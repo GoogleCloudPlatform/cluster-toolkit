@@ -174,7 +174,6 @@ const (
 	ErrTypeGpuQuotaExceeded                          = "GPU_QUOTA_EXCEEDED"
 	ErrTypeH4DVmCreateFailed                         = "H4D_VM_CREATE_FAILED"
 	ErrTypeHashicorpUnavailability                   = "HASHICORP_UNAVAILABILITY"
-	ErrTypeHashicropUnavailability                   = "HASHICROP_UNAVAILABILITY"
 	ErrTypeHelmInstallApplyFailure                   = "HELM_INSTALL_APPLY_FAILURE"
 	ErrTypeHtcondorComError                          = "HTCONDOR_COM_ERROR"
 	ErrTypeHtcondorPacker                            = "HTCONDOR_PACKER"
@@ -394,11 +393,6 @@ var extraSubstringErrMatchers = []struct {
 	{"Error: Failed to download metadata for repo 'lustre'", ErrTypeSlurmV5LustreRepoFailure},
 	{"Timeout when waiting for file /var/run/munge/munge", ErrTypeSlurmV5MungeTimeout},
 	{"Timeout when waiting for file /var/run/munge/munge.socket.2", ErrTypeSlurmV5MungeTimeout},
-	{"Timeout when waiting for file /var/run/munge/munge.socket.2", ErrTypeSlurmV6MungeTimeout},
-	{"Timeout when waiting for file /var/run/munge/munge.socket.2", ErrTypeSlurmV5MungeTimeout},
-	{"Timeout when waiting for file /var/run/munge/munge.socket.2", ErrTypeSlurmV5MungeTimeout},
-	{"Timeout when waiting for file /var/run/munge/munge.socket.2", ErrTypePsSlurmMungeTimeout},
-	{"Timeout when waiting for file /var/run/munge/munge.socket.2", ErrTypeMungeTimeoutTypes},
 	{"startup-script timed out", ErrTypeOmniaTimeout},
 	{"Yum repo downloading error", ErrTypeOmniaYumFailure},
 	{"Could not fetch serial port output: Authentication backend internal server error", ErrTypeOmniaInternalServerError},
@@ -431,7 +425,6 @@ var extraSubstringErrMatchers = []struct {
 	{"Failed to upload state to gs", ErrTypeStateUploadFail},
 	{"ZONE_RESOURCE_POOL_EXHAUSTED", ErrTypeBatchResourcePoolExhausted},
 	{"googlecompute.toolkit_image: Error waiting for startup script to finish: Startup script exited with error.", ErrTypeHtcondorPacker},
-	{"googlecompute.toolkit_image: Error waiting for startup script to finish: Startup script exited with error.", ErrTypeSlurmArtifactsCreateFailed},
 	{"The package might be corrupted or you are not allowed to open the file. Check the permissions of the file.", ErrTypeInstallVirtualglFailure},
 	{"exit status 1. Output: could not detect end of startup script. Sleeping.", ErrTypeWaitForStartupFailure},
 	{"Error: Error waiting for instance to create: Internal error. Please try again or contact Google Support. (Code: '-537542952742641820", ErrTypeGkeRemoteNodeFailure},
@@ -516,9 +509,9 @@ var extraSubstringErrMatchers = []struct {
 	{"Invalid value for \\\"value\\\" parameter: argument must not be null.", ErrTypeValidationError},
 	{"Wait for job to run (1 retries left)", ErrTypeMpiJobTimeout},
 	{"context deadline exceeded (Client.Timeout exceeded while awaiting headers", ErrTypePostHeaderTimeOut},
-	{"validator \\\"test_zone_exists\\\" failed", ErrTypeTestZoneValidatorFalied},
+	{"validator \\\"test_zone_exists\\\" failed", ErrTypeTestZoneValidatorFailed},
 	{"Error: variable \\\"checkpoint_bucket_name\\\" not found", ErrTypeCheckBucketNameNotFound},
-	{"Error: unknown module id: \\\"gcs-training\\\"", ErrTypeUnknownGcsTraningModule},
+	{"Error: unknown module id: \\\"gcs-training\\\"", ErrTypeUnknownGcsTrainingModule},
 	{"Error: expected master_authorized_networks_config.0.cidr_blocks.0.cidr_block to contain a valid Value", ErrTypeInvalidCidrMasterAuthorizedNetworksConfig},
 	{"does not match expected topology depth", ErrTypeTopologyAssertionError},
 	{"Error waiting for instance to create: Quota 'CPUS_PER_VM_FAMILY' exceeded", ErrTypeCpusPerVmFamilyQuotaExceeded},
@@ -565,7 +558,6 @@ var extraSubstringErrMatchers = []struct {
 	{"error: timed out waiting for the condition on pods/fio", ErrTypeTimeOutError},
 	{"ERROR: No matching distribution found for requests==2.33.0", ErrTypeVersionMismatch},
 	{"Error: Error creating instance: googleapi: Error 400: pd-standard disk type cannot be used by n4-standard-2 machine type., badRequest", ErrTypeN4MachineIssue},
-	{"Error: local-exec provisioner error", ErrTypeProvisionerError},
 	{"subprocess.CalledProcessError: Command '['gcloud", ErrTypeSubprocessError},
 	{"FATAL: Error: exit status 1", ErrTypeFilestoreCreationError},
 	{"variable 'reservation_affinity.consume_reservation_type' value doesn't match", ErrTypeFlexNoReservationError},
@@ -586,7 +578,7 @@ var extraSubstringErrMatchers = []struct {
 	{"Error: error creating NodePool: googleapi: Error 400: Reservation name format path is invalid", ErrTypeReservationPathInvalid},
 	{"Does not currently have sufficient capacity for the requested resources", ErrTypeNoZoneHaveEnoughResources},
 	{"Please use a version with COS", ErrTypeGkeNodeVersionNotSupported},
-	{"Unable to locate package terraform. E: Package 'packer' has no installation candidate", ErrTypeHashicropUnavailability},
+	{"Unable to locate package terraform. E: Package 'packer' has no installation candidate", ErrTypeHashicorpUnavailability},
 	{" Lustre read/write test pod failed to complete. Final phase: Pending Check debug output above.", ErrTypePodFailed},
 	{"Subnetworks must be distinct for NICs in the same instance", ErrTypeSubnetworkNicInstanceFailure},
 	{" Error: file for staging /workspace/tools/cloud-build/daily-tests/blueprints/system_benchmarks does not exists", ErrTypeSystemBenchmarksDirectoryUnsupported},
@@ -595,8 +587,8 @@ var extraSubstringErrMatchers = []struct {
 	{"Unable to locate package terraform", ErrTypeHashicorpUnavailability},
 	{"Please use formats like projects/{project}/reservations/{reservation}", ErrTypeReservationPathInvalid},
 	{"Cluster is running incompatible operation", ErrTypeClusterAlreadyHasOperation},
-	{"Could not fetch resource", ErrTypeLoginInstaneNotFoun},
-	{"Error 403: Permission 'iam.serviceAccounts.get' denied on resource", ErrTypeIamPermissionDeined},
+	{"Could not fetch resource", ErrTypeLoginInstanceNotFound},
+	{"Error 403: Permission 'iam.serviceAccounts.get' denied on resource", ErrTypeIamPermissionDenied},
 	{"Action failed: Integration tests failed", ErrTypeIntegrationTestFailure},
 	{"/bin/bash: line 28: GCLUSTER_GCS_PATH: unbound variable", ErrTypeMissingEnvironmentVariable},
 	{"/bin/bash: line 29: GCLUSTER_GCS_PATH: unbound variable", ErrTypeMissingEnvironmentVariable},
@@ -673,7 +665,7 @@ var extraMultiSubstringErrMatchers = []struct {
 	{[]string{"RouterNat: googleapi: Error 404: The resource", "was not found"}, ErrTypeRouternatResourceNotFound},
 	{[]string{"Error waiting to create Instance: Error waiting for Creating Instance", "google_parallelstore_instance"}, ErrTypeParallelstoreInstanceCreationFailed},
 	{[]string{"test-gke-managed-hyperdisk", "fatal", "\"attempts\": 80"}, ErrTypeGkeHyperDiskJobTimeout},
-	{[]string{"Error waiting to create Instance: Error waiting for Creating Instance: Error code 3, message: The request was invalid: Server subnetwork IP range [\"172.17.167.0/26\"] overlaps with restricted IP range [\"172.17.0.0/16\"]. Please choose a range explicitly that does not overlap", "google_parallelstore_instance"}, ErrTypeParallelstoreServerSubnetworkIpOwerlapped},
+	{[]string{"Error waiting to create Instance: Error waiting for Creating Instance: Error code 3, message: The request was invalid: Server subnetwork IP range [\"172.17.167.0/26\"] overlaps with restricted IP range [\"172.17.0.0/16\"]. Please choose a range explicitly that does not overlap", "google_parallelstore_instance"}, ErrTypeParallelstoreServerSubnetworkIpOverlapped},
 	{[]string{"nvidia-container-cli: container error: file lookup failed", "permission denied"}, ErrTypeSlurmstepdError},
 	{[]string{"Insufficient", "INSTANCE_GROUP_MANAGERS"}, ErrTypeReachInstanceGroupManagerLimitation},
 	{[]string{"Error: Error waiting for instance to create: Quota 'SSD_TOTAL_GB' exceeded.", "Quota 'IN_USE_ADDRESSES' exceeded."}, ErrTypeReachSsdTotalGbLimitation},
