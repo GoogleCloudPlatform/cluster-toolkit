@@ -76,7 +76,11 @@ variable "kueue_migrated_tests" {
     "gke-managed-lustre",
     "pfs-managed-lustre-slurm",
     "pfs-managed-lustre-vm",
-    "netapp-volumes"
+    "netapp-volumes",
+    "slurm-gcp-v6-reconfig-size",
+    "slurm-gcp-v6-simple-job-completion",
+    "slurm-gcp-v6-startup-scripts",
+    "slurm-gcp-v6-topology"
   ]
 }
 
