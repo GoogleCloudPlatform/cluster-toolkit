@@ -358,9 +358,16 @@ func TestResolveTopologyForChips(t *testing.T) {
 			wantErr:    true,
 		},
 		{
-			name:       "v4 3 chips (Fail)",
+			name:       "v4 3 cores (Fail)",
 			prefix:     "v4",
 			totalChips: 3,
+			wantShape:  "",
+			wantErr:    true,
+		},
+		{
+			name:       "v5p 7 cores (Fail)",
+			prefix:     "v5p",
+			totalChips: 7,
 			wantShape:  "",
 			wantErr:    true,
 		},

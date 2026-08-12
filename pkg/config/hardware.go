@@ -351,6 +351,9 @@ func parseShorthand(accelaratorType string) (size int, err error) {
 
 	// For TPU v4 and v5p, the shorthand suffix represents cores. We need to divide by 2 to get chips.
 	if strings.HasPrefix(accelaratorType, "v4-") || strings.HasPrefix(accelaratorType, "v5p-") {
+		if size%2 != 0 {
+			return 0, fmt.Errorf("TPU v4 and v5p shorthand core count must be even, got %d", size)
+		}
 		size = size / 2
 	}
 
