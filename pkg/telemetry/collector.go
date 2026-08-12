@@ -459,7 +459,6 @@ func getErrorType(err error) string {
 	return ErrTypeUnknown
 }
 
-
 // This method returns "true" for test projects, and "false" otherwise.
 func getIsTestData(projectID string) string {
 	if slices.Contains(testProjects, projectID) {
