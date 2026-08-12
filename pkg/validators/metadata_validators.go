@@ -25,8 +25,126 @@ import (
 // RegexValidator implements the Validator interface for 'regex' type.
 type RegexValidator struct{}
 
+func resolveSettingToString(
+	bp config.Blueprint,
+	group config.Group,
+	modIdx int,
+	mod config.Module,
+	settingName string,
+	optional bool,
+	allowNull bool,
+) (string, bool, config.Path, error) {
+	values, path, err := getModuleSettingValues(bp, group, modIdx, mod, settingName)
+	if err != nil {
+		if optional {
+			return "", true, path, nil
+		}
+		missingPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Settings.Dot(settingName)
+		return "", false, missingPath, config.BpError{
+			Err:  fmt.Errorf("setting %q not found in module %q settings", settingName, mod.ID),
+			Path: missingPath,
+		}
+	}
+	if len(values) == 0 || values[0].Type() != cty.String {
+		if len(values) == 0 && optional {
+			return "", true, path, nil
+		}
+		return "", false, path, config.BpError{Err: fmt.Errorf("setting %q must be a string", settingName), Path: path}
+	}
+	if !values[0].IsKnown() {
+		return "", false, path, nil
+	}
+	if values[0].IsNull() {
+		if !allowNull {
+			return "", false, path, config.BpError{Err: fmt.Errorf("setting %q cannot be null", settingName), Path: path}
+		}
+		return "", true, path, nil
+	}
+	return values[0].AsString(), true, path, nil
+}
+
+func (r *RegexValidator) validateConcat(
+	bp config.Blueprint,
+	mod config.Module,
+	rule modulereader.ValidationRule,
+	group config.Group,
+	modIdx int,
+	re *regexp.Regexp,
+	patternRaw string,
+	optional bool,
+) error {
+	varsList, _ := parseStringList(rule.Inputs["vars"])
+	separator, _ := rule.Inputs["separator"].(string)
+	allowNullList, _ := parseStringList(rule.Inputs["allow_null"])
+	allowNullMap := make(map[string]struct{})
+	for _, v := range allowNullList {
+		allowNullMap[v] = struct{}{}
+	}
+
+	var parts []string
+	var targetPath config.Path
+	first := true
+
+	for _, varName := range varsList {
+		_, allowNull := allowNullMap[varName]
+		val, known, path, err := resolveSettingToString(bp, group, modIdx, mod, varName, optional, allowNull)
+		if err != nil {
+			return err
+		}
+		if !known {
+			return nil
+		}
+		if first {
+			targetPath = path
+			first = false
+		}
+		if val != "" {
+			parts = append(parts, val)
+		}
+	}
+
+	joined := strings.Join(parts, separator)
+	if !re.MatchString(joined) {
+		msg := rule.ErrorMessage
+		if msg == "" {
+			msg = fmt.Sprintf("concatenated value %q does not match pattern %q", joined, patternRaw)
+		}
+		return config.BpError{Err: fmt.Errorf("%s", msg), Path: targetPath}
+	}
+	return nil
+}
+
+func (r *RegexValidator) validateStandard(
+	bp config.Blueprint,
+	mod config.Module,
+	rule modulereader.ValidationRule,
+	group config.Group,
+	modIdx int,
+	re *regexp.Regexp,
+	patternRaw string,
+) error {
+	validateValues := func(values []cty.Value, path config.Path) error {
+		for _, val := range values {
+			if val.Type() != cty.String {
+				continue
+			}
+			if !re.MatchString(val.AsString()) {
+				msg := rule.ErrorMessage
+				if msg == "" {
+					msg = fmt.Sprintf("value %q does not match pattern %q", val.AsString(), patternRaw)
+				}
+				return config.BpError{Err: fmt.Errorf("%s", msg), Path: path}
+			}
+		}
+		return nil
+	}
+
+	return IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
+		return validateValues(t.Values, t.Path)
+	})
+}
+
 // Validate checks if the variables specified in the rule match the provided regex pattern.
-// This function focuses on the predicate and uses IterateRuleTargets from targets.go to resolve targets.
 func (r *RegexValidator) Validate(
 	bp config.Blueprint,
 	mod config.Module,
@@ -53,28 +171,25 @@ func (r *RegexValidator) Validate(
 		}
 	}
 
-	// helper: validate flattened cty.Values against regex, returning first error
-	validateValues := func(values []cty.Value, path config.Path) error {
-		for _, val := range values {
-			if val.Type() != cty.String {
-				continue
-			}
-			if !re.MatchString(val.AsString()) {
-				msg := rule.ErrorMessage
-				if msg == "" {
-					msg = fmt.Sprintf("value %q does not match pattern %q", val.AsString(), patternRaw)
-				}
-				return config.BpError{Err: fmt.Errorf("%s", msg), Path: path}
-			}
+	concat, err := parseBoolInput(rule.Inputs, "concat", false)
+	if err != nil {
+		return config.BpError{
+			Err:  fmt.Errorf("failed to parse 'concat' input: %w", err),
+			Path: config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source,
 		}
-		return nil
 	}
 
-	// iterate targets using shared logic
-	err = IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
-		return validateValues(t.Values, t.Path)
-	})
-	return err
+	optional := true
+	if v, ok := rule.Inputs["optional"]; ok {
+		if b, ok := v.(bool); ok {
+			optional = b
+		}
+	}
+
+	if concat {
+		return r.validateConcat(bp, mod, rule, group, modIdx, re, patternRaw, optional)
+	}
+	return r.validateStandard(bp, mod, rule, group, modIdx, re, patternRaw)
 }
 
 type AllowedEnumValidator struct{}
@@ -589,81 +704,4 @@ func evalTriggers(
 		}
 	}
 	return true
-}
-
-var serviceAccountIDRegexp = regexp.MustCompile(`^[a-z][-a-z0-9]*[a-z0-9]$`)
-
-// ServiceAccountIDValidator validates if the combined deployment_name and name
-// form a valid GCP Service Account ID.
-type ServiceAccountIDValidator struct{}
-
-// Validate checks if the generated service account ID is valid.
-func (v *ServiceAccountIDValidator) Validate(
-	bp config.Blueprint,
-	mod config.Module,
-	rule modulereader.ValidationRule,
-	group config.Group,
-	modIdx int,
-) error {
-	depNameSetting, ok := rule.Inputs["deployment_name"].(string)
-	if !ok {
-		depNameSetting = "deployment_name"
-	}
-	nameSetting, ok := rule.Inputs["name"].(string)
-	if !ok {
-		nameSetting = "name"
-	}
-
-	depNameValues, depNamePath, err := getModuleSettingValues(bp, group, modIdx, mod, depNameSetting)
-	if err != nil {
-		return config.BpError{Err: fmt.Errorf("failed to resolve setting %q: %w", depNameSetting, err), Path: depNamePath}
-	}
-	if len(depNameValues) == 0 || depNameValues[0].Type() != cty.String {
-		return config.BpError{Err: fmt.Errorf("setting %q must be a string", depNameSetting), Path: depNamePath}
-	}
-	if !depNameValues[0].IsKnown() {
-		return nil
-	}
-	var depName string
-	if !depNameValues[0].IsNull() {
-		depName = depNameValues[0].AsString()
-	}
-
-	nameValues, namePath, err := getModuleSettingValues(bp, group, modIdx, mod, nameSetting)
-	if err != nil {
-		return config.BpError{Err: fmt.Errorf("failed to resolve setting %q: %w", nameSetting, err), Path: namePath}
-	}
-	if len(nameValues) == 0 || nameValues[0].Type() != cty.String {
-		return config.BpError{Err: fmt.Errorf("setting %q must be a string", nameSetting), Path: namePath}
-	}
-	if !nameValues[0].IsKnown() {
-		return nil
-	}
-	if nameValues[0].IsNull() {
-		return config.BpError{Err: fmt.Errorf("setting %q cannot be null", nameSetting), Path: namePath}
-	}
-	name := nameValues[0].AsString()
-
-	var saID string
-	if depName == "" {
-		saID = name
-	} else {
-		saID = fmt.Sprintf("%s-%s", depName, name)
-	}
-
-	if len(saID) < 6 || len(saID) > 30 {
-		return config.BpError{
-			Err:  fmt.Errorf("generated service account ID %q is invalid: length must be between 6 and 30 characters, but got %d (deployment_name: %d, name: %d)", saID, len(saID), len(depName), len(name)),
-			Path: namePath,
-		}
-	}
-
-	if !serviceAccountIDRegexp.MatchString(saID) {
-		return config.BpError{
-			Err:  fmt.Errorf("generated service account ID %q is invalid: must begin with a lowercase letter, contain only lowercase alphanumeric characters and dashes, and cannot end with a dash", saID),
-			Path: namePath,
-		}
-	}
-
-	return nil
 }

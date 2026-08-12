@@ -16,12 +16,11 @@ package validators
 
 // Registry maps validation type strings to their corresponding validator implementation.
 var Registry = map[string]RuleValidator{
-	"regex":              &RegexValidator{},
-	"allowed_enum":       &AllowedEnumValidator{},
-	"range":              &RangeValidator{},
-	"exclusive":          &ExclusiveValidator{},
-	"required":           &RequiredValidator{},
-	"conditional":        &ConditionalValidator{},
-	"conditional_regex":  &ConditionalRegexValidator{},
-	"service_account_id": &ServiceAccountIDValidator{},
+	"regex":             &RegexValidator{},
+	"allowed_enum":      &AllowedEnumValidator{},
+	"range":             &RangeValidator{},
+	"exclusive":         &ExclusiveValidator{},
+	"required":          &RequiredValidator{},
+	"conditional":       &ConditionalValidator{},
+	"conditional_regex": &ConditionalRegexValidator{},
 }

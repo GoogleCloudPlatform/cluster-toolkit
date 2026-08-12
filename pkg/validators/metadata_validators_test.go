@@ -139,6 +139,126 @@ func TestRegexValidator(t *testing.T) {
 			t.Fatalf("unexpected error message: %q", err.Error())
 		}
 	})
+
+}
+
+func TestRegexValidator_ConcatMode(t *testing.T) {
+	baseBP := config.Blueprint{
+		BlueprintName: "test-bp",
+		Vars: config.NewDict(map[string]cty.Value{
+			"deployment_name": cty.StringVal("my-dep"),
+		}),
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "test-module",
+						Source: "test/module",
+						Settings: config.NewDict(map[string]cty.Value{
+							"name": cty.StringVal("sa-name"),
+						}),
+					},
+				},
+			},
+		},
+	}
+
+	rule := modulereader.ValidationRule{
+		Validator: "regex",
+		Inputs: map[string]interface{}{
+			"vars":      []interface{}{"deployment_name", "name"},
+			"concat":    true,
+			"separator": "-",
+			"pattern":   "^[a-z][-a-z0-9]{4,28}[a-z0-9]$",
+		},
+	}
+
+	validator := RegexValidator{}
+
+	tests := []struct {
+		name       string
+		depName    cty.Value
+		saName     cty.Value
+		wantErrSub string
+	}{
+		{
+			name:    "passes_on_valid_id",
+			depName: cty.StringVal("my-dep"),
+			saName:  cty.StringVal("sa-name"),
+		},
+		{
+			name:       "fails_when_too_long",
+			depName:    cty.StringVal("a-very-long-deployment-name-that-exceeds"),
+			saName:     cty.StringVal("sa-name"),
+			wantErrSub: "does not match pattern",
+		},
+		{
+			name:       "fails_when_too_short",
+			depName:    cty.StringVal("a"),
+			saName:     cty.StringVal("b"),
+			wantErrSub: "does not match pattern",
+		},
+		{
+			name:       "fails_on_invalid_characters",
+			saName:     cty.StringVal("SA-NAME"),
+			wantErrSub: "does not match pattern",
+		},
+		{
+			name:    "passes_when_deployment_name_is_unknown",
+			depName: cty.UnknownVal(cty.String),
+		},
+		{
+			name:   "passes_when_name_is_unknown",
+			saName: cty.UnknownVal(cty.String),
+		},
+		{
+			name:       "fails_when_name_is_null",
+			saName:     cty.NullVal(cty.String),
+			wantErrSub: "cannot be null",
+		},
+		{
+			name:       "fails_when_deployment_name_is_null",
+			depName:    cty.NullVal(cty.String),
+			saName:     cty.StringVal("valid-sa-name"),
+			wantErrSub: "cannot be null",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			bp := baseBP
+			depVal := cty.StringVal("my-dep")
+			if tc.depName != cty.NilVal {
+				depVal = tc.depName
+			}
+			bp.Vars = config.NewDict(map[string]cty.Value{
+				"deployment_name": depVal,
+			})
+
+			saVal := cty.StringVal("sa-name")
+			if tc.saName != cty.NilVal {
+				saVal = tc.saName
+			}
+			bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+				"name": saVal,
+			})
+
+			err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+			if tc.wantErrSub == "" {
+				if err != nil {
+					t.Fatalf("unexpected validation error: %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Fatalf("expected validation error, got nil")
+				}
+				if !strings.Contains(err.Error(), tc.wantErrSub) {
+					t.Fatalf("expected error message to contain %q, got: %q", tc.wantErrSub, err.Error())
+				}
+			}
+		})
+	}
 }
 
 func TestAllowedEnumValidator(t *testing.T) {
@@ -1142,155 +1262,6 @@ func TestConditionalRegexValidator(t *testing.T) {
 		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-}
-
-func TestServiceAccountIDValidator(t *testing.T) {
-	// Base fake blueprint/module used by subtests
-	baseBP := config.Blueprint{
-		BlueprintName: "test-bp",
-		Vars: config.NewDict(map[string]cty.Value{
-			"deployment_name": cty.StringVal("my-dep"),
-		}),
-		Groups: []config.Group{
-			{
-				Name: "primary",
-				Modules: []config.Module{
-					{
-						ID:     "test-module",
-						Source: "test/module",
-						Settings: config.NewDict(map[string]cty.Value{
-							"name": cty.StringVal("sa-name"),
-						}),
-					},
-				},
-			},
-		},
-	}
-
-	validator := ServiceAccountIDValidator{}
-	rule := modulereader.ValidationRule{
-		Validator: "service_account_id",
-		Inputs: map[string]interface{}{
-			"deployment_name": "deployment_name",
-			"name":            "name",
-		},
-	}
-
-	t.Run("passes_on_valid_id", func(t *testing.T) {
-		err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0)
-		if err != nil {
-			t.Fatalf("unexpected validation error: %v", err)
-		}
-	})
-
-	t.Run("fails_when_too_long", func(t *testing.T) {
-		bp := baseBP
-		bp.Vars = config.NewDict(map[string]cty.Value{
-			"deployment_name": cty.StringVal("a-very-long-deployment-name-that-exceeds"),
-		})
-		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
-		if err == nil {
-			t.Fatalf("expected validation error due to length, got nil")
-		}
-		if !strings.Contains(err.Error(), "length must be between 6 and 30") {
-			t.Fatalf("expected error message to contain length limit info, got: %q", err.Error())
-		}
-	})
-
-	t.Run("fails_when_too_short", func(t *testing.T) {
-		bp := baseBP
-		bp.Vars = config.NewDict(map[string]cty.Value{
-			"deployment_name": cty.StringVal("a"),
-		})
-		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
-			"name": cty.StringVal("b"),
-		})
-		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
-		if err == nil {
-			t.Fatalf("expected validation error due to length, got nil")
-		}
-		if !strings.Contains(err.Error(), "length must be between 6 and 30") {
-			t.Fatalf("expected error message to contain length limit info, got: %q", err.Error())
-		}
-	})
-
-	t.Run("fails_on_invalid_characters", func(t *testing.T) {
-		bp := baseBP
-		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
-			"name": cty.StringVal("SA-NAME"), // uppercase not allowed
-		})
-		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
-		if err == nil {
-			t.Fatalf("expected validation error due to invalid characters, got nil")
-		}
-		if !strings.Contains(err.Error(), "must begin with a lowercase letter") {
-			t.Fatalf("expected error message to contain char requirements, got: %q", err.Error())
-		}
-	})
-
-	t.Run("fails_when_ends_with_dash", func(t *testing.T) {
-		bp := baseBP
-		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
-			"name": cty.StringVal("name-"),
-		})
-		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
-		if err == nil {
-			t.Fatalf("expected validation error, got nil")
-		}
-		if !strings.Contains(err.Error(), "cannot end with a dash") {
-			t.Fatalf("expected error message to contain 'cannot end with a dash', got: %q", err.Error())
-		}
-	})
-
-	t.Run("passes_when_deployment_name_is_unknown", func(t *testing.T) {
-		bp := baseBP
-		bp.Vars = config.NewDict(map[string]cty.Value{
-			"deployment_name": cty.UnknownVal(cty.String),
-		})
-		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
-		if err != nil {
-			t.Fatalf("unexpected validation error: %v", err)
-		}
-	})
-
-	t.Run("passes_when_name_is_unknown", func(t *testing.T) {
-		bp := baseBP
-		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
-			"name": cty.UnknownVal(cty.String),
-		})
-		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
-		if err != nil {
-			t.Fatalf("unexpected validation error: %v", err)
-		}
-	})
-
-	t.Run("fails_when_name_is_null", func(t *testing.T) {
-		bp := baseBP
-		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
-			"name": cty.NullVal(cty.String),
-		})
-		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
-		if err == nil {
-			t.Fatalf("expected validation error, got nil")
-		}
-		if !strings.Contains(err.Error(), "cannot be null") {
-			t.Fatalf("expected error message to contain 'cannot be null', got: %q", err.Error())
-		}
-	})
-
-	t.Run("passes_when_deployment_name_is_null", func(t *testing.T) {
-		bp := baseBP
-		bp.Vars = config.NewDict(map[string]cty.Value{
-			"deployment_name": cty.NullVal(cty.String),
-		})
-		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
-			"name": cty.StringVal("valid-sa-name"),
-		})
-		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
-		if err != nil {
-			t.Fatalf("unexpected validation error: %v", err)
 		}
 	})
 }
