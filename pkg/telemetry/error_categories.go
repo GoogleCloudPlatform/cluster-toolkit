@@ -245,7 +245,7 @@ const (
 	ErrTypePackerOnetimeWoops                        = "PACKER_ONETIME_WOOPS"
 	ErrTypeParallelstoreInstanceCreationFailed       = "PARALLELSTORE_INSTANCE_CREATION_FAILED"
 	ErrTypeParallelstoreNotMounted                   = "PARALLELSTORE_NOT_MOUNTED"
-	ErrTypeParallelstoreServerSubnetworkIpOwerlapped = "PARALLELSTORE_SERVER_SUBNETWORK_IP_OWERLAPPED"
+	ErrTypeParallelstoreServerSubnetworkIpOverlapped = "PARALLELSTORE_SERVER_SUBNETWORK_IP_OVERLAPPED"
 	ErrTypeParamikoConnectFailure                    = "PARAMIKO_CONNECT_FAILURE"
 	ErrTypePbsnodesUnknownCommand                    = "PBSNODES_UNKNOWN_COMMAND"
 	ErrTypePbsproHostsNotConnected                   = "PBSPRO_HOSTS_NOT_CONNECTED"
