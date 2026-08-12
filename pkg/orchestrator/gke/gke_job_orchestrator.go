@@ -34,6 +34,7 @@ import (
 
 	"github.com/google/safetext/yamltemplate"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -1594,24 +1595,66 @@ func parseConditions(conditions []interface{}, statusStr *string, completionTime
 	}
 }
 
+func (g *GKEOrchestrator) validateTargetNamespaceExists(job *orchestrator.JobDefinition) error {
+	if job == nil {
+		return fmt.Errorf("job definition cannot be nil")
+	}
+
+	var ns string
+	var err error
+	if job.GKENamespace != "" {
+		ns = job.GKENamespace
+	} else {
+		ns, err = g.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
+		if err != nil {
+			return err
+		}
+	}
+
+	if ns == "" {
+		return fmt.Errorf("target namespace cannot be empty")
+	}
+
+	client, err := g.getDynamicClient()
+	if err != nil {
+		return fmt.Errorf("failed to initialize Kubernetes client for namespace validation: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err = client.Resource(namespaceGVR).Get(ctx, ns, metav1.GetOptions{})
+	switch {
+	case err == nil:
+		return nil
+	case apierrors.IsNotFound(err):
+		return fmt.Errorf("target namespace %q does not exist on GKE cluster %q. Please create the namespace first (e.g., 'kubectl create namespace %s')", ns, job.ClusterName, ns)
+	case apierrors.IsForbidden(err):
+		logging.Warn("Insufficient RBAC permissions to verify existence of namespace %q on cluster %q (403 Forbidden). Proceeding with job submission...", ns, job.ClusterName)
+		return nil
+	default:
+		return fmt.Errorf("failed to verify existence of namespace %q on cluster %q: %w", ns, job.ClusterName, err)
+	}
+}
+
+func (g *GKEOrchestrator) getKubeClient() KubeClient {
+	if g.kubeClient != nil {
+		return g.kubeClient
+	}
+	return &DefaultKubeClient{dynClient: g.dynClient}
+}
+
 func (g *GKEOrchestrator) getCurrentNamespace(clusterName, location, projectID string) (string, error) {
 	if g.namespace != "" {
 		return g.namespace, nil
 	}
 
-	var ns string
-	var err error
-	if g.kubeClient == nil {
-		client := &DefaultKubeClient{}
-		ns, err = client.GetCurrentNamespace(clusterName, location, projectID)
-	} else {
-		ns, err = g.kubeClient.GetCurrentNamespace(clusterName, location, projectID)
+	ns, err := g.getKubeClient().GetCurrentNamespace(clusterName, location, projectID)
+	if err != nil {
+		return "", err
 	}
-
-	if err == nil {
-		g.namespace = ns
-	}
-	return ns, err
+	g.namespace = ns
+	return ns, nil
 }
 
 func (g *GKEOrchestrator) getKueueWorkloadStatus(client dynamic.Interface, ns string, uid string) (string, error) {

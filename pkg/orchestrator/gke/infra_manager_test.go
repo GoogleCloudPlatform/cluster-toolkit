@@ -15,9 +15,20 @@
 package gke
 
 import (
-	"hpc-toolkit/pkg/shell"
+	"bytes"
+	"context"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
+
+	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func TestRenderClusterQueue(t *testing.T) {
@@ -282,6 +293,20 @@ func TestParseVersion(t *testing.T) {
 	}
 }
 
+type mockHTTPClient struct {
+	getFunc func(url string) (*http.Response, error)
+}
+
+func (m *mockHTTPClient) Get(url string) (*http.Response, error) {
+	if m.getFunc != nil {
+		return m.getFunc(url)
+	}
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader([]byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: mock-manifest\n"))),
+	}, nil
+}
+
 func TestCheckAndInstallKueue_ReinstallNeeded_LowVersion(t *testing.T) {
 	origPrompt := shell.PromptYesNo
 	defer func() { shell.PromptYesNo = origPrompt }()
@@ -322,7 +347,8 @@ func TestCheckAndInstallKueue_ReinstallNeeded_LowVersion(t *testing.T) {
 	}
 
 	orc := &GKEOrchestrator{
-		executor: mock,
+		executor:   mock,
+		httpClient: &mockHTTPClient{},
 	}
 
 	err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a")
@@ -525,7 +551,8 @@ func TestCheckAndInstallKueue_PermissionGranted(t *testing.T) {
 	shell.PromptYesNo = func(prompt string) bool { return true }
 
 	orc := &GKEOrchestrator{
-		executor: mock,
+		executor:   mock,
+		httpClient: &mockHTTPClient{},
 	}
 
 	err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a")
@@ -740,5 +767,45 @@ func TestRenderResourceFlavor_TopologyFiltering(t *testing.T) {
 	}
 	if strings.Contains(output, "cloud.google.com/gke-tpu-partition-") {
 		t.Errorf("cloud.google.com/gke-tpu-partition-* labels should be filtered out, got:\n%s", output)
+	}
+}
+
+func TestValidateClusterState_TargetNamespaceValidation(t *testing.T) {
+	mockExec := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			// Mock other checks in ValidateClusterState to pass
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+
+	mockDyn := &mockDynamicClient{
+		getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+			return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "namespaces"}, name)
+		},
+	}
+
+	orc := &GKEOrchestrator{
+		executor:  mockExec,
+		dynClient: mockDyn,
+		kubeClient: &MockKubeClient{
+			Namespace: "nonexistent-ns",
+		},
+	}
+
+	job := &orchestrator.JobDefinition{
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "test-project",
+		GKENamespace:    "nonexistent-ns",
+	}
+
+	err := orc.ValidateClusterState(job)
+	if err == nil {
+		t.Fatal("expected ValidateClusterState to fail when namespace validation fails, got nil")
+	}
+
+	expectedErr := `target namespace "nonexistent-ns" does not exist`
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error to contain %q, got: %v", expectedErr, err)
 	}
 }
