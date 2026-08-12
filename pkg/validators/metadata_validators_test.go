@@ -180,6 +180,7 @@ func TestRegexValidator_ConcatMode(t *testing.T) {
 		name       string
 		depName    cty.Value
 		saName     cty.Value
+		depMissing bool
 		wantErrSub string
 	}{
 		{
@@ -223,18 +224,25 @@ func TestRegexValidator_ConcatMode(t *testing.T) {
 			saName:     cty.StringVal("valid-sa-name"),
 			wantErrSub: "cannot be null",
 		},
+		{
+			name:       "passes_when_deployment_name_is_missing_and_rule_is_optional",
+			depMissing: true,
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			bp := baseBP
-			depVal := cty.StringVal("my-dep")
-			if tc.depName != cty.NilVal {
-				depVal = tc.depName
+			bp.Vars = config.NewDict(map[string]cty.Value{})
+			if !tc.depMissing {
+				depVal := cty.StringVal("my-dep")
+				if tc.depName != cty.NilVal {
+					depVal = tc.depName
+				}
+				bp.Vars = config.NewDict(map[string]cty.Value{
+					"deployment_name": depVal,
+				})
 			}
-			bp.Vars = config.NewDict(map[string]cty.Value{
-				"deployment_name": depVal,
-			})
 
 			saVal := cty.StringVal("sa-name")
 			if tc.saName != cty.NilVal {

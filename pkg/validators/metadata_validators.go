@@ -37,7 +37,7 @@ func resolveSettingToString(
 	values, path, err := getModuleSettingValues(bp, group, modIdx, mod, settingName)
 	if err != nil {
 		if optional {
-			return "", true, path, nil
+			return "", false, path, nil
 		}
 		missingPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Settings.Dot(settingName)
 		return "", false, missingPath, config.BpError{
@@ -47,7 +47,7 @@ func resolveSettingToString(
 	}
 	if len(values) == 0 || values[0].Type() != cty.String {
 		if len(values) == 0 && optional {
-			return "", true, path, nil
+			return "", false, path, nil
 		}
 		return "", false, path, config.BpError{Err: fmt.Errorf("setting %q must be a string", settingName), Path: path}
 	}
@@ -101,6 +101,10 @@ func (r *RegexValidator) validateConcat(
 		if val != "" {
 			parts = append(parts, val)
 		}
+	}
+
+	if len(parts) == 0 {
+		return nil
 	}
 
 	joined := strings.Join(parts, separator)
