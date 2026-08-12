@@ -228,6 +228,11 @@ func TestRegexValidator_ConcatMode(t *testing.T) {
 			name:       "passes_when_deployment_name_is_missing_and_rule_is_optional",
 			depMissing: true,
 		},
+		{
+			name:    "passes_when_deployment_name_is_unknown_even_if_other_parts_are_invalid",
+			depName: cty.UnknownVal(cty.String),
+			saName:  cty.StringVal("INVALID-SA"),
+		},
 	}
 
 	for _, tc := range tests {
