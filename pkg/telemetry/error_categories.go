@@ -610,8 +610,6 @@ var extraSubstringErrMatchers = []struct {
 	{"unexpected EOF while looking for matching", ErrTypeSyntaxError},
 	{"The command '/bin/sh -c wget -q ", ErrTypeOverwriteConflict},
 	{" sbatch: error: fetch_config: DNS SRV lookup failed", ErrTypeDnsSrvLookupFailed},
-	{"The command '/bin/sh -c wget -q ", ErrTypeOverwriteConflict},
-	{" sbatch: error: fetch_config: DNS SRV lookup failed", ErrTypeDnsSrvLookupFailed},
 	{"Error 403: Permission 'iam.serviceAccounts.get' denied on resource or it may not exist", ErrTypeIamDeniedError},
 	{"subprocess.CalledProcessError: Command 'gcloud compute instances describe a23901topo-nodeset-0 --zone=us-central1-a --project=hpc-toolkit-dev --format='value(resourceStatus.physicalHost)'' returned non-zero exit status 1.", ErrTypeTopologyCommandFailure},
 }
