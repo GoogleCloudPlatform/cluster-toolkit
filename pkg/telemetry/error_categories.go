@@ -217,7 +217,7 @@ const (
 	ErrTypeMountHomeTimeout                          = "MOUNT_HOME_TIMEOUT"
 	ErrTypeMpiJobTimeout                             = "MPI_JOB_TIMEOUT"
 	ErrTypeMungeAuthFailure                          = "MUNGE_AUTH_FAILURE"
-	ErrTypeMungeTimeoutTypes                         = "MUNGE_TIMEOUT_TYPEs"
+	ErrTypeMungeTimeoutTypes                         = "MUNGE_TIMEOUT_TYPES"
 	ErrTypeN2QuotaExceeded                           = "N2_QUOTA_EXCEEDED"
 	ErrTypeN4MachineIssue                            = "N4_MACHINE_ISSUE"
 	ErrTypeNameRegexpError                           = "NAME_REGEXP_ERROR"
