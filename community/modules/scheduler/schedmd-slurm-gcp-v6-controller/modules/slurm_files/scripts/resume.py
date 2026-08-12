@@ -325,7 +325,7 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                 instanceGroupManager=mig_name,
                 body={"instanceTemplate": template_link}
             )
-            execute_with_futures(lambda req: req.execute(), [aic_req])
+            ensure_execute(aic_req)
         except Exception as e:
             log.warning(f"Failed to setInstanceTemplate on MIG {mig_name}: {e}")
 
@@ -337,7 +337,7 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
         instanceGroupManager=mig_name,
         body={"instances": pic_instances}
     )
-    res = execute_with_futures(lambda req: req.execute(), [pic_req])
+    res = ensure_execute(pic_req)
     log.debug(f"createInstances response for {mig_name}: {res}")
 
 
@@ -381,7 +381,7 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             tpu_chunks.append(chunk.nodes)
         elif lkp.is_flex_node(model):
             flex_chunks.append(chunk)
-        elif lkp.is_mig_engine():
+        elif getattr(lkp.node_nodeset(model), "mig_name", None) is not None or lkp.is_mig_engine():
             mig_chunks.append(chunk)
         else:
             bi_inserts[group] = create_instances_request(

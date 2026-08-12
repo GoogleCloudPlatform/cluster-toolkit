@@ -176,7 +176,7 @@ def test_allocate_nodes_to_placements(nodes: list[str], excl_job_id: Optional[in
     assert resume._allocate_nodes_to_placements(nodes, excl_job_id, lkp) == expected
 
 
-@unittest.mock.patch("resume.execute_with_futures")
+@unittest.mock.patch("resume.ensure_execute")
 @unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
 def test_resume_mig_nodes(mock_compute_prop, mock_execute):
   cfg = TstCfg(

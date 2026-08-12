@@ -128,11 +128,12 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
                     links.append(f"zones/{zone_name}/instances/{node}")
                 else:
                     nodeset = lkp.node_nodeset(node)
-                    zone_name = getattr(nodeset, "zone", None)
-                    if zone_name:
+                    zone_allow = getattr(nodeset, "zone_policy_allow", [])
+                    if zone_allow:
+                        zone_name = list(zone_allow)[0]
                         links.append(f"zones/{zone_name}/instances/{node}")
                     else:
-                        links.append(f"zones/us-central1-a/instances/{node}")
+                        links.append(f"zones/{lkp.zone}/instances/{node}")
 
         log.info(f"Deleting {len(ns_nodes)} MIG instances ({to_hostlist(ns_nodes)}) from MIG {mig_name}")
         req = lkp.compute.regionInstanceGroupManagers().deleteInstances(
@@ -145,7 +146,7 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
             }
         )
         try:
-            res = util.execute_with_futures(lambda r: r.execute(), [req])
+            res = util.ensure_execute(req)
             log.debug(f"deleteInstances response for {mig_name}: {res}")
         except Exception as e:
             log.error(f"Failed deleteInstances for MIG {mig_name}: {e}")
@@ -157,10 +158,14 @@ def suspend_nodes(nodes: List[str]) -> None:
     bulk_nodes, flex_nodes = util.separate(lkp.is_flex_node, other_nodes)
 
     mig_flex.suspend_flex_nodes(flex_nodes, lkp)
-    if lkp.is_mig_engine():
-        suspend_mig_nodes(bulk_nodes, lkp)
-    else:
-        delete_instances(bulk_nodes)
+    mig_nodes, non_mig_nodes = util.separate(
+        lambda n: getattr(lkp.node_nodeset(n), "mig_name", None) is not None or lkp.is_mig_engine(),
+        bulk_nodes,
+    )
+    if mig_nodes:
+        suspend_mig_nodes(mig_nodes, lkp)
+    if non_mig_nodes:
+        delete_instances(non_mig_nodes)
     tpu.delete_tpu_instances(tpu_nodes)
 
 
