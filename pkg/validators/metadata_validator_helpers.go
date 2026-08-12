@@ -31,6 +31,18 @@ func getNestedValue(d config.Dict, path string) (cty.Value, bool) {
 	if len(vals) == 0 {
 		return cty.NilVal, false
 	}
+	
+	allNull := true
+	for _, v := range vals {
+		if !v.IsNull() {
+			allNull = false
+			break
+		}
+	}
+	if allNull {
+		return cty.NilVal, false
+	}
+
 	if len(vals) == 1 {
 		return vals[0], true
 	}
@@ -57,9 +69,12 @@ func getValuesFromPath(val cty.Value, parts []string) []cty.Value {
 	}
 
 	part := parts[0]
-	if (ty.IsObjectType() || ty.IsMapType()) && ty.HasAttribute(part) {
-		attrVal := val.GetAttr(part)
-		return getValuesFromPath(attrVal, parts[1:])
+	if ty.IsObjectType() || ty.IsMapType() {
+		if ty.HasAttribute(part) {
+			attrVal := val.GetAttr(part)
+			return getValuesFromPath(attrVal, parts[1:])
+		}
+		return []cty.Value{cty.NullVal(cty.DynamicPseudoType)}
 	}
 
 	return nil
