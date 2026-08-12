@@ -204,7 +204,7 @@ const (
 	ErrTypeKueueWebhookServiceNotFound               = "KUEUE_WEBHOOK_SERVICE_NOT_FOUND"
 	ErrTypeKueueWebhookServiceUnavailable            = "KUEUE_WEBHOOK_SERVICE_UNAVAILABLE"
 	ErrTypeLocalExecProvisionerError                 = "LOCAL_EXEC_PROVISIONER_ERROR"
-	ErrTypeLoginInstaneNotFoun                       = "LOGIN_INSTANE_NOT_FOUN"
+	ErrTypeLoginInstanceNotFound                     = "LOGIN_INSTANCE_NOT_FOUND"
 	ErrTypeLustreInstanceCreateFailed                = "LUSTRE_INSTANCE_CREATE_FAILED"
 	ErrTypeLustreNetworkInitialisation               = "LUSTRE_NETWORK_INITIALISATION"
 	ErrTypeMatchingBuildFailure                      = "MATCHING_BUILD_FAILURE"
