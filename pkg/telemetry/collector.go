@@ -445,11 +445,11 @@ func getErrorType(err error) string {
 	}
 
 	errMsgExact := err.Error()
-	if cat := getExtendedErrorType(errMsgExact); cat != "" {
+	errMsg := strings.ToLower(errMsgExact)
+	if cat := getExtendedErrorType(errMsgExact, errMsg); cat != "" {
 		return cat
 	}
 
-	errMsg := strings.ToLower(errMsgExact)
 	for _, m := range substringErrMatchers {
 		if strings.Contains(errMsg, m.substring) {
 			return m.category

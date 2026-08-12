@@ -18,6 +18,7 @@ import (
 	"context"
 	"os"
 	"regexp"
+	"strings"
 )
 
 const (
@@ -677,4 +678,15 @@ var extraMultiSubstringErrMatchers = []struct {
 	{[]string{"mkdir: cannot create directory", "/run/enroot", "Permission denied"}, ErrTypeEnrootPermissionDenied},
 	{[]string{"Required 'compute.images.get' permission", "forbidden"}, ErrTypeComputeImagesGetForbidden},
 	{[]string{"validator \"test_reservation_exists\" failed", "was not found in any zone of project"}, ErrTypeValidatorReservationNotFound},
+}
+
+func init() {
+	for i, m := range extraMultiSubstringErrMatchers {
+		for j, sub := range m.substrings {
+			extraMultiSubstringErrMatchers[i].substrings[j] = strings.ToLower(sub)
+		}
+	}
+	for i, m := range extraSubstringErrMatchers {
+		extraSubstringErrMatchers[i].substring = strings.ToLower(m.substring)
+	}
 }
