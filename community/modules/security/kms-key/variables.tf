@@ -174,23 +174,32 @@ variable "destroy_scheduled_duration" {
 
 variable "deletion_policy" {
   description = <<-EOT
-    What `terraform destroy` does with the CryptoKey.
+    What `terraform destroy` does with the CryptoKey this module created.
 
-      ABANDON  drop it from Terraform state, leaving the CryptoKey and
-               every key version intact and enabled in Cloud KMS
       DELETE   destroy all key versions, rendering data encrypted with
                them permanently unrecoverable
+      ABANDON  drop it from Terraform state, leaving the CryptoKey and
+               every key version intact and enabled in Cloud KMS
 
-    ABANDON is the default because key material routinely outlives the
-    deployment that created it, and because destroying versions cannot be
-    undone. Only set DELETE for a key whose data is genuinely disposable.
+    DELETE is the default, matching the provider's own default for this
+    resource: a key this deployment created is this deployment's to destroy,
+    so tearing the deployment down destroys its key material rather than
+    leaving it enabled forever. Set ABANDON when data encrypted with this
+    key must outlive the deployment that created it -- for example a
+    Filestore instance or bucket meant to survive `terraform destroy`.
+
+    Neither setting frees the CryptoKey name: Cloud KMS never deletes a
+    CryptoKey resource itself, only DELETE additionally destroys its
+    version(s). A key adopted with the pre-existing-kms-key module is never
+    affected by this variable, since that module never creates a
+    google_kms_crypto_key resource for `terraform destroy` to act on.
 
     Changing this is an in-place update, so it can be set on an existing
     key by re-applying -- unlike protection_level and
     destroy_scheduled_duration, which are fixed at creation.
     EOT
   type        = string
-  default     = "ABANDON"
+  default     = "DELETE"
   nullable    = false
 
   validation {
