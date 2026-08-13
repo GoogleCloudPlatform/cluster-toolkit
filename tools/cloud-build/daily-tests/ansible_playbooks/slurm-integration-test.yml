@@ -328,6 +328,28 @@
       ansible.builtin.include_tasks: tasks/add-instance-labels.yml
       when: custom_vars is defined and custom_vars.enable_spot | default(false) | bool
 
+    - name: Hot-patch TCPXO network interface names on compute nodes
+      delegate_to: controller_node_host
+      ansible.builtin.shell: |
+        #!/bin/bash
+        NODES=$(sinfo --noheader --format "%n")
+        if [ -z "$NODES" ]; then exit 0; fi
+
+        # Use srun -N 1 to bypass the multi-node prolog bug and patch safely
+        for NODE in $NODES; do
+          srun -N 1 -w "$NODE" bash -c "
+            HEADER=\$(sudo lspci -s 06:00.0 -xxx 2>/dev/null | grep -E '^00:' | awk '{print \$16}')
+            if [ \"\$HEADER\" == \"80\" ]; then
+              sudo sed -i 's/s0\"/s0f0\"/g' /opt/tcpdirect_benchmark/gpu_rxq_configuration.textproto 2>/dev/null || true
+            fi
+          "
+        done
+      args:
+        executable: /bin/bash
+      ignore_errors: true
+      changed_when: false
+      when: "'a3h' in test_name | default('')"
+
     - name: Run Integration tests for Cluster Toolkit
       ansible.builtin.include_tasks: "{{ test }}"
       vars:

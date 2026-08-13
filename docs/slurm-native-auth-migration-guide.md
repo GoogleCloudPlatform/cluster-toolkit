@@ -1,9 +1,8 @@
 # Slurm Native Authentication Migration Guide
 
 > [!WARNING]
-> **DEPRECATION NOTICE**: Support for legacy MUNGE-based authentication (`auth/munge`) is currently **DEPRECATING**.
-> It is scheduled for complete removal on **July 31, 2026** in favor of Slurm Native Authentication (`auth/slurm`).
-> All new deployments will use Slurm Native Authentication by default. Please plan to migrate existing clusters using the destroy-and-recreate workflow detailed below.
+> **DEPRECATION NOTICE**: Legacy MUNGE-based authentication (`auth/munge`) has reached **End-of-Support** and is no longer maintained in Cluster Toolkit.
+> The option to configure MUNGE (`enable_slurm_auth: false`) will be completely removed soon. All deployments must use Slurm Native Authentication (`auth/slurm`). Please plan to migrate existing clusters using the destroy-and-recreate workflow detailed below.
 
 This document serves as the canonical operational manual for migrating Slurm-GCP deployments within the Cluster Toolkit from legacy MUNGE authentication (`auth/munge`) to **Slurm Native Authentication** (`auth/slurm`).
 

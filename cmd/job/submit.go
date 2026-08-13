@@ -53,13 +53,14 @@ var (
 	placementPolicy string
 	nodeConstraint  map[string]string
 
-	cpuAffinityStr     string
-	restartOnExitCodes []int
-	imagePullSecrets   string
-	serviceAccountName string
-	topology           string
-	gkeScheduler       string
-	platform           string
+	cpuAffinityStr         string
+	restartOnExitCodes     []int
+	imagePullSecrets       string
+	serviceAccountName     string
+	topology               string
+	gkeCustomTemplatesPath string
+	gkeScheduler           string
+	platform               string
 
 	awaitJobCompletion bool
 	timeout            string
@@ -185,7 +186,8 @@ func init() {
 	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
 
 	SubmitCmd.Flags().BoolVar(&gkeMtcEnabled, "gke-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC).")
-	SubmitCmd.Flags().StringVar(&gkeMtcRamdiskDirectory, "gke-mtc-ramdisk-dir", "", "The ramdisk directory path for local checkpoints in MTC.")
+	SubmitCmd.Flags().StringVar(&gkeMtcRamdiskDirectory, "gke-mtc-ramdisk-dir", "", "Ramdisk directory for Multi-Tier Checkpointing (MTC).")
+	SubmitCmd.Flags().StringVar(&gkeCustomTemplatesPath, "gke-custom-templates-path", "", "Path to a local directory containing custom GKE templates overrides.")
 
 	_ = SubmitCmd.MarkFlagRequired("name")
 	_ = SubmitCmd.MarkFlagRequired("compute-type")
@@ -238,6 +240,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		ProjectID:                     projectID,
 		ClusterName:                   clusterName,
 		ClusterLocation:               location,
+		GKENamespace:                  gkeNamespace,
 		WorkloadName:                  workloadName,
 		KueueQueueName:                kueueQueueName,
 		NumSlices:                     numSlices,
@@ -260,6 +263,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		Verbose:                       verbose,
 		GKEMTCEnabled:                 gkeMtcEnabled,
 		GKEMTCRamdiskDirectory:        gkeMtcRamdiskDirectory,
+		GkeCustomTemplatesPath:        gkeCustomTemplatesPath,
 		GKENAPProvisioning:            gkeNapProvisioning,
 		GKENAPReservation:             gkeNapReservation,
 		IsPathwaysJob:                 isPathwaysJob,

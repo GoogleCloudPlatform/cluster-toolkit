@@ -64,6 +64,7 @@ type JobDefinition struct {
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
+	GKENamespace    string
 
 	WorkloadName                  string
 	KueueQueueName                string
@@ -98,6 +99,8 @@ type JobDefinition struct {
 	GKEMTCEnabled          bool
 	GKEMTCRamdiskDirectory string
 
+	GkeCustomTemplatesPath string
+
 	RawMounts []string
 	Env       map[string]string
 
@@ -115,6 +118,7 @@ type ListOptions struct {
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
+	GKENamespace    string
 	// Filters
 	Status       string
 	NameContains string
@@ -124,12 +128,14 @@ type CancelOptions struct {
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
+	GKENamespace    string
 }
 
 type LogsOptions struct {
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
+	GKENamespace    string
 	Follow          bool
 	MainOnly        *bool
 }
@@ -139,6 +145,7 @@ type InspectOptions struct {
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
+	GKENamespace    string
 	WorkloadName    string
 	OutputPath      string
 	Show            bool

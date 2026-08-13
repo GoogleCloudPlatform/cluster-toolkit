@@ -29,7 +29,9 @@ substitutions:
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 86400s
-queueTtl: 86400s  # 24hr
+queueTtl: 86400s # 24hr
+logsBucket: "gs://$PROJECT_NUMBER.cloudbuild-logs.googleusercontent.com"
+
 steps:
 # 1. Build and push workspace container containing the current code layer
 - id: build-workspace-image
@@ -116,6 +118,7 @@ steps:
             args:
             - |
               set -x -e
+              echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/batch-mpi.yaml"
               cd /workspace
 
               DEPLOYMENT_NAME="batch-mpi-$$BUILD_ID_SHORT"

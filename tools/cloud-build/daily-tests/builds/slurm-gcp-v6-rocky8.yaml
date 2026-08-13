@@ -29,8 +29,7 @@ substitutions:
 timeout: 86400s
 queueTtl: 86400s  # 24hr
 
-options:
-  defaultLogsBucketBehavior: REGIONAL_USER_OWNED_BUCKET
+logsBucket: "gs://$PROJECT_NUMBER.cloudbuild-logs.googleusercontent.com"
 
 steps:
 # 1. Build and push workspace container containing the current code layer
@@ -89,6 +88,10 @@ steps:
           - name: runner
             image: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
             env:
+            - name: PROJECT_ID
+              value: "$PROJECT_ID"
+            - name: BUILD_ID
+              value: "$BUILD_ID"
             - name: ANSIBLE_HOST_KEY_CHECKING
               value: "false"
             - name: ANSIBLE_CONFIG
@@ -107,6 +110,7 @@ steps:
             args:
             - |
               set -x -e
+              echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/slurm-gcp-v6-rocky8.yaml"
               cd /workspace
 
               DEPLOYMENT_NAME="rock-8-$$BUILD_ID_SHORT"
@@ -161,7 +165,7 @@ steps:
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
                 --extra-vars="test_prefix=${_TEST_PREFIX}" --extra-vars="use_fixed_vpc=true" \
-                --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT" \
+                --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
                 --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-v6-rocky8.yml" \
                 --extra-vars="triage_gcs_bucket_override=\$$TRIAGE_GCS_BUCKET" \
                 --extra-vars="triage_project_number_override=\$$TRIAGE_PROJECT_NUMBER" \

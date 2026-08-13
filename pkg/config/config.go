@@ -44,7 +44,7 @@ import (
 
 const (
 	maxHintDist          int = 3 // Maximum Levenshtein distance where we suggest a hint
-	latestToolkitVersion     = "v1.99.0"
+	latestToolkitVersion     = "v1.100.0"
 	// SharedModulesDirName is the name of the shared directory for embedded modules
 	SharedModulesDirName = "_modules"
 )
@@ -1144,9 +1144,11 @@ func fetchExampleFilesFromGitHub(version string) []string {
 	if err == nil {
 		// Parse the remote tree
 		for _, item := range treeResp.Tree {
-			// Check for YAML files in the examples directories.
+			// Check for YAML files in the examples and daily tests directories.
 			if item.Type == "blob" &&
-				(strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/")) &&
+				(strings.HasPrefix(item.Path, "examples/") ||
+					strings.HasPrefix(item.Path, "community/examples/") ||
+					strings.HasPrefix(item.Path, "tools/cloud-build/daily-tests/blueprints/")) &&
 				(strings.HasSuffix(item.Path, ".yaml") || strings.HasSuffix(item.Path, ".yml")) {
 
 				predefinedExamples = append(predefinedExamples, item.Path)

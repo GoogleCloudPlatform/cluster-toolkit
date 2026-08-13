@@ -165,6 +165,8 @@ deployment_groups:
     settings:
       kueue:
         install: true
+        ## Custom kueue config path
+        # config_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
         config_template_vars:
           tpu_quota: $(vars.num_slices * gke-tpu-v4-pool.node_count_static * gke-tpu-v4-pool.tpu_chips_per_node)
           accelerator_type: $(vars.accelerator_type)

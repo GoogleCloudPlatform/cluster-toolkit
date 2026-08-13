@@ -51,6 +51,16 @@ vars:
   # The Customer-Managed Encryption Key (CMEK) path (required if enable_confidential_storage is true)
   disk_encryption_kms_key: ""
 
+  # (Optional) Local SSD storage configuration (supports 0 or 4 for g4-standard-48).
+  # Defaults to 0 (no SSDs attached).
+  # Note: These settings are mutually exclusive. Uncommenting both will cause a Terraform planning error.
+  #
+  # Exposes Local SSDs as raw /dev/nvmeX block devices:
+  # local_ssd_count_nvme_block: 4
+  #
+  # Formats and mounts Local SSDs for GKE ephemeral scratch storage (emptyDir):
+  # local_ssd_count_ephemeral_storage: 4
+
   # VPC and Subnet Name overrides for primary (net-0) and secondary (net-1) networks
   network_name_0: $(vars.deployment_name)-net-0
   subnetwork_name_0: $(vars.deployment_name)-sub-0
@@ -163,6 +173,9 @@ deployment_groups:
       zones: [$(vars.zone)]
       static_node_count: $(vars.static_node_count)
       disk_type: "hyperdisk-balanced"
+      # To enable Local SSDs, uncomment the corresponding line below:
+      # local_ssd_count_nvme_block: $(vars.local_ssd_count_nvme_block)
+      # local_ssd_count_ephemeral_storage: $(vars.local_ssd_count_ephemeral_storage)
       enable_numa_aware_scheduling: true
       guest_accelerator:
       - type: nvidia-rtx-pro-6000

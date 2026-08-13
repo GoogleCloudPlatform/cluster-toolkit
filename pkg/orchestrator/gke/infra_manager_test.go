@@ -344,7 +344,7 @@ func TestEnsurePriorityClassesInstalled_Missing(t *testing.T) {
 				// Return only system priority classes to simulate no user priority classes
 				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical system-node-critical"}
 			}
-			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "priority-classes.yaml") {
+			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "kueue_priority_classes.yaml") {
 				applyCalled = true
 				return shell.CommandResult{ExitCode: 0}
 			}
@@ -375,7 +375,7 @@ func TestEnsurePriorityClassesInstalled_Present(t *testing.T) {
 				// Return system classes and at least one user class (e.g. 'low') to simulate pre-existing classes
 				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical system-node-critical low"}
 			}
-			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "priority-classes.yaml") {
+			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "kueue_priority_classes.yaml") {
 				applyCalled = true
 				return shell.CommandResult{ExitCode: 0}
 			}
@@ -702,5 +702,43 @@ func TestReplaceDeprecatedRbacProxyImage(t *testing.T) {
 			checkContainers("containers")
 			checkContainers("initContainers")
 		})
+	}
+}
+
+func TestRenderResourceFlavor_TopologyFiltering(t *testing.T) {
+	orc := &GKEOrchestrator{}
+
+	inputLabels := map[string]string{
+		"cloud.google.com/gke-tpu-accelerator":      "tpu7x",
+		"cloud.google.com/gke-nodepool":             "tpu-pool",
+		"cloud.google.com/gke-tpu-topology":         "4x4x4",
+		"cloud.google.com/gke-tpu-slice-1x1-id":     "some-id",
+		"cloud.google.com/gke-tpu-partition-2x2-id": "some-partition-id",
+	}
+
+	bytes, err := orc.renderResourceFlavor("flavor-tpu7x", inputLabels)
+	if err != nil {
+		t.Fatalf("renderResourceFlavor failed: %v", err)
+	}
+
+	output := string(bytes)
+
+	// Allowed labels must be preserved
+	if !strings.Contains(output, "cloud.google.com/gke-tpu-accelerator: tpu7x") {
+		t.Errorf("expected cloud.google.com/gke-tpu-accelerator to be present, got:\n%s", output)
+	}
+	if !strings.Contains(output, "cloud.google.com/gke-nodepool: tpu-pool") {
+		t.Errorf("expected cloud.google.com/gke-nodepool to be present, got:\n%s", output)
+	}
+
+	// Blocked topology labels must be filtered out
+	if strings.Contains(output, "cloud.google.com/gke-tpu-topology") {
+		t.Errorf("cloud.google.com/gke-tpu-topology should be filtered out, got:\n%s", output)
+	}
+	if strings.Contains(output, "cloud.google.com/gke-tpu-slice-") {
+		t.Errorf("cloud.google.com/gke-tpu-slice-* labels should be filtered out, got:\n%s", output)
+	}
+	if strings.Contains(output, "cloud.google.com/gke-tpu-partition-") {
+		t.Errorf("cloud.google.com/gke-tpu-partition-* labels should be filtered out, got:\n%s", output)
 	}
 }

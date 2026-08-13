@@ -16,9 +16,6 @@
 blueprint_name: a3ultra-slurm
 
 vars:
-  # Set to true to enable the secure Slurm Native Authentication standard.
-  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
-  enable_slurm_auth: false
   deployment_name: # supply deployment name
   project_id: # supply project ID
   region: # supply region
@@ -260,20 +257,27 @@ deployment_groups:
           - name: Install and Configure CUDA 13 / DCGM
             hosts: all
             become: true
+            vars:
+              cuda_installer_url: "https://developer.download.nvidia.com/compute/cuda/13.0.0/local_installers/cuda_13.0.0_580.65.06_linux.run"
+              cuda_installer_file: "/tmp/cuda_13.0.0_580.65.06_linux.run"
+              nvidia_packages:
+                - datacenter-gpu-manager-4-core=1:4.6.1-1
+                - datacenter-gpu-manager-4-dev=1:4.6.1-1
+                - datacenter-gpu-manager-4-cuda13=1:4.6.1-1
             tasks:
               - name: Download CUDA runfile
                 ansible.builtin.get_url:
-                  url: https://developer.download.nvidia.com/compute/cuda/13.0.0/local_installers/cuda_13.0.0_580.65.06_linux.run
-                  dest: /tmp/cuda_13.0.0_580.65.06_linux.run
+                  url: "{{ cuda_installer_url }}"
+                  dest: "{{ cuda_installer_file }}"
                   mode: '0755'
 
               - name: Install CUDA toolkit via runfile
                 ansible.builtin.command:
-                  cmd: /tmp/cuda_13.0.0_580.65.06_linux.run --silent --toolkit
+                  cmd: "{{ cuda_installer_file }} --silent --toolkit"
 
               - name: Remove CUDA runfile
                 ansible.builtin.file:
-                  path: /tmp/cuda_13.0.0_580.65.06_linux.run
+                  path: "{{ cuda_installer_file }}"
                   state: absent
 
               - name: Install NVIDIA repository keyring
@@ -285,22 +289,17 @@ deployment_groups:
                 ansible.builtin.apt:
                   update_cache: yes
 
-              - name: Install DCGM packages
+              - name: Install NVIDIA Packages
                 ansible.builtin.apt:
-                  name:
-                    - datacenter-gpu-manager-4-cuda13=1:4.6.0-1
-                    - datacenter-gpu-manager-4-dev=1:4.6.0-1
-                    - datacenter-gpu-manager-4-core=1:4.6.0-1
+                  name: "{{ nvidia_packages }}"
                   state: present
+                  allow_downgrade: yes
 
               - name: Freeze DCGM packages
                 ansible.builtin.dpkg_selections:
-                  name: "{{ item }}"
+                  name: "{{ item.split('=')[0] }}"
                   selection: hold
-                loop:
-                  - datacenter-gpu-manager-4-cuda13
-                  - datacenter-gpu-manager-4-dev
-                  - datacenter-gpu-manager-4-core
+                loop: "{{ nvidia_packages }}"
       - type: ansible-local
         destination: enable_dcgm.yml
         content: |

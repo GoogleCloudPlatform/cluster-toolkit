@@ -525,7 +525,7 @@ Enables slurm authentication instead of munge.
 
 EOD
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "cloud_parameters" {
