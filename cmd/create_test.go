@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"context"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulewriter"
 	"os"
@@ -190,7 +191,7 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 	}
 }
 
-func TestPromptAndCreateGcsBucketsEmptyBucket(t *testing.T) {
+func TestVerifyGcsBucketsEmptyBucket(t *testing.T) {
 	bp := config.Blueprint{
 		Vars: config.NewDict(map[string]cty.Value{
 			"project_id": cty.StringVal("my-project"),
@@ -208,17 +209,17 @@ func TestPromptAndCreateGcsBucketsEmptyBucket(t *testing.T) {
 		},
 	}
 
-	err := promptAndCreateGcsBuckets(bp)
+	err := verifyGcsBuckets(context.Background(), bp)
 	if err == nil {
 		t.Errorf("expected error when bucket is null, got nil")
-	} else if err.Error() != "GCS backend bucket name cannot be empty" {
-		t.Errorf("expected error 'GCS backend bucket name cannot be empty', got: %v", err)
+	} else if err.Error() != "GCS backend bucket name cannot be empty or unknown" {
+		t.Errorf("expected error 'GCS backend bucket name cannot be empty or unknown', got: %v", err)
 	}
 
 	bp.Groups[0].TerraformBackend.Configuration = config.NewDict(map[string]cty.Value{
 		"bucket": cty.StringVal(""),
 	})
-	err = promptAndCreateGcsBuckets(bp)
+	err = verifyGcsBuckets(context.Background(), bp)
 	if err == nil {
 		t.Errorf("expected error when bucket is empty string, got nil")
 	} else if err.Error() != "GCS backend bucket name cannot be empty" {

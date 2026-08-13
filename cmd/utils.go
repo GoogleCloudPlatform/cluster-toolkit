@@ -24,6 +24,7 @@ import (
 	"slices"
 
 	"github.com/spf13/cobra"
+	"github.com/zclconf/go-cty/cty"
 )
 
 var flagArtifactsDir string
@@ -147,4 +148,34 @@ func hasSelectedGroupOfKind(bp config.Blueprint, kind config.ModuleKind) bool {
 		}
 	}
 	return false
+}
+
+func GetUniqueGcsBuckets(bp config.Blueprint) ([]string, error) {
+	seenBuckets := make(map[string]bool)
+	var buckets []string
+
+	for _, g := range bp.Groups {
+		if g.TerraformBackend.Type != "gcs" || !g.TerraformBackend.Configuration.Has("bucket") {
+			continue
+		}
+		evaluatedConfig, err := bp.EvalDict(g.TerraformBackend.Configuration)
+		if err != nil {
+			return nil, fmt.Errorf("failed to evaluate terraform backend configuration: %w", err)
+		}
+		bucketVal := evaluatedConfig.Get("bucket")
+		if bucketVal.IsNull() || !bucketVal.IsKnown() || bucketVal.Type() != cty.String {
+			return nil, fmt.Errorf("GCS backend bucket name cannot be empty or unknown")
+		}
+		bucketName := bucketVal.AsString()
+		if bucketName == "" {
+			return nil, fmt.Errorf("GCS backend bucket name cannot be empty")
+		}
+		if seenBuckets[bucketName] {
+			continue
+		}
+		seenBuckets[bucketName] = true
+		buckets = append(buckets, bucketName)
+	}
+
+	return buckets, nil
 }

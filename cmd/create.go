@@ -34,7 +34,6 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/spf13/cobra"
-	"github.com/zclconf/go-cty/cty"
 )
 
 func addCreateFlags(c *cobra.Command) *cobra.Command {
@@ -73,89 +72,38 @@ var (
 	}))
 )
 
-func promptAndCreateGcsBuckets(bp config.Blueprint) error {
+func verifyGcsBuckets(ctx context.Context, bp config.Blueprint) error {
+	buckets, err := GetUniqueGcsBuckets(bp)
+	if err != nil {
+		return err
+	}
+
 	var client *storage.Client
-	ctx := context.Background()
 	defer func() {
 		if client != nil {
 			_ = client.Close()
 		}
 	}()
 
-	seenBuckets := make(map[string]bool)
-
-	for _, g := range bp.Groups {
-		if g.TerraformBackend.Type != "gcs" || !g.TerraformBackend.Configuration.Has("bucket") {
-			continue
-		}
-		evaluatedConfig, err := bp.EvalDict(g.TerraformBackend.Configuration)
-		if err != nil {
-			return fmt.Errorf("failed to evaluate terraform backend configuration: %w", err)
-		}
-		bucketVal := evaluatedConfig.Get("bucket")
-		if bucketVal.IsNull() || bucketVal.Type() != cty.String {
-			return fmt.Errorf("GCS backend bucket name cannot be empty")
-		}
-		bucketName := bucketVal.AsString()
-		if bucketName == "" {
-			return fmt.Errorf("GCS backend bucket name cannot be empty")
-		}
-		if seenBuckets[bucketName] {
-			continue
-		}
-		seenBuckets[bucketName] = true
-
+	for _, bucketName := range buckets {
 		if client == nil {
 			client, err = storage.NewClient(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to initialize GCS client: %w", err)
+				logging.Warn("Failed to initialize GCS client to verify bucket '%s': %v. Ensure you have the right permissions and network access.", bucketName, err)
+				continue
 			}
 		}
 
-		if err := createGcsBucket(ctx, client, bucketName, bp); err != nil {
-			return err
+		bucketHandle := client.Bucket(bucketName)
+		ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+		_, err = bucketHandle.Attrs(ctxTimeout)
+		cancel()
+
+		if errors.Is(err, storage.ErrBucketNotExist) {
+			logging.Warn("GCS backend bucket '%s' does not exist. It will be created during the deploy phase.", bucketName)
+		} else if err != nil {
+			logging.Warn("Failed to connect to GCS to verify bucket '%s': %v. Ensure you have the right permissions and network access.", bucketName, err)
 		}
-	}
-	return nil
-}
-
-func createGcsBucket(ctx context.Context, client *storage.Client, bucketName string, bp config.Blueprint) error {
-	bucketHandle := client.Bucket(bucketName)
-
-	ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
-	_, err := bucketHandle.Attrs(ctxTimeout)
-	cancel()
-
-	if errors.Is(err, storage.ErrBucketNotExist) {
-		if !flagAutoApprove {
-			prompt := fmt.Sprintf("Bucket '%s' missing. Note that this bucket will not be deleted by gcluster destroy command and needs manual deletion.\nCreate it? [y/n]: ", bucketName)
-			if !confirmActionFunc(prompt) {
-				return fmt.Errorf("user aborted")
-			}
-		}
-
-		projectID := config.GetKeyFromBlueprint("project_id", bp)
-		if projectID == "" {
-			return fmt.Errorf("cannot create bucket: project_id is missing or invalid in blueprint vars")
-		}
-
-		region := config.GetKeyFromBlueprint("region", bp)
-		var bucketAttrs *storage.BucketAttrs
-		if region != "" {
-			bucketAttrs = &storage.BucketAttrs{Location: region}
-		}
-
-		ctxCreate, cancelCreate := context.WithTimeout(ctx, 30*time.Second)
-		err = bucketHandle.Create(ctxCreate, projectID, bucketAttrs)
-		cancelCreate()
-
-		if err != nil {
-			return err
-		}
-
-		logging.Info("Note: The GCS bucket %s will not be deleted by gcluster destroy command and needs manual deletion.", bucketName)
-	} else if err != nil {
-		return fmt.Errorf("failed to verify GCS bucket %q: %w", bucketName, err)
 	}
 	return nil
 }
@@ -175,7 +123,7 @@ func doCreate(cmd *cobra.Command, path string) string {
 	logging.Info("Creating deployment folder %q ...", deplDir)
 	checkErr(checkOverwriteAllowed(deplDir, bp, createFlags.overwriteDeployment, createFlags.forceOverwrite), ctx)
 	if os.Getenv("GHPC_SKIP_BUCKET_CREATION") != "true" {
-		checkErr(promptAndCreateGcsBuckets(bp), ctx)
+		checkErr(verifyGcsBuckets(cmd.Context(), bp), ctx)
 	}
 	checkErr(modulewriter.WriteDeployment(bp, deplDir), ctx)
 	return deplDir
