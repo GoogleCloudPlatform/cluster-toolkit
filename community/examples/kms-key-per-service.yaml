@@ -46,12 +46,17 @@ blueprint_name: kms-key-per-service
 # Cost note: this builds a real cluster -- a controller, a login node and a
 # 1 TiB ZONAL Filestore instance are charged from the moment they exist.
 #
-# Teardown note: Cloud KMS key rings can never be deleted and CryptoKey names
-# can never be reused, so `terraform destroy` leaves the two keys this
-# blueprint creates behind, and never touches the adopted one. Redeploying
-# under the same deployment_name fails on the retained rings; use a fresh
+# Teardown note: the disk_key and bucket_key modules default to
+# deletion_policy = DELETE, so `terraform destroy` schedules both keys'
+# versions for destruction, making the resources they encrypted permanently
+# unrecoverable; the adopted filestore_key is never touched, since
+# pre-existing-kms-key never creates a resource for destroy to act on. Key
+# rings and CryptoKey names are retained regardless of deletion_policy
+# (Cloud KMS never frees either), so redeploying under the same
+# deployment_name still fails on the retained rings; use a fresh
 # deployment_name, or point key_ring_id at the retained ring with a new
-# key_name.
+# key_name. Set a key module's deletion_policy to ABANDON to keep its data
+# recoverable after a teardown.
 vars:
   # Set to true to enable the secure Slurm Native Authentication standard.
   # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
