@@ -49,6 +49,29 @@ example `roles/cloudkms.viewer` on the key or its ring), and — if a
 
 A key can only encrypt resources in its own location, unless it is `global`.
 
+## Testing
+
+`terraform validate` passes on this module in isolation.
+
+Live-verified against a real GCP project, adopting a key created out of band
+with `gcloud kms keys create`:
+
+* The module correctly reads the pre-existing key, and `kms-key-iam` grants
+  land on it the same way as for a generated key -- confirmed with
+  `gcloud kms keys describe` / `get-iam-policy`.
+* Consumers (a controller boot disk and a Filestore instance) confirmed via
+  `gcloud ... describe --format="value(...kmsKeyName)"` actually using the
+  adopted key.
+* `terraform state list` confirms the key is held only as
+  `data.google_kms_crypto_key.this` / `data.google_kms_key_ring.this`, never
+  as a managed resource.
+* `terraform destroy` on a deployment using this module leaves the key
+  completely untouched and still `ENABLED` -- confirmed both immediately
+  after apply and, separately, on a deployment whose companion `kms-key`
+  module defaults to `deletion_policy = "DELETE"`, where `terraform destroy`
+  reported nothing to destroy for this module while the generated key in the
+  same run was correctly scheduled for deletion. Independently reproduced.
+
 [kms-key]: ../kms-key/README.md
 [kms-key-iam]: ../kms-key-iam/README.md
 

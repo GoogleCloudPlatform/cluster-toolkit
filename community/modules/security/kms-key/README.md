@@ -106,6 +106,39 @@ for previously encrypted data. This module never disables or destroys a key
 version outside of `terraform destroy`, whose effect on existing versions is
 controlled entirely by `deletion_policy`.
 
+## Testing
+
+`terraform validate` passes on this module in isolation.
+
+Live-verified against a real GCP project, using both a full trimmed Slurm
+cluster and a minimal standalone deployment:
+
+* A generated key comes up `ENABLED`/`ENCRYPT_DECRYPT`, and `kms-key-iam`
+  grants land on the expected service agents (compute, storage, filestore) --
+  confirmed with `gcloud kms keys describe` / `get-iam-policy`.
+* Consumers actually use the key, not a Google-managed one: a controller boot
+  disk and a Filestore instance both confirmed via
+  `gcloud ... describe --format="value(...kmsKeyName)"` pointing at the
+  generated key.
+* A real Slurm job (`srun`) completed successfully on a CMEK-encrypted
+  compute node.
+* Disabling the key's version produces lockout without deleting anything: a
+  Compute Engine instance start is rejected with an explicit `DISABLED`-state
+  error (and a `kmsKeyError` system event forcing the instance to
+  `TERMINATED`), the Filestore instance transitions to `SUSPENDED`, and Cloud
+  Storage reads fail with `KEY_DISABLED` -- all three resources remain
+  listed, only access is blocked. Re-enabling the version restores all three
+  without redeploying.
+* `deletion_policy = "DELETE"` (the default): `terraform destroy` schedules
+  the key's version for destruction (`DESTROY_SCHEDULED`, with `destroyTime`
+  set `destroy_scheduled_duration` out) -- confirmed on a live key,
+  independently reproduced twice.
+* `deletion_policy = "ABANDON"`: `terraform destroy` leaves the key ring,
+  CryptoKey and every version intact and `ENABLED`.
+* Redeploying under a fresh `key_ring_id`/`key_name` after a teardown works
+  as documented; redeploying under the same retained ring/key name fails
+  with `Error 409: ... already exists`, as expected.
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
