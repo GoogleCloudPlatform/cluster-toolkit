@@ -23,7 +23,7 @@ terraform {
   }
 
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:pre-existing-gke-cluster/v1.99.0"
+    module_name = "blueprints/terraform/hpc-toolkit:pre-existing-gke-cluster/v1.100.0"
   }
 
   required_version = ">= 1.12.2"
