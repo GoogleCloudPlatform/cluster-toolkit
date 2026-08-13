@@ -39,10 +39,35 @@ func (c *CIDRValidator) Validate(
 		modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
 		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
 	}
+	objectKey, _ := parseString(rule.Inputs["object_key"])
 
 	return IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
 		for _, val := range t.Values {
-			if val.IsNull() {
+			fmt.Printf("target name: %s, val: %#v, isKnown: %v\n", t.Name, val, val.IsKnown())
+			if !val.IsKnown() {
+				continue
+			}
+			
+			fmt.Printf("val type: %s\n", val.Type().FriendlyName())
+			var cidrVal cty.Value
+			if val.Type() == cty.String {
+				cidrVal = val
+			} else if val.Type().IsObjectType() || val.Type().IsMapType() {
+				if objectKey == "" {
+					continue
+				}
+				if !val.Type().HasAttribute(objectKey) {
+					if !allowNull {
+						return config.BpError{Err: fmt.Errorf("missing key %q in object", objectKey), Path: t.Path}
+					}
+					continue
+				}
+				cidrVal = val.GetAttr(objectKey)
+			} else {
+				continue
+			}
+
+			if cidrVal.IsNull() {
 				if allowNull {
 					continue
 				}
@@ -52,11 +77,10 @@ func (c *CIDRValidator) Validate(
 				}
 				return config.BpError{Err: fmt.Errorf("%s", msg), Path: t.Path}
 			}
-			if !val.IsKnown() || val.Type() != cty.String {
+			if cidrVal.Type() != cty.String {
 				continue
 			}
-			// Extract each extracted CIDR string (e.g. "1.2.3.4/32") and validate with Go's net.ParseCIDR
-			str := val.AsString()
+			str := cidrVal.AsString()
 			if _, _, err := net.ParseCIDR(str); err != nil {
 				msg := rule.ErrorMessage
 				if msg == "" {
@@ -68,7 +92,6 @@ func (c *CIDRValidator) Validate(
 		return nil
 	})
 }
-
 // RegexValidator implements the Validator interface for 'regex' type.
 type RegexValidator struct{}
 
