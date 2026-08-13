@@ -66,14 +66,43 @@ func PatchPath() error {
 	return nil
 }
 
-// EnsureDependencies checks if terraform and packer are accessible in the PATH.
+// HasBinary checks if a binary is available in the PATH.
+func HasBinary(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
+}
+
+// EnsureDependencies checks if requested tools are accessible in the PATH.
 // If not, it handles downloading them according to the decision.
-func EnsureDependencies(decision DownloadDecision) error {
-	if err := ensureBinary("terraform", TerraformVersion, decision); err != nil {
-		return err
+// It returns an error if no tools are specified.
+func EnsureDependencies(decision DownloadDecision, tools ...string) error {
+	if len(tools) == 0 {
+		return fmt.Errorf("no tools specified for dependency check")
 	}
-	if err := ensureBinary("packer", PackerVersion, decision); err != nil {
-		return err
+
+	for _, tool := range tools {
+		if tool != "terraform" && tool != "packer" {
+			return fmt.Errorf("unknown tool requested: %s", tool)
+		}
+	}
+
+	seen := make(map[string]bool)
+	for _, tool := range tools {
+		if seen[tool] {
+			continue
+		}
+		seen[tool] = true
+
+		var err error
+		switch tool {
+		case "terraform":
+			err = ensureBinary("terraform", TerraformVersion, decision)
+		case "packer":
+			err = ensureBinary("packer", PackerVersion, decision)
+		}
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
