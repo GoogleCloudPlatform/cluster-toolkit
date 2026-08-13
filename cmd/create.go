@@ -62,14 +62,14 @@ var (
 		forceOverwrite      bool
 	}{}
 
-	createCmd = addAutoApproveFlag(addCreateFlags(&cobra.Command{
+	createCmd = addCreateFlags(&cobra.Command{
 		Use:               "create <BLUEPRINT_FILE>",
 		Short:             "Create a new deployment.",
 		Long:              "Create a new deployment based on a provided blueprint.",
 		Run:               runCreateCmd,
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkExists),
 		ValidArgsFunction: filterYaml,
-	}))
+	})
 )
 
 func verifyGcsBuckets(ctx context.Context, bp config.Blueprint) error {

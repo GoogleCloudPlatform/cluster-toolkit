@@ -52,7 +52,6 @@ run_test() {
 		cd "${tmpdir}"
 	fi
 	${GHPC_PATH} create -l ERROR \
-		--auto-approve \
 		--skip-validators="${VALIDATORS_TO_SKIP}" \
 		--vars="project_id=${PROJECT},deployment_name=${DEPLOYMENT}" \
 		--add-creator-label=false \

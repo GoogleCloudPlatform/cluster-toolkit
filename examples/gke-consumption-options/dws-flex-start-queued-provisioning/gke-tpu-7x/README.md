@@ -255,5 +255,3 @@ If you ran `tpu-7x-test-job-gcs.yaml`, you can verify the benchmark results and 
 
 > [!TIP]
 > If the job is still running, you can follow the logs in real-time by adding the `-f` flag to the `kubectl logs` command.
-
-**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

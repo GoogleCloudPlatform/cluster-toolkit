@@ -66,8 +66,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 		deplRoot = args[0]
 		// check that no "create" flags were specified
 		cmd.Flags().VisitAll(func(f *pflag.Flag) {
-			_, isShared := f.Annotations["shared"]
-			if f.Changed && createCmd.LocalFlags().Lookup(f.Name) != nil && !isShared {
+			if f.Changed && createCmd.LocalFlags().Lookup(f.Name) != nil {
 				checkErr(fmt.Errorf("cannot specify flag %q with DEPLOYMENT_DIRECTORY provided", f.Name), nil)
 			}
 		})
@@ -218,7 +217,7 @@ func createGcsBucketsIfMissing(ctx context.Context, bp config.Blueprint) error {
 
 		if errors.Is(err, storage.ErrBucketNotExist) {
 			if !flagAutoApprove {
-				prompt := fmt.Sprintf("The required Terraform state bucket '%s' is missing. We can create it now, but for data safety, gcluster destroy will not delete it later—you must delete it manually when done. Create it automatically? [y/N]: ", bucketName)
+				prompt := fmt.Sprintf("The required Terraform state bucket '%s' is missing. We can create it now, but for data safety, gcluster destroy will not delete it later—you must delete it manually when done.\nAlternatively, you can create it manually via `gcloud storage buckets create gs://%s` and then re-run this command.\nCreate it automatically? [y/N]: ", bucketName, bucketName)
 				if !confirmActionFunc(prompt) {
 					return fmt.Errorf("user aborted")
 				}
@@ -245,7 +244,7 @@ func createGcsBucketsIfMissing(ctx context.Context, bp config.Blueprint) error {
 				return err
 			}
 		} else if err != nil {
-			return fmt.Errorf("failed to verify GCS bucket %q: %w", bucketName, err)
+			logging.Warn("Unable to verify if GCS bucket %q exists: %v", bucketName, err)
 		}
 	}
 	return nil

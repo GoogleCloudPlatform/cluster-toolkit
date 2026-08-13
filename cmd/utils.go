@@ -53,7 +53,6 @@ func getApplyBehavior() shell.ApplyBehavior {
 
 func addAutoApproveFlag(c *cobra.Command) *cobra.Command {
 	c.Flags().BoolVar(&flagAutoApprove, "auto-approve", false, "Automatically approve proposed changes")
-	_ = c.Flags().SetAnnotation("auto-approve", "shared", []string{"true"})
 	return c
 }
 

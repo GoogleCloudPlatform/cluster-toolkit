@@ -207,5 +207,3 @@ For detailed deployment instructions, topology requirements, and job examples, p
 
 * [TPU v6e (Trillium)](gke-tpu-v6e/README.md): Optimized for `ct6e-standard-4t` clusters.
 * [TPU 7x (TPU v4)](gke-tpu-7x/README.md): Optimized for `tpu7x-standard-4t` clusters.
-
-**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
