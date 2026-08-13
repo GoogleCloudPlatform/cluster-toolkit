@@ -1,0 +1,18 @@
+---
+# region, zone must be defined in build file with --extra-vars flag!
+test_name: vm-storage
+deployment_name: vmstorage-{{ build }}
+workspace: /workspace
+blueprint_yaml: "{{ workspace }}/examples/vm-storage.yaml"
+network: "{{ test_name }}-net"
+remote_node: "{{ deployment_name }}-0"
+post_deploy_tests:
+- test-validation/test-vm-storage.yml
+cli_deployment_vars:
+  project_id: "{{ project }}"
+  test_name: "{{ test_name }}"
+  network_name: "{{ network }}"
+  region: "{{ region }}"
+  zone: "{{ zone }}"
+  hyperdisk_balanced_storage_pool: "projects/{{ project }}/zones/{{ zone }}/storagePools/{{ hyperdisk_balanced_pool }}"
+  hyperdisk_throughput_storage_pool: "projects/{{ project }}/zones/{{ zone }}/storagePools/{{ hyperdisk_throughput_pool }}"
