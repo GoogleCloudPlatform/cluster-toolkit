@@ -53,24 +53,35 @@ A key can only encrypt resources in its own location, unless it is `global`.
 
 `terraform validate` passes on this module in isolation.
 
-Live-verified against a real GCP project, adopting a key created out of band
-with `gcloud kms keys create`:
+Key created out of band, then adopted by a blueprint using this module:
 
-* The module correctly reads the pre-existing key, and `kms-key-iam` grants
-  land on it the same way as for a generated key -- confirmed with
-  `gcloud kms keys describe` / `get-iam-policy`.
-* Consumers (a controller boot disk and a Filestore instance) confirmed via
-  `gcloud ... describe --format="value(...kmsKeyName)"` actually using the
-  adopted key.
-* `terraform state list` confirms the key is held only as
-  `data.google_kms_crypto_key.this` / `data.google_kms_key_ring.this`, never
-  as a managed resource.
-* `terraform destroy` on a deployment using this module leaves the key
-  completely untouched and still `ENABLED` -- confirmed both immediately
-  after apply and, separately, on a deployment whose companion `kms-key`
-  module defaults to `deletion_policy = "DELETE"`, where `terraform destroy`
-  reported nothing to destroy for this module while the generated key in the
-  same run was correctly scheduled for deletion. Independently reproduced.
+```console
+$ gcloud kms keys create KEY --keyring=KEYRING --location=LOCATION --purpose=encryption --project=PROJECT_ID
+
+$ ./ghpc deploy DEPLOYMENT_DIR --auto-approve
+...
+Cloud infrastructure in deployment group ... is already applied
+
+$ terraform state list | grep -i kms
+module.imported_key.data.google_kms_crypto_key.this
+module.imported_key.data.google_kms_key_ring.this
+
+$ ./ghpc destroy DEPLOYMENT_DIR --auto-approve
+...
+Cloud infrastructure in deployment group ... is already destroyed
+
+$ gcloud kms keys versions list --key=KEY --keyring=KEYRING --location=LOCATION --project=PROJECT_ID
+NAME                                                                                         STATE
+projects/PROJECT_ID/locations/LOCATION/keyRings/KEYRING/cryptoKeys/KEY/cryptoKeyVersions/1  ENABLED
+```
+
+`deploy` and `destroy` both report there is nothing to apply or destroy --
+this module never puts the key in Terraform state to begin with, so the key
+stays `ENABLED` regardless of what `deletion_policy` a [kms-key] module
+elsewhere in the same blueprint is set to.
+
+Also deployed as part of a full Slurm cluster and confirmed to actually
+encrypt a controller boot disk and a Filestore instance.
 
 [kms-key]: ../kms-key/README.md
 [kms-key-iam]: ../kms-key-iam/README.md

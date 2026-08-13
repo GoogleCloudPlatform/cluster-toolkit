@@ -84,21 +84,25 @@ All are the same key id; the separate names exist only so `use` matches.
 
 `terraform validate` passes on this module in isolation.
 
-Live-verified against a real GCP project, granting `compute`, `storage` and
-`filestore` on both a generated key ([kms-key]) and an adopted key
-([pre-existing-kms-key]):
+Granting `compute`, `storage` and `filestore` on a [kms-key]-generated key:
 
-* Grants land on the correct project service agents in both cases --
-  confirmed with `gcloud kms keys get-iam-policy`.
-* Ordering behind the grants works as designed: every consumer (Filestore,
-  Slurm boot disks, the controller's config bucket) deployed successfully
-  with no `PERMISSION_DENIED` races, across multiple full-cluster deploys.
-* Output aliasing confirmed correct by inspecting the generated Terraform:
-  `kms_key_name` reached `modules/file-system/filestore`, `disk_encryption_key`
-  reached the Slurm boot disk settings, and `slurm_bucket_kms_key` reached the
-  controller's Slurm bucket setting, all via `use` with no explicit wiring.
-* On destroy, the encrypted resources were removed before the grants they
-  depended on, with no ordering errors, across every teardown performed.
+```console
+$ gcloud kms keys get-iam-policy KEY --keyring=KEYRING --location=LOCATION --project=PROJECT_ID
+bindings:
+- members:
+  - serviceAccount:service-PROJECT_NUMBER@cloud-filer.iam.gserviceaccount.com
+  - serviceAccount:service-PROJECT_NUMBER@compute-system.iam.gserviceaccount.com
+  - serviceAccount:service-PROJECT_NUMBER@gs-project-accounts.iam.gserviceaccount.com
+  role: roles/cloudkms.cryptoKeyEncrypterDecrypter
+```
+
+Also deployed as part of a full Slurm cluster: every consumer (Filestore,
+Slurm boot disks, the controller's config bucket) deployed successfully with
+no `PERMISSION_DENIED` races, and the generated Terraform confirmed `use`
+correctly matched `kms_key_name`, `disk_encryption_key` and
+`slurm_bucket_kms_key` to their respective consumers with no explicit
+wiring. On destroy, encrypted resources were removed before the grants they
+depended on.
 
 [kms-key]: ../kms-key/README.md
 [pre-existing-kms-key]: ../pre-existing-kms-key/README.md
