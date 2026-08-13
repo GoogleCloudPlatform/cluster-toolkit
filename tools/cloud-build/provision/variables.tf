@@ -83,7 +83,10 @@ variable "kueue_migrated_tests" {
     "slurm-gcp-v6-topology",
     "slurm-gcp-v6-debian",
     "slurm-gcp-v6-ubuntu",
-    "slurm-gcp-v6-ssd"
+    "slurm-gcp-v6-ssd",
+    "gke-a2-highgpu-kueue-onspot",
+    "gke-a4-onspot",
+    "gke-g4-onspot"
   ]
 }
 
