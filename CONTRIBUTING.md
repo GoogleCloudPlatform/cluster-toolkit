@@ -43,6 +43,8 @@ A maintainer will review the pull request once the following conditions are met:
 
 6. New partner or experimental modules should be submitted to the `community/modules/` directory only.
 
+7. Ensure any new modules or blueprints are listed in the respective README file (`modules/README.md` or `examples/README.md`).
+
 Consult [GitHub Help](https://help.github.com/articles/about-pull-requests/) for more
 information on pull requests.
 
