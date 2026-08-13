@@ -110,34 +110,45 @@ controlled entirely by `deletion_policy`.
 
 `terraform validate` passes on this module in isolation.
 
-Live-verified against a real GCP project, using both a full trimmed Slurm
-cluster and a minimal standalone deployment:
+`deletion_policy = "DELETE"` (the default):
 
-* A generated key comes up `ENABLED`/`ENCRYPT_DECRYPT`, and `kms-key-iam`
-  grants land on the expected service agents (compute, storage, filestore) --
-  confirmed with `gcloud kms keys describe` / `get-iam-policy`.
-* Consumers actually use the key, not a Google-managed one: a controller boot
-  disk and a Filestore instance both confirmed via
-  `gcloud ... describe --format="value(...kmsKeyName)"` pointing at the
-  generated key.
-* A real Slurm job (`srun`) completed successfully on a CMEK-encrypted
-  compute node.
-* Disabling the key's version produces lockout without deleting anything: a
-  Compute Engine instance start is rejected with an explicit `DISABLED`-state
-  error (and a `kmsKeyError` system event forcing the instance to
-  `TERMINATED`), the Filestore instance transitions to `SUSPENDED`, and Cloud
-  Storage reads fail with `KEY_DISABLED` -- all three resources remain
-  listed, only access is blocked. Re-enabling the version restores all three
-  without redeploying.
-* `deletion_policy = "DELETE"` (the default): `terraform destroy` schedules
-  the key's version for destruction (`DESTROY_SCHEDULED`, with `destroyTime`
-  set `destroy_scheduled_duration` out) -- confirmed on a live key,
-  independently reproduced twice.
-* `deletion_policy = "ABANDON"`: `terraform destroy` leaves the key ring,
-  CryptoKey and every version intact and `ENABLED`.
-* Redeploying under a fresh `key_ring_id`/`key_name` after a teardown works
-  as documented; redeploying under the same retained ring/key name fails
-  with `Error 409: ... already exists`, as expected.
+```console
+$ gcloud kms keys versions list --key=KEY --keyring=KEYRING --location=LOCATION --project=PROJECT_ID
+NAME                                                                                         STATE
+projects/PROJECT_ID/locations/LOCATION/keyRings/KEYRING/cryptoKeys/KEY/cryptoKeyVersions/1  ENABLED
+
+$ ./ghpc destroy DEPLOYMENT_DIR --auto-approve
+...
+Apply complete! Resources: 0 added, 0 changed, 2 destroyed.
+
+$ gcloud kms keys versions list --key=KEY --keyring=KEYRING --location=LOCATION --project=PROJECT_ID
+NAME                                                                                         STATE
+projects/PROJECT_ID/locations/LOCATION/keyRings/KEYRING/cryptoKeys/KEY/cryptoKeyVersions/1  DESTROY_SCHEDULED
+```
+
+`deletion_policy = "ABANDON"`, same steps:
+
+```console
+$ ./ghpc destroy DEPLOYMENT_DIR --auto-approve
+...
+Apply complete! Resources: 0 added, 0 changed, 2 destroyed.
+
+$ gcloud kms keys versions list --key=KEY --keyring=KEYRING --location=LOCATION --project=PROJECT_ID
+NAME                                                                                         STATE
+projects/PROJECT_ID/locations/LOCATION/keyRings/KEYRING/cryptoKeys/KEY/cryptoKeyVersions/1  ENABLED
+```
+
+Terraform's own resource count (`2 destroyed`) is identical either way --
+only the `gcloud` output tells the two apart.
+
+Also deployed as part of a full Slurm cluster and confirmed to actually
+encrypt a controller boot disk and a Filestore instance (`gcloud compute
+disks describe` / `gcloud filestore instances describe
+--format="value(...kmsKeyName)"`), with a real Slurm job running
+successfully against it. Grant placement is [kms-key-iam]'s concern; see
+that module's Testing section.
+
+[kms-key-iam]: ../kms-key-iam/README.md
 
 ## License
 
