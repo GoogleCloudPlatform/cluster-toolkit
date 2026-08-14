@@ -16,6 +16,7 @@ package validators
 
 // Registry maps validation type strings to their corresponding validator implementation.
 var Registry = map[string]RuleValidator{
+	"cidr":              &CIDRValidator{},
 	"regex":             &RegexValidator{},
 	"allowed_enum":      &AllowedEnumValidator{},
 	"range":             &RangeValidator{},
