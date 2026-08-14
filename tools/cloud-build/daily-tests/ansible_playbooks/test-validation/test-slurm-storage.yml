@@ -102,31 +102,19 @@
     fail_msg: "FIO read performance thresholds not met. Bandwidth: {{ fio_results.jobs[0].read.bw_mean }} KB/s (expected >= 1000 KB/s), IOPS: {{ fio_results.jobs[0].read.iops_mean }} (expected >= 300)."
     success_msg: "FIO read performance thresholds met. Bandwidth: {{ fio_results.jobs[0].read.bw_mean }} KB/s, IOPS: {{ fio_results.jobs[0].read.iops_mean }}."
 
-- name: Verify Controller Boot Disk Storage Pool
+- name: Verify Controller Instance Template Storage Pools
   delegate_to: localhost
   ansible.builtin.shell: |
-    gcloud compute disks describe {{ slurm_cluster_name }}-controller --project={{ project_id }} --zone={{ zone }} --format="value(storagePool)"
-  register: controller_boot_pool
+    gcloud compute instance-templates list --filter="name~{{ slurm_cluster_name }}-controller" --project={{ project_id }} --format="value(properties.disks[0].initializeParams.storagePool, properties.disks[1].initializeParams.storagePool)"
+  register: controller_template_pools
   changed_when: false
 
-- name: Assert Controller Boot Disk is in Balanced Pool
+- name: Assert Controller Template uses correct Storage Pools
   delegate_to: localhost
   ansible.builtin.assert:
     that:
-    - hyperdisk_balanced_pool in controller_boot_pool.stdout
-
-- name: Verify Controller Additional Disk Storage Pool
-  delegate_to: localhost
-  ansible.builtin.shell: |
-    gcloud compute disks describe slurm_controller-data --project={{ project_id }} --zone={{ zone }} --format="value(storagePool)"
-  register: controller_data_pool
-  changed_when: false
-
-- name: Assert Controller Additional Disk is in Throughput Pool
-  delegate_to: localhost
-  ansible.builtin.assert:
-    that:
-    - hyperdisk_throughput_pool in controller_data_pool.stdout
+    - hyperdisk_balanced_pool in controller_template_pools.stdout
+    - hyperdisk_throughput_pool in controller_template_pools.stdout
 
 - name: Verify Login Nodes Instance Template Storage Pools
   delegate_to: localhost
