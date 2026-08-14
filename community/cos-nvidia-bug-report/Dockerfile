@@ -50,6 +50,6 @@ RUN python3 -m venv .venv
 RUN . .venv/bin/activate
 
 # Install Python dependencies
-RUN .venv/bin/pip install --no-cache-dir -r requirements.txt
+RUN .venv/bin/pip install --no-cache-dir --require-hashes -r requirements.txt
 
 ENTRYPOINT [".venv/bin/python", "cos-nvidia-bug-report.py"]

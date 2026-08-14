@@ -17,7 +17,10 @@ package config
 import (
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
 
@@ -30,8 +33,10 @@ import (
 const (
 	blueprintLabel        = "ghpc_blueprint"
 	deploymentLabel       = "ghpc_deployment"
-	GoogleProviderVersion = ">= 6.9.0, <= 7.23.0"
+	GoogleProviderVersion = ">= 6.9.0, <= 7.40.0"
 )
+
+var validLabelValueRegex = regexp.MustCompile("[^a-z0-9_-]")
 
 func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
 	mi := m.InfoOrDie()
@@ -66,17 +71,20 @@ func attemptEvalModuleInput(val cty.Value, bp Blueprint) (cty.Value, bool) {
 	return v, err == nil
 }
 
-func checkInputValueMatchesType(val cty.Value, input modulereader.VarInfo, bp Blueprint) error {
+func checkInputValueMatchesType(val cty.Value, input modulereader.VarInfo, bp Blueprint) (err error) {
+	// cty does panic on some edge cases, e.g. (cty.NilVal)
+	// we don't anticipate any of those, but just in case, catch panic and return as error
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic during type conversion for %q: %v", input.Name, r)
+		}
+	}()
 	v, ok := attemptEvalModuleInput(val, bp)
 	if !ok || input.Type == cty.NilType {
 		return nil // skip, can do nothing
 	}
-	// cty does panic on some edge cases, e.g. (cty.NilVal)
-	// we don't anticipate any of those, but just in case, catch panic and swallow it
-	defer func() { recover() }()
-	// TODO: consider returning error (not panic) or logging warning
-	if _, err := convert.Convert(v, input.Type); err != nil {
-		return fmt.Errorf("unsuitable value for %q: %w", input.Name, err)
+	if _, convErr := convert.Convert(v, input.Type); convErr != nil {
+		return fmt.Errorf("unsuitable value for %q: %w", input.Name, convErr)
 	}
 	return nil
 }
@@ -137,6 +145,8 @@ func (bp *Blueprint) expandGroups() error {
 		return errs
 	}
 
+	bp.deduplicateDranetTemplates()
+
 	// Following actions depend on whole blueprint being expanded
 	// run it after all groups are expanded
 	if err := validateModulesAreUsed(*bp); err != nil {
@@ -161,6 +171,25 @@ func (bp Blueprint) expandGroup(gp groupPath, g *Group) error {
 func (bp Blueprint) expandModule(mp ModulePath, m *Module) error {
 	bp.applyUseModules(m)
 	bp.applyGlobalVarsInModule(m)
+	if err := expandHardwareSettings(bp, m); err != nil {
+		return err
+	}
+
+	// Inject machine_configs if supported by the module
+	for _, input := range m.InfoOrDie().Inputs {
+		if input.Name == "machine_configs" {
+			cfgJson, err := getMachineConfigJSON(m, bp)
+			if err != nil {
+				return err
+			}
+			m.Settings = m.Settings.With("machine_configs", cty.StringVal(cfgJson))
+			break
+		}
+	}
+
+	if err := ExpandClusterAutoscaling(bp, m); err != nil {
+		return err
+	}
 	return validateModuleInputs(mp, *m, bp)
 }
 
@@ -310,9 +339,19 @@ func (bp Blueprint) applyUseModules(m *Module) error {
 
 // expandGlobalLabels sets defaults for labels based on other variables.
 func (bp *Blueprint) expandGlobalLabels() {
-	defaults := cty.ObjectVal(map[string]cty.Value{
+	defaultsMap := map[string]cty.Value{
 		blueprintLabel:  cty.StringVal(bp.BlueprintName),
-		deploymentLabel: GlobalRef("deployment_name").AsValue()})
+		deploymentLabel: GlobalRef("deployment_name").AsValue(),
+	}
+	if bp.AddCreatorLabel {
+		creator := strings.ToLower(bp.CreatorUsername)
+		creator = validLabelValueRegex.ReplaceAllString(creator, "_")
+		if len(creator) > 63 {
+			creator = creator[:63]
+		}
+		defaultsMap["ghpc_creator"] = cty.StringVal(creator)
+	}
+	defaults := cty.ObjectVal(defaultsMap)
 
 	labels := "labels"
 	var gl cty.Value
@@ -538,4 +577,77 @@ func intersection(s1 []string, s2 []string) []string {
 	is := maps.Keys(both)
 	slices.Sort(is)
 	return is
+}
+
+func isGKENodePool(m *Module) bool {
+	path := strings.Split(m.Source, "?")[0]
+	return strings.HasSuffix(path, "modules/compute/gke-node-pool")
+}
+
+func (bp *Blueprint) getEnableDranet(m *Module) bool {
+	if !m.Settings.Has("enable_dranet") {
+		return false
+	}
+	val, err := bp.Eval(m.Settings.Get("enable_dranet"))
+	return err == nil && val.Type() == cty.Bool && val.True()
+}
+
+func (bp *Blueprint) getMachineType(m *Module) string {
+	if !m.Settings.Has("machine_type") {
+		return ""
+	}
+	val, err := bp.Eval(m.Settings.Get("machine_type"))
+	if err == nil && val.Type() == cty.String {
+		return val.AsString()
+	}
+	return ""
+}
+
+func isMellanoxRdmaMachine(machineType string) bool {
+	return machineType == "a3-ultragpu-8g" ||
+		strings.HasPrefix(machineType, "a4-") ||
+		strings.HasPrefix(machineType, "a4x-")
+}
+
+func (bp *Blueprint) getDeviceClassName(m *Module) string {
+	if m.Settings.Has("dranet_device_class_name") {
+		val, err := bp.Eval(m.Settings.Get("dranet_device_class_name"))
+		if err == nil && val.Type() == cty.String {
+			return val.AsString()
+		}
+	}
+
+	// Auto-detect based on machine type if not explicitly set
+	machineType := bp.getMachineType(m)
+	if isMellanoxRdmaMachine(machineType) {
+		return "mrdma.google.com"
+	}
+	return "netdev.google.com"
+}
+
+func (bp *Blueprint) deduplicateDranetTemplates() {
+	installedTemplates := make(map[string]ModuleID)
+
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+		if !isGKENodePool(m) {
+			return
+		}
+
+		if !bp.getEnableDranet(m) {
+			return
+		}
+
+		deviceClassName := bp.getDeviceClassName(m)
+
+		// Check for duplicates
+		if primaryModuleID, exists := installedTemplates[deviceClassName]; exists {
+			// Duplicate found for this device class, disable installation
+			m.Settings = m.Settings.With("install_dranet_template", cty.BoolVal(false))
+			logging.Info("DRANET: Module %s will skip ResourceClaimTemplate installation for class %s (handled by %s)", m.ID, deviceClassName, primaryModuleID)
+		} else {
+			// First module for this device class, enable installation
+			installedTemplates[deviceClassName] = m.ID
+			m.Settings = m.Settings.With("install_dranet_template", cty.BoolVal(true))
+		}
+	})
 }

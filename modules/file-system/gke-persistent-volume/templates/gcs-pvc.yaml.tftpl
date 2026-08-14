@@ -11,7 +11,7 @@ metadata:
 spec:
   accessModes:
   - ReadWriteMany
-  storageClassName: ""
+  storageClassName: "${storage_class_name != null ? storage_class_name : ""}"
   volumeName: ${pv_name}
   resources:
     requests:

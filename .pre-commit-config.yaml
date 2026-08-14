@@ -74,15 +74,6 @@ repos:
     files: 'tools/cloud-build/daily-tests/builds/.*\.yaml'
     pass_filenames: false
     require_serial: true
-  - id: validate-daily-test-builds
-    name: validate-daily-test-builds
-    entry: tools/cloud-build/daily-tests/validate_daily_test_builds.py
-    language: python
-    language_version: python3
-    additional_dependencies: ['pyyaml']
-    files: 'tools/cloud-build/daily-tests/builds/.*\.(yaml|yml)'
-    pass_filenames: true
-    require_serial: true
   - id: pytest-check
     name: pytest-check
     entry: pytest
@@ -100,7 +91,7 @@ repos:
     - requests
     - httplib2
     - more-executors
-    - addict
+
     - google-cloud-tpu
     types: [python]
     pass_filenames: false
@@ -122,9 +113,30 @@ repos:
     - pytest
     - pytest-unordered
     - more-executors
-    - addict
+
     - google-cloud-tpu
     types: [python]
+    pass_filenames: false
+
+  - id: go-vet-community-health-check
+    name: go-vet-community-health-check
+    entry: bash -c 'cd community/cluster-health-check && go vet ./...'
+    language: system
+    files: ^community/cluster-health-check/.*\.go$
+    pass_filenames: false
+
+  - id: go-unit-tests-community-health-check
+    name: go-unit-tests-community-health-check
+    entry: bash -c 'cd community/cluster-health-check && go test -timeout 30s -short -v ./...'
+    language: system
+    files: ^community/cluster-health-check/.*\.go$
+    pass_filenames: false
+
+  - id: go-mod-tidy-community-health-check
+    name: go-mod-tidy-community-health-check
+    entry: bash -c 'cd community/cluster-health-check && go mod tidy && git diff --exit-code go.mod go.sum'
+    language: system
+    files: ^community/cluster-health-check/(go\.mod|go\.sum|.*\.go)$
     pass_filenames: false
 
 - repo: https://github.com/dnephin/pre-commit-golang
@@ -132,6 +144,7 @@ repos:
   hooks:
   - id: go-fmt
   - id: go-vet
+    exclude: ^community/cluster-health-check/
   - id: go-imports
   - id: go-cyclo
     args: [-over=13]
@@ -143,7 +156,7 @@ repos:
 #   hooks:
 #   - id: go-critic
 - repo: https://github.com/golangci/golangci-lint
-  rev: v1.63.4
+  rev: v2.4.0
   hooks:
   - id: golangci-lint
 - repo: https://github.com/adrienverge/yamllint
@@ -163,6 +176,7 @@ repos:
     # MD041 - First line in file should be a top level header
     # MD046 - Code block style
     # MD024 - Multiple headings cannot contain the same content.
+    exclude: GEMINI.md
     args: [--disable-rules, "MD013,MD022,MD033,MD034,MD041,MD046,MD024", scan]
 - repo: https://github.com/jumanjihouse/pre-commit-hooks
   rev: "3.0.0"

@@ -48,17 +48,17 @@
         <td><a href="{% url 'vpc-detail' vpc.id %}">{{ vpc.name }}</a></td>
         <td>{{ vpc.cloud_id }}</td>
         <td>
-          {% if "c" in vpc.cloud_state == "c" %}
-          <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+          {% if "c" in vpc.cloud_state %}
+          <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="">
           {% endif %}
           {% if "i" in vpc.cloud_state or vpc.cloud_state == "m" %}
-          <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+          <img src="/static/img/status-ready.png" style="width:32px;height:32px;" alt="">
           {% endif %}
           {% if "n" in vpc.cloud_state %}
-          <img src="/static/img/status-configured.png" style="width:30px;height:32px;">
+          <img src="/static/img/status-configured.png" style="width:30px;height:32px;" alt="">
           {% endif %}
           {% if "d" in vpc.cloud_state %}
-          <img src="/static/img/status-deleted.png" style="width:29px;height:32px;">
+          <img src="/static/img/status-deleted.png" style="width:29px;height:32px;" alt="">
           {% endif %}
           {{ vpc.get_cloud_state_display }}
         </td>
@@ -93,7 +93,7 @@
     {% endfor %}
     </tbody>
   </table>
-  <input type="checkbox" id="id_show_destroyed"/> Show Destroyed VPCs
+  <input type="checkbox" id="id_show_destroyed"/> <label for="id_show_destroyed">Show Destroyed VPCs</label>
   </div>
   {% else %}
     <p>This is no record of any VPC in this system. Create one!</p>
@@ -124,6 +124,7 @@ function filterTable() {
 }
 function setupFilter() {
     var toggle = document.getElementById("id_show_destroyed");
+    if (!toggle) return;
     toggle_cookie = ($.cookie("vpc_list_show_destroyed") != "false");
     if ( toggle_cookie ) {
         toggle.checked = true;

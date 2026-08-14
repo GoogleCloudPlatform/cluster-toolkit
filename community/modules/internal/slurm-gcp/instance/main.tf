@@ -120,7 +120,6 @@ resource "google_compute_instance_from_template" "slurm_instance" {
   # we have to explicitly override instance labels instead of inheriting them from template.
   labels = data.google_compute_instance_template.base.labels
 
-
   lifecycle {
     replace_triggered_by = [null_resource.replace_trigger.id]
   }

@@ -29,6 +29,7 @@ module "gpu" {
 
   machine_type      = var.machine_type
   guest_accelerator = var.guest_accelerator
+  machine_configs   = var.machine_configs
 }
 
 locals {
@@ -45,14 +46,17 @@ locals {
 
   additional_disks = [
     for ad in var.additional_disks : {
-      disk_name                  = ad.disk_name
-      device_name                = ad.device_name
-      disk_type                  = ad.disk_type
-      disk_size_gb               = ad.disk_size_gb
-      disk_labels                = merge(ad.disk_labels, local.labels)
-      auto_delete                = ad.auto_delete
-      boot                       = ad.boot
-      disk_resource_manager_tags = ad.disk_resource_manager_tags
+      disk_name                           = ad.disk_name
+      device_name                         = ad.device_name
+      disk_type                           = ad.disk_type
+      disk_storage_pool                   = ad.disk_storage_pool
+      disk_size_gb                        = ad.disk_size_gb
+      disk_labels                         = merge(ad.disk_labels, local.labels)
+      auto_delete                         = ad.auto_delete
+      boot                                = ad.boot
+      disk_resource_manager_tags          = ad.disk_resource_manager_tags
+      disk_encryption_key                 = ad.disk_encryption_key
+      disk_encryption_key_service_account = ad.disk_encryption_key_service_account
     }
   ]
 
@@ -82,8 +86,12 @@ locals {
     disk_labels                = merge(local.labels, var.disk_labels)
     disk_size_gb               = var.disk_size_gb
     disk_type                  = var.disk_type
+    disk_storage_pool          = var.disk_storage_pool
     disk_resource_manager_tags = var.disk_resource_manager_tags
     additional_disks           = local.additional_disks
+
+    disk_encryption_key                 = var.disk_encryption_key
+    disk_encryption_key_service_account = var.disk_encryption_key_service_account
 
     bandwidth_tier = var.bandwidth_tier
     can_ip_forward = var.can_ip_forward
@@ -156,7 +164,7 @@ data "google_compute_zones" "available" {
 }
 
 locals {
-  res_match = regex("^(?P<whole>(?P<prefix>projects/(?P<project>[a-z0-9-]+)/reservations/)?(?P<name>[a-z0-9-]+)(?P<suffix>/reservationBlocks/[a-z0-9-]+)?)?$", var.reservation_name)
+  res_match = regex("^(?P<whole>(?P<prefix>projects/(?P<project>[a-z0-9-]+)/reservations/)?(?P<name>[a-z0-9-]+)(?P<suffix>/reservationBlocks/[a-z0-9-]+(?:/reservationSubBlocks/[a-z0-9-]+)?)?)?$", var.reservation_name)
 
   res_short_name = local.res_match.name
   res_project    = coalesce(local.res_match.project, var.project_id)

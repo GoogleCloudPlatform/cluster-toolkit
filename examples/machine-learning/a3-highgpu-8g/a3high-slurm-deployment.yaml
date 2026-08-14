@@ -30,7 +30,7 @@ vars:
   slurm_cluster_name: # supply name for slurm cluster (lowercase letters, numbers, and hyphens, max 20 characters, must start with a letter)
   a3_static_cluster_size: # supply a3-highgpu-8g reservation size
   a3_partition_name: # supply partition name
-  disk_size_gb: 200
+
   # Additional provisioning models (pick only one), can be used to substitute `a3_reservation_name`:
   #
   # a3_dws_flex_enabled: true

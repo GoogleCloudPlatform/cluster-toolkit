@@ -22,23 +22,29 @@ module "gpu" {
 locals {
   additional_disks = [
     for ad in var.additional_disks : {
-      disk_name                  = ad.disk_name
-      device_name                = ad.device_name
-      disk_type                  = ad.disk_type
-      disk_size_gb               = ad.disk_size_gb
-      disk_labels                = merge(ad.disk_labels, local.labels)
-      auto_delete                = ad.auto_delete
-      boot                       = ad.boot
-      disk_resource_manager_tags = ad.disk_resource_manager_tags
+      disk_name                           = ad.disk_name
+      device_name                         = ad.device_name
+      disk_type                           = ad.disk_type
+      disk_storage_pool                   = ad.disk_storage_pool
+      disk_size_gb                        = ad.disk_size_gb
+      disk_labels                         = merge(ad.disk_labels, local.labels)
+      auto_delete                         = ad.auto_delete
+      boot                                = ad.boot
+      disk_resource_manager_tags          = ad.disk_resource_manager_tags
+      disk_encryption_key                 = ad.disk_encryption_key
+      disk_encryption_key_service_account = ad.disk_encryption_key_service_account
     }
   ]
 
   state_disk = var.controller_state_disk != null ? [{
-    source      = google_compute_disk.controller_disk[0].name
-    device_name = google_compute_disk.controller_disk[0].name
-    disk_labels = null
-    auto_delete = false
-    boot        = false
+    source                              = google_compute_disk.controller_disk[0].name
+    device_name                         = google_compute_disk.controller_disk[0].name
+    disk_labels                         = null
+    disk_storage_pool                   = null
+    auto_delete                         = false
+    boot                                = false
+    disk_encryption_key                 = var.disk_encryption_key
+    disk_encryption_key_service_account = var.disk_encryption_key_service_account
   }] : []
 
   synth_def_sa_email = "${data.google_project.controller_project.number}-compute@developer.gserviceaccount.com"
@@ -50,13 +56,25 @@ locals {
 
   disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
 
+  controller_project_id = coalesce(var.controller_project_id, var.project_id)
+
+  # HA Locals
+  backup_zone                  = coalesce(var.backup_zone, var.zone)
+  slurm_backup_controller_name = var.enable_backup_controller ? "${local.slurm_cluster_name}-controller-1" : ""
+
+  # Merge HA metadata
   metadata = merge(
     local.disable_automatic_updates_metadata,
     var.metadata,
-    local.universe_domain
+    local.universe_domain,
+    var.enable_backup_controller ? {
+      slurm_ha_role                = "dynamic"
+      slurm_backup_controller_name = local.slurm_backup_controller_name
+      } : {
+      slurm_ha_role                = "primary"
+      slurm_backup_controller_name = ""
+    }
   )
-
-  controller_project_id = coalesce(var.controller_project_id, var.project_id)
 }
 
 data "google_project" "controller_project" {
@@ -71,6 +89,14 @@ resource "google_compute_disk" "controller_disk" {
   type    = var.controller_state_disk.type
   size    = var.controller_state_disk.size
   zone    = var.zone
+
+  dynamic "disk_encryption_key" {
+    for_each = compact([var.disk_encryption_key])
+    content {
+      kms_key_self_link       = disk_encryption_key.value
+      kms_key_service_account = var.disk_encryption_key_service_account
+    }
+  }
 }
 
 # INSTANCE TEMPLATE
@@ -87,8 +113,12 @@ module "slurm_controller_template" {
   disk_labels                = merge(var.disk_labels, local.labels)
   disk_size_gb               = var.disk_size_gb
   disk_type                  = var.disk_type
+  disk_storage_pool          = var.disk_storage_pool
   disk_resource_manager_tags = var.disk_resource_manager_tags
   additional_disks           = concat(local.additional_disks, local.state_disk)
+
+  disk_encryption_key                 = var.disk_encryption_key
+  disk_encryption_key_service_account = var.disk_encryption_key_service_account
 
   bandwidth_tier            = var.bandwidth_tier
   slurm_bucket_path         = module.slurm_files.slurm_bucket_path
@@ -117,13 +147,14 @@ module "slurm_controller_template" {
 
   subnetwork = var.subnetwork_self_link
 
-  tags = concat([local.slurm_cluster_name], var.tags)
+  tags = concat([local.slurm_cluster_name], ["${local.slurm_cluster_name}-controller"], var.tags)
   # termination_action = TODO: add support for termination_action (?)
 }
 
 # INSTANCE
 resource "google_compute_instance_from_template" "controller" {
   provider = google-beta
+  count    = var.enable_backup_controller ? 0 : 1
 
   name                     = "${local.slurm_cluster_name}-controller"
   project                  = local.controller_project_id
@@ -155,6 +186,318 @@ resource "google_compute_instance_from_template" "controller" {
       network_attachment = var.controller_network_attachment
     }
   }
+
+  dynamic "network_interface" {
+    for_each = var.additional_networks
+    content {
+      network            = network_interface.value.network
+      subnetwork         = network_interface.value.subnetwork
+      subnetwork_project = network_interface.value.subnetwork_project
+      network_ip         = network_interface.value.network_ip
+      nic_type           = network_interface.value.nic_type
+      stack_type         = network_interface.value.stack_type
+      queue_count        = network_interface.value.queue_count
+      dynamic "access_config" {
+        for_each = network_interface.value.access_config
+        content {
+          nat_ip       = access_config.value.nat_ip
+          network_tier = access_config.value.network_tier
+        }
+      }
+      dynamic "ipv6_access_config" {
+        for_each = network_interface.value.ipv6_access_config
+        content {
+          network_tier = ipv6_access_config.value.network_tier
+        }
+      }
+      dynamic "alias_ip_range" {
+        for_each = network_interface.value.alias_ip_range
+        content {
+          ip_cidr_range         = alias_ip_range.value.ip_cidr_range
+          subnetwork_range_name = alias_ip_range.value.subnetwork_range_name
+        }
+      }
+    }
+  }
+}
+
+data "google_compute_subnetwork" "controller_subnetwork" {
+  count     = var.enable_backup_controller ? 1 : 0
+  self_link = var.subnetwork_self_link
+}
+
+# HEALTH CHECK FIREWALL RULE (Allow GCP probers to reach controller MIG)
+resource "google_compute_firewall" "health_check_firewall_rule" {
+  count       = (var.enable_backup_controller && var.health_check.create_firewall_rule) ? 1 : 0
+  name        = "allow-health-check-${local.slurm_cluster_name}"
+  description = "Allow Managed Instance Group Health Checks for Slurm Controller VMs"
+  project     = one(data.google_compute_subnetwork.controller_subnetwork[*].project)
+  network     = one(data.google_compute_subnetwork.controller_subnetwork[*].network)
+
+  direction = "INGRESS"
+  source_ranges = [
+    "130.211.0.0/22",
+    "35.191.0.0/16",
+  ]
+  target_tags = ["${local.slurm_cluster_name}-controller"]
+
+  allow {
+    protocol = "tcp"
+    ports    = concat([tostring(var.health_check.port)], var.enable_controller_load_balancer ? ["6821"] : [])
+  }
+}
+
+# CONTROLLER HEALTH CHECK (for HA autohealing)
+resource "google_compute_health_check" "controller_health_check" {
+  count       = var.enable_backup_controller ? 1 : 0
+  name        = "${local.slurm_cluster_name}-controller-hc"
+  description = "Health check for Slurm Controller HA instance group autohealing"
+  project     = local.controller_project_id
+
+  check_interval_sec  = var.health_check.check_interval_sec
+  timeout_sec         = var.health_check.timeout_sec
+  healthy_threshold   = var.health_check.healthy_threshold
+  unhealthy_threshold = var.health_check.unhealthy_threshold
+
+  dynamic "log_config" {
+    for_each = var.health_check.enable_logging ? [1] : []
+    content {
+      enable = true
+    }
+  }
+
+  dynamic "tcp_health_check" {
+    for_each = var.health_check.type == "tcp" ? [1] : []
+    content {
+      port = var.health_check.port
+    }
+  }
+
+  dynamic "http_health_check" {
+    for_each = var.health_check.type == "http" ? [1] : []
+    content {
+      port         = var.health_check.port
+      request_path = var.health_check.request_path
+    }
+  }
+}
+
+# ZONAL INSTANCE GROUP MANAGER (deployed if ha_type is zonal)
+resource "google_compute_instance_group_manager" "controller_zonal_mig" {
+  count              = (var.enable_backup_controller && var.controller_ha_type == "zonal") ? 1 : 0
+  name               = "${local.slurm_cluster_name}-controller-mig"
+  base_instance_name = "${local.slurm_cluster_name}-controller"
+  zone               = var.zone
+  project            = local.controller_project_id
+  target_size        = 0
+
+  named_port {
+    name = var.health_check.port_name
+    port = var.health_check.port
+  }
+
+  dynamic "named_port" {
+    for_each = var.named_ports
+    content {
+      name = named_port.value.name
+      port = named_port.value.port
+    }
+  }
+
+  version {
+    instance_template = module.slurm_controller_template.self_link
+  }
+
+  auto_healing_policies {
+    health_check      = one(google_compute_health_check.controller_health_check[*].id)
+    initial_delay_sec = var.health_check.initial_delay_sec
+  }
+
+  update_policy {
+    type                  = "PROACTIVE"
+    minimal_action        = "REPLACE"
+    replacement_method    = "RECREATE"
+    max_surge_fixed       = 0
+    max_unavailable_fixed = 1
+  }
+
+  lifecycle {
+    ignore_changes = [
+      target_size,
+    ]
+  }
+}
+
+# REGIONAL INSTANCE GROUP MANAGER (deployed if ha_type is regional)
+resource "google_compute_region_instance_group_manager" "controller_regional_mig" {
+  count                     = (var.enable_backup_controller && var.controller_ha_type == "regional") ? 1 : 0
+  name                      = "${local.slurm_cluster_name}-controller-mig"
+  base_instance_name        = "${local.slurm_cluster_name}-controller"
+  region                    = var.region
+  project                   = local.controller_project_id
+  distribution_policy_zones = [var.zone, local.backup_zone]
+  target_size               = 0
+
+  named_port {
+    name = var.health_check.port_name
+    port = var.health_check.port
+  }
+
+  dynamic "named_port" {
+    for_each = var.named_ports
+    content {
+      name = named_port.value.name
+      port = named_port.value.port
+    }
+  }
+
+  version {
+    instance_template = module.slurm_controller_template.self_link
+  }
+
+  auto_healing_policies {
+    health_check      = one(google_compute_health_check.controller_health_check[*].id)
+    initial_delay_sec = var.health_check.initial_delay_sec
+  }
+
+  update_policy {
+    type                         = "PROACTIVE"
+    minimal_action               = "REPLACE"
+    replacement_method           = "RECREATE"
+    instance_redistribution_type = "NONE"
+    max_surge_fixed              = 0
+    max_unavailable_fixed        = 2
+  }
+
+  lifecycle {
+    ignore_changes = [
+      target_size,
+    ]
+    precondition {
+      condition     = var.controller_ha_type != "regional" || var.zone != local.backup_zone
+      error_message = "For a regional controller HA deployment, 'zone' and 'backup_zone' must be different."
+    }
+  }
+}
+
+resource "google_compute_address" "controller_ips" {
+  for_each     = var.enable_backup_controller ? toset(var.static_ips) : []
+  project      = local.controller_project_id
+  name         = "${local.slurm_cluster_name}-controller-ip-${replace(each.value, ".", "-")}"
+  address_type = "INTERNAL"
+  subnetwork   = var.subnetwork_self_link
+  address      = each.value
+  region       = var.region
+}
+
+locals {
+  # Maps pre-allocated static IPs to instance suffixes (e.g. 0 and 1)
+  mig_instances = var.enable_backup_controller ? {
+    "${local.slurm_cluster_name}-controller-0" = var.static_ips[0]
+    "${local.slurm_cluster_name}-controller-1" = var.static_ips[1]
+  } : {}
+}
+
+# STATEFUL PER-INSTANCE IP CONFIGURATION (ZONAL)
+resource "google_compute_per_instance_config" "controller_zonal_stateful_ips" {
+  for_each               = (var.enable_backup_controller && var.controller_ha_type == "zonal") ? local.mig_instances : {}
+  project                = local.controller_project_id
+  instance_group_manager = google_compute_instance_group_manager.controller_zonal_mig[0].name
+  zone                   = var.zone
+  name                   = each.key
+
+  preserved_state {
+    internal_ip {
+      interface_name = "nic0"
+      auto_delete    = "NEVER"
+      ip_address {
+        address = google_compute_address.controller_ips[each.value].self_link
+      }
+    }
+  }
+}
+
+# STATEFUL PER-INSTANCE IP CONFIGURATION (REGIONAL)
+resource "google_compute_region_per_instance_config" "controller_regional_stateful_ips" {
+  for_each                      = (var.enable_backup_controller && var.controller_ha_type == "regional") ? local.mig_instances : {}
+  project                       = local.controller_project_id
+  region_instance_group_manager = google_compute_region_instance_group_manager.controller_regional_mig[0].name
+  region                        = var.region
+  name                          = each.key
+
+  preserved_state {
+    internal_ip {
+      interface_name = "nic0"
+      auto_delete    = "NEVER"
+      ip_address {
+        address = google_compute_address.controller_ips[each.value].self_link
+      }
+    }
+  }
+}
+
+# INTERNAL LOAD BALANCER: REGIONAL HTTP HEALTH CHECK (PORT 6821)
+resource "google_compute_region_health_check" "slurm_health_check" {
+  count       = (var.enable_backup_controller && var.enable_controller_load_balancer) ? 1 : 0
+  name        = "${local.slurm_cluster_name}-slurm-hc"
+  description = "Active-Passive HTTP health check for Slurm controllers (scontrol ping on port 6821)"
+  project     = local.controller_project_id
+  region      = var.region
+
+  check_interval_sec  = 10
+  timeout_sec         = 5
+  healthy_threshold   = 2
+  unhealthy_threshold = 3
+
+  http_health_check {
+    port         = 6821
+    request_path = "/"
+  }
+}
+
+# INTERNAL LOAD BALANCER: REGIONAL BACKEND SERVICE (L4 TCP)
+resource "google_compute_region_backend_service" "slurm_controller_backend" {
+  count                           = (var.enable_backup_controller && var.enable_controller_load_balancer) ? 1 : 0
+  name                            = "${local.slurm_cluster_name}-controller-backend"
+  description                     = "Internal L4 backend service for Slurm controllers VIP"
+  project                         = local.controller_project_id
+  region                          = var.region
+  load_balancing_scheme           = "INTERNAL"
+  protocol                        = "TCP"
+  connection_draining_timeout_sec = 10
+  health_checks                   = google_compute_region_health_check.slurm_health_check[*].id
+
+  dynamic "backend" {
+    for_each = var.controller_ha_type == "regional" ? [1] : []
+    content {
+      group          = one(google_compute_region_instance_group_manager.controller_regional_mig[*].instance_group)
+      balancing_mode = "CONNECTION"
+    }
+  }
+
+  dynamic "backend" {
+    for_each = var.controller_ha_type == "zonal" ? [1] : []
+    content {
+      group          = one(google_compute_instance_group_manager.controller_zonal_mig[*].instance_group)
+      balancing_mode = "CONNECTION"
+    }
+  }
+}
+
+# INTERNAL LOAD BALANCER: FORWARDING RULE (VIP)
+resource "google_compute_forwarding_rule" "slurm_controller_vip" {
+  count                 = (var.enable_backup_controller && var.enable_controller_load_balancer) ? 1 : 0
+  name                  = "${local.slurm_cluster_name}-controller-vip"
+  description           = "Virtual IP forwarding rule for Slurm controllers (ports 6817/6818)"
+  project               = local.controller_project_id
+  region                = var.region
+  load_balancing_scheme = "INTERNAL"
+  backend_service       = one(google_compute_region_backend_service.slurm_controller_backend[*].id)
+  ip_protocol           = "TCP"
+  all_ports             = true
+  subnetwork            = var.subnetwork_self_link
+  ip_address            = var.controller_load_balancer_ip
+  allow_global_access   = true
 }
 
 moved {

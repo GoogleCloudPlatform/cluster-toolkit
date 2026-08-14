@@ -54,14 +54,17 @@ variable "login_nodes" {
       network_tier = string
     })))
     additional_disks = optional(list(object({
-      disk_name                  = optional(string)
-      device_name                = optional(string)
-      disk_size_gb               = optional(number)
-      disk_type                  = optional(string)
-      disk_labels                = optional(map(string), {})
-      auto_delete                = optional(bool, true)
-      boot                       = optional(bool, false)
-      disk_resource_manager_tags = optional(map(string), {})
+      disk_name                           = optional(string)
+      device_name                         = optional(string)
+      disk_size_gb                        = optional(number)
+      disk_type                           = optional(string)
+      disk_storage_pool                   = optional(string)
+      disk_labels                         = optional(map(string), {})
+      auto_delete                         = optional(bool, true)
+      boot                                = optional(bool, false)
+      disk_resource_manager_tags          = optional(map(string), {})
+      disk_encryption_key                 = optional(string)
+      disk_encryption_key_service_account = optional(string)
     })), [])
     additional_networks = optional(list(object({
       access_config = optional(list(object({
@@ -90,6 +93,7 @@ variable "login_nodes" {
     disk_resource_manager_tags = optional(map(string), {})
     disk_size_gb               = optional(number)
     disk_type                  = optional(string, "n1-standard-1")
+    disk_storage_pool          = optional(string)
     enable_confidential_vm     = optional(bool, false)
     enable_oslogin             = optional(bool, true)
     enable_shielded_vm         = optional(bool, false)
@@ -123,15 +127,17 @@ variable "login_nodes" {
       enable_secure_boot          = optional(bool, true)
       enable_vtpm                 = optional(bool, true)
     }))
-    source_image_family  = optional(string)
-    source_image_project = optional(string)
-    source_image         = optional(string)
-    static_ips           = optional(list(string), [])
-    subnetwork           = string
-    spot                 = optional(bool, false)
-    tags                 = optional(list(string), [])
-    zone                 = optional(string)
-    termination_action   = optional(string)
+    source_image_family                 = optional(string)
+    source_image_project                = optional(string)
+    source_image                        = optional(string)
+    static_ips                          = optional(list(string), [])
+    subnetwork                          = string
+    spot                                = optional(bool, false)
+    tags                                = optional(list(string), [])
+    zone                                = optional(string)
+    termination_action                  = optional(string)
+    disk_encryption_key                 = optional(string)
+    disk_encryption_key_service_account = optional(string)
   })
 }
 
@@ -166,11 +172,13 @@ Storage to mounted on login instances
 - mount_options : Options to mount with.
 EOD
   type = list(object({
-    server_ip     = string
-    remote_mount  = string
-    local_mount   = string
-    fs_type       = string
-    mount_options = string
+    server_ip               = string
+    remote_mount            = string
+    local_mount             = string
+    local_mount_owner       = optional(string)
+    local_mount_permissions = optional(string)
+    fs_type                 = string
+    mount_options           = string
   }))
   default = []
 }

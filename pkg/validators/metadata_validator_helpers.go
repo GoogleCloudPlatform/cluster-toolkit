@@ -71,11 +71,28 @@ func getModuleSettingValues(bp config.Blueprint, group config.Group, modIdx int,
 	groupIndex := bp.GroupIndex(group.Name)
 	path := config.Root.Groups.At(groupIndex).Modules.At(modIdx).Settings.Dot(settingName)
 
-	// If YAML context exists and the path is not present in the user's YAML,
-	// treat the setting as absent so validators skip it (honoring optional:true).
-
+	// If the setting is omitted from the settings block, check if it's implicitly bound
+	// to a global variable with the exact same name declared in the vars block.
+	isExplicitSetting := false
 	if bp.YamlCtx != nil {
-		if _, ok := bp.YamlCtx.Pos(path); !ok {
+		_, isExplicitSetting = bp.YamlCtx.Pos(path)
+	} else {
+		_, isExplicitSetting = getNestedValue(mod.Settings, settingName)
+	}
+
+	if !isExplicitSetting && bp.Vars.Has(settingName) {
+		val := bp.Vars.Get(settingName)
+		if evaledVal, err := bp.Eval(val); err == nil {
+			val = evaledVal
+		}
+		values := evaluateAndFlatten(val)
+		varPath := config.Root.Vars.Dot(settingName)
+		return values, varPath, nil
+	}
+
+	// Fallback to explicit settings extraction
+	if bp.YamlCtx != nil {
+		if !isExplicitSetting {
 			return nil, nilPath, fmt.Errorf("setting %q not present in blueprint YAML for module %q", settingName, mod.ID)
 		}
 	}

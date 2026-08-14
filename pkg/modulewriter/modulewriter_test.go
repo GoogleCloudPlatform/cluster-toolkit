@@ -414,7 +414,7 @@ func (s *zeroSuite) TestWriteVersions(c *C) {
 		c.Assert(err, IsNil)
 		c.Check(string(b), Equals, license+`
 terraform {
-  required_version = "= 1.12.2"
+  required_version = ">= 1.12.2"
 
   required_providers {
     elephant = {
@@ -522,13 +522,13 @@ func (s *zeroSuite) TestDeploymentSource(c *C) {
 		m := config.Module{Kind: config.TerraformKind, Source: "modules/x/y"}
 		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
-		c.Check(s, Equals, "./modules/embedded/modules/x/y")
+		c.Check(s, Equals, "../"+config.SharedModulesDirName+"/embedded/modules/x/y")
 	}
 	{ // embedded community
 		m := config.Module{Kind: config.TerraformKind, Source: "community/modules/x/y"}
 		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
-		c.Check(s, Equals, "./modules/embedded/community/modules/x/y")
+		c.Check(s, Equals, "../"+config.SharedModulesDirName+"/embedded/community/modules/x/y")
 	}
 	{ // local rel in repo
 		m := config.Module{Kind: config.TerraformKind, Source: "./modules/x/y"}
@@ -547,6 +547,15 @@ func (s *zeroSuite) TestDeploymentSource(c *C) {
 		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
+	}
+	{ // equivalent paths produce same hash after cleaning
+		m1 := config.Module{Kind: config.TerraformKind, Source: "./modules/x/y"}
+		m2 := config.Module{Kind: config.TerraformKind, Source: "./modules/x/z/../y"}
+		s1, err1 := DeploymentSource(m1)
+		c.Check(err1, IsNil)
+		s2, err2 := DeploymentSource(m2)
+		c.Check(err2, IsNil)
+		c.Check(s1, Equals, s2)
 	}
 }
 

@@ -22,8 +22,8 @@ ghpc:
   - validator: regex
     inputs:
       vars: [partition_name]
-      pattern: "^[a-z](?:[a-z0-9]*)$"
-    error_message: "'partition_name' must start with a lowercase letter and can only contain lowercase letters and numbers."
+      pattern: "^[a-z](?:[a-z0-9-]*)$"
+    error_message: "'partition_name' must start with a lowercase letter and can only contain lowercase letters, numbers, and hyphens."
   - validator: exclusive
     inputs:
       vars: [nodeset, nodeset_dyn, nodeset_tpu]

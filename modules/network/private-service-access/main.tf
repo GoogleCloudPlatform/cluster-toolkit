@@ -25,13 +25,9 @@ locals {
   network_project  = local.split_network_id[1]
 }
 
-resource "random_id" "resource_name_suffix" {
-  byte_length = 4
-}
-
 resource "google_compute_global_address" "private_ip_alloc" {
   provider      = google
-  name          = "global-psconnect-ip-${random_id.resource_name_suffix.hex}"
+  name          = var.name != null ? var.name : "psconnect-${trimsuffix(substr(local.network_name, 0, 53), "-")}"
   project       = var.project_id
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"

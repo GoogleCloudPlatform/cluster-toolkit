@@ -41,16 +41,20 @@ resource "random_uuid" "cluster_id" {
 
 locals {
   config = {
-    enable_bigquery_load  = var.enable_bigquery_load
-    cloudsql_secret       = var.cloudsql_secret
-    cluster_id            = random_uuid.cluster_id.result
-    project               = var.project_id
-    slurm_cluster_name    = var.slurm_cluster_name
-    enable_slurm_auth     = var.enable_slurm_auth
-    bucket_path           = local.bucket_path
-    enable_debug_logging  = var.enable_debug_logging
-    extra_logging_flags   = var.extra_logging_flags
-    controller_state_disk = var.controller_state_disk
+    enable_bigquery_load            = var.enable_bigquery_load
+    cloudsql_secret                 = var.cloudsql_secret
+    cluster_id                      = random_uuid.cluster_id.result
+    project                         = var.project_id
+    slurm_cluster_name              = var.slurm_cluster_name
+    slurm_backup_controller_name    = var.slurm_backup_controller_name
+    slurm_backup_controller_ip      = var.slurm_backup_controller_ip
+    enable_controller_load_balancer = var.enable_controller_load_balancer
+    accounting_storage_backup_host  = var.accounting_storage_backup_host
+    enable_slurm_auth               = var.enable_slurm_auth
+    bucket_path                     = local.bucket_path
+    enable_debug_logging            = var.enable_debug_logging
+    extra_logging_flags             = var.extra_logging_flags
+    controller_state_disk           = var.controller_state_disk
 
     # storage
     disable_default_mounts = var.disable_default_mounts
@@ -59,25 +63,30 @@ locals {
     # timeouts
     controller_startup_scripts_timeout = var.controller_startup_scripts_timeout
     compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
+    backup_controller_key_timeout      = var.backup_controller_key_timeout
 
     munge_mount     = local.munge_mount
     slurm_key_mount = var.slurm_key_mount
 
     # slurm conf
-    prolog_scripts      = [for k, v in google_storage_bucket_object.prolog_scripts : k]
-    epilog_scripts      = [for k, v in google_storage_bucket_object.epilog_scripts : k]
-    task_prolog_scripts = [for k, v in google_storage_bucket_object.task_prolog_scripts : k]
-    task_epilog_scripts = [for k, v in google_storage_bucket_object.task_epilog_scripts : k]
-    cloud_parameters    = var.cloud_parameters
+    prolog_scripts                 = [for k, v in google_storage_bucket_object.prolog_scripts : k]
+    epilog_scripts                 = [for k, v in google_storage_bucket_object.epilog_scripts : k]
+    task_prolog_scripts            = [for k, v in google_storage_bucket_object.task_prolog_scripts : k]
+    task_epilog_scripts            = [for k, v in google_storage_bucket_object.task_epilog_scripts : k]
+    cloud_parameters               = var.cloud_parameters
+    experimental                   = var.experimental
+    enable_expedited_requeue       = var.enable_expedited_requeue
+    enable_health_check_start_only = var.enable_health_check_start_only
+    enable_openmetrics             = var.enable_openmetrics
 
     # hybrid
     hybrid                        = var.enable_hybrid
     google_app_cred_path          = var.enable_hybrid ? local.google_app_cred_path : null
     output_dir                    = var.enable_hybrid ? local.output_dir : null
     install_dir                   = var.enable_hybrid ? local.install_dir : null
-    slurm_control_host            = var.enable_hybrid ? var.slurm_control_host : null
-    slurm_control_host_port       = var.enable_hybrid ? local.slurm_control_host_port : null
-    slurm_control_addr            = var.enable_hybrid ? var.slurm_control_addr : null
+    slurm_control_host            = var.slurm_control_host
+    slurm_control_host_port       = local.slurm_control_host_port
+    slurm_control_addr            = var.slurm_control_addr
     slurm_bin_dir                 = var.enable_hybrid ? local.slurm_bin_dir : null
     slurm_log_dir                 = var.enable_hybrid ? local.slurm_log_dir : null
     controller_network_attachment = var.controller_network_attachment
@@ -107,8 +116,8 @@ locals {
   slurm_bin_dir        = var.slurm_bin_dir != null ? abspath(var.slurm_bin_dir) : null
   slurm_log_dir        = var.slurm_log_dir != null ? abspath(var.slurm_log_dir) : null
 
-  munge_mount = var.enable_hybrid ? {
-    server_ip     = lookup(var.munge_mount, "server_ip", coalesce(var.slurm_control_addr, var.slurm_control_host))
+  munge_mount = (var.enable_hybrid || var.slurm_backup_controller_name != null) ? {
+    server_ip     = lookup(var.munge_mount, "server_ip", coalesce(var.slurm_control_addr, var.slurm_control_host, "$controller"))
     remote_mount  = lookup(var.munge_mount, "remote_mount", "/etc/munge/")
     fs_type       = lookup(var.munge_mount, "fs_type", "nfs")
     mount_options = lookup(var.munge_mount, "mount_options", "")
@@ -171,7 +180,7 @@ resource "google_storage_bucket_object" "nodeset_tpu_config" {
 #########
 
 locals {
-  build_dir = abspath("${path.module}/build")
+  build_dir = "${path.module}/build"
 
   slurm_gcp_devel_controller_zip     = "slurm-gcp-devel-controller.zip"
   slurm_gcp_devel_compute_zip        = "slurm-gcp-devel.zip"
@@ -184,6 +193,7 @@ locals {
     "tools/task-prolog",
     "conf.py",
     "conf_v2411.py",
+    "conf_v2511.py",
     "file_cache.py",
     "get_tpu_vmcount.py",
     "job_submit.lua.tpl",
@@ -193,8 +203,10 @@ locals {
     "resume_wrapper.sh",
     "resume.py",
     "repair.py",
+    "error_handler.py",
     "setup_network_storage.py",
     "setup.py",
+    "slurm_health_check.py",
     "slurmsync.py",
     "sort_nodes.py",
     "suspend_wrapper.sh",
@@ -210,6 +222,7 @@ locals {
     "tools/task-prolog",
     "conf.py",
     "conf_v2411.py",
+    "conf_v2511.py",
     "file_cache.py",
     "get_tpu_vmcount.py",
     "job_submit.lua.tpl",
@@ -219,6 +232,7 @@ locals {
     "setup.py",
     "slurmsync.py",
     "sort_nodes.py",
+    "error_handler.py",
     "repair.py",
     "suspend.py",
     "tpu.py",

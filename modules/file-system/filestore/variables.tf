@@ -64,10 +64,34 @@ variable "local_mount" {
   default     = "/shared"
 }
 
+variable "local_mount_owner" {
+  description = "Local mount owner, string in format <user>:<group>."
+  type        = string
+  default     = ""
+  nullable    = false
+  validation {
+    condition     = var.local_mount_owner == "" || length(split(":", var.local_mount_owner)) == 2
+    error_message = "Provide owner as <user>:<group>."
+  }
+  validation {
+    condition = var.local_mount_owner == "" || alltrue([
+      for x in split(":", var.local_mount_owner) : (length(x) > 0)
+    ])
+    error_message = "Both user and group part must be non-empty"
+  }
+}
+
+variable "local_mount_permissions" {
+  description = "Local mount permissions, specified as mode according to chmod(2)."
+  type        = string
+  default     = ""
+  nullable    = false
+}
+
 variable "size_gb" {
   description = "Storage size of the filestore instance in GB."
   type        = number
-  default     = 1024
+  default     = 2560
   validation {
     condition     = var.size_gb >= 1024
     error_message = "No Filestore tier supports less than 1024GiB.\nSee https://cloud.google.com/filestore/docs/service-tiers."
@@ -77,7 +101,7 @@ variable "size_gb" {
 variable "filestore_tier" {
   description = "The service tier of the instance."
   type        = string
-  default     = "BASIC_HDD"
+  default     = "BASIC_SSD"
   validation {
     condition     = var.filestore_tier != "STANDARD"
     error_message = "The preferred name for STANDARD tier is now BASIC_HDD\nhttps://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier."

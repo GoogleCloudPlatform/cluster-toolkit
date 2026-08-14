@@ -213,13 +213,13 @@ variable "local_ssd_filesystem" {
 }
 
 variable "install_cloud_ops_agent" {
-  description = "Warning: Consider using `install_stackdriver_agent` for better performance. Run Google Ops Agent installation script if set to true."
+  description = "Run Google Cloud Ops Agent installation script if set to true. Recommended for modern OSes (Rocky 9+, RHEL 9+, Ubuntu 24.04+, Debian 12+) where the legacy agent is unsupported."
   type        = bool
   default     = false
 }
 
 variable "install_stackdriver_agent" {
-  description = "Run Google Stackdriver Agent installation script if set to true. Preferred over ops agent for performance."
+  description = "Run Google Stackdriver (legacy) Agent installation script if set to true. Note: This agent is deprecated and unsupported on newer OSes (Rocky 9+, RHEL 9+, Ubuntu 24.04+, Debian 12+)."
   type        = bool
   default     = false
 }
@@ -295,4 +295,16 @@ variable "enable_gpu_network_wait_online" {
   description = "Enable a SystemD unit that blocks execution of startup-scripts until after all network interfaces are online. (Works on reboots or boots of an image built using this solution)"
   type        = bool
   default     = false
+}
+
+variable "compute_endpoint_version" {
+  description = "Custom Google Compute API endpoint version."
+  type        = string
+  default     = null
+}
+
+variable "gcloud_path_override" {
+  description = "Path to the directory containing the gcloud binary to use as an override for local execution."
+  type        = string
+  default     = ""
 }

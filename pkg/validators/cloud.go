@@ -19,18 +19,28 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"regexp"
 	"strings"
 
+	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
+	cloudresourcemanager "google.golang.org/api/cloudresourcemanager/v1"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
+	iam "google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
 	serviceusage "google.golang.org/api/serviceusage/v1"
 )
 
 var reservationNameRegex = regexp.MustCompile(`^projects/([^/]+)/reservations/([^/]+)$`)
 var resKeyRegex = regexp.MustCompile(`^(.*_)?reservation(_name)?$`)
+
+var newComputeService = func(ctx context.Context) (*compute.Service, error) {
+	return compute.NewService(ctx)
+}
+
+const gcsFuseProfileUserRole = "gke.gcsfuse.profileUser"
 
 func getErrorReason(err googleapi.Error) (string, map[string]interface{}) {
 	for _, d := range err.Details {
@@ -254,25 +264,74 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
-// findReservationInOtherZones searches for a reservation by name across zones
-// in the project.
-func findReservationInOtherZones(s *compute.Service, projectID string, name string) ([]string, error) {
-	aggList, err := s.Reservations.AggregatedList(projectID).Do()
-	if err != nil {
-		return nil, err
-	}
+// Helper interface to treat Standard and Future reservations generically
+type zoneResource interface {
+	GetName() string
+	GetZone() string
+}
 
+// Wrapper for compute.Reservation
+type stdRes struct{ *compute.Reservation }
+
+func (r stdRes) GetName() string { return r.Name }
+func (r stdRes) GetZone() string { return r.Zone }
+
+// Wrapper for compute.FutureReservation
+type futRes struct{ *compute.FutureReservation }
+
+func (r futRes) GetName() string { return r.Name }
+func (r futRes) GetZone() string { return r.Zone }
+
+func extractZonesFromItems[T any](items map[string]T, name string, extractor func(T) []zoneResource) []string {
 	foundInZones := []string{}
-	for _, scopedList := range aggList.Items {
-		for _, res := range scopedList.Reservations {
-			if res.Name == name {
-				// res.Zone is a full URL, extract just the name (e.g., "us-central1-a")
-				parts := strings.Split(res.Zone, "/")
+	for _, scopedList := range items {
+		for _, res := range extractor(scopedList) {
+			if res.GetName() == name {
+				parts := strings.Split(res.GetZone(), "/")
 				foundInZones = append(foundInZones, parts[len(parts)-1])
 			}
 		}
 	}
-	return foundInZones, nil
+	return foundInZones
+}
+
+func findReservationInOtherZones(ctx context.Context, s *compute.Service, projectID string, name string) ([]string, error) {
+	// 1. Search Standard Zonal Reservations
+	aggList, err := s.Reservations.AggregatedList(projectID).Context(ctx).Do()
+	if err == nil {
+		found := extractZonesFromItems(aggList.Items, name, func(l compute.ReservationsScopedList) []zoneResource {
+			res := make([]zoneResource, len(l.Reservations))
+			for i, r := range l.Reservations {
+				res[i] = stdRes{r}
+			}
+			return res
+		})
+		if len(found) > 0 {
+			return found, nil
+		}
+	}
+
+	// 2. Search Future Reservations (Early return if Standard found, otherwise search here)
+	fAggList, fErr := s.FutureReservations.AggregatedList(projectID).Context(ctx).Do()
+	if fErr == nil {
+		found := extractZonesFromItems(fAggList.Items, name, func(l compute.FutureReservationsScopedList) []zoneResource {
+			res := make([]zoneResource, len(l.FutureReservations))
+			for i, r := range l.FutureReservations {
+				res[i] = futRes{r}
+			}
+			return res
+		})
+		if len(found) > 0 {
+			return found, nil
+		}
+	}
+
+	// If both failed and we found nothing, return the errors
+	if err != nil || fErr != nil {
+		return nil, fmt.Errorf("failed to list standard reservations: %v; failed to list future reservations: %v", err, fErr)
+	}
+
+	return []string{}, nil
 }
 
 // TestReservationExists checks if a reservation exists in a project and zone.
@@ -281,26 +340,40 @@ func TestReservationExists(ctx context.Context, reservationProjectID string, zon
 		return nil
 	}
 
-	s, err := compute.NewService(ctx)
+	s, err := newComputeService(ctx)
 	if err != nil {
 		return handleClientError(err)
 	}
 
-	// 1. Direct check: Try to Get the specific reservation
-	_, err = s.Reservations.Get(reservationProjectID, zone, reservationName).Do()
+	// 1. Direct check: Try Standard Zonal Reservation
+	_, err = s.Reservations.Get(reservationProjectID, zone, reservationName).Context(ctx).Do()
 	if err == nil {
-		return nil // Success
+		return nil
 	}
 
-	// 2. Access Check: If we can't even reach the project/API, issue soft warning
+	// 2. Fallback: Try Future Reservation (Required for Blackwell/A4 hardware)
+	_, fErr := s.FutureReservations.Get(reservationProjectID, zone, reservationName).Context(ctx).Do()
+	if fErr == nil {
+		return nil
+	}
+
+	// 3. Access Check: If both failed, check for metadata blindness (403/400).
+	// We handle this because users might be allowed to CONSUME but not DESCRIBE a shared reservation.
+	// Case A: Standard API Access Check
 	if msg, isSoft := getSoftWarningMessage(err, "test_reservation_exists", reservationProjectID, "Compute Engine API", "compute.reservations.get"); isSoft {
 		fmt.Println(msg)
-		return nil // Skip and continue
+		return nil
 	}
 
-	// 3. Diagnostic Search: The reservation was not in the expected zone (404).
+	// Case B: Future API Access Check
+	if msg, isSoft := getSoftWarningMessage(fErr, "test_reservation_exists", reservationProjectID, "Compute Engine API", "compute.futureReservations.get"); isSoft {
+		fmt.Println(msg)
+		return nil
+	}
+
+	// 4. Diagnostic Search: The reservation was not in the expected zone (404).
 	// We try to find where it actually is.
-	foundInZones, aggErr := findReservationInOtherZones(s, reservationProjectID, reservationName)
+	foundInZones, aggErr := findReservationInOtherZones(ctx, s, reservationProjectID, reservationName)
 
 	if aggErr != nil {
 		// If Discovery fails (403/400) and it's a SHARED project, we must skip
@@ -320,7 +393,7 @@ func TestReservationExists(ctx context.Context, reservationProjectID string, zon
 		return fmt.Errorf("reservation %q not found in project %q and zone %q", reservationName, reservationProjectID, zone)
 	}
 
-	// 4. Resource Found Discovery: If we found it elsewhere, provide a Hard Failure with Hint.
+	// 5. Resource Found Discovery: Provide Hint
 	if len(foundInZones) > 0 {
 		zonesList := strings.Join(foundInZones, ", ")
 		return config.HintError{
@@ -331,8 +404,98 @@ func TestReservationExists(ctx context.Context, reservationProjectID string, zon
 		}
 	}
 
-	// 5. Not Found Anywhere: Hard Failure
+	// 6. Not Found Anywhere: Hard Failure
 	return fmt.Errorf("reservation %q was not found in any zone of project %q", reservationName, reservationProjectID)
+}
+
+// findReservationOwnerProject scans the blueprint's modules to see if a specific
+// reservation is configured as a shared reservation (meaning it has an explicit
+// 'project' field defined in its 'reservation_affinity' settings).
+// If found, it returns the owner project ID; otherwise, it returns an empty string.
+func findReservationOwnerProject(bp config.Blueprint, reservationName string) string {
+	var ownerProject string
+	// Walk through all modules in the blueprint to inspect their settings
+	bp.WalkModulesSafe(func(_ config.ModulePath, m *config.Module) {
+		// Short-circuit if we already found the owner project in a previous module
+		if ownerProject != "" {
+			return
+		}
+		ownerProject = extractOwnerProjectFromModule(bp, m, reservationName)
+	})
+	return ownerProject
+}
+
+// extractOwnerProjectFromModule evaluates the 'reservation_affinity' setting of a module
+// and attempts to extract the owner project if it matches the target reservation.
+func extractOwnerProjectFromModule(bp config.Blueprint, m *config.Module, reservationName string) string {
+	settings := m.Settings
+	if !settings.Has("reservation_affinity") {
+		return ""
+	}
+	val := settings.Get("reservation_affinity")
+	v, err := bp.Eval(val)
+	if err != nil || v.IsNull() {
+		return ""
+	}
+	v, _ = v.Unmark()
+	if !v.IsKnown() || !v.Type().IsObjectType() {
+		return ""
+	}
+	attrs := v.AsValueMap()
+	specRes, ok := attrs["specific_reservations"]
+	if !ok {
+		return ""
+	}
+	return findProjectInSpecificReservations(specRes, reservationName)
+}
+
+// findProjectInSpecificReservations iterates over the 'specific_reservations' list
+// to find a reservation matching the target name and returns its owner project.
+func findProjectInSpecificReservations(specRes cty.Value, reservationName string) string {
+	specRes, _ = specRes.Unmark()
+	if specRes.IsNull() || !specRes.IsKnown() {
+		return ""
+	}
+	if !specRes.Type().IsListType() && !specRes.Type().IsTupleType() {
+		return ""
+	}
+	iterator := specRes.ElementIterator()
+	for iterator.Next() {
+		_, resVal := iterator.Element()
+		if proj := getProjectIfReservationMatches(resVal, reservationName); proj != "" {
+			return proj
+		}
+	}
+	return ""
+}
+
+// getProjectIfReservationMatches checks if a single reservation object matches the
+// target name and returns its owner project if specified.
+func getProjectIfReservationMatches(resVal cty.Value, reservationName string) string {
+	resVal, _ = resVal.Unmark()
+	if resVal.IsNull() || !resVal.IsKnown() || !resVal.Type().IsObjectType() {
+		return ""
+	}
+	resAttrs := resVal.AsValueMap()
+	nameVal := strings.Split(getSafeString(resAttrs, "name"), "/reservationBlocks/")[0]
+	if nameVal != reservationName {
+		return ""
+	}
+	return getSafeString(resAttrs, "project")
+}
+
+// getSafeString extracts a string value from a cty.Value map by key, returning
+// an empty string if the key is missing, null, or not of type string.
+func getSafeString(attrs map[string]cty.Value, key string) string {
+	val, ok := attrs[key]
+	if !ok {
+		return ""
+	}
+	val, _ = val.Unmark()
+	if val.Type() != cty.String || val.IsNull() || !val.IsKnown() {
+		return ""
+	}
+	return val.AsString()
 }
 
 func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
@@ -366,9 +529,14 @@ func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
 		// Use the project ID extracted from the path instead of the deployment project.
 		reservationProjectID = matches[1]
 		targetName = matches[2]
+	} else {
+		// It's a simple name. Check if we can find an owner project in the blueprint modules.
+		if ownerProj := findReservationOwnerProject(bp, resInput); ownerProj != "" {
+			reservationProjectID = ownerProj
+		}
 	}
 
-	// Pass both the owner project and the deployment project
+	// Pass context from the caller to ensure cancellation/timeouts are respected
 	ctx := context.Background()
 	return TestReservationExists(ctx, reservationProjectID, zone, targetName, deploymentProjectID)
 }
@@ -431,4 +599,93 @@ func testMachineTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) 
 // testDiskTypeInZoneAvailability automatically validates disk types in modules
 func testDiskTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) error {
 	return testResourceInZoneAvailability(bp, inputs, "test_disk_type_in_zone", "disk_type", "disk type", validateDiskTypeInZone)
+}
+
+// testGCSFuseIAMRoleExistsCheck verifies that the required custom IAM role for GCS Fuse exists.
+// High-level logic for failures:
+//   - Hard Failure (404): If the role explicitly does not exist, we block deployment because
+//     GCS Fuse Storage Profiles will fail at runtime without it.
+//   - Soft Warning (403/other): If we cannot verify the role due to permission issues (e.g., the
+//     runner lacks 'iam.roles.get'), we log a warning but do not block. This prevents blocking
+//     users who have deployment permissions but not project-wide IAM read permissions.
+func testGCSFuseIAMRoleExistsCheck(projectID string) error {
+	ctx := context.Background()
+	s, err := iam.NewService(ctx)
+	if err != nil {
+		return handleClientError(err)
+	}
+
+	roleName := fmt.Sprintf("projects/%s/roles/%s", projectID, gcsFuseProfileUserRole)
+	_, err = s.Projects.Roles.Get(roleName).Do()
+	if err != nil {
+		var herr *googleapi.Error
+		if errors.As(err, &herr) && herr.Code == 404 {
+			return config.HintError{
+				Err: fmt.Errorf("custom IAM role '%s' was not found in project %s", gcsFuseProfileUserRole, projectID),
+				Hint: "GCS Fuse CSI Storage Profiles require this custom IAM role.\n" +
+					"Please refer to modules/file-system/gke-persistent-volume/README.md for instructions.",
+			}
+		}
+		logging.Error("\n[!] WARNING: Unable to verify existence of the custom IAM role '%s'.", roleName)
+		logging.Error("    Permission 'iam.roles.get' was denied. GCS Fuse CSI Storage Profiles require this role to scan and mount storage.")
+		logging.Error("    Please verify with your Google Cloud administrator that the custom IAM role has been provisioned successfully.")
+		logging.Error("    Reference: modules/file-system/gke-persistent-volume/README.md\n")
+		return nil
+	}
+
+	// Optional Check: Validate IAM Binding for the GKE Service Agent
+	checkGCSFuseIAMBinding(ctx, projectID, roleName)
+
+	return nil
+}
+
+func checkGCSFuseIAMBinding(ctx context.Context, projectID string, roleName string) {
+	crmService, err := cloudresourcemanager.NewService(ctx)
+	if err != nil {
+		logging.Error("WARNING: Could not initialize Cloud Resource Manager service: %v. Skipping IAM binding check.", err)
+		return
+	}
+
+	project, err := crmService.Projects.Get(projectID).Do()
+	if err != nil {
+		logging.Error("WARNING: Could not fetch project number for %s: %v. Skipping IAM binding check.", projectID, err)
+		return
+	}
+
+	policy, err := crmService.Projects.GetIamPolicy(projectID, &cloudresourcemanager.GetIamPolicyRequest{}).Do()
+	if err != nil {
+		logging.Error("WARNING: Could not fetch IAM policy for %s: %v. Skipping IAM binding check.", projectID, err)
+		return
+	}
+
+	agentMember := fmt.Sprintf("serviceAccount:service-%d@container-engine-robot.iam.gserviceaccount.com", project.ProjectNumber)
+	roleGranted := false
+
+	for _, binding := range policy.Bindings {
+		if binding.Role == roleName {
+			for _, member := range binding.Members {
+				if member == agentMember {
+					roleGranted = true
+					break
+				}
+			}
+		}
+	}
+
+	if !roleGranted {
+		logging.Error("\n[!] WARNING: GKE Service Agent (%s) does not appear to have the custom role '%s' assigned.", agentMember, roleName)
+		logging.Error("    This might cause GCS Fuse CSI drivers to fail at runtime.")
+		logging.Error("    Refer to modules/file-system/gke-persistent-volume/README.md to manually bind permissions.\n")
+	}
+}
+
+func testGCSFuseIAMRoleExists(bp config.Blueprint, inputs config.Dict) error {
+	if err := checkInputs(inputs, []string{"project_id"}); err != nil {
+		return err
+	}
+	m, err := inputsAsStrings(inputs)
+	if err != nil {
+		return err
+	}
+	return testGCSFuseIAMRoleExistsCheck(m["project_id"])
 }

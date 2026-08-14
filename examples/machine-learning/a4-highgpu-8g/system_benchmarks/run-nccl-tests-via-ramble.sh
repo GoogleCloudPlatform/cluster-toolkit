@@ -44,7 +44,26 @@ read -t 30 -rp "To continue, hit [enter]. To cancel, type [Ctrl-c]. Will auto-co
 mkdir -p "${TEST_DIR}"
 
 # Install prerequisites
-sudo apt-get install -y python3-venv jq
+# Handle Munge service conflict
+MUNGE_ACTIVE=false
+if systemctl is-active --quiet munge; then
+	MUNGE_ACTIVE=true
+	echo "Stopping Munge to prevent package lock..."
+	sudo systemctl stop munge || true
+fi
+
+# Non-interactive installation
+echo "Installing prerequisites..."
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+	-o Dpkg::Options::="--force-confdef" \
+	-o Dpkg::Options::="--force-confold" \
+	python3-venv jq
+
+# Restart Munge if it was active
+if [ "$MUNGE_ACTIVE" = true ]; then
+	echo "Restarting Munge..."
+	sudo systemctl start munge || true
+fi
 
 # Create enroot credentials set up for artifact registry
 mkdir -p "${HOME}"/.enroot/
@@ -100,8 +119,8 @@ ramble:
     hostlist: \${SLURM_JOB_NODELIST}
 
     container_dir: "${SOFTWARE_INSTALL}/ramble/sqsh"
-    container_name: nccl-plugin-gib-diagnostic-v1.1.0
-    container_uri: docker://us-docker.pkg.dev#gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.1.0
+    container_name: nccl-plugin-gib-diagnostic-v1.1.2
+    container_uri: docker://us-docker.pkg.dev#gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.1.2
     processes_per_node: 8
     processes_per_node: '{gpus_per_node}'
     gpus_per_node: '8'

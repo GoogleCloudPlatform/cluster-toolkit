@@ -24,9 +24,9 @@ This blueprint installs and configures several key software components. While th
 * **NVIDIA CUDA Toolkit:** 13.0 (and related `datacenter-gpu-manager` packages)
 * **Mellanox OFED (DOCA):** 3.2.0 for Ubuntu 24.04 arm64-sbsa
 * **Mellanox Firmware Tools (MFT):** 4.34.0-145
-* **Slurm:** Git ref `6.10.10` from `https://github.com/GoogleCloudPlatform/slurm-gcp`
+* **Slurm:** Git ref `6.12.1` from `https://github.com/GoogleCloudPlatform/slurm-gcp`
 * **NCCL Plugin Image:** `us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-gib-a4x-max-arm64` (Version: `v1.1.1`)
-* **ASAPd Image:** `us-docker.pkg.dev/gce-ai-infra/asapd-lite/asapd-lite:v0.0.4`
+* **ASAPd Image:** `us-docker.pkg.dev/gce-ai-infra/asapd-lite/asapd-lite:v0.0.8`
 
 *Note: Some package managers might install minor updates to these components based on repository availability at build time.*
 

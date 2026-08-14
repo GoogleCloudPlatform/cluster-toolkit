@@ -45,6 +45,12 @@ variable "zone" {
   type        = string
 }
 
+variable "region" {
+  description = "Cloud region in which to provision image building VM"
+  type        = string
+  default     = null
+}
+
 variable "network_project_id" {
   description = "Project ID of Shared VPC network"
   type        = string
@@ -99,7 +105,7 @@ variable "source_image" {
 variable "source_image_family" {
   description = "Alternative to source_image. Specify image family to build from latest image in family"
   type        = string
-  default     = "hpc-rocky-linux-8"
+  default     = "hpc-rocky-linux-9"
 }
 
 variable "service_account_email" {
@@ -273,4 +279,22 @@ variable "shielded_instance_config" {
     enable_vtpm                 = true
     enable_integrity_monitoring = true
   }
+}
+
+variable "compute_endpoint_version" {
+  description = "Custom Google Compute API endpoint version."
+  type        = string
+  default     = null
+}
+
+variable "gcloud_path_override" {
+  description = "Path to the directory containing the gcloud binary to use as an override for local execution."
+  type        = string
+  default     = ""
+}
+
+variable "image_licenses" {
+  description = "List of licenses to apply to the image"
+  type        = list(string)
+  default     = ["projects/click-to-deploy-images/global/licenses/hpc-toolkit-vm-image"]
 }

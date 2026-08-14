@@ -18,6 +18,12 @@ variable "disk_type" {
   default     = "pd-ssd"
 }
 
+variable "disk_storage_pool" {
+  description = "Storage pool to use for the boot disk. Note that storage pools are only supported with Hyperdisk types. For boot disks, only hyperdisk-balanced is supported. You must provide an existing storage pool, as this module does not create new ones."
+  type        = string
+  default     = null
+}
+
 variable "disk_size_gb" {
   type        = number
   description = "Boot disk size in GB."
@@ -52,17 +58,32 @@ variable "disk_resource_manager_tags" {
 
 variable "additional_disks" {
   type = list(object({
-    disk_name                  = string
-    device_name                = string
-    disk_type                  = string
-    disk_size_gb               = number
-    disk_labels                = map(string)
-    auto_delete                = bool
-    boot                       = bool
-    disk_resource_manager_tags = map(string)
+    disk_name                           = optional(string)
+    device_name                         = optional(string)
+    disk_type                           = optional(string)
+    disk_storage_pool                   = optional(string)
+    disk_size_gb                        = optional(number)
+    disk_labels                         = optional(map(string), {})
+    auto_delete                         = optional(bool, true)
+    boot                                = optional(bool, false)
+    disk_resource_manager_tags          = optional(map(string), {})
+    disk_encryption_key                 = optional(string)
+    disk_encryption_key_service_account = optional(string)
   }))
   description = "List of maps of disks."
   default     = []
+}
+
+variable "disk_encryption_key" {
+  type        = string
+  description = "The id of the encryption key that is stored in Google Cloud KMS to use to encrypt all the disks on this instance"
+  default     = null
+}
+
+variable "disk_encryption_key_service_account" {
+  type        = string
+  description = "The service account being used for the encryption request for the given KMS key. If absent, the Compute Engine default service account is used."
+  default     = null
 }
 
 variable "advanced_machine_features" {
@@ -105,8 +126,8 @@ variable "static_ips" {
   description = "List of static IPs for VM instances."
   default     = []
   validation {
-    condition     = length(var.static_ips) <= 1
-    error_message = "The Slurm modules supports 0 or 1 static IPs on controller instance."
+    condition     = length(var.static_ips) <= 2
+    error_message = "The Slurm module supports 0, 1, or 2 static IPs on controller instances."
   }
 }
 
@@ -301,7 +322,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-11-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-12-hpc-rocky-linux-9"
     project = "schedmd-slurm-public"
   }
 
@@ -373,6 +394,31 @@ variable "controller_network_attachment" {
   default     = null
 }
 
+variable "additional_networks" {
+  description = "Additional network interface details for the controller, if any."
+  default     = []
+  type = list(object({
+    access_config = optional(list(object({
+      nat_ip       = string
+      network_tier = string
+    })), [])
+    alias_ip_range = optional(list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    })), [])
+    ipv6_access_config = optional(list(object({
+      network_tier = string
+    })), [])
+    network            = optional(string)
+    network_ip         = optional(string, "")
+    nic_type           = optional(string)
+    queue_count        = optional(number)
+    stack_type         = optional(string)
+    subnetwork         = optional(string)
+    subnetwork_project = optional(string)
+  }))
+}
+
 variable "resource_manager_tags" {
   description = "(Optional) A set of key/value resource manager tag pairs to bind to the instances. Keys must be in the format tagKeys/{tag_key_id}, and values are in the format tagValues/456."
   type        = map(string)
@@ -384,5 +430,92 @@ variable "resource_manager_tags" {
   validation {
     condition     = alltrue([for value in keys(var.resource_manager_tags) : can(regex("tagKeys/[0-9]+", value))])
     error_message = "All Resource Manager tag keys should be in the format 'tagKeys/[0-9]+'"
+  }
+}
+
+variable "munge_mount" {
+  description = <<-EOD
+  Remote munge mount for compute and login nodes to acquire the munge.key.
+  By default, the munge mount server will be assumed to be the
+  `var.slurm_control_host` (or `var.slurm_control_addr` if non-null) when
+  `server_ip=null`.
+  EOD
+  type = object({
+    server_ip     = string
+    remote_mount  = string
+    fs_type       = string
+    mount_options = string
+  })
+  default = {
+    server_ip     = null
+    remote_mount  = "/etc/munge/"
+    fs_type       = "nfs"
+    mount_options = ""
+  }
+}
+
+variable "slurm_key_mount" {
+  description = <<-EOD
+  Remote mount for compute and login nodes to acquire the slurm.key.
+  EOD
+  type = object({
+    server_ip     = string
+    remote_mount  = string
+    fs_type       = string
+    mount_options = string
+  })
+  default = null
+}
+
+variable "health_check" {
+  description = "Health check and autohealing configuration for controller HA instance groups."
+  type = object({
+    type                 = optional(string, "tcp")
+    port                 = optional(number, 6818)
+    initial_delay_sec    = optional(number, 900)
+    check_interval_sec   = optional(number, 60)
+    timeout_sec          = optional(number, 10)
+    healthy_threshold    = optional(number, 2)
+    unhealthy_threshold  = optional(number, 5)
+    enable_logging       = optional(bool, true)
+    request_path         = optional(string, "/healthz")
+    create_firewall_rule = optional(bool, true)
+    port_name            = optional(string, "slurmctld")
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = contains(["tcp", "http"], var.health_check.type)
+    error_message = "The health_check.type must be either 'tcp' or 'http'."
+  }
+
+  validation {
+    condition     = var.health_check.timeout_sec <= var.health_check.check_interval_sec
+    error_message = "The health_check.timeout_sec must be less than or equal to health_check.check_interval_sec."
+  }
+}
+
+variable "named_ports" {
+  description = "Named ports for the controller instance group."
+  type = list(object({
+    name = string
+    port = number
+  }))
+  default = []
+
+  validation {
+    condition     = alltrue([for p in var.named_ports : p.port > 0 && p.port <= 65535])
+    error_message = "All named port numbers must be between 1 and 65535."
+  }
+
+  validation {
+    condition     = alltrue([for p in var.named_ports : can(regex("^[a-z]([-a-z0-9]*[a-z0-9])?$", p.name)) && length(p.name) <= 63])
+    error_message = "All named port names must be valid RFC 1035 labels (1-63 characters, lowercase letters, numbers, or hyphens, starting with a letter and ending with a letter or number)."
+  }
+
+  validation {
+    condition     = length(var.named_ports) == length(distinct([for p in var.named_ports : p.name]))
+    error_message = "All named port names must be unique."
   }
 }

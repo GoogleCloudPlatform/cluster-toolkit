@@ -68,7 +68,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-11-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-12-hpc-rocky-linux-9"
     project = "schedmd-slurm-public"
   }
 
@@ -123,6 +123,12 @@ variable "disk_type" {
   default     = "pd-standard"
 }
 
+variable "disk_storage_pool" {
+  description = "Storage pool to use for the boot disk. Note that storage pools are only supported with Hyperdisk types. For boot disks, only hyperdisk-balanced is supported. You must provide an existing storage pool, as this module does not create new ones."
+  type        = string
+  default     = null
+}
+
 variable "disk_size_gb" {
   description = "Size of boot disk to create for the partition compute nodes."
   type        = number
@@ -144,13 +150,14 @@ variable "disk_labels" {
 variable "additional_disks" {
   description = "Configurations of additional disks to be included on the partition nodes."
   type = list(object({
-    disk_name    = string
-    device_name  = string
-    disk_size_gb = number
-    disk_type    = string
-    disk_labels  = map(string)
-    auto_delete  = bool
-    boot         = bool
+    disk_name         = string
+    device_name       = string
+    disk_size_gb      = number
+    disk_type         = string
+    disk_storage_pool = optional(string)
+    disk_labels       = map(string)
+    auto_delete       = bool
+    boot              = bool
   }))
   default = []
 }
@@ -392,11 +399,19 @@ variable "universe_domain" {
 variable "network_storage" {
   description = "An array of network attached storage mounts to be configured on nodes."
   type = list(object({
-    server_ip     = string,
-    remote_mount  = string,
-    local_mount   = string,
-    fs_type       = string,
-    mount_options = string,
+    server_ip               = string,
+    remote_mount            = string,
+    local_mount             = string,
+    local_mount_owner       = optional(string)
+    local_mount_permissions = optional(string)
+    fs_type                 = string,
+    mount_options           = string,
   }))
   default = []
+}
+
+variable "machine_configs" {
+  description = "Definition of GCE machine types and counts"
+  type        = any
+  default     = {}
 }

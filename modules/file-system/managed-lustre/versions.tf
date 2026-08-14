@@ -18,7 +18,7 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 6.27.0"
+      version = ">= 7.27.0"
     }
     random = {
       source  = "hashicorp/random"
@@ -26,11 +26,11 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:managed-lustre/v1.84.0"
+    module_name = "blueprints/terraform/hpc-toolkit:managed-lustre/v1.100.0"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:managed-lustre/v1.84.0"
+    module_name = "blueprints/terraform/hpc-toolkit:managed-lustre/v1.100.0"
   }
 
-  required_version = "= 1.12.2"
+  required_version = ">= 1.12.2"
 }

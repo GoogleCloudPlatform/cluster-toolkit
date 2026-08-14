@@ -288,8 +288,8 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
+| ---- | ------- |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.41 |
 | <a name="requirement_local"></a> [local](#requirement\_local) | >= 2.0.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
@@ -297,7 +297,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 6.41 |
 | <a name="provider_local"></a> [local](#provider\_local) | >= 2.0.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
@@ -309,7 +309,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_storage_bucket.configs_bucket](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket) | resource |
 | [google_storage_bucket_iam_binding.viewers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_binding) | resource |
 | [google_storage_bucket_object.scripts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
@@ -319,23 +319,25 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_ansible_virtualenv_path"></a> [ansible\_virtualenv\_path](#input\_ansible\_virtualenv\_path) | Virtual environment path in which to install Ansible | `string` | `"/usr/local/ghpc-venv"` | no |
 | <a name="input_bucket_viewers"></a> [bucket\_viewers](#input\_bucket\_viewers) | Additional service accounts or groups, users, and domains to which to grant read-only access to startup-script bucket (leave unset if using default Compute Engine service account) | `list(string)` | `[]` | no |
+| <a name="input_compute_endpoint_version"></a> [compute\_endpoint\_version](#input\_compute\_endpoint\_version) | Custom Google Compute API endpoint version. | `string` | `null` | no |
 | <a name="input_configure_ssh_host_patterns"></a> [configure\_ssh\_host\_patterns](#input\_configure\_ssh\_host\_patterns) | If specified, it will automate ssh configuration by:<br/>  - Defining a Host block for every element of this variable and setting StrictHostKeyChecking to 'No'.<br/>  Ex: "hpc*", "hpc01*", "ml*"<br/>  - The first time users log-in, it will create ssh keys that are added to the authorized keys list<br/>  This requires a shared /home filesystem and relies on specifying the right prefix. | `list(string)` | `[]` | no |
 | <a name="input_debug_file"></a> [debug\_file](#input\_debug\_file) | Path to an optional local to be written with 'startup\_script'. | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used to name GCS bucket for startup scripts. | `string` | n/a | yes |
 | <a name="input_docker"></a> [docker](#input\_docker) | Install and configure Docker | <pre>object({<br/>    enabled        = optional(bool, false)<br/>    world_writable = optional(bool, false)<br/>    daemon_config  = optional(string, "")<br/>  })</pre> | <pre>{<br/>  "enabled": false<br/>}</pre> | no |
 | <a name="input_enable_docker_world_writable"></a> [enable\_docker\_world\_writable](#input\_enable\_docker\_world\_writable) | DEPRECATED: use var.docker | `bool` | `null` | no |
 | <a name="input_enable_gpu_network_wait_online"></a> [enable\_gpu\_network\_wait\_online](#input\_enable\_gpu\_network\_wait\_online) | Enable a SystemD unit that blocks execution of startup-scripts until after all network interfaces are online. (Works on reboots or boots of an image built using this solution) | `bool` | `false` | no |
+| <a name="input_gcloud_path_override"></a> [gcloud\_path\_override](#input\_gcloud\_path\_override) | Path to the directory containing the gcloud binary to use as an override for local execution. | `string` | `""` | no |
 | <a name="input_gcs_bucket_path"></a> [gcs\_bucket\_path](#input\_gcs\_bucket\_path) | The GCS path for storage bucket and the object, starting with `gs://`. | `string` | `null` | no |
 | <a name="input_http_no_proxy"></a> [http\_no\_proxy](#input\_http\_no\_proxy) | Domains for which to disable http\_proxy behavior. Honored only if var.http\_proxy is set | `string` | `".google.com,.googleapis.com,metadata.google.internal,localhost,127.0.0.1"` | no |
 | <a name="input_http_proxy"></a> [http\_proxy](#input\_http\_proxy) | Web (http and https) proxy configuration for pip, apt, and yum/dnf and interactive shells | `string` | `""` | no |
 | <a name="input_install_ansible"></a> [install\_ansible](#input\_install\_ansible) | Run Ansible installation script if either set to true or unset and runner of type 'ansible-local' are used. | `bool` | `null` | no |
-| <a name="input_install_cloud_ops_agent"></a> [install\_cloud\_ops\_agent](#input\_install\_cloud\_ops\_agent) | Warning: Consider using `install_stackdriver_agent` for better performance. Run Google Ops Agent installation script if set to true. | `bool` | `false` | no |
+| <a name="input_install_cloud_ops_agent"></a> [install\_cloud\_ops\_agent](#input\_install\_cloud\_ops\_agent) | Run Google Cloud Ops Agent installation script if set to true. Recommended for modern OSes (Rocky 9+, RHEL 9+, Ubuntu 24.04+, Debian 12+) where the legacy agent is unsupported. | `bool` | `false` | no |
 | <a name="input_install_cloud_rdma_drivers"></a> [install\_cloud\_rdma\_drivers](#input\_install\_cloud\_rdma\_drivers) | If true, will install and reload Cloud RDMA drivers. Currently only supported on Rocky Linux 8. Should not be enabled if using the HPC VM Image. | `bool` | `false` | no |
 | <a name="input_install_docker"></a> [install\_docker](#input\_install\_docker) | DEPRECATED: use var.docker. | `bool` | `null` | no |
-| <a name="input_install_stackdriver_agent"></a> [install\_stackdriver\_agent](#input\_install\_stackdriver\_agent) | Run Google Stackdriver Agent installation script if set to true. Preferred over ops agent for performance. | `bool` | `false` | no |
+| <a name="input_install_stackdriver_agent"></a> [install\_stackdriver\_agent](#input\_install\_stackdriver\_agent) | Run Google Stackdriver (legacy) Agent installation script if set to true. Note: This agent is deprecated and unsupported on newer OSes (Rocky 9+, RHEL 9+, Ubuntu 24.04+, Debian 12+). | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels for the created GCS bucket. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_ssd_filesystem"></a> [local\_ssd\_filesystem](#input\_local\_ssd\_filesystem) | Create and mount a filesystem from local SSD disks (data will be lost if VMs are powered down without enabling migration); enable by setting mountpoint field to a valid directory path. | <pre>object({<br/>    fs_type     = optional(string, "ext4")<br/>    mountpoint  = optional(string, "")<br/>    permissions = optional(string, "0755")<br/>  })</pre> | <pre>{<br/>  "fs_type": "ext4",<br/>  "mountpoint": "",<br/>  "permissions": "0755"<br/>}</pre> | no |
 | <a name="input_managed_lustre"></a> [managed\_lustre](#input\_managed\_lustre) | Configure Managed Lustre (assumes driver already installed) | <pre>object({<br/>    enabled = optional(bool, false)<br/>    port    = optional(number, 988)<br/>  })</pre> | <pre>{<br/>  "enabled": false,<br/>  "port": 988<br/>}</pre> | no |
@@ -348,7 +350,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_compute_startup_script"></a> [compute\_startup\_script](#output\_compute\_startup\_script) | script to load and run all runners, as a string value. Targets the inputs for the slurm controller. |
 | <a name="output_controller_startup_script"></a> [controller\_startup\_script](#output\_controller\_startup\_script) | script to load and run all runners, as a string value. Targets the inputs for the slurm controller. |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | script to load and run all runners, as a string value. |

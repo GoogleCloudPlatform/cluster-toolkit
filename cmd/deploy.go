@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
+	"hpc-toolkit/pkg/validators"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -55,25 +56,40 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 	var deplRoot string
 
 	if checkDir(cmd, args) != nil { // arg[0] is BLUEPRINT_FILE
-		deplRoot = doCreate(args[0])
+		deplRoot = doCreate(cmd, args[0])
 	} else { // arg[0] is DEPLOYMENT_DIRECTORY
 		deplRoot = args[0]
 		// check that no "create" flags were specified
 		cmd.Flags().VisitAll(func(f *pflag.Flag) {
-			if f.Changed && createCmd.Flag(f.Name) != nil {
+			if f.Changed && createCmd.LocalFlags().Lookup(f.Name) != nil {
 				checkErr(fmt.Errorf("cannot specify flag %q with DEPLOYMENT_DIRECTORY provided", f.Name), nil)
 			}
 		})
 	}
-	doDeploy(deplRoot)
+	skipSecurity, _ := cmd.Flags().GetBool("skip-gke-security-check")
+	doDeploy(cmd, deplRoot, skipSecurity)
 }
 
-func doDeploy(deplRoot string) {
+func doDeploy(cmd *cobra.Command, deplRoot string, skipSecurity bool) {
 	artDir := getArtifactsDir(deplRoot)
 	checkErr(shell.CheckWritableDir(artDir), nil)
 	bp, ctx := artifactBlueprintOrDie(artDir)
+	validators.PerformGkeVulnerabilitiesCheck(skipSecurity, &bp)
 	groups := bp.Groups
 	checkErr(validateGroupSelectionFlags(bp), ctx)
+
+	var requiredTools []string
+	if hasSelectedGroupOfKind(bp, config.TerraformKind) {
+		requiredTools = append(requiredTools, "terraform")
+	}
+	if hasSelectedGroupOfKind(bp, config.PackerKind) {
+		requiredTools = append(requiredTools, "packer")
+	}
+
+	if len(requiredTools) > 0 {
+		checkDependencies(cmd, requiredTools...)
+	}
+
 	checkErr(validateRuntimeDependencies(deplRoot, groups), ctx)
 	checkErr(shell.ValidateDeploymentDirectory(groups, deplRoot), ctx)
 
@@ -108,6 +124,9 @@ func doDeploy(deplRoot string) {
 
 func validateRuntimeDependencies(deplDir string, groups []config.Group) error {
 	for ig, group := range groups {
+		if !isGroupSelected(group.Name) {
+			continue
+		}
 		var err error
 		switch group.Kind() {
 		case config.PackerKind:

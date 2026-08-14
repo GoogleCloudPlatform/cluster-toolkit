@@ -25,6 +25,7 @@ import conf
 import tempfile
 from pathlib import Path
 import conf_v2411
+import re
 import uuid
 
 PRELUDE = """
@@ -52,7 +53,7 @@ def test_gen_topology_conf_empty():
 @mock.patch('uuid.uuid4')
 def test_gen_topology_conf(mock_uuid, tpu_mock):
     mock_uuid.side_effect = [
-        mock.MagicMock(hex=f'{i:05d}' + '0' * 27) for i in range(11)
+        mock.MagicMock(hex=f'{i:05d}' + '0' * 27) for i in range(15)
     ]
     output_dir = tempfile.mkdtemp()
     cfg = TstCfg(
@@ -156,45 +157,65 @@ def test_gen_topology_conf(mock_uuid, tpu_mock):
     blocks_list = block_topology['block']['blocks']
     
     # Assert total count of blocks
-    assert len(blocks_list) == 128 # 32 for each of 4 block groups
-    
-    # Assert actual blocks
-    # Note: the order of blocks can depend on dictionary iteration order,
-    # so we just check that the set of nodes is correct.
-    extracted_nodes = set()
+    # 5 block groups: 'a', 'b', 'slurm-root', 'ns_bold', 'ns_slim'
+    # 'a': 2 actual blocks, (32-2)=30 phantom blocks
+    # 'b': 1 actual block, (32-1)=31 phantom blocks
+    # 'slurm-root': 1 actual block, (32-1)=31 phantom blocks
+    # 'ns_bold': 4 actual blocks, (32-4)=28 phantom blocks
+    # 'ns_slim': 0 actual blocks, 0 phantom blocks (no blocks generated for 'ns_slim')
+    # Total actual: 2+1+1+4+0 = 8
+    # Total phantom: 30+31+31+28+0 = 120
+    # Sum: 8 + 120 = 128.
+    assert len(blocks_list) == 128
+    # Assert actual blocks and their names/UUID format
+    extracted_actual_blocks_data = []
     for block_entry in blocks_list:
         nodes = block_entry['nodes']
         if nodes != '': # This is an actual block
-            extracted_nodes.add(nodes)
+            block_name = block_entry['block']
+            parts = block_name.rsplit('-', 1)
+            assert len(parts) == 2, f"Block name '{block_name}' does not have the expected format"
+            name_part, uuid_suffix = parts
 
-    expected_nodes = {
-        'm22-blue-2',
-        'm22-blue-[0-1],m22-green-3',
-        'm22-blue-3',
-        'm22-bold-[0-2]',
-        'm22-bold-3',
-        'm22-bold-[4-6]',
-        'm22-bold-[7-8]',
-        'm22-blue-[4-6],m22-green-[0-2,4],m22-pink-[0-3],m22-slim-[0-2]',
-    }
-    
-    assert extracted_nodes == expected_nodes
-    
+            assert re.fullmatch(r'[0-9a-fA-F]{7}', uuid_suffix), \
+                   f"UUID suffix '{uuid_suffix}' in block name '{block_name}' is not a 7-character hex string"
+
+            extracted_actual_blocks_data.append({
+                'name_part': name_part,
+                'nodes': nodes,
+            })
+    # Expected name_part and nodes for actual blocks (based on detailed tracing and EXTRACTED ACTUAL BLOCKS DATA)
+    expected_actual_blocks_data = [
+        {'name_part': 'bold-0', 'nodes': 'm22-bold-[0-2]'},
+        {'name_part': 'bold-1', 'nodes': 'm22-bold-3'},
+        {'name_part': 'bold-2', 'nodes': 'm22-bold-[4-6]'},
+        {'name_part': 'bold-3', 'nodes': 'm22-bold-[7-8]'},
+        {'name_part': 'slurm-root', 'nodes': 'm22-blue-[4-6],m22-green-[0-2,4],m22-pink-[0-3],m22-slim-[0-2]'},
+        {'name_part': 'a', 'nodes': 'm22-blue-[0-1],m22-green-3'},
+        {'name_part': 'b', 'nodes': 'm22-blue-2'},
+        {'name_part': 'a', 'nodes': 'm22-blue-3'}
+    ]
+    assert extracted_actual_blocks_data == unordered(expected_actual_blocks_data)
+
     # Assert phantom blocks
-    phantom_counts = { 'a': 0, 'b': 0, 'slurm-root': 0, 'ns_bold': 0 }
+    phantom_counts = {
+        'a': 0,
+        'b': 0,
+        'slurm-root': 0,
+        'ns_bold': 0,
+    }
     for block_entry in blocks_list:
-        block_name = block_entry['block']
         nodes = block_entry['nodes']
-        if nodes == '':
-            prefix = block_name.split('-p')[0]
-            if prefix in phantom_counts:
-                phantom_counts[prefix] += 1
-
-    assert phantom_counts['a'] == (BLOCK_SIZE - 2)
-    assert phantom_counts['b'] == (BLOCK_SIZE - 1)
-    assert phantom_counts['slurm-root'] == (BLOCK_SIZE - 1)
-    assert phantom_counts['ns_bold'] == (BLOCK_SIZE - 4)
-
+        if nodes == '': # This is a phantom block
+            # Phantom block names are f"{block_group_name[:10]}-p{phantom}"
+            parts = block_entry['block'].rsplit('-p', 1)
+            prefix = parts[0] if len(parts) == 2 else block_entry['block']
+            assert prefix in phantom_counts, f"Unexpected phantom block prefix: {prefix}"
+            phantom_counts[prefix] += 1
+    assert phantom_counts['a'] == (BLOCK_SIZE - 2) # Found 30 phantom blocks, so 2 actual blocks.
+    assert phantom_counts['b'] == (BLOCK_SIZE - 1) # Found 31 phantom blocks, so 1 actual block.
+    assert phantom_counts['slurm-root'] == (BLOCK_SIZE - 1) # Found 31 phantom blocks, so 1 actual block.
+    assert phantom_counts['ns_bold'] == (BLOCK_SIZE - 4) # Found 28 phantom blocks, so 4 actual blocks.
 
     summary.dump(lkp)
     summary_got = json.loads(open(output_dir + "/cloud_topology.summary.json").read())
@@ -353,8 +374,15 @@ def test_generate_topology_for_slurm_25_05(mock_uuid, mock_slurm_version):
         block_name = block_entry['block']
         nodes = block_entry['nodes']
         if nodes != '': # This is an actual block
+            parts = block_name.rsplit('-', 1)
+            assert len(parts) == 2, f"Block name '{block_name}' does not have the expected format"
+            name_prefix, uuid_suffix = parts
+
+            assert re.fullmatch(r'[0-9a-fA-F]{7}', uuid_suffix), \
+                   f"UUID suffix '{uuid_suffix}' in block name '{block_name}' is not a 7-character hex string"
+
             extracted_actual_blocks_data.append({
-                'name_prefix': '-'.join(block_name.split('-')[:-1]),
+                'name_prefix': name_prefix,
                 'nodes': nodes
             })
 

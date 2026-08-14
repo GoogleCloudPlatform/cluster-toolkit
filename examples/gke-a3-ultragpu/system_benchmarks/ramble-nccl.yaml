@@ -19,7 +19,7 @@ metadata:
   name: ramble
   namespace: ramble
 ---
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: LocalQueue
 metadata:
   namespace: "ramble"
@@ -126,7 +126,7 @@ data:
           | sed 's/ / -x /g')
 
         container_name: nccl-tests
-        container_uri: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.1.0
+        container_uri: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.1.2
         gke_container_name: nccl
         gke_namespace: ramble
         gpus_per_node: 8

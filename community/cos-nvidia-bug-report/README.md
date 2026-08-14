@@ -97,7 +97,7 @@ Before running the script, ensure you have:
 
 2. The GPU driver is installed on the GCE VM instance.
    * Please refer to
-        [COS's official documentation page](\(https://cloud.google.com/container-optimized-os/docs/how-to/run-gpus#install\))
+        [COS's official documentation page](https://cloud.google.com/container-optimized-os/docs/how-to/run-gpus#install)
         for more detail.
    * Sample commands to install the GPU driver and verify the installation:
    * ***NOTE:*** For GKE the driver is already installed. Unless opted for [manual driver installation](https://cloud.google.com/kubernetes-engine/docs/how-to/gpus#create-gpu-pool-auto-drivers)

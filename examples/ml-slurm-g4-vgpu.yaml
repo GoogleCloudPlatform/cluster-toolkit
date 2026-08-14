@@ -1,0 +1,288 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: ml-slurm-g4-vgpu
+
+vars:
+  deployment_name: g4-vgpu
+  project_id:  # specify the project id
+  region: us-central1
+  zone: us-central1-b
+  cluster_size: 2
+  machine_type: g4-standard-12 # Options: g4-standard-6, g4-standard-12, g4-standard-24
+
+  # Image settings
+  source_image_family: ubuntu-2404-lts-amd64
+  source_image_project: ubuntu-os-cloud
+  image_build_machine_type: n2-standard-4
+  image_disk_size_gb: 50
+  built_image_family: slurm-vgpu-ubuntu2404
+  build_slurm_from_git_ref: 6.12.1
+
+  # Cluster env settings
+  net0_range: 192.168.0.0/24
+  filestore_ip_range: 192.168.1.0/29
+
+  # Cluster Settings
+  disk_size_gb: 100
+  reservation_name: "" # To use a reservation, provide its name here.
+
+deployment_groups:
+- group: image-env
+  modules:
+  - id: builder-net
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-build-net
+
+  - id: slurm-build-script
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: ansible-local
+        destination: install_vgpu_deps.yml
+        content: |
+          ---
+          - name: Install Dependencies
+            hosts: all
+            become: true
+            tasks:
+            - name: Install apt packages
+              ansible.builtin.apt:
+                name:
+                - libevent-core-2.1-7
+                - libevent-2.1-7
+                - libevent-dev
+                - zip
+                - gcc
+                - make
+                - wget
+                - libboost-program-options-dev
+                - build-essential
+                - devscripts
+                - debhelper
+                - fakeroot
+                - linux-headers-{{ ansible_kernel }}
+                update_cache: true
+                state: present
+
+            - name: Download CMake
+              ansible.builtin.get_url:
+                url: https://cmake.org/files/v3.26/cmake-3.26.0-linux-x86_64.sh
+                dest: /tmp/cmake-3.26.0-linux-x86_64.sh
+                mode: '0755'
+
+            - name: Install CMake
+              ansible.builtin.command:
+                cmd: /tmp/cmake-3.26.0-linux-x86_64.sh --skip-license
+
+      - type: data
+        destination: /var/tmp/slurm_vars.json
+        content: |
+          {
+            "reboot": false,
+            "install_ompi": true,
+            "install_lustre": false,
+            "install_gcsfuse": false,
+            "install_cuda": false,
+            "allow_kernel_upgrades": false,
+            "monitoring_agent": "none"
+          }
+      - type: shell
+        destination: install_slurm.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          sudo ansible-pull \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_slurm_from_git_ref) \
+              -i localhost, --limit localhost --connection=local \
+              -e @/var/tmp/slurm_vars.json \
+              ansible/playbook.yml
+
+- group: image
+  modules:
+  - id: slurm-vgpu-image
+    source: modules/packer/custom-image
+    kind: packer
+    settings:
+      disk_size: $(vars.image_disk_size_gb)
+      machine_type: $(vars.image_build_machine_type)
+      source_image_family: $(vars.source_image_family)
+      source_image_project_id: [$(vars.source_image_project)]
+      image_family: $(vars.built_image_family)
+      omit_external_ip: false
+      metadata:
+        user-data: |
+          #cloud-config
+          create_hostname_file: true
+          write_files:
+          - path: /etc/apt/apt.conf.d/20auto-upgrades
+            permissions: '0644'
+            owner: root
+            content: |
+              APT::Periodic::Update-Package-Lists "0";
+              APT::Periodic::Unattended-Upgrade "0";
+    use:
+    - builder-net
+    - slurm-build-script
+
+- group: cluster-env
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net0_range)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal
+        ranges: [$(vars.net0_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use:
+    - network
+    settings:
+      filestore_tier: BASIC_SSD
+      size_gb: 2560
+      local_mount: /home
+      reserved_ip_range: $(vars.filestore_ip_range)
+
+- group: cluster
+  modules:
+  - id: g4_node_startup
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: true
+      runners:
+      - type: shell
+        destination: install_nvidia_driver.sh
+        content: |
+          #!/bin/bash
+          set -e
+          # Add keyring to download and install DCGM
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb -O cuda-keyring.deb
+          sudo dpkg -i cuda-keyring.deb
+          sudo apt-get update
+          # Copy driver from GCS bucket and install
+          TMP_DIR=\$(mktemp -d)
+          gsutil cp gs://gce-nvidia-vgpu-drivers/G4_VGPU/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run "${TMP_DIR}/"
+          chmod +x "${TMP_DIR}/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run"
+          echo "Installing driver..."
+          sudo sh "${TMP_DIR}/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run" --silent
+          rm -rf "${TMP_DIR}"
+
+          # install the DCGM package
+          sudo apt-get install -y datacenter-gpu-manager
+      - type: ansible-local
+        destination: enable_dcgm.yml
+        content: |
+          ---
+          - name: Enable NVIDIA DCGM and Persistence on GPU nodes
+            hosts: all
+            become: true
+            tasks:
+            # 1. Create the missing nvidia-persistenced.service file
+            - name: Create nvidia-persistenced service file
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/nvidia-persistenced.service
+                owner: root
+                group: root
+                mode: '0644'
+                content: |
+                  [Unit]
+                  Description=NVIDIA Persistence Daemon
+                  Wants=network-online.target
+                  After=network-online.target
+
+                  [Service]
+                  Type=forking
+                  ExecStart=/usr/bin/nvidia-persistenced --user root
+                  ExecStop=/usr/bin/killall nvidia-persistenced
+                  Restart=always
+
+                  [Install]
+                  WantedBy=multi-user.target
+
+            - name: Enable and Start NVIDIA DCGM
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: started
+                enabled: true
+
+            - name: Reload systemd and start nvidia-persistenced
+              ansible.builtin.systemd:
+                name: nvidia-persistenced.service
+                state: started
+                enabled: true
+                daemon_reload: yes
+
+  - id: vgpu_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, g4_node_startup]
+    settings:
+      node_count_static: $(vars.cluster_size)
+      node_count_dynamic_max: 0
+      machine_type: $(vars.machine_type)
+      zone: $(vars.zone)
+      instance_image:
+        project: $(vars.project_id)
+        family: $(vars.built_image_family)
+      instance_image_custom: true
+      bandwidth_tier: gvnic_enabled
+      disk_type: hyperdisk-balanced
+      disk_size_gb: $(vars.disk_size_gb)
+      on_host_maintenance: TERMINATE
+      reservation_name: $(vars.reservation_name)
+
+  - id: vgpu_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [vgpu_nodeset]
+    settings:
+      partition_name: vgpu
+      is_default: true
+      exclusive: false
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      machine_type: n2-standard-4
+      enable_login_public_ips: true
+      instance_image:
+        project: $(vars.project_id)
+        family: $(vars.built_image_family)
+      instance_image_custom: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - vgpu_partition
+    - homefs
+    - slurm_login
+    settings:
+      machine_type: n2-standard-4
+      enable_controller_public_ips: true
+      instance_image:
+        project: $(vars.project_id)
+        family: $(vars.built_image_family)
+      instance_image_custom: true

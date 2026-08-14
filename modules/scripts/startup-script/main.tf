@@ -47,6 +47,9 @@ locals {
   prefix_file                  = "/tmp/prefix_file.json"
   ansible_docker_settings_file = "/tmp/ansible_docker_settings.json"
 
+  # construct custom compute endpoint URL if compute version is provided
+  compute_endpoint_url = var.compute_endpoint_version != null ? "https://www.googleapis.com/compute/${var.compute_endpoint_version}/" : null
+
   docker_config    = try(jsondecode(var.docker.daemon_config), {})
   docker_data_root = try(local.docker_config.data-root, null)
 
@@ -181,12 +184,24 @@ locals {
   ])
 
   install_ansible = coalesce(var.install_ansible, local.has_ansible_runners)
-  ansible_installer = local.install_ansible ? [{
-    type        = "shell"
-    source      = "${path.module}/files/install_ansible.sh"
-    destination = "install_ansible_automatic.sh"
-    args        = var.ansible_virtualenv_path
-  }] : []
+  ansible_installer = local.install_ansible ? [
+    {
+      type        = "file"
+      source      = "${path.module}/files/build-tools.txt"
+      destination = "build-tools.txt"
+    },
+    {
+      type        = "file"
+      source      = "${path.module}/files/install_ansible_requirements.txt"
+      destination = "install_ansible_requirements.txt"
+    },
+    {
+      type        = "shell"
+      source      = "${path.module}/files/install_ansible.sh"
+      destination = "install_ansible_automatic.sh"
+      args        = var.ansible_virtualenv_path
+    }
+  ] : []
 
   hotfix_runner = [{
     type        = "shell"
@@ -221,9 +236,11 @@ locals {
   load_runners = templatefile(
     "${path.module}/templates/startup-script-custom.tftpl",
     {
-      bucket     = local.storage_bucket_name,
-      http_proxy = var.http_proxy,
-      no_proxy   = var.http_no_proxy,
+      bucket                      = local.storage_bucket_name,
+      http_proxy                  = var.http_proxy,
+      no_proxy                    = var.http_no_proxy,
+      custom_compute_endpoint_url = local.compute_endpoint_url == null ? "" : local.compute_endpoint_url,
+      gcloud_path_override        = var.gcloud_path_override == null ? "" : var.gcloud_path_override,
       runners = [
         for runner in local.runners : {
           object      = google_storage_bucket_object.scripts[basename(runner["destination"])].output_name

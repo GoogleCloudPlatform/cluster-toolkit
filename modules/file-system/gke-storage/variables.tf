@@ -142,3 +142,21 @@ variable "namespace" {
   type        = string
   default     = "default"
 }
+
+variable "enable_confidential_storage" {
+  description = "Enable Confidential Storage for this storage class."
+  type        = bool
+  default     = false
+}
+
+variable "disk_encryption_kms_key" {
+  description = "The Customer-Managed Encryption Key (CMEK) to use for disk encryption."
+  type        = string
+  default     = null
+}
+
+variable "disk_storage_pool" {
+  description = "Storage pool to use for the provisioned disks. Note that storage pools are only supported with Hyperdisk types (balanced or throughput). You must provide an existing storage pool, as this module does not create new ones."
+  type        = string
+  default     = null
+}

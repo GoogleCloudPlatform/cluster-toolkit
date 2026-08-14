@@ -58,7 +58,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     use: [bucket-for-startup-script]
     settings:
-      install_stackdriver_agent: true
+      install_cloud_ops_agent: true
 
   - id: workstation-stack
     source: modules/compute/vm-instance

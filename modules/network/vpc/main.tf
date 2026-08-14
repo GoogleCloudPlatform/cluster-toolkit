@@ -171,6 +171,21 @@ locals {
     for secondary_range in var.secondary_ranges_list :
     secondary_range.subnetwork_name => secondary_range.ranges
   }
+
+  output_subnets_gke = [
+    {
+      network            = module.vpc.network_name
+      subnetwork         = local.output_primary_subnetwork_name
+      subnetwork_project = var.project_id
+      nic_type           = var.nic_type
+      queue_count        = null
+      network_ip         = null
+      stack_type         = local.output_primary_subnetwork_stack_type
+      access_config      = []
+      ipv6_access_config = []
+      alias_ip_range     = []
+    }
+  ]
 }
 
 resource "terraform_data" "network_profile_firewall_validation" {

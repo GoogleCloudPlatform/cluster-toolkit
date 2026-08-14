@@ -48,7 +48,7 @@
   {% else %}
     <p class="text-warning">
       {% if object.status == "p" or object.status == "q" or object.status == "d" or object.status == "r" or object.status == "u" %}
-      <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+      <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="">
       {% endif %}
       {{ object.get_status_display }}
     </p>

@@ -19,7 +19,6 @@
 #    bucket: customer-bucket
 
 vars:
-  # Define overall deployment variables
   deployment_name: af3-slurm         # adjust if necessary
   project_id:                        # supply existing project id
   region: us-central1                # supply region with C3D-highmem and GPU capacity

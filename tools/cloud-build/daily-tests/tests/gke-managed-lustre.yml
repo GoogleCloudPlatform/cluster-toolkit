@@ -15,7 +15,7 @@
 test_name: gke-managed-lustre
 deployment_name: gke-ml-{{ build }}
 region: us-central1
-zone: us-central1-c
+zone: us-central1-a
 lustre_instance_id: "{{ deployment_name }}-lstr"
 size_gib: 36000
 per_unit_storage_throughput: 500
@@ -28,6 +28,7 @@ post_deploy_tests:
 custom_vars:
   project: "{{ project }}"
 cli_deployment_vars:
+  test_name: "{{ test_name }}"
   region: "{{ region }}"
   zone: "{{ zone }}"
   base_network_name: "{{ deployment_name }}-basic"
@@ -35,3 +36,4 @@ cli_deployment_vars:
   size_gib: "{{ size_gib }}"
   per_unit_storage_throughput: "{{ per_unit_storage_throughput }}"
   gcp_public_cidrs_access_enabled: true
+  kms_key: "projects/{{ project }}/locations/us-central1/keyRings/lustre-keyring/cryptoKeys/lustre-key"

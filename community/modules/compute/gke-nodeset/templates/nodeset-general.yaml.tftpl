@@ -52,7 +52,7 @@ spec:
         - |
           mkdir -p /usr/local/lib/slurm
           ln -s  /usr/lib/x86_64-linux-gnu/slurm/spank_pyxis.so /usr/local/lib/slurm/spank_pyxis.so
-          /usr/local/bin/entrypoint.sh -Z --conf-server ${controller_name}:6825 -N $NODE_NAME
+          /usr/local/bin/entrypoint.sh -Z --conf-server ${controller_name}:${controller_port} -N $NODE_NAME
         command: 
         - tini
         env:

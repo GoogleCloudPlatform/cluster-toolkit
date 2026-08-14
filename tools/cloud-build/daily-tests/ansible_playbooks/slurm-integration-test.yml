@@ -52,6 +52,10 @@
       dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | \
           awk -F'"' '{print $2}'
 
+  - name: Set actual network name
+    ansible.builtin.set_fact:
+      actual_network: "{% if use_fixed_vpc | default(false) | bool %}{{ test_prefix | default('') }}{{ test_name }}-0{% else %}{{ network }}{% endif %}"
+
   - name: Run Pre Deploy Tasks
     ansible.builtin.include_tasks: "{{ pre_deploy_task }}"
     loop: "{{ pre_deploy_tasks | default([]) }}"
@@ -66,6 +70,12 @@
   - name: Create Infrastructure and test
     block:
 
+    - name: Clean up any existing PSA resources from previous runs
+      ansible.builtin.include_tasks:
+        file: tasks/cleanup_existing_psa.yml
+      vars:
+        psa_network: "{{ actual_network | default(network) }}"
+
     - name: Create Cluster with gcluster
       register: deployment
       changed_when: deployment.changed
@@ -79,32 +89,50 @@
       ansible.builtin.include_tasks:
         file: tasks/get_instance_ids.yml
 
-    - name: Get IP of a login node - Exact name provided
-      changed_when: false
-      register: get_login_ip
-      ansible.builtin.command: >-
-        gcloud compute instances describe --zone={{ zone }} {{ login_node }}
-        --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
+    - name: Set login node name fact - Exact name provided
+      ansible.builtin.set_fact:
+        login_node_name: "{{ login_node }}"
       when: '"*" not in login_node'
 
-    - name: Set login_ip variable - Exact name provided
-      ansible.builtin.set_fact:
-        login_ip: "{{ get_login_ip.stdout }}"
-      when: '"*" not in login_node'
-
-    - name: Get IP of a login node - Name pattern provided
+    - name: Get login node name - Name pattern provided
       changed_when: false
-      register: get_login_ip
+      register: get_login_name
       ansible.builtin.command: >-
-        gcloud compute instances list \
-          --format='get(networkInterfaces[0].accessConfigs[0].natIP)' --limit=1 \
-          --filter=NAME:{{ login_node }}
+        gcloud compute instances list
+        --format='value(name)' --limit=1
+        --filter=NAME:{{ login_node }}
       when: '"*" in login_node'
 
-    - name: Set login_ip variable - Name pattern provided
+    - name: Set login node name fact - Name pattern provided
       ansible.builtin.set_fact:
-        login_ip: "{{ get_login_ip.stdout }}"
+        login_node_name: "{{ get_login_name.stdout }}"
       when: '"*" in login_node'
+
+    - name: Check that login node name is resolved
+      ansible.builtin.assert:
+        that:
+        - login_node_name is defined
+        - login_node_name != ""
+
+    - name: Get Login Nat IP
+      changed_when: false
+      register: get_login_nat_ip
+      ansible.builtin.command: >-
+        gcloud compute instances describe --zone={{ zone }} {{ login_node_name }}
+        --format='value(networkInterfaces[0].accessConfigs[0].natIP)'
+      failed_when: false
+
+    - name: Get Login Network IP
+      changed_when: false
+      register: get_login_network_ip
+      ansible.builtin.command: >-
+        gcloud compute instances describe --zone={{ zone }} {{ login_node_name }}
+        --format='value(networkInterfaces[0].networkIP)'
+
+    - name: Set Login IP facts
+      ansible.builtin.set_fact:
+        login_ip: "{{ get_login_nat_ip.stdout | default(get_login_network_ip.stdout, true) }}"
+        login_is_private: "{{ get_login_nat_ip.stdout == '' }}"
 
     - name: Check that login IP is set
       ansible.builtin.assert:
@@ -112,20 +140,58 @@
         - login_ip is defined
         - login_ip != ""
 
-    - name: Print login public IP
+    - name: Print login IP info
       ansible.builtin.debug:
-        var: login_ip
+        msg: "Login IP: {{ login_ip }}, Private: {{ login_is_private }}"
 
-    - name: Get Controller IP
+    - name: Set controller node name fact - Exact name provided
+      ansible.builtin.set_fact:
+        controller_node_name: "{{ controller_node }}"
+      when: '"*" not in controller_node'
+
+    - name: Get controller node name - Name pattern provided
       changed_when: false
-      register: controller_ip
+      register: get_controller_name
       ansible.builtin.command: >-
-        gcloud compute instances describe --zone={{ zone }} {{ controller_node }}
-        --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
+        gcloud compute instances list
+        --format='value(name)' --limit=1
+        --filter=NAME:{{ controller_node }}
+      when: '"*" in controller_node'
 
-    - name: Print controller public IP
+    - name: Set controller node name fact - Name pattern provided
+      ansible.builtin.set_fact:
+        controller_node_name: "{{ get_controller_name.stdout }}"
+      when: '"*" in controller_node'
+
+    - name: Check that controller node name is resolved
+      ansible.builtin.assert:
+        that:
+        - controller_node_name is defined
+        - controller_node_name != ""
+
+    - name: Get Controller Nat IP
+      changed_when: false
+      register: get_controller_nat_ip
+      ansible.builtin.command: >-
+        gcloud compute instances describe --zone={{ zone }} {{ controller_node_name }}
+        --format='value(networkInterfaces[0].accessConfigs[0].natIP)'
+      failed_when: false
+
+    - name: Get Controller Network IP
+      changed_when: false
+      register: get_controller_network_ip
+      ansible.builtin.command: >-
+        gcloud compute instances describe --zone={{ zone }} {{ controller_node_name }}
+        --format='value(networkInterfaces[0].networkIP)'
+
+    - name: Set Controller IP facts
+      ansible.builtin.set_fact:
+        controller_ip: "{{ get_controller_nat_ip.stdout | default(get_controller_network_ip.stdout, true) }}"
+        controller_is_private: "{{ get_controller_nat_ip.stdout == '' }}"
+
+    - name: Print controller IP info
       ansible.builtin.debug:
-        var: controller_ip.stdout_lines
+        msg: "Controller IP: {{ controller_ip }}, Private: {{ controller_is_private }}"
 
     ## Setup firewall for cloud build
     - name: Create firewall rule
@@ -141,7 +207,7 @@
         - "{{ deployment_name }}"
         - --direction=INGRESS
         - --priority=1000
-        - --network={{ network }}
+        - --network={{ actual_network }}
         - --action=ALLOW
         - --rules=tcp:22
         - --source-ranges={{ build_ip.stdout }}
@@ -171,14 +237,30 @@
 
     - name: Add Login node as host
       ansible.builtin.add_host:
-        hostname: "{{ login_ip }}"
+        name: login_node_host
+        ansible_host: "{{ login_node_name if login_is_private else login_ip }}"
+        ansible_ssh_common_args: >-
+          {% if login_is_private %}
+          -o ProxyCommand="gcloud compute start-iap-tunnel %h %p --listen-on-stdin --project={{ project }} --zone={{ zone }} --verbosity=warning"
+          {% endif %}
         groups: [remote_host]
-      when: login_ip | ansible.utils.ipaddr
+        actual_network: "{{ actual_network }}"
+
+    - name: Add Controller node as host
+      ansible.builtin.add_host:
+        name: controller_node_host
+        ansible_host: "{{ controller_ip if not controller_is_private else controller_node_name }}"
+        ansible_ssh_common_args: >-
+          {% if controller_is_private %}
+          -o ProxyCommand="gcloud compute start-iap-tunnel %h %p --listen-on-stdin --project={{ project }} --zone={{ zone }} --verbosity=warning"
+          {% endif %}
+
 
     - name: Wait for host tasks
       ansible.builtin.include_tasks: tasks/wait-for-host.yml
       vars:
-        host_ip: "{{ login_ip }}"
+        host_to_wait: login_node_host
+        is_private: "{{ login_is_private }}"
         ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
 
     ## Cleanup and fail gracefully
@@ -211,8 +293,6 @@
   hosts: remote_host
   gather_facts: false  # must wait until host is reachable
   ignore_unreachable: true  # ensure always block will run even if SSH fails
-  vars:
-    key_type: "munge"
   tasks:
   - name: Slurm Test Block
     vars:
@@ -222,17 +302,16 @@
     - name: Gather facts
       ansible.builtin.setup:
 
-    - name: Wait until Munge is active
-      ansible.builtin.wait_for:
-        path: /var/run/munge/munge.socket.2
-        timeout: 600
-      when: key_type == 'munge'
+    - name: Wait until Slurm Key or Munge Socket is active
+      ansible.builtin.shell: |
+        test -f /etc/slurm/slurm.key || test -S /var/run/munge/munge.socket.2
+      args:
+        executable: /bin/bash
+      register: auth_active
+      until: auth_active.rc == 0
+      retries: 60
+      delay: 10
 
-    - name: Wait until Slurm key exists
-      ansible.builtin.wait_for:
-        path: /etc/slurm/slurm.key
-        timeout: 600  # Waits for up to 10 minutes for the file to appear
-      when: key_type == 'slurm'
 
     - name: Count Slurm nodes
       ansible.builtin.shell:
@@ -248,6 +327,28 @@
     - name: Add instance labels for spot instances
       ansible.builtin.include_tasks: tasks/add-instance-labels.yml
       when: custom_vars is defined and custom_vars.enable_spot | default(false) | bool
+
+    - name: Hot-patch TCPXO network interface names on compute nodes
+      delegate_to: controller_node_host
+      ansible.builtin.shell: |
+        #!/bin/bash
+        NODES=$(sinfo --noheader --format "%n")
+        if [ -z "$NODES" ]; then exit 0; fi
+
+        # Use srun -N 1 to bypass the multi-node prolog bug and patch safely
+        for NODE in $NODES; do
+          srun -N 1 -w "$NODE" bash -c "
+            HEADER=\$(sudo lspci -s 06:00.0 -xxx 2>/dev/null | grep -E '^00:' | awk '{print \$16}')
+            if [ \"\$HEADER\" == \"80\" ]; then
+              sudo sed -i 's/s0\"/s0f0\"/g' /opt/tcpdirect_benchmark/gpu_rxq_configuration.textproto 2>/dev/null || true
+            fi
+          "
+        done
+      args:
+        executable: /bin/bash
+      ignore_errors: true
+      changed_when: false
+      when: "'a3h' in test_name | default('')"
 
     - name: Run Integration tests for Cluster Toolkit
       ansible.builtin.include_tasks: "{{ test }}"
@@ -300,7 +401,7 @@
       become: true
       changed_when: false
       failed_when: false
-      delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
+      delegate_to: controller_node_host
       ansible.builtin.command: cat /slurm/scripts/setup.log
       register: setup_output
 
@@ -312,7 +413,7 @@
       become: true
       changed_when: false
       failed_when: false
-      delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
+      delegate_to: controller_node_host
       ansible.builtin.command: cat /var/log/slurm/resume.log
       register: resume_output
 
@@ -324,7 +425,7 @@
       become: true
       changed_when: false
       failed_when: false
-      delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
+      delegate_to: controller_node_host
       ansible.builtin.command: cat /var/log/slurm/suspend.log
       register: suspend_output
 
@@ -336,7 +437,7 @@
       become: true
       changed_when: false
       failed_when: false
-      delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
+      delegate_to: controller_node_host
       ansible.builtin.command: cat /var/log/slurm/slurmctld.log
       register: slurmctld_output
 
@@ -348,7 +449,7 @@
       become: true
       changed_when: false
       failed_when: false
-      delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
+      delegate_to: controller_node_host
       ansible.builtin.command: cat /var/log/slurm/slurmsync.log
       register: slurmsync_output
 

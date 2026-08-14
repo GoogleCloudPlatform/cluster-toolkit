@@ -32,7 +32,10 @@ if [[ -n "${gcloud_dir}" ]]; then
 	export PATH="$gcloud_dir:$PATH"
 fi
 
-export CLOUDSDK_API_ENDPOINT_OVERRIDES_COMPUTE="https://www.${universe_domain}/compute/${compute_endpoint_version}/"
+if [[ -n "$compute_endpoint_version" ]]; then
+	export CLOUDSDK_API_ENDPOINT_OVERRIDES_COMPUTE="https://compute.mtls.${universe_domain}/compute/${compute_endpoint_version}/"
+	export CLOUDSDK_API_CLIENT_OVERRIDES_COMPUTE="${compute_endpoint_version}"
+fi
 export CLOUDSDK_CORE_PROJECT="${project}"
 
 if ! type -P gcloud 1>/dev/null; then

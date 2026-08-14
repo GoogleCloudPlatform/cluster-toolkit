@@ -18,7 +18,7 @@ vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: storage-gke-01
   region: us-central1
-  zone: us-central1-c
+  zone: us-central1-b
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
   authorized_cidr: <your-ip-address>/32
@@ -93,6 +93,7 @@ deployment_groups:
       local_mount: /data
       random_suffix: true
       force_destroy: true
+      # Refer https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache for parameter details
       anywhere_cache:
         zones: [$(vars.zone)]
         ttl: "86400s"
@@ -103,6 +104,17 @@ deployment_groups:
     source: modules/file-system/gke-persistent-volume
     use: [gke_cluster, data-bucket]
     settings: {capacity_gib: 5000}
+
+  - id: data-bucket-zonal
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /data_zonal
+      random_suffix: true
+      force_destroy: true
+      storage_class: RAPID
+      placement_zones: ["$(vars.zone)"]
+      enable_hierarchical_namespace: true
+    outputs: [gcs_bucket_name]
 
   ### Filestore ###
 

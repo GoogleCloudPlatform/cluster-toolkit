@@ -115,8 +115,8 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
+| ---- | ------- |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 
 ## Providers
 
@@ -133,8 +133,8 @@ No resources.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
-| <a name="input_condor_version"></a> [condor\_version](#input\_condor\_version) | Yum/DNF-compatible version string; leave unset to use latest 23.0 LTS release (examples: "23.0.0","23.*")) | `string` | `"23.*"` | no |
+| ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_condor_version"></a> [condor\_version](#input\_condor\_version) | Yum/DNF-compatible version string; leave unset to use latest 25.0 LTS release (examples: "25.0.0","25.*") | `string` | `"25.*"` | no |
 | <a name="input_enable_docker"></a> [enable\_docker](#input\_enable\_docker) | Install and enable docker daemon alongside HTCondor | `bool` | `true` | no |
 | <a name="input_http_proxy"></a> [http\_proxy](#input\_http\_proxy) | Set system default web (http and https) proxy for Windows HTCondor installation | `string` | `""` | no |
 | <a name="input_python_windows_installer_url"></a> [python\_windows\_installer\_url](#input\_python\_windows\_installer\_url) | URL of Python installer for Windows | `string` | `"https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"` | no |
@@ -142,7 +142,7 @@ No resources.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_gcp_service_list"></a> [gcp\_service\_list](#output\_gcp\_service\_list) | Google Cloud APIs required by HTCondor |
 | <a name="output_runners"></a> [runners](#output\_runners) | Runner to install HTCondor using startup-scripts |
 | <a name="output_windows_startup_ps1"></a> [windows\_startup\_ps1](#output\_windows\_startup\_ps1) | Windows PowerShell script to install HTCondor |

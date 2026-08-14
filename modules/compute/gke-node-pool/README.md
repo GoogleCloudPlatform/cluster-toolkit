@@ -111,7 +111,7 @@ fixed number of attached GPUs, let's call these machine types as "pre-defined gp
 > **Note**: It is not necessary to define the [`guest_accelerator`] setting when
 > using pre-defined gpu machine families as information about GPUs, such as type, count and
 > `gpu_driver_installation_config`, is automatically inferred from the machine type.
-> Optional fields such as `gpu_partition_size` need to be specified only if they have
+> `guest_accelerator` block is specified, optional fields such as `gpu_partition_size` need to be specified only if they have
 > non-default values.
 
 The following scenarios require the [`guest_accelerator`] block is specified:
@@ -257,6 +257,19 @@ reservation_affinity:
     project: shared_reservation_owner_project_id
 ```
 
+### Target a future reservation OR reservations that are not fulfilled yet
+To create a GKE nodepool with a future reservation or reservations that are not fulfilled yet, set the `is_reservation_active` input variable to `false`. Note that to use this variable, these input variables should not be set or be set to 0 or null: `static_node_count`, `autoscaling_min_node_count`, `autoscaling_max_node_count` and `initial_node_count`.
+
+```yaml
+is_reservation_active: false
+reservation_affinity:
+  consume_reservation_type: SPECIFIC_RESERVATION
+  specific_reservations:
+  - name: future_or_placeholder_reservation_name
+```
+
+Once the future reservation is active or the reservation is fulfilled, set the `is_reservation_active` input variable to `true`. Also set the node count information with either the `static_node_count` to define the required number of static nodes, or the `autoscaling_min_node_count` and `autoscaling_max_node_count` to use node scaling. Remember to use the `-w` flag in the `gcluster deploy` command and DO NOT change the `deployment_name` variable.
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -277,36 +290,41 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
+| ---- | ------- |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.2 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.24.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.2 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.24.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
+| <a name="module_dranet_template_apply"></a> [dranet\_template\_apply](#module\_dranet\_template\_apply) | ../../management/kubectl-apply | n/a |
+| <a name="module_dranet_version_compare"></a> [dranet\_version\_compare](#module\_dranet\_version\_compare) | ../../internal/semver_compare | n/a |
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../internal/gpu-definition | n/a |
+| <a name="module_gpu_direct_version_compare"></a> [gpu\_direct\_version\_compare](#module\_gpu\_direct\_version\_compare) | ../../internal/semver_compare | n/a |
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
 | <a name="module_tpu"></a> [tpu](#module\_tpu) | ../../internal/tpu-definition | n/a |
 
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google-beta_google_container_node_pool.node_pool](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
 | [null_resource.enable_tcpx_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.enable_tcpxo_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.install_dependencies](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [terraform_data.validate_dranet_allocation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [google_compute_machine_types.machine_info](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_machine_types) | data source |
 | [google_compute_region_instance_template.instance_template](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_region_instance_template) | data source |
 | [google_compute_reservation.specific_reservations](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_reservation) | data source |
@@ -315,7 +333,8 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_accelerator_topology_mode"></a> [accelerator\_topology\_mode](#input\_accelerator\_topology\_mode) | The accelerator topology mode for the resource policy. It accepts values like `PROVISION_ONLY` or `AUTO_CONNECT`. Note that `enable_queued_provisioning` (DWS) is not supported when `accelerator_topology_mode` is set to `PROVISION_ONLY`. | `string` | `null` | no |
 | <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GKE, if any. Providing additional networks adds additional node networks to the node pool | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = string<br/>    subnetwork_project = string<br/>    network_ip         = string<br/>    nic_type           = string<br/>    stack_type         = string<br/>    queue_count        = number<br/>    access_config = list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    }))<br/>    ipv6_access_config = list(object({<br/>      network_tier = string<br/>    }))<br/>    alias_ip_range = list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_auto_repair"></a> [auto\_repair](#input\_auto\_repair) | Whether the nodes will be automatically repaired. | `bool` | `true` | no |
 | <a name="input_auto_upgrade"></a> [auto\_upgrade](#input\_auto\_upgrade) | Whether the nodes will be automatically upgraded. | `bool` | `false` | no |
@@ -323,28 +342,40 @@ limitations under the License.
 | <a name="input_autoscaling_min_node_count"></a> [autoscaling\_min\_node\_count](#input\_autoscaling\_min\_node\_count) | Minimum number of nodes per zone in the NodePool. Cannot be used with autoscaling\_total\_min\_nodes. | `number` | `null` | no |
 | <a name="input_autoscaling_total_max_nodes"></a> [autoscaling\_total\_max\_nodes](#input\_autoscaling\_total\_max\_nodes) | Total maximum number of nodes in the NodePool. | `number` | `1000` | no |
 | <a name="input_autoscaling_total_min_nodes"></a> [autoscaling\_total\_min\_nodes](#input\_autoscaling\_total\_min\_nodes) | Total minimum number of nodes in the NodePool. | `number` | `0` | no |
+| <a name="input_boot_disk_kms_key"></a> [boot\_disk\_kms\_key](#input\_boot\_disk\_kms\_key) | The Customer Managed Encryption Key (CMEK) used to encrypt the boot disks of the GKE nodes. Required if enable\_confidential\_storage is true. | `string` | `null` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | projects/{{project}}/locations/{{location}}/clusters/{{cluster}} | `string` | n/a | yes |
 | <a name="input_compact_placement"></a> [compact\_placement](#input\_compact\_placement) | DEPRECATED: Use `placement_policy` | `bool` | `null` | no |
+| <a name="input_confidential_instance_type"></a> [confidential\_instance\_type](#input\_confidential\_instance\_type) | The type of technology used by the confidential nodes (e.g., SEV, SEV\_SNP, TDX). Leave null for default. | `string` | `null` | no |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Size of disk for each node. | `number` | `100` | no |
+| <a name="input_disk_storage_pool"></a> [disk\_storage\_pool](#input\_disk\_storage\_pool) | Storage pool to use for the node's boot disk. Note that storage pools are only supported with Hyperdisk types. For boot disks, only hyperdisk-balanced is supported. You must provide an existing storage pool, as this module does not create new ones. | `string` | `null` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for each node. | `string` | `null` | no |
+| <a name="input_dranet_allocation_mode"></a> [dranet\_allocation\_mode](#input\_dranet\_allocation\_mode) | Allocation mode for the auto-applied DRANET ResourceClaimTemplate (e.g., 'All' or 'ExactCount'). | `string` | `"All"` | no |
+| <a name="input_dranet_device_class_name"></a> [dranet\_device\_class\_name](#input\_dranet\_device\_class\_name) | DRA device class name. If null, automatically detected based on machine type. Default is mrdma.google.com (RDMA) for RDMA-supported machines, netdev.google.com for others. | `string` | `null` | no |
+| <a name="input_dranet_device_count"></a> [dranet\_device\_count](#input\_dranet\_device\_count) | Device count for the auto-applied DRANET ResourceClaimTemplate. Required if dranet\_allocation\_mode is 'ExactCount'. | `number` | `null` | no |
+| <a name="input_enable_confidential_nodes"></a> [enable\_confidential\_nodes](#input\_enable\_confidential\_nodes) | Enable Confidential Nodes for this node pool. | `bool` | `false` | no |
+| <a name="input_enable_confidential_storage"></a> [enable\_confidential\_storage](#input\_enable\_confidential\_storage) | Enable Confidential Storage on the node pool. Node boot disks will be encrypted using keys protected by the Confidential VM. | `bool` | `false` | no |
+| <a name="input_enable_dranet"></a> [enable\_dranet](#input\_enable\_dranet) | Enable GKE managed Dynamic Resource Allocation (DRA) driver for networking (DRANET) and Accelerator Network Profile (ANP). When set to true, this enables the driver for supported GPU/TPU nodes on GKE 1.34.1-gke.1829001 or later when Dataplane V2 is enabled on the cluster. | `bool` | `false` | no |
 | <a name="input_enable_flex_start"></a> [enable\_flex\_start](#input\_enable\_flex\_start) | If true, start the node pool with Flex Start provisioning model.<br/>To learn more about flex-start mode, please refer to<br/>https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training and<br/>https://cloud.google.com/kubernetes-engine/docs/how-to/provisioningrequest | `bool` | `false` | no |
 | <a name="input_enable_gcfs"></a> [enable\_gcfs](#input\_enable\_gcfs) | Enable the Google Container Filesystem (GCFS). See [restrictions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#gcfs_config). | `bool` | `false` | no |
 | <a name="input_enable_numa_aware_scheduling"></a> [enable\_numa\_aware\_scheduling](#input\_enable\_numa\_aware\_scheduling) | Enable [NUMA-aware](https://cloud.google.com/kubernetes-engine/distributed-cloud/bare-metal/docs/vm-runtime/numa) scheduling. | `bool` | `false` | no |
 | <a name="input_enable_private_nodes"></a> [enable\_private\_nodes](#input\_enable\_private\_nodes) | Whether nodes have internal IP addresses only. | `bool` | `true` | no |
-| <a name="input_enable_queued_provisioning"></a> [enable\_queued\_provisioning](#input\_enable\_queued\_provisioning) | If true, enables Dynamic Workload Scheduler and adds the cloud.google.com/gke-queued taint to the node pool. | `bool` | `false` | no |
+| <a name="input_enable_queued_provisioning"></a> [enable\_queued\_provisioning](#input\_enable\_queued\_provisioning) | If true, enables Dynamic Workload Scheduler and adds the cloud.google.com/gke-queued taint to the node pool. This cannot be true if `accelerator_topology_mode` is set to `PROVISION_ONLY`. | `bool` | `false` | no |
 | <a name="input_enable_secure_boot"></a> [enable\_secure\_boot](#input\_enable\_secure\_boot) | Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info. | `bool` | `true` | no |
 | <a name="input_gke_version"></a> [gke\_version](#input\_gke\_version) | GKE version | `string` | n/a | yes |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = optional(string)<br/>    count = optional(number, 0)<br/>    gpu_driver_installation_config = optional(object({<br/>      gpu_driver_version = string<br/>    }), { gpu_driver_version = "DEFAULT" })<br/>    gpu_partition_size = optional(string)<br/>    gpu_sharing_config = optional(object({<br/>      gpu_sharing_strategy       = string<br/>      max_shared_clients_per_gpu = number<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_host_maintenance_interval"></a> [host\_maintenance\_interval](#input\_host\_maintenance\_interval) | Specifies the frequency of planned maintenance events. | `string` | `""` | no |
 | <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_initial_node_count"></a> [initial\_node\_count](#input\_initial\_node\_count) | The initial number of nodes for the pool. In regional clusters, this is the number of nodes per zone. Changing this setting after node pool creation will not make any effect. It cannot be set with static\_node\_count and must be set to a value between autoscaling\_total\_min\_nodes and autoscaling\_total\_max\_nodes. | `number` | `null` | no |
+| <a name="input_install_dranet_template"></a> [install\_dranet\_template](#input\_install\_dranet\_template) | If true, automatically deploys the DRANET ResourceClaimTemplate. The compiler automatically overrides this to false for subsequent node pools in the same cluster if they use the same device class. | `bool` | `true` | no |
+| <a name="input_install_gpu_direct_manifests"></a> [install\_gpu\_direct\_manifests](#input\_install\_gpu\_direct\_manifests) | If true, automatically downloads and applies GPUDirect (NCCL and NRI) manifests from GitHub for A3 High/Mega GPUs. Set to false if you are applying these manifests manually. | `bool` | `true` | no |
 | <a name="input_internal_ghpc_module_id"></a> [internal\_ghpc\_module\_id](#input\_internal\_ghpc\_module\_id) | DO NOT SET THIS MANUALLY. Automatically populates with module id (unique blueprint-wide). | `string` | n/a | yes |
-| <a name="input_is_reservation_active"></a> [is\_reservation\_active](#input\_is\_reservation\_active) | Whether the specified reservation is already created. | `bool` | `true` | no |
+| <a name="input_is_reservation_active"></a> [is\_reservation\_active](#input\_is\_reservation\_active) | Whether the specified reservation is already created. When is\_reservation\_active is set to false, static\_node\_count, autoscaling\_min\_node\_count, autoscaling\_max\_node\_count, and initial\_node\_count must all be either null or 0. | `bool` | `true` | no |
 | <a name="input_kubernetes_labels"></a> [kubernetes\_labels](#input\_kubernetes\_labels) | Kubernetes labels to be applied to each node in the node group. Key-value pairs. <br/>(The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified) | `map(string)` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_linux_node_config"></a> [linux\_node\_config](#input\_linux\_node\_config) | Linux node configuration (e.g., sysctls, hugepages). | <pre>object({<br/>    sysctls = optional(map(string), {<br/>      "net.ipv4.tcp_rmem" = "4096 87380 16777216"<br/>      "net.ipv4.tcp_wmem" = "4096 16384 16777216"<br/>    })<br/>    hugepages_config = optional(object({<br/>      hugepage_size_2m = optional(number)<br/>      hugepage_size_1g = optional(number)<br/>    }))<br/>  })</pre> | `{}` | no |
 | <a name="input_local_ssd_count_ephemeral_storage"></a> [local\_ssd\_count\_ephemeral\_storage](#input\_local\_ssd\_count\_ephemeral\_storage) | The number of local SSDs to attach to each node to back ephemeral storage.<br/>Uses NVMe interfaces.  Must be supported by `machine_type`.<br/>When set to null,  default value either is [set based on machine\_type](https://cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds) or GKE decides about default value.<br/>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
 | <a name="input_local_ssd_count_nvme_block"></a> [local\_ssd\_count\_nvme\_block](#input\_local\_ssd\_count\_nvme\_block) | The number of local SSDs to attach to each node to back block storage.<br/>Uses NVMe interfaces.  Must be supported by `machine_type`.<br/>When set to null,  default value either is [set based on machine\_type](https://cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds) or GKE decides about default value.<br/>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
+| <a name="input_machine_configs"></a> [machine\_configs](#input\_machine\_configs) | Definition of GCE machine types and counts | `any` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | The name of a Google Compute Engine machine type. | `string` | `"c2-standard-60"` | no |
 | <a name="input_max_pods_per_node"></a> [max\_pods\_per\_node](#input\_max\_pods\_per\_node) | The maximum number of pods per node in this node pool. This will force replacement. | `number` | `null` | no |
 | <a name="input_max_run_duration"></a> [max\_run\_duration](#input\_max\_run\_duration) | The duration (in whole seconds) of the instance. Instance will run and be terminated after then. | `number` | `null` | no |
@@ -372,10 +403,13 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
+| <a name="output_accelerator_topology_mode"></a> [accelerator\_topology\_mode](#output\_accelerator\_topology\_mode) | The accelerator topology mode for the resource policy. |
 | <a name="output_allocatable_cpu_per_node"></a> [allocatable\_cpu\_per\_node](#output\_allocatable\_cpu\_per\_node) | Number of CPUs available for scheduling pods on each node. |
 | <a name="output_allocatable_gpu_per_node"></a> [allocatable\_gpu\_per\_node](#output\_allocatable\_gpu\_per\_node) | Number of GPUs available for scheduling pods on each node. |
 | <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the gke cluster with format projects/{{project\_id}}/locations/{{region}}/clusters/{{name}}. |
+| <a name="output_dranet_template_name"></a> [dranet\_template\_name](#output\_dranet\_template\_name) | The name of the DRANET ResourceClaimTemplate deployed for this node pool. |
+| <a name="output_enable_dranet"></a> [enable\_dranet](#output\_enable\_dranet) | Boolean indicating whether managed DRANET is enabled on this node pool. |
 | <a name="output_guest_accelerator"></a> [guest\_accelerator](#output\_guest\_accelerator) | The accelerator type of the nodes. |
 | <a name="output_has_gpu"></a> [has\_gpu](#output\_has\_gpu) | Boolean value indicating whether nodes in the pool are configured with GPUs. |
 | <a name="output_instance_templates"></a> [instance\_templates](#output\_instance\_templates) | The URLs of Instance Templates |

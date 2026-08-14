@@ -1,0 +1,89 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: rapid-storage-slurm
+
+vars:
+  project_id:  # Set GCP Project ID Here
+  deployment_name: zonal-bucket-ac-slurm
+  region: us-central1
+  zone: us-central1-b
+  gcs_bucket_local_mount: /data
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+
+  - id: zonal-gcs-bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: $(vars.gcs_bucket_local_mount)
+      random_suffix: true
+      # force_destroy allows the bucket to be destroyed even if it contains objects.
+      # To preserve the bucket please change the below flag to "false".
+      force_destroy: true
+      storage_class: RAPID
+      placement_zones: ["$(vars.zone)"]
+      enable_hierarchical_namespace: true
+      # Refer https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache for parameter details
+      anywhere_cache:
+        zones: ["$(vars.zone)"]
+        admission_policy: "admit-on-first-miss"
+    outputs: [gcs_bucket_name]
+
+- group: slurm-cluster
+  modules:
+  - id: slurm-nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 2
+      machine_type: n2-standard-4
+      allow_automatic_updates: false
+      metadata:
+        gcs-bucket-name: $(zonal-gcs-bucket.gcs_bucket_name)
+        gcs-mount-path: $(vars.gcs_bucket_local_mount)
+
+  - id: rapid_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - slurm-nodeset
+    settings:
+      partition_name: rapid
+      is_default: true
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use:
+    - network
+    settings:
+      machine_type: n2-standard-4
+      enable_login_public_ips: true
+      metadata:
+        gcs-bucket-name: $(zonal-gcs-bucket.gcs_bucket_name)
+        gcs-mount-path: $(vars.gcs_bucket_local_mount)
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - rapid_partition
+    - zonal-gcs-bucket
+    - slurm_login
+    settings:
+      machine_type: n2-standard-4
+      enable_controller_public_ips: true

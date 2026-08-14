@@ -19,7 +19,6 @@ terraform_backend_defaults:
     bucket:   # Bucket Name
 
 vars:
-  # --- Required Variables ---
   project_id:               # GCP Project ID
   deployment_name:          # Unique name for the deployment
   region:                   # GCP region for the deployment

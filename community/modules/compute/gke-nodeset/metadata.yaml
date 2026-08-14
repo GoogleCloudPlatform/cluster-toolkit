@@ -23,8 +23,8 @@ ghpc:
   - validator: regex
     inputs:
       vars: [slurm_cluster_name]
-      pattern: "^[a-z](?:[a-z0-9]{0,9})$"
-    error_message: "'slurm_cluster_name' must contain only lowercase letters and numbers, start with a letter, and be 1-10 characters long."
+      pattern: "^[a-z]([-a-z0-9]{0,19})$"
+    error_message: "Variable 'slurm_cluster_name' must be a match of regex '^[a-z]([-a-z0-9]{0,19})$'."
   - validator: range
     inputs:
       vars: [network_storage]

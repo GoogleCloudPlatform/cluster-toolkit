@@ -40,6 +40,10 @@ module "bucket" {
   labels = merge(local.labels, {
     slurm_cluster_name = local.slurm_cluster_name
   })
+
+  encryption_key_names = var.slurm_bucket_kms_key != null ? {
+    (local.synth_bucket_name) = var.slurm_bucket_kms_key
+  } : {}
 }
 
 # BUCKET IAMs
@@ -115,6 +119,25 @@ locals {
 
 
   nodeset_startup_scripts = { for k, v in local.nodeset_map : k => concat(local.common_scripts, v.startup_script) }
+
+  state_spool_mount = one([
+    for ns in var.network_storage : ns
+    if ns.local_mount == "/var/spool/slurm"
+  ])
+
+  auto_munge_mount = (var.enable_backup_controller && local.state_spool_mount != null) ? {
+    server_ip     = local.state_spool_mount.server_ip
+    remote_mount  = local.state_spool_mount.remote_mount
+    fs_type       = local.state_spool_mount.fs_type
+    mount_options = "defaults,soft,intr,timeo=600,retrans=2"
+  } : var.munge_mount
+
+  auto_slurm_key_mount = (var.enable_backup_controller && local.state_spool_mount != null) ? {
+    server_ip     = local.state_spool_mount.server_ip
+    remote_mount  = local.state_spool_mount.remote_mount
+    fs_type       = local.state_spool_mount.fs_type
+    mount_options = "defaults,soft,intr,timeo=600,retrans=2"
+  } : var.slurm_key_mount
 }
 
 module "daos_network_storage_scripts" {
@@ -131,17 +154,26 @@ module "daos_network_storage_scripts" {
 module "slurm_files" {
   source = "./modules/slurm_files"
 
-  project_id                    = var.project_id
-  slurm_cluster_name            = local.slurm_cluster_name
-  bucket_dir                    = var.bucket_dir
-  bucket_name                   = local.bucket_name
-  controller_network_attachment = var.controller_network_attachment
+  project_id                      = var.project_id
+  slurm_cluster_name              = local.slurm_cluster_name
+  slurm_control_host              = var.enable_backup_controller ? "${local.slurm_cluster_name}-controller-0" : null
+  slurm_control_addr              = (var.enable_backup_controller && var.enable_controller_load_balancer) ? one(google_compute_forwarding_rule.slurm_controller_vip[*].ip_address) : (var.enable_backup_controller && length(var.static_ips) >= 1 ? var.static_ips[0] : null)
+  slurm_backup_controller_name    = var.enable_backup_controller ? local.slurm_backup_controller_name : null
+  slurm_backup_controller_ip      = var.enable_backup_controller && length(var.static_ips) >= 2 ? var.static_ips[1] : null
+  enable_controller_load_balancer = var.enable_controller_load_balancer
+  bucket_dir                      = var.bucket_dir
+  bucket_name                     = local.bucket_name
+  controller_network_attachment   = var.controller_network_attachment
+  slurm_control_host_port         = var.slurm_control_host_port
 
-  slurmdbd_conf_tpl   = var.slurmdbd_conf_tpl
-  slurm_conf_tpl      = var.slurm_conf_tpl
-  slurm_conf_template = var.slurm_conf_template
-  cgroup_conf_tpl     = var.cgroup_conf_tpl
-  cloud_parameters    = var.cloud_parameters
+  slurmdbd_conf_tpl              = var.slurmdbd_conf_tpl
+  slurm_conf_tpl                 = var.slurm_conf_tpl
+  slurm_conf_template            = var.slurm_conf_template
+  cgroup_conf_tpl                = var.cgroup_conf_tpl
+  cloud_parameters               = var.cloud_parameters
+  experimental                   = var.experimental
+  enable_expedited_requeue       = var.enable_expedited_requeue
+  enable_health_check_start_only = var.enable_health_check_start_only
   cloudsql_secret = try(
     one(google_secret_manager_secret_version.cloudsql_version[*].id),
   null)
@@ -154,6 +186,7 @@ module "slurm_files" {
 
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags
+  enable_openmetrics   = var.enable_openmetrics
 
   enable_slurm_auth = var.enable_slurm_auth
 
@@ -166,14 +199,18 @@ module "slurm_files" {
   task_epilog_scripts                = var.task_epilog_scripts
   task_prolog_scripts                = var.task_prolog_scripts
 
-  disable_default_mounts = !var.enable_default_mounts
+  munge_mount            = local.auto_munge_mount
+  slurm_key_mount        = local.auto_slurm_key_mount
+  disable_default_mounts = !var.enable_default_mounts || var.enable_backup_controller
   network_storage = [
     for storage in var.network_storage : {
-      server_ip     = storage.server_ip,
-      remote_mount  = storage.remote_mount,
-      local_mount   = storage.local_mount,
-      fs_type       = storage.fs_type,
-      mount_options = storage.mount_options
+      server_ip               = storage.server_ip,
+      remote_mount            = storage.remote_mount,
+      local_mount             = storage.local_mount,
+      local_mount_owner       = storage.local_mount_owner
+      local_mount_permissions = storage.local_mount_permissions
+      fs_type                 = storage.fs_type,
+      mount_options           = storage.mount_options
     }
     if storage.fs_type != "daos"
   ]

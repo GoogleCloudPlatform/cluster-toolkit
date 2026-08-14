@@ -49,6 +49,7 @@ resource "helm_release" "cert_manager" {
   version          = var.cert_manager_chart_version
   namespace        = "cert-manager"
   create_namespace = true
+  wait             = true
 
   values = concat(
     [yamlencode({
@@ -75,6 +76,7 @@ resource "helm_release" "slurm_operator" {
   version          = var.slurm_operator_chart_version
   namespace        = var.slurm_operator_namespace
   create_namespace = true
+  wait             = true
 
   # The Cert Manager webhook deployment must be running to provision the Operator
   depends_on = [

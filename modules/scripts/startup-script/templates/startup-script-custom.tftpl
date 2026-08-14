@@ -56,6 +56,25 @@ stdlib::load_runners(){
   export NO_PROXY=${no_proxy}
   %{endif ~}
 
+  %{if custom_compute_endpoint_url != "" || gcloud_path_override != "" ~}
+  stdlib::info "=== Creating gcloud wrapper with custom path and compute endpoint ==="
+  
+  cat <<EOF > /usr/local/bin/gcloud
+#!/bin/bash
+
+export CLOUDSDK_API_ENDPOINT_OVERRIDES_COMPUTE="${custom_compute_endpoint_url}"
+
+if [[ -x "${gcloud_path_override}/gcloud" ]]; then
+    exec "${gcloud_path_override}/gcloud" "\$@"
+else
+    exec "/usr/bin/gcloud" "\$@"
+fi
+EOF
+  chmod +x /usr/local/bin/gcloud
+  export PATH="/usr/local/bin:$PATH"
+  %{endif ~}
+
+
   %{for r in runners ~}
   stdlib::runner "${r.type}" "${r.object}" "${r.destination}" $${tmpdir} "${r.args}"
   %{endfor ~}

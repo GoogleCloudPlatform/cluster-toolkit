@@ -88,7 +88,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-11-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-12-hpc-rocky-linux-9"
     project = "schedmd-slurm-public"
   }
 
@@ -142,6 +142,12 @@ variable "disk_type" {
   default     = "pd-standard"
 }
 
+variable "disk_storage_pool" {
+  description = "Storage pool to use for the boot disk. Note that storage pools are only supported with Hyperdisk types. For boot disks, only hyperdisk-balanced is supported. You must provide an existing storage pool, as this module does not create new ones."
+  type        = string
+  default     = null
+}
+
 variable "disk_size_gb" {
   description = "Size of boot disk to create for the partition compute nodes."
   type        = number
@@ -173,18 +179,32 @@ variable "disk_resource_manager_tags" {
     error_message = "All Resource Manager tag keys should be in the format 'tagKeys/[0-9]+'"
   }
 }
+variable "disk_encryption_key" {
+  type        = string
+  description = "The id of the encryption key that is stored in Google Cloud KMS to use to encrypt all the disks on this instance"
+  default     = null
+}
+
+variable "disk_encryption_key_service_account" {
+  type        = string
+  description = "The service account being used for the encryption request for the given KMS key. If absent, the Compute Engine default service account is used."
+  default     = null
+}
 
 variable "additional_disks" {
   description = "Configurations of additional disks to be included on the partition nodes."
   type = list(object({
-    disk_name                  = optional(string)
-    device_name                = optional(string)
-    disk_size_gb               = optional(number)
-    disk_type                  = optional(string)
-    disk_labels                = optional(map(string))
-    auto_delete                = optional(bool)
-    boot                       = optional(bool)
-    disk_resource_manager_tags = optional(map(string))
+    disk_name                           = optional(string)
+    device_name                         = optional(string)
+    disk_size_gb                        = optional(number)
+    disk_type                           = optional(string)
+    disk_storage_pool                   = optional(string)
+    disk_labels                         = optional(map(string))
+    auto_delete                         = optional(bool)
+    boot                                = optional(bool)
+    disk_resource_manager_tags          = optional(map(string))
+    disk_encryption_key                 = optional(string)
+    disk_encryption_key_service_account = optional(string)
   }))
   default = []
 }
@@ -515,14 +535,15 @@ variable "reservation_name" {
 
     Formats:
     - Local Reservation: For reservations in the same project as the cluster (var.project_id), the name is sufficient:
-      RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
+      RESERVATION_NAME[/reservationBlocks/BLOCK_ID[/reservationSubBlocks/SUBBLOCK_ID]]
     - Shared Reservation: For reservations shared from a different project, the full resource path is required:
-      projects/HOST_PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
+      projects/HOST_PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID[/reservationSubBlocks/SUBBLOCK_ID]]
 
     Where:
     - HOST_PROJECT_ID: Project ID where the shared reservation was created.
     - RESERVATION_NAME: The name assigned to the specific reservation.
     - BLOCK_ID (Optional): The identifier for a specific reservation block, if the reservation is composed of multiple blocks.
+    - SUBBLOCK_ID (Optional): The identifier for a specific reservation subblock within a block.
 
     Note: Using a shared reservation ideally requires the 'compute.reservations.get' permission for the node service account in the host project; without it, full details cannot be fetched, but deployment will still proceed with defaults.
   EOD
@@ -531,8 +552,8 @@ variable "reservation_name" {
   nullable    = false
 
   validation {
-    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+)(/reservationBlocks/[a-z0-9-]+)?)?$", var.reservation_name)) > 0
-    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME[/reservationBlocks/BLOCK_ID]', [...] are optional parts."
+    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+)(/reservationBlocks/[a-z0-9-]+(/reservationSubBlocks/[a-z0-9-]+)?)?)?$", var.reservation_name)) > 0
+    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME[/reservationBlocks/BLOCK_ID[/reservationSubBlocks/SUBBLOCK_ID]]', [...] are optional parts."
   }
 }
 
@@ -569,11 +590,13 @@ variable "startup_script" {
 variable "network_storage" {
   description = "An array of network attached storage mounts to be configured on nodes."
   type = list(object({
-    server_ip     = string,
-    remote_mount  = string,
-    local_mount   = string,
-    fs_type       = string,
-    mount_options = string,
+    server_ip               = string,
+    remote_mount            = string,
+    local_mount             = string,
+    local_mount_owner       = optional(string)
+    local_mount_permissions = optional(string)
+    fs_type                 = string,
+    mount_options           = string,
   }))
   default = []
 }
@@ -617,8 +640,8 @@ variable "dws_flex" {
   - use_bulk_insert: Uses the legacy implementation of DWS Flex Start with Bulk Insert for non-accelerator instances
 
  Limitations:
-  - CAN NOT be used with reservations;
-  - CAN NOT be used with placement groups;
+  - CAN NOT be used with reservations.
+
 
  EOD
 
@@ -653,4 +676,10 @@ variable "confidential_instance_type" {
   type        = string
   description = "The type of Confidential Computing to use (e.g., SEV, TDX). Required for some machine types like A3."
   default     = null
+}
+
+variable "machine_configs" {
+  description = "Definition of GCE machine types and counts"
+  type        = any
+  default     = {}
 }

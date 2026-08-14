@@ -35,6 +35,7 @@ vars:
   machine_type:
 
   # Number of GPUS in the VM. Can be found here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
+  # If the value is fractional (less than 1), it should be set to 1.
   num_gpus:
 
   # The number of nodes to be created

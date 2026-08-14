@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{.PVName}}
+spec:
+  capacity:
+    storage: {{.Capacity}}
+  accessModes:
+  - ReadWriteMany
+  nfs:
+    path: /{{.Share}}
+    server: {{.IP}}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{.PVCName}}
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: ""
+  volumeName: {{.PVName}}
+  resources:
+    requests:
+      storage: {{.Capacity}}
