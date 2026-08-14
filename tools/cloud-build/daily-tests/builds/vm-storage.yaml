@@ -12,9 +12,9 @@
 
 ---
 tags:
+- vm
 - m.vpc
 - m.vm-instance
-- storage-pool
 
 substitutions:
   _TEST_PREFIX: ""
@@ -115,20 +115,18 @@ steps:
               cd /workspace
 
               DEPLOYMENT_NAME="vm-storage-$$BUILD_ID_SHORT"
-              
+
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
               trap cleanup_pod EXIT SIGTERM SIGINT
 
-
-              
               REGION="\$${ZONE%-*}"
               bash tools/get_binary.sh "\$$_TEST_PREFIX"
-              
+
               BLUEPRINT="examples/storage-vm.yaml"
               bash tools/add_ttl_label.sh \$$BLUEPRINT
 
-              
+
               echo "Checking if required storage pools exist..."
               if ! gcloud compute storage-pools describe test-pool-balanced --project=$PROJECT_ID --zone=\$$ZONE >/dev/null 2>&1; then
                 echo "ERROR: Storage pool 'test-pool-balanced' does not exist."

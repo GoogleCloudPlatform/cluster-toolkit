@@ -163,7 +163,7 @@ steps:
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
                 --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID hyperdisk_balanced_pool=test-pool-balanced hyperdisk_throughput_pool=test-pool-throughput" \
-                --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-storage.yaml" \
+                --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-storage.yml" \
                 --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
                 --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
                 --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \

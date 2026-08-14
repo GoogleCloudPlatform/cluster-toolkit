@@ -58,14 +58,14 @@ deployment_groups:
       disk_type: hyperdisk-balanced
       disk_storage_pool: $(vars.hyperdisk_balanced_storage_pool)
       additional_disks:
-        - disk_name: nodeset-data
-          device_name: nodeset-data
-          disk_type: hyperdisk-throughput
-          disk_size_gb: 2048
-          disk_storage_pool: $(vars.hyperdisk_throughput_storage_pool)
-          auto_delete: true
-          boot: false
-          disk_labels: {}
+      - disk_name: nodeset-data
+        device_name: nodeset-data
+        disk_type: hyperdisk-throughput
+        disk_size_gb: 2048
+        disk_storage_pool: $(vars.hyperdisk_throughput_storage_pool)
+        auto_delete: true
+        boot: false
+        disk_labels: {}
       allow_automatic_updates: false
       metadata:
         gcs-bucket-name: $(zonal-gcs-bucket.gcs_bucket_name)
@@ -88,14 +88,14 @@ deployment_groups:
       disk_type: hyperdisk-balanced
       disk_storage_pool: $(vars.hyperdisk_balanced_storage_pool)
       additional_disks:
-        - disk_name: login-data
-          device_name: login-data
-          disk_type: hyperdisk-throughput
-          disk_size_gb: 2048
-          disk_storage_pool: $(vars.hyperdisk_throughput_storage_pool)
-          auto_delete: true
-          boot: false
-          disk_labels: {}
+      - disk_name: login-data
+        device_name: login-data
+        disk_type: hyperdisk-throughput
+        disk_size_gb: 2048
+        disk_storage_pool: $(vars.hyperdisk_throughput_storage_pool)
+        auto_delete: true
+        boot: false
+        disk_labels: {}
       enable_login_public_ips: true
       metadata:
         gcs-bucket-name: $(zonal-gcs-bucket.gcs_bucket_name)
@@ -113,12 +113,12 @@ deployment_groups:
       disk_type: hyperdisk-balanced
       disk_storage_pool: $(vars.hyperdisk_balanced_storage_pool)
       additional_disks:
-        - disk_name: controller-data
-          device_name: controller-data
-          disk_type: hyperdisk-throughput
-          disk_size_gb: 2048
-          disk_storage_pool: $(vars.hyperdisk_throughput_storage_pool)
-          auto_delete: true
-          boot: false
-          disk_labels: {}
+      - disk_name: controller-data
+        device_name: controller-data
+        disk_type: hyperdisk-throughput
+        disk_size_gb: 2048
+        disk_storage_pool: $(vars.hyperdisk_throughput_storage_pool)
+        auto_delete: true
+        boot: false
+        disk_labels: {}
       enable_controller_public_ips: true
