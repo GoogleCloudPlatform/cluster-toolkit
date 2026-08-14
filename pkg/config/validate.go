@@ -91,7 +91,6 @@ func validateVars(bp Blueprint) error {
 		Add(validateDeploymentName(bp)).
 		Add(validateGlobalLabels(bp)).
 		Add(validateSlurmClusterName(bp))
-
 	// Check for any nil values
 	// Iterator over non evaluated variables, it's Ok if evaluated value is null
 	for key, val := range bp.Vars.Items() {
