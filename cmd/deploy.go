@@ -190,7 +190,7 @@ func deployTerraformGroup(groupDir string, artifactsDir string, applyBehavior sh
 }
 
 func createGcsBucketsIfMissing(ctx context.Context, bp config.Blueprint) error {
-	buckets, err := GetUniqueGcsBuckets(bp)
+	buckets, err := modulewriter.GetUniqueGcsBuckets(bp)
 	if err != nil {
 		return err
 	}

@@ -73,7 +73,7 @@ var (
 )
 
 func verifyGcsBuckets(ctx context.Context, bp config.Blueprint) error {
-	buckets, err := GetUniqueGcsBuckets(bp)
+	buckets, err := modulewriter.GetUniqueGcsBuckets(bp)
 	if err != nil {
 		return err
 	}

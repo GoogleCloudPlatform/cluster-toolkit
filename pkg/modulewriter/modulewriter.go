@@ -456,19 +456,9 @@ func writeDestroyInstructions(w io.Writer, bp config.Blueprint, deploymentDir st
 		if grp.Kind() == config.PackerKind {
 			packerManifests = append(packerManifests, filepath.Join(grpPath, string(grp.Modules[0].ID), "packer-manifest.json"))
 		}
-		if grp.TerraformBackend.Type == "gcs" && grp.TerraformBackend.Configuration.Has("bucket") {
-			evaluatedConfig, err := bp.EvalDict(grp.TerraformBackend.Configuration)
-			if err == nil {
-				val := evaluatedConfig.Get("bucket")
-				if !val.IsNull() && val.Type() == cty.String {
-					bucketName := val.AsString()
-					if bucketName != "" {
-						gcsBuckets = append(gcsBuckets, bucketName)
-					}
-				}
-			}
-		}
 	}
+
+	gcsBuckets, _ = GetUniqueGcsBuckets(bp)
 
 	WritePackerDestroyInstructions(w, packerManifests)
 	WriteGcsDestroyInstructions(w, gcsBuckets)
@@ -516,4 +506,38 @@ func WriteGcsDestroyInstructions(w io.Writer, buckets []string) {
 	}
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintln(w, "https://console.cloud.google.com/storage/browser")
+}
+
+// GetUniqueGcsBuckets returns a list of unique GCS buckets used for Terraform state.
+func GetUniqueGcsBuckets(bp config.Blueprint) ([]string, error) {
+	seenBuckets := make(map[string]bool)
+	var buckets []string
+	var retErr error
+
+	for _, g := range bp.Groups {
+		if g.TerraformBackend.Type != "gcs" || !g.TerraformBackend.Configuration.Has("bucket") {
+			continue
+		}
+		evaluatedConfig, err := bp.EvalDict(g.TerraformBackend.Configuration)
+		if err != nil {
+			return buckets, fmt.Errorf("failed to evaluate terraform backend configuration: %w", err)
+		}
+		bucketVal := evaluatedConfig.Get("bucket")
+		if bucketVal.IsNull() || !bucketVal.IsKnown() || bucketVal.Type() != cty.String {
+			retErr = fmt.Errorf("GCS backend bucket name cannot be empty or unknown")
+			continue
+		}
+		bucketName := bucketVal.AsString()
+		if bucketName == "" {
+			retErr = fmt.Errorf("GCS backend bucket name cannot be empty")
+			continue
+		}
+		if seenBuckets[bucketName] {
+			continue
+		}
+		seenBuckets[bucketName] = true
+		buckets = append(buckets, bucketName)
+	}
+
+	return buckets, retErr
 }

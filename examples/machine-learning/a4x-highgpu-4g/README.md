@@ -77,6 +77,8 @@ gcluster deploy -d a4xhigh-slurm-deployment.yaml examples/machine-learning/a4x-h
 ./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
 ```
 
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
+
 Selective deployment and teardown for this blueprint are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
 
 Example (deploy only the primary group for this blueprint):
@@ -124,6 +126,8 @@ gcluster deploy -d a4x-vm-deployment.yaml a4x-vm.yaml
 ./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
 ```
 
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
+
 ### Cloud Storage FUSE
 
 This blueprint includes four Cloud Storage FUSE mounts to provide a simple and scalable way
@@ -138,5 +142,3 @@ to manage data.
    storage.
 1. `/gcs-model-serving` is an optimized mount for serving models, which
    downloads model weights in parallel to local ssd.
-
-**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
