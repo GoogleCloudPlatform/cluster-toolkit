@@ -134,11 +134,6 @@
   register: pv_throughput_name
   changed_when: false
 
-- name: Wait for CSI to provision Disks in GCP
-  delegate_to: localhost
-  ansible.builtin.pause:
-    seconds: 15
-
 - name: Verify GCP Persistent Disk Placement (Balanced)
   delegate_to: localhost
   ansible.builtin.shell: |
