@@ -385,7 +385,7 @@ variable "master_authorized_networks" {
   default = []
 
   validation {
-    condition     = can([for net in var.master_authorized_networks : cidrnetmask(net.cidr_block)])
+    condition     = can([for net in var.master_authorized_networks : cidrhost(net.cidr_block, 0)])
     error_message = "Validation failed due to invalid CIDR IP address in 'master_authorized_networks'. All values must be in CIDR format (e.g. 1.2.3.4/32)."
   }
 

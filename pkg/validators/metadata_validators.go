@@ -27,10 +27,13 @@ import (
 type CIDRValidator struct{}
 
 func extractCIDRValue(val cty.Value, objectKey string, allowNull bool, path config.Path) (cty.Value, error) {
+	if val.IsNull() {
+		return cty.NullVal(cty.String), nil
+	}
 	if val.Type() == cty.String {
 		return val, nil
 	}
-	if val.Type().IsObjectType() || val.Type().IsMapType() {
+	if val.Type().IsObjectType() {
 		if objectKey == "" {
 			return cty.NilVal, nil
 		}
@@ -41,6 +44,18 @@ func extractCIDRValue(val cty.Value, objectKey string, allowNull bool, path conf
 			return cty.NilVal, nil
 		}
 		return val.GetAttr(objectKey), nil
+	}
+	if val.Type().IsMapType() {
+		if objectKey == "" {
+			return cty.NilVal, nil
+		}
+		if !val.HasIndex(cty.StringVal(objectKey)).True() {
+			if !allowNull {
+				return cty.NilVal, config.BpError{Err: fmt.Errorf("missing key %q in map", objectKey), Path: path}
+			}
+			return cty.NilVal, nil
+		}
+		return val.Index(cty.StringVal(objectKey)), nil
 	}
 	return cty.NilVal, nil
 }
@@ -60,6 +75,9 @@ func validateCIDRValue(cidrVal cty.Value, rule modulereader.ValidationRule, allo
 		return config.BpError{Err: fmt.Errorf("%s", msg), Path: path}
 	}
 	if cidrVal.Type() != cty.String {
+		return nil
+	}
+	if !cidrVal.IsKnown() {
 		return nil
 	}
 	str := cidrVal.AsString()
