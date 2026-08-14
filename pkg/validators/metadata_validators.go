@@ -7,7 +7,10 @@
 //      http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
-// distributed under the License and limitations under the License.
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package validators
 
@@ -26,6 +29,53 @@ import (
 // CIDRValidator implements the RuleValidator interface for 'cidr' type.
 type CIDRValidator struct{}
 
+func extractCIDRValue(val cty.Value, objectKey string, allowNull bool, path config.Path) (cty.Value, error) {
+	if val.Type() == cty.String {
+		return val, nil
+	}
+	if val.Type().IsObjectType() || val.Type().IsMapType() {
+		if objectKey == "" {
+			return cty.NilVal, nil
+		}
+		if !val.Type().HasAttribute(objectKey) {
+			if !allowNull {
+				return cty.NilVal, config.BpError{Err: fmt.Errorf("missing key %q in object", objectKey), Path: path}
+			}
+			return cty.NilVal, nil
+		}
+		return val.GetAttr(objectKey), nil
+	}
+	return cty.NilVal, nil
+}
+
+func validateCIDRValue(cidrVal cty.Value, rule modulereader.ValidationRule, allowNull bool, path config.Path) error {
+	if cidrVal == cty.NilVal {
+		return nil
+	}
+	if cidrVal.IsNull() {
+		if allowNull {
+			return nil
+		}
+		msg := rule.ErrorMessage
+		if msg == "" {
+			msg = "CIDR block cannot be null or empty"
+		}
+		return config.BpError{Err: fmt.Errorf("%s", msg), Path: path}
+	}
+	if cidrVal.Type() != cty.String {
+		return nil
+	}
+	str := cidrVal.AsString()
+	if _, _, err := net.ParseCIDR(str); err != nil {
+		msg := rule.ErrorMessage
+		if msg == "" {
+			msg = fmt.Sprintf("invalid CIDR address: %s", str)
+		}
+		return config.BpError{Err: fmt.Errorf("%s", msg), Path: path}
+	}
+	return nil
+}
+
 // Validate checks if the variables specified in the rule are valid CIDR addresses.
 func (c *CIDRValidator) Validate(
 	bp config.Blueprint,
@@ -43,50 +93,15 @@ func (c *CIDRValidator) Validate(
 
 	return IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
 		for _, val := range t.Values {
-			fmt.Printf("target name: %s, val: %#v, isKnown: %v\n", t.Name, val, val.IsKnown())
 			if !val.IsKnown() {
 				continue
 			}
-
-			fmt.Printf("val type: %s\n", val.Type().FriendlyName())
-			var cidrVal cty.Value
-			if val.Type() == cty.String {
-				cidrVal = val
-			} else if val.Type().IsObjectType() || val.Type().IsMapType() {
-				if objectKey == "" {
-					continue
-				}
-				if !val.Type().HasAttribute(objectKey) {
-					if !allowNull {
-						return config.BpError{Err: fmt.Errorf("missing key %q in object", objectKey), Path: t.Path}
-					}
-					continue
-				}
-				cidrVal = val.GetAttr(objectKey)
-			} else {
-				continue
+			cidrVal, err := extractCIDRValue(val, objectKey, allowNull, t.Path)
+			if err != nil {
+				return err
 			}
-
-			if cidrVal.IsNull() {
-				if allowNull {
-					continue
-				}
-				msg := rule.ErrorMessage
-				if msg == "" {
-					msg = "CIDR block cannot be null or empty"
-				}
-				return config.BpError{Err: fmt.Errorf("%s", msg), Path: t.Path}
-			}
-			if cidrVal.Type() != cty.String {
-				continue
-			}
-			str := cidrVal.AsString()
-			if _, _, err := net.ParseCIDR(str); err != nil {
-				msg := rule.ErrorMessage
-				if msg == "" {
-					msg = fmt.Sprintf("invalid CIDR address: %s", str)
-				}
-				return config.BpError{Err: fmt.Errorf("%s", msg), Path: t.Path}
+			if err := validateCIDRValue(cidrVal, rule, allowNull, t.Path); err != nil {
+				return err
 			}
 		}
 		return nil
