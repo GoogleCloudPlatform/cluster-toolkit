@@ -125,7 +125,7 @@ steps:
               REGION="\$${ZONE%-*}"
               bash tools/get_binary.sh "\$$_TEST_PREFIX"
               
-              BLUEPRINT="examples/vm-storage.yaml"
+              BLUEPRINT="examples/storage-vm.yaml"
               bash tools/add_ttl_label.sh \$$BLUEPRINT
 
               
