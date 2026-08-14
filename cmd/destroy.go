@@ -81,6 +81,11 @@ func runDestroyCmd(cmd *cobra.Command, args []string) {
 
 	bp, ctx := artifactBlueprintOrDie(artifactsDir)
 	checkErr(validateGroupSelectionFlags(bp), ctx)
+
+	if hasSelectedGroupOfKind(bp, config.TerraformKind) {
+		checkDependencies(cmd, "terraform")
+	}
+
 	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot), ctx)
 
 	destroyRunner(deplRoot, artifactsDir, bp, ctx)
@@ -236,16 +241,17 @@ func destroyTerraformGroup(groupDir string) error {
 				applyBehavior := getApplyBehavior()
 				forceDestroyApproved := false
 
-				if applyBehavior == shell.PromptBeforeApply {
+				switch applyBehavior {
+				case shell.PromptBeforeApply:
 					promptMsg := "GKE cluster is unreachable. Do you want to force destroy the remaining infrastructure by removing GKE resources from the state? [y/n]: "
 					if confirmActionFunc(promptMsg) {
 						forceDestroyApproved = true
 					} else {
 						return errUserAborted
 					}
-				} else if applyBehavior == shell.AutomaticApply {
+				case shell.AutomaticApply:
 					forceDestroyApproved = true
-				} else {
+				default:
 					return err
 				}
 

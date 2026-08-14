@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/dependencies"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulereader"
 	"strings"
@@ -27,10 +28,22 @@ import (
 )
 
 func projectError(p string) error {
+	hint := "It is possible the machine you are working on has not been authenticated.\n"
+	if dependencies.HasBinary("gcloud") {
+		hint += "Try to run `gcloud auth application-default login`"
+	} else {
+		hint += "How to fix:\n" +
+			"1. Recommended: Install the Google Cloud SDK and authenticate.\n" +
+			"   -> Install: https://cloud.google.com/sdk/docs/install\n" +
+			"   -> Authenticate: Run `gcloud auth application-default login`\n\n" +
+			"2. Alternative: Use a Service Account Key file (Air-gapped/Minimal VMs).\n" +
+			"   -> Set the environment variable:\n" +
+			"      export GOOGLE_APPLICATION_CREDENTIALS=\"/path/to/your/key.json\""
+	}
+
 	return config.HintError{
-		Err: fmt.Errorf("project %q does not exist or your credentials do not have permission to access it", p),
-		Hint: "It is possible the machine you are working on has not been authenticated.\n" +
-			"Try to run `gcloud auth application-default login`",
+		Err:  fmt.Errorf("project %q does not exist or your credentials do not have permission to access it", p),
+		Hint: hint,
 	}
 }
 

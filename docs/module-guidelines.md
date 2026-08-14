@@ -27,6 +27,8 @@ the following structure:
 * No `provider` blocks should be defined in reusable modules. It is OK to impose a range of acceptable provider versions.
   In the case on conflicts, the root module will configure all providers and pass alternatives as an alias. See:
 https://developer.hashicorp.com/terraform/language/modules/develop/providers#implicit-provider-inheritance
+* Prefer adding dependent modules to the `use` list instead of explicitly passing their outputs in `settings`. This allows variables to be implicitly wired and keeps blueprints clean.
+* New modules must include a runnable blueprint YAML demonstrating their use.
 
 ## Terraform Coding Standards
 
@@ -206,3 +208,5 @@ ghpc:  # [optional]
   # the creation will fail if the module is not used.
   has_to_be_used: true 
 ```
+
+Modules can utilize the `ghpc` section in `metadata.yaml` to enforce preflight validation checks. See [module-level validators](blueprint-validation.md#module-level-metadata-validators) for a list of available validators and their usage.

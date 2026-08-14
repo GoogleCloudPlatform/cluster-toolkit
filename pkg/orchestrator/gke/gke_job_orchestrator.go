@@ -55,6 +55,10 @@ const (
 
 	// maxLogRequests is the maximum concurrent log streams allowed by the GKE logs CLI.
 	maxLogRequests = 10
+
+	workloadContainerPrefix      = "workload-container"
+	pathwaysContainerPrefix      = "pathways-"
+	jobSetContainerNamesJSONPath = "{.spec.replicatedJobs[0].template.spec.template.spec.containers[*].name}"
 )
 
 func NewGKEOrchestrator() *GKEOrchestrator {
@@ -236,13 +240,22 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 		return "", fmt.Errorf("job '%s' has %d pods matching logs query, which exceeds the max fetch limit (%d). Please view logs directly in the Google Cloud Console:\n%s", name, podCountForNotice, maxLogRequests, consoleURL)
 	}
 
+	var containerName string
+	if mainOnly {
+		containerName = g.getFirstContainerName(foundNamespace, selector)
+		if containerName == "" {
+			logging.Info("Could not determine specific workload container from JobSet; streaming all containers...")
+		}
+	}
+
 	if opts.Follow {
 		logging.Info("Streaming logs for job '%s'...", name)
-		err := g.executor.ExecuteCommandStream("kubectl", "logs", "-n", foundNamespace, "-l", selector, "--all-containers", "-f", fmt.Sprintf("--max-log-requests=%d", maxLogRequests), "--tail=-1")
+		args := g.buildKubectlLogsArgs(foundNamespace, selector, containerName, true)
+		err = g.executor.ExecuteCommandStream("kubectl", args...)
 		return "", err
 	}
 
-	res, err := g.fetchLogsWithRetry(foundNamespace, selector)
+	res, err := g.fetchLogsWithRetry(foundNamespace, selector, containerName)
 	if err != nil {
 		return "", err
 	}
@@ -254,17 +267,31 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 	return res.Stdout, nil
 }
 
-func (g *GKEOrchestrator) fetchLogsWithRetry(ns, selector string) (shell.CommandResult, error) {
+func (g *GKEOrchestrator) buildKubectlLogsArgs(ns, selector, containerName string, follow bool) []string {
+	args := []string{"logs", "-n", ns, "-l", selector}
+	if containerName != "" {
+		args = append(args, "-c", containerName)
+	} else {
+		args = append(args, "--all-containers")
+	}
+	if follow {
+		args = append(args, "-f")
+	}
+	args = append(args, fmt.Sprintf("--max-log-requests=%d", maxLogRequests), "--tail=-1")
+	return args
+}
+
+func (g *GKEOrchestrator) fetchLogsWithRetry(ns, selector, containerName string) (shell.CommandResult, error) {
 	maxRetries := 12 // 12 * 5s = 1 minute timeout
 	var res shell.CommandResult
-	cmdArgs := []string{"logs", "-n", ns, "-l", selector, "--all-containers", fmt.Sprintf("--max-log-requests=%d", maxLogRequests), "--tail=-1"}
+	cmdArgs := g.buildKubectlLogsArgs(ns, selector, containerName, false)
 	for i := 0; i < maxRetries; i++ {
 		res = g.executor.ExecuteCommand("kubectl", cmdArgs...)
 		if res.ExitCode == 0 {
 			return res, nil
 		}
 
-		if strings.Contains(res.Stderr, "is waiting to start") {
+		if strings.Contains(res.Stderr, "is waiting to start") || strings.Contains(res.Stderr, "No resources found") {
 			if i == 0 {
 				logging.Info("Job containers are waiting to start (likely pulling images). Waiting...")
 			}
@@ -276,6 +303,41 @@ func (g *GKEOrchestrator) fetchLogsWithRetry(ns, selector string) (shell.Command
 	}
 
 	return res, fmt.Errorf("timed out waiting for job to start; latest error: %s\n%s", res.Stderr, res.Stdout)
+}
+
+func findWorkloadContainer(containers []string) string {
+	for _, c := range containers {
+		if strings.HasPrefix(c, workloadContainerPrefix) || strings.HasPrefix(c, pathwaysContainerPrefix) {
+			return c
+		}
+	}
+	if len(containers) > 0 {
+		return containers[0]
+	}
+	return ""
+}
+
+func (g *GKEOrchestrator) getFirstContainerName(ns, selector string) string {
+	var jobsetName string
+	for _, part := range strings.Split(selector, ",") {
+		if strings.HasPrefix(part, "jobset.sigs.k8s.io/jobset-name=") {
+			jobsetName = strings.TrimPrefix(part, "jobset.sigs.k8s.io/jobset-name=")
+			break
+		}
+	}
+	if jobsetName != "" {
+		res := g.executor.ExecuteCommand("kubectl", "get", "jobsets.jobset.x-k8s.io", jobsetName, "-n", ns, "-o", "jsonpath="+jobSetContainerNamesJSONPath)
+		if res.ExitCode == 0 && strings.TrimSpace(res.Stdout) != "" {
+			if name := findWorkloadContainer(strings.Fields(res.Stdout)); name != "" {
+				return name
+			}
+		} else if res.ExitCode != 0 {
+			logging.Warn("Failed to query JobSet '%s' for container names: %s", jobsetName, strings.TrimSpace(res.Stderr))
+		} else {
+			logging.Warn("Could not determine a primary workload container for JobSet '%s' from output: %s", jobsetName, strings.TrimSpace(res.Stdout))
+		}
+	}
+	return ""
 }
 
 func (g *GKEOrchestrator) getJobPodCount(ns, selector string) (int, error) {

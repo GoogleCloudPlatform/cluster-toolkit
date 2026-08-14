@@ -188,6 +188,15 @@ After installing `gcluster`, you can deploy, manage, and destroy infrastructure 
    ./gcluster destroy hpc-slurm
    ```
 
+### Automatic Dependency Management
+
+When running commands like `deploy` or `destroy` in non-interactive environments (such as CI/CD pipelines), the toolkit can automatically download missing HashiCorp dependencies (**Terraform** and **Packer**) by passing the `--download-dependencies` flag.
+
+- `--download-dependencies`: Automatically download missing dependencies without prompting.
+- `--download-dependencies=false`: Fail immediately if any required dependencies are missing.
+
+In interactive terminals, this flag is optional; the toolkit will ask for confirmation before downloading missing dependencies.
+
 For detailed guides, blueprint syntax, and configuration options, see the [Google Cloud documentation site](https://cloud.google.com/cluster-toolkit/docs/overview).
 
 ## Job submission (gcluster job submit)

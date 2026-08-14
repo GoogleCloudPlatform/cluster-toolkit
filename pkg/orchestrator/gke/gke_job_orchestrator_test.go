@@ -2796,13 +2796,13 @@ func TestGetJobLogs(t *testing.T) {
 			desc:               "explicit MainOnly=true uses coordinator-only selector (1 pod, succeeds)",
 			mainOnly:           &trueVal,
 			mockGetPods2Stdout: "pod-main-0-0\n",
-			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --all-containers --max-log-requests=10",
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 -c workload-container --max-log-requests=10 --tail=-1",
 		},
 		{
 			desc:               "explicit MainOnly=false with pods <= 10 uses all-job selector (succeeds)",
 			mainOnly:           &falseVal,
 			mockGetPods2Stdout: "pod-1\npod-2\npod-3\npod-4\npod-5\npod-6\npod-7\npod-8\n", // 8 pods
-			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=10",
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=10 --tail=-1",
 		},
 		{
 			desc:               "explicit MainOnly=false with pods > 10 fails proactively with Console URL",
@@ -2815,14 +2815,14 @@ func TestGetJobLogs(t *testing.T) {
 			mainOnly:           nil,
 			mockGetPods1Stdout: "pod-1\npod-2\n", // 2 pods (total)
 			mockGetPods2Stdout: "pod-1\npod-2\n", // 2 pods (filtered)
-			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=10",
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=10 --tail=-1",
 		},
 		{
 			desc:               "implicit MainOnly (nil) with pods > 5 defaults to coordinator-only (succeeds)",
 			mainOnly:           nil,
 			mockGetPods1Stdout: "pod-1\npod-2\npod-3\npod-4\npod-5\npod-6\npod-7\npod-8\n", // 8 pods total
 			mockGetPods2Stdout: "pod-main-0-0\n",                                           // 1 pod coordinator
-			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --all-containers --max-log-requests=10",
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 -c workload-container --max-log-requests=10 --tail=-1",
 		},
 	}
 
@@ -2837,6 +2837,7 @@ func TestGetJobLogs(t *testing.T) {
 			mockResponses := map[string][]shell.CommandResult{
 				"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0, Stdout: ""}},
 				"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+				"kubectl get jobsets.jobset.x-k8s.io test-job -n default -o jsonpath={.spec.replicatedJobs[0].template.spec.template.spec.containers[*].name}": {{ExitCode: 0, Stdout: "workload-container\n"}},
 			}
 			if totalQuery == filteredQuery {
 				mockResponses[totalQuery] = []shell.CommandResult{{ExitCode: 0, Stdout: tc.mockGetPods2Stdout}}
@@ -3252,6 +3253,89 @@ users: []
 				if ns != tc.wantNS {
 					t.Errorf("expected namespace %q, got %q", tc.wantNS, ns)
 				}
+			}
+		})
+	}
+}
+
+func TestFetchLogsWithRetry_JobSetDiscovery(t *testing.T) {
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job -c workload-container --max-log-requests=10 --tail=-1": {
+			{ExitCode: 1, Stderr: "container is waiting to start"},
+			{ExitCode: 0, Stdout: "Successful Job Output Log"},
+		},
+	}
+
+	mockExecutor := NewMockExecutor(mockResponses)
+	g := newTestGKEOrchestrator(mockExecutor)
+
+	res, err := g.fetchLogsWithRetry("default", "jobset.sigs.k8s.io/jobset-name=test-job", "workload-container")
+	if err != nil {
+		t.Fatalf("fetchLogsWithRetry failed unexpectedly: %v", err)
+	}
+
+	if res.Stdout != "Successful Job Output Log" {
+		t.Errorf("fetchLogsWithRetry stdout = %q, want %q", res.Stdout, "Successful Job Output Log")
+	}
+}
+
+func TestGetFirstContainerName_JobSetDiscovery(t *testing.T) {
+	tests := []struct {
+		name          string
+		selector      string
+		mockResponses map[string][]shell.CommandResult
+		wantContainer string
+	}{
+		{
+			name:     "JobSet CR spec query succeeds with standard container",
+			selector: "jobset.sigs.k8s.io/jobset-name=test-job",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get jobsets.jobset.x-k8s.io test-job -n default -o jsonpath={.spec.replicatedJobs[0].template.spec.template.spec.containers[*].name}": {
+					{ExitCode: 0, Stdout: "workload-container\n"},
+				},
+			},
+			wantContainer: "workload-container",
+		},
+		{
+			name:     "JobSet CR spec query succeeds with Pathways containers",
+			selector: "jobset.sigs.k8s.io/jobset-name=pathways-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get jobsets.jobset.x-k8s.io pathways-job -n default -o jsonpath={.spec.replicatedJobs[0].template.spec.template.spec.containers[*].name}": {
+					{ExitCode: 0, Stdout: "pathways-proxy pathways-rm\n"},
+				},
+			},
+			wantContainer: "pathways-proxy",
+		},
+		{
+			name:     "JobSet CR spec query succeeds with custom container name",
+			selector: "jobset.sigs.k8s.io/jobset-name=custom-job",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get jobsets.jobset.x-k8s.io custom-job -n default -o jsonpath={.spec.replicatedJobs[0].template.spec.template.spec.containers[*].name}": {
+					{ExitCode: 0, Stdout: "my-custom-trainer helper\n"},
+				},
+			},
+			wantContainer: "my-custom-trainer",
+		},
+		{
+			name:     "JobSet CR query fails (returns empty string to trigger all-containers fallback)",
+			selector: "jobset.sigs.k8s.io/jobset-name=test-job",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get jobsets.jobset.x-k8s.io test-job -n default -o jsonpath={.spec.replicatedJobs[0].template.spec.template.spec.containers[*].name}": {
+					{ExitCode: 1, Stderr: "Error from server (NotFound)"},
+				},
+			},
+			wantContainer: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExecutor := NewMockExecutor(tt.mockResponses)
+			g := newTestGKEOrchestrator(mockExecutor)
+
+			got := g.getFirstContainerName("default", tt.selector)
+			if got != tt.wantContainer {
+				t.Errorf("getFirstContainerName() = %q, want %q", got, tt.wantContainer)
 			}
 		})
 	}
