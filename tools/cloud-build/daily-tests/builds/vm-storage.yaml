@@ -18,7 +18,7 @@ tags:
 
 substitutions:
   _TEST_PREFIX: ""
-  _ZONE: "us-central1-a"
+  _ZONE: "us-central1-b"
 
 timeout: 86400s
 queueTtl: 86400s  # 24hr
