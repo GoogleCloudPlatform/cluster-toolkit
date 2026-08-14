@@ -1169,7 +1169,7 @@ func TestCIDRValidator(t *testing.T) {
 	rule := modulereader.ValidationRule{
 		Validator: "cidr",
 		Inputs: map[string]interface{}{
-			"vars": []interface{}{"master_authorized_networks"},
+			"vars":       []interface{}{"master_authorized_networks"},
 			"object_key": "cidr_block",
 		},
 	}
@@ -1206,4 +1206,3 @@ func TestCIDRValidator(t *testing.T) {
 		}
 	})
 }
-

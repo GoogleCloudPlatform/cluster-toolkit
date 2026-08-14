@@ -47,7 +47,7 @@ func (c *CIDRValidator) Validate(
 			if !val.IsKnown() {
 				continue
 			}
-			
+
 			fmt.Printf("val type: %s\n", val.Type().FriendlyName())
 			var cidrVal cty.Value
 			if val.Type() == cty.String {
@@ -92,6 +92,7 @@ func (c *CIDRValidator) Validate(
 		return nil
 	})
 }
+
 // RegexValidator implements the Validator interface for 'regex' type.
 type RegexValidator struct{}
 

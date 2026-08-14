@@ -107,10 +107,10 @@ func getModuleSettingValues(bp config.Blueprint, group config.Group, modIdx int,
 		val = evaledVal
 	}
 	fmt.Printf("setting: %s, val: %#v\n", settingName, val)
-		values := evaluateAndFlatten(val)
+	values := evaluateAndFlatten(val)
 
 	fmt.Printf("flattened values: %#v\n", values)
-		return values, path, nil
+	return values, path, nil
 }
 
 // parseStringList normalizes an input that may be a single string, []interface{} or nil into []string.
