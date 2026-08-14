@@ -1,0 +1,76 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: test-cluster
+
+vars:
+  project_id: hpc-toolkit-gsc
+  deployment_name: test-cluster
+  region: us-central1
+  zone: us-central1-a
+  vm_count: 2
+  base_network_name: $(vars.deployment_name)
+  test_machine_type: # Example test type
+  test_availability_domains: 3 # Desired spread
+
+deployment_groups:
+- group: primary
+  modules:
+
+  - id: cluster-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.base_network_name)-net-0
+      subnetworks:
+      - subnet_name: $(vars.base_network_name)-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: 10.0.1.0/24
+
+
+  # 3. Filestore Network Storage (Provides a shared /home directory across all VMs)
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [cluster-net-0]
+    settings:
+      local_mount: /home
+
+  # 4. Local SSD Startup Script (Replaces the raw bash script from gcloud)
+  - id: test-startup
+    source: modules/scripts/startup-script
+    settings:
+      configure_ssh_host_patterns:
+      - "$(vars.deployment_name)-*"
+      local_ssd_filesystem:
+        fs_type: ext4
+        mountpoint: /mnt/localssd1
+        permissions: "1777"
+
+  # 5. test Virtual Machines
+  - id: test-vms
+    source: modules/compute/vm-instance
+    use: [cluster-net-0, test-startup, homefs]
+    settings:
+      machine_type: $(vars.test_machine_type)
+      instance_count: $(vars.vm_count)
+      placement_policy:
+        availability_domain_count: $(vars.test_availability_domains)
+
+  # 6. Wait for startup to complete (Ensures the Local SSD formats correctly)
+  - id: wait-for-vms
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_names: $(test-vms.name)
+      timeout: 7200
