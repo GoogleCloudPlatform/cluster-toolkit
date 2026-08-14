@@ -86,7 +86,10 @@ variable "kueue_migrated_tests" {
     "slurm-gcp-v6-ssd",
     "gke-a2-highgpu-kueue-onspot",
     "gke-a4-onspot",
-    "gke-g4-onspot"
+    "gke-g4-onspot",
+    "ml-a3-highgpu-onspot-slurm",
+    "ml-a4-highgpu-onspot-slurm",
+    "ml-g4-onspot-slurm"
   ]
 }
 
