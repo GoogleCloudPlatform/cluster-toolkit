@@ -85,7 +85,6 @@ func getModuleSettingValues(bp config.Blueprint, group config.Group, modIdx int,
 		if evaledVal, err := bp.Eval(val); err == nil {
 			val = evaledVal
 		}
-		fmt.Printf("setting: %s, val: %#v\n", settingName, val)
 		values := evaluateAndFlatten(val)
 		varPath := config.Root.Vars.Dot(settingName)
 		return values, varPath, nil
@@ -106,10 +105,8 @@ func getModuleSettingValues(bp config.Blueprint, group config.Group, modIdx int,
 	if evaledVal, err := bp.Eval(val); err == nil {
 		val = evaledVal
 	}
-	fmt.Printf("setting: %s, val: %#v\n", settingName, val)
 	values := evaluateAndFlatten(val)
 
-	fmt.Printf("flattened values: %#v\n", values)
 	return values, path, nil
 }
 
