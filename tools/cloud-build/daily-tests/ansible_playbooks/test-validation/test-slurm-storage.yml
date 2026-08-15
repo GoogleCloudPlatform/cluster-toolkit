@@ -105,7 +105,7 @@
 - name: Verify Controller Instance Template Storage Pools
   delegate_to: localhost
   ansible.builtin.shell: |
-    gcloud compute instance-templates list --filter="name~{{ slurm_cluster_name }}-controller" --project={{ project_id }} --format="value(properties.disks[0].initializeParams.storagePool, properties.disks[1].initializeParams.storagePool)"
+    gcloud compute instance-templates list --filter="name~{{ slurm_cluster_name }}-controller" --project={{ project }} --format="value(properties.disks[0].initializeParams.storagePool, properties.disks[1].initializeParams.storagePool)"
   register: controller_template_pools
   changed_when: false
 
@@ -119,7 +119,7 @@
 - name: Verify Login Nodes Instance Template Storage Pools
   delegate_to: localhost
   ansible.builtin.shell: |
-    gcloud compute instance-templates list --filter="name~{{ slurm_cluster_name }}-login" --project={{ project_id }} --format="value(properties.disks[0].initializeParams.storagePool, properties.disks[1].initializeParams.storagePool)"
+    gcloud compute instance-templates list --filter="name~{{ slurm_cluster_name }}-login" --project={{ project }} --format="value(properties.disks[0].initializeParams.storagePool, properties.disks[1].initializeParams.storagePool)"
   register: login_template_pools
   changed_when: false
 
@@ -133,7 +133,7 @@
 - name: Verify Nodeset Instance Template Storage Pools
   delegate_to: localhost
   ansible.builtin.shell: |
-    gcloud compute instance-templates list --filter="name~{{ slurm_cluster_name }}-slurm-nodeset" --project={{ project_id }} --format="value(properties.disks[0].initializeParams.storagePool, properties.disks[1].initializeParams.storagePool)"
+    gcloud compute instance-templates list --filter="name~{{ slurm_cluster_name }}-slurm-nodeset" --project={{ project }} --format="value(properties.disks[0].initializeParams.storagePool, properties.disks[1].initializeParams.storagePool)"
   register: nodeset_template_pools
   changed_when: false
 
