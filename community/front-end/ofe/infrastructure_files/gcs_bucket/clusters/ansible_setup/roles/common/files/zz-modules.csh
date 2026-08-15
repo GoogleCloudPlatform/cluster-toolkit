@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-where module >& /dev/null
+which module >& /dev/null
 if ( $status == 0 ) then
   if ( $?MODULEPATH ) then
     if ( ":${MODULEPATH}:" !~ *:/opt/cluster/modulefiles:* ) then
