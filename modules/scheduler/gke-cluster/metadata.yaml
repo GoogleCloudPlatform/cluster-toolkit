@@ -33,3 +33,11 @@ ghpc:
       dependent: configure_workload_identity_sa
       dependent_value: true
     error_message: "The variable 'configure_workload_identity_sa' must be set to true when 'enable_ml_diagnostics' is enabled to correctly configure ML Diagnostics."
+
+  - validator: conditional
+    inputs:
+      trigger: enable_multi_tier_checkpointing
+      trigger_value: true
+      dependent: enable_gcsfuse_csi
+      dependent_value: true
+    error_message: "The variable 'enable_gcsfuse_csi' must be set to true when 'enable_multi_tier_checkpointing' is enabled."
