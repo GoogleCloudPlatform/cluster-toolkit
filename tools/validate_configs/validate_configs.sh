@@ -44,7 +44,7 @@ run_test() {
 		cd "${tmpdir}"
 	fi
 	ADDITIONAL_VARS=""
-	if grep -q "authorized_cidr:" "${BP_PATH}"; then
+	if grep -q "^[[:space:]]*authorized_cidr:" "${BP_PATH}"; then
 		ADDITIONAL_VARS=",authorized_cidr=1.2.3.4/32"
 	fi
 	${GHPC_PATH} create "${BP_PATH}" -l ERROR \

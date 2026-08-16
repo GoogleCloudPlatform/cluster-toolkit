@@ -23,7 +23,9 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-// CIDRValidator implements the RuleValidator interface for 'cidr' type.
+// CIDRValidator implements the RuleValidator interface for the 'cidr' type.
+// It verifies that a given string is a valid IP CIDR block.
+// Used in a module's metadata.yaml via `- validator: cidr`.
 type CIDRValidator struct{}
 
 func extractCIDRValue(val cty.Value, objectKey string, allowNull bool, path config.Path) (cty.Value, error) {
@@ -35,7 +37,7 @@ func extractCIDRValue(val cty.Value, objectKey string, allowNull bool, path conf
 	}
 	if val.Type().IsObjectType() {
 		if objectKey == "" {
-			return cty.NilVal, nil
+			return cty.NilVal, config.BpError{Err: fmt.Errorf("object_key is required when validating an object"), Path: path}
 		}
 		if !val.Type().HasAttribute(objectKey) {
 			if !allowNull {
@@ -47,7 +49,7 @@ func extractCIDRValue(val cty.Value, objectKey string, allowNull bool, path conf
 	}
 	if val.Type().IsMapType() {
 		if objectKey == "" {
-			return cty.NilVal, nil
+			return cty.NilVal, config.BpError{Err: fmt.Errorf("object_key is required when validating a map"), Path: path}
 		}
 		if !val.HasIndex(cty.StringVal(objectKey)).True() {
 			if !allowNull {
@@ -57,7 +59,7 @@ func extractCIDRValue(val cty.Value, objectKey string, allowNull bool, path conf
 		}
 		return val.Index(cty.StringVal(objectKey)), nil
 	}
-	return cty.NilVal, nil
+	return cty.NilVal, config.BpError{Err: fmt.Errorf("unsupported type %s for CIDR validation", val.Type().FriendlyName()), Path: path}
 }
 
 func validateCIDRValue(cidrVal cty.Value, rule modulereader.ValidationRule, allowNull bool, path config.Path) error {
@@ -75,7 +77,7 @@ func validateCIDRValue(cidrVal cty.Value, rule modulereader.ValidationRule, allo
 		return config.BpError{Err: fmt.Errorf("%s", msg), Path: path}
 	}
 	if cidrVal.Type() != cty.String {
-		return nil
+		return config.BpError{Err: fmt.Errorf("CIDR block must be a string, got %s", cidrVal.Type().FriendlyName()), Path: path}
 	}
 	if !cidrVal.IsKnown() {
 		return nil
