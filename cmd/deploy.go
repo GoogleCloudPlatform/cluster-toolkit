@@ -241,7 +241,7 @@ func createGcsBucketsIfMissing(ctx context.Context, bp config.Blueprint) error {
 			cancelCreate()
 
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create GCS bucket %q: %w", bucketName, err)
 			}
 		} else if err != nil {
 			logging.Warn("Unable to verify if GCS bucket %q exists: %v", bucketName, err)

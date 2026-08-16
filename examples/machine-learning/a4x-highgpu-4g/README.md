@@ -26,6 +26,8 @@ APIs and IAM permissions.
   gcloud storage buckets update gs://${TF_STATE_BUCKET_NAME} --versioning
   ```
 
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
+
 ### Obtain Filestore Zonal Capacity
 We suggest using a filestore zonal instance for the best NFS performance, which
 may require a quota increase request. See
@@ -77,8 +79,6 @@ gcluster deploy -d a4xhigh-slurm-deployment.yaml examples/machine-learning/a4x-h
 ./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
 ```
 
-**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
-
 Selective deployment and teardown for this blueprint are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
 
 Example (deploy only the primary group for this blueprint):
@@ -125,8 +125,6 @@ gcluster deploy -d a4x-vm-deployment.yaml a4x-vm.yaml
 #!/bin/bash
 ./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
 ```
-
-**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
 
 ### Cloud Storage FUSE
 

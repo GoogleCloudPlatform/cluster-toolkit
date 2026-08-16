@@ -488,23 +488,14 @@ func WriteGcsDestroyInstructions(w io.Writer, buckets []string) {
 		return
 	}
 
-	uniqueBuckets := []string{}
-	seen := map[string]bool{}
-	for _, b := range buckets {
-		if !seen[b] {
-			seen[b] = true
-			uniqueBuckets = append(uniqueBuckets, b)
-		}
-	}
-
 	_, _ = fmt.Fprintln(w)
-	_, _ = fmt.Fprintf(w, "Please browse to the Cloud Console to remove GCS buckets used for Terraform state.\n")
-	_, _ = fmt.Fprintln(w, "The following buckets were used and will not be automatically deleted by gcluster destroy:")
+	_, _ = fmt.Fprintln(w, "The following buckets were used for Terraform state and will not be automatically deleted by gcluster destroy:")
 	_, _ = fmt.Fprintln(w)
-	for _, bucket := range uniqueBuckets {
+	for _, bucket := range buckets {
 		_, _ = fmt.Fprintln(w, bucket)
 	}
 	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "Please browse to the Cloud Console to remove them:")
 	_, _ = fmt.Fprintln(w, "https://console.cloud.google.com/storage/browser")
 }
 

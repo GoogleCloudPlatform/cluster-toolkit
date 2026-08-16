@@ -21,7 +21,6 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
 	"os"
-	"testing"
 
 	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
@@ -41,7 +40,7 @@ func (s *MySuite) TestDeployGroups(c *C) {
 	os.Setenv("PATH", pathEnv)
 }
 
-func TestCreateGcsBucketsIfMissingEmptyBucket(t *testing.T) {
+func (s *MySuite) TestCreateGcsBucketsIfMissingEmptyBucket(c *C) {
 	bp := config.Blueprint{
 		Vars: config.NewDict(map[string]cty.Value{
 			"project_id": cty.StringVal("my-project"),
@@ -60,19 +59,13 @@ func TestCreateGcsBucketsIfMissingEmptyBucket(t *testing.T) {
 	}
 
 	err := createGcsBucketsIfMissing(context.Background(), bp)
-	if err == nil {
-		t.Errorf("expected error when bucket is null, got nil")
-	} else if err.Error() != "GCS backend bucket name cannot be empty or unknown" {
-		t.Errorf("expected error 'GCS backend bucket name cannot be empty or unknown', got: %v", err)
-	}
+	c.Assert(err, NotNil)
+	c.Check(err.Error(), Equals, "GCS backend bucket name cannot be empty or unknown")
 
 	bp.Groups[0].TerraformBackend.Configuration = config.NewDict(map[string]cty.Value{
 		"bucket": cty.StringVal(""),
 	})
 	err = createGcsBucketsIfMissing(context.Background(), bp)
-	if err == nil {
-		t.Errorf("expected error when bucket is empty string, got nil")
-	} else if err.Error() != "GCS backend bucket name cannot be empty" {
-		t.Errorf("expected error 'GCS backend bucket name cannot be empty', got: %v", err)
-	}
+	c.Assert(err, NotNil)
+	c.Check(err.Error(), Equals, "GCS backend bucket name cannot be empty")
 }

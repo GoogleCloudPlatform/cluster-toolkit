@@ -151,6 +151,8 @@ subcommands as well:
 > in both the blueprint and CLI, the tool uses values at CLI. "gcs" is set as
 > type by default.
 
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
+
 [terraform backends]: https://developer.hashicorp.com/terraform/language/backend
 [configuration block]: https://developer.hashicorp.com/terraform/language/backend#define-a-backend-block
 [gcs]: https://developer.hashicorp.com/terraform/language/settings/backends/gcs
@@ -2105,5 +2107,3 @@ This means that you can redeploy a blueprint (`gcluster deploy <blueprint> -w`) 
 Slurm-GCP v5 users should read [Slurm-GCP v5 EOL](../docs/slurm-gcp-support.md)
 for information on v5 retirement and feature highlights for v6. Slurm-GCP v6 is
 only supported option within the Toolkit.
-
-**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

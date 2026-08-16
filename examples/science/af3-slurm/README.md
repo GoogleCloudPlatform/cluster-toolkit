@@ -542,5 +542,3 @@ reverse order. Leave out the `--auto-approve` if you want control over each depl
 > associated costs. Also, the buckets you may have created via the cloud console or CLI will
 > not be destroyed by the above command (they would be, however, destroyed if you deleted the project).
 > For deleting the buckets consult [Delete buckets](https://cloud.google.com/storage/docs/deleting-buckets).
-
-**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

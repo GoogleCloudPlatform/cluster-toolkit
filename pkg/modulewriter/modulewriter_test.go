@@ -669,7 +669,7 @@ func (s *zeroSuite) TestStageFile(c *C) {
 
 }
 
-func TestWriteGcsDestroyInstructions(t *testing.T) {
+func (s *zeroSuite) TestWriteGcsDestroyInstructions(c *C) {
 	bp := config.Blueprint{
 		Vars: config.NewDict(map[string]cty.Value{
 			"project_id": cty.StringVal("my-project"),
@@ -709,7 +709,5 @@ func TestWriteGcsDestroyInstructions(t *testing.T) {
 	writeDestroyInstructions(buf, bp, "deployment-dir")
 	out := buf.String()
 
-	if !strings.Contains(out, "my-bucket-name") {
-		t.Errorf("expected GCS destroy instructions to contain 'my-bucket-name', got: %s", out)
-	}
+	c.Check(strings.Contains(out, "my-bucket-name"), Equals, true)
 }
