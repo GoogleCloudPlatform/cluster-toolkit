@@ -32,9 +32,7 @@ This module creates the key and nothing else. Two companions complete the set:
   source: community/modules/security/kms-key-iam
   use: [kms_key]
   settings:
-    service_agent_principals:
-    - "serviceAccount:service-PROJECT_NUMBER@cloud-filer.iam.gserviceaccount.com"
-    - "serviceAccount:service-PROJECT_NUMBER@compute-system.iam.gserviceaccount.com"
+    service_agents: [compute, filestore]
 
 - id: homefs
   source: modules/file-system/filestore

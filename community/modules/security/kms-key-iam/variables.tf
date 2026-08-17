@@ -64,14 +64,19 @@ variable "service_agents" {
   }
 }
 
-variable "service_agent_principals" {
-  description = "Fully qualified principal strings granted roles/cloudkms.cryptoKeyEncrypterDecrypter on the CryptoKey, e.g. \"serviceAccount:service-PROJECT_NUMBER@compute-system.iam.gserviceaccount.com\". Use this for principals service_agents cannot derive: agents belonging to a different project, or a user-managed service account. Unioned with service_agents; each principal must already exist."
-  type        = set(string)
+variable "custom_service_accounts" {
+  description = "Bare email addresses of user-managed service accounts to grant roles/cloudkms.cryptoKeyEncrypterDecrypter on the CryptoKey, e.g. \"my-sa@my-project.iam.gserviceaccount.com\". Use this for identities service_agents cannot derive: a custom disk_encryption_key_service_account, or an agent belonging to a different project. Do not include the \"serviceAccount:\" prefix; the module adds it. Unioned with service_agents; each account must already exist."
+  type        = list(string)
   default     = []
   nullable    = false
 
   validation {
-    condition     = alltrue([for p in var.service_agent_principals : startswith(p, "serviceAccount:")])
-    error_message = "Every value in service_agent_principals must begin with \"serviceAccount:\"."
+    condition     = alltrue([for a in var.custom_service_accounts : !startswith(a, "serviceAccount:")])
+    error_message = "custom_service_accounts must be bare email addresses, not principal strings -- omit the \"serviceAccount:\" prefix, which the module adds automatically."
+  }
+
+  validation {
+    condition     = alltrue([for a in var.custom_service_accounts : can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.gserviceaccount\\.com$", a))])
+    error_message = "Each value in custom_service_accounts must be a service account email ending in \".gserviceaccount.com\", e.g. my-sa@my-project.iam.gserviceaccount.com."
   }
 }
