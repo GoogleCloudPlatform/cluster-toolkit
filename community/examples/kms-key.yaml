@@ -44,15 +44,15 @@ blueprint_name: kms-key
 # and a 1 TiB ZONAL Filestore instance are charged from the moment they exist,
 # whether or not any job runs.
 #
-# Teardown note: kms_key's deletion_policy defaults to DELETE, so
-# `terraform destroy` schedules this key's version for destruction, making
-# every resource it encrypted permanently unrecoverable. The key ring and
-# CryptoKey name are still retained regardless (Cloud KMS never frees
-# either), so redeploying under the same deployment_name still fails on the
-# retained ring -- pick a fresh deployment_name, or set the kms_key module's
-# key_ring_id to the retained ring together with a new key_name. To keep
-# this deployment's data recoverable after a teardown, set the kms_key
-# module's deletion_policy to ABANDON instead.
+# Teardown note: kms_key's deletion_policy has no default -- it is set to
+# ABANDON below, so `terraform destroy` leaves this key's version enabled
+# and every resource it encrypted stays decryptable. The key ring and
+# CryptoKey name are retained either way (Cloud KMS never frees either), so
+# redeploying under the same deployment_name still fails on the retained
+# ring -- pick a fresh deployment_name, or set the kms_key module's
+# key_ring_id to the retained ring together with a new key_name. Set
+# deletion_policy to DELETE instead only once you have deliberately decided
+# this deployment's data is disposable.
 vars:
   # Set to true to enable the secure Slurm Native Authentication standard.
   # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
@@ -121,6 +121,10 @@ deployment_groups:
       location: $(vars.region)
       key_ring_name: $(vars.deployment_name)-ring
       key_name: $(vars.deployment_name)-key
+      # ABANDON: this key protects the Filestore /home instance below, which
+      # a blueprint author may reasonably want to survive `terraform destroy`.
+      # See the kms-key module README for the DELETE alternative.
+      deletion_policy: ABANDON
 
   # Granting is a separate module so that consumers can depend on the grants
   # rather than merely on the key. Everything below `use`s this, not kms_key:

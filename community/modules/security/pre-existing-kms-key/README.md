@@ -8,8 +8,9 @@ entirely.
 Nothing here is created, so `terraform destroy` leaves the key completely
 untouched: it is never in Terraform state to begin with, regardless of any
 `deletion_policy` setting. That is a stronger guarantee than [kms-key] offers
-for a key it created: `kms-key` destroys its key's version(s) by default on
-`terraform destroy` unless the caller sets `deletion_policy = "ABANDON"`.
+for a key it created: `kms-key` requires the caller to choose
+`deletion_policy` explicitly, and `"DELETE"` destroys its key's version(s)
+on `terraform destroy`.
 
 This module does not grant anyone access to the key. Pass `crypto_key_id` to a
 [kms-key-iam] module, and have CMEK consumers `use` that.
