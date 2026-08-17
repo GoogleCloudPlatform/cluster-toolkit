@@ -101,6 +101,10 @@ steps:
 
               DEPLOYMENT_NAME="$$BUILD_ID_SHORT-slurm-flex"
 
+              # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
+              echo "Checking for and clearing leaked Terraform state locks..."
+              gsutil rm "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+
               RUN_CLEANUP=true
               # Trap function that runs the rescue playbook (terraform destroy)
               # if the pod is terminated by Kueue, fails, or is cancelled.

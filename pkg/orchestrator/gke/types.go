@@ -21,10 +21,12 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
+	"net/http"
 	"strings"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
 	compute "google.golang.org/api/compute/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -34,6 +36,18 @@ const (
 	// nodePoolLabel is the GKE label for the node pool name.
 	nodePoolLabel = "cloud.google.com/gke-nodepool"
 )
+
+// namespaceGVR defines the GroupVersionResource for core Kubernetes Namespace resources.
+var namespaceGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "namespaces",
+}
+
+// HTTPClient abstracts HTTP GET calls for testability and thread safety.
+type HTTPClient interface {
+	Get(url string) (*http.Response, error)
+}
 
 type Executor interface {
 	ExecuteCommand(name string, args ...string) shell.CommandResult
@@ -89,6 +103,7 @@ type GKEOrchestrator struct {
 	slicingTopologiesChecked    bool
 	slicingTopologiesDetected   bool
 	gkeCustomTemplatesPath      string
+	httpClient                  HTTPClient
 }
 
 // Types for GetClusterInfo unmarshaling
