@@ -166,8 +166,8 @@
       kubectl get pods -v=9 \
       -o custom-columns="Name:.metadata.name,Host:.spec.nodeSelector.cloud\.google\.com/gce-topology-subblock" | \
       sort -k2 | uniq -f 1 | wc -l
-    register: unique_host_count
-    until: unique_host_count.stdout | int == 2
+    register: unique_rack_count
+    until: unique_rack_count.stdout | int == 2
     retries: 10
     delay: 10
 
@@ -213,8 +213,8 @@
       kubectl get pods -v=9 \
       -o custom-columns="Name:.metadata.name,Host:.spec.nodeSelector.cloud\.google\.com/gce-topology-block" | \
       sort -k2 | uniq -f 1 | wc -l
-    register: unique_host_count
-    until: unique_host_count.stdout | int == 2
+    register: unique_block_count
+    until: unique_block_count.stdout | int == 2
     retries: 10
     delay: 10
 
