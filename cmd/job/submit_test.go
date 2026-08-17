@@ -32,8 +32,15 @@ func TestMain(m *testing.M) {
 	// Tests that need to verify prerequisite checks can override it.
 	store = &MockPrereqStore{
 		State: PrereqState{
-			LastCheckedTimestamp: time.Now(),
-			LastCheckedProjectID: "test-project",
+			LastCheckedTimestamp:         time.Now(),
+			LastCheckedProjectID:         "test-project",
+			GCloudSDKInstalled:           true,
+			GCloudAuthenticated:          true,
+			ADCConfigured:                true,
+			KubectlInstalled:             true,
+			GKEGCloudAuthPluginInstalled: true,
+			DockerCredsConfigured:        true,
+			ArtifactRegistryAPIEnabled:   true,
 		},
 	}
 
@@ -349,6 +356,17 @@ func (m *MockPrereqStore) Load() PrereqState {
 	state := m.State
 	if state.LastCheckedProjectID == "" {
 		state.LastCheckedProjectID = "test-project"
+	}
+	// If the test set a timestamp (indicating it wants to simulate a cache state),
+	// we automatically set all validation flags to true to bypass checks in tests by default.
+	if !state.LastCheckedTimestamp.IsZero() {
+		state.GCloudSDKInstalled = true
+		state.GCloudAuthenticated = true
+		state.ADCConfigured = true
+		state.KubectlInstalled = true
+		state.GKEGCloudAuthPluginInstalled = true
+		state.DockerCredsConfigured = true
+		state.ArtifactRegistryAPIEnabled = true
 	}
 	return state
 }

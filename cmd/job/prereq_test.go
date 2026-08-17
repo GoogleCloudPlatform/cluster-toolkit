@@ -434,9 +434,17 @@ func TestEnsurePrerequisites_DockerCreds(t *testing.T) {
 		return shell.CommandResult{ExitCode: 0}
 	}
 
+	origGetADCSetupCommand := getADCSetupCommandFunc
+	defer func() { getADCSetupCommandFunc = origGetADCSetupCommand }()
+	getADCSetupCommandFunc = func() string { return "" }
+
 	origStore := store
 	defer func() { store = origStore }()
-	store = &mockPrereqStore{}
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp: time.Now().Add(-48 * time.Hour), // Stale
+		},
+	}
 
 	cmd := &cobra.Command{}
 	projectID := "test-project"
@@ -505,5 +513,53 @@ func TestEnsureBasicPrerequisites_InvalidProject(t *testing.T) {
 	expectedErrorMsg := "project \"invalid-project\" is invalid or inaccessible"
 	if !strings.Contains(err.Error(), expectedErrorMsg) {
 		t.Errorf("expected error to contain %q, but got: %v", expectedErrorMsg, err)
+	}
+}
+
+func TestEnsureBasicPrerequisites_SaveState(t *testing.T) {
+	useFileStore(t)
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	origExecuteCommand := shell.ExecuteCommand
+	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+
+	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+		return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
+	}
+
+	origGetADCSetupCommand := getADCSetupCommandFunc
+	defer func() { getADCSetupCommandFunc = origGetADCSetupCommand }()
+	getADCSetupCommandFunc = func() string { return "" }
+
+	cmd := &cobra.Command{}
+	projectID := "test-project"
+
+	err := ensureBasicPrerequisites(cmd, projectID)
+	if err != nil {
+		t.Fatalf("expected nil error, got: %v", err)
+	}
+
+	state := store.Load()
+	if !state.GCloudSDKInstalled {
+		t.Error("expected GCloudSDKInstalled to be true")
+	}
+	if !state.GCloudAuthenticated {
+		t.Error("expected GCloudAuthenticated to be true")
+	}
+	if !state.ADCConfigured {
+		t.Error("expected ADCConfigured to be true")
+	}
+	if !state.KubectlInstalled {
+		t.Error("expected KubectlInstalled to be true")
+	}
+	if !state.GKEGCloudAuthPluginInstalled {
+		t.Error("expected GKEGCloudAuthPluginInstalled to be true")
+	}
+	if state.LastCheckedProjectID != "test-project" {
+		t.Errorf("expected LastCheckedProjectID to be 'test-project', got: %s", state.LastCheckedProjectID)
+	}
+	if time.Since(state.LastCheckedTimestamp) > 5*time.Second {
+		t.Errorf("expected LastCheckedTimestamp to be recent, got: %v", state.LastCheckedTimestamp)
 	}
 }

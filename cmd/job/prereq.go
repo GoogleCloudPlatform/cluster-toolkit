@@ -264,25 +264,83 @@ func ensureBasicPrerequisites(cmd *cobra.Command, projectID string) error {
 	}
 
 	// Check ADC
-	if adcCmd := getADCSetupCommandFunc(); adcCmd != "" {
+	adcCmd := getADCSetupCommandFunc()
+	if adcCmd != "" {
 		missing = append(missing, missingPrereq{name: "Application Default Credentials (ADC)", commands: []string{adcCmd}})
 	}
 
 	checkK8sDependencies(&state, &missing)
+
+	// Run project validation if auth is OK, regardless of other missing checks
+	var projectErr error
+	if gcloudAuthOK && projectID != "" {
+		projectErr = ensureProjectExists(projectID)
+	}
+
+	// Now decide what to return
+	if projectErr != nil {
+		if len(missing) > 0 {
+			printMissingPrereqs(cmd, missing)
+		}
+		return fmt.Errorf("project %q is invalid or inaccessible: %w", projectID, projectErr)
+	}
 
 	if len(missing) > 0 {
 		printMissingPrereqs(cmd, missing)
 		return fmt.Errorf("some basic prerequisites are missing")
 	}
 
-	// Project validation - fail immediately with direct error
-	if gcloudAuthOK && projectID != "" {
-		if err := ensureProjectExists(projectID); err != nil {
-			return fmt.Errorf("project %q is invalid or inaccessible: %w", projectID, err)
-		}
-	}
+	// All basic checks passed! Save state.
+	state.GCloudSDKInstalled = true
+	state.GCloudAuthenticated = true
+	state.ADCConfigured = (adcCmd == "")
+	// state.KubectlInstalled and state.GKEGCloudAuthPluginInstalled are already set inside checkK8sDependencies
+
+	state.LastCheckedTimestamp = time.Now()
+	state.LastCheckedProjectID = projectID
+	store.Save(state)
 
 	return nil
+}
+
+// hasPassedBasicPrerequisites checks if all basic prerequisite checks are marked as passed.
+func hasPassedBasicPrerequisites(state PrereqState) bool {
+	return state.GCloudSDKInstalled &&
+		state.GCloudAuthenticated &&
+		state.ADCConfigured &&
+		state.KubectlInstalled &&
+		state.GKEGCloudAuthPluginInstalled
+}
+
+func checkArtifactRegistryAPI(projectID string, state *PrereqState, missing *[]missingPrereq) {
+	if projectID == "" {
+		return
+	}
+	apiResult := shell.ExecuteCommand("gcloud", "services", "list", "--filter=NAME:artifactregistry.googleapis.com", "--format=value(STATE)", "--project", projectID)
+	if strings.TrimSpace(apiResult.Stdout) != "ENABLED" {
+		*missing = append(*missing, missingPrereq{
+			name:     "Artifact Registry API",
+			commands: []string{fmt.Sprintf("gcloud services enable artifactregistry.googleapis.com --project %s --quiet", projectID)},
+		})
+	} else {
+		state.ArtifactRegistryAPIEnabled = true
+	}
+}
+
+func checkDockerCredentials(location string, state *PrereqState, missing *[]missingPrereq) {
+	region := shell.ExtractRegion(location)
+	if !isDockerCredsConfigured(region) {
+		cmds := []string{"gcloud auth configure-docker gcr.io --quiet"}
+		if region != "" {
+			cmds = append(cmds, fmt.Sprintf("gcloud auth configure-docker %s-docker.pkg.dev --quiet", region))
+		}
+		*missing = append(*missing, missingPrereq{
+			name:     "Docker Credentials",
+			commands: cmds,
+		})
+	} else {
+		state.DockerCredsConfigured = true
+	}
 }
 
 // EnsurePrerequisites checks all necessary gcloud and kubectl prerequisites.
@@ -293,54 +351,28 @@ func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string)
 
 	state := store.Load()
 
-	if !isStateStale(state, *projectID) {
+	if !isStateStale(state, *projectID) && state.DockerCredsConfigured && state.ArtifactRegistryAPIEnabled {
 		logging.Info("Skipping checks; prerequisites are fresh (project: %s, checked: %v ago).", state.LastCheckedProjectID, time.Since(state.LastCheckedTimestamp).Round(time.Second))
 		return nil
 	}
-	logging.Info("Prerequisites state is stale or project ID changed, performing fresh check.")
-	state = PrereqState{}
+
+	// Safety check: if basic checks haven't run or are not recorded as passed, run them now.
+	if !hasPassedBasicPrerequisites(state) {
+		if err := ensureBasicPrerequisites(cmd, *projectID); err != nil {
+			return err
+		}
+		state = store.Load() // Reload the state updated by ensureBasicPrerequisites
+	}
 
 	var missing []missingPrereq
 
-	// Check Artifact Registry API
-	if *projectID != "" {
-		apiResult := shell.ExecuteCommand("gcloud", "services", "list", "--filter=NAME:artifactregistry.googleapis.com", "--format=value(STATE)", "--project", *projectID)
-		if strings.TrimSpace(apiResult.Stdout) != "ENABLED" {
-			missing = append(missing, missingPrereq{
-				name:     "Artifact Registry API",
-				commands: []string{fmt.Sprintf("gcloud services enable artifactregistry.googleapis.com --project %s --quiet", *projectID)},
-			})
-		} else {
-			state.ArtifactRegistryAPIEnabled = true
-		}
-	}
-
-	// Check Docker creds
-	region := shell.ExtractRegion(location)
-	if !isDockerCredsConfigured(region) {
-		cmds := []string{"gcloud auth configure-docker gcr.io --quiet"}
-		if region != "" {
-			cmds = append(cmds, fmt.Sprintf("gcloud auth configure-docker %s-docker.pkg.dev --quiet", region))
-		}
-		missing = append(missing, missingPrereq{
-			name:     "Docker Credentials",
-			commands: cmds,
-		})
-	} else {
-		state.DockerCredsConfigured = true
-	}
+	checkArtifactRegistryAPI(*projectID, &state, &missing)
+	checkDockerCredentials(location, &state, &missing)
 
 	if len(missing) > 0 {
 		printMissingPrereqs(cmd, missing)
 		return fmt.Errorf("job could not be submitted because some prerequisites are missing")
 	}
-
-	// Mark basic checks as true since they must have passed to reach here
-	state.GCloudSDKInstalled = true
-	state.GCloudAuthenticated = true
-	state.ADCConfigured = true
-	state.KubectlInstalled = true
-	state.GKEGCloudAuthPluginInstalled = true
 
 	state.LastCheckedTimestamp = time.Now()
 	state.LastCheckedProjectID = *projectID
