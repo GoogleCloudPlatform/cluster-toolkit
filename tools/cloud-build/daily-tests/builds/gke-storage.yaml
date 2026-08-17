@@ -197,8 +197,8 @@ steps:
                 echo "gcloud compute storage-pools create test-pool-throughput"
                 echo "    --project=$PROJECT_ID"
                 echo "    --zone=us-central1-b"
-                echo "    --provisioned-capacity=10240GB"
-                echo "    --provisioned-throughput=180"
+                echo "    --provisioned-capacity=28672GB"
+                echo "    --provisioned-throughput=500"
                 echo "    --storage-pool-type=hyperdisk-throughput"
                 exit 1
               fi
