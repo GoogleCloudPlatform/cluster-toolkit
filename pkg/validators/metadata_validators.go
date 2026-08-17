@@ -34,33 +34,29 @@ func resolveSettingToString(
 	optional bool,
 	allowNull bool,
 ) (string, bool, config.Path, error) {
-	values, path, err := getModuleSettingValues(bp, group, modIdx, mod, settingName)
-	if err != nil {
+	val, path := getSettingWithFallback(bp, group, modIdx, mod, settingName)
+	if val == cty.NilVal {
 		if optional {
 			return "", false, path, nil
 		}
-		missingPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Settings.Dot(settingName)
-		return "", false, missingPath, config.BpError{
+		return "", false, path, config.BpError{
 			Err:  fmt.Errorf("setting %q not found in module %q settings", settingName, mod.ID),
-			Path: missingPath,
+			Path: path,
 		}
 	}
-	if len(values) == 0 || values[0].Type() != cty.String {
-		if len(values) == 0 && optional {
-			return "", false, path, nil
-		}
+	if val.Type() != cty.String {
 		return "", false, path, config.BpError{Err: fmt.Errorf("setting %q must be a string", settingName), Path: path}
 	}
-	if !values[0].IsKnown() {
+	if !val.IsKnown() {
 		return "", false, path, nil
 	}
-	if values[0].IsNull() {
+	if val.IsNull() {
 		if !allowNull {
 			return "", false, path, config.BpError{Err: fmt.Errorf("setting %q cannot be null", settingName), Path: path}
 		}
 		return "", true, path, nil
 	}
-	return values[0].AsString(), true, path, nil
+	return val.AsString(), true, path, nil
 }
 
 func (r *RegexValidator) validateConcat(
@@ -129,7 +125,7 @@ func (r *RegexValidator) validateStandard(
 ) error {
 	validateValues := func(values []cty.Value, path config.Path) error {
 		for _, val := range values {
-			if val.Type() != cty.String {
+			if val == cty.NilVal || !val.IsKnown() || val.IsNull() || val.Type() != cty.String {
 				continue
 			}
 			if !re.MatchString(val.AsString()) {
@@ -220,6 +216,9 @@ func (v *AllowedEnumValidator) normalizeAllowed(allowedRaw interface{}) ([]strin
 // checkValues iterates through cty.Values to ensure they exist within the allowed set, handling nulls and casing.
 func (v *AllowedEnumValidator) checkValues(values []cty.Value, path config.Path, allowedSet map[string]struct{}, allowedList []string, caseSensitive bool, allowNull bool, errMsg string) error {
 	for _, val := range values {
+		if val == cty.NilVal || !val.IsKnown() {
+			continue
+		}
 		if val.IsNull() {
 			if allowNull {
 				continue
@@ -347,7 +346,7 @@ func (r *RangeValidator) validateTarget(
 	}
 
 	for _, val := range values {
-		if val.IsNull() || !val.IsKnown() {
+		if val == cty.NilVal || !val.IsKnown() || val.IsNull() {
 			continue
 		}
 		if val.Type() == cty.Number {
@@ -609,7 +608,7 @@ func (c *ConditionalRegexValidator) Validate(
 	}
 
 	dependentVal, depPath := getSettingWithFallback(bp, group, modIdx, mod, dependent)
-	if dependentVal.IsNull() || dependentVal == cty.NilVal || dependentVal.Type() != cty.String {
+	if dependentVal == cty.NilVal || !dependentVal.IsKnown() || dependentVal.IsNull() || dependentVal.Type() != cty.String {
 		return nil
 	}
 
@@ -685,6 +684,20 @@ func getSettingWithFallback(
 	return cty.NilVal, path
 }
 
+func matchTrigger(actualVal, expectedVal cty.Value) bool {
+	if actualVal == cty.NilVal || actualVal.IsNull() {
+		if !isVarSet([]cty.Value{expectedVal}) {
+			return true
+		}
+		return expectedVal != cty.NilVal && expectedVal.IsKnown() && !expectedVal.IsNull() && expectedVal.Type() == cty.Bool && expectedVal.False()
+	}
+	if !actualVal.IsKnown() || !expectedVal.IsKnown() || expectedVal == cty.NilVal {
+		return false
+	}
+	eq := actualVal.Equals(expectedVal)
+	return eq.IsKnown() && !eq.IsNull() && eq.True()
+}
+
 func evalTriggers(
 	bp config.Blueprint,
 	group config.Group,
@@ -695,15 +708,7 @@ func evalTriggers(
 	for name, expectedValRaw := range triggers {
 		expectedVal := convertToCty(expectedValRaw)
 		actualVal, _ := getSettingWithFallback(bp, group, modIdx, mod, name)
-
-		var matches bool
-		if actualVal.IsNull() || actualVal == cty.NilVal {
-			matches = !isVarSet([]cty.Value{expectedVal}) || expectedVal.False()
-		} else {
-			matches = actualVal.Equals(expectedVal).True()
-		}
-
-		if !matches {
+		if !matchTrigger(actualVal, expectedVal) {
 			return false
 		}
 	}
