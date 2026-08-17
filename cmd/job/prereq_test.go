@@ -453,7 +453,7 @@ func TestEnsurePrerequisites_DockerCreds(t *testing.T) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 
-	err := ensurePrerequisites(cmd, &projectID, location)
+	err := ensurePrerequisites(cmd, projectID, location)
 	if err == nil {
 		t.Error("expected error because prerequisites are missing, got nil")
 	}
@@ -543,6 +543,9 @@ func TestEnsureBasicPrerequisites_SaveState(t *testing.T) {
 	state := store.Load()
 	if !state.GCloudSDKInstalled {
 		t.Error("expected GCloudSDKInstalled to be true")
+	}
+	if !state.GCloudProjectConfigured {
+		t.Error("expected GCloudProjectConfigured to be true")
 	}
 	if !state.GCloudAuthenticated {
 		t.Error("expected GCloudAuthenticated to be true")

@@ -294,6 +294,7 @@ func ensureBasicPrerequisites(cmd *cobra.Command, projectID string) error {
 
 	// All basic checks passed! Save state.
 	state.GCloudSDKInstalled = true
+	state.GCloudProjectConfigured = true
 	state.GCloudAuthenticated = true
 	state.ADCConfigured = (adcCmd == "")
 	// state.KubectlInstalled and state.GKEGCloudAuthPluginInstalled are already set inside checkK8sDependencies
@@ -305,9 +306,13 @@ func ensureBasicPrerequisites(cmd *cobra.Command, projectID string) error {
 	return nil
 }
 
-// hasPassedBasicPrerequisites checks if all basic prerequisite checks are marked as passed.
-func hasPassedBasicPrerequisites(state PrereqState) bool {
+// hasPassedBasicPrerequisites checks if all basic prerequisite checks are fresh and marked as passed.
+func hasPassedBasicPrerequisites(state PrereqState, projectID string) bool {
+	if isStateStale(state, projectID) {
+		return false
+	}
 	return state.GCloudSDKInstalled &&
+		state.GCloudProjectConfigured &&
 		state.GCloudAuthenticated &&
 		state.ADCConfigured &&
 		state.KubectlInstalled &&
@@ -346,21 +351,21 @@ func checkDockerCredentials(location string, state *PrereqState, missing *[]miss
 }
 
 // EnsurePrerequisites checks all necessary gcloud and kubectl prerequisites.
-func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string) error {
+func ensurePrerequisites(cmd *cobra.Command, projectID string, location string) error {
 	if dryRunManifest != "" {
 		return nil
 	}
 
 	state := store.Load()
 
-	if !isStateStale(state, *projectID) && state.DockerCredsConfigured && state.ArtifactRegistryAPIEnabled {
+	if !isStateStale(state, projectID) && state.DockerCredsConfigured && state.ArtifactRegistryAPIEnabled {
 		logging.Info("Skipping checks; prerequisites are fresh (project: %s, checked: %v ago).", state.LastCheckedProjectID, time.Since(state.LastCheckedTimestamp).Round(time.Second))
 		return nil
 	}
 
 	// Safety check: if basic checks haven't run or are not recorded as passed, run them now.
-	if !hasPassedBasicPrerequisites(state) {
-		if err := ensureBasicPrerequisites(cmd, *projectID); err != nil {
+	if !hasPassedBasicPrerequisites(state, projectID) {
+		if err := ensureBasicPrerequisites(cmd, projectID); err != nil {
 			return err
 		}
 		state = store.Load() // Reload the state updated by ensureBasicPrerequisites
@@ -368,7 +373,7 @@ func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string)
 
 	var missing []missingPrereq
 
-	checkArtifactRegistryAPI(*projectID, &state, &missing)
+	checkArtifactRegistryAPI(projectID, &state, &missing)
 	checkDockerCredentials(location, &state, &missing)
 
 	if len(missing) > 0 {
@@ -377,7 +382,7 @@ func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string)
 	}
 
 	state.LastCheckedTimestamp = time.Now()
-	state.LastCheckedProjectID = *projectID
+	state.LastCheckedProjectID = projectID
 	store.Save(state)
 
 	logging.Info("Prerequisites checked successfully.")

@@ -35,6 +35,7 @@ func TestMain(m *testing.M) {
 			LastCheckedTimestamp:         time.Now(),
 			LastCheckedProjectID:         "test-project",
 			GCloudSDKInstalled:           true,
+			GCloudProjectConfigured:      true,
 			GCloudAuthenticated:          true,
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
@@ -361,6 +362,7 @@ func (m *MockPrereqStore) Load() PrereqState {
 	// we automatically set all validation flags to true to bypass checks in tests by default.
 	if !state.LastCheckedTimestamp.IsZero() {
 		state.GCloudSDKInstalled = true
+		state.GCloudProjectConfigured = true
 		state.GCloudAuthenticated = true
 		state.ADCConfigured = true
 		state.KubectlInstalled = true
