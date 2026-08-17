@@ -566,3 +566,39 @@ func TestEnsureBasicPrerequisites_SaveState(t *testing.T) {
 		t.Errorf("expected LastCheckedTimestamp to be recent, got: %v", state.LastCheckedTimestamp)
 	}
 }
+
+func TestEnsureBasicPrerequisites_RestrictedPermissions_Proceeds(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	origExecuteCommand := shell.ExecuteCommand
+	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+
+	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+		cmdStr := name + " " + strings.Join(args, " ")
+		switch {
+		case strings.HasPrefix(cmdStr, "gcloud auth list"):
+			return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
+		case cmdStr == "gcloud projects describe restricted-project":
+			return shell.CommandResult{ExitCode: 1, Stderr: "ERROR: (gcloud.projects.describe) PERMISSION_DENIED: The caller does not have permission"}
+		default:
+			return shell.CommandResult{ExitCode: 0}
+		}
+	}
+
+	origStore := store
+	defer func() { store = origStore }()
+	store = &mockPrereqStore{}
+
+	origGetADCSetupCommand := getADCSetupCommandFunc
+	defer func() { getADCSetupCommandFunc = origGetADCSetupCommand }()
+	getADCSetupCommandFunc = func() string { return "" }
+
+	cmd := &cobra.Command{}
+	projectID := "restricted-project"
+
+	err := ensureBasicPrerequisites(cmd, projectID)
+	if err != nil {
+		t.Fatalf("expected nil error when user lacks resourcemanager permission, got: %v", err)
+	}
+}

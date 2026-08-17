@@ -226,11 +226,27 @@ func isDockerCredsConfigured(region string) bool {
 	return config.CredHelpers[pkgDevReg] == "gcloud"
 }
 
+// isPermissionDeniedError checks if the error indicates a 403 / permission denied response.
+func isPermissionDeniedError(stderr string) bool {
+	lower := strings.ToLower(stderr)
+	return strings.Contains(lower, "permission_denied") ||
+		strings.Contains(lower, "permission") ||
+		strings.Contains(lower, "forbidden") ||
+		strings.Contains(lower, "not authorized") ||
+		strings.Contains(lower, "access denied") ||
+		strings.Contains(lower, "403")
+}
+
 // ensureProjectExists checks if the project exists and is accessible.
 func ensureProjectExists(projectID string) error {
 	result := shell.ExecuteCommand("gcloud", "projects", "describe", projectID)
 	if result.ExitCode != 0 {
-		return fmt.Errorf("failed to validate project: %s", strings.TrimSpace(result.Stderr))
+		stderr := strings.TrimSpace(result.Stderr)
+		if isPermissionDeniedError(stderr) {
+			logging.Warn("Could not verify project %q existence due to restricted IAM permissions; proceeding anyway.", projectID)
+			return nil
+		}
+		return fmt.Errorf("failed to validate project: %s", stderr)
 	}
 	return nil
 }
