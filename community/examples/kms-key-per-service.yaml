@@ -46,17 +46,17 @@ blueprint_name: kms-key-per-service
 # Cost note: this builds a real cluster -- a controller, a login node and a
 # 1 TiB ZONAL Filestore instance are charged from the moment they exist.
 #
-# Teardown note: the disk_key and bucket_key modules default to
-# deletion_policy = DELETE, so `terraform destroy` schedules both keys'
-# versions for destruction, making the resources they encrypted permanently
-# unrecoverable; the adopted filestore_key is never touched, since
+# Teardown note: deletion_policy has no default -- disk_key and bucket_key
+# are both set to ABANDON below, so `terraform destroy` leaves both keys'
+# versions enabled and the resources they encrypted stay decryptable; the
+# adopted filestore_key is never touched either way, since
 # pre-existing-kms-key never creates a resource for destroy to act on. Key
 # rings and CryptoKey names are retained regardless of deletion_policy
 # (Cloud KMS never frees either), so redeploying under the same
 # deployment_name still fails on the retained rings; use a fresh
 # deployment_name, or point key_ring_id at the retained ring with a new
-# key_name. Set a key module's deletion_policy to ABANDON to keep its data
-# recoverable after a teardown.
+# key_name. Set a key module's deletion_policy to DELETE instead only once
+# you have deliberately decided that key's data is disposable.
 vars:
   # Set to true to enable the secure Slurm Native Authentication standard.
   # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
@@ -132,6 +132,9 @@ deployment_groups:
       location: $(vars.region)
       key_ring_name: $(vars.deployment_name)-disk-ring
       key_name: $(vars.deployment_name)-disk-key
+      # ABANDON: boot/scratch disks are routinely recreated, but the data on
+      # them may not be, so this key outlives `terraform destroy` by default.
+      deletion_policy: ABANDON
 
   - id: disk_key_iam
     source: community/modules/security/kms-key-iam
@@ -155,6 +158,9 @@ deployment_groups:
       location: $(vars.region)
       key_ring_name: $(vars.deployment_name)-bucket-ring
       key_name: $(vars.deployment_name)-bucket-key
+      # ABANDON: the Slurm configuration bucket is recreated on every
+      # deployment, but nothing about that requires destroying this key too.
+      deletion_policy: ABANDON
 
   - id: bucket_key_iam
     source: community/modules/security/kms-key-iam

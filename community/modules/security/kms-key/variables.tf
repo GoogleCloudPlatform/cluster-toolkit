@@ -175,18 +175,24 @@ variable "destroy_scheduled_duration" {
 variable "deletion_policy" {
   description = <<-EOT
     What `terraform destroy` does with the CryptoKey this module created.
+    Required -- there is no default. The consequences of each value are
+    severe and opposite enough (permanent data loss vs. a key that outlives
+    every deployment) that picking one silently, for you, is worse than
+    making every blueprint author decide and write it down.
 
-      DELETE   destroy all key versions, rendering data encrypted with
-               them permanently unrecoverable
       ABANDON  drop it from Terraform state, leaving the CryptoKey and
                every key version intact and enabled in Cloud KMS
+      DELETE   destroy all key versions, rendering data encrypted with
+               them permanently unrecoverable
 
-    DELETE is the default, matching the provider's own default for this
-    resource: a key this deployment created is this deployment's to destroy,
-    so tearing the deployment down destroys its key material rather than
-    leaving it enabled forever. Set ABANDON when data encrypted with this
-    key must outlive the deployment that created it -- for example a
-    Filestore instance or bucket meant to survive `terraform destroy`.
+    ABANDON is the recommended choice for most blueprints: key material
+    routinely outlives the deployment that created it (a Filestore instance
+    or bucket meant to survive `terraform destroy`, a key shared by more
+    than this one deployment), and destroying versions cannot be undone.
+    Choose DELETE only when you have deliberately decided the data this key
+    protects is disposable and should not outlive this deployment -- for
+    example short-lived scratch resources recreated from scratch on every
+    deploy.
 
     Neither setting frees the CryptoKey name: Cloud KMS never deletes a
     CryptoKey resource itself, only DELETE additionally destroys its
@@ -199,7 +205,6 @@ variable "deletion_policy" {
     destroy_scheduled_duration, which are fixed at creation.
     EOT
   type        = string
-  default     = "DELETE"
   nullable    = false
 
   validation {

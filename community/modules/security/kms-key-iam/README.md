@@ -79,6 +79,36 @@ input name:
 
 All are the same key id; the separate names exist only so `use` matches.
 
+## Adding a new consumer
+
+The output-aliasing table above is what makes `use:` wire a CryptoKey id
+into a consumer's own input without the blueprint author naming it by hand
+-- but that means this module has to already know the exact input name
+every CMEK-capable module expects. It does not discover that automatically.
+
+Giving Cluster Toolkit CMEK support for a module that does not appear in
+the table above requires updating `outputs.tf` in this module at the same
+time, not just the new module's own `variables.tf`. The pattern is the
+same for every existing entry:
+
+* Add an output whose name is exactly the new consumer's input variable
+  name for its CMEK key setting (e.g. a module with
+  `variable "my_encryption_key"` needs an output named `my_encryption_key`
+  here).
+* Give it `depends_on = [google_kms_crypto_key_iam_member.this]`, the same
+  as every other output, so `use` orders the consumer behind the grant on
+  `apply` and ahead of it on `destroy`.
+* Have it return `var.crypto_key_id` -- every output here is the same key
+  id, just under a different name.
+* Add a row to the table above and to this module's `Inputs`/`Outputs`
+  docs (regenerate with `terraform-docs`, or by hand if it is unavailable).
+
+Without this, a new module can still be granted access to a key by passing
+`crypto_key_id` explicitly instead of relying on `use:` -- but that is
+exactly the ordering hazard this module exists to avoid (see "Description"
+above), so a permanent CMEK integration for a new module should add the
+named output rather than route around it.
+
 ## Testing
 
 `terraform validate` passes on this module in isolation.
