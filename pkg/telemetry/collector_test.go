@@ -2311,7 +2311,7 @@ func TestGetErrorType(t *testing.T) {
 		{
 			name:     "Text Match Stockout",
 			err:      errors.New("A c2-standard-60 VM instance is currently unavailable"),
-			expected: ErrTypeExtraStockout,
+			expected: ErrTypeStockout,
 		},
 		{
 			name:     "Text Match APIDisabled",
