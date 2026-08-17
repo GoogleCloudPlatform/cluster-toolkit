@@ -46,6 +46,10 @@ created — by which point the error names the consumer rather than the key.
 The identity running Terraform needs `cloudkms.cryptoKeys.get` on the key (for
 example `roles/cloudkms.viewer` on the key or its ring), and — if a
 [kms-key-iam] module is granting on it — `cloudkms.cryptoKeys.setIamPolicy`.
+If permissions on this key are managed out-of-band instead (for example by a
+security team), set `skip_iam_role_grants: true` on the [kms-key-iam] module
+using it: this module never needs `setIamPolicy`, but a granting
+`kms-key-iam` module does unless that option is set.
 
 A key can only encrypt resources in its own location, unless it is `global`.
 

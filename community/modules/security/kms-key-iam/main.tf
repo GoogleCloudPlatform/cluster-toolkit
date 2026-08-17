@@ -52,7 +52,7 @@ data "google_project" "this" {
 }
 
 resource "google_kms_crypto_key_iam_member" "this" {
-  for_each = local.principals
+  for_each = var.skip_iam_role_grants ? [] : local.principals
 
   crypto_key_id = var.crypto_key_id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"

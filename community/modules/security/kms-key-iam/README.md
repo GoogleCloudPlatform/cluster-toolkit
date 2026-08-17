@@ -79,6 +79,20 @@ input name:
 
 All are the same key id; the separate names exist only so `use` matches.
 
+## Out-of-band permissions
+
+Set `skip_iam_role_grants: true` when a key's IAM is managed by someone
+else -- for example a security team granting
+`roles/cloudkms.cryptoKeyEncrypterDecrypter` directly on a key adopted with
+[pre-existing-kms-key], where the identity running this module has no
+`cloudkms.admin`/`setIamPolicy` on that key. Without this, Terraform
+attempts the grant anyway and fails with a 403, even though the caller only
+wanted this module's `use`-wiring convenience, not for it to manage IAM.
+
+`service_agents` and `custom_service_accounts` must both be empty when this
+is set -- `terraform plan` fails otherwise, since a non-empty value here
+would otherwise look like a grant request that silently does nothing.
+
 ## Adding a new consumer
 
 The output-aliasing table above is what makes `use:` wire a CryptoKey id
@@ -201,6 +215,58 @@ used the SA it was actually assigned, not just whichever came first in the
 list, confirming the grants are independent rather than a single catch-all.
 The SA-two-encrypted compute node also ran the job successfully.
 
+`skip_iam_role_grants`, against a [pre-existing-kms-key] key whose grant was
+applied entirely by hand (`gcloud kms keys add-iam-policy-binding`),
+simulating a security team managing permissions out-of-band:
+
+```console
+$ ./ghpc deploy DEPLOYMENT_DIR --auto-approve
+...
+Apply complete! Resources: 28 added, 0 changed, 0 destroyed.
+
+$ terraform state list | grep -i kms
+module.imported_key.data.google_kms_crypto_key.this
+module.imported_key.data.google_kms_key_ring.this
+module.kms_key_iam.data.google_project.this
+
+$ gcloud compute disks describe CONTROLLER_DISK --zone=ZONE --project=PROJECT_ID \
+    --format="value(diskEncryptionKey.kmsKeyName)"
+projects/PROJECT_ID/locations/LOCATION/keyRings/KEYRING/cryptoKeys/KEY
+
+$ gcloud compute disks describe LOGIN_DISK --zone=ZONE --project=PROJECT_ID \
+    --format="value(diskEncryptionKey.kmsKeyName)"
+projects/PROJECT_ID/locations/LOCATION/keyRings/KEYRING/cryptoKeys/KEY
+
+$ gcloud compute ssh LOGIN_INSTANCE --zone=ZONE --project=PROJECT_ID --tunnel-through-iap \
+    --command="uptime; echo EXIT_CODE:\$?"
+ 13:38:07 up 5 min,  2 users,  load average: 0.00, 0.03, 0.00
+EXIT_CODE:0
+```
+
+No `google_kms_crypto_key_iam_member` resource exists in state, yet both
+disks correctly resolved and used the manually-granted key, and the login
+instance booted and stayed reachable -- confirming this module's grant
+resource is genuinely skipped, not merely hidden, while its output-aliasing
+convenience still works. Setting `skip_iam_role_grants: true` together with
+a non-empty `service_agents` fails `terraform plan` immediately with the
+cross-variable validation error, before any resource is created:
+
+```console
+$ ./ghpc deploy DEPLOYMENT_DIR --auto-approve
+...
+Error: Invalid value for variable
+
+  on main.tf line 32, in module "kms_key_iam":
+  32:   skip_iam_role_grants = true
+    |-----------------
+    | var.service_agents is set of string with 1 element
+    | var.skip_iam_role_grants is true
+
+service_agents and custom_service_accounts must be empty when
+skip_iam_role_grants is true -- there is nothing to grant when this module
+isn't managing IAM.
+```
+
 Also deployed as part of a full Slurm cluster: every consumer (Filestore,
 Slurm boot disks, the controller's config bucket) deployed successfully with
 no `PERMISSION_DENIED` races, and the generated Terraform confirmed `use`
@@ -259,6 +325,7 @@ No modules.
 | <a name="input_custom_service_accounts"></a> [custom\_service\_accounts](#input\_custom\_service\_accounts) | Bare email addresses of user-managed service accounts to grant roles/cloudkms.cryptoKeyEncrypterDecrypter on the CryptoKey, e.g. "my-sa@my-project.iam.gserviceaccount.com". Use this for identities service\_agents cannot derive: a custom disk\_encryption\_key\_service\_account, or an agent belonging to a different project. Do not include the "serviceAccount:" prefix; the module adds it. Unioned with service\_agents; each account must already exist. | `list(string)` | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project whose service agents are granted on the key. This is the project holding the resources being encrypted, which need not be the project holding the key. | `string` | n/a | yes |
 | <a name="input_service_agents"></a> [service\_agents](#input\_service\_agents) | Short names of the Google service agents to grant on the key. Their<br/>addresses are derived from project\_id, so the project number does not<br/>have to be looked up and pasted in. One of:<br/><br/>  compute            Compute Engine disks, images and snapshots<br/>  storage            Cloud Storage buckets and objects<br/>  filestore          Filestore instances<br/>  cloudsql           Cloud SQL instances<br/>  artifactregistry   Artifact Registry repositories<br/>  secretmanager      Secret Manager secrets<br/>  pubsub             Pub/Sub topics<br/>  notebooks          Vertex AI Workbench instances<br/><br/>Grant `compute` for Slurm boot and additional disks: with<br/>disk\_encryption\_key\_service\_account left unset, Compute Engine<br/>encrypts as its own service agent rather than as the instance's<br/>service account. | `set(string)` | `[]` | no |
+| <a name="input_skip_iam_role_grants"></a> [skip\_iam\_role\_grants](#input\_skip\_iam\_role\_grants) | Skip creating the IAM grants this module normally creates, while every<br/>output still resolves crypto\_key\_id as usual. Set this when permissions<br/>on the key are managed out-of-band by someone else -- for example a<br/>security team granting roles/cloudkms.cryptoKeyEncrypterDecrypter on a<br/>pre-existing-kms-key key directly -- and the identity running this<br/>module lacks cloudkms.admin/setIamPolicy on it. Without this, Terraform<br/>would attempt the grant anyway and fail with a 403, even though the<br/>caller only wanted this module's `use`-wiring convenience.<br/><br/>service\_agents and custom\_service\_accounts must both be empty when this<br/>is true. Setting either alongside skip\_iam\_role\_grants would otherwise<br/>look like a grant request that silently does nothing, which is exactly<br/>the kind of surprising behavior this variable exists to prevent. | `bool` | `false` | no |
 
 ## Outputs
 
