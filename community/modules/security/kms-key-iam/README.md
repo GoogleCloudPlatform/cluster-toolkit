@@ -30,9 +30,8 @@ one) — both publish `crypto_key_id`, so `use` connects them:
   source: community/modules/security/kms-key-iam
   use: [kms_key]
   settings:
-    service_agent_principals:
-    - "serviceAccount:service-PROJECT_NUMBER@compute-system.iam.gserviceaccount.com"
-    - "serviceAccount:service-PROJECT_NUMBER@cloud-filer.iam.gserviceaccount.com"
+    service_agents: [compute, filestore]
+    # custom_service_accounts: ["my-sa@my-project.iam.gserviceaccount.com"]
 
 - id: homefs
   source: modules/file-system/filestore
@@ -96,6 +95,82 @@ bindings:
   role: roles/cloudkms.cryptoKeyEncrypterDecrypter
 ```
 
+`custom_service_accounts`, granting a single user-managed SA with no
+`service_agents` at all, to prove the custom-SA path works standalone:
+
+```console
+$ ./ghpc deploy DEPLOYMENT_DIR --auto-approve
+...
+Apply complete! Resources: 38 added, 0 changed, 0 destroyed.
+
+$ gcloud kms keys get-iam-policy KEY --keyring=KEYRING --location=LOCATION --project=PROJECT_ID
+bindings:
+- members:
+  - serviceAccount:CUSTOM_SA@PROJECT_ID.iam.gserviceaccount.com
+  role: roles/cloudkms.cryptoKeyEncrypterDecrypter
+
+$ gcloud compute disks describe CONTROLLER_DISK --zone=ZONE --project=PROJECT_ID \
+    --format="value(diskEncryptionKey.kmsKeyServiceAccount)"
+CUSTOM_SA@PROJECT_ID.iam.gserviceaccount.com
+
+$ gcloud compute disks describe LOGIN_DISK --zone=ZONE --project=PROJECT_ID \
+    --format="value(diskEncryptionKey.kmsKeyServiceAccount)"
+CUSTOM_SA@PROJECT_ID.iam.gserviceaccount.com
+
+$ gcloud compute ssh LOGIN_INSTANCE --zone=ZONE --project=PROJECT_ID --tunnel-through-iap \
+    --command="srun -p debug -N1 hostname; echo EXIT_CODE:\$?"
+NODESET_INSTANCE
+EXIT_CODE:0
+
+$ gcloud compute disks describe NODESET_DISK --zone=ZONE --project=PROJECT_ID \
+    --format="value(diskEncryptionKey.kmsKeyServiceAccount)"
+CUSTOM_SA@PROJECT_ID.iam.gserviceaccount.com
+```
+
+`kmsKeyServiceAccount` on every disk confirms Compute Engine actually used
+the custom SA to encrypt, not a fallback to its own service agent -- on the
+controller and login boot disks, and on the dynamically-provisioned compute
+node that ran the job.
+
+`custom_service_accounts` also accepts more than one entry, each
+independently grantable and independently usable -- granting two SAs on one
+key, then pointing two different resources at two different SAs:
+
+```console
+$ ./ghpc deploy DEPLOYMENT_DIR --auto-approve
+...
+Apply complete! Resources: 39 added, 0 changed, 0 destroyed.
+
+$ gcloud kms keys get-iam-policy KEY --keyring=KEYRING --location=LOCATION --project=PROJECT_ID
+bindings:
+- members:
+  - serviceAccount:CUSTOM_SA_ONE@PROJECT_ID.iam.gserviceaccount.com
+  - serviceAccount:CUSTOM_SA_TWO@PROJECT_ID.iam.gserviceaccount.com
+  role: roles/cloudkms.cryptoKeyEncrypterDecrypter
+
+$ gcloud compute disks describe CONTROLLER_DISK --zone=ZONE --project=PROJECT_ID \
+    --format="value(diskEncryptionKey.kmsKeyServiceAccount)"
+CUSTOM_SA_ONE@PROJECT_ID.iam.gserviceaccount.com
+
+$ gcloud compute disks describe LOGIN_DISK --zone=ZONE --project=PROJECT_ID \
+    --format="value(diskEncryptionKey.kmsKeyServiceAccount)"
+CUSTOM_SA_ONE@PROJECT_ID.iam.gserviceaccount.com
+
+$ gcloud compute ssh LOGIN_INSTANCE --zone=ZONE --project=PROJECT_ID --tunnel-through-iap \
+    --command="srun -p debug -N1 hostname; echo EXIT_CODE:\$?"
+NODESET_INSTANCE
+EXIT_CODE:0
+
+$ gcloud compute disks describe NODESET_DISK --zone=ZONE --project=PROJECT_ID \
+    --format="value(diskEncryptionKey.kmsKeyServiceAccount)"
+CUSTOM_SA_TWO@PROJECT_ID.iam.gserviceaccount.com
+```
+
+Controller and login both used SA one; the nodeset used SA two -- each disk
+used the SA it was actually assigned, not just whichever came first in the
+list, confirming the grants are independent rather than a single catch-all.
+The SA-two-encrypted compute node also ran the job successfully.
+
 Also deployed as part of a full Slurm cluster: every consumer (Filestore,
 Slurm boot disks, the controller's config bucket) deployed successfully with
 no `PERMISSION_DENIED` races, and the generated Terraform confirmed `use`
@@ -151,8 +226,8 @@ No modules.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_crypto_key_id"></a> [crypto\_key\_id](#input\_crypto\_key\_id) | The id of the CryptoKey to grant on, of the form projects/PROJECT/locations/LOCATION/keyRings/RING/cryptoKeys/KEY. Take this from a kms-key or pre-existing-kms-key module rather than writing it out, so the grants are ordered against the key. | `string` | n/a | yes |
+| <a name="input_custom_service_accounts"></a> [custom\_service\_accounts](#input\_custom\_service\_accounts) | Bare email addresses of user-managed service accounts to grant roles/cloudkms.cryptoKeyEncrypterDecrypter on the CryptoKey, e.g. "my-sa@my-project.iam.gserviceaccount.com". Use this for identities service\_agents cannot derive: a custom disk\_encryption\_key\_service\_account, or an agent belonging to a different project. Do not include the "serviceAccount:" prefix; the module adds it. Unioned with service\_agents; each account must already exist. | `list(string)` | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project whose service agents are granted on the key. This is the project holding the resources being encrypted, which need not be the project holding the key. | `string` | n/a | yes |
-| <a name="input_service_agent_principals"></a> [service\_agent\_principals](#input\_service\_agent\_principals) | Fully qualified principal strings granted roles/cloudkms.cryptoKeyEncrypterDecrypter on the CryptoKey, e.g. "serviceAccount:service-PROJECT\_NUMBER@compute-system.iam.gserviceaccount.com". Use this for principals service\_agents cannot derive: agents belonging to a different project, or a user-managed service account. Unioned with service\_agents; each principal must already exist. | `set(string)` | `[]` | no |
 | <a name="input_service_agents"></a> [service\_agents](#input\_service\_agents) | Short names of the Google service agents to grant on the key. Their<br/>addresses are derived from project\_id, so the project number does not<br/>have to be looked up and pasted in. One of:<br/><br/>  compute            Compute Engine disks, images and snapshots<br/>  storage            Cloud Storage buckets and objects<br/>  filestore          Filestore instances<br/>  cloudsql           Cloud SQL instances<br/>  artifactregistry   Artifact Registry repositories<br/>  secretmanager      Secret Manager secrets<br/>  pubsub             Pub/Sub topics<br/>  notebooks          Vertex AI Workbench instances<br/><br/>Grant `compute` for Slurm boot and additional disks: with<br/>disk\_encryption\_key\_service\_account left unset, Compute Engine<br/>encrypts as its own service agent rather than as the instance's<br/>service account. | `set(string)` | `[]` | no |
 
 ## Outputs

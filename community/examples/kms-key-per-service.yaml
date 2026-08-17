@@ -144,8 +144,8 @@ deployment_groups:
       # that identity needs the grant too -- an override moves the
       # requirement, it does not remove it.
       service_agents: [compute]
-      service_agent_principals:
-      - $(hpc_service_account.service_account_iam_email)
+      custom_service_accounts:
+      - $(hpc_service_account.service_account_email)
 
   # --- Storage key: the Slurm configuration bucket ----------------------
   - id: bucket_key

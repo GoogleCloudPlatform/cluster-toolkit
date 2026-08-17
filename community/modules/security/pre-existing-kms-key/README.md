@@ -29,8 +29,7 @@ This module does not grant anyone access to the key. Pass `crypto_key_id` to a
   source: community/modules/security/kms-key-iam
   use: [existing_key]
   settings:
-    service_agent_principals:
-    - "serviceAccount:service-PROJECT_NUMBER@compute-system.iam.gserviceaccount.com"
+    service_agents: [compute]
 ```
 
 `project_id` is the *key* project, which need not be the project the encrypted
