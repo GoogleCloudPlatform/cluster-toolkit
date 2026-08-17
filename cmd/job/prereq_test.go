@@ -602,3 +602,44 @@ func TestEnsureBasicPrerequisites_RestrictedPermissions_Proceeds(t *testing.T) {
 		t.Fatalf("expected nil error when user lacks resourcemanager permission, got: %v", err)
 	}
 }
+
+func TestEnsureBasicPrerequisites_ProjectNameContainsPermission_Fails(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	origExecuteCommand := shell.ExecuteCommand
+	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+
+	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+		cmdStr := name + " " + strings.Join(args, " ")
+		switch {
+		case strings.HasPrefix(cmdStr, "gcloud auth list"):
+			return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
+		case cmdStr == "gcloud projects describe my-permission-test":
+			return shell.CommandResult{ExitCode: 1, Stderr: "ERROR: (gcloud.projects.describe) NOT_FOUND: Project 'my-permission-test' was not found"}
+		default:
+			return shell.CommandResult{ExitCode: 0}
+		}
+	}
+
+	origStore := store
+	defer func() { store = origStore }()
+	store = &mockPrereqStore{}
+
+	origGetADCSetupCommand := getADCSetupCommandFunc
+	defer func() { getADCSetupCommandFunc = origGetADCSetupCommand }()
+	getADCSetupCommandFunc = func() string { return "" }
+
+	cmd := &cobra.Command{}
+	projectID := "my-permission-test"
+
+	err := ensureBasicPrerequisites(cmd, projectID)
+	// It should hard fail because it is a NOT_FOUND error, NOT a true IAM permission error.
+	if err == nil {
+		t.Fatal("expected error because project does not exist, but got nil")
+	}
+
+	if !strings.Contains(err.Error(), "NOT_FOUND") {
+		t.Errorf("expected error to contain NOT_FOUND, got: %v", err)
+	}
+}
