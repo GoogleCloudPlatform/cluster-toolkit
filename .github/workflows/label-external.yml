@@ -14,7 +14,7 @@
 
 name: Label External PRs
 
-on:
+on: # zizmor: ignore[dangerous-triggers]
   pull_request_target:
     branches:
     - develop
