@@ -248,6 +248,8 @@ func ensureBasicPrerequisites(cmd *cobra.Command, projectID string) error {
 		return nil
 	}
 
+	state = PrereqState{}
+
 	var missing []missingPrereq
 
 	// Hard dependency: gcloud must be installed
