@@ -104,6 +104,8 @@
           name: vol-balanced
         - mountPath: "/data-throughput"
           name: vol-throughput
+      nodeSelector:
+        cloud.google.com/gke-nodepool: hp-pool
       volumes:
       - name: vol-balanced
         persistentVolumeClaim:
