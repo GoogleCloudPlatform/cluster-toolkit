@@ -80,7 +80,19 @@ variable "kueue_migrated_tests" {
     "slurm-gcp-v6-reconfig-size",
     "slurm-gcp-v6-simple-job-completion",
     "slurm-gcp-v6-startup-scripts",
-    "slurm-gcp-v6-topology"
+    "slurm-gcp-v6-topology",
+    "slurm-gcp-v6-debian",
+    "slurm-gcp-v6-ubuntu",
+    "slurm-gcp-v6-ssd",
+    "gke-a2-highgpu-kueue-onspot",
+    "gke-a4-onspot",
+    "gke-g4-onspot",
+    "gke-h4d-onspot",
+    "ml-h4d-onspot-slurm",
+    "h4d-vm",
+    "ml-a3-highgpu-onspot-slurm",
+    "ml-a4-highgpu-onspot-slurm",
+    "ml-g4-onspot-slurm"
   ]
 }
 

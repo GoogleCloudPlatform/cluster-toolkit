@@ -70,9 +70,9 @@ Before deploying, fill out the `gke-g4-confidential-deployment.yaml` file with y
 | `region` / `zone` | The GCP region and zone (e.g., `us-south1`, `us-south1-a`). |
 | `machine_type` | The GCE machine type used for G4 GPU nodes. Must be `g4-standard-48` for RTX 6000 GPU Confidential nodes. Defaults to `g4-standard-48`. |
 | `num_gpus` | The number of GPUs to attach to each G4 node. Must be `1` for the `g4-standard-48` shape. Defaults to `1`. |
-| `static_node_count` | Number of G4 GPU nodes to provision. |
+| `static_node_count` | The exact number of G4 GPU nodes to provision in the pool. Defaults to `1`. |
 | `authorized_cidr` | Your public IP address in CIDR notation (e.g., `1.2.3.4/32`). |
-| `reservation` | (Optional) The name of a zonal GCE reservation matching `g4-standard-48` to consume capacity from. |
+| `reservation` | The name of a zonal GCE reservation matching `g4-standard-48` to consume capacity from. |
 | `enable_confidential_storage` | (Optional) Set to `true` to enable Confidential Storage, encrypting both the Kubernetes dynamic PVs (using CMEK) and the VM boot disks of all GKE nodes (system and workload). Defaults to `false`. |
 | `disk_encryption_kms_key` | (Optional) The resource path to your Cloud KMS key used for CMEK storage encryption. Defaults to empty (`""`). |
 | `local_ssd_count_nvme_block` | (Optional) Number of Local SSDs to attach as raw block NVMe devices (supports `0` or `4` for `g4-standard-48`). Defaults to `0` (no SSDs attached). |
@@ -141,6 +141,65 @@ To ensure low latency and compatibility, the Cloud KMS key **must** be created i
    ```
 
    For advanced concepts, see the [Using CMEK in GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/using-cmek) documentation.
+
+### Confidential G4 GPU Consumption Options (Spot vs. DWS Flex Start)
+
+By default, this blueprint is configured to use **On-Demand VMs with a Specific Reservation** (configured via the `reservation` variable).
+
+If you want to use **Spot VMs** or **DWS Flex Start (Queued Provisioning)** instead, you must modify the GKE node pool module settings directly in the [`gke-g4-confidential.yaml`](./gke-g4-confidential.yaml) blueprint file before deploying:
+
+#### Option 1: Using Spot VMs
+Spot VMs are preemptible instances suitable for fault-tolerant workloads. For more details, refer to the [GKE Spot VMs documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/spot-vms). To configure the cluster to use Spot VMs:
+1. Open [`gke-g4-confidential.yaml`](./gke-g4-confidential.yaml) and locate the `g4-pool` module settings block.
+2. Comment out or remove the `reservation_affinity` block.
+3. Add `spot: true` to the settings block.
+
+```yaml
+  - id: g4-pool
+    source: modules/compute/gke-node-pool
+    settings:
+      # ... other settings ...
+      static_node_count: $(vars.static_node_count)
+      spot: true # Add this line
+      
+      # Comment out or remove:
+      # reservation_affinity:
+      #   consume_reservation_type: SPECIFIC_RESERVATION
+      #   specific_reservations:
+      #   - name: $(vars.reservation)
+```
+
+#### Option 2: Using DWS Flex Start (Queued Provisioning)
+DWS Flex Start is a queued provisioning model that allocates all requested GPU resources at the same time, once the entire capacity becomes available. For more details, refer to the [GKE DWS Flex Start documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training). To configure the cluster for DWS Flex Start:
+1. Open [`gke-g4-confidential.yaml`](./gke-g4-confidential.yaml) and locate the `g4-pool` module settings block.
+2. Comment out or remove the `static_node_count` setting.
+3. Comment out or remove the `reservation_affinity` block.
+4. Add the following DWS parameters to the settings block:
+
+```yaml
+  - id: g4-pool
+    source: modules/compute/gke-node-pool
+    settings:
+      # ... other settings ...
+      # Comment out or remove static_node_count:
+      # static_node_count: $(vars.static_node_count)
+
+      # Add DWS settings:
+      enable_flex_start: true
+      enable_queued_provisioning: true
+      auto_repair: false
+      autoscaling_total_min_nodes: 0 # Must start from 0
+      autoscaling_total_max_nodes: 2 # Adjust based on desired limit
+
+      # Comment out or remove:
+      # reservation_affinity:
+      #   consume_reservation_type: SPECIFIC_RESERVATION
+      #   specific_reservations:
+      #   - name: $(vars.reservation)
+```
+
+> [!NOTE]
+> Under DWS Flex Start, the node pool starts with 0 nodes and is tainted with `cloud.google.com/gke-queued=true:NoSchedule`. Standard Kubernetes Jobs (such as the `run-nvidia-smi` and `g4-verification-test` jobs described in the verification section below) will remain in a `Pending` state indefinitely unless they are configured to run via Kueue (which is installed by this blueprint) or adapted to use GKE `ProvisioningRequest` objects.
 
 ---
 

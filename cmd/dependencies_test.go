@@ -39,46 +39,28 @@ func TestAddDependenciesFlags(t *testing.T) {
 	}
 }
 
-func TestInitDependenciesIgnoresCommands(t *testing.T) {
-	cmd := &cobra.Command{Use: "unrelated-command"}
+func TestCheckDependencies(t *testing.T) {
+	cmd := &cobra.Command{Use: "test-command"}
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	addDependenciesFlags(flags)
 	cmd.Flags().AddFlagSet(flags)
 
 	called := false
+	var capturedTools []string
 	originalFn := ensureDependenciesFn
-	ensureDependenciesFn = func(d dependencies.DownloadDecision) error {
+	ensureDependenciesFn = func(d dependencies.DownloadDecision, tools ...string) error {
 		called = true
+		capturedTools = tools
 		return nil
 	}
 	defer func() { ensureDependenciesFn = originalFn }()
 
-	initDependencies(cmd)
+	checkDependencies(cmd, "terraform")
 
-	if called {
-		t.Errorf("Expected ensureDependenciesFn not to be called")
+	if !called {
+		t.Errorf("Expected ensureDependenciesFn to be called")
 	}
-}
-
-func TestInitDependenciesAllowedCommands(t *testing.T) {
-	for _, cmdName := range []string{"deploy", "destroy", "export-outputs"} {
-		cmd := &cobra.Command{Use: cmdName}
-		flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
-		addDependenciesFlags(flags)
-		cmd.Flags().AddFlagSet(flags)
-
-		called := false
-		originalFn := ensureDependenciesFn
-		ensureDependenciesFn = func(d dependencies.DownloadDecision) error {
-			called = true
-			return nil
-		}
-		defer func() { ensureDependenciesFn = originalFn }()
-
-		initDependencies(cmd)
-
-		if !called {
-			t.Errorf("Expected ensureDependenciesFn to be called for command %s", cmdName)
-		}
+	if len(capturedTools) != 1 || capturedTools[0] != "terraform" {
+		t.Errorf("Expected captured tools to be ['terraform'], got %v", capturedTools)
 	}
 }

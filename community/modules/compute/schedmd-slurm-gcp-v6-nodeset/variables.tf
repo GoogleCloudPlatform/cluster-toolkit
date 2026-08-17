@@ -142,6 +142,12 @@ variable "disk_type" {
   default     = "pd-standard"
 }
 
+variable "disk_storage_pool" {
+  description = "Storage pool to use for the boot disk. Note that storage pools are only supported with Hyperdisk types. For boot disks, only hyperdisk-balanced is supported. You must provide an existing storage pool, as this module does not create new ones."
+  type        = string
+  default     = null
+}
+
 variable "disk_size_gb" {
   description = "Size of boot disk to create for the partition compute nodes."
   type        = number
@@ -192,6 +198,7 @@ variable "additional_disks" {
     device_name                         = optional(string)
     disk_size_gb                        = optional(number)
     disk_type                           = optional(string)
+    disk_storage_pool                   = optional(string)
     disk_labels                         = optional(map(string))
     auto_delete                         = optional(bool)
     boot                                = optional(bool)
