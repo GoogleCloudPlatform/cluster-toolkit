@@ -247,9 +247,35 @@ No `google_kms_crypto_key_iam_member` resource exists in state, yet both
 disks correctly resolved and used the manually-granted key, and the login
 instance booted and stayed reachable -- confirming this module's grant
 resource is genuinely skipped, not merely hidden, while its output-aliasing
-convenience still works. Setting `skip_iam_role_grants: true` together with
-a non-empty `service_agents` fails `terraform plan` immediately with the
-cross-variable validation error, before any resource is created:
+convenience still works.
+
+That success alone doesn't rule out some unrelated pre-existing permission
+being the real reason the boot worked, rather than the one manual grant.
+Isolating it: removing that grant and forcing a fresh decrypt on the same
+key, same instance, changing nothing else --
+
+```console
+$ gcloud kms keys get-iam-policy KEY --keyring=KEYRING --location=LOCATION --project=PROJECT_ID
+etag: ...
+# (no bindings)
+
+$ gcloud compute instances stop CONTROLLER_INSTANCE --zone=ZONE --project=PROJECT_ID
+$ gcloud compute instances start CONTROLLER_INSTANCE --zone=ZONE --project=PROJECT_ID
+ERROR: (gcloud.compute.instances.start) HTTPError 400: Cloud KMS error when using key projects/PROJECT_ID/locations/LOCATION/keyRings/KEYRING/cryptoKeys/KEY/cryptoKeyVersions/1: Permission 'cloudkms.cryptoKeyVersions.useToDecrypt' denied on resource '...' (or it may not exist).
+
+$ gcloud compute instances describe CONTROLLER_INSTANCE --zone=ZONE --project=PROJECT_ID --format="value(status)"
+TERMINATED
+```
+
+-- fails explicitly, citing the exact key, and re-granting the same binding
+immediately restores it (`start` succeeds, instance returns to `RUNNING`).
+Same key, same instance, only the grant changed, and the outcome flipped
+both directions -- confirming the earlier success was actually caused by
+that grant, not some unrelated permission already present in the project.
+
+Setting `skip_iam_role_grants: true` together with a non-empty
+`service_agents` fails `terraform plan` immediately with the cross-variable
+validation error, before any resource is created:
 
 ```console
 $ ./ghpc deploy DEPLOYMENT_DIR --auto-approve
