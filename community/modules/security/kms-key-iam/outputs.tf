@@ -31,6 +31,13 @@
 # `use` for its consumer.
 #
 # depends_on is per-output and is not inherited, so each one repeats it.
+#
+# When var.skip_iam_role_grants is true, google_kms_crypto_key_iam_member.this
+# has zero instances (see main.tf), so every depends_on below is vacuous and
+# each output simply returns var.crypto_key_id immediately -- this is
+# intentional, not a gap: skip_iam_role_grants exists for callers whose
+# permissions are managed out-of-band, so there is no grant here to order
+# behind in the first place.
 
 output "crypto_key_id" {
   description = "The CryptoKey id, ordered after the encrypt/decrypt grants. This is the output to pass to any CMEK-consuming module whose input is not named below."

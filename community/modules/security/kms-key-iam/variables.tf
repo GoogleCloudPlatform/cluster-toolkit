@@ -80,3 +80,31 @@ variable "custom_service_accounts" {
     error_message = "Each value in custom_service_accounts must be a service account email ending in \".gserviceaccount.com\", e.g. my-sa@my-project.iam.gserviceaccount.com."
   }
 }
+
+variable "skip_iam_role_grants" {
+  description = <<-EOT
+    Skip creating the IAM grants this module normally creates, while every
+    output still resolves crypto_key_id as usual. Set this when permissions
+    on the key are managed out-of-band by someone else -- for example a
+    security team granting roles/cloudkms.cryptoKeyEncrypterDecrypter on a
+    pre-existing-kms-key key directly -- and the identity running this
+    module lacks cloudkms.admin/setIamPolicy on it. Without this, Terraform
+    would attempt the grant anyway and fail with a 403, even though the
+    caller only wanted this module's `use`-wiring convenience.
+
+    service_agents and custom_service_accounts must both be empty when this
+    is true. Setting either alongside skip_iam_role_grants would otherwise
+    look like a grant request that silently does nothing, which is exactly
+    the kind of surprising behavior this variable exists to prevent.
+    EOT
+  type        = bool
+  default     = false
+  nullable    = false
+
+  validation {
+    condition = !var.skip_iam_role_grants || (
+      length(var.service_agents) == 0 && length(var.custom_service_accounts) == 0
+    )
+    error_message = "service_agents and custom_service_accounts must be empty when skip_iam_role_grants is true -- there is nothing to grant when this module isn't managing IAM."
+  }
+}
