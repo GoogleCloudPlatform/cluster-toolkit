@@ -40,6 +40,6 @@ concurrency:
 
 jobs:
   multi-approvers:
-    uses: 'abcxyz/pkg/.github/workflows/multi-approvers.yml@main'
+    uses: 'abcxyz/pkg/.github/workflows/multi-approvers.yml@543c2604d7324bab0739027d23c93b2a3ec8ca2e' # main
     with:
       org-members-path: 'GoogleCloudPlatform/cluster-toolkit/develop/cluster-toolkit-writers.json'
