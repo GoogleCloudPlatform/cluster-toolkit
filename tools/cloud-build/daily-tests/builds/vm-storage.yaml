@@ -1,7 +1,6 @@
 # Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
@@ -9,26 +8,17 @@
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
 # limitations under the License.
 
 ---
 tags:
-- m.cloud-storage-bucket
-- gcs-rapid
-- anywhere-cache
-- m.filestore
-- m.gke-cluster
-- m.service-account
-- m.gke-job-template
-- m.gke-node-pool
-- m.gke-persistent-volume
-- m.gke-storage
+- vm
 - m.vpc
-- gke
+- m.vm-instance
 
 substitutions:
-  _TEST_PREFIX: "" # Default to no prefix
+  _TEST_PREFIX: ""
+  _ZONE: "us-central1-b"
 
 timeout: 86400s
 queueTtl: 86400s  # 24hr
@@ -75,7 +65,7 @@ steps:
     apiVersion: batch/v1
     kind: Job
     metadata:
-      name: gke-storage-$$BUILD_ID_SHORT
+      name: vm-storage-$$BUILD_ID_SHORT
       namespace: default
       labels:
         kueue.x-k8s.io/queue-name: local-queue-test-locks
@@ -83,14 +73,12 @@ steps:
     spec:
       suspend: true # Required for Kueue: the job must be created in suspended state for Kueue to manage it
       backoffLimit: 0
-      activeDeadlineSeconds: 14400
       template:
         metadata:
           annotations:
             cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
         spec:
           $$PRIORITY_LINE
-          terminationGracePeriodSeconds: 1800 # Grants 30 minutes for terraform destroy to finish gracefully if cancelled
           serviceAccountName: test-kueue-cluster-runner-ksa
           restartPolicy: Never
           containers:
@@ -103,6 +91,12 @@ steps:
               value: "/workspace/tools/cloud-build/ansible.cfg"
             - name: _TEST_PREFIX
               value: "${_TEST_PREFIX}"
+            - name: ZONE
+              value: "${_ZONE}"
+            - name: BUILD_ID
+              value: "$BUILD_ID"
+            - name: PROJECT_ID
+              value: "$PROJECT_ID"
             - name: GCLUSTER_GCS_PATH
               value: "$$GCLUSTER_GCS_PATH"
             - name: TRIAGE_GCS_BUCKET
@@ -113,106 +107,57 @@ steps:
               value: "$$TRIAGE_INVOKER_SA"
             - name: TRIAGE_CLOUD_RUN_URL
               value: "$$TRIAGE_CLOUD_RUN_URL"
-            - name: PROJECT_ID
-              value: "$PROJECT_ID"
-            - name: BUILD_ID
-              value: "$BUILD_ID"
             command: ["/bin/bash", "-c"]
             args:
             - |
-              set -eo pipefail
+
               set -x -e
-              echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/gke-storage.yaml"
               cd /workspace
 
-              DEPLOYMENT_NAME="gke-storage-$$BUILD_ID_SHORT"
-              # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
-              echo "Checking for and clearing leaked Terraform state locks..."
-              gsutil rm "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              DEPLOYMENT_NAME="vm-storage-$$BUILD_ID_SHORT"
 
               RUN_CLEANUP=true
-              # Trap function that runs the rescue playbook (terraform destroy)
-              # if the pod is terminated by Kueue, fails, or is cancelled.
-              cleanup_pod() {
-                local exit_code=\$$?
-                trap - EXIT SIGTERM SIGINT ERR
-                set +e
-
-                if [ "\$$RUN_CLEANUP" = "false" ]; then
-                  exit 0
-                fi
-                if [ \$$exit_code -eq 0 ]; then exit_code=1; fi
-
-                echo ""
-                echo "=========================================================================="
-                echo "CAUGHT SIGTERM OR SCRIPT ERROR!"
-                echo "Halting primary Ansible execution..."
-                echo "=========================================================================="
-                if [ -n "\$${ANSIBLE_PID:-}" ]; then
-                    kill -TERM \$$ANSIBLE_PID 2>/dev/null || true
-                    wait \$$ANSIBLE_PID 2>/dev/null || true
-                    echo "Waiting 15s for Terraform to release GCS backend state locks..."
-                    sleep 15
-                fi
-
-                echo ""
-                echo "INITIATING RESCUE PLAYBOOK: Destroying leaked infrastructure for \$$DEPLOYMENT_NAME..."
-                echo "- hosts: localhost" > /workspace/cleanup-playbook.yml
-                echo "  tasks:" >> /workspace/cleanup-playbook.yml
-                echo "  - ansible.builtin.include_tasks:" >> /workspace/cleanup-playbook.yml
-                echo "      file: tools/cloud-build/daily-tests/ansible_playbooks/tasks/rescue_gcluster_failure.yml" >> /workspace/cleanup-playbook.yml
-
-                ansible-playbook /workspace/cleanup-playbook.yml -e deployment_name="\$$DEPLOYMENT_NAME" -e workspace="/workspace" || true
-
-                echo "Graceful cleanup finished."
-                exit \$$exit_code
-              }
+              source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
               trap cleanup_pod EXIT SIGTERM SIGINT
 
-              bash tools/get_binary.sh "${_TEST_PREFIX}"
+              REGION="\$${ZONE%-*}"
+              bash tools/get_binary.sh "\$$_TEST_PREFIX"
 
-              SG_EXAMPLE=examples/storage-gke.yaml
+              BLUEPRINT="examples/storage-vm.yaml"
+              bash tools/add_ttl_label.sh \$$BLUEPRINT
 
-              # adding vm to act as remote node
-              echo '  - id: remote-node'                     >> \$$SG_EXAMPLE
-              echo '    source: modules/compute/vm-instance' >> \$$SG_EXAMPLE
-              echo '    use: [network1]'                     >> \$$SG_EXAMPLE
-              echo '    settings:'                           >> \$$SG_EXAMPLE
-              echo '      machine_type: e2-standard-2'       >> \$$SG_EXAMPLE
-              echo '      zone: us-central1-b'               >> \$$SG_EXAMPLE
 
               echo "Checking if required storage pools exist..."
-              if ! gcloud compute storage-pools describe test-pool-balanced --project=$PROJECT_ID --zone=us-central1-b >/dev/null 2>&1; then
-                echo "ERROR: Storage pool 'test-pool-balanced' does not exist in us-central1-b."
+              if ! gcloud compute storage-pools describe test-pool-balanced --project=$PROJECT_ID --zone=\$$ZONE >/dev/null 2>&1; then
+                echo "ERROR: Storage pool 'test-pool-balanced' does not exist."
                 echo "Please create it by running the following command:"
                 echo "gcloud compute storage-pools create test-pool-balanced"
                 echo "    --project=$PROJECT_ID"
-                echo "    --zone=us-central1-b"
+                echo "    --zone=\$$ZONE"
                 echo "    --provisioned-capacity=10240GB"
                 echo "    --provisioned-iops=10000"
                 echo "    --provisioned-throughput=1024"
                 echo "    --storage-pool-type=hyperdisk-balanced"
                 exit 1
               fi
-              if ! gcloud compute storage-pools describe test-pool-throughput --project=$PROJECT_ID --zone=us-central1-b >/dev/null 2>&1; then
-                echo "ERROR: Storage pool 'test-pool-throughput' does not exist in us-central1-b."
+              if ! gcloud compute storage-pools describe test-pool-throughput --project=$PROJECT_ID --zone=\$$ZONE >/dev/null 2>&1; then
+                echo "ERROR: Storage pool 'test-pool-throughput' does not exist."
                 echo "Please create it by running the following command:"
                 echo "gcloud compute storage-pools create test-pool-throughput"
                 echo "    --project=$PROJECT_ID"
-                echo "    --zone=us-central1-b"
+                echo "    --zone=\$$ZONE"
                 echo "    --provisioned-capacity=28672GB"
                 echo "    --provisioned-throughput=500"
                 echo "    --storage-pool-type=hyperdisk-throughput"
                 exit 1
               fi
 
-              bash tools/add_ttl_label.sh "\$$SG_EXAMPLE"
-              python3 tools/fix_vpc_name.py \$$SG_EXAMPLE "${_TEST_PREFIX}"
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-                --extra-vars="hyperdisk_balanced_pool=test-pool-balanced hyperdisk_throughput_pool=test-pool-throughput" --extra-vars="test_prefix=${_TEST_PREFIX}" --extra-vars="use_fixed_vpc=true" \
-                --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
-                --extra-vars="@tools/cloud-build/daily-tests/tests/gke-storage.yml" \
+                --user="$$OSLOGIN_USER" --extra-vars="project=\$$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
+                --extra-vars="region=\$$REGION zone=\$$ZONE" \
+                --extra-vars="hyperdisk_balanced_pool=test-pool-balanced hyperdisk_throughput_pool=test-pool-throughput" \
+                --extra-vars="@tools/cloud-build/daily-tests/tests/vm-storage.yml" \
                 --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
                 --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
                 --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
@@ -221,15 +166,16 @@ steps:
 
               wait \$$ANSIBLE_PID
               RUN_CLEANUP=false
+
             resources:
               requests:
                 cpu: 200m
                 memory: "2Gi"
-                test-locks/gke-storage: 1
+                test-locks/vm-storage: 1
               limits:
                 cpu: 1
                 memory: "2Gi"
-                test-locks/gke-storage: 1
+                test-locks/vm-storage: 1
     EOF
 
 # 3. Submit and Monitor GKE Kueue Job with Retry
@@ -242,7 +188,7 @@ steps:
     set -eo pipefail
     gcloud container clusters get-credentials test-kueue-cluster --region=us-central1
     BUILD_ID_SHORT=$$(echo "$BUILD_ID" | cut -c1-6)
-    JOB_NAME="gke-storage-$$BUILD_ID_SHORT"
+    JOB_NAME="vm-storage-$$BUILD_ID_SHORT"
 
     # Cloud Build trap: If the Cloud Build step itself receives a cancellation signal,
     # delete the GKE job so the pod receives a SIGTERM and performs infrastructure cleanup.
@@ -281,7 +227,6 @@ steps:
         break
       fi
 
-      # Check if the failure was specifically due to a lack of GCP zone capacity.
       # If so, retry. If it's a real error (like a terraform syntax error), fail immediately.
       if bash tools/cloud-build/check_retriable_error.sh /workspace/job_logs.txt; then
         echo "WARNING: Retriable error detected. Kueue Job has already been deleted. Retrying in $$RETRY_DELAY seconds..."
@@ -291,7 +236,6 @@ steps:
       fi
 
       if [ $$ATTEMPT -ge $$MAX_RETRIES ]; then
-        echo "ERROR: Job failed to find zone capacity after $$MAX_RETRIES attempts." >&2
         exit 1
       fi
 
@@ -334,6 +278,7 @@ steps:
     echo "Failed to delete image after $$MAX_RETRIES attempts."
     echo "Image will be handled by Artifact Registry background cleanup policies."
     exit 1
+
 availableSecrets:
   secretManager:
   - versionName: projects/${PROJECT_ID}/secrets/sa-email/versions/latest
