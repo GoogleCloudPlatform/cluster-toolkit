@@ -231,39 +231,161 @@ func TestParseSingleVolume(t *testing.T) {
 func TestValidateMounts(t *testing.T) {
 	sm := &StorageManager{}
 
-	mounts := []string{
-		"gs://my-bucket;/data",
-		"my-pvc;/data", // duplicate dest
-	}
-	err := sm.ValidateMounts(mounts)
-	if err == nil || !strings.Contains(err.Error(), "duplicate volume destination") {
-		t.Errorf("expected duplicate destination error, got %v", err)
+	type testCase struct {
+		name      string
+		mounts    []string
+		wantErr   bool
+		errSubstr string
 	}
 
-	mounts = []string{
-		"gs://my-bucket;/data1",
-		"gs://my-bucket;/data2", // duplicate src
-	}
-	err = sm.ValidateMounts(mounts)
-	if err == nil || !strings.Contains(err.Error(), "duplicate volume source") {
-		t.Errorf("expected duplicate source error, got %v", err)
+	tests := []testCase{
+		{
+			name: "duplicate dest",
+			mounts: []string{
+				"gs://my-bucket;/data",
+				"my-pvc;/data",
+			},
+			wantErr:   true,
+			errSubstr: "duplicate volume destination",
+		},
+		{
+			name: "duplicate src",
+			mounts: []string{
+				"gs://my-bucket;/data1",
+				"gs://my-bucket;/data2",
+			},
+			wantErr:   true,
+			errSubstr: "duplicate volume source",
+		},
+		{
+			name: "unsupported scheme",
+			mounts: []string{
+				"parallelstore://foo;/data",
+			},
+			wantErr:   true,
+			errSubstr: "Unsupported scheme",
+		},
+		{
+			name: "root directory",
+			mounts: []string{
+				"gs://my-bucket;/",
+			},
+			wantErr:   true,
+			errSubstr: "cannot be the root directory",
+		},
+		{
+			name: "valid mounts",
+			mounts: []string{
+				"gs://my-bucket;/data1",
+				"my-pvc;/data2",
+			},
+			wantErr: false,
+		},
 	}
 
-	mounts = []string{
-		"parallelstore://foo;/data", // unsupported scheme
-	}
-	err = sm.ValidateMounts(mounts)
-	if err == nil || !strings.Contains(err.Error(), "Unsupported scheme") {
-		t.Errorf("expected unsupported scheme error, got %v", err)
+	for _, reserved := range []string{"/dev", "/proc", "/sys", "/etc", "/bin", "/sbin", "/usr", "/lib", "/lib64"} {
+		tests = append(tests, testCase{
+			name:      "reserved dir " + reserved,
+			mounts:    []string{"gs://my-bucket;" + reserved},
+			wantErr:   true,
+			errSubstr: "cannot be a reserved system directory",
+		})
 	}
 
-	mounts = []string{
-		"gs://my-bucket;/data1",
-		"my-pvc;/data2",
+	for _, reserved := range []string{"/proc/sys", "/etc/kubernetes", "/usr/local/bin"} {
+		tests = append(tests, testCase{
+			name:      "nested reserved dir " + reserved,
+			mounts:    []string{"gs://my-bucket;" + reserved},
+			wantErr:   true,
+			errSubstr: "cannot be within a reserved system directory",
+		})
 	}
-	err = sm.ValidateMounts(mounts)
-	if err != nil {
-		t.Errorf("expected no error for valid mounts, got %v", err)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := sm.ValidateMounts(tt.mounts)
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
+					t.Errorf("expected error containing %q, got %v", tt.errSubstr, err)
+				}
+			} else if err != nil {
+				t.Errorf("expected no error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateRamdiskDir(t *testing.T) {
+	sm := &StorageManager{}
+
+	type testCase struct {
+		name       string
+		ramdiskDir string
+		rawMounts  []string
+		wantErr    bool
+		errSubstr  string
+	}
+
+	tests := []testCase{
+		{
+			name:       "Empty Ramdisk - Pass",
+			ramdiskDir: "",
+		},
+		{
+			name:       "Relative Path - Fail",
+			ramdiskDir: "relative/path",
+			wantErr:    true,
+			errSubstr:  "--gke-mtc-ramdisk-dir must be an absolute path",
+		},
+		{
+			name:       "Root Directory - Fail",
+			ramdiskDir: "/",
+			wantErr:    true,
+			errSubstr:  "cannot be the root directory",
+		},
+		{
+			name:       "Mount Conflict - Fail",
+			ramdiskDir: "/tmp/ramdisk",
+			rawMounts:  []string{"gs://bucket;/tmp/ramdisk"},
+			wantErr:    true,
+			errSubstr:  "conflicts with duplicate mount destination",
+		},
+		{
+			name:       "Valid Path without Conflict - Pass",
+			ramdiskDir: "/tmp/ramdisk",
+			rawMounts:  []string{"gs://bucket;/data"},
+		},
+	}
+
+	for _, reserved := range []string{"/dev", "/proc", "/sys", "/etc", "/bin", "/sbin", "/usr", "/lib", "/lib64", "/proc/"} {
+		tests = append(tests, testCase{
+			name:       "Reserved Dir " + reserved + " - Fail",
+			ramdiskDir: reserved,
+			wantErr:    true,
+			errSubstr:  "cannot be a reserved system directory",
+		})
+	}
+
+	for _, reserved := range []string{"/proc/sys", "/etc/kubernetes", "/usr/local/bin"} {
+		tests = append(tests, testCase{
+			name:       "Nested Reserved Dir " + reserved + " - Fail",
+			ramdiskDir: reserved,
+			wantErr:    true,
+			errSubstr:  "cannot be within a reserved system directory",
+		})
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := sm.ValidateRamdiskDir(tt.ramdiskDir, tt.rawMounts)
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
+					t.Errorf("expected error containing %q, got %v", tt.errSubstr, err)
+				}
+			} else if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
 	}
 }
 
