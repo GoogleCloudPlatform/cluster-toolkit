@@ -1607,30 +1607,39 @@ Creates a Slurm cluster with Customer-Managed Encryption Keys (CMEK) enabled for
 ### [kms-key.yaml] ![community-badge] ![experimental-badge]
 
 An end-to-end CMEK Slurm cluster. The [kms-key] module creates one Cloud KMS
-key ring and symmetric CryptoKey and grants encrypt/decrypt on it, and every
-encrypted resource picks that key up through `use: [kms_key]`: the Filestore
-`/home` instance, the controller, login and compute boot disks, and the Slurm
-configuration bucket. Nothing reconstructs a Cloud KMS resource name by hand,
-and because the module's outputs are ordered behind its IAM grants, no
-encrypted resource is created before its service agent can use the key.
+key ring and symmetric CryptoKey, [kms-key-iam] grants the service agents that
+encrypt with it, and every encrypted resource picks the key up through
+`use: [kms_key_iam]`: the Filestore `/home` instance, the controller, login and
+compute boot disks, and the Slurm configuration bucket. Nothing reconstructs a
+Cloud KMS resource name by hand. Consumers `use` the IAM module rather than
+the key module: kms-key's own outputs don't match any consumer's CMEK input
+name, so `use: [kms_key]` wires nothing, and wiring a resource straight to the
+key rather than the grant would be a race rather than a guarantee.
 
 Set `key_project_id` to hold the key in a dedicated key project instead of the
-workload project; the service agents stay in the workload project and the
-module grants them across the project boundary.
+workload project. The service agents stay in the workload project, and
+kms-key-iam grants them across the project boundary — its `project_id` is the
+project holding the encrypted resources, not the one holding the key. The
+service agents are provisioned on demand via `gcloud` (see the comments in the
+blueprint), not configured as blueprint settings; kms-key-iam derives each
+one's address from `project_id`, so no address is ever written by hand.
 
 Contrast with [hpc-slurm-kms.yaml], which points a Slurm cluster at a CryptoKey
 that already exists rather than creating one.
 
-Requires the workload project's Filestore, Compute Engine and Cloud Storage
-service agents to exist, with `filestore_service_agent`,
-`compute_service_agent` and `storage_service_agent` set to their real
-addresses. Note that Cloud KMS key rings cannot be deleted and CryptoKey names
-cannot be reused, so `terraform destroy` deliberately retains the key material
-and redeploying needs a fresh `deployment_name`; see the [kms-key] README for
-details.
+Note the teardown behaviour. kms-key's `deletion_policy` is required and has
+no default, because the two outcomes are opposite and both irreversible; this
+blueprint sets `ABANDON`, so `terraform destroy` leaves the key version
+enabled and everything it encrypted stays decryptable. `DELETE` instead
+destroys the key version, making that data permanently unrecoverable. Either
+way Cloud KMS never frees the key ring or the CryptoKey name, so redeploying
+under the same `deployment_name` fails on the retained ring — use a fresh
+`deployment_name`, or set the module's `key_ring_id` to the retained ring
+together with a new `key_name`. See the [kms-key] README for details.
 
 [kms-key.yaml]: ../community/examples/kms-key.yaml
 [kms-key]: ../community/modules/security/kms-key/README.md
+[kms-key-iam]: ../community/modules/security/kms-key-iam/README.md
 
 ### [kms-key-per-service.yaml] ![community-badge] ![experimental-badge]
 
