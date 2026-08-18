@@ -648,7 +648,7 @@ func (g *GKEOrchestrator) verifyCheckpointConfigurationCR(job *orchestrator.JobD
 }
 
 func (g *GKEOrchestrator) validateMTCConfig(job *orchestrator.JobDefinition) error {
-	if !job.GKEMTCEnabled {
+	if job == nil || !job.GKEMTCEnabled {
 		return nil
 	}
 
