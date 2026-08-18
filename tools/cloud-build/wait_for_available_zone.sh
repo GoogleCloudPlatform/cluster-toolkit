@@ -16,6 +16,8 @@
 # Wrapper around find_available_zone.sh that loops instead of exiting when out of capacity.
 # Since find_available_zone.sh uses 'exit 1', we must run it in a subshell
 # to prevent it from killing the pod.
+OLD_ERREXIT=$(shopt -po errexit)
+
 ZONE_EXPORT=$(mktemp)
 ZONE_OUTPUT=$(mktemp)
 
@@ -45,9 +47,16 @@ while true; do
 		else
 			echo "--- FATAL ERROR: find_available_zone.sh failed due to a configuration or system error. Exiting. ---" >&2
 			rm -f "$ZONE_EXPORT" "$ZONE_OUTPUT"
-			exit 1
+			if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+				eval "$OLD_ERREXIT"
+				return 1
+			else
+				exit 1
+			fi
 		fi
 	fi
 done
 
 rm -f "$ZONE_EXPORT" "$ZONE_OUTPUT"
+
+eval "$OLD_ERREXIT"

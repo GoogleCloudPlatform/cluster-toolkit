@@ -128,7 +128,7 @@ steps:
             command: ["/bin/bash", "-c"]
             args:
             - |
-              set -e -u -o pipefail
+              set -x -e
               echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/ml-h4d-onspot-slurm.yaml"
               cd /workspace
 
@@ -142,6 +142,7 @@ steps:
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
               trap cleanup_pod EXIT SIGTERM SIGINT
 
+              set -e -u -o pipefail
               echo "Sourcing find_available_zone.sh to determine zone."
               source /workspace/tools/cloud-build/wait_for_available_zone.sh
               if [ -z "\$${ZONE:-}" ]; then
@@ -149,8 +150,6 @@ steps:
                 exit 1
               fi
               set -x
-              echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/ml-h4d-onspot-slurm.yaml"
-
               bash tools/get_binary.sh "${_TEST_PREFIX}"
               REGION="\$${ZONE%-*}"
               BLUEPRINT="/workspace/examples/hpc-slurm-h4d/hpc-slurm-h4d.yaml"
@@ -240,7 +239,6 @@ steps:
       wait $$MONITOR_PID
       EXIT_CODE=$$?
       set -e
-      echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/ml-h4d-onspot-slurm.yaml"
 
       if [ $$EXIT_CODE -eq 0 ]; then
         echo "Job succeeded!"
