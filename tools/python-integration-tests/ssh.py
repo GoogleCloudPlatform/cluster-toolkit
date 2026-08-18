@@ -54,7 +54,7 @@ class SSHManager:
         self.tunnel = subprocess.Popen(iap_tunnel_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
         # Sleep to give the tunnel a few seconds to set up
-        time.sleep(3)
+        time.sleep(15)
 
     def get_keypath(self):
         key_path = os.path.expanduser("~/.ssh/slurm_tests")
