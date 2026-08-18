@@ -120,7 +120,7 @@ steps:
               echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/slurm-storage.yaml"
               cd /workspace
 
-              DEPLOYMENT_NAME="rapid-$$BUILD_ID_SHORT"
+              DEPLOYMENT_NAME="slurm-storage-$$BUILD_ID_SHORT"
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
               gsutil rm "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true

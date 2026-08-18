@@ -21,6 +21,8 @@ vars:
   region: us-central1
   zone: us-central1-b
   gcs_bucket_local_mount: /data
+  # To use Storage Pools, they must be pre-created before deployment.
+  # Replace 'your-pool-balanced' and 'your-pool-throughput' with your storage pool names.
   hyperdisk_balanced_storage_pool: "projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-balanced"
   hyperdisk_throughput_storage_pool: "projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-throughput"
 

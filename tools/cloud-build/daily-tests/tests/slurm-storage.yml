@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-test_name: slurm-rapid-storage
-deployment_name: rapid-{{ build }}
-slurm_cluster_name: "rapid{{ build[0:4] }}"
+test_name: slurm-storage
+deployment_name: slurm-storage-{{ build }}
+slurm_cluster_name: "slurm-storage{{ build[0:4] }}"
 region: us-central1
 zone: us-central1-b
 workspace: /workspace
