@@ -24,7 +24,7 @@ vars:
   zone: us-central1-a
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
-  authorized_cidr: <your-ip-address>/32
+  authorized_cidr:  # <your-ip-address>/32
   version_prefix: "1.35."
   base_network_name: $(vars.deployment_name)
   # Managed-Lustre instance name. This should be unique for each deployment.
