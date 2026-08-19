@@ -63,7 +63,7 @@ if [[ ${DIST} == "Ubuntu" ]]; then
 	apt update
 	if ! apt install -y "lustre-client-modules-$(uname -r)" lustre-client-utils; then
 		echo "Pre-compiled package lustre-client-modules-$(uname -r) not found. Attempting install via lustre-client-modules-dkms..."
-		if ! apt install -y dkms lustre-client-modules-dkms lustre-client-utils; then
+		if ! apt install -y dkms "linux-headers-$(uname -r)" lustre-client-modules-dkms lustre-client-utils; then
 			echo "Error finding Lustre module packages, Lustre package may not exist for this kernel version" >&2
 			exit 1
 		fi

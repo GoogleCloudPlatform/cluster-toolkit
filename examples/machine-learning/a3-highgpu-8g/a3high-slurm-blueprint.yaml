@@ -337,12 +337,8 @@ deployment_groups:
         content: |
           #!/bin/bash
           set -e -o pipefail
-          curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --yes --dearmor -o /usr/share/keyrings/google-cloud.gpg
           curl -fsSL https://us-apt.pkg.dev/doc/repo-signing-key.gpg | gpg --yes --dearmor -o /usr/share/keyrings/lustre-client.gpg
-          echo 'deb [signed-by=/usr/share/keyrings/google-cloud.gpg] http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main' > /etc/apt/sources.list.d/google-cloud.list
-          apt-get update
-          apt-get install -y apt-transport-artifact-registry
-          echo "deb [signed-by=/usr/share/keyrings/lustre-client.gpg] ar+https://us-apt.pkg.dev/projects/lustre-client-binaries lustre-client-ubuntu-jammy main" > /etc/apt/sources.list.d/artifact-registry.list
+          echo "deb [signed-by=/usr/share/keyrings/lustre-client.gpg] https://us-apt.pkg.dev/projects/lustre-client-binaries lustre-client-ubuntu-jammy main" > /etc/apt/sources.list.d/artifact-registry.list
           apt-get update
           TCPX_KERNEL_VERSION=""
           for d in /lib/modules/*tcpx*; do
@@ -355,7 +351,7 @@ deployment_groups:
             echo "Installing Lustre client modules for kernel ${TCPX_KERNEL_VERSION}..."
             if ! apt-get install -y lustre-client-modules-${TCPX_KERNEL_VERSION}; then
               echo "Pre-compiled package lustre-client-modules-${TCPX_KERNEL_VERSION} not found. Installing via DKMS for ${TCPX_KERNEL_VERSION}..."
-              apt-get install -y dkms lustre-client-modules-dkms lustre-client-utils
+              apt-get install -y dkms linux-headers-${TCPX_KERNEL_VERSION} lustre-client-modules-dkms lustre-client-utils
               echo "Building DKMS modules specifically for ${TCPX_KERNEL_VERSION}..."
               dkms autoinstall -k "${TCPX_KERNEL_VERSION}"
             fi
