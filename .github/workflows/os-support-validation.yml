@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: Glibc and OS Compatibility Validation
+name: OS Support Validation
 
 on:
   pull_request:
@@ -35,6 +35,10 @@ jobs:
           image: "debian:trixie-slim"
         - os-name: "Ubuntu 22.04"
           image: "ubuntu:22.04"
+        - os-name: "Ubuntu 24.04"
+          image: "ubuntu:24.04"
+        - os-name: "Ubuntu 26.04"
+          image: "ubuntu:26.04"
         - os-name: "Rocky Linux 8"
           image: "rockylinux:8"
         - os-name: "Rocky Linux 9"
@@ -42,12 +46,10 @@ jobs:
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
-
     - name: Set up Go 1.26
       uses: actions/setup-go@v5
       with:
         go-version: '1.26'
-
     - name: Build Binary
       run: |
         go mod tidy
