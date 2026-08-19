@@ -73,6 +73,8 @@ jobs:
         extra_args: --show-diff-on-failure --all-files
   pre-commit-highest-dependencies:
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: auto
     steps:
     - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 #v6.1.0
     - name: Free Disk Space (Ubuntu)
