@@ -15,12 +15,15 @@
  */
 
 variable "project_id" {
-  description = "ID of project in which the NetApp storage pool will be created."
+  description = "ID of project in which the NetApp volume will be created."
   type        = string
 }
 
 variable "netapp_storage_pool_id" {
-  description = "The ID of the NetApp storage pool to use for the volume."
+  description = <<-EOT
+    The ID of the NetApp storage pool to use for the volume. Volume location (region or zone) is parsed from this value.
+    Inherited from the pool when using use: [netapp_pool].
+    EOT
   type        = string
   validation {
     condition     = length(split("/", var.netapp_storage_pool_id)) == 6
@@ -28,29 +31,47 @@ variable "netapp_storage_pool_id" {
   }
 }
 
-variable "region" {
-  description = "Location for NetApp storage pool."
-  type        = string
-}
-
-variable "volume_name" {
-  description = "The name of the volume. Needs to be unique within the storage pool."
+variable "service_level" {
+  description = "Service level of the storage pool used by this volume. Inherited from the pool when using use: [netapp_pool]."
   type        = string
   default     = null
 }
 
+variable "type" {
+  description = "Type of the storage pool used by this volume. Inherited from the pool when using use: [netapp_pool]. Flex Unified pools use UNIFIED. Null for STANDARD, PREMIUM, and EXTREME pools."
+  type        = string
+  default     = null
+}
+
+variable "allow_auto_tiering" {
+  description = "Whether the storage pool supports auto-tiering. Inherited from the pool when using use: [netapp_pool]."
+  type        = bool
+  default     = null
+}
+
+variable "scale_type" {
+  description = "Scale type of the storage pool. Inherited from the pool when using use: [netapp_pool]. Flex-only; null for STANDARD, PREMIUM, and EXTREME pools."
+  type        = string
+  default     = null
+}
+
+variable "volume_name" {
+  description = <<-EOT
+    The name of the volume. Needs to be unique within the storage pool.
+    FLEX pools: lowercase letters, numbers, and underscores only; must start with a lowercase letter and cannot end with an underscore.
+    STANDARD, PREMIUM, and EXTREME pools: hyphens are allowed; underscores are not allowed.
+    EOT
+  type        = string
+}
+
 variable "capacity_gib" {
-  description = "The capacity of the volume in GiB."
+  description = "The capacity of the volume in GiB. Minimum is 100 GiB for STANDARD, PREMIUM, and EXTREME; 15 TiB (15360 GiB) for STANDARD, PREMIUM, and EXTREME large capacity volumes; 1 GiB for Flex Unified; 4800 GiB for Flex Unified large capacity volumes."
   type        = number
   default     = 1024
-  validation {
-    condition     = var.capacity_gib >= 100
-    error_message = "The minimum capacity for the volume is 100 GiB."
-  }
 }
 
 variable "protocols" {
-  description = "The protocols that the volume supports. Currently, only NFSv3 and NFSv4 is supported."
+  description = "Access protocols for the volume. Only NFSv3 and NFSv4.1 (NFSV4) are supported."
   type        = list(string)
   default     = ["NFSV3"]
   validation {
@@ -83,35 +104,84 @@ variable "local_mount" {
 variable "mount_options" {
   description = "NFS mount options to mount file system."
   type        = string
-  default     = "rw,hard,rsize=65536,wsize=65536,tcp"
+  default     = "rw,hard,rsize=262144,wsize=262144,tcp"
 }
 
 variable "large_capacity" {
   description = <<-EOT
-    If true, the volume will be created with large capacity.
-    Large capacity volumes have 6 IP addresses and a minimal size of 15 TiB.
+    If true, the volume will be created with large capacity for STANDARD/PREMIUM/EXTREME service levels.
+    For FLEX service level, use large_capacity_config instead.
     EOT
   type        = bool
   default     = false
 }
 
+variable "large_capacity_config" {
+  description = <<-EOT
+    Configuration for a Flex Unified large capacity volume. Supported only for Flex Unified pools.
+    Set constituent_count in the blueprint. The typical value for current SCALE_TYPE_SCALEOUT pools is 48.
+    EOT
+  type = object({
+    constituent_count = number
+  })
+  default = null
+  validation {
+    condition     = var.large_capacity_config == null || var.large_capacity_config.constituent_count >= 2
+    error_message = "constituent_count must be at least 2 for Flex Unified large capacity volumes."
+  }
+}
+
 variable "unix_permissions" {
   description = "UNIX permissions for root inode in the volume."
   type        = string
-  default     = "0777"
+  default     = "0770"
   validation {
-    condition     = length(var.unix_permissions) <= 4
-    error_message = "UNIX permissions must be a 4-digit octal number."
+    condition     = can(regex("^[0-7]{3,4}$", var.unix_permissions))
+    error_message = "UNIX permissions must be a 3 or 4-digit octal number (digits 0-7)."
   }
 }
 
 variable "tiering_policy" {
-  description = "Define the tiering policy for the NetApp volume."
+  description = <<-EOT
+    Define the tiering policy for the NetApp volume. Requires a pool with allow_auto_tiering enabled.
+    hot_tier_bypass_mode_enabled (FLEX only): use during data migration so writes go to the cold tier instead of filling the hot tier; disable after migration completes.
+    EOT
   type = object({
-    tier_action            = optional(string)
-    cooling_threshold_days = optional(number)
+    tier_action                  = optional(string)
+    cooling_threshold_days       = optional(number)
+    hot_tier_bypass_mode_enabled = optional(bool)
   })
   default = null
+  validation {
+    condition = var.tiering_policy == null || contains(
+      ["ENABLED", "PAUSED"],
+      coalesce(var.tiering_policy.tier_action, "PAUSED")
+    )
+    error_message = "tier_action must be ENABLED or PAUSED."
+  }
+  validation {
+    condition = var.tiering_policy == null || var.tiering_policy.cooling_threshold_days == null || (
+      coalesce(var.tiering_policy.cooling_threshold_days, 0) >= 2 &&
+      coalesce(var.tiering_policy.cooling_threshold_days, 0) <= 183
+    )
+    error_message = "cooling_threshold_days must be between 2 and 183."
+  }
+}
+
+variable "deletion_policy" {
+  description = <<-EOT
+    Controls Terraform destroy behavior. Omit to use the provider default (delete the volume in Google Cloud).
+    DEFAULT or DELETE: delete the volume in Google Cloud.
+    FORCE: delete the volume even when nested snapshot resources exist.
+    PREVENT: block Terraform from deleting the volume.
+    ABANDON: remove the volume from Terraform state without deleting it in Google Cloud.
+    EOT
+  type        = string
+  default     = null
+  validation {
+    condition     = var.deletion_policy == null ? true : contains(["DEFAULT", "FORCE", "PREVENT", "ABANDON", "DELETE"], var.deletion_policy)
+    error_message = "Allowed values for deletion_policy are DEFAULT, FORCE, PREVENT, ABANDON, or DELETE."
+  }
 }
 
 variable "export_policy_rules" {
@@ -130,4 +200,10 @@ variable "export_policy_rules" {
     access_type     = "READ_WRITE",
   }]
   nullable = true
+  validation {
+    condition = var.export_policy_rules == null ? true : alltrue([
+      for rule in var.export_policy_rules : contains(["READ_ONLY", "READ_WRITE", "READ_NONE"], rule.access_type)
+    ])
+    error_message = "access_type must be READ_ONLY, READ_WRITE, or READ_NONE."
+  }
 }
