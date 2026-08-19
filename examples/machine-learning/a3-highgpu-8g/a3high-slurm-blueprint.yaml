@@ -16,7 +16,16 @@ blueprint_name: a3high-slurm
 
 vars:
   sys_net_range: 172.16.0.0/16
-  filestore_ip_range: 192.168.0.0/29
+  # Managed-Lustre instance name. This should be unique for each deployment.
+  lustre_instance_id: $(vars.deployment_name)-lustre
+
+  # The values of size_gib and per_unit_storage_throughput are co-related
+  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  # Storage capacity of the lustre instance in GiB
+  lustre_size_gib: 36000
+
+  # Maximum throughput of the lustre instance in MBps per TiB
+  per_unit_storage_throughput: 500
   source_image_project_id: ubuntu-os-cloud
   source_image_family: ubuntu-2204-lts
   local_mount_homefs: /home
@@ -58,15 +67,22 @@ deployment_groups:
       network_count: 4
       subnetwork_cidr_suffix: 20
 
-  - id: homefs
-    source: modules/file-system/filestore
+  - id: private_service_access
+    source: modules/network/private-service-access
     use:
     - sysnet
+
+  - id: homefs
+    source: modules/file-system/managed-lustre
+    use:
+    - sysnet
+    - private_service_access
     settings:
-      filestore_tier: BASIC_SSD
-      size_gb: 2560
-      reserved_ip_range: $(vars.filestore_ip_range)
+      name: $(vars.lustre_instance_id)
+      size_gib: $(vars.lustre_size_gib)
       local_mount: $(vars.local_mount_homefs)
+      remote_mount: lustrefs
+      per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
 
 - group: build-script
   modules:
@@ -301,8 +317,7 @@ deployment_groups:
             "monitoring_agent": "cloud-ops",
             "nvidia_version": "latest",
             "allow_kernel_upgrades": true, # tcpx kernel is held and gcp kernel is removed as the last task
-            "install_nvidia_repo": false,
-            "monitoring_agent": "cloud-ops",
+            "install_nvidia_repo": false
           }
 
       - type: shell
@@ -316,6 +331,40 @@ deployment_groups:
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
+
+      - type: shell
+        destination: install_tcpx_lustre.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --yes --dearmor -o /usr/share/keyrings/google-cloud.gpg
+          curl -fsSL https://us-apt.pkg.dev/doc/repo-signing-key.gpg | gpg --yes --dearmor -o /usr/share/keyrings/lustre-client.gpg
+          echo 'deb [signed-by=/usr/share/keyrings/google-cloud.gpg] http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main' > /etc/apt/sources.list.d/google-cloud.list
+          apt-get update
+          apt-get install -y apt-transport-artifact-registry
+          echo "deb [signed-by=/usr/share/keyrings/lustre-client.gpg] ar+https://us-apt.pkg.dev/projects/lustre-client-binaries lustre-client-ubuntu-jammy main" > /etc/apt/sources.list.d/artifact-registry.list
+          apt-get update
+          TCPX_KERNEL_VERSION=""
+          for d in /lib/modules/*tcpx*; do
+            if [ -d "$d" ]; then
+              TCPX_KERNEL_VERSION=`basename "$d"`
+              break
+            fi
+          done
+          if [ -n "${TCPX_KERNEL_VERSION}" ]; then
+            echo "Installing Lustre client modules for kernel ${TCPX_KERNEL_VERSION}..."
+            set +e
+            apt-get install -y lustre-client-modules-${TCPX_KERNEL_VERSION}
+            if [ $? -ne 0 ]; then
+              echo "Pre-compiled package lustre-client-modules-${TCPX_KERNEL_VERSION} not found. Installing via DKMS for ${TCPX_KERNEL_VERSION}..."
+              apt-get install -y dkms lustre-client-modules-dkms lustre-client-utils
+              echo "Building DKMS modules specifically for ${TCPX_KERNEL_VERSION}..."
+              dkms autoinstall -k "${TCPX_KERNEL_VERSION}"
+            fi
+            set -e
+          else
+            echo "No tcpx kernel modules directory found."
+          fi
 
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf
