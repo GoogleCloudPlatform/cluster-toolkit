@@ -42,10 +42,15 @@ func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
 		return err
 	} else if installed {
 		logging.Info("JobSet CRD found. Verifying Webhook health...")
-		cmdEndpoints := g.executor.ExecuteCommand("kubectl", "get", "endpoints", "jobset-webhook-service", "-n", "jobset-system", "-o", "jsonpath={.subsets[*].addresses[*].ip}")
-		if cmdEndpoints.ExitCode == 0 && strings.TrimSpace(cmdEndpoints.Stdout) != "" {
-			logging.Info("JobSet Webhook is healthy.")
-			return nil
+		cmdEndpoints := g.executor.ExecuteCommand("kubectl", "get", "endpointslice", "-l", "kubernetes.io/service-name=jobset-webhook-service", "-n", "jobset-system", "-o", "json")
+		if cmdEndpoints.ExitCode == 0 {
+			var eps k8sEndpointSliceList
+			if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
+				logging.Warn("Failed to parse JobSet endpointslice JSON: %v", err)
+			} else if eps.HasReadyEndpoint() {
+				logging.Info("JobSet Webhook is healthy.")
+				return nil
+			}
 		}
 		logging.Info("JobSet Webhook endpoints not found. Proceeding with re-installation/fix...")
 	}
@@ -87,6 +92,17 @@ type k8sEndpointSliceList struct {
 	} `json:"items"`
 }
 
+func (eps *k8sEndpointSliceList) HasReadyEndpoint() bool {
+	for _, item := range eps.Items {
+		for _, ep := range item.Endpoints {
+			if ep.Conditions.Ready && len(ep.Addresses) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (g *GKEOrchestrator) waitForJobSetWebhook() error {
 	logging.Info("Waiting for JobSet webhook service to be ready...")
 	res := g.executor.ExecuteCommand("kubectl", "rollout", "status", "deployment/jobset-controller-manager", "-n", "jobset-system", "--timeout=600s")
@@ -99,15 +115,12 @@ func (g *GKEOrchestrator) waitForJobSetWebhook() error {
 		cmdEndpoints := g.executor.ExecuteCommand("kubectl", "get", "endpointslice", "-l", "kubernetes.io/service-name=jobset-webhook-service", "-n", "jobset-system", "-o", "json")
 		if cmdEndpoints.ExitCode == 0 {
 			var eps k8sEndpointSliceList
-			if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err == nil {
-				for _, item := range eps.Items {
-					for _, ep := range item.Endpoints {
-						if ep.Conditions.Ready && len(ep.Addresses) > 0 {
-							logging.Info("JobSet webhook service endpoints are available.")
-							return nil
-						}
-					}
-				}
+			if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
+				return fmt.Errorf("failed to unmarshal jobset endpointslice json: %w", err)
+			}
+			if eps.HasReadyEndpoint() {
+				logging.Info("JobSet webhook service endpoints are available.")
+				return nil
 			}
 		}
 		time.Sleep(3 * time.Second)
@@ -129,10 +142,12 @@ func (g *GKEOrchestrator) isJobSetCRDInstalled() (bool, error) {
 }
 
 func (g *GKEOrchestrator) getHTTPClient() HTTPClient {
-	if g.httpClient != nil {
-		return g.httpClient
-	}
-	return &http.Client{Timeout: 30 * time.Second}
+	g.httpOnce.Do(func() {
+		if g.httpClient == nil {
+			g.httpClient = &http.Client{Timeout: 30 * time.Second}
+		}
+	})
+	return g.httpClient
 }
 
 func (g *GKEOrchestrator) downloadManifests(url string) ([]byte, error) {

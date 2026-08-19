@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 
@@ -56,20 +55,9 @@ func (m *mockHTTPClient) Get(url string) (*http.Response, error) {
 }
 
 func TestConfigureClusterEnvironment_AutoCreateQueues(t *testing.T) {
-	pipeRead, pipeWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = pipeRead.Close() }()
-	defer func() { _ = pipeWrite.Close() }()
-
-	origStdin := os.Stdin
-	os.Stdin = pipeRead
-	defer func() { os.Stdin = origStdin }()
-
-	if _, err := pipeWrite.Write([]byte("y\n")); err != nil {
-		t.Fatal(err)
-	}
+	origPrompt := shell.PromptYesNo
+	t.Cleanup(func() { shell.PromptYesNo = origPrompt })
+	shell.PromptYesNo = func(prompt string) bool { return true }
 
 	responses := map[string][]shell.CommandResult{
 		"kubectl get localqueue default -n default": {
@@ -77,6 +65,9 @@ func TestConfigureClusterEnvironment_AutoCreateQueues(t *testing.T) {
 		},
 		"kubectl get clusterqueue default": {
 			{ExitCode: 1, Stderr: "Error from server (NotFound): clusterqueues.kueue.x-k8s.io \"default\" not found"},
+		},
+		"kubectl get resourceflavor": {
+			{ExitCode: 0, Stdout: ""},
 		},
 		"kubectl apply -f": {
 			{ExitCode: 0, Stdout: "resourceflavor.kueue.x-k8s.io/flavor-default created"},
@@ -106,7 +97,7 @@ func TestConfigureClusterEnvironment_AutoCreateQueues(t *testing.T) {
 		KueueQueueName: "default",
 	}
 
-	err = orc.configureClusterEnvironment(job)
+	err := orc.configureClusterEnvironment(job)
 	if err != nil {
 		t.Fatalf("configureClusterEnvironment failed: %v", err)
 	}
@@ -554,7 +545,7 @@ func TestParseVersion(t *testing.T) {
 
 func TestCheckAndInstallKueue_ReinstallNeeded_LowVersion(t *testing.T) {
 	origPrompt := shell.PromptYesNo
-	defer func() { shell.PromptYesNo = origPrompt }()
+	t.Cleanup(func() { shell.PromptYesNo = origPrompt })
 	shell.PromptYesNo = func(prompt string) bool { return true }
 
 	deleteCalled := false
@@ -668,7 +659,7 @@ func TestEnsurePriorityClassesInstalled_Present(t *testing.T) {
 
 func TestHandleKueueReinstallation_UserDeclines(t *testing.T) {
 	origPrompt := shell.PromptYesNo
-	defer func() { shell.PromptYesNo = origPrompt }()
+	t.Cleanup(func() { shell.PromptYesNo = origPrompt })
 	shell.PromptYesNo = func(prompt string) bool { return false }
 
 	orc := &GKEOrchestrator{}
@@ -789,7 +780,7 @@ func TestCheckAndInstallKueue_PermissionGranted(t *testing.T) {
 	}
 
 	origPrompt := shell.PromptYesNo
-	defer func() { shell.PromptYesNo = origPrompt }()
+	t.Cleanup(func() { shell.PromptYesNo = origPrompt })
 	shell.PromptYesNo = func(prompt string) bool { return true }
 
 	orc := &GKEOrchestrator{
@@ -960,7 +951,7 @@ func TestCheckAndInstallKueue_VersionNormalization(t *testing.T) {
 		},
 	}
 	origPrompt := shell.PromptYesNo
-	defer func() { shell.PromptYesNo = origPrompt }()
+	t.Cleanup(func() { shell.PromptYesNo = origPrompt })
 	shell.PromptYesNo = func(prompt string) bool { return true }
 
 	orc := &GKEOrchestrator{
@@ -972,5 +963,74 @@ func TestCheckAndInstallKueue_VersionNormalization(t *testing.T) {
 	err := orc.CheckAndInstallKueue("0.17.1", "test-cluster", "us-central1-a")
 	if err != nil {
 		t.Fatalf("CheckAndInstallKueue failed for version without 'v' prefix: %v", err)
+	}
+}
+
+func TestValidatePriorityClass_Forbidden(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): priorityclasses.scheduling.k8s.io is forbidden"}
+		},
+	}
+	orc := &GKEOrchestrator{executor: mock}
+
+	err := orc.validatePriorityClass("high")
+	if err != nil {
+		t.Fatalf("validatePriorityClass should succeed and skip on 403 Forbidden, got: %v", err)
+	}
+}
+
+func TestHasUserPriorityClasses_Forbidden(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): priorityclasses.scheduling.k8s.io is forbidden"}
+		},
+	}
+	orc := &GKEOrchestrator{executor: mock}
+
+	hasUser, err := orc.hasUserPriorityClasses()
+	if err != nil {
+		t.Fatalf("hasUserPriorityClasses should return true and skip on 403 Forbidden, got error: %v", err)
+	}
+	if !hasUser {
+		t.Errorf("expected hasUserPriorityClasses to return true on 403 Forbidden to skip installation")
+	}
+}
+
+func TestEnsureResourceFlavors_Forbidden(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): resourceflavors.kueue.x-k8s.io is forbidden"}
+		},
+	}
+	orc := &GKEOrchestrator{
+		executor: mock,
+		capacity: ClusterCapacity{
+			Flavors: map[string]FlavorCapacity{
+				"flavor-default": {},
+			},
+		},
+	}
+
+	err := orc.EnsureResourceFlavors()
+	if err != nil {
+		t.Fatalf("EnsureResourceFlavors should succeed and skip on 403 Forbidden, got: %v", err)
+	}
+}
+
+func TestCheckClusterQueueCoverage_Forbidden(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): clusterqueues.kueue.x-k8s.io is forbidden"}
+		},
+	}
+	orc := &GKEOrchestrator{executor: mock}
+
+	covered, isNew, err := orc.checkClusterQueueCoverage("default")
+	if err != nil {
+		t.Fatalf("checkClusterQueueCoverage should succeed and skip on 403 Forbidden, got: %v", err)
+	}
+	if !covered || isNew {
+		t.Errorf("expected covered=true, isNew=false on 403 Forbidden, got covered=%v, isNew=%v", covered, isNew)
 	}
 }

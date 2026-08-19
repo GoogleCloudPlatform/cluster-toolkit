@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/shell"
 
@@ -56,6 +57,30 @@ const (
 	pathwaysMemoryNominalQuota    = "999999T"
 	kueueControllerRolloutTimeout = "--timeout=600s"
 )
+
+var kueuePermissionChecks = []struct {
+	verb     string
+	resource string
+}{
+	{"create", "namespaces"},
+	{"create", "customresourcedefinitions.apiextensions.k8s.io"},
+	{"create", "clusterroles.rbac.authorization.k8s.io"},
+	{"create", "clusterrolebindings.rbac.authorization.k8s.io"},
+}
+
+var kueueCRDs = []string{
+	"admissionchecks.kueue.x-k8s.io",
+	"clusterqueues.kueue.x-k8s.io",
+	"cohorts.kueue.x-k8s.io",
+	"localqueues.kueue.x-k8s.io",
+	"multikueueclusters.kueue.x-k8s.io",
+	"multikueueconfigs.kueue.x-k8s.io",
+	"provisioningrequestconfigs.kueue.x-k8s.io",
+	"resourceflavors.kueue.x-k8s.io",
+	"topologies.kueue.x-k8s.io",
+	"workloadpriorityclasses.kueue.x-k8s.io",
+	"workloads.kueue.x-k8s.io",
+}
 
 // -----------------------------------------------------------------------------
 // 2. Kueue Job Queue Resolution & Setup (Job-Level)
@@ -129,6 +154,7 @@ func (g *GKEOrchestrator) checkClusterQueueExists(name string) (bool, error) {
 	if strings.Contains(errStr, "forbidden") {
 		// If the user lacks RBAC permissions to read ClusterQueue, assume it exists in shared clusters
 		// so we skip cluster-scoped creation (which would also fail with 403) and proceed to create LocalQueue.
+		logging.Warn("Insufficient RBAC permissions to read ClusterQueue %q (403 Forbidden). Assuming it exists in shared cluster.", name)
 		return true, nil
 	}
 	return false, fmt.Errorf("failed to check clusterqueue status: %s", res.Stderr)
@@ -224,6 +250,11 @@ func (g *GKEOrchestrator) getClusterQueueName(localQueueName, ns string) (string
 func (g *GKEOrchestrator) checkClusterQueueCoverage(cqName string) (bool, bool, error) {
 	res := g.executor.ExecuteCommand("kubectl", "get", "clusterqueue", cqName, "-o", "json")
 	if res.ExitCode != 0 {
+		errStr := strings.ToLower(res.Stderr)
+		if strings.Contains(errStr, "forbidden") {
+			logging.Warn("Insufficient RBAC permissions to read ClusterQueue %q (403 Forbidden). Skipping resource coverage validation.", cqName)
+			return true, false, nil
+		}
 		return false, false, fmt.Errorf("failed to get clusterqueue %s: %s", cqName, res.Stderr)
 	}
 
@@ -308,6 +339,10 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName strin
 		if err := g.handleKueueReinstallation(version, reinstallReason); err != nil {
 			return err
 		}
+	} else {
+		if err := g.waitForKueueWebhookFast(); err != nil {
+			return fmt.Errorf("kueue is installed but currently unhealthy. Please check deployment health with 'kubectl get deployment kueue-controller-manager -n kueue-system': %w", err)
+		}
 	}
 
 	logging.Info("Kueue is already installed.")
@@ -320,9 +355,6 @@ func (g *GKEOrchestrator) evaluateKueueReinstall(crdInstalled, depInstalled bool
 	}
 	if !crdInstalled || !depInstalled {
 		return true, "Kueue installation is incomplete (CRD or Deployment missing)."
-	}
-	if g.waitForKueueWebhook() != nil {
-		return true, "Kueue webhook health check failed. Treating as broken."
 	}
 	return false, ""
 }
@@ -369,17 +401,7 @@ func (g *GKEOrchestrator) installKueue(version string) error {
 
 func (g *GKEOrchestrator) checkKueueInstallPermissions(version string) error {
 	logging.Info("Verifying cluster permissions for Kueue installation...")
-	checks := []struct {
-		verb     string
-		resource string
-	}{
-		{"create", "namespaces"},
-		{"create", "customresourcedefinitions.apiextensions.k8s.io"},
-		{"create", "clusterroles.rbac.authorization.k8s.io"},
-		{"create", "clusterrolebindings.rbac.authorization.k8s.io"},
-	}
-
-	for _, c := range checks {
+	for _, c := range kueuePermissionChecks {
 		res := g.executor.ExecuteCommand("kubectl", "auth", "can-i", c.verb, c.resource)
 		if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) != "yes" {
 			return fmt.Errorf("unable to re-install kueue to version %s, this could be a permission issue. Please contact your cluster administrator for updating KUEUE settings", version)
@@ -394,7 +416,8 @@ func (g *GKEOrchestrator) isKueueInstalled() (bool, error) {
 		logging.Info("Kueue CRD found.")
 		return true, nil
 	}
-	if strings.Contains(res.Stderr, "not found") || strings.Contains(res.Stdout, "NotFound") {
+	errStr := strings.ToLower(res.Stderr + " " + res.Stdout)
+	if strings.Contains(errStr, "notfound") || strings.Contains(errStr, "not found") {
 		logging.Info("Kueue CRD not found.")
 		return false, nil
 	}
@@ -407,7 +430,8 @@ func (g *GKEOrchestrator) isKueueDeploymentInstalled() (bool, error) {
 		logging.Info("Kueue deployment found.")
 		return true, nil
 	}
-	if strings.Contains(res.Stderr, "not found") || strings.Contains(res.Stdout, "NotFound") {
+	errStr := strings.ToLower(res.Stderr + " " + res.Stdout)
+	if strings.Contains(errStr, "notfound") || strings.Contains(errStr, "not found") {
 		logging.Info("Kueue deployment not found.")
 		return false, nil
 	}
@@ -472,26 +496,12 @@ func (g *GKEOrchestrator) DeleteKueueDeployment() error {
 
 // DeleteAllKueueResources deletes all Kueue custom resources and CRDs from the cluster.
 func (g *GKEOrchestrator) DeleteAllKueueResources() error {
-	crds := []string{
-		"admissionchecks.kueue.x-k8s.io",
-		"clusterqueues.kueue.x-k8s.io",
-		"cohorts.kueue.x-k8s.io",
-		"localqueues.kueue.x-k8s.io",
-		"multikueueclusters.kueue.x-k8s.io",
-		"multikueueconfigs.kueue.x-k8s.io",
-		"provisioningrequestconfigs.kueue.x-k8s.io",
-		"resourceflavors.kueue.x-k8s.io",
-		"topologies.kueue.x-k8s.io",
-		"workloadpriorityclasses.kueue.x-k8s.io",
-		"workloads.kueue.x-k8s.io",
-	}
-
-	resourceList := strings.Join(crds, ",")
+	resourceList := strings.Join(kueueCRDs, ",")
 	logging.Info("Deleting all Kueue resources...")
 	g.executor.ExecuteCommand("kubectl", "delete", resourceList, "--all", "--ignore-not-found", "--wait=false")
 
 	logging.Info("Deleting Kueue CRDs...")
-	args := append([]string{"delete", "crd", "--ignore-not-found"}, crds...)
+	args := append([]string{"delete", "crd", "--ignore-not-found"}, kueueCRDs...)
 	res := g.executor.ExecuteCommand("kubectl", args...)
 	if res.ExitCode != 0 {
 		return fmt.Errorf("failed to delete Kueue CRDs: %s\n%s", res.Stderr, res.Stdout)
@@ -500,7 +510,7 @@ func (g *GKEOrchestrator) DeleteAllKueueResources() error {
 	return g.DeleteKueueDeployment()
 }
 
-func (g *GKEOrchestrator) waitForKueueWebhook() error {
+func (g *GKEOrchestrator) waitForKueueWebhookFast() error {
 	res := g.executor.ExecuteCommand("kubectl", "rollout", "status", "deployment/kueue-controller-manager", "-n", "kueue-system", kueueControllerRolloutTimeout)
 	if res.ExitCode != 0 {
 		podDetails := g.getKueuePodDetails()
@@ -516,10 +526,13 @@ func (g *GKEOrchestrator) waitForKueueWebhook() error {
 	major, minor, _ := parseVersion(version)
 	useEndpointSlice := major > 0 || (major == 0 && minor > 13)
 
-	if err := g.waitForKueueEndpoints(useEndpointSlice); err != nil {
+	return g.waitForKueueEndpoints(useEndpointSlice)
+}
+
+func (g *GKEOrchestrator) waitForKueueWebhook() error {
+	if err := g.waitForKueueWebhookFast(); err != nil {
 		return err
 	}
-
 	return g.probeKueueWebhookReadiness()
 }
 
@@ -540,23 +553,20 @@ func (g *GKEOrchestrator) waitForKueueEndpoints(useEndpointSlice bool) error {
 
 func (g *GKEOrchestrator) probeKueueWebhookReadiness() error {
 	logging.Info("Probing Kueue webhook readiness...")
-	probeManifest := `apiVersion: kueue.x-k8s.io/` + kueueAPIVersion + `
-kind: ResourceFlavor
-metadata:
-  name: gcluster-webhook-probe
-`
+	probeName := fmt.Sprintf("gcluster-webhook-probe-%d", time.Now().UnixNano())
+	probeManifest := fmt.Sprintf("apiVersion: kueue.x-k8s.io/%s\nkind: ResourceFlavor\nmetadata:\n  name: %s\n", kueueAPIVersion, probeName)
 	f, err := os.CreateTemp("", "gcluster-webhook-probe-*.yaml")
 	if err != nil {
 		return fmt.Errorf("failed to create probe manifest file: %w", err)
 	}
 	probeFile := f.Name()
 	defer func() {
-		_ = f.Close()
-		g.executor.ExecuteCommand("kubectl", "delete", "-f", probeFile, "--ignore-not-found")
+		_ = g.executor.ExecuteCommand("kubectl", "delete", "-f", probeFile, "--ignore-not-found")
 		_ = os.Remove(probeFile)
 	}()
 
 	if _, err := f.Write([]byte(probeManifest)); err != nil {
+		_ = f.Close()
 		return fmt.Errorf("failed to write probe manifest: %w", err)
 	}
 	if err := f.Close(); err != nil {
@@ -624,14 +634,11 @@ func (g *GKEOrchestrator) checkKueueEndpoints(useEndpointSlice bool) (bool, erro
 
 	if useEndpointSlice {
 		var eps k8sEndpointSliceList
-		if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err == nil {
-			for _, item := range eps.Items {
-				for _, ep := range item.Endpoints {
-					if ep.Conditions.Ready && len(ep.Addresses) > 0 {
-						return true, nil
-					}
-				}
-			}
+		if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
+			return false, fmt.Errorf("failed to unmarshal endpointslice json: %w", err)
+		}
+		if eps.HasReadyEndpoint() {
+			return true, nil
 		}
 	} else {
 		var eps struct {
@@ -641,11 +648,12 @@ func (g *GKEOrchestrator) checkKueueEndpoints(useEndpointSlice bool) (bool, erro
 				} `json:"addresses"`
 			} `json:"subsets"`
 		}
-		if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err == nil {
-			for _, subset := range eps.Subsets {
-				if len(subset.Addresses) > 0 {
-					return true, nil
-				}
+		if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
+			return false, fmt.Errorf("failed to unmarshal endpoints json: %w", err)
+		}
+		for _, subset := range eps.Subsets {
+			if len(subset.Addresses) > 0 {
+				return true, nil
 			}
 		}
 	}
@@ -667,6 +675,10 @@ func (g *GKEOrchestrator) getClusterPriorityClasses() ([]string, error) {
 func (g *GKEOrchestrator) hasUserPriorityClasses() (bool, error) {
 	existing, err := g.getClusterPriorityClasses()
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "forbidden") {
+			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping default PriorityClass installation.")
+			return true, nil
+		}
 		return false, err
 	}
 
@@ -726,6 +738,10 @@ func (g *GKEOrchestrator) validatePriorityClass(requestedPriority string) error 
 
 	existing, err := g.getClusterPriorityClasses()
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "forbidden") {
+			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping PriorityClass validation for %q.", requestedPriority)
+			return nil
+		}
 		return err
 	}
 
@@ -744,10 +760,17 @@ func (g *GKEOrchestrator) EnsureResourceFlavors() error {
 	logging.Info("Ensuring Kueue ResourceFlavors exist...")
 	cmd := g.executor.ExecuteCommand("kubectl", "get", "resourceflavor", "-o", "jsonpath={.items[*].metadata.name}")
 	existingFlavors := make(map[string]bool)
-	if cmd.ExitCode == 0 {
-		for _, f := range strings.Fields(cmd.Stdout) {
-			existingFlavors[f] = true
+	if cmd.ExitCode != 0 {
+		errStr := strings.ToLower(cmd.Stderr)
+		if strings.Contains(errStr, "forbidden") {
+			logging.Warn("Insufficient RBAC permissions to list resource flavors (403 Forbidden). Skipping ResourceFlavor verification and creation.")
+			return nil
 		}
+		return fmt.Errorf("failed to list resource flavors: %s", cmd.Stderr)
+	}
+
+	for _, f := range strings.Fields(cmd.Stdout) {
+		existingFlavors[f] = true
 	}
 
 	names := slices.Sorted(maps.Keys(g.capacity.Flavors))
@@ -853,11 +876,20 @@ func (g *GKEOrchestrator) isResourceActive(staticAmount int, napLimitKey string)
 	return staticAmount > 0 || (g.napEnabled && g.napLimits[napLimitKey] > 0)
 }
 
-func (g *GKEOrchestrator) isAccelActive(staticAmount int, napLimitKey string, fname string, flavorSub string) bool {
+func (g *GKEOrchestrator) isAccelActive(staticAmount int, napLimitKey string, lowerFname string, flavorSub string) bool {
 	if staticAmount > 0 {
 		return true
 	}
-	return g.napEnabled && g.napLimits[napLimitKey] > 0 && strings.Contains(strings.ToLower(fname), flavorSub)
+	if !g.napEnabled || g.napLimits[napLimitKey] <= 0 {
+		return false
+	}
+	if flavorSub == "tpu" {
+		return isTPUFlavor(lowerFname)
+	}
+	if flavorSub == "nvidia" {
+		return isGPUFlavor(lowerFname)
+	}
+	return strings.Contains(lowerFname, flavorSub)
 }
 
 func (g *GKEOrchestrator) calculateCoveredResources() map[string]bool {
@@ -866,6 +898,7 @@ func (g *GKEOrchestrator) calculateCoveredResources() map[string]bool {
 	fnames := slices.Sorted(maps.Keys(g.capacity.Flavors))
 	for _, fname := range fnames {
 		fc := g.capacity.Flavors[fname]
+		lowerFname := strings.ToLower(fname)
 		if g.isResourceActive(fc.CPUs, "cpu") {
 			coveredMap["cpu"] = true
 		}
@@ -873,10 +906,10 @@ func (g *GKEOrchestrator) calculateCoveredResources() map[string]bool {
 			coveredMap["memory"] = true
 		}
 		if fname != "pathways-flavor" {
-			if g.isAccelActive(fc.GPUs, "nvidia.com/gpu", fname, "nvidia") {
+			if g.isAccelActive(fc.GPUs, "nvidia.com/gpu", lowerFname, "nvidia") {
 				coveredMap["nvidia.com/gpu"] = true
 			}
-			if g.isAccelActive(fc.TPUs, "google.com/tpu", fname, "tpu") {
+			if g.isAccelActive(fc.TPUs, "google.com/tpu", lowerFname, "tpu") {
 				coveredMap["google.com/tpu"] = true
 			}
 		}
@@ -885,8 +918,11 @@ func (g *GKEOrchestrator) calculateCoveredResources() map[string]bool {
 }
 
 func isTPUFlavor(fname string) bool {
-	lower := strings.ToLower(fname)
-	return strings.Contains(lower, "tpu") || strings.Contains(lower, "ct")
+	cleanName := strings.TrimPrefix(fname, "flavor-")
+	if strings.EqualFold(cleanName, "ct") {
+		return false
+	}
+	return config.IsTPU(cleanName) || strings.Contains(strings.ToLower(fname), "tpu")
 }
 
 func isGPUFlavor(fname string) bool {
