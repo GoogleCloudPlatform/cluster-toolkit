@@ -939,3 +939,38 @@ func TestCheckClusterQueueExists_Forbidden(t *testing.T) {
 		t.Errorf("checkClusterQueueExists on Forbidden = false; want true")
 	}
 }
+
+func TestCheckAndInstallKueue_VersionNormalization(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			if strings.Contains(fullCmd, "auth can-i") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "yes"}
+			}
+			if strings.Contains(fullCmd, "jsonpath") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.12.0"}
+			}
+			if strings.Contains(fullCmd, "kubectl get crd") || strings.Contains(fullCmd, "kubectl get deployment") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "found"}
+			}
+			if strings.Contains(fullCmd, "kubectl get endpoints") || strings.Contains(fullCmd, "kubectl get endpointslice") {
+				return shell.CommandResult{ExitCode: 0, Stdout: `{"subsets": [{"addresses": [{"ip": "10.0.0.1"}]}]}`}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+	origPrompt := shell.PromptYesNo
+	defer func() { shell.PromptYesNo = origPrompt }()
+	shell.PromptYesNo = func(prompt string) bool { return true }
+
+	orc := &GKEOrchestrator{
+		executor:   mock,
+		httpClient: &mockHTTPClient{},
+	}
+
+	// Pass version without 'v' prefix: "0.17.1"
+	err := orc.CheckAndInstallKueue("0.17.1", "test-cluster", "us-central1-a")
+	if err != nil {
+		t.Fatalf("CheckAndInstallKueue failed for version without 'v' prefix: %v", err)
+	}
+}

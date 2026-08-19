@@ -291,6 +291,8 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName strin
 
 	if version == "" {
 		version = defaultKueueVersion
+	} else if !strings.HasPrefix(version, "v") {
+		version = "v" + version
 	}
 
 	needReinstall, reinstallReason := g.evaluateKueueReinstall(kueueCRDInstalled, kueueDeploymentInstalled, currentVersion, version)
