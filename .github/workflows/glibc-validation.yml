@@ -27,32 +27,32 @@ jobs:
     strategy:
       matrix:
         include:
-          - os-name: "Debian 11 (Bullseye)"
-            image: "debian:11-slim"
-          - os-name: "Debian 12 (Bookworm)"
-            image: "debian:12-slim"
-          - os-name: "Debian 13 (Trixie)"
-            image: "debian:trixie-slim"
-          - os-name: "Ubuntu 22.04"
-            image: "ubuntu:22.04"
-          - os-name: "Rocky Linux 8"
-            image: "rockylinux:8"
-          - os-name: "Rocky Linux 9"
-            image: "rockylinux:9"
+        - os-name: "Debian 11 (Bullseye)"
+          image: "debian:11-slim"
+        - os-name: "Debian 12 (Bookworm)"
+          image: "debian:12-slim"
+        - os-name: "Debian 13 (Trixie)"
+          image: "debian:trixie-slim"
+        - os-name: "Ubuntu 22.04"
+          image: "ubuntu:22.04"
+        - os-name: "Rocky Linux 8"
+          image: "rockylinux:8"
+        - os-name: "Rocky Linux 9"
+          image: "rockylinux:9"
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
-      - name: Set up Go 1.26
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.26'
+    - name: Set up Go 1.26
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.26'
 
-      - name: Build Binary
-        run: |
-          go mod tidy
-          CGO_ENABLED=0 go build -o gcluster .
+    - name: Build Binary
+      run: |
+        go mod tidy
+        CGO_ENABLED=0 go build -o gcluster .
 
-      - name: Dry-Run Test on Target OS
-        run: |
-          docker run --rm -v "$(pwd)/gcluster:/gcluster" ${{ matrix.image }} /gcluster --version
+    - name: Dry-Run Test on Target OS
+      run: |
+        docker run --rm -v "$(pwd)/gcluster:/gcluster" ${{ matrix.image }} /gcluster --version
