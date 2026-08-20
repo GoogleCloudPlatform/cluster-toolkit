@@ -27,7 +27,7 @@ cli_deployment_vars:
   region: us-west4
   zone: us-west4-c
   authorized_cidr: "{{ build_ip.stdout }}/32"
-  slinky_image: "us-west4-docker.pkg.dev/hpc-toolkit-dev/slurm/slurmd-pyxis:25.05-ubuntu24.04"
+  slinky_image: "us-west4-docker.pkg.dev/{{ project }}/slurm/slurmd-pyxis:25.05-ubuntu24.04"
 
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/slurm-gke/slurm-gke.yaml"
