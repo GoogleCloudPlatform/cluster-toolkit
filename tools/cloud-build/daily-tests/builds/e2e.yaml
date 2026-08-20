@@ -114,17 +114,17 @@ steps:
               bash tools/add_ttl_label.sh "\$$BLUEPRINT"
 
               ./gcluster deploy "\$$BLUEPRINT" --vars="\$$vars" --auto-approve &
-              CMD_PID=\$$!
-              wait \$$CMD_PID
+              ANSIBLE_PID=\$$!
+              wait \$$ANSIBLE_PID
 
               # check instance was created
               gcloud compute instances describe "\$${DEPLOYMENT_NAME}-0" --project="\$$PROJECT_ID" --zone="\$$zone" >/dev/null &
-              CMD_PID=\$$!
-              wait \$$CMD_PID
+              ANSIBLE_PID=\$$!
+              wait \$$ANSIBLE_PID
 
               ./gcluster destroy "\$$DEPLOYMENT_NAME" --auto-approve --robust &
-              CMD_PID=\$$!
-              wait \$$CMD_PID
+              ANSIBLE_PID=\$$!
+              wait \$$ANSIBLE_PID
 
               RUN_CLEANUP=false
             resources:

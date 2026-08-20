@@ -118,9 +118,9 @@ steps:
               gcloud config set project $PROJECT_ID
 
               python3 tools/python-integration-tests/slurm_simple_job_completion.py --blueprint=\$$BLUEPRINT &
-              SCRIPT_PID=\$$!
+              ANSIBLE_PID=\$$!
 
-              wait \$$SCRIPT_PID
+              wait \$$ANSIBLE_PID
               RUN_CLEANUP=false
             resources:
               requests:

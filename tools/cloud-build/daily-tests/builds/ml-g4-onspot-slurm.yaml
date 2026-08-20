@@ -154,7 +154,6 @@ steps:
               set -x
               bash tools/get_binary.sh "${_TEST_PREFIX}"
               REGION="\$${ZONE%-*}"
-              BUILD_ID_SHORT="\$${BUILD_ID:0:6}"
               BLUEPRINT="/workspace/examples/ml-slurm-g4.yaml"
 
               ENABLE_SPOT="true"
