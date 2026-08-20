@@ -115,6 +115,8 @@ vars:
 ./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
 ```
 
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
+
 Selective deployment and teardown for this blueprint are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
 
 Example (deploy only the primary group for this blueprint):

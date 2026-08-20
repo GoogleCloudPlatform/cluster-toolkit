@@ -152,6 +152,8 @@ subcommands as well:
 > in both the blueprint and CLI, the tool uses values at CLI. "gcs" is set as
 > type by default.
 
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
+
 [terraform backends]: https://developer.hashicorp.com/terraform/language/backend
 [configuration block]: https://developer.hashicorp.com/terraform/language/backend#define-a-backend-block
 [gcs]: https://developer.hashicorp.com/terraform/language/settings/backends/gcs
