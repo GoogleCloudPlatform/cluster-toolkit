@@ -112,7 +112,7 @@ func TestCreateDefaultQueues_CustomNamespace(t *testing.T) {
 		"kubectl get resourceflavor": {
 			{ExitCode: 1, Stderr: "Error from server (NotFound)"},
 		},
-		"kubectl get clusterqueue team-a": {
+		"kubectl get clusterqueue default": {
 			{ExitCode: 1, Stderr: "Error from server (NotFound)"},
 		},
 		"kubectl apply -f": {
@@ -923,11 +923,72 @@ func TestCheckClusterQueueExists_Forbidden(t *testing.T) {
 	orc := &GKEOrchestrator{executor: mock}
 
 	exists, err := orc.checkClusterQueueExists("default")
-	if err != nil {
-		t.Fatalf("checkClusterQueueExists returned unexpected error on Forbidden: %v", err)
+	if err == nil {
+		t.Fatalf("checkClusterQueueExists should return error on Forbidden, got err = nil")
 	}
-	if !exists {
-		t.Errorf("checkClusterQueueExists on Forbidden = false; want true")
+	if exists {
+		t.Errorf("checkClusterQueueExists on Forbidden = true; want false")
+	}
+}
+
+func TestCreateDefaultQueues_Forbidden(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			if strings.Contains(fullCmd, "kubectl get clusterqueue") {
+				return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): clusterqueues.kueue.x-k8s.io \"default\" is forbidden"}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+	orc := &GKEOrchestrator{executor: mock}
+
+	err := orc.createDefaultQueues("default", "team-a")
+	if err == nil {
+		t.Fatalf("createDefaultQueues should fail fast on Forbidden, got err = nil")
+	}
+	if !strings.Contains(err.Error(), "restricted (403 Forbidden)") {
+		t.Errorf("createDefaultQueues error = %v; want 403 Forbidden message", err)
+	}
+}
+
+func TestIsKueueInstalled_Forbidden(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			return shell.CommandResult{
+				ExitCode: 1,
+				Stderr:   "Error from server (Forbidden): customresourcedefinitions.apiextensions.k8s.io \"clusterqueues.kueue.x-k8s.io\" is forbidden",
+			}
+		},
+	}
+	orc := &GKEOrchestrator{executor: mock}
+
+	installed, err := orc.isKueueInstalled()
+	if err != nil {
+		t.Fatalf("isKueueInstalled should succeed and return true on 403 Forbidden, got err: %v", err)
+	}
+	if !installed {
+		t.Errorf("isKueueInstalled on 403 Forbidden = false; want true")
+	}
+}
+
+func TestIsKueueDeploymentInstalled_Forbidden(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			return shell.CommandResult{
+				ExitCode: 1,
+				Stderr:   "Error from server (Forbidden): deployments.apps \"kueue-controller-manager\" is forbidden",
+			}
+		},
+	}
+	orc := &GKEOrchestrator{executor: mock}
+
+	installed, err := orc.isKueueDeploymentInstalled()
+	if err != nil {
+		t.Fatalf("isKueueDeploymentInstalled should succeed and return true on 403 Forbidden, got err: %v", err)
+	}
+	if !installed {
+		t.Errorf("isKueueDeploymentInstalled on 403 Forbidden = false; want true")
 	}
 }
 

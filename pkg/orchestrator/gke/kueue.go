@@ -152,15 +152,12 @@ func (g *GKEOrchestrator) checkClusterQueueExists(name string) (bool, error) {
 		return false, nil
 	}
 	if strings.Contains(errStr, "forbidden") {
-		// If the user lacks RBAC permissions to read ClusterQueue, assume it exists in shared clusters
-		// so we skip cluster-scoped creation (which would also fail with 403) and proceed to create LocalQueue.
-		logging.Warn("Insufficient RBAC permissions to read ClusterQueue %q (403 Forbidden). Assuming it exists in shared cluster.", name)
-		return true, nil
+		return false, fmt.Errorf("insufficient RBAC permissions to read ClusterQueue %q (403 Forbidden)", name)
 	}
 	return false, fmt.Errorf("failed to check clusterqueue status: %s", res.Stderr)
 }
 
-// createDefaultQueues creates a LocalQueue in the target namespace and a corresponding ClusterQueue (named after the target namespace if non-default, or defaultClusterQueue).
+// createDefaultQueues creates a LocalQueue in the target namespace and a corresponding ClusterQueue (defaultClusterQueue).
 func (g *GKEOrchestrator) createDefaultQueues(localQueueName, ns string) error {
 	logging.Info("Creating default ClusterQueue and LocalQueue...")
 
@@ -168,9 +165,12 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName, ns string) error {
 		logging.Info("Warning: Failed to ensure ResourceFlavors: %v", err)
 	}
 
-	cqName := ns
+	cqName := defaultClusterQueue
 	cqExists, err := g.checkClusterQueueExists(cqName)
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "forbidden") {
+			return fmt.Errorf("LocalQueue '%s' does not exist in namespace '%s' and cluster permissions are restricted (403 Forbidden). Please ask your cluster administrator to create a LocalQueue in namespace '%s'", localQueueName, ns, ns)
+		}
 		return fmt.Errorf("failed to check if ClusterQueue %s exists: %w", cqName, err)
 	}
 
@@ -421,6 +421,10 @@ func (g *GKEOrchestrator) isKueueInstalled() (bool, error) {
 		logging.Info("Kueue CRD not found.")
 		return false, nil
 	}
+	if strings.Contains(errStr, "forbidden") {
+		logging.Warn("Insufficient RBAC permissions to read Kueue CRD (403 Forbidden). Assuming Kueue is installed in shared cluster.")
+		return true, nil
+	}
 	return false, fmt.Errorf("failed to check for Kueue CRD: %s\n%s", res.Stderr, res.Stdout)
 }
 
@@ -434,6 +438,10 @@ func (g *GKEOrchestrator) isKueueDeploymentInstalled() (bool, error) {
 	if strings.Contains(errStr, "notfound") || strings.Contains(errStr, "not found") {
 		logging.Info("Kueue deployment not found.")
 		return false, nil
+	}
+	if strings.Contains(errStr, "forbidden") {
+		logging.Warn("Insufficient RBAC permissions to read Kueue deployment in kueue-system (403 Forbidden). Assuming Kueue deployment is installed in shared cluster.")
+		return true, nil
 	}
 	return false, fmt.Errorf("failed to check for Kueue deployment: %s\n%s", res.Stderr, res.Stdout)
 }
@@ -497,12 +505,15 @@ func (g *GKEOrchestrator) DeleteKueueDeployment() error {
 // DeleteAllKueueResources deletes all Kueue custom resources and CRDs from the cluster.
 func (g *GKEOrchestrator) DeleteAllKueueResources() error {
 	resourceList := strings.Join(kueueCRDs, ",")
-	logging.Info("Deleting all Kueue resources...")
-	g.executor.ExecuteCommand("kubectl", "delete", resourceList, "--all", "--ignore-not-found", "--wait=false")
+	logging.Info("Deleting all Kueue custom resources...")
+	res := g.executor.ExecuteCommand("kubectl", "delete", resourceList, "--all", "--ignore-not-found", "--timeout=60s")
+	if res.ExitCode != 0 {
+		logging.Info("Warning: Non-zero exit code while deleting Kueue custom resources: %s", res.Stderr)
+	}
 
 	logging.Info("Deleting Kueue CRDs...")
-	args := append([]string{"delete", "crd", "--ignore-not-found"}, kueueCRDs...)
-	res := g.executor.ExecuteCommand("kubectl", args...)
+	args := append([]string{"delete", "crd", "--ignore-not-found", "--timeout=60s"}, kueueCRDs...)
+	res = g.executor.ExecuteCommand("kubectl", args...)
 	if res.ExitCode != 0 {
 		return fmt.Errorf("failed to delete Kueue CRDs: %s\n%s", res.Stderr, res.Stdout)
 	}
@@ -561,12 +572,12 @@ func (g *GKEOrchestrator) probeKueueWebhookReadiness() error {
 	}
 	probeFile := f.Name()
 	defer func() {
+		_ = f.Close()
 		_ = g.executor.ExecuteCommand("kubectl", "delete", "-f", probeFile, "--ignore-not-found")
 		_ = os.Remove(probeFile)
 	}()
 
 	if _, err := f.Write([]byte(probeManifest)); err != nil {
-		_ = f.Close()
 		return fmt.Errorf("failed to write probe manifest: %w", err)
 	}
 	if err := f.Close(); err != nil {
@@ -629,6 +640,11 @@ func (g *GKEOrchestrator) checkKueueEndpoints(useEndpointSlice bool) (bool, erro
 	}
 
 	if cmdEndpoints.ExitCode != 0 {
+		errStr := strings.ToLower(cmdEndpoints.Stderr)
+		if strings.Contains(errStr, "forbidden") {
+			logging.Warn("Insufficient RBAC permissions to read kueue-webhook-service endpoints in kueue-system (403 Forbidden). Skipping endpoint readiness check.")
+			return true, nil
+		}
 		return false, nil
 	}
 
@@ -801,6 +817,7 @@ func (g *GKEOrchestrator) renderResourceFlavor(name string, nodeLabels map[strin
 	}
 	if len(nodeLabels) > 0 {
 		filteredLabels := make(map[string]string)
+		// Omit instance-specific slice and topology labels to keep ResourceFlavor generic across TPU node pools.
 		for k, v := range nodeLabels {
 			if k != tpuTopologyLabel &&
 				!strings.HasPrefix(k, "cloud.google.com/gke-tpu-slice-") &&
@@ -1022,6 +1039,8 @@ func (g *GKEOrchestrator) buildFlavorResources(coveredMap map[string]bool, fc Fl
 	_, hasPathways := g.capacity.Flavors["pathways-flavor"]
 	for _, resName := range resList {
 		quota := g.getNominalQuota(resName, fc, fname)
+		// For Pathways TPU flavors, set CPU and Memory nominal quotas to unconstrained values (999999)
+		// so secondary resource limits do not block Pathways helper containers from co-scheduling with TPUs.
 		if hasPathways && isTPUFlavor(fname) {
 			switch resName {
 			case "cpu":
