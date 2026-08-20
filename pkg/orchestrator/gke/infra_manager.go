@@ -831,10 +831,16 @@ func (g *GKEOrchestrator) isJobSetCRDInstalled() (bool, error) {
 	return false, fmt.Errorf("failed to check for JobSet CRD: %s\n%s", res.Stderr, res.Stdout)
 }
 
+func (g *GKEOrchestrator) getHTTPClient() HTTPClient {
+	if g.httpClient != nil {
+		return g.httpClient
+	}
+	return &http.Client{Timeout: 30 * time.Second}
+}
+
 func (g *GKEOrchestrator) downloadManifests(url string) ([]byte, error) {
 	logging.Info("Downloading manifests from %s", url)
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := g.getHTTPClient().Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download manifests: %w", err)
 	}
@@ -1040,6 +1046,7 @@ func (g *GKEOrchestrator) removeDescriptionFields(data map[interface{}]interface
 func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) error {
 	validators := []func() error{
 		g.checkClusterConnectivity,
+		func() error { return g.validateTargetNamespaceExists(job) },
 		func() error { return g.CheckAndInstallKueue("", job.ClusterName, job.ClusterLocation) },
 		g.checkAndInstallJobSetCRD,
 	}
@@ -1063,7 +1070,7 @@ func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) 
 // It uses a short timeout to fail fast if IP is blocked by authorized networks.
 func (g *GKEOrchestrator) checkClusterConnectivity() error {
 	logging.Info("Checking cluster connectivity...")
-	res := g.executor.ExecuteCommand("kubectl", "get", "namespace", "default", "--request-timeout=5s")
+	res := g.executor.ExecuteCommand("kubectl", "version", "--request-timeout=5s")
 	if res.ExitCode != 0 {
 		return fmt.Errorf("failed to connect to GKE cluster. Please verify your IP is allowed in the cluster's authorized networks or that you have correct network access. Error: %s", res.Stderr)
 	}

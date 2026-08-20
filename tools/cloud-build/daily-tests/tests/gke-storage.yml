@@ -23,11 +23,15 @@ remote_node: "{{ deployment_name }}-0"
 post_deploy_tests:
 - test-validation/test-zonal-bucket.yml
 - test-validation/test-anywhere-cache.yml
+- test-validation/test-gke-storage-pool.yml
 cli_deployment_vars:
   test_name: "{{ test_name }}"
   region: "{{ region }}"
   zone: "{{ zone }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   gcp_public_cidrs_access_enabled: true
+  project_id: "{{ project }}"
+  hyperdisk_balanced_storage_pool: "projects/{{ project }}/zones/us-central1-b/storagePools/{{ hyperdisk_balanced_pool }}"
+  hyperdisk_throughput_storage_pool: "projects/{{ project }}/zones/us-central1-b/storagePools/{{ hyperdisk_throughput_pool }}"
 custom_vars:
   project: "{{ project }}"

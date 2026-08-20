@@ -13,14 +13,18 @@
 # limitations under the License.
 
 ---
-blueprint_name: rapid-storage-slurm
+blueprint_name: storage-slurm
 
 vars:
   project_id:  # Set GCP Project ID Here
-  deployment_name: zonal-bucket-ac-slurm
+  deployment_name: storage-slurm
   region: us-central1
   zone: us-central1-b
   gcs_bucket_local_mount: /data
+  # To use Storage Pools, they must be pre-created before deployment.
+  # Replace 'your-pool-balanced' and 'your-pool-throughput' with your storage pool names.
+  hyperdisk_balanced_storage_pool: "projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-balanced"
+  hyperdisk_throughput_storage_pool: "projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-throughput"
 
 deployment_groups:
 - group: primary
@@ -52,7 +56,18 @@ deployment_groups:
     use: [network]
     settings:
       node_count_dynamic_max: 2
-      machine_type: n2-standard-4
+      machine_type: c3d-standard-4
+      disk_type: hyperdisk-balanced
+      disk_storage_pool: $(vars.hyperdisk_balanced_storage_pool)
+      additional_disks:
+      - disk_name: nodeset-data
+        device_name: nodeset-data
+        disk_type: hyperdisk-throughput
+        disk_size_gb: 2048
+        disk_storage_pool: $(vars.hyperdisk_throughput_storage_pool)
+        auto_delete: true
+        boot: false
+        disk_labels: {}
       allow_automatic_updates: false
       metadata:
         gcs-bucket-name: $(zonal-gcs-bucket.gcs_bucket_name)
@@ -71,7 +86,18 @@ deployment_groups:
     use:
     - network
     settings:
-      machine_type: n2-standard-4
+      machine_type: c3d-standard-4
+      disk_type: hyperdisk-balanced
+      disk_storage_pool: $(vars.hyperdisk_balanced_storage_pool)
+      additional_disks:
+      - disk_name: login-data
+        device_name: login-data
+        disk_type: hyperdisk-throughput
+        disk_size_gb: 2048
+        disk_storage_pool: $(vars.hyperdisk_throughput_storage_pool)
+        auto_delete: true
+        boot: false
+        disk_labels: {}
       enable_login_public_ips: true
       metadata:
         gcs-bucket-name: $(zonal-gcs-bucket.gcs_bucket_name)
@@ -85,5 +111,16 @@ deployment_groups:
     - zonal-gcs-bucket
     - slurm_login
     settings:
-      machine_type: n2-standard-4
+      machine_type: c3d-standard-4
+      disk_type: hyperdisk-balanced
+      disk_storage_pool: $(vars.hyperdisk_balanced_storage_pool)
+      additional_disks:
+      - disk_name: controller-data
+        device_name: controller-data
+        disk_type: hyperdisk-throughput
+        disk_size_gb: 2048
+        disk_storage_pool: $(vars.hyperdisk_throughput_storage_pool)
+        auto_delete: true
+        boot: false
+        disk_labels: {}
       enable_controller_public_ips: true

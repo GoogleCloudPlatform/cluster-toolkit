@@ -21,8 +21,12 @@ vars:
   zone: us-central1-b
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
-  authorized_cidr: <your-ip-address>/32
+  authorized_cidr:  # <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
+  # To use Storage Pools, they must be pre-created before deployment.
+  # Replace 'your-pool-balanced' and 'your-pool-throughput' with your storage pool names.
+  hyperdisk_balanced_storage_pool: "projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-balanced"
+  hyperdisk_throughput_storage_pool: "projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-throughput"
 
 deployment_groups:
 - group: primary
@@ -210,3 +214,35 @@ deployment_groups:
       - --iodepth_batch_submit=64
       - --iodepth_batch_complete_max=64
     outputs: [instructions]
+
+  ### Storage Pools ###
+
+  - id: gke-pool-hp
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, node_pool_service_account]
+    settings:
+      name: hp-pool
+      zones: [$(vars.zone)]
+      machine_type: c3d-standard-4
+      disk_type: hyperdisk-balanced
+      disk_storage_pool: $(vars.hyperdisk_balanced_storage_pool)
+
+  - id: gke-storage-hp
+    source: modules/file-system/gke-storage
+    use: [gke_cluster]
+    settings:
+      storage_type: hyperdisk-balanced
+      access_mode: ReadWriteOnce
+      capacity_gb: 20
+      sc_reclaim_policy: Delete
+      disk_storage_pool: $(vars.hyperdisk_balanced_storage_pool)
+
+  - id: gke-storage-hp-thr
+    source: modules/file-system/gke-storage
+    use: [gke_cluster]
+    settings:
+      storage_type: hyperdisk-throughput
+      access_mode: ReadWriteOnce
+      capacity_gb: 5000
+      sc_reclaim_policy: Delete
+      disk_storage_pool: $(vars.hyperdisk_throughput_storage_pool)

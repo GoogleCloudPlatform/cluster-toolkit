@@ -101,3 +101,45 @@
     - fio_results.jobs[0].read.iops_mean >= 300
     fail_msg: "FIO read performance thresholds not met. Bandwidth: {{ fio_results.jobs[0].read.bw_mean }} KB/s (expected >= 1000 KB/s), IOPS: {{ fio_results.jobs[0].read.iops_mean }} (expected >= 300)."
     success_msg: "FIO read performance thresholds met. Bandwidth: {{ fio_results.jobs[0].read.bw_mean }} KB/s, IOPS: {{ fio_results.jobs[0].read.iops_mean }}."
+
+- name: Verify Controller Instance Template Storage Pools
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    gcloud compute instance-templates list --filter="name~{{ slurm_cluster_name }}-controller" --project={{ project }} --format="value(properties.disks[0].initializeParams.storagePool, properties.disks[1].initializeParams.storagePool)"
+  register: controller_template_pools
+  changed_when: false
+
+- name: Assert Controller Template uses correct Storage Pools
+  delegate_to: localhost
+  ansible.builtin.assert:
+    that:
+    - hyperdisk_balanced_pool in controller_template_pools.stdout
+    - hyperdisk_throughput_pool in controller_template_pools.stdout
+
+- name: Verify Login Nodes Instance Template Storage Pools
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    gcloud compute instance-templates list --filter="name~{{ slurm_cluster_name }}-login" --project={{ project }} --format="value(properties.disks[0].initializeParams.storagePool, properties.disks[1].initializeParams.storagePool)"
+  register: login_template_pools
+  changed_when: false
+
+- name: Assert Login Template uses correct Storage Pools
+  delegate_to: localhost
+  ansible.builtin.assert:
+    that:
+    - hyperdisk_balanced_pool in login_template_pools.stdout
+    - hyperdisk_throughput_pool in login_template_pools.stdout
+
+- name: Verify Nodeset Instance Template Storage Pools
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    gcloud compute instance-templates list --filter="name~{{ slurm_cluster_name }}-compute-slurmnodeset" --project={{ project }} --format="value(properties.disks[0].initializeParams.storagePool, properties.disks[1].initializeParams.storagePool)"
+  register: nodeset_template_pools
+  changed_when: false
+
+- name: Assert Nodeset Template uses correct Storage Pools
+  delegate_to: localhost
+  ansible.builtin.assert:
+    that:
+    - hyperdisk_balanced_pool in nodeset_template_pools.stdout
+    - hyperdisk_throughput_pool in nodeset_template_pools.stdout
