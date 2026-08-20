@@ -1,0 +1,54 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+tests:
+- name: Migrate simple xpk command in markdown
+  input:
+    user: 'Migrate the xpk commands in tests/test_docs.md'
+  expect_tool_calls:
+  - function: 'replace'
+  rubric: |
+    - The agent should replace `xpk workload create` with `gcluster job submit`.
+    - The agent should map the flags correctly.
+    - The agent should audit the file to ensure zero residual `xpk` references remain.
+- name: Migrate complex xpk command in bash
+  input:
+    user: 'Migrate xpk cluster create in tests/test_script.sh'
+  expect_tool_calls:
+  - function: 'replace'
+  rubric: |
+    - The agent should create a new blueprint YAML file.
+    - The agent should replace the `xpk cluster create` command with direct `gcluster deploy <blueprint> --vars ...`.
+- name: Migrate Pathways workload command
+  input:
+    user: 'Migrate xpk workload create-pathways command with custom server and proxy args'
+  rubric: |
+    - The agent should convert the command to `gcluster job submit --pathways`.
+    - The agent should map `--pathways-gcs-location`, `--pathways-proxy-args`, `--pathways-server-args`, and `--pathways-headless`.
+    - The agent should not generate raw kubectl Job manifests for standard workload submission.
+- name: Integrated Storage and Blueprint Automation
+  input:
+    user: 'Migrate a guide using Managed Lustre storage and GPU A4 cluster on GKE'
+  rubric: |
+    - The agent should select or generate a blueprint (e.g. `examples/gke-a4/gke-a4.yaml`) that includes Managed Lustre and GKE Lustre CSI driver.
+    - The agent should verify that the blueprint path exists in the Cluster Toolkit repository.
+    - The agent should remove redundant manual `gcloud lustre instances create` and manual `PersistentVolume` manifests.
+    - The agent should configure `spot=true` in `--vars` rather than using a CLI flag.
+    - The agent should verify all documentation cross-references and routes.
+    - The agent should produce a structured migration report and a checklist of actionable user next steps.
+- name: Ignore non-xpk commands
+  input:
+    user: 'Migrate the xpk commands in tests/test_unrelated.sh'
+  rubric: |
+    - The agent should not modify the file if there are no xpk commands.

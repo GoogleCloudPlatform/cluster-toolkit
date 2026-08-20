@@ -1,0 +1,261 @@
+#!/usr/bin/env python3
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Unit tests for parse_xpk_to_gcluster.py."""
+
+import unittest
+from unittest import mock
+
+import parse_xpk_to_gcluster
+
+
+class ParseXpkToGclusterTest(unittest.TestCase):
+
+  def test_is_tpu_hardware(self):
+    self.assertTrue(parse_xpk_to_gcluster.is_tpu_hardware("v6e-8", None))
+    self.assertTrue(parse_xpk_to_gcluster.is_tpu_hardware("v8e-16", None))
+    self.assertTrue(parse_xpk_to_gcluster.is_tpu_hardware(None, "tpu7x-128"))
+    self.assertFalse(
+        parse_xpk_to_gcluster.is_tpu_hardware("a4-highgpu-8g", "a4-highgpu-8g")
+    )
+
+  def test_is_flag_true(self):
+    self.assertTrue(parse_xpk_to_gcluster.is_flag_true("true"))
+    self.assertTrue(parse_xpk_to_gcluster.is_flag_true("1"))
+    self.assertTrue(parse_xpk_to_gcluster.is_flag_true("yes"))
+    self.assertFalse(parse_xpk_to_gcluster.is_flag_true("none"))
+    self.assertFalse(parse_xpk_to_gcluster.is_flag_true("false"))
+    self.assertFalse(parse_xpk_to_gcluster.is_flag_true("0"))
+    self.assertFalse(parse_xpk_to_gcluster.is_flag_true(None))
+
+  def test_parse_workload_create_basic(self):
+    cmd = (
+        "xpk workload create --workload my-job --tpu-type tpu7x-128"
+        " --docker-image gcr.io/my-img --command python3 train.py"
+    )
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("gcluster job submit", output)
+    self.assertIn("--name my-job", output)
+    self.assertIn("--compute-type tpu7x-standard-4t", output)
+    self.assertIn("--topology 4x4x4", output)
+    self.assertIn("--image gcr.io/my-img", output)
+
+  def test_parse_workload_create_pathways(self):
+    cmd = (
+        "xpk workload create-pathways --workload my-pw --tpu-type tpu7x-128"
+        " --headless=true --pathways-gcs-location gs://my-bucket/tmp"
+    )
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("--pathways", output)
+    self.assertIn("--pathways-headless", output)
+    self.assertIn("--pathways-gcs-location gs://my-bucket/tmp", output)
+
+  def test_parse_workload_create_omits_num_nodes_for_tpu(self):
+    cmd = (
+        "xpk workload create --workload tpu-job --tpu-type tpu7x-128"
+        " --num-nodes 4 --docker-image gcr.io/my-img"
+    )
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("Omitted --num-nodes", output)
+    self.assertNotIn("--num-nodes", output.splitlines()[-1])
+
+  def test_parse_workload_create_unmapped_flags_omitted_from_tokens(self):
+    cmd = (
+        "xpk workload create --workload my-job --tpu-type tpu7x-128"
+        " --unsupported-flag-abc foo"
+    )
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn(
+        "# Warning: Unmapped xpk flags were ignored: --unsupported-flag-abc"
+        " foo",
+        output,
+    )
+    self.assertNotIn("--unsupported-flag-abc", output.splitlines()[-1])
+
+  def test_parse_cluster_create_includes_blueprint_name(self):
+    cmd = (
+        "xpk cluster create --cluster test-cluster --project my-proj --zone"
+        " us-central1-a --tpu-type tpu7x-128"
+    )
+    blueprint, warnings, unmapped = parse_xpk_to_gcluster.parse_cluster_create(
+        is_pathways=False,
+        unknown=[
+            "--cluster",
+            "test-cluster",
+            "--project",
+            "my-proj",
+            "--zone",
+            "us-central1-a",
+            "--tpu-type",
+            "tpu7x-128",
+        ],
+    )
+    self.assertEqual(blueprint["blueprint_name"], "test-cluster")
+    self.assertIn("vars", blueprint)
+
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("blueprint_name: test-cluster", output)
+    self.assertIn("vars:", output)
+    self.assertIn("deployment_name: test-cluster", output)
+    self.assertIn("gcluster deploy test-cluster.yaml", output)
+    self.assertNotIn("gcluster create", output)
+
+  def test_authorized_networks_maps_to_authorized_cidr(self):
+    cmd = "xpk cluster create --cluster c1 --authorized-networks 10.0.0.0/8"
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("authorized_cidr: 10.0.0.0/8", output)
+
+  def test_on_demand_does_not_set_spot(self):
+    cmd = "xpk cluster create --cluster c1 --on-demand"
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertNotIn("spot: true", output)
+
+  def test_parse_cluster_create_explicit_boolean(self):
+    cmd = (
+        "xpk cluster create --cluster c1 --private=true --enable-pathways=true"
+    )
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("enable_private_endpoint: true", output)
+    self.assertIn("enable_pathways_for_tpus: true", output)
+
+  def test_parse_cluster_create_unmapped_flags_warning(self):
+    cmd = "xpk cluster create --cluster c1 --custom-unsupported-flag foo"
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("Warning: Unmapped xpk flags were ignored", output)
+
+  def test_tensorboard_warning(self):
+    cmd = (
+        "xpk cluster create --cluster c1 --create-vertex-tensorboard"
+        " --tensorboard-name my-tb"
+    )
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn(
+        "Cluster Toolkit does not support Vertex Tensorboard creation", output
+    )
+
+  def test_missing_machine_types_file_fallback(self):
+    with mock.patch.object(
+        parse_xpk_to_gcluster.os.path, "exists", return_value=False
+    ):
+      m_type, top = parse_xpk_to_gcluster.get_machine_type("unknown-device")
+      self.assertEqual(m_type, "unknown-device")
+      self.assertEqual(top, "N/A")
+
+  def test_parse_workload_create_maps_storage_to_mount(self):
+    cmd = (
+        "xpk workload create --workload job1 --tpu-type v6e-16"
+        " --storage gs://my-bucket/data"
+    )
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("--mount", output)
+    self.assertIn("gs://my-bucket/data;/mnt/data;rw", output)
+
+  def test_parse_workload_create_maps_storage_variable(self):
+    cmd = (
+        "xpk workload create --workload job1 --tpu-type v6e-16"
+        " --storage $STORAGE_URI"
+    )
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("--mount '$STORAGE_URI;/mnt/storage_uri;rw'", output)
+
+  def test_parse_workload_create_maps_storage_with_trailing_slash(self):
+    cmd = (
+        "xpk workload create --workload job1 --tpu-type v6e-16"
+        " --storage gs://my-bucket/dir/"
+    )
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("gs://my-bucket/dir/;/mnt/dir;rw", output)
+
+  def test_invalid_command(self):
+    output = parse_xpk_to_gcluster.parse_xpk_command("kubectl get pods")
+    self.assertIn("Error: Not an xpk command", output)
+
+  def test_syntax_error_unclosed_quotes(self):
+    output = parse_xpk_to_gcluster.parse_xpk_command(
+        'xpk workload create --workload "unclosed'
+    )
+    self.assertIn("Error parsing command:", output)
+
+  def test_workload_create_command_flag_preserved(self):
+    cmd = (
+        'xpk workload create --workload job1 --tpu-type v6e-16 --command'
+        ' "python3 train.py --lr=0.01"'
+    )
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("--command 'python3 train.py --lr=0.01'", output)
+
+  def test_parse_cluster_create_with_zone_variable(self):
+    cmd = "xpk cluster create --cluster c1 --zone=$ZONE"
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("zone: $ZONE", output)
+    self.assertIn("region: <YOUR_REGION>", output)
+
+  def test_main_single_quoted_argument(self):
+    with mock.patch("builtins.print") as mock_print:
+      parse_xpk_to_gcluster.main(
+          ["parse_xpk_to_gcluster.py", "xpk workload create --workload job1 --tpu-type v6e-16"]
+      )
+      mock_print.assert_called_once()
+      printed_output = mock_print.call_args[0][0]
+      self.assertIn("gcluster job submit --name job1", printed_output)
+
+  def test_gpu_variable_omits_topology_in_workload(self):
+    cmd = "xpk workload create --workload job1 --device-type $GPU_DEVICE"
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("--compute-type '$GPU_DEVICE'", output)
+    self.assertNotIn("--topology", output)
+
+  def test_tpu_variable_adds_topology_placeholder_in_workload(self):
+    cmd = "xpk workload create --workload job1 --tpu-type $TPU_DEVICE"
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("--compute-type '$TPU_DEVICE'", output)
+    self.assertIn("--topology '<YOUR_TOPOLOGY>'", output)
+
+  def test_main_flag_format(self):
+    with mock.patch("builtins.print") as mock_print:
+      parse_xpk_to_gcluster.main(
+          ["parse_xpk_to_gcluster.py", "--xpk_command=xpk workload create --workload job1 --tpu-type v6e-16"]
+      )
+      mock_print.assert_called_once()
+      printed_output = mock_print.call_args[0][0]
+      self.assertIn("gcluster job submit --name job1", printed_output)
+
+  def test_main_unquoted_positional_arguments(self):
+    with mock.patch("builtins.print") as mock_print:
+      parse_xpk_to_gcluster.main(
+          ["parse_xpk_to_gcluster.py", "xpk", "workload", "create", "--workload", "job1", "--tpu-type", "v6e-16"]
+      )
+      mock_print.assert_called_once()
+      printed_output = mock_print.call_args[0][0]
+      self.assertIn("gcluster job submit --name job1", printed_output)
+
+  def test_main_flag_with_unquoted_args(self):
+    with mock.patch("builtins.print") as mock_print:
+      parse_xpk_to_gcluster.main(
+          ["parse_xpk_to_gcluster.py", "--xpk_command", "xpk", "workload", "create", "--workload", "job1", "--tpu-type", "v6e-16"]
+      )
+      mock_print.assert_called_once()
+      printed_output = mock_print.call_args[0][0]
+      self.assertIn("gcluster job submit --name job1", printed_output)
+
+  def test_gpu_variable_omits_tpu_topology_in_cluster(self):
+    cmd = "xpk cluster create --cluster c1 --device-type $GPU_DEVICE"
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("machine_type: $GPU_DEVICE", output)
+    self.assertNotIn("tpu_topology", output)
+
+
+if __name__ == "__main__":
+  unittest.main()
