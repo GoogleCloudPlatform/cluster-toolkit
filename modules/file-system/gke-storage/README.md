@@ -115,6 +115,7 @@ limitations under the License.
 | <a name="input_capacity_gb"></a> [capacity\_gb](#input\_capacity\_gb) | The storage capacity with which to create the persistent volume. | `number` | n/a | yes |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the GKE cluster in the format `projects/{{project}}/locations/{{location}}/clusters/{{cluster}}` | `string` | n/a | yes |
 | <a name="input_disk_encryption_kms_key"></a> [disk\_encryption\_kms\_key](#input\_disk\_encryption\_kms\_key) | The Customer-Managed Encryption Key (CMEK) to use for disk encryption. | `string` | `null` | no |
+| <a name="input_disk_storage_pool"></a> [disk\_storage\_pool](#input\_disk\_storage\_pool) | Storage pool to use for the provisioned disks. Note that storage pools are only supported with Hyperdisk types (balanced or throughput). You must provide an existing storage pool, as this module does not create new ones. | `string` | `null` | no |
 | <a name="input_enable_confidential_storage"></a> [enable\_confidential\_storage](#input\_enable\_confidential\_storage) | Enable Confidential Storage for this storage class. | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Controls the mountOptions for dynamically provisioned PersistentVolumes of this storage class. | `string` | `null` | no |

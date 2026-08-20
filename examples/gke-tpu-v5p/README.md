@@ -169,7 +169,7 @@ Before submitting the job to the live GKE cluster, it is highly recommended to p
 ```sh
 ./gcluster job submit \
   --name pathways-job \
-  --compute-type v5p-4 \
+  --compute-type v5p-8 \
   --pathways \
   --pathways-gcs-location gs://YOUR_COORDINATION_BUCKET/pathways-scratch \
   --image us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest \
@@ -184,7 +184,7 @@ This generates a local file `my-manifest.yaml` containing the complete Kubernete
 
 #### CLI Flags Description
 * `--name`: A unique identifier for your job (keep it under 10 characters to avoid Kubernetes label length constraints).
-* `--compute-type`: The TPU slice topology configuration (e.g., `v5p-4` maps to a `2x2x1` TPU v5p topology).
+* `--compute-type`: The TPU slice topology configuration (e.g., `v5p-8` maps to a `2x2x1` TPU v5p topology).
 * `--pathways`: Flags GCluster to generate a Pathways JobSet coordination architecture.
 * `--pathways-gcs-location`: A Cloud Storage bucket URI used by the coordinator and worker pods to synchronize network state and parameters.
 * `--image`: The container image for the workload (using the standard TPU JAX image).
@@ -198,7 +198,7 @@ Once you have verified the manifest, submit the job to your live GKE cluster by 
 ```sh
 ./gcluster job submit \
   --name pathways-job \
-  --compute-type v5p-4 \
+  --compute-type v5p-8 \
   --pathways \
   --pathways-gcs-location gs://YOUR_COORDINATION_BUCKET/pathways-scratch \
   --image us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest \

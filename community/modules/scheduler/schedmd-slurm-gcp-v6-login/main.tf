@@ -46,6 +46,7 @@ locals {
       disk_name                           = ad.disk_name
       device_name                         = ad.device_name
       disk_type                           = ad.disk_type
+      disk_storage_pool                   = ad.disk_storage_pool
       disk_size_gb                        = ad.disk_size_gb
       disk_labels                         = merge(ad.disk_labels, local.labels)
       auto_delete                         = ad.auto_delete
@@ -82,6 +83,7 @@ locals {
     disk_labels                = merge(var.disk_labels, local.labels)
     disk_size_gb               = var.disk_size_gb
     disk_type                  = var.disk_type
+    disk_storage_pool          = var.disk_storage_pool
     disk_resource_manager_tags = var.disk_resource_manager_tags
     additional_disks           = local.additional_disks
     additional_networks        = var.additional_networks

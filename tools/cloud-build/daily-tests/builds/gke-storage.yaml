@@ -23,6 +23,7 @@ tags:
 - m.gke-job-template
 - m.gke-node-pool
 - m.gke-persistent-volume
+- m.gke-storage
 - m.vpc
 - gke
 
@@ -125,6 +126,9 @@ steps:
               cd /workspace
 
               DEPLOYMENT_NAME="gke-storage-$$BUILD_ID_SHORT"
+              # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
+              echo "Checking for and clearing leaked Terraform state locks..."
+              gsutil rm "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               # Trap function that runs the rescue playbook (terraform destroy)
@@ -177,11 +181,36 @@ steps:
               echo '      machine_type: e2-standard-2'       >> \$$SG_EXAMPLE
               echo '      zone: us-central1-b'               >> \$$SG_EXAMPLE
 
+              echo "Checking if required storage pools exist..."
+              if ! gcloud compute storage-pools describe test-pool-balanced --project=$PROJECT_ID --zone=us-central1-b >/dev/null 2>&1; then
+                echo "ERROR: Storage pool 'test-pool-balanced' does not exist in us-central1-b."
+                echo "Please create it by running the following command:"
+                echo "gcloud compute storage-pools create test-pool-balanced"
+                echo "    --project=$PROJECT_ID"
+                echo "    --zone=us-central1-b"
+                echo "    --provisioned-capacity=10240GB"
+                echo "    --provisioned-iops=10000"
+                echo "    --provisioned-throughput=1024"
+                echo "    --storage-pool-type=hyperdisk-balanced"
+                exit 1
+              fi
+              if ! gcloud compute storage-pools describe test-pool-throughput --project=$PROJECT_ID --zone=us-central1-b >/dev/null 2>&1; then
+                echo "ERROR: Storage pool 'test-pool-throughput' does not exist in us-central1-b."
+                echo "Please create it by running the following command:"
+                echo "gcloud compute storage-pools create test-pool-throughput"
+                echo "    --project=$PROJECT_ID"
+                echo "    --zone=us-central1-b"
+                echo "    --provisioned-capacity=28672GB"
+                echo "    --provisioned-throughput=500"
+                echo "    --storage-pool-type=hyperdisk-throughput"
+                exit 1
+              fi
+
               bash tools/add_ttl_label.sh "\$$SG_EXAMPLE"
               python3 tools/fix_vpc_name.py \$$SG_EXAMPLE "${_TEST_PREFIX}"
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-                --extra-vars="test_prefix=${_TEST_PREFIX}" --extra-vars="use_fixed_vpc=true" \
+                --extra-vars="hyperdisk_balanced_pool=test-pool-balanced hyperdisk_throughput_pool=test-pool-throughput" --extra-vars="test_prefix=${_TEST_PREFIX}" --extra-vars="use_fixed_vpc=true" \
                 --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
                 --extra-vars="@tools/cloud-build/daily-tests/tests/gke-storage.yml" \
                 --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \

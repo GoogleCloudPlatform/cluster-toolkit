@@ -39,8 +39,8 @@ func TestResolveMachineName(t *testing.T) {
 		},
 		{
 			name:            "TPU shorthand mapping",
-			acceleratorType: "v5p-1",
-			wantMachineName: "ct5p-hightpu-1t",
+			acceleratorType: "v5p-8",
+			wantMachineName: "ct5p-hightpu-4t",
 		},
 		{
 			name:            "Unknown type falls back to input",

@@ -2328,6 +2328,66 @@ func TestGetErrorType(t *testing.T) {
 			err:      errors.New("PERMISSION DENIED TO ACCESS THIS RESOURCE"),
 			expected: ErrTypePermissionDenied,
 		},
+		{
+			name:     "Extra Substring Match",
+			err:      errors.New("accelerator_topology must be divisible by number of gpus in machine"),
+			expected: ErrTypeA4XTopologyIssue,
+		},
+		{
+			name:     "Extra Regex Match",
+			err:      errors.New("container \"my-job-container\" in pod \"my-job-someid\" is waiting to start: trying and failing to pull image"),
+			expected: ErrTypeServerError,
+		},
+		{
+			name:     "Extra Multi Substring Match",
+			err:      errors.New("failed with error: mkdir: cannot create directory /run/enroot : Permission denied"),
+			expected: ErrTypeEnrootPermissionDenied,
+		},
+		{
+			name:     "Rate Limit Match",
+			err:      errors.New("Quota exceeded for quota metric 'Requests to public APIs' and limit 'Requests to public APIs per minute per user' of service 'file.googleapis.com'"),
+			expected: ErrTypeFilestoreApiRateLimit,
+		},
+		{
+			name:     "Spot Instance Not Found",
+			err:      errors.New("gcloud.compute.instances.update) HTTPError 404: The resource being requested"),
+			expected: ErrTypeGkeSpotInstanceNotFound,
+		},
+		{
+			name:     "Cluster Already Has Operation",
+			err:      errors.New("Cluster is running incompatible operation while executing"),
+			expected: ErrTypeClusterAlreadyHasOperation,
+		},
+		{
+			name:     "Validator Failed Match",
+			err:      errors.New("validator \"test_reservation_exists\" failed because it was not found in any zone of project"),
+			expected: ErrTypeValidatorReservationNotFound,
+		},
+		{
+			name:     "Extra Regex Subnet overlapping",
+			err:      errors.New("Error waiting to create Instance: Error waiting for Creating Instance: Error code 3, message: The request was invalid: Server subnetwork IP range [\"172.17.167.0/26\"] overlaps with restricted IP range [\"172.17.0.0/16\"]. Please choose a range explicitly that does not overlap for google_parallelstore_instance"),
+			expected: ErrTypeParallelstoreServerSubnetworkIpOverlapped,
+		},
+		{
+			name:     "Munge timeout match",
+			err:      errors.New("Timeout when waiting for file /var/run/munge/munge.socket.2"),
+			expected: ErrTypeSlurmV5MungeTimeout,
+		},
+		{
+			name:     "Compute VM create failure",
+			err:      errors.New("Error: Error waiting for instance to create: couldn't find resource for resource \"google_compute_instance\" \"compute_vm\" in region"),
+			expected: ErrTypeComputeVmCreateFail,
+		},
+		{
+			name:     "Syntax error matching",
+			err:      errors.New("unexpected EOF while looking for matching quote"),
+			expected: ErrTypeSyntaxError,
+		},
+		{
+			name:     "Network Timeout with Substrings",
+			err:      errors.New("RouterNat: googleapi: Error 404: The resource was not found"),
+			expected: ErrTypeRouternatResourceNotFound,
+		},
 	}
 
 	for _, tt := range tests {

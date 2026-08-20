@@ -67,16 +67,29 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 		})
 	}
 	skipSecurity, _ := cmd.Flags().GetBool("skip-gke-security-check")
-	doDeploy(deplRoot, skipSecurity)
+	doDeploy(cmd, deplRoot, skipSecurity)
 }
 
-func doDeploy(deplRoot string, skipSecurity bool) {
+func doDeploy(cmd *cobra.Command, deplRoot string, skipSecurity bool) {
 	artDir := getArtifactsDir(deplRoot)
 	checkErr(shell.CheckWritableDir(artDir), nil)
 	bp, ctx := artifactBlueprintOrDie(artDir)
 	validators.PerformGkeVulnerabilitiesCheck(skipSecurity, &bp)
 	groups := bp.Groups
 	checkErr(validateGroupSelectionFlags(bp), ctx)
+
+	var requiredTools []string
+	if hasSelectedGroupOfKind(bp, config.TerraformKind) {
+		requiredTools = append(requiredTools, "terraform")
+	}
+	if hasSelectedGroupOfKind(bp, config.PackerKind) {
+		requiredTools = append(requiredTools, "packer")
+	}
+
+	if len(requiredTools) > 0 {
+		checkDependencies(cmd, requiredTools...)
+	}
+
 	checkErr(validateRuntimeDependencies(deplRoot, groups), ctx)
 	checkErr(shell.ValidateDeploymentDirectory(groups, deplRoot), ctx)
 
@@ -111,6 +124,9 @@ func doDeploy(deplRoot string, skipSecurity bool) {
 
 func validateRuntimeDependencies(deplDir string, groups []config.Group) error {
 	for ig, group := range groups {
+		if !isGroupSelected(group.Name) {
+			continue
+		}
 		var err error
 		switch group.Kind() {
 		case config.PackerKind:

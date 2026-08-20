@@ -27,6 +27,28 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func TestMain(m *testing.M) {
+	// Mock store globally for tests to skip prerequisite checks by default.
+	// Tests that need to verify prerequisite checks can override it.
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp:         time.Now(),
+			LastCheckedProjectID:         "test-project",
+			GCloudSDKInstalled:           true,
+			GCloudProjectConfigured:      true,
+			GCloudAuthenticated:          true,
+			ADCConfigured:                true,
+			KubectlInstalled:             true,
+			GKEGCloudAuthPluginInstalled: true,
+			DockerCredsConfigured:        true,
+			ArtifactRegistryAPIEnabled:   true,
+		},
+	}
+
+	code := m.Run()
+	os.Exit(code)
+}
+
 func executeCommand(root *cobra.Command, args ...string) (string, error) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
@@ -332,7 +354,23 @@ type MockPrereqStore struct {
 }
 
 func (m *MockPrereqStore) Load() PrereqState {
-	return m.State
+	state := m.State
+	if state.LastCheckedProjectID == "" {
+		state.LastCheckedProjectID = "test-project"
+	}
+	// If the test set a timestamp (indicating it wants to simulate a cache state),
+	// we automatically set all validation flags to true to bypass checks in tests by default.
+	if !state.LastCheckedTimestamp.IsZero() {
+		state.GCloudSDKInstalled = true
+		state.GCloudProjectConfigured = true
+		state.GCloudAuthenticated = true
+		state.ADCConfigured = true
+		state.KubectlInstalled = true
+		state.GKEGCloudAuthPluginInstalled = true
+		state.DockerCredsConfigured = true
+		state.ArtifactRegistryAPIEnabled = true
+	}
+	return state
 }
 
 func (m *MockPrereqStore) Save(state PrereqState) {
