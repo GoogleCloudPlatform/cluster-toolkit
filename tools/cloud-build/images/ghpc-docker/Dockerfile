@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM golang:bullseye AS build
+FROM golang:1.26-trixie AS build
 WORKDIR /ghpc-build
 ARG ref
 RUN git clone https://github.com/GoogleCloudPlatform/hpc-toolkit.git &&\
