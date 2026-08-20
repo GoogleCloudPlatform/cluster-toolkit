@@ -102,7 +102,7 @@ func verifyGcsBuckets(ctx context.Context, bp config.Blueprint) error {
 		if errors.Is(err, storage.ErrBucketNotExist) {
 			logging.Warn("GCS backend bucket '%s' does not exist. It will be created during the deploy phase.", bucketName)
 		} else if err != nil {
-			logging.Warn("Failed to connect to GCS to verify bucket '%s': %v. Ensure you have the right permissions and network access.", bucketName, err)
+			logging.Warn("Failed to connect to GCS to verify bucket '%s': %v. Ensure you have the necessary permissions and network access.", bucketName, err)
 		}
 	}
 	return nil
