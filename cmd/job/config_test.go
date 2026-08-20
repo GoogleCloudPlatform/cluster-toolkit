@@ -20,11 +20,7 @@ import (
 )
 
 func TestConfigSetCmd_NoGlobalFlagsRequired(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "config-test-home")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	t.Setenv("HOME", tempDir)
 
@@ -40,5 +36,80 @@ func TestConfigSetCmd_NoGlobalFlagsRequired(t *testing.T) {
 	ctx := loadContext()
 	if ctx.ClusterName != "my-new-cluster" {
 		t.Errorf("expected cluster name to be 'my-new-cluster', got '%s'", ctx.ClusterName)
+	}
+}
+
+func TestConfigSetCmd_BatchAssignment(t *testing.T) {
+	tempDir := t.TempDir()
+
+	t.Setenv("HOME", tempDir)
+
+	output, err := executeCommand(JobCmd, "config", "set", "project=my-project", "cluster=my-cluster", "location=my-location")
+	if err != nil {
+		t.Fatalf("config set failed unexpectedly: %v, output: %s", err, output)
+	}
+
+	ctx := loadContext()
+	if ctx.ProjectID != "my-project" {
+		t.Errorf("expected project 'my-project', got '%s'", ctx.ProjectID)
+	}
+	if ctx.ClusterName != "my-cluster" {
+		t.Errorf("expected cluster 'my-cluster', got '%s'", ctx.ClusterName)
+	}
+	if ctx.Location != "my-location" {
+		t.Errorf("expected location 'my-location', got '%s'", ctx.Location)
+	}
+}
+
+func TestConfigSetCmd_InvalidBatch(t *testing.T) {
+	tempDir := t.TempDir()
+
+	t.Setenv("HOME", tempDir)
+
+	output, err := executeCommand(JobCmd, "config", "set", "project=my-project", "invalid-no-equals")
+	if err == nil {
+		t.Fatalf("expected config set to fail with invalid argument format, but it succeeded: %s", output)
+	}
+}
+
+func TestConfigSetCmd_BackwardsCompatibleWithEquals(t *testing.T) {
+	tempDir := t.TempDir()
+
+	t.Setenv("HOME", tempDir)
+
+	output, err := executeCommand(JobCmd, "config", "set", "project", "my-project=foo")
+	if err != nil {
+		t.Fatalf("config set failed unexpectedly: %v, output: %s", err, output)
+	}
+
+	ctx := loadContext()
+	if ctx.ProjectID != "my-project=foo" {
+		t.Errorf("expected project 'my-project=foo', got '%s'", ctx.ProjectID)
+	}
+}
+
+func TestConfigSetCmd_LegacyBug(t *testing.T) {
+	tempDir := t.TempDir()
+
+	t.Setenv("HOME", tempDir)
+
+	output, err := executeCommand(JobCmd, "config", "set", "project", "cluster=foo")
+	if err == nil {
+		t.Fatalf("expected config set to fail with invalid argument format for suspicious value, but it succeeded: %s", output)
+	}
+}
+
+func TestConfigSetCmd_InferenceFailure(t *testing.T) {
+	tempDir := t.TempDir()
+
+	t.Setenv("HOME", tempDir)
+
+	oldPath := os.Getenv("PATH")
+	t.Setenv("PATH", "")
+	defer t.Setenv("PATH", oldPath)
+
+	output, err := executeCommand(JobCmd, "config", "set", "--from-gcloud")
+	if err == nil {
+		t.Fatalf("expected from-gcloud inference to fail but it succeeded: %s", output)
 	}
 }

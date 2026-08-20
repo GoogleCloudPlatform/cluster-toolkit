@@ -210,6 +210,50 @@ Ensure your environment is set up before submitting jobs:
 - `kubectl` and `gke-gcloud-auth-plugin` installed and authenticated (`gcloud auth login`).
 - For on-the-fly builds (`--build-context`), set `export GCLUSTER_IMAGE_REPO=<repository-name>` to specify your Artifact Registry repository name (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo`).
 
+### Configure default settings
+
+To reduce boilerplate in `job submit` commands, you can set default configuration values for `project`, `location`, and `cluster`.
+The easiest way is to infer these from your active `kubectl` context:
+
+```bash
+./gcluster job config set --from-gcloud
+```
+
+You can also set values manually or override inferred ones using batch `key=value` arguments:
+
+```bash
+./gcluster job config set project=my-project cluster=my-cluster
+./gcluster job config set --from-gcloud cluster=override-cluster
+```
+
+Check the active configuration using:
+
+```bash
+./gcluster job config list
+```
+
+### Configure default settings
+
+To reduce boilerplate in `job submit` commands, you can set default configuration values for `project`, `location`, and `cluster`.
+The easiest way is to infer these from your active `kubectl` context:
+
+```bash
+./gcluster job config set --from-gcloud
+```
+
+You can also set values manually or override inferred ones using batch `key=value` arguments:
+
+```bash
+./gcluster job config set project=my-project cluster=my-cluster
+./gcluster job config set --from-gcloud cluster=override-cluster
+```
+
+Check the active configuration using:
+
+```bash
+./gcluster job config list
+```
+
 ### Submit a JobSet
 
 There are two ways to submit a JobSet with the `gcluster job submit` command:
