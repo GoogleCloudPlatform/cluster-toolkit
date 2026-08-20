@@ -50,8 +50,6 @@ locals {
   # multi networking needs enabled Dataplane v2
   derived_enable_dataplane_v2 = coalesce(var.enable_dataplane_v2, local.derived_enable_multi_networking)
 
-
-
   default_logging_component = [
     "SYSTEM_COMPONENTS",
     "WORKLOADS"
@@ -111,7 +109,8 @@ locals {
     var.release_channel != "UNSPECIFIED" ? local.latest_channel_version : local.latest_master_version
   )
 
-  mldiagnostics_minimum_version = "1.35.0-gke.3065000"
+  mldiagnostics_minimum_version            = "1.35.0-gke.3065000"
+  high_scale_checkpointing_minimum_version = "1.32.4-gke.1415000"
 }
 
 
@@ -125,6 +124,25 @@ module "mldiagnostics_version_check" {
   source          = "../../internal/semver_compare"
   current_version = local.master_version
   minimum_version = local.mldiagnostics_minimum_version
+}
+
+module "high_scale_checkpointing_version_check" {
+  source          = "../../internal/semver_compare"
+  current_version = local.master_version
+  minimum_version = local.high_scale_checkpointing_minimum_version
+}
+
+resource "terraform_data" "validate_high_scale_checkpointing_version" {
+  lifecycle {
+    precondition {
+      condition     = !var.enable_multi_tier_checkpointing || module.high_scale_checkpointing_version_check.is_greater_than_or_equal
+      error_message = "GKE-managed High Scale Checkpointing (MTC) requires a GKE version of ${local.high_scale_checkpointing_minimum_version} or higher. Please update 'version_prefix' or 'min_master_version'."
+    }
+    precondition {
+      condition     = !var.enable_multi_tier_checkpointing || var.enable_gcsfuse_csi
+      error_message = "The variable 'enable_gcsfuse_csi' must be set to true when 'enable_multi_tier_checkpointing' is enabled."
+    }
+  }
 }
 
 resource "google_container_cluster" "gke_cluster" {
@@ -317,6 +335,9 @@ resource "google_container_cluster" "gke_cluster" {
     }
     gcs_fuse_csi_driver_config {
       enabled = var.enable_gcsfuse_csi
+    }
+    high_scale_checkpointing_config {
+      enabled = var.enable_multi_tier_checkpointing
     }
     gce_persistent_disk_csi_driver_config {
       enabled = var.enable_persistent_disk_csi
@@ -727,4 +748,11 @@ resource "terraform_data" "validate_ml_diagnostics_version" {
       error_message = "GKE-managed ML Diagnostics requires a GKE version of ${local.mldiagnostics_minimum_version} or higher. Please update 'version_prefix' or 'min_master_version'."
     }
   }
+}
+
+resource "google_service_account_iam_member" "mtc_node_workload_identity" {
+  count              = var.enable_multi_tier_checkpointing ? 1 : 0
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${local.sa_email}"
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${replace(var.project_id, ":", "/")}.svc.id.goog[gke-managed-checkpointing/gke-checkpointing-multitier-node]"
 }

@@ -22,6 +22,7 @@ tags:
 - m.service-account
 - m.gke-job-template
 - m.gke-node-pool
+- m.kubectl-apply
 - m.gke-persistent-volume
 - m.gke-storage
 - m.vpc

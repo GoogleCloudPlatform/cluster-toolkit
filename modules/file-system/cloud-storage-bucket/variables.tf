@@ -83,6 +83,19 @@ variable "viewers" {
   }
 }
 
+variable "object_users" {
+  description = "A map of static keys to accounts that can read, write, and list objects in this bucket (roles/storage.objectUser)"
+  type        = map(string)
+  default     = {}
+
+  validation {
+    error_message = "All bucket object_users must be in IAM member format with a type prefix (e.g. 'serviceAccount:sa@project.iam.gserviceaccount.com', 'user:user@example.com', 'domain:domain.com', or 'principal://iam.googleapis.com/workloadIdentityPools/POOL_ID/...')."
+    condition = alltrue([
+      for key, user in var.object_users : can(regex("^[a-zA-Z0-9_-]+:.+", user))
+    ])
+  }
+}
+
 variable "enable_hierarchical_namespace" {
   description = "If true, enables hierarchical namespace for the bucket. This option must be configured during the initial creation of the bucket."
   type        = bool
