@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"path"
 	"strings"
 	"time"
 
@@ -75,7 +76,38 @@ func (sm *StorageManager) ProcessMounts(mounts []string, job orchestrator.JobDef
 	return mountInfos, additionalManifests, nil
 }
 
-// ValidateMounts checks mounts for duplicate sources/destinations and valid formats.
+func normalizeMountPath(p string) string {
+	return path.Clean(strings.ReplaceAll(p, "\\", "/"))
+}
+
+var reservedDirs = map[string]bool{
+	"/dev":   true,
+	"/proc":  true,
+	"/sys":   true,
+	"/etc":   true,
+	"/bin":   true,
+	"/sbin":  true,
+	"/usr":   true,
+	"/lib":   true,
+	"/lib64": true,
+}
+
+func checkReservedSystemPath(cleanPath string, targetName string) error {
+	if cleanPath == "/" {
+		return fmt.Errorf("%s cannot be the root directory '/'", targetName)
+	}
+	if reservedDirs[cleanPath] {
+		return fmt.Errorf("%s cannot be a reserved system directory (%s)", targetName, cleanPath)
+	}
+	for reserved := range reservedDirs {
+		if strings.HasPrefix(cleanPath, reserved+"/") {
+			return fmt.Errorf("%s cannot be within a reserved system directory (%s)", targetName, reserved)
+		}
+	}
+	return nil
+}
+
+// ValidateMounts checks mounts for duplicate sources/destinations, reserved system paths, and valid formats.
 func (sm *StorageManager) ValidateMounts(mounts []string) error {
 	seenSources := make(map[string]bool)
 	seenDestinations := make(map[string]bool)
@@ -86,14 +118,43 @@ func (sm *StorageManager) ValidateMounts(mounts []string) error {
 			return err
 		}
 
+		cleanDest := normalizeMountPath(dest)
+		if err := checkReservedSystemPath(cleanDest, fmt.Sprintf("mount destination %q", dest)); err != nil {
+			return err
+		}
+
 		if seenSources[src] {
 			return fmt.Errorf("duplicate volume source: %s", src)
 		}
-		if seenDestinations[dest] {
+		if seenDestinations[cleanDest] {
 			return fmt.Errorf("duplicate volume destination: %s", dest)
 		}
 		seenSources[src] = true
-		seenDestinations[dest] = true
+		seenDestinations[cleanDest] = true
+	}
+	return nil
+}
+
+// ValidateRamdiskDir checks --gke-mtc-ramdisk-dir for valid path format, root '/' prohibition, reserved system directory prohibition, and conflicts with user mounts.
+func (sm *StorageManager) ValidateRamdiskDir(ramdiskDir string, rawMounts []string) error {
+	if ramdiskDir == "" {
+		return nil
+	}
+	if !strings.HasPrefix(ramdiskDir, "/") {
+		return fmt.Errorf("--gke-mtc-ramdisk-dir must be an absolute path (e.g. /tmp/ramdisk), got: %q", ramdiskDir)
+	}
+	cleanRamdisk := normalizeMountPath(ramdiskDir)
+	if err := checkReservedSystemPath(cleanRamdisk, "--gke-mtc-ramdisk-dir"); err != nil {
+		return err
+	}
+	for _, m := range rawMounts {
+		_, dest, _, _, err := sm.parseSingleVolume(m)
+		if err != nil {
+			return err
+		}
+		if normalizeMountPath(dest) == cleanRamdisk {
+			return fmt.Errorf("--gke-mtc-ramdisk-dir path %q conflicts with duplicate mount destination in --mount flag", ramdiskDir)
+		}
 	}
 	return nil
 }
@@ -293,7 +354,7 @@ func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountIn
 			map[string]interface{}{"name": "cache", "mountPath": ramdiskDir},
 		)
 		volSpecs = append(volSpecs,
-			map[string]interface{}{"name": "cache", "csi": map[string]interface{}{"driver": "multitier-checkpoint.csi.storage.gke.io"}},
+			map[string]interface{}{"name": "cache", "csi": map[string]interface{}{"driver": multitierCheckpointCSIDriver}},
 		)
 	}
 

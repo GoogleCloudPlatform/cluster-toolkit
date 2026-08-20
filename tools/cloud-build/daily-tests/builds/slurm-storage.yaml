@@ -71,7 +71,7 @@ steps:
     apiVersion: batch/v1
     kind: Job
     metadata:
-      name: slurm-rapid-storage-$$BUILD_ID_SHORT
+      name: slurm-storage-$$BUILD_ID_SHORT
       namespace: default
       labels:
         kueue.x-k8s.io/queue-name: local-queue-test-locks
@@ -117,58 +117,56 @@ steps:
             args:
             - |
               set -x -e
-              echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/slurm-rapid-storage.yaml"
+              echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/slurm-storage.yaml"
               cd /workspace
 
-              DEPLOYMENT_NAME="rapid-$$BUILD_ID_SHORT"
+              DEPLOYMENT_NAME="slurm-storage-$$BUILD_ID_SHORT"
+              # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
+              echo "Checking for and clearing leaked Terraform state locks..."
+              gsutil rm "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
-              # Trap function that runs the rescue playbook (terraform destroy)
-              # if the pod is terminated by Kueue, fails, or is cancelled.
-              cleanup_pod() {
-                local exit_code=\$$?
-                trap - EXIT SIGTERM SIGINT ERR
-                set +e
-
-                if [ "\$$RUN_CLEANUP" = "false" ]; then
-                  exit 0
-                fi
-                if [ \$$exit_code -eq 0 ]; then exit_code=1; fi
-
-                echo ""
-                echo "=========================================================================="
-                echo "CAUGHT SIGTERM OR SCRIPT ERROR!"
-                echo "Halting primary Ansible execution..."
-                echo "=========================================================================="
-                if [ -n "\$${ANSIBLE_PID:-}" ]; then
-                    kill -TERM \$$ANSIBLE_PID 2>/dev/null || true
-                    wait \$$ANSIBLE_PID 2>/dev/null || true
-                    echo "Waiting 15s for Terraform to release GCS backend state locks..."
-                    sleep 15
-                fi
-
-                echo ""
-                echo "INITIATING RESCUE PLAYBOOK: Destroying leaked infrastructure for \$$DEPLOYMENT_NAME..."
-                echo "- hosts: localhost" > /workspace/cleanup-playbook.yml
-                echo "  tasks:" >> /workspace/cleanup-playbook.yml
-                echo "  - ansible.builtin.include_tasks:" >> /workspace/cleanup-playbook.yml
-                echo "      file: tools/cloud-build/daily-tests/ansible_playbooks/tasks/rescue_gcluster_failure.yml" >> /workspace/cleanup-playbook.yml
-
-                ansible-playbook /workspace/cleanup-playbook.yml -e deployment_name="\$$DEPLOYMENT_NAME" -e workspace="/workspace" || true
-
-                echo "Graceful cleanup finished."
-                exit \$$exit_code
+              source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
+              cleanup() {
+                echo "Cleaning up storage pools..."
+                cleanup_pod
               }
-              trap cleanup_pod EXIT SIGTERM SIGINT
+              trap cleanup EXIT SIGTERM SIGINT
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
-              BLUEPRINT="examples/rapid-storage-slurm.yaml"
+              BLUEPRINT="examples/storage-slurm.yaml"
               bash tools/add_ttl_label.sh \$$BLUEPRINT
 
+              echo "Checking if required storage pools exist..."
+              if ! gcloud compute storage-pools describe test-pool-balanced --project=$PROJECT_ID --zone=us-central1-b >/dev/null 2>&1; then
+                echo "ERROR: Storage pool 'test-pool-balanced' does not exist in us-central1-b."
+                echo "Please create it by running the following command:"
+                echo "gcloud compute storage-pools create test-pool-balanced"
+                echo "    --project=$PROJECT_ID"
+                echo "    --zone=us-central1-b"
+                echo "    --provisioned-capacity=10240GB"
+                echo "    --provisioned-iops=10000"
+                echo "    --provisioned-throughput=1024"
+                echo "    --storage-pool-type=hyperdisk-balanced"
+                exit 1
+              fi
+              if ! gcloud compute storage-pools describe test-pool-throughput --project=$PROJECT_ID --zone=us-central1-b >/dev/null 2>&1; then
+                echo "ERROR: Storage pool 'test-pool-throughput' does not exist in us-central1-b."
+                echo "Please create it by running the following command:"
+                echo "gcloud compute storage-pools create test-pool-throughput"
+                echo "    --project=$PROJECT_ID"
+                echo "    --zone=us-central1-b"
+                echo "    --provisioned-capacity=28672GB"
+                echo "    --provisioned-throughput=500"
+                echo "    --storage-pool-type=hyperdisk-throughput"
+                exit 1
+              fi
+
+
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
-                --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
-                --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-rapid-storage.yaml" \
+                --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID hyperdisk_balanced_pool=test-pool-balanced hyperdisk_throughput_pool=test-pool-throughput" \
+                --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-storage.yml" \
                 --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
                 --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
                 --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
@@ -181,11 +179,11 @@ steps:
               requests:
                 cpu: 200m
                 memory: "2Gi"
-                test-locks/slurm-rapid-storage: 1
+                test-locks/slurm-storage: 1
               limits:
                 cpu: 1
                 memory: "2Gi"
-                test-locks/slurm-rapid-storage: 1
+                test-locks/slurm-storage: 1
     EOF
 
 # 3. Submit and Monitor GKE Kueue Job with Retry
@@ -198,7 +196,7 @@ steps:
     set -eo pipefail
     gcloud container clusters get-credentials test-kueue-cluster --region=us-central1
     BUILD_ID_SHORT=$$(echo "$BUILD_ID" | cut -c1-6)
-    JOB_NAME="slurm-rapid-storage-$$BUILD_ID_SHORT"
+    JOB_NAME="slurm-storage-$$BUILD_ID_SHORT"
 
     # Cloud Build trap: If the Cloud Build step itself receives a cancellation signal,
     # delete the GKE job so the pod receives a SIGTERM and performs infrastructure cleanup.

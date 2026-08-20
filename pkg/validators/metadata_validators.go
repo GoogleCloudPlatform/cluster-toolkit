@@ -13,6 +13,7 @@ package validators
 
 import (
 	"fmt"
+	"net"
 	"regexp"
 	"strings"
 
@@ -21,6 +22,108 @@ import (
 
 	"github.com/zclconf/go-cty/cty"
 )
+
+// CIDRValidator implements the RuleValidator interface for the 'cidr' type.
+// It verifies that a given string is a valid IP CIDR block.
+// Used in a module's metadata.yaml via `- validator: cidr`.
+type CIDRValidator struct{}
+
+func extractCIDRValue(val cty.Value, objectKey string, allowNull bool, path config.Path) (cty.Value, error) {
+	if val.IsNull() {
+		return cty.NullVal(cty.String), nil
+	}
+	if val.Type() == cty.String {
+		return val, nil
+	}
+	if val.Type().IsObjectType() {
+		if objectKey == "" {
+			return cty.NilVal, config.BpError{Err: fmt.Errorf("object_key is required when validating an object"), Path: path}
+		}
+		if !val.Type().HasAttribute(objectKey) {
+			if !allowNull {
+				return cty.NilVal, config.BpError{Err: fmt.Errorf("missing key %q in object", objectKey), Path: path}
+			}
+			return cty.NilVal, nil
+		}
+		return val.GetAttr(objectKey), nil
+	}
+	if val.Type().IsMapType() {
+		if objectKey == "" {
+			return cty.NilVal, config.BpError{Err: fmt.Errorf("object_key is required when validating a map"), Path: path}
+		}
+		if !val.HasIndex(cty.StringVal(objectKey)).True() {
+			if !allowNull {
+				return cty.NilVal, config.BpError{Err: fmt.Errorf("missing key %q in map", objectKey), Path: path}
+			}
+			return cty.NilVal, nil
+		}
+		return val.Index(cty.StringVal(objectKey)), nil
+	}
+	return cty.NilVal, config.BpError{Err: fmt.Errorf("unsupported type %s for CIDR validation", val.Type().FriendlyName()), Path: path}
+}
+
+func validateCIDRValue(cidrVal cty.Value, rule modulereader.ValidationRule, allowNull bool, path config.Path) error {
+	if cidrVal == cty.NilVal {
+		return nil
+	}
+	if cidrVal.IsNull() {
+		if allowNull {
+			return nil
+		}
+		msg := rule.ErrorMessage
+		if msg == "" {
+			msg = "CIDR block cannot be null or empty"
+		}
+		return config.BpError{Err: fmt.Errorf("%s", msg), Path: path}
+	}
+	if cidrVal.Type() != cty.String {
+		return config.BpError{Err: fmt.Errorf("CIDR block must be a string, got %s", cidrVal.Type().FriendlyName()), Path: path}
+	}
+	if !cidrVal.IsKnown() {
+		return nil
+	}
+	str := cidrVal.AsString()
+	if _, _, err := net.ParseCIDR(str); err != nil {
+		msg := rule.ErrorMessage
+		if msg == "" {
+			msg = fmt.Sprintf("invalid CIDR address: %s", str)
+		}
+		return config.BpError{Err: fmt.Errorf("%s", msg), Path: path}
+	}
+	return nil
+}
+
+// Validate checks if the variables specified in the rule are valid CIDR addresses.
+func (c *CIDRValidator) Validate(
+	bp config.Blueprint,
+	mod config.Module,
+	rule modulereader.ValidationRule,
+	group config.Group,
+	modIdx int) error {
+
+	allowNull, err := parseBoolInput(rule.Inputs, "allow_null", false)
+	if err != nil {
+		modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
+		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
+	}
+	objectKey, _ := parseString(rule.Inputs["object_key"])
+
+	return IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
+		for _, val := range t.Values {
+			if !val.IsKnown() {
+				continue
+			}
+			cidrVal, err := extractCIDRValue(val, objectKey, allowNull, t.Path)
+			if err != nil {
+				return err
+			}
+			if err := validateCIDRValue(cidrVal, rule, allowNull, t.Path); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
 
 // RegexValidator implements the Validator interface for 'regex' type.
 type RegexValidator struct{}

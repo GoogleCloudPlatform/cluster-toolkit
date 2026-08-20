@@ -1,0 +1,163 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Verify GKE Node Pool Storage Pool
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    # The cluster name defaults to deployment_name in our GKE module
+    gcloud container node-pools describe hp-pool --cluster {{ deployment_name }} --region {{ region }} --project {{ project }} --format="value(config.storagePools)"
+  register: gke_node_pool
+  changed_when: false
+  # Ignore errors in case the cluster is zonal instead of regional, and try zonal
+  ignore_errors: true
+
+- name: Verify GKE Node Pool Storage Pool (Zonal Fallback)
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    gcloud container node-pools describe hp-pool --cluster {{ deployment_name }} --zone {{ zone }} --project {{ project }} --format="value(config.storagePools)"
+  register: gke_node_pool_zonal
+  changed_when: false
+  when: gke_node_pool.failed
+
+- name: Set GKE Node Pool Result
+  delegate_to: localhost
+  ansible.builtin.set_fact:
+    gke_node_pool_output: "{{ gke_node_pool.stdout if not gke_node_pool.failed else gke_node_pool_zonal.stdout }}"
+
+- name: Assert GKE Node Pool uses Balanced Storage Pool
+  delegate_to: localhost
+  ansible.builtin.assert:
+    that:
+    - hyperdisk_balanced_pool in gke_node_pool_output
+
+
+- name: Authenticate to GKE Cluster (Regional)
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ project }}
+  register: gke_auth
+  changed_when: false
+  ignore_errors: true
+
+- name: Authenticate to GKE Cluster (Zonal Fallback)
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    gcloud container clusters get-credentials {{ deployment_name }} --zone {{ zone }} --project {{ project }}
+  changed_when: false
+  when: gke_auth.failed
+
+- name: Verify StorageClass contains storage-pools (Balanced)
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl get sc hyperdisk-balanced-sc -o yaml
+  register: sc_balanced
+  changed_when: false
+
+- name: Assert StorageClass contains storage-pools (Balanced)
+  delegate_to: localhost
+  ansible.builtin.assert:
+    that:
+    - "'storage-pools: projects/{{ project }}' in sc_balanced.stdout"
+    - hyperdisk_balanced_pool in sc_balanced.stdout
+
+- name: Verify StorageClass contains storage-pools (Throughput)
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl get sc hyperdisk-throughput-sc -o yaml
+  register: sc_throughput
+  changed_when: false
+
+- name: Assert StorageClass contains storage-pools (Throughput)
+  delegate_to: localhost
+  ansible.builtin.assert:
+    that:
+    - "'storage-pools: projects/{{ project }}' in sc_throughput.stdout"
+    - hyperdisk_throughput_pool in sc_throughput.stdout
+
+- name: Deploy Test Pod to trigger PVC binding
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    cat <<'POD' | kubectl apply -f -
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: test-hd-pod
+    spec:
+      containers:
+      - name: test
+        image: busybox
+        command: ["sleep", "3600"]
+        volumeMounts:
+        - mountPath: "/data-balanced"
+          name: vol-balanced
+        - mountPath: "/data-throughput"
+          name: vol-throughput
+      nodeSelector:
+        cloud.google.com/gke-nodepool: hp-pool
+      volumes:
+      - name: vol-balanced
+        persistentVolumeClaim:
+          claimName: hyperdisk-balanced-pvc-0
+      - name: vol-throughput
+        persistentVolumeClaim:
+          claimName: hyperdisk-throughput-pvc-0
+    POD
+  changed_when: true
+
+- name: Wait for Test Pod to be Running (Binding PVCs)
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl wait --for=condition=Ready pod/test-hd-pod --timeout=600s
+  changed_when: false
+
+- name: Get Persistent Volume names (Balanced)
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl get pvc hyperdisk-balanced-pvc-0 -o jsonpath='{.spec.volumeName}'
+  register: pv_balanced_name
+  changed_when: false
+
+- name: Get Persistent Volume names (Throughput)
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl get pvc hyperdisk-throughput-pvc-0 -o jsonpath='{.spec.volumeName}'
+  register: pv_throughput_name
+  changed_when: false
+
+- name: Verify GCP Persistent Disk Placement (Balanced)
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    gcloud compute disks describe {{ pv_balanced_name.stdout }} --zone {{ zone }} --project {{ project }} --format="value(storagePool)"
+  register: disk_pool_balanced
+  changed_when: false
+
+- name: Assert Balanced Disk is in Storage Pool
+  delegate_to: localhost
+  ansible.builtin.assert:
+    that:
+    - hyperdisk_balanced_pool in disk_pool_balanced.stdout
+
+- name: Verify GCP Persistent Disk Placement (Throughput)
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    gcloud compute disks describe {{ pv_throughput_name.stdout }} --zone {{ zone }} --project {{ project }} --format="value(storagePool)"
+  register: disk_pool_throughput
+  changed_when: false
+
+- name: Assert Throughput Disk is in Storage Pool
+  delegate_to: localhost
+  ansible.builtin.assert:
+    that:
+    - hyperdisk_throughput_pool in disk_pool_throughput.stdout
