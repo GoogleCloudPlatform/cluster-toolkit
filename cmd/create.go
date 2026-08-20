@@ -89,7 +89,7 @@ func verifyGcsBuckets(ctx context.Context, bp config.Blueprint) error {
 		if client == nil {
 			client, err = storage.NewClient(ctx)
 			if err != nil {
-				logging.Warn("Failed to initialize GCS client to verify bucket '%s': %v. Ensure you have the right permissions and network access.", bucketName, err)
+				logging.Warn("Failed to initialize GCS client to verify bucket '%s': %v. Ensure you have the necessary permissions and network access.", bucketName, err)
 				continue
 			}
 		}
