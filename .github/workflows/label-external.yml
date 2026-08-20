@@ -15,6 +15,11 @@
 name: Label External PRs
 
 on:
+  # zizmor: ignore[dangerous-triggers] -- checkout uses the default ref (base
+  # branch), never the PR head/fork commit, so untrusted code is never checked
+  # out or executed. The script only reads constrained values (PR author login,
+  # PR number, target branch name) from the event payload into shell variables;
+  # no PR-supplied content (title, body, files) is interpolated or executed.
   pull_request_target:
     branches:
     - develop

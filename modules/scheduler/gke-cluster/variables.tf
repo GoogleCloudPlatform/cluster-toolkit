@@ -383,6 +383,13 @@ variable "master_authorized_networks" {
     display_name = string
   }))
   default = []
+
+  validation {
+    condition     = var.master_authorized_networks == null ? true : can([for net in var.master_authorized_networks : cidrhost(net.cidr_block, 0)])
+    error_message = "Validation failed due to invalid CIDR IP address in 'master_authorized_networks.cidr_block'. All values must be in CIDR format (e.g. 1.2.3.4/32)."
+  }
+
+
 }
 
 variable "service_account_email" {

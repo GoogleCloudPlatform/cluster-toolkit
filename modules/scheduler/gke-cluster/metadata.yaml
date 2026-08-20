@@ -33,3 +33,9 @@ ghpc:
       dependent: configure_workload_identity_sa
       dependent_value: true
     error_message: "The variable 'configure_workload_identity_sa' must be set to true when 'enable_ml_diagnostics' is enabled to correctly configure ML Diagnostics."
+
+  - validator: cidr
+    inputs:
+      vars: [master_authorized_networks]
+      object_key: cidr_block
+    error_message: "Validation failed due to invalid CIDR IP address in 'master_authorized_networks.cidr_block'. All values must be in CIDR format (e.g. 1.2.3.4/32)."

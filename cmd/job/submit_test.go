@@ -305,6 +305,7 @@ func setupSubmitTestEnv(t *testing.T) {
 	awaitJobCompletion = false
 	priority = "medium"
 	isPathwaysJob = false
+	skipPrereqs = false
 	pathways = orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}
 	gkeNapProvisioning = ""
 	gkeNapReservation = ""
@@ -1103,5 +1104,86 @@ func TestSubmitCmd_PathwaysHeadless(t *testing.T) {
 
 	if !pathways.Headless {
 		t.Errorf("expected pathways.Headless to be true")
+	}
+}
+func TestSubmitCmd_SkipPrereqs_BypassesChecks(t *testing.T) {
+	setupSubmitTestEnv(t)
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	// Provide a completely empty/stale state. This would ordinarily trigger
+	// the prerequisite checks (like checking for gcloud) and fail.
+	store = &MockPrereqStore{State: PrereqState{}}
+
+	// Force an error in checks to guarantee it fails if they run!
+	oldADC := getADCSetupCommandFunc
+	defer func() { getADCSetupCommandFunc = oldADC }()
+	getADCSetupCommandFunc = func() string {
+		return "echo force-failure"
+	}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "test-skip-true",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--skip-prereqs", "true",
+	)
+
+	// Since --skip-prereqs is true, all ensureBasicPrerequisites and ensurePrerequisites
+	// checks must be bypassed, making it succeed and reach the mock orchestrator.
+	if err != nil {
+		t.Fatalf("expected no error when --skip-prereqs is true, got: %v", err)
+	}
+}
+
+func TestSubmitCmd_SkipPrereqsFalse_RunsChecks(t *testing.T) {
+	setupSubmitTestEnv(t)
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	// Provide a completely empty/stale state.
+	store = &MockPrereqStore{State: PrereqState{}}
+
+	// Force an error in checks to guarantee it fails if they run!
+	oldADC := getADCSetupCommandFunc
+	defer func() { getADCSetupCommandFunc = oldADC }()
+	getADCSetupCommandFunc = func() string {
+		return "echo force-failure"
+	}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "test-skip-false",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		// --skip-prereqs is false by default
+	)
+
+	// Since --skip-prereqs is false, the prerequisite checks will run.
+	// Since our MockStore state is empty, the CLI will try to run real gcloud checks
+	// which will fail either due to absence of gcloud or missing authentication in test env.
+	if err == nil {
+		t.Fatalf("expected an error (prerequisite check failure) since --skip-prereqs is false/omitted, but got nil")
 	}
 }
