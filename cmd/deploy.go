@@ -222,7 +222,7 @@ func createGcsBucketsIfMissing(ctx context.Context, bp config.Blueprint) error {
 					return fmt.Errorf("user aborted")
 				}
 			} else {
-				logging.Info("The required Terraform state bucket '%s' is missing. Auto-approving creation. Note: for data safety, gcluster destroy will not delete it later—you must delete it manually when done.", bucketName)
+				logging.Info("The required Terraform state bucket '%s' is missing. Auto-approving creation. Note: for data safety, 'gcluster destroy' will not delete it later. You must delete it manually when done.", bucketName)
 			}
 
 			projectID := config.GetKeyFromBlueprint("project_id", bp)
