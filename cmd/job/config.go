@@ -17,7 +17,6 @@ package job
 import (
 	"fmt"
 	"hpc-toolkit/pkg/logging"
-	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -42,45 +41,12 @@ Supported keys:
   project   - Google Cloud Project ID
   cluster   - GKE Cluster Name
   location  - GKE Cluster Location (region or zone)
-  
-Can be used with --from-gcloud to infer settings from the active kubectl context.
-You can optionally provide key=value pairs to override the inferred context, or to set multiple values at once.`,
-	Args: func(cmd *cobra.Command, args []string) error {
-		fromGcloud, err := cmd.Flags().GetBool("from-gcloud")
-		if err == nil && fromGcloud {
-			return cobra.MinimumNArgs(0)(cmd, args)
-		}
-		return cobra.MinimumNArgs(1)(cmd, args)
-	},
+
+
+You can optionally provide multiple key=value pairs to set multiple values at once.`,
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := loadContext()
-		fromGcloud, err := cmd.Flags().GetBool("from-gcloud")
-		if err != nil {
-			return err
-		}
-
-		if fromGcloud {
-			cmd := exec.Command("kubectl", "config", "current-context")
-			var stderr strings.Builder
-			cmd.Stderr = &stderr
-			out, err := cmd.Output()
-			if err != nil {
-				if stderr.Len() > 0 {
-					return fmt.Errorf("could not infer context from kubectl: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
-				}
-				return fmt.Errorf("could not infer context from kubectl: %w", err)
-			}
-			contextStr := strings.TrimSpace(string(out))
-			parts := strings.Split(contextStr, "_")
-			if len(parts) == 4 && parts[0] == "gke" {
-				ctx.ProjectID = parts[1]
-				ctx.Location = parts[2]
-				ctx.ClusterName = parts[3]
-				logging.Info("Inferred context from gcloud: project=%s, location=%s, cluster=%s", ctx.ProjectID, ctx.Location, ctx.ClusterName)
-			} else {
-				return fmt.Errorf("active kubectl context '%s' does not match expected GKE format (gke_project_location_cluster)", contextStr)
-			}
-		}
 
 		isOldFormatKey := false
 		if len(args) > 0 {
@@ -152,7 +118,6 @@ var configListCmd = &cobra.Command{
 }
 
 func init() {
-	configSetCmd.Flags().Bool("from-gcloud", false, "Infer project, location, and cluster from the active kubectl context.")
 	ConfigCmd.AddCommand(configSetCmd)
 	ConfigCmd.AddCommand(configListCmd)
 }

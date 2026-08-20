@@ -15,7 +15,6 @@
 package job
 
 import (
-	"os"
 	"testing"
 )
 
@@ -96,20 +95,5 @@ func TestConfigSetCmd_LegacyBug(t *testing.T) {
 	output, err := executeCommand(JobCmd, "config", "set", "project", "cluster=foo")
 	if err == nil {
 		t.Fatalf("expected config set to fail with invalid argument format for suspicious value, but it succeeded: %s", output)
-	}
-}
-
-func TestConfigSetCmd_InferenceFailure(t *testing.T) {
-	tempDir := t.TempDir()
-
-	t.Setenv("HOME", tempDir)
-
-	oldPath := os.Getenv("PATH")
-	t.Setenv("PATH", "")
-	defer t.Setenv("PATH", oldPath)
-
-	output, err := executeCommand(JobCmd, "config", "set", "--from-gcloud")
-	if err == nil {
-		t.Fatalf("expected from-gcloud inference to fail but it succeeded: %s", output)
 	}
 }

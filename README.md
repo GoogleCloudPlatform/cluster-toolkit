@@ -213,17 +213,18 @@ Ensure your environment is set up before submitting jobs:
 ### Configure default settings
 
 To reduce boilerplate in `job submit` commands, you can set default configuration values for `project`, `location`, and `cluster`.
-The easiest way is to infer these from your active `kubectl` context:
+
+You can set values individually (legacy format):
 
 ```bash
-./gcluster job config set --from-gcloud
+./gcluster job config set project my-project
+./gcluster job config set cluster my-cluster
 ```
 
-You can also set values manually or override inferred ones using batch `key=value` arguments:
+Or you can set multiple values at once using batch `key=value` arguments:
 
 ```bash
-./gcluster job config set project=my-project cluster=my-cluster
-./gcluster job config set --from-gcloud cluster=override-cluster
+./gcluster job config set project=my-project cluster=my-cluster location=us-central1
 ```
 
 Check the active configuration using:
@@ -235,17 +236,18 @@ Check the active configuration using:
 ### Configure default settings
 
 To reduce boilerplate in `job submit` commands, you can set default configuration values for `project`, `location`, and `cluster`.
-The easiest way is to infer these from your active `kubectl` context:
+
+You can set values individually (legacy format):
 
 ```bash
-./gcluster job config set --from-gcloud
+./gcluster job config set project my-project
+./gcluster job config set cluster my-cluster
 ```
 
-You can also set values manually or override inferred ones using batch `key=value` arguments:
+Or you can set multiple values at once using batch `key=value` arguments:
 
 ```bash
-./gcluster job config set project=my-project cluster=my-cluster
-./gcluster job config set --from-gcloud cluster=override-cluster
+./gcluster job config set project=my-project cluster=my-cluster location=us-central1
 ```
 
 Check the active configuration using:
