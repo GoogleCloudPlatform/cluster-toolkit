@@ -20,7 +20,7 @@ steps:
 - id: git-fetch-unshallow
   name: gcr.io/cloud-builders/git
   args: ['fetch', '--unshallow']
-- name: "1.26-trixie"
+- name: "golang:1.26-trixie"
   entrypoint: /bin/bash
   args:
   - -c
