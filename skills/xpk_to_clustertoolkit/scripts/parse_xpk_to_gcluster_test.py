@@ -108,8 +108,11 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
     self.assertIn("blueprint_name: test-cluster", output)
     self.assertIn("vars:", output)
-    self.assertIn("deployment_name: test-cluster", output)
-    self.assertIn("gcluster deploy test-cluster.yaml", output)
+    self.assertIn(
+        "gcluster deploy test-cluster.yaml --vars"
+        " project_id=my-proj,deployment_name=test-cluster,zone=us-central1-a,region=us-central1",
+        output,
+    )
     self.assertNotIn("gcluster create", output)
 
   def test_authorized_networks_maps_to_authorized_cidr(self):
@@ -199,8 +202,8 @@ class ParseXpkToGclusterTest(unittest.TestCase):
   def test_parse_cluster_create_with_zone_variable(self):
     cmd = "xpk cluster create --cluster c1 --zone=$ZONE"
     output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
-    self.assertIn("zone: $ZONE", output)
-    self.assertIn("region: <YOUR_REGION>", output)
+    self.assertIn("zone=$ZONE", output)
+    self.assertIn("region=<YOUR_REGION>", output)
 
   def test_main_single_quoted_argument(self):
     with mock.patch("builtins.print") as mock_print:

@@ -450,11 +450,32 @@ def format_cluster_output(
         f" {' '.join(unmapped_flags)}\n"
     )
 
+  # Extract deployment-specific vars for the CLI command
+  v = blueprint.get("vars", {})
+  project_id = v.get("project_id") or "<YOUR_PROJECT_ID>"
+  zone = v.get("zone") or "<YOUR_ZONE>"
+  region = v.get("region") or "<YOUR_REGION>"
+  deployment_name = v.get("deployment_name") or "my-cluster"
+
+  # Clear them in the blueprint to keep it generic and reusable
+  v["project_id"] = None
+  v["zone"] = None
+  v["region"] = None
+  v["deployment_name"] = None
+
   result += "Parsed Blueprint Configuration:\n"
   result += dump_yaml(blueprint)
-  deployment_name = blueprint.get("blueprint_name", "my-cluster")
+
+  vars_list = [
+      f"project_id={project_id}",
+      f"deployment_name={deployment_name}",
+      f"zone={zone}",
+      f"region={region}",
+  ]
+  vars_str = ",".join(vars_list)
+
   result += "\nCommands to run:\n"
-  result += f"gcluster deploy {deployment_name}.yaml\n"
+  result += f"gcluster deploy {deployment_name}.yaml --vars {vars_str}\n"
   return result
 
 
