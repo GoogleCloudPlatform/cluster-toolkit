@@ -608,19 +608,22 @@ func (c *ConditionalRegexValidator) Validate(
 		return nil
 	}
 
-	valStr, known, depPath, err := resolveSettingToString(bp, group, modIdx, mod, dependent, true, false)
-	if err != nil || !known {
+	dependentVal, known, depPath, err := resolveSettingToString(bp, group, modIdx, mod, dependent, true, true)
+	if err != nil {
+		return err
+	}
+	if !known || dependentVal == "" {
 		return nil
 	}
 
-	matched := re.MatchString(valStr)
+	matched := re.MatchString(dependentVal)
 	if matched != matchExpected {
 		msg := rule.ErrorMessage
 		if msg == "" {
 			if matchExpected {
-				msg = fmt.Sprintf("variable %q value %q must match pattern %q when conditions are met", dependent, valStr, re.String())
+				msg = fmt.Sprintf("variable %q value %q must match pattern %q when conditions are met", dependent, dependentVal, re.String())
 			} else {
-				msg = fmt.Sprintf("variable %q value %q must not match pattern %q when conditions are met", dependent, valStr, re.String())
+				msg = fmt.Sprintf("variable %q value %q must not match pattern %q when conditions are met", dependent, dependentVal, re.String())
 			}
 		}
 		return config.BpError{Err: fmt.Errorf("%s", msg), Path: depPath}
