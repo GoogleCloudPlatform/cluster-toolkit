@@ -146,12 +146,17 @@ configuration into a Cluster Toolkit blueprint YAML file:
    Setting `enable_pathways_for_tpus: true` in `modules/scheduler/gke-cluster`
    automatically provisions the dedicated `cpu-np` CPU node pool with
    `n4-standard-64` instances and configures Kueue with Pathways resource
-   flavors.
+   flavors. Note that `pathways_gce_machine_type` is not a configurable
+   blueprint variable in canonical Cluster Toolkit blueprints.
 
-4. **Execution Commands**: Replace the `xpk cluster create` command with direct `gcluster deploy`:
+4. **GHPC Template Variable Isolation & Arithmetic**:
+   - *Separate Variable References*: Cluster Toolkit (GHPC) template expansions do not support arbitrary compound math expressions inside a single `$(...)` block. Each variable reference must be isolated in its own block (e.g., `$(vars.num_slices) * $(pool.node_count_static)`).
+   - *Kueue Quota Calculations*: Workload managers like Kueue expect raw integer values for nominal quotas. Do not pass unparsed mathematical expressions to YAML fields. Instead, pass individual integer parameters via `config_template_vars` (e.g., `num_slices: $(vars.num_slices)`, `node_count: $(gke-tpu-7x-pool.node_count_static)`) and let the `.tftpl` template or Terraform engine perform native arithmetic: `${num_slices * node_count * tpu_chips_per_node}`.
+
+5. **Execution Commands**: Replace the `xpk cluster create` command with direct `gcluster deploy`:
 
    ```bash
-   gcluster deploy <blueprint-file.yaml> --vars project_id=<project>,deployment_name=<cluster-name>,zone=<zone>
+   gcluster deploy <blueprint-file.yaml> --vars project_id=<project>,deployment_name=<cluster-name>,zone=<zone>,region=<region>
    ```
 
    **DIRECTIVE**: Always use `gcluster deploy` directly without the `gcluster create` pre-step. `gcluster deploy` accepts the blueprint YAML and `--vars` arguments directly, streamlining provisioning into a single step.
@@ -210,9 +215,15 @@ Unlike `xpk`, which manages storage imperatively via `xpk storage create` and `x
   * **Do NOT keep manual infrastructure commands**: Remove manual `gcloud compute addresses create`, `gcloud services vpc-peerings connect`, `gcloud lustre instances create`, and manual `PersistentVolume` manifests.
   * **Direct Workload Mounting**: RayCluster or JobSet manifests should directly reference the blueprint-provisioned claim: `claimName: lustre-pvc`.
   * **Spot Provisioning**: Spot instances are configured in Cluster Toolkit via blueprint variables (`--vars ...,spot=true`), NOT CLI flags (`--spot`).
+* **Generic Storage Modules & CSI Drivers**:
+  When migrating workflows using standard Cloud Storage buckets, Filestore instances, or Parallelstore instances:
+  - **Cloud Storage (GCS FUSE)**: Enable `enable_gcsfuse_csi_driver: true` in cluster vars or include `modules/file-storage/gcs-bucket` in blueprint modules.
+  - **Filestore (NFS)**: Enable `enable_filestore_csi_driver: true` and define `modules/file-storage/filestore` module connected to the VPC network.
+  - **Parallelstore**: Enable `enable_parallelstore_csi_driver: true` (or `enable_managed_lustre_csi: true` for Lustre) and configure `modules/file-storage/parallelstore`.
 * **Job Submission Storage Mounting**: Use `--mount "<src>;<dest>[;<mode>][;options=<options>]"` with `gcluster job submit`.
-  * *Flag Translation*: Automatically converts XPK's `--storage <uri>` or `--storage <name>` flags into `--mount "<src>;<dest>;<mode>"`.
-  * *GCS Fuse Options*: Note that the `;options=<options>` parameter is strictly validated by `gcluster` and is supported **exclusively for Cloud Storage volumes (`gs://`)**. Appending `options=` to non-GCS volumes will result in a CLI validation error.
+  - *Flag Translation*: Automatically converts XPK's `--storage <uri>` or `--storage <name>` flags into `--mount "<src>;<dest>;<mode>"`.
+  - *Default Mount Mode*: The `<mode>` field defaults to `ro` (read-only) if unspecified.
+  - *GCS Fuse Options*: Note that the `;options=<options>` parameter is strictly validated by `gcluster` and is supported **exclusively for Cloud Storage volumes (`gs://`)**. Appending `options=` to non-GCS volumes will result in a CLI validation error.
 
 ## 4. Logging Translation Rule
 
