@@ -28,6 +28,8 @@ If you use `--build-context` to build images on-the-fly, you must set:
 > If any required dependencies are missing or unconfigured, `gcluster` will identify them and print the necessary installation or remediation commands directly to your console for review and execution
 >
 > Successful checks are remembered in `~/.gcluster/job_prereq_state.json` to optimize subsequent runs. Checks are re-run if the state is older than 24 hours or if you switch projects.
+>
+> **Bypassing Checks:** If you are running `gcluster` in a complex environment (such as an automated CI/CD pipeline without a human `gcloud` session, a system with custom Docker credential helpers, or an environment with strict least-privilege IAM limits), you can completely bypass these validations by appending the `--skip-prereqs` flag.
 
 ### 1.1 Multi-Tier Checkpointing (MTC) Prerequisites
 
@@ -1139,6 +1141,7 @@ Pass the `--gke-custom-templates-path` flag to the `submit` command:
 | `-l, --location` | `string` | Google Cloud location (Zone or Region) of the GKE cluster. |
 | `-p, --project` | `string` | Google Cloud Project ID. |
 | `--gke-namespace` | `string` | Target GKE namespace for the operation. Supported across all job commands. If omitted, automatic detection is used. |
+| `--skip-prereqs` | `flag` | Bypasses local workstation pre-flight environment checks (e.g. gcloud SDK, IAM checks, Docker config). |
 
 ### 9.2 Configuration Commands
 *Use these commands to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*

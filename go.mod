@@ -1,9 +1,9 @@
 module hpc-toolkit
 
-go 1.24.6
+go 1.26
 
 require (
-	cloud.google.com/go/storage v1.58.0 // indirect
+	cloud.google.com/go/storage v1.58.0
 	github.com/go-git/go-git/v5 v5.18.0
 	github.com/hashicorp/go-getter v1.8.4
 	github.com/hashicorp/hcl v1.0.0 // indirect

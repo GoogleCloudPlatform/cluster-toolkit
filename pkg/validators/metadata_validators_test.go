@@ -1145,3 +1145,64 @@ func TestConditionalRegexValidator(t *testing.T) {
 		}
 	})
 }
+
+func createBaseTestBlueprint() config.Blueprint {
+	return config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "test-module",
+						Source: "test/module",
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestCIDRValidator(t *testing.T) {
+	validator := &CIDRValidator{}
+
+	rule := modulereader.ValidationRule{
+		Validator: "cidr",
+		Inputs: map[string]interface{}{
+			"vars":       []interface{}{"master_authorized_networks"},
+			"object_key": "cidr_block",
+		},
+	}
+
+	t.Run("fails_on_placeholder_cidr", func(t *testing.T) {
+		bp := createBaseTestBlueprint()
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"master_authorized_networks": cty.TupleVal([]cty.Value{
+				cty.ObjectVal(map[string]cty.Value{
+					"display_name": cty.StringVal("test"),
+					"cidr_block":   cty.StringVal("<your-ip-address>/32"),
+				}),
+			}),
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("passes_on_valid_cidr", func(t *testing.T) {
+		bp := createBaseTestBlueprint()
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"master_authorized_networks": cty.TupleVal([]cty.Value{
+				cty.ObjectVal(map[string]cty.Value{
+					"display_name": cty.StringVal("test"),
+					"cidr_block":   cty.StringVal("1.2.3.4/32"),
+				}),
+			}),
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}

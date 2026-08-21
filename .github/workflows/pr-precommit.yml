@@ -34,6 +34,8 @@ permissions:
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: auto
     steps:
     - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 #v6.1.0
       with:
@@ -54,7 +56,7 @@ jobs:
         cache: 'pip'
     - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 #v6.5.0
       with:
-        go-version: '1.25'
+        go-version: '1.26'
         check-latest: true
     - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e #v4.0.1
       with:
@@ -73,6 +75,8 @@ jobs:
         extra_args: --show-diff-on-failure --all-files
   pre-commit-highest-dependencies:
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: auto
     steps:
     - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 #v6.1.0
       with:
@@ -94,7 +98,7 @@ jobs:
         cache: 'pip'
     - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 #v6.5.0
       with:
-        go-version: '1.25'
+        go-version: '1.26'
         check-latest: true
     - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e #v4.0.1
       with:

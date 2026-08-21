@@ -16,6 +16,7 @@
 set -e -o pipefail
 
 export GHPC_MOCK_MACHINE_CONFIG='{"gpus": {}, "tpus": {}, "cpus": {}}'
+export GHPC_SKIP_BUCKET_CREATION="true"
 
 run_test() {
 	example=$1
@@ -43,9 +44,13 @@ run_test() {
 	else
 		cd "${tmpdir}"
 	fi
+	ADDITIONAL_VARS=""
+	if grep -q "^[[:space:]]*authorized_cidr:" "${BP_PATH}"; then
+		ADDITIONAL_VARS=",authorized_cidr=1.2.3.4/32"
+	fi
 	${GHPC_PATH} create "${BP_PATH}" -l ERROR \
 		--skip-validators="${VALIDATORS_TO_SKIP}" "${deployment_args[@]}" \
-		--vars="project_id=${PROJECT},deployment_name=${DEPLOYMENT}" >/dev/null ||
+		--vars="project_id=${PROJECT},deployment_name=${DEPLOYMENT}${ADDITIONAL_VARS}" >/dev/null ||
 		{
 			echo "*** ERROR: error creating deployment with gcluster for ${exampleFile}"
 			exit 1

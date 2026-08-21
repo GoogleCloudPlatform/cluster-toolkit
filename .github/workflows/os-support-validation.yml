@@ -1,0 +1,63 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: OS Support Validation
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [develop]
+  push:
+    branches: [develop]
+
+jobs:
+  validate-binary-compatibility:
+    name: Verify binary on ${{ matrix.os-name }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+        - os-name: "Debian 11 (Bullseye)"
+          image: "debian:11-slim"
+        - os-name: "Debian 12 (Bookworm)"
+          image: "debian:12-slim"
+        - os-name: "Debian 13 (Trixie)"
+          image: "debian:trixie-slim"
+        - os-name: "Ubuntu 22.04"
+          image: "ubuntu:22.04"
+        - os-name: "Ubuntu 24.04"
+          image: "ubuntu:24.04"
+        - os-name: "Ubuntu 26.04"
+          image: "ubuntu:26.04"
+        - os-name: "Rocky Linux 8"
+          image: "rockylinux:8"
+        - os-name: "Rocky Linux 9"
+          image: "rockylinux:9"
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 #v4.4.0
+    - name: Set up Go 1.26
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff #v5.6.0
+      with:
+        go-version: '1.26'
+    - name: Build Binary
+      run: |
+        go mod tidy
+        CGO_ENABLED=0 go build -o gcluster .
+
+    - name: Dry-Run Test on Target OS
+      run: |
+        docker run --rm -v "$(pwd)/gcluster:/gcluster" ${{ matrix.image }} /gcluster --version

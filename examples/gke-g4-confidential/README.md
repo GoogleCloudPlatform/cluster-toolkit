@@ -456,3 +456,5 @@ To avoid incurring ongoing charges for the resources created, destroy the deploy
 ```
 
 Replace `DEPLOYMENT_NAME` with the name of your deployment (defaults to `gke-g4-cvm`).
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
