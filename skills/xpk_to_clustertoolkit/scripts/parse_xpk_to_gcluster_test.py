@@ -259,6 +259,26 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     self.assertIn("machine_type: $GPU_DEVICE", output)
     self.assertNotIn("tpu_topology", output)
 
+  def test_single_chip_tpu_resolution(self):
+    m_type, top = parse_xpk_to_gcluster.get_machine_type("v6e-1")
+    self.assertEqual(m_type, "ct6e-standard-1t")
+    self.assertEqual(top, "1x1")
+
+    m_type, top = parse_xpk_to_gcluster.get_machine_type("v5litepod-1")
+    self.assertEqual(m_type, "ct5lp-hightpu-1t")
+    self.assertEqual(top, "1x1")
+
+  def test_enable_lustre_csi_driver_flag_ignored_with_warning(self):
+    cmd = "xpk cluster create --cluster c1 --enable-lustre-csi-driver"
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("Warning: Unmapped xpk flags were ignored: --enable-lustre-csi-driver", output)
+    self.assertNotIn("enable_parallelstore_csi_driver", output)
+
+  def test_enable_parallelstore_csi_driver(self):
+    cmd = "xpk cluster create --cluster c1 --enable-parallelstore-csi-driver"
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("enable_parallelstore_csi_driver: true", output)
+
 
 if __name__ == "__main__":
   unittest.main()

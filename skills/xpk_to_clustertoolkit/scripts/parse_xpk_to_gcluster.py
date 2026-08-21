@@ -108,12 +108,13 @@ def get_machine_type(device_type: str) -> tuple[str, str]:
   )
   if top_match:
     family, topology = top_match.group(1).lower(), top_match.group(2)
-    machine_type, _ = TPU_FAMILY_CONFIG.get(
+    default_machine_type, _ = TPU_FAMILY_CONFIG.get(
         family, (shorthand_map.get(family, f"{family}-standard-4t"), "3d")
     )
+    machine_type = shorthand_map.get(device_type, default_machine_type)
     return machine_type, topology
 
-  # Case B: Chip count in device_type (e.g., v6e-16, tpu7x-128, v4-128, v5p-64)
+  # Case B: Chip count in device_type (e.g., v6e-1, v6e-16, tpu7x-128, v4-128, v5p-64)
   chip_match = re.match(
       r"^(tpu7x|v6e|v5p|v5e|v5litepod|v4)-(\d+)$",
       device_type,
@@ -123,7 +124,8 @@ def get_machine_type(device_type: str) -> tuple[str, str]:
     family, chips_str = chip_match.group(1).lower(), chip_match.group(2)
     chips = int(chips_str)
     if family in TPU_FAMILY_CONFIG:
-      machine_type, dim_type = TPU_FAMILY_CONFIG[family]
+      default_machine_type, dim_type = TPU_FAMILY_CONFIG[family]
+      machine_type = shorthand_map.get(device_type, default_machine_type)
       topology = TPU_CHIPS_TO_TOPOLOGY[dim_type].get(chips, "N/A")
       return machine_type, topology
 
@@ -316,7 +318,6 @@ def parse_cluster_create(
       "--enable-master-global-access",
       "--enable-workload-identity",
       "--enable-gcsfuse-csi-driver",
-      "--enable-lustre-csi-driver",
       "--enable-gcpfilestore-csi-driver",
       "--enable-parallelstore-csi-driver",
       "--enable-pd-csi-driver",
@@ -391,9 +392,7 @@ def parse_cluster_create(
     v["enable_workload_identity"] = True
   if is_flag_true(parsed.enable_gcsfuse_csi_driver):
     v["enable_gcsfuse_csi_driver"] = True
-  if is_flag_true(parsed.enable_lustre_csi_driver) or is_flag_true(
-      parsed.enable_parallelstore_csi_driver
-  ):
+  if is_flag_true(parsed.enable_parallelstore_csi_driver):
     v["enable_parallelstore_csi_driver"] = True
   if is_flag_true(parsed.enable_gcpfilestore_csi_driver):
     v["enable_filestore_csi_driver"] = True
