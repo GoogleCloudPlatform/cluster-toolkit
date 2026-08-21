@@ -99,7 +99,7 @@ get_latest_activity_timestamp() {
 		# Check latest non-bot comment activity
 		local latest_comment_updated_at
 		latest_comment_updated_at=$(echo "$comments_json" | jq -r '
-			map(select((.author.login // "" | test("github-actions|bot"; "i") | not) or (.body | contains("<!-- PR_INACTIVITY_REMINDER -->") | not))) |
+			map(select(.author.login // "" | test("github-actions|bot"; "i") | not)) |
 			map(select(.createdAt | type == "string")) |
 			map(.createdAt) |
 			max // null
@@ -200,8 +200,8 @@ process_pr() {
 
 	local target_tag
 	target_tag=$(echo "$pr_json" | jq -r '
-		([.reviewRequests[]? | select(.login != null) | "@" + .login] +
-		 [.assignees[]? | select(.login != null) | "@" + .login]) | unique | join(", ")
+		([.reviewRequests[]?.requestedReviewer.login // empty | "@" + .] +
+		 [.assignees[]?.login // empty | "@" + .]) | unique | join(", ")
 	')
 	if [[ -z "$target_tag" ]]; then
 		target_tag="$TEAM_TO_TAG"
