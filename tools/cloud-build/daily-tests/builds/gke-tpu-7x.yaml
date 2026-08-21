@@ -131,7 +131,7 @@ steps:
               cd /workspace
 
               DEPLOYMENT_NAME="gke-tpu-7x-$$BUILD_ID_SHORT"
-              
+
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
               gsutil rm "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true

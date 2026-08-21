@@ -144,7 +144,7 @@ steps:
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
               trap cleanup_pod EXIT SIGTERM SIGINT
-              
+
               set -e -u -o pipefail
               echo "Sourcing wait_for_available_zone.sh to determine zone."
               source /workspace/tools/cloud-build/wait_for_available_zone.sh
