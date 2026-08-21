@@ -112,8 +112,10 @@ configuration into a Cluster Toolkit blueprint YAML file:
 1. **Asset Selection (Template)**: Determine hardware from `--device-type` or
    `--tpu-type`. Run `bash skills/xpk_to_clustertoolkit/scripts/fetch_toolkit_examples.sh` to examine the
    templates downloaded to `~/.cache/cluster-toolkit-examples/examples` (e.g.,
-   `gke-tpu-v6e`, `gke-a3-mega`, `gke-tpu-7x`). Fall back to
-   `skills/xpk_to_clustertoolkit/references/gke-a4.yaml` (GPU) or `skills/xpk_to_clustertoolkit/references/gke-tpu-7x.yaml` (TPU).
+   `gke-tpu-v6e`, `gke-a3-mega`, `gke-tpu-7x`, `storage-gke`). Fall back to:
+   - `skills/xpk_to_clustertoolkit/references/gke-a4.yaml` (GPU)
+   - `skills/xpk_to_clustertoolkit/references/gke-tpu-7x.yaml` (TPU)
+   - `skills/xpk_to_clustertoolkit/references/storage-gke.yaml` (Storage: GCS, Filestore, Managed Lustre, Persistent Volumes, and MTC)
 2. **Extract and Map Variables**: Run: `python3
    skills/xpk_to_clustertoolkit/scripts/parse_xpk_to_gcluster.py "xpk cluster create..."` or `"xpk cluster
    create-pathways..."` The script outputs the `vars` block for your blueprint.
@@ -149,7 +151,12 @@ configuration into a Cluster Toolkit blueprint YAML file:
    flavors. Note that `pathways_gce_machine_type` is not a configurable
    blueprint variable in canonical Cluster Toolkit blueprints.
 
-4. **Reservation Affinity Configuration**:
+4. **Storage & Multi-Tier Checkpointing (MTC) Architecture**:
+   - For storage architectures (Cloud Storage with anywhere-cache, Filestore, Managed Lustre with PSA, and Persistent Volumes) or cluster-wide MTC CRD installation, consult `skills/xpk_to_clustertoolkit/references/storage-gke.yaml`.
+   - When MTC is enabled at the cluster level (`--enable-mtc`), set `enable_multi_tier_checkpointing: true` on `modules/scheduler/gke-cluster`.
+   - To apply the cluster-wide CheckpointConfiguration CRD declaratively via `kubectl-apply`, stage and apply `modules/management/kubectl-apply/manifests/checkpoint-configuration.yaml.tftpl` with `inMemoryVolumeSize` and `cloudStorageBucketName`.
+
+5. **Reservation Affinity Configuration**:
    - When `--reservation <name>` is provided in `xpk cluster create`:
      - Set `reservation: <name>` in the blueprint's `vars` block.
      - Include the `reservation_affinity` block under `modules/compute/gke-node-pool` settings:
@@ -162,11 +169,11 @@ configuration into a Cluster Toolkit blueprint YAML file:
    - When `--reservation` is NOT provided (default):
      - Do not include the `reservation_affinity` block in `modules/compute/gke-node-pool` settings so that node pools deploy without requiring an active reservation.
 
-5. **GHPC Template Variable Isolation & Arithmetic**:
+6. **GHPC Template Variable Isolation & Arithmetic**:
    - *Separate Variable References*: Cluster Toolkit (GHPC) template expansions do not support arbitrary compound math expressions inside a single `$(...)` block. Each variable reference must be isolated in its own block (e.g., `$(vars.num_slices) * $(pool.node_count_static)`).
    - *Kueue Quota Calculations*: Workload managers like Kueue expect raw integer values for nominal quotas. Do not pass unparsed mathematical expressions to YAML fields. Instead, pass individual integer parameters via `config_template_vars` (e.g., `num_slices: $(vars.num_slices)`, `node_count: $(gke-tpu-7x-pool.node_count_static)`) and let the `.tftpl` template or Terraform engine perform native arithmetic: `${num_slices * node_count * tpu_chips_per_node}`.
 
-6. **Execution Commands**: Replace the `xpk cluster create` command with direct `gcluster deploy`:
+7. **Execution Commands**: Replace the `xpk cluster create` command with direct `gcluster deploy`:
 
    ```bash
    gcluster deploy <blueprint-file.yaml> --vars project_id=<project>,deployment_name=<cluster-name>,zone=<zone>,region=<region>

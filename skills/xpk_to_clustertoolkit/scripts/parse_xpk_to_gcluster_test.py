@@ -343,6 +343,11 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     self.assertIn("enable_multi_tier_checkpointing: true", output)
     self.assertIn("In Cluster Toolkit, MTC ramdisk directory and storage buckets are configured", output)
 
+  def test_cluster_create_zone_parameter_expansion(self):
+    cmd = "xpk cluster create --cluster my-cluster --project my-project --zone ${ZONE:-us-central1-a} --tpu-type v6e-16"
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("region=${ZONE%-*}", output)
+
 
 if __name__ == "__main__":
   unittest.main()

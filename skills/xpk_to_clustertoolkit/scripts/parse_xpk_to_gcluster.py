@@ -345,10 +345,12 @@ def parse_cluster_create(
   v["project_id"] = parsed.project or "<YOUR_PROJECT_ID>"
   if parsed.zone and parsed.zone.startswith("$"):
     v["zone"] = parsed.zone
-    if parsed.zone.startswith("${") and parsed.zone.endswith("}"):
-      v["region"] = f"${{{parsed.zone[2:-1]}%-*}}"
+    var_match = re.match(r"^\$\{?([a-zA-Z_][a-zA-Z0-9_]*)", parsed.zone)
+    if var_match:
+      var_name = var_match.group(1)
+      v["region"] = f"${{{var_name}%-*}}"
     else:
-      v["region"] = f"${{{parsed.zone[1:]}%-*}}"
+      v["region"] = "<YOUR_REGION>"
   elif parsed.zone and "-" in parsed.zone:
     v["zone"] = parsed.zone
     v["region"] = parsed.zone.rsplit("-", 1)[0]
