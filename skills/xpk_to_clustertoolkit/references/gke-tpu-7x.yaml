@@ -50,6 +50,7 @@ vars:
   enable_gcsfuse_csi_driver: true
   enable_filestore_csi_driver: false
   enable_parallelstore_csi_driver: false
+  enable_managed_lustre_csi: false
   enable_pd_csi: false
 
   # Checkpointing & Diagnostics
@@ -125,6 +126,7 @@ deployment_groups:
       enable_gcsfuse_csi: $(vars.enable_gcsfuse_csi_driver)
       enable_filestore_csi: $(vars.enable_filestore_csi_driver)
       enable_parallelstore_csi: $(vars.enable_parallelstore_csi_driver)
+      enable_managed_lustre_csi: $(vars.enable_managed_lustre_csi)
       enable_pd_csi: $(vars.enable_pd_csi)
       enable_autoprovisioning: $(vars.enable_autoprovisioning)
       autoprovisioning_min_chips: $(vars.autoprovisioning_min_chips)

@@ -326,6 +326,15 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
     self.assertIn("gcluster job submit --name job1", output)
 
+  def test_storage_variable_with_bucket_prefix(self):
+    cmd = "xpk workload create --workload job1 --tpu-type v6e-16 --storage gs://$BUCKET_NAME"
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("--mount 'gs://$BUCKET_NAME;/mnt/bucket_name;rw'", output)
+
+    cmd2 = "xpk workload create --workload job1 --tpu-type v6e-16 --storage gs://${BUCKET_NAME}"
+    output2 = parse_xpk_to_gcluster.parse_xpk_command(cmd2)
+    self.assertIn("--mount 'gs://${BUCKET_NAME};/mnt/bucket_name;rw'", output2)
+
 
 if __name__ == "__main__":
   unittest.main()

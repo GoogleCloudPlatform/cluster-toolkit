@@ -268,13 +268,8 @@ def parse_workload_create(
     if ";" in storage_val:
       cmd.extend(["--mount", storage_val])
     else:
-      dest_name = (
-          re.sub(r"[\$\{\}\<\>]", "", storage_val.rstrip("/").split("/")[-1])
-          .strip()
-          .lower()
-          if (storage_val.startswith("$") or storage_val.startswith("<"))
-          else storage_val.rstrip("/").split("/")[-1]
-      )
+      last_component = storage_val.rstrip("/").split("/")[-1]
+      dest_name = re.sub(r"[\$\{\}\<\>]", "", last_component).strip().lower()
       clean_dest = dest_name if dest_name else "storage"
       cmd.extend(["--mount", f"{storage_val};/mnt/{clean_dest};rw"])
   for env_val in parsed.pathways_proxy_env:
