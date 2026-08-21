@@ -44,7 +44,7 @@ func init() {
 		addGroupSelectionFlags(
 			addAutoApproveFlag(
 				addArtifactsDirFlag(destroyCmd))))
-	destroyCmd.Flags().BoolVar(&robustDestroy, "robust", false, "Perform a robust destroy, including firewall rule cleanup.")
+	destroyCmd.Flags().BoolVar(&robustDestroy, "robust", true, "Perform a robust destroy, including firewall rule cleanup.")
 }
 
 var (
