@@ -113,9 +113,12 @@ By specifying the `--compute-type` flag, you can use the exact same command to t
 > **Simplify Commands with Configuration**: You can set these values once using the configuration command and omit them from subsequent commands:
 >
 > ```bash
+> # Set values individually
 > ./gcluster job config set project <PROJECT_ID>
 > ./gcluster job config set cluster <CLUSTER_NAME>
-> ./gcluster job config set location <REGION/ZONE>
+>
+> # Or set multiple values at once
+> ./gcluster job config set project=<PROJECT_ID> cluster=<CLUSTER_NAME> location=<REGION/ZONE>
 > ```
 >
 > To view your current configuration, run:
@@ -1146,8 +1149,8 @@ Pass the `--gke-custom-templates-path` flag to the `submit` command:
 ### 9.2 Configuration Commands
 *Use these commands to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*
 
-#### `gcluster job config set [key] [value]`
-Sets a persistent configuration property.
+#### `gcluster job config set [key] [value]` or `[key=value...]`
+Sets persistent configuration properties (single or batched).
 
 * **Supported Keys:**
   * `project`: Google Cloud Project ID
@@ -1158,6 +1161,7 @@ Sets a persistent configuration property.
 
 ```bash
 ./gcluster job config set project my-awesome-project
+./gcluster job config set project=my-awesome-project cluster=my-cluster
 ```
 
 #### `gcluster job config list`
