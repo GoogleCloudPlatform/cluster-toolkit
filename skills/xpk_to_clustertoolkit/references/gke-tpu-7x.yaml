@@ -117,6 +117,7 @@ deployment_groups:
     use: [gke-tpu-7x-net, workload_service_account]
     settings:
       system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
+      system_node_pool_node_count: $(vars.system_pool_node_count)
       system_node_pool_taints: []
       enable_private_endpoint: $(vars.enable_private_endpoint)
       private_endpoint_subnetwork: $(vars.private_endpoint_subnetwork)

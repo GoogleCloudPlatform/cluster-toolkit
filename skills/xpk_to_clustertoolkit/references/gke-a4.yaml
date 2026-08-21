@@ -165,6 +165,7 @@ deployment_groups:
       auto_monitoring_scope: $(vars.auto_monitoring_scope)
       system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
+      system_node_pool_node_count: $(vars.system_pool_node_count)
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
       enable_gcsfuse_csi: $(vars.enable_gcsfuse_csi_driver)
