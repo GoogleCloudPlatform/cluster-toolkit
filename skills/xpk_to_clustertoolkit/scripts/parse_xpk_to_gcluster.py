@@ -265,7 +265,9 @@ def parse_workload_create(
       cmd.extend(["--mount", storage_val])
     else:
       dest_name = (
-          re.sub(r"[\$\{\}\<\>\/]", "", storage_val).strip().lower()
+          re.sub(r"[\$\{\}\<\>]", "", storage_val.rstrip("/").split("/")[-1])
+          .strip()
+          .lower()
           if (storage_val.startswith("$") or storage_val.startswith("<"))
           else storage_val.rstrip("/").split("/")[-1]
       )
@@ -537,7 +539,7 @@ def parse_xpk_command(cmd_string: str) -> str:
     )
 
 
-def main(argv: list[str] = None) -> None:
+def main(argv: list[str] | None = None) -> None:
   if argv is None:
     argv = sys.argv
 

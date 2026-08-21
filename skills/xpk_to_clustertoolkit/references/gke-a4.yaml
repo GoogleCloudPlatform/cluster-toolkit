@@ -124,7 +124,7 @@ deployment_groups:
       - monitoring.metricWriter
       - monitoring.viewer
       - stackdriver.resourceMetadata.writer
-      - storage.objectAdmin
+      - storage.objectViewer
       - artifactregistry.reader
 
   - id: workload_service_account

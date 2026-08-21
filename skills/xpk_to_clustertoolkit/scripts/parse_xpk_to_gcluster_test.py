@@ -279,6 +279,11 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
     self.assertIn("enable_parallelstore_csi_driver: true", output)
 
+  def test_storage_variable_with_path_suffix(self):
+    cmd = "xpk workload create --workload job1 --tpu-type v6e-16 --storage $STORAGE_URI/data"
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("--mount '$STORAGE_URI/data;/mnt/data;rw'", output)
+
 
 if __name__ == "__main__":
   unittest.main()
