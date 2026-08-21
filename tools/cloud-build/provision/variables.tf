@@ -99,7 +99,9 @@ variable "kueue_migrated_tests" {
     "ml-a3-megagpu-onspot-slurm-ubuntu",
     "gke-a3-ultragpu-onspot",
     "ml-a3-ultragpu-onspot-slurm",
-    "ml-a3-ultragpu-onspot-jbvms"
+    "ml-a3-ultragpu-onspot-jbvms",
+    "gke-a4x",
+    "ml-a4x-highgpu-slurm"
   ]
 }
 
