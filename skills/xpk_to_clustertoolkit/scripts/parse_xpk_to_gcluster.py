@@ -318,6 +318,7 @@ def parse_cluster_create(
       "--enable-master-global-access",
       "--enable-workload-identity",
       "--enable-gcsfuse-csi-driver",
+      "--enable-lustre-csi-driver",
       "--enable-gcpfilestore-csi-driver",
       "--enable-parallelstore-csi-driver",
       "--enable-pd-csi-driver",
@@ -392,6 +393,8 @@ def parse_cluster_create(
     v["enable_workload_identity"] = True
   if is_flag_true(parsed.enable_gcsfuse_csi_driver):
     v["enable_gcsfuse_csi_driver"] = True
+  if is_flag_true(parsed.enable_lustre_csi_driver):
+    v["enable_managed_lustre_csi"] = True
   if is_flag_true(parsed.enable_parallelstore_csi_driver):
     v["enable_parallelstore_csi_driver"] = True
   if is_flag_true(parsed.enable_gcpfilestore_csi_driver):

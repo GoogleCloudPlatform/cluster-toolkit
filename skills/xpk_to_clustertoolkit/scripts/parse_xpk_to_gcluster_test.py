@@ -268,10 +268,10 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     self.assertEqual(m_type, "ct5lp-hightpu-1t")
     self.assertEqual(top, "1x1")
 
-  def test_enable_lustre_csi_driver_flag_ignored_with_warning(self):
+  def test_enable_lustre_csi_driver(self):
     cmd = "xpk cluster create --cluster c1 --enable-lustre-csi-driver"
     output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
-    self.assertIn("Warning: Unmapped xpk flags were ignored: --enable-lustre-csi-driver", output)
+    self.assertIn("enable_managed_lustre_csi: true", output)
     self.assertNotIn("enable_parallelstore_csi_driver", output)
 
   def test_enable_parallelstore_csi_driver(self):
