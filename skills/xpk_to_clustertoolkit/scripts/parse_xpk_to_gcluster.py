@@ -87,7 +87,7 @@ def get_machine_type(device_type: str) -> tuple[str, str]:
   shorthand_map: dict[str, str] = {}
   if os.path.exists(ref_path):
     try:
-      with open(ref_path, "r") as f:
+      with open(ref_path, "r", encoding="utf-8") as f:
         data = json.load(f)
         shorthand_map = data.get("accelerator_shorthand_map", {})
     except Exception:
@@ -187,6 +187,9 @@ def parse_workload_create(
       "--placement-policy": "--placement-policy",
       "--node-constraint": "--node-constraint",
       "--output-manifest-file": "--dry-run-out",
+      "--timeout": "--timeout",
+      "--queue": "--queue",
+      "--gke-namespace": "--gke-namespace",
       # Pathways specific value flags
       "--proxy-server-image": "--pathways-proxy-server-image",
       "--server-image": "--pathways-server-image",
@@ -203,6 +206,7 @@ def parse_workload_create(
       "--mtc-enabled": "--gke-mtc-enabled",
       "--headless": "--pathways-headless",
       "--enable-debug-logs": "--verbose",
+      "--skip-prereqs": "--skip-prereqs",
   }
 
   parser = argparse.ArgumentParser(allow_abbrev=False)
@@ -513,8 +517,12 @@ def parse_xpk_command(cmd_string: str) -> str:
   except ValueError as e:
     return f"Error parsing command: {e}"
 
-  if not tokens or tokens[0] != "xpk":
+  try:
+    xpk_idx = tokens.index("xpk")
+  except ValueError:
     return "Error: Not an xpk command"
+
+  tokens = tokens[xpk_idx:]
 
   if len(tokens) < 3:
     return "Error: Incomplete xpk command"

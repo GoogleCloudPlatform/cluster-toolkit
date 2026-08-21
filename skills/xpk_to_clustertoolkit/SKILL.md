@@ -190,6 +190,7 @@ configuration into a Cluster Toolkit blueprint YAML file:
 | `--queue` | `--queue` | Kueue local queue name |
 | `--gke-namespace` | `--gke-namespace` | Workload Kubernetes namespace |
 | `--skip-prereqs` | `--skip-prereqs` | Skip cluster prerequisite validation checks |
+| `--wait-for-job-completion` | `--await-job-completion` | Wait for workload completion |
 | `--headless` (Pathways) | `--pathways-headless` | Headless mode for Pathways |
 | `--proxy-server-image` | `--pathways-proxy-server-image` | Pathways proxy image |
 | `--server-image` | `--pathways-server-image` | Pathways RM server image |

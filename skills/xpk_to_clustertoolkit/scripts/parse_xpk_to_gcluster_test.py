@@ -310,6 +310,22 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
     self.assertIn("--mount '$STORAGE_URI/data;/mnt/data;rw'", output)
 
+  def test_additional_workload_flags(self):
+    cmd = (
+        "xpk workload create --workload job1 --tpu-type v6e-16 --timeout 24h"
+        " --queue my-queue --gke-namespace custom-ns --skip-prereqs"
+    )
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("--timeout 24h", output)
+    self.assertIn("--queue my-queue", output)
+    self.assertIn("--gke-namespace custom-ns", output)
+    self.assertIn("--skip-prereqs", output)
+
+  def test_prepended_environment_variables(self):
+    cmd = "PROJECT_ID=my-project ZONE=us-central1-a xpk workload create --workload job1 --tpu-type v6e-16"
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("gcluster job submit --name job1", output)
+
 
 if __name__ == "__main__":
   unittest.main()
