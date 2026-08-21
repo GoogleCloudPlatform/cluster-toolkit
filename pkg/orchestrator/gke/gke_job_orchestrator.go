@@ -909,13 +909,13 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 	if job.DryRunManifest == "" {
 		exists, err := g.checkLocalQueueExists(localQueue, ns)
 		if err != nil {
-			logging.Info("Warning: Failed to check if LocalQueue exists: %v", err)
+			return fmt.Errorf("failed to check if LocalQueue exists: %w", err)
 		}
 		if !exists {
 			promptMsg := fmt.Sprintf("LocalQueue '%s' does not exist in namespace '%s'. Do you want gcluster to create default Kueue resources (ClusterQueue and LocalQueue) with calculated cluster capacity?", localQueue, ns)
 			if shell.PromptYesNo(promptMsg) {
 				if err := g.createDefaultQueues(localQueue, ns); err != nil {
-					logging.Info("Warning: Failed to create default queues: %v. Workload might remain suspended.", err)
+					return err
 				}
 			} else {
 				return fmt.Errorf("LocalQueue '%s' does not exist in namespace '%s' and user declined to create default queues. Please create one manually or specify an existing queue using --queue flag", localQueue, ns)
@@ -924,7 +924,7 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 
 		if job.IsPathwaysJob {
 			if err := g.ensureClusterQueueCoverage(localQueue, ns); err != nil {
-				logging.Info("Warning: Could not automatically update ClusterQueue: %v. Workload might remain suspended.", err)
+				return err
 			}
 		}
 	}

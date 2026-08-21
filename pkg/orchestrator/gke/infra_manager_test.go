@@ -137,3 +137,23 @@ func TestReplaceDeprecatedRbacProxyImage(t *testing.T) {
 		t.Errorf("manager image = %v; want gcr.io/k8s-staging-jobset/jobset:v0.2.0", got)
 	}
 }
+
+func TestIsJobSetCRDInstalled_Forbidden(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			return shell.CommandResult{
+				ExitCode: 1,
+				Stderr:   "Error from server (Forbidden): customresourcedefinitions.apiextensions.k8s.io \"jobsets.jobset.x-k8s.io\" is forbidden",
+			}
+		},
+	}
+	orc := &GKEOrchestrator{executor: mock}
+
+	installed, err := orc.isJobSetCRDInstalled()
+	if err != nil {
+		t.Fatalf("isJobSetCRDInstalled should succeed and return true on 403 Forbidden, got err: %v", err)
+	}
+	if !installed {
+		t.Errorf("isJobSetCRDInstalled on 403 Forbidden = false; want true")
+	}
+}

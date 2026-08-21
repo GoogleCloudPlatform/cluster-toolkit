@@ -162,7 +162,7 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName, ns string) error {
 	logging.Info("Creating default ClusterQueue and LocalQueue...")
 
 	if err := g.EnsureResourceFlavors(); err != nil {
-		logging.Info("Warning: Failed to ensure ResourceFlavors: %v", err)
+		return err
 	}
 
 	cqName := defaultClusterQueue
@@ -329,7 +329,7 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName strin
 	needReinstall, reinstallReason := g.evaluateKueueReinstall(kueueCRDInstalled, kueueDeploymentInstalled, currentVersion, version)
 	if needReinstall {
 		if g.checkDynamicSlicingViaGKE() {
-			return fmt.Errorf("automatic Kueue installation blocked: we detected that cluster %s is set up for Dynamic-slicing (found 'PROVISION_ONLY' in the node pool's placementPolicy). Wiping Kueue would corrupt your custom topology configurations. Please install Kueue and the required custom CRDs manually", clusterName)
+			return fmt.Errorf("automatic Kueue installation/modification blocked: cluster %s is set up for Dynamic-Slicing (found 'PROVISION_ONLY' in node pool placementPolicy). Automatic installation or modification of Kueue could conflict with custom topology configurations. Please install Kueue and required CRDs manually", clusterName)
 		}
 
 		if err := g.checkKueueInstallPermissions(version); err != nil {
@@ -401,11 +401,15 @@ func (g *GKEOrchestrator) installKueue(version string) error {
 
 func (g *GKEOrchestrator) checkKueueInstallPermissions(version string) error {
 	logging.Info("Verifying cluster permissions for Kueue installation...")
+	var missing []string
 	for _, c := range kueuePermissionChecks {
 		res := g.executor.ExecuteCommand("kubectl", "auth", "can-i", c.verb, c.resource)
 		if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) != "yes" {
-			return fmt.Errorf("unable to re-install kueue to version %s, this could be a permission issue. Please contact your cluster administrator for updating KUEUE settings", version)
+			missing = append(missing, fmt.Sprintf("'%s %s'", c.verb, c.resource))
 		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("unable to re-install Kueue to version %s: missing required RBAC permissions: [%s]. Please contact your cluster administrator", version, strings.Join(missing, ", "))
 	}
 	return nil
 }
@@ -777,12 +781,16 @@ func (g *GKEOrchestrator) EnsureResourceFlavors() error {
 	cmd := g.executor.ExecuteCommand("kubectl", "get", "resourceflavor", "-o", "jsonpath={.items[*].metadata.name}")
 	existingFlavors := make(map[string]bool)
 	if cmd.ExitCode != 0 {
-		errStr := strings.ToLower(cmd.Stderr)
+		errStr := strings.ToLower(cmd.Stderr + " " + cmd.Stdout)
 		if strings.Contains(errStr, "forbidden") {
 			logging.Warn("Insufficient RBAC permissions to list resource flavors (403 Forbidden). Skipping ResourceFlavor verification and creation.")
 			return nil
 		}
-		return fmt.Errorf("failed to list resource flavors: %s", cmd.Stderr)
+		if strings.Contains(errStr, "not found") || strings.Contains(errStr, "notfound") || strings.Contains(errStr, "no resources found") {
+			logging.Info("No ResourceFlavors found.")
+		} else {
+			return fmt.Errorf("failed to list resource flavors: %s", cmd.Stderr)
+		}
 	}
 
 	for _, f := range strings.Fields(cmd.Stdout) {
@@ -838,7 +846,7 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 	logging.Info("Installing Kueue resources (ClusterQueue, LocalQueue)...")
 
 	if err := g.EnsureResourceFlavors(); err != nil {
-		logging.Info("Warning: Failed to ensure ResourceFlavors: %v", err)
+		return err
 	}
 
 	hasUserClasses, err := g.hasUserPriorityClasses()

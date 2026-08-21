@@ -745,7 +745,7 @@ func TestCheckAndInstallKueue_PermissionDenied(t *testing.T) {
 		t.Fatal("expected error due to insufficient permissions, got nil")
 	}
 
-	expectedErr := "unable to re-install kueue to version"
+	expectedErr := "unable to re-install Kueue to version"
 	if !strings.Contains(err.Error(), expectedErr) {
 		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
 	}
@@ -1093,5 +1093,50 @@ func TestCheckClusterQueueCoverage_Forbidden(t *testing.T) {
 	}
 	if !covered || isNew {
 		t.Errorf("expected covered=true, isNew=false on 403 Forbidden, got covered=%v, isNew=%v", covered, isNew)
+	}
+}
+
+func TestEnsureClusterQueueCoverage_Covered(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			if strings.Contains(fullCmd, "get localqueue") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "default"}
+			}
+			if strings.Contains(fullCmd, "get clusterqueue") {
+				return shell.CommandResult{
+					ExitCode: 0,
+					Stdout:   `{"spec": {"resourceGroups": [{"coveredResources": ["cpu", "memory"]}]}}`,
+				}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+	orc := &GKEOrchestrator{executor: mock}
+
+	err := orc.ensureClusterQueueCoverage("default", "default")
+	if err != nil {
+		t.Fatalf("ensureClusterQueueCoverage failed on covered queue: %v", err)
+	}
+}
+
+func TestCheckKueueInstallPermissions_MissingPermission(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			if strings.Contains(fullCmd, "auth can-i create namespaces") || strings.Contains(fullCmd, "auth can-i create clusterroles") {
+				return shell.CommandResult{ExitCode: 1, Stdout: "no"}
+			}
+			return shell.CommandResult{ExitCode: 0, Stdout: "yes"}
+		},
+	}
+	orc := &GKEOrchestrator{executor: mock}
+
+	err := orc.checkKueueInstallPermissions("v0.15.2")
+	if err == nil {
+		t.Fatalf("checkKueueInstallPermissions should fail on missing permission, got nil")
+	}
+	if !strings.Contains(err.Error(), "missing required RBAC permissions: ['create namespaces', 'create clusterroles.rbac.authorization.k8s.io']") {
+		t.Errorf("checkKueueInstallPermissions error = %v; want aggregated missing permissions list", err)
 	}
 }

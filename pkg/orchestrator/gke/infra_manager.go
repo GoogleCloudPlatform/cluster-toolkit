@@ -51,6 +51,9 @@ func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
 				logging.Info("JobSet Webhook is healthy.")
 				return nil
 			}
+		} else if strings.Contains(strings.ToLower(cmdEndpoints.Stderr), "forbidden") {
+			logging.Warn("Insufficient RBAC permissions to read JobSet webhook endpoints (403 Forbidden). Assuming JobSet is healthy in shared cluster.")
+			return nil
 		}
 		logging.Info("JobSet Webhook endpoints not found. Proceeding with re-installation/fix...")
 	}
@@ -134,9 +137,14 @@ func (g *GKEOrchestrator) isJobSetCRDInstalled() (bool, error) {
 	if res.ExitCode == 0 {
 		return true, nil
 	}
-	if strings.Contains(res.Stderr, "not found") || strings.Contains(res.Stdout, "NotFound") {
+	errStr := strings.ToLower(res.Stderr + " " + res.Stdout)
+	if strings.Contains(errStr, "not found") || strings.Contains(errStr, "notfound") {
 		logging.Info("JobSet CRD not found.")
 		return false, nil
+	}
+	if strings.Contains(errStr, "forbidden") {
+		logging.Warn("Insufficient RBAC permissions to read JobSet CRD (403 Forbidden). Assuming JobSet is installed in shared cluster.")
+		return true, nil
 	}
 	return false, fmt.Errorf("failed to check for JobSet CRD: %s\n%s", res.Stderr, res.Stdout)
 }
