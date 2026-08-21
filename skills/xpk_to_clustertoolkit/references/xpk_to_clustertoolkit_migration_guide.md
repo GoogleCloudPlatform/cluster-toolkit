@@ -208,10 +208,16 @@ You can pass TPU shorthand directly into `--compute-type` (e.g., `--compute-type
 | `--num-slices <N>` | `--num-slices <N>` | Number of TPU slices |
 | `--num-nodes <N>` | `--num-nodes <N>` | **GPU/CPU jobs only**. Omit `--num-nodes` for TPU jobs |
 | `--priority <PRIORITY>` | `--priority <PRIORITY>` | Kueue queue priority (`low`, `medium`, `high`) |
+| `--queue <QUEUE>` | `--queue <QUEUE>` | Kueue LocalQueue name |
+| `--gke-namespace <NS>` | `--gke-namespace <NS>` | Target Kubernetes namespace |
+| `--timeout <DURATION>` | `--timeout <DURATION>` | Workload execution timeout duration (e.g. `24h`, `30m`) |
 | `--wait-for-job-completion` | `--await-job-completion` | Blocks CLI until job finishes |
+| `--skip-prereqs` | `--skip-prereqs` | Skip pre-submission cluster validation checks |
 | `--env KEY=VAL` | `--env KEY=VAL` | Environment variables |
 | `--storage <NAME>` | `--mount <SRC>;<DEST>[;<MODE>][;options=<OPTS>]` | Inline storage mount (`gs://`, `pvc://`, `filestore://`). Note: `gcluster` CLI defaults to `ro` (read-only) if mode is omitted; translated commands explicitly specify `;rw` to preserve XPK's read-write behavior. `options=` is supported exclusively for GCS volumes (`gs://`) |
 | `--use-parallel-containers false` | `--gke-disable-parallel-containers` | Explicitly disables parallel containers on TPU v7/v7x hardware |
+| `--scheduler <SCHEDULER>` | `--gke-scheduler <SCHEDULER>` | Kubernetes scheduler name (e.g. `gke.io/topology-aware-auto`) |
+| `--restart-on-exit-codes <CODES>` | `--restart-on-exit-codes <CODES>` | Comma-separated exit codes that should not trigger job failure |
 | `--service-account <SA>` | `--service-account <SA>` | Kubernetes service account name |
 | `--max-restarts <N>` | `--restarts <N>` | Maximum JobSet restarts |
 | `--ttl-seconds-after-finished <SEC>` | `--gke-ttl-after-finished <SEC>` | TTL after job completion |
@@ -327,16 +333,16 @@ gcluster job submit \
 
 | XPK Command | Cluster Toolkit (`gcluster`) Equivalent | Notes |
 | :--- | :--- | :--- |
-| `xpk cluster create` | `gcluster create <file.yaml> && gcluster deploy <name>` | Provision GKE cluster & TPU node pools |
+| `xpk cluster create` | `gcluster deploy <file.yaml>` (or `gcluster create <file.yaml> && gcluster deploy <name>`) | Provision GKE cluster & TPU/GPU node pools. Single-step `gcluster deploy` automatically executes `create` if needed |
 | `xpk cluster delete` | `gcluster destroy <deployment_name>` | Tear down infrastructure |
 | `xpk cluster list` | `gcluster cluster list` | List active clusters |
 | `xpk cluster describe` | `gcluster cluster describe` | Describe cluster status |
 | `xpk workload create` | `gcluster job submit` | Submits JobSet workload |
 | `xpk workload create-pathways` | `gcluster job submit --pathways` | Submits Pathways workload |
 | `xpk storage attach` | Inline `--mount` flag with `gcluster job submit` | Supports `gs://`, `pvc://`, `filestore://`. `options=` is GCS `gs://` exclusive |
-| `xpk workload list` | `gcluster job list` | List active workloads |
+| `xpk workload list` | `gcluster job list` | List active workloads. Filter with `--status` or `--name-contains` |
 | `xpk workload delete` | `gcluster job cancel <workload_name>` | Cancel running workload |
-| `xpk inspector` | `gcluster job inspect` / `gcluster job logs <workload_name>` | Inspect cluster health and workload status, or stream logs |
+| `xpk inspector` | `gcluster job inspect` / `gcluster job logs <workload_name>` | Inspect cluster health and workload status, or stream logs (`--main-only` for primary container) |
 | `xpk info` | `gcluster cluster info` | View cluster details |
 | `xpk config set` | `gcluster job config set` | Update local CLI config (specifically project, cluster and location) |
 | `xpk storage list` | `gcluster cluster volume` | View mounted volumes |
