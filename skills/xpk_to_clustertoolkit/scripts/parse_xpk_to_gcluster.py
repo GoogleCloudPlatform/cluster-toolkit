@@ -143,7 +143,7 @@ def is_tpu_hardware(compute_type: str | None, device_type: str | None) -> bool:
   d_lower = (device_type or "").lower()
   if "tpu" in c_lower or "tpu" in d_lower:
     return True
-  pattern = r"^(v\d|ct\d|tpu)"
+  pattern = r"^(v[2-9]|ct[2-9]|tpu)"
   return bool(re.search(pattern, c_lower) or re.search(pattern, d_lower))
 
 

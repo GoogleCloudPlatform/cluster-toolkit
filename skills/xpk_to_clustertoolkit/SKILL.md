@@ -222,8 +222,8 @@ Unlike `xpk`, which manages storage imperatively via `xpk storage create` and `x
   - **Filestore (NFS)**: Enable `enable_filestore_csi_driver: true` and define `modules/file-storage/filestore` module connected to the VPC network.
   - **Parallelstore**: Enable `enable_parallelstore_csi_driver: true` (or `enable_managed_lustre_csi: true` for Lustre) and configure `modules/file-storage/parallelstore`.
 * **Job Submission Storage Mounting**: Use `--mount "<src>;<dest>[;<mode>][;options=<options>]"` with `gcluster job submit`.
-  - *Flag Translation*: Automatically converts XPK's `--storage <uri>` or `--storage <name>` flags into `--mount "<src>;<dest>;<mode>"`.
-  - *Default Mount Mode*: The `<mode>` field defaults to `ro` (read-only) if unspecified.
+  - *Flag Translation*: Automatically converts XPK's `--storage <uri>` or `--storage <name>` flags into `--mount "<src>;<dest>;rw"` (appending `;rw` to preserve XPK's read-write default).
+  - *Native Default Mount Mode*: In native `gcluster job submit`, the `<mode>` field defaults to `ro` (read-only) if omitted.
   - *GCS Fuse Options*: Note that the `;options=<options>` parameter is strictly validated by `gcluster` and is supported **exclusively for Cloud Storage volumes (`gs://`)**. Appending `options=` to non-GCS volumes will result in a CLI validation error.
 
 ## 4. Logging Translation Rule

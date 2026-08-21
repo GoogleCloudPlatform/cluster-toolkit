@@ -30,6 +30,8 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     self.assertFalse(
         parse_xpk_to_gcluster.is_tpu_hardware("a4-highgpu-8g", "a4-highgpu-8g")
     )
+    self.assertFalse(parse_xpk_to_gcluster.is_tpu_hardware("v100-8", None))
+    self.assertFalse(parse_xpk_to_gcluster.is_tpu_hardware(None, "v100"))
 
   def test_is_flag_true(self):
     self.assertTrue(parse_xpk_to_gcluster.is_flag_true("true"))
