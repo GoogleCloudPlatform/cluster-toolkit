@@ -261,9 +261,25 @@ func TestRegexValidator_ConcatMode(t *testing.T) {
 			saName:  cty.StringVal("sa-name"),
 		},
 		{
+			name:    "passes_on_exact_max_length_30_chars",
+			depName: cty.StringVal("a-1234567890-1234567890"),
+			saName:  cty.StringVal("123456"),
+		},
+		{
+			name:    "passes_on_exact_min_length_6_chars",
+			depName: cty.StringVal("ab"),
+			saName:  cty.StringVal("cde"),
+		},
+		{
 			name:       "fails_when_too_long",
 			depName:    cty.StringVal("a-very-long-deployment-name-that-exceeds"),
 			saName:     cty.StringVal("sa-name"),
+			wantErrSub: "does not match pattern",
+		},
+		{
+			name:       "fails_on_length_31_chars",
+			depName:    cty.StringVal("a-1234567890-1234567890"),
+			saName:     cty.StringVal("1234567"),
 			wantErrSub: "does not match pattern",
 		},
 		{

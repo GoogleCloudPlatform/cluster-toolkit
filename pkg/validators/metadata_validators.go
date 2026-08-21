@@ -70,7 +70,7 @@ func (r *RegexValidator) validateConcat(
 	optional bool,
 ) error {
 	varsList, _ := parseStringList(rule.Inputs["vars"])
-	separator, _ := rule.Inputs["separator"].(string)
+	separator, _ := parseString(rule.Inputs["separator"])
 	allowNullList, _ := parseStringList(rule.Inputs["allow_null"])
 	allowNullMap := make(map[string]struct{})
 	for _, v := range allowNullList {
@@ -179,10 +179,11 @@ func (r *RegexValidator) Validate(
 		}
 	}
 
-	optional := true
-	if v, ok := rule.Inputs["optional"]; ok {
-		if b, ok := v.(bool); ok {
-			optional = b
+	optional, err := parseBoolInput(rule.Inputs, "optional", true)
+	if err != nil {
+		return config.BpError{
+			Err:  fmt.Errorf("failed to parse 'optional' input: %w", err),
+			Path: config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source,
 		}
 	}
 
@@ -607,19 +608,19 @@ func (c *ConditionalRegexValidator) Validate(
 		return nil
 	}
 
-	dependentVal, depPath := getSettingWithFallback(bp, group, modIdx, mod, dependent)
-	if dependentVal == cty.NilVal || !dependentVal.IsKnown() || dependentVal.IsNull() || dependentVal.Type() != cty.String {
+	valStr, known, depPath, err := resolveSettingToString(bp, group, modIdx, mod, dependent, true, false)
+	if err != nil || !known {
 		return nil
 	}
 
-	matched := re.MatchString(dependentVal.AsString())
+	matched := re.MatchString(valStr)
 	if matched != matchExpected {
 		msg := rule.ErrorMessage
 		if msg == "" {
 			if matchExpected {
-				msg = fmt.Sprintf("variable %q value %q must match pattern %q when conditions are met", dependent, dependentVal.AsString(), re.String())
+				msg = fmt.Sprintf("variable %q value %q must match pattern %q when conditions are met", dependent, valStr, re.String())
 			} else {
-				msg = fmt.Sprintf("variable %q value %q must not match pattern %q when conditions are met", dependent, dependentVal.AsString(), re.String())
+				msg = fmt.Sprintf("variable %q value %q must not match pattern %q when conditions are met", dependent, valStr, re.String())
 			}
 		}
 		return config.BpError{Err: fmt.Errorf("%s", msg), Path: depPath}
