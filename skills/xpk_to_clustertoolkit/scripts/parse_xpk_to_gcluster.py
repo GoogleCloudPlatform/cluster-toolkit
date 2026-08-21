@@ -294,7 +294,6 @@ def parse_cluster_create(
   parser.add_argument("--num-slices", type=str)
   parser.add_argument("--tpu-type", type=str)
   parser.add_argument("--device-type", type=str)
-  parser.add_argument("--pathways-gce-machine-type", type=str)
   parser.add_argument("--default-pool-cpu-machine-type", type=str)
   parser.add_argument("--cluster-cpu-machine-type", type=str)
   parser.add_argument("--reservation", type=str)
@@ -369,10 +368,13 @@ def parse_cluster_create(
     elif is_tpu and (device_type.startswith("<") or device_type.startswith("$")):
       v["tpu_topology"] = "<YOUR_TOPOLOGY>"
 
+  warnings: list[str] = []
   if is_pathways or is_flag_true(parsed.enable_pathways):
     v["enable_pathways_for_tpus"] = True
-    if parsed.pathways_gce_machine_type:
-      v["pathways_gce_machine_type"] = parsed.pathways_gce_machine_type
+    warnings.append(
+        "enable_pathways_for_tpus: true automatically provisions the dedicated"
+        " cpu-np CPU node pool with default n4-standard-64 instances."
+    )
 
   cpu_machine_type = (
       parsed.default_pool_cpu_machine_type or parsed.cluster_cpu_machine_type
@@ -432,7 +434,6 @@ def parse_cluster_create(
   if is_flag_true(parsed.managed_mldiagnostics):
     v["enable_managed_mldiagnostics"] = True
 
-  warnings: list[str] = []
   if (
       is_flag_true(parsed.create_vertex_tensorboard)
       or parsed.tensorboard_name

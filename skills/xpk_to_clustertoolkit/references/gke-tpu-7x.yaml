@@ -45,7 +45,6 @@ vars:
 
   # Pathways
   enable_pathways_for_tpus: false
-  pathways_gce_machine_type: "n2-standard-64"
 
   # Storage CSI Drivers
   enable_gcsfuse_csi_driver: true
@@ -123,7 +122,6 @@ deployment_groups:
       private_endpoint_subnetwork: $(vars.private_endpoint_subnetwork)
       enable_master_global_access: $(vars.enable_master_global_access)
       enable_pathways_for_tpus: $(vars.enable_pathways_for_tpus)
-      pathways_gce_machine_type: $(vars.pathways_gce_machine_type)
       enable_gcsfuse_csi: $(vars.enable_gcsfuse_csi_driver)
       enable_filestore_csi: $(vars.enable_filestore_csi_driver)
       enable_parallelstore_csi: $(vars.enable_parallelstore_csi_driver)

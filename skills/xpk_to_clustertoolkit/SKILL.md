@@ -26,8 +26,9 @@ map commands and flags natively to `gcluster`:
 
 * `xpk workload list` -> `gcluster job list` (Note: flag `--filter-by-job`
   maps to `--name-contains`)
-* `xpk workload delete` -> `gcluster job cancel` (Note: map `--workload` to
-  `--name` or `--filter-by-job` to `--name-contains`)
+* `xpk workload delete` -> `gcluster job cancel <workload-name>` (Note: uses
+  positional argument `gcluster job cancel <workload-name>`. Batch deletion
+  with `--filter-by-job` is not supported in `gcluster job cancel`)
 * `xpk cluster delete` -> `gcluster destroy <deployment_name>`
 * `xpk config set` -> `gcluster job config set`
 * `xpk inspector` -> `gcluster job logs <workload_name>` (or `gcluster job
@@ -140,11 +141,12 @@ configuration into a Cluster Toolkit blueprint YAML file:
    ```yaml
    vars:
      enable_pathways_for_tpus: true
-     pathways_gce_machine_type: n2-standard-64  # Or value from --pathways-gce-machine-type
    ```
 
-   This automatically provisions the dedicated `cpu-np` CPU node pool and
-   configures Kueue with Pathways resource flavors.
+   Setting `enable_pathways_for_tpus: true` in `modules/scheduler/gke-cluster`
+   automatically provisions the dedicated `cpu-np` CPU node pool with
+   `n4-standard-64` instances and configures Kueue with Pathways resource
+   flavors.
 
 4. **Execution Commands**: Replace the `xpk cluster create` command with direct `gcluster deploy`:
 
@@ -160,6 +162,7 @@ configuration into a Cluster Toolkit blueprint YAML file:
 | :--- | :--- | :--- |
 | `xpk workload create` | `gcluster job submit` | Job submission |
 | `xpk workload create-pathways` | `gcluster job submit --pathways` | Adds `--pathways` flag |
+| `xpk workload delete` | `gcluster job cancel <workload-name>` | Positional workload name (batch deletion via `--filter-by-job` is not supported) |
 | `--workload` | `--name` | Workload identifier |
 | `--tpu-type` / `--device-type` | `--compute-type` + `--topology` | Looked up via `pkg/config/machine_mappings.json` |
 | `--num-slices` | `--num-slices` | Number of slices |
@@ -172,12 +175,16 @@ configuration into a Cluster Toolkit blueprint YAML file:
 | `--max-restarts` | `--restarts` | Max restarts before job failure |
 | `--ttl-seconds-after-finished` | `--gke-ttl-after-finished` | JobSet retention duration |
 | `--termination-grace-period-seconds` | `--grace-period` | Pod termination grace period |
+| `--timeout` | `--timeout` | Job execution timeout duration |
 | `--use-parallel-containers` | `--gke-disable-parallel-containers` | Inverted boolean flag polarity |
 | `--scheduler` | `--gke-scheduler` | e.g. `gke.io/topology-aware-auto` |
 | `--ramdisk-directory` | `--gke-mtc-ramdisk-dir` | Multi-tier checkpointing ramdisk |
 | `--mtc-enabled` | `--gke-mtc-enabled` | Enable MTC |
 | `--restart-on-exit-codes` | `--restart-on-exit-codes` | Non-failing exit codes |
 | `--service-account` | `--service-account` | Pod K8s service account |
+| `--queue` | `--queue` | Kueue local queue name |
+| `--gke-namespace` | `--gke-namespace` | Workload Kubernetes namespace |
+| `--skip-prereqs` | `--skip-prereqs` | Skip cluster prerequisite validation checks |
 | `--headless` (Pathways) | `--pathways-headless` | Headless mode for Pathways |
 | `--proxy-server-image` | `--pathways-proxy-server-image` | Pathways proxy image |
 | `--server-image` | `--pathways-server-image` | Pathways RM server image |
@@ -187,10 +194,12 @@ configuration into a Cluster Toolkit blueprint YAML file:
 | `--custom-pathways-worker-args` | `--pathways-worker-args` | Pass-through worker args |
 | `--elastic-slices` | `--pathways-elastic-slices` | Pathways elastic slicing |
 | `--max-slice-restarts` | `--pathways-max-slice-restarts` | Pathways slice restarts |
-| `xpk cluster create-pathways` | Blueprint `vars`: `enable_pathways_for_tpus: true` | Dedicated CPU pool + Kueue CRDs (Cluster Creation) |
-| `--pathways-gce-machine-type` | Blueprint `vars`: `pathways_gce_machine_type` | Machine type for Pathways CPU pool (Cluster Creation blueprint only) |
+| `xpk cluster create-pathways` | Blueprint `vars`: `enable_pathways_for_tpus: true` | Dedicated `cpu-np` CPU pool (`n4-standard-64`) + Kueue CRDs |
 | `xpk cluster delete` | `gcluster destroy <deployment>` | Destroys cluster infrastructure |
 | `xpk inspector` | `gcluster job inspect` or `gcluster job logs` | Workload status & log inspection |
+| `--main-only` | `--main-only` | Stream logs only for main container in `gcluster job logs` |
+| `xpk workload list` | `gcluster job list` | List workloads |
+| `--status` | `--status` | Filter workloads by status in `gcluster job list` |
 | `xpk storage list` | `gcluster cluster volume` | View attached cluster storage |
 
 ## 3. Storage Generation & Blueprint Automation Rule

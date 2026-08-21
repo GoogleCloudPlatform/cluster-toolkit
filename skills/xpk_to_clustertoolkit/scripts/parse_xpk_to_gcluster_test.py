@@ -132,6 +132,7 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
     self.assertIn("enable_private_endpoint: true", output)
     self.assertIn("enable_pathways_for_tpus: true", output)
+    self.assertIn("n4-standard-64", output)
 
   def test_parse_cluster_create_unmapped_flags_warning(self):
     cmd = "xpk cluster create --cluster c1 --custom-unsupported-flag foo"
