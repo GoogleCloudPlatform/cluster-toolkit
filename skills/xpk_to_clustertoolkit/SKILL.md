@@ -378,5 +378,5 @@ gcluster job submit --pathways \
   --restarts 0 \
   --pathways-proxy-args "${XLA_FLAGS}" \
   --compute-type tpu7x-standard-4t \
-  --topology 4x4x4
+  --topology 4x4x8
 ```

@@ -49,7 +49,7 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     self.assertIn("gcluster job submit", output)
     self.assertIn("--name my-job", output)
     self.assertIn("--compute-type tpu7x-standard-4t", output)
-    self.assertIn("--topology 4x4x4", output)
+    self.assertIn("--topology 4x4x8", output)
     self.assertIn("--image gcr.io/my-img", output)
 
   def test_parse_workload_create_pathways(self):
