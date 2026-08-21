@@ -203,7 +203,12 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     cmd = "xpk cluster create --cluster c1 --zone=$ZONE"
     output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
     self.assertIn("zone=$ZONE", output)
-    self.assertIn("region=<YOUR_REGION>", output)
+    self.assertIn("region=${ZONE%-*}", output)
+
+    cmd_braced = "xpk cluster create --cluster c1 --zone=${MY_ZONE}"
+    output_braced = parse_xpk_to_gcluster.parse_xpk_command(cmd_braced)
+    self.assertIn("zone=${MY_ZONE}", output_braced)
+    self.assertIn("region=${MY_ZONE%-*}", output_braced)
 
   def test_main_single_quoted_argument(self):
     with mock.patch("builtins.print") as mock_print:
