@@ -337,6 +337,12 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     output2 = parse_xpk_to_gcluster.parse_xpk_command(cmd2)
     self.assertIn("--mount 'gs://${BUCKET_NAME};/mnt/bucket_name;rw'", output2)
 
+  def test_cluster_create_mtc(self):
+    cmd = "xpk cluster create --cluster my-cluster --project my-project --zone us-central1-a --tpu-type v6e-16 --num-slices 2 --enable-mtc --mtc-ramdisk-size 50Gi"
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("enable_multi_tier_checkpointing: true", output)
+    self.assertIn("In Cluster Toolkit, MTC ramdisk directory and storage buckets are configured", output)
+
 
 if __name__ == "__main__":
   unittest.main()

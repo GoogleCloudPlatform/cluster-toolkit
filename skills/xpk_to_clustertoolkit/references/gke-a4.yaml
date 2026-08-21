@@ -47,10 +47,7 @@ vars:
   enable_pd_csi: false
 
   # Checkpointing & Diagnostics
-  enable_mtc: false
-  mtc_ramdisk_size:
-  mtc_gcs_bucket:
-  mtc_toleration_key:
+  enable_multi_tier_checkpointing: false
   enable_managed_mldiagnostics: false
 
   # Configuration Paths
@@ -174,6 +171,7 @@ deployment_groups:
       enable_parallelstore_csi: $(vars.enable_parallelstore_csi_driver)
       enable_managed_lustre_csi: $(vars.enable_managed_lustre_csi)
       enable_pd_csi: $(vars.enable_pd_csi)
+      enable_multi_tier_checkpointing: $(vars.enable_multi_tier_checkpointing)
       enable_private_endpoint: $(vars.enable_private_endpoint)
       private_endpoint_subnetwork: $(vars.private_endpoint_subnetwork)
       enable_master_global_access: $(vars.enable_master_global_access)

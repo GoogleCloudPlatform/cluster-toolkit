@@ -54,10 +54,7 @@ vars:
   enable_pd_csi: false
 
   # Checkpointing & Diagnostics
-  enable_mtc: false
-  mtc_ramdisk_size:
-  mtc_gcs_bucket:
-  mtc_toleration_key:
+  enable_multi_tier_checkpointing: false
   enable_managed_mldiagnostics: false
 
 deployment_groups:
@@ -128,6 +125,7 @@ deployment_groups:
       enable_parallelstore_csi: $(vars.enable_parallelstore_csi_driver)
       enable_managed_lustre_csi: $(vars.enable_managed_lustre_csi)
       enable_pd_csi: $(vars.enable_pd_csi)
+      enable_multi_tier_checkpointing: $(vars.enable_multi_tier_checkpointing)
       enable_autoprovisioning: $(vars.enable_autoprovisioning)
       autoprovisioning_min_chips: $(vars.autoprovisioning_min_chips)
       autoprovisioning_max_chips: $(vars.autoprovisioning_max_chips)

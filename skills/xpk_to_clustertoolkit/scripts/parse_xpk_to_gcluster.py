@@ -424,13 +424,13 @@ def parse_cluster_create(
   if parsed.host_maintenance_interval:
     v["maintenance_interval"] = parsed.host_maintenance_interval
   if is_flag_true(parsed.enable_mtc):
-    v["enable_mtc"] = True
-  if parsed.mtc_ramdisk_size:
-    v["mtc_ramdisk_size"] = parsed.mtc_ramdisk_size
-  if parsed.mtc_gcs_bucket:
-    v["mtc_gcs_bucket"] = parsed.mtc_gcs_bucket
-  if parsed.mtc_toleration_key:
-    v["mtc_toleration_key"] = parsed.mtc_toleration_key
+    v["enable_multi_tier_checkpointing"] = True
+  if parsed.mtc_ramdisk_size or parsed.mtc_gcs_bucket or parsed.mtc_toleration_key:
+    warnings.append(
+        "In Cluster Toolkit, MTC ramdisk directory and storage buckets are"
+        " configured per workload at job submission via `gcluster job submit"
+        " --gke-mtc-enabled --gke-mtc-ramdisk-dir <dir>` and `--mount`."
+    )
   if is_flag_true(parsed.managed_mldiagnostics):
     v["enable_managed_mldiagnostics"] = True
 
