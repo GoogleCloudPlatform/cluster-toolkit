@@ -149,11 +149,24 @@ configuration into a Cluster Toolkit blueprint YAML file:
    flavors. Note that `pathways_gce_machine_type` is not a configurable
    blueprint variable in canonical Cluster Toolkit blueprints.
 
-4. **GHPC Template Variable Isolation & Arithmetic**:
+4. **Reservation Affinity Configuration**:
+   - When `--reservation <name>` is provided in `xpk cluster create`:
+     - Set `reservation: <name>` in the blueprint's `vars` block.
+     - Include the `reservation_affinity` block under `modules/compute/gke-node-pool` settings:
+       ```yaml
+       reservation_affinity:
+         consume_reservation_type: SPECIFIC_RESERVATION
+         specific_reservations:
+         - name: $(vars.reservation)
+       ```
+   - When `--reservation` is NOT provided (default):
+     - Do not include the `reservation_affinity` block in `modules/compute/gke-node-pool` settings so that node pools deploy without requiring an active reservation.
+
+5. **GHPC Template Variable Isolation & Arithmetic**:
    - *Separate Variable References*: Cluster Toolkit (GHPC) template expansions do not support arbitrary compound math expressions inside a single `$(...)` block. Each variable reference must be isolated in its own block (e.g., `$(vars.num_slices) * $(pool.node_count_static)`).
    - *Kueue Quota Calculations*: Workload managers like Kueue expect raw integer values for nominal quotas. Do not pass unparsed mathematical expressions to YAML fields. Instead, pass individual integer parameters via `config_template_vars` (e.g., `num_slices: $(vars.num_slices)`, `node_count: $(gke-tpu-7x-pool.node_count_static)`) and let the `.tftpl` template or Terraform engine perform native arithmetic: `${num_slices * node_count * tpu_chips_per_node}`.
 
-5. **Execution Commands**: Replace the `xpk cluster create` command with direct `gcluster deploy`:
+6. **Execution Commands**: Replace the `xpk cluster create` command with direct `gcluster deploy`:
 
    ```bash
    gcluster deploy <blueprint-file.yaml> --vars project_id=<project>,deployment_name=<cluster-name>,zone=<zone>,region=<region>

@@ -168,10 +168,6 @@ deployment_groups:
       enable_flex_start: $(vars.enable_flex_start)
       auto_upgrade: true
       zones: [$(vars.zone)]
-      reservation_affinity:
-        consume_reservation_type: SPECIFIC_RESERVATION
-        specific_reservations:
-        - name: $(vars.reservation)
     outputs: [instructions]
 
   - id: workload-manager-install
