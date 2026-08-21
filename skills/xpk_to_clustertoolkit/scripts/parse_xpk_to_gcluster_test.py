@@ -174,6 +174,14 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
     self.assertIn("--mount '$STORAGE_URI;/mnt/storage_uri;rw'", output)
 
+  def test_parse_workload_create_maps_storage_variable_with_subpath(self):
+    cmd = (
+        "xpk workload create --workload job1 --tpu-type v6e-16"
+        " --storage $STORAGE_URI/subfolder"
+    )
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("--mount '$STORAGE_URI/subfolder;/mnt/subfolder;rw'", output)
+
   def test_parse_workload_create_maps_storage_with_trailing_slash(self):
     cmd = (
         "xpk workload create --workload job1 --tpu-type v6e-16"
