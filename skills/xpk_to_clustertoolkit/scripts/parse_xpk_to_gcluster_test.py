@@ -231,6 +231,18 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     self.assertIn("--compute-type '$TPU_DEVICE'", output)
     self.assertIn("--topology '<YOUR_TOPOLOGY>'", output)
 
+  def test_custom_named_variable_in_tpu_type(self):
+    cmd = "xpk workload create --workload job1 --tpu-type $MY_ACCELERATOR --num-nodes 4"
+    output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("--compute-type '$MY_ACCELERATOR'", output)
+    self.assertIn("--topology '<YOUR_TOPOLOGY>'", output)
+    self.assertIn("Omitted --num-nodes", output)
+
+    cluster_cmd = "xpk cluster create --cluster c1 --tpu-type $MY_ACCELERATOR"
+    cluster_output = parse_xpk_to_gcluster.parse_xpk_command(cluster_cmd)
+    self.assertIn("machine_type: $MY_ACCELERATOR", cluster_output)
+    self.assertIn("tpu_topology: <YOUR_TOPOLOGY>", cluster_output)
+
   def test_main_flag_format(self):
     with mock.patch("builtins.print") as mock_print:
       parse_xpk_to_gcluster.main(

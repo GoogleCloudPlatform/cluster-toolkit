@@ -227,7 +227,7 @@ def parse_workload_create(
   if device_type:
     m_type, top = get_machine_type(device_type)
 
-  is_tpu = is_tpu_hardware(m_type, device_type)
+  is_tpu = bool(parsed.tpu_type) or is_tpu_hardware(m_type, device_type)
 
   for flag, mapped_flag in value_flags.items():
     val = getattr(parsed, flag.lstrip("-").replace("-", "_"), None)
@@ -363,7 +363,7 @@ def parse_cluster_create(
   if device_type:
     m_type, top = get_machine_type(device_type)
     v["machine_type"] = m_type
-    is_tpu = is_tpu_hardware(m_type, device_type)
+    is_tpu = bool(parsed.tpu_type) or is_tpu_hardware(m_type, device_type)
     if top and top != "N/A":
       v["tpu_topology"] = top
     elif is_tpu and (device_type.startswith("<") or device_type.startswith("$")):
