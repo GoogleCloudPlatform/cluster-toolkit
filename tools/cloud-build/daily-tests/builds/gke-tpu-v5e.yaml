@@ -205,7 +205,7 @@ steps:
                 memory: "2Gi"
                 test-locks/gke-tpu-v5e: 1
                 test-locks/tpu-v5e: 1
-    EOF2
+    EOF
 
 # 3. Submit and Monitor GKE Kueue Job with Retry
 - id: submit-and-monitor-gke-job
