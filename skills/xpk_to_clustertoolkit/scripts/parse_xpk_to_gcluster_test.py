@@ -348,6 +348,38 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
     self.assertIn("region=${ZONE%-*}", output)
 
+  def test_main_cli_variations(self):
+    with mock.patch("builtins.print") as mock_print:
+      parse_xpk_to_gcluster.main([
+          "parse_xpk_to_gcluster.py",
+          "--xpk_command=xpk",
+          "workload",
+          "create",
+          "--workload",
+          "job1",
+          "--tpu-type",
+          "v6e-16",
+      ])
+      mock_print.assert_called_once()
+      printed = mock_print.call_args[0][0]
+      self.assertIn("gcluster job submit --name job1", printed)
+
+    with mock.patch("builtins.print") as mock_print:
+      parse_xpk_to_gcluster.main([
+          "parse_xpk_to_gcluster.py",
+          "--xpk_command",
+          "xpk",
+          "workload",
+          "create",
+          "--workload",
+          "job2",
+          "--tpu-type",
+          "v6e-16",
+      ])
+      mock_print.assert_called_once()
+      printed = mock_print.call_args[0][0]
+      self.assertIn("gcluster job submit --name job2", printed)
+
 
 if __name__ == "__main__":
   unittest.main()

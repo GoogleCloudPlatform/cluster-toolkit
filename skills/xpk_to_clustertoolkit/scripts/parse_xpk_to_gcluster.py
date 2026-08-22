@@ -91,7 +91,7 @@ def get_machine_type(device_type: str) -> tuple[str, str]:
       with open(ref_path, "r", encoding="utf-8") as f:
         data = json.load(f)
         shorthand_map = data.get("accelerator_shorthand_map", {})
-    except Exception:
+    except (json.JSONDecodeError, OSError):
       pass
 
   # 2. Check direct match in accelerator shorthand map (GPU & fixed TPUs)
@@ -126,6 +126,14 @@ def get_machine_type(device_type: str) -> tuple[str, str]:
     chips = int(chips_str)
     if family in TPU_FAMILY_CONFIG:
       default_machine_type, dim_type = TPU_FAMILY_CONFIG[family]
+      if chips == 1 and family == "v6e":
+        default_machine_type = "ct6e-standard-1t"
+      elif chips == 1 and family in ("v5e", "v5litepod"):
+        default_machine_type = "ct5lp-hightpu-1t"
+      elif chips == 8 and family == "v6e":
+        default_machine_type = "ct6e-standard-8t"
+      elif chips == 8 and family in ("v5e", "v5litepod"):
+        default_machine_type = "ct5lp-hightpu-8t"
       machine_type = shorthand_map.get(device_type, default_machine_type)
       topology = TPU_CHIPS_TO_TOPOLOGY[dim_type].get(chips, "N/A")
       return machine_type, topology
@@ -566,10 +574,12 @@ def main(argv: list[str] | None = None) -> None:
 
   cmd_string = None
   if args[0].startswith("--xpk_command="):
-    cmd_string = args[0].split("=", 1)[1]
-  elif args[0] == "--xpk_command" and len(args) == 2:
-    cmd_string = args[1]
-  elif args[0] == "--xpk_command" and len(args) > 2:
+    first_token = args[0].split("=", 1)[1]
+    if len(args) > 1:
+      cmd_string = shlex.join([first_token] + args[1:])
+    else:
+      cmd_string = first_token
+  elif args[0] == "--xpk_command" and len(args) > 1:
     cmd_string = shlex.join(args[1:])
   elif len(args) == 1:
     cmd_string = args[0]
