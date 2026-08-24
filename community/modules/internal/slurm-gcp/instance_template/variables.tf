@@ -144,8 +144,15 @@ variable "additional_networks" {
     })), [])
   }))
   validation {
-    condition     = alltrue([for nic in var.additional_networks : (nic.subnetwork != null && nic.subnetwork != "") != (nic.network_attachment != null && nic.network_attachment != "")])
-    error_message = "In var.additional_networks, exactly one of 'subnetwork' or 'network_attachment' must be specified."
+    condition = alltrue([
+      for nic in var.additional_networks : (
+        # Cannot specify both subnetwork and network_attachment
+        !((nic.subnetwork != null && nic.subnetwork != "") && (nic.network_attachment != null && nic.network_attachment != "")) &&
+        # Must specify at least one of network, subnetwork, or network_attachment
+        ((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "") || (nic.network_attachment != null && nic.network_attachment != ""))
+      )
+    ])
+    error_message = "In var.additional_networks, you must specify at least one of 'network', 'subnetwork', or 'network_attachment', and you cannot specify both 'subnetwork' and 'network_attachment'."
   }
 }
 
