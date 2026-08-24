@@ -26,6 +26,7 @@ tags:
 - m.gke-persistent-volume
 
 substitutions:
+  _PROVISIONING_MODEL: ""
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 86400s
