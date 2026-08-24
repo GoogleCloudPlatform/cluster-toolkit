@@ -1,0 +1,23 @@
+#!/bin/bash
+# Installs the noVNC browser client, which the broker serves directly.
+set -euo pipefail
+
+install_root=${jsonencode(install_root)}
+novnc_dir=${jsonencode(novnc_dir)}
+novnc_version=${jsonencode(novnc_version)}
+
+if command -v dnf >/dev/null 2>&1; then
+  dnf install -y curl tar
+elif command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y curl tar
+fi
+
+install -d -m 0755 "$install_root"
+curl -fsSL --retry 5 --retry-delay 5 --retry-connrefused \
+  "https://github.com/novnc/noVNC/archive/refs/tags/v$novnc_version.tar.gz" \
+  | tar xz -C "$install_root"
+rm -rf "$novnc_dir"
+mv "$install_root/noVNC-$novnc_version" "$novnc_dir"
+ln -sf "$novnc_dir/vnc.html" "$novnc_dir/index.html"

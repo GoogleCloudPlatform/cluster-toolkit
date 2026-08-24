@@ -1,0 +1,17 @@
+#!/bin/bash
+set -euo pipefail
+
+vnc_backend=${jsonencode(vnc_backend)}
+
+if command -v dnf >/dev/null 2>&1; then
+  dnf install -y curl
+  dnf install -y epel-release || true
+${indent(2, dnf_install_script)}
+elif command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+${indent(2, apt_install_script)}
+else
+  echo "Unsupported package manager for desktop runtime backend $vnc_backend" >&2
+  exit 1
+fi

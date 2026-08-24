@@ -36,6 +36,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ubuntu2204.yaml](#hpc-slurm-ubuntu2204yaml-) ![community-badge]
+  * [hpc-slurm-remote-desktop.yaml](#hpc-slurm-remote-desktopyaml--) ![community-badge] ![experimental-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
   * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
@@ -934,6 +935,25 @@ For this example the following is needed in the selected region:
   needed for `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
+
+### [hpc-slurm-remote-desktop.yaml] ![community-badge] ![experimental-badge]
+
+This example provisions a Slurm cluster whose login node also serves browser
+based Linux desktops, alongside a dedicated visualisation node for heavier
+graphical work.
+
+Each user gets their own XFCE session, reached over
+[noVNC] in a browser. Sessions on the login node can see the scheduler, so a
+user can run `sbatch` and `squeue` from a terminal inside the desktop.
+
+The desktop broker takes the user's identity from request headers and requires
+a shared secret, so it must only be reached through a proxy that authenticates
+the user. The blueprint does not expose it publicly: see the
+[remote desktop README] for how to reach a desktop over an IAP tunnel.
+
+[hpc-slurm-remote-desktop.yaml]: ../community/examples/remote-desktop/hpc-slurm-remote-desktop.yaml
+[remote desktop README]: ../community/examples/remote-desktop/README.md
+[noVNC]: https://novnc.com/
 
 ### [hpc-amd-slurm.yaml] ![community-badge]
 
