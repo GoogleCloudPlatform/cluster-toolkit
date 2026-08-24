@@ -186,6 +186,20 @@ variable "nodeset" {
     condition     = length(distinct(var.nodeset[*].nodeset_name)) == length(var.nodeset)
     error_message = "All nodesets must have a unique name."
   }
+
+  validation {
+    condition = alltrue(flatten([
+      for ns in var.nodeset : [
+        for nic in(ns.additional_networks != null ? ns.additional_networks : []) : (
+          # Cannot specify network or subnetwork alongside network_attachment
+          !(((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "")) && (nic.network_attachment != null && nic.network_attachment != "")) &&
+          # Must specify at least one of network, subnetwork, or network_attachment
+          ((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "") || (nic.network_attachment != null && nic.network_attachment != ""))
+        )
+      ]
+    ]))
+    error_message = "In var.nodeset[*].additional_networks, you must specify at least one of 'network', 'subnetwork', or 'network_attachment'. You cannot specify 'network' or 'subnetwork' alongside 'network_attachment'."
+  }
 }
 
 variable "nodeset_tpu" {

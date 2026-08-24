@@ -106,14 +106,14 @@ resource "google_compute_instance_from_template" "slurm_instance" {
           network_tier = access_config.value.network_tier
         }
       }
-      network            = nic.value.network
-      network_attachment = nic.value.network_attachment
-      network_ip         = nic.value.network_ip
-      nic_type           = nic.value.nic_type
+      network            = try(coalesce(nic.value.network), null)
+      network_attachment = try(coalesce(nic.value.network_attachment), null)
+      network_ip         = try(coalesce(nic.value.network_ip), null)
+      nic_type           = try(coalesce(nic.value.nic_type), null)
       queue_count        = nic.value.queue_count
-      subnetwork         = nic.value.subnetwork
-      subnetwork_project = nic.value.subnetwork_project
-      stack_type         = nic.value.stack_type
+      subnetwork         = try(coalesce(nic.value.subnetwork), null)
+      subnetwork_project = try(coalesce(nic.value.subnetwork_project), null)
+      stack_type         = try(coalesce(nic.value.stack_type), null)
     }
   }
 

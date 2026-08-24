@@ -395,7 +395,7 @@ variable "controller_network_attachment" {
 }
 
 variable "additional_networks" {
-  description = "Additional network interface details for the controller, if any."
+  description = "Additional network interface details for the controller, if any. For Private Service Connect interfaces, 'network_attachment' must be the full resource URI: projects/{project}/regions/{region}/networkAttachments/{name}."
   default     = []
   type = list(object({
     access_config = optional(list(object({
@@ -419,8 +419,15 @@ variable "additional_networks" {
     subnetwork_project = optional(string)
   }))
   validation {
-    condition     = alltrue([for nic in var.additional_networks : (nic.subnetwork != null && nic.subnetwork != "") != (nic.network_attachment != null && nic.network_attachment != "")])
-    error_message = "In var.additional_networks, exactly one of 'subnetwork' or 'network_attachment' must be specified."
+    condition = alltrue([
+      for nic in var.additional_networks : (
+        # Cannot specify network or subnetwork alongside network_attachment
+        !(((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "")) && (nic.network_attachment != null && nic.network_attachment != "")) &&
+        # Must specify at least one of network, subnetwork, or network_attachment
+        ((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "") || (nic.network_attachment != null && nic.network_attachment != ""))
+      )
+    ])
+    error_message = "In var.additional_networks, you must specify at least one of 'network', 'subnetwork', or 'network_attachment'. You cannot specify 'network' or 'subnetwork' alongside 'network_attachment'."
   }
 }
 
