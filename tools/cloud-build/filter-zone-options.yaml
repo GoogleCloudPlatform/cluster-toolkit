@@ -60,6 +60,10 @@ steps:
         # Extract the GCS options file path
         GCS_PATH=$$(grep -o 'OPTIONS_GCS_PATH=gs://[^"]*' "$$yaml" | cut -d= -f2 || true)
         if [[ -z "$$GCS_PATH" ]]; then
+          # Fallback for Kueue job style env vars
+          GCS_PATH=$$(grep -A 1 'name: OPTIONS_GCS_PATH' "$$yaml" | grep -o 'value: "gs://[^"]*' | cut -d'"' -f2 || true)
+        fi
+        if [[ -z "$$GCS_PATH" ]]; then
           continue
         fi
 
