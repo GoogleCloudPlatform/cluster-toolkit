@@ -187,7 +187,7 @@ resource "google_container_cluster" "gke_cluster" {
     gcp_public_cidrs_access_enabled = var.gcp_public_cidrs_access_enabled
   }
 
-  private_ipv6_google_access = var.enable_private_ipv6_google_access ? "PRIVATE_IPV6_GOOGLE_ACCESS_TO_GOOGLE" : null
+  private_ipv6_google_access = var.enable_private_ipv6_google_access ? "PRIVATE_IPV6_GOOGLE_ACCESS_TO_GOOGLE" : "PRIVATE_IPV6_GOOGLE_ACCESS_DISABLED"
   default_max_pods_per_node  = var.default_max_pods_per_node
   master_auth {
     client_certificate_config {
