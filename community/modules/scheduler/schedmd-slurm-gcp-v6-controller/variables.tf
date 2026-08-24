@@ -338,7 +338,7 @@ variable "nodeset" {
       subnetwork         = optional(string)
       subnetwork_project = optional(string)
       network_attachment = optional(string)
-      network_ip         = optional(string)
+      network_ip         = optional(string, "")
       nic_type           = optional(string)
       stack_type         = optional(string)
       queue_count        = optional(number)

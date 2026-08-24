@@ -127,9 +127,10 @@ variable "additional_networks" {
     subnetwork         = optional(string)
     subnetwork_project = optional(string)
     network_attachment = optional(string)
-    network_ip         = optional(string)
+    network_ip         = optional(string, "")
     nic_type           = optional(string)
     stack_type         = optional(string)
+    queue_count        = optional(number)
     access_config = optional(list(object({
       nat_ip       = string
       network_tier = string
@@ -137,14 +138,14 @@ variable "additional_networks" {
     ipv6_access_config = optional(list(object({
       network_tier = string
     })), [])
+    alias_ip_range = optional(list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    })), [])
   }))
   validation {
-    condition     = alltrue([for nic in var.additional_networks : (nic.subnetwork != null || nic.network_attachment != null)])
-    error_message = "Either subnetwork or network_attachment is required for additional_networks, neither is provided."
-  }
-  validation {
-    condition     = !anytrue([for nic in var.additional_networks : (nic.subnetwork != null && nic.network_attachment != null)])
-    error_message = "Either subnetwork or network_attachment is required for additional_networks, both are provided."
+    condition     = alltrue([for nic in var.additional_networks : (nic.subnetwork != null && nic.subnetwork != "") != (nic.network_attachment != null && nic.network_attachment != "")])
+    error_message = "In var.additional_networks, exactly one of 'subnetwork' or 'network_attachment' must be specified."
   }
 }
 
