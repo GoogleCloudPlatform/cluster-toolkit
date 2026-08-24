@@ -383,7 +383,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.41 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.0.0 |
@@ -391,14 +391,14 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 6.41 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.0.0 |
 
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_bucket"></a> [bucket](#module\_bucket) | terraform-google-modules/cloud-storage/google | >= 6.1 |
 | <a name="module_daos_network_storage_scripts"></a> [daos\_network\_storage\_scripts](#module\_daos\_network\_storage\_scripts) | ../../../../modules/scripts/startup-script | n/a |
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../../../modules/internal/gpu-definition | n/a |
@@ -413,7 +413,7 @@ limitations under the License.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google-beta_google_compute_instance_from_template.controller](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_instance_from_template) | resource |
 | [google_compute_address.controller_ips](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
 | [google_compute_disk.controller_disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
@@ -438,7 +438,7 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_additional_disks"></a> [additional\_disks](#input\_additional\_disks) | List of maps of disks. | <pre>list(object({<br/>    disk_name                           = optional(string)<br/>    device_name                         = optional(string)<br/>    disk_type                           = optional(string)<br/>    disk_storage_pool                   = optional(string)<br/>    disk_size_gb                        = optional(number)<br/>    disk_labels                         = optional(map(string), {})<br/>    auto_delete                         = optional(bool, true)<br/>    boot                                = optional(bool, false)<br/>    disk_resource_manager_tags          = optional(map(string), {})<br/>    disk_encryption_key                 = optional(string)<br/>    disk_encryption_key_service_account = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for the controller, if any. | <pre>list(object({<br/>    access_config = optional(list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    })), [])<br/>    alias_ip_range = optional(list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    })), [])<br/>    ipv6_access_config = optional(list(object({<br/>      network_tier = string<br/>    })), [])<br/>    network            = optional(string)<br/>    network_attachment = optional(string)<br/>    network_ip         = optional(string, "")<br/>    nic_type           = optional(string)<br/>    queue_count        = optional(number)<br/>    stack_type         = optional(string)<br/>    subnetwork         = optional(string)<br/>    subnetwork_project = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_advanced_machine_features"></a> [advanced\_machine\_features](#input\_advanced\_machine\_features) | See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_template#nested_advanced_machine_features | <pre>object({<br/>    enable_nested_virtualization = optional(bool)<br/>    threads_per_core             = optional(number)<br/>    turbo_mode                   = optional(string)<br/>    visible_core_count           = optional(number)<br/>    performance_monitoring_unit  = optional(string)<br/>    enable_uefi_networking       = optional(bool)<br/>  })</pre> | <pre>{<br/>  "threads_per_core": 1<br/>}</pre> | no |
@@ -547,7 +547,7 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_controller_instance_group"></a> [controller\_instance\_group](#output\_controller\_instance\_group) | Self-link of the controller instance group (zonal or regional) if HA is enabled. |
 | <a name="output_controller_instance_names"></a> [controller\_instance\_names](#output\_controller\_instance\_names) | Names of the controller instances when HA is enabled. |
 | <a name="output_controller_mig_id"></a> [controller\_mig\_id](#output\_controller\_mig\_id) | Fully qualified group manager id (zonal or regional). |
