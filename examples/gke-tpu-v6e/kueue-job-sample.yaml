@@ -48,8 +48,8 @@ spec:
                 echo "Job complete."
               resources:
                 requests:
-                  google.com/tpu: "4" # 4 chips per pod * 4 pods = 16 chips
+                  google.com/tpu: "4" # 4 chips per pod * 1 pod = 4 chips
                 limits:
-                  google.com/tpu: "4" # 4 chips per pod * 4 pods = 16 chips
+                  google.com/tpu: "4" # 4 chips per pod * 1 pod = 4 chips
                 claims:
                 - name: netdev
