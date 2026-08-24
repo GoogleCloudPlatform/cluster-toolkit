@@ -181,6 +181,91 @@ check_vm_capacity() {
 	[[ "${success}" == "true" ]]
 }
 
+check_filestore_quota() {
+	local region=$1
+	local required_capacity=${REQUIRED_FILESTORE_GB:-0}
+	local tier=${REQUIRED_FILESTORE_TIER:-"BASIC_SSD"} # Default to BASIC_SSD if not specified
+
+	if [[ "$required_capacity" -le 0 ]]; then
+		return 0
+	fi
+
+	local quota_id
+	case "${tier}" in
+		"BASIC_HDD"|"STANDARD")
+			quota_id="StandardStorageGbPerRegion"
+			tier="BASIC_HDD"
+			;;
+		"BASIC_SSD"|"PREMIUM")
+			quota_id="PremiumStorageGbPerRegion"
+			tier="BASIC_SSD"
+			;;
+		"HIGH_SCALE_SSD")
+			quota_id="HighScaleSSDStorageGibPerRegion"
+			;;
+		"ENTERPRISE")
+			quota_id="EnterpriseStorageGibPerRegion"
+			;;
+		*)
+			echo "WARN: Unknown Filestore tier '${tier}'. Falling back to PremiumStorageGbPerRegion."
+			quota_id="PremiumStorageGbPerRegion"
+			tier="BASIC_SSD"
+			;;
+	esac
+
+	local limit
+	limit=$(gcloud beta quotas info list --service=file.googleapis.com --project="${PROJECT_ID}" \
+		--filter="quotaId=${quota_id}" --format="json" 2>/dev/null | \
+		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($region) or (.dimensions?.region? // "") == $region) | .details?.value? | select(. != null) | tonumber] | max // 0')
+
+	if [[ -z "$limit" || "$limit" == "0" ]]; then
+		echo "WARN: Could not fetch Filestore quota limit (${quota_id}) for $region or limit is 0. Assuming no capacity."
+		return 1
+	fi
+
+	local usage
+	usage=$(gcloud filestore instances list --project="${PROJECT_ID}" --format="json" 2>/dev/null | \
+		jq -r --arg region "$region" --arg tier "$tier" '[.[]? | select(.name | contains($region)) | select(.tier == $tier) | .fileShares[]?.capacityGb | tonumber] | add // 0')
+
+	local remaining=$(( limit - usage ))
+	if [[ "$remaining" -ge "$required_capacity" ]]; then
+		return 0
+	else
+		echo "INFO: Insufficient Filestore quota (${tier}/${quota_id}) in $region (Limit: $limit, Usage: $usage, Required: $required_capacity)."
+		return 1
+	fi
+}
+
+check_lustre_quota() {
+	local region=$1
+	local required_capacity=${REQUIRED_LUSTRE_GB:-0}
+	if [[ "$required_capacity" -le 0 ]]; then
+		return 0
+	fi
+
+	local limit
+	limit=$(gcloud beta quotas info list --service=parallelstore.googleapis.com --project="${PROJECT_ID}" \
+		--filter="quotaId=StorageGiBPerRegion" --format="json" 2>/dev/null | \
+		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($region) or (.dimensions?.region? // "") == $region) | .details?.value? | select(. != null) | tonumber] | max // 0')
+
+	if [[ -z "$limit" || "$limit" == "0" ]]; then
+		echo "WARN: Could not fetch Lustre quota limit for $region or limit is 0. Assuming no capacity."
+		return 1
+	fi
+
+	local usage
+	usage=$(gcloud parallelstore instances list --location="-" --project="${PROJECT_ID}" --format="json" 2>/dev/null | \
+		jq -r --arg region "$region" '[.[]? | select(.name | contains($region)) | .capacityGib | tonumber] | add // 0')
+
+	local remaining=$(( limit - usage ))
+	if [[ "$remaining" -ge "$required_capacity" ]]; then
+		return 0
+	else
+		echo "INFO: Insufficient Lustre quota in $region (Limit: $limit, Usage: $usage, Required: $required_capacity)."
+		return 1
+	fi
+}
+
 if ! GCS_CONTENT=$(gcloud storage cat "${OPTIONS_GCS_PATH}"); then
 	echo "ERROR: Failed to read ${OPTIONS_GCS_PATH}." >&2
 	exit 1
@@ -205,10 +290,46 @@ if [[ "${ENABLE_SPOT_FALLBACK:-false}" == "true" ]]; then
 	PROVISIONING_MODELS+=("STANDARD")
 fi
 
+FILESTORE_ZONES=""
+if [[ "${CHECK_FILESTORE}" == "true" ]]; then
+	echo "INFO: Fetching available Filestore zones..."
+	FILESTORE_ZONES=$(gcloud filestore locations list --project="${PROJECT_ID}" --format="value(name)" 2>/dev/null || true)
+fi
+
+LUSTRE_ZONES=""
+if [[ "${CHECK_LUSTRE}" == "true" ]]; then
+	echo "INFO: Fetching available Lustre (Parallelstore) zones..."
+	LUSTRE_ZONES=$(gcloud parallelstore locations list --project="${PROJECT_ID}" --format="value(locationId)" 2>/dev/null || true)
+fi
+
 for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 	echo "INFO: Trying provisioning model: ${PROVISIONING_MODEL}"
 
 	for ZONE in "${ZONES_ARRAY[@]}"; do
+		REGION=${ZONE%-*}
+
+		if [[ "${CHECK_FILESTORE}" == "true" ]]; then
+			if ! echo "${FILESTORE_ZONES}" | grep -q "${ZONE}"; then
+				echo "INFO: Skipping ${ZONE} - Filestore not available in this zone."
+				continue
+			fi
+			if ! check_filestore_quota "${REGION}"; then
+				echo "INFO: Skipping ${ZONE} - Filestore quota check failed in region ${REGION}."
+				continue
+			fi
+		fi
+
+		if [[ "${CHECK_LUSTRE}" == "true" ]]; then
+			if ! echo "${LUSTRE_ZONES}" | grep -q "${ZONE}"; then
+				echo "INFO: Skipping ${ZONE} - Lustre (Parallelstore) not available in this zone."
+				continue
+			fi
+			if ! check_lustre_quota "${REGION}"; then
+				echo "INFO: Skipping ${ZONE} - Lustre quota check failed in region ${REGION}."
+				continue
+			fi
+		fi
+
 		if [[ "${MACHINE_TYPE}" == "tpu" ]]; then
 			if check_tpu_capacity "${ZONE}" "${PROVISIONING_MODEL}"; then
 				SELECTED_ZONE="${ZONE}"
