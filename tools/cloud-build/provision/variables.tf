@@ -101,7 +101,12 @@ variable "kueue_migrated_tests" {
     "ml-a3-ultragpu-onspot-slurm",
     "ml-a3-ultragpu-onspot-jbvms",
     "gke-a4x",
-    "ml-a4x-highgpu-slurm"
+    "ml-a4x-highgpu-slurm",
+    "batch",
+    "gke-g4-confidential",
+    "gke-tpu-v5e",
+    "gke-tpu-7x",
+    "gke-tpu-v5p"
   ]
 }
 
