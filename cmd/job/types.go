@@ -30,8 +30,8 @@ type missingPrereq struct {
 
 // Context holds the active CLI context.
 type Context struct {
-	ProjectID   string `json:"project_id"`
-	ClusterName string `json:"cluster_name"`
+	ProjectID   string `json:"project"`
+	ClusterName string `json:"cluster"`
 	Location    string `json:"location"`
 }
 

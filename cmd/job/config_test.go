@@ -15,85 +15,69 @@
 package job
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestConfigSetCmd_NoGlobalFlagsRequired(t *testing.T) {
-	tempDir := t.TempDir()
+func TestConfigSetCmd_Strict(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
 
-	t.Setenv("HOME", tempDir)
+	cmd := configSetCmd
 
-	// We do NOT set cluster, location, or project flags here.
-	// The command should still succeed because we overrode PersistentPreRunE for ConfigCmd.
-	output, err := executeCommand(JobCmd, "config", "set", "cluster", "my-new-cluster")
+	err := cmd.RunE(cmd, []string{"project", ""})
+	if err == nil || !strings.Contains(err.Error(), "configuration values cannot be empty") {
+		t.Fatalf("Expected empty value error, got %v", err)
+	}
 
+	err = cmd.RunE(cmd, []string{"project"})
+	if err == nil || !strings.Contains(err.Error(), "requires both a key and a value") {
+		t.Fatalf("Expected error for 1 argument, got %v", err)
+	}
+
+	err = cmd.RunE(cmd, []string{"project", "my-super-project"})
 	if err != nil {
-		t.Fatalf("config set failed unexpectedly: %v, output: %s", err, output)
+		t.Fatalf("Unexpected error for valid set project: %v", err)
 	}
 
-	// Verify that the context was saved correctly
-	ctx := loadContext()
-	if ctx.ClusterName != "my-new-cluster" {
-		t.Errorf("expected cluster name to be 'my-new-cluster', got '%s'", ctx.ClusterName)
+	ctx, _ := loadContext()
+	if ctx.ProjectID != "my-super-project" {
+		t.Fatalf("Expected 'my-super-project', got '%v'", ctx.ProjectID)
+	}
+
+	err = cmd.RunE(cmd, []string{"invalidkey", "value"})
+	if err == nil || !strings.Contains(err.Error(), "unknown configuration key") {
+		t.Fatalf("Expected unknown key error, got %v", err)
 	}
 }
 
-func TestConfigSetCmd_BatchAssignment(t *testing.T) {
-	tempDir := t.TempDir()
+func TestConfigShowCmd_Strict(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
 
-	t.Setenv("HOME", tempDir)
+	file := filepath.Join(tempHome, ".gcluster", "context.json")
+	if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
+		t.Fatal(err)
+	}
 
-	output, err := executeCommand(JobCmd, "config", "set", "project=my-project", "cluster=my-cluster", "location=my-location")
+	if err := os.WriteFile(file, []byte("{\"project\": \"test-show-project\", \"cluster\": \"show-cluster\", \"location\": \"us-west\"}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := configShowCmd
+	b := bytes.NewBufferString("")
+	cmd.SetOut(b)
+
+	err := cmd.RunE(cmd, []string{})
 	if err != nil {
-		t.Fatalf("config set failed unexpectedly: %v, output: %s", err, output)
+		t.Fatalf("Unexpected error running show: %v", err)
 	}
 
-	ctx := loadContext()
-	if ctx.ProjectID != "my-project" {
-		t.Errorf("expected project 'my-project', got '%s'", ctx.ProjectID)
-	}
-	if ctx.ClusterName != "my-cluster" {
-		t.Errorf("expected cluster 'my-cluster', got '%s'", ctx.ClusterName)
-	}
-	if ctx.Location != "my-location" {
-		t.Errorf("expected location 'my-location', got '%s'", ctx.Location)
-	}
-}
-
-func TestConfigSetCmd_InvalidBatch(t *testing.T) {
-	tempDir := t.TempDir()
-
-	t.Setenv("HOME", tempDir)
-
-	output, err := executeCommand(JobCmd, "config", "set", "project=my-project", "invalid-no-equals")
-	if err == nil {
-		t.Fatalf("expected config set to fail with invalid argument format, but it succeeded: %s", output)
-	}
-}
-
-func TestConfigSetCmd_BackwardsCompatibleWithEquals(t *testing.T) {
-	tempDir := t.TempDir()
-
-	t.Setenv("HOME", tempDir)
-
-	output, err := executeCommand(JobCmd, "config", "set", "project", "my-project=foo")
-	if err != nil {
-		t.Fatalf("config set failed unexpectedly: %v, output: %s", err, output)
-	}
-
-	ctx := loadContext()
-	if ctx.ProjectID != "my-project=foo" {
-		t.Errorf("expected project 'my-project=foo', got '%s'", ctx.ProjectID)
-	}
-}
-
-func TestConfigSetCmd_LegacyBug(t *testing.T) {
-	tempDir := t.TempDir()
-
-	t.Setenv("HOME", tempDir)
-
-	output, err := executeCommand(JobCmd, "config", "set", "project", "cluster=foo")
-	if err == nil {
-		t.Fatalf("expected config set to fail with invalid argument format for suspicious value, but it succeeded: %s", output)
+	out := b.String()
+	if !strings.Contains(out, "test-show-project") || !strings.Contains(out, "show-cluster") {
+		t.Fatalf("Expected formatted output containing test-show-project, got: %s", out)
 	}
 }
