@@ -5,6 +5,9 @@ metadata:
   labels:
     gcluster.google.com/workload: {{.WorkloadName}}
     kueue.x-k8s.io/queue-name: {{.KueueQueueName}}
+{{- if .GKEMLDiagnosticsEnabled }}
+    managed-mldiagnostics-gke: "true"
+{{- end }}
   annotations:
     jobset.sigs.k8s.io/hack: "true"
 spec:
@@ -48,6 +51,11 @@ spec:
 {{- end }}
         template:
           metadata:
+            labels:
+              gcluster.google.com/workload: {{.WorkloadName}}
+{{- if .GKEMLDiagnosticsEnabled }}
+              managed-mldiagnostics-gke: "true"
+{{- end }}
             annotations:
               kueue.x-k8s.io/safe-to-forcefully-delete: "true"
 {{- if .GCSFuseEnabled }}
@@ -239,6 +247,9 @@ spec:
           metadata:
             labels:
               gcluster.google.com/workload: {{.WorkloadName}}
+{{- if .GKEMLDiagnosticsEnabled }}
+              managed-mldiagnostics-gke: "true"
+{{- end }}
             annotations:
                 kueue.x-k8s.io/safe-to-forcefully-delete: "true"
                 cloud.google.com/skip-tpu-webhook-check: "true"

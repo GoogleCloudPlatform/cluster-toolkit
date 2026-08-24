@@ -74,6 +74,8 @@ var (
 	isPathwaysJob bool
 	pathways      orchestrator.PathwaysJobDefinition
 
+	gkeMLDiagnosticsEnabled bool
+
 	gkeNapProvisioning string
 	gkeNapReservation  string
 
@@ -188,6 +190,7 @@ func init() {
 
 	SubmitCmd.Flags().BoolVar(&gkeMtcEnabled, "gke-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC).")
 	SubmitCmd.Flags().StringVar(&gkeMtcRamdiskDirectory, "gke-mtc-ramdisk-dir", "", "Ramdisk directory path for Multi-Tier Checkpointing (MTC). Required when --gke-mtc-enabled is set.")
+	SubmitCmd.Flags().BoolVar(&gkeMLDiagnosticsEnabled, "gke-mldiagnostics-enabled", false, "Enable ML Diagnostics for the GKE workload")
 	SubmitCmd.Flags().StringVar(&gkeCustomTemplatesPath, "gke-custom-templates-path", "", "Path to a local directory containing custom GKE templates overrides.")
 
 	_ = SubmitCmd.MarkFlagRequired("name")
@@ -262,6 +265,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		Timeout:                       timeout,
 		PriorityClassName:             priority,
 		Verbose:                       verbose,
+		GKEMLDiagnosticsEnabled:       gkeMLDiagnosticsEnabled,
 		GKEMTCEnabled:                 gkeMtcEnabled,
 		GKEMTCRamdiskDirectory:        gkeMtcRamdiskDirectory,
 		GkeCustomTemplatesPath:        gkeCustomTemplatesPath,

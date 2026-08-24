@@ -99,6 +99,8 @@ type JobDefinition struct {
 	GKEMTCEnabled          bool
 	GKEMTCRamdiskDirectory string
 
+	GKEMLDiagnosticsEnabled bool
+
 	GkeCustomTemplatesPath string
 
 	RawMounts []string

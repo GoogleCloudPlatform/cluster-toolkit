@@ -5,6 +5,9 @@ metadata:
   labels:
     gcluster.google.com/workload: {{.WorkloadName}}
     kueue.x-k8s.io/queue-name: {{.KueueQueueName}}
+{{- if .GKEMLDiagnosticsEnabled }}
+    managed-mldiagnostics-gke: "true"
+{{- end }}
 {{- if .ExclusiveTopologyAnnotation }}
   annotations:
     {{(StructuralData .ExclusiveTopologyAnnotation)}}
@@ -33,6 +36,9 @@ spec:
             metadata:
               labels:
                 gcluster.google.com/workload: {{.WorkloadName}}
+{{- if .GKEMLDiagnosticsEnabled }}
+                managed-mldiagnostics-gke: "true"
+{{- end }}
 {{- if or .TopologyAnnotation .GCSFuseEnabled }}
               annotations:
 {{- if .TopologyAnnotation }}
