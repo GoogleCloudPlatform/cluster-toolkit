@@ -59,6 +59,10 @@ locals {
   default_system_node_pool_machine_type = var.enable_confidential_nodes ? "n2d-standard-4" : "e2-standard-4"
   # Fallback to the default if the user left it null
   system_node_pool_machine_type = coalesce(var.system_node_pool_machine_type, local.default_system_node_pool_machine_type)
+  # Choose default disk type based on confidential storage mode.
+  # If enable_confidential_storage is false, we default to null to let GKE use its standard default boot disk.
+  # This avoids generating a Terraform diff (e.g. pd-standard -> pd-balanced) and triggering recreation of the system node pool on existing clusters.
+  system_node_pool_disk_type = var.system_node_pool_disk_type != null ? var.system_node_pool_disk_type : (var.enable_confidential_storage ? "hyperdisk-balanced" : null)
 }
 
 # GKE Node Auto-Provisioning (NAP) locals
@@ -502,7 +506,7 @@ resource "google_container_node_pool" "system_node_pools" {
     oauth_scopes                = var.service_account_scopes
     machine_type                = local.system_node_pool_machine_type
     disk_size_gb                = var.system_node_pool_disk_size_gb
-    disk_type                   = var.system_node_pool_disk_type
+    disk_type                   = local.system_node_pool_disk_type
     enable_confidential_storage = var.enable_confidential_storage
     boot_disk_kms_key           = var.boot_disk_kms_key
 
@@ -579,8 +583,17 @@ resource "google_container_node_pool" "system_node_pools" {
       error_message = "A valid boot_disk_kms_key must be provided when enable_confidential_storage is true to satisfy GKE Confidential Storage requirements."
     }
     precondition {
-      condition     = !var.enable_confidential_storage || (var.system_node_pool_disk_type != null && can(regex("^hyperdisk", var.system_node_pool_disk_type)))
+      condition     = !var.enable_confidential_storage || (local.system_node_pool_disk_type != null && can(regex("^hyperdisk", local.system_node_pool_disk_type)))
       error_message = "Confidential Storage (enable_confidential_storage = true) is only supported on Hyperdisks. Please set system_node_pool_disk_type to 'hyperdisk-balanced' or another hyperdisk type."
+    }
+    precondition {
+      # If confidential storage is disabled, and the disk type is hyperdisk, the machine family must support standard hyperdisk boot disks.
+      condition = (
+        var.enable_confidential_storage ||
+        !can(regex("^hyperdisk", coalesce(local.system_node_pool_disk_type, ""))) ||
+        !can(regex("^(n2d-|n2-|e2-|c2-|c2d-|t2d-|t2a-)", local.system_node_pool_machine_type))
+      )
+      error_message = "Standard Hyperdisk boot disks are not supported on machine type ${local.system_node_pool_machine_type} when enable_confidential_storage is false. Please set enable_confidential_storage to true, or use a standard persistent disk type (e.g., 'pd-balanced') for system_node_pool_disk_type."
     }
   }
 }
