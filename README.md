@@ -214,23 +214,24 @@ Ensure your environment is set up before submitting jobs:
 
 To reduce boilerplate in `job submit` commands, you can set default configuration values for `project`, `location`, and `cluster`.
 
-You can set values individually (legacy format):
+You can open your default system text editor interactively:
+
+```bash
+./gcluster job config set
+```
+
+Or you can set values individually:
 
 ```bash
 ./gcluster job config set project my-project
 ./gcluster job config set cluster my-cluster
-```
-
-Or you can set multiple values at once using batch `key=value` arguments:
-
-```bash
-./gcluster job config set project=my-project cluster=my-cluster location=us-central1
+./gcluster job config set location us-central1-a
 ```
 
 Check the active configuration using:
 
 ```bash
-./gcluster job config list
+./gcluster job config show
 ```
 
 ### Submit a JobSet

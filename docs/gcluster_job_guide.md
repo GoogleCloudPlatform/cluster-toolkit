@@ -113,18 +113,19 @@ By specifying the `--compute-type` flag, you can use the exact same command to t
 > **Simplify Commands with Configuration**: You can set these values once using the configuration command and omit them from subsequent commands:
 >
 > ```bash
-> # Set values individually
+> # Open system editor to edit defaults interactively
+> ./gcluster job config set
+>
+> # Or set values individually
 > ./gcluster job config set project <PROJECT_ID>
 > ./gcluster job config set cluster <CLUSTER_NAME>
->
-> # Or set multiple values at once
-> ./gcluster job config set project=<PROJECT_ID> cluster=<CLUSTER_NAME> location=<REGION/ZONE>
+> ./gcluster job config set location <REGION/ZONE>
 > ```
 >
 > To view your current configuration, run:
 >
 > ```bash
-> ./gcluster job config list
+> ./gcluster job config show
 > ```
 
 ### 4.2 Submit the Job
@@ -1149,23 +1150,34 @@ Pass the `--gke-custom-templates-path` flag to the `submit` command:
 ### 9.2 Configuration Commands
 *Use these commands to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*
 
-#### `gcluster job config set [key] [value]` or `[key=value...]`
-Sets persistent configuration properties (single or batched).
+#### `gcluster job config set [key] [value]`
+Modifies configuration defaults. If run without any arguments (`./gcluster job config set`), it automatically opens your default system text editor (`$EDITOR` or `nano`) to edit the configuration file interactively.
 
 * **Supported Keys:**
   * `project`: Google Cloud Project ID
   * `cluster`: GKE Cluster Name
   * `location`: GKE Cluster Location (region or zone)
 
+**Examples:**
+
+```bash
+# Interactive editor mode:
+./gcluster job config set
+
+# Set specific key/value pairs:
+./gcluster job config set project my-awesome-project
+./gcluster job config set cluster my-cluster
+./gcluster job config set location us-central1-a
+```
+
+#### `gcluster job config show`
+Prints the current saved configuration defaults and configuration file path.
+
 **Example:**
 
 ```bash
-./gcluster job config set project my-awesome-project
-./gcluster job config set project=my-awesome-project cluster=my-cluster
+./gcluster job config show
 ```
-
-#### `gcluster job config list`
-Lists all persistent configuration properties currently set.
 
 ### 9.3 `submit` Flags
 The `gcluster job submit` command deploys a container image as a job (Kubernetes JobSet) on a GKE cluster, integrated with Kueue for advanced queuing. It can use pre-built images or build images on-the-fly without a local Docker daemon (powered internally by the [Crane](https://github.com/google/go-containerregistry/blob/main/cmd/crane/README.md) container utility).
