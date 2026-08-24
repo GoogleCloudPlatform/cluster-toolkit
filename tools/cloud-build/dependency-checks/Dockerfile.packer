@@ -14,7 +14,7 @@
 
 FROM us-central1-docker.pkg.dev/hpc-toolkit-dev/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
 
-RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add - && \
-    apt-get -y update && apt-get -y install software-properties-common && \
-    apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com bullseye main" && \
+RUN apt-get -y update && apt-get install -y curl gnupg && \
+    curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com $(. /etc/os-release && echo "$VERSION_CODENAME") main" | tee /etc/apt/sources.list.d/hashicorp.list && \
     apt-get -y update && apt-get -y install packer
