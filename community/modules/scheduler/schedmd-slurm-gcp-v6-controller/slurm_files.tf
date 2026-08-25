@@ -156,7 +156,6 @@ module "slurm_files" {
 
   project_id                      = var.project_id
   slurm_cluster_name              = local.slurm_cluster_name
-  provisioning_engine             = var.provisioning_engine
   slurm_control_host              = var.enable_backup_controller ? "${local.slurm_cluster_name}-controller-0" : null
   slurm_control_addr              = (var.enable_backup_controller && var.enable_controller_load_balancer) ? one(google_compute_forwarding_rule.slurm_controller_vip[*].ip_address) : (var.enable_backup_controller && length(var.static_ips) >= 1 ? var.static_ips[0] : null)
   slurm_backup_controller_name    = var.enable_backup_controller ? local.slurm_backup_controller_name : null

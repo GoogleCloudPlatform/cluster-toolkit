@@ -44,7 +44,7 @@ from util import (
     dirs,
 )
 from util import lookup
-from suspend import delete_instances
+from suspend import delete_instances, suspend_nodes
 import tpu
 import conf
 import watch_delete_vm_op
@@ -97,7 +97,7 @@ class NodeActionDelete():
     def apply(self, nodes:List[str]) -> None:
         hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} instances to delete ({hostlist})")
-        delete_instances(nodes)
+        suspend_nodes(nodes)
 
 @dataclass(frozen=True)
 class NodeActionPrempt():

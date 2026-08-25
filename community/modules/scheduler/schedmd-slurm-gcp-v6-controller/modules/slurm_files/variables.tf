@@ -61,8 +61,8 @@ EOD
 
 variable "provisioning_engine" {
   type        = string
-  default     = "BULK_INSERT"
-  description = "Compute node provisioning engine: 'MIG' or 'BULK_INSERT'"
+  default     = "AUTO"
+  description = "Compute node provisioning engine: 'AUTO', 'MIG', or 'BULK_INSERT'"
 }
 
 #########

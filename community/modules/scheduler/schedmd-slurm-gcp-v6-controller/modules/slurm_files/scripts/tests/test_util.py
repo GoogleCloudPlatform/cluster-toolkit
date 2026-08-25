@@ -863,3 +863,19 @@ def test_mig_name():
     lkp = util.Lookup(cfg)
     assert lkp.mig_name("ns1") == "testcl-ns1-mig"
     assert lkp.mig_name("ns2", shard_index=0) == "testcl-ns2-shard-0-mig"
+
+
+def test_is_node_mig():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        provisioning_engine="AUTO",
+        nodeset={
+            "ns_mig": TstNodeset(nodeset_name="ns_mig", mig_name="testcl-ns_mig-mig", provisioning_engine="MIG"),
+            "ns_bulk": TstNodeset(nodeset_name="ns_bulk", provisioning_engine="BULK_INSERT"),
+        }
+    )
+    lkp = util.Lookup(cfg)
+    assert lkp.is_nodeset_mig("ns_mig")
+    assert not lkp.is_nodeset_mig("ns_bulk")
+    assert lkp.is_node_mig("testcl-ns_mig-0")
+    assert not lkp.is_node_mig("testcl-ns_bulk-0")
