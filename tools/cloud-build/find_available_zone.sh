@@ -243,7 +243,7 @@ check_filestore_quota() {
 
 	local usage
 	usage=$(gcloud filestore instances list --project="${PROJECT_ID}" --format="json" 2>/dev/null |
-		jq -r --arg region "$region" --arg tier "$tier" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | select(.tier == $tier) | .fileShares[]?.capacityGb | tonumber] | add // 0' 2>/dev/null)
+		jq -r --arg region "$region" --arg tier "$tier" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | select(.tier == $tier) | .fileShares[]?.capacityGb | select(. != null) | tonumber] | add // 0' 2>/dev/null)
 
 	limit=$(printf "%.0f" "${limit}" 2>/dev/null || echo 0)
 	usage=$(printf "%.0f" "${usage}" 2>/dev/null || echo 0)
@@ -298,7 +298,7 @@ check_lustre_quota() {
 
 	local usage
 	usage=$(gcloud parallelstore instances list --location="-" --project="${PROJECT_ID}" --format="json" 2>/dev/null |
-		jq -r --arg region "$region" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | .capacityGib | tonumber] | add // 0' 2>/dev/null)
+		jq -r --arg region "$region" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | .capacityGib | select(. != null) | tonumber] | add // 0' 2>/dev/null)
 
 	limit=$(printf "%.0f" "${limit}" 2>/dev/null || echo 0)
 	usage=$(printf "%.0f" "${usage}" 2>/dev/null || echo 0)
