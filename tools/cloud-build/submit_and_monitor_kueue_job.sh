@@ -54,7 +54,7 @@ while true; do
 			us-central1 \
 			"$JOB_NAME" \
 			default | tee /workspace/job_logs.txt
-		exit ${PIPESTATUS[0]}
+		exit "${PIPESTATUS[0]}"
 	) &
 	MONITOR_PID=$!
 	wait $MONITOR_PID
