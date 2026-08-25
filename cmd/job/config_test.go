@@ -22,39 +22,86 @@ import (
 	"testing"
 )
 
-func TestConfigSetCmd_Strict(t *testing.T) {
-	tempHome := t.TempDir()
-	t.Setenv("HOME", tempHome)
-
-	cmd := configSetCmd
-
-	err := cmd.RunE(cmd, []string{"project", ""})
-	if err == nil || !strings.Contains(err.Error(), "configuration values cannot be empty") {
-		t.Fatalf("Expected empty value error, got %v", err)
+func TestConfigSetCmd(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		expectedCtx Context
+		expectErr   string
+	}{
+		{
+			name:      "empty value fails",
+			args:      []string{"project", ""},
+			expectErr: "configuration values cannot be empty",
+		},
+		{
+			name:      "single argument fails",
+			args:      []string{"project"},
+			expectErr: "requires both a key and a value",
+		},
+		{
+			name:      "invalid key fails",
+			args:      []string{"invalidkey", "value"},
+			expectErr: "unknown configuration key",
+		},
+		{
+			name: "valid project sets successfully",
+			args: []string{"project", "my-super-project"},
+			expectedCtx: Context{
+				ProjectID: "my-super-project",
+			},
+		},
+		{
+			name: "valid cluster sets successfully",
+			args: []string{"cluster", "my-super-cluster"},
+			expectedCtx: Context{
+				ClusterName: "my-super-cluster",
+			},
+		},
+		{
+			name: "valid location sets successfully",
+			args: []string{"location", "us-west1-a"},
+			expectedCtx: Context{
+				Location: "us-west1-a",
+			},
+		},
 	}
 
-	err = cmd.RunE(cmd, []string{"project"})
-	if err == nil || !strings.Contains(err.Error(), "requires both a key and a value") {
-		t.Fatalf("Expected error for 1 argument, got %v", err)
-	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempHome := t.TempDir()
+			t.Setenv("HOME", tempHome)
 
-	err = cmd.RunE(cmd, []string{"project", "my-super-project"})
-	if err != nil {
-		t.Fatalf("Unexpected error for valid set project: %v", err)
-	}
+			cmd := configSetCmd
+			err := cmd.RunE(cmd, tc.args)
 
-	ctx, _ := loadContext()
-	if ctx.ProjectID != "my-super-project" {
-		t.Fatalf("Expected 'my-super-project', got '%v'", ctx.ProjectID)
-	}
-
-	err = cmd.RunE(cmd, []string{"invalidkey", "value"})
-	if err == nil || !strings.Contains(err.Error(), "unknown configuration key") {
-		t.Fatalf("Expected unknown key error, got %v", err)
+			if tc.expectErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.expectErr) {
+					t.Fatalf("expected error containing %q, got %v", tc.expectErr, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				ctx, err := loadContext()
+				if err != nil {
+					t.Fatalf("failed to load context: %v", err)
+				}
+				if tc.expectedCtx.ProjectID != "" && ctx.ProjectID != tc.expectedCtx.ProjectID {
+					t.Errorf("expected ProjectID %q, got %q", tc.expectedCtx.ProjectID, ctx.ProjectID)
+				}
+				if tc.expectedCtx.ClusterName != "" && ctx.ClusterName != tc.expectedCtx.ClusterName {
+					t.Errorf("expected ClusterName %q, got %q", tc.expectedCtx.ClusterName, ctx.ClusterName)
+				}
+				if tc.expectedCtx.Location != "" && ctx.Location != tc.expectedCtx.Location {
+					t.Errorf("expected Location %q, got %q", tc.expectedCtx.Location, ctx.Location)
+				}
+			}
+		})
 	}
 }
 
-func TestConfigShowCmd_Strict(t *testing.T) {
+func TestConfigShowCmd(t *testing.T) {
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 
@@ -73,11 +120,11 @@ func TestConfigShowCmd_Strict(t *testing.T) {
 
 	err := cmd.RunE(cmd, []string{})
 	if err != nil {
-		t.Fatalf("Unexpected error running show: %v", err)
+		t.Fatalf("unexpected error running show: %v", err)
 	}
 
 	out := b.String()
 	if !strings.Contains(out, "test-show-project") || !strings.Contains(out, "show-cluster") {
-		t.Fatalf("Expected formatted output containing test-show-project, got: %s", out)
+		t.Fatalf("expected formatted output containing test-show-project, got: %s", out)
 	}
 }
