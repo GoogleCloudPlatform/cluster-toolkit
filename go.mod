@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	cloud.google.com/go/storage v1.64.0
 	github.com/go-git/go-git/v5 v5.19.2
-	github.com/hashicorp/go-getter v1.8.8
+	github.com/hashicorp/go-getter v1.8.7
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.24.0
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20250731202709-e8a84eebd3e7
