@@ -225,7 +225,7 @@ check_filestore_quota() {
 
 	local usage
 	usage=$(gcloud filestore instances list --project="${PROJECT_ID}" --format="json" 2>/dev/null | \
-		jq -r --arg region "$region" --arg tier "$tier" '[.[]? | select(.name | contains($region)) | select(.tier == $tier) | .fileShares[]?.capacityGb | tonumber] | add // 0')
+		jq -r --arg region "$region" --arg tier "$tier" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | select(.tier == $tier) | .fileShares[]?.capacityGb | tonumber] | add // 0')
 
 	local remaining=$(( limit - usage ))
 	if [[ "$remaining" -ge "$required_capacity" ]]; then
@@ -255,7 +255,7 @@ check_lustre_quota() {
 
 	local usage
 	usage=$(gcloud parallelstore instances list --location="-" --project="${PROJECT_ID}" --format="json" 2>/dev/null | \
-		jq -r --arg region "$region" '[.[]? | select(.name | contains($region)) | .capacityGib | tonumber] | add // 0')
+		jq -r --arg region "$region" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | .capacityGib | tonumber] | add // 0')
 
 	local remaining=$(( limit - usage ))
 	if [[ "$remaining" -ge "$required_capacity" ]]; then
@@ -309,8 +309,8 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 		REGION=${ZONE%-*}
 
 		if [[ "${CHECK_FILESTORE}" == "true" ]]; then
-			if ! echo "${FILESTORE_ZONES}" | grep -q "${ZONE}"; then
-				echo "INFO: Skipping ${ZONE} - Filestore not available in this zone."
+			if ! echo "${FILESTORE_ZONES}" | grep -x -E -q "${ZONE}|${REGION}"; then
+				echo "INFO: Skipping ${ZONE} - Filestore not available in this zone or region."
 				continue
 			fi
 			if ! check_filestore_quota "${REGION}"; then
@@ -320,7 +320,7 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 		fi
 
 		if [[ "${CHECK_LUSTRE}" == "true" ]]; then
-			if ! echo "${LUSTRE_ZONES}" | grep -q "${ZONE}"; then
+			if ! echo "${LUSTRE_ZONES}" | grep -x -q "${ZONE}"; then
 				echo "INFO: Skipping ${ZONE} - Lustre (Parallelstore) not available in this zone."
 				continue
 			fi
