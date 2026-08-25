@@ -181,6 +181,7 @@ check_vm_capacity() {
 	[[ "${success}" == "true" ]]
 }
 
+declare -A FILESTORE_QUOTA_CACHE
 check_filestore_quota() {
 	local region=$1
 	local required_capacity=${REQUIRED_FILESTORE_GB:-0}
@@ -188,6 +189,10 @@ check_filestore_quota() {
 
 	if [[ "$required_capacity" -le 0 ]]; then
 		return 0
+	fi
+
+	if [[ -n "${FILESTORE_QUOTA_CACHE[$region]:-}" ]]; then
+		return "${FILESTORE_QUOTA_CACHE[$region]}"
 	fi
 
 	local quota_id
@@ -220,6 +225,7 @@ check_filestore_quota() {
 
 	if [[ -z "$limit" || "$limit" == "0" ]]; then
 		echo "WARN: Could not fetch Filestore quota limit (${quota_id}) for $region or limit is 0. Assuming no capacity."
+		FILESTORE_QUOTA_CACHE[$region]=1
 		return 1
 	fi
 
@@ -227,20 +233,30 @@ check_filestore_quota() {
 	usage=$(gcloud filestore instances list --project="${PROJECT_ID}" --format="json" 2>/dev/null | \
 		jq -r --arg region "$region" --arg tier "$tier" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | select(.tier == $tier) | .fileShares[]?.capacityGb | tonumber] | add // 0')
 
+	if [[ ! "${limit}" =~ ^[0-9]+$ ]]; then limit=0; fi
+	if [[ ! "${usage}" =~ ^[0-9]+$ ]]; then usage=0; fi
+
 	local remaining=$(( limit - usage ))
 	if [[ "$remaining" -ge "$required_capacity" ]]; then
+		FILESTORE_QUOTA_CACHE[$region]=0
 		return 0
 	else
 		echo "INFO: Insufficient Filestore quota (${tier}/${quota_id}) in $region (Limit: $limit, Usage: $usage, Required: $required_capacity)."
+		FILESTORE_QUOTA_CACHE[$region]=1
 		return 1
 	fi
 }
 
+declare -A LUSTRE_QUOTA_CACHE
 check_lustre_quota() {
 	local region=$1
 	local required_capacity=${REQUIRED_LUSTRE_GB:-0}
 	if [[ "$required_capacity" -le 0 ]]; then
 		return 0
+	fi
+
+	if [[ -n "${LUSTRE_QUOTA_CACHE[$region]:-}" ]]; then
+		return "${LUSTRE_QUOTA_CACHE[$region]}"
 	fi
 
 	local limit
@@ -250,6 +266,7 @@ check_lustre_quota() {
 
 	if [[ -z "$limit" || "$limit" == "0" ]]; then
 		echo "WARN: Could not fetch Lustre quota limit for $region or limit is 0. Assuming no capacity."
+		LUSTRE_QUOTA_CACHE[$region]=1
 		return 1
 	fi
 
@@ -257,11 +274,16 @@ check_lustre_quota() {
 	usage=$(gcloud parallelstore instances list --location="-" --project="${PROJECT_ID}" --format="json" 2>/dev/null | \
 		jq -r --arg region "$region" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | .capacityGib | tonumber] | add // 0')
 
+	if [[ ! "${limit}" =~ ^[0-9]+$ ]]; then limit=0; fi
+	if [[ ! "${usage}" =~ ^[0-9]+$ ]]; then usage=0; fi
+
 	local remaining=$(( limit - usage ))
 	if [[ "$remaining" -ge "$required_capacity" ]]; then
+		LUSTRE_QUOTA_CACHE[$region]=0
 		return 0
 	else
 		echo "INFO: Insufficient Lustre quota in $region (Limit: $limit, Usage: $usage, Required: $required_capacity)."
+		LUSTRE_QUOTA_CACHE[$region]=1
 		return 1
 	fi
 }
