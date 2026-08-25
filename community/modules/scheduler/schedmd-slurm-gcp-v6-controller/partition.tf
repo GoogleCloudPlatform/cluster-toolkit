@@ -100,26 +100,46 @@ data "google_compute_zones" "available" {
 
 locals {
   # NodeSet-level engine resolution matching Section 10.1 of Design Doc
+  # Phase 1: DWS Flex automatically resolves to MIG; standard compute nodes default to BULK_INSERT (MIG is strictly opt-in)
   nodeset_resolved_engine = {
     for name, ns in local.nodeset_map : name => (
-      try(ns.provisioning_engine, "AUTO") != "AUTO" ? ns.provisioning_engine : (
-        ns.dws_flex.enabled ? "MIG" :
-        (ns.node_count_static > 0 && ns.node_count_dynamic_max == 0) ? "MIG" :
+      ns.dws_flex.enabled && !ns.dws_flex.use_bulk_insert ? "MIG" : (
+        try(ns.provisioning_engine, "AUTO") == "MIG" ? "MIG" :
         "BULK_INSERT"
       )
     )
   }
+
+  # Multi-MIG Sharding for >1000 nodes per Section 3.2 & 10.2 of Design Doc
+  mig_shards = merge([
+    for name, ns in local.nodeset_map : {
+      for idx in range(ceil(max(ns.node_count_static, 1) / 1000.0)) : (
+        ns.node_count_static > 1000 ? "${name}-mig-${idx}" : name
+        ) => {
+        nodeset_name       = name
+        shard_index        = idx
+        mig_name           = ns.node_count_static > 1000 ? "${local.slurm_cluster_name}-${name}-mig-${idx}" : "${local.slurm_cluster_name}-${name}-mig"
+        base_instance_name = name
+        region             = coalesce(ns.region, var.region)
+        target_size        = min(1000, max(0, ns.node_count_static - (idx * 1000)))
+        zone_policy_allow  = ns.zone_policy_allow
+        template_link      = module.slurm_nodeset_template[name].self_link
+        nodeset            = ns
+      }
+    }
+    if local.nodeset_resolved_engine[name] == "MIG" && !ns.dws_flex.enabled
+  ]...)
 }
 
 resource "google_compute_region_instance_group_manager" "nodeset_mig" {
-  for_each           = { for name, ns in local.nodeset_map : name => ns if local.nodeset_resolved_engine[name] == "MIG" }
-  name               = "${local.slurm_cluster_name}-${each.value.nodeset_name}-mig"
-  base_instance_name = each.value.nodeset_name
-  region             = coalesce(each.value.region, var.region)
-  target_size        = each.value.dws_flex.enabled ? 0 : each.value.node_count_static
+  for_each           = local.mig_shards
+  name               = each.value.mig_name
+  base_instance_name = each.value.base_instance_name
+  region             = each.value.region
+  target_size        = each.value.target_size
 
   version {
-    instance_template = module.slurm_nodeset_template[each.value.nodeset_name].self_link
+    instance_template = each.value.template_link
   }
 
   distribution_policy_zones        = length(try(each.value.zone_policy_allow, [])) > 0 ? each.value.zone_policy_allow : (var.zone != null ? [var.zone] : null)
@@ -142,11 +162,11 @@ resource "google_compute_region_instance_group_manager" "nodeset_mig" {
       target_size,
     ]
     precondition {
-      condition     = !(each.value.dws_flex.enabled && try(each.value.provisioning_engine, "AUTO") == "BULK_INSERT")
+      condition     = !(each.value.nodeset.dws_flex.enabled && try(each.value.nodeset.provisioning_engine, "AUTO") == "BULK_INSERT")
       error_message = "DWS Flex-Start strictly requires MIGs. Cannot force provisioning_engine = 'BULK_INSERT'."
     }
     precondition {
-      condition     = (each.value.node_count_static == 0 && each.value.node_count_dynamic_max == 0) || try(each.value.provisioning_engine, "AUTO") == "AUTO" || local.nodeset_resolved_engine[each.value.nodeset_name] == "MIG"
+      condition     = (each.value.nodeset.node_count_static == 0 && each.value.nodeset.node_count_dynamic_max == 0) || try(each.value.nodeset.provisioning_engine, "AUTO") == "AUTO" || try(each.value.nodeset.provisioning_engine, "AUTO") == "BULK_INSERT" || local.nodeset_resolved_engine[each.value.nodeset_name] == "MIG"
       error_message = "Live-Mutation Guardrail: Cannot toggle provisioning_engine on an active NodeSet unless nodes are drained."
     }
     postcondition {
@@ -162,7 +182,7 @@ locals {
     node_conf                        = ns.node_conf
     dws_flex                         = ns.dws_flex
     instance_template                = module.slurm_nodeset_template[ns.nodeset_name].self_link
-    mig_name                         = local.nodeset_resolved_engine[ns.nodeset_name] == "MIG" ? try(google_compute_region_instance_group_manager.nodeset_mig[ns.nodeset_name].name, null) : null
+    mig_name                         = (local.nodeset_resolved_engine[ns.nodeset_name] == "MIG" && !ns.dws_flex.enabled) ? (ns.node_count_static > 1000 ? "${local.slurm_cluster_name}-${ns.nodeset_name}-mig-0" : try(google_compute_region_instance_group_manager.nodeset_mig[ns.nodeset_name].name, null)) : null
     provisioning_engine              = local.nodeset_resolved_engine[ns.nodeset_name]
     node_count_dynamic_max           = ns.node_count_dynamic_max
     node_count_static                = ns.node_count_static

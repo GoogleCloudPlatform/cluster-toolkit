@@ -277,7 +277,7 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
         
         model = nodes[0]
         
-        if lkp.is_flex_node(model):
+        if lkp.is_flex_node(model) or lkp.is_node_mig(model):
             chunk_size = ZONAL_MIG_SIZE_LIMIT
         elif lkp.node_is_tpu(model):
             ns_name = lkp.node_nodeset_name(model)
@@ -308,47 +308,53 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
     if not nodes:
         return
 
-    nodeset_name = lkp.node_nodeset_name(nodes[0])
-    mig_name = lkp.mig_name(nodeset_name)
-    nodeset = lkp.node_nodeset(nodes[0])
-    region = lkp.node_region(nodes[0])
+    # Group nodes by target MIG (to support >1000 node sharding)
+    nodes_by_mig: Dict[str, List[str]] = {}
+    for node in nodes:
+        mig_name = lkp.node_mig_name(node)
+        nodes_by_mig.setdefault(mig_name, []).append(node)
 
-    log.info(f"Resuming {len(nodes)} MIG nodes ({to_hostlist(nodes)}) for MIG {mig_name}")
+    for mig_name, mig_nodes in nodes_by_mig.items():
+        nodeset = lkp.node_nodeset(mig_nodes[0])
+        region = lkp.node_region(mig_nodes[0])
 
-    # 1. All-Instances Config (AIC) - Stamp group-wide metadata in 1 API call
-    template_link = getattr(nodeset, "instance_template", None)
-    if template_link:
-        try:
-            aic_req = lkp.compute.regionInstanceGroupManagers().setInstanceTemplate(
+        log.info(f"Resuming {len(mig_nodes)} MIG nodes ({to_hostlist(mig_nodes)}) for MIG {mig_name}")
+
+        # 1. All-Instances Config (AIC) - Stamp group-wide metadata in 1 API call
+        template_link = getattr(nodeset, "instance_template", None)
+        if template_link:
+            try:
+                aic_req = lkp.compute.regionInstanceGroupManagers().setInstanceTemplate(
+                    project=lkp.project,
+                    region=region,
+                    instanceGroupManager=mig_name,
+                    body={"instanceTemplate": template_link}
+                )
+                ensure_execute(aic_req)
+            except Exception as e:
+                log.warning(f"Failed to setInstanceTemplate on MIG {mig_name}: {e}")
+
+        # 2. Per-Instance Config (PIC) - Lightweight instance name binding for static Slurm hostnames
+        pic_instances: List[Dict[str, Any]] = []
+        for node in mig_nodes:
+            inst: Dict[str, Any] = {"name": node}
+            if excl_job_id is not None:
+                inst["preservedState"] = {
+                    "metadata": {
+                        "slurm_job_id": str(excl_job_id)
+                    }
+                }
+            pic_instances.append(inst)
+
+        for chunk in chunked(pic_instances, n=ZONAL_MIG_SIZE_LIMIT):
+            pic_req = lkp.compute.regionInstanceGroupManagers().createInstances(
                 project=lkp.project,
                 region=region,
                 instanceGroupManager=mig_name,
-                body={"instanceTemplate": template_link}
+                body={"instances": chunk}
             )
-            ensure_execute(aic_req)
-        except Exception as e:
-            log.warning(f"Failed to setInstanceTemplate on MIG {mig_name}: {e}")
-
-    # 2. Per-Instance Config (PIC) - Lightweight instance name binding for static Slurm hostnames
-    pic_instances: List[Dict[str, Any]] = []
-    for node in nodes:
-        inst: Dict[str, Any] = {"name": node}
-        if excl_job_id is not None:
-            inst["preservedState"] = {
-                "metadata": {
-                    "slurm_job_id": str(excl_job_id)
-                }
-            }
-        pic_instances.append(inst)
-
-    pic_req = lkp.compute.regionInstanceGroupManagers().createInstances(
-        project=lkp.project,
-        region=region,
-        instanceGroupManager=mig_name,
-        body={"instances": pic_instances}
-    )
-    res = ensure_execute(pic_req)
-    log.debug(f"createInstances response for {mig_name}: {res}")
+            res = ensure_execute(pic_req)
+            log.debug(f"createInstances response for {mig_name}: {res}")
 
 
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):

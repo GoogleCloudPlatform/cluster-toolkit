@@ -89,16 +89,14 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
     if not nodes:
         return
 
-    by_nodeset: Dict[str, List[str]] = {}
+    # Group nodes by target MIG (to support >1000 node sharding)
+    nodes_by_mig: Dict[str, List[str]] = {}
     for node in nodes:
-        ns_name = lkp.node_nodeset_name(node)
-        if ns_name not in by_nodeset:
-            by_nodeset[ns_name] = []
-        by_nodeset[ns_name].append(node)
+        mig_name = lkp.node_mig_name(node)
+        nodes_by_mig.setdefault(mig_name, []).append(node)
 
-    for ns_name, ns_nodes in by_nodeset.items():
-        mig_name = lkp.mig_name(ns_name)
-        region = lkp.node_region(ns_nodes[0])
+    for mig_name, mig_nodes in nodes_by_mig.items():
+        region = lkp.node_region(mig_nodes[0])
 
         # Resolve instance URLs from MIG or local lookup
         try:
@@ -117,7 +115,7 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
             mig_inst_map = {}
 
         links = []
-        for node in ns_nodes:
+        for node in mig_nodes:
             if node in mig_inst_map:
                 links.append(mig_inst_map[node])
             else:
@@ -135,21 +133,22 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
                     else:
                         links.append(f"zones/{lkp.zone}/instances/{node}")
 
-        log.info(f"Deleting {len(ns_nodes)} MIG instances ({to_hostlist(ns_nodes)}) from MIG {mig_name}")
-        req = lkp.compute.regionInstanceGroupManagers().deleteInstances(
-            project=lkp.project,
-            region=region,
-            instanceGroupManager=mig_name,
-            body={
-                "instances": links,
-                "decreaseTargetSize": True
-            }
-        )
-        try:
-            res = util.ensure_execute(req)
-            log.debug(f"deleteInstances response for {mig_name}: {res}")
-        except Exception as e:
-            log.error(f"Failed deleteInstances for MIG {mig_name}: {e}")
+        log.info(f"Deleting {len(mig_nodes)} MIG instances ({to_hostlist(mig_nodes)}) from MIG {mig_name}")
+        for chunk_links in util.chunked(links, n=1000):
+            req = lkp.compute.regionInstanceGroupManagers().deleteInstances(
+                project=lkp.project,
+                region=region,
+                instanceGroupManager=mig_name,
+                body={
+                    "instances": chunk_links,
+                    "decreaseTargetSize": True
+                }
+            )
+            try:
+                res = util.ensure_execute(req)
+                log.debug(f"deleteInstances response for {mig_name}: {res}")
+            except Exception as e:
+                log.error(f"Failed deleteInstances for MIG {mig_name}: {e}")
 
 
 def suspend_nodes(nodes: List[str]) -> None:
