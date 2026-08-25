@@ -287,12 +287,12 @@ variable "system_node_pool_node_count" {
   })
   default = {
     total_min_nodes = 2
-    total_max_nodes = 10
+    total_max_nodes = 150
   }
 }
 
 variable "system_node_pool_machine_type" {
-  description = "Machine type for the system node pool. Defaults to n2d-standard-4 if confidential nodes are enabled, otherwise e2-standard-4."
+  description = "Machine type for the system node pool. Defaults to n4-standard-4 if available in the region/zone catalog, falling back to n2d-standard-4 (or n2d-standard-4 if confidential nodes are enabled)."
   type        = string
   default     = null
 }

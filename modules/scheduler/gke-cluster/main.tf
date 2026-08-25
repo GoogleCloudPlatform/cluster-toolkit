@@ -55,8 +55,19 @@ locals {
     "WORKLOADS"
   ]
 
-  # Choose the default based on confidential mode
-  default_system_node_pool_machine_type = var.enable_confidential_nodes ? "n2d-standard-4" : "e2-standard-4"
+  # Check if n4-standard-4 is present in the region/zone catalog
+  n4_available_in_catalog = contains(
+    [for m in data.google_compute_machine_types.available_system_machines.machine_types : m.name],
+    "n4-standard-4"
+  )
+
+  # Choose the default based on confidential mode and N4 catalog availability:
+  # 1. If confidential nodes are enabled, default to n2d-standard-4 (Confidential VM support).
+  # 2. Otherwise, if n4-standard-4 is in the catalog, default to n4-standard-4 (Gen 4 primary).
+  # 3. If n4-standard-4 is not in the catalog, fall back to n2d-standard-4 (E2-less fallback).
+  default_system_node_pool_machine_type = var.enable_confidential_nodes ? "n2d-standard-4" : (
+    local.n4_available_in_catalog ? "n4-standard-4" : "n2d-standard-4"
+  )
   # Fallback to the default if the user left it null
   system_node_pool_machine_type = coalesce(var.system_node_pool_machine_type, local.default_system_node_pool_machine_type)
   # Choose default disk type based on confidential storage mode.
@@ -98,6 +109,18 @@ locals {
 
 data "google_project" "project" {
   project_id = var.project_id
+}
+
+data "google_compute_zones" "available" {
+  provider = google-beta
+  project  = var.project_id
+  region   = var.region
+}
+
+data "google_compute_machine_types" "available_system_machines" {
+  provider = google-beta
+  project  = var.project_id
+  zone     = var.cluster_availability_type == "ZONAL" ? var.zone : data.google_compute_zones.available.names[0]
 }
 
 data "google_container_engine_versions" "version_prefix_filter" {
