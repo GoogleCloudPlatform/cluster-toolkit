@@ -81,37 +81,6 @@ deployment_groups:
           ports: ["0-65535"]
         - protocol: icmp
 
-  - id: gke-a3-ultra-net-1
-    source: modules/network/vpc
-    settings:
-      network_name: $(vars.deployment_name)-net-1
-      ips_per_nat: 6
-      subnetworks:
-      - subnet_name: $(vars.deployment_name)-sub-1
-        subnet_region: $(vars.region)
-        subnet_ip: 192.168.64.0/18
-      firewall_rules:
-      - name: $(vars.deployment_name)-internal-1
-        ranges: [192.168.0.0/16]
-        allow:
-        - protocol: tcp
-          ports: ["0-65535"]
-        - protocol: udp
-          ports: ["0-65535"]
-        - protocol: icmp
-
-  - id: gke-a3-ultra-rdma-net
-    source: modules/network/gpu-rdma-vpc
-    settings:
-      network_name: $(vars.deployment_name)-rdma-net
-      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
-      network_routing_mode: REGIONAL
-      subnetworks_template:
-        name_prefix: $(vars.deployment_name)-rdma-sub
-        count: 8
-        ip_range: 192.168.128.0/18
-        region: $(vars.region)
-
   - id: node_pool_service_account
     source: modules/project/service-account
     settings:
@@ -165,15 +134,12 @@ deployment_groups:
       enable_dcgm_monitoring: true
       enable_gcsfuse_csi: true
       enable_managed_lustre_csi: true # Enable Managed Lustre for the cluster
+      enable_dataplane_v2: true
       enable_private_endpoint: false # Allows access from authorized public IPs
       configure_workload_identity_sa: true
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
-      additional_networks:
-        $(concat(gke-a3-ultra-net-1.instance_additional_networks,
-         gke-a3-ultra-rdma-net.subnetwork_interfaces_gke
-        ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
       version_prefix: $(vars.version_prefix)
@@ -232,6 +198,7 @@ deployment_groups:
     settings:
       machine_type: a3-ultragpu-8g
       auto_upgrade: true
+      enable_dranet: true
       zones: [$(vars.zone)]
       disk_size_gb: $(vars.a3ultra_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
@@ -242,10 +209,6 @@ deployment_groups:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
         - name: $(vars.reservation)
-      additional_networks:
-        $(concat(gke-a3-ultra-net-1.instance_additional_networks,
-         gke-a3-ultra-rdma-net.subnetwork_interfaces_gke
-        ))
     outputs: [instructions]
 
   - id: workload-manager-install

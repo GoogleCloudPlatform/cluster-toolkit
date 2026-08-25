@@ -17,9 +17,6 @@
 blueprint_name: eda-all-on-cloud
 
 vars:
-  # Set to true to enable the secure Slurm Native Authentication standard.
-  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
-  enable_slurm_auth: true
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: eda-all-on-cloud
   region: us-central1  ## Set GCP Region Here ##
@@ -86,7 +83,6 @@ deployment_groups:
     source: modules/file-system/netapp-volume
     use: [netapp_pool]
     settings:
-      region: $(vars.region)
       volume_name: "toolsfs"
       capacity_gib: 1024    # Adjust size as needed
       large_capacity: false
@@ -101,7 +97,6 @@ deployment_groups:
     source: modules/file-system/netapp-volume
     use: [netapp_pool]
     settings:
-      region: $(vars.region)
       volume_name: "libraryfs"
       capacity_gib: 1024    # Adjust size as needed
       large_capacity: false
@@ -116,7 +111,6 @@ deployment_groups:
     source: modules/file-system/netapp-volume
     use: [netapp_pool]
     settings:
-      region: $(vars.region)
       volume_name: "homefs"
       capacity_gib: 1024    # Adjust size as needed
       large_capacity: false
@@ -129,7 +123,6 @@ deployment_groups:
     source: modules/file-system/netapp-volume
     use: [netapp_pool]
     settings:
-      region: $(vars.region)
       volume_name: "scratchfs"
       capacity_gib: 1024    # Adjust size as needed
       large_capacity: false

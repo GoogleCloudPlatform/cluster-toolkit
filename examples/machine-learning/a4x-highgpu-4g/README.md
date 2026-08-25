@@ -26,6 +26,8 @@ APIs and IAM permissions.
   gcloud storage buckets update gs://${TF_STATE_BUCKET_NAME} --versioning
   ```
 
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
+
 ### Obtain Filestore Zonal Capacity
 We suggest using a filestore zonal instance for the best NFS performance, which
 may require a quota increase request. See

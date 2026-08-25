@@ -61,7 +61,7 @@ func TestEnsureBinary_MissingAndDecisionNo(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Expected error when binary is missing and decision is No")
 	}
-	expectedErrMsg := fmt.Sprintf("%s is missing. Download is explicitly disabled. Enable download by specifying --download-dependencies flag.", binaryName)
+	expectedErrMsg := fmt.Sprintf("%s is missing or incompatible; download is explicitly disabled, enable download by specifying --download-dependencies flag (see %s)", binaryName, docLink)
 	if err.Error() != expectedErrMsg {
 		t.Errorf("Expected error %q, got %q", expectedErrMsg, err.Error())
 	}
@@ -141,7 +141,7 @@ func TestEnsureDependencies_Exists(t *testing.T) {
 	defer os.Setenv("PATH", oldPath)
 	os.Setenv("PATH", tempDir+string(os.PathListSeparator)+oldPath)
 
-	err := EnsureDependencies(DownloadDecisionNo)
+	err := EnsureDependencies(DownloadDecisionNo, "terraform", "packer")
 	if err != nil {
 		t.Fatalf("expected no error when dependencies exist, got %v", err)
 	}
@@ -152,9 +152,29 @@ func TestEnsureDependencies_Missing(t *testing.T) {
 	defer os.Setenv("PATH", oldPath)
 	os.Setenv("PATH", t.TempDir()) // Empty PATH basically
 
-	err := EnsureDependencies(DownloadDecisionNo)
+	err := EnsureDependencies(DownloadDecisionNo, "terraform", "packer")
 	if err == nil {
 		t.Fatalf("expected error when dependencies are missing and decision is No")
+	}
+}
+
+func TestEnsureDependencies_NoTools(t *testing.T) {
+	err := EnsureDependencies(DownloadDecisionNo)
+	if err == nil {
+		t.Fatalf("expected error when no tools are specified")
+	}
+	expectedErrMsg := "no tools specified for dependency check"
+	if err.Error() != expectedErrMsg {
+		t.Errorf("Expected error %q, got %q", expectedErrMsg, err.Error())
+	}
+}
+
+func TestHasBinary(t *testing.T) {
+	if !HasBinary("go") {
+		t.Errorf("Expected HasBinary('go') to be true")
+	}
+	if HasBinary("definitely-not-a-real-binary-xyz-123") {
+		t.Errorf("Expected HasBinary('definitely-not-a-real-binary-xyz-123') to be false")
 	}
 }
 

@@ -54,7 +54,7 @@
   delegate_to: localhost
 
 - name: Wait for FIO Pod to complete
-  ansible.builtin.command: kubectl wait --for=condition=Succeeded pod/fio --namespace default --timeout=900s
+  ansible.builtin.command: kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/fio --namespace default --timeout=900s
   delegate_to: localhost
   ignore_errors: true # Even if we timeout, continue to next steps
 

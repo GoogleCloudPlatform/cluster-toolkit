@@ -1,0 +1,11 @@
+# Note: 'inMemoryVolumeSize' must always be provided in template_vars (can be null or empty string) to prevent Terraform templatefile compilation errors.
+apiVersion: checkpointing.gke.io/v1
+kind: CheckpointConfiguration
+metadata:
+  name: default
+  namespace: ${jsonencode(namespace)}
+spec:
+%{ if inMemoryVolumeSize != null && inMemoryVolumeSize != "" ~}
+  inMemoryVolumeSize: ${jsonencode(inMemoryVolumeSize)}
+%{ endif ~}
+  cloudStorageBucketName: ${jsonencode(cloudStorageBucketName)}

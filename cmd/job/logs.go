@@ -49,6 +49,7 @@ func runLogsCmd(cmd *cobra.Command, args []string) error {
 		ClusterName:     clusterName,
 		ClusterLocation: location,
 		ProjectID:       projectID,
+		GKENamespace:    gkeNamespace,
 		Follow:          follow,
 		MainOnly:        mainOnlyPtr,
 	}

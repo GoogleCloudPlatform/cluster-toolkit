@@ -80,9 +80,7 @@ var AcceleratorShorthandMap = map[string]string{
 
 	// TPU mappings
 	"v4-8":        "ct4p-hightpu-4t",
-	"v5p-1":       "ct5p-hightpu-1t",
-	"v5p-2":       "ct5p-hightpu-2t",
-	"v5p-4":       "ct5p-hightpu-4t",
+	"v5p-8":       "ct5p-hightpu-4t",
 	"v5litepod-1": "ct5lp-hightpu-1t",
 	"v5litepod-4": "ct5lp-hightpu-4t",
 	"v5litepod-8": "ct5lp-hightpu-8t",
@@ -351,8 +349,11 @@ func parseShorthand(accelaratorType string) (size int, err error) {
 		return 0, fmt.Errorf("invalid chips value for accelerator type %s: %w", accelaratorType, err)
 	}
 
-	// For TPU v4 (v4-8), the shorthand suffix represents cores. We need to divide by 2 to get chips.
-	if accelaratorType == "v4-8" {
+	// For TPU v4 and v5p, the shorthand suffix represents cores. We need to divide by 2 to get chips.
+	if strings.HasPrefix(accelaratorType, "v4-") || strings.HasPrefix(accelaratorType, "v5p-") {
+		if size%2 != 0 {
+			return 0, fmt.Errorf("TPU v4 and v5p shorthand core count must be even, got %d", size)
+		}
 		size = size / 2
 	}
 

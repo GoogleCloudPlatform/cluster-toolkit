@@ -55,9 +55,6 @@ vars:
   # Enable Dynamic Slicing for TPUs
   enable_dynamic_slicing_for_tpus: false
 
-  # Kueue configuration
-  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
-
   # The namespace to be configured for running workloads
   user_namespace: default
 
@@ -97,24 +94,6 @@ deployment_groups:
           ip_cidr_range: 10.0.32.0/20
       firewall_rules:
       - name: $(vars.deployment_name)-internal-0
-        ranges: [192.168.0.0/16]
-        allow:
-        - protocol: tcp
-          ports: ["0-65535"]
-        - protocol: udp
-          ports: ["0-65535"]
-        - protocol: icmp
-
-  - id: gke-tpu-7x-net-1
-    source: modules/network/vpc
-    settings:
-      network_name: $(vars.deployment_name)-net-1
-      subnetworks:
-      - subnet_name: $(vars.deployment_name)-sub-1
-        subnet_region: $(vars.region)
-        subnet_ip: 192.168.64.0/18
-      firewall_rules:
-      - name: $(vars.deployment_name)-internal-1
         ranges: [192.168.0.0/16]
         allow:
         - protocol: tcp
@@ -179,13 +158,13 @@ deployment_groups:
       enable_persistent_disk_csi: true # enable Hyperdisk for the cluster
       enable_managed_lustre_csi: true  # enable Managed Lustre for the cluster
       enable_filestore_csi: true # enable Filestore for the cluster
+      enable_dataplane_v2: true
       configure_workload_identity_sa: true
       enable_ml_diagnostics: true
       namespace: $(vars.user_namespace)
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
-      additional_networks: $(gke-tpu-7x-net-1.instance_additional_networks)
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
       version_prefix: "1.35."
@@ -216,8 +195,8 @@ deployment_groups:
       disk_type: hyperdisk-balanced
       machine_type: $(vars.machine_type)
       auto_upgrade: true
+      enable_dranet: true
       zones: [$(vars.zone)]
-      additional_networks: $(gke-tpu-7x-net-1.instance_additional_networks)
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
@@ -278,7 +257,8 @@ deployment_groups:
         enable_dynamic_slicing_for_tpus: $(vars.enable_dynamic_slicing_for_tpus)
         accelerator_topology_mode: $(gke-tpu-7x-pool.accelerator_topology_mode)
         machine_type: $(gke-tpu-7x-pool.machine_type)
-        config_path: $(vars.kueue_configuration_path)
+        ## Custom kueue config path
+        # config_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
         config_template_vars:
           tpu_quota: $(vars.num_slices * gke-tpu-7x-pool.node_count_static * gke-tpu-7x-pool.tpu_chips_per_node)
           accelerator_type: $(vars.accelerator_type)

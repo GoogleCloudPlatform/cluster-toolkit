@@ -53,22 +53,26 @@ var (
 	placementPolicy string
 	nodeConstraint  map[string]string
 
-	cpuAffinityStr     string
-	restartOnExitCodes []int
-	imagePullSecrets   string
-	serviceAccountName string
-	topology           string
-	gkeScheduler       string
-	platform           string
+	cpuAffinityStr         string
+	restartOnExitCodes     []int
+	imagePullSecrets       string
+	serviceAccountName     string
+	topology               string
+	gkeCustomTemplatesPath string
+	gkeScheduler           string
+	platform               string
 
 	awaitJobCompletion bool
-	timeoutStr         string
-	priorityClassName  string
-	isPathwaysJob      bool
+	timeout            string
+	priority           string
 	verbose            bool
+	volumeStr          []string
 
-	volumeStr []string
-	pathways  orchestrator.PathwaysJobDefinition
+	gkeMtcEnabled          bool
+	gkeMtcRamdiskDirectory string
+
+	isPathwaysJob bool
+	pathways      orchestrator.PathwaysJobDefinition
 
 	gkeNapProvisioning string
 	gkeNapReservation  string
@@ -106,9 +110,10 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 		if err := validatePathwaysFlags(); err != nil {
 			return err
 		}
-
-		if err := ensurePrerequisites(cmd, &projectID, location); err != nil {
-			return err
+		if !skipPrereqs {
+			if err := ensurePrerequisites(cmd, projectID, location); err != nil {
+				return err
+			}
 		}
 
 		if err := validateGKENAPFlags(); err != nil {
@@ -121,7 +126,7 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			}
 		}
 
-		priorityClassName = strings.ToLower(priorityClassName)
+		priority = strings.ToLower(priority)
 
 		return nil
 	},
@@ -137,7 +142,7 @@ func init() {
 	SubmitCmd.Flags().StringVarP(&dryRunManifest, "dry-run-out", "o", "", "Path to output the generated Kubernetes manifest instead of applying it.")
 	SubmitCmd.Flags().StringVarP(&platform, "platform", "f", "linux/amd64", "Target platform for the image build (e.g., 'linux/amd64', 'linux/arm64'). Used with --base-image.")
 
-	SubmitCmd.Flags().StringSliceVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>:<dest>[:<mode>], mode can be 'ro' or 'rw', default 'ro').")
+	SubmitCmd.Flags().StringArrayVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>;<dest>[;<mode>][;options=<options>], mode can be 'ro' or 'rw', default 'ro').")
 	SubmitCmd.Flags().StringArrayVar(&envVars, "env", []string{}, "Custom environment variables to pass to the workload container in KEY=VALUE format. Can be specified multiple times.")
 
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
@@ -158,8 +163,8 @@ func init() {
 	SubmitCmd.Flags().StringVar(&topology, "topology", "", "TPU slice topology (e.g., 2x2x1).")
 	SubmitCmd.Flags().StringVar(&gkeScheduler, "gke-scheduler", "", "Kubernetes Scheduler name (e.g., gke.io/topology-aware-auto).")
 	SubmitCmd.Flags().BoolVar(&awaitJobCompletion, "await-job-completion", false, "If true, gcluster will wait for the submitted job to complete.")
-	SubmitCmd.Flags().StringVar(&timeoutStr, "timeout", "-1s", "Time to wait for job in seconds or string format (e.g. 1h, 10m). Default is max timeout (-1s).")
-	SubmitCmd.Flags().StringVar(&priorityClassName, "priority", "", "A priority class name (e.g., low, medium, high, or any custom PriorityClass defined in the cluster). If empty, the cluster's default priority class will be used.")
+	SubmitCmd.Flags().StringVar(&timeout, "timeout", "-1s", "Time to wait for job in seconds or string format (e.g. 1h, 10m). Default is max timeout (-1s).")
+	SubmitCmd.Flags().StringVar(&priority, "priority", "", "A priority class name (e.g., low, medium, high, or any custom PriorityClass defined in the cluster). If empty, the cluster's default priority class will be used.")
 	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging for the workload (TPUs and GPUs).")
 	SubmitCmd.Flags().StringVar(&gkeNapProvisioning, "gke-nap-provisioning", "", "Compute provisioning model for GKE NAP. Allowed values: on-demand, spot, reservation.")
 	SubmitCmd.Flags().StringVar(&gkeNapReservation, "gke-nap-reservation", "", "Name of the Google Cloud Reservation for GKE NAP (required if --gke-nap-provisioning=reservation).")
@@ -180,8 +185,10 @@ func init() {
 	SubmitCmd.Flags().StringArrayVar(&pathwaysWorkerEnv, "pathways-worker-env", []string{}, "Custom environment variables for the Pathways worker container in KEY=VALUE format. Can be specified multiple times.")
 	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional Python-based sidecar container to run alongside the Pathways head components.")
 	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
-	SubmitCmd.Flags().BoolVar(&pathways.MTCEnabled, "pathways-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC) for Pathways.")
-	SubmitCmd.Flags().StringVar(&pathways.RamdiskDirectory, "pathways-ramdisk-directory", "", "The ramdisk directory path for local checkpoints in MTC.")
+
+	SubmitCmd.Flags().BoolVar(&gkeMtcEnabled, "gke-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC).")
+	SubmitCmd.Flags().StringVar(&gkeMtcRamdiskDirectory, "gke-mtc-ramdisk-dir", "", "Ramdisk directory path for Multi-Tier Checkpointing (MTC). Required when --gke-mtc-enabled is set.")
+	SubmitCmd.Flags().StringVar(&gkeCustomTemplatesPath, "gke-custom-templates-path", "", "Path to a local directory containing custom GKE templates overrides.")
 
 	_ = SubmitCmd.MarkFlagRequired("name")
 	_ = SubmitCmd.MarkFlagRequired("compute-type")
@@ -209,7 +216,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		affinity["cpu-affinity"] = cpuAffinityStr
 	}
 
-	if timeoutStr != "-1s" {
+	if timeout != "-1s" {
 		awaitJobCompletion = true
 	}
 
@@ -234,6 +241,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		ProjectID:                     projectID,
 		ClusterName:                   clusterName,
 		ClusterLocation:               location,
+		GKENamespace:                  gkeNamespace,
 		WorkloadName:                  workloadName,
 		KueueQueueName:                kueueQueueName,
 		NumSlices:                     numSlices,
@@ -251,15 +259,18 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		GKEScheduler:                  gkeScheduler,
 		AwaitJobCompletion:            awaitJobCompletion,
 		UseParallelContainers:         !gkeDisableParallelContainers,
-		Timeout:                       timeoutStr,
-		PriorityClassName:             priorityClassName,
+		Timeout:                       timeout,
+		PriorityClassName:             priority,
+		Verbose:                       verbose,
+		GKEMTCEnabled:                 gkeMtcEnabled,
+		GKEMTCRamdiskDirectory:        gkeMtcRamdiskDirectory,
+		GkeCustomTemplatesPath:        gkeCustomTemplatesPath,
 		GKENAPProvisioning:            gkeNapProvisioning,
 		GKENAPReservation:             gkeNapReservation,
 		IsPathwaysJob:                 isPathwaysJob,
 		Pathways:                      pathways,
 		RawMounts:                     volumeStr,
 		Env:                           parseEnvFlags(envVars),
-		Verbose:                       verbose,
 	}
 
 	return orc.SubmitJob(jobDef)
@@ -375,6 +386,7 @@ func validateGKENAPFlags() error {
 	if gkeNapProvisioning != "reservation" && gkeNapReservation != "" {
 		return fmt.Errorf("--gke-nap-reservation should only be provided when --gke-nap-provisioning=reservation")
 	}
+
 	return nil
 }
 

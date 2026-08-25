@@ -1824,7 +1824,9 @@ func TestGetDeploymentFile(t *testing.T) {
 	mockJSON := `{
 		"tree": [
 			{"path": "examples/hpc-slurm.yaml", "type": "blob"},
-			{"path": "community/examples/ml-cluster.yml", "type": "blob"}
+			{"path": "community/examples/ml-cluster.yml", "type": "blob"},
+			{"path": "examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml", "type": "blob"},
+			{"path": "tools/cloud-build/daily-tests/blueprints/ml-gke-e2e.yaml", "type": "blob"}
 		]
 	}`
 
@@ -1835,6 +1837,26 @@ func TestGetDeploymentFile(t *testing.T) {
 		mockResp   *http.Response
 		expected   string
 	}{
+		{
+			name:       "success: match machine learning deployment file",
+			flagValue:  "examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml",
+			flagExists: true,
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml",
+		},
+		{
+			name:       "success: match cloud build daily test blueprint",
+			flagValue:  "tools/cloud-build/daily-tests/blueprints/ml-gke-e2e.yaml",
+			flagExists: true,
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "tools/cloud-build/daily-tests/blueprints/ml-gke-e2e.yaml",
+		},
 		{
 			name:       "success: exact match standard file",
 			flagValue:  "community/examples/ml-cluster.yml",
@@ -2305,6 +2327,66 @@ func TestGetErrorType(t *testing.T) {
 			name:     "Capitalization Test",
 			err:      errors.New("PERMISSION DENIED TO ACCESS THIS RESOURCE"),
 			expected: ErrTypePermissionDenied,
+		},
+		{
+			name:     "Extra Substring Match",
+			err:      errors.New("accelerator_topology must be divisible by number of gpus in machine"),
+			expected: ErrTypeA4XTopologyIssue,
+		},
+		{
+			name:     "Extra Regex Match",
+			err:      errors.New("container \"my-job-container\" in pod \"my-job-someid\" is waiting to start: trying and failing to pull image"),
+			expected: ErrTypeServerError,
+		},
+		{
+			name:     "Extra Multi Substring Match",
+			err:      errors.New("failed with error: mkdir: cannot create directory /run/enroot : Permission denied"),
+			expected: ErrTypeEnrootPermissionDenied,
+		},
+		{
+			name:     "Rate Limit Match",
+			err:      errors.New("Quota exceeded for quota metric 'Requests to public APIs' and limit 'Requests to public APIs per minute per user' of service 'file.googleapis.com'"),
+			expected: ErrTypeFilestoreApiRateLimit,
+		},
+		{
+			name:     "Spot Instance Not Found",
+			err:      errors.New("gcloud.compute.instances.update) HTTPError 404: The resource being requested"),
+			expected: ErrTypeGkeSpotInstanceNotFound,
+		},
+		{
+			name:     "Cluster Already Has Operation",
+			err:      errors.New("Cluster is running incompatible operation while executing"),
+			expected: ErrTypeClusterAlreadyHasOperation,
+		},
+		{
+			name:     "Validator Failed Match",
+			err:      errors.New("validator \"test_reservation_exists\" failed because it was not found in any zone of project"),
+			expected: ErrTypeValidatorReservationNotFound,
+		},
+		{
+			name:     "Extra Regex Subnet overlapping",
+			err:      errors.New("Error waiting to create Instance: Error waiting for Creating Instance: Error code 3, message: The request was invalid: Server subnetwork IP range [\"172.17.167.0/26\"] overlaps with restricted IP range [\"172.17.0.0/16\"]. Please choose a range explicitly that does not overlap for google_parallelstore_instance"),
+			expected: ErrTypeParallelstoreServerSubnetworkIpOverlapped,
+		},
+		{
+			name:     "Munge timeout match",
+			err:      errors.New("Timeout when waiting for file /var/run/munge/munge.socket.2"),
+			expected: ErrTypeSlurmV5MungeTimeout,
+		},
+		{
+			name:     "Compute VM create failure",
+			err:      errors.New("Error: Error waiting for instance to create: couldn't find resource for resource \"google_compute_instance\" \"compute_vm\" in region"),
+			expected: ErrTypeComputeVmCreateFail,
+		},
+		{
+			name:     "Syntax error matching",
+			err:      errors.New("unexpected EOF while looking for matching quote"),
+			expected: ErrTypeSyntaxError,
+		},
+		{
+			name:     "Network Timeout with Substrings",
+			err:      errors.New("RouterNat: googleapi: Error 404: The resource was not found"),
+			expected: ErrTypeRouternatResourceNotFound,
 		},
 	}
 

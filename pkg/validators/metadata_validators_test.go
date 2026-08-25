@@ -139,6 +139,343 @@ func TestRegexValidator(t *testing.T) {
 			t.Fatalf("unexpected error message: %q", err.Error())
 		}
 	})
+
+	t.Run("passes_when_setting_is_unknown", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"name": cty.UnknownVal(cty.String),
+		})
+		rule := modulereader.ValidationRule{
+			Validator: "regex",
+			Inputs: map[string]interface{}{
+				"vars":    []interface{}{"name"},
+				"pattern": "^[a-z]+$",
+			},
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected error when setting is unknown: %v", err)
+		}
+	})
+
+	t.Run("passes_when_setting_is_null", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"name": cty.NullVal(cty.String),
+		})
+		rule := modulereader.ValidationRule{
+			Validator: "regex",
+			Inputs: map[string]interface{}{
+				"vars":    []interface{}{"name"},
+				"pattern": "^[a-z]+$",
+			},
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected error when setting is null: %v", err)
+		}
+	})
+
+	t.Run("passes_when_setting_is_non_string", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"name": cty.NumberIntVal(123),
+		})
+		rule := modulereader.ValidationRule{
+			Validator: "regex",
+			Inputs: map[string]interface{}{
+				"vars":    []interface{}{"name"},
+				"pattern": "^[a-z]+$",
+			},
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected error when setting is non-string: %v", err)
+		}
+	})
+}
+
+func createConcatTestBP(baseBP config.Blueprint, depName, saName cty.Value, depMissing, saMissing bool) config.Blueprint {
+	bp := baseBP
+	bp.Vars = config.NewDict(map[string]cty.Value{})
+	if !depMissing {
+		depVal := cty.StringVal("my-dep")
+		if depName != cty.NilVal {
+			depVal = depName
+		}
+		bp.Vars = config.NewDict(map[string]cty.Value{"deployment_name": depVal})
+	}
+
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{})
+	if !saMissing {
+		saVal := cty.StringVal("sa-name")
+		if saName != cty.NilVal {
+			saVal = saName
+		}
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"name": saVal})
+	}
+	return bp
+}
+
+func TestRegexValidator_ConcatMode(t *testing.T) {
+	mockInfo := modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{
+			{Name: "name_with_default", Type: cty.String, Default: "default-sa"},
+			{Name: "invalid_default", Type: cty.String, Default: "INVALID_SA"},
+		},
+	}
+	modulereader.SetModuleInfo("test/module", "terraform", mockInfo)
+	modulereader.SetModuleInfo("test/module", "", mockInfo)
+
+	baseBP := config.Blueprint{
+		BlueprintName: "test-bp",
+		Vars: config.NewDict(map[string]cty.Value{
+			"deployment_name": cty.StringVal("my-dep"),
+		}),
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:       "test-module",
+						Source:   "test/module",
+						Kind:     config.TerraformKind,
+						Settings: config.NewDict(map[string]cty.Value{"name": cty.StringVal("sa-name")}),
+					},
+				},
+			},
+		},
+	}
+
+	validator := RegexValidator{}
+	tests := []struct {
+		name        string
+		depName     cty.Value
+		saName      cty.Value
+		varNames    []interface{}
+		depMissing  bool
+		saMissing   bool
+		notOptional bool
+		wantErrSub  string
+	}{
+		{
+			name:    "passes_on_valid_id",
+			depName: cty.StringVal("my-dep"),
+			saName:  cty.StringVal("sa-name"),
+		},
+		{
+			name:    "passes_on_exact_max_length_30_chars",
+			depName: cty.StringVal("a-1234567890-1234567890"),
+			saName:  cty.StringVal("123456"),
+		},
+		{
+			name:    "passes_on_exact_min_length_6_chars",
+			depName: cty.StringVal("ab"),
+			saName:  cty.StringVal("cde"),
+		},
+		{
+			name:       "fails_when_too_long",
+			depName:    cty.StringVal("a-very-long-deployment-name-that-exceeds"),
+			saName:     cty.StringVal("sa-name"),
+			wantErrSub: "does not match pattern",
+		},
+		{
+			name:       "fails_on_length_31_chars",
+			depName:    cty.StringVal("a-1234567890-1234567890"),
+			saName:     cty.StringVal("1234567"),
+			wantErrSub: "does not match pattern",
+		},
+		{
+			name:       "fails_when_too_short",
+			depName:    cty.StringVal("a"),
+			saName:     cty.StringVal("b"),
+			wantErrSub: "does not match pattern",
+		},
+		{
+			name:       "fails_on_invalid_characters",
+			saName:     cty.StringVal("SA-NAME"),
+			wantErrSub: "does not match pattern",
+		},
+		{
+			name:    "passes_when_deployment_name_is_unknown",
+			depName: cty.UnknownVal(cty.String),
+		},
+		{
+			name:   "passes_when_name_is_unknown",
+			saName: cty.UnknownVal(cty.String),
+		},
+		{
+			name:       "fails_when_name_is_null",
+			saName:     cty.NullVal(cty.String),
+			wantErrSub: "cannot be null",
+		},
+		{
+			name:       "fails_when_deployment_name_is_null",
+			depName:    cty.NullVal(cty.String),
+			saName:     cty.StringVal("valid-sa-name"),
+			wantErrSub: "cannot be null",
+		},
+		{
+			name:       "passes_when_deployment_name_is_missing_and_rule_is_optional",
+			depMissing: true,
+		},
+		{
+			name:    "passes_when_deployment_name_is_unknown_even_if_other_parts_are_invalid",
+			depName: cty.UnknownVal(cty.String),
+			saName:  cty.StringVal("INVALID-SA"),
+		},
+		{
+			name:      "passes_when_module_setting_falls_back_to_default",
+			depName:   cty.StringVal("my-dep"),
+			varNames:  []interface{}{"deployment_name", "name_with_default"},
+			saMissing: true,
+		},
+		{
+			name:       "fails_when_module_setting_default_violates_pattern",
+			depName:    cty.StringVal("my-dep"),
+			varNames:   []interface{}{"deployment_name", "invalid_default"},
+			saMissing:  true,
+			wantErrSub: "does not match pattern",
+		},
+		{
+			name:       "fails_when_setting_is_non_string",
+			saName:     cty.NumberIntVal(123),
+			wantErrSub: "must be a string",
+		},
+		{
+			name:       "fails_when_setting_is_unknown_number",
+			saName:     cty.UnknownVal(cty.Number),
+			wantErrSub: "must be a string",
+		},
+		{
+			name:        "fails_when_setting_is_missing_and_no_default_and_not_optional",
+			varNames:    []interface{}{"deployment_name", "missing_var"},
+			notOptional: true,
+			wantErrSub:  "setting \"missing_var\" not found in module \"test-module\" settings",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			bp := createConcatTestBP(baseBP, tc.depName, tc.saName, tc.depMissing, tc.saMissing)
+			rule := modulereader.ValidationRule{
+				Validator: "regex",
+				Inputs: map[string]interface{}{
+					"vars":      []interface{}{"deployment_name", "name"},
+					"concat":    true,
+					"separator": "-",
+					"pattern":   "^[a-z][-a-z0-9]{4,28}[a-z0-9]$",
+				},
+			}
+			if tc.varNames != nil {
+				rule.Inputs["vars"] = tc.varNames
+			}
+			if tc.notOptional {
+				rule.Inputs["optional"] = false
+			}
+
+			err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+			if tc.wantErrSub == "" && err != nil {
+				t.Fatalf("unexpected validation error: %v", err)
+			}
+			if tc.wantErrSub != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tc.wantErrSub)
+				}
+				if !strings.Contains(err.Error(), tc.wantErrSub) {
+					t.Fatalf("expected error containing %q, got: %q", tc.wantErrSub, err.Error())
+				}
+			}
+		})
+	}
+}
+
+func TestResolveSettingToString(t *testing.T) {
+	mockInfo := modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{
+			{Name: "default_string", Type: cty.String, Default: "fallback_val"},
+			{Name: "default_number", Type: cty.Number, Default: 100},
+		},
+	}
+	modulereader.SetModuleInfo("test/module", "terraform", mockInfo)
+	modulereader.SetModuleInfo("test/module", "", mockInfo)
+
+	bp := config.Blueprint{
+		BlueprintName: "test-bp",
+		Vars: config.NewDict(map[string]cty.Value{
+			"global_str": cty.StringVal("global_val"),
+		}),
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "test-mod",
+						Source: "test/module",
+						Kind:   config.TerraformKind,
+						Settings: config.NewDict(map[string]cty.Value{
+							"str_setting":  cty.StringVal("explicit_val"),
+							"num_setting":  cty.NumberIntVal(42),
+							"bool_setting": cty.BoolVal(true),
+							"null_setting": cty.NullVal(cty.String),
+							"null_num":     cty.NullVal(cty.Number),
+							"unknown_str":  cty.UnknownVal(cty.String),
+							"unknown_num":  cty.UnknownVal(cty.Number),
+							"list_setting": cty.ListVal([]cty.Value{cty.NumberIntVal(1)}),
+							"map_setting":  cty.ObjectVal(map[string]cty.Value{"k": cty.StringVal("v")}),
+						}),
+					},
+				},
+			},
+		},
+	}
+	mod := bp.Groups[0].Modules[0]
+	group := bp.Groups[0]
+
+	tests := []struct {
+		name        string
+		setting     string
+		optional    bool
+		allowNull   bool
+		expectedVal string
+		expectKnown bool
+		wantErrSub  string
+	}{
+		{name: "explicit_string", setting: "str_setting", expectKnown: true, expectedVal: "explicit_val"},
+		{name: "module_default", setting: "default_string", expectKnown: true, expectedVal: "fallback_val"},
+		{name: "global_var", setting: "global_str", expectKnown: true, expectedVal: "global_val"},
+		{name: "missing_optional", setting: "nonexistent", optional: true, expectKnown: false},
+		{name: "missing_not_optional", setting: "nonexistent", optional: false, wantErrSub: "not found in module"},
+		{name: "number_setting", setting: "num_setting", wantErrSub: "must be a string"},
+		{name: "bool_setting", setting: "bool_setting", wantErrSub: "must be a string"},
+		{name: "list_setting", setting: "list_setting", wantErrSub: "must be a string"},
+		{name: "map_setting", setting: "map_setting", wantErrSub: "must be a string"},
+		{name: "unknown_number", setting: "unknown_num", wantErrSub: "must be a string"},
+		{name: "unknown_string", setting: "unknown_str", expectKnown: false},
+		{name: "null_string_not_allowed", setting: "null_setting", allowNull: false, wantErrSub: "cannot be null"},
+		{name: "null_string_allowed", setting: "null_setting", allowNull: true, expectKnown: true, expectedVal: ""},
+		{name: "null_number_allowed", setting: "null_num", allowNull: true, wantErrSub: "must be a string"},
+		{name: "null_number_not_allowed", setting: "null_num", allowNull: false, wantErrSub: "must be a string"},
+		{name: "default_number", setting: "default_number", wantErrSub: "must be a string"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			val, known, _, err := resolveSettingToString(bp, group, 0, mod, tc.setting, tc.optional, tc.allowNull)
+			if tc.wantErrSub != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tc.wantErrSub)
+				}
+				if !strings.Contains(err.Error(), tc.wantErrSub) {
+					t.Fatalf("expected error containing %q, got: %q", tc.wantErrSub, err.Error())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if known != tc.expectKnown || val != tc.expectedVal {
+				t.Fatalf("expected known=%v, val=%q; got known=%v, val=%q", tc.expectKnown, tc.expectedVal, known, val)
+			}
+		})
+	}
 }
 
 func TestAllowedEnumValidator(t *testing.T) {
@@ -1138,6 +1475,115 @@ func TestConditionalRegexValidator(t *testing.T) {
 				"enabled": cty.True,
 			}),
 			"enable_placement": cty.False,
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	// 5. Passes when dependent variable is unknown
+	t.Run("passes_when_dependent_is_unknown", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"machine_type": cty.UnknownVal(cty.String),
+			"dws_flex": cty.ObjectVal(map[string]cty.Value{
+				"enabled": cty.True,
+			}),
+			"enable_placement": cty.True,
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err != nil {
+			t.Fatalf("unexpected error when dependent is unknown: %v", err)
+		}
+	})
+
+	// 6. Passes when dependent variable is null
+	t.Run("passes_when_dependent_is_null", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"machine_type": cty.NullVal(cty.String),
+			"dws_flex": cty.ObjectVal(map[string]cty.Value{
+				"enabled": cty.True,
+			}),
+			"enable_placement": cty.True,
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err != nil {
+			t.Fatalf("unexpected error when dependent is null: %v", err)
+		}
+	})
+
+	// 7. Passes when trigger is unknown
+	t.Run("passes_when_trigger_is_unknown", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"machine_type": cty.StringVal("g4-standard-48"),
+			"dws_flex": cty.ObjectVal(map[string]cty.Value{
+				"enabled": cty.UnknownVal(cty.Bool),
+			}),
+			"enable_placement": cty.True,
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err != nil {
+			t.Fatalf("unexpected error when trigger is unknown: %v", err)
+		}
+	})
+}
+
+func createBaseTestBlueprint() config.Blueprint {
+	return config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "test-module",
+						Source: "test/module",
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestCIDRValidator(t *testing.T) {
+	validator := &CIDRValidator{}
+
+	rule := modulereader.ValidationRule{
+		Validator: "cidr",
+		Inputs: map[string]interface{}{
+			"vars":       []interface{}{"master_authorized_networks"},
+			"object_key": "cidr_block",
+		},
+	}
+
+	t.Run("fails_on_placeholder_cidr", func(t *testing.T) {
+		bp := createBaseTestBlueprint()
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"master_authorized_networks": cty.TupleVal([]cty.Value{
+				cty.ObjectVal(map[string]cty.Value{
+					"display_name": cty.StringVal("test"),
+					"cidr_block":   cty.StringVal("<your-ip-address>/32"),
+				}),
+			}),
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("passes_on_valid_cidr", func(t *testing.T) {
+		bp := createBaseTestBlueprint()
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"master_authorized_networks": cty.TupleVal([]cty.Value{
+				cty.ObjectVal(map[string]cty.Value{
+					"display_name": cty.StringVal("test"),
+					"cidr_block":   cty.StringVal("1.2.3.4/32"),
+				}),
+			}),
 		})
 		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
 		if err != nil {

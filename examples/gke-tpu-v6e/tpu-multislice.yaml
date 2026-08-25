@@ -34,11 +34,12 @@ spec:
         backoffLimit: 0
         template:
           spec:
-            hostNetwork: true
-            dnsPolicy: ClusterFirstWithHostNet
             nodeSelector:
               cloud.google.com/gke-tpu-accelerator: tpu-v6e-slice
               cloud.google.com/gke-tpu-topology: 4x4
+            resourceClaims:
+            - name: netdev
+              resourceClaimTemplateName: default-netdev
             containers:
             - name: jax-tpu
               image: us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest
@@ -57,3 +58,7 @@ spec:
               resources:
                 limits:
                   google.com/tpu: 4
+                requests:
+                  google.com/tpu: 4
+                claims:
+                - name: netdev

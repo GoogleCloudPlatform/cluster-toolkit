@@ -92,9 +92,9 @@ variable "min_master_version" {
 }
 
 variable "version_prefix" {
-  description = "If provided, Terraform will only return versions that match the string prefix. For example, `1.31.` will match all `1.31` series releases. Since this is just a string match, it's recommended that you append a `.` after minor versions to ensure that prefixes such as `1.3` don't match versions like `1.30.1-gke.10` accidentally."
+  description = "If provided, Terraform will only return versions that match the string prefix. For example, `1.35.` will match all `1.35` series releases. Since this is just a string match, it's recommended that you append a `.` after minor versions to ensure that prefixes such as `1.3` don't match versions like `1.30.1-gke.10` accidentally."
   type        = string
-  default     = "1.31."
+  default     = "1.35."
 }
 
 variable "maintenance_start_time" {
@@ -200,12 +200,18 @@ variable "enable_gcsfuse_csi" {
   default     = false
 }
 
-
 variable "enable_persistent_disk_csi" {
   description = "The status of the Google Compute Engine Persistent Disk Container Storage Interface (CSI) driver addon, which allows the usage of a PD as volumes."
   type        = bool
   default     = true
 }
+
+variable "enable_multi_tier_checkpointing" {
+  description = "The status of the High Scale Checkpointing addon (Multi-Tier Checkpointing). This feature allows GKE to manage local SSD checkpoints and background uploads to Cloud Storage for highly resilient machine learning workloads."
+  type        = bool
+  default     = false
+}
+
 
 variable "enable_parallelstore_csi" {
   description = "The status of the Google Compute Engine Parallelstore Container Storage Interface (CSI) driver addon, which allows the usage of a parallelstore as volumes."
@@ -248,10 +254,6 @@ variable "monitoring_components" {
     "JOBSET"
   ]
 }
-
-
-
-
 
 variable "enable_node_local_dns_cache" {
   description = "Enable GKE NodeLocal DNSCache addon to improve DNS lookup latency"
@@ -383,6 +385,13 @@ variable "master_authorized_networks" {
     display_name = string
   }))
   default = []
+
+  validation {
+    condition     = var.master_authorized_networks == null ? true : can([for net in var.master_authorized_networks : cidrhost(net.cidr_block, 0)])
+    error_message = "Validation failed due to invalid CIDR IP address in 'master_authorized_networks.cidr_block'. All values must be in CIDR format (e.g. 1.2.3.4/32)."
+  }
+
+
 }
 
 variable "service_account_email" {

@@ -156,7 +156,7 @@ repos:
 #   hooks:
 #   - id: go-critic
 - repo: https://github.com/golangci/golangci-lint
-  rev: v2.4.0
+  rev: v2.13.1
   hooks:
   - id: golangci-lint
 - repo: https://github.com/adrienverge/yamllint

@@ -169,7 +169,7 @@ limitations under the License.
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.73.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.13.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.13.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
 
@@ -177,7 +177,7 @@ limitations under the License.
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_google"></a> [google](#provider\_google) | >= 4.73.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 6.13.0 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.13.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | >= 3.0 |
 
@@ -205,7 +205,7 @@ limitations under the License.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_add_deployment_name_before_prefix"></a> [add\_deployment\_name\_before\_prefix](#input\_add\_deployment\_name\_before\_prefix) | If true, the names of VMs and disks will always be prefixed with `deployment_name` to enable uniqueness across deployments.<br/>See `name_prefix` for further details on resource naming behavior. | `bool` | `false` | no |
-| <a name="input_additional_persistent_disks"></a> [additional\_persistent\_disks](#input\_additional\_persistent\_disks) | Configurations of additional disks to be included on the partition nodes. | <pre>object({<br/>    count = optional(number, 0)<br/>    type  = optional(string, "pd-balanced")<br/>    size  = optional(number, 200)<br/>  })</pre> | `{}` | no |
+| <a name="input_additional_persistent_disks"></a> [additional\_persistent\_disks](#input\_additional\_persistent\_disks) | Configurations of additional disks to be included on the partition nodes. Note that storage\_pool is only supported with Hyperdisk types (balanced or throughput). You must provide an existing storage pool, as this module does not create new ones. | <pre>object({<br/>    count        = optional(number, 0)<br/>    type         = optional(string, "pd-balanced")<br/>    size         = optional(number, 200)<br/>    storage_pool = optional(string)<br/>  })</pre> | `{}` | no |
 | <a name="input_allocate_ip"></a> [allocate\_ip](#input\_allocate\_ip) | If not null, allocate IPs with the given configuration. See details at<br/>https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address | <pre>object({<br/>    address_type = optional(string, "INTERNAL")<br/>    purpose      = optional(string),<br/>    network_tier = optional(string),<br/>    ip_version   = optional(string, "IPV4"),<br/>  })</pre> | `null` | no |
 | <a name="input_allow_automatic_updates"></a> [allow\_automatic\_updates](#input\_allow\_automatic\_updates) | If false, disables automatic system package updates on the created instances.  This feature is<br/>only available on supported images (or images derived from them).  For more details, see<br/>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `true` | no |
 | <a name="input_auto_delete_boot_disk"></a> [auto\_delete\_boot\_disk](#input\_auto\_delete\_boot\_disk) | Controls if boot disk should be auto-deleted when instance is deleted. | `bool` | `true` | no |
@@ -214,6 +214,7 @@ limitations under the License.
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment, will optionally be used name resources according to `name_prefix` | `string` | n/a | yes |
 | <a name="input_disable_public_ips"></a> [disable\_public\_ips](#input\_disable\_public\_ips) | If set to true, instances will not have public IPs | `bool` | `false` | no |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Size of disk for instances. | `number` | `200` | no |
+| <a name="input_disk_storage_pool"></a> [disk\_storage\_pool](#input\_disk\_storage\_pool) | Storage pool to use for the boot disk. Note that storage pools are only supported with Hyperdisk types. For boot disks, only hyperdisk-balanced is supported. You must provide an existing storage pool, as this module does not create new ones. | `string` | `null` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for instances. | `string` | `"pd-standard"` | no |
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enable or Disable OS Login with "ENABLE" or "DISABLE". Set to "INHERIT" to inherit project OS Login setting. | `string` | `"ENABLE"` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = string,<br/>    count = number<br/>  }))</pre> | `[]` | no |
