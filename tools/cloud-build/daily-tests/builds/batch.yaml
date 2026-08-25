@@ -89,6 +89,8 @@ steps:
           - name: runner
             image: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
             env:
+            - name: GCLUSTER_GCS_PATH
+              value: "$$GCLUSTER_GCS_PATH"
             - name: PROJECT_ID
               value: "$PROJECT_ID"
             - name: BUILD_ID

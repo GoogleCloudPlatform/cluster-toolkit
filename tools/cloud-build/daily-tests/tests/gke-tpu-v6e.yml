@@ -36,7 +36,7 @@ custom_vars:
     tpuv6e_onspot: true
   enable_spot: true
   gcs_bucket: "ml-diagnostics-test"
-  image_tag: "us-central1-docker.pkg.dev/hpc-toolkit-dev/ml-diagnostics-test/sample-diagnostics-job:1.0.0"
+  image_tag: "us-central1-docker.pkg.dev/{{ project }}/ml-diagnostics-test/sample-diagnostics-job:1.0.0"
   tpu_accelerator: tpu-v6e-slice
   tpu_topology: 2x2
   k8s_service_account: workload-identity-k8s-sa
