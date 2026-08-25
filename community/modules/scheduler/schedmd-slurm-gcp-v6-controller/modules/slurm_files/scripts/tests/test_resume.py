@@ -199,3 +199,30 @@ def test_resume_mig_nodes(mock_compute_prop, mock_execute):
       {"name": "c-n-0", "preservedState": {"metadata": {"slurm_job_id": "101"}}},
       {"name": "c-n-1", "preservedState": {"metadata": {"slurm_job_id": "101"}}},
   ]
+
+
+@unittest.mock.patch("resume.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_chunking(mock_compute_prop, mock_execute):
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      provisioning_engine="MIG",
+      nodeset={
+          "n": TstNodeset(nodeset_name="n", node_count_static=1200, instance_template="projects/p/global/instanceTemplates/t1"),
+      }
+  )
+  lkp = util.Lookup(cfg)
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+
+  # Resume 1200 nodes
+  large_nodes = [f"c-n-{i}" for i in range(1200)]
+  resume.resume_mig_nodes(large_nodes, excl_job_id=None, lkp=lkp)
+
+  # Verify createInstances was called for each shard
+  create_calls = mock_compute.regionInstanceGroupManagers().createInstances.call_args_list
+  assert len(create_calls) == 2
+  assert create_calls[0].kwargs["instanceGroupManager"] == "c-n-mig-0"
+  assert len(create_calls[0].kwargs["body"]["instances"]) == 1000
+  assert create_calls[1].kwargs["instanceGroupManager"] == "c-n-mig-1"
+  assert len(create_calls[1].kwargs["body"]["instances"]) == 200

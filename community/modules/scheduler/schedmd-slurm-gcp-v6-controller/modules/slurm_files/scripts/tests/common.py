@@ -48,6 +48,8 @@ class TstNodeset:
     accelerator_topology: Optional[str] = ""
     future_reservation: Optional[str] = ""
     subnetwork: str = "projects/p/regions/us-central1/subnetworks/default"
+    region: Optional[str] = None
+    dws_flex: Optional[Any] = None
 
 @dataclass
 class TstPartition:

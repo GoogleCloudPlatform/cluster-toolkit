@@ -1834,11 +1834,20 @@ class Lookup:
         return self.is_nodeset_mig(nodeset_name)
 
     def mig_name(self, nodeset_name: str, shard_index: int = 0) -> str:
-        """Returns target MIG name for a given NodeSet, supporting sharding for >1000 VMs."""
+        """Returns target MIG name for a given NodeSet, supporting multiple instance groups for >1000 VMs."""
         nodeset = self.cfg.nodeset.get(nodeset_name)
-        if nodeset and getattr(nodeset, "node_count_dynamic_max", 0) > 1000:
-            return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-shard-{shard_index}-mig"
+        if nodeset:
+            max_nodes = getattr(nodeset, "node_count_static", 0) + getattr(nodeset, "node_count_dynamic_max", 0)
+            if max_nodes > 1000:
+                return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-mig-{shard_index}"
         return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-mig"
+
+    def node_mig_name(self, node_name: str) -> str:
+        """Returns the specific MIG name (including shard) for a given node."""
+        nodeset_name = self.node_nodeset_name(node_name)
+        idx = self.node_index(node_name)
+        shard_idx = idx // 1000
+        return self.mig_name(nodeset_name, shard_index=shard_idx)
 
     def node_is_fr(self, node_name:str) -> bool:
         return bool(self.node_nodeset(node_name).future_reservation)
@@ -2399,17 +2408,20 @@ class Lookup:
             return False
 
         for mig in mig_list["items"]:
-            if not mig.get("instanceTemplate"): #possibly an old MIG
-                return False
-            if mig["instanceTemplate"] == self.node_template(node) and mig["currentActions"]["creating"] > 0:
+            template = mig.get("instanceTemplate") or (mig.get("versions", [{}])[0].get("instanceTemplate") if mig.get("versions") else None)
+            if not template:
+                continue
+            creating_count = mig.get("currentActions", {}).get("creating", 0) if mig.get("currentActions") else 0
+            if template == self.node_template(node) and creating_count > 0:
                 potential_migs.append(self.get_mig_instances(self.project, region, trim_self_link(mig["selfLink"])))
 
         if not potential_migs:
             return False
 
-        for instance_collection in potential_migs[0]["managedInstances"]:
-            if node in instance_collection["name"] and instance_collection["currentAction"]=="CREATING":
-                return True
+        for inst_group in potential_migs:
+            for instance_collection in inst_group.get("managedInstances", []):
+                if node in instance_collection.get("name", "") and instance_collection.get("currentAction") == "CREATING":
+                    return True
         return False
     
     def cluster_regions(self) -> list[str]:

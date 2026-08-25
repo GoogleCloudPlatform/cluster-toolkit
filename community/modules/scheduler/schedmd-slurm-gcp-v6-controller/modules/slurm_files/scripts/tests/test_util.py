@@ -862,7 +862,7 @@ def test_mig_name():
     )
     lkp = util.Lookup(cfg)
     assert lkp.mig_name("ns1") == "testcl-ns1-mig"
-    assert lkp.mig_name("ns2", shard_index=0) == "testcl-ns2-shard-0-mig"
+    assert lkp.mig_name("ns2", shard_index=0) == "testcl-ns2-mig-0"
 
 
 def test_is_node_mig():
@@ -879,3 +879,127 @@ def test_is_node_mig():
     assert not lkp.is_nodeset_mig("ns_bulk")
     assert lkp.is_node_mig("testcl-ns_mig-0")
     assert not lkp.is_node_mig("testcl-ns_bulk-0")
+
+
+def test_is_provisioning_flex_node(monkeypatch):
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "flex_ns": TstNodeset(
+                nodeset_name="flex_ns",
+                region="us-central1",
+                zone_policy_allow=["us-central1-a"],
+                instance_template="projects/testproj/global/instanceTemplates/flex-tpl",
+                dws_flex=NSDict(enabled=True, use_bulk_insert=False),
+            ),
+            "non_flex_ns": TstNodeset(
+                nodeset_name="non_flex_ns",
+                region="us-central1",
+                dws_flex=NSDict(enabled=False),
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    # Non-flex node returns False immediately
+    assert not lkp.is_provisioning_flex_node("testcl-non_flex_ns-0")
+
+    # Mock instances call returning None (node not created yet)
+    monkeypatch.setattr(lkp, "instance", lambda node: None)
+
+    # Mock get_mig_list returning MIGs with versioned template
+    fake_migs = {
+        "items": [
+            {
+                "selfLink": "https://www.googleapis.com/compute/v1/projects/testproj/regions/us-central1/instanceGroupManagers/unrelated-mig",
+                "versions": [{"instanceTemplate": "projects/testproj/global/instanceTemplates/other-tpl"}],
+                "currentActions": {"creating": 1},
+            },
+            {
+                "selfLink": "https://www.googleapis.com/compute/v1/projects/testproj/regions/us-central1/instanceGroupManagers/job-mig",
+                "versions": [{"instanceTemplate": "projects/testproj/global/instanceTemplates/flex-tpl"}],
+                "currentActions": {"creating": 1},
+            },
+        ]
+    }
+    monkeypatch.setattr(lkp, "get_mig_list", lambda proj, reg: fake_migs)
+
+    def mock_get_mig_instances(proj, reg, mig_name):
+        if mig_name == "job-mig":
+            return {
+                "managedInstances": [
+                    {"name": "testcl-flex_ns-0", "currentAction": "CREATING"}
+                ]
+            }
+        return {"managedInstances": []}
+
+    monkeypatch.setattr(lkp, "get_mig_instances", mock_get_mig_instances)
+
+    assert lkp.is_provisioning_flex_node("testcl-flex_ns-0")
+    assert not lkp.is_provisioning_flex_node("testcl-flex_ns-1")
+
+
+def test_mig_name_sharding():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "small_ns": TstNodeset(nodeset_name="small_ns", node_count_static=50, node_count_dynamic_max=0),
+            "large_static_ns": TstNodeset(nodeset_name="large_static_ns", node_count_static=2500, node_count_dynamic_max=0),
+            "large_dynamic_ns": TstNodeset(nodeset_name="large_dynamic_ns", node_count_static=0, node_count_dynamic_max=1500),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    # <= 1000 nodes -> single MIG name
+    assert lkp.mig_name("small_ns") == "testcl-small_ns-mig"
+    assert lkp.node_mig_name("testcl-small_ns-0") == "testcl-small_ns-mig"
+    assert lkp.node_mig_name("testcl-small_ns-49") == "testcl-small_ns-mig"
+
+    # > 1000 static nodes -> sharded MIG names
+    assert lkp.mig_name("large_static_ns", shard_index=0) == "testcl-large_static_ns-mig-0"
+    assert lkp.mig_name("large_static_ns", shard_index=1) == "testcl-large_static_ns-mig-1"
+    assert lkp.mig_name("large_static_ns", shard_index=2) == "testcl-large_static_ns-mig-2"
+    assert lkp.node_mig_name("testcl-large_static_ns-0") == "testcl-large_static_ns-mig-0"
+    assert lkp.node_mig_name("testcl-large_static_ns-999") == "testcl-large_static_ns-mig-0"
+    assert lkp.node_mig_name("testcl-large_static_ns-1000") == "testcl-large_static_ns-mig-1"
+    assert lkp.node_mig_name("testcl-large_static_ns-1999") == "testcl-large_static_ns-mig-1"
+    assert lkp.node_mig_name("testcl-large_static_ns-2000") == "testcl-large_static_ns-mig-2"
+
+    # > 1000 dynamic nodes -> sharded MIG names
+    assert lkp.node_mig_name("testcl-large_dynamic_ns-500") == "testcl-large_dynamic_ns-mig-0"
+    assert lkp.node_mig_name("testcl-large_dynamic_ns-1200") == "testcl-large_dynamic_ns-mig-1"
+
+
+@unittest.mock.patch("util.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_suspend_mig_nodes_sharding(mock_compute_prop, mock_execute):
+    import suspend
+
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "large_ns": TstNodeset(nodeset_name="large_ns", region="us-central1", node_count_static=2500, node_count_dynamic_max=0),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+        "managedInstances": [
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-large_ns-0"},
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-large_ns-1005"},
+        ]
+    }
+
+    suspend.suspend_mig_nodes(["testcl-large_ns-0", "testcl-large_ns-1005"], lkp=lkp)
+
+    delete_calls = mock_compute.regionInstanceGroupManagers().deleteInstances.call_args_list
+    assert len(delete_calls) == 2
+    # Shard 0 for node index 0
+    assert delete_calls[0].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-0"
+    assert delete_calls[0].kwargs["body"]["instances"] == ["projects/testproj/zones/us-central1-a/instances/testcl-large_ns-0"]
+    # Shard 1 for node index 1005
+    assert delete_calls[1].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-1"
+    assert delete_calls[1].kwargs["body"]["instances"] == ["projects/testproj/zones/us-central1-a/instances/testcl-large_ns-1005"]
