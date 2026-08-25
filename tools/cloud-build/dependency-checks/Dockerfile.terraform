@@ -22,4 +22,14 @@ RUN apt-get -y update && apt-get -y install gnupg && \
     apt-get -y update && apt-get -y install terraform unzip && \
     rm -rf /var/lib/apt/lists/*
 
-RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+
+# --- Install TFLint Securely ---
+ARG TFLINT_VERSION=v0.62.1
+ARG TFLINT_ZIP_HASH="c004ec45ade3caf87cd4089feb1d2af9f7df57b13140a36df8a63c0a8cc69f14"
+
+RUN curl -fsSLo /tmp/tflint_linux_amd64.zip \
+      https://github.com/terraform-linters/tflint/releases/download/${TFLINT_VERSION}/tflint_linux_amd64.zip && \
+    echo "${TFLINT_ZIP_HASH}  /tmp/tflint_linux_amd64.zip" | sha256sum -c - && \
+    unzip -o /tmp/tflint_linux_amd64.zip -d /usr/local/bin && \
+    chmod +x /usr/local/bin/tflint && \
+    rm -f /tmp/tflint_linux_amd64.zip
