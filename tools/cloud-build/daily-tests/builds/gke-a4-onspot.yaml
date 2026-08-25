@@ -19,13 +19,13 @@ tags:
 - m.gke-cluster
 - m.gke-node-pool
 - m.service-account
-- m.gpu-rdma-vpc
 - m.kubectl-apply
 - m.vpc
 - m.cloud-storage-bucket
 - m.gke-persistent-volume
 
 substitutions:
+  _PROVISIONING_MODEL: ""
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 86400s

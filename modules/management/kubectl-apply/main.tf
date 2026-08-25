@@ -111,8 +111,12 @@ locals {
   manifest_names = {
     for index, manifest in local.enabled_manifests : index =>
     trim(replace(lower(
-      (try(manifest.name, null) != null ? manifest.name :
-        "${substr((manifest.source != null && manifest.source != "") ? replace(basename(manifest.source), "/(\\.(tftpl|yaml|yml))+$/", "") : "${var.module_id}-raw", 0, 30)}-${substr(sha1(jsonencode(manifest)), 0, 7)}"
+      (try(coalesce(manifest.name, ""), "") != "" ? manifest.name :
+        "${substr((try(manifest.source, null) != null && manifest.source != "") ? replace(basename(manifest.source), "/(\\.(tftpl|yaml|yml))+$/", "") : "${var.module_id}-raw", 0, 30)}-${substr(sha1(join("|", [
+          try(manifest.source != null ? manifest.source : "", ""),
+          try(manifest.content != null ? manifest.content : "", ""),
+          join(",", try(keys(manifest.template_vars), []))
+        ])), 0, 7)}-${index}"
       )
     ), "/[^a-z0-9-]+/", "-"), "-")
   }

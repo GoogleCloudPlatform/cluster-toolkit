@@ -34,6 +34,7 @@ import (
 
 	"github.com/hashicorp/go-getter"
 	"github.com/otiai10/copy"
+	"github.com/zclconf/go-cty/cty"
 )
 
 // strings that get re-used throughout this package and others
@@ -432,6 +433,7 @@ func writeExpandedBlueprint(depDir string, bp config.Blueprint) error {
 
 func writeDestroyInstructions(w io.Writer, bp config.Blueprint, deploymentDir string) {
 	packerManifests := []string{}
+	gcsBuckets := []string{}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Destroying infrastructure when no longer needed")
 	fmt.Fprintln(w, "===============================================")
@@ -456,7 +458,10 @@ func writeDestroyInstructions(w io.Writer, bp config.Blueprint, deploymentDir st
 		}
 	}
 
+	gcsBuckets, _ = GetUniqueGcsBuckets(bp)
+
 	WritePackerDestroyInstructions(w, packerManifests)
+	WriteGcsDestroyInstructions(w, gcsBuckets)
 }
 
 // WritePackerDestroyInstructions prints our best effort guidance to the user on
@@ -474,4 +479,56 @@ func WritePackerDestroyInstructions(w io.Writer, manifests []string) {
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "https://console.cloud.google.com/compute/images")
+}
+
+// WriteGcsDestroyInstructions prints our best effort guidance to the user on
+// deleting GCS buckets used for Terraform state.
+func WriteGcsDestroyInstructions(w io.Writer, buckets []string) {
+	if len(buckets) == 0 {
+		return
+	}
+
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "The following buckets were used for Terraform state and will not be automatically deleted by gcluster destroy:")
+	_, _ = fmt.Fprintln(w)
+	for _, bucket := range buckets {
+		_, _ = fmt.Fprintln(w, bucket)
+	}
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "Please browse to the Cloud Console to remove them:")
+	_, _ = fmt.Fprintln(w, "https://console.cloud.google.com/storage/browser")
+}
+
+// GetUniqueGcsBuckets returns a list of unique GCS buckets used for Terraform state.
+func GetUniqueGcsBuckets(bp config.Blueprint) ([]string, error) {
+	seenBuckets := make(map[string]bool)
+	var buckets []string
+	var retErr error
+
+	for _, g := range bp.Groups {
+		if g.TerraformBackend.Type != "gcs" || !g.TerraformBackend.Configuration.Has("bucket") {
+			continue
+		}
+		evaluatedConfig, err := bp.EvalDict(g.TerraformBackend.Configuration)
+		if err != nil {
+			return buckets, fmt.Errorf("failed to evaluate terraform backend configuration: %w", err)
+		}
+		bucketVal := evaluatedConfig.Get("bucket")
+		if bucketVal.IsNull() || !bucketVal.IsKnown() || bucketVal.Type() != cty.String {
+			retErr = fmt.Errorf("GCS backend bucket name cannot be empty or unknown")
+			continue
+		}
+		bucketName := bucketVal.AsString()
+		if bucketName == "" {
+			retErr = fmt.Errorf("GCS backend bucket name cannot be empty")
+			continue
+		}
+		if seenBuckets[bucketName] {
+			continue
+		}
+		seenBuckets[bucketName] = true
+		buckets = append(buckets, bucketName)
+	}
+
+	return buckets, retErr
 }

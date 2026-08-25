@@ -20,6 +20,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
@@ -31,6 +32,7 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -70,6 +72,42 @@ var (
 	})
 )
 
+func verifyGcsBuckets(ctx context.Context, bp config.Blueprint) error {
+	buckets, err := modulewriter.GetUniqueGcsBuckets(bp)
+	if err != nil {
+		return err
+	}
+
+	var client *storage.Client
+	defer func() {
+		if client != nil {
+			_ = client.Close()
+		}
+	}()
+
+	for _, bucketName := range buckets {
+		if client == nil {
+			client, err = storage.NewClient(ctx)
+			if err != nil {
+				logging.Warn("Failed to initialize GCS client to verify bucket '%s': %v. Ensure you have the necessary permissions and network access.", bucketName, err)
+				continue
+			}
+		}
+
+		bucketHandle := client.Bucket(bucketName)
+		ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+		_, err = bucketHandle.Attrs(ctxTimeout)
+		cancel()
+
+		if errors.Is(err, storage.ErrBucketNotExist) {
+			logging.Warn("GCS backend bucket '%s' does not exist. It will be created during the deploy phase.", bucketName)
+		} else if err != nil {
+			logging.Warn("Failed to connect to GCS to verify bucket '%s': %v. Ensure you have the necessary permissions and network access.", bucketName, err)
+		}
+	}
+	return nil
+}
+
 func runCreateCmd(cmd *cobra.Command, args []string) {
 	deplDir := doCreate(cmd, args[0])
 	logging.Info("To deploy your infrastructure please run:")
@@ -84,6 +122,9 @@ func doCreate(cmd *cobra.Command, path string) string {
 	deplDir := filepath.Join(createFlags.outputDir, bp.DeploymentName())
 	logging.Info("Creating deployment folder %q ...", deplDir)
 	checkErr(checkOverwriteAllowed(deplDir, bp, createFlags.overwriteDeployment, createFlags.forceOverwrite), ctx)
+	if os.Getenv("GHPC_SKIP_BUCKET_CREATION") != "true" {
+		checkErr(verifyGcsBuckets(cmd.Context(), bp), ctx)
+	}
 	checkErr(modulewriter.WriteDeployment(bp, deplDir), ctx)
 	return deplDir
 }

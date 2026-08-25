@@ -176,8 +176,8 @@ steps:
               echo '    use: [gke_cluster]'                            >> \$$SG_EXAMPLE
               echo '    settings: {name: ubuntu, image_type: UBUNTU_CONTAINERD, host_maintenance_interval: AS_NEEDED}' >> \$$SG_EXAMPLE
 
-              IP=\$\$(curl ifconfig.me)
-              sed -i "s/<your-ip-address>/\$${IP}/" \$$SG_EXAMPLE
+              IP=\$(curl ifconfig.me)
+              sed -i "s|.*authorized_cidr:.*|  authorized_cidr: \$$IP/32|" \$$SG_EXAMPLE
               bash tools/add_ttl_label.sh \$$SG_EXAMPLE
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \

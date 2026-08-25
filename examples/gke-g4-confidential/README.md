@@ -447,6 +447,82 @@ kubectl delete job g4-verification-nvbandwidth
 
 ---
 
+## Submitting Workloads using GCluster CLI
+
+Once the cluster is deployed, you can use the `gcluster job submit` command to orchestrate and submit your GPU workloads directly from your terminal. `gcluster` handles GKE JobSet scaffolding, schedules workloads on the correct GPU pools, and configures Workload Identity service accounts automatically.
+
+Below are instructions and sample commands tailored to the G4 GPU node pool:
+
+### 1. (Optional) Verify Job Manifest (Dry-Run)
+Before submitting the job to the live GKE cluster, you can perform a dry-run to generate and inspect the Kubernetes `JobSet` manifest locally:
+
+```bash
+./gcluster job submit \
+  --project YOUR_PROJECT_ID \
+  --cluster YOUR_DEPLOYMENT_NAME \
+  --location YOUR_REGION \
+  --image nvidia/cuda:12.6.0-base-ubuntu22.04 \
+  --command "nvidia-smi" \
+  --name g4-dry-run \
+  --compute-type rtx-6000-1 \
+  --dry-run-out my-manifest.yaml
+```
+
+This generates a local file `my-manifest.yaml` containing the complete Kubernetes `JobSet` manifest. You can inspect this file to verify that the job targets the `g4-pool` and requests the Blackwell GPU correctly.
+
+### 2. Submit a Basic GPU Verification Job
+Submit the job to your live GKE cluster to run `nvidia-smi` on the Blackwell GPU:
+
+```bash
+./gcluster job submit \
+  --project YOUR_PROJECT_ID \
+  --cluster YOUR_DEPLOYMENT_NAME \
+  --location YOUR_REGION \
+  --image nvidia/cuda:12.6.0-base-ubuntu22.04 \
+  --command "nvidia-smi" \
+  --name g4-nvidia-smi \
+  --compute-type rtx-6000-1
+```
+
+### 3. Submit a PyTorch Matrix Multiplication Workload
+Submit a live job that runs a 10,000 x 10,000 matrix multiplication in PyTorch to stress-test the GPU under hardware encryption:
+
+```bash
+./gcluster job submit \
+  --project YOUR_PROJECT_ID \
+  --cluster YOUR_DEPLOYMENT_NAME \
+  --location YOUR_REGION \
+  --image nvcr.io/nvidia/pytorch:24.01-py3 \
+  --command "python3 -c 'import torch; print(\"CUDA Available:\", torch.cuda.is_available()); device = torch.device(\"cuda\"); print(\"Device:\", torch.cuda.get_device_name(0)); a = torch.randn(10000, 10000).to(device); b = torch.randn(10000, 10000).to(device); c = torch.matmul(a, b); print(\"SUCCESS: G4 GPU computation completed successfully.\")'" \
+  --name g4-gpu-computation \
+  --compute-type rtx-6000-1
+```
+
+### Managing Submitted Jobs
+
+* **List active jobs:**
+
+  ```bash
+  ./gcluster job list --cluster YOUR_DEPLOYMENT_NAME --location YOUR_REGION --project YOUR_PROJECT_ID
+  ```
+
+* **Fetch logs for a job:**
+
+  ```bash
+  ./gcluster job logs g4-gpu-computation --cluster YOUR_DEPLOYMENT_NAME --location YOUR_REGION --project YOUR_PROJECT_ID
+  ```
+
+* **Cancel and clean up a job:**
+
+  ```bash
+  ./gcluster job cancel g4-gpu-computation --cluster YOUR_DEPLOYMENT_NAME --location YOUR_REGION --project YOUR_PROJECT_ID
+  ```
+
+> [!NOTE]
+> Refer to the [GCluster Job Submission Guide](../../docs/gcluster_job_guide.md) for detailed instructions on job submission.
+
+---
+
 ## Clean Up
 
 To avoid incurring ongoing charges for the resources created, destroy the deployment:
@@ -456,3 +532,5 @@ To avoid incurring ongoing charges for the resources created, destroy the deploy
 ```
 
 Replace `DEPLOYMENT_NAME` with the name of your deployment (defaults to `gke-g4-cvm`).
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

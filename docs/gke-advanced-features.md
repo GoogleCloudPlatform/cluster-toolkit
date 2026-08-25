@@ -202,8 +202,63 @@ Submit a workload that targets an existing Compute Engine reservation:
 
 ---
 
+## 4. Multi-Tier Checkpointing (MTC / HighScaleCheckpointing)
+
+Multi-Tier Checkpointing (MTC) provides high-throughput, low-latency checkpoint saving and restoration for large-scale LLM and AI training jobs on GKE. MTC buffers checkpoints in local node memory (RAM / local SSD) for ultra-fast saves, while asynchronously background-replicating checkpoint files to Google Cloud Storage (GCS).
+
+### 4.1 Blueprint configuration
+
+To enable MTC on your GKE cluster, configure `enable_multi_tier_checkpointing: true` in your `gke-cluster` module settings, grant GKE Node Service Account access in your GCS checkpoint bucket's `object_users` list, and apply the `CheckpointConfiguration` Custom Resource (CR):
+
+```yaml
+deployment_groups:
+- group: primary
+  modules:
+  - id: checkpoint_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      # Pass the GKE Node Service Account to grant GCS read/write/list object permissions:
+      object_users:
+        gke_node_sa: "serviceAccount:$(gke_cluster.node_service_account)"
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    settings:
+      enable_multi_tier_checkpointing: true  # Enables MTC GKE Addon & Workload Identity
+
+  - id: apply_mtc_config
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      apply_manifests:
+      - source: $(ghpc_stage("../modules/management/kubectl-apply/manifests/checkpoint-configuration.yaml.tftpl"))
+        template_vars:
+          namespace: "default"
+          inMemoryVolumeSize: "50Gi"
+          cloudStorageBucketName: $(checkpoint_bucket.gcs_bucket_name)
+```
+
+#### Key configuration notes
+* **Workload Identity & IAM Permissions**: Setting `enable_multi_tier_checkpointing: true` automatically binds the MTC Kubernetes Service Account (`gke-managed-checkpointing/gke-checkpointing-multitier-node`) to the Node GCP Service Account via Workload Identity.
+* **GCS Bucket Permissions**: Ensure the `checkpoint_bucket` includes `object_users: { gke_node_sa: "serviceAccount:$(gke_cluster.node_service_account)" }` so the MTC background replicator daemonset has object write, list, and read access (`roles/storage.objectUser`).
+
+### 4.2 One-Command MTC Job Submission (`gcluster job submit --gke-mtc-enabled`)
+
+When submitting training workloads via `gcluster job submit`, add the `--gke-mtc-enabled` flag. `gcluster` will automatically inject the MTC CSI driver (`multitier-checkpoint.csi.storage.gke.io`) into your pod specification mounted at `/tmp/mtc_checkpoints`:
+
+```shell
+./gcluster job submit \
+  --name my-mtc-training-job \
+  --command "python train.py --checkpoint-dir=/tmp/mtc_checkpoints" \
+  --compute-type v6e-4 \
+  --gke-mtc-enabled
+```
+
+---
+
 ## What's next
 
 * [TPU Dynamic Slicing on GKE Concepts](https://cloud.google.com/kubernetes-engine/docs/concepts/tpu-dynamic-slicing)
 * [Scheduling Dynamic Slices with Kueue and TAS on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/kueue-tpu-dynamic-slicing)
 * [GKE Node Auto-Provisioning Documentation](https://cloud.google.com/kubernetes-engine/docs/concepts/node-auto-provisioning)
+* [Multi-Tier Checkpointing on GKE Overview](https://cloud.google.com/kubernetes-engine/docs/concepts/multi-tier-checkpointing)

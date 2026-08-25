@@ -287,6 +287,15 @@ sbatch build-nccl-tests.sh
 sbatch run-nccl-tests.sh
 ```
 
+## Destroy the VMs
+
+```bash
+#!/bin/bash
+./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
+```
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
+
 [consume]: https://cloud.google.com/compute/docs/instances/reservations-consume#consuming_instances_from_any_matching_reservation
 [tkdeps]: https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies
 [tkinstall]: https://github.com/GoogleCloudPlatform/cluster-toolkit/#quickstart
