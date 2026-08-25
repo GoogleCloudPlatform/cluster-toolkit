@@ -186,6 +186,7 @@ check_filestore_quota() {
 	local region=$1
 	local required_capacity=${REQUIRED_FILESTORE_GB:-0}
 	local tier=${REQUIRED_FILESTORE_TIER:-"BASIC_SSD"} # Default to BASIC_SSD if not specified
+	tier="${tier^^}"
 
 	if [[ "$required_capacity" -le 0 ]]; then
 		return 0
@@ -222,6 +223,11 @@ check_filestore_quota() {
 	limit=$(gcloud beta quotas info list --service=file.googleapis.com --project="${PROJECT_ID}" \
 		--filter="quotaId=${quota_id}" --format="json" 2>/dev/null | \
 		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($region) or (.dimensions?.region? // "") == $region) | .details?.value? | select(. != null) | tonumber] | max // 0')
+
+	if [[ "${limit}" == "-1" ]]; then
+		FILESTORE_QUOTA_CACHE[$region]=0
+		return 0
+	fi
 
 	if [[ -z "$limit" || "$limit" == "0" ]]; then
 		echo "WARN: Could not fetch Filestore quota limit (${quota_id}) for $region or limit is 0. Assuming no capacity."
@@ -263,6 +269,11 @@ check_lustre_quota() {
 	limit=$(gcloud beta quotas info list --service=parallelstore.googleapis.com --project="${PROJECT_ID}" \
 		--filter="quotaId=StorageGiBPerRegion" --format="json" 2>/dev/null | \
 		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($region) or (.dimensions?.region? // "") == $region) | .details?.value? | select(. != null) | tonumber] | max // 0')
+
+	if [[ "${limit}" == "-1" ]]; then
+		LUSTRE_QUOTA_CACHE[$region]=0
+		return 0
+	fi
 
 	if [[ -z "$limit" || "$limit" == "0" ]]; then
 		echo "WARN: Could not fetch Lustre quota limit for $region or limit is 0. Assuming no capacity."
