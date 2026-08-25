@@ -198,31 +198,31 @@ check_filestore_quota() {
 
 	local quota_id
 	case "${tier}" in
-		"BASIC_HDD"|"STANDARD")
-			quota_id="StandardStorageGbPerRegion"
-			tier="BASIC_HDD"
-			;;
-		"BASIC_SSD"|"PREMIUM")
-			quota_id="PremiumStorageGbPerRegion"
-			tier="BASIC_SSD"
-			;;
-		"HIGH_SCALE_SSD")
-			quota_id="HighScaleSSDStorageGibPerRegion"
-			;;
-		"ENTERPRISE")
-			quota_id="EnterpriseStorageGibPerRegion"
-			;;
-		*)
-			echo "WARN: Unknown Filestore tier '${tier}'. Falling back to PremiumStorageGbPerRegion."
-			quota_id="PremiumStorageGbPerRegion"
-			tier="BASIC_SSD"
-			;;
+	"BASIC_HDD" | "STANDARD")
+		quota_id="StandardStorageGbPerRegion"
+		tier="BASIC_HDD"
+		;;
+	"BASIC_SSD" | "PREMIUM")
+		quota_id="PremiumStorageGbPerRegion"
+		tier="BASIC_SSD"
+		;;
+	"HIGH_SCALE_SSD")
+		quota_id="HighScaleSSDStorageGibPerRegion"
+		;;
+	"ENTERPRISE")
+		quota_id="EnterpriseStorageGibPerRegion"
+		;;
+	*)
+		echo "WARN: Unknown Filestore tier '${tier}'. Falling back to PremiumStorageGbPerRegion."
+		quota_id="PremiumStorageGbPerRegion"
+		tier="BASIC_SSD"
+		;;
 	esac
 
 	local limit
 	limit=$(gcloud beta quotas info list --service=file.googleapis.com --project="${PROJECT_ID}" \
-		--filter="quotaId=${quota_id}" --format="json" 2>/dev/null | \
-		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($region) or (.dimensions?.region? // "") == $region) | .details?.value? | select(. != null) | tonumber] | max')
+		--filter="quotaId=${quota_id}" --format="json" 2>/dev/null |
+		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($region) or (.dimensions?.region? // "") == $region) | .details?.value? | select(. != null) | tonumber] | max' 2>/dev/null)
 
 	if [[ "${limit}" == "-1" ]]; then
 		FILESTORE_QUOTA_CACHE[$region]=0
@@ -242,15 +242,16 @@ check_filestore_quota() {
 	fi
 
 	local usage
-	usage=$(gcloud filestore instances list --project="${PROJECT_ID}" --format="json" 2>/dev/null | \
-		jq -r --arg region "$region" --arg tier "$tier" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | select(.tier == $tier) | .fileShares[]?.capacityGb | tonumber] | add // 0')
+	usage=$(gcloud filestore instances list --project="${PROJECT_ID}" --format="json" 2>/dev/null |
+		jq -r --arg region "$region" --arg tier "$tier" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | select(.tier == $tier) | .fileShares[]?.capacityGb | tonumber] | add // 0' 2>/dev/null)
 
-	limit=${limit%.*}
-	usage=${usage%.*}
+	limit=$(printf "%.0f" "${limit}" 2>/dev/null || echo 0)
+	usage=$(printf "%.0f" "${usage}" 2>/dev/null || echo 0)
+
 	if [[ ! "${limit}" =~ ^[0-9]+$ ]]; then limit=0; fi
 	if [[ ! "${usage}" =~ ^[0-9]+$ ]]; then usage=0; fi
 
-	local remaining=$(( limit - usage ))
+	local remaining=$((limit - usage))
 	if [[ "$remaining" -ge "$required_capacity" ]]; then
 		FILESTORE_QUOTA_CACHE[$region]=0
 		return 0
@@ -275,8 +276,8 @@ check_lustre_quota() {
 
 	local limit
 	limit=$(gcloud beta quotas info list --service=parallelstore.googleapis.com --project="${PROJECT_ID}" \
-		--filter="quotaId=StorageGiBPerRegion" --format="json" 2>/dev/null | \
-		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($region) or (.dimensions?.region? // "") == $region) | .details?.value? | select(. != null) | tonumber] | max')
+		--filter="quotaId=StorageGiBPerRegion" --format="json" 2>/dev/null |
+		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($region) or (.dimensions?.region? // "") == $region) | .details?.value? | select(. != null) | tonumber] | max' 2>/dev/null)
 
 	if [[ "${limit}" == "-1" ]]; then
 		LUSTRE_QUOTA_CACHE[$region]=0
@@ -296,15 +297,16 @@ check_lustre_quota() {
 	fi
 
 	local usage
-	usage=$(gcloud parallelstore instances list --location="-" --project="${PROJECT_ID}" --format="json" 2>/dev/null | \
-		jq -r --arg region "$region" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | .capacityGib | tonumber] | add // 0')
+	usage=$(gcloud parallelstore instances list --location="-" --project="${PROJECT_ID}" --format="json" 2>/dev/null |
+		jq -r --arg region "$region" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | .capacityGib | tonumber] | add // 0' 2>/dev/null)
 
-	limit=${limit%.*}
-	usage=${usage%.*}
+	limit=$(printf "%.0f" "${limit}" 2>/dev/null || echo 0)
+	usage=$(printf "%.0f" "${usage}" 2>/dev/null || echo 0)
+
 	if [[ ! "${limit}" =~ ^[0-9]+$ ]]; then limit=0; fi
 	if [[ ! "${usage}" =~ ^[0-9]+$ ]]; then usage=0; fi
 
-	local remaining=$(( limit - usage ))
+	local remaining=$((limit - usage))
 	if [[ "$remaining" -ge "$required_capacity" ]]; then
 		LUSTRE_QUOTA_CACHE[$region]=0
 		return 0
