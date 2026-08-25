@@ -16,6 +16,7 @@
 set -eo pipefail
 
 TEST_NAME=$1
+BUILD_ID=$2
 
 if [ -z "$TEST_NAME" ]; then
 	echo "Usage: $0 <test-name>" >&2
