@@ -342,7 +342,7 @@ if [[ "${ENABLE_SPOT_FALLBACK:-false}" == "true" ]]; then
 fi
 
 FILESTORE_ZONES=""
-if [[ "${CHECK_FILESTORE}" == "true" ]]; then
+if [[ "${CHECK_FILESTORE:-false}" == "true" ]]; then
 	echo "INFO: Fetching available Filestore zones..."
 	if ! FILESTORE_ZONES=$(gcloud filestore locations list --project="${PROJECT_ID}" --format="value(locationId)" 2>&1); then
 		echo "ERROR: Failed to fetch available Filestore locations: ${FILESTORE_ZONES}" >&2
@@ -351,7 +351,7 @@ if [[ "${CHECK_FILESTORE}" == "true" ]]; then
 fi
 
 LUSTRE_ZONES=""
-if [[ "${CHECK_LUSTRE}" == "true" ]]; then
+if [[ "${CHECK_LUSTRE:-false}" == "true" ]]; then
 	echo "INFO: Fetching available Lustre (Parallelstore) zones..."
 	if ! LUSTRE_ZONES=$(gcloud parallelstore locations list --project="${PROJECT_ID}" --format="value(locationId)" 2>&1); then
 		echo "ERROR: Failed to fetch available Lustre locations: ${LUSTRE_ZONES}" >&2
@@ -365,7 +365,7 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 	for ZONE in "${ZONES_ARRAY[@]}"; do
 		REGION=${ZONE%-*}
 
-		if [[ "${CHECK_FILESTORE}" == "true" ]]; then
+		if [[ "${CHECK_FILESTORE:-false}" == "true" ]]; then
 			if ! echo "${FILESTORE_ZONES}" | grep -x -E -q "${ZONE}|${REGION}"; then
 				echo "INFO: Skipping ${ZONE} - Filestore not available in this zone or region."
 				continue
@@ -376,7 +376,7 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 			fi
 		fi
 
-		if [[ "${CHECK_LUSTRE}" == "true" ]]; then
+		if [[ "${CHECK_LUSTRE:-false}" == "true" ]]; then
 			if ! echo "${LUSTRE_ZONES}" | grep -x -q "${ZONE}"; then
 				echo "INFO: Skipping ${ZONE} - Lustre (Parallelstore) not available in this zone."
 				continue
