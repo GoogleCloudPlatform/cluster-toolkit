@@ -1817,6 +1817,22 @@ class Lookup:
         """Returns True if the cluster deployment is configured with provisioning_engine == 'MIG'."""
         return getattr(self.cfg, "provisioning_engine", "BULK_INSERT") == "MIG"
 
+    def is_nodeset_mig(self, nodeset_name: str) -> bool:
+        """Returns True if a specific NodeSet is configured with or resolved to MIG."""
+        nodeset = self.cfg.nodeset.get(nodeset_name)
+        if not nodeset:
+            return False
+        if getattr(nodeset, "mig_name", None) is not None:
+            return True
+        if getattr(nodeset, "provisioning_engine", None) == "MIG":
+            return True
+        return self.is_mig_engine()
+
+    def is_node_mig(self, node_name: str) -> bool:
+        """Returns True if the node belongs to a MIG-backed NodeSet."""
+        nodeset_name = self.node_nodeset_name(node_name)
+        return self.is_nodeset_mig(nodeset_name)
+
     def mig_name(self, nodeset_name: str, shard_index: int = 0) -> str:
         """Returns target MIG name for a given NodeSet, supporting sharding for >1000 VMs."""
         nodeset = self.cfg.nodeset.get(nodeset_name)

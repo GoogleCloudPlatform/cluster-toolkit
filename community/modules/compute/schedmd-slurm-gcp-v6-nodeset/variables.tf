@@ -683,3 +683,13 @@ variable "machine_configs" {
   type        = any
   default     = {}
 }
+
+variable "provisioning_engine" {
+  description = "Compute node provisioning engine: 'AUTO', 'MIG', or 'BULK_INSERT'."
+  type        = string
+  default     = "AUTO"
+  validation {
+    condition     = contains(["AUTO", "MIG", "BULK_INSERT"], var.provisioning_engine)
+    error_message = "Variable 'provisioning_engine' must be 'AUTO', 'MIG', or 'BULK_INSERT'."
+  }
+}

@@ -158,10 +158,7 @@ def suspend_nodes(nodes: List[str]) -> None:
     bulk_nodes, flex_nodes = util.separate(lkp.is_flex_node, other_nodes)
 
     mig_flex.suspend_flex_nodes(flex_nodes, lkp)
-    mig_nodes, non_mig_nodes = util.separate(
-        lambda n: getattr(lkp.node_nodeset(n), "mig_name", None) is not None or lkp.is_mig_engine(),
-        bulk_nodes,
-    )
+    mig_nodes, non_mig_nodes = util.separate(lkp.is_node_mig, bulk_nodes)
     if mig_nodes:
         suspend_mig_nodes(mig_nodes, lkp)
     if non_mig_nodes:

@@ -330,7 +330,17 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
             log.warning(f"Failed to setInstanceTemplate on MIG {mig_name}: {e}")
 
     # 2. Per-Instance Config (PIC) - Lightweight instance name binding for static Slurm hostnames
-    pic_instances = [{"name": node} for node in nodes]
+    pic_instances: List[Dict[str, Any]] = []
+    for node in nodes:
+        inst: Dict[str, Any] = {"name": node}
+        if excl_job_id is not None:
+            inst["preservedState"] = {
+                "metadata": {
+                    "slurm_job_id": str(excl_job_id)
+                }
+            }
+        pic_instances.append(inst)
+
     pic_req = lkp.compute.regionInstanceGroupManagers().createInstances(
         project=lkp.project,
         region=region,
@@ -381,7 +391,7 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             tpu_chunks.append(chunk.nodes)
         elif lkp.is_flex_node(model):
             flex_chunks.append(chunk)
-        elif getattr(lkp.node_nodeset(model), "mig_name", None) is not None or lkp.is_mig_engine():
+        elif lkp.is_node_mig(model):
             mig_chunks.append(chunk)
         else:
             bi_inserts[group] = create_instances_request(

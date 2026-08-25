@@ -98,12 +98,25 @@ data "google_compute_zones" "available" {
   region  = var.region
 }
 
+locals {
+  # NodeSet-level engine resolution matching Section 10.1 of Design Doc
+  nodeset_resolved_engine = {
+    for name, ns in local.nodeset_map : name => (
+      try(ns.provisioning_engine, "AUTO") != "AUTO" ? ns.provisioning_engine : (
+        ns.dws_flex.enabled ? "MIG" :
+        (ns.node_count_static > 0 && ns.node_count_dynamic_max == 0) ? "MIG" :
+        "BULK_INSERT"
+      )
+    )
+  }
+}
+
 resource "google_compute_region_instance_group_manager" "nodeset_mig" {
-  for_each           = var.provisioning_engine == "MIG" ? local.nodeset_map : {}
+  for_each           = { for name, ns in local.nodeset_map : name => ns if local.nodeset_resolved_engine[name] == "MIG" }
   name               = "${local.slurm_cluster_name}-${each.value.nodeset_name}-mig"
   base_instance_name = each.value.nodeset_name
   region             = coalesce(each.value.region, var.region)
-  target_size        = 0
+  target_size        = each.value.dws_flex.enabled ? 0 : each.value.node_count_static
 
   version {
     instance_template = module.slurm_nodeset_template[each.value.nodeset_name].self_link
@@ -128,6 +141,18 @@ resource "google_compute_region_instance_group_manager" "nodeset_mig" {
     ignore_changes = [
       target_size,
     ]
+    precondition {
+      condition     = !(each.value.dws_flex.enabled && try(each.value.provisioning_engine, "AUTO") == "BULK_INSERT")
+      error_message = "DWS Flex-Start strictly requires MIGs. Cannot force provisioning_engine = 'BULK_INSERT'."
+    }
+    precondition {
+      condition     = (each.value.node_count_static == 0 && each.value.node_count_dynamic_max == 0) || try(each.value.provisioning_engine, "AUTO") == "AUTO" || local.nodeset_resolved_engine[each.value.nodeset_name] == "MIG"
+      error_message = "Live-Mutation Guardrail: Cannot toggle provisioning_engine on an active NodeSet unless nodes are drained."
+    }
+    postcondition {
+      condition     = self.update_policy[0].type == "OPPORTUNISTIC"
+      error_message = "Proactive Lockout Guardrail: Compute NodeSet MIGs must never use PROACTIVE update policies."
+    }
   }
 }
 
@@ -137,7 +162,8 @@ locals {
     node_conf                        = ns.node_conf
     dws_flex                         = ns.dws_flex
     instance_template                = module.slurm_nodeset_template[ns.nodeset_name].self_link
-    mig_name                         = var.provisioning_engine == "MIG" ? try(google_compute_region_instance_group_manager.nodeset_mig[ns.nodeset_name].name, null) : null
+    mig_name                         = local.nodeset_resolved_engine[ns.nodeset_name] == "MIG" ? try(google_compute_region_instance_group_manager.nodeset_mig[ns.nodeset_name].name, null) : null
+    provisioning_engine              = local.nodeset_resolved_engine[ns.nodeset_name]
     node_count_dynamic_max           = ns.node_count_dynamic_max
     node_count_static                = ns.node_count_static
     subnetwork                       = ns.subnetwork_self_link

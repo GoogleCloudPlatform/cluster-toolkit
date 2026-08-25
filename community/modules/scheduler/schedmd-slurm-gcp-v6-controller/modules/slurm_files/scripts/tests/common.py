@@ -39,6 +39,8 @@ class TstNodeset:
     node_count_dynamic_max: int = 0
     node_conf: dict[str, Any] = field(default_factory=dict)
     instance_template: Optional[str] = None
+    mig_name: Optional[str] = None
+    provisioning_engine: Optional[str] = None
     reservation_name: Optional[str] = ""
     zone_policy_allow: Optional[list[str]] = field(default_factory=list)
     enable_placement: bool = True

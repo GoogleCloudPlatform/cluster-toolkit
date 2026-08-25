@@ -194,3 +194,8 @@ def test_resume_mig_nodes(mock_compute_prop, mock_execute):
 
   assert mock_compute.regionInstanceGroupManagers().setInstanceTemplate.called
   assert mock_compute.regionInstanceGroupManagers().createInstances.called
+  call_args = mock_compute.regionInstanceGroupManagers().createInstances.call_args
+  assert call_args.kwargs["body"]["instances"] == [
+      {"name": "c-n-0", "preservedState": {"metadata": {"slurm_job_id": "101"}}},
+      {"name": "c-n-1", "preservedState": {"metadata": {"slurm_job_id": "101"}}},
+  ]
