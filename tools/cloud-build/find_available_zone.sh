@@ -222,15 +222,21 @@ check_filestore_quota() {
 	local limit
 	limit=$(gcloud beta quotas info list --service=file.googleapis.com --project="${PROJECT_ID}" \
 		--filter="quotaId=${quota_id}" --format="json" 2>/dev/null | \
-		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($region) or (.dimensions?.region? // "") == $region) | .details?.value? | select(. != null) | tonumber] | max // 0')
+		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($region) or (.dimensions?.region? // "") == $region) | .details?.value? | select(. != null) | tonumber] | max')
 
 	if [[ "${limit}" == "-1" ]]; then
 		FILESTORE_QUOTA_CACHE[$region]=0
 		return 0
 	fi
 
-	if [[ -z "$limit" || "$limit" == "0" ]]; then
-		echo "WARN: Could not fetch Filestore quota limit (${quota_id}) for $region or limit is 0. Assuming no capacity."
+	if [[ -z "$limit" || "$limit" == "null" ]]; then
+		echo "WARN: Could not fetch Filestore quota limit (${quota_id}) for $region. Failing-open and assuming capacity exists."
+		FILESTORE_QUOTA_CACHE[$region]=0
+		return 0
+	fi
+
+	if [[ "$limit" == "0" ]]; then
+		echo "INFO: Filestore quota limit (${quota_id}) for $region is explicitly 0. Skipping zone."
 		FILESTORE_QUOTA_CACHE[$region]=1
 		return 1
 	fi
@@ -270,15 +276,21 @@ check_lustre_quota() {
 	local limit
 	limit=$(gcloud beta quotas info list --service=parallelstore.googleapis.com --project="${PROJECT_ID}" \
 		--filter="quotaId=StorageGiBPerRegion" --format="json" 2>/dev/null | \
-		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($region) or (.dimensions?.region? // "") == $region) | .details?.value? | select(. != null) | tonumber] | max // 0')
+		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($region) or (.dimensions?.region? // "") == $region) | .details?.value? | select(. != null) | tonumber] | max')
 
 	if [[ "${limit}" == "-1" ]]; then
 		LUSTRE_QUOTA_CACHE[$region]=0
 		return 0
 	fi
 
-	if [[ -z "$limit" || "$limit" == "0" ]]; then
-		echo "WARN: Could not fetch Lustre quota limit for $region or limit is 0. Assuming no capacity."
+	if [[ -z "$limit" || "$limit" == "null" ]]; then
+		echo "WARN: Could not fetch Lustre quota limit for $region. Failing-open and assuming capacity exists."
+		LUSTRE_QUOTA_CACHE[$region]=0
+		return 0
+	fi
+
+	if [[ "$limit" == "0" ]]; then
+		echo "INFO: Lustre quota limit for $region is explicitly 0. Skipping zone."
 		LUSTRE_QUOTA_CACHE[$region]=1
 		return 1
 	fi
@@ -330,7 +342,7 @@ fi
 FILESTORE_ZONES=""
 if [[ "${CHECK_FILESTORE}" == "true" ]]; then
 	echo "INFO: Fetching available Filestore zones..."
-	if ! FILESTORE_ZONES=$(gcloud filestore locations list --project="${PROJECT_ID}" --format="value(name)" 2>&1); then
+	if ! FILESTORE_ZONES=$(gcloud filestore locations list --project="${PROJECT_ID}" --format="value(locationId)" 2>&1); then
 		echo "ERROR: Failed to fetch available Filestore locations: ${FILESTORE_ZONES}" >&2
 		exit 1
 	fi
