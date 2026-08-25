@@ -99,8 +99,7 @@ data "google_compute_zones" "available" {
 }
 
 locals {
-  # NodeSet-level engine resolution matching Section 10.1 of Design Doc
-  # Phase 1: DWS Flex automatically resolves to MIG; standard compute nodes default to BULK_INSERT (MIG is strictly opt-in)
+  # NodeSet-level engine resolution: DWS Flex automatically resolves to MIG; standard compute nodes default to BULK_INSERT (MIG is opt-in)
   nodeset_resolved_engine = {
     for name, ns in local.nodeset_map : name => (
       ns.dws_flex.enabled && !ns.dws_flex.use_bulk_insert ? "MIG" : (
@@ -110,18 +109,18 @@ locals {
     )
   }
 
-  # Multi-MIG Sharding for >1000 nodes per Section 3.2 & 10.2 of Design Doc
-  mig_shards = merge([
+  # Multiple instance groups when node count exceeds 1000
+  nodeset_migs = merge([
     for name, ns in local.nodeset_map : {
       for idx in range(ceil(max(ns.node_count_static, 1) / 1000.0)) : (
         ns.node_count_static > 1000 ? "${name}-mig-${idx}" : name
         ) => {
         nodeset_name       = name
-        shard_index        = idx
+        index              = idx
         mig_name           = ns.node_count_static > 1000 ? "${local.slurm_cluster_name}-${name}-mig-${idx}" : "${local.slurm_cluster_name}-${name}-mig"
-        base_instance_name = name
+        base_instance_name = "${local.slurm_cluster_name}-${name}"
         region             = coalesce(ns.region, var.region)
-        target_size        = min(1000, max(0, ns.node_count_static - (idx * 1000)))
+        target_size        = 0
         zone_policy_allow  = ns.zone_policy_allow
         template_link      = module.slurm_nodeset_template[name].self_link
         nodeset            = ns
@@ -132,7 +131,7 @@ locals {
 }
 
 resource "google_compute_region_instance_group_manager" "nodeset_mig" {
-  for_each           = local.mig_shards
+  for_each           = local.nodeset_migs
   name               = each.value.mig_name
   base_instance_name = each.value.base_instance_name
   region             = each.value.region

@@ -862,7 +862,7 @@ def test_mig_name():
     )
     lkp = util.Lookup(cfg)
     assert lkp.mig_name("ns1") == "testcl-ns1-mig"
-    assert lkp.mig_name("ns2", shard_index=0) == "testcl-ns2-mig-0"
+    assert lkp.mig_name("ns2", index=0) == "testcl-ns2-mig-0"
 
 
 def test_is_node_mig():
@@ -940,7 +940,7 @@ def test_is_provisioning_flex_node(monkeypatch):
     assert not lkp.is_provisioning_flex_node("testcl-flex_ns-1")
 
 
-def test_mig_name_sharding():
+def test_mig_name_multi_mig():
     cfg = TstCfg(
         slurm_cluster_name="testcl",
         nodeset={
@@ -956,24 +956,24 @@ def test_mig_name_sharding():
     assert lkp.node_mig_name("testcl-small_ns-0") == "testcl-small_ns-mig"
     assert lkp.node_mig_name("testcl-small_ns-49") == "testcl-small_ns-mig"
 
-    # > 1000 static nodes -> sharded MIG names
-    assert lkp.mig_name("large_static_ns", shard_index=0) == "testcl-large_static_ns-mig-0"
-    assert lkp.mig_name("large_static_ns", shard_index=1) == "testcl-large_static_ns-mig-1"
-    assert lkp.mig_name("large_static_ns", shard_index=2) == "testcl-large_static_ns-mig-2"
+    # > 1000 static nodes -> indexed MIG names
+    assert lkp.mig_name("large_static_ns", index=0) == "testcl-large_static_ns-mig-0"
+    assert lkp.mig_name("large_static_ns", index=1) == "testcl-large_static_ns-mig-1"
+    assert lkp.mig_name("large_static_ns", index=2) == "testcl-large_static_ns-mig-2"
     assert lkp.node_mig_name("testcl-large_static_ns-0") == "testcl-large_static_ns-mig-0"
     assert lkp.node_mig_name("testcl-large_static_ns-999") == "testcl-large_static_ns-mig-0"
     assert lkp.node_mig_name("testcl-large_static_ns-1000") == "testcl-large_static_ns-mig-1"
     assert lkp.node_mig_name("testcl-large_static_ns-1999") == "testcl-large_static_ns-mig-1"
     assert lkp.node_mig_name("testcl-large_static_ns-2000") == "testcl-large_static_ns-mig-2"
 
-    # > 1000 dynamic nodes -> sharded MIG names
+    # > 1000 dynamic nodes -> indexed MIG names
     assert lkp.node_mig_name("testcl-large_dynamic_ns-500") == "testcl-large_dynamic_ns-mig-0"
     assert lkp.node_mig_name("testcl-large_dynamic_ns-1200") == "testcl-large_dynamic_ns-mig-1"
 
 
 @unittest.mock.patch("util.ensure_execute")
 @unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
-def test_suspend_mig_nodes_sharding(mock_compute_prop, mock_execute):
+def test_suspend_mig_nodes_multi_mig(mock_compute_prop, mock_execute):
     import suspend
 
     cfg = TstCfg(
@@ -997,9 +997,9 @@ def test_suspend_mig_nodes_sharding(mock_compute_prop, mock_execute):
 
     delete_calls = mock_compute.regionInstanceGroupManagers().deleteInstances.call_args_list
     assert len(delete_calls) == 2
-    # Shard 0 for node index 0
+    # Group 0 for node index 0
     assert delete_calls[0].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-0"
     assert delete_calls[0].kwargs["body"]["instances"] == ["projects/testproj/zones/us-central1-a/instances/testcl-large_ns-0"]
-    # Shard 1 for node index 1005
+    # Group 1 for node index 1005
     assert delete_calls[1].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-1"
     assert delete_calls[1].kwargs["body"]["instances"] == ["projects/testproj/zones/us-central1-a/instances/testcl-large_ns-1005"]

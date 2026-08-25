@@ -219,7 +219,7 @@ def test_resume_mig_nodes_chunking(mock_compute_prop, mock_execute):
   large_nodes = [f"c-n-{i}" for i in range(1200)]
   resume.resume_mig_nodes(large_nodes, excl_job_id=None, lkp=lkp)
 
-  # Verify createInstances was called for each shard
+  # Verify createInstances was called for each instance group
   create_calls = mock_compute.regionInstanceGroupManagers().createInstances.call_args_list
   assert len(create_calls) == 2
   assert create_calls[0].kwargs["instanceGroupManager"] == "c-n-mig-0"
