@@ -1833,21 +1833,21 @@ class Lookup:
         nodeset_name = self.node_nodeset_name(node_name)
         return self.is_nodeset_mig(nodeset_name)
 
-    def mig_name(self, nodeset_name: str, shard_index: int = 0) -> str:
+    def mig_name(self, nodeset_name: str, index: int = 0) -> str:
         """Returns target MIG name for a given NodeSet, supporting multiple instance groups for >1000 VMs."""
         nodeset = self.cfg.nodeset.get(nodeset_name)
         if nodeset:
             max_nodes = getattr(nodeset, "node_count_static", 0) + getattr(nodeset, "node_count_dynamic_max", 0)
             if max_nodes > 1000:
-                return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-mig-{shard_index}"
+                return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-mig-{index}"
         return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-mig"
 
     def node_mig_name(self, node_name: str) -> str:
-        """Returns the specific MIG name (including shard) for a given node."""
+        """Returns the specific MIG name for a given node."""
         nodeset_name = self.node_nodeset_name(node_name)
         idx = self.node_index(node_name)
-        shard_idx = idx // 1000
-        return self.mig_name(nodeset_name, shard_index=shard_idx)
+        mig_idx = idx // 1000
+        return self.mig_name(nodeset_name, index=mig_idx)
 
     def node_is_fr(self, node_name:str) -> bool:
         return bool(self.node_nodeset(node_name).future_reservation)

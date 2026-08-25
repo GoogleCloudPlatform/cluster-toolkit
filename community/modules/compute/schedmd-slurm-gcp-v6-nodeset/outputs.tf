@@ -112,6 +112,6 @@ output "nodeset" {
 
   precondition {
     condition     = !(var.node_count_dynamic_max > 0 && !var.dws_flex.enabled && var.provisioning_engine == "MIG")
-    error_message = "Dynamic compute NodeSets on MIG are currently unsupported in Phase 1 (deferred to Phase 4). Please use provisioning_engine = 'BULK_INSERT' or 'AUTO' for dynamic nodes."
+    error_message = "Dynamic compute NodeSets with provisioning_engine = 'MIG' are currently not supported. Please use provisioning_engine = 'BULK_INSERT' or 'AUTO' for dynamic nodes."
   }
 }
