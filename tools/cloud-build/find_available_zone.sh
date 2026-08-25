@@ -239,6 +239,8 @@ check_filestore_quota() {
 	usage=$(gcloud filestore instances list --project="${PROJECT_ID}" --format="json" 2>/dev/null | \
 		jq -r --arg region "$region" --arg tier "$tier" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | select(.tier == $tier) | .fileShares[]?.capacityGb | tonumber] | add // 0')
 
+	limit=${limit%.*}
+	usage=${usage%.*}
 	if [[ ! "${limit}" =~ ^[0-9]+$ ]]; then limit=0; fi
 	if [[ ! "${usage}" =~ ^[0-9]+$ ]]; then usage=0; fi
 
@@ -285,6 +287,8 @@ check_lustre_quota() {
 	usage=$(gcloud parallelstore instances list --location="-" --project="${PROJECT_ID}" --format="json" 2>/dev/null | \
 		jq -r --arg region "$region" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | .capacityGib | tonumber] | add // 0')
 
+	limit=${limit%.*}
+	usage=${usage%.*}
 	if [[ ! "${limit}" =~ ^[0-9]+$ ]]; then limit=0; fi
 	if [[ ! "${usage}" =~ ^[0-9]+$ ]]; then usage=0; fi
 
@@ -326,13 +330,19 @@ fi
 FILESTORE_ZONES=""
 if [[ "${CHECK_FILESTORE}" == "true" ]]; then
 	echo "INFO: Fetching available Filestore zones..."
-	FILESTORE_ZONES=$(gcloud filestore locations list --project="${PROJECT_ID}" --format="value(name)" 2>/dev/null || true)
+	if ! FILESTORE_ZONES=$(gcloud filestore locations list --project="${PROJECT_ID}" --format="value(name)" 2>&1); then
+		echo "ERROR: Failed to fetch available Filestore locations: ${FILESTORE_ZONES}" >&2
+		exit 1
+	fi
 fi
 
 LUSTRE_ZONES=""
 if [[ "${CHECK_LUSTRE}" == "true" ]]; then
 	echo "INFO: Fetching available Lustre (Parallelstore) zones..."
-	LUSTRE_ZONES=$(gcloud parallelstore locations list --project="${PROJECT_ID}" --format="value(locationId)" 2>/dev/null || true)
+	if ! LUSTRE_ZONES=$(gcloud parallelstore locations list --project="${PROJECT_ID}" --format="value(locationId)" 2>&1); then
+		echo "ERROR: Failed to fetch available Lustre locations: ${LUSTRE_ZONES}" >&2
+		exit 1
+	fi
 fi
 
 for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
