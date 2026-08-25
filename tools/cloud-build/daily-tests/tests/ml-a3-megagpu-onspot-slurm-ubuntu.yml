@@ -32,6 +32,7 @@ post_deploy_tests:
 - test-validation/test-enroot.yml
 - test-validation/test-gpus-slurm.yml
 - test-validation/test-nccl.yml
+- test-validation/test-chs.yml
 post_destroy_tasks:
 - post-destroy-tasks/delete-image.yml
 custom_vars:
@@ -60,3 +61,4 @@ cli_deployment_vars:
   enable_nvidia_persistenced: true
   final_image_family: "{{ deployment_name}}-u22"
   a3mega_enable_spot_vm: true
+scheduler: "slurm"

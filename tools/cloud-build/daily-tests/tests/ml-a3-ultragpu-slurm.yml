@@ -31,6 +31,7 @@ post_deploy_tests:
 - test-validation/test-default-partition.yml
 - test-validation/test-enroot.yml
 - test-validation/test-gpus-slurm.yml
+- test-validation/test-chs.yml
 post_destroy_tasks:
 - post-destroy-tasks/delete-image.yml
 custom_vars:
@@ -51,3 +52,4 @@ cli_deployment_vars:
   a3u_cluster_size: 2
   a3u_reservation_name: hpc-exr-2
   base_network_name: "{{ test_name }}"
+scheduler: "slurm"
