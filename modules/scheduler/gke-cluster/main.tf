@@ -56,10 +56,7 @@ locals {
   ]
 
   # Check if n4-standard-4 is present in the region/zone catalog
-  n4_available_in_catalog = contains(
-    [for m in data.google_compute_machine_types.available_system_machines.machine_types : m.name],
-    "n4-standard-4"
-  )
+  n4_available_in_catalog = length(data.google_compute_machine_types.available_system_machines.machine_types) > 0
 
   # Choose the default based on confidential mode and N4 catalog availability:
   # 1. If confidential nodes are enabled, default to n2d-standard-4 (Confidential VM support).
@@ -121,6 +118,7 @@ data "google_compute_machine_types" "available_system_machines" {
   provider = google-beta
   project  = var.project_id
   zone     = var.cluster_availability_type == "ZONAL" ? var.zone : data.google_compute_zones.available.names[0]
+  filter   = "name = \"n4-standard-4\""
 }
 
 data "google_container_engine_versions" "version_prefix_filter" {

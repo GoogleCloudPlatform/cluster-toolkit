@@ -148,6 +148,8 @@ limitations under the License.
 | [terraform_data.validate_high_scale_checkpointing_version](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.validate_ml_diagnostics_version](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [time_static.exclusion_start](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/static) | resource |
+| [google-beta_google_compute_machine_types.available_system_machines](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/data-sources/google_compute_machine_types) | data source |
+| [google-beta_google_compute_zones.available](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/data-sources/google_compute_zones) | data source |
 | [google-beta_google_container_engine_versions.version_prefix_filter](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/data-sources/google_container_engine_versions) | data source |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_project.project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
