@@ -35,9 +35,9 @@ jobs:
         PR_URL: ${{ github.event.pull_request.html_url || github.event.review.pull_request_url }}
         EVENT_NAME: ${{ github.event_name }}
         EVENT_ACTION: ${{ github.event.action }}
-        REVIEW_STATE: ${{ github.event.review.state }}
-        APPROVER: ${{ github.event.review.user.login }}
-        REMOVED_USER: ${{ github.event.requested_reviewer.login }}
+        REVIEW_STATE: ${{ github.event.review && github.event.review.state || '' }}
+        APPROVER: ${{ github.event.review && github.event.review.user && github.event.review.user.login || '' }}
+        REMOVED_USER: ${{ github.event.requested_reviewer && github.event.requested_reviewer.login || '' }}
       run: |
         set -euo pipefail
 
@@ -47,7 +47,7 @@ jobs:
             # Robust query handling potential nested structures
             REMAINING=$(gh pr view "$PR_URL" --json reviewRequests -q '[.reviewRequests[]? | (.login // .requestedReviewer?.login // empty)] | length' || echo "0")
 
-            if [ "$REMAINING" -gt 0 ]; then
+            if [ "$REMAINING" -gt 0 ] && [ -n "$APPROVER" ]; then
               echo "Other reviewers still requested ($REMAINING remaining). Removing $APPROVER from assignees."
               gh pr edit "$PR_URL" --remove-assignee "$APPROVER" || true
             else
