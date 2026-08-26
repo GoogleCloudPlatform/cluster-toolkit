@@ -3631,14 +3631,14 @@ func TestGenerateGKEManifest_MLDiagnosticsEnabled(t *testing.T) {
 	orc.acceleratorToMachineType = make(map[string]string)
 
 	opts := ManifestOptions{
-		WorkloadName:            "test-workload",
-		FullImageName:           "test-image",
-		CommandToRun:            "test-command",
-		ComputeType:             "n1-standard-4",
-		ClusterName:             "test-cluster",
-		ClusterLocation:         "test-location",
-		ProjectID:               "test-project",
-		GKEMLDiagnosticsEnabled: true,
+		WorkloadName:         "test-workload",
+		FullImageName:        "test-image",
+		CommandToRun:         "test-command",
+		ComputeType:          "n1-standard-4",
+		ClusterName:          "test-cluster",
+		ClusterLocation:      "test-location",
+		ProjectID:            "test-project",
+		MLDiagnosticsEnabled: true,
 	}
 
 	profile := JobProfile{
@@ -3659,12 +3659,12 @@ func TestGenerateGKEManifest_MLDiagnosticsEnabled(t *testing.T) {
 func TestGeneratePathwaysManifest_MLDiagnosticsEnabled(t *testing.T) {
 	setupMockMachineConfig(t)
 	job := orchestrator.JobDefinition{
-		WorkloadName:            "pathways-test",
-		CommandToRun:            "echo hello",
-		NumSlices:               2,
-		ClusterLocation:         "us-central1",
-		ComputeType:             "n2-standard-2",
-		GKEMLDiagnosticsEnabled: true,
+		WorkloadName:         "pathways-test",
+		CommandToRun:         "echo hello",
+		NumSlices:            2,
+		ClusterLocation:      "us-central1",
+		ComputeType:          "n2-standard-2",
+		MLDiagnosticsEnabled: true,
 		Pathways: orchestrator.PathwaysJobDefinition{
 			ProxyServerImage: "proxy:latest",
 			ServerImage:      "server:latest",

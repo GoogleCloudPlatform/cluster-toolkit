@@ -99,7 +99,7 @@ type JobDefinition struct {
 	GKEMTCEnabled          bool
 	GKEMTCRamdiskDirectory string
 
-	GKEMLDiagnosticsEnabled bool
+	MLDiagnosticsEnabled bool
 
 	GkeCustomTemplatesPath string
 

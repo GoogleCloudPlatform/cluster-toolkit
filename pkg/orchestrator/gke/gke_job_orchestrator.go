@@ -1388,7 +1388,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
 		IsTPU:                         isTPU,
 		IsGPU:                         isGPU,
-		GKEMLDiagnosticsEnabled:       opts.GKEMLDiagnosticsEnabled,
+		MLDiagnosticsEnabled:          opts.MLDiagnosticsEnabled,
 		GKEMTCEnabled:                 opts.GKEMTCEnabled,
 		GKEMTCRamdiskDirectory:        opts.GKEMTCRamdiskDirectory,
 	}

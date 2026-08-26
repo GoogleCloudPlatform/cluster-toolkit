@@ -321,7 +321,7 @@ func setupSubmitTestEnv(t *testing.T) {
 	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
 		return &mockOrchestrator{}
 	}
-	gkeMLDiagnosticsEnabled = false
+	enableMLDiagnostics = false
 	gkeMtcEnabled = false
 	gkeMtcRamdiskDirectory = ""
 }
