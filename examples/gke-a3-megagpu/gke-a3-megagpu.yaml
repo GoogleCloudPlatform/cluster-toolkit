@@ -51,6 +51,7 @@ vars:
   auto_repair: true
   enable_queued_provisioning: false
   autoscaling_total_min_nodes: 0
+  placement_policy: {type: null, name: null}
 
   accelerator_type: nvidia-h100-mega-80gb
   version_prefix: "1.35."
@@ -143,6 +144,7 @@ deployment_groups:
       auto_repair: "$((vars.enable_flex_start) ? false : vars.auto_repair)"
       enable_queued_provisioning: $(vars.enable_queued_provisioning)
       autoscaling_total_min_nodes: $(vars.autoscaling_total_min_nodes)
+      placement_policy: $(vars.placement_policy)
     outputs: [instructions]
 
   - id: workload_manager_install

@@ -185,9 +185,6 @@ steps:
                 echo "INFO: Using \$$GKE_VARS_FILE as it is for SPOT provisioning."
               fi
 
-              sed -i -e '/reservation_affinity:/,+3c\      placement_policy:\n        type: COMPACT\n      spot: '"\$$ENABLE_SPOT"'' \$$EXAMPLE_BP
-              sed -i '/reservation/d' \$$EXAMPLE_BP
-
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
                 --user="$$OSLOGIN_USER" \
                 --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \

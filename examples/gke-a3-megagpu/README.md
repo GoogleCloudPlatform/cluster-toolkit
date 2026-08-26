@@ -43,11 +43,11 @@ You can select a consumption model by uncommenting the corresponding section in 
   - Note: Queued provisioning does not work with `static_node_count` and requires `autoscaling_total_min_nodes` be set to `0`.
   - Note: Set `kueue_configuration_path: $(ghpc_stage("../dws-sample-workloads/dws-queues.yaml.tftpl"))`.
 
-- **Spot**: Requires setting `static_node_count`.
+- **Spot**: Requires setting `static_node_count`. For multi-node workloads utilizing Kueue Topology-Aware Scheduling (TAS), compact placement is recommended (`placement_policy: { type: COMPACT }`). For more details, see [Compact Placement on GKE (Spot)](../../docs/gke-compact-placement.md#spot).
 
-- **Specific Reservation**: Requires setting `static_node_count`. Refer to [Using GCE Reservations](https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/compute/gke-node-pool#using-gce-reservations) for details.
+- **Specific Reservation**: Requires setting `static_node_count`. If using a reservation created with compact placement, specify the policy name in `placement_policy`. Refer to [Using GCE Reservations](https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/compute/gke-node-pool#using-gce-reservations) for details.
 
-- **On-Demand (Default)**: Requires setting `static_node_count`.
+- **On-Demand (Default)**: Requires setting `static_node_count`. To enable Topology-Aware Scheduling (TAS) for multi-node jobs, compact placement is recommended (`placement_policy: { type: COMPACT }`). For more details, see [Compact Placement on GKE (On-Demand)](../../docs/gke-compact-placement.md#on-demand).
 
 ## Deploy the Cluster
 
