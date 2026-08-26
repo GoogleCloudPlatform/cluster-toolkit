@@ -35,6 +35,7 @@ cli_deployment_vars:
   local_ssd_count_nvme_block: 16
   gcp_public_cidrs_access_enabled: true
   spot: "{{ enable_spot | default(true) }}"
+  placement_policy: { type: COMPACT }
 custom_vars:
   project: "{{ project }}"
   instance_labels:
