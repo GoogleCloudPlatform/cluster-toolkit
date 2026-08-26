@@ -292,7 +292,7 @@ variable "system_node_pool_node_count" {
 }
 
 variable "system_node_pool_machine_type" {
-  description = "Machine type for the system node pool. Defaults to n4-standard-4 if available in the region/zone catalog, falling back to n2d-standard-4 (or n2d-standard-4 if confidential nodes are enabled)."
+  description = "Machine type for the system node pool. Defaults to 'n2d-standard-4' if confidential nodes are enabled. Otherwise, it defaults to 'n4-standard-4' if available in the target region/zones, falling back to 'n2d-standard-4'."
   type        = string
   default     = null
 }
