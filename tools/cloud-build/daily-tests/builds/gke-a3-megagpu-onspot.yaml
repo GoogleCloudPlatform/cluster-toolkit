@@ -164,6 +164,7 @@ steps:
               echo '      name_prefix: remote-node'                >> \$$EXAMPLE_BP
               echo '      add_deployment_name_before_prefix: true' >> \$$EXAMPLE_BP
               echo '      spot: $(null)'                           >> \$$EXAMPLE_BP
+              echo '      placement_policy: $(null)'               >> \$$EXAMPLE_BP
               echo ''
               echo '  - id: job_template_hostname'                       >> \$$EXAMPLE_BP
               echo '    source: modules/compute/gke-job-template'        >> \$$EXAMPLE_BP
