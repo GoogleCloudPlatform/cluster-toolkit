@@ -77,6 +77,7 @@ class TstCfg:
     
     install_dir: Optional[str] = None
     output_dir: Optional[str] = None
+    slurm_bin_dir: Optional[str] = "/usr/bin"
 
     enable_controller_load_balancer: bool = False
     slurm_control_host: Optional[str] = None

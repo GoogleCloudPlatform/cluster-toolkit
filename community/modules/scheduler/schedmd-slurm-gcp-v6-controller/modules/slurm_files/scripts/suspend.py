@@ -99,17 +99,22 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
         region = lkp.node_region(mig_nodes[0])
 
         # Resolve instance URLs from MIG or local lookup
+        mig_inst_map = {}
         try:
-            list_res = lkp.compute.regionInstanceGroupManagers().listManagedInstances(
-                project=lkp.project,
-                region=region,
-                instanceGroupManager=mig_name
-            ).execute()
-            mig_inst_map = {
-                item["instance"].split("/")[-1]: item["instance"]
-                for item in list_res.get("managedInstances", [])
-                if "instance" in item
-            }
+            page_token = None
+            while True:
+                list_res = lkp.compute.regionInstanceGroupManagers().listManagedInstances(
+                    project=lkp.project,
+                    region=region,
+                    instanceGroupManager=mig_name,
+                    pageToken=page_token
+                ).execute()
+                for item in list_res.get("managedInstances", []):
+                    if "instance" in item:
+                        mig_inst_map[item["instance"].split("/")[-1]] = item["instance"]
+                page_token = list_res.get("nextPageToken")
+                if not page_token:
+                    break
         except Exception as e:
             log.warning(f"Could not list managed instances for MIG {mig_name}: {e}")
             mig_inst_map = {}
@@ -157,7 +162,7 @@ def suspend_nodes(nodes: List[str]) -> None:
     bulk_nodes, flex_nodes = util.separate(lkp.is_flex_node, other_nodes)
 
     mig_flex.suspend_flex_nodes(flex_nodes, lkp)
-    mig_nodes, non_mig_nodes = util.separate(lkp.is_node_mig, bulk_nodes)
+    non_mig_nodes, mig_nodes = util.separate(lkp.is_node_mig, bulk_nodes)
     if mig_nodes:
         suspend_mig_nodes(mig_nodes, lkp)
     if non_mig_nodes:

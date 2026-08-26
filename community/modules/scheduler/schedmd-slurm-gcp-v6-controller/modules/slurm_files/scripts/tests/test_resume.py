@@ -183,7 +183,7 @@ def test_resume_mig_nodes(mock_compute_prop, mock_execute):
       slurm_cluster_name="c",
       provisioning_engine="MIG",
       nodeset={
-          "n": TstNodeset(nodeset_name="n", instance_template="projects/p/global/instanceTemplates/t1"),
+          "n": TstNodeset(nodeset_name="n"),
       }
   )
   lkp = util.Lookup(cfg)
@@ -192,13 +192,62 @@ def test_resume_mig_nodes(mock_compute_prop, mock_execute):
 
   resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=101, lkp=lkp)
 
-  assert mock_compute.regionInstanceGroupManagers().setInstanceTemplate.called
   assert mock_compute.regionInstanceGroupManagers().createInstances.called
   call_args = mock_compute.regionInstanceGroupManagers().createInstances.call_args
+  assert call_args.kwargs["instanceGroupManager"] == "c-n-mig-0"
   assert call_args.kwargs["body"]["instances"] == [
       {"name": "c-n-0", "preservedState": {"metadata": {"slurm_job_id": "101"}}},
       {"name": "c-n-1", "preservedState": {"metadata": {"slurm_job_id": "101"}}},
   ]
+
+
+@unittest.mock.patch("resume.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_drift_update(mock_compute_prop, mock_execute):
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      provisioning_engine="MIG",
+      project="p",
+      nodeset={
+          "n": TstNodeset(nodeset_name="n", region="r", instance_template="projects/p/global/instanceTemplates/t2"),
+      }
+  )
+  lkp = util.Lookup(cfg)
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
+      "instanceTemplate": "projects/p/global/instanceTemplates/t1"
+  }
+
+  resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=lkp)
+
+  assert mock_compute.regionInstanceGroupManagers().setInstanceTemplate.called
+  set_call = mock_compute.regionInstanceGroupManagers().setInstanceTemplate.call_args
+  assert set_call.kwargs["instanceGroupManager"] == "c-n-mig-0"
+  assert set_call.kwargs["body"]["instanceTemplate"] == "projects/p/global/instanceTemplates/t2"
+
+
+@unittest.mock.patch("resume.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_no_drift(mock_compute_prop, mock_execute):
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      provisioning_engine="MIG",
+      project="p",
+      nodeset={
+          "n": TstNodeset(nodeset_name="n", region="r", instance_template="projects/p/global/instanceTemplates/t1"),
+      }
+  )
+  lkp = util.Lookup(cfg)
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
+      "instanceTemplate": "projects/p/global/instanceTemplates/t1"
+  }
+
+  resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=lkp)
+
+  assert not mock_compute.regionInstanceGroupManagers().setInstanceTemplate.called
 
 
 @unittest.mock.patch("resume.ensure_execute")
