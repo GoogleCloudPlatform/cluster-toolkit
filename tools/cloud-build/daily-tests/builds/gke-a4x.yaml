@@ -159,6 +159,9 @@ steps:
               echo '        effect: NoSchedule'                          >> \$$EXAMPLE_BP
               echo '    outputs: [instructions]'                         >> \$$EXAMPLE_BP
 
+              # Override force_destroy from false to true for training and checkpoint storage buckets
+              sed -i -E 's/force_destroy:\s*false/force_destroy: true/g' \$$EXAMPLE_BP
+
               bash tools/add_ttl_label.sh "\$$EXAMPLE_BP"
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
                   --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
