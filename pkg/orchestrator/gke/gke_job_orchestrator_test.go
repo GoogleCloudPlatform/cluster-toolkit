@@ -3626,7 +3626,14 @@ func TestValidateNamespaceExists(t *testing.T) {
 }
 
 func TestGenerateGKEManifest_MLDiagnosticsEnabled(t *testing.T) {
-	orc := NewGKEOrchestrator()
+	setupMockMachineConfig(t)
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n1-standard-4 --zone=test-location-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 4}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"test-location-a"}
 	orc.gkeCustomTemplatesPath = ""
 	orc.acceleratorToMachineType = make(map[string]string)
 
