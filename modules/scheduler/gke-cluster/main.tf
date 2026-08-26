@@ -119,7 +119,7 @@ locals {
   target_system_node_pool_zones = toset(
     var.cluster_availability_type == "ZONAL" ? (
       var.zone != null ? [var.zone] : []
-    ) : (
+      ) : (
       var.system_node_pool_zones != null ? var.system_node_pool_zones : data.google_compute_zones.available.names
     )
   )
