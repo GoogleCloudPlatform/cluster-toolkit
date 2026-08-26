@@ -178,7 +178,7 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 		"--project", "test-project",
 		"--dry-run-out", tmpfile.Name(),
 		"--compute-type", "n2-standard-4",
-		"--enable-mldiagnostics",
+		"--enable-ml-diagnostics",
 	)
 
 	if err != nil {
