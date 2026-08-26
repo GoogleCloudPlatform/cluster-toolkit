@@ -301,7 +301,6 @@ class Instance:
   metadata: Dict[str, str]
   # TODO: use proper InstanceScheduling class
   scheduling: NSDict
-  current_action: Optional[str] = None
 
   @classmethod
   def from_json(cls, jo: dict) -> "Instance":
@@ -314,7 +313,6 @@ class Instance:
       scheduling=NSDict(jo.get("scheduling")),
       role = jo.get("labels", {}).get("slurm_instance_role"),
       metadata = {k["key"]: k["value"] for k in jo.get("metadata", {}).get("items", [])},
-      current_action = jo.get("currentAction"),
     )
 
 
@@ -1834,13 +1832,8 @@ class Lookup:
         return self.is_nodeset_mig(nodeset_name)
 
     def mig_name(self, nodeset_name: str, index: int = 0) -> str:
-        """Returns target MIG name for a given NodeSet, supporting multiple instance groups for >1000 VMs."""
-        nodeset = self.cfg.nodeset.get(nodeset_name)
-        if nodeset:
-            max_nodes = getattr(nodeset, "node_count_static", 0) + getattr(nodeset, "node_count_dynamic_max", 0)
-            if max_nodes > 1000:
-                return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-mig-{index}"
-        return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-mig"
+        """Returns target MIG name for a given NodeSet, indexed from 0 for consistent scale expansion."""
+        return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-mig-{index}"
 
     def node_mig_name(self, node_name: str) -> str:
         """Returns the specific MIG name for a given node."""
@@ -2053,9 +2046,27 @@ class Lookup:
         """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
         return self.compute.regionInstanceGroupManagers().get(project=project, region=region, instanceGroupManager=self_link).execute()
 
-    @lru_cache
-    def get_mig_instances(self, project: str, region: str, self_link:str) -> Any:
-        return self.compute.regionInstanceGroupManagers().listManagedInstances(project=project, region=region, instanceGroupManager=self_link).execute() 
+    @lru_cache()
+    def get_mig_instances(self, project: str, region: str, self_link: str) -> Any:
+        """Returns all managed instances for a given MIG, handling pagination."""
+        all_instances = []
+        page_token = None
+        while True:
+            res = (
+                self.compute.regionInstanceGroupManagers()
+                .listManagedInstances(
+                    project=project,
+                    region=region,
+                    instanceGroupManager=self_link,
+                    pageToken=page_token,
+                )
+                .execute()
+            )
+            all_instances.extend(res.get("managedInstances", []))
+            page_token = res.get("nextPageToken")
+            if not page_token:
+                break
+        return {"managedInstances": all_instances} 
 
     @lru_cache()
     def get_mig_list(self, project: str, region: str) -> Any:

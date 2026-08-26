@@ -112,12 +112,12 @@ locals {
   # Multiple instance groups when node count exceeds 1000
   nodeset_migs = merge([
     for name, ns in local.nodeset_map : {
-      for idx in range(ceil(max(ns.node_count_static, 1) / 1000.0)) : (
-        ns.node_count_static > 1000 ? "${name}-mig-${idx}" : name
+      for idx in range(ceil(max(ns.node_count_static + ns.node_count_dynamic_max, 1) / 1000.0)) : (
+        "${name}-mig-${idx}"
         ) => {
         nodeset_name       = name
         index              = idx
-        mig_name           = ns.node_count_static > 1000 ? "${local.slurm_cluster_name}-${name}-mig-${idx}" : "${local.slurm_cluster_name}-${name}-mig"
+        mig_name           = "${local.slurm_cluster_name}-${name}-mig-${idx}"
         base_instance_name = "${local.slurm_cluster_name}-${name}"
         region             = coalesce(ns.region, var.region)
         target_size        = 0
@@ -181,7 +181,7 @@ locals {
     node_conf                        = ns.node_conf
     dws_flex                         = ns.dws_flex
     instance_template                = module.slurm_nodeset_template[ns.nodeset_name].self_link
-    mig_name                         = (local.nodeset_resolved_engine[ns.nodeset_name] == "MIG" && !ns.dws_flex.enabled) ? (ns.node_count_static > 1000 ? "${local.slurm_cluster_name}-${ns.nodeset_name}-mig-0" : try(google_compute_region_instance_group_manager.nodeset_mig[ns.nodeset_name].name, null)) : null
+    mig_name                         = (local.nodeset_resolved_engine[ns.nodeset_name] == "MIG" && !ns.dws_flex.enabled) ? "${local.slurm_cluster_name}-${ns.nodeset_name}-mig-0" : null
     provisioning_engine              = local.nodeset_resolved_engine[ns.nodeset_name]
     node_count_dynamic_max           = ns.node_count_dynamic_max
     node_count_static                = ns.node_count_static

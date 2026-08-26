@@ -320,19 +320,27 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
 
         log.info(f"Resuming {len(mig_nodes)} MIG nodes ({to_hostlist(mig_nodes)}) for MIG {mig_name}")
 
-        # 1. All-Instances Config (AIC) - Stamp group-wide metadata in 1 API call
+        # 1. Drift-Aware Group Template Alignment
         template_link = getattr(nodeset, "instance_template", None)
         if template_link:
             try:
-                aic_req = lkp.compute.regionInstanceGroupManagers().setInstanceTemplate(
-                    project=lkp.project,
-                    region=region,
-                    instanceGroupManager=mig_name,
-                    body={"instanceTemplate": template_link}
-                )
-                ensure_execute(aic_req)
+                mig = lkp.get_mig(lkp.project, region, mig_name)
+                if mig:
+                    current_template = (
+                        mig.get("instanceTemplate")
+                        or (mig.get("versions", [{}])[0].get("instanceTemplate") if mig.get("versions") else None)
+                    )
+                    if current_template and util.trim_self_link(current_template) != util.trim_self_link(template_link):
+                        log.info(f"Updating MIG {mig_name} template: {current_template} -> {template_link}")
+                        aic_req = lkp.compute.regionInstanceGroupManagers().setInstanceTemplate(
+                            project=lkp.project,
+                            region=region,
+                            instanceGroupManager=mig_name,
+                            body={"instanceTemplate": template_link}
+                        )
+                        ensure_execute(aic_req)
             except Exception as e:
-                log.warning(f"Failed to setInstanceTemplate on MIG {mig_name}: {e}")
+                log.warning(f"Could not verify/update template for MIG {mig_name}: {e}")
 
         # 2. Per-Instance Config (PIC) - Lightweight instance name binding for static Slurm hostnames
         pic_instances: List[Dict[str, Any]] = []

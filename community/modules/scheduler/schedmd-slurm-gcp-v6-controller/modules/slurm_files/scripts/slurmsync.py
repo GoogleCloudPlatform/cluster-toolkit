@@ -292,9 +292,20 @@ def get_node_action(nodename: str) -> NodeAction:
         return _find_tpu_node_action(nodename, state)
 
     # split below is workaround for VMs whose hostname is FQDN
-    inst = lkp.instance(nodename.split(".")[0])
-    if inst and getattr(inst, "current_action", None) == "REPAIRING":
-        return NodeActionDown(reason="MIG Auto-Healing instance repair in progress")
+    short_nodename = nodename.split(".")[0]
+    inst = lkp.instance(short_nodename)
+
+    # For MIG compute nodes, detect active GCE Auto-Healing repairs
+    if lkp.is_node_mig(nodename):
+        mig_name = lkp.node_mig_name(nodename)
+        region = lkp.node_region(nodename)
+        try:
+            mig_insts = lkp.get_mig_instances(lkp.project, region, mig_name)
+            for m_inst in mig_insts.get("managedInstances", []):
+                if short_nodename == m_inst.get("instance", "").split("/")[-1] and m_inst.get("currentAction") == "REPAIRING":
+                    return NodeActionDown(reason="MIG Auto-Healing instance repair in progress")
+        except Exception as e:
+            log.debug(f"Failed to check managed instance repair status for {nodename}: {e}")
 
     power_flags = frozenset(
         ("POWER_DOWN", "POWERING_UP", "POWERING_DOWN", "POWERED_DOWN")
