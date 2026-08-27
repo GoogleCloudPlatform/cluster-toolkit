@@ -36,9 +36,6 @@ spec:
             metadata:
               labels:
                 gcluster.google.com/workload: {{.WorkloadName}}
-{{- if .MLDiagnosticsEnabled }}
-                managed-mldiagnostics-gke: "true"
-{{- end }}
 {{- if or .TopologyAnnotation .GCSFuseEnabled }}
               annotations:
 {{- if .TopologyAnnotation }}
