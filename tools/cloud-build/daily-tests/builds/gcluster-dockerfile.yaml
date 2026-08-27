@@ -163,6 +163,7 @@ steps:
   args:
   - tools/cloud-build/submit_and_monitor_kueue_job.sh
   - gcluster-dockerfile
+  - $BUILD_ID
 
 # 5. Cleanup the built image from Registry to save costs
 - id: cleanup-images

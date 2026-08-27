@@ -208,6 +208,7 @@ steps:
   args:
   - tools/cloud-build/submit_and_monitor_kueue_job.sh
   - ml-gke-e2e
+  - $BUILD_ID
 
 # 4. Cleanup the built image from Registry to save costs
 - id: cleanup-image
