@@ -275,3 +275,25 @@ def test_resume_mig_nodes_chunking(mock_compute_prop, mock_execute):
   assert len(create_calls[0].kwargs["body"]["instances"]) == 1000
   assert create_calls[1].kwargs["instanceGroupManager"] == "c-n-mig-1"
   assert len(create_calls[1].kwargs["body"]["instances"]) == 200
+
+
+@unittest.mock.patch("resume.down_nodes_notify_jobs")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_exception_handling(mock_compute_prop, mock_down_notify):
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      provisioning_engine="MIG",
+      nodeset={
+          "n": TstNodeset(nodeset_name="n", node_count_static=2, instance_template="projects/p/global/instanceTemplates/t1"),
+      }
+  )
+  lkp = util.Lookup(cfg)
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().createInstances.side_effect = Exception("Quota Exceeded")
+
+  resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=None, lkp=lkp)
+
+  mock_down_notify.assert_called_once()
+  assert mock_down_notify.call_args[0][0] == ["c-n-0", "c-n-1"]
+  assert "Quota Exceeded" in mock_down_notify.call_args[0][1]

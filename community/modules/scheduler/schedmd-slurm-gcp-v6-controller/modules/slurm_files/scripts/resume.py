@@ -303,7 +303,7 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
     return {chunk.name: chunk for chunk in chunks}
 
 
-def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Lookup) -> None:
+def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Lookup, resume_data: Optional[ResumeData] = None) -> None:
     """Provisions nodes using Tiered AIC metadata stamping & Lightweight PIC creation."""
     if not nodes:
         return
@@ -355,14 +355,23 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
             pic_instances.append(inst)
 
         for chunk in chunked(pic_instances, n=ZONAL_MIG_SIZE_LIMIT):
-            pic_req = lkp.compute.regionInstanceGroupManagers().createInstances(
-                project=lkp.project,
-                region=region,
-                instanceGroupManager=mig_name,
-                body={"instances": chunk}
-            )
-            res = ensure_execute(pic_req)
-            log.debug(f"createInstances response for {mig_name}: {res}")
+            chunk_nodes = [item["name"] for item in chunk]
+            try:
+                pic_req = lkp.compute.regionInstanceGroupManagers().createInstances(
+                    project=lkp.project,
+                    region=region,
+                    instanceGroupManager=mig_name,
+                    body={"instances": chunk}
+                )
+                res = ensure_execute(pic_req)
+                log.debug(f"createInstances response for {mig_name}: {res}")
+            except Exception as e:
+                log.error(f"Failed createInstances for MIG {mig_name} on nodes {to_hostlist(chunk_nodes)}: {e}")
+                down_nodes_notify_jobs(
+                    chunk_nodes,
+                    f"MIG createInstances failed: {e}",
+                    resume_data,
+                )
 
 
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
@@ -416,7 +425,7 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
         mig_flex.resume_flex_chunk(chunk.nodes, chunk.excl_job_id, lkp, chunk.placement_group)
 
     for chunk in mig_chunks:
-        resume_mig_nodes(chunk.nodes, chunk.excl_job_id, lkp)
+        resume_mig_nodes(chunk.nodes, chunk.excl_job_id, lkp, resume_data)
 
 
     # execute all bulkInsert requests  with batch

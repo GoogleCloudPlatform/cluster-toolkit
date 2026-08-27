@@ -100,30 +100,24 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
 
         # Resolve instance URLs from MIG or local lookup
         mig_inst_map = {}
+        mig_list_success = False
         try:
-            page_token = None
-            while True:
-                list_res = lkp.compute.regionInstanceGroupManagers().listManagedInstances(
-                    project=lkp.project,
-                    region=region,
-                    instanceGroupManager=mig_name,
-                    pageToken=page_token
-                ).execute()
-                for item in list_res.get("managedInstances", []):
-                    if "instance" in item:
-                        mig_inst_map[item["instance"].split("/")[-1]] = item["instance"]
-                page_token = list_res.get("nextPageToken")
-                if not page_token:
-                    break
+            mig_data = lkp.get_mig_instances(lkp.project, region, mig_name)
+            for item in mig_data.get("managedInstances", []):
+                if "instance" in item:
+                    mig_inst_map[item["instance"].split("/")[-1]] = item["instance"]
+            mig_list_success = True
         except Exception as e:
             log.warning(f"Could not list managed instances for MIG {mig_name}: {e}")
             mig_inst_map = {}
+            mig_list_success = False
 
         links = []
         for node in mig_nodes:
             if node in mig_inst_map:
                 links.append(mig_inst_map[node])
-            else:
+            elif not mig_list_success:
+                # Only guess fallback URLs if listManagedInstances failed completely
                 inst = lkp.instance(node)
                 zone = getattr(inst, "zone", None)
                 if zone:
@@ -137,6 +131,12 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
                         links.append(f"zones/{zone_name}/instances/{node}")
                     else:
                         links.append(f"zones/{lkp.zone}/instances/{node}")
+            else:
+                log.debug(f"Node {node} is not present in MIG {mig_name}; skipping deleteInstances.")
+
+        if not links:
+            log.info(f"No active instances found to delete in MIG {mig_name}")
+            continue
 
         log.info(f"Deleting {len(mig_nodes)} MIG instances ({to_hostlist(mig_nodes)}) from MIG {mig_name}")
         for chunk_links in util.chunked(links, n=1000):

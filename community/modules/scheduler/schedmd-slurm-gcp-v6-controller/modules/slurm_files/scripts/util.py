@@ -1822,8 +1822,11 @@ class Lookup:
             return False
         if getattr(nodeset, "mig_name", None) is not None:
             return True
-        if getattr(nodeset, "provisioning_engine", None) == "MIG":
+        engine = getattr(nodeset, "provisioning_engine", None)
+        if engine == "MIG":
             return True
+        if engine == "BULK_INSERT":
+            return False
         return self.is_mig_engine()
 
     def is_node_mig(self, node_name: str) -> bool:
@@ -2431,7 +2434,11 @@ class Lookup:
 
         for inst_group in potential_migs:
             for instance_collection in inst_group.get("managedInstances", []):
-                if node in instance_collection.get("name", "") and instance_collection.get("currentAction") == "CREATING":
+                inst_name = (
+                    instance_collection.get("name")
+                    or instance_collection.get("instance", "").split("/")[-1]
+                )
+                if node == inst_name and instance_collection.get("currentAction") == "CREATING":
                     return True
         return False
     
