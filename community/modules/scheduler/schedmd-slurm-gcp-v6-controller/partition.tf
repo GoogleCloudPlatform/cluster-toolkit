@@ -93,11 +93,6 @@ module "nodeset_cleanup" {
   nodeset_template       = module.slurm_nodeset_template[each.value.nodeset_name].self_link
 }
 
-data "google_compute_zones" "available" {
-  project = var.project_id
-  region  = var.region
-}
-
 locals {
   # NodeSet-level engine resolution: DWS Flex automatically resolves to MIG; standard compute nodes default to BULK_INSERT (MIG is opt-in)
   nodeset_resolved_engine = {
@@ -148,7 +143,7 @@ resource "google_compute_region_instance_group_manager" "nodeset_mig" {
     type                         = "OPPORTUNISTIC"
     minimal_action               = "REPLACE"
     instance_redistribution_type = "NONE"
-    max_surge_fixed              = length(try(each.value.zone_policy_allow, [])) > 0 ? length(each.value.zone_policy_allow) : (var.zone != null ? 1 : length(data.google_compute_zones.available.names))
+    max_surge_fixed              = length(try(each.value.zone_policy_allow, [])) > 0 ? length(each.value.zone_policy_allow) : 1
     max_unavailable_fixed        = 0
   }
 

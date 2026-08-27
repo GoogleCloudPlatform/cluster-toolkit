@@ -880,6 +880,21 @@ def test_is_node_mig():
     assert lkp.is_node_mig("testcl-ns_mig-0")
     assert not lkp.is_node_mig("testcl-ns_bulk-0")
 
+    # Cluster-level MIG with explicit NodeSet-level BULK_INSERT override
+    cfg_cluster_mig = TstCfg(
+        slurm_cluster_name="testcl",
+        provisioning_engine="MIG",
+        nodeset={
+            "ns_mig_cluster": TstNodeset(nodeset_name="ns_mig_cluster"),
+            "ns_bulk_override": TstNodeset(nodeset_name="ns_bulk_override", provisioning_engine="BULK_INSERT"),
+        }
+    )
+    lkp_cluster = util.Lookup(cfg_cluster_mig)
+    assert lkp_cluster.is_nodeset_mig("ns_mig_cluster")
+    assert not lkp_cluster.is_nodeset_mig("ns_bulk_override")
+    assert lkp_cluster.is_node_mig("testcl-ns_mig_cluster-0")
+    assert not lkp_cluster.is_node_mig("testcl-ns_bulk_override-0")
+
 
 def test_is_provisioning_flex_node(monkeypatch):
     cfg = TstCfg(
@@ -929,7 +944,7 @@ def test_is_provisioning_flex_node(monkeypatch):
         if mig_name == "job-mig":
             return {
                 "managedInstances": [
-                    {"name": "testcl-flex_ns-0", "currentAction": "CREATING"}
+                    {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-flex_ns-0", "currentAction": "CREATING"}
                 ]
             }
         return {"managedInstances": []}
@@ -993,11 +1008,12 @@ def test_suspend_mig_nodes_multi_mig(mock_compute_prop, mock_execute):
         ]
     }
 
-    suspend.suspend_mig_nodes(["testcl-large_ns-0", "testcl-large_ns-1005"], lkp=lkp)
+    # Pass an absent node "testcl-large_ns-999" along with active nodes; it must be skipped safely
+    suspend.suspend_mig_nodes(["testcl-large_ns-0", "testcl-large_ns-999", "testcl-large_ns-1005"], lkp=lkp)
 
     delete_calls = mock_compute.regionInstanceGroupManagers().deleteInstances.call_args_list
     assert len(delete_calls) == 2
-    # Group 0 for node index 0
+    # Group 0 for node index 0 (node 999 is skipped from body)
     assert delete_calls[0].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-0"
     assert delete_calls[0].kwargs["body"]["instances"] == ["projects/testproj/zones/us-central1-a/instances/testcl-large_ns-0"]
     # Group 1 for node index 1005
