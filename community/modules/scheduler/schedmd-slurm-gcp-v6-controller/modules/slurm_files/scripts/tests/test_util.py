@@ -770,6 +770,46 @@ def test_get_reservation_details_error(mocker):
     lkp._get_reservation.assert_called_once_with("my-project", "us-central1-a", "my-reservation")
 
 
+def test_batch_execute_custom_universe_domain(mocker):
+    mocker.patch("util.universe_domain", return_value="apis-sovereign.goog")
+    req0 = Mock()
+    req0.execute.return_value = {"status": "DONE", "name": "op-0"}
+    req1 = Mock()
+    req1.execute.return_value = {"status": "DONE", "name": "op-1"}
+
+    requests = {
+        "node-0": req0,
+        "node-1": req1,
+    }
+    done, failed = util.batch_execute(requests)
+    assert len(done) == 2
+    assert len(failed) == 0
+    assert done["node-0"]["name"] == "op-0"
+    assert done["node-1"]["name"] == "op-1"
+    req0.execute.assert_called_once()
+    req1.execute.assert_called_once()
+
+
+def test_batch_execute_custom_universe_partial_failure(mocker):
+    mocker.patch("util.universe_domain", return_value="apis-sovereign.goog")
+    req_ok = Mock()
+    req_ok.execute.return_value = {"status": "DONE"}
+    req_err = Mock()
+    req_err.execute.side_effect = RuntimeError("API error")
+
+    requests = {
+        "node-ok": req_ok,
+        "node-err": req_err,
+    }
+    done, failed = util.batch_execute(requests)
+    assert len(done) == 1
+    assert len(failed) == 1
+    assert "node-ok" in done
+    assert "node-err" in failed
+    req_ok.execute.assert_called_once()
+    req_err.execute.assert_called_once()
+
+
 def test_compute_service_default_universe_domain(mocker):
     mocker.patch("util.universe_domain", return_value="googleapis.com")
     mocker.patch("util.get_credentials", return_value=None)

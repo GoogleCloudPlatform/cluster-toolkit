@@ -1456,6 +1456,22 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
     """execute list or dict<req_id, request> as batch requests
     retry if retry_cb returns true
     """
+    # Custom universe domains (GCD / Sovereign Cloud) do not support BatchHttpRequest.
+    if universe_domain() != DEFAULT_UNIVERSE_DOMAIN:
+        assert retry_cb is None, "retry_cb not supported for non-default universe domains"
+        if not isinstance(requests, dict):
+            requests = {str(k): v for k, v in enumerate(requests)}
+        done, failed = {}, {}
+        with ThreadPoolExecutor(max_workers=32) as exe:
+            future_to_rid = {exe.submit(ensure_execute, req): rid for rid, req in requests.items()}
+            for future in as_completed(future_to_rid):
+                rid = future_to_rid[future]
+                try:
+                    done[rid] = future.result()
+                except Exception as e:
+                    log_err(f"compute request exception {rid}: {e}")
+                    failed[rid] = (requests[rid], e)
+        return done, failed
 
     BATCH_LIMIT = 1000
     if not isinstance(requests, dict):
