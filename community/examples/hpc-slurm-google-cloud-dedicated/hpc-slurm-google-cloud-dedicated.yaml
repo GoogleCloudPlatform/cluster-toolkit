@@ -1,0 +1,273 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: hpc-c3-slurm-google-cloud-dedicated
+vars:
+  project_id: # <project-id>
+  deployment_name: hpc-slurm
+  region: us-central1
+  zone: us-central1-a
+  universe_domain: googleapis.com # apis-<location>.goog
+  service_account_email: default # <account-id>-compute@developer.gserviceaccount.com
+
+  # Image Build Settings
+  source_image_family: rocky-linux-8-optimized-gcp
+  source_image_project: rocky-linux-cloud
+  image_build_machine_type: c3-standard-4
+  build_slurm_from_git_ref: 6.12.1
+  built_instance_image:
+    family: slurm-c3-rocky8
+    project: $(vars.project_id)
+
+terraform_providers:
+  google:
+    source: hashicorp/google
+    version: '>= 5.45.0'
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+      universe_domain: $(vars.universe_domain)
+  google-beta:
+    source: hashicorp/google-beta
+    version: '>= 5.45.0'
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+      universe_domain: $(vars.universe_domain)
+
+deployment_groups:
+- group: setup
+  modules:
+  - id: network
+    source: modules/network/pre-existing-vpc
+    settings:
+      network_name: default
+      subnetwork_name: default
+
+  - id: slurm-build-script
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: false
+      runners:
+      - type: shell
+        destination: prep-for-slurm-build.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          # Ensure SELinux allows NFS home directories
+          setsebool -P use_nfs_home_dirs 1 || true
+          # Slurm build will install and set python3.12 as the default python3
+          dnf install -y python3.12 python3.12-pip perl-ExtUtils-MakeMaker perl-devel
+          python3.12 -m pip install pip --upgrade
+          python3.12 -m pip install ansible==8.7.0
+          export PATH=/usr/local/bin:$PATH
+          ansible --version
+          n=0
+          until [ "$n" -ge 3 ] || ( { dnf install -y --disablerepo=ciq-sigcloud-next nfs-utils 2>/dev/null || dnf install -y nfs-utils; } && ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents ); do
+            ((n=n+1))
+            sleep 5
+          done
+      - type: data
+        destination: /var/tmp/slurm_vars.json
+        # Add or update slurm-gcp flags as required, https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/ansible/playbook.yml
+        content: |
+          {
+            "reboot": false,
+            "install_cuda": false,
+            "nvidia_version": "latest",
+            "install_ompi": true,
+            "install_lustre": false,
+            "install_gcsfuse": true,
+            "allow_kernel_upgrades": false,
+            "monitoring_agent": "cloud-ops",
+            "install_managed_lustre": false
+          }
+
+      - type: shell
+        destination: install_slurm.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          dnf update -y
+          dnf install -y epel-release git ansible-core
+          ansible-pull -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_slurm_from_git_ref) \
+              -i localhost, --limit localhost --connection=local \
+              -e @/var/tmp/slurm_vars.json ansible/playbook.yml
+
+- group: build-slurm
+  modules:
+  - id: custom-slurm-image
+    source: modules/packer/custom-image
+    kind: packer
+    use: [network, slurm-build-script]
+    settings:
+      source_image_project_id: [$(vars.source_image_project)]
+      source_image_family: $(vars.source_image_family)
+      machine_type: $(vars.image_build_machine_type)
+      image_family: $(vars.built_instance_image.family)
+      disk_type: hyperdisk-balanced
+      zone: $(vars.zone)
+      omit_external_ip: false
+      image_licenses: []
+      state_timeout: 30m
+
+- group: cluster
+  modules:
+  - id: homefs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    settings:
+      local_mounts: [/home, /opt/apps]
+      machine_type: $(vars.image_build_machine_type)
+      boot_disk_type: hyperdisk-balanced
+      type: hyperdisk-balanced
+      disk_size: 100
+      instance_image:
+        family: $(vars.built_instance_image.family)
+        project: $(vars.project_id)
+
+  - id: ssh_config
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: false
+      runners:
+      - type: shell
+        destination: setup_non_oslogin_ssh.sh
+        content: |
+          #!/bin/bash
+          # 1. SELinux & Crypto Policy for Rocky Linux 8/9
+          setsebool -P use_nfs_home_dirs 1 || true
+          update-crypto-policies --set DEFAULT:SHA1 || true
+
+          # 2. Populate metadata keys and secure inter-node keypair on NFS /home
+          METADATA="http://metadata.google.internal/computeMetadata/v1"
+          PROJ_KEYS=`curl -s -f -H "Metadata-Flavor: Google" "$METADATA/project/attributes/ssh-keys" 2>/dev/null || true`
+          INST_KEYS=`curl -s -f -H "Metadata-Flavor: Google" "$METADATA/instance/attributes/ssh-keys" 2>/dev/null || true`
+          KEYS=`printf "%s\n%s\n" "$PROJ_KEYS" "$INST_KEYS" | grep -v '^[[:space:]]*$' | sort -u`
+
+          for user in `echo "$KEYS" | cut -d: -f1 | sort -u`; do
+            [ -z "$user" ] && continue
+
+            # Create group and user with deterministic UID/GID to ensure consistency across the cluster
+            if ! id "$user" &>/dev/null; then
+              UID_HASH=`printf "%s" "$user" | cksum | cut -d' ' -f1`
+              USER_UID=`expr 2000 + $UID_HASH % 58000`
+              groupadd -g "$USER_UID" "$user" || true
+              useradd -u "$USER_UID" -g "$USER_UID" -m -s /bin/bash "$user"
+            fi
+            mkdir -p "/home/$user/.ssh"
+            chown -R "$user:$user" "/home/$user"
+            chmod 700 "/home/$user/.ssh"
+
+            # Safely serialize key generation & authorized_keys rebuilding across the cluster
+            (
+              flock 9
+
+              # Generate ED25519 cluster key natively
+              if [ ! -f "/home/$user/.ssh/id_ed25519" ]; then
+                ssh-keygen -t ed25519 -N "" -f "/home/$user/.ssh/id_ed25519"
+              fi
+
+              # Rebuild authorized_keys atomically on the exact same NFS filesystem (prevents O_TRUNC zeroing)
+              TMP_KEYS=`mktemp "/home/$user/.ssh/authorized_keys.XXXXXX"`
+              if [ -n "$TMP_KEYS" ] && [ -f "$TMP_KEYS" ]; then
+                echo "$KEYS" | grep "^$user:" | cut -d: -f2- > "$TMP_KEYS"
+                [ -f "/home/$user/.ssh/id_ed25519.pub" ] && cat "/home/$user/.ssh/id_ed25519.pub" >> "$TMP_KEYS"
+                mv -f "$TMP_KEYS" "/home/$user/.ssh/authorized_keys"
+              fi
+
+            ) 9>"/home/$user/.ssh/keygen.lock"
+
+            # Secure remaining permissions to the user
+            chown -R "$user:$user" "/home/$user/.ssh"
+            chmod 600 "/home/$user/.ssh/"*
+          done
+
+          # 3. Disable StrictHostKeyChecking safely for internal network jumps only
+          if ! grep -q "Host 10.\*" /etc/ssh/ssh_config; then
+            echo -e "Host 10.*\n    StrictHostKeyChecking no\n    UserKnownHostsFile=/dev/null" >> /etc/ssh/ssh_config
+          fi
+
+          # 4. Restart sshd so it loads DEFAULT:SHA1 crypto policy for RSA keys
+          systemctl restart sshd
+
+  - id: c3_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, ssh_config]
+    settings:
+      node_count_static: 2
+      node_count_dynamic_max: 0
+      machine_type: c3-standard-176
+      disk_type: hyperdisk-balanced
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+      # reservation_name: c3-16node-reservation
+      # If not using reservation:
+      # enable_placement: true
+      # placement_max_distance: 2
+      instance_image:
+        family: $(vars.built_instance_image.family)
+        project: $(vars.project_id)
+      instance_image_custom: true
+      service_account_email: $(vars.service_account_email)
+      service_account_scopes: &id001
+      - https://www.googleapis.com/auth/cloud-platform
+      enable_oslogin: false
+
+  - id: c3_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [c3_nodeset]
+    settings:
+      partition_name: compute
+      is_default: true
+      exclusive: false
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network, ssh_config]
+    settings:
+      machine_type: $(vars.image_build_machine_type)
+      disk_type: hyperdisk-balanced
+      enable_login_public_ips: true
+      instance_image:
+        family: $(vars.built_instance_image.family)
+        project: $(vars.project_id)
+      instance_image_custom: true
+      service_account_email: $(vars.service_account_email)
+      service_account_scopes: *id001
+      enable_oslogin: false
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, c3_partition, homefs, slurm_login]
+    settings:
+      controller_startup_script: $(ssh_config.controller_startup_script)
+      login_startup_script: $(ssh_config.startup_script)
+      machine_type: $(vars.image_build_machine_type)
+      disk_type: hyperdisk-balanced
+      controller_state_disk:
+        type: hyperdisk-balanced
+        size: 50
+      enable_controller_public_ips: false
+      instance_image:
+        family: $(vars.built_instance_image.family)
+        project: $(vars.project_id)
+      instance_image_custom: true
+      service_account_email: $(vars.service_account_email)
+      service_account_scopes: *id001
+      enable_slurm_auth: true
+      enable_oslogin: false
