@@ -245,8 +245,8 @@ check_filestore_quota() {
 	usage=$(gcloud filestore instances list --project="${PROJECT_ID}" --format="json" 2>/dev/null |
 		jq -r --arg region "$region" --arg tier "$tier" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | select(.tier == $tier) | .fileShares[]?.capacityGb | select(. != null) | tonumber] | add // 0' 2>/dev/null)
 
-	limit=$(printf "%.0f" "${limit}" 2>/dev/null || echo 0)
-	usage=$(printf "%.0f" "${usage}" 2>/dev/null || echo 0)
+	if ! limit=$(printf "%.0f" "${limit}" 2>/dev/null); then limit=0; fi
+	if ! usage=$(printf "%.0f" "${usage}" 2>/dev/null); then usage=0; fi
 
 	if [[ ! "${limit}" =~ ^[0-9]+$ ]]; then limit=0; fi
 	if [[ ! "${usage}" =~ ^[0-9]+$ ]]; then usage=0; fi
@@ -300,8 +300,8 @@ check_lustre_quota() {
 	usage=$(gcloud lustre instances list --location="-" --project="${PROJECT_ID}" --format="json" 2>/dev/null |
 		jq -r --arg zone "$zone" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $zone or ($loc | startswith($zone + "-"))) | .capacityGib | select(. != null) | tonumber] | add // 0' 2>/dev/null)
 
-	limit=$(printf "%.0f" "${limit}" 2>/dev/null || echo 0)
-	usage=$(printf "%.0f" "${usage}" 2>/dev/null || echo 0)
+	if ! limit=$(printf "%.0f" "${limit}" 2>/dev/null); then limit=0; fi
+	if ! usage=$(printf "%.0f" "${usage}" 2>/dev/null); then usage=0; fi
 
 	if [[ ! "${limit}" =~ ^[0-9]+$ ]]; then limit=0; fi
 	if [[ ! "${usage}" =~ ^[0-9]+$ ]]; then usage=0; fi
