@@ -1,0 +1,85 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kueue-reaper-role
+  namespace: default
+rules:
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["get", "list", "watch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kueue-reaper-rolebinding
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: kueue-reaper-ksa
+  namespace: default
+roleRef:
+  kind: Role
+  name: kueue-reaper-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kueue-reaper-script
+  namespace: default
+data:
+  reaper.sh: |
+    #!/bin/bash
+    echo "Starting Centralized K8s Reaper Pod..."
+    echo "This pod monitors active jobs and cancels them if their Cloud Build is CANCELLED."
+    while true; do
+      # Fetch all jobs that have a build-id label
+      kubectl get jobs -l build-id -o custom-columns=NAME:.metadata.name,BUILD_ID:.metadata.labels.build-id --no-headers | while read job_name build_id; do
+        if [ -z "$build_id" ] || [ "$build_id" == "<none>" ]; then
+          continue
+        fi
+
+        # Check the Cloud Build status. Suppress stderr so we don't spam logs
+        status=$(gcloud builds describe "$build_id" --format="value(status)" 2>/dev/null)
+
+        if [ "$status" == "CANCELLED" ] || [ "$status" == "FAILURE" ] || [ "$status" == "TIMEOUT" ]; then
+          echo "WARNING: Cloud Build $build_id is $status!"
+          echo "Deleting Kubernetes Job $job_name to trigger graceful cleanup or remove it from the Kueue..."
+          kubectl delete job "$job_name"
+        fi
+      done
+
+      # Poll every 30 seconds
+      sleep 30
+    done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kueue-reaper
+  namespace: default
+  labels:
+    app: kueue-reaper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kueue-reaper
+  template:
+    metadata:
+      labels:
+        app: kueue-reaper
+    spec:
+      serviceAccountName: kueue-reaper-ksa
+      containers:
+      - name: reaper
+        image: gcr.io/google.com/cloudsdktool/cloud-sdk:latest
+        command: ["/bin/bash", "/scripts/reaper.sh"]
+        volumeMounts:
+        - name: script-volume
+          mountPath: /scripts
+      volumes:
+      - name: script-volume
+        configMap:
+          name: kueue-reaper-script
+          defaultMode: 0777

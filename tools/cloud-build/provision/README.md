@@ -14,6 +14,19 @@ terraform apply
 When prompted for gcs bucket, use `<team name>-dev-automation`.\
 When prompted for project, use integration test project.
 
+## Kueue Lock Automation
+
+If you are adding new daily tests that use Kueue (`submit_and_monitor_kueue_job.sh`), you must request a test lock in your job definition (e.g., `test-locks/<test-name>: 1`).
+
+The pipeline uses `pre-commit` hooks to enforce and automate test lock registration:
+
+1. `validate_kueue_tests.py`: Ensures your test job requests a lock and auto-fixes the `cpu` and `memory` limits/requests if they are missing or non-standard.
+2. `generate_kueue_locks.py`: Automatically detects new locks requested in build files and appends them to the Kueue configurations in `daily-tests/blueprints/test-infra-kueue/configs/`.
+
+If the `generate-kueue-locks` hook modifies files during your commit, simply review the changes and run `git add` again.
+
+Newly generated locks are automatically applied to the test clusters whenever you run `terraform apply` in this module.
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
@@ -29,6 +42,7 @@ When prompted for project, use integration test project.
 | ---- | ------- |
 | <a name="provider_external"></a> [external](#provider\_external) | ~> 2.3.0 |
 | <a name="provider_google"></a> [google](#provider\_google) | ~> 5.0 |
+| <a name="provider_null"></a> [null](#provider\_null) | n/a |
 
 ## Modules
 
@@ -62,6 +76,7 @@ When prompted for project, use integration test project.
 | [google_cloudbuild_trigger.zebug_fast_build_success](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_compute_reservation.c2standard60_us_west4_c](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_reservation) | resource |
 | [google_compute_reservation.n1standard8_with_tesla_t4_europe_west1_d](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_reservation) | resource |
+| [null_resource.apply_kueue_locks](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [external_external.list_tests_midnight](https://registry.terraform.io/providers/hashicorp/external/latest/docs/data-sources/external) | data source |
 
 ## Inputs
