@@ -14,19 +14,6 @@ terraform apply
 When prompted for gcs bucket, use `<team name>-dev-automation`.\
 When prompted for project, use integration test project.
 
-## Kueue Lock Automation
-
-If you are adding new daily tests that use Kueue (`submit_and_monitor_kueue_job.sh`), you must request a test lock in your job definition (e.g., `test-locks/<test-name>: 1`).
-
-The pipeline uses `pre-commit` hooks to enforce and automate test lock registration:
-
-1. `validate_kueue_tests.py`: Ensures your test job requests a lock and auto-fixes the `cpu` and `memory` limits/requests if they are missing or non-standard.
-2. `generate_kueue_locks.py`: Automatically detects new locks requested in build files and appends them to the Kueue configurations in `daily-tests/blueprints/test-infra-kueue/configs/`.
-
-If the `generate-kueue-locks` hook modifies files during your commit, simply review the changes and run `git add` again.
-
-Newly generated locks are automatically applied to the test clusters whenever you run `terraform apply` in this module.
-
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
@@ -35,6 +22,7 @@ Newly generated locks are automatically applied to the test clusters whenever yo
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_external"></a> [external](#requirement\_external) | ~> 2.3.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 5.0 |
+| <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.2.0 |
 
 ## Providers
 
@@ -42,7 +30,7 @@ Newly generated locks are automatically applied to the test clusters whenever yo
 | ---- | ------- |
 | <a name="provider_external"></a> [external](#provider\_external) | ~> 2.3.0 |
 | <a name="provider_google"></a> [google](#provider\_google) | ~> 5.0 |
-| <a name="provider_null"></a> [null](#provider\_null) | n/a |
+| <a name="provider_null"></a> [null](#provider\_null) | ~> 3.2.0 |
 
 ## Modules
 
