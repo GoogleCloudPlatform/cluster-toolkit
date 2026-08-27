@@ -318,7 +318,7 @@ class Instance:
 
 @dataclass(frozen=True)
 class NSMount:
-    server_ip: str
+    server_ip: Optional[str]
     local_mount: Path
     remote_mount: Path
     fs_type: str
@@ -672,10 +672,24 @@ def compute_service(version="beta"):
         return googleapiclient.http.HttpRequest(new_http, *args, **kwargs)
 
     ver = endpoint_version(ApiEndpoint.COMPUTE)
-    disc_url = googleapiclient.discovery.DISCOVERY_URI
     if ver:
         version = ver
-        disc_url = disc_url.replace(DEFAULT_UNIVERSE_DOMAIN, universe_domain())
+
+    ud = universe_domain()
+    if ud and ud != DEFAULT_UNIVERSE_DOMAIN:
+        discovery_opts = dict(
+            client_options=ClientOptions(
+                api_endpoint=f"https://compute.{ud}/compute/{version}/",
+                universe_domain=ud,
+            ),
+            static_discovery=True,
+        )
+    else:
+        discovery_opts = dict(
+            discoveryServiceUrl=googleapiclient.discovery.DISCOVERY_URI,
+            static_discovery=False,
+            cache_discovery=False, # See https://github.com/googleapis/google-api-python-client/issues/299
+        )
 
     log.debug(f"Using version={version} of Google Compute Engine API")
     return googleapiclient.discovery.build(
@@ -684,8 +698,7 @@ def compute_service(version="beta"):
         requestBuilder=build_request,
         credentials=credentials,
         developerKey=dev_key,
-        discoveryServiceUrl=disc_url,
-        cache_discovery=False, # See https://github.com/googleapis/google-api-python-client/issues/299
+        **discovery_opts,
     )
 
 def storage_client() -> storage.Client:
@@ -693,11 +706,14 @@ def storage_client() -> storage.Client:
     Config-independent storage client
     """
     ud = universe_domain()
-    # Check if we need a custom universe domain, otherwise pass None
+    api_endpoint = f"https://storage.{ud}" if (ud and ud != DEFAULT_UNIVERSE_DOMAIN) else None
     universe_domain_val = ud if (ud and ud != DEFAULT_UNIVERSE_DOMAIN) else None
-    
+
     return storage.Client(
-        client_options=ClientOptions(universe_domain=universe_domain_val)
+        client_options=ClientOptions(
+            api_endpoint=api_endpoint,
+            universe_domain=universe_domain_val,
+        )
     )
 
 
@@ -1440,6 +1456,7 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
     """execute list or dict<req_id, request> as batch requests
     retry if retry_cb returns true
     """
+
     BATCH_LIMIT = 1000
     if not isinstance(requests, dict):
         requests = {str(k): v for k, v in enumerate(requests)}  # rid generated here
@@ -1641,11 +1658,11 @@ class Lookup:
 
     @property
     def control_host(self):
-        return self.cfg.slurm_control_host
+        return self.cfg.slurm_control_host or (self.hostname if self.is_controller else None)
 
     @cached_property
     def control_host_addr(self):
-        return self.control_addr or host_lookup(self.cfg.slurm_control_host)
+        return self.control_addr or (host_lookup(self.control_host) if self.control_host else None)
 
     @property
     def control_host_port(self):
@@ -2257,8 +2274,8 @@ class Lookup:
     def etc_dir(self) -> Path:
         return Path(self.cfg.output_dir or slurmdirs.etc)
 
-    def controller_mount_server_ip(self) -> str:
-        return self.control_addr or self.control_host
+    def controller_mount_server_ip(self) -> Optional[str]:
+        return self.control_addr or self.control_host or (self.hostname if self.is_controller else None)
 
     def normalize_ns_mount(self, ns: Union[dict, NSMount]) -> NSMount:
         if isinstance(ns, NSMount):

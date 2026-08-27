@@ -768,3 +768,34 @@ def test_get_reservation_details_error(mocker):
         )
     
     lkp._get_reservation.assert_called_once_with("my-project", "us-central1-a", "my-reservation")
+
+
+def test_compute_service_default_universe_domain(mocker):
+    mocker.patch("util.universe_domain", return_value="googleapis.com")
+    mocker.patch("util.get_credentials", return_value=None)
+    mocker.patch("util.get_dev_key", return_value=None)
+    mock_build = mocker.patch("googleapiclient.discovery.build")
+
+    util.compute_service()
+    mock_build.assert_called_once()
+    args, kwargs = mock_build.call_args
+    assert args == ("compute", "beta")
+    assert kwargs.get("discoveryServiceUrl") == "https://www.googleapis.com/discovery/v1/apis/{api}/{apiVersion}/rest"
+    assert kwargs.get("static_discovery") is False
+    assert kwargs.get("client_options") is None
+
+
+def test_compute_service_custom_universe_domain(mocker):
+    mocker.patch("util.universe_domain", return_value="apis-sovereign.goog")
+    mocker.patch("util.get_credentials", return_value=None)
+    mocker.patch("util.get_dev_key", return_value=None)
+    mock_build = mocker.patch("googleapiclient.discovery.build")
+
+    util.compute_service()
+    mock_build.assert_called_once()
+    args, kwargs = mock_build.call_args
+    assert args == ("compute", "beta")
+    assert kwargs.get("discoveryServiceUrl") is None
+    assert kwargs.get("static_discovery") is True
+    assert kwargs.get("client_options").api_endpoint == "https://compute.apis-sovereign.goog/compute/beta/"
+    assert kwargs.get("client_options").universe_domain == "apis-sovereign.goog"
