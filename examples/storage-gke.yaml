@@ -21,7 +21,7 @@ vars:
   zone: us-central1-b
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
-  authorized_cidr: <your-ip-address>/32
+  authorized_cidr:  # <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
   # To use Storage Pools, they must be pre-created before deployment.
   # Replace 'your-pool-balanced' and 'your-pool-throughput' with your storage pool names.
@@ -55,31 +55,20 @@ deployment_groups:
       - storage.objectViewer
       - artifactregistry.reader
 
-  - id: workload_service_account
-    source: modules/project/service-account
-    settings:
-      name: gke-wl-sa
-      project_roles:
-      - logging.logWriter
-      - monitoring.metricWriter
-      - monitoring.viewer
-      - stackdriver.resourceMetadata.writer
-      - storage.objectAdmin
-      - artifactregistry.reader
-
   - id: gke_cluster
     source: modules/scheduler/gke-cluster
-    use: [network1, workload_service_account]
+    use: [network1, node_pool_service_account]
     settings:
       enable_filestore_csi: true
       enable_gcsfuse_csi: true
+      enable_multi_tier_checkpointing: true
       configure_workload_identity_sa: true  # needed when using GCS
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
       master_authorized_networks:
       - display_name: deployment-machine
         cidr_block: $(vars.authorized_cidr)
-    outputs: [instructions, k8s_service_account_name]
+    outputs: [instructions, k8s_service_account_name, node_service_account]
 
   - id: debug_pool
     source: modules/compute/gke-node-pool
@@ -97,12 +86,25 @@ deployment_groups:
       local_mount: /data
       random_suffix: true
       force_destroy: true
+      object_users:
+        gke_node_sa: "serviceAccount:$(gke_cluster.node_service_account)"
       # Refer https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache for parameter details
       anywhere_cache:
         zones: [$(vars.zone)]
         ttl: "86400s"
         admission_policy: "admit-on-first-miss"
     outputs: [gcs_bucket_name]
+
+  - id: apply_mtc_config
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      apply_manifests:
+      - source: $(ghpc_stage("../modules/management/kubectl-apply/manifests/checkpoint-configuration.yaml.tftpl"))
+        template_vars:
+          namespace: "default"
+          inMemoryVolumeSize: "50Gi"
+          cloudStorageBucketName: $(data-bucket.gcs_bucket_name)
 
   - id: data-bucket-pv
     source: modules/file-system/gke-persistent-volume

@@ -27,6 +27,7 @@ var (
 	location     string
 	projectID    string
 	gkeNamespace string
+	skipPrereqs  bool
 )
 
 var gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
@@ -67,8 +68,10 @@ var JobCmd = &cobra.Command{
 		if projectID == "" {
 			return fmt.Errorf("project ID is required; please specify it using the --project flag or set a default value using 'gcluster job config set project <value>'")
 		}
-		if err := ensureBasicPrerequisites(cmd, projectID); err != nil {
-			return err
+		if !skipPrereqs {
+			if err := ensureBasicPrerequisites(cmd, projectID); err != nil {
+				return err
+			}
 		}
 
 		resolvedLoc, err := orc.Initialize(clusterName, location, projectID)
@@ -86,6 +89,7 @@ func init() {
 	JobCmd.PersistentFlags().StringVarP(&location, "location", "l", "", "Location (region or zone) of the GKE cluster.")
 	JobCmd.PersistentFlags().StringVarP(&projectID, "project", "p", "", "Google Cloud Project ID.")
 	JobCmd.PersistentFlags().StringVar(&gkeNamespace, "gke-namespace", "", "Target GKE namespace for the operation. If omitted, automatic detection is used.")
+	JobCmd.PersistentFlags().BoolVar(&skipPrereqs, "skip-prereqs", false, "Skip local environment prerequisite checks (gcloud, kubectl, docker auth, etc.) before taking action.")
 
 	JobCmd.AddCommand(SubmitCmd)
 	JobCmd.AddCommand(CancelJobCmd)

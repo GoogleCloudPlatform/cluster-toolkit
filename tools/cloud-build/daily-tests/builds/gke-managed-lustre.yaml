@@ -176,7 +176,7 @@ steps:
               echo '      zone: us-central1-a'               >> \$$EXAMPLE_BP
 
               IP=\$(curl ifconfig.me)
-              sed -i "s/<your-ip-address>/\$$IP/" \$$EXAMPLE_BP
+              sed -i "s|.*authorized_cidr:.*|  authorized_cidr: \$$IP/32|" \$$EXAMPLE_BP
               bash tools/add_ttl_label.sh "\$$EXAMPLE_BP"
 
               # 1. Run the script execution

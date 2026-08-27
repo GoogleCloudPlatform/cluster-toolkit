@@ -57,6 +57,11 @@ jobs:
         echo "rc_branch=$BRANCH" >> "$GITHUB_OUTPUT"
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+    - name: Setup git auth for gh CLI
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: gh auth setup-git
+
     - name: Create Draft Release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

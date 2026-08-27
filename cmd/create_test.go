@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"context"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulewriter"
 	"os"
@@ -187,4 +188,34 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 		c.Check(checkOverwriteAllowed(p, bp, yesW, noForce), ErrorMatches, `.*remove a deployment group "isildur".*`)
 		c.Check(checkOverwriteAllowed(p, bp, noW, yesForce), IsNil)
 	}
+}
+
+func (s *MySuite) TestVerifyGcsBucketsEmptyBucket(c *C) {
+	bp := config.Blueprint{
+		Vars: config.NewDict(map[string]cty.Value{
+			"project_id": cty.StringVal("my-project"),
+		}),
+		Groups: []config.Group{
+			{
+				Name: "group1",
+				TerraformBackend: config.TerraformBackend{
+					Type: "gcs",
+					Configuration: config.NewDict(map[string]cty.Value{
+						"bucket": cty.NullVal(cty.String),
+					}),
+				},
+			},
+		},
+	}
+
+	err := verifyGcsBuckets(context.Background(), bp)
+	c.Assert(err, NotNil)
+	c.Check(err.Error(), Equals, "GCS backend bucket name cannot be empty or unknown")
+
+	bp.Groups[0].TerraformBackend.Configuration = config.NewDict(map[string]cty.Value{
+		"bucket": cty.StringVal(""),
+	})
+	err = verifyGcsBuckets(context.Background(), bp)
+	c.Assert(err, NotNil)
+	c.Check(err.Error(), Equals, "GCS backend bucket name cannot be empty")
 }

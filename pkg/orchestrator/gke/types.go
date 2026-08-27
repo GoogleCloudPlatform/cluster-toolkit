@@ -23,6 +23,7 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"net/http"
 	"strings"
+	"sync"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
 	compute "google.golang.org/api/compute/v1"
@@ -113,6 +114,7 @@ type GKEOrchestrator struct {
 	slicingTopologiesDetected   bool
 	gkeCustomTemplatesPath      string
 	httpClient                  HTTPClient
+	httpOnce                    sync.Once
 }
 
 // Types for GetClusterInfo unmarshaling
