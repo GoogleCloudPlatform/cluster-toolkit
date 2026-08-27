@@ -313,18 +313,6 @@ data:
                   annotations:
                     kueue.x-k8s.io/podset-preferred-topology: "kubernetes.io/hostname"
                     networking.gke.io/default-interface: 'eth0'
-                    networking.gke.io/interfaces: |
-                      [
-                        \{"interfaceName":"eth0","network":"default"\},
-                        \{"interfaceName":"eth2","network":"{gpu_subnet_prefix}-0"\},
-                        \{"interfaceName":"eth3","network":"{gpu_subnet_prefix}-1"\},
-                        \{"interfaceName":"eth4","network":"{gpu_subnet_prefix}-2"\},
-                        \{"interfaceName":"eth5","network":"{gpu_subnet_prefix}-3"\},
-                        \{"interfaceName":"eth6","network":"{gpu_subnet_prefix}-4"\},
-                        \{"interfaceName":"eth7","network":"{gpu_subnet_prefix}-5"\},
-                        \{"interfaceName":"eth8","network":"{gpu_subnet_prefix}-6"\},
-                        \{"interfaceName":"eth9","network":"{gpu_subnet_prefix}-7"\}
-                      ]
                 spec:
                   restartPolicy: Never
                   nodeSelector:
@@ -372,6 +360,9 @@ data:
                   - name: nemo-config
                     configMap:
                       name: {experiment_name}
+                  resourceClaims:
+                  - name: rdma
+                    resourceClaimTemplateName: default-rdma
                   initContainers:
                   - name: gpu-healthcheck
                     image: alpine:latest
@@ -485,6 +476,8 @@ data:
                         nvidia.com/gpu: 8
                       requests:
                         nvidia.com/gpu: 8
+                      claims:
+                      - name: rdma
 
                   restartPolicy: Never
 

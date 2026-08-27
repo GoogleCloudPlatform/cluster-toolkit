@@ -25,7 +25,14 @@ fi
 ZONE_EXPORT=$(mktemp)
 ZONE_OUTPUT=$(mktemp)
 
+MAX_WAIT_SECONDS=28800
+START_TIME=$SECONDS
+
 while true; do
+	if [ $((SECONDS - START_TIME)) -gt $MAX_WAIT_SECONDS ]; then
+		echo "--- FATAL ERROR: Timed out waiting for available zone after 8 hours. Exiting. ---" >&2
+		exit 1
+	fi
 	# Run the script in a subshell, streaming stdout and stderr to the console and a log file.
 	# To extract the exported variables, we have the subshell write them to a file.
 	set +e

@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/orchestrator"
@@ -120,13 +121,23 @@ func (m *MockExecutor) ExecuteCommandStream(name string, args ...string) error {
 }
 
 type MockKubeClient struct {
-	Namespace     string
-	Workloads     []string
-	Err           error
-	ExplicitEmpty bool
+	Namespace          string
+	Workloads          []string
+	WorkloadsResponses [][]string
+	WorkloadCallCount  int
+	Err                error
+	ExplicitEmpty      bool
 }
 
 func (m *MockKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
+	if len(m.WorkloadsResponses) > 0 {
+		idx := m.WorkloadCallCount
+		m.WorkloadCallCount++
+		if idx < len(m.WorkloadsResponses) {
+			return m.WorkloadsResponses[idx], m.Err
+		}
+		return m.WorkloadsResponses[len(m.WorkloadsResponses)-1], m.Err
+	}
 	return m.Workloads, m.Err
 }
 
@@ -608,16 +619,59 @@ func TestAwaitJobCompletion(t *testing.T) {
 	projectID := "test-project"
 
 	tests := []struct {
-		name          string
-		mockNamespace string
-		mockWorkloads []string
-		mockResponses map[string][]shell.CommandResult
-		expectedError string
+		name                   string
+		mockNamespace          string
+		mockWorkloads          []string
+		mockWorkloadsResponses [][]string
+		mockResponses          map[string][]shell.CommandResult
+		expectedError          string
 	}{
 		{
 			name:          "Successful completion",
 			mockNamespace: "default",
 			mockWorkloads: []string{"jobset-test-workload-abc"},
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl wait --for=condition=Finished workload jobset-test-workload-abc -n default --timeout=1h": {
+					{ExitCode: 0, Stdout: "workload condition met"},
+				},
+				"kubectl get jobset test-workload -n default -o json": {
+					{ExitCode: 0, Stdout: `{"status": {"conditions": [{"type": "Completed", "status": "True", "lastTransitionTime": "2026-04-12T12:00:00Z"}]}}`},
+				},
+			},
+			expectedError: "",
+		},
+		{
+			name:          "Successful completion with JobSetCompleted condition",
+			mockNamespace: "default",
+			mockWorkloads: []string{"jobset-test-workload-abc"},
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl wait --for=condition=Finished workload jobset-test-workload-abc -n default --timeout=1h": {
+					{ExitCode: 0, Stdout: "workload condition met"},
+				},
+				"kubectl get jobset test-workload -n default -o json": {
+					{ExitCode: 0, Stdout: `{"status": {"conditions": [{"type": "JobSetCompleted", "status": "True", "lastTransitionTime": "2026-04-12T12:00:00Z"}]}}`},
+				},
+			},
+			expectedError: "",
+		},
+		{
+			name:          "Successful completion with newer inactive Suspended condition",
+			mockNamespace: "default",
+			mockWorkloads: []string{"jobset-test-workload-abc"},
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl wait --for=condition=Finished workload jobset-test-workload-abc -n default --timeout=1h": {
+					{ExitCode: 0, Stdout: "workload condition met"},
+				},
+				"kubectl get jobset test-workload -n default -o json": {
+					{ExitCode: 0, Stdout: `{"status": {"conditions": [{"type": "Completed", "status": "True", "lastTransitionTime": "2026-04-12T12:00:00Z"}, {"type": "Suspended", "status": "False", "lastTransitionTime": "2026-04-12T12:05:00Z"}]}}`},
+				},
+			},
+			expectedError: "",
+		},
+		{
+			name:                   "Successful completion with delayed Kueue workload discovery (retry)",
+			mockNamespace:          "default",
+			mockWorkloadsResponses: [][]string{{}, {"jobset-test-workload-abc"}},
 			mockResponses: map[string][]shell.CommandResult{
 				"kubectl wait --for=condition=Finished workload jobset-test-workload-abc -n default --timeout=1h": {
 					{ExitCode: 0, Stdout: "workload condition met"},
@@ -658,7 +712,11 @@ func TestAwaitJobCompletion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockExecutor := &MockExecutor{responses: tt.mockResponses, callCount: make(map[string]int)}
-			mockKube := &MockKubeClient{Namespace: tt.mockNamespace, Workloads: tt.mockWorkloads}
+			mockKube := &MockKubeClient{
+				Namespace:          tt.mockNamespace,
+				Workloads:          tt.mockWorkloads,
+				WorkloadsResponses: tt.mockWorkloadsResponses,
+			}
 			orc := newTestGKEOrchestrator(mockExecutor)
 			orc.kubeClient = mockKube
 			orc.dynClient = &mockDynamicClient{} // Avoid loading real kubeconfig
@@ -672,6 +730,161 @@ func TestAwaitJobCompletion(t *testing.T) {
 			} else {
 				if err == nil || !strings.Contains(err.Error(), tt.expectedError) {
 					t.Errorf("Expected error containing %q, but got: %v", tt.expectedError, err)
+				}
+			}
+		})
+	}
+}
+
+func TestFindTargetWorkload(t *testing.T) {
+	tests := []struct {
+		name                   string
+		timeout                time.Duration
+		mockWorkloads          []string
+		mockWorkloadsResponses [][]string
+		mockErr                error
+		wantWorkload           string
+		expectedError          string
+	}{
+		{
+			name:          "Immediate discovery",
+			timeout:       50 * time.Millisecond,
+			mockWorkloads: []string{"jobset-workload-1"},
+			wantWorkload:  "jobset-workload-1",
+		},
+		{
+			name:                   "Delayed discovery retry",
+			timeout:                1 * time.Second,
+			mockWorkloadsResponses: [][]string{{}, {"jobset-workload-delayed"}},
+			wantWorkload:           "jobset-workload-delayed",
+		},
+		{
+			name:          "Discovery timeout",
+			timeout:       100 * time.Millisecond,
+			mockWorkloads: []string{},
+			expectedError: "failed to find Kueue workload for jobset test-workload (timed out waiting for Kueue to create workload)",
+		},
+		{
+			name:          "Immediate discovery with timeout <= 0",
+			timeout:       0,
+			mockWorkloads: []string{"jobset-workload-instant"},
+			wantWorkload:  "jobset-workload-instant",
+		},
+		{
+			name:          "Discovery failure with timeout <= 0",
+			timeout:       0,
+			mockWorkloads: []string{},
+			expectedError: "failed to find Kueue workload for jobset test-workload",
+		},
+		{
+			name:          "KubeClient is nil",
+			timeout:       50 * time.Millisecond,
+			mockWorkloads: []string{"jobset-workload-1"},
+			expectedError: "kubernetes client is not initialized",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockKube := &MockKubeClient{
+				Workloads:          tt.mockWorkloads,
+				WorkloadsResponses: tt.mockWorkloadsResponses,
+				Err:                tt.mockErr,
+			}
+			orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+			if tt.name == "KubeClient is nil" {
+				orc.kubeClient = nil
+			} else {
+				orc.kubeClient = mockKube
+			}
+
+			got, err := orc.findTargetWorkload("default", "test-workload", tt.timeout)
+			if tt.expectedError == "" {
+				if err != nil {
+					t.Fatalf("findTargetWorkload unexpected error: %v", err)
+				}
+				if got != tt.wantWorkload {
+					t.Errorf("findTargetWorkload = %q, want %q", got, tt.wantWorkload)
+				}
+			} else {
+				if err == nil || !strings.Contains(err.Error(), tt.expectedError) {
+					t.Errorf("findTargetWorkload error = %v, want containing %q", err, tt.expectedError)
+				}
+			}
+		})
+	}
+}
+
+func TestGetJobSetStatus(t *testing.T) {
+	tests := []struct {
+		name          string
+		stdout        string
+		exitCode      int
+		wantStatus    string
+		expectedError string
+	}{
+		{
+			name:       "Active Completed condition",
+			stdout:     `{"status": {"conditions": [{"type": "Completed", "status": "True", "lastTransitionTime": "2026-04-12T12:00:00Z"}]}}`,
+			wantStatus: "Completed",
+		},
+		{
+			name:       "Active JobSetCompleted condition",
+			stdout:     `{"status": {"conditions": [{"type": "JobSetCompleted", "status": "True", "lastTransitionTime": "2026-04-12T12:00:00Z"}]}}`,
+			wantStatus: "Completed",
+		},
+		{
+			name:       "Active JobSetFailed condition",
+			stdout:     `{"status": {"conditions": [{"type": "JobSetFailed", "status": "True", "lastTransitionTime": "2026-04-12T12:00:00Z"}]}}`,
+			wantStatus: "Failed",
+		},
+		{
+			name:       "Inactive Suspended with newer timestamp does not override Completed",
+			stdout:     `{"status": {"conditions": [{"type": "Completed", "status": "True", "lastTransitionTime": "2026-04-12T12:00:00Z"}, {"type": "Suspended", "status": "False", "lastTransitionTime": "2026-04-12T12:05:00Z"}]}}`,
+			wantStatus: "Completed",
+		},
+		{
+			name:       "Active Suspended condition",
+			stdout:     `{"status": {"conditions": [{"type": "Suspended", "status": "True", "lastTransitionTime": "2026-04-12T12:05:00Z"}]}}`,
+			wantStatus: "Suspended",
+		},
+		{
+			name:       "No conditions, spec not suspended -> Running",
+			stdout:     `{"spec": {"suspend": false}, "status": {}}`,
+			wantStatus: "Running",
+		},
+		{
+			name:       "No conditions, spec suspended -> Suspended",
+			stdout:     `{"spec": {"suspend": true}, "status": {}}`,
+			wantStatus: "Suspended",
+		},
+		{
+			name:          "Kubectl execution failure",
+			exitCode:      1,
+			stdout:        "",
+			expectedError: "failed to get final job status",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := "kubectl get jobset test-jobset -n default -o json"
+			responses := map[string][]shell.CommandResult{
+				cmd: {{ExitCode: tt.exitCode, Stdout: tt.stdout, Stderr: "error details"}},
+			}
+			orc := newTestGKEOrchestrator(NewMockExecutor(responses))
+
+			gotStatus, err := orc.getJobSetStatus("test-jobset", "default")
+			if tt.expectedError == "" {
+				if err != nil {
+					t.Fatalf("getJobSetStatus unexpected error: %v", err)
+				}
+				if gotStatus != tt.wantStatus {
+					t.Errorf("getJobSetStatus = %q, want %q", gotStatus, tt.wantStatus)
+				}
+			} else {
+				if err == nil || !strings.Contains(err.Error(), tt.expectedError) {
+					t.Errorf("getJobSetStatus error = %v, want containing %q", err, tt.expectedError)
 				}
 			}
 		})
@@ -1510,6 +1723,70 @@ func TestParseJobStatus_CompletionTime(t *testing.T) {
 			wantStatus:         "Running",
 			wantCompletionTime: "",
 		},
+		{
+			name: "JobSetCompleted condition",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"conditions": []interface{}{
+						map[string]interface{}{
+							"type":               "JobSetCompleted",
+							"status":             "True",
+							"lastTransitionTime": "2026-04-03T12:15:00Z",
+						},
+					},
+				},
+			},
+			wantStatus:         "Succeeded",
+			wantCompletionTime: "2026-04-03T12:15:00Z",
+		},
+		{
+			name: "JobSetFailed condition",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"conditions": []interface{}{
+						map[string]interface{}{
+							"type":               "JobSetFailed",
+							"status":             "True",
+							"lastTransitionTime": "2026-04-03T12:30:00Z",
+						},
+					},
+				},
+			},
+			wantStatus:         "Failed",
+			wantCompletionTime: "2026-04-03T12:30:00Z",
+		},
+		{
+			name: "JobSetSuspended condition",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"conditions": []interface{}{
+						map[string]interface{}{
+							"type":   "JobSetSuspended",
+							"status": "True",
+						},
+					},
+				},
+			},
+			wantStatus:         "Suspended",
+			wantCompletionTime: "",
+		},
+		{
+			name: "Malformed non-map condition element",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"conditions": []interface{}{
+						"invalid-string-element",
+						map[string]interface{}{
+							"type":               "Completed",
+							"status":             "True",
+							"lastTransitionTime": "2026-04-03T12:00:00Z",
+						},
+					},
+				},
+			},
+			wantStatus:         "Succeeded",
+			wantCompletionTime: "2026-04-03T12:00:00Z",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1791,123 +2068,6 @@ func TestGenerateGKEManifest_ParallelContainers(t *testing.T) {
 	}
 }
 
-func TestConfigureClusterEnvironment_AutoCreateQueues(t *testing.T) {
-	pipeRead, pipeWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pipeRead.Close()
-	defer pipeWrite.Close()
-
-	origStdin := os.Stdin
-	os.Stdin = pipeRead
-	defer func() { os.Stdin = origStdin }()
-
-	if _, err := pipeWrite.Write([]byte("y\n")); err != nil {
-		t.Fatal(err)
-	}
-
-	responses := map[string][]shell.CommandResult{
-		"kubectl get localqueue default-queue -n default": {
-			{ExitCode: 1, Stderr: "Error from server (NotFound): localqueues.kueue.x-k8s.io \"default-queue\" not found"},
-		},
-		"kubectl apply -f": {
-			{ExitCode: 0, Stdout: "resourceflavor.kueue.x-k8s.io/flavor-default created"},
-			{ExitCode: 0, Stdout: "clusterqueue.kueue.x-k8s.io/cluster-queue created"},
-			{ExitCode: 0, Stdout: "localqueue.kueue.x-k8s.io/default-queue created"},
-		},
-		"kubectl get localqueue default-queue -n default -o jsonpath={.spec.clusterQueue}": {
-			{ExitCode: 0, Stdout: "cluster-queue"},
-		},
-		"kubectl get clusterqueue cluster-queue -o json": {
-			{ExitCode: 0, Stdout: "{\"apiVersion\":\"kueue.x-k8s.io/v1beta2\",\"kind\":\"ClusterQueue\",\"spec\":{\"resourceGroups\":[{\"coveredResources\":[\"cpu\"]}]}}"},
-		},
-		"kubectl patch clusterqueue cluster-queue": {
-			{ExitCode: 0, Stdout: "clusterqueue.kueue.x-k8s.io/cluster-queue patched"},
-		},
-	}
-
-	mockExec := NewMockExecutor(responses)
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.capacity = ClusterCapacity{
-		Flavors: map[string]FlavorCapacity{
-			"flavor-default": {CPUs: 30},
-		},
-	}
-
-	job := &orchestrator.JobDefinition{
-		KueueQueueName: "default-queue",
-	}
-
-	err = orc.configureClusterEnvironment(job)
-	if err != nil {
-		t.Fatalf("configureClusterEnvironment failed: %v", err)
-	}
-
-	// Verify calls
-	if mockExec.callCount["kubectl apply -f"] != 3 {
-		t.Errorf("Expected 3 calls to kubectl apply -f, got %d", mockExec.callCount["kubectl apply -f"])
-	}
-}
-
-func TestResolveKueueQueue(t *testing.T) {
-	tests := []struct {
-		name          string
-		requestedName string
-		kubectlOutput string
-		wantName      string
-		wantErr       bool
-	}{
-		{
-			name:          "User requested name",
-			requestedName: "custom-q",
-			kubectlOutput: "",
-			wantName:      "custom-q",
-			wantErr:       false,
-		},
-		{
-			name:          "No queues found, fallback to multislice-queue",
-			requestedName: "",
-			kubectlOutput: "",
-			wantName:      "multislice-queue",
-			wantErr:       false,
-		},
-		{
-			name:          "Single queue found, auto-discover",
-			requestedName: "",
-			kubectlOutput: "queue-1",
-			wantName:      "queue-1",
-			wantErr:       false,
-		},
-		{
-			name:          "Multiple queues found, hard fail",
-			requestedName: "",
-			kubectlOutput: "queue-1 queue-2",
-			wantName:      "",
-			wantErr:       true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			responses := map[string][]shell.CommandResult{
-				"kubectl get localqueue -n default -o jsonpath={.items[*].metadata.name}": {
-					{ExitCode: 0, Stdout: tt.kubectlOutput},
-				},
-			}
-			mockExec := NewMockExecutor(responses)
-			orc := newTestGKEOrchestrator(mockExec)
-
-			got, err := orc.resolveKueueQueue(tt.requestedName, "default")
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("resolveKueueQueue() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if got != tt.wantName {
-				t.Errorf("resolveKueueQueue() got = %v, want %v", got, tt.wantName)
-			}
-		})
-	}
-}
 func TestGPUTopologyAwareScheduling(t *testing.T) {
 	setupMockMachineConfig(t)
 

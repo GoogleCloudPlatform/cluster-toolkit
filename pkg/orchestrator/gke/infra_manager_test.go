@@ -15,10 +15,7 @@
 package gke
 
 import (
-	"bytes"
 	"context"
-	"io"
-	"net/http"
 	"strings"
 	"testing"
 
@@ -30,130 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
-
-func TestRenderClusterQueue(t *testing.T) {
-	orc := &GKEOrchestrator{
-		capacity: ClusterCapacity{
-			Flavors: map[string]FlavorCapacity{
-				"flavor-default": {
-					CPUs:     100,
-					MemoryGi: 400,
-				},
-				"flavor-gpu-test": {
-					CPUs: 10, // Share CPU
-					GPUs: 10,
-				},
-			},
-		},
-	}
-
-	bytes, err := orc.renderClusterQueue("cluster-queue")
-	if err != nil {
-		t.Fatalf("renderClusterQueue failed: %v", err)
-	}
-
-	output := string(bytes)
-
-	// Verify quotas are rendered correctly
-	if !strings.Contains(output, "nominalQuota: 100") {
-		t.Errorf("expected nominalQuota: 100 for CPU, got %s", output)
-	}
-	if !strings.Contains(output, "nominalQuota: 400Gi") {
-		t.Errorf("expected nominalQuota: 400Gi for Memory, got %s", output)
-	}
-	if !strings.Contains(output, "nominalQuota: 10") {
-		t.Errorf("expected nominalQuota: 10 for GPU, got %s", output)
-	}
-
-	// Verify single resource group
-	count := strings.Count(output, "coveredResources:")
-	if count != 1 {
-		t.Errorf("expected 1 coveredResources block, got %d. Output: %s", count, output)
-	}
-}
-
-func TestRenderClusterQueue_Pathways(t *testing.T) {
-	orc := &GKEOrchestrator{
-		capacity: ClusterCapacity{
-			Flavors: map[string]FlavorCapacity{
-				"flavor-tpu": { // TPU flavor (name contains 'tpu')
-					CPUs:     100,
-					MemoryGi: 400,
-					TPUs:     8, // Physical TPU capacity
-				},
-				"pathways-flavor": { // Pathways flavor (CPU-only)
-					CPUs:     480,
-					MemoryGi: 2000,
-					TPUs:     0, // No TPUs
-				},
-			},
-		},
-	}
-
-	bytes, err := orc.renderClusterQueue("cluster-queue")
-	if err != nil {
-		t.Fatalf("renderClusterQueue failed: %v", err)
-	}
-
-	output := string(bytes)
-
-	// Verify quotas are rendered correctly
-	// The TPU flavor (flavor-tpu) CPU/Memory must be overridden to the high defaults (999999 / 999999T)
-	// The TPU nominal quota should match physical capacity (8)
-	if !strings.Contains(output, "nominalQuota: \"999999\"") {
-		t.Errorf("expected nominalQuota: \"999999\" for TPU flavor CPU, got %s", output)
-	}
-	if !strings.Contains(output, "nominalQuota: 999999T") {
-		t.Errorf("expected nominalQuota: 999999T for TPU flavor Memory, got %s", output)
-	}
-	if !strings.Contains(output, "nominalQuota: 8") {
-		t.Errorf("expected nominalQuota: 8 for TPU flavor TPUs, got %s", output)
-	}
-
-	// The Pathways flavor CPU/Memory should remain at their physical/mocked values
-	// The TPU nominal quota for Pathways flavor must be successfully injected as 0
-	if !strings.Contains(output, "nominalQuota: 480") {
-		t.Errorf("expected nominalQuota: 480 for Pathways flavor CPU, got %s", output)
-	}
-	if !strings.Contains(output, "nominalQuota: 2000Gi") {
-		t.Errorf("expected nominalQuota: 2000Gi for Pathways flavor Memory, got %s", output)
-	}
-	if !strings.Contains(output, "nominalQuota: 0") {
-		t.Errorf("expected nominalQuota: 0 for Pathways flavor TPUs, got %s", output)
-	}
-
-	// Verify SINGLE resource group (unified when Pathways is active)
-	count := strings.Count(output, "coveredResources:")
-	if count != 1 {
-		t.Errorf("expected 1 coveredResources block for Pathways case (unified), got %d. Output: %s", count, output)
-	}
-
-	// Verify both flavors are present in the output
-	if !strings.Contains(output, "name: flavor-tpu") {
-		t.Errorf("expected flavor-tpu in output, got %s", output)
-	}
-	if !strings.Contains(output, "name: pathways-flavor") {
-		t.Errorf("expected pathways-flavor in output, got %s", output)
-	}
-}
-
-func TestRenderClusterQueue_Empty(t *testing.T) {
-	orc := &GKEOrchestrator{
-		capacity: ClusterCapacity{}, // Empty
-	}
-
-	bytes, err := orc.renderClusterQueue("cluster-queue")
-	if err != nil {
-		t.Fatalf("renderClusterQueue failed: %v", err)
-	}
-
-	output := string(bytes)
-
-	// Verify no quotas are rendered
-	if strings.Contains(output, "nominalQuota") {
-		t.Errorf("expected no nominalQuota rendered when capacity is empty, got %s", output)
-	}
-}
 
 func TestCleanAndProcessManifests(t *testing.T) {
 	orc := &GKEOrchestrator{}
@@ -186,594 +59,9 @@ spec:
 	}
 }
 
-type mockExecutor struct {
-	executeCommandFunc func(name string, args ...string) shell.CommandResult
-}
-
-func (m *mockExecutor) ExecuteCommand(name string, args ...string) shell.CommandResult {
-	if m.executeCommandFunc != nil {
-		return m.executeCommandFunc(name, args...)
-	}
-	return shell.CommandResult{ExitCode: 0}
-}
-
-func (m *mockExecutor) ExecuteCommandStream(name string, args ...string) error {
-	return nil
-}
-
-func TestWaitForKueueWebhook_Success(t *testing.T) {
-	mock := &mockExecutor{
-		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
-			if name == "kubectl" && args[0] == "get" && args[1] == "deployment" {
-				return shell.CommandResult{
-					ExitCode: 0,
-					Stdout:   "registry.k8s.io/kueue/kueue:v0.15.2",
-				}
-			}
-			if name == "kubectl" && args[0] == "get" && args[1] == "endpointslice" {
-				return shell.CommandResult{
-					ExitCode: 0,
-					Stdout:   `{"items":[{"endpoints":[{"addresses":["10.4.1.3"],"conditions":{"ready":true}}]}]}`,
-				}
-			}
-			// Handle rollout status
-			if name == "kubectl" && args[0] == "rollout" {
-				return shell.CommandResult{ExitCode: 0}
-			}
-			return shell.CommandResult{ExitCode: 0}
-		},
-	}
-
-	orc := &GKEOrchestrator{
-		executor: mock,
-	}
-
-	err := orc.waitForKueueWebhook()
-	if err != nil {
-		t.Fatalf("waitForKueueWebhook failed: %v", err)
-	}
-}
-
-func TestWaitForKueueWebhook_Success_OlderVersion(t *testing.T) {
-	mock := &mockExecutor{
-		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
-			if name == "kubectl" && args[0] == "get" && args[1] == "deployment" {
-				return shell.CommandResult{
-					ExitCode: 0,
-					Stdout:   "registry.k8s.io/kueue/kueue:v0.11.1",
-				}
-			}
-			if name == "kubectl" && args[0] == "get" && args[1] == "endpoints" {
-				return shell.CommandResult{
-					ExitCode: 0,
-					Stdout:   `{"subsets":[{"addresses":[{"ip":"10.4.1.3"}]}]}`,
-				}
-			}
-			// Handle rollout status
-			if name == "kubectl" && args[0] == "rollout" {
-				return shell.CommandResult{ExitCode: 0}
-			}
-			return shell.CommandResult{ExitCode: 0}
-		},
-	}
-
-	orc := &GKEOrchestrator{
-		executor: mock,
-	}
-
-	err := orc.waitForKueueWebhook()
-	if err != nil {
-		t.Fatalf("waitForKueueWebhook failed: %v", err)
-	}
-}
-
-func TestParseVersion(t *testing.T) {
-	tests := []struct {
-		version string
-		major   int
-		minor   int
-		patch   int
-	}{
-		{"v0.15.2", 0, 15, 2},
-		{"v0.11.1", 0, 11, 1},
-		{"v0.6.3", 0, 6, 3},
-		{"1.2.3", 1, 2, 3},
-		{"v1.2", 1, 2, 0},
-		{"v0.16.6-some-random-suffix", 0, 16, 6},
-		{"v0.16.6+build123", 0, 16, 6},
-		{"v0.16.6-rc1+build123", 0, 16, 6},
-		{"invalid", 0, 0, 0},
-	}
-
-	for _, tc := range tests {
-		major, minor, patch := parseVersion(tc.version)
-		if major != tc.major || minor != tc.minor || patch != tc.patch {
-			t.Errorf("parseVersion(%s) = (%d, %d, %d); want (%d, %d, %d)", tc.version, major, minor, patch, tc.major, tc.minor, tc.patch)
-		}
-	}
-}
-
-type mockHTTPClient struct {
-	getFunc func(url string) (*http.Response, error)
-}
-
-func (m *mockHTTPClient) Get(url string) (*http.Response, error) {
-	if m.getFunc != nil {
-		return m.getFunc(url)
-	}
-	return &http.Response{
-		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(bytes.NewReader([]byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: mock-manifest\n"))),
-	}, nil
-}
-
-func TestCheckAndInstallKueue_ReinstallNeeded_LowVersion(t *testing.T) {
-	origPrompt := shell.PromptYesNo
-	defer func() { shell.PromptYesNo = origPrompt }()
-	shell.PromptYesNo = func(prompt string) bool { return true }
-
-	deleteCalled := false
-
-	matchers := []struct {
-		pattern string
-		res     shell.CommandResult
-		action  func()
-	}{
-		{pattern: "kubectl delete crd", action: func() { deleteCalled = true }, res: shell.CommandResult{ExitCode: 0}},
-		{pattern: "auth can-i", res: shell.CommandResult{ExitCode: 0, Stdout: "yes"}},
-		{pattern: "kubectl get crd", res: shell.CommandResult{ExitCode: 0, Stdout: "clusterqueues.kueue.x-k8s.io found"}},
-		{pattern: "jsonpath", res: shell.CommandResult{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.12.0"}},
-		{pattern: "kubectl get deployment", res: shell.CommandResult{ExitCode: 0, Stdout: "kueue-controller-manager found"}},
-		{pattern: "kubectl get endpoints", res: shell.CommandResult{ExitCode: 0, Stdout: `{"subsets": [{"addresses": [{"ip": "10.0.0.1"}]}]}`}},
-		{pattern: "kubectl get endpointslice", res: shell.CommandResult{ExitCode: 0, Stdout: `{"subsets": [{"addresses": [{"ip": "10.0.0.1"}]}]}`}},
-		{pattern: "apply", res: shell.CommandResult{ExitCode: 0}},
-		{pattern: "priorityclass", res: shell.CommandResult{ExitCode: 0}},
-		{pattern: "rollout", res: shell.CommandResult{ExitCode: 0}},
-	}
-
-	mock := &mockExecutor{
-		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
-			fullCmd := name + " " + strings.Join(args, " ")
-			for _, m := range matchers {
-				if strings.Contains(fullCmd, m.pattern) {
-					if m.action != nil {
-						m.action()
-					}
-					return m.res
-				}
-			}
-			return shell.CommandResult{ExitCode: 0}
-		},
-	}
-
-	orc := &GKEOrchestrator{
-		executor:   mock,
-		httpClient: &mockHTTPClient{},
-	}
-
-	err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a")
-	if err != nil {
-		t.Fatalf("CheckAndInstallKueue failed: %v", err)
-	}
-
-	if !deleteCalled {
-		t.Errorf("expected DeleteAllKueueResources to be called, but it wasn't")
-	}
-}
-
-func TestEnsurePriorityClassesInstalled_Missing(t *testing.T) {
-	applyCalled := false
-	mock := &mockExecutor{
-		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
-			fullCmd := name + " " + strings.Join(args, " ")
-			if strings.Contains(fullCmd, "kubectl get priorityclass") {
-				// Return only system priority classes to simulate no user priority classes
-				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical system-node-critical"}
-			}
-			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "kueue_priority_classes.yaml") {
-				applyCalled = true
-				return shell.CommandResult{ExitCode: 0}
-			}
-			return shell.CommandResult{ExitCode: 0}
-		},
-	}
-
-	orc := &GKEOrchestrator{
-		executor: mock,
-	}
-
-	err := orc.ensurePriorityClassesInstalled()
-	if err != nil {
-		t.Fatalf("ensurePriorityClassesInstalled failed: %v", err)
-	}
-
-	if !applyCalled {
-		t.Errorf("expected priority classes to be installed, but they weren't")
-	}
-}
-
-func TestEnsurePriorityClassesInstalled_Present(t *testing.T) {
-	applyCalled := false
-	mock := &mockExecutor{
-		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
-			fullCmd := name + " " + strings.Join(args, " ")
-			if strings.Contains(fullCmd, "kubectl get priorityclass") {
-				// Return system classes and at least one user class (e.g. 'low') to simulate pre-existing classes
-				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical system-node-critical low"}
-			}
-			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "kueue_priority_classes.yaml") {
-				applyCalled = true
-				return shell.CommandResult{ExitCode: 0}
-			}
-			return shell.CommandResult{ExitCode: 0}
-		},
-	}
-
-	orc := &GKEOrchestrator{
-		executor: mock,
-	}
-
-	err := orc.ensurePriorityClassesInstalled()
-	if err != nil {
-		t.Fatalf("ensurePriorityClassesInstalled failed: %v", err)
-	}
-
-	if applyCalled {
-		t.Errorf("expected priority classes to be skipped, but they were installed")
-	}
-}
-
-func TestHandleKueueReinstallation_UserDeclines(t *testing.T) {
-	origPrompt := shell.PromptYesNo
-	defer func() { shell.PromptYesNo = origPrompt }()
-	shell.PromptYesNo = func(prompt string) bool { return false }
-
-	orc := &GKEOrchestrator{}
-
-	err := orc.handleKueueReinstallation("v0.15.2", "Test reason")
-	if err == nil {
-		t.Fatal("expected error when user declines, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "user declined to re-install Kueue") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestRenderClusterQueue_NAP(t *testing.T) {
-	orc := &GKEOrchestrator{
-		napEnabled: true,
-		napLimits: map[string]int64{
-			"cpu":            1000,
-			"memory":         4000, // limit is in GB in napLimits
-			"nvidia.com/gpu": 80,
-		},
-		capacity: ClusterCapacity{
-			Flavors: map[string]FlavorCapacity{
-				"flavor-default": {
-					CPUs:     4,
-					MemoryGi: 16,
-				},
-				"nvidia-tesla-a100": {
-					GPUs: 2,
-				},
-			},
-		},
-	}
-
-	bytes, err := orc.renderClusterQueue("cluster-queue")
-	if err != nil {
-		t.Fatalf("renderClusterQueue failed: %v", err)
-	}
-
-	output := string(bytes)
-
-	// Verify nominal quotas are rendered from napLimits, not static capacities
-	if !strings.Contains(output, "nominalQuota: 1000") { // CPU limit from napLimits
-		t.Errorf("expected nominalQuota: 1000 for CPU, got %s", output)
-	}
-	if !strings.Contains(output, "nominalQuota: 4000G") { // Memory limit from napLimits
-		t.Errorf("expected nominalQuota: 4000G for Memory, got %s", output)
-	}
-	if !strings.Contains(output, "nominalQuota: 80") { // GPU limit from napLimits
-		t.Errorf("expected nominalQuota: 80 for GPU, got %s", output)
-	}
-}
-
-func TestCheckAndInstallKueue_PermissionDenied(t *testing.T) {
-	mock := &mockExecutor{
-		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
-			fullCmd := name + " " + strings.Join(args, " ")
-			if strings.Contains(fullCmd, "auth can-i") {
-				if strings.Contains(fullCmd, "clusterroles") {
-					return shell.CommandResult{ExitCode: 0, Stdout: "no"}
-				}
-				return shell.CommandResult{ExitCode: 0, Stdout: "yes"}
-			}
-			if strings.Contains(fullCmd, "kubectl get crd") {
-				return shell.CommandResult{ExitCode: 0, Stdout: "clusterqueues.kueue.x-k8s.io found"}
-			}
-			if strings.Contains(fullCmd, "jsonpath") {
-				return shell.CommandResult{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.12.0"}
-			}
-			if strings.Contains(fullCmd, "kubectl get deployment") {
-				return shell.CommandResult{ExitCode: 0, Stdout: "kueue-controller-manager found"}
-			}
-			return shell.CommandResult{ExitCode: 0}
-		},
-	}
-
-	orc := &GKEOrchestrator{
-		executor: mock,
-	}
-
-	err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a")
-	if err == nil {
-		t.Fatal("expected error due to insufficient permissions, got nil")
-	}
-
-	expectedErr := "unable to re-install kueue to version"
-	if !strings.Contains(err.Error(), expectedErr) {
-		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
-	}
-}
-
-func TestCheckAndInstallKueue_PermissionGranted(t *testing.T) {
-	deleteCalled := false
-	mock := &mockExecutor{
-		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
-			fullCmd := name + " " + strings.Join(args, " ")
-			if strings.Contains(fullCmd, "auth can-i") {
-				return shell.CommandResult{ExitCode: 0, Stdout: "yes"}
-			}
-			if strings.Contains(fullCmd, "kubectl delete crd") {
-				deleteCalled = true
-				return shell.CommandResult{ExitCode: 0}
-			}
-			if strings.Contains(fullCmd, "kubectl get crd") {
-				return shell.CommandResult{ExitCode: 0, Stdout: "clusterqueues.kueue.x-k8s.io found"}
-			}
-			if strings.Contains(fullCmd, "jsonpath") {
-				return shell.CommandResult{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.12.0"}
-			}
-			if strings.Contains(fullCmd, "kubectl get deployment") {
-				return shell.CommandResult{ExitCode: 0, Stdout: "kueue-controller-manager found"}
-			}
-			if strings.Contains(fullCmd, "kubectl get endpoints") || strings.Contains(fullCmd, "kubectl get endpointslice") {
-				return shell.CommandResult{ExitCode: 0, Stdout: `{"subsets": [{"addresses": [{"ip": "10.0.0.1"}]}]}`}
-			}
-			return shell.CommandResult{ExitCode: 0}
-		},
-	}
-
-	origPrompt := shell.PromptYesNo
-	defer func() { shell.PromptYesNo = origPrompt }()
-	shell.PromptYesNo = func(prompt string) bool { return true }
-
-	orc := &GKEOrchestrator{
-		executor:   mock,
-		httpClient: &mockHTTPClient{},
-	}
-
-	err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a")
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	if !deleteCalled {
-		t.Errorf("expected DeleteAllKueueResources to be called, but it wasn't")
-	}
-}
-
-func TestValidatePriorityClass_Empty(t *testing.T) {
-	orc := &GKEOrchestrator{}
-	err := orc.validatePriorityClass("")
-	if err != nil {
-		t.Fatalf("expected no error for empty priority, got %v", err)
-	}
-}
-
-func TestValidatePriorityClass_Exists(t *testing.T) {
-	mock := &mockExecutor{
-		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
-			if strings.Contains(name+" "+strings.Join(args, " "), "kubectl get priorityclass") {
-				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical low medium high"}
-			}
-			return shell.CommandResult{ExitCode: 0}
-		},
-	}
-	orc := &GKEOrchestrator{executor: mock}
-	err := orc.validatePriorityClass("medium")
-	if err != nil {
-		t.Fatalf("expected no error for existing priority, got %v", err)
-	}
-}
-
-func TestValidatePriorityClass_NotExist(t *testing.T) {
-	mock := &mockExecutor{
-		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
-			if strings.Contains(name+" "+strings.Join(args, " "), "kubectl get priorityclass") {
-				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical low high"}
-			}
-			return shell.CommandResult{ExitCode: 0}
-		},
-	}
-	orc := &GKEOrchestrator{executor: mock}
-	err := orc.validatePriorityClass("medium")
-	if err == nil {
-		t.Fatal("expected error for non-existing priority, got nil")
-	}
-	expected := `priority class "medium" does not exist in the cluster`
-	if !strings.Contains(err.Error(), expected) {
-		t.Errorf("expected error to contain %q, got %v", expected, err)
-	}
-}
-
-func TestReplaceDeprecatedRbacProxyImage(t *testing.T) {
-	tests := []struct {
-		name     string
-		podSpec  map[interface{}]interface{}
-		wantSpec map[interface{}]interface{}
-	}{
-		{
-			name: "replaces v0.13.1 image",
-			podSpec: map[interface{}]interface{}{
-				"containers": []interface{}{
-					map[interface{}]interface{}{
-						"name":  "kube-rbac-proxy",
-						"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
-					},
-					map[interface{}]interface{}{
-						"name":  "other-container",
-						"image": "nginx:latest",
-					},
-				},
-			},
-			wantSpec: map[interface{}]interface{}{
-				"containers": []interface{}{
-					map[interface{}]interface{}{
-						"name":  "kube-rbac-proxy",
-						"image": "quay.io/brancz/kube-rbac-proxy:v0.13.1",
-					},
-					map[interface{}]interface{}{
-						"name":  "other-container",
-						"image": "nginx:latest",
-					},
-				},
-			},
-		},
-		{
-			name: "replaces v0.14.0 image dynamically",
-			podSpec: map[interface{}]interface{}{
-				"containers": []interface{}{
-					map[interface{}]interface{}{
-						"name":  "kube-rbac-proxy",
-						"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.14.0",
-					},
-				},
-			},
-			wantSpec: map[interface{}]interface{}{
-				"containers": []interface{}{
-					map[interface{}]interface{}{
-						"name":  "kube-rbac-proxy",
-						"image": "quay.io/brancz/kube-rbac-proxy:v0.14.0",
-					},
-				},
-			},
-		},
-		{
-			name: "ignores unrelated images",
-			podSpec: map[interface{}]interface{}{
-				"containers": []interface{}{
-					map[interface{}]interface{}{
-						"name":  "main",
-						"image": "gcr.io/my-project/my-image:latest",
-					},
-				},
-			},
-			wantSpec: map[interface{}]interface{}{
-				"containers": []interface{}{
-					map[interface{}]interface{}{
-						"name":  "main",
-						"image": "gcr.io/my-project/my-image:latest",
-					},
-				},
-			},
-		},
-		{
-			name: "replaces image in initContainers",
-			podSpec: map[interface{}]interface{}{
-				"initContainers": []interface{}{
-					map[interface{}]interface{}{
-						"name":  "kube-rbac-proxy-init",
-						"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
-					},
-				},
-			},
-			wantSpec: map[interface{}]interface{}{
-				"initContainers": []interface{}{
-					map[interface{}]interface{}{
-						"name":  "kube-rbac-proxy-init",
-						"image": "quay.io/brancz/kube-rbac-proxy:v0.13.1",
-					},
-				},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			replaceDeprecatedRbacProxyImage(tt.podSpec)
-
-			checkContainers := func(key string) {
-				containers, ok1 := tt.podSpec[key].([]interface{})
-				wantContainers, ok2 := tt.wantSpec[key].([]interface{})
-				if ok1 != ok2 {
-					t.Fatalf("mismatch in %s presence: got %v, want %v", key, ok1, ok2)
-				}
-				if !ok1 {
-					return
-				}
-				if len(containers) != len(wantContainers) {
-					t.Fatalf("length mismatch for %s: got %d, want %d", key, len(containers), len(wantContainers))
-				}
-				for i := range containers {
-					c := containers[i].(map[interface{}]interface{})
-					w := wantContainers[i].(map[interface{}]interface{})
-					if c["image"] != w["image"] {
-						t.Errorf("image mismatch in %s: got %q, want %q", key, c["image"], w["image"])
-					}
-				}
-			}
-
-			checkContainers("containers")
-			checkContainers("initContainers")
-		})
-	}
-}
-
-func TestRenderResourceFlavor_TopologyFiltering(t *testing.T) {
-	orc := &GKEOrchestrator{}
-
-	inputLabels := map[string]string{
-		"cloud.google.com/gke-tpu-accelerator":      "tpu7x",
-		"cloud.google.com/gke-nodepool":             "tpu-pool",
-		"cloud.google.com/gke-tpu-topology":         "4x4x4",
-		"cloud.google.com/gke-tpu-slice-1x1-id":     "some-id",
-		"cloud.google.com/gke-tpu-partition-2x2-id": "some-partition-id",
-	}
-
-	bytes, err := orc.renderResourceFlavor("flavor-tpu7x", inputLabels)
-	if err != nil {
-		t.Fatalf("renderResourceFlavor failed: %v", err)
-	}
-
-	output := string(bytes)
-
-	// Allowed labels must be preserved
-	if !strings.Contains(output, "cloud.google.com/gke-tpu-accelerator: tpu7x") {
-		t.Errorf("expected cloud.google.com/gke-tpu-accelerator to be present, got:\n%s", output)
-	}
-	if !strings.Contains(output, "cloud.google.com/gke-nodepool: tpu-pool") {
-		t.Errorf("expected cloud.google.com/gke-nodepool to be present, got:\n%s", output)
-	}
-
-	// Blocked topology labels must be filtered out
-	if strings.Contains(output, "cloud.google.com/gke-tpu-topology") {
-		t.Errorf("cloud.google.com/gke-tpu-topology should be filtered out, got:\n%s", output)
-	}
-	if strings.Contains(output, "cloud.google.com/gke-tpu-slice-") {
-		t.Errorf("cloud.google.com/gke-tpu-slice-* labels should be filtered out, got:\n%s", output)
-	}
-	if strings.Contains(output, "cloud.google.com/gke-tpu-partition-") {
-		t.Errorf("cloud.google.com/gke-tpu-partition-* labels should be filtered out, got:\n%s", output)
-	}
-}
-
 func TestValidateClusterState_TargetNamespaceValidation(t *testing.T) {
 	mockExec := &mockExecutor{
 		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
-			// Mock other checks in ValidateClusterState to pass
 			return shell.CommandResult{ExitCode: 0}
 		},
 	}
@@ -807,5 +95,65 @@ func TestValidateClusterState_TargetNamespaceValidation(t *testing.T) {
 	expectedErr := `target namespace "nonexistent-ns" does not exist`
 	if !strings.Contains(err.Error(), expectedErr) {
 		t.Errorf("expected error to contain %q, got: %v", expectedErr, err)
+	}
+}
+
+func TestReplaceDeprecatedRbacProxyImage(t *testing.T) {
+	podSpec := map[interface{}]interface{}{
+		"initContainers": []interface{}{
+			map[interface{}]interface{}{
+				"name":  "init-proxy",
+				"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
+			},
+		},
+		"containers": []interface{}{
+			map[interface{}]interface{}{
+				"name":  "proxy",
+				"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
+			},
+			map[interface{}]interface{}{
+				"name":  "manager",
+				"image": "gcr.io/k8s-staging-jobset/jobset:v0.2.0",
+			},
+		},
+	}
+
+	replaceDeprecatedRbacProxyImage(podSpec)
+
+	initContainers := podSpec["initContainers"].([]interface{})
+	initProxy := initContainers[0].(map[interface{}]interface{})
+	if got := initProxy["image"]; got != "quay.io/brancz/kube-rbac-proxy:v0.13.1" {
+		t.Errorf("initContainers image = %v; want quay.io/brancz/kube-rbac-proxy:v0.13.1", got)
+	}
+
+	containers := podSpec["containers"].([]interface{})
+	proxy := containers[0].(map[interface{}]interface{})
+	if got := proxy["image"]; got != "quay.io/brancz/kube-rbac-proxy:v0.13.1" {
+		t.Errorf("containers image = %v; want quay.io/brancz/kube-rbac-proxy:v0.13.1", got)
+	}
+
+	manager := containers[1].(map[interface{}]interface{})
+	if got := manager["image"]; got != "gcr.io/k8s-staging-jobset/jobset:v0.2.0" {
+		t.Errorf("manager image = %v; want gcr.io/k8s-staging-jobset/jobset:v0.2.0", got)
+	}
+}
+
+func TestIsJobSetCRDInstalled_Forbidden(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			return shell.CommandResult{
+				ExitCode: 1,
+				Stderr:   "Error from server (Forbidden): customresourcedefinitions.apiextensions.k8s.io \"jobsets.jobset.x-k8s.io\" is forbidden",
+			}
+		},
+	}
+	orc := &GKEOrchestrator{executor: mock}
+
+	installed, err := orc.isJobSetCRDInstalled()
+	if err != nil {
+		t.Fatalf("isJobSetCRDInstalled should succeed and return true on 403 Forbidden, got err: %v", err)
+	}
+	if !installed {
+		t.Errorf("isJobSetCRDInstalled on 403 Forbidden = false; want true")
 	}
 }

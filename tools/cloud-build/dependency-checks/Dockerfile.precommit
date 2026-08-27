@@ -14,8 +14,8 @@
 
 FROM golang:1.26-trixie
 
-RUN apt-get -y update && apt-get install -y python3-pip python3-venv git 
-shellcheck && \
+RUN apt-get -y update && apt-get install -y python3-pip python3-venv git \
+    shellcheck && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN python3 -m venv /opt/venv && \
