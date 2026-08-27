@@ -264,41 +264,41 @@ check_filestore_quota() {
 
 declare -A LUSTRE_QUOTA_CACHE
 check_lustre_quota() {
-	local region=$1
+	local zone=$1
 	local required_capacity=${REQUIRED_LUSTRE_GB:-0}
 	if [[ "$required_capacity" -le 0 ]]; then
 		return 0
 	fi
 
-	if [[ -n "${LUSTRE_QUOTA_CACHE[$region]:-}" ]]; then
-		return "${LUSTRE_QUOTA_CACHE[$region]}"
+	if [[ -n "${LUSTRE_QUOTA_CACHE[$zone]:-}" ]]; then
+		return "${LUSTRE_QUOTA_CACHE[$zone]}"
 	fi
 
 	local limit
-	limit=$(gcloud beta quotas info list --service=parallelstore.googleapis.com --project="${PROJECT_ID}" \
-		--filter="quotaId=StorageGiBPerRegion" --format="json" 2>/dev/null |
-		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($region) or (.dimensions?.region? // "") == $region) | .details?.value? | select(. != null) | tonumber] | max' 2>/dev/null)
+	limit=$(gcloud beta quotas info list --service=lustre.googleapis.com --project="${PROJECT_ID}" \
+		--filter="quotaId=Capacity" --format="json" 2>/dev/null |
+		jq -r --arg zone "$zone" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($zone) or (.dimensions?.zone? // "") == $zone) | .details?.value? | select(. != null) | tonumber] | max' 2>/dev/null)
 
 	if [[ "${limit}" == "-1" ]]; then
-		LUSTRE_QUOTA_CACHE[$region]=0
+		LUSTRE_QUOTA_CACHE[$zone]=0
 		return 0
 	fi
 
 	if [[ -z "$limit" || "$limit" == "null" ]]; then
-		echo "WARN: Could not fetch Lustre quota limit for $region. Failing-open and assuming capacity exists."
-		LUSTRE_QUOTA_CACHE[$region]=0
+		echo "WARN: Could not fetch Lustre quota limit for $zone. Failing-open and assuming capacity exists."
+		LUSTRE_QUOTA_CACHE[$zone]=0
 		return 0
 	fi
 
 	if [[ "$limit" == "0" ]]; then
-		echo "INFO: Lustre quota limit for $region is explicitly 0. Skipping zone."
-		LUSTRE_QUOTA_CACHE[$region]=1
+		echo "INFO: Lustre quota limit for $zone is explicitly 0. Skipping zone."
+		LUSTRE_QUOTA_CACHE[$zone]=1
 		return 1
 	fi
 
 	local usage
-	usage=$(gcloud parallelstore instances list --location="-" --project="${PROJECT_ID}" --format="json" 2>/dev/null |
-		jq -r --arg region "$region" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | .capacityGib | select(. != null) | tonumber] | add // 0' 2>/dev/null)
+	usage=$(gcloud lustre instances list --location="-" --project="${PROJECT_ID}" --format="json" 2>/dev/null |
+		jq -r --arg zone "$zone" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $zone or ($loc | startswith($zone + "-"))) | .capacityGib | select(. != null) | tonumber] | add // 0' 2>/dev/null)
 
 	limit=$(printf "%.0f" "${limit}" 2>/dev/null || echo 0)
 	usage=$(printf "%.0f" "${usage}" 2>/dev/null || echo 0)
@@ -308,11 +308,11 @@ check_lustre_quota() {
 
 	local remaining=$((limit - usage))
 	if [[ "$remaining" -ge "$required_capacity" ]]; then
-		LUSTRE_QUOTA_CACHE[$region]=0
+		LUSTRE_QUOTA_CACHE[$zone]=0
 		return 0
 	else
-		echo "INFO: Insufficient Lustre quota in $region (Limit: $limit, Usage: $usage, Required: $required_capacity)."
-		LUSTRE_QUOTA_CACHE[$region]=1
+		echo "INFO: Insufficient Lustre quota in $zone (Limit: $limit, Usage: $usage, Required: $required_capacity)."
+		LUSTRE_QUOTA_CACHE[$zone]=1
 		return 1
 	fi
 }
@@ -352,8 +352,8 @@ fi
 
 LUSTRE_ZONES=""
 if [[ "${CHECK_LUSTRE:-false}" == "true" ]]; then
-	echo "INFO: Fetching available Lustre (Parallelstore) zones..."
-	if ! LUSTRE_ZONES=$(gcloud parallelstore locations list --project="${PROJECT_ID}" --format="value(locationId)" 2>&1); then
+	echo "INFO: Fetching available Managed Lustre zones..."
+	if ! LUSTRE_ZONES=$(gcloud lustre locations list --project="${PROJECT_ID}" --format="value(locationId)" 2>&1); then
 		echo "ERROR: Failed to fetch available Lustre locations: ${LUSTRE_ZONES}" >&2
 		exit 1
 	fi
@@ -378,11 +378,11 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 
 		if [[ "${CHECK_LUSTRE:-false}" == "true" ]]; then
 			if ! echo "${LUSTRE_ZONES}" | grep -x -q "${ZONE}"; then
-				echo "INFO: Skipping ${ZONE} - Lustre (Parallelstore) not available in this zone."
+				echo "INFO: Skipping ${ZONE} - Managed Lustre not available in this zone."
 				continue
 			fi
-			if ! check_lustre_quota "${REGION}"; then
-				echo "INFO: Skipping ${ZONE} - Lustre quota check failed in region ${REGION}."
+			if ! check_lustre_quota "${ZONE}"; then
+				echo "INFO: Skipping ${ZONE} - Lustre quota check failed in zone ${ZONE}."
 				continue
 			fi
 		fi
