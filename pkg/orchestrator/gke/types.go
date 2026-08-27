@@ -341,6 +341,9 @@ type JobSetCondition struct {
 }
 
 type JobSetStatus struct {
+	Spec struct {
+		Suspend bool `json:"suspend"`
+	} `json:"spec"`
 	Status struct {
 		Conditions []JobSetCondition `json:"conditions"`
 	} `json:"status"`
