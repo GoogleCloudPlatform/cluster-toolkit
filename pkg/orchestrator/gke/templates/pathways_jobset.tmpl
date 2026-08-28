@@ -51,8 +51,6 @@ spec:
 {{- end }}
         template:
           metadata:
-            labels:
-              gcluster.google.com/workload: {{.WorkloadName}}
             annotations:
               kueue.x-k8s.io/safe-to-forcefully-delete: "true"
 {{- if .GCSFuseEnabled }}
