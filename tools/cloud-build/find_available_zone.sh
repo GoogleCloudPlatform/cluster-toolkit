@@ -298,7 +298,7 @@ check_lustre_quota() {
 
 	local usage
 	usage=$(gcloud lustre instances list --location="-" --project="${PROJECT_ID}" --format="json" 2>/dev/null |
-		jq -r --arg zone "$zone" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $zone or ($loc | startswith($zone + "-"))) | .capacityGib | select(. != null) | tonumber] | add // 0' 2>/dev/null)
+		jq -r --arg zone "$zone" '[.[]? | select((.name | split("/")[3]) == $zone) | .capacityGib | select(. != null) | tonumber] | add // 0' 2>/dev/null)
 
 	if ! limit=$(printf "%.0f" "${limit}" 2>/dev/null); then limit=0; fi
 	if ! usage=$(printf "%.0f" "${usage}" 2>/dev/null); then usage=0; fi
