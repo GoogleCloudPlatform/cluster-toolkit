@@ -20,6 +20,7 @@ PROJECTS=("hpc-toolkit-dev" "hpc-toolkit-dev-2" "hpc-toolkit-gsc")
 
 echo "Applying Kueue Locks to Clusters..."
 
+ERRORS=0
 for PROJECT in "${PROJECTS[@]}"; do
 	echo "==========================================="
 	echo "Project: $PROJECT"
@@ -28,17 +29,25 @@ for PROJECT in "${PROJECTS[@]}"; do
 	# Check if cluster exists in this project
 	if gcloud container clusters describe test-kueue-cluster --region us-central1 --project "$PROJECT" >/dev/null 2>&1; then
 		echo "Getting credentials for test-kueue-cluster in $PROJECT..."
-		gcloud container clusters get-credentials test-kueue-cluster --region us-central1 --project "$PROJECT"
+		if gcloud container clusters get-credentials test-kueue-cluster --region us-central1 --project "$PROJECT"; then
+			echo "Applying dummy-device-plugin..."
+			kubectl apply -f "$CONFIGS_DIR/dummy-device-plugin.yaml" || ERRORS=1
 
-		echo "Applying dummy-device-plugin..."
-		kubectl apply -f "$CONFIGS_DIR/dummy-device-plugin.yaml"
-
-		echo "Applying kueue-setup..."
-		kubectl apply -f "$CONFIGS_DIR/kueue-setup.yaml"
+			echo "Applying kueue-setup..."
+			kubectl apply -f "$CONFIGS_DIR/kueue-setup.yaml" || ERRORS=1
+		else
+			echo "Failed to get credentials for test-kueue-cluster in $PROJECT."
+			ERRORS=1
+		fi
 	else
 		echo "test-kueue-cluster not found in $PROJECT. Skipping."
 	fi
 	echo ""
 done
+
+if [ "$ERRORS" -ne 0 ]; then
+	echo "Error: Failed to apply Kueue locks to one or more clusters."
+	exit 1
+fi
 
 echo "Done."

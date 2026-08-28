@@ -77,8 +77,8 @@ def auto_fix_resources(filepath):
                             
                             containers = job_data.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
                             for container in containers:
-                                resources = container.get('resources', {})
-                                requests = resources.get('requests', {})
+                                resources = container.get('resources') or {}
+                                requests = resources.get('requests') or {}
                                 
                                 lock_name = None
                                 for k in requests.keys():
@@ -91,7 +91,7 @@ def auto_fix_resources(filepath):
                                     if requests.get('cpu') != '200m' or str(requests.get('memory')) != '2Gi':
                                         needs_fix = True
                                     
-                                    limits = resources.get('limits', {})
+                                    limits = resources.get('limits') or {}
                                     if str(limits.get('cpu')) != '1' or str(limits.get('memory')) != '2Gi' or limits.get(lock_name) != 1:
                                         needs_fix = True
                                         
@@ -118,7 +118,7 @@ def auto_fix_resources(filepath):
                                         modified = True
                         except Exception as e:
                             # It might fail if the bash script has $VARS inside the yaml that breaks the YAML parser
-                            pass
+                            print(f"Warning: Failed to parse embedded job.yaml in {filepath}: {e}")
                             
     if modified:
         with open(filepath, 'w') as f:

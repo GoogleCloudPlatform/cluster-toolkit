@@ -113,11 +113,18 @@ def update_kueue_setup(new_locks):
     if not missing_locks:
         return 0
         
-    # We need to append to the last test_lock group, or create a new one if it hits 50 limit.
-    # To keep it simple and preserve ruamel's formatting as best as possible, we just append to the last group.
-    # Wait, Kueue API limits ResourceFlavors to 50 resources.
-    # Let's check the size of the last group.
-    last_group = test_lock_groups[-1]
+    if test_lock_groups:
+        last_group = test_lock_groups[-1]
+    else:
+        last_group = {
+            "coveredResources": [],
+            "flavors": [{
+                "name": "test-lock-flavor",
+                "resources": []
+            }]
+        }
+        cq_doc['spec']['resourceGroups'].append(last_group)
+        test_lock_groups.append(last_group)
     
     flavor = last_group['flavors'][0]
     flavor_name = flavor['name']
