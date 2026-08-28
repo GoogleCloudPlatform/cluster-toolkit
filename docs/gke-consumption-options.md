@@ -3,6 +3,7 @@
 Cluster Toolkit provides unified configuration for deploying GKE clusters across multiple Compute Engine consumption models. This guide outlines variable requirements, compact placement behaviors, and machine family constraints across all supported models.
 
 For deep-dive documentation on underlying Google Cloud topology, scheduling, and quota mechanics, see:
+
 * [AI Hypercomputer GKE consumption options](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#use-cluster-toolkit)
 * [Dynamic Workload Scheduler (DWS)](https://cloud.google.com/kubernetes-engine/docs/concepts/dws)
 * [Topology-Aware Scheduling (TAS) in GKE](https://cloud.google.com/kubernetes-engine/docs/concepts/topology-aware-scheduling)
@@ -120,6 +121,7 @@ Standard on-demand Compute Engine allocation.
 * Default model. Requires defining `static_node_count` (`spot` defaults to `false`).
 
 ### Compact Placement
+
 ```yaml
 # In your deployment file:
 spot: false
