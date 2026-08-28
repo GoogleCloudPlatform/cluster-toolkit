@@ -160,3 +160,26 @@ resource "google_storage_anywhere_cache" "cache_instances" {
     create = var.anywhere_cache_create_timeout
   }
 }
+
+resource "google_project_iam_custom_role" "gke_gcsfuse" {
+  count       = var.anywhere_cache != null ? 1 : 0
+  project     = var.project_id
+  role_id     = "gke_gcsfuse_${substr(md5(google_storage_bucket.bucket.name), 0, 8)}"
+  title       = "GKE GCS Fuse Anywhere Cache Custom Role (${google_storage_bucket.bucket.name})"
+  description = "Custom role for GCS Fuse Anywhere Cache on bucket ${google_storage_bucket.bucket.name}"
+  permissions = [
+    "storage.objects.list",
+    "storage.buckets.get",
+    "storage.anywhereCaches.create",
+    "storage.anywhereCaches.get",
+    "storage.anywhereCaches.list",
+    "storage.anywhereCaches.update",
+  ]
+}
+
+resource "google_project_iam_member" "gke_gcsfuse_members" {
+  for_each = var.anywhere_cache != null ? toset(concat(values(var.object_users), tolist(var.viewers))) : toset([])
+  project  = var.project_id
+  role     = google_project_iam_custom_role.gke_gcsfuse[0].id
+  member   = each.value
+}

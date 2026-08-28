@@ -15,4 +15,6 @@
 
 spec:
   requirements:
-    services: []
+    services:
+    - storage.googleapis.com
+    - iam.googleapis.com
