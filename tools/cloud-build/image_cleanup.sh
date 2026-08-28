@@ -15,7 +15,7 @@
 
 set -eo pipefail
 
-IMAGE="us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID"
+IMAGE=${IMAGE:-"us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID"}
 MAX_RETRIES=5
 RETRY_DELAY=10
 ATTEMPT=1
