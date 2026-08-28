@@ -62,19 +62,18 @@ var (
 	gkeScheduler           string
 	platform               string
 
-	awaitJobCompletion bool
-	timeout            string
-	priority           string
-	verbose            bool
-	volumeStr          []string
+	awaitJobCompletion  bool
+	timeout             string
+	priority            string
+	verbose             bool
+	enableMLDiagnostics bool
+	volumeStr           []string
 
 	gkeMtcEnabled          bool
 	gkeMtcRamdiskDirectory string
 
 	isPathwaysJob bool
 	pathways      orchestrator.PathwaysJobDefinition
-
-	enableMLDiagnostics bool
 
 	gkeNapProvisioning string
 	gkeNapReservation  string
