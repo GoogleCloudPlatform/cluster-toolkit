@@ -25,7 +25,18 @@ fi
 
 gcloud container clusters get-credentials test-kueue-cluster --region=us-central1
 BUILD_ID_SHORT=$(echo "$BUILD_ID" | cut -c1-6)
-JOB_NAME="${TEST_NAME}-${BUILD_ID_SHORT}"
+
+# Read the actual job name from the manifest to handle cases where tests use abbreviated names.
+# Strip any YAML quotes and suppress errors if the file doesn't exist yet.
+JOB_NAME=""
+if [ -f "/workspace/job.yaml" ]; then
+	JOB_NAME=$(grep -m 1 -E '^ *name:' /workspace/job.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
+fi
+
+if [ -z "$JOB_NAME" ]; then
+	# Fallback if grep fails or file is missing
+	JOB_NAME="${TEST_NAME}-${BUILD_ID_SHORT}"
+fi
 
 # Cloud Build trap: If the Cloud Build step itself receives a cancellation signal,
 # delete the GKE job so the pod receives a SIGTERM and performs infrastructure cleanup.
