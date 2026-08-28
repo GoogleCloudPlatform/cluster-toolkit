@@ -169,7 +169,7 @@ data "google_project" "project" {
 resource "google_project_iam_custom_role" "gke_gcsfuse" {
   count       = var.anywhere_cache != null && var.create_gcsfuse_iam_role ? 1 : 0
   project     = var.project_id
-  role_id     = "gke_gcsfuse_${substr(md5(local.name), 0, 8)}"
+  role_id     = "gke_gcsfuse_${substr(md5("${var.deployment_name}_${var.name_prefix != null ? var.name_prefix : ""}"), 0, 8)}"
   title       = "GKE GCS Fuse Anywhere Cache Custom Role (${local.name})"
   description = "Custom role for GCS Fuse Anywhere Cache on bucket ${local.name}"
   permissions = [
