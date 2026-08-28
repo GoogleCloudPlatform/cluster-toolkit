@@ -161,6 +161,10 @@ resource "google_storage_anywhere_cache" "cache_instances" {
   }
 }
 
+data "google_project" "project" {
+  project_id = var.project_id
+}
+
 resource "google_project_iam_custom_role" "gke_gcsfuse" {
   count       = var.anywhere_cache != null ? 1 : 0
   project     = var.project_id
@@ -178,8 +182,8 @@ resource "google_project_iam_custom_role" "gke_gcsfuse" {
 }
 
 resource "google_project_iam_member" "gke_gcsfuse_members" {
-  for_each = var.anywhere_cache != null ? toset(concat(values(var.object_users), tolist(var.viewers))) : toset([])
-  project  = var.project_id
-  role     = google_project_iam_custom_role.gke_gcsfuse[0].id
-  member   = each.value
+  count   = var.anywhere_cache != null ? 1 : 0
+  project = var.project_id
+  role    = google_project_iam_custom_role.gke_gcsfuse[0].id
+  member  = "serviceAccount:service-${data.google_project.project.number}@container-engine-robot.iam.gserviceaccount.com"
 }
