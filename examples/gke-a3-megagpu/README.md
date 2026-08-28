@@ -182,7 +182,7 @@ After deployment, you can verify the GPU and networking performance using the in
 
 *Note: DWS Flex Start workloads require `nodeSelector: cloud.google.com/gke-flex-start: "true"`.*
 
-### Deploy the NCCL test JobSet
+### Deploy the NCCL test JobSet for DWS Flex Start
 
 1. Deploy the NCCL test JobSet:
 
@@ -223,7 +223,7 @@ After deployment, you can verify the GPU and networking performance using the in
 
 *Note: Queued Provisioning workloads require the label `kueue.x-k8s.io/queue-name: dws-local-queue` and annotation `provreq.kueue.x-k8s.io/maxRunDurationSeconds`.*
 
-### Deploy the NCCL test JobSet
+### Deploy the NCCL test JobSet for DWS Flex Start with Queued Provisioning
 
 1. Deploy the NCCL test JobSet:
 
