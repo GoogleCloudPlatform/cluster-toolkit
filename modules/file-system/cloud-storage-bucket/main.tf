@@ -162,13 +162,14 @@ resource "google_storage_anywhere_cache" "cache_instances" {
 }
 
 data "google_project" "project" {
+  count      = var.anywhere_cache != null && var.create_gcsfuse_iam_role ? 1 : 0
   project_id = var.project_id
 }
 
 resource "google_project_iam_custom_role" "gke_gcsfuse" {
-  count       = var.anywhere_cache != null ? 1 : 0
+  count       = var.anywhere_cache != null && var.create_gcsfuse_iam_role ? 1 : 0
   project     = var.project_id
-  role_id     = "gke_gcsfuse_${substr(md5(google_storage_bucket.bucket.name), 0, 8)}"
+  role_id     = "gke_gcsfuse_${substr(md5("${var.deployment_name}_${var.name_prefix != null ? var.name_prefix : ""}"), 0, 8)}"
   title       = "GKE GCS Fuse Anywhere Cache Custom Role (${google_storage_bucket.bucket.name})"
   description = "Custom role for GCS Fuse Anywhere Cache on bucket ${google_storage_bucket.bucket.name}"
   permissions = [
@@ -182,8 +183,8 @@ resource "google_project_iam_custom_role" "gke_gcsfuse" {
 }
 
 resource "google_project_iam_member" "gke_gcsfuse_members" {
-  count   = var.anywhere_cache != null ? 1 : 0
+  count   = var.anywhere_cache != null && var.create_gcsfuse_iam_role ? 1 : 0
   project = var.project_id
   role    = google_project_iam_custom_role.gke_gcsfuse[0].id
-  member  = "serviceAccount:service-${data.google_project.project.number}@container-engine-robot.iam.gserviceaccount.com"
+  member  = "serviceAccount:service-${data.google_project.project[0].number}@container-engine-robot.iam.gserviceaccount.com"
 }
