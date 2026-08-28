@@ -46,16 +46,16 @@ data:
     #!/bin/bash
     echo "Starting Centralized K8s Reaper Pod..."
     echo "This pod monitors active jobs and cancels them if their Cloud Build is CANCELLED."
-    
+
     # Explicitly configure the project to prevent silent gcloud failures
-    PROJECT_ID=$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/project/project-id)
+    PROJECT_ID=$(curl -s -m 5 -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/project/project-id)
     if [ -n "$PROJECT_ID" ]; then
       gcloud config set project "$PROJECT_ID" 2>/dev/null
     fi
-    
+
     while true; do
       # Fetch all jobs, checking their Complete and Failed conditions
-      kubectl get jobs -l build-id -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels.build-id}{"\t"}{.status.conditions[?(@.type=="Complete")].status}{"\t"}{.status.conditions[?(@.type=="Failed")].status}{"\n"}{end}' | while read job_name build_id complete failed; do
+      kubectl get jobs -l build-id -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.metadata.labels.build-id}{"|"}{.status.conditions[?(@.type=="Complete")].status}{"|"}{.status.conditions[?(@.type=="Failed")].status}{"\n"}{end}' | while IFS='|' read -r job_name build_id complete failed; do
         if [ -z "$build_id" ]; then
           continue
         fi

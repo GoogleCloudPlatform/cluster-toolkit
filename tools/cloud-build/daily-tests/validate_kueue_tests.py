@@ -56,7 +56,7 @@ def auto_fix_resources(filepath):
                     end_idx = -1
                     eof_marker = None
                     for j, line in enumerate(lines):
-                        match = re.search(r'cat <<\s*\'?([A-Z_]+)\'?\s*>.*job\.yaml', line)
+                        match = re.search(r'cat <<\s*[\'"]?([A-Z_]+)[\'"]?\s*>.*job\.yaml', line)
                         if match:
                             start_idx = j + 1
                             eof_marker = match.group(1)
@@ -77,11 +77,20 @@ def auto_fix_resources(filepath):
                             
                             containers = job_data.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
                             for container in containers:
+                                if not isinstance(container, dict):
+                                    continue
                                 resources = container.get('resources') or {}
+                                if not isinstance(resources, dict):
+                                    resources = {}
                                 requests = resources.get('requests') or {}
-                                
+                                if not isinstance(requests, dict):
+                                    requests = {}
+                                limits = resources.get('limits') or {}
+                                if not isinstance(limits, dict):
+                                    limits = {}
+
                                 lock_name = None
-                                for k in requests.keys():
+                                for k in list(requests.keys()) + list(limits.keys()):
                                     if k.startswith('test-locks/'):
                                         lock_name = k
                                         break
@@ -91,16 +100,17 @@ def auto_fix_resources(filepath):
                                     if requests.get('cpu') != '200m' or str(requests.get('memory')) != '2Gi':
                                         needs_fix = True
                                     
-                                    limits = resources.get('limits') or {}
                                     if str(limits.get('cpu')) != '1' or str(limits.get('memory')) != '2Gi' or limits.get(lock_name) != 1:
                                         needs_fix = True
                                         
                                     if needs_fix:
                                         print(f"Auto-fixing and standardizing resources for {filepath}...")
+                                        if 'requests' not in resources or not isinstance(resources['requests'], dict):
+                                            resources['requests'] = {}
                                         resources['requests']['cpu'] = '200m'
                                         resources['requests']['memory'] = dq('2Gi')
                                         
-                                        if 'limits' not in resources:
+                                        if 'limits' not in resources or not isinstance(resources['limits'], dict):
                                             resources['limits'] = {}
                                         resources['limits']['cpu'] = 1
                                         resources['limits']['memory'] = dq('2Gi')

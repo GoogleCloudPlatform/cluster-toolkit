@@ -126,8 +126,7 @@ def update_kueue_setup(new_locks):
         cq_doc['spec']['resourceGroups'].append(last_group)
         test_lock_groups.append(last_group)
     
-    flavor = last_group['flavors'][0]
-    flavor_name = flavor['name']
+
     
     for lock in missing_locks:
         if len(last_group['coveredResources']) >= 50:

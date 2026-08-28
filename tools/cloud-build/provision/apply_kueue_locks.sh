@@ -15,7 +15,10 @@
 
 set -eo pipefail
 
-CONFIGS_DIR="tools/cloud-build/daily-tests/blueprints/test-infra-kueue/configs"
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+CONFIGS_DIR="$SCRIPT_DIR/../daily-tests/blueprints/test-infra-kueue/configs"
+CLUSTER_NAME="test-kueue-cluster"
+CLUSTER_REGION="us-central1"
 PROJECTS=("hpc-toolkit-dev" "hpc-toolkit-dev-2" "hpc-toolkit-gsc")
 
 echo "Applying Kueue Locks to Clusters..."
@@ -27,20 +30,20 @@ for PROJECT in "${PROJECTS[@]}"; do
 	echo "==========================================="
 
 	# Check if cluster exists in this project
-	if gcloud container clusters describe test-kueue-cluster --region us-central1 --project "$PROJECT" >/dev/null 2>&1; then
-		echo "Getting credentials for test-kueue-cluster in $PROJECT..."
-		if gcloud container clusters get-credentials test-kueue-cluster --region us-central1 --project "$PROJECT"; then
+	if gcloud container clusters describe "$CLUSTER_NAME" --region "$CLUSTER_REGION" --project "$PROJECT" >/dev/null 2>&1; then
+		echo "Getting credentials for $CLUSTER_NAME in $PROJECT..."
+		if gcloud container clusters get-credentials "$CLUSTER_NAME" --region "$CLUSTER_REGION" --project "$PROJECT"; then
 			echo "Applying dummy-device-plugin..."
 			kubectl apply -f "$CONFIGS_DIR/dummy-device-plugin.yaml" || ERRORS=1
 
 			echo "Applying kueue-setup..."
 			kubectl apply -f "$CONFIGS_DIR/kueue-setup.yaml" || ERRORS=1
 		else
-			echo "Failed to get credentials for test-kueue-cluster in $PROJECT."
+			echo "Failed to get credentials for $CLUSTER_NAME in $PROJECT."
 			ERRORS=1
 		fi
 	else
-		echo "test-kueue-cluster not found in $PROJECT. Skipping."
+		echo "$CLUSTER_NAME not found in $PROJECT. Skipping."
 	fi
 	echo ""
 done
