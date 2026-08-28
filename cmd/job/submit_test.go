@@ -291,6 +291,11 @@ func setupSubmitTestEnv(t *testing.T) {
 	location = ""
 	projectID = ""
 	workloadName = ""
+
+	// Reset MTc & ML Diagnostics global flags to prevent state bleeding across test cases
+	enableMLDiagnostics = false
+	gkeMtcEnabled = false
+	gkeMtcRamdiskDirectory = ""
 	kueueQueueName = ""
 	numNodes = 1
 	numSlices = 1
