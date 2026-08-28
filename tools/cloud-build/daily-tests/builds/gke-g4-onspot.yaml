@@ -130,19 +130,10 @@ steps:
             command: ["/bin/bash", "-c"]
             args:
             - |
-              set -e -u -o pipefail
-              echo "Sourcing find_available_zone.sh to determine zone."
-              source /workspace/tools/cloud-build/wait_for_available_zone.sh
-              if [ -z "\$${ZONE:-}" ]; then
-                echo "ERROR: ZONE not found" >&2
-                exit 1
-              fi
               set -x -e
               echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/gke-g4-onspot.yaml"
               cd /workspace
 
-              BUILD_ID_FULL=$$BUILD_ID
-              BUILD_ID_SHORT=\$${BUILD_ID_FULL:0:6}
               DEPLOYMENT_NAME="gke-g4-spot-$$BUILD_ID_SHORT"
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
@@ -153,6 +144,14 @@ steps:
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
               trap cleanup_pod EXIT SIGTERM SIGINT
 
+              set -e -u -o pipefail
+              echo "Sourcing find_available_zone.sh to determine zone."
+              source /workspace/tools/cloud-build/wait_for_available_zone.sh
+              if [ -z "\$${ZONE:-}" ]; then
+                echo "ERROR: ZONE not found" >&2
+                exit 1
+              fi
+              set -x
               bash tools/get_binary.sh "${_TEST_PREFIX}"
               REGION="\$${ZONE%-*}"
               EXAMPLE_BP=examples/gke-g4/gke-g4.yaml
@@ -183,7 +182,7 @@ steps:
               cat \$$EXAMPLE_BP
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-                --extra-vars="test_prefix=${_TEST_PREFIX}" \
+                  --extra-vars="test_prefix=${_TEST_PREFIX}" \
                   --user="$$OSLOGIN_USER" \
                   --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
                   --extra-vars="region=\$$REGION zone=\$$ZONE" \

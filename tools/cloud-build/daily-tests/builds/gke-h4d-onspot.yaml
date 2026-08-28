@@ -131,15 +131,7 @@ steps:
             command: ["/bin/bash", "-c"]
             args:
             - |
-              set -e -u -o pipefail
-              echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/gke-h4d-onspot.yaml"
-              echo "Sourcing find_available_zone.sh to determine zone."
-              source /workspace/tools/cloud-build/wait_for_available_zone.sh
-              if [ -z "\$${ZONE:-}" ]; then
-                echo "ERROR: ZONE not found" >&2
-                exit 1
-              fi
-              set -x
+              set -x -e
               echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/gke-h4d-onspot.yaml"
               cd /workspace
 
@@ -153,8 +145,16 @@ steps:
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
               trap cleanup_pod EXIT SIGTERM SIGINT
 
+              set -e -u -o pipefail
+              echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/gke-h4d-onspot.yaml"
+              echo "Sourcing find_available_zone.sh to determine zone."
+              source /workspace/tools/cloud-build/wait_for_available_zone.sh
+              if [ -z "\$${ZONE:-}" ]; then
+                echo "ERROR: ZONE not found" >&2
+                exit 1
+              fi
+              set -x
               bash tools/get_binary.sh "${_TEST_PREFIX}"
-
               REGION="\$${ZONE%-*}"
               EXAMPLE_BP="examples/gke-h4d/gke-h4d.yaml"
 
