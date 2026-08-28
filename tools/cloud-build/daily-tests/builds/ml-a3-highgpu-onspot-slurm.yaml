@@ -97,6 +97,12 @@ steps:
           - name: runner
             image: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
             env:
+            - name: CHECK_FILESTORE
+              value: "true"
+            - name: REQUIRED_FILESTORE_TIER
+              value: "BASIC_SSD"
+            - name: REQUIRED_FILESTORE_GB
+              value: "2560"
             - name: ANSIBLE_HOST_KEY_CHECKING
               value: "false"
             - name: ANSIBLE_CONFIG
