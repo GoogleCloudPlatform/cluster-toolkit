@@ -32,22 +32,11 @@ Before deploying, fill out the `gke-a3-megagpu-deployment.yaml` file with your p
 
 ### Consumption Options
 
-You can select a consumption model by uncommenting the corresponding section in `gke-a3-megagpu-deployment.yaml`. For certain options, specific variable values must be configured:
+You can select a consumption model by uncommenting the corresponding section in `gke-a3-megagpu-deployment.yaml`.
 
-- **DWS Flex Start**: Dynamic Workload Scheduler (DWS) Flex Start improves access to AI/ML resources and optimizes spend by scheduling required accelerators simultaneously.
-  - Note: DWS Flex Start does not work with static nodes. So, `static_node_count` cannot be set.
-  - Note: To use DWS Flex Start, `auto_repair` should be set to `false`.
+For details on required variables, compact placement behavior, and machine family support across all models (DWS Flex Start, DWS Flex Start + Queued Provisioning, Spot, Specific Reservations, and On-Demand), see the [GKE Consumption Options Guide](../../docs/gke-consumption-options.md).
 
-- **DWS Flex Start + Queued Provisioning**: Enables queue-based provisioning on top of DWS Flex Start.
-  - Note: Along with these flex start requirements, there are a few queue-provisioning specific requirements.
-  - Note: Queued provisioning does not work with `static_node_count` and requires `autoscaling_total_min_nodes` be set to `0`.
-  - Note: Set `kueue_configuration_path: $(ghpc_stage("../dws-sample-workloads/dws-queues.yaml.tftpl"))`.
-
-- **Spot**: Requires setting `static_node_count`. For multi-node workloads utilizing Kueue Topology-Aware Scheduling (TAS), compact placement is recommended (`placement_policy: { type: COMPACT }`). For more details, see [Compact Placement on GKE (Spot)](../../docs/gke-compact-placement.md#spot).
-
-- **Specific Reservation**: Requires setting `static_node_count`. If using a reservation created with compact placement, specify the policy name in `placement_policy`. Refer to [Using GCE Reservations](https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/compute/gke-node-pool#using-gce-reservations) for details.
-
-- **On-Demand (Default)**: Requires setting `static_node_count`. To enable Topology-Aware Scheduling (TAS) for multi-node jobs, compact placement is recommended (`placement_policy: { type: COMPACT }`). For more details, see [Compact Placement on GKE (On-Demand)](../../docs/gke-compact-placement.md#on-demand).
+Refer to [Consumption options](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#use-cluster-toolkit) for official Google Cloud documentation on alternative consumption options.
 
 ## Deploy the Cluster
 
@@ -267,5 +256,3 @@ To avoid incurring charges for the resources created, destroy the deployment:
 Refer to [Deploy an A3 Mega GKE cluster for ML training](https://cloud.google.com/cluster-toolkit/docs/deploy/deploy-a3-mega-gke-cluster) for more instructions on creating the GKE-A3M cluster.
 
 Refer to [Deploy and run NCCL test with Topology Aware Scheduling (TAS)](https://docs.cloud.google.com/ai-hypercomputer/docs/nccl/test-gke#a3-mega) for more instructions on running a NCCL test on the GKE-A3M cluster.
-
-Refer to [Consumption options](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#use-cluster-toolkit) for more instructions on alternative consumption options.
