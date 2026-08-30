@@ -302,7 +302,8 @@ def get_node_action(nodename: str) -> NodeAction:
         try:
             mig_insts = lkp.get_mig_instances(lkp.project, region, mig_name)
             for m_inst in mig_insts.get("managedInstances", []):
-                if short_nodename == m_inst.get("instance", "").split("/")[-1] and m_inst.get("currentAction") == "REPAIRING":
+                inst_name = m_inst.get("name") or m_inst.get("instance", "").split("/")[-1]
+                if short_nodename == inst_name and m_inst.get("currentAction") == "REPAIRING":
                     return NodeActionDown(reason="MIG Auto-Healing instance repair in progress")
         except Exception as e:
             log.debug(f"Failed to check managed instance repair status for {nodename}: {e}")
