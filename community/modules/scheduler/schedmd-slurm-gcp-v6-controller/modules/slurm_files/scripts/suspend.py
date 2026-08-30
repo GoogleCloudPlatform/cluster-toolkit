@@ -114,23 +114,24 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
 
         links = []
         for node in mig_nodes:
-            if node in mig_inst_map:
-                links.append(mig_inst_map[node])
+            short_name = node.split(".")[0]
+            if short_name in mig_inst_map:
+                links.append(mig_inst_map[short_name])
             elif not mig_list_success:
                 # Only guess fallback URLs if listManagedInstances failed completely
-                inst = lkp.instance(node)
+                inst = lkp.instance(short_name)
                 zone = getattr(inst, "zone", None)
                 if zone:
                     zone_name = zone.split("/")[-1]
-                    links.append(f"zones/{zone_name}/instances/{node}")
+                    links.append(f"zones/{zone_name}/instances/{short_name}")
                 else:
-                    nodeset = lkp.node_nodeset(node)
+                    nodeset = lkp.node_nodeset(short_name)
                     zone_allow = getattr(nodeset, "zone_policy_allow", [])
                     if zone_allow:
                         zone_name = list(zone_allow)[0]
-                        links.append(f"zones/{zone_name}/instances/{node}")
+                        links.append(f"zones/{zone_name}/instances/{short_name}")
                     else:
-                        links.append(f"zones/{lkp.zone}/instances/{node}")
+                        links.append(f"zones/{lkp.zone}/instances/{short_name}")
             else:
                 log.debug(f"Node {node} is not present in MIG {mig_name}; skipping deleteInstances.")
 

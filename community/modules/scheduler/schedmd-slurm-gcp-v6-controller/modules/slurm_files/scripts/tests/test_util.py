@@ -1008,12 +1008,12 @@ def test_suspend_mig_nodes_multi_mig(mock_compute_prop, mock_execute):
         ]
     }
 
-    # Pass an absent node "testcl-large_ns-999" along with active nodes; it must be skipped safely
-    suspend.suspend_mig_nodes(["testcl-large_ns-0", "testcl-large_ns-999", "testcl-large_ns-1005"], lkp=lkp)
+    # Pass an absent node "testcl-large_ns-999" along with active nodes and FQDN; it must be mapped and skipped safely
+    suspend.suspend_mig_nodes(["testcl-large_ns-0.c.testproj.internal", "testcl-large_ns-999", "testcl-large_ns-1005"], lkp=lkp)
 
     delete_calls = mock_compute.regionInstanceGroupManagers().deleteInstances.call_args_list
     assert len(delete_calls) == 2
-    # Group 0 for node index 0 (node 999 is skipped from body)
+    # Group 0 for node index 0 (FQDN normalized to short name, node 999 is skipped from body)
     assert delete_calls[0].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-0"
     assert delete_calls[0].kwargs["body"]["instances"] == ["projects/testproj/zones/us-central1-a/instances/testcl-large_ns-0"]
     # Group 1 for node index 1005
@@ -1042,7 +1042,8 @@ def test_slurmsync_mig_auto_repair(mock_lookup, mock_compute_prop, mock_inst, mo
     mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
         "managedInstances": [
             {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-ns-0", "currentAction": "REPAIRING"},
-            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-ns-1", "currentAction": "NONE"},
+            {"name": "testcl-ns-1", "currentAction": "REPAIRING"},
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-ns-2", "currentAction": "NONE"},
         ]
     }
     mock_lookup.return_value = lkp
@@ -1050,3 +1051,8 @@ def test_slurmsync_mig_auto_repair(mock_lookup, mock_compute_prop, mock_inst, mo
     action0 = slurmsync.get_node_action("testcl-ns-0")
     assert isinstance(action0, slurmsync.NodeActionDown)
     assert "MIG Auto-Healing" in action0.reason
+
+    # Test resolution when API returns 'name' field
+    action1 = slurmsync.get_node_action("testcl-ns-1.c.testproj.internal")
+    assert isinstance(action1, slurmsync.NodeActionDown)
+    assert "MIG Auto-Healing" in action1.reason
