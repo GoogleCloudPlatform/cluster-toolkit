@@ -32,11 +32,9 @@ Before deploying, fill out the `gke-a3-megagpu-deployment.yaml` file with your p
 
 ### Consumption Options
 
-You can select a consumption model by uncommenting the corresponding section in `gke-a3-megagpu-deployment.yaml`.
+Option 1 (Specific Reservation) is uncommented by default in `gke-a3-megagpu-deployment.yaml`. To use another consumption model, comment out Option 1 and uncomment the desired option.
 
-For details on required variables, compact placement behavior, and machine family support across all models (DWS Flex Start, DWS Flex Start + Queued Provisioning, Spot, Specific Reservations, and On-Demand), see the [GKE Consumption Options Guide](../../docs/gke-consumption-options.md).
-
-Refer to [Consumption options](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#use-cluster-toolkit) for official Google Cloud documentation on alternative consumption options.
+For details on required variables, compact placement behavior, and machine family support across all models (Specific Reservations, DWS Flex Start, DWS Flex Start + Queued Provisioning, Spot, and On-Demand), see the [GKE Consumption Options Guide](../../docs/gke-consumption-options.md).
 
 ## Deploy the Cluster
 

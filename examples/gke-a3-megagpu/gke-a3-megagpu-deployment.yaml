@@ -38,36 +38,36 @@ vars:
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
 
-## Choose ONE consumption model from the options below (default is On-Demand):
+## Choose ONE consumption model from the options below (default is Specific Reservation):
 
-## --- Option 1: DWS Flex Start ---
+## --- Option 1: Specific Reservation (Default) ---
+## See for more information: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/gke-consumption-options.md#consumption-of-specific-reservations
+  reservation_affinity:
+    consume_reservation_type: SPECIFIC_RESERVATION
+    specific_reservations:
+    - name:
+  static_node_count:
+
+## --- Option 2: DWS Flex Start ---
   #enable_flex_start: true
   #static_node_count: $(null)
 
-## --- Option 2: DWS Flex Start + Queued Provisioning ---
+## --- Option 3: DWS Flex Start + Queued Provisioning ---
   ## Change this variable if you want to have a custom kueue config file
   #kueue_configuration_path: $(ghpc_stage("../dws-sample-workloads/dws-queues.yaml.tftpl"))
   #enable_flex_start: true
   #enable_queued_provisioning: true
   #static_node_count: $(null)
 
-## --- Option 3: Spot ---
-## See for more information: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/gke-consumption-options.md#spot
+## --- Option 4: Spot ---
+## See for more information: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/gke-consumption-options.md#consumption-of-spot
   #spot: true
   #static_node_count:
   #placement_policy:
   #  type: COMPACT
 
-## --- Option 4: Specific Reservation ---
-## See for more information: https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/compute/gke-node-pool#using-gce-reservations
-  #reservation_affinity:
-  #  consume_reservation_type: SPECIFIC_RESERVATION
-  #  specific_reservations:
-  #  - name:
-  #static_node_count:
-
-## --- Option 5: On-Demand (Default) ---
-## See for more information: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/gke-consumption-options.md#on-demand
+## --- Option 5: On-Demand ---
+## See for more information: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/gke-consumption-options.md#consumption-of-on-demand
   #static_node_count:
   #placement_policy:
   #  type: COMPACT
