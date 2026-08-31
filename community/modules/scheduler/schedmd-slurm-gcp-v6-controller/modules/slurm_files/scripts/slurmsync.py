@@ -497,7 +497,9 @@ def update_topology(lkp: util.Lookup) -> None:
 
     if updated:
         log.info("Topology configuration updated. Reconfiguring Slurm.")
-        util.scontrol_reconfigure(lkp)
+        # Topology is reloaded by `scontrol reconfigure`; restarting slurmctld
+        # here would flap nodes that register during the restart window.
+        util.scontrol_reconfigure(lkp, restart=False)
         # Safe summary only after Slurm got reconfigured, so summary reflects Slurm POV
         summary.dump(lkp)
 

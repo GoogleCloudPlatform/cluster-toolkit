@@ -2381,9 +2381,18 @@ def update_config(cfg: NSDict) -> None:
     global _lkp
     _lkp = Lookup(cfg)
 
-def scontrol_reconfigure(lkp: Lookup) -> None:
-    log.info("Running systemctl restart slurmctld.service")
-    run("sudo systemctl restart slurmctld.service", timeout=30)
+def scontrol_reconfigure(lkp: Lookup, restart: bool = True) -> None:
+    """Make Slurm pick up regenerated configuration.
+
+    Args:
+        restart: also restart slurmctld. Needed when slurm.conf/cloud.conf
+            content changed. A topology-only change is picked up by `scontrol
+            reconfigure` alone, and restarting for it makes slurmctld falsely
+            flag nodes that register during the restart as not responding.
+    """
+    if restart:
+        log.info("Running systemctl restart slurmctld.service")
+        run("sudo systemctl restart slurmctld.service", timeout=30)
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure")
 

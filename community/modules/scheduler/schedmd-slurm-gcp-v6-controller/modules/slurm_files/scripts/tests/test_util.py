@@ -768,3 +768,26 @@ def test_get_reservation_details_error(mocker):
         )
     
     lkp._get_reservation.assert_called_once_with("my-project", "us-central1-a", "my-reservation")
+
+
+@pytest.mark.parametrize(
+    "restart,expect_restart",
+    [
+        (True, True),
+        (False, False),
+    ],
+)
+def test_scontrol_reconfigure(restart, expect_restart, mocker):
+    """`scontrol reconfigure` always runs; the slurmctld restart is opt-out.
+
+    `update_topology` runs on every node power-up, so restarting slurmctld there
+    put a controller restart on the autoscaling hot path.
+    """
+    mock_run = mocker.patch("util.run")
+    lkp = mocker.Mock(scontrol="scontrol")
+
+    util.scontrol_reconfigure(lkp, restart=restart)
+
+    commands = [c.args[0] for c in mock_run.call_args_list]
+    assert "scontrol reconfigure" in commands
+    assert ("sudo systemctl restart slurmctld.service" in commands) == expect_restart
