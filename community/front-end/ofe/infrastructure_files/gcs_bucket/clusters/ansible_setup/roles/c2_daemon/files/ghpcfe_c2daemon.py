@@ -251,24 +251,41 @@ def _parse_slurm_time(value):
     return None
 
 
-def _slurm_get_job_info_from_sacct(jobid):
+def _slurm_get_job_info_from_sacct(jobid, timeout=10, retries=2):
     """Returns final job state information from sacct when a job leaves squeue"""
     try:
-        proc = subprocess.run(
-            [
-                "sacct",
-                "-X",
-                "--noheader",
-                "--parsable2",
-                "--format=JobID,State,Start,End",
-                "--jobs",
-                str(jobid),
-            ],
-            check=True,
-            encoding="utf-8",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        for attempt in range(retries + 1):
+            try:
+                proc = subprocess.run(
+                    [
+                        "sacct",
+                        "-X",
+                        "--noheader",
+                        "--parsable2",
+                        "--format=JobID,State,Start,End",
+                        "--jobs",
+                        str(jobid),
+                    ],
+                    check=True,
+                    encoding="utf-8",
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=timeout,
+                )
+                break
+            except subprocess.TimeoutExpired:
+                logger.warning(
+                    "sacct timed out for job %s (attempt %d/%d)",
+                    jobid,
+                    attempt + 1,
+                    retries + 1,
+                )
+                if attempt == retries:
+                    logger.error(
+                        "sacct repeatedly timed out for job %s; giving up for now",
+                        jobid,
+                    )
+                    return None
         # A requeued job has one accounting row per run all under the same JobID.
         # Take the latest rather than whichever comes first.
         # Rows with no parseable start time sort earliest so a row that has one always wins.
@@ -327,7 +344,7 @@ def _slurm_get_job_info(jobid):
     # and this can be changed to something more sane.  For now, call squeue
     try:
         proc = subprocess.run(
-            ["squeue", "--json"], check=True, stdout=subprocess.PIPE
+            ["squeue", "--json"], check=True, stdout=subprocess.PIPE, timeout=10
         )
         output = json.loads(proc.stdout)
         for job in output["jobs"]:
