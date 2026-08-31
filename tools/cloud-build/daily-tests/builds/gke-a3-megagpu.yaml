@@ -71,7 +71,6 @@ steps:
     echo '    outputs: [instructions]'                         >> $${EXAMPLE_BP}
 
     bash tools/add_ttl_label.sh "$${EXAMPLE_BP}"
-    sed -i -e '/reservation_affinity: {/c\  reservation_affinity:\n    consume_reservation_type: SPECIFIC_RESERVATION\n    specific_reservations:\n    - name: a3mega-reservation-0' $${EXAMPLE_BP}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} full_build_id=$BUILD_ID" \
         --extra-vars="@tools/cloud-build/daily-tests/tests/gke-a3-megagpu.yml" \
