@@ -34,8 +34,6 @@ Before deploying, fill out the `gke-a3-megagpu-deployment.yaml` file with your p
 
 Option 1 (Specific Reservation) is uncommented by default in `gke-a3-megagpu-deployment.yaml`. To use another consumption model, comment out Option 1 and uncomment the desired option.
 
-For details on required variables, compact placement behavior, and machine family support across all models (Specific Reservations, DWS Flex Start, DWS Flex Start + Queued Provisioning, Spot, and On-Demand), see the [GKE Consumption Options Guide](../../docs/gke-consumption-options.md).
-
 ## Deploy the Cluster
 
 1. Switch to the toolkit directory:

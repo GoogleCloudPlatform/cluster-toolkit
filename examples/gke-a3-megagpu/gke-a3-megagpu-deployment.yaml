@@ -40,8 +40,8 @@ vars:
 
 ## Choose ONE consumption model from the options below (default is Specific Reservation):
 
-## --- Option 1: Specific Reservation (Default) ---
-## See for more information: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/gke-consumption-options.md#consumption-of-specific-reservations
+## --- Option 1: Specific Reservation ---
+## See for more information: [https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/compute/gke-node-pool#using-gce-reservations](https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/compute/gke-node-pool#using-gce-reservations)
   reservation_affinity:
     consume_reservation_type: SPECIFIC_RESERVATION
     specific_reservations:
@@ -60,14 +60,12 @@ vars:
   #static_node_count: $(null)
 
 ## --- Option 4: Spot ---
-## See for more information: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/gke-consumption-options.md#consumption-of-spot
   #spot: true
   #static_node_count:
   #placement_policy:
   #  type: COMPACT
 
 ## --- Option 5: On-Demand ---
-## See for more information: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/gke-consumption-options.md#consumption-of-on-demand
   #static_node_count:
   #placement_policy:
   #  type: COMPACT
