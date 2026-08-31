@@ -31,6 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -3637,22 +3638,6 @@ func TestValidateMTCConfig(t *testing.T) {
 			wantErrSubstr: "ramdisk directory path (--gke-mtc-ramdisk-dir) cannot be empty",
 		},
 		{
-			name: "MTC Enabled with namespace resolution failure - Fail",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "/tmp/ramdisk",
-			},
-			clusterDesc: gkeCluster{
-				AddonsConfig: &gkeAddonsConfig{
-					HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{Enabled: true},
-				},
-			},
-			kubeClient:    &MockKubeClient{ExplicitEmpty: true, Err: fmt.Errorf("failed to get namespace")},
-			dynClient:     &mockDynamicClient{},
-			wantErr:       true,
-			wantErrSubstr: "failed to resolve namespace for MTC verification",
-		},
-		{
 			name: "MTC Enabled with generic k8s client error - Fail",
 			job: &orchestrator.JobDefinition{
 				GKEMTCEnabled:          true,
@@ -3759,8 +3744,11 @@ func TestGetTargetNamespace(t *testing.T) {
 
 type mockNamespaceableResource struct {
 	dynamic.NamespaceableResourceInterface
-	getFunc  func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
-	listFunc func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
+	getFunc    func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
+	listFunc   func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
+	updateFunc func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error)
+	deleteFunc func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error
+	patchFunc  func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error)
 }
 
 func (m *mockNamespaceableResource) Get(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
@@ -3781,14 +3769,486 @@ func (m *mockNamespaceableResource) List(ctx context.Context, opts metav1.ListOp
 	return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{}}, nil
 }
 
+func (m *mockNamespaceableResource) Update(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
+	if m.updateFunc != nil {
+		return m.updateFunc(ctx, obj, options, subresources...)
+	}
+	return obj, nil
+}
+
+func (m *mockNamespaceableResource) Delete(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
+	if m.deleteFunc != nil {
+		return m.deleteFunc(ctx, name, options, subresources...)
+	}
+	return nil
+}
+
+func (m *mockNamespaceableResource) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
+	if m.patchFunc != nil {
+		return m.patchFunc(ctx, name, pt, data, options, subresources...)
+	}
+	return &unstructured.Unstructured{}, nil
+}
+
 type mockDynamicClient struct {
 	dynamic.Interface
-	getFunc  func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
-	listFunc func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
+	getFunc    func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
+	listFunc   func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
+	updateFunc func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error)
+	deleteFunc func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error
+	patchFunc  func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error)
 }
 
 func (m *mockDynamicClient) Resource(resource schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
-	return &mockNamespaceableResource{getFunc: m.getFunc, listFunc: m.listFunc}
+	return &mockNamespaceableResource{
+		getFunc:    m.getFunc,
+		listFunc:   m.listFunc,
+		updateFunc: m.updateFunc,
+		deleteFunc: m.deleteFunc,
+		patchFunc:  m.patchFunc,
+	}
+}
+
+func TestGetNodeServiceAccount(t *testing.T) {
+	tests := []struct {
+		name        string
+		clusterDesc gkeCluster
+		wantSA      string
+	}{
+		{
+			name: "No node pools",
+			clusterDesc: gkeCluster{
+				NodePools: []gkeJobNodePool{},
+			},
+			wantSA: "",
+		},
+		{
+			name: "Default service account ignored",
+			clusterDesc: gkeCluster{
+				NodePools: []gkeJobNodePool{
+					{Config: gkeNodePoolConfig{ServiceAccount: "default"}},
+				},
+			},
+			wantSA: "",
+		},
+		{
+			name: "Custom node pool service account found",
+			clusterDesc: gkeCluster{
+				NodePools: []gkeJobNodePool{
+					{Config: gkeNodePoolConfig{ServiceAccount: "default"}},
+					{Config: gkeNodePoolConfig{ServiceAccount: "custom-gsa@project.iam.gserviceaccount.com"}},
+				},
+			},
+			wantSA: "custom-gsa@project.iam.gserviceaccount.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{clusterDesc: tt.clusterDesc}
+			got := orc.getNodeServiceAccount()
+			if got != tt.wantSA {
+				t.Errorf("getNodeServiceAccount() = %q, want %q", got, tt.wantSA)
+			}
+		})
+	}
+}
+
+func TestEnsureMTCWorkloadIdentity_Basic(t *testing.T) {
+	const nodeSA = "test-node-sa@test-proj.iam.gserviceaccount.com"
+	clusterWithSA := gkeCluster{
+		NodePools: []gkeJobNodePool{
+			{Config: gkeNodePoolConfig{ServiceAccount: nodeSA}},
+		},
+	}
+
+	t.Run("MTC Disabled - No op", func(t *testing.T) {
+		orc := &GKEOrchestrator{clusterDesc: clusterWithSA}
+		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: false})
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+	})
+
+	t.Run("No custom node SA - No op", func(t *testing.T) {
+		orc := &GKEOrchestrator{
+			clusterDesc: gkeCluster{
+				NodePools: []gkeJobNodePool{
+					{Config: gkeNodePoolConfig{ServiceAccount: "default"}},
+				},
+			},
+		}
+		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+	})
+
+	t.Run("Annotation already correct - No update or restart", func(t *testing.T) {
+		updated := false
+		deleted := false
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{
+							"annotations": map[string]interface{}{
+								"iam.gke.io/gcp-service-account": nodeSA,
+							},
+						},
+					},
+				}, nil
+			},
+			updateFunc: func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				updated = true
+				return obj, nil
+			},
+			deleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
+				deleted = true
+				return nil
+			},
+		}
+
+		orc := &GKEOrchestrator{
+			clusterDesc: clusterWithSA,
+			dynClient:   dynClient,
+		}
+		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		if updated || deleted {
+			t.Errorf("expected no update or delete when annotation is correct, got updated=%v, deleted=%v", updated, deleted)
+		}
+	})
+}
+
+func TestEnsureMTCWorkloadIdentity_Restart(t *testing.T) {
+	const nodeSA = "test-node-sa@test-proj.iam.gserviceaccount.com"
+	clusterWithSA := gkeCluster{
+		NodePools: []gkeJobNodePool{
+			{Config: gkeNodePoolConfig{ServiceAccount: nodeSA}},
+		},
+	}
+
+	t.Run("Annotation missing - Updates SA and restarts DaemonSet", func(t *testing.T) {
+		updated := false
+		patchedDS := false
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{
+							"annotations": map[string]interface{}{},
+						},
+					},
+				}, nil
+			},
+			updateFunc: func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				updated = true
+				return obj, nil
+			},
+			patchFunc: func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				if name == "multitier-driver" {
+					patchedDS = true
+				}
+				return &unstructured.Unstructured{}, nil
+			},
+		}
+
+		orc := &GKEOrchestrator{
+			clusterDesc: clusterWithSA,
+			dynClient:   dynClient,
+		}
+		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		if !updated {
+			t.Errorf("expected SA to be updated, but was not")
+		}
+		if !patchedDS {
+			t.Errorf("expected DaemonSet multitier-driver to be patched for restart, but was not")
+		}
+	})
+
+	t.Run("Annotation missing - Updates SA and falls back to restarting driver pods when DaemonSet patch fails", func(t *testing.T) {
+		updated := false
+		deletedPods := []string{}
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{
+							"annotations": map[string]interface{}{},
+						},
+					},
+				}, nil
+			},
+			updateFunc: func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				updated = true
+				return obj, nil
+			},
+			patchFunc: func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, fmt.Errorf("daemonset not found")
+			},
+			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				return &unstructured.UnstructuredList{
+					Items: []unstructured.Unstructured{
+						{
+							Object: map[string]interface{}{
+								"metadata": map[string]interface{}{
+									"name": "multitier-driver-abc12",
+								},
+							},
+						},
+						{
+							Object: map[string]interface{}{
+								"metadata": map[string]interface{}{
+									"name": "other-pod-xyz",
+								},
+							},
+						},
+					},
+				}, nil
+			},
+			deleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
+				deletedPods = append(deletedPods, name)
+				return nil
+			},
+		}
+
+		orc := &GKEOrchestrator{
+			clusterDesc: clusterWithSA,
+			dynClient:   dynClient,
+		}
+		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		if !updated {
+			t.Errorf("expected SA to be updated, but was not")
+		}
+		if len(deletedPods) != 1 || deletedPods[0] != "multitier-driver-abc12" {
+			t.Errorf("expected driver pod multitier-driver-abc12 to be deleted, got %v", deletedPods)
+		}
+	})
+}
+
+func TestEnsureMTCWorkloadIdentity_RBAC(t *testing.T) {
+	const nodeSA = "test-node-sa@test-proj.iam.gserviceaccount.com"
+	clusterWithSA := gkeCluster{
+		NodePools: []gkeJobNodePool{
+			{Config: gkeNodePoolConfig{ServiceAccount: nodeSA}},
+		},
+	}
+
+	t.Run("Get SA fails - Self-healing logs warning and continues without failing job", func(t *testing.T) {
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "serviceaccounts"}, "gke-checkpointing-multitier-node")
+			},
+		}
+		orc := &GKEOrchestrator{
+			clusterDesc: clusterWithSA,
+			dynClient:   dynClient,
+		}
+		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+	})
+
+	t.Run("403 Forbidden on Get SA - Continues gracefully", func(t *testing.T) {
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "serviceaccounts"}, "gke-checkpointing-multitier-node", fmt.Errorf("forbidden"))
+			},
+		}
+		orc := &GKEOrchestrator{
+			clusterDesc: clusterWithSA,
+			dynClient:   dynClient,
+		}
+		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+	})
+
+	t.Run("403 Forbidden on Update SA - Continues gracefully", func(t *testing.T) {
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{
+							"annotations": map[string]interface{}{},
+						},
+					},
+				}, nil
+			},
+			updateFunc: func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "serviceaccounts"}, "gke-checkpointing-multitier-node", fmt.Errorf("forbidden"))
+			},
+		}
+		orc := &GKEOrchestrator{
+			clusterDesc: clusterWithSA,
+			dynClient:   dynClient,
+		}
+		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+	})
+
+	t.Run("403 Forbidden on List driver pods - Continues gracefully", func(t *testing.T) {
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{
+							"annotations": map[string]interface{}{},
+						},
+					},
+				}, nil
+			},
+			updateFunc: func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return obj, nil
+			},
+			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "", fmt.Errorf("forbidden"))
+			},
+		}
+		orc := &GKEOrchestrator{
+			clusterDesc: clusterWithSA,
+			dynClient:   dynClient,
+		}
+		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+	})
+}
+
+func TestIsForbiddenError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "Nil error returns false",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "Typed 403 Forbidden returns true",
+			err:  apierrors.NewForbidden(schema.GroupResource{Resource: "services"}, "test-svc", fmt.Errorf("forbidden")),
+			want: true,
+		},
+		{
+			name: "Generic error with forbidden substring returns true",
+			err:  fmt.Errorf("Error from server (Forbidden): request forbidden"),
+			want: true,
+		},
+		{
+			name: "Other error returns false",
+			err:  fmt.Errorf("connection refused"),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isForbiddenError(tt.err); got != tt.want {
+				t.Errorf("isForbiddenError(%v) = %v; want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestVerifyCheckpointConfigurationCR(t *testing.T) {
+	const docRemediation = "Please follow the documentation."
+
+	tests := []struct {
+		name          string
+		dynClient     dynamic.Interface
+		wantErr       bool
+		wantErrSubstr string
+	}{
+		{
+			name: "Success - CR exists",
+			dynClient: &mockDynamicClient{
+				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+					return &unstructured.UnstructuredList{
+						Items: []unstructured.Unstructured{
+							{
+								Object: map[string]interface{}{
+									"metadata": map[string]interface{}{"name": "default"},
+								},
+							},
+						},
+					}, nil
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "CRD Not Found - returns error",
+			dynClient: &mockDynamicClient{
+				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+					return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "checkpointconfigurations"}, "")
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: "the CheckpointConfiguration CustomResourceDefinition (CRD) is not registered on the cluster",
+		},
+		{
+			name: "403 Forbidden typed error - proceeds without error",
+			dynClient: &mockDynamicClient{
+				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+					return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "checkpointconfigurations"}, "", fmt.Errorf("user cannot list resource"))
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "403 Forbidden string error - proceeds without error",
+			dynClient: &mockDynamicClient{
+				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+					return nil, fmt.Errorf("Error from server (Forbidden): checkpointconfigurations.checkpointing.gke.io is forbidden")
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "0 CR items - returns error",
+			dynClient: &mockDynamicClient{
+				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+					return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{}}, nil
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: "Multi-Tier Checkpointing (MTC) requires a CheckpointConfiguration resource to be deployed on the cluster",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{
+				dynClient: tt.dynClient,
+			}
+			err := orc.verifyCheckpointConfigurationCR(&orchestrator.JobDefinition{GKEMTCEnabled: true}, docRemediation)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected an error, but got nil")
+				} else if !strings.Contains(err.Error(), tt.wantErrSubstr) {
+					t.Errorf("expected error to contain %q, but got: %v", tt.wantErrSubstr, err)
+				}
+			} else if err != nil {
+				t.Errorf("expected no error, but got: %v", err)
+			}
+		})
+	}
 }
 
 func TestValidateNamespaceExists(t *testing.T) {

@@ -43,7 +43,7 @@ const (
 // checkpointConfigurationGVR defines the GroupVersionResource for GKE CheckpointConfiguration resources.
 var checkpointConfigurationGVR = schema.GroupVersionResource{
 	Group:    "checkpointing.gke.io",
-	Version:  "v1alpha1",
+	Version:  "v1",
 	Resource: "checkpointconfigurations",
 }
 
@@ -52,6 +52,27 @@ var namespaceGVR = schema.GroupVersionResource{
 	Group:    "",
 	Version:  "v1",
 	Resource: "namespaces",
+}
+
+// serviceAccountGVR defines the GroupVersionResource for core Kubernetes ServiceAccount resources.
+var serviceAccountGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "serviceaccounts",
+}
+
+// podGVR defines the GroupVersionResource for core Kubernetes Pod resources.
+var podGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "pods",
+}
+
+// daemonsetGVR defines the GroupVersionResource for apps/v1 DaemonSet resources.
+var daemonsetGVR = schema.GroupVersionResource{
+	Group:    "apps",
+	Version:  "v1",
+	Resource: "daemonsets",
 }
 
 // HTTPClient abstracts HTTP GET calls for testability and thread safety.
