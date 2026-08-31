@@ -116,11 +116,9 @@ data "google_compute_zones" "available" {
 }
 
 locals {
-  target_system_node_pool_zones = toset(
-    var.cluster_availability_type == "ZONAL" ? (
-      var.zone != null ? [var.zone] : []
-      ) : (
-      var.system_node_pool_zones != null ? var.system_node_pool_zones : data.google_compute_zones.available.names
+  target_system_node_pool_zones = var.system_node_pool_machine_type != null ? [] : toset(
+    var.system_node_pool_zones != null ? var.system_node_pool_zones : (
+      var.cluster_availability_type == "ZONAL" ? (var.zone != null ? [var.zone] : []) : data.google_compute_zones.available.names
     )
   )
 }
