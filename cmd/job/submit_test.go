@@ -160,12 +160,13 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
-	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
-		return &mockOrchestrator{}
-	}
-
 	// Reset flags before each test
 	setupSubmitTestEnv(t)
+
+	mockOrc := &mockOrchestrator{}
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return mockOrc
+	}
 
 	output, err := executeCommand(JobCmd,
 		"submit",
@@ -177,6 +178,7 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 		"--project", "test-project",
 		"--dry-run-out", tmpfile.Name(),
 		"--compute-type", "n2-standard-4",
+		"--enable-ml-diagnostics",
 	)
 
 	if err != nil {
@@ -199,6 +201,10 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 
 	if !strings.Contains(manifestStr, "image: busybox") {
 		t.Errorf("manifest does not contain correct image")
+	}
+
+	if !mockOrc.SubmittedJob.MLDiagnosticsEnabled {
+		t.Errorf("Expected MLDiagnosticsEnabled to be true in submitted JobDefinition")
 	}
 }
 
@@ -285,6 +291,11 @@ func setupSubmitTestEnv(t *testing.T) {
 	location = ""
 	projectID = ""
 	workloadName = ""
+
+	// Reset MTc & ML Diagnostics global flags to prevent state bleeding across test cases
+	enableMLDiagnostics = false
+	gkeMtcEnabled = false
+	gkeMtcRamdiskDirectory = ""
 	kueueQueueName = ""
 	numNodes = 1
 	numSlices = 1
@@ -305,6 +316,7 @@ func setupSubmitTestEnv(t *testing.T) {
 	awaitJobCompletion = false
 	priority = "medium"
 	isPathwaysJob = false
+	skipPrereqs = false
 	pathways = orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}
 	gkeNapProvisioning = ""
 	gkeNapReservation = ""
@@ -320,6 +332,7 @@ func setupSubmitTestEnv(t *testing.T) {
 	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
 		return &mockOrchestrator{}
 	}
+	enableMLDiagnostics = false
 	gkeMtcEnabled = false
 	gkeMtcRamdiskDirectory = ""
 }
@@ -327,6 +340,7 @@ func setupSubmitTestEnv(t *testing.T) {
 type mockOrchestrator struct {
 	orchestrator.JobOrchestrator
 	initializeFunc func(string, string, string) (string, error)
+	SubmittedJob   orchestrator.JobDefinition
 }
 
 func (m *mockOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
@@ -337,6 +351,7 @@ func (m *mockOrchestrator) Initialize(clusterName, location, projectID string) (
 }
 
 func (m *mockOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
+	m.SubmittedJob = job
 	if job.DryRunManifest != "" {
 		var content string
 		if job.IsPathwaysJob {
@@ -1103,5 +1118,86 @@ func TestSubmitCmd_PathwaysHeadless(t *testing.T) {
 
 	if !pathways.Headless {
 		t.Errorf("expected pathways.Headless to be true")
+	}
+}
+func TestSubmitCmd_SkipPrereqs_BypassesChecks(t *testing.T) {
+	setupSubmitTestEnv(t)
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	// Provide a completely empty/stale state. This would ordinarily trigger
+	// the prerequisite checks (like checking for gcloud) and fail.
+	store = &MockPrereqStore{State: PrereqState{}}
+
+	// Force an error in checks to guarantee it fails if they run!
+	oldADC := getADCSetupCommandFunc
+	defer func() { getADCSetupCommandFunc = oldADC }()
+	getADCSetupCommandFunc = func() string {
+		return "echo force-failure"
+	}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "test-skip-true",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--skip-prereqs", "true",
+	)
+
+	// Since --skip-prereqs is true, all ensureBasicPrerequisites and ensurePrerequisites
+	// checks must be bypassed, making it succeed and reach the mock orchestrator.
+	if err != nil {
+		t.Fatalf("expected no error when --skip-prereqs is true, got: %v", err)
+	}
+}
+
+func TestSubmitCmd_SkipPrereqsFalse_RunsChecks(t *testing.T) {
+	setupSubmitTestEnv(t)
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	// Provide a completely empty/stale state.
+	store = &MockPrereqStore{State: PrereqState{}}
+
+	// Force an error in checks to guarantee it fails if they run!
+	oldADC := getADCSetupCommandFunc
+	defer func() { getADCSetupCommandFunc = oldADC }()
+	getADCSetupCommandFunc = func() string {
+		return "echo force-failure"
+	}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "test-skip-false",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		// --skip-prereqs is false by default
+	)
+
+	// Since --skip-prereqs is false, the prerequisite checks will run.
+	// Since our MockStore state is empty, the CLI will try to run real gcloud checks
+	// which will fail either due to absence of gcloud or missing authentication in test env.
+	if err == nil {
+		t.Fatalf("expected an error (prerequisite check failure) since --skip-prereqs is false/omitted, but got nil")
 	}
 }

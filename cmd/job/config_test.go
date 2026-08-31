@@ -15,30 +15,116 @@
 package job
 
 import (
+	"bytes"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestConfigSetCmd_NoGlobalFlagsRequired(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "config-test-home")
-	if err != nil {
+func TestConfigSetCmd(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		expectedCtx Context
+		expectErr   string
+	}{
+		{
+			name:      "empty value fails",
+			args:      []string{"project", ""},
+			expectErr: "configuration values cannot be empty",
+		},
+		{
+			name:      "single argument fails",
+			args:      []string{"project"},
+			expectErr: "requires both a key and a value",
+		},
+		{
+			name:      "invalid key fails",
+			args:      []string{"invalidkey", "value"},
+			expectErr: "unknown configuration key",
+		},
+		{
+			name: "valid project sets successfully",
+			args: []string{"project", "my-super-project"},
+			expectedCtx: Context{
+				ProjectID: "my-super-project",
+			},
+		},
+		{
+			name: "valid cluster sets successfully",
+			args: []string{"cluster", "my-super-cluster"},
+			expectedCtx: Context{
+				ClusterName: "my-super-cluster",
+			},
+		},
+		{
+			name: "valid location sets successfully",
+			args: []string{"location", "us-west1-a"},
+			expectedCtx: Context{
+				Location: "us-west1-a",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempHome := t.TempDir()
+			t.Setenv("HOME", tempHome)
+
+			cmd := configSetCmd
+			err := cmd.RunE(cmd, tc.args)
+
+			if tc.expectErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.expectErr) {
+					t.Fatalf("expected error containing %q, got %v", tc.expectErr, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				ctx, err := loadContext()
+				if err != nil {
+					t.Fatalf("failed to load context: %v", err)
+				}
+				if tc.expectedCtx.ProjectID != "" && ctx.ProjectID != tc.expectedCtx.ProjectID {
+					t.Errorf("expected ProjectID %q, got %q", tc.expectedCtx.ProjectID, ctx.ProjectID)
+				}
+				if tc.expectedCtx.ClusterName != "" && ctx.ClusterName != tc.expectedCtx.ClusterName {
+					t.Errorf("expected ClusterName %q, got %q", tc.expectedCtx.ClusterName, ctx.ClusterName)
+				}
+				if tc.expectedCtx.Location != "" && ctx.Location != tc.expectedCtx.Location {
+					t.Errorf("expected Location %q, got %q", tc.expectedCtx.Location, ctx.Location)
+				}
+			}
+		})
+	}
+}
+
+func TestConfigShowCmd(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+
+	file := filepath.Join(tempHome, ".gcluster", "context.json")
+	if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(tempDir)
 
-	t.Setenv("HOME", tempDir)
-
-	// We do NOT set cluster, location, or project flags here.
-	// The command should still succeed because we overrode PersistentPreRunE for ConfigCmd.
-	output, err := executeCommand(JobCmd, "config", "set", "cluster", "my-new-cluster")
-
-	if err != nil {
-		t.Fatalf("config set failed unexpectedly: %v, output: %s", err, output)
+	if err := os.WriteFile(file, []byte("{\"project\": \"test-show-project\", \"cluster\": \"show-cluster\", \"location\": \"us-west\"}"), 0644); err != nil {
+		t.Fatal(err)
 	}
 
-	// Verify that the context was saved correctly
-	ctx := loadContext()
-	if ctx.ClusterName != "my-new-cluster" {
-		t.Errorf("expected cluster name to be 'my-new-cluster', got '%s'", ctx.ClusterName)
+	cmd := configShowCmd
+	b := bytes.NewBufferString("")
+	cmd.SetOut(b)
+
+	err := cmd.RunE(cmd, []string{})
+	if err != nil {
+		t.Fatalf("unexpected error running show: %v", err)
+	}
+
+	out := b.String()
+	if !strings.Contains(out, "test-show-project") || !strings.Contains(out, "show-cluster") {
+		t.Fatalf("expected formatted output containing test-show-project, got: %s", out)
 	}
 }

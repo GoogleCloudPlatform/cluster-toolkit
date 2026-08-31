@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM golang:bullseye AS build
+FROM golang:1.26-trixie AS build
 WORKDIR /ghpc-build
 ARG ref
 RUN git clone https://github.com/GoogleCloudPlatform/hpc-toolkit.git &&\
@@ -23,7 +23,7 @@ RUN git clone https://github.com/GoogleCloudPlatform/hpc-toolkit.git &&\
  /go/bin/go-licenses check "./..." &&\
  /go/bin/go-licenses save "./..." --save_path="THIRD_PARTY_NOTICES"
 
-FROM debian:bullseye-slim
+FROM debian:trixie-slim
 COPY --from=build /ghpc-build/hpc-toolkit/ghpc /usr/bin/ghpc
 COPY --from=build /ghpc-build/hpc-toolkit/THIRD_PARTY_NOTICES /THIRD_PARTY_NOTICES
 

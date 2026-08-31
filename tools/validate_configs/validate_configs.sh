@@ -16,6 +16,7 @@
 set -e -o pipefail
 
 export GHPC_MOCK_MACHINE_CONFIG='{"gpus": {}, "tpus": {}, "cpus": {}}'
+export GHPC_SKIP_BUCKET_CREATION="true"
 
 run_test() {
 	example=$1
@@ -26,7 +27,10 @@ run_test() {
 	fi
 	tmpdir="$(mktemp -d)"
 	exampleFile=$(basename "$example")
-	DEPLOYMENT=$(echo "${exampleFile%.yaml}-$(basename "${tmpdir##*.}")" | sed -e 's/\(.*\)/\L\1/')
+	baseName=${exampleFile%.yaml}
+	baseNameShort=${baseName:0:4}
+	suffixShort=${tmpdir: -4}
+	DEPLOYMENT=$(echo "${baseNameShort}-${suffixShort}" | sed -e 's/\(.*\)/\L\1/' -e 's/_/-/g' -e 's/-\{2,\}/-/g')
 	PROJECT="invalid-project"
 	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_quota_availability,test_machine_type_in_zone,test_reservation_exists,test_disk_type_in_zone"
 	GHPC_PATH="${cwd}/ghpc"
@@ -43,9 +47,13 @@ run_test() {
 	else
 		cd "${tmpdir}"
 	fi
+	ADDITIONAL_VARS=""
+	if grep -q "^[[:space:]]*authorized_cidr:" "${BP_PATH}"; then
+		ADDITIONAL_VARS=",authorized_cidr=1.2.3.4/32"
+	fi
 	${GHPC_PATH} create "${BP_PATH}" -l ERROR \
 		--skip-validators="${VALIDATORS_TO_SKIP}" "${deployment_args[@]}" \
-		--vars="project_id=${PROJECT},deployment_name=${DEPLOYMENT}" >/dev/null ||
+		--vars="project_id=${PROJECT},deployment_name=${DEPLOYMENT}${ADDITIONAL_VARS}" >/dev/null ||
 		{
 			echo "*** ERROR: error creating deployment with gcluster for ${exampleFile}"
 			exit 1

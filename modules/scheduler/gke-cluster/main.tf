@@ -50,8 +50,6 @@ locals {
   # multi networking needs enabled Dataplane v2
   derived_enable_dataplane_v2 = coalesce(var.enable_dataplane_v2, local.derived_enable_multi_networking)
 
-
-
   default_logging_component = [
     "SYSTEM_COMPONENTS",
     "WORKLOADS"
@@ -61,6 +59,10 @@ locals {
   default_system_node_pool_machine_type = var.enable_confidential_nodes ? "n2d-standard-4" : "e2-standard-4"
   # Fallback to the default if the user left it null
   system_node_pool_machine_type = coalesce(var.system_node_pool_machine_type, local.default_system_node_pool_machine_type)
+  # Choose default disk type based on confidential storage mode.
+  # If enable_confidential_storage is false, we default to null to let GKE use its standard default boot disk.
+  # This avoids generating a Terraform diff (e.g. pd-standard -> pd-balanced) and triggering recreation of the system node pool on existing clusters.
+  system_node_pool_disk_type = var.system_node_pool_disk_type != null ? var.system_node_pool_disk_type : (var.enable_confidential_storage ? "hyperdisk-balanced" : null)
 }
 
 # GKE Node Auto-Provisioning (NAP) locals
@@ -111,7 +113,8 @@ locals {
     var.release_channel != "UNSPECIFIED" ? local.latest_channel_version : local.latest_master_version
   )
 
-  mldiagnostics_minimum_version = "1.35.0-gke.3065000"
+  mldiagnostics_minimum_version            = "1.35.0-gke.3065000"
+  high_scale_checkpointing_minimum_version = "1.32.4-gke.1415000"
 }
 
 
@@ -125,6 +128,25 @@ module "mldiagnostics_version_check" {
   source          = "../../internal/semver_compare"
   current_version = local.master_version
   minimum_version = local.mldiagnostics_minimum_version
+}
+
+module "high_scale_checkpointing_version_check" {
+  source          = "../../internal/semver_compare"
+  current_version = local.master_version
+  minimum_version = local.high_scale_checkpointing_minimum_version
+}
+
+resource "terraform_data" "validate_high_scale_checkpointing_version" {
+  lifecycle {
+    precondition {
+      condition     = !var.enable_multi_tier_checkpointing || module.high_scale_checkpointing_version_check.is_greater_than_or_equal
+      error_message = "GKE-managed High Scale Checkpointing (MTC) requires a GKE version of ${local.high_scale_checkpointing_minimum_version} or higher. Please update 'version_prefix' or 'min_master_version'."
+    }
+    precondition {
+      condition     = !var.enable_multi_tier_checkpointing || var.enable_gcsfuse_csi
+      error_message = "The variable 'enable_gcsfuse_csi' must be set to true when 'enable_multi_tier_checkpointing' is enabled."
+    }
+  }
 }
 
 resource "google_container_cluster" "gke_cluster" {
@@ -165,7 +187,7 @@ resource "google_container_cluster" "gke_cluster" {
     gcp_public_cidrs_access_enabled = var.gcp_public_cidrs_access_enabled
   }
 
-  private_ipv6_google_access = var.enable_private_ipv6_google_access ? "PRIVATE_IPV6_GOOGLE_ACCESS_TO_GOOGLE" : null
+  private_ipv6_google_access = var.enable_private_ipv6_google_access ? "PRIVATE_IPV6_GOOGLE_ACCESS_TO_GOOGLE" : "PRIVATE_IPV6_GOOGLE_ACCESS_DISABLED"
   default_max_pods_per_node  = var.default_max_pods_per_node
   master_auth {
     client_certificate_config {
@@ -317,6 +339,9 @@ resource "google_container_cluster" "gke_cluster" {
     }
     gcs_fuse_csi_driver_config {
       enabled = var.enable_gcsfuse_csi
+    }
+    high_scale_checkpointing_config {
+      enabled = var.enable_multi_tier_checkpointing
     }
     gce_persistent_disk_csi_driver_config {
       enabled = var.enable_persistent_disk_csi
@@ -481,7 +506,7 @@ resource "google_container_node_pool" "system_node_pools" {
     oauth_scopes                = var.service_account_scopes
     machine_type                = local.system_node_pool_machine_type
     disk_size_gb                = var.system_node_pool_disk_size_gb
-    disk_type                   = var.system_node_pool_disk_type
+    disk_type                   = local.system_node_pool_disk_type
     enable_confidential_storage = var.enable_confidential_storage
     boot_disk_kms_key           = var.boot_disk_kms_key
 
@@ -558,8 +583,17 @@ resource "google_container_node_pool" "system_node_pools" {
       error_message = "A valid boot_disk_kms_key must be provided when enable_confidential_storage is true to satisfy GKE Confidential Storage requirements."
     }
     precondition {
-      condition     = !var.enable_confidential_storage || (var.system_node_pool_disk_type != null && can(regex("^hyperdisk", var.system_node_pool_disk_type)))
+      condition     = !var.enable_confidential_storage || (local.system_node_pool_disk_type != null && can(regex("^hyperdisk", local.system_node_pool_disk_type)))
       error_message = "Confidential Storage (enable_confidential_storage = true) is only supported on Hyperdisks. Please set system_node_pool_disk_type to 'hyperdisk-balanced' or another hyperdisk type."
+    }
+    precondition {
+      # If confidential storage is disabled, and the disk type is hyperdisk, the machine family must support standard hyperdisk boot disks.
+      condition = (
+        var.enable_confidential_storage ||
+        !can(regex("^hyperdisk", coalesce(local.system_node_pool_disk_type, ""))) ||
+        !can(regex("^(n2d-|n2-|e2-|c2-|c2d-|t2d-|t2a-)", local.system_node_pool_machine_type))
+      )
+      error_message = "Standard Hyperdisk boot disks are not supported on machine type ${local.system_node_pool_machine_type} when enable_confidential_storage is false. Please set enable_confidential_storage to true, or use a standard persistent disk type (e.g., 'pd-balanced') for system_node_pool_disk_type."
     }
   }
 }
@@ -727,4 +761,11 @@ resource "terraform_data" "validate_ml_diagnostics_version" {
       error_message = "GKE-managed ML Diagnostics requires a GKE version of ${local.mldiagnostics_minimum_version} or higher. Please update 'version_prefix' or 'min_master_version'."
     }
   }
+}
+
+resource "google_service_account_iam_member" "mtc_node_workload_identity" {
+  count              = var.enable_multi_tier_checkpointing ? 1 : 0
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${local.sa_email}"
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${replace(var.project_id, ":", "/")}.svc.id.goog[gke-managed-checkpointing/gke-checkpointing-multitier-node]"
 }

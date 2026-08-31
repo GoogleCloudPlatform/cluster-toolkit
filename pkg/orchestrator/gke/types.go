@@ -23,6 +23,7 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"net/http"
 	"strings"
+	"sync"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
 	compute "google.golang.org/api/compute/v1"
@@ -113,6 +114,7 @@ type GKEOrchestrator struct {
 	slicingTopologiesDetected   bool
 	gkeCustomTemplatesPath      string
 	httpClient                  HTTPClient
+	httpOnce                    sync.Once
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -208,6 +210,7 @@ type ManifestOptions struct {
 	IsPathwaysJob                 bool
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
+	MLDiagnosticsEnabled          bool
 	Verbose                       bool
 	Env                           map[string]string
 	AdditionalManifests           []string
@@ -339,6 +342,9 @@ type JobSetCondition struct {
 }
 
 type JobSetStatus struct {
+	Spec struct {
+		Suspend bool `json:"suspend"`
+	} `json:"spec"`
 	Status struct {
 		Conditions []JobSetCondition `json:"conditions"`
 	} `json:"status"`
@@ -404,6 +410,7 @@ type jobSetTemplateData struct {
 	IsGPU                         bool
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
+	MLDiagnosticsEnabled          bool
 }
 
 // Types for parsing kubectl get nodes -o json

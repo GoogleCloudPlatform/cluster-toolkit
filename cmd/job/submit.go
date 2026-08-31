@@ -62,11 +62,12 @@ var (
 	gkeScheduler           string
 	platform               string
 
-	awaitJobCompletion bool
-	timeout            string
-	priority           string
-	verbose            bool
-	volumeStr          []string
+	awaitJobCompletion  bool
+	timeout             string
+	priority            string
+	verbose             bool
+	enableMLDiagnostics bool
+	volumeStr           []string
 
 	gkeMtcEnabled          bool
 	gkeMtcRamdiskDirectory string
@@ -110,8 +111,10 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 		if err := validatePathwaysFlags(); err != nil {
 			return err
 		}
-		if err := ensurePrerequisites(cmd, projectID, location); err != nil {
-			return err
+		if !skipPrereqs {
+			if err := ensurePrerequisites(cmd, projectID, location); err != nil {
+				return err
+			}
 		}
 
 		if err := validateGKENAPFlags(); err != nil {
@@ -186,6 +189,7 @@ func init() {
 
 	SubmitCmd.Flags().BoolVar(&gkeMtcEnabled, "gke-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC).")
 	SubmitCmd.Flags().StringVar(&gkeMtcRamdiskDirectory, "gke-mtc-ramdisk-dir", "", "Ramdisk directory path for Multi-Tier Checkpointing (MTC). Required when --gke-mtc-enabled is set.")
+	SubmitCmd.Flags().BoolVar(&enableMLDiagnostics, "enable-ml-diagnostics", false, "Enables ML Diagnostics for the workload. Requires the target cluster to have ML Diagnostics explicitly enabled.")
 	SubmitCmd.Flags().StringVar(&gkeCustomTemplatesPath, "gke-custom-templates-path", "", "Path to a local directory containing custom GKE templates overrides.")
 
 	_ = SubmitCmd.MarkFlagRequired("name")
@@ -260,6 +264,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		Timeout:                       timeout,
 		PriorityClassName:             priority,
 		Verbose:                       verbose,
+		MLDiagnosticsEnabled:          enableMLDiagnostics,
 		GKEMTCEnabled:                 gkeMtcEnabled,
 		GKEMTCRamdiskDirectory:        gkeMtcRamdiskDirectory,
 		GkeCustomTemplatesPath:        gkeCustomTemplatesPath,

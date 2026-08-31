@@ -28,6 +28,8 @@ If you use `--build-context` to build images on-the-fly, you must set:
 > If any required dependencies are missing or unconfigured, `gcluster` will identify them and print the necessary installation or remediation commands directly to your console for review and execution
 >
 > Successful checks are remembered in `~/.gcluster/job_prereq_state.json` to optimize subsequent runs. Checks are re-run if the state is older than 24 hours or if you switch projects.
+>
+> **Bypassing Checks:** If you are running `gcluster` in a complex environment (such as an automated CI/CD pipeline without a human `gcloud` session, a system with custom Docker credential helpers, or an environment with strict least-privilege IAM limits), you can completely bypass these validations by appending the `--skip-prereqs` flag.
 
 ### 1.1 Multi-Tier Checkpointing (MTC) Prerequisites
 
@@ -111,6 +113,10 @@ By specifying the `--compute-type` flag, you can use the exact same command to t
 > **Simplify Commands with Configuration**: You can set these values once using the configuration command and omit them from subsequent commands:
 >
 > ```bash
+> # Open system editor to edit defaults interactively
+> ./gcluster job config set
+>
+> # Or set values individually
 > ./gcluster job config set project <PROJECT_ID>
 > ./gcluster job config set cluster <CLUSTER_NAME>
 > ./gcluster job config set location <REGION/ZONE>
@@ -119,7 +125,7 @@ By specifying the `--compute-type` flag, you can use the exact same command to t
 > To view your current configuration, run:
 >
 > ```bash
-> ./gcluster job config list
+> ./gcluster job config show
 > ```
 
 ### 4.2 Submit the Job
@@ -1139,26 +1145,39 @@ Pass the `--gke-custom-templates-path` flag to the `submit` command:
 | `-l, --location` | `string` | Google Cloud location (Zone or Region) of the GKE cluster. |
 | `-p, --project` | `string` | Google Cloud Project ID. |
 | `--gke-namespace` | `string` | Target GKE namespace for the operation. Supported across all job commands. If omitted, automatic detection is used. |
+| `--skip-prereqs` | `flag` | Bypasses local workstation pre-flight environment checks (e.g. gcloud SDK, IAM checks, Docker config). |
 
 ### 9.2 Configuration Commands
 *Use these commands to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*
 
 #### `gcluster job config set [key] [value]`
-Sets a persistent configuration property.
+Modifies configuration defaults. If run without any arguments (`./gcluster job config set`), it automatically opens your default system text editor (`$EDITOR` or `nano`) to edit the configuration file interactively.
 
 * **Supported Keys:**
   * `project`: Google Cloud Project ID
   * `cluster`: GKE Cluster Name
   * `location`: GKE Cluster Location (region or zone)
 
+**Examples:**
+
+```bash
+# Interactive editor mode:
+./gcluster job config set
+
+# Set specific key/value pairs:
+./gcluster job config set project my-awesome-project
+./gcluster job config set cluster my-cluster
+./gcluster job config set location us-central1-a
+```
+
+#### `gcluster job config show`
+Prints the current saved configuration defaults and configuration file path.
+
 **Example:**
 
 ```bash
-./gcluster job config set project my-awesome-project
+./gcluster job config show
 ```
-
-#### `gcluster job config list`
-Lists all persistent configuration properties currently set.
 
 ### 9.3 `submit` Flags
 The `gcluster job submit` command deploys a container image as a job (Kubernetes JobSet) on a GKE cluster, integrated with Kueue for advanced queuing. It can use pre-built images or build images on-the-fly without a local Docker daemon (powered internally by the [Crane](https://github.com/google/go-containerregistry/blob/main/cmd/crane/README.md) container utility).

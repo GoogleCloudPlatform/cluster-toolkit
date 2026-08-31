@@ -17,6 +17,7 @@ limitations under the License.
 package modulewriter
 
 import (
+	"bytes"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
@@ -666,4 +667,47 @@ func (s *zeroSuite) TestStageFile(c *C) {
 		c.Assert(string(dat), Equals, "pulp")
 	}
 
+}
+
+func (s *zeroSuite) TestWriteGcsDestroyInstructions(c *C) {
+	bp := config.Blueprint{
+		Vars: config.NewDict(map[string]cty.Value{
+			"project_id": cty.StringVal("my-project"),
+		}),
+		Groups: []config.Group{
+			{
+				Name: "group1",
+				TerraformBackend: config.TerraformBackend{
+					Type: "gcs",
+					Configuration: config.NewDict(map[string]cty.Value{
+						"bucket": cty.StringVal("my-bucket-name"),
+					}),
+				},
+			},
+			{
+				Name: "group_empty_bucket",
+				TerraformBackend: config.TerraformBackend{
+					Type: "gcs",
+					Configuration: config.NewDict(map[string]cty.Value{
+						"bucket": cty.StringVal(""),
+					}),
+				},
+			},
+			{
+				Name: "group_null_bucket",
+				TerraformBackend: config.TerraformBackend{
+					Type: "gcs",
+					Configuration: config.NewDict(map[string]cty.Value{
+						"bucket": cty.NullVal(cty.String),
+					}),
+				},
+			},
+		},
+	}
+
+	buf := new(bytes.Buffer)
+	writeDestroyInstructions(buf, bp, "deployment-dir")
+	out := buf.String()
+
+	c.Check(strings.Contains(out, "my-bucket-name"), Equals, true)
 }
