@@ -44,7 +44,7 @@ gcluster --version
 
 The blueprint is split into 3 deployment groups:
 
-1. Group 1 provisions the system network, gpu network and 1 Filestore instance for mounting `/home`
+1. Group 1 provisions the system network, gpu network and 1 Managed Lustre instance for mounting `/home`
 across the cluster.
 2. Group 2 builds a custom image installing Slurm on an Ubuntu 22.04 image. The image
 runs a kernel patched with performance enhancements for the a3-highgpu-8g VM.
