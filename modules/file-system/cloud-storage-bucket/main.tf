@@ -182,9 +182,9 @@ resource "google_project_iam_custom_role" "gke_gcsfuse" {
   ]
 }
 
-resource "google_project_iam_member" "gke_gcsfuse_members" {
-  count   = var.anywhere_cache != null && var.create_gcsfuse_iam_role ? 1 : 0
-  project = var.project_id
-  role    = google_project_iam_custom_role.gke_gcsfuse[0].id
-  member  = "serviceAccount:service-${data.google_project.project[0].number}@container-engine-robot.iam.gserviceaccount.com"
+resource "google_storage_bucket_iam_member" "gke_gcsfuse_members" {
+  count  = var.anywhere_cache != null && var.create_gcsfuse_iam_role ? 1 : 0
+  bucket = google_storage_bucket.bucket.name
+  role   = google_project_iam_custom_role.gke_gcsfuse[0].id
+  member = "serviceAccount:service-${data.google_project.project[0].number}@container-engine-robot.iam.gserviceaccount.com"
 }
