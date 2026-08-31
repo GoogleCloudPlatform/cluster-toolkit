@@ -2527,10 +2527,19 @@ def wait_slurmctld_up(lkp: Lookup, timeout: float = 60) -> None:
     raise TimeoutError(f"slurmctld ({target_role}) is not fully up after {timeout} seconds")
 
 
-def scontrol_reconfigure(lkp: Lookup) -> None:
-    log.info("Running systemctl restart slurmctld.service")
-    run("sudo systemctl restart slurmctld.service", timeout=30)
-    wait_slurmctld_up(lkp)
+def scontrol_reconfigure(lkp: Lookup, restart: bool = True) -> None:
+    """Make Slurm pick up regenerated configuration.
+
+    Args:
+        restart: also restart slurmctld. Needed when slurm.conf/cloud.conf
+            content changed. A topology-only change is picked up by `scontrol
+            reconfigure` alone, and restarting for it makes slurmctld falsely
+            flag nodes that register during the restart as not responding.
+    """
+    if restart:
+        log.info("Running systemctl restart slurmctld.service")
+        run("sudo systemctl restart slurmctld.service", timeout=30)
+        wait_slurmctld_up(lkp)
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure")
 
