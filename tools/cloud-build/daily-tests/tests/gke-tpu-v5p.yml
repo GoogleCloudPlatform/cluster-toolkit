@@ -32,7 +32,7 @@ cli_deployment_vars:
 custom_vars:
   project: "{{ project }}"
   expected_tpu_count: 4
-  gcs_bucket: "ml-diagnostics-test"
+  gcs_bucket: "ml-diagnostics-test-{{ project }}"
   image_tag: "us-central1-docker.pkg.dev/{{ project }}/ml-diagnostics-test/sample-diagnostics-job:1.0.0"
   tpu_accelerator: tpu-v5p-slice
   tpu_topology: 2x2x1
