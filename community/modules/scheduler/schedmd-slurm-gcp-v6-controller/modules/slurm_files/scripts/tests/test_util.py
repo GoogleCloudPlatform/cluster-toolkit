@@ -1001,6 +1001,7 @@ def test_suspend_mig_nodes_multi_mig(mock_compute_prop, mock_execute):
     lkp = util.Lookup(cfg)
     mock_compute = unittest.mock.MagicMock()
     mock_compute_prop.return_value = mock_compute
+    mock_execute.side_effect = lambda req: req.execute()
     mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
         "managedInstances": [
             {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-large_ns-0"},
@@ -1016,9 +1017,11 @@ def test_suspend_mig_nodes_multi_mig(mock_compute_prop, mock_execute):
     # Group 0 for node index 0 (FQDN normalized to short name, node 999 is skipped from body)
     assert delete_calls[0].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-0"
     assert delete_calls[0].kwargs["body"]["instances"] == ["projects/testproj/zones/us-central1-a/instances/testcl-large_ns-0"]
+    assert delete_calls[0].kwargs["body"]["skipInstancesOnValidationError"] is True
     # Group 1 for node index 1005
     assert delete_calls[1].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-1"
     assert delete_calls[1].kwargs["body"]["instances"] == ["projects/testproj/zones/us-central1-a/instances/testcl-large_ns-1005"]
+    assert delete_calls[1].kwargs["body"]["skipInstancesOnValidationError"] is True
 
 
 @unittest.mock.patch.object(util.Lookup, "node_state", return_value=None)
@@ -1047,6 +1050,9 @@ def test_slurmsync_mig_auto_repair(mock_lookup, mock_compute_prop, mock_inst, mo
         ]
     }
     mock_lookup.return_value = lkp
+
+    # Verify set cache
+    assert lkp.get_mig_repairing_instances("testproj", "us-central1", "testcl-ns-mig-0") == {"testcl-ns-0", "testcl-ns-1"}
 
     action0 = slurmsync.get_node_action("testcl-ns-0")
     assert isinstance(action0, slurmsync.NodeActionDown)
