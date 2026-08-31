@@ -335,7 +335,7 @@ variable "anywhere_cache_create_timeout" {
 }
 
 variable "create_gcsfuse_iam_role" {
-  description = "Whether to automate the creation of the custom IAM role and GKE Service Agent binding for GCS Fuse Anywhere Cache. Set to false in restricted environments where the deployer lacks project-level IAM permissions."
+  description = "Whether to automate the creation of the custom IAM role and GKE Service Agent binding for GCS Fuse Anywhere Cache. Set to false in restricted environments where the deployer lacks project-level IAM permissions or when re-deploying within the 37-day GCP custom role soft-delete window."
   type        = bool
   default     = true
 }
