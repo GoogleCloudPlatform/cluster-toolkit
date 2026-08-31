@@ -55,7 +55,7 @@ steps:
     echo '    use: [network]'                            >> $${EXAMPLE_BP}
     echo '    settings:'                                 >> $${EXAMPLE_BP}
     echo '      machine_type: n2d-standard-2'            >> $${EXAMPLE_BP}
-    echo '      zone: us-central1-a'                     >> $${SG_EXAMPLE}
+    echo '      zone: us-central1-a'                     >> $${EXAMPLE_BP}
     echo '      name_prefix: remote-node'                >> $${EXAMPLE_BP}
     echo '      add_deployment_name_before_prefix: true' >> $${EXAMPLE_BP}
 
