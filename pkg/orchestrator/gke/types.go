@@ -210,6 +210,7 @@ type ManifestOptions struct {
 	IsPathwaysJob                 bool
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
+	MLDiagnosticsEnabled          bool
 	Verbose                       bool
 	Env                           map[string]string
 	AdditionalManifests           []string
@@ -409,6 +410,7 @@ type jobSetTemplateData struct {
 	IsGPU                         bool
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
+	MLDiagnosticsEnabled          bool
 }
 
 // Types for parsing kubectl get nodes -o json
