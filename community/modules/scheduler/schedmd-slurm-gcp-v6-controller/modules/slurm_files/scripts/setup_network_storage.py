@@ -99,9 +99,12 @@ def resolve_network_storage() -> List[NSMount]:
 
     return list(mounts.values())
 
-
 def is_controller_mount(mount) -> bool:
-    if not mount or not getattr(mount, "server_ip", None):
+    if not mount:
+        return False
+    if getattr(mount, "fs_type", None) == "gcsfuse":
+        return False
+    if not getattr(mount, "server_ip", None):
         return lookup().is_controller
     # NOTE: Valid Lustre server_ip can take the form of '<IP>@tcp'
     server_ip = str(mount.server_ip).split("@")[0]
