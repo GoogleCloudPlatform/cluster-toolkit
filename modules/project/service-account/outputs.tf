@@ -17,6 +17,10 @@
 output "key" {
   description = "Service account key (if creation was requested)"
   value       = module.service_account.key
+  depends_on = [
+    module.service_account,
+    time_sleep.wait_for_service_account,
+  ]
 }
 
 output "service_account_email" {
@@ -24,6 +28,7 @@ output "service_account_email" {
   value       = module.service_account.email
   depends_on = [
     module.service_account,
+    time_sleep.wait_for_service_account,
   ]
 }
 
@@ -32,5 +37,6 @@ output "service_account_iam_email" {
   value       = module.service_account.iam_email
   depends_on = [
     module.service_account,
+    time_sleep.wait_for_service_account,
   ]
 }

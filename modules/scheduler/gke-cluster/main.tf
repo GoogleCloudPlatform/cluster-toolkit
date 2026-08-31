@@ -768,4 +768,7 @@ resource "google_service_account_iam_member" "mtc_node_workload_identity" {
   service_account_id = "projects/${var.project_id}/serviceAccounts/${local.sa_email}"
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${replace(var.project_id, ":", "/")}.svc.id.goog[gke-managed-checkpointing/gke-checkpointing-multitier-node]"
+  depends_on = [
+    google_container_cluster.gke_cluster
+  ]
 }
