@@ -125,13 +125,8 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
                     zone_name = zone.split("/")[-1]
                     links.append(f"zones/{zone_name}/instances/{short_name}")
                 else:
-                    nodeset = lkp.node_nodeset(short_name)
-                    zone_allow = getattr(nodeset, "zone_policy_allow", [])
-                    if zone_allow:
-                        zone_name = list(zone_allow)[0]
-                        links.append(f"zones/{zone_name}/instances/{short_name}")
-                    else:
-                        links.append(f"zones/{lkp.zone}/instances/{short_name}")
+                    # If the instance does not exist in GCE, skip it to prevent batch rejection
+                    log.debug(f"Instance {short_name} does not exist in GCE; skipping deleteInstances.")
             else:
                 log.debug(f"Node {node} is not present in MIG {mig_name}; skipping deleteInstances.")
 
@@ -139,7 +134,8 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
             log.info(f"No active instances found to delete in MIG {mig_name}")
             continue
 
-        log.info(f"Deleting {len(mig_nodes)} MIG instances ({to_hostlist(mig_nodes)}) from MIG {mig_name}")
+        active_nodes = [l.split("/")[-1] for l in links]
+        log.info(f"Deleting {len(links)} MIG instances ({to_hostlist(active_nodes)}) from MIG {mig_name}")
         for chunk_links in util.chunked(links, n=1000):
             req = lkp.compute.regionInstanceGroupManagers().deleteInstances(
                 project=lkp.project,
@@ -147,7 +143,7 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
                 instanceGroupManager=mig_name,
                 body={
                     "instances": chunk_links,
-                    "decreaseTargetSize": True
+                    "skipInstancesOnValidationError": True,
                 }
             )
             try:

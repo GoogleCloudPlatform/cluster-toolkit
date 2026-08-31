@@ -345,7 +345,8 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
         # 2. Per-Instance Config (PIC) - Lightweight instance name binding for static Slurm hostnames
         pic_instances: List[Dict[str, Any]] = []
         for node in mig_nodes:
-            inst: Dict[str, Any] = {"name": node}
+            short_name = node.split(".")[0]
+            inst: Dict[str, Any] = {"name": short_name}
             if excl_job_id is not None:
                 inst["preservedState"] = {
                     "metadata": {

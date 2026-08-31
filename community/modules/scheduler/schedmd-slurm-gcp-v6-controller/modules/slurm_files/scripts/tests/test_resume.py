@@ -190,7 +190,8 @@ def test_resume_mig_nodes(mock_compute_prop, mock_execute):
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
 
-  resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=101, lkp=lkp)
+  # Pass an FQDN to verify instance name normalization
+  resume.resume_mig_nodes(["c-n-0.c.testproj.internal", "c-n-1"], excl_job_id=101, lkp=lkp)
 
   assert mock_compute.regionInstanceGroupManagers().createInstances.called
   call_args = mock_compute.regionInstanceGroupManagers().createInstances.call_args

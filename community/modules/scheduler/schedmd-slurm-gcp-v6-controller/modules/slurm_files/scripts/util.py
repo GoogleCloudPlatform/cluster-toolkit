@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Union
+from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Union, Set
 import argparse
 import base64
 from dataclasses import dataclass, field
@@ -2045,9 +2045,10 @@ class Lookup:
             project=project, zone=zone, reservation=name).execute()
 
     @lru_cache()
-    def get_mig(self, project: str, region: str, self_link:str) -> Any:
+    def get_mig(self, project: str, region: str, self_link: str) -> Any:
         """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
-        return self.compute.regionInstanceGroupManagers().get(project=project, region=region, instanceGroupManager=self_link).execute()
+        req = self.compute.regionInstanceGroupManagers().get(project=project, region=region, instanceGroupManager=self_link)
+        return ensure_execute(req)
 
     @lru_cache()
     def get_mig_instances(self, project: str, region: str, self_link: str) -> Any:
@@ -2055,7 +2056,7 @@ class Lookup:
         all_instances = []
         page_token = None
         while True:
-            res = (
+            req = (
                 self.compute.regionInstanceGroupManagers()
                 .listManagedInstances(
                     project=project,
@@ -2063,18 +2064,29 @@ class Lookup:
                     instanceGroupManager=self_link,
                     pageToken=page_token,
                 )
-                .execute()
             )
-            all_instances.extend(res.get("managedInstances", []))
-            page_token = res.get("nextPageToken")
+            res = ensure_execute(req)
+            all_instances.extend(res.get("managedInstances", []) if isinstance(res, dict) else [])
+            page_token = res.get("nextPageToken") if isinstance(res, dict) else None
             if not page_token:
                 break
-        return {"managedInstances": all_instances} 
+        return {"managedInstances": all_instances}
+
+    @lru_cache()
+    def get_mig_repairing_instances(self, project: str, region: str, self_link: str) -> Set[str]:
+        """Returns the set of instance names currently in REPAIRING state in a given MIG."""
+        mig_insts = self.get_mig_instances(project, region, self_link)
+        return {
+            (m_inst.get("name") or m_inst.get("instance", "").split("/")[-1])
+            for m_inst in mig_insts.get("managedInstances", [])
+            if m_inst.get("currentAction") == "REPAIRING"
+        }
 
     @lru_cache()
     def get_mig_list(self, project: str, region: str) -> Any:
         """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
-        return self.compute.regionInstanceGroupManagers().list(project=project, region=region).execute()
+        req = self.compute.regionInstanceGroupManagers().list(project=project, region=region)
+        return ensure_execute(req)
 
     @lru_cache()
     def _get_future_reservation(self, project:str, zone:str, name: str) -> Any:
