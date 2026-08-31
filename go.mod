@@ -35,6 +35,7 @@ require (
 	github.com/moby/patternmatcher v0.6.1
 	github.com/zclconf/go-cty-debug v0.0.0-20240509010212-0d6042c53940
 	golang.org/x/mod v0.38.0
+	golang.org/x/term v0.45.0
 	google.golang.org/api v0.292.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.36.3
@@ -114,7 +115,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.48.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260630182238-925bb5da69e7 // indirect
