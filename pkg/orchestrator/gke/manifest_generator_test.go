@@ -15,6 +15,8 @@
 package gke
 
 import (
+	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
 	"strings"
 	"testing"
 )
@@ -126,5 +128,167 @@ func TestAssembleManifest(t *testing.T) {
 				t.Errorf("assembleManifest() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestGenerateGKEManifest_MLDiagnosticsEnabled(t *testing.T) {
+	setupMockMachineConfig(t)
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n1-standard-4 --zone=test-location-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 4}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"test-location-a"}
+	orc.gkeCustomTemplatesPath = ""
+	orc.acceleratorToMachineType = make(map[string]string)
+
+	opts := ManifestOptions{
+		WorkloadName:         "test-workload",
+		FullImageName:        "test-image",
+		CommandToRun:         "test-command",
+		ComputeType:          "n1-standard-4",
+		ClusterName:          "test-cluster",
+		ClusterLocation:      "test-location",
+		ProjectID:            "test-project",
+		MLDiagnosticsEnabled: true,
+	}
+
+	profile := JobProfile{
+		IsCPUMachine:  true,
+		CapacityCount: 1,
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("Failed to generate manifest: %v", err)
+	}
+
+	if !strings.Contains(manifest, "managed-mldiagnostics-gke: \"true\"") {
+		t.Errorf("Expected manifest to contain ML Diagnostics label, got:\n%s", manifest)
+	}
+}
+
+func TestGeneratePathwaysManifest_MLDiagnosticsEnabled(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:         "pathways-test",
+		CommandToRun:         "echo hello",
+		NumSlices:            2,
+		ClusterLocation:      "us-central1",
+		ComputeType:          "n2-standard-2",
+		MLDiagnosticsEnabled: true,
+		Pathways: orchestrator.PathwaysJobDefinition{
+			ProxyServerImage: "proxy:latest",
+			ServerImage:      "server:latest",
+			WorkerImage:      "worker:latest",
+			GCSLocation:      "gs://my-bucket",
+			HeadNodePool:     "pathways-np",
+		},
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+	profile, _, _, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image", profile, false, false)
+	if err != nil {
+		t.Fatalf("Failed to generate pathways manifest: %v", err)
+	}
+
+	if !strings.Contains(manifest, "managed-mldiagnostics-gke: \"true\"") {
+		t.Errorf("Expected manifest to contain ML Diagnostics label, got:\n%s", manifest)
+	}
+}
+
+func TestGenerateGKEManifest_MLDiagnosticsDisabled(t *testing.T) {
+	setupMockMachineConfig(t)
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n1-standard-4 --zone=test-location-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 4}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"test-location-a"}
+	orc.gkeCustomTemplatesPath = ""
+	orc.acceleratorToMachineType = make(map[string]string)
+
+	opts := ManifestOptions{
+		WorkloadName:         "test-workload",
+		FullImageName:        "test-image",
+		CommandToRun:         "test-command",
+		ComputeType:          "n1-standard-4",
+		ClusterName:          "test-cluster",
+		ClusterLocation:      "test-location",
+		ProjectID:            "test-project",
+		MLDiagnosticsEnabled: false,
+	}
+
+	profile := JobProfile{
+		IsCPUMachine:  true,
+		CapacityCount: 1,
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("Failed to generate manifest: %v", err)
+	}
+
+	if strings.Contains(manifest, "managed-mldiagnostics-gke: \"true\"") {
+		t.Errorf("Expected manifest to NOT contain ML Diagnostics label when disabled, got:\n%s", manifest)
+	}
+}
+
+func TestGeneratePathwaysManifest_MLDiagnosticsDisabled(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:         "pathways-test",
+		CommandToRun:         "echo hello",
+		NumSlices:            2,
+		ClusterLocation:      "us-central1",
+		ComputeType:          "n2-standard-2",
+		MLDiagnosticsEnabled: false,
+		Pathways: orchestrator.PathwaysJobDefinition{
+			ProxyServerImage: "proxy:latest",
+			ServerImage:      "server:latest",
+			WorkerImage:      "worker:latest",
+			GCSLocation:      "gs://my-bucket",
+			HeadNodePool:     "pathways-np",
+		},
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+	profile, _, _, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image", profile, false, false)
+	if err != nil {
+		t.Fatalf("Failed to generate pathways manifest: %v", err)
+	}
+
+	if strings.Contains(manifest, "managed-mldiagnostics-gke: \"true\"") {
+		t.Errorf("Expected manifest to NOT contain ML Diagnostics label when disabled, got:\n%s", manifest)
 	}
 }

@@ -77,6 +77,8 @@ deployment_groups:
       name: debug
       zones: [$(vars.zone)]
       machine_type: n2d-standard-2
+      threads_per_core: 2
+      static_node_count: 2
 
   ### Google Cloud Storage ###
 
@@ -95,6 +97,16 @@ deployment_groups:
         admission_policy: "admit-on-first-miss"
     outputs: [gcs_bucket_name]
 
+  # Install Kueue and Jobset
+  - id: workload-manager-install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      kueue:
+        install: true
+      jobset:
+        install: true
+
   - id: apply_mtc_config
     source: modules/management/kubectl-apply
     use: [gke_cluster]
@@ -102,7 +114,6 @@ deployment_groups:
       apply_manifests:
       - source: $(ghpc_stage("../modules/management/kubectl-apply/manifests/checkpoint-configuration.yaml.tftpl"))
         template_vars:
-          namespace: "default"
           inMemoryVolumeSize: "50Gi"
           cloudStorageBucketName: $(data-bucket.gcs_bucket_name)
 
@@ -120,6 +131,8 @@ deployment_groups:
       storage_class: RAPID
       placement_zones: ["$(vars.zone)"]
       enable_hierarchical_namespace: true
+      object_users:
+        gke_node_sa: "serviceAccount:$(gke_cluster.node_service_account)"
     outputs: [gcs_bucket_name]
 
   ### Filestore ###
@@ -170,7 +183,10 @@ deployment_groups:
     use: [gke_cluster, node_pool_service_account]
     settings:
       name: local-ssd
+      zones: [$(vars.zone)]
       machine_type: n2d-standard-2
+      threads_per_core: 2
+      static_node_count: 1
       local_ssd_count_ephemeral_storage: 1
 
   - id: ephemeral-storage-job

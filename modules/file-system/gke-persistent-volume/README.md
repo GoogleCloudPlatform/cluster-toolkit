@@ -113,7 +113,9 @@ the deploying machine can connect to the cluster.
 
 When using `gcsfuse_storage_class_name` with GCS Fuse, GKE requires a custom IAM role named `gke.gcsfuse.profileUser` to be present in the project. This role grants the GKE service agent permissions to manage Anywhere Caches and retrieve bucket metadata.
 
-If this role is not already created in your project, you must create it before deploying.
+> **_NOTE:_** If you are creating your GCS bucket using the Cluster Toolkit [`cloud-storage-bucket`](../cloud-storage-bucket/README.md) module with `anywhere_cache` configured, **this custom IAM role and its member bindings are created and managed automatically**. No manual steps are required.
+
+If you are using a pre-existing bucket or managing buckets outside of the `cloud-storage-bucket` module, you must ensure this role exists in your project.
 
 You can create it using the `gcloud` CLI:
 
@@ -123,25 +125,6 @@ gcloud iam roles create gke.gcsfuse.profileUser \
   --title="GKE GCSFuse Profile User" \
   --description="Allows scanning GCS buckets for objects, retrieving bucket metadata, and creating Anywhere Caches." \
   --permissions="storage.objects.list,storage.buckets.get,storage.anywhereCaches.create,storage.anywhereCaches.get,storage.anywhereCaches.list,storage.anywhereCaches.update"
-```
-
-Or using Terraform:
-
-```hcl
-resource "google_project_iam_custom_role" "gcsfuse_profile_user" {
-  role_id     = "gke.gcsfuse.profileUser"
-  project     = var.project_id
-  title       = "GKE GCSFuse Profile User"
-  description = "Allows scanning GCS buckets for objects, retrieving bucket metadata, and creating Anywhere Caches."
-  permissions = [
-    "storage.objects.list",
-    "storage.buckets.get",
-    "storage.anywhereCaches.create",
-    "storage.anywhereCaches.get",
-    "storage.anywhereCaches.list",
-    "storage.anywhereCaches.update",
-  ]
-}
 ```
 
 Once created, the role must be bound to the GKE Service Agent (`service-<PROJECT_NUMBER>@container-engine-robot.iam.gserviceaccount.com`).

@@ -160,12 +160,13 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
-	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
-		return &mockOrchestrator{}
-	}
-
 	// Reset flags before each test
 	setupSubmitTestEnv(t)
+
+	mockOrc := &mockOrchestrator{}
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return mockOrc
+	}
 
 	output, err := executeCommand(JobCmd,
 		"submit",
@@ -177,6 +178,7 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 		"--project", "test-project",
 		"--dry-run-out", tmpfile.Name(),
 		"--compute-type", "n2-standard-4",
+		"--enable-ml-diagnostics",
 	)
 
 	if err != nil {
@@ -199,6 +201,10 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 
 	if !strings.Contains(manifestStr, "image: busybox") {
 		t.Errorf("manifest does not contain correct image")
+	}
+
+	if !mockOrc.SubmittedJob.MLDiagnosticsEnabled {
+		t.Errorf("Expected MLDiagnosticsEnabled to be true in submitted JobDefinition")
 	}
 }
 
@@ -285,6 +291,11 @@ func setupSubmitTestEnv(t *testing.T) {
 	location = ""
 	projectID = ""
 	workloadName = ""
+
+	// Reset MTc & ML Diagnostics global flags to prevent state bleeding across test cases
+	enableMLDiagnostics = false
+	gkeMtcEnabled = false
+	gkeMtcRamdiskDirectory = ""
 	kueueQueueName = ""
 	numNodes = 1
 	numSlices = 1
@@ -321,6 +332,7 @@ func setupSubmitTestEnv(t *testing.T) {
 	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
 		return &mockOrchestrator{}
 	}
+	enableMLDiagnostics = false
 	gkeMtcEnabled = false
 	gkeMtcRamdiskDirectory = ""
 }
@@ -328,6 +340,7 @@ func setupSubmitTestEnv(t *testing.T) {
 type mockOrchestrator struct {
 	orchestrator.JobOrchestrator
 	initializeFunc func(string, string, string) (string, error)
+	SubmittedJob   orchestrator.JobDefinition
 }
 
 func (m *mockOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
@@ -338,6 +351,7 @@ func (m *mockOrchestrator) Initialize(clusterName, location, projectID string) (
 }
 
 func (m *mockOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
+	m.SubmittedJob = job
 	if job.DryRunManifest != "" {
 		var content string
 		if job.IsPathwaysJob {

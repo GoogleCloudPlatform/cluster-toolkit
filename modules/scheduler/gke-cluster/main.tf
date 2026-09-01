@@ -55,8 +55,18 @@ locals {
     "WORKLOADS"
   ]
 
-  # Choose the default based on confidential mode
-  default_system_node_pool_machine_type = var.enable_confidential_nodes ? "n2d-standard-4" : "e2-standard-4"
+  # Check if n4-standard-4 is present across all target system node pool zones
+  n4_available_in_catalog = length(local.target_system_node_pool_zones) > 0 && alltrue([
+    for z in local.target_system_node_pool_zones : length(data.google_compute_machine_types.available_system_machines[z].machine_types) > 0
+  ])
+
+  # Choose the default based on confidential mode and N4 catalog availability:
+  # 1. If confidential nodes are enabled, default to n2d-standard-4 (Confidential VM support).
+  # 2. Otherwise, if n4-standard-4 is in the catalog, default to n4-standard-4 (Gen 4 primary).
+  # 3. If n4-standard-4 is not in the catalog, fall back to n2d-standard-4 (E2-less fallback).
+  default_system_node_pool_machine_type = var.enable_confidential_nodes ? "n2d-standard-4" : (
+    local.n4_available_in_catalog ? "n4-standard-4" : "n2d-standard-4"
+  )
   # Fallback to the default if the user left it null
   system_node_pool_machine_type = coalesce(var.system_node_pool_machine_type, local.default_system_node_pool_machine_type)
   # Choose default disk type based on confidential storage mode.
@@ -98,6 +108,26 @@ locals {
 
 data "google_project" "project" {
   project_id = var.project_id
+}
+
+data "google_compute_zones" "available" {
+  project = var.project_id
+  region  = var.region
+}
+
+locals {
+  target_system_node_pool_zones = var.system_node_pool_machine_type != null ? [] : toset(
+    var.system_node_pool_zones != null ? var.system_node_pool_zones : (
+      var.cluster_availability_type == "ZONAL" ? (var.zone != null ? [var.zone] : []) : data.google_compute_zones.available.names
+    )
+  )
+}
+
+data "google_compute_machine_types" "available_system_machines" {
+  for_each = local.target_system_node_pool_zones
+  project  = var.project_id
+  zone     = each.value
+  filter   = "name = \"n4-standard-4\""
 }
 
 data "google_container_engine_versions" "version_prefix_filter" {
