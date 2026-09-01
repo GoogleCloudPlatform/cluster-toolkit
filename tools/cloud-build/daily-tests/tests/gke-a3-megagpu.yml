@@ -33,11 +33,14 @@ cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
   static_node_count: "{{ static_node_count }}"
-  reservation: "{{ extended_reservation }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   network_name: "{{ network }}"
   local_ssd_count_nvme_block: 16
   gcp_public_cidrs_access_enabled: true
+  reservation_affinity:
+    consume_reservation_type: SPECIFIC_RESERVATION
+    specific_reservations:
+    - name: "{{ extended_reservation }}"
 custom_vars:
   project: "{{ project }}"
 post_deploy_tests:
