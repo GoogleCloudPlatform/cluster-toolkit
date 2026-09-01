@@ -24,7 +24,7 @@ Django==6.0.7
 django-allauth==65.18.0
 django-crispy-forms==2.6
 django-extensions==3.2.3
-djangorestframework==3.17.1
+djangorestframework==3.17.2
 filelock==3.32.0
 google-api-core==2.33.0
 google-api-python-client==2.198.0
