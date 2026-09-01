@@ -4129,6 +4129,111 @@ func TestEnsureMTCWorkloadIdentity_RBAC(t *testing.T) {
 	})
 }
 
+func TestWaitForMTCDriverDaemonSetReady(t *testing.T) {
+	t.Run("DaemonSet ready immediately", func(t *testing.T) {
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{
+							"generation": int64(2),
+						},
+						"status": map[string]interface{}{
+							"observedGeneration":     int64(2),
+							"desiredNumberScheduled": int64(3),
+							"numberReady":            int64(3),
+							"updatedNumberScheduled": int64(3),
+						},
+					},
+				}, nil
+			},
+		}
+		waitForMTCDriverDaemonSetReady(context.Background(), dynClient, "gke-managed-checkpointing")
+	})
+
+	t.Run("DaemonSet ready after polling", func(t *testing.T) {
+		calls := 0
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				calls++
+				if calls < 2 {
+					return &unstructured.Unstructured{
+						Object: map[string]interface{}{
+							"metadata": map[string]interface{}{
+								"generation": int64(2),
+							},
+							"status": map[string]interface{}{
+								"observedGeneration":     int64(2),
+								"desiredNumberScheduled": int64(3),
+								"numberReady":            int64(1),
+								"updatedNumberScheduled": int64(1),
+							},
+						},
+					}, nil
+				}
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{
+							"generation": int64(2),
+						},
+						"status": map[string]interface{}{
+							"observedGeneration":     int64(2),
+							"desiredNumberScheduled": int64(3),
+							"numberReady":            int64(3),
+							"updatedNumberScheduled": int64(3),
+						},
+					},
+				}, nil
+			},
+		}
+		waitForMTCDriverDaemonSetReady(context.Background(), dynClient, "gke-managed-checkpointing")
+		if calls < 2 {
+			t.Errorf("expected at least 2 calls for polling, got %d", calls)
+		}
+	})
+
+	t.Run("403 Forbidden returns gracefully", func(t *testing.T) {
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "daemonsets"}, "multitier-driver", fmt.Errorf("forbidden"))
+			},
+		}
+		waitForMTCDriverDaemonSetReady(context.Background(), dynClient, "gke-managed-checkpointing")
+	})
+
+	t.Run("DaemonSet NotFound returns gracefully", func(t *testing.T) {
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "daemonsets"}, "multitier-driver")
+			},
+		}
+		waitForMTCDriverDaemonSetReady(context.Background(), dynClient, "gke-managed-checkpointing")
+	})
+
+	t.Run("Context canceled/timeout returns gracefully", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{
+							"generation": int64(2),
+						},
+						"status": map[string]interface{}{
+							"observedGeneration":     int64(2),
+							"desiredNumberScheduled": int64(3),
+							"numberReady":            int64(1),
+							"updatedNumberScheduled": int64(1),
+						},
+					},
+				}, nil
+			},
+		}
+		waitForMTCDriverDaemonSetReady(ctx, dynClient, "gke-managed-checkpointing")
+	})
+}
+
 func TestIsForbiddenError(t *testing.T) {
 	tests := []struct {
 		name string
