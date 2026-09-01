@@ -258,6 +258,7 @@ deployment_groups:
       machine_type: c3d-standard-4
       disk_type: hyperdisk-balanced
       disk_storage_pool: $(vars.hyperdisk_balanced_storage_pool)
+      static_node_count: 1
 
   - id: gke-storage-hp
     source: modules/file-system/gke-storage
