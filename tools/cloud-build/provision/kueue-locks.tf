@@ -20,6 +20,6 @@ resource "null_resource" "apply_kueue_locks" {
   }
 
   provisioner "local-exec" {
-    command = "${path.module}/apply_kueue_locks.sh"
+    command = "bash ${path.module}/apply_kueue_locks.sh"
   }
 }

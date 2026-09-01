@@ -123,7 +123,21 @@ def auto_fix_resources(filepath):
                                         job_yaml.dump(job_data, out)
                                         new_job_yaml_str = out.getvalue()
                                         
-                                        new_arg = '\n'.join(lines[:start_idx]) + '\n' + new_job_yaml_str + '\n'.join(lines[end_idx:])
+                                        # Preserve the original indentation of the heredoc
+                                        # Find the first non-empty line to calculate correct indentation
+                                        indent = 0
+                                        for line in lines[start_idx:end_idx]:
+                                            if line.strip():
+                                                indent = len(line) - len(line.lstrip())
+                                                break
+                                                
+                                        indent_str = ' ' * indent
+                                        indented_job_yaml = ''.join(
+                                            indent_str + line if line.strip() else line
+                                            for line in new_job_yaml_str.splitlines(keepends=True)
+                                        )
+                                        
+                                        new_arg = '\n'.join(lines[:start_idx]) + '\n' + indented_job_yaml + '\n'.join(lines[end_idx:])
                                         step['args'][i] = new_arg
                                         modified = True
                         except Exception as e:

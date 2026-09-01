@@ -19,7 +19,12 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 CONFIGS_DIR="$SCRIPT_DIR/../daily-tests/blueprints/test-infra-kueue/configs"
 CLUSTER_NAME="test-kueue-cluster"
 CLUSTER_REGION="us-central1"
-PROJECTS=("hpc-toolkit-dev" "hpc-toolkit-dev-2" "hpc-toolkit-gsc")
+if [ -n "$TEST_INFRA_KUEUE_PROJECTS" ]; then
+  # Read space-separated projects into an array
+  read -r -a PROJECTS <<< "$TEST_INFRA_KUEUE_PROJECTS"
+else
+  PROJECTS=("hpc-toolkit-dev" "hpc-toolkit-dev-2" "hpc-toolkit-gsc")
+fi
 
 echo "Applying Kueue Locks to Clusters..."
 

@@ -55,25 +55,51 @@ data:
 
     while true; do
       # Fetch all jobs, checking their Complete and Failed conditions
-      kubectl get jobs -l build-id -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.metadata.labels.build-id}{"|"}{.status.conditions[?(@.type=="Complete")].status}{"|"}{.status.conditions[?(@.type=="Failed")].status}{"\n"}{end}' | while IFS='|' read -r job_name build_id complete failed; do
-        if [ -z "$build_id" ]; then
-          continue
-        fi
+      jobs_data=$(kubectl get jobs -l build-id -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.metadata.labels.build-id}{"|"}{.status.conditions[?(@.type=="Complete")].status}{"|"}{.status.conditions[?(@.type=="Failed")].status}{"\n"}{end}' 2>/dev/null)
 
-        # If the job has already finished running, skip it to preserve Pod logs for debugging
-        if [ "$complete" == "True" ] || [ "$failed" == "True" ]; then
-          continue
-        fi
+      if [ -n "$jobs_data" ]; then
+        active_jobs=()
+        filter_parts=()
+        while IFS='|' read -r job_name build_id complete failed; do
+          if [ -z "$build_id" ] || [ "$complete" == "True" ] || [ "$failed" == "True" ]; then
+            continue
+          fi
+          active_jobs+=("$job_name|$build_id")
+          filter_parts+=("id=$build_id")
+        done <<< "$jobs_data"
 
-        # Check the Cloud Build status. Suppress stderr so we don't spam logs
-        status=$(gcloud builds describe "$build_id" --format="value(status)" 2>/dev/null)
+        if [ ${#active_jobs[@]} -gt 0 ]; then
+          # Construct the filter string for batch query
+          filter_str=""
+          for part in "${filter_parts[@]}"; do
+            if [ -z "$filter_str" ]; then
+              filter_str="$part"
+            else
+              filter_str="$filter_str OR $part"
+            fi
+          done
 
-        if [ "$status" == "CANCELLED" ] || [ "$status" == "FAILURE" ] || [ "$status" == "TIMEOUT" ]; then
-          echo "WARNING: Cloud Build $build_id is $status!"
-          echo "Deleting suspended/active Kubernetes Job $job_name to trigger graceful cleanup or remove it from Kueue..."
-          kubectl delete job "$job_name"
+          # Query all statuses in a single batch call
+          declare -A build_statuses
+          while read -r bid bstatus; do
+            if [ -n "$bid" ]; then
+              build_statuses["$bid"]="$bstatus"
+            fi
+          done < <(gcloud builds list --filter="$filter_str" --format="value(id,status)" 2>/dev/null)
+
+          # Check and delete jobs for cancelled/failed builds
+          for item in "${active_jobs[@]}"; do
+            IFS='|' read -r job_name build_id <<< "$item"
+            status="${build_statuses[$build_id]}"
+
+            if [ "$status" == "CANCELLED" ] || [ "$status" == "FAILURE" ] || [ "$status" == "TIMEOUT" ]; then
+              echo "WARNING: Cloud Build $build_id is $status!"
+              echo "Deleting suspended/active Kubernetes Job $job_name to trigger graceful cleanup or remove it from Kueue..."
+              kubectl delete job "$job_name" 2>/dev/null || true
+            fi
+          done
         fi
-      done
+      fi
 
       # Poll every 30 seconds
       sleep 30
