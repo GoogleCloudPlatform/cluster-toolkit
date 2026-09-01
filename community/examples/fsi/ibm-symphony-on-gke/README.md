@@ -81,7 +81,7 @@ This deployment combines a dedicated IBM Spectrum Symphony Master VM on Google C
 
 The GCS bucket layout:
 
-![bucket_image](images/data_files.png)
+![bucket_image](https://services.google.com/fh/files/misc/data_files.png)
 
 ## Deployment
 

@@ -29,7 +29,7 @@ This blueprint deploys an IBM Spectrum Symphony cluster consisting of a dedicate
 
 The GCS bucket layout should look like:
 
-![bucket_image](images/data_files.png)
+![bucket_image](https://services.google.com/fh/files/misc/data_files.png)
 
 ## Deployment
 
