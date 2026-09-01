@@ -532,7 +532,7 @@ vm-instance module:
     use:
     - network1
     settings:
-      machine_type: e2-medium
+      machine_type: n2d-standard-2
     outputs:
     - internal_ip
     - name: external_ip
