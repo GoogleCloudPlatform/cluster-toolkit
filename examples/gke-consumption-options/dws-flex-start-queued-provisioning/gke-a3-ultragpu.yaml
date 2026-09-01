@@ -170,6 +170,8 @@ deployment_groups:
       guest_accelerator:
       - type: nvidia-h200-141gb
         count: 8
+        gpu_driver_installation_config:
+          gpu_driver_version: LATEST
       additional_networks:
         $(concat(
           [{
