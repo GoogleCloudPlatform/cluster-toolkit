@@ -41,8 +41,8 @@ for PROJECT in "${PROJECTS[@]}"; do
 	echo "Project: $PROJECT"
 	echo "==========================================="
 
-	# Check if cluster exists in this project
-	if gcloud container clusters describe "$CLUSTER_NAME" --region "$CLUSTER_REGION" --project "$PROJECT" >/dev/null 2>&1; then
+	# Check if cluster exists in this project without throwing a 404 error if it's missing
+	if gcloud container clusters list --region "$CLUSTER_REGION" --project "$PROJECT" --filter="name=$CLUSTER_NAME" --format="value(name)" | grep -q "^${CLUSTER_NAME}$"; then
 		echo "Getting credentials for $CLUSTER_NAME in $PROJECT..."
 		if gcloud container clusters get-credentials "$CLUSTER_NAME" --region "$CLUSTER_REGION" --project "$PROJECT"; then
 			echo "Applying dummy-device-plugin..."

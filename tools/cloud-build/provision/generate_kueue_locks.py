@@ -26,7 +26,7 @@ def extract_locks_from_builds():
     locks = set()
     for filepath in glob.glob(os.path.join(BUILDS_DIR, "*.yaml")):
         test_name = os.path.basename(filepath).replace('.yaml', '')
-        with open(filepath, 'r') as f:
+        with open(filepath, 'r', encoding='utf-8') as f:
             content = f.read()
             
         # We consider it a Kueue test if it uses Kueue (either the script or explicitly requests a lock)
@@ -46,7 +46,7 @@ def update_dummy_device_plugin(new_locks):
     yaml.width = 4096
     filepath = os.path.join(CONFIGS_DIR, "dummy-device-plugin.yaml")
     
-    with open(filepath, 'r') as f:
+    with open(filepath, 'r', encoding='utf-8') as f:
         data = yaml.load(f)
         
     args = data['spec']['template']['spec']['containers'][0]['args']
@@ -71,7 +71,7 @@ def update_dummy_device_plugin(new_locks):
             added += 1
             
     if added > 0:
-        with open(filepath, 'w') as f:
+        with open(filepath, 'w', encoding='utf-8') as f:
             yaml.dump(data, f)
     return added
 
@@ -81,7 +81,7 @@ def update_kueue_setup(new_locks):
     yaml.width = 4096
     filepath = os.path.join(CONFIGS_DIR, "kueue-setup.yaml")
     
-    with open(filepath, 'r') as f:
+    with open(filepath, 'r', encoding='utf-8') as f:
         docs = list(yaml.load_all(f))
         
     # Find the ClusterQueue doc
@@ -165,7 +165,7 @@ def update_kueue_setup(new_locks):
         added += 1
 
     if added > 0:
-        with open(filepath, 'w') as f:
+        with open(filepath, 'w', encoding='utf-8') as f:
             yaml.dump_all(docs, f)
             
     return added

@@ -55,7 +55,7 @@ data:
 
     while true; do
       # Fetch all jobs, checking their Complete and Failed conditions
-      jobs_data=$(kubectl get jobs -l build-id -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.metadata.labels.build-id}{"|"}{.status.conditions[?(@.type=="Complete")].status}{"|"}{.status.conditions[?(@.type=="Failed")].status}{"\n"}{end}' 2>/dev/null)
+      jobs_data=$(kubectl get jobs -l build-id -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.metadata.labels.build-id}{"|"}{.status.conditions[?(@.type=="Complete")].status}{"|"}{.status.conditions[?(@.type=="Failed")].status}{"\n"}{end}')
 
       if [ -n "$jobs_data" ]; then
         active_jobs=()
@@ -86,7 +86,7 @@ data:
             if [ -n "$bid" ]; then
               build_statuses["$bid"]="$bstatus"
             fi
-          done < <(gcloud builds list --filter="$filter_str" --format="value(id,status)" 2>/dev/null)
+          done < <(gcloud builds list --filter="$filter_str" --format="value(id,status)")
 
           # Check and delete jobs for cancelled/failed builds
           for item in "${active_jobs[@]}"; do

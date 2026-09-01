@@ -26,7 +26,7 @@ def auto_fix_resources(filepath):
     yaml.preserve_quotes = True
     yaml.width = 4096
 
-    with open(filepath, 'r') as f:
+    with open(filepath, 'r', encoding='utf-8') as f:
         content = f.read()
         
     if "submit_and_monitor_kueue_job.sh" not in content:
@@ -39,7 +39,7 @@ def auto_fix_resources(filepath):
         return True # Failed validation
         
     try:
-        with open(filepath, 'r') as f:
+        with open(filepath, 'r', encoding='utf-8') as f:
             data = yaml.load(f)
     except Exception as e:
         print(f"Failed to parse outer yaml for {filepath}: {e}")
@@ -79,6 +79,7 @@ def auto_fix_resources(filepath):
                             job_data = job_yaml.load(job_yaml_str)
                             
                             containers = job_data.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
+                            found_lock = False
                             for container in containers:
                                 if not isinstance(container, dict):
                                     continue
@@ -99,6 +100,7 @@ def auto_fix_resources(filepath):
                                         break
                                         
                                 if lock_name:
+                                    found_lock = True
                                     needs_fix = False
                                     if requests.get('cpu') != '200m' or str(requests.get('memory')) != '2Gi':
                                         needs_fix = True
@@ -143,12 +145,17 @@ def auto_fix_resources(filepath):
                                         new_arg = '\n'.join(lines[:start_idx]) + '\n' + indented_job_yaml + '\n'.join(lines[end_idx:])
                                         step['args'][i] = new_arg
                                         modified = True
+                            
+                            if not found_lock:
+                                print(f"ERROR: Embedded job.yaml in {filepath} does not actually request any test-locks in its container resources!")
+                                return True # Failed validation
+                                
                         except Exception as e:
                             # It might fail if the bash script has $VARS inside the yaml that breaks the YAML parser
                             print(f"Warning: Failed to parse embedded job.yaml in {filepath}: {e}")
                             
     if modified:
-        with open(filepath, 'w') as f:
+        with open(filepath, 'w', encoding='utf-8') as f:
             yaml.dump(data, f)
         return True # Failed validation (was modified)
     
