@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-resource "null_resource" "apply_kueue_locks" {
-  triggers = {
+resource "terraform_data" "apply_kueue_locks" {
+  triggers_replace = {
     dummy_hash  = filemd5("${path.module}/../daily-tests/blueprints/test-infra-kueue/configs/dummy-device-plugin.yaml")
     setup_hash  = filemd5("${path.module}/../daily-tests/blueprints/test-infra-kueue/configs/kueue-setup.yaml")
     script_hash = filemd5("${path.module}/apply_kueue_locks.sh")

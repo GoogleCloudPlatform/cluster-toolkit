@@ -47,6 +47,9 @@ def auto_fix_resources(filepath):
         
     modified = False
     
+    if not data or not isinstance(data, dict):
+        return False
+        
     for step in data.get('steps', []):
         if 'args' in step:
             for i, arg in enumerate(step['args']):

@@ -80,6 +80,7 @@ data:
           done
 
           # Query all statuses in a single batch call
+          unset build_statuses
           declare -A build_statuses
           while read -r bid bstatus; do
             if [ -n "$bid" ]; then

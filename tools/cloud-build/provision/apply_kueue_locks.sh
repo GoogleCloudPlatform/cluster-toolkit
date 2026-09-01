@@ -15,15 +15,22 @@
 
 set -eo pipefail
 
+for cmd in gcloud kubectl; do
+	if ! command -v "$cmd" &>/dev/null; then
+		echo "Error: $cmd is required but not installed." >&2
+		exit 1
+	fi
+done
+
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 CONFIGS_DIR="$SCRIPT_DIR/../daily-tests/blueprints/test-infra-kueue/configs"
 CLUSTER_NAME="test-kueue-cluster"
 CLUSTER_REGION="us-central1"
 if [ -n "$TEST_INFRA_KUEUE_PROJECTS" ]; then
-  # Read space-separated projects into an array
-  read -r -a PROJECTS <<< "$TEST_INFRA_KUEUE_PROJECTS"
+	# Read space-separated projects into an array
+	read -r -a PROJECTS <<<"$TEST_INFRA_KUEUE_PROJECTS"
 else
-  PROJECTS=("hpc-toolkit-dev" "hpc-toolkit-dev-2" "hpc-toolkit-gsc")
+	PROJECTS=("hpc-toolkit-dev" "hpc-toolkit-dev-2" "hpc-toolkit-gsc")
 fi
 
 echo "Applying Kueue Locks to Clusters..."

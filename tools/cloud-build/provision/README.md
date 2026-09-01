@@ -22,7 +22,6 @@ When prompted for project, use integration test project.
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_external"></a> [external](#requirement\_external) | ~> 2.3.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 5.0 |
-| <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.2.0 |
 
 ## Providers
 
@@ -30,7 +29,7 @@ When prompted for project, use integration test project.
 | ---- | ------- |
 | <a name="provider_external"></a> [external](#provider\_external) | ~> 2.3.0 |
 | <a name="provider_google"></a> [google](#provider\_google) | ~> 5.0 |
-| <a name="provider_null"></a> [null](#provider\_null) | ~> 3.2.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
@@ -64,7 +63,7 @@ When prompted for project, use integration test project.
 | [google_cloudbuild_trigger.zebug_fast_build_success](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_compute_reservation.c2standard60_us_west4_c](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_reservation) | resource |
 | [google_compute_reservation.n1standard8_with_tesla_t4_europe_west1_d](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_reservation) | resource |
-| [null_resource.apply_kueue_locks](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [terraform_data.apply_kueue_locks](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [external_external.list_tests_midnight](https://registry.terraform.io/providers/hashicorp/external/latest/docs/data-sources/external) | data source |
 
 ## Inputs
