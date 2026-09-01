@@ -128,11 +128,11 @@ gcloud compute ssh "<DEPLOYMENT_NAME>-master-0" \
     --zone "<ZONE>" \
     --project "<PROJECT_ID>" \
     --tunnel-through-iap \
-    -- -L 8080:localhost:8080
+    -- -L 8888:localhost:8080
 ```
 Open your browser and navigate to:
 ```
-http://localhost:8080/platform/
+http://localhost:8888/platform/
 ```
 Log in using:
 *   **Username:** `Admin`
