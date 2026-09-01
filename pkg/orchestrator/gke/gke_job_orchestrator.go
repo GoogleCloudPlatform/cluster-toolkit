@@ -718,6 +718,8 @@ func checkDaemonSetReady(ctx context.Context, client dynamic.Interface, namespac
 	return isDaemonSetRolloutComplete(dsObj), nil
 }
 
+var daemonSetPollInterval = 2 * time.Second
+
 // waitForMTCDriverDaemonSetReady waits for the multitier-driver DaemonSet to finish rollout and become ready.
 func waitForMTCDriverDaemonSetReady(ctx context.Context, client dynamic.Interface, namespace string) {
 	logging.Info("Waiting for MTC multitier-driver DaemonSet in %s to be ready...", namespace)
@@ -728,7 +730,7 @@ func waitForMTCDriverDaemonSetReady(ctx context.Context, client dynamic.Interfac
 		return
 	}
 
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(daemonSetPollInterval)
 	defer ticker.Stop()
 
 	for {

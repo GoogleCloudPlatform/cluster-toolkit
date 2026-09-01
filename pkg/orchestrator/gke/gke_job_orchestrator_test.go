@@ -4130,6 +4130,10 @@ func TestEnsureMTCWorkloadIdentity_RBAC(t *testing.T) {
 }
 
 func TestWaitForMTCDriverDaemonSetReady(t *testing.T) {
+	oldInterval := daemonSetPollInterval
+	daemonSetPollInterval = 1 * time.Millisecond
+	defer func() { daemonSetPollInterval = oldInterval }()
+
 	t.Run("DaemonSet ready immediately", func(t *testing.T) {
 		dynClient := &mockDynamicClient{
 			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
