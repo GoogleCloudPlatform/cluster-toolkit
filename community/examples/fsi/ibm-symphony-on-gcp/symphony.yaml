@@ -1,0 +1,246 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: ibm-symphony
+
+vars:
+  project_id:  ## Set project id here
+  deployment_name: symphony1
+  region: us-central1
+  zone: us-central1-a
+  base_image:
+    family: hpc-rocky-linux-8 
+    project: cloud-hpc-image-public 
+  new_image:
+    family: $(vars.deployment_name)
+    project: $(vars.project_id)
+  disk_size_gb: 200
+  metadata: # Workaround for https://github.com/GoogleCloudPlatform/cluster-toolkit/discussions/3243
+    VmDnsSetting: GlobalOnly
+  sym_installer: sym-7.3.2.0_x86_64.bin
+  sym_source_bucket: <YOUR_GCS_BUCKET_NAME>
+  sym_fixpack: sym-7.3.2.0_x86_64_build601711.tar.gz
+  sym_entitlement: sym_adv_entitlement.dat
+  symphony_install_dir: /opt/ibm/symphony
+  admin_password: admin
+  service_account_email: $(vars.service_account_email)
+  pubsub_subscription: hf-gce-vm-events-sub
+  pubsub_topic: hf-gce-vm-events
+  sink_name: hf-gce-vm-events-sink
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+
+  - id: destination_pubsub
+    source: git::https://github.com/terraform-google-modules/terraform-google-log-export.git//modules/pubsub
+    settings:
+      project_id: $(vars.project_id)
+      topic_name: $(vars.pubsub_topic)
+      log_sink_writer_identity: $(sink.writer_identity)
+
+  - id: sink
+    source: git::https://github.com/terraform-google-modules/terraform-google-log-export.git
+    settings:
+      parent_resource_id: $(vars.project_id)
+      parent_resource_type: project
+      destination_uri: $(destination_pubsub.destination_uri)
+      log_sink_name: $(vars.sink_name)
+      unique_writer_identity: true
+      filter: |
+        logName="projects/$(vars.project_id)/logs/cloudaudit.googleapis.com%2Factivity" 
+        resource.type=("gce_instance_group_manager" OR "gce_instance" ) 
+        protoPayload.methodName=( 
+          "v1.compute.instanceGroupManagers.createInstances" 
+          OR "v1.compute.instanceGroupManagers.deleteInstances" 
+          OR "v1.compute.instances.delete" 
+        )
+
+  - id: pubsub
+    source: git::https://github.com/terraform-google-modules/terraform-google-pubsub.git
+    settings:
+      project_id: $(vars.project_id)
+      create_topic: false
+      topic: $(destination_pubsub.resource_name)
+      pull_subscriptions:
+      - name: $(vars.pubsub_subscription)
+        service_account: $(vars.service_account_email)
+
+  - id: script
+    source: modules/scripts/startup-script
+    settings:
+      install_cloud_ops_agent: true
+      runners:
+      - type: data
+        destination: /tmp/Symphony/hostProviderPlugins.json
+        source:  $(ghpc_stage("resources/hostProviderPlugins.json"))
+      - type: data
+        destination: /tmp/Symphony/hostProviders.json
+        source:  $(ghpc_stage("resources/hostProviders.json"))
+      - type: data
+        destination: /tmp/Symphony/hostRequestors.json
+        source:  $(ghpc_stage("resources/hostRequestors.json"))
+      - type: shell
+        destination: install_symphony.sh
+        source:  $(ghpc_stage("scripts/install_symphony.sh"))
+        args: $(vars.sym_installer) $(vars.sym_fixpack) $(vars.sym_entitlement) $(vars.symphony_install_dir) $(vars.sym_source_bucket)
+      - type: shell
+        destination: hf-gce_symphony.sh
+        source:  $(ghpc_stage("scripts/hf-gce_symphony.sh"))
+        args: $(vars.symphony_install_dir) $(vars.project_id)
+  - id: sym-compute-script
+    source: modules/scripts/startup-script
+    settings:
+      install_cloud_ops_agent: true
+      runners:
+      - type: shell
+        destination: google_ops_agent_config.sh
+        source:  $(ghpc_stage("scripts/google_ops_agent_config.sh"))
+        args: $(vars.symphony_install_dir)
+      - type: shell
+        destination: sym_compute.sh
+        source:  $(ghpc_stage("scripts/sym_compute.sh"))
+        args: $(vars.deployment_name)-master-0 $(vars.symphony_install_dir)
+
+- group: packer
+  modules:
+  - id: custom-image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - network
+    - script
+    settings:
+      # give VM a public IP to ensure startup script can reach public internet
+      # w/o new VPC
+      omit_external_ip: false
+      source_image_family: $(vars.base_image.family)
+      source_image_project_id: [$(vars.base_image.project)]
+      disk_size: $(vars.disk_size_gb)
+      disk_type: pd-ssd
+      image_family: $(vars.new_image.family)
+      # building this image does not require a GPU-enabled VM
+      machine_type: c2-standard-4
+      state_timeout: 15m
+
+- group: create-mig
+  modules:
+
+  ## Create MIG instance templates
+  - id: sym-mig-c2-30
+    use: 
+    - sym-compute-script
+    source: git::https://github.com/terraform-google-modules/terraform-google-vm.git//modules/instance_template?ref=main
+    settings:
+      subnetwork: $(network.subnetwork_name)
+      source_image_family: $(vars.new_image.family)
+      source_image_project: $(vars.new_image.project)
+      name_prefix: $(vars.deployment_name)
+      machine_type: c2-standard-30
+      threads_per_core: null # Use platform default value
+      service_account:
+        email: $(vars.service_account_email)
+
+  - id: sym-mig-c2-4
+    use: 
+    - sym-compute-script
+    source: git::https://github.com/terraform-google-modules/terraform-google-vm.git//modules/instance_template?ref=main
+    settings:
+      subnetwork: $(network.subnetwork_name)
+      source_image_family: $(vars.new_image.family)
+      source_image_project: $(vars.new_image.project)
+      name_prefix: $(vars.deployment_name)
+      machine_type: c2-standard-4
+      threads_per_core: null # Use platform default value
+      service_account:
+        email: $(vars.service_account_email)
+
+  ## Create MIGs
+  - id: sym-mig-4
+    source: community/modules/compute/mig
+    settings:
+      name: sym-mig-c2-4
+      base_instance_name: $(vars.deployment_name)-c2-4
+      versions:
+      - name: sym-mig-c2-4
+        instance_template: $(sym-mig-c2-4.self_link)
+      target_size: 0
+
+  - id: sym-mig-30
+    source: community/modules/compute/mig
+    settings:
+      name: sym-mig-c2-30
+      base_instance_name: $(vars.deployment_name)-c2-30
+      versions:
+      - name: sym-mig-c2-30
+        instance_template: $(sym-mig-c2-30.self_link)
+      target_size: 0
+
+- group: deploy-vms
+  modules:
+  - id: sym-master-script
+    source: modules/scripts/startup-script
+    settings:
+      install_cloud_ops_agent: true
+      runners:
+      - type: shell
+        destination: google_ops_agent_config.sh
+        source:  $(ghpc_stage("scripts/google_ops_agent_config.sh"))
+        args: $(vars.symphony_install_dir)
+      - type: data
+        destination: /tmp/sym_mig_provider.py
+        source:  $(ghpc_stage("resources/sym_mig_provider.py"))
+      - type: shell
+        destination: hostfactoryconf_json.sh
+        source:  $(ghpc_stage("scripts/hostfactoryconf_json.sh"))
+        args: $(vars.symphony_install_dir)
+      - type: shell
+        destination: gcpgceinstprov_config_json.sh
+        source:  $(ghpc_stage("scripts/gcpgceinstprov_config_json.sh"))
+        args: $(vars.symphony_install_dir) $(vars.project_id) $(vars.pubsub_topic) $(vars.pubsub_subscription)
+
+      - type: shell
+        destination: gcpgceinstprov_templates_json.sh
+        source:  $(ghpc_stage("scripts/gcpgceinstprov_templates_json.sh"))
+        args: $(vars.symphony_install_dir) "sym-mig-c2-4,10,X86_64,4,4,32768,$(vars.zone),sym-mig-c2-4__sym-mig-c2-30,10,X86_64,30,30,122880,$(vars.zone),sym-mig-c2-30"
+
+      - type: shell
+        destination: sym_master.sh
+        source:  $(ghpc_stage("scripts/sym_master.sh"))
+        args: $(vars.deployment_name)-master-0 $(vars.symphony_install_dir) $(vars.admin_password) $(vars.project_id) $(vars.pubsub_subscription)
+
+  - id: sym-master-vm
+    source: modules/compute/vm-instance
+    use: 
+    - sym-master-script
+    - network
+    settings:
+      name_prefix: $(vars.deployment_name)-master
+      machine_type: c2-standard-4
+      instance_image: $(vars.new_image)
+
+  - id: sym-compute-vm
+    source: modules/compute/vm-instance
+    use: 
+    - sym-compute-script
+    - network
+    settings:
+      name_prefix: $(vars.deployment_name)-compute
+      machine_type: c2-standard-4
+      instance_image: $(vars.new_image)
+      instance_count: 1

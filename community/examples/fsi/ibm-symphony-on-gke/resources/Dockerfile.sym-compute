@@ -1,0 +1,198 @@
+# syntax=docker/dockerfile:1
+#
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# select base image
+ARG base_image=rockylinux:9
+FROM $base_image AS build
+ARG sym_version=7.3.2
+ARG sym_installer=sym-7.3.2.0_x86_64.bin
+ARG sym_fixpack=sym-7.3.2.0_x86_64_build602717.tar.gz
+ARG ego_admin=egoadmin
+ARG sym_install=/opt/ibm/spectrumcomputing
+
+# install symphony dependencies
+RUN yum install -y \
+	bc \
+	gettext \
+	bind-utils \
+	net-tools \
+	libnsl \
+	openssl \
+	ed \
+	dejavu-serif-fonts \
+	findutils \
+	sudo \
+	vim \
+	zip \
+	diffutils \
+	iproute \
+	procps \
+	jq \
+	glibc-locale-source \
+	glibc-langpack-en \
+	libxcrypt-compat \
+	&& yum clean all && rm -rf /var/cache/yum
+
+# setup system requirements
+RUN useradd -G wheel -m ${ego_admin} && echo ${ego_admin}:Admin | chpasswd && echo "${ego_admin} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/symphony-cluster-admins
+RUN touch /var/run/utmp && chmod 664 /var/run/utmp && chown root:utmp /var/run/utmp
+RUN echo LC_ALL=en_US.UTF-8 > /etc/locale.conf && \
+	LC_ALL=en_US.UTF-8 localedef -v -c -i en_US -f UTF-8 en_US.UTF-8 | true
+RUN echo "${ego_admin} soft nproc  65536" >> /etc/security/limits.conf && \
+	echo "${ego_admin} hard nproc  65536" >> /etc/security/limits.conf && \
+	echo "${ego_admin} soft nofile 65536" >> /etc/security/limits.conf && \
+	echo "${ego_admin} hard nofile 65536" >> /etc/security/limits.conf
+RUN echo "root soft nproc  65536" >> /etc/security/limits.conf && \
+	echo "root hard nproc  65536" >> /etc/security/limits.conf && \
+	echo "root soft nofile 65536" >> /etc/security/limits.conf && \
+	echo "root hard nofile 65536" >> /etc/security/limits.conf
+
+# install symphony
+RUN mkdir -p /opt/ibm
+ADD --chmod=770 ${sym_installer} /opt/ibm/${sym_installer}
+ENV EGO_TOP=${sym_install} CLUSTERADMIN=${ego_admin} IBM_SPECTRUM_SYMPHONY_LICENSE_ACCEPT=Y SIMPLIFIEDWEM=N DISABLESSL=Y EGOCOMPUTEHOST=Y
+RUN /opt/ibm/${sym_installer} --prefix $EGO_TOP --quiet && rm /opt/ibm/${sym_installer}
+
+COPY ${sym_fixpack} /opt/ibm/${sym_fixpack}
+
+RUN <<EOF
+
+export sym_fixpack_path=/opt/ibm/${sym_fixpack}
+export sym_fixpack_name=$(basename $sym_fixpack .tar.gz)
+export sym_fixpack_dir=/opt/ibm/${sym_fixpack_name}
+
+mkdir -p ${sym_fixpack_dir}
+chmod 770 ${sym_fixpack_dir}
+tar -xf ${sym_fixpack_path} -C ${sym_fixpack_dir}
+chmod u+r ${sym_fixpack_dir}/*
+chmod a+x ${sym_fixpack_dir}/*.sh
+
+cd ${sym_fixpack_dir}
+
+su -s /bin/bash $CLUSTERADMIN -c "source $EGO_TOP/profile.platform && ${sym_fixpack_dir}/sym-7.3.2.sh -c -i"
+
+source $EGO_TOP/profile.platform
+${sym_fixpack_dir}/symrpm-7.3.2.sh -c -i
+
+cd -
+
+rm -rf $EGO_TOP/patch/backup/*
+rm -rf ${sym_fixpack_dir}
+rm -f ${sym_fixpack_path}
+
+EOF
+
+# Fix BINARY_TYPE detection on Rocky Linux
+RUN sed -i 's|BINARY_TYPE="fail"|BINARY_TYPE="linux-x86_64"|g' ${sym_install}/kernel/conf/profile.ego && \
+    sed -i 's|BINARY_TYPE="fail"|BINARY_TYPE="linux-x86_64"|g' ${sym_install}/jre/profile.jre && \
+    sed -i 's|BINARY_TYPE="fail"|BINARY_TYPE="linux-x86_64"|g' ${sym_install}/soam/conf/profile.soam
+
+# Update Symphony configuration to accelerate compute nodes joining the cluster
+RUN sed -i 's/EGO_DYNAMIC_HOST_WAIT_TIME=60/EGO_DYNAMIC_HOST_WAIT_TIME=10,60/' ${sym_install}/kernel/conf/ego.conf
+RUN sed -i 's/EGO_DISTRIBUTION_INTERVAL=1/EGO_DISTRIBUTION_INTERVAL=2/' ${sym_install}/kernel/conf/ego.conf
+RUN echo "RESOURCE_OPERATION_INTERVAL=1" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_MASTER_ANN_BUF_SIZE=40960" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_RESOURCE_UPDATE_INTERVAL=30" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "RESOURCE_OPERATION_INTERVAL=1" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_MASTER_ANN_BUF_SIZE=40960" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_RESOURCE_UPDATE_INTERVAL=30" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_DATA_MAXSIZE=1000" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_LIM_IS_IN_CONTAINER=Y" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_SEND_CONFINFO_TCP_THRESHOLD=16384" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_UID_CACHE_DURATION=600" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_HOST_CACHE_PTTL=3600" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_DYNAMIC_HOST_TIMEOUT=10m" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_RECV_LIM_TIMEOUT=5" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_PLATCOMMDRV_BACKLOG_SIZE_ON_LINUX=36864" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_ENABLE_CHAN_KEEPALIVE=Y" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_CHAN_KEEPALIVE_TIME=180" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_REMOVE_HOSTNAME_FROM_EVENT_DATA=Y" >> ${sym_install}/kernel/conf/ego.conf
+RUN echo "EGO_GET_HOST_IP_ADDRESS_WITHOUT_LIM_DNS_CACHE=Y" >> ${sym_install}/kernel/conf/ego.conf
+
+WORKDIR ${sym_install}
+
+# force single layer so that deleted files are not in final image
+FROM scratch
+COPY --from=build / /
+WORKDIR /opt/ibm
+ARG ego_admin=egoadmin
+ARG sym_install=/opt/ibm/spectrumcomputing
+ENV EGO_TOP=${sym_install} CLUSTERADMIN=${ego_admin}
+
+COPY --chmod=755 <<EOT /opt/ibm/entrypoint.sh
+#!/bin/sh
+set -e
+if [ -z "\$MASTER_HOST" ] ; then echo "Environment variable MASTER_HOST not defined, aborting" && exit 1; fi
+if [ -z "\$ADMIN_PASSWORD" ] ; then export ADMIN_PASSWORD=Admin; fi
+
+HOSTS_FILE="/etc/hosts"
+EGO_HOSTS_FILE="${sym_install}/kernel/conf/hosts"
+
+# Determine if MASTER_HOST is an IPv4 address
+if echo "\$MASTER_HOST" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+	# MASTER_HOST is an IP address
+	if [ -n "\$MASTER_ALIAS" ]; then
+		JOIN_HOSTNAME="\$MASTER_ALIAS"
+	else
+		JOIN_HOSTNAME="sym-master"
+	fi
+	RESOLVED_IP="\$MASTER_HOST"
+
+	echo "Mapping master IP \$RESOLVED_IP to hostname \$JOIN_HOSTNAME..."
+	if grep -q "\$JOIN_HOSTNAME" "\$HOSTS_FILE" 2>/dev/null; then
+		sudo sed -i "s/^.*\$JOIN_HOSTNAME.*/\$RESOLVED_IP \$JOIN_HOSTNAME/" "\$HOSTS_FILE"
+	else
+		echo "\$RESOLVED_IP \$JOIN_HOSTNAME" | sudo tee -a "\$HOSTS_FILE" > /dev/null
+	fi
+
+	mkdir -p "\$(dirname "\$EGO_HOSTS_FILE")"
+	if grep -q "\$JOIN_HOSTNAME" "\$EGO_HOSTS_FILE" 2>/dev/null; then
+		sudo sed -i "s/^.*\$JOIN_HOSTNAME.*/\$RESOLVED_IP \$JOIN_HOSTNAME/" "\$EGO_HOSTS_FILE"
+	else
+		echo "\$RESOLVED_IP \$JOIN_HOSTNAME" | sudo tee -a "\$EGO_HOSTS_FILE" > /dev/null
+	fi
+else
+	# MASTER_HOST is already a hostname
+	JOIN_HOSTNAME="\$MASTER_HOST"
+	if [ -n "\$MASTER_ALIAS" ]; then
+		RESOLVED_IP=\$(getent hosts "\$MASTER_HOST" 2>/dev/null | awk '{print \$1}')
+		if [ -n "\$RESOLVED_IP" ]; then
+			echo "Mapping master IP \$RESOLVED_IP to alias \$MASTER_ALIAS..."
+			echo "\$RESOLVED_IP \$MASTER_ALIAS" | sudo tee -a "\$HOSTS_FILE" > /dev/null
+			echo "\$RESOLVED_IP \$MASTER_ALIAS" | sudo tee -a "\$EGO_HOSTS_FILE" > /dev/null
+		fi
+	fi
+fi
+
+source \$EGO_TOP/profile.platform && egosetsudoers.sh -f
+su -s /bin/bash ${ego_admin} -c "source \$EGO_TOP/profile.platform && egoconfig addresourceattr '[resourcemap gcpgke*cloudprovider]' && egoconfig join \$JOIN_HOSTNAME -f && egosh ego start && \$*"
+EOT
+
+COPY --chmod=755 <<'EOT' /opt/ibm/tail.sh
+#!/bin/sh
+set -e
+(
+trap 'kill 0' EXIT
+for log in lim elim.sa melim pem pim ; do
+	tail -Fq $EGO_TOP/kernel/log/$log.log.$(hostname) 2>/dev/null | fgrep '' --line-buffered | sed -u -e "s/^/[$log] /" | fgrep '' --line-buffered &
+done
+wait
+)
+EOT
+
+# egosh ego start
+ENTRYPOINT ["/opt/ibm/entrypoint.sh"]
+CMD ["/opt/ibm/tail.sh"]

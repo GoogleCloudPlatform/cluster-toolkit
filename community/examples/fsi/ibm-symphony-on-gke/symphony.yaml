@@ -1,0 +1,248 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: ibm-symphony-gke
+
+validators:
+- validator: test_apis_enabled
+  skip: true # Handled by service-enablement module during deployment
+
+vars:
+  project_id:  ## Set project id here
+  deployment_name: symphony-gke
+  region: us-central1
+  zone: us-central1-c
+  authorized_cidr: 0.0.0.0/0
+  base_image:
+    family: hpc-rocky-linux-8
+    project: cloud-hpc-image-public
+  new_image:
+    family: $(vars.deployment_name)
+    project: $(vars.project_id)
+  disk_size_gb: 200
+  metadata:
+    VmDnsSetting: GlobalOnly
+  sym_installer: sym-7.3.2.0_x86_64.bin
+  sym_source_bucket: <YOUR_GCS_BUCKET_NAME>
+  sym_fixpack: sym-7.3.2.0_x86_64_build601711.tar.gz
+  sym_entitlement: sym_adv_entitlement.dat
+  symphony_install_dir: /opt/ibm/symphony
+  admin_password: admin
+  gke_node_machine_type: c2-standard-4
+  gke_min_node_count: 3
+  gke_max_node_count: 100
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: enable_apis
+    source: community/modules/project/service-enablement
+    settings:
+      gcp_service_list:
+      - secretmanager.googleapis.com
+      - accesscontextmanager.googleapis.com
+      - compute.googleapis.com
+      - container.googleapis.com
+      - artifactregistry.googleapis.com
+      - cloudbuild.googleapis.com
+      - serviceusage.googleapis.com
+      - storage.googleapis.com
+      - logging.googleapis.com
+      - monitoring.googleapis.com
+      - cloudresourcemanager.googleapis.com
+      - iam.googleapis.com
+
+  - id: network
+    source: modules/network/vpc
+    settings:
+      subnetwork_name: $(vars.deployment_name)-subnet
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-subnet
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+
+  - id: sym_master_sa
+    source: modules/project/service-account
+    settings:
+      name: master-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - container.developer
+      - storage.admin
+      - storage.objectAdmin
+      - cloudbuild.builds.editor
+      - serviceusage.serviceUsageConsumer
+      - iam.serviceAccountUser
+      - artifactregistry.writer
+      - compute.instanceAdmin.v1
+
+  - id: registry
+    source: git::https://github.com/GoogleCloudPlatform/terraform-google-artifact-registry.git
+    settings:
+      project_id: $(vars.project_id)
+      location: $(vars.region)
+      repository_id: $(vars.deployment_name)-repo
+      format: DOCKER
+      description: "Docker repository for Symphony compute container images"
+
+  - id: packer-script
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: data
+        destination: /tmp/Symphony/hostProviderPlugins.json
+        source: $(ghpc_stage("resources/hostProviderPlugins.json"))
+      - type: data
+        destination: /tmp/Symphony/hostProviders.json
+        source: $(ghpc_stage("resources/hostProviders.json"))
+      - type: data
+        destination: /tmp/Symphony/hostRequestors.json
+        source: $(ghpc_stage("resources/hostRequestors.json"))
+      - type: shell
+        destination: install_symphony.sh
+        source: $(ghpc_stage("scripts/install_symphony.sh"))
+        args: $(vars.sym_installer) $(vars.sym_fixpack) $(vars.sym_entitlement) $(vars.symphony_install_dir) $(vars.sym_source_bucket)
+      - type: shell
+        destination: hf-gke_symphony.sh
+        source: $(ghpc_stage("scripts/hf-gke_symphony.sh"))
+        args: $(vars.symphony_install_dir) $(vars.project_id)
+      - type: data
+        destination: /tmp/Symphony/Dockerfile.sym-compute
+        source: $(ghpc_stage("resources/Dockerfile.sym-compute"))
+      - type: data
+        destination: /tmp/Symphony/cloudbuild.yaml
+        source: $(ghpc_stage("resources/cloudbuild.yaml"))
+      - type: shell
+        destination: build_compute_image.sh
+        source: $(ghpc_stage("scripts/build_compute_image.sh"))
+        args: $(vars.region)-docker.pkg.dev/$(vars.project_id)/$(vars.deployment_name)-repo "sym-compute" $(vars.sym_source_bucket) $(vars.sym_installer) $(vars.sym_fixpack)
+
+- group: packer
+  modules:
+  - id: custom-image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - network
+    - packer-script
+    settings:
+      service_account_email: $(sym_master_sa.service_account_email)
+      omit_external_ip: false
+      source_image_family: $(vars.base_image.family)
+      source_image_project_id: [$(vars.base_image.project)]
+      disk_size: $(vars.disk_size_gb)
+      disk_type: pd-ssd
+      image_family: $(vars.new_image.family)
+      machine_type: c2-standard-4
+      state_timeout: 15m
+
+- group: deploy-gke
+  modules:
+  - id: gke_node_pool_sa
+    source: modules/project/service-account
+    settings:
+      name: gke-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network, gke_node_pool_sa]
+    settings:
+      enable_private_endpoint: false
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr)
+        display_name: "management-network"
+    outputs: [instructions]
+
+  - id: gke_compute_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, gke_node_pool_sa]
+    settings:
+      name: sym-pool
+      machine_type: $(vars.gke_node_machine_type)
+      autoscaling_total_min_nodes: $(vars.gke_min_node_count)
+      autoscaling_total_max_nodes: $(vars.gke_max_node_count)
+      taints: []
+
+  - id: symphony_operator_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      apply_manifests:
+      - source: $(ghpc_stage("resources/manifests/symphony-operator.yaml.tftpl"))
+        wait_for_rollout: true
+        template_vars:
+          project_id: $(vars.project_id)
+          region: $(vars.region)
+          deployment_name: $(vars.deployment_name)
+
+- group: deploy-vms
+  modules:
+  - id: sym-master-script
+    source: modules/scripts/startup-script
+    settings:
+      install_cloud_ops_agent: true
+      runners:
+      - type: data
+        destination: /tmp/Symphony/pod-spec.yaml
+        source: $(ghpc_stage("resources/pod-specs/pod-spec.yaml"))
+      - type: shell
+        destination: google_ops_agent_config.sh
+        source: $(ghpc_stage("scripts/google_ops_agent_config.sh"))
+        args: $(vars.symphony_install_dir)
+      - type: shell
+        destination: hostfactoryconf_json.sh
+        source: $(ghpc_stage("scripts/hostfactoryconf_json.sh"))
+        args: $(vars.symphony_install_dir)
+      - type: shell
+        destination: gcpgkeinstprov_config_json.sh
+        source: $(ghpc_stage("scripts/gcpgkeinstprov_config_json.sh"))
+        args: $(vars.symphony_install_dir)
+      - type: shell
+        destination: gcpgkeinstprov_templates_json.sh
+        source: $(ghpc_stage("scripts/gcpgkeinstprov_templates_json.sh"))
+        args: $(vars.symphony_install_dir) "sym-pod-c2-4" 100 4 16384 "pod-specs/pod-spec.yaml" $(vars.region)-docker.pkg.dev/$(vars.project_id)/$(vars.deployment_name)-repo/sym-compute:latest
+      - type: shell
+        destination: setup_kubeconfig.sh
+        source: $(ghpc_stage("scripts/setup_kubeconfig.sh"))
+        args: $(vars.symphony_install_dir) $(vars.project_id) $(vars.region) $(vars.deployment_name)
+      - type: shell
+        destination: sym_master.sh
+        source: $(ghpc_stage("scripts/sym_master.sh"))
+        args: $(vars.deployment_name)-master-0 $(vars.symphony_install_dir) $(vars.admin_password)
+
+  - id: sym-master-vm
+    source: modules/compute/vm-instance
+    use:
+    - sym-master-script
+    - network
+    - sym_master_sa
+    settings:
+      name_prefix: $(vars.deployment_name)-master
+      machine_type: c2-standard-4
+      instance_image: $(vars.new_image)
+      service_account_scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+
