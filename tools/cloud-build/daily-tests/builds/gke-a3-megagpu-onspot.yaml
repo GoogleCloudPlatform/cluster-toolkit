@@ -161,9 +161,11 @@ steps:
               echo '    source: modules/compute/vm-instance'       >> \$$EXAMPLE_BP
               echo '    use: [network1]'                           >> \$$EXAMPLE_BP
               echo '    settings:'                                 >> \$$EXAMPLE_BP
-              echo '      machine_type: e2-standard-2'             >> \$$EXAMPLE_BP
+              echo '      machine_type: n2d-standard-2'            >> \$$EXAMPLE_BP
               echo '      name_prefix: remote-node'                >> \$$EXAMPLE_BP
               echo '      add_deployment_name_before_prefix: true' >> \$$EXAMPLE_BP
+              echo '      spot: $(null)'                           >> \$$EXAMPLE_BP
+              echo '      placement_policy: $(null)'               >> \$$EXAMPLE_BP
               echo ''
               echo '  - id: job_template_hostname'                       >> \$$EXAMPLE_BP
               echo '    source: modules/compute/gke-job-template'        >> \$$EXAMPLE_BP
@@ -185,9 +187,6 @@ steps:
               else
                 echo "INFO: Using \$$GKE_VARS_FILE as it is for SPOT provisioning."
               fi
-
-              sed -i -e '/reservation_affinity:/,+3c\      placement_policy:\n        type: COMPACT\n      spot: '"\$$ENABLE_SPOT"'' \$$EXAMPLE_BP
-              sed -i '/reservation/d' \$$EXAMPLE_BP
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
                 --user="$$OSLOGIN_USER" \
