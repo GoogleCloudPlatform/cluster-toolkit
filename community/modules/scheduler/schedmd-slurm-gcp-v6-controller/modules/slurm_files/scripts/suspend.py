@@ -149,6 +149,8 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
             try:
                 res = util.ensure_execute(req)
                 log.debug(f"deleteInstances response for {mig_name}: {res}")
+                lkp.get_mig_instances.cache_clear()
+                lkp.get_mig_repairing_instances.cache_clear()
             except Exception as e:
                 log.error(f"Failed deleteInstances for MIG {mig_name}: {e}")
 

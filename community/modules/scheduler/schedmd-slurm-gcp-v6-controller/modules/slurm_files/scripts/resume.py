@@ -304,7 +304,7 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
 
 
 def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Lookup, resume_data: Optional[ResumeData] = None) -> None:
-    """Provisions nodes using Tiered AIC metadata stamping & Lightweight PIC creation."""
+    """Provisions nodes via MIG createInstances with Per-Instance Config and preserved state."""
     if not nodes:
         return
 
@@ -367,6 +367,7 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                 )
                 res = ensure_execute(pic_req)
                 log.debug(f"createInstances response for {mig_name}: {res}")
+                lkp.get_mig_instances.cache_clear()
             except Exception as e:
                 log.error(f"Failed createInstances for MIG {mig_name} on nodes {to_hostlist(chunk_nodes)}: {e}")
                 down_nodes_notify_jobs(
