@@ -463,14 +463,19 @@ def _get_gcp_subnet_egress_info(credentials, region, subnet_name):
     # subnet as NAT-covered if a router on the same network has a NAT that
     # either covers all subnets or names this subnet explicitly.
     try:
-        routers = (
-            client.routers()
-            .list(project=project, region=region)
-            .execute()
-            .get("items", [])
-        )
+        routers = []
+        req = client.routers().list(project=project, region=region)
+        while req is not None:
+            resp = req.execute()
+            routers.extend(resp.get("items", []))
+            req = client.routers().list_next(
+                previous_request=req, previous_response=resp
+            )
+
+        subnet_network = (info["network"] or "").split("/")[-1]
         for router in routers:
-            if info["network"] and router.get("network") != info["network"]:
+            router_network = router.get("network", "").split("/")[-1]
+            if subnet_network and router_network != subnet_network:
                 continue
             for nat in router.get("nats", []):
                 mode = nat.get("sourceSubnetworkIpRangesToNat", "")

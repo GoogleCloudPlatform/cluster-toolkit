@@ -269,6 +269,7 @@ def _slurm_get_job_info_from_sacct(jobid):
             encoding="utf-8",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            timeout=30,
         )
         for line in proc.stdout.splitlines():
             if not line.strip():
