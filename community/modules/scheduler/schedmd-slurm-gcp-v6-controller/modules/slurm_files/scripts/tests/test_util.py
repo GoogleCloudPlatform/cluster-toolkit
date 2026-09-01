@@ -955,6 +955,22 @@ def test_is_provisioning_flex_node(monkeypatch):
     assert not lkp.is_provisioning_flex_node("testcl-flex_ns-1")
 
 
+def test_is_nodeset_mig():
+    import types
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "static_mig_ns": TstNodeset(nodeset_name="static_mig_ns", provisioning_engine="MIG", mig_name="testcl-static_mig_ns-mig-0"),
+            "flex_ns": TstNodeset(nodeset_name="flex_ns", provisioning_engine="MIG", dws_flex=types.SimpleNamespace(enabled=True)),
+            "bulk_ns": TstNodeset(nodeset_name="bulk_ns", provisioning_engine="BULK_INSERT"),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    assert lkp.is_nodeset_mig("static_mig_ns") is True
+    assert lkp.is_nodeset_mig("flex_ns") is False
+    assert lkp.is_nodeset_mig("bulk_ns") is False
+
+
 def test_mig_name_multi_mig():
     cfg = TstCfg(
         slurm_cluster_name="testcl",
