@@ -99,6 +99,7 @@ The GCS bucket layout:
       sym_installer: sym-7.3.2.0_x86_64.bin
       sym_fixpack: sym-7.3.2.0_x86_64_build601711.tar.gz
       sym_entitlement: sym_adv_entitlement.dat
+      symphony_install_dir: /opt/ibm/spectrumcomputing
       admin_password: <ADMIN_PASSWORD>
       gke_node_machine_type: c2-standard-8
       gke_min_node_count: 1

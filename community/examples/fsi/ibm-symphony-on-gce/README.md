@@ -1,21 +1,46 @@
-# IBM Spectrum Symphony on Google Cloud
+# IBM Spectrum Symphony on Google Compute Engine (GCE)
 
-This project provides a blueprint for deploying an [IBM Spectrum Symphony](https://www.ibm.com/products/spectrum-symphony) cluster on Google Cloud Platform using the [Google Cloud Cluster Toolkit](https://cloud.google.com/cluster-toolkit). The blueprint automates infrastructure provisioning, custom image creation via Packer, and Symphony cluster installation with dynamic cloud bursting via Host Factory.
+This project provides a blueprint for deploying an [IBM Spectrum Symphony](https://www.ibm.com/products/spectrum-symphony) cluster on Google Cloud Platform using the [Google Cloud Cluster Toolkit](https://cloud.google.com/cluster-toolkit). The blueprint automates infrastructure provisioning, custom base image creation via Packer, and Symphony cluster installation with dynamic cloud bursting to Compute Engine Managed Instance Groups (MIGs) via Symphony Host Factory.
 
 ## Overview
 
-This blueprint deploys an IBM Spectrum Symphony cluster consisting of a dedicated master node, static compute nodes, and dynamic compute nodes managed via Compute Engine Managed Instance Groups (MIGs). Dynamic scaling is coordinated through Symphony's Host Factory framework integrated with Google Cloud services:
+This blueprint deploys an IBM Spectrum Symphony cluster consisting of a dedicated master VM, a static compute VM, and dynamic compute nodes managed via Compute Engine Managed Instance Groups (MIGs). Dynamic scaling is coordinated through Symphony's Host Factory framework integrated with Google Cloud services:
 
 *   **Google Compute Engine (GCE):** Virtual machines for master and compute nodes, with MIGs for autoscaled worker nodes.
 *   **Google Cloud Storage (GCS):** Storage bucket holding Symphony binary installers, fixpacks, and entitlement files.
-*   **Packer:** Automated creation of a custom Rocky Linux 8 base image pre-installed with Symphony and the GCP Host Factory provider plugin.
-*   **Cloud Logging & Cloud Pub/Sub:** Cloud audit log sink routing GCE instance lifecycle events to Pub/Sub for real-time Host Factory monitoring.
+*   **Packer:** Automated creation of a custom Rocky Linux 8 base image pre-installed with Symphony and the GCP Host Factory provider plugin (`hf-gce`).
+*   **Cloud Logging & Cloud Pub/Sub:** Cloud audit log sink routing GCE instance lifecycle events to Pub/Sub for real-time Host Factory monitoring (`hf-monitor`).
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       Symphony Management Host (GCE Master VM)              │
+│  ┌─────────────────────────┐          ┌──────────────────────────────────┐  │
+│  │   IBM Spectrum Symphony │          │       Host Factory Provider      │  │
+│  │   Master (EGO / PMC)    │◄────────►│              (hf-gce)            │  │
+│  └─────────────────────────┘          └─────────────────┬────────────────┘  │
+└─────────────────────────────────────────────────────────┼───────────────────┘
+                                                          │ GCE Compute API &
+                                                          │ Pub/Sub Events
+                                                          ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       Google Compute Engine (GCE)                           │
+│  ┌───────────────────────────────┐     ┌─────────────────────────────────┐  │
+│  │      Static Compute Nodes     │     │      Managed Instance Groups    │  │
+│  │  ┌─────────────────────────┐  │     │   (Dynamic Autoscaled Nodes)    │  │
+│  │  │   sym-compute-vm        │  │     │  ┌────────────┐ ┌────────────┐  │  │
+│  │  │   (joins Master VM)     │  │     │  │ sym-mig-4  │ │ sym-mig-30 │  │  │
+│  │  └─────────────────────────┘  │     │  └────────────┘ └────────────┘  │  │
+│  └───────────────────────────────┘     └─────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ## Directory Structure
 
-*   `symphony.yaml`: The main Cluster Toolkit blueprint defining the infrastructure, Packer image build, MIGs, and VM deployment.
-*   `symphony_deployment.yaml`: Deployment configuration file specifying deployment-specific variables (project, region, bucket, credentials, etc.).
-*   `resources/`: Configuration files and templates (Cloud Ops Agent configuration, Host Factory provider/requestor JSON files, and MIG template generator script).
+*   `symphony.yaml`: The main Cluster Toolkit blueprint defining the VPC network, Pub/Sub topic/subscription, Audit Log Sink, Packer image build, MIGs, static compute VM, and Master VM deployment.
+*   `symphony_deployment.yaml`: Deployment configuration file specifying deployment-specific variables (project ID, region, zone, GCS bucket, credentials, and service account).
+*   `resources/`: Configuration files and templates (Cloud Ops Agent configuration, Host Factory provider/requestor JSON files, and MIG template generator script `sym_mig_provider.py`).
 *   `scripts/`: Shell scripts executed during Packer build and VM startup (Symphony installation, Host Factory setup, cluster initialization, and node join scripts).
 
 ## Prerequisites
@@ -46,8 +71,12 @@ The GCS bucket layout should look like:
       sym_installer: sym-7.3.2.0_x86_64.bin
       sym_fixpack: sym-7.3.2.0_x86_64_build601711.tar.gz
       sym_entitlement: sym_adv_entitlement.dat
+      symphony_install_dir: /opt/ibm/spectrumcomputing
       admin_password: <ADMIN_PASSWORD>
       service_account_email: <SERVICE_ACCOUNT_EMAIL>
+      pubsub_subscription: hf-gce-vm-events-sub
+      pubsub_topic: hf-gce-vm-events
+      sink_name: hf-gce-vm-events-sink
     ```
 
 2.  **Deploy the Cluster:**
@@ -66,9 +95,9 @@ The GCS bucket layout should look like:
 ## Accessing the Cluster
 
 ### SSH to Master Node
-SSH into the Symphony master VM:
+SSH into the Symphony master VM using IAP:
 ```bash
-gcloud compute ssh "<DEPLOYMENT_NAME>-master-0" --zone "<ZONE>" --project "<PROJECT_ID>"
+gcloud compute ssh "<DEPLOYMENT_NAME>-master-0" --zone "<ZONE>" --project "<PROJECT_ID>" --tunnel-through-iap
 ```
 
 ### Access Symphony Web Management Console (PMC)
@@ -87,6 +116,28 @@ http://localhost:8080/platform/
 Log in using:
 *   **Username:** `Admin`
 *   **Password:** Value configured in `admin_password`
+
+### Verify Host Factory & Cluster Services
+On the Master VM:
+1. Load Symphony environment and log in:
+   ```bash
+   source /opt/ibm/spectrumcomputing/profile.platform
+   egosh user logon -u Admin -x <ADMIN_PASSWORD>
+   ```
+2. Verify Symphony cluster and services status:
+   ```bash
+   egosh resource list
+   egosh service list
+   ```
+3. Test Host Factory GCE provider templates:
+   ```bash
+   export HF_PROVIDER_CONFDIR=/opt/ibm/spectrumcomputing/hostfactory/conf/providers/gcpgceinst
+   $HF_TOP/1.2/providerplugins/gcpgce/bin/hf-gce getAvailableTemplates
+   ```
+4. Run a sample ping workload:
+   ```bash
+   symping -u Admin -x <ADMIN_PASSWORD> -m 10 -r 1000
+   ```
 
 ## Destroying the Deployment
 
