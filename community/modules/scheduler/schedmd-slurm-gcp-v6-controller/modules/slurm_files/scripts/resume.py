@@ -339,6 +339,7 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                             body={"instanceTemplate": template_link}
                         )
                         ensure_execute(aic_req)
+                        lkp.get_mig.cache_clear()
             except Exception as e:
                 log.warning(f"Could not verify/update template for MIG {mig_name}: {e}")
 

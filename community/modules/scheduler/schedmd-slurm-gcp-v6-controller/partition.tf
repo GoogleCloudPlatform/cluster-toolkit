@@ -47,7 +47,6 @@ module "slurm_nodeset_template" {
   disk_resource_manager_tags          = each.value.disk_resource_manager_tags
   disk_size_gb                        = each.value.disk_size_gb
   disk_type                           = each.value.disk_type
-  disk_storage_pool                   = each.value.disk_storage_pool
   enable_confidential_vm              = each.value.enable_confidential_vm
   confidential_instance_type          = each.value.confidential_instance_type
   enable_oslogin                      = each.value.enable_oslogin
@@ -155,14 +154,6 @@ resource "google_compute_region_instance_group_manager" "nodeset_mig" {
     ignore_changes = [
       target_size,
     ]
-    precondition {
-      condition     = !(each.value.nodeset.dws_flex.enabled && try(each.value.nodeset.provisioning_engine, "AUTO") == "BULK_INSERT")
-      error_message = "DWS Flex-Start strictly requires MIGs. Cannot force provisioning_engine = 'BULK_INSERT'."
-    }
-    precondition {
-      condition     = (each.value.nodeset.node_count_static == 0 && each.value.nodeset.node_count_dynamic_max == 0) || try(each.value.nodeset.provisioning_engine, "AUTO") == "AUTO" || try(each.value.nodeset.provisioning_engine, "AUTO") == "BULK_INSERT" || local.nodeset_resolved_engine[each.value.nodeset_name] == "MIG"
-      error_message = "Live-Mutation Guardrail: Cannot toggle provisioning_engine on an active NodeSet unless nodes are drained."
-    }
     postcondition {
       condition     = self.update_policy[0].type == "OPPORTUNISTIC"
       error_message = "Proactive Lockout Guardrail: Compute NodeSet MIGs must never use PROACTIVE update policies."

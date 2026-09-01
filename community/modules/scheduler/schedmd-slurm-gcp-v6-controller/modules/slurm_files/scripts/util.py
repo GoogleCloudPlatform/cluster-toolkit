@@ -1820,6 +1820,8 @@ class Lookup:
         nodeset = self.cfg.nodeset.get(nodeset_name)
         if not nodeset:
             return False
+        if getattr(nodeset, "dws_flex", None) and getattr(nodeset.dws_flex, "enabled", False):
+            return False
         if getattr(nodeset, "mig_name", None) is not None:
             return True
         engine = getattr(nodeset, "provisioning_engine", None)
