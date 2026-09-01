@@ -337,16 +337,11 @@ deployment_groups:
         content: |
           #!/bin/bash
           set -e -o pipefail
+          export DEBIAN_FRONTEND=noninteractive
           curl -fsSL https://us-apt.pkg.dev/doc/repo-signing-key.gpg | gpg --yes --dearmor -o /usr/share/keyrings/lustre-client.gpg
           echo "deb [signed-by=/usr/share/keyrings/lustre-client.gpg] https://us-apt.pkg.dev/projects/lustre-client-binaries lustre-client-ubuntu-jammy main" > /etc/apt/sources.list.d/artifact-registry.list
           apt-get update
-          TCPX_KERNEL_VERSION=""
-          for d in /lib/modules/*tcpx*; do
-            if [ -d "$d" ]; then
-              TCPX_KERNEL_VERSION=`basename "$d"`
-              break
-            fi
-          done
+          TCPX_KERNEL_VERSION=$(ls -d /lib/modules/*tcpx* 2>/dev/null | sort -V | tail -n 1 | xargs -r basename)
           if [ -n "${TCPX_KERNEL_VERSION}" ]; then
             echo "Installing Lustre client modules for kernel ${TCPX_KERNEL_VERSION}..."
             if ! apt-get install -y lustre-client-modules-${TCPX_KERNEL_VERSION}; then
@@ -356,7 +351,8 @@ deployment_groups:
               dkms autoinstall -k "${TCPX_KERNEL_VERSION}"
             fi
           else
-            echo "No tcpx kernel modules directory found."
+            echo "ERROR: No tcpx kernel modules directory found under /lib/modules/." >&2
+            exit 1
           fi
 
       - type: data
