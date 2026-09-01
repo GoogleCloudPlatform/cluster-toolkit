@@ -438,7 +438,7 @@ deployment_groups:
     settings:
       disk_size_gb: $(vars.disk_size_gb)
       enable_login_public_ips: true
-      machine_type: e2-standard-16
+      machine_type: n2d-standard-16
       metadata:
         user-data: |
           #cloud-config
@@ -501,7 +501,7 @@ deployment_groups:
       enable_controller_public_ips: true
       disk_type: pd-extreme
       disk_size_gb: $(vars.disk_size_gb)
-      machine_type: e2-standard-16
+      machine_type: n2d-standard-16
       controller_startup_script: $(controller_startup.startup_script)
       enable_external_prolog_epilog: true
       compute_startup_scripts_timeout: 1800
