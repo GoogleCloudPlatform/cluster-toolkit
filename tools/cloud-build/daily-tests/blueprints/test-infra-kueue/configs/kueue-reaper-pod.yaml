@@ -99,7 +99,7 @@ spec:
       serviceAccountName: kueue-reaper-ksa
       containers:
       - name: reaper
-        image: gcr.io/google.com/cloudsdktool/cloud-sdk:latest
+        image: gcr.io/google.com/cloudsdktool/cloud-sdk:stable
         command: ["/bin/bash", "/scripts/reaper.sh"]
         volumeMounts:
         - name: script-volume

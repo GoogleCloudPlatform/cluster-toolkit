@@ -134,13 +134,18 @@ def update_kueue_setup(new_locks):
             flavor_idx = len(test_lock_groups) + 1
             new_flavor_name = f"test-lock-flavor-{flavor_idx}"
             
-            # Insert the new ResourceFlavor document right before the ClusterQueue
-            cq_index = docs.index(cq_doc)
-            docs.insert(cq_index, {
-                "apiVersion": "kueue.x-k8s.io/v1beta1",
-                "kind": "ResourceFlavor",
-                "metadata": {"name": new_flavor_name}
-            })
+            # Insert the new ResourceFlavor document right before the ClusterQueue if it doesn't exist
+            flavor_exists = any(
+                doc and doc.get('kind') == 'ResourceFlavor' and doc.get('metadata', {}).get('name') == new_flavor_name 
+                for doc in docs
+            )
+            if not flavor_exists:
+                cq_index = docs.index(cq_doc)
+                docs.insert(cq_index, {
+                    "apiVersion": "kueue.x-k8s.io/v1beta1",
+                    "kind": "ResourceFlavor",
+                    "metadata": {"name": new_flavor_name}
+                })
             
             last_group = {
                 "coveredResources": [],
