@@ -19,8 +19,6 @@ set -x
 export SYM_MASTER=$1
 export EGO_TOP=$2
 export ADMIN_PASSWORD=$3
-export PROJECT_ID=$4
-export PUBSUB_SUBSCRIPTION=$5
 
 ##### Configure Master VM.
 

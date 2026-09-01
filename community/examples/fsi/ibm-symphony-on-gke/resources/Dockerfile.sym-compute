@@ -106,9 +106,6 @@ RUN sed -i 's/EGO_DISTRIBUTION_INTERVAL=1/EGO_DISTRIBUTION_INTERVAL=2/' ${sym_in
 RUN echo "RESOURCE_OPERATION_INTERVAL=1" >> ${sym_install}/kernel/conf/ego.conf
 RUN echo "EGO_MASTER_ANN_BUF_SIZE=40960" >> ${sym_install}/kernel/conf/ego.conf
 RUN echo "EGO_RESOURCE_UPDATE_INTERVAL=30" >> ${sym_install}/kernel/conf/ego.conf
-RUN echo "RESOURCE_OPERATION_INTERVAL=1" >> ${sym_install}/kernel/conf/ego.conf
-RUN echo "EGO_MASTER_ANN_BUF_SIZE=40960" >> ${sym_install}/kernel/conf/ego.conf
-RUN echo "EGO_RESOURCE_UPDATE_INTERVAL=30" >> ${sym_install}/kernel/conf/ego.conf
 RUN echo "EGO_DATA_MAXSIZE=1000" >> ${sym_install}/kernel/conf/ego.conf
 RUN echo "EGO_LIM_IS_IN_CONTAINER=Y" >> ${sym_install}/kernel/conf/ego.conf
 RUN echo "EGO_SEND_CONFINFO_TCP_THRESHOLD=16384" >> ${sym_install}/kernel/conf/ego.conf

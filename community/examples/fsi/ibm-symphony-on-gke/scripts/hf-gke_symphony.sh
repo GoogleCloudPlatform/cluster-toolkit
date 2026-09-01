@@ -16,7 +16,6 @@ set -o pipefail
 set -x
 
 export EGO_TOP=$1
-export PROJECT_ID=$2
 
 git clone https://github.com/google/symphony-gcp.git
 cd symphony-gcp/hf-provider

@@ -112,12 +112,6 @@ The GCS bucket layout:
     gcluster deploy symphony.yaml -d symphony_deployment.yaml --auto-approve
     ```
 
-    > [!TIP]
-    > If the custom Packer image has already been built and you only want to update or re-provision the cluster infrastructure, skip the image build step by adding `--skip packer`:
-    > ```bash
-    > gcluster deploy symphony.yaml -d symphony_deployment.yaml -w --auto-approve --skip packer
-    > ```
-
 ## Accessing the Cluster
 
 ### SSH to Master Node

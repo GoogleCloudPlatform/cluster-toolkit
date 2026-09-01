@@ -39,7 +39,7 @@ vars:
   sym_source_bucket: <YOUR_GCS_BUCKET_NAME>
   sym_fixpack: sym-7.3.2.0_x86_64_build601711.tar.gz
   sym_entitlement: sym_adv_entitlement.dat
-  symphony_install_dir: /opt/ibm/symphony
+  symphony_install_dir: /opt/ibm/spectrumcomputing
   admin_password: admin
   gke_node_machine_type: c2-standard-4
   gke_min_node_count: 3
@@ -122,7 +122,7 @@ deployment_groups:
       - type: shell
         destination: hf-gke_symphony.sh
         source: $(ghpc_stage("scripts/hf-gke_symphony.sh"))
-        args: $(vars.symphony_install_dir) $(vars.project_id)
+        args: $(vars.symphony_install_dir)
       - type: data
         destination: /tmp/Symphony/Dockerfile.sym-compute
         source: $(ghpc_stage("resources/Dockerfile.sym-compute"))

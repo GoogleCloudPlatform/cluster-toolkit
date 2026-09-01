@@ -34,9 +34,9 @@ vars:
   sym_source_bucket: <YOUR_GCS_BUCKET_NAME>
   sym_fixpack: sym-7.3.2.0_x86_64_build601711.tar.gz
   sym_entitlement: sym_adv_entitlement.dat
-  symphony_install_dir: /opt/ibm/symphony
+  symphony_install_dir: /opt/ibm/spectrumcomputing 
   admin_password: admin
-  service_account_email: $(vars.service_account_email)
+  service_account_email: null
   pubsub_subscription: hf-gce-vm-events-sub
   pubsub_topic: hf-gce-vm-events
   sink_name: hf-gce-vm-events-sink
@@ -102,7 +102,7 @@ deployment_groups:
       - type: shell
         destination: hf-gce_symphony.sh
         source:  $(ghpc_stage("scripts/hf-gce_symphony.sh"))
-        args: $(vars.symphony_install_dir) $(vars.project_id)
+        args: $(vars.symphony_install_dir)
   - id: sym-compute-script
     source: modules/scripts/startup-script
     settings:
@@ -222,7 +222,7 @@ deployment_groups:
       - type: shell
         destination: sym_master.sh
         source:  $(ghpc_stage("scripts/sym_master.sh"))
-        args: $(vars.deployment_name)-master-0 $(vars.symphony_install_dir) $(vars.admin_password) $(vars.project_id) $(vars.pubsub_subscription)
+        args: $(vars.deployment_name)-master-0 $(vars.symphony_install_dir) $(vars.admin_password)
 
   - id: sym-master-vm
     source: modules/compute/vm-instance

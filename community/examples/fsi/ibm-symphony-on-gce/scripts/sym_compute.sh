@@ -19,7 +19,7 @@ set -x
 export SYM_MASTER=$1
 export EGO_TOP=$2
 
-##### Configure Master VM.
+##### Configure Compute VM.
 
 source $EGO_TOP/profile.platform && egosetsudoers.sh -f
 

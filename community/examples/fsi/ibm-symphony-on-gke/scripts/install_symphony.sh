@@ -126,14 +126,13 @@ sed -i "s|BINARY_TYPE=\"fail\"|BINARY_TYPE=\"linux-x86_64\"|g" kernel/conf/profi
   sed -i -e "s|AUTOMATIC|MANUAL|g" eservice/esc/conf/services/execproxy.xml && \
   sed -i -e "s|MANUAL|AUTOMATIC|g" eservice/esc/conf/services/symrest.xml
 
-echo "EGO_DYNAMIC_HOST_TIMEOUT=10m" >> kernel/conf/ego.conf && \
-  echo "EGO_DYNAMIC_HOST_WAIT_TIME=1" >> kernel/conf/ego.conf && \
-  #echo "EGO_RESOURCE_UPDATE_INTERVAL=1" >> kernel/conf/ego.conf && \
-  #echo "EGO_ENABLE_RG_UPDATE_MEMBERSHIP=Y" >> kernel/conf/ego.conf && \
-  #echo "EGO_RG_UPDATE_MEMBERSHIP_INTERVAL=10" >> kernel/conf/ego.conf && \
-  echo "EGO_DISABLE_ROOT_REX=Y" >> kernel/conf/ego.conf && \
-  echo "EGO_ELIM_RUNAS_CLUSTER_ADMIN=Y" >> kernel/conf/ego.conf && \
-  echo "EGO_LIM_IS_IN_CONTAINER=Y" >> kernel/conf/ego.conf && \
-  echo "EGO_GET_CONF=LIM" >> kernel/conf/ego.conf
+ cat << 'EOF' >> kernel/conf/ego.conf                                                                                                                                                                                      
+    EGO_DYNAMIC_HOST_TIMEOUT=10m                                                                                                                                                                                              
+    EGO_DYNAMIC_HOST_WAIT_TIME=1                                                                                                                                                                                              
+    EGO_DISABLE_ROOT_REX=Y                                                                                                                                                                                                    
+    EGO_ELIM_RUNAS_CLUSTER_ADMIN=Y                                                                                                                                                                                            
+    EGO_LIM_IS_IN_CONTAINER=Y                                                                                                                                                                                                 
+    EGO_GET_CONF=LIM                                                                                                                                                                                                          
+    EOF  
 
 echo "=== IBM Spectrum Symphony Installation Completed Successfully ==="
