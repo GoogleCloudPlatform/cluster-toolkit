@@ -1674,8 +1674,10 @@ class Lookup:
 
     @property
     def control_host(self):
-        return self.cfg.slurm_control_host or (self.hostname if self.is_controller else None)
-
+        return (
+            self.cfg.slurm_control_host
+            or (self.hostname if self.is_controller else f"{self.cfg.slurm_cluster_name}-controller")
+        )
     @cached_property
     def control_host_addr(self):
         return self.control_addr or (host_lookup(self.control_host) if self.control_host else None)

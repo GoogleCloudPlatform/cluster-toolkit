@@ -170,7 +170,7 @@ deployment_groups:
               useradd -u "$USER_UID" -g "$USER_UID" -m -s /bin/bash "$user"
             fi
             mkdir -p "/home/$user/.ssh"
-            chown -R "$user:$user" "/home/$user"
+            chown "$user:$user" "/home/$user"
             chmod 700 "/home/$user/.ssh"
 
             # Safely serialize key generation & authorized_keys rebuilding across the cluster
@@ -199,7 +199,9 @@ deployment_groups:
 
           # 3. Disable StrictHostKeyChecking safely for internal network jumps only
           if ! grep -q "Host 10.\*" /etc/ssh/ssh_config; then
-            echo -e "Host 10.*\n    StrictHostKeyChecking no\n    UserKnownHostsFile=/dev/null" >> /etc/ssh/ssh_config
+            if ! grep -q "StrictHostKeyChecking no" /etc/ssh/ssh_config; then
+              echo -e "Host 10.* 172.16.* 192.168.* *.internal *\n    StrictHostKeyChecking no\n    UserKnownHostsFile=/dev/null" >> /etc/ssh/ssh_config
+            fi
           fi
 
           # 4. Restart sshd so it loads DEFAULT:SHA1 crypto policy for RSA keys
@@ -256,7 +258,6 @@ deployment_groups:
     use: [network, c3_partition, homefs, slurm_login]
     settings:
       controller_startup_script: $(ssh_config.controller_startup_script)
-      login_startup_script: $(ssh_config.startup_script)
       machine_type: $(vars.image_build_machine_type)
       disk_type: hyperdisk-balanced
       controller_state_disk:
