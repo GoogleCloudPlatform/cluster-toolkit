@@ -3931,6 +3931,10 @@ func TestEnsureMTCWorkloadIdentity_Restart(t *testing.T) {
 		},
 	}
 
+	oldInterval := daemonSetPollInterval
+	daemonSetPollInterval = 1 * time.Millisecond
+	defer func() { daemonSetPollInterval = oldInterval }()
+
 	t.Run("Annotation missing - Updates SA and restarts DaemonSet", func(t *testing.T) {
 		updated := false
 		patchedDS := false

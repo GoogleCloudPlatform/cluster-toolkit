@@ -777,6 +777,7 @@ func restartMTCDriverPods(ctx context.Context, client dynamic.Interface, namespa
 			pods = fallbackPods
 		}
 	}
+	podsDeleted := 0
 	for _, pod := range pods.Items {
 		if strings.HasPrefix(pod.GetName(), "multitier-driver") {
 			logging.Info("Restarting MTC driver pod: %s", pod.GetName())
@@ -786,8 +787,15 @@ func restartMTCDriverPods(ctx context.Context, client dynamic.Interface, namespa
 					continue
 				}
 				logging.Warn("Failed to delete MTC driver pod %s: %v", pod.GetName(), err)
+			} else {
+				podsDeleted++
 			}
 		}
+	}
+	if podsDeleted > 0 {
+		// Brief pause to allow the DaemonSet controller to observe the pod deletions
+		// and decrement status.numberReady before we poll for readiness.
+		time.Sleep(daemonSetPollInterval)
 	}
 	waitForMTCDriverDaemonSetReady(ctx, client, namespace)
 }
