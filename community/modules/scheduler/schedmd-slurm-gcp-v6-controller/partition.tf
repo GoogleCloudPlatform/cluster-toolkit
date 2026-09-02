@@ -23,7 +23,10 @@ locals {
   nodeset_dyn_map     = { for k, vs in local.nodeset_dyn_map_ell : k => vs[0] }
 
 
-  no_reservation_affinity = { type : "NO_RESERVATION" }
+  no_reservation_affinity = {
+    type                 = "NO_RESERVATION"
+    specific_reservation = null
+  }
 }
 
 # NODESET
@@ -74,9 +77,19 @@ module "slurm_nodeset_template" {
   access_config                       = each.value.access_config
   tags                                = concat([local.slurm_cluster_name], each.value.tags)
 
-  max_run_duration     = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? each.value.dws_flex.max_run_duration : null
-  provisioning_model   = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? "FLEX_START" : null
-  reservation_affinity = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? local.no_reservation_affinity : null
+  max_run_duration   = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? each.value.dws_flex.max_run_duration : null
+  provisioning_model = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? "FLEX_START" : null
+  reservation_affinity = (
+    each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert ? local.no_reservation_affinity : (
+      each.value.reservation_name != "" && each.value.reservation_name != null ? {
+        type = "SPECIFIC_RESERVATION"
+        specific_reservation = {
+          key    = "compute.${coalesce(var.universe_domain, "googleapis.com")}/reservation-name"
+          values = [each.value.reservation_name]
+        }
+      } : null
+    )
+  )
 }
 
 module "nodeset_cleanup" {

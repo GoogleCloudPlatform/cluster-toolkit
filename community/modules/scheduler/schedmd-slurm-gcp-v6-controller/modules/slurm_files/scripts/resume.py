@@ -425,10 +425,16 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             )
 
     for chunk in flex_chunks:
-        mig_flex.resume_flex_chunk(chunk.nodes, chunk.excl_job_id, lkp, chunk.placement_group)
+        try:
+            mig_flex.resume_flex_chunk(chunk.nodes, chunk.excl_job_id, lkp, chunk.placement_group)
+        except Exception:
+            log.exception(f"failed to resume flex chunk {chunk.nodes}")
 
     for chunk in mig_chunks:
-        resume_mig_nodes(chunk.nodes, chunk.excl_job_id, lkp, resume_data)
+        try:
+            resume_mig_nodes(chunk.nodes, chunk.excl_job_id, lkp, resume_data)
+        except Exception:
+            log.exception(f"failed to resume MIG chunk {chunk.nodes}")
 
 
     # execute all bulkInsert requests  with batch

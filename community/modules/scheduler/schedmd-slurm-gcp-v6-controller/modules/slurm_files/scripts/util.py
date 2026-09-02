@@ -1822,13 +1822,13 @@ class Lookup:
             return False
         if getattr(nodeset, "dws_flex", None) and getattr(nodeset.dws_flex, "enabled", False):
             return False
-        if getattr(nodeset, "mig_name", None) is not None:
-            return True
         engine = getattr(nodeset, "provisioning_engine", None)
-        if engine == "MIG":
-            return True
         if engine == "BULK_INSERT":
             return False
+        if engine == "MIG":
+            return True
+        if getattr(nodeset, "mig_name", None) is not None:
+            return True
         return self.is_mig_engine()
 
     def is_node_mig(self, node_name: str) -> bool:
@@ -2421,13 +2421,14 @@ class Lookup:
     def is_provisioning_flex_node(self, node:str) -> bool:
         if not self.is_flex_node(node):
             return False
-        if self.instance(node) is not None:
+        short_name = node.split(".")[0]
+        if self.instance(short_name) is not None:
             return True
 
-        nodeset = self.node_nodeset(node)
+        nodeset = self.node_nodeset(short_name)
         zones = nodeset.zone_policy_allow
         assert len(zones) > 0
-        region = self.node_region(node)
+        region = self.node_region(short_name)
 
         potential_migs=[]
         mig_list=self.get_mig_list(self.project, region)
@@ -2440,7 +2441,7 @@ class Lookup:
             if not template:
                 continue
             creating_count = mig.get("currentActions", {}).get("creating", 0) if mig.get("currentActions") else 0
-            if template == self.node_template(node) and creating_count > 0:
+            if template == self.node_template(short_name) and creating_count > 0:
                 potential_migs.append(self.get_mig_instances(self.project, region, trim_self_link(mig["selfLink"])))
 
         if not potential_migs:
@@ -2452,7 +2453,7 @@ class Lookup:
                     instance_collection.get("name")
                     or instance_collection.get("instance", "").split("/")[-1]
                 )
-                if node == inst_name and instance_collection.get("currentAction") == "CREATING":
+                if short_name == inst_name and instance_collection.get("currentAction") == "CREATING":
                     return True
         return False
     
