@@ -48,11 +48,11 @@
 - name: Bind Secrets to Ansible Facts
   when: "not triage_init.failed and 'PROCEED' in (triage_init.stdout | default('')) and not (triage_secrets.failed | default(false))"
   ansible.builtin.set_fact:
-    triage_project_number: "{{ triage_secrets.results[0].stdout }}"
-    triage_invoker_sa: "{{ triage_secrets.results[1].stdout }}"
-    triage_cloud_run_url: "{{ triage_secrets.results[2].stdout }}"
-    triage_firestore_url: "{{ triage_secrets.results[3].stdout }}"
-    triage_ui_url: "{{ triage_secrets.results[4].stdout }}"
+    triage_project_number: "{{ (triage_secrets.results | selectattr('item', 'equalto', 'triage-project-number') | first).stdout | default('') }}"
+    triage_invoker_sa: "{{ (triage_secrets.results | selectattr('item', 'equalto', 'triage-invoker-sa') | first).stdout | default('') }}"
+    triage_cloud_run_url: "{{ (triage_secrets.results | selectattr('item', 'equalto', 'triage-cloud-run-url') | first).stdout | default('') }}"
+    triage_firestore_url: "{{ (triage_secrets.results | selectattr('item', 'equalto', 'triage_firestore_url') | first).stdout | default('') }}"
+    triage_ui_url: "{{ (triage_secrets.results | selectattr('item', 'equalto', 'triage_ui_url') | first).stdout | default('') }}"
 
 - name: Execute Triage Agent Pipeline
   when: "not triage_init.failed and 'PROCEED' in (triage_init.stdout | default('')) and not (triage_secrets.failed | default(false))"
@@ -67,7 +67,7 @@
       TRIAGE_INVOKER_SA: "{{ triage_invoker_sa }}"
       TRIAGE_CLOUD_RUN_URL: "{{ triage_cloud_run_url }}"
       TRIAGE_PROJECT_NUMBER: "{{ triage_project_number }}"
-    ansible.builtin.command: "{{ playbook_dir }}/../../trigger_triage_agent.py"
+    ansible.builtin.command: "python3 {{ playbook_dir }}/../../trigger_triage_agent.py"
     ignore_errors: true
 
   - name: Wait for Analysis to Complete
@@ -77,7 +77,7 @@
       TRIAGE_BUILD_ID: "{{ triage_build_id }}"
       TRIAGE_FIRESTORE_URL: "{{ triage_firestore_url }}"
       TRIAGE_INVOKER_SA: "{{ triage_invoker_sa }}"
-    ansible.builtin.command: "{{ playbook_dir }}/../../wait_for_triage_agent.py"
+    ansible.builtin.command: "python3 {{ playbook_dir }}/../../wait_for_triage_agent.py"
     register: agent_state
     ignore_errors: true
 
@@ -91,7 +91,6 @@
         TRIAGE AGENT SUMMARY:
         {{ (agent_state.stdout | default('{}', true) | from_json).executive_summary | default('No summary available.') | wordwrap(100) }}
 
-        {% endif %}
-
         View the comprehensive diagnostic report for this build at:
         {{ triage_ui_url | regex_replace('/$', '') }}/?build_id={{ triage_build_id }}&project={{ project }}
+        {% endif %}
