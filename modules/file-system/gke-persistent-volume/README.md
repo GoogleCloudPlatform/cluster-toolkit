@@ -109,15 +109,17 @@ authorized to connect to the Kubernetes API. You can add the
 the IP address of the machine performing the deployment. This will ensure that
 the deploying machine can connect to the cluster.
 
-### GCS Fuse Storage Profiles Prerequisites
+### GCS Fuse Storage Profiles IAM
 
-When using `gcsfuse_storage_class_name` with GCS Fuse, GKE requires a custom IAM role named `gke.gcsfuse.profileUser` to be present in the project. This role grants the GKE service agent permissions to manage Anywhere Caches and retrieve bucket metadata.
+When using `gcsfuse_storage_class_name` with GCS Fuse, the GKE Service Agent requires permissions to scan bucket metadata and manage Anywhere Caches.
 
-> **_NOTE:_** If you are creating your GCS bucket using the Cluster Toolkit [`cloud-storage-bucket`](../cloud-storage-bucket/README.md) module with `anywhere_cache` configured, **this custom IAM role and its member bindings are created and managed automatically**. No manual steps are required.
+By default, this module automatically grants the built-in `roles/storage.admin` role to the GKE Service Agent directly on the bucket (`grant_gcsfuse_service_agent_role = true`). Because `roles/storage.admin` is a standard Google Cloud role, it requires **zero manual IAM role creation** and works immediately out-of-the-box.
 
-If you are using a pre-existing bucket or managing buckets outside of the `cloud-storage-bucket` module, you must ensure this role exists in your project.
+#### Optional: Least-Privilege Custom Role (`gke.gcsfuse.profileUser`)
 
-You can create it using the `gcloud` CLI:
+For environments with strict least-privilege security policies, you can use a custom IAM role with strictly the required read/cache permissions instead of `roles/storage.admin`:
+
+1. Create the custom role in your project:
 
 ```bash
 gcloud iam roles create gke.gcsfuse.profileUser \
@@ -127,12 +129,15 @@ gcloud iam roles create gke.gcsfuse.profileUser \
   --permissions="storage.objects.list,storage.buckets.get,storage.anywhereCaches.create,storage.anywhereCaches.get,storage.anywhereCaches.list,storage.anywhereCaches.update"
 ```
 
-Once created, the role must be bound to the GKE Service Agent (`service-<PROJECT_NUMBER>@container-engine-robot.iam.gserviceaccount.com`).
+1. In your blueprint, set `gcsfuse_service_agent_role`:
 
-```bash
-gcloud projects add-iam-policy-binding <YOUR_PROJECT_ID> \
-  --member="serviceAccount:service-<YOUR_PROJECT_NUMBER>@container-engine-robot.iam.gserviceaccount.com" \
-  --role="projects/<YOUR_PROJECT_ID>/roles/gke.gcsfuse.profileUser"
+```yaml
+  - id: data-bucket-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [gke_cluster, data-bucket]
+    settings:
+      gcsfuse_storage_class_name: gcsfusecsi-training
+      gcsfuse_service_agent_role: "projects/<YOUR_PROJECT_ID>/roles/gke.gcsfuse.profileUser"
 ```
 
 ### Connecting Via Use
@@ -196,11 +201,13 @@ No modules.
 
 | Name | Type |
 | ---- | ---- |
+| [google_storage_bucket_iam_member.gke_service_agent](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_member) | resource |
 | [kubectl_manifest.pv](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
 | [kubectl_manifest.pvc](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
 | [kubectl_manifest.pvc_namespace](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/container_cluster) | data source |
+| [google_project.cluster_project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
 
 ## Inputs
 
@@ -210,7 +217,9 @@ No modules.
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the GKE cluster in the format `projects/{{project}}/locations/{{location}}/clusters/{{cluster}}` | `string` | n/a | yes |
 | <a name="input_filestore_id"></a> [filestore\_id](#input\_filestore\_id) | An identifier for a filestore with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`. | `string` | `null` | no |
 | <a name="input_gcs_bucket_name"></a> [gcs\_bucket\_name](#input\_gcs\_bucket\_name) | The gcs bucket to be used with the persistent volume. | `string` | `null` | no |
+| <a name="input_gcsfuse_service_agent_role"></a> [gcsfuse\_service\_agent\_role](#input\_gcsfuse\_service\_agent\_role) | The IAM role to grant to the GKE Service Agent on the bucket for GCSFuse Storage Profiles. Defaults to built-in 'roles/storage.admin' for zero-friction deployment without custom roles. Can be set to a custom role (e.g. 'projects/<cluster\_project\_id>/roles/gke.gcsfuse.profileUser') for strict least-privilege compliance. | `string` | `"roles/storage.admin"` | no |
 | <a name="input_gcsfuse_storage_class_name"></a> [gcsfuse\_storage\_class\_name](#input\_gcsfuse\_storage\_class\_name) | The storage class name for GCS Fuse. Allowed values: gcsfusecsi-training, gcsfusecsi-serving, gcsfusecsi-checkpointing. | `string` | `null` | no |
+| <a name="input_grant_gcsfuse_service_agent_role"></a> [grant\_gcsfuse\_service\_agent\_role](#input\_grant\_gcsfuse\_service\_agent\_role) | Whether to grant the GCS Fuse service agent role to the GKE robot service account on the bucket when using a GCS Fuse storage profile. | `bool` | `true` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_lustre_id"></a> [lustre\_id](#input\_lustre\_id) | An identifier for a lustre with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`. | `string` | `null` | no |
 | <a name="input_namespace"></a> [namespace](#input\_namespace) | Kubernetes namespace to deploy the storage PVC/PV | `string` | `"default"` | no |
