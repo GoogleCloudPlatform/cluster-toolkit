@@ -27,7 +27,7 @@ variable "install_dir" {
 
 variable "ramble_url" {
   description = "URL for Ramble repository to clone."
-  default     = "https://github.com/GoogleCloudPlatform/ramble"
+  default     = "https://github.com/Ramble-Project/ramble"
   type        = string
 }
 

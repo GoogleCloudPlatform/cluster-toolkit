@@ -538,7 +538,7 @@ spec:
           mkdir -p ${SOFTWARE_INSTALL} ${TEST_DIR}
 
           printf "Cloning ramble and cluster-toolkit\n"
-          git clone --depth 1 -c feature.manyFiles=true https://github.com/GoogleCloudPlatform/ramble.git "${SOFTWARE_INSTALL}"/ramble
+          git clone --depth 1 -c feature.manyFiles=true https://github.com/Ramble-Project/ramble.git "${SOFTWARE_INSTALL}"/ramble
 
           printf "Setting up ramble python environment, and installing requirements\n"
           python3 -m venv "${SOFTWARE_INSTALL}"/ramble/env || true
