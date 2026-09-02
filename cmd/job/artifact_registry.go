@@ -17,6 +17,7 @@ package job
 import (
 	"context"
 	"fmt"
+	"path"
 	"strings"
 	"time"
 
@@ -25,18 +26,22 @@ import (
 	"google.golang.org/api/artifactregistry/v1"
 )
 
+var newArtifactRegistryService = func(ctx context.Context) (*artifactregistry.Service, error) {
+	return artifactregistry.NewService(ctx)
+}
+
 // lookupArtifactRegistryRepos queries Artifact Registry to find up to 5 Docker repositories
 // in the specified project and region.
-var lookupArtifactRegistryRepos = func(ctx context.Context, projectID, location string) []string {
+var lookupArtifactRegistryRepos = func(ctx context.Context, projectID, location string) ([]string, bool) {
 	if projectID == "" || location == "" {
-		return nil
+		return nil, false
 	}
 
 	region := shell.ExtractRegion(location)
 
-	service, err := artifactregistry.NewService(ctx)
+	service, err := newArtifactRegistryService(ctx)
 	if err != nil {
-		return nil
+		return nil, false
 	}
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -60,11 +65,10 @@ var lookupArtifactRegistryRepos = func(ctx context.Context, projectID, location 
 		}
 
 		for _, repo := range resp.Repositories {
-			if repo.Format != "DOCKER" {
+			if !strings.EqualFold(repo.Format, "DOCKER") {
 				continue
 			}
-			repoParts := strings.Split(repo.Name, "/")
-			repoID := repoParts[len(repoParts)-1]
+			repoID := path.Base(repo.Name)
 
 			if len(suggestions) < maxSuggestions {
 				suggestions = append(suggestions, repoID)
@@ -80,9 +84,5 @@ var lookupArtifactRegistryRepos = func(ctx context.Context, projectID, location 
 		nextPageToken = resp.NextPageToken
 	}
 
-	if hasMore {
-		suggestions = append(suggestions, "... (and more)")
-	}
-
-	return suggestions
+	return suggestions, hasMore
 }

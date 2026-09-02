@@ -367,7 +367,7 @@ func validateBuildContext(ctx context.Context, projectID, location string) error
 		return nil
 	}
 	if os.Getenv("GCLUSTER_IMAGE_REPO") == "" {
-		suggestions := lookupArtifactRegistryRepos(ctx, projectID, location)
+		suggestions, hasMore := lookupArtifactRegistryRepos(ctx, projectID, location)
 
 		region := shell.ExtractRegion(location)
 
@@ -382,6 +382,9 @@ func validateBuildContext(ctx context.Context, projectID, location string) error
 
 		if len(suggestions) > 0 {
 			reposStr := "'" + strings.Join(suggestions, "', '") + "'"
+			if hasMore {
+				reposStr += " (and more)"
+			}
 			return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context.\n\n"+
 				"Available Docker repositories in project '%s' and region '%s' are: %s.\n\n"+
 				"To view all repositories, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --format=\"value(name)\"\n\n"+

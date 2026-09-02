@@ -474,8 +474,8 @@ func TestSubmitCmd_MissingRepoEnvVar_DynamicSuggestions(t *testing.T) {
 
 	oldLookup := lookupArtifactRegistryRepos
 	defer func() { lookupArtifactRegistryRepos = oldLookup }()
-	lookupArtifactRegistryRepos = func(ctx context.Context, projectID, location string) []string {
-		return []string{"repo1", "repo2", "repo3"}
+	lookupArtifactRegistryRepos = func(ctx context.Context, projectID, location string) ([]string, bool) {
+		return []string{"repo1", "repo2", "repo3"}, false
 	}
 
 	_, err := executeCommand(JobCmd,
