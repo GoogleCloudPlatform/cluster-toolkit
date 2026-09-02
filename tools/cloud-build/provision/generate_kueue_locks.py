@@ -36,8 +36,6 @@ def extract_locks_from_builds():
             if found_locks:
                 for lock in found_locks:
                     locks.add(lock)
-            else:
-                locks.add(test_name)
     return sorted(list(locks))
 
 def update_dummy_device_plugin(new_locks):
