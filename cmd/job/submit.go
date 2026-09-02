@@ -370,11 +370,7 @@ func validateBuildContext(projectID, location string) error {
 		ctx := context.Background()
 		suggestions := lookupArtifactRegistryRepos(ctx, projectID, location)
 
-		parts := strings.Split(location, "-")
-		region := location
-		if len(parts) >= 3 {
-			region = strings.Join(parts[:len(parts)-1], "-")
-		}
+		region := locationToRegion(location)
 
 		if len(suggestions) > 0 {
 			reposStr := "'" + strings.Join(suggestions, "', '") + "'"
