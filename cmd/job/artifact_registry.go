@@ -25,10 +25,6 @@ import (
 	"google.golang.org/api/artifactregistry/v1"
 )
 
-func locationToRegion(location string) string {
-	return shell.ExtractRegion(location)
-}
-
 // lookupArtifactRegistryRepos queries Artifact Registry to find up to 5 Docker repositories
 // in the specified project and region.
 var lookupArtifactRegistryRepos = func(ctx context.Context, projectID, location string) []string {
@@ -36,15 +32,14 @@ var lookupArtifactRegistryRepos = func(ctx context.Context, projectID, location 
 		return nil
 	}
 
-	region := locationToRegion(location)
+	region := shell.ExtractRegion(location)
 
 	service, err := artifactregistry.NewService(ctx)
 	if err != nil {
 		return nil
 	}
 
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, 3*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
 	parent := fmt.Sprintf("projects/%s/locations/%s", projectID, region)
@@ -59,7 +54,7 @@ var lookupArtifactRegistryRepos = func(ctx context.Context, projectID, location 
 			req.PageToken(nextPageToken)
 		}
 
-		resp, err := req.Context(ctx).Do()
+		resp, err := req.Context(timeoutCtx).Do()
 		if err != nil {
 			break
 		}
