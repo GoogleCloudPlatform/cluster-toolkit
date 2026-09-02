@@ -23,7 +23,7 @@ steps:
   env:
   - "BUILD_ID=${BUILD_ID}"
   - "PROJECT_ID=${PROJECT_ID}"
-  - "DRY_RUN=true"
+  - "DRY_RUN=false"
   - "EXCLUSION_FILE=gs://${PROJECT_ID}-cleanup/${PROJECT_ID}-exclusions.txt"
   args:
   - -c

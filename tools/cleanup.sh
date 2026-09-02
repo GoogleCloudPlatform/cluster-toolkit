@@ -92,77 +92,83 @@ load_exclusions() {
 # aged out via a creation timestamp because the IAM serviceAccounts.list API
 # does not return one (see process_service_accounts()).
 populate_active_build_exclusions() {
-        log "INFO" "Fetching active Cloud Build builds and GKE Kueue jobs to protect their service accounts..."
- 
-        # --- Part A: Protect service accounts tied to ongoing Cloud Build builds ---
-        local ongoing_builds
-        if ! ongoing_builds=$(gcloud builds list --project="$PROJECT_ID" --ongoing --format="value(id)" 2>/dev/null); then
-                log "WARNING" "Failed to list ongoing Cloud Build builds. Service accounts for in-flight builds may not be protected."
-        elif [[ -z "$ongoing_builds" ]]; then
-                log "INFO" "No ongoing Cloud Build builds found."
-        else
-                while IFS= read -r build_id; do
-                        [[ -z "$build_id" ]] && continue
-                        local prefix="${build_id:0:6}"
-                        if [[ -n "$prefix" && -z "${EXCLUSION_MAP[${prefix}]:-}" ]]; then
-                                log "INFO" "Protecting service accounts matching active Cloud Build prefix: ${prefix} (build ${build_id})"
-                                EXCLUSION_MAP["${prefix}"]=1
-                        fi
-                done <<<"$ongoing_builds"
-        fi
- 
-        # --- Part B: Protect service accounts tied to active GKE Kueue batch jobs ---
-        if ! command -v kubectl &>/dev/null; then
-        log "WARNING" "kubectl not found; skipping active GKE Kueue job protection."
-else
-        local all_clusters
-        if ! all_clusters=$(gcloud container clusters list \
-                --project="$PROJECT_ID" --format="value(name,location)" 2>/dev/null); then
-                log "WARNING" "Failed to list GKE clusters in project $PROJECT_ID; skipping active GKE Kueue job protection."
-        elif [[ -z "$all_clusters" ]]; then
-                log "INFO" "No GKE clusters found in project $PROJECT_ID."
-        else
-                # Create a temporary kubeconfig to avoid clobbering the user's default ~/.kube/config
-                export KUBECONFIG=$(mktemp)
-                
-                while IFS=$'\t' read -r cluster_name cluster_location; do
-                        [[ -z "$cluster_name" ]] && continue
+	log "INFO" "Fetching active Cloud Build builds and GKE Kueue jobs to protect their service accounts..."
 
-                        log "DEBUG" "Checking cluster ${cluster_name} (${cluster_location}) for active Kueue jobs..."
+	# --- Part A: Protect service accounts tied to ongoing Cloud Build builds ---
+	local ongoing_builds
+	if ! ongoing_builds=$(gcloud builds list --project="$PROJECT_ID" --filter="status=(QUEUED,WORKING)" --format="value(id)" 2>/dev/null); then
+		log "WARNING" "Failed to list ongoing Cloud Build builds. Service accounts for in-flight builds may not be protected."
+	elif [[ -z "$ongoing_builds" ]]; then
+		log "INFO" "No ongoing Cloud Build builds found."
+	else
+		while IFS= read -r build_id; do
+			[[ -z "$build_id" ]] && continue
+			local prefix="${build_id:0:6}"
+			if [[ -n "$prefix" && -z "${EXCLUSION_MAP[${prefix}]:-}" ]]; then
+				log "INFO" "Protecting service accounts matching active Cloud Build prefix: ${prefix} (build ${build_id})"
+				EXCLUSION_MAP["${prefix}"]=1
+			fi
+		done <<<"$ongoing_builds"
+	fi
 
-                        if ! gcloud container clusters get-credentials "$cluster_name" \
-                                --location="$cluster_location" --project="$PROJECT_ID" &>/dev/null; then
-                                log "WARNING" "Failed to authenticate kubectl against cluster ${cluster_name}; skipping this cluster for Kueue job protection."
-                                continue
-                        fi
+	# --- Part B: Protect service accounts tied to active GKE Kueue batch jobs ---
+	if ! command -v kubectl &>/dev/null; then
+		log "WARNING" "kubectl not found; skipping active GKE Kueue job protection."
+	else
+		local all_clusters
+		if ! all_clusters=$(gcloud container clusters list \
+			--project="$PROJECT_ID" --format="value(name,location)" 2>/dev/null); then
+			log "WARNING" "Failed to list GKE clusters in project $PROJECT_ID; skipping active GKE Kueue job protection."
+		elif [[ -z "$all_clusters" ]]; then
+			log "INFO" "No GKE clusters found in project $PROJECT_ID."
+		else
+			# Create a temporary kubeconfig to avoid clobbering the user's default ~/.kube/config
+			local temp_kubeconfig
+			if ! temp_kubeconfig=$(mktemp); then
+				log "WARNING" "Failed to create temporary kubeconfig; skipping active GKE Kueue job protection."
+				return 0
+			fi
+			export KUBECONFIG="$temp_kubeconfig"
+			trap 'rm -f "$temp_kubeconfig"' EXIT
 
-                        local kueue_jobs
-                        # Extracts running jobs (active>0) AND queued jobs (suspend==true)
-                        if ! kueue_jobs=$(kubectl get jobs -A -l "kueue.x-k8s.io/queue-name" \
-                                -o jsonpath='{range .items[?(@.status.active>0)]}{.metadata.name}{"\n"}{end}{range .items[?(@.spec.suspend==true)]}{.metadata.name}{"\n"}{end}' 2>/dev/null); then
-                                log "WARNING" "Failed to list active GKE Kueue jobs on cluster ${cluster_name} (may be unreachable)."
-                                continue
-                        fi
+			while IFS=$'\t' read -r cluster_name cluster_location; do
+				[[ -z "$cluster_name" ]] && continue
 
-                        if [[ -z "$kueue_jobs" ]]; then
-                                log "INFO" "No active GKE Kueue jobs found on cluster ${cluster_name}."
-                        else
-                                while IFS= read -r job_name; do
-                                        [[ -z "$job_name" ]] && continue
-                                        if [[ -z "${EXCLUSION_MAP[${job_name}]:-}" ]]; then
-                                                log "INFO" "Protecting service accounts matching active GKE Kueue job prefix: ${job_name} (cluster: ${cluster_name})"
-                                                EXCLUSION_MAP["${job_name}"]=1
-                                        fi
-                                done <<<"$kueue_jobs"
-                        fi
-                done <<<"$all_clusters"
-                
-                # Clean up the temporary kubeconfig file
-                rm -f "$KUBECONFIG"
-                unset KUBECONFIG
-        fi
-fi
+				log "DEBUG" "Checking cluster ${cluster_name} (${cluster_location}) for active Kueue jobs..."
 
+				if ! gcloud container clusters get-credentials "$cluster_name" \
+					--location="$cluster_location" --project="$PROJECT_ID" &>/dev/null; then
+					log "WARNING" "Failed to authenticate kubectl against cluster ${cluster_name}; skipping this cluster for Kueue job protection."
+					continue
+				fi
+
+				local kueue_jobs
+				# Extracts running jobs (active>0) AND queued jobs (suspend==true)
+				if ! kueue_jobs=$(kubectl get jobs -A -l "kueue.x-k8s.io/queue-name" \
+					-o jsonpath='{range .items[?(@.status.active>0)]}{.metadata.name}{"\n"}{end}{range .items[?(@.spec.suspend==true)]}{.metadata.name}{"\n"}{end}' 2>/dev/null); then
+					log "WARNING" "Failed to list active GKE Kueue jobs on cluster ${cluster_name} (may be unreachable)."
+					continue
+				fi
+
+				if [[ -z "$kueue_jobs" ]]; then
+					log "INFO" "No active GKE Kueue jobs found on cluster ${cluster_name}."
+				else
+					while IFS= read -r job_name; do
+						[[ -z "$job_name" ]] && continue
+						if [[ -z "${EXCLUSION_MAP[${job_name}]:-}" ]]; then
+							log "INFO" "Protecting service accounts matching active GKE Kueue job prefix: ${job_name} (cluster: ${cluster_name})"
+							EXCLUSION_MAP["${job_name}"]=1
+						fi
+					done <<<"$kueue_jobs"
+				fi
+			done <<<"$all_clusters"
+
+			# Clean up the temporary kubeconfig file
+			rm -f "$temp_kubeconfig"
+			trap - EXIT
+			unset KUBECONFIG
+		fi
+	fi
 
 	log "INFO" "Finished fetching active build/job prefixes."
 }
