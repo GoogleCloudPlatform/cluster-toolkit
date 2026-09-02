@@ -44,7 +44,7 @@ from util import (
     dirs,
 )
 from util import lookup
-from suspend import delete_instances, suspend_nodes
+from suspend import suspend_nodes
 import tpu
 import conf
 import watch_delete_vm_op

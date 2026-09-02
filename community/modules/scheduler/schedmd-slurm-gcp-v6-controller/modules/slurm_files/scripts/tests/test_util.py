@@ -952,6 +952,7 @@ def test_is_provisioning_flex_node(monkeypatch):
     monkeypatch.setattr(lkp, "get_mig_instances", mock_get_mig_instances)
 
     assert lkp.is_provisioning_flex_node("testcl-flex_ns-0")
+    assert lkp.is_provisioning_flex_node("testcl-flex_ns-0.c.testproj.internal")
     assert not lkp.is_provisioning_flex_node("testcl-flex_ns-1")
 
 
@@ -963,12 +964,14 @@ def test_is_nodeset_mig():
             "static_mig_ns": TstNodeset(nodeset_name="static_mig_ns", provisioning_engine="MIG", mig_name="testcl-static_mig_ns-mig-0"),
             "flex_ns": TstNodeset(nodeset_name="flex_ns", provisioning_engine="MIG", dws_flex=types.SimpleNamespace(enabled=True)),
             "bulk_ns": TstNodeset(nodeset_name="bulk_ns", provisioning_engine="BULK_INSERT"),
+            "bulk_override_ns": TstNodeset(nodeset_name="bulk_override_ns", provisioning_engine="BULK_INSERT", mig_name="testcl-bulk_override_ns-mig-0"),
         },
     )
     lkp = util.Lookup(cfg)
     assert lkp.is_nodeset_mig("static_mig_ns") is True
     assert lkp.is_nodeset_mig("flex_ns") is False
     assert lkp.is_nodeset_mig("bulk_ns") is False
+    assert lkp.is_nodeset_mig("bulk_override_ns") is False
 
 
 def test_mig_name_multi_mig():

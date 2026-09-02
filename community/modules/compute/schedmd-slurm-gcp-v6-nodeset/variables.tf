@@ -685,7 +685,7 @@ variable "machine_configs" {
 }
 
 variable "provisioning_engine" {
-  description = "Compute node provisioning engine: 'AUTO', 'MIG', or 'BULK_INSERT'."
+  description = "Compute node provisioning engine: 'AUTO', 'MIG', or 'BULK_INSERT'. Note: When using 'MIG', 'node_count_dynamic_max' must be explicitly set to 0."
   type        = string
   default     = "AUTO"
   validation {
