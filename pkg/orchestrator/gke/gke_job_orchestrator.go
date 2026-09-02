@@ -688,11 +688,72 @@ func (g *GKEOrchestrator) getNodeServiceAccount() string {
 	return ""
 }
 
+func isDaemonSetRolloutComplete(dsObj *unstructured.Unstructured) bool {
+	gen, _, _ := unstructured.NestedInt64(dsObj.Object, "metadata", "generation")
+	obsGen, _, _ := unstructured.NestedInt64(dsObj.Object, "status", "observedGeneration")
+	desired, _, _ := unstructured.NestedInt64(dsObj.Object, "status", "desiredNumberScheduled")
+	ready, _, _ := unstructured.NestedInt64(dsObj.Object, "status", "numberReady")
+	updated, _, _ := unstructured.NestedInt64(dsObj.Object, "status", "updatedNumberScheduled")
+
+	if obsGen >= gen && ready >= desired && updated >= desired {
+		logging.Info("MTC multitier-driver DaemonSet is ready (%d/%d nodes ready).", ready, desired)
+		return true
+	}
+	return false
+}
+
+func checkDaemonSetReady(ctx context.Context, client dynamic.Interface, namespace string) (bool, error) {
+	dsObj, err := client.Resource(daemonsetGVR).Namespace(namespace).Get(ctx, "multitier-driver", metav1.GetOptions{})
+	if err != nil {
+		if isForbiddenError(err) {
+			logging.Warn("Insufficient RBAC permissions to get multitier-driver DaemonSet status (403 Forbidden). Proceeding with job submission.")
+			return true, nil
+		}
+		if apierrors.IsNotFound(err) {
+			logging.Warn("MTC multitier-driver DaemonSet not found in %s. Proceeding with job submission.", namespace)
+			return true, nil
+		}
+		return false, err
+	}
+	return isDaemonSetRolloutComplete(dsObj), nil
+}
+
+var daemonSetPollInterval = 2 * time.Second
+
+// waitForMTCDriverDaemonSetReady waits for the multitier-driver DaemonSet to finish rollout and become ready.
+func waitForMTCDriverDaemonSetReady(ctx context.Context, client dynamic.Interface, namespace string) {
+	logging.Info("Waiting for MTC multitier-driver DaemonSet in %s to be ready...", namespace)
+	waitCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+
+	if ready, err := checkDaemonSetReady(waitCtx, client, namespace); ready && err == nil {
+		return
+	}
+
+	ticker := time.NewTicker(daemonSetPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-waitCtx.Done():
+			logging.Warn("Timed out or context canceled waiting for MTC multitier-driver DaemonSet in %s to become ready. Proceeding with job submission.", namespace)
+			return
+		case <-ticker.C:
+			if ready, err := checkDaemonSetReady(waitCtx, client, namespace); ready && err == nil {
+				return
+			} else if err != nil {
+				logging.Warn("Retrying get of multitier-driver DaemonSet: %v", err)
+			}
+		}
+	}
+}
+
 // restartMTCDriverPods restarts the multitier-driver DaemonSet to pick up updated service account tokens.
 func restartMTCDriverPods(ctx context.Context, client dynamic.Interface, namespace string) {
 	patchData := fmt.Appendf(nil, `{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}`, time.Now().UTC().Format(time.RFC3339))
 	if _, err := client.Resource(daemonsetGVR).Namespace(namespace).Patch(ctx, "multitier-driver", types.StrategicMergePatchType, patchData, metav1.PatchOptions{}); err == nil {
 		logging.Info("Triggered rolling restart of multitier-driver DaemonSet in %s", namespace)
+		waitForMTCDriverDaemonSetReady(ctx, client, namespace)
 		return
 	} else if isForbiddenError(err) {
 		logging.Warn("Insufficient RBAC permissions to restart multitier-driver DaemonSet in %s (403 Forbidden). Skipping driver restart.", namespace)
@@ -716,6 +777,7 @@ func restartMTCDriverPods(ctx context.Context, client dynamic.Interface, namespa
 			pods = fallbackPods
 		}
 	}
+	podsDeleted := 0
 	for _, pod := range pods.Items {
 		if strings.HasPrefix(pod.GetName(), "multitier-driver") {
 			logging.Info("Restarting MTC driver pod: %s", pod.GetName())
@@ -725,9 +787,17 @@ func restartMTCDriverPods(ctx context.Context, client dynamic.Interface, namespa
 					continue
 				}
 				logging.Warn("Failed to delete MTC driver pod %s: %v", pod.GetName(), err)
+			} else {
+				podsDeleted++
 			}
 		}
 	}
+	if podsDeleted > 0 {
+		// Brief pause to allow the DaemonSet controller to observe the pod deletions
+		// and decrement status.numberReady before we poll for readiness.
+		time.Sleep(daemonSetPollInterval)
+	}
+	waitForMTCDriverDaemonSetReady(ctx, client, namespace)
 }
 
 // updateMTCServiceAccountAnnotation updates the MTC KSA with the node GSA Workload Identity annotation and restarts driver pods.

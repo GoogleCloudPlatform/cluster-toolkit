@@ -60,12 +60,12 @@ func (s *MySuite) TestCreateGcsBucketsIfMissingEmptyBucket(c *C) {
 
 	err := createGcsBucketsIfMissing(context.Background(), bp)
 	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "GCS backend bucket name cannot be empty or unknown")
+	c.Check(err.Error(), Equals, "GCS backend bucket name for group \"group1\" cannot be empty or unknown")
 
 	bp.Groups[0].TerraformBackend.Configuration = config.NewDict(map[string]cty.Value{
 		"bucket": cty.StringVal(""),
 	})
 	err = createGcsBucketsIfMissing(context.Background(), bp)
 	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "GCS backend bucket name cannot be empty")
+	c.Check(err.Error(), Equals, "GCS backend bucket name for group \"group1\" cannot be empty")
 }

@@ -6,7 +6,7 @@ and install Ramble’s dependencies.
 Ramble is a multi-platform experimentation framework capable of driving
 software installation, acquiring input files, configuring experiments, and
 extracting results. For more information about ramble, see:
-https://github.com/GoogleCloudPlatform/ramble
+https://github.com/Ramble-Project/ramble
 
 This module outputs two startup script runners, which can be added to startup
 scripts to setup, ramble and its dependencies.
@@ -36,7 +36,7 @@ This example simply installs ramble on a VM.
   source: community/modules/scripts/ramble-setup
   settings:
     install_dir: /ramble
-    ramble_url: https://github.com/GoogleCloudPlatform/ramble
+    ramble_url: https://github.com/Ramble-Project/ramble
     ramble_ref: v0.2.1
     log_file: /var/log/ramble.log
     chown_owner: “owner”
@@ -106,7 +106,7 @@ limitations under the License.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_ramble_profile_script_path"></a> [ramble\_profile\_script\_path](#input\_ramble\_profile\_script\_path) | Path to the Ramble profile.d script. Created by this module | `string` | `"/etc/profile.d/ramble.sh"` | no |
 | <a name="input_ramble_ref"></a> [ramble\_ref](#input\_ramble\_ref) | Git ref to checkout for Ramble. | `string` | `"develop"` | no |
-| <a name="input_ramble_url"></a> [ramble\_url](#input\_ramble\_url) | URL for Ramble repository to clone. | `string` | `"https://github.com/GoogleCloudPlatform/ramble"` | no |
+| <a name="input_ramble_url"></a> [ramble\_url](#input\_ramble\_url) | URL for Ramble repository to clone. | `string` | `"https://github.com/Ramble-Project/ramble"` | no |
 | <a name="input_ramble_virtualenv_path"></a> [ramble\_virtualenv\_path](#input\_ramble\_virtualenv\_path) | Virtual environment path in which to install Ramble Python interpreter and other dependencies | `string` | `"/usr/local/ramble-python"` | no |
 | <a name="input_region"></a> [region](#input\_region) | Region to place bucket containing startup script. | `string` | n/a | yes |
 | <a name="input_system_user_gid"></a> [system\_user\_gid](#input\_system\_user\_gid) | GID used when creating system user group. Ignored if `system_user_name` already exists on system. Default of 1104762904 is arbitrary. | `number` | `1104762904` | no |
