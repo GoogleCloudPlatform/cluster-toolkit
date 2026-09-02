@@ -20,15 +20,13 @@ import (
 	"strings"
 	"time"
 
+	"hpc-toolkit/pkg/shell"
+
 	"google.golang.org/api/artifactregistry/v1"
 )
 
 func locationToRegion(location string) string {
-	parts := strings.Split(location, "-")
-	if len(parts) >= 3 {
-		return strings.Join(parts[:len(parts)-1], "-")
-	}
-	return location
+	return shell.ExtractRegion(location)
 }
 
 // lookupArtifactRegistryRepos queries Artifact Registry to find up to 5 Docker repositories
@@ -40,13 +38,14 @@ var lookupArtifactRegistryRepos = func(ctx context.Context, projectID, location 
 
 	region := locationToRegion(location)
 
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-
 	service, err := artifactregistry.NewService(ctx)
 	if err != nil {
 		return nil
 	}
+
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
 
 	parent := fmt.Sprintf("projects/%s/locations/%s", projectID, region)
 	maxSuggestions := 5
