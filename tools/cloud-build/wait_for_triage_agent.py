@@ -22,6 +22,14 @@ import urllib.request
 import urllib.error
 
 def main():
+    """
+    Polls the Firestore database REST API to determine when the async Triage Agent completes.
+    
+    Required Environment Variables:
+    - TRIAGE_BUILD_ID: Unique string identifying the active build document.
+    - TRIAGE_INVOKER_SA: Service Account email to safely impersonate for authorization.
+    - TRIAGE_FIRESTORE_URL: The Firestore REST API base endpoint for the diagnostics DB.
+    """
     build_id = os.environ.get("TRIAGE_BUILD_ID")
     firestore_url = os.environ.get("TRIAGE_FIRESTORE_URL")
     invoker_sa = os.environ.get("TRIAGE_INVOKER_SA")
@@ -32,7 +40,7 @@ def main():
 
     try:
         proc = subprocess.run(
-            ["gcloud", "auth", "print-access-token", f"--impersonate-service-account={invoker_sa}"],
+            ["gcloud", "auth", "print-access-token", "--impersonate-service-account", invoker_sa],
             capture_output=True, text=True, check=True
         )
         token = proc.stdout.strip()
@@ -52,6 +60,10 @@ def main():
             if "name" in doc:
                 doc_hydrated = True
                 break
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 403):
+                print(f"Auth error ({e.code}): Permission denied when accessing Firestore.", file=sys.stderr)
+                sys.exit(1)
         except (urllib.error.URLError, json.JSONDecodeError):
             pass
         time.sleep(5)
@@ -68,15 +80,22 @@ def main():
                 
             status = doc.get("fields", {}).get("status", {}).get("stringValue", "")
             if status in ["completed", "failed"]:
-                exec_sum = (doc.get("fields", {})
-                              .get("report", {})
-                              .get("mapValue", {})
-                              .get("fields", {})
-                              .get("executive_summary", {})
-                              .get("stringValue", ""))
+                try:
+                    exec_sum = (doc.get("fields", {})
+                                  .get("report", {})
+                                  .get("mapValue", {})
+                                  .get("fields", {})
+                                  .get("executive_summary", {})
+                                  .get("stringValue", ""))
+                except (AttributeError, TypeError):
+                    exec_sum = ""
                 
                 print(json.dumps({"status": status, "executive_summary": exec_sum}))
                 sys.exit(0)
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 403):
+                print(f"Auth error ({e.code}): Permission denied when accessing Firestore.", file=sys.stderr)
+                sys.exit(1)
         except (urllib.error.URLError, json.JSONDecodeError):
             pass
         

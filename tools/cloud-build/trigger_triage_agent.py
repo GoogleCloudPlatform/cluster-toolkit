@@ -21,6 +21,15 @@ import urllib.request
 import urllib.error
 
 def main():
+    """
+    Triggers the asynchronous Cloud Run Triage Agent via an authenticated REST POST request.
+    
+    Required Environment Variables:
+    - TRIAGE_BUILD_ID: Unique string identifying the active build execution.
+    - TRIAGE_INVOKER_SA: Service Account email to safely impersonate for authorization.
+    - TRIAGE_CLOUD_RUN_URL: Target endpoint URL for the backend Triage service.
+    - TRIAGE_PROJECT_NUMBER: GCP project number associated with the active pipeline.
+    """
     build_id = os.environ.get("TRIAGE_BUILD_ID")
     project_number = os.environ.get("TRIAGE_PROJECT_NUMBER")
     cloud_run_url = os.environ.get("TRIAGE_CLOUD_RUN_URL")
