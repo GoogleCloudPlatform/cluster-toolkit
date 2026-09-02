@@ -118,11 +118,11 @@ sed -i "s|BINARY_TYPE=\"fail\"|BINARY_TYPE=\"linux-x86_64\"|g" kernel/conf/profi
   sed -i -e "s|AUTOMATIC|MANUAL|g" eservice/esc/conf/services/rsa.xml && \
   sed -i -e "s|MANUAL|AUTOMATIC|g" eservice/esc/conf/services/symrest.xml
 
- cat << 'EOF' >> kernel/conf/ego.conf                                                                                                                                                                                      
-    EGO_DYNAMIC_HOST_TIMEOUT=10m                                                                                                                                                                                              
-    EGO_DYNAMIC_HOST_WAIT_TIME=1                                                                                                                                                                                              
-    EGO_DISABLE_ROOT_REX=Y                                                                                                                                                                                                    
-    EGO_ELIM_RUNAS_CLUSTER_ADMIN=Y                                                                                                                                                                                            
-    EGO_LIM_IS_IN_CONTAINER=Y                                                                                                                                                                                                 
-    EGO_GET_CONF=LIM                                                                                                                                                                                                          
-    EOF  
+cat << 'EOF' >> kernel/conf/ego.conf
+EGO_DYNAMIC_HOST_TIMEOUT=10m
+EGO_DYNAMIC_HOST_WAIT_TIME=1
+EGO_DISABLE_ROOT_REX=Y
+EGO_ELIM_RUNAS_CLUSTER_ADMIN=Y
+EGO_LIM_IS_IN_CONTAINER=Y
+EGO_GET_CONF=LIM
+EOF

@@ -56,6 +56,23 @@ The GCS bucket layout should look like:
 
 ![bucket_image](https://services.google.com/fh/files/misc/data_files.png)
 
+4.  **Deployer IAM Roles:** The identity executing `gcluster deploy` requires permissions to configure Cloud Audit Log exports, manage Pub/Sub topics, and assign project IAM roles. In addition to basic resource provisioning permissions (such as `roles/editor` or `roles/writer`), grant the following roles to the deployer identity:
+    *   `roles/logging.admin` (or `roles/logging.configWriter`) — to create the Cloud Audit Log sink.
+    *   `roles/pubsub.admin` — to manage Pub/Sub topic IAM policies for log export ingestion.
+    *   `roles/resourcemanager.projectIamAdmin` — to assign the Pub/Sub subscriber role to the Compute service account.
+
+    Run the following commands using the `gcloud` CLI:
+    ```bash
+    gcloud projects add-iam-policy-binding <YOUR_PROJECT_ID> \
+        --member="user:<DEPLOYER_USER_EMAIL>" \
+        --role="roles/logging.admin"
+
+    gcloud projects add-iam-policy-binding <YOUR_PROJECT_ID> \
+        --member="user:<DEPLOYER_USER_EMAIL>" \
+        --role="roles/pubsub.admin"
+    ```
+    *(Note: If deploying with a service account, replace `user:<DEPLOYER_USER_EMAIL>` with `serviceAccount:<DEPLOYER_SERVICE_ACCOUNT_EMAIL>`.)*
+
 ## Deployment
 
 1.  **Configure Deployment Variables:**

@@ -79,7 +79,15 @@ deployment_groups:
       topic: $(destination_pubsub.resource_name)
       pull_subscriptions:
       - name: $(vars.pubsub_subscription)
-        service_account: $(vars.service_account_email)
+
+  - id: sa_roles
+    source: git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/member_iam
+    settings:
+      service_account_address: $(vars.service_account_email)
+      project_id: $(vars.project_id)
+      project_roles:
+      - roles/pubsub.subscriber
+      - roles/iam.serviceAccountUser
 
   - id: script
     source: modules/scripts/startup-script
