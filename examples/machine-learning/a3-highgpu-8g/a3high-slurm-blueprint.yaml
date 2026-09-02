@@ -341,7 +341,7 @@ deployment_groups:
           curl -fsSL https://us-apt.pkg.dev/doc/repo-signing-key.gpg | gpg --yes --dearmor -o /usr/share/keyrings/lustre-client.gpg
           echo "deb [signed-by=/usr/share/keyrings/lustre-client.gpg] https://us-apt.pkg.dev/projects/lustre-client-binaries lustre-client-ubuntu-jammy main" > /etc/apt/sources.list.d/artifact-registry.list
           apt-get update
-          TCPX_KERNEL_VERSION=`ls -d /lib/modules/*tcpx* 2>/dev/null | sort -V | tail -n 1 | xargs -r basename`
+          TCPX_KERNEL_VERSION=`(ls -d /lib/modules/*tcpx* 2>/dev/null || true) | sort -V | tail -n 1 | xargs -r basename`
           if [ -n "${TCPX_KERNEL_VERSION}" ]; then
             echo "Installing Lustre client modules for kernel ${TCPX_KERNEL_VERSION}..."
             if ! apt-get install -y lustre-client-modules-${TCPX_KERNEL_VERSION}; then
