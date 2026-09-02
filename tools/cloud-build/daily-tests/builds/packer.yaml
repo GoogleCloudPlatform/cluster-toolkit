@@ -88,6 +88,8 @@ steps:
           - name: runner
             image: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
             env:
+            - name: PROJECT_ID
+              value: "$PROJECT_ID"
             - name: BUILD_ID
               value: "$BUILD_ID"
             - name: ANSIBLE_HOST_KEY_CHECKING

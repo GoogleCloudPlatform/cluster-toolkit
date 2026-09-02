@@ -42,7 +42,7 @@
   ignore_errors: true
 
 - name: Bind Secrets to Ansible Facts
-  when: "not triage_init.failed and 'PROCEED' in (triage_init.stdout | default('')) and not triage_secrets.failed"
+  when: "not triage_init.failed and 'PROCEED' in (triage_init.stdout | default('')) and not (triage_secrets.failed | default(false))"
   ansible.builtin.set_fact:
     triage_project_number: "{{ triage_secrets.results[0].stdout }}"
     triage_invoker_sa: "{{ triage_secrets.results[1].stdout }}"
@@ -51,85 +51,29 @@
     triage_ui_url: "{{ triage_secrets.results[4].stdout }}"
 
 - name: Execute Triage Agent Pipeline
-  when: "not triage_init.failed and 'PROCEED' in (triage_init.stdout | default('')) and not triage_secrets.failed"
+  when: "not triage_init.failed and 'PROCEED' in (triage_init.stdout | default('')) and not (triage_secrets.failed | default(false))"
   vars:
     triage_build_id: "{{ full_build_id | default('') }}"
   block:
   - name: Trigger Failure Triage Agent
     delegate_to: localhost
     changed_when: false
-    args:
-      executable: /bin/bash
     environment:
       TRIAGE_BUILD_ID: "{{ triage_build_id }}"
       TRIAGE_INVOKER_SA: "{{ triage_invoker_sa }}"
       TRIAGE_CLOUD_RUN_URL: "{{ triage_cloud_run_url }}"
       TRIAGE_PROJECT_NUMBER: "{{ triage_project_number }}"
-    ansible.builtin.shell: |
-      TOKEN=$(gcloud auth print-identity-token --impersonate-service-account="$TRIAGE_INVOKER_SA" --audiences="$TRIAGE_CLOUD_RUN_URL")
-      if [ -z "$TOKEN" ]; then
-        echo "Failed to get identity token." >&2
-        exit 1
-      fi
-
-      RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST "${TRIAGE_CLOUD_RUN_URL%/}/trigger" \
-        -H "Authorization: Bearer $TOKEN" \
-        -H "Content-Type: application/json" \
-        -d "{\"build_id\": \"$TRIAGE_BUILD_ID\", \"project_number\": \"$TRIAGE_PROJECT_NUMBER\"}")
-
-      HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
-      BODY=$(echo "$RESPONSE" | sed '$d')
-
-      if [ "$HTTP_STATUS" != "202" ]; then
-        echo "Failed to trigger agent. HTTP Status: $HTTP_STATUS" >&2
-        echo "Response Body: $BODY" >&2
-        exit 1
-      fi
+    ansible.builtin.command: "{{ playbook_dir }}/../../trigger_triage_agent.py"
     ignore_errors: true
 
   - name: Wait for Analysis to Complete
     delegate_to: localhost
     changed_when: false
-    args:
-      executable: /bin/bash
     environment:
       TRIAGE_BUILD_ID: "{{ triage_build_id }}"
       TRIAGE_FIRESTORE_URL: "{{ triage_firestore_url }}"
       TRIAGE_INVOKER_SA: "{{ triage_invoker_sa }}"
-    ansible.builtin.shell: |
-      TOKEN=$(gcloud auth print-access-token --impersonate-service-account="$TRIAGE_INVOKER_SA")
-      if [ -z "$TOKEN" ]; then
-        echo "Failed to get access token." >&2
-        exit 1
-      fi
-
-      URL="${TRIAGE_FIRESTORE_URL%/}/${TRIAGE_BUILD_ID}"
-
-      # Wait for Cloud Run to dynamically hydrate the Document
-      for i in {1..12}; do
-        DOC=$(curl -s -H "Authorization: Bearer $TOKEN" "$URL")
-        if echo "$DOC" | grep -q '"name":'; then
-          break
-        fi
-        sleep 5
-      done
-
-      if ! echo "$DOC" | grep -q '"name":'; then
-        echo "Agent failed to start: Database document was not created within 60 seconds." >&2
-        exit 1
-      fi
-
-      for i in {1..30}; do
-        DOC=$(curl -s -H "Authorization: Bearer $TOKEN" "$URL")
-        STATUS=$(echo "$DOC" | python3 -c "import sys, json; doc=json.load(sys.stdin); print(doc.get('fields', {}).get('status', {}).get('stringValue', ''))" 2>/dev/null)
-        if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
-          echo "$DOC" | python3 -c "import sys, json; doc=json.load(sys.stdin); exec_sum=doc.get('fields', {}).get('report', {}).get('mapValue', {}).get('fields', {}).get('executive_summary', {}).get('stringValue', ''); print(json.dumps({'status': '$STATUS', 'executive_summary': exec_sum}))"
-          exit 0
-        fi
-        # Time delay between polling attempts
-        sleep 30
-      done
-      exit 1
+    ansible.builtin.command: "{{ playbook_dir }}/../../wait_for_triage_agent.py"
     register: agent_state
     ignore_errors: true
 
@@ -146,4 +90,4 @@
         {% endif %}
 
         View the comprehensive diagnostic report for this build at:
-        {{ triage_ui_url | regex_replace('/$', '') }}/?build_id={{ triage_build_id }}
+        {{ triage_ui_url | regex_replace('/$', '') }}/?build_id={{ triage_build_id }}&project={{ project }}
