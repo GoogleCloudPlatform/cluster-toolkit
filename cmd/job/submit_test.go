@@ -494,7 +494,7 @@ func TestSubmitCmd_MissingRepoEnvVar_DynamicSuggestions(t *testing.T) {
 		t.Fatal("expected error for missing GCLUSTER_IMAGE_REPO, got nil")
 	}
 
-	expectedMsg := "GCLUSTER_IMAGE_REPO environment variable is required when using --build-context.\n\nAvailable Docker repositories in project 'test-project' and region 'us-central1' are: 'repo1', 'repo2', 'repo3'.\n\nTo view all repositories, you can run:\n\t> gcloud artifacts repositories list --project=test-project --location=us-central1 --format=\"value(name)\"\n\nPlease set your environment variable to one of these (e.g., export GCLUSTER_IMAGE_REPO=repo1)"
+	expectedMsg := "GCLUSTER_IMAGE_REPO environment variable is required when using --build-context.\n\nAvailable Docker repositories in project 'test-project' and region 'us-central1' are: 'repo1', 'repo2', 'repo3'.\n\nTo view all repositories, you can run:\n\t> gcloud artifacts repositories list --project=test-project --location=us-central1 --filter=\"format=DOCKER\" --format=\"value(name.basename())\"\n\nPlease set your environment variable to one of these (e.g., export GCLUSTER_IMAGE_REPO=repo1)"
 	if !strings.Contains(err.Error(), expectedMsg) {
 		t.Errorf("unexpected error: %v\nexpected contained: %v", err, expectedMsg)
 	}
