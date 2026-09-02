@@ -21,10 +21,9 @@ source $EGO_TOP/profile.platform
 export KUBECONFIG_PATH=${2:-"$HF_TOP/conf/providers/gcpgkeinst/kubeconfig"}
 export CRD_NAMESPACE=${3:-"gcp-symphony"}
 
-
 mkdir -p $HF_TOP/conf/providers/gcpgkeinst/pod-specs
 
-cat << INNER_EOF > $HF_TOP/conf/providers/gcpgkeinst/gcpgkeinstprov_config.json
+cat <<INNER_EOF >$HF_TOP/conf/providers/gcpgkeinst/gcpgkeinstprov_config.json
 {
   "GKE_KUBECONFIG": "$KUBECONFIG_PATH",
   "GKE_CRD_NAMESPACE": "$CRD_NAMESPACE",

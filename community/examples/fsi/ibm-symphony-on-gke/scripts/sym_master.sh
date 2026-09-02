@@ -21,16 +21,16 @@ export ADMIN_PASSWORD=$3
 
 # Ensure required runtime packages are installed
 if [ ! -f /usr/lib64/libnsl.so.1 ] && [ ! -f /lib64/libnsl.so.1 ]; then
-  dnf install -y libnsl || true
+	dnf install -y libnsl || true
 fi
 
 # Ensure python command is available for HostFactory requestor scripts
-if ! command -v python &> /dev/null; then
-  alternatives --set python /usr/bin/python3 2>/dev/null || ln -sf /usr/bin/python3 /usr/bin/python || true
+if ! command -v python &>/dev/null; then
+	alternatives --set python /usr/bin/python3 2>/dev/null || ln -sf /usr/bin/python3 /usr/bin/python || true
 fi
 
 # Add symphony environment to global profile
-echo "source $EGO_TOP/profile.platform" >> /etc/profile
+echo "source $EGO_TOP/profile.platform" >>/etc/profile
 
 source $EGO_TOP/profile.platform && egosetsudoers.sh -f
 

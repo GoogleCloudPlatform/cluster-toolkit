@@ -23,5 +23,4 @@ export EGO_TOP=$2
 
 source $EGO_TOP/profile.platform && egosetsudoers.sh -f
 
-	su -s /bin/bash egoadmin -c "source $EGO_TOP/profile.platform && egoconfig join $SYM_MASTER -f && egosh ego start"
-
+su -s /bin/bash egoadmin -c "source $EGO_TOP/profile.platform && egoconfig join $SYM_MASTER -f && egosh ego start"

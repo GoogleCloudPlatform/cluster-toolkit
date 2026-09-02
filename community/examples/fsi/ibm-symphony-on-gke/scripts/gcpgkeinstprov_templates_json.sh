@@ -39,7 +39,7 @@ echo "Updated /tmp/Symphony/pod-spec.yaml with image and master IP"
 mkdir -p $HF_TOP/conf/providers/gcpgkeinst/pod-specs
 cp /tmp/Symphony/pod-spec.yaml $HF_TOP/conf/providers/gcpgkeinst/pod-specs/pod-spec.yaml
 
-cat << INNER_EOF > $HF_TOP/conf/providers/gcpgkeinst/gcpgkeinstprov_templates.json
+cat <<INNER_EOF >$HF_TOP/conf/providers/gcpgkeinst/gcpgkeinstprov_templates.json
 {
   "templates": [
     {

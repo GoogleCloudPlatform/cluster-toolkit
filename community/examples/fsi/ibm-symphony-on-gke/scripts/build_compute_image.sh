@@ -39,11 +39,11 @@ PROJECT_ID=$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.interna
 
 # Submit build to Cloud Build using the Master VM's service account
 gcloud builds submit --config cloudbuild.yaml \
-    --service-account="projects/${PROJECT_ID}/serviceAccounts/${SA_EMAIL}" \
-    --substitutions=_BUCKET="${BUCKET}",_INSTALLER="${INSTALLER}",_FIXPACK="${FIXPACK}",_IMAGE="${FULL_IMAGE_NAME}",_OPERATOR_IMAGE="${OPERATOR_IMAGE_NAME}" \
-    --timeout=30m
+	--service-account="projects/${PROJECT_ID}/serviceAccounts/${SA_EMAIL}" \
+	--substitutions=_BUCKET="${BUCKET}",_INSTALLER="${INSTALLER}",_FIXPACK="${FIXPACK}",_IMAGE="${FULL_IMAGE_NAME}",_OPERATOR_IMAGE="${OPERATOR_IMAGE_NAME}" \
+	--timeout=30m
 
 echo "Successfully built and pushed ${FULL_IMAGE_NAME} and ${OPERATOR_IMAGE_NAME}"
 
 # Save the image name to a file
-echo "${FULL_IMAGE_NAME}" > /tmp/Symphony/compute_image_name.txt
+echo "${FULL_IMAGE_NAME}" >/tmp/Symphony/compute_image_name.txt

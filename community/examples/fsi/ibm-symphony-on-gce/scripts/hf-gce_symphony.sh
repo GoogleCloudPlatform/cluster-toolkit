@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 set -o pipefail # more output
-set -x # verbose
+set -x          # verbose
 
 export EGO_TOP=$1
 
@@ -42,8 +42,7 @@ tar czf hf-gce.tgz *
 source ${EGO_TOP}/profile.platform
 
 # Untar in Hostfactory
-tar -xzf hf-gce.tgz  -C $HF_TOP
-
+tar -xzf hf-gce.tgz -C $HF_TOP
 
 # Update Config
 

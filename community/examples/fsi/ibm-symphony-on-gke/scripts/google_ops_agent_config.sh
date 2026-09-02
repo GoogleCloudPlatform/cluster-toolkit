@@ -19,7 +19,7 @@ export EGO_TOP=$1
 
 mkdir -p /etc/google-cloud-ops-agent
 
-cat > /etc/google-cloud-ops-agent/config.yaml << INNER_EOF
+cat >/etc/google-cloud-ops-agent/config.yaml <<INNER_EOF
 logging:
   receivers:
     syslog:
