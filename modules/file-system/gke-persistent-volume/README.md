@@ -111,13 +111,26 @@ the deploying machine can connect to the cluster.
 
 ### GCS Fuse Storage Profiles IAM
 
-When using `gcsfuse_storage_class_name` with GCS Fuse, the GKE Service Agent requires permissions to scan bucket metadata and manage Anywhere Caches.
+When using a GCS Fuse Storage Profile (configured via `gcsfuse_storage_class_name`), the GKE Service Agent requires specific permissions on the Cloud Storage bucket to scan metadata and manage Anywhere Cache / Rapid Cache instances, as described in the official [GKE GCS Fuse Storage Profiles documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/cloud-storage-fuse-storage-profiles#grant-iam-roles).
 
-By default, this module automatically grants the built-in `roles/storage.admin` role to the GKE Service Agent directly on the bucket (`grant_gcsfuse_service_agent_role = true`). Because `roles/storage.admin` is a standard Google Cloud role, it requires **zero manual IAM role creation** and works immediately out-of-the-box.
+The required permissions are:
+
+* `storage.buckets.get` (retrieve bucket metadata)
+* `storage.objects.list` (scan and list objects in the bucket)
+* `storage.anywhereCaches.create` (create Anywhere Cache / Rapid Cache instances)
+* `storage.anywhereCaches.get` (inspect cache status)
+* `storage.anywhereCaches.list` (list caches associated with the bucket)
+* `storage.anywhereCaches.update` (update cache settings)
+
+#### Turnkey Default: `roles/storage.admin`
+
+By default, this module automatically grants Google's built-in `roles/storage.admin` role to the GKE Service Agent directly on the bucket (`grant_gcsfuse_service_agent_role = true`).
+
+As documented in [Cloud Storage Predefined IAM Roles](https://docs.cloud.google.com/storage/docs/access-control/iam-roles#storage.admin), `roles/storage.admin` natively includes all 6 of the above permissions. Using this built-in role provides complete turnkey automation because it is scoped strictly to the target bucket and requires zero project-level custom IAM role creation (`iam.roles.create`), ensuring deployments succeed out-of-the-box across standard and restricted environments.
 
 #### Optional: Least-Privilege Custom Role (`gke.gcsfuse.profileUser`)
 
-For environments with strict least-privilege security policies, you can use a custom IAM role with strictly the required read/cache permissions instead of `roles/storage.admin`:
+For environments with strict least-privilege security compliance policies, you can create a custom IAM role containing only these 6 permissions and override the default role:
 
 1. Create the custom role in your project:
 
@@ -129,7 +142,7 @@ gcloud iam roles create gke.gcsfuse.profileUser \
   --permissions="storage.objects.list,storage.buckets.get,storage.anywhereCaches.create,storage.anywhereCaches.get,storage.anywhereCaches.list,storage.anywhereCaches.update"
 ```
 
-1. In your blueprint, set `gcsfuse_service_agent_role`:
+1. In your blueprint, specify `gcsfuse_service_agent_role`:
 
 ```yaml
   - id: data-bucket-pv
@@ -217,7 +230,7 @@ No modules.
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the GKE cluster in the format `projects/{{project}}/locations/{{location}}/clusters/{{cluster}}` | `string` | n/a | yes |
 | <a name="input_filestore_id"></a> [filestore\_id](#input\_filestore\_id) | An identifier for a filestore with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`. | `string` | `null` | no |
 | <a name="input_gcs_bucket_name"></a> [gcs\_bucket\_name](#input\_gcs\_bucket\_name) | The gcs bucket to be used with the persistent volume. | `string` | `null` | no |
-| <a name="input_gcsfuse_service_agent_role"></a> [gcsfuse\_service\_agent\_role](#input\_gcsfuse\_service\_agent\_role) | The IAM role to grant to the GKE Service Agent on the bucket for GCSFuse Storage Profiles. Defaults to built-in 'roles/storage.admin' for zero-friction deployment without custom roles. Can be set to a custom role (e.g. 'projects/<cluster\_project\_id>/roles/gke.gcsfuse.profileUser') for strict least-privilege compliance. | `string` | `"roles/storage.admin"` | no |
+| <a name="input_gcsfuse_service_agent_role"></a> [gcsfuse\_service\_agent\_role](#input\_gcsfuse\_service\_agent\_role) | The IAM role to grant to the GKE Service Agent on the bucket for GCSFuse Storage Profiles. Defaults to built-in 'roles/storage.admin' which covers all required permissions (storage.buckets.get, storage.objects.list, and storage.anywhereCaches.*) for zero-friction deployment without custom roles. Can be set to a custom role (e.g. 'projects/<cluster\_project\_id>/roles/gke.gcsfuse.profileUser') for strict least-privilege compliance. | `string` | `"roles/storage.admin"` | no |
 | <a name="input_gcsfuse_storage_class_name"></a> [gcsfuse\_storage\_class\_name](#input\_gcsfuse\_storage\_class\_name) | The storage class name for GCS Fuse. Allowed values: gcsfusecsi-training, gcsfusecsi-serving, gcsfusecsi-checkpointing. | `string` | `null` | no |
 | <a name="input_grant_gcsfuse_service_agent_role"></a> [grant\_gcsfuse\_service\_agent\_role](#input\_grant\_gcsfuse\_service\_agent\_role) | Whether to grant the GCS Fuse service agent role to the GKE robot service account on the bucket when using a GCS Fuse storage profile. | `bool` | `true` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |

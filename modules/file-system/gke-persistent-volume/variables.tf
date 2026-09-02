@@ -109,7 +109,7 @@ variable "grant_gcsfuse_service_agent_role" {
 }
 
 variable "gcsfuse_service_agent_role" {
-  description = "The IAM role to grant to the GKE Service Agent on the bucket for GCSFuse Storage Profiles. Defaults to built-in 'roles/storage.admin' for zero-friction deployment without custom roles. Can be set to a custom role (e.g. 'projects/<cluster_project_id>/roles/gke.gcsfuse.profileUser') for strict least-privilege compliance."
+  description = "The IAM role to grant to the GKE Service Agent on the bucket for GCSFuse Storage Profiles. Defaults to built-in 'roles/storage.admin' which covers all required permissions (storage.buckets.get, storage.objects.list, and storage.anywhereCaches.*) for zero-friction deployment without custom roles. Can be set to a custom role (e.g. 'projects/<cluster_project_id>/roles/gke.gcsfuse.profileUser') for strict least-privilege compliance."
   type        = string
   default     = "roles/storage.admin"
 }
