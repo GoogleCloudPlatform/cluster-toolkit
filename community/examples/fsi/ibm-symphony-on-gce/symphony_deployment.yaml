@@ -17,10 +17,10 @@
 
 vars:
   # This should be unique across all of your Cluster Toolkit Deployments.
-  deployment_name: sym-jrt-05
+  deployment_name: symphony-01
 
   # Your GCP Project ID
-  project_id: af3-on-gke
+  project_id: <YOUR_PROJECT_ID>
 
   # The GCP Region used for this deployment.
   region: us-central1
@@ -29,12 +29,12 @@ vars:
   zone: us-central1-c
 
   sym_installer: sym-7.3.2.0_x86_64.bin
-  sym_source_bucket: ibm-af3-on-gke
+  sym_source_bucket: <YOUR_GCS_BUCKET_NAME>
   sym_fixpack: sym-7.3.2.0_x86_64_build601711.tar.gz
   sym_entitlement: sym_adv_entitlement.dat
   symphony_install_dir: /opt/ibm/spectrumcomputing
-  admin_password: admin-04
-  service_account_email: 1597822633-compute@developer.gserviceaccount.com
+  admin_password: <ADMIN_PASSWORD>
+  service_account_email: <SERVICE_ACCOUNT_EMAIL>
   pubsub_subscription: hf-gce-vm-events-sub
   pubsub_topic: hf-gce-vm-events
   sink_name: hf-gce-vm-events-sink
