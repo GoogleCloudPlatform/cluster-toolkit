@@ -23,7 +23,8 @@ export RAM=${5:-16384}
 export POD_SPEC=${6:-"pod-specs/pod-spec.yaml"}
 export FULL_IMAGE_NAME=$7
 
-source $EGO_TOP/profile.platform
+# shellcheck source=/dev/null
+source "$EGO_TOP/profile.platform"
 
 # Get master IP and Hostname
 MASTER_IP=$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip)
@@ -36,10 +37,10 @@ sed -i "s|MASTER_HOSTNAME_PLACEHOLDER|${MASTER_HOSTNAME}|g" /tmp/Symphony/pod-sp
 
 echo "Updated /tmp/Symphony/pod-spec.yaml with image and master IP"
 
-mkdir -p $HF_TOP/conf/providers/gcpgkeinst/pod-specs
-cp /tmp/Symphony/pod-spec.yaml $HF_TOP/conf/providers/gcpgkeinst/pod-specs/pod-spec.yaml
+mkdir -p "$HF_TOP/conf/providers/gcpgkeinst/pod-specs"
+cp /tmp/Symphony/pod-spec.yaml "$HF_TOP/conf/providers/gcpgkeinst/pod-specs/pod-spec.yaml"
 
-cat <<INNER_EOF >$HF_TOP/conf/providers/gcpgkeinst/gcpgkeinstprov_templates.json
+cat <<INNER_EOF >"$HF_TOP/conf/providers/gcpgkeinst/gcpgkeinstprov_templates.json"
 {
   "templates": [
     {

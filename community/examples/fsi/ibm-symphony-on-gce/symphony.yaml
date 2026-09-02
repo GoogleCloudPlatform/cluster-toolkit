@@ -22,8 +22,8 @@ vars:
   region: us-central1
   zone: us-central1-a
   base_image:
-    family: hpc-rocky-linux-8 
-    project: cloud-hpc-image-public 
+    family: hpc-rocky-linux-8
+    project: cloud-hpc-image-public
   new_image:
     family: $(vars.deployment_name)
     project: $(vars.project_id)
@@ -34,7 +34,7 @@ vars:
   sym_source_bucket: <YOUR_GCS_BUCKET_NAME>
   sym_fixpack: sym-7.3.2.0_x86_64_build601711.tar.gz
   sym_entitlement: sym_adv_entitlement.dat
-  symphony_install_dir: /opt/ibm/spectrumcomputing 
+  symphony_install_dir: /opt/ibm/spectrumcomputing
   admin_password: admin
   service_account_email: null
   pubsub_subscription: hf-gce-vm-events-sub
@@ -63,12 +63,12 @@ deployment_groups:
       log_sink_name: $(vars.sink_name)
       unique_writer_identity: true
       filter: |
-        logName="projects/$(vars.project_id)/logs/cloudaudit.googleapis.com%2Factivity" 
-        resource.type=("gce_instance_group_manager" OR "gce_instance" ) 
-        protoPayload.methodName=( 
-          "v1.compute.instanceGroupManagers.createInstances" 
-          OR "v1.compute.instanceGroupManagers.deleteInstances" 
-          OR "v1.compute.instances.delete" 
+        logName="projects/$(vars.project_id)/logs/cloudaudit.googleapis.com%2Factivity"
+        resource.type=("gce_instance_group_manager" OR "gce_instance" )
+        protoPayload.methodName=(
+          "v1.compute.instanceGroupManagers.createInstances"
+          OR "v1.compute.instanceGroupManagers.deleteInstances"
+          OR "v1.compute.instances.delete"
         )
 
   - id: pubsub
@@ -96,20 +96,20 @@ deployment_groups:
       runners:
       - type: data
         destination: /tmp/Symphony/hostProviderPlugins.json
-        source:  $(ghpc_stage("resources/hostProviderPlugins.json"))
+        source: $(ghpc_stage("resources/hostProviderPlugins.json"))
       - type: data
         destination: /tmp/Symphony/hostProviders.json
-        source:  $(ghpc_stage("resources/hostProviders.json"))
+        source: $(ghpc_stage("resources/hostProviders.json"))
       - type: data
         destination: /tmp/Symphony/hostRequestors.json
-        source:  $(ghpc_stage("resources/hostRequestors.json"))
+        source: $(ghpc_stage("resources/hostRequestors.json"))
       - type: shell
         destination: install_symphony.sh
-        source:  $(ghpc_stage("scripts/install_symphony.sh"))
+        source: $(ghpc_stage("scripts/install_symphony.sh"))
         args: $(vars.sym_installer) $(vars.sym_fixpack) $(vars.sym_entitlement) $(vars.symphony_install_dir) $(vars.sym_source_bucket)
       - type: shell
         destination: hf-gce_symphony.sh
-        source:  $(ghpc_stage("scripts/hf-gce_symphony.sh"))
+        source: $(ghpc_stage("scripts/hf-gce_symphony.sh"))
         args: $(vars.symphony_install_dir)
   - id: sym-compute-script
     source: modules/scripts/startup-script
@@ -118,11 +118,11 @@ deployment_groups:
       runners:
       - type: shell
         destination: google_ops_agent_config.sh
-        source:  $(ghpc_stage("scripts/google_ops_agent_config.sh"))
+        source: $(ghpc_stage("scripts/google_ops_agent_config.sh"))
         args: $(vars.symphony_install_dir)
       - type: shell
         destination: sym_compute.sh
-        source:  $(ghpc_stage("scripts/sym_compute.sh"))
+        source: $(ghpc_stage("scripts/sym_compute.sh"))
         args: $(vars.deployment_name)-master-0 $(vars.symphony_install_dir)
 
 - group: packer
@@ -151,7 +151,7 @@ deployment_groups:
 
   ## Create MIG instance templates
   - id: sym-mig-c2-30
-    use: 
+    use:
     - sym-compute-script
     source: git::https://github.com/terraform-google-modules/terraform-google-vm.git//modules/instance_template?ref=main
     settings:
@@ -165,7 +165,7 @@ deployment_groups:
         email: $(vars.service_account_email)
 
   - id: sym-mig-c2-4
-    use: 
+    use:
     - sym-compute-script
     source: git::https://github.com/terraform-google-modules/terraform-google-vm.git//modules/instance_template?ref=main
     settings:
@@ -208,33 +208,33 @@ deployment_groups:
       runners:
       - type: shell
         destination: google_ops_agent_config.sh
-        source:  $(ghpc_stage("scripts/google_ops_agent_config.sh"))
+        source: $(ghpc_stage("scripts/google_ops_agent_config.sh"))
         args: $(vars.symphony_install_dir)
       - type: data
         destination: /tmp/sym_mig_provider.py
-        source:  $(ghpc_stage("resources/sym_mig_provider.py"))
+        source: $(ghpc_stage("resources/sym_mig_provider.py"))
       - type: shell
         destination: hostfactoryconf_json.sh
-        source:  $(ghpc_stage("scripts/hostfactoryconf_json.sh"))
+        source: $(ghpc_stage("scripts/hostfactoryconf_json.sh"))
         args: $(vars.symphony_install_dir)
       - type: shell
         destination: gcpgceinstprov_config_json.sh
-        source:  $(ghpc_stage("scripts/gcpgceinstprov_config_json.sh"))
+        source: $(ghpc_stage("scripts/gcpgceinstprov_config_json.sh"))
         args: $(vars.symphony_install_dir) $(vars.project_id) $(vars.pubsub_topic) $(vars.pubsub_subscription)
 
       - type: shell
         destination: gcpgceinstprov_templates_json.sh
-        source:  $(ghpc_stage("scripts/gcpgceinstprov_templates_json.sh"))
+        source: $(ghpc_stage("scripts/gcpgceinstprov_templates_json.sh"))
         args: $(vars.symphony_install_dir) "sym-mig-c2-4,10,X86_64,4,4,32768,$(vars.zone),sym-mig-c2-4__sym-mig-c2-30,10,X86_64,30,30,122880,$(vars.zone),sym-mig-c2-30"
 
       - type: shell
         destination: sym_master.sh
-        source:  $(ghpc_stage("scripts/sym_master.sh"))
+        source: $(ghpc_stage("scripts/sym_master.sh"))
         args: $(vars.deployment_name)-master-0 $(vars.symphony_install_dir) $(vars.admin_password)
 
   - id: sym-master-vm
     source: modules/compute/vm-instance
-    use: 
+    use:
     - sym-master-script
     - network
     settings:
@@ -244,7 +244,7 @@ deployment_groups:
 
   - id: sym-compute-vm
     source: modules/compute/vm-instance
-    use: 
+    use:
     - sym-compute-script
     - network
     settings:

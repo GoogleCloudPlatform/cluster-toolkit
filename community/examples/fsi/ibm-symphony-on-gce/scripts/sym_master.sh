@@ -25,6 +25,7 @@ export ADMIN_PASSWORD=$3
 # Add symphony environment to global profile
 echo "source $EGO_TOP/profile.platform" >>/etc/profile
 
-source $EGO_TOP/profile.platform && egosetsudoers.sh -f
+# shellcheck source=/dev/null
+source "$EGO_TOP/profile.platform" && egosetsudoers.sh -f
 
 su -s /bin/bash egoadmin -c "source $EGO_TOP/profile.platform  && egoconfig join $SYM_MASTER -f  && egoconfig setpassword -x $ADMIN_PASSWORD -f && egoconfig setentitlement ${EGO_TOP}/*.dat -f && egosh ego start"

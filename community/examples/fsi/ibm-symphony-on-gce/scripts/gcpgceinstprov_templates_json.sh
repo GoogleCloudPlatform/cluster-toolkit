@@ -21,8 +21,9 @@ export MIG_INFO=$2
 
 ##### Configure Master VM.
 
-source $EGO_TOP/profile.platform
+# shellcheck source=/dev/null
+source "$EGO_TOP/profile.platform"
 
 ### Configure Symphony provider config
 
-python3 /tmp/sym_mig_provider.py "$MIG_INFO" >$HF_TOP/conf/providers/gcpgceinst/gcpgceinstprov_templates.json
+python3 /tmp/sym_mig_provider.py "$MIG_INFO" >"$HF_TOP/conf/providers/gcpgceinst/gcpgceinstprov_templates.json"

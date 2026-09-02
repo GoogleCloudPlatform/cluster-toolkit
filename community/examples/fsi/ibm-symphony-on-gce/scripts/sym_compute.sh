@@ -21,6 +21,7 @@ export EGO_TOP=$2
 
 ##### Configure Compute VM.
 
-source $EGO_TOP/profile.platform && egosetsudoers.sh -f
+# shellcheck source=/dev/null
+source "$EGO_TOP/profile.platform" && egosetsudoers.sh -f
 
 su -s /bin/bash egoadmin -c "source $EGO_TOP/profile.platform && egoconfig join $SYM_MASTER -f && egosh ego start"

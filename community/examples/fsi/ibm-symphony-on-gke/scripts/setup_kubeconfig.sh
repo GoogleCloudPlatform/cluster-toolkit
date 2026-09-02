@@ -20,9 +20,10 @@ export PROJECT_ID=$2
 export REGION=$3
 export CLUSTER_NAME=$4
 
-source $EGO_TOP/profile.platform
+# shellcheck source=/dev/null
+source "$EGO_TOP/profile.platform"
 
-mkdir -p $HF_TOP/conf/providers/gcpgkeinst
+mkdir -p "$HF_TOP/conf/providers/gcpgkeinst"
 
 # Install gke-gcloud-auth-plugin if not present
 if ! command -v gke-gcloud-auth-plugin &>/dev/null; then
@@ -34,7 +35,8 @@ if ! command -v kubectl &>/dev/null; then
 fi
 
 # Generate kubeconfig using gcloud with retry and timeout
-export KUBECONFIG=$HF_TOP/conf/providers/gcpgkeinst/kubeconfig
+KUBECONFIG="$HF_TOP/conf/providers/gcpgkeinst/kubeconfig"
+export KUBECONFIG
 
 TIMEOUT_SECONDS=${CLUSTER_WAIT_TIMEOUT:-900} # 15 minutes default (GKE creation typically takes 4-8 min)
 INTERVAL=15

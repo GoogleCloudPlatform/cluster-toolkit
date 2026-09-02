@@ -73,48 +73,53 @@ echo "egoadmin soft nproc  65536" >>/etc/security/limits.conf &&
 	echo "egoadmin hard nofile 65536" >>/etc/security/limits.conf
 
 echo "=== 4/7: Downloading installation packages from gs://${sym_source_bucket} ==="
-gcloud storage cp gs://${sym_source_bucket}/${sym_installer} /tmp
-gcloud storage cp gs://${sym_source_bucket}/${sym_entitlement} /tmp
-gcloud storage cp gs://${sym_source_bucket}/${sym_fixpack} /tmp
+gcloud storage cp "gs://${sym_source_bucket}/${sym_installer}" /tmp
+gcloud storage cp "gs://${sym_source_bucket}/${sym_entitlement}" /tmp
+gcloud storage cp "gs://${sym_source_bucket}/${sym_fixpack}" /tmp
 
 echo "=== 5/7: Running IBM Spectrum Symphony installer ==="
-cd /tmp
-mkdir -p ${symphony_install_dir}
-export ENV EGO_TOP=${symphony_install_dir} CLUSTERADMIN=egoadmin IBM_SPECTRUM_SYMPHONY_LICENSE_ACCEPT=Y SIMPLIFIEDWEM=N DISABLESSL=Y
-mv /tmp/${sym_entitlement} ${EGO_TOP}
-chmod a+x ${sym_installer}
-./${sym_installer} --prefix ${EGO_TOP} --quiet
+cd /tmp || exit 1
+mkdir -p "${symphony_install_dir}"
+export EGO_TOP="${symphony_install_dir}" CLUSTERADMIN=egoadmin IBM_SPECTRUM_SYMPHONY_LICENSE_ACCEPT=Y SIMPLIFIEDWEM=N DISABLESSL=Y
+mv "/tmp/${sym_entitlement}" "${EGO_TOP}"
+chmod a+x "${sym_installer}"
+./"${sym_installer}" --prefix "${EGO_TOP}" --quiet
 
 echo "=== 6/7: Installing Symphony fixpack ==="
-export SYM_FIXPACK_TAR=${sym_fixpack}
-export SYM_FIXPACK_PATH=/tmp/${SYM_FIXPACK_TAR}
-export SYM_FIXPACK_NAME=$(basename $SYM_FIXPACK_TAR .tar.gz)
-export SYM_FIXPACK_DIR=/opt/ibm/${SYM_FIXPACK_NAME}
+SYM_FIXPACK_TAR="${sym_fixpack}"
+export SYM_FIXPACK_TAR
+SYM_FIXPACK_PATH="/tmp/${SYM_FIXPACK_TAR}"
+export SYM_FIXPACK_PATH
+SYM_FIXPACK_NAME=$(basename "$SYM_FIXPACK_TAR" .tar.gz)
+export SYM_FIXPACK_NAME
+SYM_FIXPACK_DIR="/opt/ibm/${SYM_FIXPACK_NAME}"
+export SYM_FIXPACK_DIR
 
-mkdir -p ${SYM_FIXPACK_DIR}
-chmod 770 ${SYM_FIXPACK_DIR}
-tar -xf ${SYM_FIXPACK_PATH} -C ${SYM_FIXPACK_DIR}
-chmod u+r ${SYM_FIXPACK_DIR}/*
-chmod a+x ${SYM_FIXPACK_DIR}/*.sh
+mkdir -p "${SYM_FIXPACK_DIR}"
+chmod 770 "${SYM_FIXPACK_DIR}"
+tar -xf "${SYM_FIXPACK_PATH}" -C "${SYM_FIXPACK_DIR}"
+chmod u+r "${SYM_FIXPACK_DIR}"/*
+chmod a+x "${SYM_FIXPACK_DIR}"/*.sh
 
-cd ${SYM_FIXPACK_DIR}
+cd "${SYM_FIXPACK_DIR}" || exit 1
 
 echo "Applying fixpack for egoadmin..."
-su -s /bin/bash $CLUSTERADMIN -c "source $EGO_TOP/profile.platform && ${SYM_FIXPACK_DIR}/sym-7.3.2.sh -c -i"
+su -s /bin/bash "$CLUSTERADMIN" -c "source $EGO_TOP/profile.platform && ${SYM_FIXPACK_DIR}/sym-7.3.2.sh -c -i"
 
 echo "Applying fixpack RPM updates..."
-source $EGO_TOP/profile.platform
-${SYM_FIXPACK_DIR}/symrpm-7.3.2.sh -c -i
+# shellcheck source=/dev/null
+source "$EGO_TOP/profile.platform"
+"${SYM_FIXPACK_DIR}/symrpm-7.3.2.sh" -c -i
 
-cd
+cd /tmp || exit 1
 
 echo "Cleaning up temporary fixpack files..."
-rm -rf $EGO_TOP/patch/backup/*
-rm -rf ${SYM_FIXPACK_DIR}
-rm -f ${SYM_FIXPACK_PATH}
+rm -rf "${EGO_TOP}"/patch/backup/*
+rm -rf "${SYM_FIXPACK_DIR}"
+rm -f "${SYM_FIXPACK_PATH}"
 
 echo "=== 7/7: Updating Symphony configuration ==="
-cd ${EGO_TOP}
+cd "${EGO_TOP}" || exit 1
 
 sed -i "s|BINARY_TYPE=\"fail\"|BINARY_TYPE=\"linux-x86_64\"|g" kernel/conf/profile.ego &&
 	sed -i "s|BINARY_TYPE=\"fail\"|BINARY_TYPE=\"linux-x86_64\"|g" jre/profile.jre &&

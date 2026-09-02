@@ -18,9 +18,10 @@ export GCP_PROJECT_ID=$2
 export PUBSUB_TOPIC=$3
 export PUBSUB_SUBSCRIPTION=$4
 
-. $EGO_TOP/profile.platform
+# shellcheck source=/dev/null
+. "$EGO_TOP/profile.platform"
 
-cat >$HF_TOP/conf/providers/gcpgceinst/gcpgceinstprov_config.json <<EOF
+cat >"$HF_TOP/conf/providers/gcpgceinst/gcpgceinstprov_config.json" <<EOF
 {
   "GCP_PROJECT_ID": "${GCP_PROJECT_ID}",
   "LOG_LEVEL":"DEBUG",

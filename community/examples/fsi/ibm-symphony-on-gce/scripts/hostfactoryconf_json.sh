@@ -15,9 +15,10 @@
 
 export EGO_TOP=$1
 
-. $EGO_TOP/profile.platform
+# shellcheck source=/dev/null
+. "$EGO_TOP/profile.platform"
 
-cat >$HF_TOP/conf/hostfactoryconf.json <<EOF
+cat >"$HF_TOP/conf/hostfactoryconf.json" <<EOF
 {
   "HF_LOGLEVEL": "LOG_TRACE",
   "HF_LOG_MAX_FILE_SIZE": 10,
