@@ -15,6 +15,7 @@
 package job
 
 import (
+	"context"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"os"
@@ -104,7 +105,7 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			return fmt.Errorf("required flag \"command\" not set")
 		}
 
-		if err := validateImageFlags(); err != nil {
+		if err := validateImageFlags(projectID, location); err != nil {
 			return err
 		}
 
@@ -338,14 +339,14 @@ func validatePathwaysFlags() error {
 	return nil
 }
 
-func validateImageFlags() error {
+func validateImageFlags(projectID, location string) error {
 	if pathways.Headless {
 		return nil
 	}
 	if err := validateImageSources(); err != nil {
 		return err
 	}
-	return validateBuildContext()
+	return validateBuildContext(projectID, location)
 }
 
 func validateImageSources() error {
@@ -361,12 +362,25 @@ func validateImageSources() error {
 	return nil
 }
 
-func validateBuildContext() error {
+func validateBuildContext(projectID, location string) error {
 	if buildContext == "" {
 		return nil
 	}
 	if os.Getenv("GCLUSTER_IMAGE_REPO") == "" {
-		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo)")
+		ctx := context.Background()
+		suggestions := lookupArtifactRegistryRepos(ctx, projectID, location)
+
+		parts := strings.Split(location, "-")
+		region := location
+		if len(parts) >= 3 {
+			region = strings.Join(parts[:len(parts)-1], "-")
+		}
+
+		if len(suggestions) > 0 {
+			reposStr := "'" + strings.Join(suggestions, "', '") + "'"
+			return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context.\n\nAvailable Docker repositories in project '%s' and region '%s' are: %s.\n\nTo view all repositories, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --format=\"value(name)\"\n\nPlease set your environment variable to one of these (e.g., export GCLUSTER_IMAGE_REPO=%s)", projectID, region, reposStr, projectID, region, suggestions[0])
+		}
+		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo).\n\nTo see available repositories manually, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --format=\"value(name)\"", projectID, region)
 	}
 	if os.Getenv("USER") == "" && os.Getenv("USERNAME") == "" {
 		return fmt.Errorf("failed to determine user identity from environment (tried USER and USERNAME). This is required to ensure unique image tagging when using --build-context")
