@@ -22,7 +22,7 @@
       echo "ERROR: PROJECT_ID is empty or undefined." >&2
       exit 1
     fi
-    ENABLE_AGENT=$(gcloud secrets versions access latest --secret="triage_agent_enabled" --project="$PROJECT_ID" 2>/dev/null || echo "false")
+    ENABLE_AGENT=$(gcloud secrets versions access latest --secret="triage-agent-enabled" --project="$PROJECT_ID" 2>/dev/null || echo "false")
     if [ "$ENABLE_AGENT" != "true" ]; then
       echo "DISABLED"
       exit 0
@@ -40,22 +40,22 @@
   - triage-project-number
   - triage-invoker-sa
   - triage-cloud-run-url
-  - triage_firestore_url
-  - triage_ui_url
+  - triage-firestore-url
+  - triage-ui-url
   register: triage_secrets
   ignore_errors: true
 
 - name: Bind Secrets to Ansible Facts
-  when: "not triage_init.failed and 'PROCEED' in (triage_init.stdout | default('')) and not (triage_secrets.failed | default(false))"
+  when: "not triage_init.failed and 'PROCEED' in (triage_init.stdout | default('')) and (triage_secrets.results | default([]) | selectattr('failed') | list | length) == 0"
   ansible.builtin.set_fact:
     triage_project_number: "{{ (triage_secrets.results | selectattr('item', 'equalto', 'triage-project-number') | first).stdout | default('') }}"
     triage_invoker_sa: "{{ (triage_secrets.results | selectattr('item', 'equalto', 'triage-invoker-sa') | first).stdout | default('') }}"
     triage_cloud_run_url: "{{ (triage_secrets.results | selectattr('item', 'equalto', 'triage-cloud-run-url') | first).stdout | default('') }}"
-    triage_firestore_url: "{{ (triage_secrets.results | selectattr('item', 'equalto', 'triage_firestore_url') | first).stdout | default('') }}"
-    triage_ui_url: "{{ (triage_secrets.results | selectattr('item', 'equalto', 'triage_ui_url') | first).stdout | default('') }}"
+    triage_firestore_url: "{{ (triage_secrets.results | selectattr('item', 'equalto', 'triage-firestore-url') | first).stdout | default('') }}"
+    triage_ui_url: "{{ (triage_secrets.results | selectattr('item', 'equalto', 'triage-ui-url') | first).stdout | default('') }}"
 
 - name: Execute Triage Agent Pipeline
-  when: "not triage_init.failed and 'PROCEED' in (triage_init.stdout | default('')) and not (triage_secrets.failed | default(false))"
+  when: "not triage_init.failed and 'PROCEED' in (triage_init.stdout | default('')) and (triage_secrets.results | default([]) | selectattr('failed') | list | length) == 0"
   vars:
     triage_build_id: "{{ full_build_id | default('') }}"
   block:
