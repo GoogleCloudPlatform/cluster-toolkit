@@ -5,7 +5,7 @@ This module will create a startup-script runner that will execute Ramble command
 Ramble is a multi-platform experimentation framework capable of driving
 software installation, acquiring input files, configuring experiments, and
 extracting results. For more information about Ramble, see:
-https://github.com/GoogleCloudPlatform/ramble
+https://github.com/Ramble-Project/ramble
 
 This module outputs a startup script runner, which can be combined with other
 startup script runners to execute a set of Ramble commands.
