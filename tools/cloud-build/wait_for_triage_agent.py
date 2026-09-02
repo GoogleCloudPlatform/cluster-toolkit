@@ -47,12 +47,12 @@ def main():
     doc_hydrated = False
     for _ in range(12):
         try:
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req, timeout=10) as response:
                 doc = json.loads(response.read().decode())
             if "name" in doc:
                 doc_hydrated = True
                 break
-        except urllib.error.HTTPError:
+        except (urllib.error.URLError, json.JSONDecodeError):
             pass
         time.sleep(5)
 
@@ -63,7 +63,7 @@ def main():
     # Poll for completion status
     for _ in range(30):
         try:
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req, timeout=10) as response:
                 doc = json.loads(response.read().decode())
                 
             status = doc.get("fields", {}).get("status", {}).get("stringValue", "")
@@ -77,7 +77,7 @@ def main():
                 
                 print(json.dumps({"status": status, "executive_summary": exec_sum}))
                 sys.exit(0)
-        except urllib.error.HTTPError:
+        except (urllib.error.URLError, json.JSONDecodeError):
             pass
         
         time.sleep(30)

@@ -18,6 +18,10 @@
   environment:
     PROJECT_ID: "{{ project }}"
   ansible.builtin.shell: |
+    if [ -z "$PROJECT_ID" ]; then
+      echo "ERROR: PROJECT_ID is empty or undefined." >&2
+      exit 1
+    fi
     ENABLE_AGENT=$(gcloud secrets versions access latest --secret="triage_agent_enabled" --project="$PROJECT_ID" 2>/dev/null || echo "false")
     if [ "$ENABLE_AGENT" != "true" ]; then
       echo "DISABLED"

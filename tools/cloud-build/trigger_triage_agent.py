@@ -51,7 +51,7 @@ def main():
     })
 
     try:
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=30) as response:
             if response.status != 202:
                 print(f"Failed to trigger agent. HTTP Status: {response.status}", file=sys.stderr)
                 print(f"Response Body: {response.read().decode()}", file=sys.stderr)
@@ -59,6 +59,9 @@ def main():
     except urllib.error.HTTPError as e:
         print(f"Failed to trigger agent. HTTP Status: {e.code}", file=sys.stderr)
         print(f"Response Body: {e.read().decode()}", file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"Failed to trigger agent. Network error: {e.reason}", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":
