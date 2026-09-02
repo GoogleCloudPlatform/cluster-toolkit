@@ -98,6 +98,10 @@ steps:
               value: "BASIC_SSD"
             - name: REQUIRED_FILESTORE_GB
               value: "2560"
+            - name: PROJECT_ID
+              value: "$PROJECT_ID"
+            - name: BUILD_ID
+              value: "$BUILD_ID"
             - name: PROVISIONING_MODEL
               value: "$_PROVISIONING_MODEL"
             - name: ANSIBLE_HOST_KEY_CHECKING
