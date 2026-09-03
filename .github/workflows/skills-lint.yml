@@ -51,7 +51,7 @@ permissions:
 
 jobs:
   skills-lint:
-    name: Lint Skills & Validate Schemas (Tier 1)
+    name: Lint & Test Skills
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Code

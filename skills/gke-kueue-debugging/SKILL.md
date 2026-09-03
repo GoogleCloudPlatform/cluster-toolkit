@@ -105,8 +105,8 @@ kubectl get clusterqueue <CLUSTER_QUEUE_NAME> -o jsonpath='{"=== FLAVORS RESERVA
 *Root Cause Check:*
 * **Head-of-Line (HOL) Blocking**: If `QueueingStrategy` is `StrictFIFO`, an inadmissible older job at the head of the queue blocks all newer jobs across the cluster even if quota is free! Inspect oldest pending workloads for this queue:
   ```bash
-  # Scoped to target queue (avoids cluster-wide workload noise)
-  kubectl get workloads -n <NAMESPACE> --field-selector spec.queueName=<QUEUE_NAME> --sort-by=.metadata.creationTimestamp -o custom-columns='NAME:.metadata.name,QUEUE:.spec.queueName,RESERVED:.status.conditions[?(@.type=="QuotaReserved")].status,CREATED:.metadata.creationTimestamp' | head -n 10
+  # In target namespace (sorted by creation timestamp to spot head-of-line blockers)
+  kubectl get workloads -n <NAMESPACE> --sort-by=.metadata.creationTimestamp -o custom-columns='NAME:.metadata.name,QUEUE:.spec.queueName,RESERVED:.status.conditions[?(@.type=="QuotaReserved")].status,CREATED:.metadata.creationTimestamp' | head -n 10
 
   # Or across all namespaces sharing this ClusterQueue
   kubectl get workloads -A --sort-by=.metadata.creationTimestamp -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,QUEUE:.spec.queueName,RESERVED:.status.conditions[?(@.type=="QuotaReserved")].status,CREATED:.metadata.creationTimestamp' | head -n 10
@@ -128,8 +128,8 @@ When `Reason: Inadmissible`, verify that the node pool hardware labels, taints, 
 # 1. Inspect ResourceFlavor definition, nodeLabels, nodeTaints, and TAS topology
 kubectl get resourceflavor <FLAVOR_NAME> -o jsonpath='{"Flavor: "}{.metadata.name}{"\nNodeLabels: "}{.spec.nodeLabels}{"\nNodeTaints: "}{.spec.nodeTaints}{"\nTolerations: "}{.spec.tolerations}{"\nTopologyName: "}{.spec.topologyName}{"\n"}'
 
-# 2. Universal GKE accelerator node inspection (server-filtered with client limit)
-kubectl get nodes -l 'cloud.google.com/gke-accelerator,cloud.google.com/gke-tpu-accelerator' -o custom-columns='NAME:.metadata.name,NODEPOOL:.metadata.labels.cloud\.google\.com/gke-nodepool,GPU:.metadata.labels.cloud\.google\.com/gke-accelerator,TPU:.metadata.labels.cloud\.google\.com/gke-tpu-accelerator,TPU_TOPOLOGY:.metadata.labels.cloud\.google\.com/gke-tpu-topology,TAINTS:.spec.taints' 2>/dev/null | head -n 25 || kubectl get nodes -o custom-columns='NAME:.metadata.name,NODEPOOL:.metadata.labels.cloud\.google\.com/gke-nodepool,TAINTS:.spec.taints' | head -n 25
+# 2. GKE accelerator node inspection (custom columns for GPU/TPU labels, taints, and nodepools)
+kubectl get nodes -o custom-columns='NAME:.metadata.name,NODEPOOL:.metadata.labels.cloud\.google\.com/gke-nodepool,GPU:.metadata.labels.cloud\.google\.com/gke-accelerator,TPU:.metadata.labels.cloud\.google\.com/gke-tpu-accelerator,TPU_TOPOLOGY:.metadata.labels.cloud\.google\.com/gke-tpu-topology,TAINTS:.spec.taints' | head -n 25
 
 # 3. Inspect requested accelerator resource types in the workload's PodSets
 kubectl get workload <WORKLOAD_NAME> -n <NAMESPACE> -o jsonpath='{range .spec.podSets[*]}{"PodSet: "}{.name}{" | Count: "}{.count}{" | Requests: "}{.template.spec.containers[*].resources.requests}{"\n"}{end}'
