@@ -5,7 +5,7 @@
   * [Pinning Specific Images](#pinning-specifics-images)
 * [Cluster Toolkit Supported Images](#cluster-toolkit-supported-images)
   * [HPC Rocky Linux 9](#hpc-rocky-linux-9)
-  * [Debian 11](#debian-11)
+  * [Debian 12](#debian-12)
   * [Ubuntu 22.04 LTS](#ubuntu-2204-lts)
   * [Windows](#windows)
   * [Other Images](#other-images)
@@ -71,7 +71,7 @@ blueprint:
         project: cloud-hpc-image-public
 
       instance_image:
-        family: debian-11
+        family: debian-12
         project: debian-cloud
 
       instance_image:
