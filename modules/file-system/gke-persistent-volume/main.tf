@@ -168,3 +168,19 @@ resource "kubectl_manifest" "pvc" {
   yaml_body  = local.pvc_content
   depends_on = [kubectl_manifest.pv, kubectl_manifest.pvc_namespace]
 }
+
+locals {
+  cluster_project_id = length(split("/", var.cluster_id)) > 1 ? split("/", var.cluster_id)[1] : null
+}
+
+data "google_project" "cluster_project" {
+  count      = local.has_gcsfuse_storage_profile && var.grant_gcsfuse_service_agent_role && var.gcs_bucket_name != null ? 1 : 0
+  project_id = local.cluster_project_id
+}
+
+resource "google_storage_bucket_iam_member" "gke_service_agent" {
+  count  = local.has_gcsfuse_storage_profile && var.grant_gcsfuse_service_agent_role && var.gcs_bucket_name != null ? 1 : 0
+  bucket = var.gcs_bucket_name
+  role   = var.gcsfuse_service_agent_role
+  member = "serviceAccount:service-${data.google_project.cluster_project[0].number}@container-engine-robot.iam.gserviceaccount.com"
+}
