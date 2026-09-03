@@ -93,12 +93,16 @@
     - name: "Run CHS suites"
       ansible.builtin.shell: |
         set -e -u
-        chs run -y --suite {{ item }}{% if scheduler == 'gke' and chs_nodepools is defined and chs_nodepools %} --nodepools {{ chs_nodepools }}{% elif scheduler == 'slurm' and chs_partitions is defined and chs_partitions %} --partitions {{ chs_partitions }}{% endif %}
+        chs run -y --suite {{ item }} {{ chs_target }}
       loop: "{{ chs_suites | default(['standard']) }}"
       register: chs_runs
       async: 3000
       poll: 10
       changed_when: false
+      vars:
+        target_flag: "{{ '--nodepools' if scheduler == 'gke' else '--partitions' }}"
+        target_val: "{{ (chs_nodepools if scheduler == 'gke' else chs_partitions) | default('') }}"
+        chs_target: "{{ target_flag + ' ' + target_val if target_val else '' }}"
 
     - name: CHS run output
       ansible.builtin.debug:
