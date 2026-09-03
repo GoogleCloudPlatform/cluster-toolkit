@@ -25,7 +25,6 @@ network: "{{ test_name }}"
 # Skipping nccl_test_path for now as it uses ramble
 sub_network: "{{ deployment_name }}-sub-0"
 scheduler: "slurm"
-instance_type: "a4x"
 chs_partitions: "a4x"
 post_deploy_tests:
 - test-validation/test-mounts.yml

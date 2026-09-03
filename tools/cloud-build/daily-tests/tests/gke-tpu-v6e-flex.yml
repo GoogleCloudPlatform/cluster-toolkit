@@ -47,7 +47,6 @@ custom_vars:
   expected_node_count: 4
   tpu_accelerator_type: tpu-v6e-slice
 
-instance_type: "tpuv6e"
 scheduler: "gke"
 chs_nodepools: "ct6e-standard-4t-tpunodepool"
 chs_suites:
