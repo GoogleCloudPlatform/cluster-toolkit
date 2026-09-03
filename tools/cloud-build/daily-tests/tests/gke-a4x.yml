@@ -25,6 +25,7 @@ extended_reservation: nvidia-gb200-jlr31fm12d525
 static_node_count: 2
 num_node_pools: 1
 instance_type: a4x
+scheduler: "gke"
 accelerator_type: nvidia-gb200
 num_gpus: 8
 k8s_service_account_name: workload-identity-k8s-sa
