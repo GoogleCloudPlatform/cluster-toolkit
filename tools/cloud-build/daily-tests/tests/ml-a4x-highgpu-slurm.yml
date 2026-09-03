@@ -30,6 +30,7 @@ post_deploy_tests:
 - test-validation/test-default-partition.yml
 - test-validation/test-enroot.yml
 - test-validation/test-gpus-slurm.yml
+- test-validation/test-chs.yml
 # Skipping test-nccl.yml for now
 post_destroy_tasks:
 - post-destroy-tasks/delete-image.yml

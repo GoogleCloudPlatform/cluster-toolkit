@@ -25,6 +25,7 @@ remote_node: "{{ hostname_prefix }}-0"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-nvidia-smi.yml
+- test-validation/test-chs.yml
 custom_vars:
   mounts:
   - /home
