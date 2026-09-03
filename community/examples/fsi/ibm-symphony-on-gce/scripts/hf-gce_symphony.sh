@@ -30,8 +30,8 @@ uv venv
 source .venv/bin/activate
 uv pip install .
 uv pip install pyinstaller
-PYTHONPATH=src pyinstaller --onefile src/gce_provider/__main__.py --name hf-gce --paths .venv/lib/python3.9/site-packages
-PYTHONPATH=src pyinstaller --onefile src/gce_provider/pubsub.py --name hf-monitor --paths .venv/lib/python3.9/site-packages
+PYTHONPATH=src pyinstaller --onefile src/gce_provider/__main__.py --name hf-gce --paths .venv/lib/python*/site-packages
+PYTHONPATH=src pyinstaller --onefile src/gce_provider/pubsub.py --name hf-monitor --paths .venv/lib/python*/site-packages
 
 cp dist/hf-gce resources/gce_cli/1.2/providerplugins/gcpgce/bin/
 cp dist/hf-monitor resources/gce_cli/1.2/providerplugins/gcpgce/bin/
