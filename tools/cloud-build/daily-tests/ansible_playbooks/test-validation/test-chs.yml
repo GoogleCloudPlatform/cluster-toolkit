@@ -100,9 +100,9 @@
       poll: 10
       changed_when: false
       vars:
-        target_flag: "{{ '--nodepools' if scheduler == 'gke' else '--partitions' }}"
-        target_val: "{{ (chs_nodepools if scheduler == 'gke' else chs_partitions) | default('') }}"
-        chs_target: "{{ target_flag + ' ' + target_val if target_val else '' }}"
+        target_flag: "{{ '--nodepools' if scheduler == 'gke' else ('--partitions' if scheduler == 'slurm' else '') }}"
+        target_val: "{{ (chs_nodepools if scheduler == 'gke' else (chs_partitions if scheduler == 'slurm' else '')) | default('') }}"
+        chs_target: "{{ target_flag + ' ' + target_val if (target_flag and target_val) else '' }}"
 
     - name: CHS run output
       ansible.builtin.debug:
