@@ -159,7 +159,7 @@ steps:
               echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/ml-a3-ultragpu-onspot-slurm.yaml"
               cd /workspace
 
-              DEPLOYMENT_NAME="a3usp-slurm-$$BUILD_ID_SHORT"
+              DEPLOYMENT_NAME="a3u-onspot-slurm-$$BUILD_ID_SHORT"
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
