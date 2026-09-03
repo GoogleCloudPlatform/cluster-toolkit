@@ -53,13 +53,13 @@ def auto_fix_resources(filepath):
     for step in data.get('steps', []):
         if 'args' in step:
             for i, arg in enumerate(step['args']):
-                if isinstance(arg, str) and 'cat <<' in arg and 'job.yaml' in arg:
+                if isinstance(arg, str) and re.search(r'cat\s*<<-?', arg) and 'job.yaml' in arg:
                     lines = arg.split('\n')
                     start_idx = -1
                     end_idx = -1
                     eof_marker = None
                     for j, line in enumerate(lines):
-                        match = re.search(r'cat <<\s*[\'"]?([A-Z_]+)[\'"]?\s*>.*job\.yaml', line)
+                        match = re.search(r'cat\s*<<-?\s*[\'"]?([A-Z_]+)[\'"]?\s*>.*job\.yaml', line)
                         if match:
                             start_idx = j + 1
                             eof_marker = match.group(1)

@@ -22,6 +22,10 @@ for cmd in gcloud kubectl; do
 	fi
 done
 
+TMP_KUBECONFIG=$(mktemp)
+export KUBECONFIG="$TMP_KUBECONFIG"
+trap 'rm -f "$TMP_KUBECONFIG"' EXIT
+
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 CONFIGS_DIR="$SCRIPT_DIR/../daily-tests/blueprints/test-infra-kueue/configs"
 CLUSTER_NAME="test-kueue-cluster"
@@ -41,8 +45,8 @@ for PROJECT in "${PROJECTS[@]}"; do
 	echo "Project: $PROJECT"
 	echo "==========================================="
 
-	# Check if cluster exists in this project without throwing a 404 error if it's missing
-	if gcloud container clusters list --region "$CLUSTER_REGION" --project "$PROJECT" --filter="name=$CLUSTER_NAME" --format="value(name)" | grep -q "^${CLUSTER_NAME}$"; then
+	cluster_found=$(gcloud container clusters list --region "$CLUSTER_REGION" --project "$PROJECT" --filter="name=$CLUSTER_NAME" --format="value(name)")
+	if [ "$cluster_found" == "$CLUSTER_NAME" ]; then
 		echo "Getting credentials for $CLUSTER_NAME in $PROJECT..."
 		if gcloud container clusters get-credentials "$CLUSTER_NAME" --region "$CLUSTER_REGION" --project "$PROJECT"; then
 			echo "Applying dummy-device-plugin..."

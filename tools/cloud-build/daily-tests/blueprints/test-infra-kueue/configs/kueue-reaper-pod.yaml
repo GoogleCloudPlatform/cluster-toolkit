@@ -126,7 +126,7 @@ spec:
       serviceAccountName: kueue-reaper-ksa
       containers:
       - name: reaper
-        image: gcr.io/google.com/cloudsdktool/cloud-sdk:latest
+        image: us-central1-docker.pkg.dev/hpc-toolkit-dev/hpc-toolkit-repo/test-runner:latest
         command: ["/bin/bash", "/scripts/reaper.sh"]
         volumeMounts:
         - name: script-volume
