@@ -25,6 +25,7 @@ controller_node: "{{ slurm_cluster_name }}-controller"
 network: "{{ test_name }}-net-0"
 scheduler: "slurm"
 instance_type: "a3-ultra"
+chs_partitions: "a3ultra"
 nccl_test_path: "examples/machine-learning/a3-ultragpu-8g/nccl-tests"
 post_deploy_tests:
 - test-validation/test-mounts.yml

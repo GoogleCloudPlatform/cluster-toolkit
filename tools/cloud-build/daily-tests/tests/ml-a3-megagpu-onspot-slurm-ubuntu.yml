@@ -27,6 +27,7 @@ nccl_test_path: "examples/machine-learning/a3-megagpu-8g/nccl-tests"
 sub_network: "{{ deployment_name }}-sub-net-0"
 scheduler: "slurm"
 instance_type: "a3-mega"
+chs_partitions: "a3mega"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml
