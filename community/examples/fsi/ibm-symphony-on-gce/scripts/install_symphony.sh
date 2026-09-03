@@ -55,7 +55,7 @@ yum install -y \
 
 # Add egoadmin user & configure
 
-useradd -G wheel -m egoadmin && echo egoadmin:Admin | chpasswd && echo "egoadmin ALL=(ALL) NOPASSWD: ALL" >>/etc/sudoers.d/symphony-cluster-admins
+useradd -G wheel -m egoadmin && echo egoadmin:Admin | chpasswd && echo "egoadmin ALL=(ALL) NOPASSWD: ALL" >>/etc/sudoers.d/symphony-cluster-admins && chmod 0440 /etc/sudoers.d/symphony-cluster-admins
 touch /var/run/utmp && chmod 664 /var/run/utmp && chown root:utmp /var/run/utmp
 echo LC_ALL=en_US.UTF-8 >/etc/locale.conf &&
 	LC_ALL=en_US.UTF-8 localedef -v -c -i en_US -f UTF-8 en_US.UTF-8 | true
