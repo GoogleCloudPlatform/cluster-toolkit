@@ -48,7 +48,7 @@ custom_vars:
   tpu_accelerator_type: tpu-v6e-slice
 
 scheduler: "gke"
-chs_nodepools: "ct6e-standard-4t-tpunodepool"
+chs_nodepools: "gke-tpu-v6e-pool"
 chs_suites:
 - lite
 - standard
