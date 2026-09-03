@@ -21,7 +21,7 @@ vars:
   deployment_name: test
   region: us-central1
   zone: us-central1-a
-  machine_type: e2-small
+  machine_type: n2d-standard-2
 
 
 deployment_groups:

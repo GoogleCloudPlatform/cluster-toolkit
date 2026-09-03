@@ -402,9 +402,15 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
-  confidential_nodes {
-    enabled                    = var.enable_confidential_nodes
-    confidential_instance_type = var.confidential_instance_type
+  # Emit the block only when enabled. The provider marks confidential_nodes
+  # ForceNew, so sending `enabled = false` to a cluster created without the
+  # block plans a full cluster replacement on every pre-existing cluster.
+  dynamic "confidential_nodes" {
+    for_each = var.enable_confidential_nodes ? [1] : []
+    content {
+      enabled                    = true
+      confidential_instance_type = var.confidential_instance_type
+    }
   }
 
 
@@ -798,4 +804,7 @@ resource "google_service_account_iam_member" "mtc_node_workload_identity" {
   service_account_id = "projects/${var.project_id}/serviceAccounts/${local.sa_email}"
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${replace(var.project_id, ":", "/")}.svc.id.goog[gke-managed-checkpointing/gke-checkpointing-multitier-node]"
+  depends_on = [
+    google_container_cluster.gke_cluster
+  ]
 }

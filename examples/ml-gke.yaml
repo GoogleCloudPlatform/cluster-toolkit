@@ -83,6 +83,7 @@ deployment_groups:
     settings:
       disk_type: pd-balanced
       machine_type: g2-standard-4
+      static_node_count: 1
 
   - id: nvidia_smi_job_template
     source: modules/compute/gke-job-template

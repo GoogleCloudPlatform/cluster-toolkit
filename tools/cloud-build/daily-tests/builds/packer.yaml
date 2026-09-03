@@ -45,7 +45,23 @@ steps:
     COPY . /workspace
     WORKDIR /workspace
     EOF
-    docker push us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
+
+    MAX_RETRIES=3
+    for i in $$(seq 1 $$MAX_RETRIES); do
+      echo "Push attempt $$i of $$MAX_RETRIES..."
+      if docker push us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID; then
+        echo "The image pushed successfully!"
+        break
+      fi
+
+      if [ "$$i" -eq "$$MAX_RETRIES" ]; then
+        echo "The image push failed after $$MAX_RETRIES attempts. (Check https://status.cloud.google.com/ for server outages)"
+        exit 1
+      fi
+
+      echo "The image push failed, retrying in 10 seconds..."
+      sleep 10
+    done
 
 # 2. Retrieve GCS Bucket name from Secret Manager and generate Job YAML
 - id: generate-job-manifest
@@ -169,36 +185,11 @@ steps:
   name: gcr.io/cloud-builders/gcloud
   entrypoint: /bin/bash
   allowFailure: true
+  env:
+  - 'PROJECT_ID=$PROJECT_ID'
+  - 'BUILD_ID=$BUILD_ID'
   args:
-  - -c
-  - |
-    set -eo pipefail
-    IMAGE="us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID"
-    MAX_RETRIES=5
-    RETRY_DELAY=10
-    ATTEMPT=1
-
-    echo "Starting cleanup for image: $$IMAGE"
-
-    while [ "$$ATTEMPT" -le "$$MAX_RETRIES" ]; do
-      echo "Attempt $$ATTEMPT of $$MAX_RETRIES..."
-
-      if gcloud artifacts docker images delete "$$IMAGE" --quiet; then
-        echo "Image successfully deleted."
-        exit 0
-      fi
-
-      if [ "$$ATTEMPT" -lt "$$MAX_RETRIES" ]; then
-        echo "Deletion failed. Retrying in $$RETRY_DELAY seconds..."
-        sleep $$RETRY_DELAY
-      fi
-
-      ATTEMPT=$$((ATTEMPT + 1))
-    done
-
-    echo "Failed to delete image after $$MAX_RETRIES attempts."
-    echo "Image will be handled by Artifact Registry background cleanup policies."
-    exit 1
+  - tools/cloud-build/image_cleanup.sh
 
 availableSecrets:
   secretManager:

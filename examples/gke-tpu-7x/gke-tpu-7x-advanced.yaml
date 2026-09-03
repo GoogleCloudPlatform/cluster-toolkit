@@ -159,6 +159,7 @@ deployment_groups:
       enable_managed_lustre_csi: true  # enable Managed Lustre for the cluster
       enable_filestore_csi: true # enable Filestore for the cluster
       enable_dataplane_v2: true
+      enable_private_ipv6_google_access: false
       configure_workload_identity_sa: true
       enable_ml_diagnostics: true
       namespace: $(vars.user_namespace)
