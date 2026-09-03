@@ -13,7 +13,7 @@
 # limitations under the License.
 
 ARG NEMOFW_VERSION=24.12
-ARG NCCL_GIB_VERSION=v1.1.2
+ARG NCCL_GIB_VERSION=v1.1.3
 
 # Stage 1: Use the nccl-plugin-gib container as an installer
 FROM us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:${NCCL_GIB_VERSION} AS nccl-gib
