@@ -128,6 +128,7 @@ populate_active_build_exclusions() {
 				log "WARNING" "Failed to create temporary kubeconfig; skipping active GKE Kueue job protection."
 				return 0
 			fi
+			local old_kubeconfig="${KUBECONFIG:-}"
 			export KUBECONFIG="$temp_kubeconfig"
 			trap 'rm -f "$temp_kubeconfig"' EXIT
 
@@ -142,31 +143,46 @@ populate_active_build_exclusions() {
 					continue
 				fi
 
-				local kueue_jobs
-				# Extracts running jobs (active>0) AND queued jobs (suspend==true)
-				if ! kueue_jobs=$(kubectl get jobs -A -l "kueue.x-k8s.io/queue-name" \
-					-o jsonpath='{range .items[?(@.status.active>0)]}{.metadata.name}{"\n"}{end}{range .items[?(@.spec.suspend==true)]}{.metadata.name}{"\n"}{end}' 2>/dev/null); then
+				local raw_jobs
+				# Use custom-columns instead of jsonpath to prevent crashes on missing conditions
+				if ! raw_jobs=$(kubectl get jobs -A -l "kueue.x-k8s.io/queue-name" \
+					--request-timeout=10s \
+					-o custom-columns="NAME:.metadata.name,SUCCEEDED:.status.succeeded,FAILED:.status.failed" \
+					--no-headers 2>/dev/null); then
 					log "WARNING" "Failed to list active GKE Kueue jobs on cluster ${cluster_name} (may be unreachable)."
 					continue
 				fi
 
-				if [[ -z "$kueue_jobs" ]]; then
-					log "INFO" "No active GKE Kueue jobs found on cluster ${cluster_name}."
+				if [[ -z "$raw_jobs" ]]; then
+					log "INFO" "No Kueue jobs found on cluster ${cluster_name}."
 				else
-					while IFS= read -r job_name; do
-						[[ -z "$job_name" ]] && continue
-						if [[ -z "${EXCLUSION_MAP[${job_name}]:-}" ]]; then
-							log "INFO" "Protecting service accounts matching active GKE Kueue job prefix: ${job_name} (cluster: ${cluster_name})"
-							EXCLUSION_MAP["${job_name}"]=1
+					while IFS= read -r line; do
+						[[ -z "$line" ]] && continue
+
+						local job_name succeeded failed
+						read -r job_name succeeded failed <<<"$line"
+
+						# In kubectl, empty numbers show up as "<none>"
+						# If a job hasn't succeeded and hasn't failed, it MUST be Running or Queued!
+						if [[ "$succeeded" =~ ^(<none>|0)$ && "$failed" =~ ^(<none>|0)$ ]]; then
+							if [[ -z "${EXCLUSION_MAP[${job_name}]:-}" ]]; then
+								log "INFO" "Protecting active/queued Kueue job: ${job_name} (cluster: ${cluster_name})"
+								EXCLUSION_MAP["${job_name}"]=1
+							fi
 						fi
-					done <<<"$kueue_jobs"
+					done <<<"$raw_jobs"
 				fi
+
 			done <<<"$all_clusters"
 
 			# Clean up the temporary kubeconfig file
 			rm -f "$temp_kubeconfig"
 			trap - EXIT
-			unset KUBECONFIG
+			if [[ -n "$old_kubeconfig" ]]; then
+				export KUBECONFIG="$old_kubeconfig"
+			else
+				unset KUBECONFIG
+			fi
 		fi
 	fi
 
