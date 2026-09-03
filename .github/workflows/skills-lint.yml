@@ -1,0 +1,80 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+name: 'Skills Lint and Schema Validation'
+
+# yamllint disable-line rule:truthy
+on:
+  pull_request:
+    types:
+    - opened
+    - reopened
+    - synchronize
+    branches:
+    - main
+    - develop
+    - release-candidate-*
+    - hotfix-*
+    paths:
+    - "skills/**"
+    - "tools/run_eval.py"
+    - "tools/tests/test_run_eval.py"
+    - ".github/workflows/skills-lint.yml"
+    - ".pre-commit-config.yaml"
+    - "Makefile"
+  push:
+    branches:
+    - main
+    - develop
+    paths:
+    - "skills/**"
+    - "tools/run_eval.py"
+    - "tools/tests/test_run_eval.py"
+    - ".github/workflows/skills-lint.yml"
+    - ".pre-commit-config.yaml"
+    - "Makefile"
+
+permissions:
+  contents: read
+
+jobs:
+  skills-lint:
+    name: Lint Skills & Validate Schemas (Tier 1)
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      with:
+        persist-credentials: false
+
+    - name: Set up Python
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      with:
+        python-version: '3.12'
+        check-latest: true
+
+    - name: Install Dependencies
+      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install 'pyyaml>=6.0.1'
+
+    - name: Run Skills Frontmatter Linting
+      run: python3 tools/run_eval.py --lint-only --all
+
+    - name: Run Skills Deterministic Evaluation
+      run: python3 tools/run_eval.py --all
+
+    - name: Run Skills Test Runner Unit Tests
+      run: python3 tools/tests/test_run_eval.py
