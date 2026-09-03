@@ -1,0 +1,274 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: clusterb
+
+vars:
+  project_id: # <project-id> e.g., eu0:<project-id> or gcd-project
+  deployment_name: clusterb
+  region: us-central1
+  zone: us-central1-a
+  universe_domain: # apis-<location>.goog e.g., apis-berlin-build0.goog, thp000.goog
+  service_account_email: # <account-id>-compute@developer.gserviceaccount.com
+  nfs_server_ip: # <IP_OF_CLUSTERA_NFS_SERVER> e.g., 10.128.0.X or internal DNS name
+  clustera_controller_ip: "" # (Optional) <IP_OF_CLUSTERA_CONTROLLER> e.g., 10.128.0.3
+
+  # Instance & Image Settings (Reusing built image from Cluster A)
+  image_build_machine_type: c3-standard-4
+  built_instance_image:
+    family: slurm-c3-rocky8
+    project: $(vars.project_id)
+
+terraform_providers:
+  google:
+    source: hashicorp/google
+    version: '>= 5.45.0'
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+      universe_domain: $(vars.universe_domain)
+  google-beta:
+    source: hashicorp/google-beta
+    version: '>= 5.45.0'
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+      universe_domain: $(vars.universe_domain)
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/pre-existing-vpc
+    settings:
+      network_name: clusterb-net
+      subnetwork_name: clusterb-subnet
+
+  # Mount Cluster A's Shared NFS Server for /home
+  - id: homefs
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      server_ip: $(vars.nfs_server_ip)
+      remote_mount: /exports/home
+      local_mount: /home
+      fs_type: nfs
+
+  # Mount Cluster A's Shared NFS Server for /opt/apps
+  - id: appsfs
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      server_ip: $(vars.nfs_server_ip)
+      remote_mount: /exports/opt/apps
+      local_mount: /opt/apps
+      fs_type: nfs
+
+  - id: ssh_config
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: false
+      runners:
+      - type: shell
+        destination: setup_non_oslogin_ssh.sh
+        content: |
+          #!/bin/bash
+          # 1. SELinux & Crypto Policy for Rocky Linux 8/9
+          setsebool -P use_nfs_home_dirs 1 || true
+          update-crypto-policies --set DEFAULT:SHA1 || true
+
+          # 2. Populate metadata keys and secure inter-node keypair on NFS /home
+          METADATA="http://metadata.google.internal/computeMetadata/v1"
+          PROJ_KEYS=`curl -s -f -H "Metadata-Flavor: Google" "$METADATA/project/attributes/ssh-keys" 2>/dev/null || true`
+          INST_KEYS=`curl -s -f -H "Metadata-Flavor: Google" "$METADATA/instance/attributes/ssh-keys" 2>/dev/null || true`
+          KEYS=`printf "%s\n%s\n" "$PROJ_KEYS" "$INST_KEYS" | grep -v '^[[:space:]]*$' | sort -u`
+
+          for user in `echo "$KEYS" | cut -d: -f1 | sort -u`; do
+            [ -z "$user" ] && continue
+
+            # Create group and user with deterministic UID/GID to ensure consistency across the cluster
+            if ! id "$user" &>/dev/null; then
+              UID_HASH=`printf "%s" "$user" | cksum | cut -d' ' -f1`
+              USER_UID=`expr 2000 + $UID_HASH % 58000`
+              groupadd -g "$USER_UID" "$user" || true
+              useradd -u "$USER_UID" -g "$USER_UID" -m -s /bin/bash "$user"
+            fi
+            mkdir -p "/home/$user/.ssh"
+            chown "$user:$user" "/home/$user"
+            chmod 700 "/home/$user/.ssh"
+
+            # Safely serialize key generation & authorized_keys rebuilding across the cluster
+            (
+              flock 9
+
+              # Generate ED25519 cluster key natively
+              if [ ! -f "/home/$user/.ssh/id_ed25519" ]; then
+                ssh-keygen -t ed25519 -N "" -f "/home/$user/.ssh/id_ed25519"
+              fi
+
+              # Rebuild authorized_keys atomically on the exact same NFS filesystem (prevents O_TRUNC zeroing)
+              TMP_KEYS=`mktemp "/home/$user/.ssh/authorized_keys.XXXXXX"`
+              if [ -n "$TMP_KEYS" ] && [ -f "$TMP_KEYS" ]; then
+                echo "$KEYS" | grep "^$user:" | cut -d: -f2- > "$TMP_KEYS"
+                [ -f "/home/$user/.ssh/id_ed25519.pub" ] && cat "/home/$user/.ssh/id_ed25519.pub" >> "$TMP_KEYS"
+                mv -f "$TMP_KEYS" "/home/$user/.ssh/authorized_keys"
+              fi
+
+            ) 9>"/home/$user/.ssh/keygen.lock"
+
+            # Secure remaining permissions to the user
+            chown -R "$user:$user" "/home/$user/.ssh"
+            chmod 600 "/home/$user/.ssh/"*
+          done
+
+          # 3. Disable StrictHostKeyChecking safely for internal network jumps only
+          if ! grep -q "Host 10.\*" /etc/ssh/ssh_config; then
+            if ! grep -q "StrictHostKeyChecking no" /etc/ssh/ssh_config; then
+              echo -e "Host 10.* 172.16.* 192.168.* *.internal\n    StrictHostKeyChecking no\n    UserKnownHostsFile=/dev/null" >> /etc/ssh/ssh_config
+            fi
+          fi
+
+          # 4. Restart sshd and silence ops-agent in GCD sovereign cloud
+          systemctl restart sshd
+          systemctl stop google-cloud-ops-agent 2>/dev/null || true
+          systemctl disable google-cloud-ops-agent 2>/dev/null || true
+
+          # 5. On Cluster B Controller: Synchronously import Cluster A's master key and configure accounting host
+          if hostname | grep -q controller; then
+            KEY_SRC=""
+            for i in `seq 1 60`; do
+              for f in /home/.shared_slurm.key /home/shared_slurm.key; do
+                [ -s "$f" ] && KEY_SRC="$f" && break 2
+              done
+              sleep 1
+            done
+            if [ -n "$KEY_SRC" ]; then
+              mkdir -p /etc/slurm /var/spool/slurm /slurm/key_distribution
+              cp -f "$KEY_SRC" /etc/slurm/slurm.key
+              cp -f "$KEY_SRC" /var/spool/slurm/slurm.key
+              cp -f "$KEY_SRC" /slurm/key_distribution/slurm.key
+              chown -R slurm:slurm /etc/slurm/slurm.key /var/spool/slurm/slurm.key /slurm/key_distribution/slurm.key
+              chmod 400 /etc/slurm/slurm.key /var/spool/slurm/slurm.key /slurm/key_distribution/slurm.key
+            fi
+
+            A_CTRL_IP="$(vars.clustera_controller_ip)"
+            if [ -z "$A_CTRL_IP" ]; then
+              for i in `seq 1 60`; do
+                for f in /home/.cluster_a_ctrl_ip /home/cluster_a_ctrl_ip; do
+                  [ -s "$f" ] && A_CTRL_IP=`cat "$f" 2>/dev/null | tr -d '[:space:]'` && break 2
+                done
+                sleep 1
+              done
+            fi
+
+            if [ -n "$A_CTRL_IP" ]; then
+              for i in `seq 1 60`; do
+                [ -s /etc/slurm/slurm.conf ] && break
+                sleep 1
+              done
+              if [ -s /etc/slurm/slurm.conf ] && ! grep -q "AccountingStorageExternalHost" /etc/slurm/slurm.conf; then
+                echo "AccountingStorageExternalHost=$A_CTRL_IP:6819" >> /etc/slurm/slurm.conf
+                scontrol reconfigure 2>/dev/null || true
+              fi
+            fi
+          fi
+
+          # 6. On Cluster B Login: Import Cluster A's master key and configure slurm config link
+          if hostname | grep -q login; then
+            mkdir -p /usr/local/etc && ln -sfn /etc/slurm /usr/local/etc/slurm
+            KEY_SRC=""
+            for f in /home/.shared_slurm.key /home/shared_slurm.key; do
+              [ -s "$f" ] && KEY_SRC="$f" && break
+            done
+            if [ -n "$KEY_SRC" ]; then
+              cp -f "$KEY_SRC" /etc/slurm/slurm.key 2>/dev/null || true
+              chown slurm:slurm /etc/slurm/slurm.key 2>/dev/null || true
+              chmod 400 /etc/slurm/slurm.key 2>/dev/null || true
+            fi
+          fi
+
+          # 7. On Cluster B Controller: Patch GCD private universe batch execute hang and state disk idempotency
+          if hostname | grep -q controller; then
+            python3 -c "import re; p='/slurm/scripts/util.py'; c=open(p).read(); 'concurrent.futures.ThreadPoolExecutor' not in c and open(p,'w').write(re.sub(r'def batch_execute\(.*?\n(?=\ndef |\Z)', 'def batch_execute(requests, retry_cb=None, log_err=log.error):\n    import concurrent.futures\n    if not isinstance(requests, dict):\n        requests = {str(k): v for k, v in enumerate(requests)}\n    done, failed = {}, {}\n    with concurrent.futures.ThreadPoolExecutor(max_workers=32) as exe:\n        future_to_rid = {exe.submit(ensure_execute, req): rid for rid, req in requests.items()}\n        for future in concurrent.futures.as_completed(future_to_rid):\n            rid = future_to_rid[future]\n            try:\n                done[rid] = future.result()\n            except Exception as e:\n                failed[rid] = (requests[rid], e)\n    return done, failed\n\n', c, flags=re.DOTALL))" 2>/dev/null || true
+            python3 -c "import re; p='/slurm/scripts/setup.py'; c=open(p).read(); 'mountpoint' not in c and open(p,'w').write(re.sub(r'util\.run\(f\"mount \{mount_point\}\"\)', 'util.run(f\"mountpoint -q {mount_point} || mount {mount_point}\", shell=True)', c))" 2>/dev/null || true
+          fi
+
+  # Dynamic Elastic Bursting Nodeset (c3-standard-176)
+  - id: burst_b_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, ssh_config]
+    settings:
+      node_count_static: 0
+      node_count_dynamic_max: 16  # Elastic autoscaling nodes
+      machine_type: c3-standard-176
+      disk_type: hyperdisk-balanced
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+      # reservation_name: c3-16node-reservation
+      # If not using reservation:
+      # enable_placement: true
+      # placement_max_distance: 2
+      instance_image:
+        family: $(vars.built_instance_image.family)
+        project: $(vars.project_id)
+      instance_image_custom: true
+      service_account_email: $(vars.service_account_email)
+      service_account_scopes: &id001
+      - https://www.googleapis.com/auth/cloud-platform
+      enable_oslogin: false
+
+  - id: burst_b_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [burst_b_nodeset]
+    settings:
+      partition_name: burst
+      is_default: true
+      exclusive: false
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network, ssh_config]
+    settings:
+      machine_type: $(vars.image_build_machine_type)
+      disk_type: hyperdisk-balanced
+      enable_login_public_ips: true
+      instance_image:
+        family: $(vars.built_instance_image.family)
+        project: $(vars.project_id)
+      instance_image_custom: true
+      service_account_email: $(vars.service_account_email)
+      service_account_scopes: *id001
+      enable_oslogin: false
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, burst_b_partition, homefs, appsfs, slurm_login]
+    settings:
+      controller_startup_script: $(ssh_config.controller_startup_script)
+      machine_type: $(vars.image_build_machine_type)
+      disk_type: hyperdisk-balanced
+      controller_state_disk:
+        type: hyperdisk-balanced
+        size: 50
+      enable_controller_public_ips: false
+      instance_image:
+        family: $(vars.built_instance_image.family)
+        project: $(vars.project_id)
+      instance_image_custom: true
+      service_account_email: $(vars.service_account_email)
+      service_account_scopes: *id001
+      enable_default_mounts: false
+      enable_slurm_auth: true
+      enable_oslogin: false

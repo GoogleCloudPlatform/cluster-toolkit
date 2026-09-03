@@ -81,6 +81,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
   * [hpc-slurm-google-cloud-dedicated.yaml](#hpc-slurm-google-cloud-dedicatedyaml-) ![community-badge]
+  * [slurm-hybrid-cloud-burst](#slurm-hybrid-cloud-burst-) ![community-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1849,6 +1850,14 @@ Creates a Slurm cluster on C3 machine types for Google Cloud Dedicated (GCD) and
 The deployment instructions can be found in the [README](../community/examples/hpc-slurm-google-cloud-dedicated/README.md).
 
 [hpc-slurm-google-cloud-dedicated.yaml]: ../community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml
+
+### [slurm-hybrid-cloud-burst] ![community-badge]
+
+Deploys a Multi-Cluster Slurm environment with Elastic Cloud Bursting across two autonomous projects in commercial Google Cloud Platform (GCP) or sovereign Google Cloud Dedicated (GCD). Includes cross-cluster SAuth discovery, automatic compute nodes autoscaling on Cluster B, and shared `/home` filesystem mounting over VPC peering.
+
+The deployment instructions can be found in the [README](../community/examples/slurm-hybrid-cloud-burst/README.md) and sovereign GCD [README](../community/examples/slurm-hybrid-cloud-burst/GCD/README.md).
+
+[slurm-hybrid-cloud-burst]: ../community/examples/slurm-hybrid-cloud-burst/README.md
 
 ## Blueprint Schema
 
