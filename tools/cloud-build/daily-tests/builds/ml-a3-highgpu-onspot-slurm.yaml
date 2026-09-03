@@ -69,7 +69,7 @@ steps:
 - id: generate-job-manifest
   name: gcr.io/cloud-builders/gcloud
   entrypoint: /bin/bash
-  secretEnv: ['SA_EMAIL', 'GCLUSTER_GCS_PATH', 'TCPX_KERNEL_LOGIN', 'TCPX_KERNEL_PASSWORD', 'KEYSERVER_UBUNTU_KEY', 'TRIAGE_GCS_BUCKET', 'TRIAGE_PROJECT_NUMBER', 'TRIAGE_INVOKER_SA', 'TRIAGE_CLOUD_RUN_URL']
+  secretEnv: ['SA_EMAIL', 'GCLUSTER_GCS_PATH', 'TCPX_KERNEL_LOGIN', 'TCPX_KERNEL_PASSWORD', 'KEYSERVER_UBUNTU_KEY']
   args:
   - -c
   - |
@@ -149,14 +149,6 @@ steps:
               value: "$$TCPX_KERNEL_PASSWORD"
             - name: KEYSERVER_UBUNTU_KEY
               value: "$$KEYSERVER_UBUNTU_KEY"
-            - name: TRIAGE_GCS_BUCKET
-              value: "$$TRIAGE_GCS_BUCKET"
-            - name: TRIAGE_PROJECT_NUMBER
-              value: "$$TRIAGE_PROJECT_NUMBER"
-            - name: TRIAGE_INVOKER_SA
-              value: "$$TRIAGE_INVOKER_SA"
-            - name: TRIAGE_CLOUD_RUN_URL
-              value: "$$TRIAGE_CLOUD_RUN_URL"
             command: ["/bin/bash", "-c"]
             args:
             - |
@@ -208,11 +200,7 @@ steps:
                 --extra-vars="region=\$$REGION zone=\$$ZONE" \
                 --extra-vars="enable_spot=\$$ENABLE_SPOT" \
                 --extra-vars="tcpx_kernel_login=\$$TCPX_KERNEL_LOGIN tcpx_kernel_password=\$$TCPX_KERNEL_PASSWORD keyserver_ubuntu_key=\$$KEYSERVER_UBUNTU_KEY" \
-                --extra-vars="@\$$SLURM_VARS_FILE" \
-                --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
-                --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
-                --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
-                --extra-vars="triage_cloud_run_url_override=$$TRIAGE_CLOUD_RUN_URL" &
+                --extra-vars="@\$$SLURM_VARS_FILE" &
               ANSIBLE_PID=\$$!
 
               wait \$$ANSIBLE_PID
@@ -258,14 +246,6 @@ availableSecrets:
     env: 'SA_EMAIL'
   - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
     env: 'GCLUSTER_GCS_PATH'
-  - versionName: projects/${PROJECT_ID}/secrets/triage-gcs-bucket/versions/latest
-    env: 'TRIAGE_GCS_BUCKET'
-  - versionName: projects/${PROJECT_ID}/secrets/triage-project-number/versions/latest
-    env: 'TRIAGE_PROJECT_NUMBER'
-  - versionName: projects/${PROJECT_ID}/secrets/triage-invoker-sa/versions/latest
-    env: 'TRIAGE_INVOKER_SA'
-  - versionName: projects/${PROJECT_ID}/secrets/triage-cloud-run-url/versions/latest
-    env: 'TRIAGE_CLOUD_RUN_URL'
   - versionName: projects/${PROJECT_ID}/secrets/tcpx-kernel-ppa-login/versions/latest
     env: 'TCPX_KERNEL_LOGIN'
   - versionName: projects/${PROJECT_ID}/secrets/tcpx-kernel-ppa-password/versions/latest

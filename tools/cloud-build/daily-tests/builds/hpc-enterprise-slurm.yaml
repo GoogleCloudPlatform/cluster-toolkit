@@ -69,7 +69,7 @@ steps:
 - id: generate-job-manifest
   name: gcr.io/cloud-builders/gcloud
   entrypoint: /bin/bash
-  secretEnv: ['SA_EMAIL', 'GCLUSTER_GCS_PATH', 'TRIAGE_GCS_BUCKET', 'TRIAGE_PROJECT_NUMBER', 'TRIAGE_INVOKER_SA', 'TRIAGE_CLOUD_RUN_URL']
+  secretEnv: ['SA_EMAIL', 'GCLUSTER_GCS_PATH']
   args:
   - -c
   - |
@@ -111,6 +111,8 @@ steps:
           - name: runner
             image: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
             env:
+            - name: PROJECT_ID
+              value: "$PROJECT_ID"
             - name: BUILD_ID
               value: "$BUILD_ID"
             - name: ANSIBLE_HOST_KEY_CHECKING
@@ -121,14 +123,6 @@ steps:
               value: "${_TEST_PREFIX}"
             - name: GCLUSTER_GCS_PATH
               value: "$$GCLUSTER_GCS_PATH"
-            - name: TRIAGE_GCS_BUCKET
-              value: "$$TRIAGE_GCS_BUCKET"
-            - name: TRIAGE_PROJECT_NUMBER
-              value: "$$TRIAGE_PROJECT_NUMBER"
-            - name: TRIAGE_INVOKER_SA
-              value: "$$TRIAGE_INVOKER_SA"
-            - name: TRIAGE_CLOUD_RUN_URL
-              value: "$$TRIAGE_CLOUD_RUN_URL"
             command: ["/bin/bash", "-c"]
             args:
             - |
@@ -157,11 +151,7 @@ steps:
                 --extra-vars="test_prefix=${_TEST_PREFIX}" \
                 --extra-vars="use_fixed_vpc=true" \
                 --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
-                --extra-vars="@tools/cloud-build/daily-tests/tests/hpc-enterprise-slurm.yml" \
-                --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
-                --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
-                --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
-                --extra-vars="triage_cloud_run_url_override=$$TRIAGE_CLOUD_RUN_URL" &
+                --extra-vars="@tools/cloud-build/daily-tests/tests/hpc-enterprise-slurm.yml" &
               ANSIBLE_PID=\$$!
 
               wait \$$ANSIBLE_PID
@@ -204,11 +194,3 @@ availableSecrets:
     env: 'SA_EMAIL'
   - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
     env: 'GCLUSTER_GCS_PATH'
-  - versionName: projects/${PROJECT_ID}/secrets/triage-gcs-bucket/versions/latest
-    env: 'TRIAGE_GCS_BUCKET'
-  - versionName: projects/${PROJECT_ID}/secrets/triage-project-number/versions/latest
-    env: 'TRIAGE_PROJECT_NUMBER'
-  - versionName: projects/${PROJECT_ID}/secrets/triage-invoker-sa/versions/latest
-    env: 'TRIAGE_INVOKER_SA'
-  - versionName: projects/${PROJECT_ID}/secrets/triage-cloud-run-url/versions/latest
-    env: 'TRIAGE_CLOUD_RUN_URL'

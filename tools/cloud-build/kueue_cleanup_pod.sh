@@ -49,7 +49,7 @@ cleanup_pod() {
 		echo "      file: tools/cloud-build/daily-tests/ansible_playbooks/tasks/rescue_gcluster_failure.yml"
 	} >/workspace/cleanup-playbook.yml
 
-	ansible-playbook /workspace/cleanup-playbook.yml -e deployment_name="$DEPLOYMENT_NAME" -e workspace="/workspace" || true
+	ansible-playbook /workspace/cleanup-playbook.yml -e deployment_name="$DEPLOYMENT_NAME" -e workspace="/workspace" -e project="$PROJECT_ID" -e full_build_id="$BUILD_ID" || true
 
 	echo "Graceful cleanup finished."
 	exit $exit_code
