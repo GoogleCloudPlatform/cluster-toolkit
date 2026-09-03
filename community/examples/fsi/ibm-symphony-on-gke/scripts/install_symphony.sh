@@ -96,7 +96,7 @@ SYM_FIXPACK_DIR="/opt/ibm/${SYM_FIXPACK_NAME}"
 export SYM_FIXPACK_DIR
 
 mkdir -p "${SYM_FIXPACK_DIR}"
-chmod 770 "${SYM_FIXPACK_DIR}"
+chmod 755 "${SYM_FIXPACK_DIR}"
 tar -xf "${SYM_FIXPACK_PATH}" -C "${SYM_FIXPACK_DIR}"
 chmod u+r "${SYM_FIXPACK_DIR}"/*
 chmod a+x "${SYM_FIXPACK_DIR}"/*.sh
