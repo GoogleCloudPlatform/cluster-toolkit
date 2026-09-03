@@ -49,6 +49,7 @@ custom_vars:
 
 instance_type: "tpuv6e"
 scheduler: "gke"
+chs_nodepools: "ct6e-standard-4t-tpunodepool"
 chs_suites:
 - lite
 - standard
