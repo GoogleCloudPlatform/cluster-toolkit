@@ -895,6 +895,38 @@ def test_is_node_mig():
     assert lkp_cluster.is_node_mig("testcl-ns_mig_cluster-0")
     assert not lkp_cluster.is_node_mig("testcl-ns_bulk_override-0")
 
+    # Cross-NodeSet Isolation: Legacy NodeSet without provisioning_engine in a hybrid cluster
+    cfg_hybrid = TstCfg(
+        slurm_cluster_name="testcl",
+        provisioning_engine="AUTO",
+        nodeset={
+            "ns_mig": TstNodeset(nodeset_name="ns_mig", mig_name="testcl-ns_mig-mig-0", provisioning_engine="MIG"),
+            "ns_legacy": TstNodeset(nodeset_name="ns_legacy"),  # No provisioning_engine field
+        }
+    )
+    lkp_hybrid = util.Lookup(cfg_hybrid)
+    assert lkp_hybrid.is_nodeset_mig("ns_mig")
+    assert not lkp_hybrid.is_nodeset_mig("ns_legacy")
+    assert lkp_hybrid.is_node_mig("testcl-ns_mig-0")
+    assert not lkp_hybrid.is_node_mig("testcl-ns_legacy-0")
+
+
+def test_get_mig_repairing_instances_empty_filter():
+    cfg = TstCfg(slurm_cluster_name="testcl")
+    lkp = util.Lookup(cfg)
+    lkp.get_mig_instances = unittest.mock.MagicMock(return_value={
+        "managedInstances": [
+            {"currentAction": "REPAIRING", "name": "node-1"},
+            {"currentAction": "RECREATING", "instance": "https://.../instances/node-2"},
+            {"currentAction": "RESTARTING", "name": "node-4"},
+            {"currentAction": "REPAIRING", "name": None, "instance": None},  # Ephemeral unassigned
+            {"currentAction": "NONE", "name": "node-3"},
+        ]
+    })
+    res = lkp.get_mig_repairing_instances("p", "r", "mig-0")
+    assert res == {"node-1", "node-2", "node-4"}
+    assert "" not in res
+
 
 def test_is_provisioning_flex_node(monkeypatch):
     cfg = TstCfg(
@@ -1028,8 +1060,8 @@ def test_suspend_mig_nodes_multi_mig(mock_compute_prop, mock_execute):
         ]
     }
 
-    # Pass an absent node "testcl-large_ns-999" along with active nodes and FQDN; it must be mapped and skipped safely
-    suspend.suspend_mig_nodes(["testcl-large_ns-0.c.testproj.internal", "testcl-large_ns-999", "testcl-large_ns-1005"], lkp=lkp)
+    # Pass duplicate entries ("testcl-large_ns-0" twice) and absent node "testcl-large_ns-999"; duplicates and absent nodes must be safely handled
+    suspend.suspend_mig_nodes(["testcl-large_ns-0.c.testproj.internal", "testcl-large_ns-0", "testcl-large_ns-999", "testcl-large_ns-1005"], lkp=lkp)
 
     delete_calls = mock_compute.regionInstanceGroupManagers().deleteInstances.call_args_list
     assert len(delete_calls) == 2
@@ -1042,12 +1074,18 @@ def test_suspend_mig_nodes_multi_mig(mock_compute_prop, mock_execute):
     assert delete_calls[1].kwargs["body"]["instances"] == ["projects/testproj/zones/us-central1-a/instances/testcl-large_ns-1005"]
     assert delete_calls[1].kwargs["body"]["skipInstancesOnValidationError"] is True
 
+    pic_del_calls = mock_compute.regionInstanceGroupManagers().deletePerInstanceConfigs.call_args_list
+    assert len(pic_del_calls) == 2
+    assert pic_del_calls[0].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-0"
+    assert set(pic_del_calls[0].kwargs["body"]["names"]) == {"testcl-large_ns-0", "testcl-large_ns-999"}
+    assert pic_del_calls[1].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-1"
+    assert set(pic_del_calls[1].kwargs["body"]["names"]) == {"testcl-large_ns-1005"}
 
-@unittest.mock.patch.object(util.Lookup, "node_state", return_value=None)
+
 @unittest.mock.patch.object(util.Lookup, "instance", return_value=None)
 @unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
 @unittest.mock.patch("slurmsync.lookup")
-def test_slurmsync_mig_auto_repair(mock_lookup, mock_compute_prop, mock_inst, mock_state):
+def test_slurmsync_mig_auto_repair(mock_lookup, mock_compute_prop, mock_inst):
     import slurmsync
 
     cfg = TstCfg(
@@ -1073,11 +1111,31 @@ def test_slurmsync_mig_auto_repair(mock_lookup, mock_compute_prop, mock_inst, mo
     # Verify set cache
     assert lkp.get_mig_repairing_instances("testproj", "us-central1", "testcl-ns-mig-0") == {"testcl-ns-0", "testcl-ns-1"}
 
-    action0 = slurmsync.get_node_action("testcl-ns-0")
-    assert isinstance(action0, slurmsync.NodeActionDown)
-    assert "MIG Auto-Healing" in action0.reason
+    # When node exists in Slurm and is IDLE (not DOWN) -> NodeActionDown
+    with unittest.mock.patch.object(util.Lookup, "node_state", return_value=slurmsync.NodeState(base="IDLE", flags=frozenset())):
+        action0 = slurmsync.get_node_action("testcl-ns-0")
+        assert isinstance(action0, slurmsync.NodeActionDown)
+        assert "MIG Auto-Healing" in action0.reason
 
-    # Test resolution when API returns 'name' field
-    action1 = slurmsync.get_node_action("testcl-ns-1.c.testproj.internal")
-    assert isinstance(action1, slurmsync.NodeActionDown)
-    assert "MIG Auto-Healing" in action1.reason
+        # Test resolution when API returns 'name' field
+        action1 = slurmsync.get_node_action("testcl-ns-1.c.testproj.internal")
+        assert isinstance(action1, slurmsync.NodeActionDown)
+        assert "MIG Auto-Healing" in action1.reason
+
+    # When node does not exist in Slurm (node_state returns None) -> NodeActionUnchanged (don't run scontrol on invalid node)
+    with unittest.mock.patch.object(util.Lookup, "node_state", return_value=None):
+        action_none = slurmsync.get_node_action("testcl-ns-0")
+        assert isinstance(action_none, slurmsync.NodeActionUnchanged)
+
+    # When node was marked DOWN due to auto-healing and instance is now RUNNING -> NodeActionIdle
+    with unittest.mock.patch.object(util.Lookup, "instance", return_value=unittest.mock.MagicMock(status="RUNNING")):
+        with unittest.mock.patch.object(util.Lookup, "node_state", return_value=slurmsync.NodeState(base="DOWN", flags=frozenset())):
+            with unittest.mock.patch("slurmsync.get_node_reason", return_value="MIG Auto-Healing instance repair in progress") as mock_get_reason:
+                action_recovered = slurmsync.get_node_action("testcl-ns-2")
+                assert isinstance(action_recovered, slurmsync.NodeActionIdle)
+                mock_get_reason.assert_called_with("testcl-ns-2")
+
+                # Verify FQDN is normalized to short name when calling get_node_reason
+                action_recovered_fqdn = slurmsync.get_node_action("testcl-ns-2.c.testproj.internal")
+                assert isinstance(action_recovered_fqdn, slurmsync.NodeActionIdle)
+                mock_get_reason.assert_called_with("testcl-ns-2")

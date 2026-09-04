@@ -1812,7 +1812,7 @@ class Lookup:
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
 
     def is_mig_engine(self) -> bool:
-        """Returns True if the cluster deployment is configured with provisioning_engine == 'MIG'."""
+        """Returns True if the cluster deployment default is configured with provisioning_engine == 'MIG'."""
         return getattr(self.cfg, "provisioning_engine", "BULK_INSERT") == "MIG"
 
     def is_nodeset_mig(self, nodeset_name: str) -> bool:
@@ -2078,11 +2078,13 @@ class Lookup:
     def get_mig_repairing_instances(self, project: str, region: str, self_link: str) -> Set[str]:
         """Returns the set of instance names currently in REPAIRING state in a given MIG."""
         mig_insts = self.get_mig_instances(project, region, self_link)
-        return {
-            (m_inst.get("name") or m_inst.get("instance", "").split("/")[-1])
-            for m_inst in mig_insts.get("managedInstances", [])
-            if m_inst.get("currentAction") == "REPAIRING"
-        }
+        repairing: Set[str] = set()
+        for m_inst in mig_insts.get("managedInstances", []):
+            if m_inst.get("currentAction") in ("REPAIRING", "RESTARTING", "RECREATING"):
+                name = m_inst.get("name") or (m_inst.get("instance") or "").split("/")[-1]
+                if name:
+                    repairing.add(name)
+        return repairing
 
     @lru_cache()
     def get_mig_list(self, project: str, region: str) -> Any:
@@ -2441,7 +2443,7 @@ class Lookup:
             if not template:
                 continue
             creating_count = mig.get("currentActions", {}).get("creating", 0) if mig.get("currentActions") else 0
-            if template == self.node_template(short_name) and creating_count > 0:
+            if trim_self_link(template) == trim_self_link(self.node_template(short_name)) and creating_count > 0:
                 potential_migs.append(self.get_mig_instances(self.project, region, trim_self_link(mig["selfLink"])))
 
         if not potential_migs:
@@ -2451,7 +2453,7 @@ class Lookup:
             for instance_collection in inst_group.get("managedInstances", []):
                 inst_name = (
                     instance_collection.get("name")
-                    or instance_collection.get("instance", "").split("/")[-1]
+                    or (instance_collection.get("instance") or "").split("/")[-1]
                 )
                 if short_name == inst_name and instance_collection.get("currentAction") == "CREATING":
                     return True

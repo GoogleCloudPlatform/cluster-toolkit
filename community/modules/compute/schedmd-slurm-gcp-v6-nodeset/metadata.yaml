@@ -38,6 +38,29 @@ ghpc:
       - TERMINATE
       allow_null: false
     error_message: "Allowed values for on_host_maintenance are 'MIGRATE' or 'TERMINATE'."
+  - validator: allowed_enum
+    inputs:
+      vars: [provisioning_engine]
+      allowed:
+      - AUTO
+      - MIG
+      - BULK_INSERT
+      allow_null: false
+    error_message: "Allowed values for provisioning_engine are 'AUTO', 'MIG', or 'BULK_INSERT'."
+  - validator: conditional
+    inputs:
+      trigger: provisioning_engine
+      trigger_value: MIG
+      dependent: node_count_dynamic_max
+      dependent_value: 0
+    error_message: "When 'provisioning_engine' is 'MIG', 'node_count_dynamic_max' must be explicitly set to 0. (Note: DWS Flex NodeSets should leave 'provisioning_engine' as 'AUTO')."
+  - validator: conditional
+    inputs:
+      trigger: provisioning_engine
+      trigger_value: MIG
+      dependent: enable_placement
+      dependent_value: false
+    error_message: "When 'provisioning_engine' is 'MIG', 'enable_placement' must be set to false. (Note: DWS Flex NodeSets should leave 'provisioning_engine' as 'AUTO')."
   - validator: exclusive
     inputs:
       vars: [instance_image.name, instance_image.family]

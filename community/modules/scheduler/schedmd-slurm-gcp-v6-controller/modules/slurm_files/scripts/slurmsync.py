@@ -297,11 +297,17 @@ def get_node_action(nodename: str) -> NodeAction:
 
     # For MIG compute nodes, detect active GCE Auto-Healing repairs
     if lkp.is_node_mig(nodename):
-        mig_name = lkp.node_mig_name(nodename)
-        region = lkp.node_region(nodename)
         try:
+            mig_name = lkp.node_mig_name(nodename)
+            region = lkp.node_region(nodename)
             if short_nodename in lkp.get_mig_repairing_instances(lkp.project, region, mig_name):
-                return NodeActionDown(reason="MIG Auto-Healing instance repair in progress")
+                if state is not None and state.base != "DOWN":
+                    return NodeActionDown(reason="MIG Auto-Healing instance repair in progress")
+                return NodeActionUnchanged()
+            elif inst and inst.status == "RUNNING" and state is not None and state.base == "DOWN":
+                if "MIG Auto-Healing" in (get_node_reason(short_nodename) or ""):
+                    log.info(f"{short_nodename} recovered by MIG auto-healing; resuming node to idle")
+                    return NodeActionIdle()
         except Exception as e:
             log.debug(f"Failed to check managed instance repair status for {nodename}: {e}")
 
