@@ -1,0 +1,35 @@
+{
+    "version": 2,
+    "providerplugins":[
+        {
+          "name": "gcpgce",
+          "enabled": 1,
+          "scriptPath": "${HF_TOP}/${HF_VERSION}/providerplugins/gcpgce/scripts/"
+        },
+        {
+            "name": "aws",
+            "enabled": 1,
+            "scriptPath": "${HF_TOP}/${HF_VERSION}/providerplugins/aws/scripts/"
+        },
+        {
+            "name": "ibmcloud",
+            "enabled": 1,
+            "scriptPath": "${HF_TOP}/${HF_VERSION}/providerplugins/ibmcloud/scripts/"
+        },
+        {
+            "name": "azure",
+            "enabled": 1,
+            "scriptPath": "${HF_TOP}/${HF_VERSION}/providerplugins/azure/scripts/"
+        },
+        {
+            "name": "openshift",
+            "enabled": 1,
+            "scriptPath": "${HF_TOP}/${HF_VERSION}/providerplugins/openshift/scripts/"
+        },
+        {
+            "name": "ibmcloudgen2",
+            "enabled": 0,
+            "scriptPath": "${HF_TOP}/${HF_VERSION}/providerplugins/ibmcloudgen2/scripts/"
+        }
+    ]
+}
