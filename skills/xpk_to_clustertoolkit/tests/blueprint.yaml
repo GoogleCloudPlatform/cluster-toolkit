@@ -1,0 +1,39 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: ${CLUSTER_NAME?}
+vars:
+  project_id: $PROJECT_ID
+  deployment_name: ${CLUSTER_NAME?}
+  zone: us-central1-a
+  machine_type: a2-highgpu-1g
+  static_node_count: 4
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+  - id: cluster
+    source: modules/scheduler/gke-cluster
+    use: [network]
+  - id: pool
+    source: modules/compute/gke-node-pool
+    use: [cluster]
+    settings:
+      machine_type: $(vars.machine_type)
+      static_node_count: $(vars.static_node_count)
+      zones: [$(vars.zone)]
+  - id: workload-manager
+    source: modules/management/kubectl-apply
+    use: [cluster, pool]

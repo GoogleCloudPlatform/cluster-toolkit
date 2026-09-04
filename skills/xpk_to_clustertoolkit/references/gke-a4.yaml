@@ -1,0 +1,241 @@
+# Copyright 2026 Google LLC. All Rights Reserved.
+
+blueprint_name: gke-a4
+
+vars:
+  project_id:
+  deployment_name: gke-a4
+  region:
+  zone:
+
+  # Node pool configuration
+  machine_type: a4-highgpu-8g
+  static_node_count:
+  spot: false
+  enable_flex_start: false
+
+  # Reservation
+  reservation:
+
+  # GKE Version & Maintenance
+  gke_version: "1.35."
+  maintenance_interval:
+
+  # Access & Networking
+  authorized_cidr:
+  master_authorized_networks:
+  enable_private_endpoint: false
+  private_endpoint_subnetwork:
+  enable_master_global_access: false
+  enable_workload_identity: true
+
+  # System Node Pool & Autoprovisioning
+  system_node_pool_machine_type: "e2-standard-16"
+  system_pool_node_count:
+  system_node_pool_disk_size_gb: 200
+  a4_node_pool_disk_size_gb: 100
+  accelerator_type: nvidia-b200
+  enable_autoprovisioning: false
+  autoprovisioning_min_chips:
+  autoprovisioning_max_chips:
+
+  # Storage CSI Drivers
+  enable_gcsfuse_csi_driver: true
+  enable_filestore_csi_driver: false
+  enable_parallelstore_csi_driver: false
+  enable_managed_lustre_csi: false
+  enable_pd_csi: false
+
+  # Checkpointing & Diagnostics
+  enable_multi_tier_checkpointing: false
+  enable_managed_mldiagnostics: false
+
+  # Configuration Paths
+  auto_monitoring_scope: "NONE"
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: gke-a4-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-0
+      ips_per_nat: 6
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.0.0/18
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-sub-0
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: gke-a4-net-1
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-1
+      ips_per_nat: 6
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.64.0/18
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: gke-a4-rdma-net
+    source: modules/network/gpu-rdma-vpc
+    settings:
+      network_name: $(vars.deployment_name)-rdma-net
+      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
+      network_routing_mode: REGIONAL
+      subnetworks_template:
+        name_prefix: $(vars.deployment_name)-rdma-sub
+        count: 8
+        ip_range: 192.168.128.0/18
+        region: $(vars.region)
+
+  - id: node_pool_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+      - container.admin
+
+  - id: training_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /training-data
+      name_prefix: training
+      random_suffix: true
+      force_destroy: false
+      enable_hierarchical_namespace: true
+
+  - id: checkpoint_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /checkpoint-data
+      name_prefix: checkpoint
+      random_suffix: true
+      force_destroy: false
+      enable_hierarchical_namespace: true
+
+  - id: a4-cluster
+    source: modules/scheduler/gke-cluster
+    use: [gke-a4-net-0, workload_service_account]
+    settings:
+      auto_monitoring_scope: $(vars.auto_monitoring_scope)
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
+      system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
+      system_node_pool_node_count: $(vars.system_pool_node_count)
+      system_node_pool_taints: []
+      enable_dcgm_monitoring: true
+      enable_gcsfuse_csi: $(vars.enable_gcsfuse_csi_driver)
+      enable_filestore_csi: $(vars.enable_filestore_csi_driver)
+      enable_parallelstore_csi: $(vars.enable_parallelstore_csi_driver)
+      enable_managed_lustre_csi: $(vars.enable_managed_lustre_csi)
+      enable_pd_csi: $(vars.enable_pd_csi)
+      enable_multi_tier_checkpointing: $(vars.enable_multi_tier_checkpointing)
+      enable_private_endpoint: $(vars.enable_private_endpoint)
+      private_endpoint_subnetwork: $(vars.private_endpoint_subnetwork)
+      enable_master_global_access: $(vars.enable_master_global_access)
+      enable_autoprovisioning: $(vars.enable_autoprovisioning)
+      autoprovisioning_min_chips: $(vars.autoprovisioning_min_chips)
+      autoprovisioning_max_chips: $(vars.autoprovisioning_max_chips)
+      maintenance_policy: $(vars.maintenance_interval)
+      configure_workload_identity_sa: $(vars.enable_workload_identity)
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr)
+        display_name: "kubectl-access-network"
+      additional_networks:
+        $(concat(
+          [{
+            network=gke-a4-net-1.network_name,
+            subnetwork=gke-a4-net-1.subnetwork_name,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }],
+         gke-a4-rdma-net.subnetwork_interfaces_gke
+        ))
+      version_prefix: $(vars.gke_version)
+      release_channel: REGULAR
+      maintenance_exclusions:
+      - name: no-minor-or-node-upgrades-indefinite
+        start_time: "2025-12-01T00:00:00Z"
+        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
+        exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
+    outputs: [instructions]
+
+  - id: a4-pool
+    source: modules/compute/gke-node-pool
+    use: [a4-cluster, node_pool_service_account]
+    settings:
+      machine_type: $(vars.machine_type)
+      spot: $(vars.spot)
+      enable_flex_start: $(vars.enable_flex_start)
+      auto_upgrade: true
+      zones: [$(vars.zone)]
+      disk_size_gb: $(vars.a4_node_pool_disk_size_gb)
+      static_node_count: $(vars.static_node_count)
+      guest_accelerator:
+      - type: $(vars.accelerator_type)
+        count: 8
+      additional_networks:
+        $(concat(
+          [{
+            network=gke-a4-net-1.network_name,
+            subnetwork=gke-a4-net-1.subnetwork_name,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }],
+         gke-a4-rdma-net.subnetwork_interfaces_gke
+        ))
+    outputs: [instructions]
