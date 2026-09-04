@@ -104,7 +104,12 @@ func createTempConfigFile(sourcePath string) (string, error) {
 }
 
 func runSystemEditor(editor, filePath string) error {
-	c := exec.Command(editor, filePath)
+	editorParts := strings.Fields(editor)
+	if len(editorParts) == 0 {
+		return fmt.Errorf("editor command is empty")
+	}
+	args := append(editorParts[1:], filePath)
+	c := exec.Command(editorParts[0], args...)
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
@@ -121,10 +126,15 @@ func validateAndApplyConfig(tempFileName, targetFile string) error {
 	}
 
 	var tempConfig Context
-	decoder := json.NewDecoder(strings.NewReader(string(tempFileData)))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&tempConfig); err != nil {
-		return fmt.Errorf("config file contains structural errors or invalid JSON: %w", err)
+	trimmedData := strings.TrimSpace(string(tempFileData))
+	if trimmedData == "" {
+		tempFileData = []byte("{}")
+	} else {
+		decoder := json.NewDecoder(strings.NewReader(trimmedData))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&tempConfig); err != nil {
+			return fmt.Errorf("config file contains structural errors or invalid JSON: %w", err)
+		}
 	}
 
 	if err := os.WriteFile(targetFile, tempFileData, 0644); err != nil {
