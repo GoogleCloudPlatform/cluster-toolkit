@@ -83,6 +83,44 @@ if [ $NUMGPUS -gt 0 ]; then
         sleep 1  # Give it a moment to start up
         START_HOSTENGINE=true
     fi
+
+    # Ensure nv-hostengine is responsive
+    log_step "Checking if nv-hostengine is responsive..."
+    if ! timeout 10 dcgmi discovery --list > /dev/null 2>&1; then
+        log_step "nv-hostengine is unresponsive."
+        if systemctl is-active nvidia-dcgm > /dev/null 2>&1; then
+            log_step "nv-hostengine is hung. Forcefully killing it before restarting service..."
+            pkill -9 nv-hostengine || true
+            sleep 1
+            log_step "Restarting nvidia-dcgm service..."
+            if ! systemctl restart nvidia-dcgm >> "$LOG_FILE" 2>&1; then
+                log_step "Failed to restart nvidia-dcgm service."
+            fi
+            sleep 2
+        else
+            log_step "nvidia-dcgm service not active. Killing nv-hostengine process..."
+            pkill -9 nv-hostengine || true
+            sleep 1
+        fi
+
+        # Re-check and try manual start if still down
+        if ! timeout 10 dcgmi discovery --list > /dev/null 2>&1; then
+            log_step "nv-hostengine still unresponsive. Trying manual start..."
+            if ! pidof nv-hostengine > /dev/null; then
+                log_step "Starting nv-hostengine..."
+                nv-hostengine >> "$LOG_FILE" 2>&1
+                sleep 1
+                START_HOSTENGINE=true
+            fi
+            # Final check
+            if ! timeout 10 dcgmi discovery --list > /dev/null 2>&1; then
+                log_step "ERROR: nv-hostengine is persistently unresponsive."
+                exit 1
+            fi
+        fi
+    else
+        log_step "nv-hostengine is responsive."
+    fi
     GROUPID=$(dcgmi group -c gpuinfo | awk '{print $NF}' | tr -d ' ')
     dcgmi group -g $GROUPID -a $GPULIST >> "$LOG_FILE" 2>&1
     dcgmi diag -g $GROUPID -r 1 > "$TMP_DCGM_OUT" 2>&1
