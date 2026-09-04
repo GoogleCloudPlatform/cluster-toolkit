@@ -247,6 +247,11 @@ spec:
     - test-locks/tpu-v5p
     - test-locks/gke-tpu-v5p
     - test-locks/batch
+    - test-locks/a4x-max
+    - test-locks/gke-a4x-max-bm
+    - test-locks/gke-tpu-v6e-flex
+    - test-locks/slurm-gcp-v6-tpu
+    - test-locks/tpu-v6e-flex
     flavors:
     - name: test-lock-flavor-2
       resources:
@@ -279,6 +284,16 @@ spec:
       - name: test-locks/gke-tpu-v5p
         nominalQuota: 1
       - name: test-locks/batch
+        nominalQuota: 1
+      - name: test-locks/a4x-max
+        nominalQuota: 1
+      - name: test-locks/gke-a4x-max-bm
+        nominalQuota: 1
+      - name: test-locks/gke-tpu-v6e-flex
+        nominalQuota: 1
+      - name: test-locks/slurm-gcp-v6-tpu
+        nominalQuota: 1
+      - name: test-locks/tpu-v6e-flex
         nominalQuota: 1
 ---
 apiVersion: kueue.x-k8s.io/v1beta1
