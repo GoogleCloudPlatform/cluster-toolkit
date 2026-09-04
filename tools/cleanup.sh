@@ -115,6 +115,7 @@ populate_active_build_exclusions() {
 	if ! command -v kubectl &>/dev/null; then
 		log "WARNING" "kubectl not found; skipping active GKE Kueue job protection."
 	else
+
 		local all_clusters
 		if ! all_clusters=$(gcloud container clusters list \
 			--project="$PROJECT_ID" --format="value(name,location)" 2>/dev/null); then
@@ -122,22 +123,20 @@ populate_active_build_exclusions() {
 		elif [[ -z "$all_clusters" ]]; then
 			log "INFO" "No GKE clusters found in project $PROJECT_ID."
 		else
-			# Create a temporary kubeconfig to avoid clobbering the user's default ~/.kube/config
+			# Temporary kubeconfig, scoped per-command via --kubeconfig (no global export, no EXIT trap)
 			local temp_kubeconfig
 			if ! temp_kubeconfig=$(mktemp); then
 				log "WARNING" "Failed to create temporary kubeconfig; skipping active GKE Kueue job protection."
 				return 0
 			fi
-			local old_kubeconfig="${KUBECONFIG:-}"
-			export KUBECONFIG="$temp_kubeconfig"
-			trap 'rm -f "$temp_kubeconfig"' EXIT
 
 			while IFS=$'\t' read -r cluster_name cluster_location; do
 				[[ -z "$cluster_name" ]] && continue
 
 				log "DEBUG" "Checking cluster ${cluster_name} (${cluster_location}) for active Kueue jobs..."
 
-				if ! gcloud container clusters get-credentials "$cluster_name" \
+				# Remove --kubeconfig flag and prefix command with KUBECONFIG environment variable
+				if ! KUBECONFIG="$temp_kubeconfig" gcloud container clusters get-credentials "$cluster_name" \
 					--location="$cluster_location" --project="$PROJECT_ID" &>/dev/null; then
 					log "WARNING" "Failed to authenticate kubectl against cluster ${cluster_name}; skipping this cluster for Kueue job protection."
 					continue
@@ -146,6 +145,7 @@ populate_active_build_exclusions() {
 				local raw_jobs
 				# Use custom-columns instead of jsonpath to prevent crashes on missing conditions
 				if ! raw_jobs=$(kubectl get jobs -A -l "kueue.x-k8s.io/queue-name" \
+					--kubeconfig="$temp_kubeconfig" \
 					--request-timeout=10s \
 					-o custom-columns="NAME:.metadata.name,SUCCEEDED:.status.succeeded,FAILED:.status.failed" \
 					--no-headers 2>/dev/null); then
@@ -162,12 +162,23 @@ populate_active_build_exclusions() {
 						local job_name succeeded failed
 						read -r job_name succeeded failed <<<"$line"
 
-						# In kubectl, empty numbers show up as "<none>"
-						# If a job hasn't succeeded and hasn't failed, it MUST be Running or Queued!
+						# Guard against empty job_name poisoning EXCLUSION_MAP[""] (matches every SA project-wide)
+						[[ -z "$job_name" ]] && continue
+
+						# If a job hasn't succeeded and hasn't failed, it MUST be Running or Queued
 						if [[ "$succeeded" =~ ^(<none>|0)$ && "$failed" =~ ^(<none>|0)$ ]]; then
 							if [[ -z "${EXCLUSION_MAP[${job_name}]:-}" ]]; then
 								log "INFO" "Protecting active/queued Kueue job: ${job_name} (cluster: ${cluster_name})"
 								EXCLUSION_MAP["${job_name}"]=1
+							fi
+
+							# Extract short build ID prefix to protect SAs derived from DEPLOYMENT_NAME,
+							# which often diverges from the k8s Job name (e.g. vm-storage-a1b2c3 vs
+							# vmstorage-a1b2c3-compute@...)
+							local short_id="${job_name##*-}"
+							if [[ -n "$short_id" && -z "${EXCLUSION_MAP[${short_id}]:-}" ]]; then
+								log "INFO" "Protecting active/queued Kueue job prefix: ${short_id} (job: ${job_name}, cluster: ${cluster_name})"
+								EXCLUSION_MAP["${short_id}"]=1
 							fi
 						fi
 					done <<<"$raw_jobs"
@@ -175,14 +186,8 @@ populate_active_build_exclusions() {
 
 			done <<<"$all_clusters"
 
-			# Clean up the temporary kubeconfig file
+			# Clean up the temporary kubeconfig file (no global state to restore)
 			rm -f "$temp_kubeconfig"
-			trap - EXIT
-			if [[ -n "$old_kubeconfig" ]]; then
-				export KUBECONFIG="$old_kubeconfig"
-			else
-				unset KUBECONFIG
-			fi
 		fi
 	fi
 
@@ -1352,7 +1357,6 @@ main() {
 
 	check_dependencies
 	load_exclusions
-	populate_active_build_exclusions
 	populate_protected_resources
 	log_protected_network_uris # Log the protected network URIs for debugging
 	log_exclusion_map          # Log the final exclusion map for debugging
@@ -1402,6 +1406,13 @@ main() {
 
 	# --- Phase 5: IAM Cleanup ---
 	log "INFO" "--- PHASE 5: Cleaning up IAM Policy Bindings ---"
+	populate_active_build_exclusions
+
+	# --- ADD THIS BLOCK to explicitly log the updated map keys ---
+	log "INFO" "--- Dynamic Suffixes / Jobs Verified in Exclusion Map ---"
+	for key in "${!EXCLUSION_MAP[@]}"; do
+		log "INFO" "EXCLUDED KEY: $key"
+	done
 	process_service_accounts
 	process_iam_deleted_members
 
