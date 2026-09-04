@@ -106,7 +106,10 @@ variable "kueue_migrated_tests" {
     "gke-g4-confidential",
     "gke-tpu-v5e",
     "gke-tpu-7x",
-    "gke-tpu-v5p"
+    "gke-tpu-v5p",
+    "gke-tpu-v6e-flex",
+    "gke-a4x-max-bm",
+    "slurm-gcp-v6-tpu"
   ]
 }
 
