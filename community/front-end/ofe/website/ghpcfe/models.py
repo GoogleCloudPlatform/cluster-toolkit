@@ -710,6 +710,14 @@ class Cluster(CloudResource):
         default="n",
         help_text="Status of this cluster",
     )
+    initialization_started = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When the cluster last entered the initialising state. Used to "
+            "detect a bootstrap that has stalled with no error."
+        ),
+    )
     spackdir = models.CharField(
         max_length=4096,
         verbose_name="Spack directory",

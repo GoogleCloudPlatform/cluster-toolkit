@@ -27,6 +27,7 @@ import subprocess
 import sys
 import time
 import concurrent.futures
+from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from urllib.parse import urlparse
@@ -200,7 +201,10 @@ def _upload_log_blobs(log_dict):
     client = gcs.Client()
     gcs_bucket = client.bucket(cluster_bucket)
     for path, data in log_dict.items():
-        if data:
+        # Skip entries with no content; upload the ones that actually have log
+        # text. (Uploading a None/empty blob raises "None could not be
+        # converted to bytes" and would crash the callback thread.)
+        if not data:
             continue
 
         # cluster_bucket is bucket and path...
@@ -224,6 +228,83 @@ def _upload_log_files(log_dict):
     client.close()
 
 
+def _normalize_slurm_state(state):
+    if not state:
+        return None
+    return state.split()[0].split("+", 1)[0]
+
+
+def _parse_slurm_time(value):
+    if not value or value in ["Unknown", "None", "N/A"]:
+        return None
+
+    for fmt in [
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%Y-%m-%d %H:%M:%S",
+    ]:
+        try:
+            return int(datetime.strptime(value, fmt).timestamp())
+        except ValueError:
+            continue
+
+    logger.warning("Unable to parse Slurm time value: %s", value)
+    return None
+
+
+def _slurm_get_job_info_from_sacct(jobid):
+    """Returns final job state information from sacct when a job leaves squeue"""
+    try:
+        proc = subprocess.run(
+            [
+                "sacct",
+                "-X",
+                "--noheader",
+                "--parsable2",
+                "--format=JobID,State,Start,End",
+                "--jobs",
+                str(jobid),
+            ],
+            check=True,
+            encoding="utf-8",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+        )
+        for line in proc.stdout.splitlines():
+            if not line.strip():
+                continue
+            fields = line.split("|")
+            if len(fields) < 4:
+                continue
+            sacct_jobid, state, start_time, end_time = fields[:4]
+            if sacct_jobid != str(jobid):
+                continue
+
+            result = {}
+            normalized_state = _normalize_slurm_state(state)
+            if normalized_state:
+                result["job_state"] = [normalized_state]
+
+            start_epoch = _parse_slurm_time(start_time)
+            if start_epoch is not None:
+                result["start_time"] = {"number": start_epoch}
+
+            end_epoch = _parse_slurm_time(end_time)
+            if end_epoch is not None:
+                result["end_time"] = {"number": end_epoch}
+
+            if normalized_state:
+                logger.info(
+                    "sacct returned job %s with state %s", jobid, normalized_state
+                )
+            return result or None
+    except Exception as err:
+        logger.error("sacct lookup failed for job %s", jobid, exc_info=err)
+
+    return None
+
+
 def _slurm_get_job_info(jobid):
     """Returns the job state, or None if job isn't in the queue"""
     # N.B - eventually, pyslurm might work with our version of Slurm,
@@ -236,24 +317,25 @@ def _slurm_get_job_info(jobid):
         for job in output["jobs"]:
             if job["job_id"] == jobid:
                 return job
-        return None
+        return _slurm_get_job_info_from_sacct(jobid)
     except Exception as err:
         logger.error("Subprocess threw an error", exc_info=err)
-        return None
+        return _slurm_get_job_info_from_sacct(jobid)
 
 
 def _slurm_get_job_state(jobid):
     """Returns the job state, or None if the job isn't in the queue"""
-    state = _slurm_get_job_info(jobid)  # Fetch job info using an external function
-    job_state = state.get("job_state", None) if state else None  # Get the 'job_state' if available
+    state = _slurm_get_job_info(jobid)
+    job_state = state.get("job_state", None) if state else None
 
     if job_state and isinstance(job_state, list) and job_state:
-        logger.info("Slurm returned job %s with state %s", jobid, job_state[0])  # Log the first state if available
-        return job_state[0]  # Return the first element of the state list
-    else:
-        logger.info("No valid job state available for job %s", jobid)  # Log when no valid state is found
+        normalized_state = _normalize_slurm_state(job_state[0])
+        logger.info("Slurm returned job %s with state %s", jobid, normalized_state)
+        return normalized_state
 
-    return None  # Return None if there is no job state or it's not a list
+    logger.info("No valid job state available for job %s", jobid)
+
+    return None
 
 def _spack_submit_build(app_id, partition, app_name, spec, extra_sbatch=None):
     build_dir = Path("/opt/cluster/installs") / str(app_id)
@@ -640,7 +722,7 @@ def _verify_params(message, keys):
 
 def _get_upload_command(target_dir, url):
     if url.startswith("gs://"):
-        return f"gsutil cp -r '{target_dir.as_posix()}' '{url}'"
+        return f"gcloud storage cp --recursive '{target_dir.as_posix()}' '{url}'"
     if url.startswith("s3://"):
         return f"aws s3 cp --recursive '{target_dir.as_posix()}' '{url}'"
 
@@ -649,7 +731,7 @@ def _get_upload_command(target_dir, url):
 
 def _get_download_command(target_dir, url):
     if url.startswith("gs://"):
-        return f"gsutil cp -r '{url}' '{target_dir.as_posix()}'"
+        return f"gcloud storage cp --recursive '{url}' '{target_dir.as_posix()}'"
     if url.startswith("s3://"):
         ret = f"""
 output=$(aws s3 cp --recursive --dryrun '{url}' '{target_dir.as_posix()}')
@@ -682,9 +764,10 @@ def _make_run_script(job_dir, uid, gid, orig_run_script):
         recursive_fetch = script_url.path.endswith("/")
         fname = script_url.path.split("/")[-1] if not recursive_fetch else ""
         if script_url.scheme == "gs":
+            # 'cp' must be unconditional; only recursion is optional.
             fetch = (
-                "gsutil "
-                f"{'-m cp -r ' if recursive_fetch else ''}"
+                "gcloud storage cp "
+                f"{'--recursive ' if recursive_fetch else ''}"
                 f"'{text}' "
                 f"'{job_dir.as_posix()}'"
             )
@@ -701,6 +784,35 @@ def _make_run_script(job_dir, uid, gid, orig_run_script):
                 return None
             fetch = f"curl --silent -O '{text}'"
 
+        # When there is no single fetched file to execute directly -- an
+        # archive that was unpacked, or a recursive directory fetch that has
+        # no filename at all -- run the shallowest 'run.sh' in the result.
+        # Sort on the number of path components (awk -F/ NF), not on string
+        # length: './a/b/run.sh' is deeper than './long_directory_name/run.sh'
+        # but shorter as a string, so a length sort picks the wrong script.
+        # The extracted file may not be executable (zip archives carry no
+        # permission bits on some platforms), so chmod before running it.
+        run_toplevel_script = (
+            "# Find and execute most top-level 'run.sh' we can find\n"
+            "toplevel_script=$("
+            "find . -maxdepth 3 -name run.sh | "
+            "awk -F/ '{print NF, $0}' | "
+            "sort -n  | "
+            "cut -d' ' -f2- | "
+            "head -n1"
+            ")\n"
+            'if [ -z "$toplevel_script" ]; then\n'
+            '  echo "No run.sh found in the fetched job files" >&2\n'
+            "  exit 1\n"
+            "fi\n"
+            'chmod 755 "$toplevel_script"\n'
+            '"$toplevel_script"'
+        )
+
+        # Defaults cover the recursive/directory case (fname == ""), where no
+        # single file is fetched: nothing to chmod, run the discovered run.sh.
+        extract = ""
+        execute = run_toplevel_script
         if fname:
             extract = f"chmod 755 {fname}"
             execute = f"./{fname}"
@@ -717,18 +829,7 @@ def _make_run_script(job_dir, uid, gid, orig_run_script):
                 extract = f"unzip {file_path.name}"
                 archive = True
             if archive:
-                execute = (
-                    "# Find and execute most top-level 'run.sh' we can find\n"
-                )
-                execute += (
-                    "$("
-                    "find . -maxdepth 3 -name run.sh | "
-                    "awk '{print length, $0}' | "
-                    "sort -n  | "
-                    "cut -d' ' -f2- | "
-                    "head -n1"
-                    ")"
-                )
+                execute = run_toplevel_script
         return f"""
 {fetch}
 {extract}
@@ -1035,8 +1136,8 @@ def cb_register_user_gcs(message, **kwargs):
     logger.info("Starting REGISTER_USER_GCS: %s", message)
 
     try:
-        (username, unused_uid, unused_gid, homedir) = _verify_oslogin_user(
-            message["login_uid"]
+        (username, unused_uid, unused_gid, unused_homedir) = (
+            _verify_oslogin_user(message["login_uid"])
         )
     except KeyError:
         logger.error(
@@ -1052,41 +1153,28 @@ def cb_register_user_gcs(message, **kwargs):
     try:
         response["status"] = "Configuring gcloud"
         send_message("UPDATE", response)
-        subprocess.run(
-            [
-                "sudo",
-                "-u",
-                username,
-                "gcloud",
-                "config",
-                "set",
-                "pass_credentials_to_gsutil",
-                "false",
-            ],
-            check=True,
-        )
 
-        # gsutil will fail if the backup file already exists
-        boto_backup = Path(homedir) / ".boto.bak"
-        if boto_backup.exists():
-            boto_backup.unlink()
-
+        # Drive the interactive gcloud user-login OAuth flow. The credentials
+        # are stored in the user's gcloud configuration and are shared with
+        # 'gcloud storage', so the user's jobs can access their private
+        # buckets. gcloud's default login scopes include cloud-platform, which
+        # covers the storage read/write access these jobs need.
         with pexpect.spawn(
             "sudo",
             args=[
                 "-u",
                 username,
-                "gsutil",
-                "config",
-                "-s",
-                "https://www.googleapis.com/auth/devstorage.read_write",
+                "gcloud",
+                "auth",
+                "login",
+                "--no-launch-browser",
             ],
         ) as child:
-            child.expect(
-                "Please navigate your browser to the following script_url:"
-            )
-            child.readline()  # Eat newline
-            url = str(child.readline(), "utf-8").strip()
+            # The consent URL is emitted on its own line; match it directly
+            # rather than relying on the surrounding prose or blank-line
+            # layout, which varies between gcloud releases.
+            child.expect(r"https://\S+")
+            url = child.after.decode("utf-8").strip()
             response["status"] = "Waiting For User Auth"
             response["verify_url"] = url
 
@@ -1118,7 +1206,7 @@ def cb_register_user_gcs(message, **kwargs):
             # Remove our callback, now that we have our verify key
             _c2_ackMap.pop(ackid)
 
-            child.expect("Enter the authorization code:")
+            child.expect("enter the verification code provided in your browser")
             child.sendline(my_verify_key)
             child.expect(pexpect.EOF)
             child.wait()

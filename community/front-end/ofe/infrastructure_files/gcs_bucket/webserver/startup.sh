@@ -116,8 +116,8 @@ pip3.12 install --require-hashes -r "$(dirname "$0")/requirements.txt"
 echo '2' | update-alternatives --config python3
 # Download configuration file
 #
-gsutil cp "gs://${config_bucket}/webserver/config" /tmp/config
-gsutil rm "gs://${config_bucket}/webserver/config"
+gcloud storage cp "gs://${config_bucket}/webserver/config" /tmp/config
+gcloud storage rm "gs://${config_bucket}/webserver/config"
 
 # Load configurations
 #
@@ -171,7 +171,7 @@ if [ "${deploy_mode}" == "git" ]; then
 
 elif [ "${deploy_mode}" == "tarball" ]; then
 	printf "\n####################\n#### Download web application files\n####################\n"
-	gsutil cp "gs://${config_bucket}/webserver/deployment.tar.gz" /tmp/deployment.tar.gz
+	gcloud storage cp "gs://${config_bucket}/webserver/deployment.tar.gz" /tmp/deployment.tar.gz
 
 	fetch_hpc_toolkit="tar xfz /tmp/deployment.tar.gz"
 fi
