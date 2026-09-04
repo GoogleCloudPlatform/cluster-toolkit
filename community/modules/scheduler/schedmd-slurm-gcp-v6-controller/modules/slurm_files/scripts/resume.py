@@ -330,23 +330,102 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                         mig.get("instanceTemplate")
                         or (mig.get("versions", [{}])[0].get("instanceTemplate") if mig.get("versions") else None)
                     )
-                    if current_template and util.trim_self_link(current_template) != util.trim_self_link(template_link):
+                    if current_template and current_template.split("/")[-1] != template_link.split("/")[-1]:
                         log.info(f"Updating MIG {mig_name} template: {current_template} -> {template_link}")
-                        aic_req = lkp.compute.regionInstanceGroupManagers().setInstanceTemplate(
+                        ver_payload: Dict[str, Any] = {"instanceTemplate": template_link}
+                        if mig.get("versions") and mig["versions"][0].get("name"):
+                            ver_payload["name"] = mig["versions"][0]["name"]
+                        aic_req = lkp.compute.regionInstanceGroupManagers().patch(
                             project=lkp.project,
                             region=region,
                             instanceGroupManager=mig_name,
-                            body={"instanceTemplate": template_link}
+                            body={"versions": [ver_payload]}
                         )
-                        ensure_execute(aic_req)
+                        aic_res = ensure_execute(aic_req)
+                        if isinstance(aic_res, dict) and "selfLink" in aic_res:
+                            op_res = wait_for_operation(aic_res)
+                            if op_res and "error" in op_res:
+                                raise RuntimeError(f"patch template operation failed: {op_res['error']}")
                         lkp.get_mig.cache_clear()
             except Exception as e:
                 log.warning(f"Could not verify/update template for MIG {mig_name}: {e}")
 
         # 2. Per-Instance Config (PIC) - Lightweight instance name binding for static Slurm hostnames
+        existing_mig_insts = set()
+        deleting_mig_insts = set()
+        try:
+            mig_data = lkp.get_mig_instances(lkp.project, region, mig_name)
+            for m in mig_data.get("managedInstances", []):
+                name = m.get("name") or (m.get("instance") or "").split("/")[-1]
+                if m.get("currentAction") in ("DELETING", "ABANDONING") or m.get("instanceStatus") in ("STOPPING", "DELETING"):
+                    if name:
+                        deleting_mig_insts.add(name)
+                elif name:
+                    existing_mig_insts.add(name)
+        except Exception as e:
+            log.warning(f"Could not check existing instances for MIG {mig_name}: {e}")
+
+        # If any requested nodes are currently in the middle of being deleted by GCE,
+        # wait briefly for the deletion operation to finish so createInstances will not fail with 409 Conflict.
+        nodes_to_wait = {n.split(".")[0] for n in mig_nodes} & deleting_mig_insts
+        still_deleting = set(nodes_to_wait)
+        if nodes_to_wait:
+            log.info(f"Waiting for in-flight deletion of {nodes_to_wait} in MIG {mig_name} before resuming...")
+            for _ in range(10):
+                time.sleep(2)
+                lkp.get_mig_instances.cache_clear()
+                try:
+                    mig_data = lkp.get_mig_instances(lkp.project, region, mig_name)
+                    current_insts = {
+                        (m.get("name") or (m.get("instance") or "").split("/")[-1])
+                        for m in mig_data.get("managedInstances", [])
+                        if (m.get("name") or m.get("instance"))
+                    }
+                    still_deleting = nodes_to_wait & current_insts
+                    if not still_deleting:
+                        break
+                except Exception:
+                    pass
+            if still_deleting:
+                log.error(f"Instances {still_deleting} still deleting in GCE after timeout; failing resume to trigger immediate requeue.")
+                if excl_job_id is not None:
+                    # Multi-node exclusive job cannot proceed without all nodes across all shards.
+                    # Reset all nodes in the request and abort createInstances immediately.
+                    all_short_nodes = [n.split(".")[0] for n in nodes]
+                    handle_resume_failure(
+                        all_short_nodes,
+                        "GCP MIG Error: Instances still in-flight deleting after timeout",
+                        resume_data,
+                        error_handler.Action.REQUEUE,
+                        "MIG in-flight deletion timeout",
+                    )
+                    return
+                else:
+                    # For non-exclusive/jobless nodes, identify all affected jobs and cancel their associated nodes
+                    affected_nodes = set(still_deleting)
+                    if resume_data:
+                        for job in resume_data.jobs:
+                            job_nodes = {n.split(".")[0] for n in job.nodes_alloc}
+                            if job_nodes & still_deleting:
+                                affected_nodes.update(job_nodes)
+                    nodes_to_fail = [n.split(".")[0] for n in mig_nodes if n.split(".")[0] in affected_nodes]
+                    handle_resume_failure(
+                        nodes_to_fail,
+                        "GCP MIG Error: Instances still in-flight deleting after timeout",
+                        resume_data,
+                        error_handler.Action.REQUEUE,
+                        "MIG in-flight deletion timeout",
+                    )
+                    existing_mig_insts.update(affected_nodes)
+
         pic_instances: List[Dict[str, Any]] = []
+        seen_names = set()
         for node in mig_nodes:
             short_name = node.split(".")[0]
+            if short_name in existing_mig_insts or short_name in seen_names:
+                log.info(f"Instance {short_name} already exists in MIG {mig_name} or duplicate; skipping createInstances.")
+                continue
+            seen_names.add(short_name)
             inst: Dict[str, Any] = {"name": short_name}
             if excl_job_id is not None:
                 inst["preservedState"] = {
@@ -355,6 +434,10 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                     }
                 }
             pic_instances.append(inst)
+
+        if not pic_instances:
+            log.info(f"All requested nodes already exist in MIG {mig_name}; nothing to create.")
+            continue
 
         for chunk in chunked(pic_instances, n=ZONAL_MIG_SIZE_LIMIT):
             chunk_nodes = [item["name"] for item in chunk]
@@ -366,15 +449,28 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                     body={"instances": chunk}
                 )
                 res = ensure_execute(pic_req)
-                log.debug(f"createInstances response for {mig_name}: {res}")
-                lkp.get_mig_instances.cache_clear()
+                log.debug(f"createInstances submitted for {mig_name}: {res}")
+                if isinstance(res, dict) and "selfLink" in res:
+                    op_res = wait_for_operation(res)
+                    if op_res and "error" in op_res:
+                        raise RuntimeError(f"createInstances operation failed: {op_res['error']}")
+                log.debug(f"createInstances completed for {mig_name}")
             except Exception as e:
                 log.error(f"Failed createInstances for MIG {mig_name} on nodes {to_hostlist(chunk_nodes)}: {e}")
-                down_nodes_notify_jobs(
-                    chunk_nodes,
-                    f"MIG createInstances failed: {e}",
+                reason = getattr(e, "_get_reason", lambda: str(e))()
+                action, admin_comment = error_handler.classify_gcp_error(reason, str(e))
+                failed_nodes = [n.split(".")[0] for n in nodes] if excl_job_id is not None else chunk_nodes
+                handle_resume_failure(
+                    failed_nodes,
+                    f"GCP Error: {reason}",
                     resume_data,
+                    action,
+                    admin_comment,
                 )
+                if excl_job_id is not None:
+                    return
+            finally:
+                lkp.get_mig_instances.cache_clear()
 
 
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
