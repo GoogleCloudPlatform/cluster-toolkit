@@ -44,69 +44,12 @@ variable "daily_tests_project_id" {
   default     = "hpc-toolkit-dev-2"
 }
 
-variable "kueue_migrated_tests" {
-  description = "List of tests migrated to Kueue"
+variable "daily_tests_dev_exceptions" {
+  description = "List of daily tests that must run in hpc-toolkit-dev in addition to hpc-toolkit-dev-2 (e.g. due to hardware reservations or quota constraints)"
   type        = list(string)
   default = [
-    "slurm-gcp-v6-rocky8",
-    "batch-mpi",
-    "htcondor",
-    "packer",
-    "monitoring",
-    "chrome-remote-desktop",
-    "chrome-remote-desktop-ubuntu",
-    "ansible-vm",
-    "e2e",
-    "hcls",
-    "slurm-gke",
-    "slurm-flex",
-    "ml-slurm",
-    "htc-slurm",
-    "hpc-build-slurm-image",
-    "hpc-enterprise-slurm",
-    "spack-gromacs",
-    "gcluster-dockerfile",
-    "gke",
-    "gke-inactive-reservation",
-    "ml-gke",
-    "ml-gke-e2e",
-    "gke-storage",
-    "gke-managed-hyperdisk",
-    "slurm-rapid-storage",
-    "gke-managed-lustre",
-    "pfs-managed-lustre-slurm",
-    "pfs-managed-lustre-vm",
-    "netapp-volumes",
-    "slurm-gcp-v6-reconfig-size",
-    "slurm-gcp-v6-simple-job-completion",
-    "slurm-gcp-v6-startup-scripts",
-    "slurm-gcp-v6-topology",
-    "slurm-gcp-v6-debian",
-    "slurm-gcp-v6-ubuntu",
-    "slurm-gcp-v6-ssd",
-    "gke-a2-highgpu-kueue-onspot",
-    "gke-a4-onspot",
-    "gke-g4-onspot",
-    "gke-h4d-onspot",
-    "ml-h4d-onspot-slurm",
-    "h4d-vm",
-    "ml-a3-highgpu-onspot-slurm",
-    "ml-a4-highgpu-onspot-slurm",
-    "ml-g4-onspot-slurm",
-    "gke-a3-highgpu-onspot",
-    "gke-a3-megagpu-onspot",
-    "gke-tpu-v6e",
-    "ml-a3-megagpu-onspot-slurm-ubuntu",
-    "gke-a3-ultragpu-onspot",
-    "ml-a3-ultragpu-onspot-slurm",
-    "ml-a3-ultragpu-onspot-jbvms",
-    "gke-a4x",
-    "ml-a4x-highgpu-slurm",
-    "batch",
     "gke-g4-confidential",
-    "gke-tpu-v5e",
     "gke-tpu-7x",
-    "gke-tpu-v5p"
   ]
 }
 
