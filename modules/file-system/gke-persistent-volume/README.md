@@ -122,11 +122,11 @@ The required permissions are:
 * `storage.anywhereCaches.list` (list caches associated with the bucket)
 * `storage.anywhereCaches.update` (update cache settings)
 
-#### Turnkey Default: `roles/storage.admin`
+#### Default: `roles/storage.admin`
 
 By default, this module automatically grants Google's built-in `roles/storage.admin` role to the GKE Service Agent directly on the bucket (`grant_gcsfuse_service_agent_role = true`).
 
-As documented in [Cloud Storage Predefined IAM Roles](https://docs.cloud.google.com/storage/docs/access-control/iam-roles#storage.admin), `roles/storage.admin` natively includes all 6 of the above permissions. Using this built-in role provides complete turnkey automation because it is scoped strictly to the target bucket and requires zero project-level custom IAM role creation (`iam.roles.create`), ensuring deployments succeed out-of-the-box across standard and restricted environments.
+As documented in [Cloud Storage Predefined IAM Roles](https://docs.cloud.google.com/storage/docs/access-control/iam-roles#storage.admin), `roles/storage.admin` natively includes all 6 of the above permissions. Using this built-in role provides complete automation because it is scoped strictly to the target bucket and requires zero project-level custom IAM role creation (`iam.roles.create`), ensuring deployments succeed out-of-the-box across standard and restricted environments.
 
 #### Optional: Least-Privilege Custom Role (`gke.gcsfuse.profileUser`)
 
