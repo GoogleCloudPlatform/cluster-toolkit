@@ -2416,11 +2416,82 @@ def update_config(cfg: NSDict) -> None:
     global _lkp
     _lkp = Lookup(cfg)
 
+def _is_target_controller_up(output: str, target_role: str) -> bool:
+    """Check if a specific controller role ('primary' or 'backup') is UP in scontrol ping output."""
+    role = target_role.lower()
+    for line in output.splitlines():
+        line_lower = line.lower()
+        if f"({role}" in line_lower or f"{role} controller" in line_lower:
+            if ("is up" in line_lower or ": up" in line_lower or "(up)" in line_lower) and "down" not in line_lower:
+                return True
+    return False
+
+
+def wait_slurmctld_up(lkp: Lookup, timeout: float = 60) -> None:
+    """Wait for local slurmctld daemon to respond to scontrol ping and report UP status.
+    This ensures scontrol reconfigure does not fail due to slurmctld not being ready
+    after a service restart.
+    """
+    log.info("Waiting for slurmctld to be fully up...")
+    hostname = socket.gethostname().split(".")[0]
+    backup_name = lkp.cfg.get("slurm_backup_controller_name")
+    backup_short = backup_name.split(".")[0] if backup_name else ""
+    is_backup = bool(backup_short) and (hostname == backup_short or hostname.endswith("-1"))
+    target_role = "backup" if is_backup else "primary"
+
+    for wait in backoff_delay(0.5, timeout=timeout):
+        try:
+            res = run(f"{lkp.scontrol} ping", check=False, timeout=5)
+            output = (res.stdout + res.stderr).lower()
+            if _is_target_controller_up(output, target_role):
+                log.info(f"slurmctld ({target_role}) is fully up.")
+                return
+        except Exception as e:
+            log.debug(f"scontrol ping check failed: {e}")
+        if wait > 0:
+            sleep(wait)
+    raise TimeoutError(f"slurmctld ({target_role}) is not fully up after {timeout} seconds")
+
+
 def scontrol_reconfigure(lkp: Lookup) -> None:
     log.info("Running systemctl restart slurmctld.service")
     run("sudo systemctl restart slurmctld.service", timeout=30)
+    wait_slurmctld_up(lkp)
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure")
+
+
+def is_active_controller(lkp: Lookup) -> bool:
+    """Returns True if the local node is the currently active Slurm controller.
+    In non-HA setups, always returns True for the controller.
+    In HA setups, queries scontrol ping to check if local node is active primary or active takeover backup.
+    """
+    if not lkp.is_controller:
+        return False
+
+    backup_name = lkp.cfg.get("slurm_backup_controller_name")
+    if not backup_name:
+        return True
+
+    hostname = socket.gethostname().split(".")[0]
+    backup_short = backup_name.split(".")[0] if backup_name else ""
+    is_backup_instance = (backup_short and hostname == backup_short) or hostname.endswith("-1")
+
+    try:
+        res = run(f"{lkp.scontrol} ping", check=False, timeout=5)
+        output = (res.stdout + res.stderr).lower()
+
+        primary_up = _is_target_controller_up(output, "primary")
+        backup_up = _is_target_controller_up(output, "backup")
+
+        if not is_backup_instance:
+            return primary_up
+        else:
+            return (not primary_up) and backup_up
+    except Exception as e:
+        log.warning(f"Failed to query scontrol ping for HA active check: {e}")
+        return not is_backup_instance
+
 
 def slurm_version_gte(v1: str, v2: str) -> bool:
     """Returns true if v1 >= v2, expects YY.MM format"""
