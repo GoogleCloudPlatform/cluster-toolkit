@@ -47,11 +47,5 @@ custom_vars:
   expected_node_count: 4
   tpu_accelerator_type: tpu-v6e-slice
 
-scheduler: "gke"
-chs_nodepools: "gke-tpu-v6e-pool"
-chs_suites:
-- lite
-- standard
 post_deploy_tests:
 - test-validation/test-gke-tpu-flex-autoscaling.yml
-- test-validation/test-chs.yml
