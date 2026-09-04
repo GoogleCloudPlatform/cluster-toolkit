@@ -99,12 +99,30 @@ def resolve_network_storage() -> List[NSMount]:
 
     return list(mounts.values())
 
-
 def is_controller_mount(mount) -> bool:
+    if not mount:
+        return False
+    if getattr(mount, "fs_type", None) == "gcsfuse":
+        return False
+    if not getattr(mount, "server_ip", None):
+        return lookup().is_controller
     # NOTE: Valid Lustre server_ip can take the form of '<IP>@tcp'
-    server_ip = mount.server_ip.split("@")[0]
-    mount_addr = util.host_lookup(server_ip)
-    return mount_addr == lookup().control_host_addr
+    server_ip = str(mount.server_ip).split("@")[0]
+    try:
+        mount_addr = util.host_lookup(server_ip) if server_ip else None
+    except Exception:
+        mount_addr = None
+    control_host = lookup().control_host
+    control_host_addr = lookup().control_host_addr
+    return (
+        (mount_addr is not None and mount_addr == control_host_addr)
+        or (control_host is not None and server_ip == control_host)
+        or (lookup().is_controller and (
+            server_ip in ("127.0.0.1", "localhost")
+            or server_ip == lookup().hostname
+            or mount_addr in ("127.0.0.1", "localhost")
+        ))
+    )
 
 def setup_network_storage():
     """prepare network fs mounts and add them to fstab"""
@@ -303,7 +321,7 @@ def slurm_key_mount_handler():
             f"{mnt.server_ip}:{mnt.remote_mount}",
             str(mnt.local_mount),
         ]
-    timeout = 120 # wait max 120s to mount
+    timeout = 300 # wait max 300s to mount
     for retry, wait in enumerate(util.backoff_delay(0.5, timeout), 1):
         try:
             run(cmd, timeout=timeout)
@@ -361,8 +379,12 @@ def setup_nfs_exports():
 
     # export path if corresponding selector boolean is True
     lines = []
-    for path,options in to_export.items():
+    for path, options in to_export.items():
         util.mkdirp(Path(path))
+        try:
+            os.chmod(Path(path), 0o755)
+        except OSError as e:
+            log.warning(f"Failed to set permissions for {path}: {e}")
         run(rf"sed -i '\#{path}#d' /etc/exports", timeout=30)
         lines.append(f"{path}  {options}")
 
@@ -371,4 +393,4 @@ def setup_nfs_exports():
     with (exportsd / "slurm.exports").open("w") as f:
         f.write("\n")
         f.write("\n".join(lines))
-    run("exportfs -a", timeout=30)
+    run("exportfs -ra", timeout=30)

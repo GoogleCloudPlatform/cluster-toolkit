@@ -122,6 +122,7 @@ deployment_groups:
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_private_endpoint: false # Allows access from authorized public IPs
+      enable_private_ipv6_google_access: false
       configure_workload_identity_sa: true
       namespace: $(vars.user_namespace)
       enable_ml_diagnostics: true

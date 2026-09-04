@@ -301,6 +301,9 @@ def setup_key(lkp: util.Lookup, is_primary: bool = True) -> None:
     if lkp.cfg.enable_slurm_auth:
         # Put key into shared volume for distribution
         if is_primary:
+            util.mkdirp(util.slurmdirs.key_distribution)
+            util.chown_slurm(util.slurmdirs.key_distribution, mode=0o755)
+
             distributed = util.slurmdirs.key_distribution / file_name
             shutil.copyfile(dst, distributed)
             util.chown_slurm(distributed, mode=0o400)
