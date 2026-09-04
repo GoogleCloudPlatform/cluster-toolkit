@@ -57,7 +57,34 @@ ATTEMPT=1
 
 while true; do
 	echo "=== ATTEMPT $ATTEMPT: Submitting Kueue Job ==="
-	kubectl apply -f /workspace/job.yaml
+
+	SUBMIT_RETRIES=3
+	SUBMIT_ATTEMPT=1
+
+	while true; do
+		echo "Executing job submission (attempt ${SUBMIT_ATTEMPT}/${SUBMIT_RETRIES})..."
+
+		if APPLY_OUT=$(kubectl apply -f /workspace/job.yaml 2>&1); then
+			echo "$APPLY_OUT"
+			break
+		fi
+		echo "$APPLY_OUT"
+
+		if ((SUBMIT_ATTEMPT >= SUBMIT_RETRIES)); then
+			echo "ERROR: Failed to apply job manifest after ${SUBMIT_RETRIES} attempts." >&2
+			exit 1
+		fi
+
+		# Fail fast on non-transient schema or validation errors
+		if ! echo "$APPLY_OUT" | grep -iqE "(webhook|timeout|context deadline exceeded|connection refused)"; then
+			echo "ERROR: Non-retriable apply failure detected. Failing immediately." >&2
+			exit 1
+		fi
+
+		echo "WARNING: kubectl apply failed. Retrying in 5s..." >&2
+		sleep 5
+		SUBMIT_ATTEMPT=$((SUBMIT_ATTEMPT + 1))
+	done
 
 	set +e
 	(
