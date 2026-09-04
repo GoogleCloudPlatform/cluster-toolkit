@@ -46,7 +46,7 @@ variable "daily_tests_project_id" {
 
 variable "daily_tests_dev_exceptions" {
   description = "List of daily tests that must run in hpc-toolkit-dev in addition to hpc-toolkit-dev-2 (e.g. due to hardware reservations or quota constraints)"
-  type        = list(string)
+  type        = set(string)
   default = [
     "gke-g4-confidential",
     "gke-tpu-7x",

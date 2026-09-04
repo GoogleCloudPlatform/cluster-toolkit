@@ -52,8 +52,9 @@ module "daily_test_schedule" {
 
 # Exception daily tests running in project_id (hpc-toolkit-dev)
 resource "google_cloudbuild_trigger" "daily_test_exceptions" {
-  for_each    = toset(var.daily_tests_dev_exceptions)
+  for_each    = var.daily_tests_dev_exceptions
   name        = "DAILY-test-${each.key}"
+  project     = var.project_id
   description = "Runs the '${each.key}' integration test against `develop`"
   tags        = [local.notify_chat_tag]
 
@@ -80,7 +81,7 @@ resource "google_cloudbuild_trigger" "daily_test_exceptions" {
 
 module "daily_test_schedule_exceptions" {
   source   = "./trigger-schedule"
-  for_each = toset(var.daily_tests_dev_exceptions)
+  for_each = var.daily_tests_dev_exceptions
   trigger  = google_cloudbuild_trigger.daily_test_exceptions[each.key]
   schedule = data.external.list_tests_midnight.result[each.key]
 }

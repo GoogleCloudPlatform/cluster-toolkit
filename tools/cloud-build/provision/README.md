@@ -70,7 +70,7 @@ When prompted for project, use integration test project.
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_daily_tests_dev_exceptions"></a> [daily\_tests\_dev\_exceptions](#input\_daily\_tests\_dev\_exceptions) | List of daily tests that must run in hpc-toolkit-dev in addition to hpc-toolkit-dev-2 (e.g. due to hardware reservations or quota constraints) | `list(string)` | <pre>[<br/>  "gke-g4-confidential",<br/>  "gke-tpu-7x"<br/>]</pre> | no |
+| <a name="input_daily_tests_dev_exceptions"></a> [daily\_tests\_dev\_exceptions](#input\_daily\_tests\_dev\_exceptions) | List of daily tests that must run in hpc-toolkit-dev in addition to hpc-toolkit-dev-2 (e.g. due to hardware reservations or quota constraints) | `set(string)` | <pre>[<br/>  "gke-g4-confidential",<br/>  "gke-tpu-7x"<br/>]</pre> | no |
 | <a name="input_daily_tests_project_id"></a> [daily\_tests\_project\_id](#input\_daily\_tests\_project\_id) | The GCP project for daily tests | `string` | `"hpc-toolkit-dev-2"` | no |
 | <a name="input_daily_tests_service_account"></a> [daily\_tests\_service\_account](#input\_daily\_tests\_service\_account) | The service account to run daily tests under. If null, the default Cloud Build service account is used. For projects enforcing BYOSA (like hpc-toolkit-dev-2), you must set this via environment variable, e.g. export TF\_VAR\_daily\_tests\_service\_account="projects/..." | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID | `string` | `"hpc-toolkit-dev"` | no |
