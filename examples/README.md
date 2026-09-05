@@ -76,6 +76,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-a4x](#gke-a4x-) ![core-badge]
   * [gke-a4x-max-bm](#gke-a4x-max-bm-) ![core-badge]
   * [netapp-volumes.yaml](#netapp-volumesyaml-) ![core-badge]
+  * [netapp-volumes-slurm.yaml](#netapp-volumes-slurmyaml-) ![core-badge]
   * [gke-tpu-7x](#gke-tpu-7x-) ![core-badge]
   * [gcloud-example.yaml](#gcloud-exampleyaml--) ![community-badge] ![experimental-badge]
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
@@ -1810,6 +1811,27 @@ To destroy all resources associated with creating the GKE cluster, run the follo
 [auto-tiering]: https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/manage-auto-tiering
 [netapp-volumes.yaml]: ../examples/netapp-volumes.yaml
 
+### [netapp-volumes-slurm.yaml] ![core-badge]
+
+This blueprint creates a basic Slurm cluster that mounts a Flex Unified large-capacity NetApp volume at `/home`. A private Cloud DNS zone publishes all NFS endpoint IPs under one FQDN so Slurm clients are distributed across endpoints. Auto-tiering is enabled on the storage pool and volume.
+
+#### Steps to deploy the blueprint
+
+```shell
+./gcluster create examples/netapp-volumes-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}" --vars region=us-central1 --vars zone=us-central1-a
+./gcluster deploy netapp-volumes-slurm
+```
+
+After the cluster is deployed, SSH to the Slurm login node and confirm `/home` is mounted over NFS by FQDN.
+
+#### Clean Up
+
+```sh
+./gcluster destroy netapp-volumes-slurm
+```
+
+[netapp-volumes-slurm.yaml]: ../examples/netapp-volumes-slurm.yaml
+
 ### [gke-tpu-7x] ![core-badge]
 
 This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/examples/gke-tpu-7x/README.md).
@@ -1826,7 +1848,7 @@ of creating and deleting a network, subnet, and VM instance.
 
 ### [eda-all-on-cloud.yaml] ![community-badge]
 
-Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also creates two new VPC networks, a network called `eda-net` which connects VMs, Slurm and storage and a RDMA network called `eda-rdma-net` between the H4D nodes, along with four [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview) mounted to `/home`, `/tools`, `/library` and `/scratch`. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
+Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also creates two new VPC networks, a network called `eda-net` which connects VMs, Slurm and storage and a RDMA network called `eda-rdma-net` between the H4D nodes, along with four [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview) mounted to `/home`, `/tools`, `/library` and `/scratch`. Each volume is published in a private Cloud DNS zone so Slurm clients mount by FQDN and use every NFS endpoint IP. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
 
 The deployment instructions can be found in the [README](../community/examples/eda/README.md).
 
@@ -1836,7 +1858,7 @@ The deployment instructions can be found in the [README](../community/examples/e
 
 Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also connects to one existing user network which connects VMs, Slurm and storage and creates a RDMA network called `eda-rdma-net` for low latency communication between the compute nodes. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
 
-Four pre-existing NFS volumes are mounted to `/home`, `/tools`, `/library` and `/scratch`. Using [FlexCache](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/cache-ontap-volumes/overview) volumes allows to bring on-premises data to Google Cloud compute, without having to manually copy the data. This enables "burst to the cloud" use cases.
+Four pre-existing NFS volumes are mounted to `/home`, `/tools`, `/library` and `/scratch`. Set each `*_server_ips` variable to the complete list of endpoint IPs; the blueprint creates private Cloud DNS records and mounts the volumes by FQDN. Using [FlexCache](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/cache-ontap-volumes/overview) volumes allows to bring on-premises data to Google Cloud compute, without having to manually copy the data. This enables "burst to the cloud" use cases.
 
 The deployment instructions can be found in the [README](../community/examples/eda/README.md).
 

@@ -68,6 +68,18 @@ deployment_groups:
       service_name: "netapp.servicenetworking.goog"
       deletion_policy: "ABANDON"
 
+  # Private DNS zone for NetApp volume NFS endpoints. Each volume below creates
+  # an A record containing all of its endpoint IPs and passes the resulting FQDN
+  # to Slurm clients through the USE directive.
+  - id: gcnv_dns_zone
+    source: modules/network/dns-managed-zone
+    settings:
+      zone_name: $(vars.deployment_name)-gcnv-dns
+      dns_name: gcnv.internal.
+      visibility: private
+      network_id: $(eda-net.network_id)
+      description: "Private DNS for NetApp volume NFS endpoints"
+
   # NetApp Storage Pool. All NetApp Volumes will be created in this pool.
   - id: netapp_pool
     source: modules/file-system/netapp-storage-pool
@@ -91,6 +103,8 @@ deployment_groups:
       unix_permissions: "0777"
       # Mount options are optimized for aggressive caching, assuming rare changes on the volume
       mount_options: "nocto,actimeo=600,hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
+      dns_config:
+        managed_zone_name: $(gcnv_dns_zone.zone_name)
 
   # NFS volume for shared libraries
   - id: libraryfs
@@ -105,6 +119,8 @@ deployment_groups:
       unix_permissions: "0777"
       # Mount options are optimized for aggressive caching, assuming rare changes on the volume
       mount_options: "nocto,actimeo=600,hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
+      dns_config:
+        managed_zone_name: $(gcnv_dns_zone.zone_name)
 
   # NFS volume for home directories
   - id: homefs
@@ -117,6 +133,8 @@ deployment_groups:
       local_mount: "/home"
       protocols: ["NFSV3"]
       unix_permissions: "0755"
+      dns_config:
+        managed_zone_name: $(gcnv_dns_zone.zone_name)
 
   # NFS volume for scratch space
   - id: scratchfs
@@ -129,6 +147,8 @@ deployment_groups:
       local_mount: "/scratch"
       protocols: ["NFSV3"]
       unix_permissions: "0777"
+      dns_config:
+        managed_zone_name: $(gcnv_dns_zone.zone_name)
 
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #
@@ -226,5 +246,6 @@ deployment_groups:
     - scratchfs
     settings:
       enable_controller_public_ips: true
+      enable_slurm_auth: true
       cloud_parameters:
         slurmd_timeout: 900
