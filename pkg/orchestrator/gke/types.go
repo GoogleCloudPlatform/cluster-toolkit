@@ -130,7 +130,7 @@ type GKEOrchestrator struct {
 	dynamicSlicingCache         map[string]bool
 	staticSlicingCache          map[string]bool
 	topologyCache               map[string]string
-	policyCache                 map[string]string
+	resourcePolicyCache         map[string]*GCEWorkloadPolicy
 	slicingTopologiesChecked    bool
 	slicingTopologiesDetected   bool
 	gkeCustomTemplatesPath      string
@@ -304,6 +304,15 @@ type gkeAutoscaling struct {
 	TotalMaxNodeCount int  `json:"totalMaxNodeCount"`
 }
 
+// GCEWorkloadPolicy represents a Google Compute Engine workload resource policy.
+type GCEWorkloadPolicy struct {
+	Name                    string `json:"name"`
+	Region                  string `json:"region"`
+	AcceleratorTopology     string `json:"acceleratorTopology,omitempty"`
+	AcceleratorTopologyMode string `json:"acceleratorTopologyMode,omitempty"`
+	Type                    string `json:"type,omitempty"`
+}
+
 type gkePlacementPolicy struct {
 	PolicyName              string `json:"policyName,omitempty"`
 	AcceleratorTopologyMode string `json:"acceleratorTopologyMode,omitempty"`
@@ -348,6 +357,11 @@ type gkeHighScaleCheckpointingConfig struct {
 
 type controlPlaneEndpointsConfig struct {
 	DnsEndpointConfig *dnsEndpointConfig `json:"dnsEndpointConfig,omitempty"`
+	IPEndpointsConfig *ipEndpointsConfig `json:"ipEndpointsConfig,omitempty"`
+}
+
+type ipEndpointsConfig struct {
+	EnablePublicEndpoint bool `json:"enablePublicEndpoint,omitempty"`
 }
 
 type dnsEndpointConfig struct {

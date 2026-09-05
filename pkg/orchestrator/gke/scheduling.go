@@ -31,13 +31,23 @@ type SchedulingOptions struct {
 	NodeAffinityLabels map[string]string
 	IsDynamicSlicing   bool
 	IsStaticSlicing    bool
+	IsTPU              bool
 }
 
 func getNodeSelector(opts SchedulingOptions) (map[string]string, error) {
 	nodeSelector := make(map[string]string)
 
 	if opts.PlacementPolicy != "" {
-		nodeSelector["cloud.google.com/gke-placement-group"] = opts.PlacementPolicy
+		// In GKE, placement policy labels differ by accelerator architecture:
+		// 1. TPUs (specifically TPU 7x multi-host NAP): GKE requires referencing a pre-created
+		//    GCE Workload Policy (HIGH_THROUGHPUT) via "cloud.google.com/placement-policy-name".
+		// 2. Non-TPUs (GPUs/CPUs): GKE NAP uses "cloud.google.com/gke-placement-group" to dynamically
+		//    generate compact placement groups on the fly for co-located VM scheduling.
+		if opts.IsTPU {
+			nodeSelector["cloud.google.com/placement-policy-name"] = opts.PlacementPolicy
+		} else {
+			nodeSelector["cloud.google.com/gke-placement-group"] = opts.PlacementPolicy
+		}
 	}
 
 	for k, v := range opts.NodeAffinityLabels {
