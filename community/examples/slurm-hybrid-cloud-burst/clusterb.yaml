@@ -1,0 +1,195 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+blueprint_name: slurm-c3-burst
+
+vars:
+  project_id: ## Set GCP Project ID for Cluster B Here ##
+  deployment_name: clusterb-c3
+  region: us-central1
+  zone: us-central1-a
+  nfs_server_ip: ## Set IP of Cluster A Controller (NFS Bridge) ##
+  nfs_remote_mount: /home
+  clustera_controller_ip: "" # (Optional) Set Cluster A Controller IP if known, or auto-read from /home/cluster_a_ctrl_ip
+  instance_image:
+    # Rocky 8: slurm-gcp-6-12-hpc-rocky-linux-8
+    # Rocky 9: slurm-gcp-6-12-hpc-rocky-linux-9
+    family: slurm-gcp-6-12-hpc-rocky-linux-8
+    project: schedmd-slurm-public
+  burst_cluster_size: 0 # Dynamic cluster: 0 static nodes
+  burst_max_nodes: 16   # Autoscales up to 16 nodes on demand
+
+  # Provisioning model, select one, lack of selection will rely on on-demand capacity
+  c3_reservation_name: ""
+  c3_dws_flex_enabled: false
+  c3_enable_spot_vm: false
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+deployment_groups:
+- group: primary
+  modules:
+
+  # Primary VPC network for Cluster B (pre-created and peered to Cluster A)
+  - id: network
+    source: modules/network/pre-existing-vpc
+    settings:
+      network_name: $(vars.deployment_name)-net
+      subnetwork_name: $(vars.deployment_name)-subnet
+
+  # Mount Cluster A's Shared /home Storage across VPC peering / interconnect
+  - id: homefs
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      server_ip: $(vars.nfs_server_ip)
+      remote_mount: $(vars.nfs_remote_mount)
+      local_mount: /home
+      fs_type: nfs
+
+  # Elastic Bursting Compute Nodeset (0 -> 16 nodes)
+  - id: burst_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      allow_automatic_updates: false
+      bandwidth_tier: gvnic_enabled
+      machine_type: c3-standard-176
+      node_count_static: $(vars.burst_cluster_size)
+      node_count_dynamic_max: $(vars.burst_max_nodes)
+      enable_placement: false
+      enable_spot_vm: $(vars.c3_enable_spot_vm)
+
+      # Provisioning models
+      reservation_name: $(vars.c3_reservation_name)
+      dws_flex:
+        enabled: $(vars.c3_dws_flex_enabled)
+
+      disk_type: hyperdisk-balanced
+
+  # Default Burst Partition
+  - id: burst_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - burst_nodeset
+    settings:
+      exclusive: false
+      partition_name: burst
+      is_default: true
+      partition_conf:
+        ResumeTimeout: 900
+        SuspendTimeout: 600
+
+  # Startup script for Login Node: synchronizes Cluster A's master slurm.key
+  - id: login_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: login_key_sync.sh
+        content: |
+          #!/bin/bash
+          KEY_SRC=""
+          for i in `seq 1 60`; do
+            for f in /home/.shared_slurm.key /home/shared_slurm.key; do
+              [ -s "$f" ] && KEY_SRC="$f" && break 2
+            done
+            sleep 1
+          done
+          if [ -n "$KEY_SRC" ]; then
+            mkdir -p /etc/slurm
+            cp -f "$KEY_SRC" /etc/slurm/slurm.key
+            chown slurm:slurm /etc/slurm/slurm.key 2>/dev/null || true
+            chmod 400 /etc/slurm/slurm.key 2>/dev/null || true
+          fi
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network, login_startup]
+    settings:
+      machine_type: c3-standard-4
+      disk_type: hyperdisk-balanced
+      enable_login_public_ips: true
+
+  # Startup script for Controller: imports master key and configures cross-cluster accounting
+  - id: controller_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: stage_scripts.sh
+        content: |
+          #!/bin/bash
+          SLURM_ROOT=/opt/apps/adm/slurm
+          mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
+
+          # enable the use of password-free sudo within Slurm jobs on all compute nodes
+          mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/epilog_slurmd.d"
+          curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
+          chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
+
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
+
+          # 1. Synchronously import Cluster A's master slurm.key from shared /home
+          KEY_SRC=""
+          for i in `seq 1 60`; do
+            for f in /home/.shared_slurm.key /home/shared_slurm.key; do
+              [ -s "$f" ] && KEY_SRC="$f" && break 2
+            done
+            sleep 1
+          done
+          if [ -n "$KEY_SRC" ]; then
+            mkdir -p /etc/slurm /var/spool/slurm /slurm/key_distribution
+            cp -f "$KEY_SRC" /etc/slurm/slurm.key
+            cp -f "$KEY_SRC" /var/spool/slurm/slurm.key
+            cp -f "$KEY_SRC" /slurm/key_distribution/slurm.key
+            chown -R slurm:slurm /etc/slurm/slurm.key /var/spool/slurm/slurm.key /slurm/key_distribution/slurm.key
+            chmod 400 /etc/slurm/slurm.key /var/spool/slurm/slurm.key /slurm/key_distribution/slurm.key
+          fi
+
+          # 2. Configure cross-cluster accounting host to point to Cluster A
+          A_CTRL_IP="$(vars.clustera_controller_ip)"
+          if [ -z "$A_CTRL_IP" ]; then
+            for i in `seq 1 60`; do
+              for f in /home/.cluster_a_ctrl_ip /home/cluster_a_ctrl_ip; do
+                [ -s "$f" ] && A_CTRL_IP=`cat "$f" 2>/dev/null | tr -d '[:space:]'` && break 2
+              done
+              sleep 1
+            done
+          fi
+          if [ -n "$A_CTRL_IP" ]; then
+            for i in `seq 1 60`; do
+              [ -s /etc/slurm/slurm.conf ] && break
+              sleep 1
+            done
+            if [ -s /etc/slurm/slurm.conf ] && ! grep -q "AccountingStorageExternalHost" /etc/slurm/slurm.conf; then
+              echo "AccountingStorageExternalHost=$A_CTRL_IP:6819" >> /etc/slurm/slurm.conf
+              scontrol reconfigure 2>/dev/null || true
+            fi
+          fi
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, burst_partition, slurm_login, homefs]
+    settings:
+      enable_slurm_auth: true
+      machine_type: c3-standard-4
+      disk_type: hyperdisk-balanced
+      enable_controller_public_ips: true
+      controller_startup_script: $(controller_startup.startup_script)
+      enable_external_prolog_epilog: true
+      cloud_parameters:
+        unkillable_step_timeout: 900

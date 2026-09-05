@@ -1,0 +1,158 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+blueprint_name: slurm-c3
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: slurm-c3
+  region: us-central1
+  zone: us-central1-a
+  instance_image:
+    # Rocky 8: slurm-gcp-6-12-hpc-rocky-linux-8
+    # Rocky 9: slurm-gcp-6-12-hpc-rocky-linux-9
+    family: slurm-gcp-6-12-hpc-rocky-linux-8
+    project: schedmd-slurm-public
+  c3_cluster_size: 2
+
+  # Provisioning model, select one, lack of selection will rely on on-demand capacity
+  c3_reservation_name: ""
+  c3_dws_flex_enabled: false
+  c3_enable_spot_vm: false
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+deployment_groups:
+- group: primary
+  modules:
+
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local module, prefix with ./, ../ or /
+
+  - id: network
+    source: modules/network/pre-existing-vpc
+    settings:
+      network_name: $(vars.deployment_name)-net
+      subnetwork_name: $(vars.deployment_name)-subnet
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network]
+    settings:
+      filestore_tier: BASIC_SSD
+      size_gb: 2560
+      filestore_share_name: homeshare
+      local_mount: /home
+
+  - id: c3_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      # Unattended upgrades are disabled to prevent automatic daily updates which may lead to potential instability.
+      # For more details, see https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
+      allow_automatic_updates: false
+      bandwidth_tier: gvnic_enabled
+      machine_type: c3-standard-176
+      node_count_static: $(vars.c3_cluster_size)
+      node_count_dynamic_max: 0
+      enable_placement: false
+      enable_spot_vm: $(vars.c3_enable_spot_vm)
+
+      # Provisioning models
+      reservation_name: $(vars.c3_reservation_name)
+      dws_flex:
+        enabled: $(vars.c3_dws_flex_enabled)
+
+      disk_type: hyperdisk-balanced
+
+  - id: c3_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - c3_nodeset
+    settings:
+      exclusive: false
+      partition_name: compute
+      is_default: true
+      partition_conf:
+        ResumeTimeout: 900
+        SuspendTimeout: 600
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      machine_type: c3-standard-4
+      disk_type: hyperdisk-balanced
+      enable_login_public_ips: true
+
+  - id: controller_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: stage_scripts.sh
+        content: |
+          #!/bin/bash
+          SLURM_ROOT=/opt/apps/adm/slurm
+          mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
+
+          # enable the use of password-free sudo within Slurm jobs on all compute nodes
+          # feature is restricted to users with OS Admin Login IAM role
+          # https://cloud.google.com/iam/docs/understanding-roles#compute.osAdminLogin
+          mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/epilog_slurmd.d"
+          curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
+          chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
+
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
+
+          # Export master slurm.key and controller IP to shared /home for Cluster B
+          for i in `seq 1 60`; do
+            [ -s /etc/slurm/slurm.key ] && break
+            sleep 1
+          done
+          if [ -s /etc/slurm/slurm.key ]; then
+            cp -f /etc/slurm/slurm.key /home/.shared_slurm.key
+            cp -f /etc/slurm/slurm.key /home/shared_slurm.key
+            chmod 600 /home/.shared_slurm.key /home/shared_slurm.key 2>/dev/null || true
+          else
+            echo "ERROR: /etc/slurm/slurm.key was not generated within 60 seconds." >&2
+          fi
+
+          A_IP=`hostname -I | awk '{print $1}'`
+          if [ -n "$A_IP" ]; then
+            echo "$A_IP" > /home/.cluster_a_ctrl_ip
+            echo "$A_IP" > /home/cluster_a_ctrl_ip
+            chmod 644 /home/.cluster_a_ctrl_ip /home/cluster_a_ctrl_ip 2>/dev/null || true
+          fi
+
+          # Re-export /home via NFS so Cluster B can mount it across VPC peering
+          # Note: In production, consider restricting '*' to Cluster B's specific CIDR (e.g. 10.130.0.0/20) for least privilege
+          mkdir -p /etc/exports.d
+          echo '/home *(rw,sync,no_subtree_check,no_root_squash,fsid=10)' > /etc/exports.d/home.exports
+          exportfs -ra 2>/dev/null || true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, c3_partition, slurm_login, homefs]
+    settings:
+      enable_slurm_auth: true
+      machine_type: c3-standard-4
+      disk_type: hyperdisk-balanced
+      enable_controller_public_ips: true
+      controller_startup_script: $(controller_startup.startup_script)
+      enable_external_prolog_epilog: true
+      cloud_parameters:
+        unkillable_step_timeout: 900
