@@ -43,6 +43,7 @@ custom_vars:
   jobset_name: sample-tpu-jobset
 instance_type: "tpuv6e"
 scheduler: "gke"
+chs_nodepools: "gke-tpu-v6e-pool"
 chs_suites:
 - lite
 - standard
