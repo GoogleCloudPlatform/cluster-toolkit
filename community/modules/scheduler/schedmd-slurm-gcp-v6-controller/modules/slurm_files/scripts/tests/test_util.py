@@ -839,3 +839,303 @@ def test_compute_service_custom_universe_domain(mocker):
     assert kwargs.get("static_discovery") is True
     assert kwargs.get("client_options").api_endpoint == "https://compute.apis-sovereign.goog/compute/beta/"
     assert kwargs.get("client_options").universe_domain == "apis-sovereign.goog"
+
+
+def test_is_mig_engine():
+    cfg_bulk = TstCfg(provisioning_engine="BULK_INSERT")
+    lkp_bulk = util.Lookup(cfg_bulk)
+    assert not lkp_bulk.is_mig_engine()
+
+    cfg_mig = TstCfg(provisioning_engine="MIG")
+    lkp_mig = util.Lookup(cfg_mig)
+    assert lkp_mig.is_mig_engine()
+
+
+def test_mig_name():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        provisioning_engine="MIG",
+        nodeset={
+            "ns1": TstNodeset(nodeset_name="ns1", node_count_dynamic_max=100),
+            "ns2": TstNodeset(nodeset_name="ns2", node_count_dynamic_max=1200),
+        }
+    )
+    lkp = util.Lookup(cfg)
+    assert lkp.mig_name("ns1") == "testcl-ns1-mig-0"
+    assert lkp.mig_name("ns2", index=0) == "testcl-ns2-mig-0"
+
+
+def test_is_node_mig():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        provisioning_engine="AUTO",
+        nodeset={
+            "ns_mig": TstNodeset(nodeset_name="ns_mig", mig_name="testcl-ns_mig-mig-0", provisioning_engine="MIG"),
+            "ns_bulk": TstNodeset(nodeset_name="ns_bulk", provisioning_engine="BULK_INSERT"),
+        }
+    )
+    lkp = util.Lookup(cfg)
+    assert lkp.is_nodeset_mig("ns_mig")
+    assert not lkp.is_nodeset_mig("ns_bulk")
+    assert lkp.is_node_mig("testcl-ns_mig-0")
+    assert not lkp.is_node_mig("testcl-ns_bulk-0")
+
+    # Cluster-level MIG with explicit NodeSet-level BULK_INSERT override
+    cfg_cluster_mig = TstCfg(
+        slurm_cluster_name="testcl",
+        provisioning_engine="MIG",
+        nodeset={
+            "ns_mig_cluster": TstNodeset(nodeset_name="ns_mig_cluster"),
+            "ns_bulk_override": TstNodeset(nodeset_name="ns_bulk_override", provisioning_engine="BULK_INSERT"),
+        }
+    )
+    lkp_cluster = util.Lookup(cfg_cluster_mig)
+    assert lkp_cluster.is_nodeset_mig("ns_mig_cluster")
+    assert not lkp_cluster.is_nodeset_mig("ns_bulk_override")
+    assert lkp_cluster.is_node_mig("testcl-ns_mig_cluster-0")
+    assert not lkp_cluster.is_node_mig("testcl-ns_bulk_override-0")
+
+    # Cross-NodeSet Isolation: Legacy NodeSet without provisioning_engine in a hybrid cluster
+    cfg_hybrid = TstCfg(
+        slurm_cluster_name="testcl",
+        provisioning_engine="AUTO",
+        nodeset={
+            "ns_mig": TstNodeset(nodeset_name="ns_mig", mig_name="testcl-ns_mig-mig-0", provisioning_engine="MIG"),
+            "ns_legacy": TstNodeset(nodeset_name="ns_legacy"),  # No provisioning_engine field
+        }
+    )
+    lkp_hybrid = util.Lookup(cfg_hybrid)
+    assert lkp_hybrid.is_nodeset_mig("ns_mig")
+    assert not lkp_hybrid.is_nodeset_mig("ns_legacy")
+    assert lkp_hybrid.is_node_mig("testcl-ns_mig-0")
+    assert not lkp_hybrid.is_node_mig("testcl-ns_legacy-0")
+
+
+def test_get_mig_repairing_instances_empty_filter():
+    cfg = TstCfg(slurm_cluster_name="testcl")
+    lkp = util.Lookup(cfg)
+    lkp.get_mig_instances = unittest.mock.MagicMock(return_value={
+        "managedInstances": [
+            {"currentAction": "REPAIRING", "name": "node-1"},
+            {"currentAction": "RECREATING", "instance": "https://.../instances/node-2"},
+            {"currentAction": "RESTARTING", "name": "node-4"},
+            {"currentAction": "REPAIRING", "name": None, "instance": None},  # Ephemeral unassigned
+            {"currentAction": "NONE", "name": "node-3"},
+        ]
+    })
+    res = lkp.get_mig_repairing_instances("p", "r", "mig-0")
+    assert res == {"node-1", "node-2", "node-4"}
+    assert "" not in res
+
+
+def test_is_provisioning_flex_node(monkeypatch):
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "flex_ns": TstNodeset(
+                nodeset_name="flex_ns",
+                region="us-central1",
+                zone_policy_allow=["us-central1-a"],
+                instance_template="projects/testproj/global/instanceTemplates/flex-tpl",
+                dws_flex=NSDict(enabled=True, use_bulk_insert=False),
+            ),
+            "non_flex_ns": TstNodeset(
+                nodeset_name="non_flex_ns",
+                region="us-central1",
+                dws_flex=NSDict(enabled=False),
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    # Non-flex node returns False immediately
+    assert not lkp.is_provisioning_flex_node("testcl-non_flex_ns-0")
+
+    # Mock instances call returning None (node not created yet)
+    monkeypatch.setattr(lkp, "instance", lambda node: None)
+
+    # Mock get_mig_list returning MIGs with versioned template
+    fake_migs = {
+        "items": [
+            {
+                "selfLink": "https://www.googleapis.com/compute/v1/projects/testproj/regions/us-central1/instanceGroupManagers/unrelated-mig",
+                "versions": [{"instanceTemplate": "projects/testproj/global/instanceTemplates/other-tpl"}],
+                "currentActions": {"creating": 1},
+            },
+            {
+                "selfLink": "https://www.googleapis.com/compute/v1/projects/testproj/regions/us-central1/instanceGroupManagers/job-mig",
+                "versions": [{"instanceTemplate": "projects/testproj/global/instanceTemplates/flex-tpl"}],
+                "currentActions": {"creating": 1},
+            },
+        ]
+    }
+    monkeypatch.setattr(lkp, "get_mig_list", lambda proj, reg: fake_migs)
+
+    def mock_get_mig_instances(proj, reg, mig_name):
+        if mig_name == "job-mig":
+            return {
+                "managedInstances": [
+                    {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-flex_ns-0", "currentAction": "CREATING"}
+                ]
+            }
+        return {"managedInstances": []}
+
+    monkeypatch.setattr(lkp, "get_mig_instances", mock_get_mig_instances)
+
+    assert lkp.is_provisioning_flex_node("testcl-flex_ns-0")
+    assert lkp.is_provisioning_flex_node("testcl-flex_ns-0.c.testproj.internal")
+    assert not lkp.is_provisioning_flex_node("testcl-flex_ns-1")
+
+
+def test_is_nodeset_mig():
+    import types
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "static_mig_ns": TstNodeset(nodeset_name="static_mig_ns", provisioning_engine="MIG", mig_name="testcl-static_mig_ns-mig-0"),
+            "flex_ns": TstNodeset(nodeset_name="flex_ns", provisioning_engine="MIG", dws_flex=types.SimpleNamespace(enabled=True)),
+            "bulk_ns": TstNodeset(nodeset_name="bulk_ns", provisioning_engine="BULK_INSERT"),
+            "bulk_override_ns": TstNodeset(nodeset_name="bulk_override_ns", provisioning_engine="BULK_INSERT", mig_name="testcl-bulk_override_ns-mig-0"),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    assert lkp.is_nodeset_mig("static_mig_ns") is True
+    assert lkp.is_nodeset_mig("flex_ns") is False
+    assert lkp.is_nodeset_mig("bulk_ns") is False
+    assert lkp.is_nodeset_mig("bulk_override_ns") is False
+
+
+def test_mig_name_multi_mig():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "small_ns": TstNodeset(nodeset_name="small_ns", node_count_static=50, node_count_dynamic_max=0),
+            "large_static_ns": TstNodeset(nodeset_name="large_static_ns", node_count_static=2500, node_count_dynamic_max=0),
+            "large_dynamic_ns": TstNodeset(nodeset_name="large_dynamic_ns", node_count_static=0, node_count_dynamic_max=1500),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    # <= 1000 nodes -> indexed MIG name starting at 0
+    assert lkp.mig_name("small_ns") == "testcl-small_ns-mig-0"
+    assert lkp.node_mig_name("testcl-small_ns-0") == "testcl-small_ns-mig-0"
+    assert lkp.node_mig_name("testcl-small_ns-49") == "testcl-small_ns-mig-0"
+
+    # > 1000 static nodes -> indexed MIG names
+    assert lkp.mig_name("large_static_ns", index=0) == "testcl-large_static_ns-mig-0"
+    assert lkp.mig_name("large_static_ns", index=1) == "testcl-large_static_ns-mig-1"
+    assert lkp.mig_name("large_static_ns", index=2) == "testcl-large_static_ns-mig-2"
+    assert lkp.node_mig_name("testcl-large_static_ns-0") == "testcl-large_static_ns-mig-0"
+    assert lkp.node_mig_name("testcl-large_static_ns-999") == "testcl-large_static_ns-mig-0"
+    assert lkp.node_mig_name("testcl-large_static_ns-1000") == "testcl-large_static_ns-mig-1"
+    assert lkp.node_mig_name("testcl-large_static_ns-1999") == "testcl-large_static_ns-mig-1"
+    assert lkp.node_mig_name("testcl-large_static_ns-2000") == "testcl-large_static_ns-mig-2"
+
+    # > 1000 dynamic nodes -> indexed MIG names
+    assert lkp.node_mig_name("testcl-large_dynamic_ns-500") == "testcl-large_dynamic_ns-mig-0"
+    assert lkp.node_mig_name("testcl-large_dynamic_ns-1200") == "testcl-large_dynamic_ns-mig-1"
+
+
+@unittest.mock.patch("util.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_suspend_mig_nodes_multi_mig(mock_compute_prop, mock_execute):
+    import suspend
+
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "large_ns": TstNodeset(nodeset_name="large_ns", region="us-central1", node_count_static=2500, node_count_dynamic_max=0),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    mock_execute.side_effect = lambda req: req.execute()
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+        "managedInstances": [
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-large_ns-0"},
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-large_ns-1005"},
+        ]
+    }
+
+    # Pass duplicate entries ("testcl-large_ns-0" twice) and absent node "testcl-large_ns-999"; duplicates and absent nodes must be safely handled
+    suspend.suspend_mig_nodes(["testcl-large_ns-0.c.testproj.internal", "testcl-large_ns-0", "testcl-large_ns-999", "testcl-large_ns-1005"], lkp=lkp)
+
+    delete_calls = mock_compute.regionInstanceGroupManagers().deleteInstances.call_args_list
+    assert len(delete_calls) == 2
+    # Group 0 for node index 0 (FQDN normalized to short name, node 999 is skipped from body)
+    assert delete_calls[0].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-0"
+    assert delete_calls[0].kwargs["body"]["instances"] == ["projects/testproj/zones/us-central1-a/instances/testcl-large_ns-0"]
+    assert delete_calls[0].kwargs["body"]["skipInstancesOnValidationError"] is True
+    # Group 1 for node index 1005
+    assert delete_calls[1].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-1"
+    assert delete_calls[1].kwargs["body"]["instances"] == ["projects/testproj/zones/us-central1-a/instances/testcl-large_ns-1005"]
+    assert delete_calls[1].kwargs["body"]["skipInstancesOnValidationError"] is True
+
+    pic_del_calls = mock_compute.regionInstanceGroupManagers().deletePerInstanceConfigs.call_args_list
+    assert len(pic_del_calls) == 2
+    assert pic_del_calls[0].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-0"
+    assert set(pic_del_calls[0].kwargs["body"]["names"]) == {"testcl-large_ns-0", "testcl-large_ns-999"}
+    assert pic_del_calls[1].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-1"
+    assert set(pic_del_calls[1].kwargs["body"]["names"]) == {"testcl-large_ns-1005"}
+
+
+@unittest.mock.patch.object(util.Lookup, "instance", return_value=None)
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+@unittest.mock.patch("slurmsync.lookup")
+def test_slurmsync_mig_auto_repair(mock_lookup, mock_compute_prop, mock_inst):
+    import slurmsync
+
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        provisioning_engine="MIG",
+        nodeset={
+            "ns": TstNodeset(nodeset_name="ns", region="us-central1", provisioning_engine="MIG", node_count_static=10, node_count_dynamic_max=0),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+        "managedInstances": [
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-ns-0", "currentAction": "REPAIRING"},
+            {"name": "testcl-ns-1", "currentAction": "REPAIRING"},
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-ns-2", "currentAction": "NONE"},
+        ]
+    }
+    mock_lookup.return_value = lkp
+
+    # Verify set cache
+    assert lkp.get_mig_repairing_instances("testproj", "us-central1", "testcl-ns-mig-0") == {"testcl-ns-0", "testcl-ns-1"}
+
+    # When node exists in Slurm and is IDLE (not DOWN) -> NodeActionDown
+    with unittest.mock.patch.object(util.Lookup, "node_state", return_value=slurmsync.NodeState(base="IDLE", flags=frozenset())):
+        action0 = slurmsync.get_node_action("testcl-ns-0")
+        assert isinstance(action0, slurmsync.NodeActionDown)
+        assert "MIG Auto-Healing" in action0.reason
+
+        # Test resolution when API returns 'name' field
+        action1 = slurmsync.get_node_action("testcl-ns-1.c.testproj.internal")
+        assert isinstance(action1, slurmsync.NodeActionDown)
+        assert "MIG Auto-Healing" in action1.reason
+
+    # When node does not exist in Slurm (node_state returns None) -> NodeActionUnchanged (don't run scontrol on invalid node)
+    with unittest.mock.patch.object(util.Lookup, "node_state", return_value=None):
+        action_none = slurmsync.get_node_action("testcl-ns-0")
+        assert isinstance(action_none, slurmsync.NodeActionUnchanged)
+
+    # When node was marked DOWN due to auto-healing and instance is now RUNNING -> NodeActionIdle
+    with unittest.mock.patch.object(util.Lookup, "instance", return_value=unittest.mock.MagicMock(status="RUNNING")):
+        with unittest.mock.patch.object(util.Lookup, "node_state", return_value=slurmsync.NodeState(base="DOWN", flags=frozenset())):
+            with unittest.mock.patch("slurmsync.get_node_reason", return_value="MIG Auto-Healing instance repair in progress") as mock_get_reason:
+                action_recovered = slurmsync.get_node_action("testcl-ns-2")
+                assert isinstance(action_recovered, slurmsync.NodeActionIdle)
+                mock_get_reason.assert_called_with("testcl-ns-2")
+
+                # Verify FQDN is normalized to short name when calling get_node_reason
+                action_recovered_fqdn = slurmsync.get_node_action("testcl-ns-2.c.testproj.internal")
+                assert isinstance(action_recovered_fqdn, slurmsync.NodeActionIdle)
+                mock_get_reason.assert_called_with("testcl-ns-2")

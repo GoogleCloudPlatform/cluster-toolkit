@@ -104,4 +104,19 @@ output "nodeset" {
       This nodeset contains zero nodes, there should be at least one static or dynamic node
     EOD
   }
+
+  precondition {
+    condition     = !(var.dws_flex.enabled && !var.dws_flex.use_bulk_insert && var.provisioning_engine == "BULK_INSERT")
+    error_message = "DWS Flex-Start strictly requires MIGs. Cannot force provisioning_engine = 'BULK_INSERT'."
+  }
+
+  precondition {
+    condition     = !(var.node_count_dynamic_max > 0 && !var.dws_flex.enabled && var.provisioning_engine == "MIG")
+    error_message = "Dynamic compute NodeSets with provisioning_engine = 'MIG' are currently not supported. When using provisioning_engine = 'MIG', please explicitly set node_count_dynamic_max = 0."
+  }
+
+  precondition {
+    condition     = !(var.provisioning_engine == "MIG" && var.enable_placement && !var.dws_flex.enabled)
+    error_message = "MIG engine currently does not support runtime dynamic compact placement policies (enable_placement = true). Please set enable_placement = false when using provisioning_engine = 'MIG'. Compact placement and Workload Policies for MIGs will be supported in a future release."
+  }
 }

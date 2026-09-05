@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Union
+from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Union, Set
 import argparse
 import base64
 from dataclasses import dataclass, field
@@ -312,7 +312,7 @@ class Instance:
       resource_status=InstanceResourceStatus.from_json(jo.get("resourceStatus")),
       scheduling=NSDict(jo.get("scheduling")),
       role = jo.get("labels", {}).get("slurm_instance_role"),
-      metadata = {k["key"]: k["value"] for k in jo.get("metadata", {}).get("items", [])}
+      metadata = {k["key"]: k["value"] for k in jo.get("metadata", {}).get("items", [])},
     )
 
 
@@ -1811,6 +1811,42 @@ class Lookup:
     def nodeset_is_tpu(self, nodeset_name=None) -> bool:
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
 
+    def is_mig_engine(self) -> bool:
+        """Returns True if the cluster deployment default is configured with provisioning_engine == 'MIG'."""
+        return getattr(self.cfg, "provisioning_engine", "BULK_INSERT") == "MIG"
+
+    def is_nodeset_mig(self, nodeset_name: str) -> bool:
+        """Returns True if a specific NodeSet is configured with or resolved to MIG."""
+        nodeset = self.cfg.nodeset.get(nodeset_name)
+        if not nodeset:
+            return False
+        if getattr(nodeset, "dws_flex", None) and getattr(nodeset.dws_flex, "enabled", False):
+            return False
+        engine = getattr(nodeset, "provisioning_engine", None)
+        if engine == "BULK_INSERT":
+            return False
+        if engine == "MIG":
+            return True
+        if getattr(nodeset, "mig_name", None) is not None:
+            return True
+        return self.is_mig_engine()
+
+    def is_node_mig(self, node_name: str) -> bool:
+        """Returns True if the node belongs to a MIG-backed NodeSet."""
+        nodeset_name = self.node_nodeset_name(node_name)
+        return self.is_nodeset_mig(nodeset_name)
+
+    def mig_name(self, nodeset_name: str, index: int = 0) -> str:
+        """Returns target MIG name for a given NodeSet, indexed from 0 for consistent scale expansion."""
+        return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-mig-{index}"
+
+    def node_mig_name(self, node_name: str) -> str:
+        """Returns the specific MIG name for a given node."""
+        nodeset_name = self.node_nodeset_name(node_name)
+        idx = self.node_index(node_name)
+        mig_idx = idx // 1000
+        return self.mig_name(nodeset_name, index=mig_idx)
+
     def node_is_fr(self, node_name:str) -> bool:
         return bool(self.node_nodeset(node_name).future_reservation)
 
@@ -2011,18 +2047,50 @@ class Lookup:
             project=project, zone=zone, reservation=name).execute()
 
     @lru_cache()
-    def get_mig(self, project: str, region: str, self_link:str) -> Any:
+    def get_mig(self, project: str, region: str, self_link: str) -> Any:
         """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
-        return self.compute.regionInstanceGroupManagers().get(project=project, region=region, instanceGroupManager=self_link).execute()
+        req = self.compute.regionInstanceGroupManagers().get(project=project, region=region, instanceGroupManager=self_link)
+        return ensure_execute(req)
 
-    @lru_cache
-    def get_mig_instances(self, project: str, region: str, self_link:str) -> Any:
-        return self.compute.regionInstanceGroupManagers().listManagedInstances(project=project, region=region, instanceGroupManager=self_link).execute() 
+    @lru_cache()
+    def get_mig_instances(self, project: str, region: str, self_link: str) -> Any:
+        """Returns all managed instances for a given MIG, handling pagination."""
+        all_instances = []
+        page_token = None
+        while True:
+            req = (
+                self.compute.regionInstanceGroupManagers()
+                .listManagedInstances(
+                    project=project,
+                    region=region,
+                    instanceGroupManager=self_link,
+                    pageToken=page_token,
+                )
+            )
+            res = ensure_execute(req)
+            all_instances.extend(res.get("managedInstances", []) if isinstance(res, dict) else [])
+            page_token = res.get("nextPageToken") if isinstance(res, dict) else None
+            if not page_token:
+                break
+        return {"managedInstances": all_instances}
+
+    @lru_cache()
+    def get_mig_repairing_instances(self, project: str, region: str, self_link: str) -> Set[str]:
+        """Returns the set of instance names currently in REPAIRING state in a given MIG."""
+        mig_insts = self.get_mig_instances(project, region, self_link)
+        repairing: Set[str] = set()
+        for m_inst in mig_insts.get("managedInstances", []):
+            if m_inst.get("currentAction") in ("REPAIRING", "RESTARTING", "RECREATING"):
+                name = m_inst.get("name") or (m_inst.get("instance") or "").split("/")[-1]
+                if name:
+                    repairing.add(name)
+        return repairing
 
     @lru_cache()
     def get_mig_list(self, project: str, region: str) -> Any:
         """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
-        return self.compute.regionInstanceGroupManagers().list(project=project, region=region).execute()
+        req = self.compute.regionInstanceGroupManagers().list(project=project, region=region)
+        return ensure_execute(req)
 
     @lru_cache()
     def _get_future_reservation(self, project:str, zone:str, name: str) -> Any:
@@ -2355,13 +2423,14 @@ class Lookup:
     def is_provisioning_flex_node(self, node:str) -> bool:
         if not self.is_flex_node(node):
             return False
-        if self.instance(node) is not None:
+        short_name = node.split(".")[0]
+        if self.instance(short_name) is not None:
             return True
 
-        nodeset = self.node_nodeset(node)
+        nodeset = self.node_nodeset(short_name)
         zones = nodeset.zone_policy_allow
         assert len(zones) > 0
-        region = self.node_region(node)
+        region = self.node_region(short_name)
 
         potential_migs=[]
         mig_list=self.get_mig_list(self.project, region)
@@ -2370,17 +2439,24 @@ class Lookup:
             return False
 
         for mig in mig_list["items"]:
-            if not mig.get("instanceTemplate"): #possibly an old MIG
-                return False
-            if mig["instanceTemplate"] == self.node_template(node) and mig["currentActions"]["creating"] > 0:
+            template = mig.get("instanceTemplate") or (mig.get("versions", [{}])[0].get("instanceTemplate") if mig.get("versions") else None)
+            if not template:
+                continue
+            creating_count = mig.get("currentActions", {}).get("creating", 0) if mig.get("currentActions") else 0
+            if trim_self_link(template) == trim_self_link(self.node_template(short_name)) and creating_count > 0:
                 potential_migs.append(self.get_mig_instances(self.project, region, trim_self_link(mig["selfLink"])))
 
         if not potential_migs:
             return False
 
-        for instance_collection in potential_migs[0]["managedInstances"]:
-            if node in instance_collection["name"] and instance_collection["currentAction"]=="CREATING":
-                return True
+        for inst_group in potential_migs:
+            for instance_collection in inst_group.get("managedInstances", []):
+                inst_name = (
+                    instance_collection.get("name")
+                    or (instance_collection.get("instance") or "").split("/")[-1]
+                )
+                if short_name == inst_name and instance_collection.get("currentAction") == "CREATING":
+                    return True
         return False
     
     def cluster_regions(self) -> list[str]:

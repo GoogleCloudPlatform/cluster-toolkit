@@ -23,7 +23,10 @@ locals {
   nodeset_dyn_map     = { for k, vs in local.nodeset_dyn_map_ell : k => vs[0] }
 
 
-  no_reservation_affinity = { type : "NO_RESERVATION" }
+  no_reservation_affinity = {
+    type                 = "NO_RESERVATION"
+    specific_reservation = null
+  }
 }
 
 # NODESET
@@ -74,9 +77,19 @@ module "slurm_nodeset_template" {
   access_config                       = each.value.access_config
   tags                                = concat([local.slurm_cluster_name], each.value.tags)
 
-  max_run_duration     = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? each.value.dws_flex.max_run_duration : null
-  provisioning_model   = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? "FLEX_START" : null
-  reservation_affinity = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? local.no_reservation_affinity : null
+  max_run_duration   = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? each.value.dws_flex.max_run_duration : null
+  provisioning_model = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? "FLEX_START" : null
+  reservation_affinity = (
+    each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert ? local.no_reservation_affinity : (
+      local.nodeset_resolved_engine[each.value.nodeset_name] == "MIG" && each.value.reservation_name != "" && each.value.reservation_name != null ? {
+        type = "SPECIFIC_RESERVATION"
+        specific_reservation = {
+          key    = "compute.${coalesce(var.universe_domain, "googleapis.com")}/reservation-name"
+          values = [each.value.reservation_name]
+        }
+      } : null
+    )
+  )
 }
 
 module "nodeset_cleanup" {
@@ -94,11 +107,103 @@ module "nodeset_cleanup" {
 }
 
 locals {
+  # NodeSet-level engine resolution: DWS Flex automatically resolves to MIG; standard compute nodes default to BULK_INSERT (MIG is opt-in)
+  nodeset_resolved_engine = {
+    for name, ns in local.nodeset_map : name => (
+      ns.dws_flex.enabled && !ns.dws_flex.use_bulk_insert ? "MIG" : (
+        try(ns.provisioning_engine, "AUTO") == "MIG" ? "MIG" :
+        "BULK_INSERT"
+      )
+    )
+  }
+
+  # Multiple instance groups when node count exceeds 1000
+  nodeset_migs = merge([
+    for name, ns in local.nodeset_map : {
+      for idx in range(ceil(max(ns.node_count_static + ns.node_count_dynamic_max, 1) / 1000.0)) : (
+        "${name}-mig-${idx}"
+        ) => {
+        nodeset_name       = name
+        index              = idx
+        mig_name           = "${local.slurm_cluster_name}-${name}-mig-${idx}"
+        base_instance_name = "${local.slurm_cluster_name}-${name}"
+        region             = coalesce(ns.region, var.region)
+        target_size        = 0
+        zone_policy_allow  = ns.zone_policy_allow
+        template_link      = module.slurm_nodeset_template[name].self_link
+        nodeset            = ns
+      }
+    }
+    if local.nodeset_resolved_engine[name] == "MIG" && !ns.dws_flex.enabled
+  ]...)
+
+  # Filter out null or empty strings from zone policy allow sets
+  nodeset_mig_zones = {
+    for k, mig in local.nodeset_migs : k => [
+      for z in try(coalesce(mig.zone_policy_allow, []), []) : z if z != null && z != ""
+    ]
+  }
+}
+
+data "google_compute_zones" "available" {
+  for_each = toset([for mig in local.nodeset_migs : mig.region])
+  project  = var.project_id
+  region   = each.value
+}
+
+resource "google_compute_region_instance_group_manager" "nodeset_mig" {
+  for_each           = local.nodeset_migs
+  name               = each.value.mig_name
+  base_instance_name = each.value.base_instance_name
+  region             = each.value.region
+  project            = var.project_id
+  target_size        = each.value.target_size
+
+  version {
+    instance_template = each.value.template_link
+  }
+
+  distribution_policy_zones = length(local.nodeset_mig_zones[each.key]) > 0 ? local.nodeset_mig_zones[each.key] : (
+    var.zone != null && contains(data.google_compute_zones.available[each.value.region].names, var.zone) ? [var.zone] : null
+  )
+  distribution_policy_target_shape = "ANY_SINGLE_ZONE"
+
+  # Proactive Lockout Guardrail: Compute NodeSet MIGs must never use PROACTIVE
+  # update policies to prevent uncoordinated restarts of active batch jobs.
+  # GCE Regional MIG Constraint: When maxSurge is 0, GCE API requires maxUnavailable
+  # to be greater than or equal to the number of target zones in the distribution policy.
+  update_policy {
+    type                         = "OPPORTUNISTIC"
+    minimal_action               = "REPLACE"
+    replacement_method           = "RECREATE"
+    instance_redistribution_type = "NONE"
+    max_surge_fixed              = 0
+    max_unavailable_fixed = length(local.nodeset_mig_zones[each.key]) > 0 ? length(local.nodeset_mig_zones[each.key]) : (
+      var.zone != null && contains(data.google_compute_zones.available[each.value.region].names, var.zone) ? 1 : length(data.google_compute_zones.available[each.value.region].names)
+    )
+  }
+
+  instance_lifecycle_policy {
+    default_action_on_failure = "REPAIR"
+  }
+
+  lifecycle {
+    ignore_changes = [
+      target_size,
+    ]
+  }
+}
+
+locals {
   nodesets = [for name, ns in local.nodeset_map : {
-    nodeset_name                     = ns.nodeset_name
-    node_conf                        = ns.node_conf
-    dws_flex                         = ns.dws_flex
-    instance_template                = module.slurm_nodeset_template[ns.nodeset_name].self_link
+    nodeset_name      = ns.nodeset_name
+    node_conf         = ns.node_conf
+    dws_flex          = ns.dws_flex
+    instance_template = module.slurm_nodeset_template[ns.nodeset_name].self_link
+    # mig_name defines the primary (index 0) MIG shard for this NodeSet.
+    # Python scripts dynamically derive subsequent shard names (-mig-1, etc.) for >1,000 nodes.
+    mig_name                         = (local.nodeset_resolved_engine[ns.nodeset_name] == "MIG" && !ns.dws_flex.enabled) ? "${local.slurm_cluster_name}-${ns.nodeset_name}-mig-0" : null
+    provisioning_engine              = local.nodeset_resolved_engine[ns.nodeset_name]
     node_count_dynamic_max           = ns.node_count_dynamic_max
     node_count_static                = ns.node_count_static
     subnetwork                       = ns.subnetwork_self_link

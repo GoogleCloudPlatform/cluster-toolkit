@@ -81,6 +81,7 @@ locals {
     node_conf              = var.node_conf
     nodeset_name           = local.name
     dws_flex               = var.dws_flex
+    provisioning_engine    = var.provisioning_engine
 
     disk_auto_delete           = var.disk_auto_delete
     disk_labels                = merge(local.labels, var.disk_labels)

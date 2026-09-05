@@ -39,12 +39,17 @@ class TstNodeset:
     node_count_dynamic_max: int = 0
     node_conf: dict[str, Any] = field(default_factory=dict)
     instance_template: Optional[str] = None
+    mig_name: Optional[str] = None
+    provisioning_engine: Optional[str] = None
     reservation_name: Optional[str] = ""
     zone_policy_allow: Optional[list[str]] = field(default_factory=list)
     enable_placement: bool = True
     placement_max_distance: Optional[int] = None
     accelerator_topology: Optional[str] = ""
     future_reservation: Optional[str] = ""
+    subnetwork: str = "projects/p/regions/us-central1/subnetworks/default"
+    region: Optional[str] = None
+    dws_flex: Optional[Any] = None
 
 @dataclass
 class TstPartition:
@@ -56,11 +61,14 @@ class TstPartition:
 @dataclass
 class TstCfg:
     slurm_cluster_name: str = "m22"
+    project: str = "p"
+    provisioning_engine: str = "BULK_INSERT"
     cloud_parameters: dict[str, Any] = field(default_factory=dict)
     experimental: dict[str, Any] = field(default_factory=dict)
     enable_health_check_start_only: bool = False
     enable_expedited_requeue: bool = False
     enable_openmetrics: bool = False
+    google_app_cred_path: Optional[str] = None
 
     partitions: dict[str, TstPartition] = field(default_factory=dict)
     nodeset: dict[str, TstNodeset] = field(default_factory=dict)
@@ -69,6 +77,7 @@ class TstCfg:
     
     install_dir: Optional[str] = None
     output_dir: Optional[str] = None
+    slurm_bin_dir: Optional[str] = "/usr/bin"
 
     enable_controller_load_balancer: bool = False
     slurm_control_host: Optional[str] = None
