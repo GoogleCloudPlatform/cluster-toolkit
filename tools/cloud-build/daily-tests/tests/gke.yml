@@ -23,4 +23,6 @@ cli_deployment_vars:
   authorized_cidr: "{{ build_ip.stdout }}/32"
   gcp_public_cidrs_access_enabled: true
   region: us-east4
+  zone: "{{ zone }}"
 post_deploy_tests: []
+
