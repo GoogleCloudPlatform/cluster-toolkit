@@ -34,12 +34,27 @@ output "config" {
   value       = local.config
 
   precondition {
-    condition     = var.enable_hybrid ? can(coalesce(var.slurm_control_host)) : true
-    error_message = "Input slurm_control_host is required."
+    condition     = var.enable_hybrid ? can(coalesce(var.hybrid_conf.slurm_control_host)) : true
+    error_message = "Input slurm_control_host is required in hybrid mode."
+  }
+
+  precondition {
+    condition     = var.enable_hybrid ? can(coalesce(var.slurm_cluster_name)) : true
+    error_message = "Input slurm_cluster_name is required in hybrid mode."
   }
 
   precondition {
     condition     = length(local.x_nodeset_overlap) == 0
     error_message = "All nodeset names must be unique among all nodeset types."
   }
+}
+
+output "scripts_dir" {
+  value       = local.scripts_dir
+  description = "The scripts dir location."
+}
+
+output "compute_devel_zip" {
+  value       = data.archive_file.slurm_gcp_devel_compute_zip.output_path
+  description = "Path to the generated compute devel zip (slurm-gcp-devel.zip)."
 }
