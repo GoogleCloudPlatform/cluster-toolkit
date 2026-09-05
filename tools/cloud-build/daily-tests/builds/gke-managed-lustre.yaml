@@ -154,7 +154,7 @@ steps:
               echo '    use: [network]'                      >> \$$EXAMPLE_BP
               echo '    settings:'                           >> \$$EXAMPLE_BP
               echo '      machine_type: n2d-standard-2'       >> \$$EXAMPLE_BP
-              echo '      zone: us-central1-a'               >> \$$EXAMPLE_BP
+              echo '      zone: us-central1-b'               >> \$$EXAMPLE_BP
 
               IP=\$(curl ifconfig.me)
               sed -i "s|.*authorized_cidr:.*|  authorized_cidr: \$$IP/32|" \$$EXAMPLE_BP
