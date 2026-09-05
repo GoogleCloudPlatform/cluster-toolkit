@@ -27,6 +27,7 @@ import subprocess
 import sys
 import time
 import concurrent.futures
+from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from urllib.parse import urlparse
@@ -224,36 +225,150 @@ def _upload_log_files(log_dict):
     client.close()
 
 
+def _normalize_slurm_state(state):
+    if not state:
+        return None
+    return state.split()[0].split("+", 1)[0]
+
+
+def _parse_slurm_time(value):
+    # UNLIMITED is what Slurm reports for the end time of a running or
+    # non-expiring job, so it is an absent time rather than an unparsable one.
+    if not value or value in ["Unknown", "None", "N/A", "UNLIMITED"]:
+        return None
+
+    for fmt in [
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%Y-%m-%d %H:%M:%S",
+    ]:
+        try:
+            return int(datetime.strptime(value, fmt).timestamp())
+        except ValueError:
+            continue
+
+    logger.warning("Unable to parse Slurm time value: %s", value)
+    return None
+
+
+def _slurm_get_job_info_from_sacct(jobid, timeout=10, retries=2):
+    """Returns final job state information from sacct when a job leaves squeue"""
+    try:
+        for attempt in range(retries + 1):
+            try:
+                proc = subprocess.run(
+                    [
+                        "sacct",
+                        "-X",
+                        "--noheader",
+                        "--parsable2",
+                        "--format=JobID,State,Start,End",
+                        "--jobs",
+                        str(jobid),
+                    ],
+                    check=True,
+                    encoding="utf-8",
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=timeout,
+                )
+                break
+            except subprocess.TimeoutExpired:
+                logger.warning(
+                    "sacct timed out for job %s (attempt %d/%d)",
+                    jobid,
+                    attempt + 1,
+                    retries + 1,
+                )
+                if attempt == retries:
+                    logger.error(
+                        "sacct repeatedly timed out for job %s; giving up for now",
+                        jobid,
+                    )
+                    return None
+        # A requeued job has one accounting row per run all under the same JobID.
+        # Take the latest rather than whichever comes first.
+        # Rows with no parseable start time sort earliest so a row that has one always wins.
+        latest_start = None
+        latest_result = None
+
+        for line in proc.stdout.splitlines():
+            if not line.strip():
+                continue
+            fields = line.split("|")
+            if len(fields) < 4:
+                continue
+            sacct_jobid, state, start_time, end_time = fields[:4]
+            if sacct_jobid != str(jobid):
+                continue
+
+            result = {}
+            normalized_state = _normalize_slurm_state(state)
+            if normalized_state:
+                result["job_state"] = [normalized_state]
+
+            start_epoch = _parse_slurm_time(start_time)
+            if start_epoch is not None:
+                result["start_time"] = {"number": start_epoch}
+
+            end_epoch = _parse_slurm_time(end_time)
+            if end_epoch is not None:
+                result["end_time"] = {"number": end_epoch}
+
+            if not result:
+                continue
+
+            if latest_result is None or (
+                start_epoch is not None
+                and (latest_start is None or start_epoch >= latest_start)
+            ):
+                latest_start = start_epoch
+                latest_result = result
+
+        if latest_result:
+            job_state = latest_result.get("job_state")
+            if job_state:
+                logger.info(
+                    "sacct returned job %s with state %s", jobid, job_state[0]
+                )
+            return latest_result
+    except Exception as err:
+        logger.error("sacct lookup failed for job %s", jobid, exc_info=err)
+
+    return None
+
+
 def _slurm_get_job_info(jobid):
     """Returns the job state, or None if job isn't in the queue"""
     # N.B - eventually, pyslurm might work with our version of Slurm,
     # and this can be changed to something more sane.  For now, call squeue
     try:
         proc = subprocess.run(
-            ["squeue", "--json"], check=True, stdout=subprocess.PIPE
+            ["squeue", "--json"], check=True, stdout=subprocess.PIPE, timeout=10
         )
         output = json.loads(proc.stdout)
         for job in output["jobs"]:
             if job["job_id"] == jobid:
                 return job
-        return None
+        return _slurm_get_job_info_from_sacct(jobid)
     except Exception as err:
         logger.error("Subprocess threw an error", exc_info=err)
-        return None
+        return _slurm_get_job_info_from_sacct(jobid)
 
 
 def _slurm_get_job_state(jobid):
     """Returns the job state, or None if the job isn't in the queue"""
-    state = _slurm_get_job_info(jobid)  # Fetch job info using an external function
-    job_state = state.get("job_state", None) if state else None  # Get the 'job_state' if available
+    state = _slurm_get_job_info(jobid)
+    job_state = state.get("job_state", None) if state else None
 
     if job_state and isinstance(job_state, list) and job_state:
-        logger.info("Slurm returned job %s with state %s", jobid, job_state[0])  # Log the first state if available
-        return job_state[0]  # Return the first element of the state list
-    else:
-        logger.info("No valid job state available for job %s", jobid)  # Log when no valid state is found
+        normalized_state = _normalize_slurm_state(job_state[0])
+        logger.info("Slurm returned job %s with state %s", jobid, normalized_state)
+        return normalized_state
 
-    return None  # Return None if there is no job state or it's not a list
+    logger.info("No valid job state available for job %s", jobid)
+
+    return None
 
 def _spack_submit_build(app_id, partition, app_name, spec, extra_sbatch=None):
     build_dir = Path("/opt/cluster/installs") / str(app_id)
