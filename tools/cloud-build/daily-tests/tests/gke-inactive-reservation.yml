@@ -14,8 +14,8 @@
 ---
 test_name: gke-inactive-reservation
 deployment_name: gke-ir-{{ build }}
-region: us-central1
-zone: us-central1-a
+region: us-east4
+zone: us-east4-a
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hpc-gke.yaml"
 network: "{{ deployment_name }}-net"
