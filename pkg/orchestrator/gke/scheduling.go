@@ -31,13 +31,18 @@ type SchedulingOptions struct {
 	NodeAffinityLabels map[string]string
 	IsDynamicSlicing   bool
 	IsStaticSlicing    bool
+	IsTPU              bool
 }
 
 func getNodeSelector(opts SchedulingOptions) (map[string]string, error) {
 	nodeSelector := make(map[string]string)
 
 	if opts.PlacementPolicy != "" {
-		nodeSelector["cloud.google.com/gke-placement-group"] = opts.PlacementPolicy
+		if opts.IsTPU {
+			nodeSelector["cloud.google.com/placement-policy-name"] = opts.PlacementPolicy
+		} else {
+			nodeSelector["cloud.google.com/gke-placement-group"] = opts.PlacementPolicy
+		}
 	}
 
 	for k, v := range opts.NodeAffinityLabels {

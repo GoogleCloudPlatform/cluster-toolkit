@@ -18,6 +18,9 @@ import (
 	"strings"
 	"testing"
 
+	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
+
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -436,5 +439,215 @@ func TestParseReservationURI(t *testing.T) {
 				t.Errorf("parseReservationURI(%q) = %+v, want %+v", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestResolveTPUWorkloadPolicy(t *testing.T) {
+	tests := []struct {
+		name          string
+		job           *orchestrator.JobDefinition
+		nodePools     []gkeJobNodePool
+		mockResponses map[string][]shell.CommandResult
+		wantPolicy    string
+		wantErr       bool
+	}{
+		{
+			name: "Placement policy already specified on job is preserved",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				PlacementPolicy: "user-specified-policy",
+			},
+			wantPolicy: "user-specified-policy",
+		},
+		{
+			name: "Discovered from existing matching node pool",
+			job: &orchestrator.JobDefinition{
+				MachineType:   "tpu7x-standard-4t",
+				Topology:      "2x2x2",
+				NodesPerSlice: 2,
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "nap-tpu7x-pool",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+						Labels: map[string]string{
+							"cloud.google.com/gke-tpu-topology": "2x2x2",
+						},
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						PolicyName: "projects/my-project/regions/us-central1/resourcePolicies/existing-nodepool-policy",
+					},
+				},
+			},
+			wantPolicy: "existing-nodepool-policy",
+		},
+		{
+			name: "Discovered from describe of canonical policy",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe tpu7x-16-2x2x2-placement-policy --region=us-central1 --project=my-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"tpu7x-16-2x2x2-placement-policy"}`},
+				},
+			},
+			wantPolicy: "tpu7x-16-2x2x2-placement-policy",
+		},
+		{
+			name: "Permission denied on describe falls back to canonical policy name without error",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe tpu7x-16-2x2x2-placement-policy": {
+					{ExitCode: 1, Stderr: "ERROR: (gcloud.compute.resource-policies.describe) Some requests did not succeed: - Required 'compute.resourcePolicies.get' permission for '...'"},
+				},
+			},
+			wantPolicy: "tpu7x-16-2x2x2-placement-policy",
+		},
+		{
+			name: "Discovered from regional list when canonical name differs",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe tpu7x-16-2x2x2-placement-policy": {
+					{ExitCode: 1, Stderr: "ERROR: not found"},
+				},
+				"gcloud compute resource-policies list --project=my-project --filter=region:( us-central1 ) AND workloadPolicy.acceleratorTopology=2x2x2 AND workloadPolicy.type=HIGH_THROUGHPUT --format=value(name)": {
+					{ExitCode: 0, Stdout: "custom-regional-2x2x2-policy\n"},
+				},
+			},
+			wantPolicy: "custom-regional-2x2x2-policy",
+		},
+		{
+			name: "Auto-creates policy when not found and not dry-run",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+				DryRunManifest:  "",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe tpu7x-16-2x2x2-placement-policy": {
+					{ExitCode: 1, Stderr: "ERROR: not found"},
+				},
+				"gcloud compute resource-policies list": {
+					{ExitCode: 0, Stdout: ""},
+				},
+				"gcloud compute resource-policies create workload-policy tpu7x-16-2x2x2-placement-policy --region=us-central1 --project=my-project --type=HIGH_THROUGHPUT --accelerator-topology=2x2x2": {
+					{ExitCode: 0, Stdout: "Created [https://www.googleapis.com/...].\n"},
+				},
+			},
+			wantPolicy: "tpu7x-16-2x2x2-placement-policy",
+		},
+		{
+			name: "Dry-run does not call create command",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+				DryRunManifest:  "/tmp/job.yaml",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe tpu7x-16-2x2x2-placement-policy": {
+					{ExitCode: 1, Stderr: "ERROR: not found"},
+				},
+				"gcloud compute resource-policies list": {
+					{ExitCode: 0, Stdout: ""},
+				},
+			},
+			wantPolicy: "tpu7x-16-2x2x2-placement-policy",
+		},
+		{
+			name: "Single-node slice does not assign workload placement policy",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x1",
+				NodesPerSlice:   1,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+			},
+			wantPolicy: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExecutor := NewMockExecutor(tt.mockResponses)
+			g := newTestGKEOrchestrator(mockExecutor)
+			g.projectID = tt.job.ProjectID
+			g.clusterDesc.NodePools = tt.nodePools
+
+			err := g.resolveTPU7xWorkloadPolicyIfRequired(tt.job, true, false)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("resolveTPU7xWorkloadPolicyIfRequired() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.job.PlacementPolicy != tt.wantPolicy {
+				t.Errorf("resolveTPU7xWorkloadPolicyIfRequired() placementPolicy = %q, want %q", tt.job.PlacementPolicy, tt.wantPolicy)
+			}
+		})
+	}
+}
+
+func TestBuildNodeSelector_PlacementPolicy(t *testing.T) {
+	g := newTestGKEOrchestrator(nil)
+	g.machineCapCache["tpu7x-standard-4t:"] = MachineTypeCap{}
+	g.machineCapCache["a3-highgpu-8g:"] = MachineTypeCap{}
+
+	// 1. TPU workload uses cloud.google.com/placement-policy-name
+	tpuJob := orchestrator.JobDefinition{
+		MachineType: "tpu7x-standard-4t",
+	}
+	tpuOpts := SchedulingOptions{
+		PlacementPolicy: "tpu7x-16-2x2x2-placement-policy",
+		IsTPU:           true,
+	}
+	tpuSelectorStr, err := g.buildNodeSelector(tpuOpts, tpuJob, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(tpuSelectorStr, "cloud.google.com/placement-policy-name: tpu7x-16-2x2x2-placement-policy") {
+		t.Errorf("Expected cloud.google.com/placement-policy-name in %s", tpuSelectorStr)
+	}
+	if strings.Contains(tpuSelectorStr, "cloud.google.com/gke-placement-group") {
+		t.Errorf("Did not expect cloud.google.com/gke-placement-group in %s", tpuSelectorStr)
+	}
+
+	// 2. Non-TPU workload uses cloud.google.com/gke-placement-group
+	nonTpuJob := orchestrator.JobDefinition{
+		MachineType: "a3-highgpu-8g",
+	}
+	nonTpuOpts := SchedulingOptions{
+		PlacementPolicy: "compact-placement-group",
+	}
+	nonTpuSelectorStr, err := g.buildNodeSelector(nonTpuOpts, nonTpuJob, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(nonTpuSelectorStr, "cloud.google.com/gke-placement-group: compact-placement-group") {
+		t.Errorf("Expected cloud.google.com/gke-placement-group in %s", nonTpuSelectorStr)
+	}
+	if strings.Contains(nonTpuSelectorStr, "cloud.google.com/placement-policy-name") {
+		t.Errorf("Did not expect cloud.google.com/placement-policy-name in %s", nonTpuSelectorStr)
 	}
 }
