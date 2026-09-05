@@ -41,6 +41,24 @@ func TestGetNodeSelector(t *testing.T) {
 			wantValue: "value",
 		},
 		{
+			name: "tpu placement policy label",
+			opts: SchedulingOptions{
+				PlacementPolicy: "tpu7x-16-2x2x2-placement-policy",
+				IsTPU:           true,
+			},
+			wantKey:   "cloud.google.com/placement-policy-name",
+			wantValue: "tpu7x-16-2x2x2-placement-policy",
+		},
+		{
+			name: "non-tpu placement policy label",
+			opts: SchedulingOptions{
+				PlacementPolicy: "compact-placement",
+				IsTPU:           false,
+			},
+			wantKey:   "cloud.google.com/gke-placement-group",
+			wantValue: "compact-placement",
+		},
+		{
 			name: "skip pipe separated values (goes to affinity)",
 			opts: SchedulingOptions{
 				NodeAffinityLabels: map[string]string{

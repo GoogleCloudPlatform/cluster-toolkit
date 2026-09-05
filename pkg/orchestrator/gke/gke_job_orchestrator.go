@@ -66,7 +66,7 @@ func NewGKEOrchestrator() *GKEOrchestrator {
 		topologyCache:            make(map[string]string),
 		dynamicSlicingCache:      make(map[string]bool),
 		staticSlicingCache:       make(map[string]bool),
-		policyCache:              make(map[string]string),
+		resourcePolicyCache:      make(map[string]*GCEWorkloadPolicy),
 	}
 }
 
@@ -1440,13 +1440,21 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 	return g.restoreNamespaceContext(originalNamespace)
 }
 
+// shouldUseDNSEndpoint determines whether to pass --dns-endpoint to gcloud container clusters get-credentials.
+// When a public IP endpoint is enabled, we prefer the IP endpoint to avoid HTTP 431 request header overflow issues on enterprise networks.
+// When only external DNS access is permitted without a public IP endpoint, we use the DNS endpoint.
+func shouldUseDNSEndpoint(cfg *controlPlaneEndpointsConfig) bool {
+	if cfg == nil || cfg.DnsEndpointConfig == nil || !cfg.DnsEndpointConfig.AllowExternalTraffic {
+		return false
+	}
+	return cfg.IPEndpointsConfig == nil || !cfg.IPEndpointsConfig.EnablePublicEndpoint
+}
+
 // refreshGKEAuth handles the gcloud container clusters get-credentials call.
 func (g *GKEOrchestrator) refreshGKEAuth(clusterName, clusterLocation, projectID string) error {
 	args := []string{"container", "clusters", "get-credentials", clusterName, "--location", clusterLocation, "--project", projectID}
 
-	if g.clusterDesc.ControlPlaneEndpointsConfig != nil &&
-		g.clusterDesc.ControlPlaneEndpointsConfig.DnsEndpointConfig != nil &&
-		g.clusterDesc.ControlPlaneEndpointsConfig.DnsEndpointConfig.AllowExternalTraffic {
+	if shouldUseDNSEndpoint(g.clusterDesc.ControlPlaneEndpointsConfig) {
 		args = append(args, "--dns-endpoint")
 	}
 

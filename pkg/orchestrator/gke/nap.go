@@ -15,11 +15,16 @@
 package gke
 
 import (
+	"errors"
 	"fmt"
-	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/orchestrator"
+	"path"
 	"sort"
 	"strings"
+
+	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
 )
 
 func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) (bool, error) {
@@ -270,5 +275,162 @@ func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) 
 			}
 		}
 	}
+	return nil
+}
+
+func (g *GKEOrchestrator) resolveTPUWorkloadPolicy(machineType, topology, clusterLocation, projectID string, isDryRun bool) (string, error) {
+	if topology == "" {
+		return "", fmt.Errorf("cannot resolve TPU workload policy: topology is empty")
+	}
+
+	if policy := g.findPolicyInClusterNodePools(machineType, topology); policy != "" {
+		return policy, nil
+	}
+
+	canonicalPolicyName := getCanonicalTPUWorkloadPolicyName(topology)
+	if g.resourcePolicyCache != nil && g.resourcePolicyCache[canonicalPolicyName] != nil {
+		return canonicalPolicyName, nil
+	}
+
+	region, resolvedProjID := g.resolvePolicyRegionAndProject(clusterLocation, projectID)
+	if region == "" || resolvedProjID == "" {
+		if isDryRun {
+			logging.Info("Dry-run: Could not determine cluster region or project. Assuming workload policy %q for topology %s. Ensure it exists in your target cluster's region.", canonicalPolicyName, topology)
+		}
+		return canonicalPolicyName, nil
+	}
+
+	policy, err := g.discoverRegionalWorkloadPolicy(canonicalPolicyName, region, resolvedProjID, topology)
+	if err != nil {
+		if errors.Is(err, ErrResourcePolicyPermissionDenied) {
+			logging.Warn("Permission denied reading workload policy %q in region %s. Assuming canonical policy name %q. If job fails to schedule, verify with an administrator that the policy exists in region %s.", canonicalPolicyName, region, canonicalPolicyName, region)
+			return canonicalPolicyName, nil
+		}
+		return "", err
+	}
+	if policy != "" {
+		return policy, nil
+	}
+
+	if !isDryRun {
+		if err := g.createTPUWorkloadPolicy(canonicalPolicyName, region, resolvedProjID, topology); err != nil {
+			return "", err
+		}
+	} else {
+		logging.Info("Dry-run: Workload policy %q for topology %s was not found. Please ensure it exists before applying the manifest, or create it using:\n  gcloud compute resource-policies create workload-policy %s --region=%s --project=%s --type=HIGH_THROUGHPUT --accelerator-topology=%s", canonicalPolicyName, topology, canonicalPolicyName, region, resolvedProjID, topology)
+	}
+
+	return canonicalPolicyName, nil
+}
+
+func (g *GKEOrchestrator) findPolicyInClusterNodePools(machineType, topology string) string {
+	for _, np := range g.clusterDesc.NodePools {
+		if strings.EqualFold(np.Config.MachineType, machineType) && np.PlacementPolicy != nil && np.PlacementPolicy.PolicyName != "" {
+			mode := np.PlacementPolicy.AcceleratorTopologyMode
+			if mode == "" && g.resourcePolicyCache != nil {
+				if cached := g.resourcePolicyCache[path.Base(np.PlacementPolicy.PolicyName)]; cached != nil {
+					mode = cached.AcceleratorTopologyMode
+				}
+			}
+			if strings.EqualFold(mode, "PROVISION_ONLY") {
+				continue // Skip dynamic slicing policies for static workloads
+			}
+			topo := np.PlacementPolicy.TpuTopology
+			if topo == "" && np.Config.Labels != nil {
+				topo = np.Config.Labels[tpuTopologyLabel]
+			}
+			if topo != "" && topo == topology {
+				policy := path.Base(np.PlacementPolicy.PolicyName)
+				logging.Info("Discovered matching placement policy %q from existing node pool %q", policy, np.Name)
+				return policy
+			}
+		}
+	}
+	return ""
+}
+
+func getCanonicalTPUWorkloadPolicyName(topology string) string {
+	chips := calculateChipsFromTopology(topology)
+	tensorcores := chips * 2
+	return fmt.Sprintf("tpu7x-%d-%s-placement-policy", tensorcores, topology)
+}
+
+func (g *GKEOrchestrator) resolvePolicyRegionAndProject(clusterLocation, projectID string) (string, string) {
+	region := ""
+	if clusterLocation != "" {
+		region = shell.ExtractRegion(clusterLocation)
+	} else if len(g.clusterDesc.Locations) > 0 {
+		region = shell.ExtractRegion(g.clusterDesc.Locations[0])
+	} else if len(g.clusterZones) > 0 {
+		region = shell.ExtractRegion(g.clusterZones[0])
+	}
+	if projectID == "" {
+		projectID = g.projectID
+	}
+	return region, projectID
+}
+
+func (g *GKEOrchestrator) discoverRegionalWorkloadPolicy(canonicalPolicyName, region, projectID, topology string) (string, error) {
+	policy, err := g.describeResourcePolicyCached(canonicalPolicyName, region, projectID)
+	if err != nil {
+		return "", err
+	}
+	if policy != nil {
+		logging.Info("Discovered existing workload policy %q in region %s", canonicalPolicyName, region)
+		return canonicalPolicyName, nil
+	}
+
+	filter := fmt.Sprintf("region:( %s ) AND workloadPolicy.acceleratorTopology=%s AND workloadPolicy.type=HIGH_THROUGHPUT", region, topology)
+	listRes := g.executor.ExecuteCommand("gcloud", "compute", "resource-policies", "list", "--project="+projectID, "--filter="+filter, "--format=value(name)")
+	if listRes.ExitCode == 0 && strings.TrimSpace(listRes.Stdout) != "" {
+		names := strings.Fields(listRes.Stdout)
+		if len(names) > 0 {
+			if g.resourcePolicyCache == nil {
+				g.resourcePolicyCache = make(map[string]*GCEWorkloadPolicy)
+			}
+			g.resourcePolicyCache[names[0]] = &GCEWorkloadPolicy{
+				Name:                names[0],
+				Region:              region,
+				AcceleratorTopology: topology,
+				Type:                "HIGH_THROUGHPUT",
+			}
+			logging.Info("Discovered matching workload policy %q for topology %s in region %s", names[0], topology, region)
+			return names[0], nil
+		}
+	}
+	return "", nil
+}
+
+func (g *GKEOrchestrator) createTPUWorkloadPolicy(canonicalPolicyName, region, projectID, topology string) error {
+	logging.Info("Workload policy for topology %s not found. Creating workload policy %q...", topology, canonicalPolicyName)
+	createRes := g.executor.ExecuteCommand("gcloud", "compute", "resource-policies", "create", "workload-policy", canonicalPolicyName, "--region="+region, "--project="+projectID, "--type=HIGH_THROUGHPUT", "--accelerator-topology="+topology)
+	if createRes.ExitCode != 0 {
+		stderrLower := strings.ToLower(createRes.Stderr)
+		if strings.Contains(stderrLower, "already exists") || strings.Contains(stderrLower, "409") {
+			logging.Info("Workload policy %q was concurrently created.", canonicalPolicyName)
+			if g.resourcePolicyCache == nil {
+				g.resourcePolicyCache = make(map[string]*GCEWorkloadPolicy)
+			}
+			g.resourcePolicyCache[canonicalPolicyName] = &GCEWorkloadPolicy{
+				Name:                canonicalPolicyName,
+				Region:              region,
+				AcceleratorTopology: topology,
+				Type:                "HIGH_THROUGHPUT",
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to create required workload policy %q in region %s: %s\nRemediation: Ensure your GCP credentials have 'compute.resourcePolicies.create' permission (e.g. 'roles/compute.admin') or create the policy manually:\n  gcloud compute resource-policies create workload-policy %s --region=%s --project=%s --type=HIGH_THROUGHPUT --accelerator-topology=%s",
+			canonicalPolicyName, region, createRes.Stderr, canonicalPolicyName, region, projectID, topology)
+	}
+	if g.resourcePolicyCache == nil {
+		g.resourcePolicyCache = make(map[string]*GCEWorkloadPolicy)
+	}
+	g.resourcePolicyCache[canonicalPolicyName] = &GCEWorkloadPolicy{
+		Name:                canonicalPolicyName,
+		Region:              region,
+		AcceleratorTopology: topology,
+		Type:                "HIGH_THROUGHPUT",
+	}
+	logging.Info("Successfully created workload policy %q in region %s", canonicalPolicyName, region)
 	return nil
 }
