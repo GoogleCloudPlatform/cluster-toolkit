@@ -25,4 +25,3 @@ cli_deployment_vars:
   region: us-east4
   zone: "{{ zone }}"
 post_deploy_tests: []
-
