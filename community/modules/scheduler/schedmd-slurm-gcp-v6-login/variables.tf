@@ -142,6 +142,7 @@ variable "additional_networks" {
       network_tier = string
     })), [])
     network            = optional(string)
+    network_attachment = optional(string)
     network_ip         = optional(string, "")
     nic_type           = optional(string)
     queue_count        = optional(number)
@@ -150,6 +151,17 @@ variable "additional_networks" {
     subnetwork_project = optional(string)
   }))
   nullable = false
+  validation {
+    condition = alltrue([
+      for nic in var.additional_networks : (
+        # Cannot specify both subnetwork and network_attachment
+        !((nic.subnetwork != null && nic.subnetwork != "") && (nic.network_attachment != null && nic.network_attachment != "")) &&
+        # Must specify at least one of network, subnetwork, or network_attachment
+        ((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "") || (nic.network_attachment != null && nic.network_attachment != ""))
+      )
+    ])
+    error_message = "In var.additional_networks, you must specify at least one of 'network', 'subnetwork', or 'network_attachment', and you cannot specify both 'subnetwork' and 'network_attachment'."
+  }
 }
 
 variable "advanced_machine_features" {

@@ -260,20 +260,37 @@ variable "additional_networks" {
   description = "Additional network interface details for GCE, if any."
   default     = []
   type = list(object({
-    network            = string
-    subnetwork         = string
-    subnetwork_project = string
-    network_ip         = string
-    nic_type           = string
-    stack_type         = optional(string)
-    access_config = list(object({
+    access_config = optional(list(object({
       nat_ip       = string
       network_tier = string
-    }))
-    ipv6_access_config = list(object({
+    })), [])
+    alias_ip_range = optional(list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    })), [])
+    ipv6_access_config = optional(list(object({
       network_tier = string
-    }))
+    })), [])
+    network            = optional(string)
+    network_attachment = optional(string)
+    network_ip         = optional(string, "")
+    nic_type           = optional(string)
+    queue_count        = optional(number)
+    stack_type         = optional(string)
+    subnetwork         = optional(string)
+    subnetwork_project = optional(string)
   }))
+  validation {
+    condition = alltrue([
+      for nic in var.additional_networks : (
+        # Cannot specify both subnetwork and network_attachment
+        !((nic.subnetwork != null && nic.subnetwork != "") && (nic.network_attachment != null && nic.network_attachment != "")) &&
+        # Must specify at least one of network, subnetwork, or network_attachment
+        ((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "") || (nic.network_attachment != null && nic.network_attachment != ""))
+      )
+    ])
+    error_message = "In var.additional_networks, you must specify at least one of 'network', 'subnetwork', or 'network_attachment', and you cannot specify both 'subnetwork' and 'network_attachment'."
+  }
 }
 
 variable "total_egress_bandwidth_tier" {
