@@ -32,10 +32,11 @@ vars:
   # The values of size_gib and per_unit_storage_throughput are co-related
   # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
   # Storage capacity of the lustre instance in GiB
-  size_gib: 36000
+  size_gib: 18000
   # Maximum throughput of the lustre instance in MBps per TiB
   per_unit_storage_throughput: 500
   kms_key: ""
+  system_node_pool_machine_type: "n2d-standard-4"
 
 deployment_groups:
 - group: primary
@@ -118,6 +119,7 @@ deployment_groups:
     use: [network, workload_service_account]
     settings:
       version_prefix: $(vars.version_prefix)
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
       enable_managed_lustre_csi: true # Enable Managed Lustre for the cluster
       configure_workload_identity_sa: true
       enable_private_endpoint: false  # Allows for access from authorized public IPs
@@ -143,5 +145,5 @@ deployment_groups:
     settings:
       name: gke-lustre-pool
       zones: [$(vars.zone)]
-      machine_type: n2-standard-16
+      machine_type: n2d-standard-4
       auto_upgrade: true
