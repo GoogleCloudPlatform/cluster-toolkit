@@ -37,3 +37,4 @@ cli_deployment_vars:
   per_unit_storage_throughput: "{{ per_unit_storage_throughput }}"
   gcp_public_cidrs_access_enabled: true
   kms_key: "projects/{{ project }}/locations/us-central1/keyRings/lustre-keyring/cryptoKeys/lustre-key"
+  system_node_pool_machine_type: "n2d-standard-4"
