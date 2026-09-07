@@ -12,25 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-- name: Get cluster credentials for kubectl
-  delegate_to: localhost
-  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
-
 - name: Run MTC test and ensure cleanup
   block:
   - name: Execute GCluster Job Submit with MTC enabled
     delegate_to: localhost
-    ansible.builtin.command: >-
-      ./gcluster job submit
+    ansible.builtin.shell: >-
+      yes | ./gcluster job submit
       --cluster {{ deployment_name }}
       --location {{ region }}
-      --project {{ custom_vars.project }}
-      --gke-namespace {{ custom_vars.user_namespace | default('default') }}
+      --project {{ (custom_vars | default({})).project | default(project) }}
+      --gke-namespace {{ (custom_vars | default({})).user_namespace | default('default') }}
       --name mtc-test-job
-      --image bash
+      --compute-type {{ (custom_vars | default({})).compute_type | default('n2d-standard-2') }}
+      --image {{ (custom_vars | default({})).image | default('debian:bookworm-slim') }}
       --command "grep -q /gke-mtc /proc/mounts"
       --gke-mtc-enabled
       --gke-mtc-ramdisk-dir /gke-mtc
+      --skip-prereqs
+      --timeout 10m
       --await-job-completion
     args:
       chdir: "{{ workspace }}"
@@ -42,5 +41,14 @@
   always:
   - name: Clean up MTC test job
     delegate_to: localhost
-    ansible.builtin.command: kubectl delete jobset mtc-test-job -n {{ custom_vars.user_namespace | default('default') }} --ignore-not-found
+    ansible.builtin.command: >-
+      ./gcluster job cancel mtc-test-job
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ (custom_vars | default({})).project | default(project) }}
+      --gke-namespace {{ (custom_vars | default({})).user_namespace | default('default') }}
+      --skip-prereqs
+    args:
+      chdir: "{{ workspace }}"
+    changed_when: false
     ignore_errors: true

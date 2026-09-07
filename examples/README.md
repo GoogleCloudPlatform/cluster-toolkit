@@ -80,6 +80,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gcloud-example.yaml](#gcloud-exampleyaml--) ![community-badge] ![experimental-badge]
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
+  * [hpc-slurm-google-cloud-dedicated.yaml](#hpc-slurm-google-cloud-dedicatedyaml-) ![community-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1840,6 +1841,14 @@ Four pre-existing NFS volumes are mounted to `/home`, `/tools`, `/library` and `
 The deployment instructions can be found in the [README](../community/examples/eda/README.md).
 
 [eda-hybrid-cloud.yaml]: ../community/examples/eda/eda-hybrid-cloud.yaml
+
+### [hpc-slurm-google-cloud-dedicated.yaml] ![community-badge]
+
+Creates a Slurm cluster on C3 machine types for Google Cloud Dedicated (GCD) and sovereign cloud environments using Packer to pre-build a custom Slurm image based on Rocky Linux 8, configured with NFS home directories, SAuth authentication, and Hyperdisk Balanced storage.
+
+The deployment instructions can be found in the [README](../community/examples/hpc-slurm-google-cloud-dedicated/README.md).
+
+[hpc-slurm-google-cloud-dedicated.yaml]: ../community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml
 
 ## Blueprint Schema
 

@@ -101,3 +101,15 @@ variable "gcsfuse_storage_class_name" {
     error_message = "gcsfuse_storage_class_name must be one of gcsfusecsi-training, gcsfusecsi-serving, gcsfusecsi-checkpointing."
   }
 }
+
+variable "grant_gcsfuse_service_agent_role" {
+  description = "Whether to grant the GCS Fuse service agent role to the GKE robot service account on the bucket when using a GCS Fuse storage profile."
+  type        = bool
+  default     = true
+}
+
+variable "gcsfuse_service_agent_role" {
+  description = "The IAM role to grant to the GKE Service Agent on the bucket for GCSFuse Storage Profiles. Defaults to built-in 'roles/storage.admin' which covers all required permissions (storage.buckets.get, storage.objects.list, and storage.anywhereCaches.*) for zero-friction deployment without custom roles. Can be set to a custom role (e.g. 'projects/<cluster_project_id>/roles/gke.gcsfuse.profileUser') for strict least-privilege compliance."
+  type        = string
+  default     = "roles/storage.admin"
+}

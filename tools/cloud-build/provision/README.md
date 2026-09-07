@@ -29,6 +29,7 @@ When prompted for project, use integration test project.
 | ---- | ------- |
 | <a name="provider_external"></a> [external](#provider\_external) | ~> 2.3.0 |
 | <a name="provider_google"></a> [google](#provider\_google) | ~> 5.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
@@ -62,6 +63,7 @@ When prompted for project, use integration test project.
 | [google_cloudbuild_trigger.zebug_fast_build_success](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_compute_reservation.c2standard60_us_west4_c](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_reservation) | resource |
 | [google_compute_reservation.n1standard8_with_tesla_t4_europe_west1_d](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_reservation) | resource |
+| [terraform_data.apply_kueue_locks](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [external_external.list_tests_midnight](https://registry.terraform.io/providers/hashicorp/external/latest/docs/data-sources/external) | data source |
 
 ## Inputs

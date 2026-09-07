@@ -37,7 +37,7 @@ if [ ! -d "${INSTALL_DIR}/spack/.git" ]; then
     git clone -c feature.manyFiles=true https://github.com/spack/spack.git ${INSTALL_DIR}/spack
 fi
 if [ ! -d "${INSTALL_DIR}/ramble/.git" ]; then
-    git clone -b v0.6.0 https://github.com/GoogleCloudPlatform/ramble.git ${INSTALL_DIR}/ramble
+    git clone -b v0.6.0 https://github.com/Ramble-Project/ramble.git ${INSTALL_DIR}/ramble
 fi
 
 source ${INSTALL_DIR}/spack/share/spack/setup-env.sh

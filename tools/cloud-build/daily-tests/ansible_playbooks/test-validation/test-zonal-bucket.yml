@@ -47,46 +47,67 @@
 
 - name: Get cluster credentials for kubectl
   delegate_to: localhost
-  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }}
+  ansible.builtin.command: >-
+    gcloud container clusters get-credentials {{ deployment_name }}
+    --region {{ region }}
+    --project {{ (custom_vars | default({})).project | default(project) }}
+  changed_when: false
 
-- name: Deploy FIO Kubernetes Pod using kubectl apply
-  ansible.builtin.command: kubectl apply -f {{ workspace }}/fio-test-job.yaml
+- name: Wait for GCS FUSE CSI driver daemonset to be ready
+  ansible.builtin.command: kubectl rollout status daemonset gcsfusecsi-node -n kube-system --timeout=300s
   delegate_to: localhost
+  changed_when: false
 
-- name: Wait for FIO Pod to complete
-  ansible.builtin.command: kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/fio --namespace default --timeout=900s
-  delegate_to: localhost
-  ignore_errors: true # Even if we timeout, continue to next steps
+# Note: The test pod and kubectl commands explicitly use the 'default' namespace
+# because the blueprint (examples/storage-gke.yaml) provisions its Workload
+# Identity Kubernetes Service Account in 'default'. Kubernetes does not
+# support cross-namespace ServiceAccount usage.
+- name: Run FIO benchmark and verify results
+  block:
+  - name: Deploy FIO Kubernetes Pod using kubectl apply
+    ansible.builtin.command: kubectl apply -f {{ workspace }}/fio-test-job.yaml
+    delegate_to: localhost
 
-- name: Fetch FIO logs
-  ansible.builtin.command: kubectl logs pod/fio --namespace default
-  register: fio_pod_logs
-  delegate_to: localhost
+  - name: Wait for FIO Pod to complete
+    ansible.builtin.command: kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/fio --namespace default --timeout=900s
+    delegate_to: localhost
+    ignore_errors: true
 
-- name: Delete FIO Pod
-  ansible.builtin.command: kubectl delete pod/fio --namespace default
-  delegate_to: localhost
-  ignore_errors: true
+  - name: Fetch FIO logs
+    ansible.builtin.command: kubectl logs pod/fio -c fio --namespace default
+    register: fio_pod_logs
+    delegate_to: localhost
 
-- name: Parse FIO results
-  delegate_to: localhost
-  ansible.builtin.set_fact:
-    fio_results: "{{ fio_pod_logs.stdout | from_json }}"
+  - name: Print raw FIO logs
+    ansible.builtin.debug:
+      var: fio_pod_logs.stdout_lines
+    delegate_to: localhost
 
-- name: Print FIO results
-  delegate_to: localhost
-  ansible.builtin.debug:
-    msg:
-    - "fio_results.jobs[0].read.bw_mean: {{ fio_results.jobs[0].read.bw_mean }}"
-    - "Type of bw: {{ fio_results.jobs[0].read.bw_mean | type_debug }}"
-    - "fio_results.jobs[0].read.iops_mean: {{ fio_results.jobs[0].read.iops_mean }}"
-    - "Type of iops: {{ fio_results.jobs[0].read.iops_mean | type_debug }}"
+  - name: Parse FIO results
+    delegate_to: localhost
+    ansible.builtin.set_fact:
+      fio_results: "{{ fio_pod_logs.stdout | from_json }}"
 
-- name: Assert FIO results
-  delegate_to: localhost
-  ansible.builtin.assert:
-    that:
-    - fio_results.jobs[0].read.bw_mean >= 1000
-    - fio_results.jobs[0].read.iops_mean >= 300
-    fail_msg: "FIO read performance thresholds not met. Bandwidth: {{ fio_results.jobs[0].read.bw_mean }} KB/s (expected >= 1000 KB/s), IOPS: {{ fio_results.jobs[0].read.iops_mean }} (expected >= 300)."
-    success_msg: "FIO read performance thresholds met. Bandwidth: {{ fio_results.jobs[0].read.bw_mean }} KB/s, IOPS: {{ fio_results.jobs[0].read.iops_mean }}."
+  - name: Print FIO results
+    delegate_to: localhost
+    ansible.builtin.debug:
+      msg:
+      - "fio_results.jobs[0].read.bw_mean: {{ fio_results.jobs[0].read.bw_mean }}"
+      - "Type of bw: {{ fio_results.jobs[0].read.bw_mean | type_debug }}"
+      - "fio_results.jobs[0].read.iops_mean: {{ fio_results.jobs[0].read.iops_mean }}"
+      - "Type of iops: {{ fio_results.jobs[0].read.iops_mean | type_debug }}"
+
+  - name: Assert FIO results
+    delegate_to: localhost
+    ansible.builtin.assert:
+      that:
+      - fio_results.jobs[0].read.bw_mean >= 1000
+      - fio_results.jobs[0].read.iops_mean >= 300
+      fail_msg: "FIO read performance thresholds not met. Bandwidth: {{ fio_results.jobs[0].read.bw_mean }} KB/s (expected >= 1000 KB/s), IOPS: {{ fio_results.jobs[0].read.iops_mean }} (expected >= 300)."
+      success_msg: "FIO read performance thresholds met. Bandwidth: {{ fio_results.jobs[0].read.bw_mean }} KB/s, IOPS: {{ fio_results.jobs[0].read.iops_mean }}."
+  always:
+  - name: Delete FIO Pod
+    ansible.builtin.command: kubectl delete pod/fio --namespace default --ignore-not-found
+    delegate_to: localhost
+    changed_when: false
+    ignore_errors: true

@@ -31,6 +31,7 @@ locals {
 
   kueue_config_template_vars = merge(
     {
+      namespace               = "default"
       pathways_cpu_quota      = 480
       pathways_memory_quota   = "2000G"
       tpu_flavor_cpu_quota    = "999999" # High default to avoid limiting TPU pods by CPU

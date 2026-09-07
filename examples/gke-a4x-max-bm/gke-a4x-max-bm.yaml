@@ -50,7 +50,7 @@ vars:
   reservation_project_id: $(vars.project_id)
 
   compute_nodepool_machine_type: a4x-maxgpu-4g-metal
-  system_nodepool_machine_type: e2-standard-16
+  system_nodepool_machine_type: n2d-standard-16
   system_node_pool_disk_size_gb: 200
   a4x_max_node_pool_disk_size_gb: 100
   k8s_service_account_name: workload-identity-k8s-sa
