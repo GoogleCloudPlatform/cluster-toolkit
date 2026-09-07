@@ -18,3 +18,41 @@ spec:
   requirements:
     services:
     - secretmanager.googleapis.com
+ghpc:
+  validators:
+  # Catches the more common mistake (both set) at gcluster-create time. The
+  # opposite mistake (neither set) is still caught, one step later, by this
+  # module's own Terraform precondition, which requires exactly one; there is
+  # no "at least one of" metadata validator to bring that check forward too.
+  - validator: exclusive
+    inputs:
+      vars: [novnc_proxy_secret, novnc_proxy_secret_id]
+    error_message: "At most one of 'novnc_proxy_secret' or 'novnc_proxy_secret_id' can be set. Exactly one is required; prefer 'novnc_proxy_secret_id', which keeps the value out of Terraform state."
+  - validator: allowed_enum
+    inputs:
+      vars: [vnc_backend]
+      case_sensitive: false
+      allowed:
+      - tigervnc
+      - turbovnc
+      allow_null: false
+    error_message: "Allowed values for vnc_backend are 'tigervnc' or 'turbovnc'."
+  - validator: allowed_enum
+    inputs:
+      vars: [novnc_identity_mode]
+      case_sensitive: false
+      allowed:
+      - trusted_proxy
+      allow_null: false
+    error_message: "novnc_identity_mode must be trusted_proxy. This module does not yet support any other identity mode."
+  - validator: allowed_enum
+    inputs:
+      vars: [slurm_auth_mode]
+      case_sensitive: false
+      allowed:
+      - none
+      - munge
+      - native
+      - auto
+      allow_null: false
+    error_message: "Allowed values for slurm_auth_mode are 'none', 'munge', 'native', or 'auto'."

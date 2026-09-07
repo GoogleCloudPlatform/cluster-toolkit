@@ -75,11 +75,13 @@ Set the following blueprint variables:
 > Compute Engine instances that run continuously until destroyed. GPU machine
 > types are billed at a significantly higher rate.
 
-Create and deploy a blueprint, replacing `BLUEPRINT` with the file you want:
+Create and deploy a blueprint. Replace `BLUEPRINT` with the file you want, and
+`DEPLOYMENT_NAME` with the `deployment_name` set in that blueprint's `vars`
+block - for `hpc-slurm-remote-desktop.yaml` that is `hpc-slurm-remote-desktop`:
 
 ```bash
 ./gcluster create community/examples/remote-desktop/BLUEPRINT.yaml -w
-./gcluster deploy BLUEPRINT
+./gcluster deploy DEPLOYMENT_NAME
 ```
 
 ## Verify
@@ -139,8 +141,9 @@ is belongs with a verified identity mode, not with `trusted_proxy`.
 
 ## Teardown Instructions
 
-Replace `BLUEPRINT` with the `deployment_name` used in the blueprint vars block.
+Replace `DEPLOYMENT_NAME` with the `deployment_name` used in the blueprint's
+`vars` block.
 
 ```bash
-./gcluster destroy BLUEPRINT
+./gcluster destroy DEPLOYMENT_NAME
 ```
