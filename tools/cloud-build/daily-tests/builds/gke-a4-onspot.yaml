@@ -183,6 +183,8 @@ steps:
               echo '      machine_type: n2d-standard-2'            >> \$$EXAMPLE_BP
               echo '      name_prefix: remote-node'                >> \$$EXAMPLE_BP
               echo '      add_deployment_name_before_prefix: true' >> \$$EXAMPLE_BP
+              echo '      spot: $(null)'                            >> \$$EXAMPLE_BP
+              echo '      placement_policy: $(null)'                >> \$$EXAMPLE_BP
               echo ''
               echo '  - id: job_template_hostname'                       >> \$$EXAMPLE_BP
               echo '    source: modules/compute/gke-job-template'        >> \$$EXAMPLE_BP
@@ -204,13 +206,8 @@ steps:
                 echo "INFO: Using \$$GKE_VARS_FILE as it is for SPOT provisioning."
               fi
 
-              # Setting placement policy as compact for nccl test to run on spot VMs, adding spot variable and removing reservation from blueprint.
-              sed -i -e '/reservation_affinity:/,+3c\      placement_policy:\n        type: COMPACT\n      spot: '"\$$ENABLE_SPOT"'' \$$EXAMPLE_BP
-              sed -i '/reservation/d' \$$EXAMPLE_BP
-
               # Override force_destroy from false to true for training and checkpoint storage buckets
               sed -i -E 's/force_destroy:\s*false/force_destroy: true/g' \$$EXAMPLE_BP
-
               bash tools/add_ttl_label.sh "\$$EXAMPLE_BP"
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
