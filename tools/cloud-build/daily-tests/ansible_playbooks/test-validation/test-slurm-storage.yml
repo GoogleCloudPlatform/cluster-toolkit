@@ -59,14 +59,16 @@
 - name: Ensure fio is installed (safe for all OS)
   ansible.builtin.raw: |
     if ! command -v fio >/dev/null 2>&1; then
-      # Clean up decommissioned parallelstore repository configs
-      rm -f /etc/yum.repos.d/parallelstore*.repo 2>/dev/null || true
       if command -v apt-get >/dev/null 2>&1; then
         apt-get update -y && apt-get install -y fio
       elif command -v dnf >/dev/null 2>&1; then
-        dnf install -y --disablerepo="parallelstore*" fio || dnf install -y fio
+        # Clean up decommissioned parallelstore repository configs
+        rm -f /etc/yum.repos.d/parallelstore*.repo 2>/dev/null || true
+        dnf install -y --disablerepo="parallelstore*" fio
       elif command -v yum >/dev/null 2>&1; then
-        yum install -y --disablerepo="parallelstore*" fio || yum install -y fio
+        # Clean up decommissioned parallelstore repository configs
+        rm -f /etc/yum.repos.d/parallelstore*.repo 2>/dev/null || true
+        yum install -y --disablerepo="parallelstore*" fio
       fi
     fi
   become: true
