@@ -116,7 +116,7 @@ steps:
             - name: PROJECT_ID
               value: "$PROJECT_ID"
             - name: NUM_NODES
-              value: "4"
+              value: "2"
             - name: MIN_NODES
               value: "2"
             - name: PROVISIONING_MODEL
