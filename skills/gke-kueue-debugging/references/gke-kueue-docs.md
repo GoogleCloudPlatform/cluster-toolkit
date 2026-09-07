@@ -67,7 +67,7 @@ In GKE AI Hypercomputer clusters, batch jobs often utilize GKE Dynamic Workload 
   * B200: `nvidia-b200`
   * L4: `nvidia-l4`
   * RTX 6000 Ada: `nvidia-rtx-pro-6000`
-* **Node Taints**: `nvidia.com/gpu=present:NoSchedule` (Workloads must specify matching toleration).
+* **Node Taints**: `key: nvidia.com/gpu, effect: NoSchedule`. Workloads must specify toleration with `operator: Exists` (e.g., `key: nvidia.com/gpu, operator: Exists, effect: NoSchedule`).
 
 ### Google TPUs
 * **Resource Key**: `google.com/tpu`
@@ -79,7 +79,7 @@ In GKE AI Hypercomputer clusters, batch jobs often utilize GKE Dynamic Workload 
 * **Topology Architecture**:
   * **3D Torus (v4 & v5p)**: Requires 3-dimensional topologies (e.g. `2x2x1`, `2x2x2`, `4x4x4`, `4x4x8`).
   * **2D Mesh (v5e & v6e)**: Single-plane 2-dimensional topologies (e.g. `1x1`, `2x2`, `2x4`, `4x4`, `4x8`, `8x8`).
-* **Node Taints**: `google.com/tpu=present:NoSchedule` (Workloads must specify matching toleration).
+* **Node Taints**: `key: google.com/tpu, effect: NoSchedule`. Workloads must specify toleration with `operator: Exists` (e.g., `key: google.com/tpu, operator: Exists, effect: NoSchedule`).
 
 ---
 

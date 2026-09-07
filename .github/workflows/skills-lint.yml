@@ -70,11 +70,8 @@ jobs:
         python3 -m pip install --upgrade pip
         python3 -m pip install 'pyyaml>=6.0.1'
 
-    - name: Run Skills Frontmatter Linting
-      run: python3 tools/run_eval.py --lint-only --all
-
-    - name: Run Skills Deterministic Evaluation
-      run: python3 tools/run_eval.py --all
-
     - name: Run Skills Test Runner Unit Tests
       run: python3 tools/tests/test_run_eval.py
+
+    - name: Run Skills Lint and Deterministic Evaluation
+      run: python3 tools/run_eval.py --all

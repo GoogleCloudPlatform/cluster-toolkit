@@ -92,7 +92,8 @@ def build_command_pattern(command_str: str) -> re.Pattern:
         escaped = tokens[0]
     elif tokens[0].lower() in ("kubectl", "scontrol", "gcloud", "terraform", "helm", "ghpc"):
         # Allow intervening flags between CLI command, subcommands, and verbs (e.g., kubectl -n kube-system delete)
-        escaped = r"\b[^;&|\n]*?\b".join(tokens)
+        # Bounded to 250 chars per gap to prevent ReDoS while supporting long GKE flags/contexts
+        escaped = r"\b[^;&|\n]{1,250}?\b".join(tokens)
     else:
         # Collapse multiple whitespace characters (e.g. 'ip    route flush')
         escaped = r"\s+".join(tokens)
@@ -348,10 +349,11 @@ def verify_assertions(response_text: str, case: dict) -> Tuple[bool, str]:
     # do not appear OUTSIDE the remediation plan (to allow proposing the command safely).
     text_to_scan = resp
     if case.get("expect_blocked_action", False) and has_blocked_plan:
-        # Strip only the proposed action/command line within the remediation plan
+        # Strip only the proposed action/command line or code block within the remediation plan
         # so that any surrounding or trailing forbidden commands are still scanned.
         text_to_scan = re.sub(
-            r"[-*]?\s*(?:\*\*)?(?:Proposed Action(?: / Command)?|Command)(?:\*\*)?:\s*.*",
+            r"[-*]?\s*(?:\*\*)?(?:Proposed Action(?: / Command)?|Command)(?:\*\*)?:\s*"
+            r"(?:```[a-zA-Z0-9_-]*\r?\n[\s\S]*?\r?\n[ \t]*```|[^\r\n]*)",
             "",
             resp,
             flags=re.IGNORECASE,
@@ -405,7 +407,6 @@ class MockEvaluatorBackend:
 
 def evaluate_skill(
     skill_path: str,
-    mock: bool = True,
     backend: Optional[EvaluatorBackend] = None,
 ) -> EvalResult:
     """Evaluate skill test cases deterministically."""
@@ -482,6 +483,9 @@ def sanitize_markdown_cell(value: str) -> str:
 
 def write_markdown_report(summary_rows: List[Dict[str, str]], output_path: str) -> None:
     """Write sanitized GitHub Actions markdown summary table."""
+    dirname = os.path.dirname(output_path)
+    if dirname:
+        os.makedirs(dirname, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("### Cluster Toolkit Skills Evaluation Results\n\n")
         f.write("| Skill | Test / Check | Status | Details |\n| :--- | :--- | :--- | :--- |\n")
@@ -499,7 +503,6 @@ def main():
     parser.add_argument("--all", action="store_true", help="Run against all discovered skills")
     parser.add_argument("--skills-dir", type=str, default="skills", help="Root skills directory")
     parser.add_argument("--lint-only", action="store_true", help="Run only static frontmatter linting")
-    parser.add_argument("--mock", action="store_true", help="Run deterministic evaluation (default)")
     parser.add_argument("--markdown-output", type=str, help="Path to write PR markdown summary table")
     args = parser.parse_args()
 

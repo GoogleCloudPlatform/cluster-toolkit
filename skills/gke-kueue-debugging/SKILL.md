@@ -44,9 +44,15 @@ Use this playbook when distributed AI/ML training jobs (PyTorchJob, RayCluster, 
 ### Step 0: Fast-Path Workload Inspection (SRE First Response)
 If investigating a parent Job, JobSet, or RayCluster, locate its generated Workload name first:
 ```bash
-# Method A: Direct lookup via owner UID (checks Job, JobSet, RayCluster, PyTorchJob, LeaderWorkerSet)
-JOB_UID=$(kubectl get job,jobset,raycluster,pytorchjob,leaderworkerset <PARENT_JOB_NAME> -n <NAMESPACE> -o jsonpath='{.metadata.uid}' 2>/dev/null)
-[ -n "$JOB_UID" ] && kubectl get workloads -n <NAMESPACE> -l kueue.x-k8s.io/job-uid=$JOB_UID
+# Method A: Direct lookup via owner UID (safely queries installed controllers without failing on missing CRDs)
+JOB_UID=$(kubectl get job <PARENT_JOB_NAME> -n <NAMESPACE> -o jsonpath='{.metadata.uid}' 2>/dev/null)
+if [ -z "$JOB_UID" ]; then
+  for kind in jobset raycluster rayjob pytorchjob mpijob leaderworkerset; do
+    JOB_UID=$(kubectl get "$kind" <PARENT_JOB_NAME> -n <NAMESPACE> -o jsonpath='{.metadata.uid}' 2>/dev/null)
+    [ -n "$JOB_UID" ] && break
+  done
+fi
+[ -n "$JOB_UID" ] && kubectl get workloads -n <NAMESPACE> -l "kueue.x-k8s.io/job-uid=$JOB_UID"
 
 # Method B: Universal filter by parent job name prefix
 kubectl get workloads -n <NAMESPACE> | grep <PARENT_JOB_NAME>
@@ -62,12 +68,13 @@ kubectl describe workload <WORKLOAD_NAME> -n <NAMESPACE>
 ### Step 1: Query Workload Conditions, Evictions & LocalQueue Assignment
 Inspect workloads in the target namespace. Do NOT query Pods directly -- Kueue suspends Jobs before Pod creation (`.spec.suspend: true`).
 ```bash
-kubectl get workloads.kueue.x-k8s.io -n <NAMESPACE> -o custom-columns='NAME:.metadata.name,QUEUE:.spec.queueName,RESERVED:.status.conditions[?(@.type=="QuotaReserved")].status,RESERVED_REASON:.status.conditions[?(@.type=="QuotaReserved")].reason,MSG:.status.conditions[?(@.type=="QuotaReserved")].message,ADMITTED:.status.conditions[?(@.type=="Admitted")].status,EVICTED:.status.conditions[?(@.type=="Evicted")].status,EVICTED_REASON:.status.conditions[?(@.type=="Evicted")].reason'
+kubectl get workloads.kueue.x-k8s.io -n <NAMESPACE> -o custom-columns='NAME:.metadata.name,QUEUE:.spec.queueName,RESERVED:.status.conditions[?(@.type=="QuotaReserved")].status,ADMITTED:.status.conditions[?(@.type=="Admitted")].status,EVICTED:.status.conditions[?(@.type=="Evicted")].status,RESERVED_REASON:.status.conditions[?(@.type=="QuotaReserved")].reason,EVICTED_REASON:.status.conditions[?(@.type=="Evicted")].reason,MSG:.status.conditions[?(@.type=="QuotaReserved")].message'
 ```
 
 *Condition Interpretation:*
-* `QuotaReserved: False`, `Reason: Pending`: Workload is waiting for quota in the ClusterQueue or Cohort. Proceed to Step 3.
-* `QuotaReserved: False`, `Reason: Inadmissible`: Workload requirements cannot be satisfied by any ResourceFlavor (label, taint, or topology mismatch). See `MSG` and proceed to Step 4 and Step 6.
+* `QuotaReserved: False`, `Reason: Pending` or `Inadmissible`: Workload is either waiting for quota (Step 3) OR failed flavor matching (Step 4). **Always inspect `MSG`**:
+  - If `MSG` indicates `insufficient quota ... > maximum capacity`, proceed to Step 3.
+  - If `MSG` indicates `doesn't match node affinity` or `untolerated taint`, proceed to Step 4 and Step 6.
 * `QuotaReserved: True`, `Admitted: False`: Quota is reserved, but the workload is gated by AdmissionChecks (e.g., GKE DWS Flex-start, TPU Dynamic Slicing). Inspect checks:
   ```bash
   kubectl get workload <WORKLOAD_NAME> -n <NAMESPACE> -o jsonpath='{range .status.admissionChecks[*]}{"Check: "}{.name}{" | State: "}{.state}{" | RequeueAfter: "}{.requeueAfterSeconds}{"s | Message: "}{.message}{"\n"}{end}'
@@ -123,20 +130,28 @@ kubectl get clusterqueue <CLUSTER_QUEUE_NAME> -o jsonpath='{"=== FLAVORS RESERVA
 ---
 
 ### Step 4: Verify ResourceFlavor Node Selectors, Taints, and Nodepools
-When `Reason: Inadmissible`, verify that the node pool hardware labels, taints, and tolerations match:
+When `QuotaReserved: False` with `Reason: Pending` or `Inadmissible` (and `MSG` indicates "couldn't assign flavors" or "doesn't match node affinity"):
 ```bash
-# 1. Inspect ResourceFlavor definition, nodeLabels, nodeTaints, and TAS topology
-kubectl get resourceflavor <FLAVOR_NAME> -o jsonpath='{"Flavor: "}{.metadata.name}{"\nNodeLabels: "}{.spec.nodeLabels}{"\nNodeTaints: "}{.spec.nodeTaints}{"\nTolerations: "}{.spec.tolerations}{"\nTopologyName: "}{.spec.topologyName}{"\n"}'
+# 1. Inspect ResourceFlavors in cluster (nodeLabels, nodeTaints, tolerations, topology)
+kubectl get resourceflavor -o jsonpath='{range .items[*]}{"Flavor: "}{.metadata.name}{"\nNodeLabels: "}{.spec.nodeLabels}{"\nNodeTaints: "}{.spec.nodeTaints}{"\nTolerations: "}{.spec.tolerations}{"\nTopologyName: "}{.spec.topologyName}{"\n\n"}{end}'
+
+# Or inspect a single flavor directly:
+# kubectl get resourceflavor <FLAVOR_NAME> -o jsonpath='{"Flavor: "}{.metadata.name}{"\nNodeLabels: "}{.spec.nodeLabels}{"\nNodeTaints: "}{.spec.nodeTaints}{"\nTolerations: "}{.spec.tolerations}{"\nTopologyName: "}{.spec.topologyName}{"\n"}'
 
 # 2. GKE accelerator node inspection (custom columns for GPU/TPU labels, taints, and nodepools)
 kubectl get nodes -o custom-columns='NAME:.metadata.name,NODEPOOL:.metadata.labels.cloud\.google\.com/gke-nodepool,GPU:.metadata.labels.cloud\.google\.com/gke-accelerator,TPU:.metadata.labels.cloud\.google\.com/gke-tpu-accelerator,TPU_TOPOLOGY:.metadata.labels.cloud\.google\.com/gke-tpu-topology,TAINTS:.spec.taints' | head -n 25
+
+# For large clusters, target accelerator pools directly with label selectors:
+# kubectl get nodes -l 'cloud.google.com/gke-accelerator' -o custom-columns=... | head -n 25
+# kubectl get nodes -l 'cloud.google.com/gke-tpu-accelerator' -o custom-columns=... | head -n 25
 
 # 3. Inspect requested accelerator resource types in the workload's PodSets
 kubectl get workload <WORKLOAD_NAME> -n <NAMESPACE> -o jsonpath='{range .spec.podSets[*]}{"PodSet: "}{.name}{" | Count: "}{.count}{" | Requests: "}{.template.spec.containers[*].resources.requests}{"\n"}{end}'
 ```
 *Verify that the workload's Pod template (or individual `spec.podSets[*]`):*
-1. **NVIDIA GPU Jobs (`nvidia.com/gpu`)**: Has tolerations matching GPU node taints (`nvidia.com/gpu=present:NoSchedule`) and nodeSelector matching `cloud.google.com/gke-accelerator` (e.g., `nvidia-h100-80gb`, `nvidia-h100-mega-80gb`, `nvidia-l4`).
-2. **Google TPU Jobs (`google.com/tpu`)**: Has tolerations matching TPU node taints (`google.com/tpu=present:NoSchedule`), nodeSelector matching `cloud.google.com/gke-tpu-accelerator` (e.g. `tpu-v5p-slice`, `tpu-v6e-slice`), and topology matching `cloud.google.com/gke-tpu-topology` (e.g. `2x2x1` for 3D torus, `2x4` for 2D mesh).
+* **Heterogeneous / Gang Scheduling**: For multi-podSet workloads (e.g., RayCluster with CPU head and GPU workers, or LeaderWorkerSet), check the `pod set <name>` prefix in `MSG` to identify which specific podSet failed flavor assignment.
+1. **NVIDIA GPU Jobs (`nvidia.com/gpu`)**: Has toleration for GPU node taints using `operator: Exists` (e.g., `key: nvidia.com/gpu, operator: Exists, effect: NoSchedule`) and nodeSelector matching `cloud.google.com/gke-accelerator` (e.g., `nvidia-h100-80gb`, `nvidia-h100-mega-80gb`, `nvidia-l4`). If running on GKE Dynamic Workload Scheduler (DWS Flex) node pools, also verify toleration for `cloud.google.com/gke-queued=true:NoSchedule`.
+2. **Google TPU Jobs (`google.com/tpu`)**: Has toleration for TPU node taints using `operator: Exists` (e.g., `key: google.com/tpu, operator: Exists, effect: NoSchedule`). Verify nodeSelector matches `cloud.google.com/gke-tpu-accelerator` (e.g. `tpu-v5p-slice`, `tpu-v6e-slice`) and topology matches `cloud.google.com/gke-tpu-topology` (e.g. `2x2x1` for 3D torus, `2x4` for 2D mesh). If running on GKE DWS Flex node pools, also verify toleration for `cloud.google.com/gke-queued=true:NoSchedule`.
 3. Has `nodeSelector` / `nodeAffinity` compatible with the flavor's `nodeLabels`.
 
 ---
