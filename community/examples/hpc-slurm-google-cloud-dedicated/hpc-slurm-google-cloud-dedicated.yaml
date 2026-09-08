@@ -26,7 +26,7 @@ vars:
   source_image_family: rocky-linux-8-optimized-gcp
   source_image_project: rocky-linux-cloud
   image_build_machine_type: c3-standard-4
-  build_slurm_from_git_ref: 6.12.1
+  build_slurm_from_git_ref: 6.12.3
   built_instance_image:
     family: slurm-c3-rocky8
     project: $(vars.project_id)

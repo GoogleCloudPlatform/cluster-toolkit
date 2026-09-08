@@ -239,3 +239,5 @@ availableSecrets:
     env: 'TRIAGE_INVOKER_SA'
   - versionName: projects/${PROJECT_ID}/secrets/triage-cloud-run-url/versions/latest
     env: 'TRIAGE_CLOUD_RUN_URL'
+  - versionName: projects/${PROJECT_ID}/secrets/cluster-health-scanner/versions/latest
+    env: 'CHS_REPO'
