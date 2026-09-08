@@ -36,6 +36,13 @@ if [[ $(type -P yum) ]]; then
 		rm -f /var/lib/rpm/__db.*
 		rpm --rebuilddb
 	fi
+	# A single unreachable repo preconfigured in the image (e.g. a CUDA repo) would
+	# otherwise fail every dnf transaction, even for unrelated packages. Let dnf skip
+	# any repo whose metadata cannot be fetched instead of aborting the whole node.
+	for repo_file in /etc/yum.repos.d/*.repo; do
+		grep -q '^skip_if_unavailable=1$' "${repo_file}" 2>/dev/null ||
+			sed -i '/^\[.*\]$/a skip_if_unavailable=1' "${repo_file}" 2>/dev/null || true
+	done
 	yum install -y ansible
 else
 	apt install -y ansible
