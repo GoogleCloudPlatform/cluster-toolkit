@@ -456,6 +456,11 @@ func TestGetIsTestData(t *testing.T) {
 			want:      "true",
 		},
 		{
+			name:      "dev-2 project",
+			projectID: "hpc-toolkit-dev-2",
+			want:      "true",
+		},
+		{
 			name:      "prod project",
 			projectID: "some-other-project",
 			want:      "false",
