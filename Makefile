@@ -34,7 +34,7 @@ endif
 
 gcluster: warn-go-version warn-terraform-version warn-packer-version $(shell find ./cmd ./pkg gcluster.go -type f)
 	$(info **************** building gcluster ************************)
-	@go build -ldflags="-X 'main.gitTagVersion=$(GIT_TAG_VERSION)' -X 'main.gitBranch=$(GIT_BRANCH)' -X 'main.gitCommitInfo=$(GIT_COMMIT_INFO)' -X 'main.gitCommitHash=$(GIT_COMMIT_HASH)' -X 'main.gitInitialHash=$(GIT_INITIAL_HASH)' -X 'main.gitIsOfficial=$(GIT_IS_OFFICIAL)' -X 'main.installationMode=$(INSTALLATION_MODE)'" gcluster.go
+	@CGO_ENABLED=0 go build -ldflags="-X 'main.gitTagVersion=$(GIT_TAG_VERSION)' -X 'main.gitBranch=$(GIT_BRANCH)' -X 'main.gitCommitInfo=$(GIT_COMMIT_INFO)' -X 'main.gitCommitHash=$(GIT_COMMIT_HASH)' -X 'main.gitInitialHash=$(GIT_INITIAL_HASH)' -X 'main.gitIsOfficial=$(GIT_IS_OFFICIAL)' -X 'main.installationMode=$(INSTALLATION_MODE)'" gcluster.go
 	@ln -sf gcluster ghpc
 
 ghpc: gcluster
@@ -256,3 +256,17 @@ packer-format:
 endif
 endif
 # END OF PACKER SECTION
+
+###################################
+# AGENT SKILLS SECTION
+.PHONY: lint-skills test-skills
+
+lint-skills:
+	$(info **************** linting agent skills ***************)
+	@python3 tools/run_eval.py --lint-only --all
+
+test-skills:
+	$(info **************** running skills unit tests and evals ***************)
+	@python3 tools/tests/test_run_eval.py
+	@python3 tools/run_eval.py --all
+# END OF AGENT SKILLS SECTION

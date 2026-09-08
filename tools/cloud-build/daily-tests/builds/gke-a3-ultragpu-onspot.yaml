@@ -205,6 +205,9 @@ steps:
                 echo "INFO: Using \$$GKE_VARS_FILE as it is for SPOT provisioning."
               fi
 
+              # Override force_destroy from false to true for training and checkpoint storage buckets
+              sed -i -E 's/force_destroy:\s*false/force_destroy: true/g' \$$EXAMPLE_BP
+
               bash tools/add_ttl_label.sh "\$$EXAMPLE_BP"
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \

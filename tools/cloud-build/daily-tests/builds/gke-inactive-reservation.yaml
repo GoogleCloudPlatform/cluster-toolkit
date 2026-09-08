@@ -153,7 +153,7 @@ steps:
               echo '    use: [network1]'                                    >> \$$EXAMPLE_BP
               echo '    settings:'                                          >> \$$EXAMPLE_BP
               echo '      machine_type: n2d-standard-2'                     >> \$$EXAMPLE_BP
-              echo '      zone: us-central1-a'                              >> \$$EXAMPLE_BP
+              echo '      zone: us-east4-a'                              >> \$$EXAMPLE_BP
 
               # Adding node pool with reservation defined
               echo '  - id: compute-pool-reservation'                       >> \$$EXAMPLE_BP
@@ -161,7 +161,7 @@ steps:
               echo '    use: [gke_cluster, node_pool_service_account]'      >> \$$EXAMPLE_BP
               echo '    settings:'                                          >> \$$EXAMPLE_BP
               echo '      machine_type: n2d-standard-2'                     >> \$$EXAMPLE_BP
-              echo '      zones: [us-central1-a]'                           >> \$$EXAMPLE_BP
+              echo '      zones: [us-east4-a]'                           >> \$$EXAMPLE_BP
               echo '      static_node_count: 0'                             >> \$$EXAMPLE_BP
               echo '      is_reservation_active: false'                     >> \$$EXAMPLE_BP
               echo '      reservation_affinity:'                            >> \$$EXAMPLE_BP
