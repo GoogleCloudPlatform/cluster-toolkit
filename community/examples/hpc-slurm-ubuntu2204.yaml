@@ -24,8 +24,8 @@ vars:
   slurm_image:
     # Please refer to the following link for the latest images:
     # https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
-    family: slurm-gcp-6-12-ubuntu-2204-lts-nvidia-570
-    project: schedmd-slurm-public
+    family: aci-gpu-u2204-slurm-2511-cuda-130-nvidia-580-amd64
+    project: advanced-compute-images
 
 deployment_groups:
 - group: primary

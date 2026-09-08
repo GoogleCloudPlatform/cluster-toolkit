@@ -26,6 +26,24 @@ repos:
     - --hook-config=--retry-once-with-cleanup=true
 - repo: local
   hooks:
+  - id: validate-kueue-tests
+    name: validate-kueue-tests
+    entry: python3 tools/cloud-build/daily-tests/validate_kueue_tests.py
+    language: python
+    language_version: python3
+    additional_dependencies: ['ruamel.yaml']
+    files: 'tools/cloud-build/daily-tests/builds/.*\.yaml'
+    pass_filenames: false
+    require_serial: true
+  - id: generate-kueue-locks
+    name: generate-kueue-locks
+    entry: python3 tools/cloud-build/provision/generate_kueue_locks.py
+    language: python
+    language_version: python3
+    additional_dependencies: ['ruamel.yaml']
+    files: 'tools/cloud-build/daily-tests/builds/.*\.yaml'
+    pass_filenames: false
+    require_serial: true
   - id: terraform-readme
     name: terraform-readme
     entry: tools/autodoc/terraform_docs.sh

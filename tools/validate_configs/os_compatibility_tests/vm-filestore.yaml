@@ -103,7 +103,7 @@ deployment_groups:
     - homefs
     settings:
       instance_image:
-        family: debian-11
+        family: debian-12
         project: debian-cloud
       name_prefix: workstation-debian
       instance_count: 1

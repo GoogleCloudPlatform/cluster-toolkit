@@ -1,0 +1,163 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+# Exercises two pieces of new functionality together:
+#   - community/modules/container/artifact-registry, in REMOTE_REPOSITORY
+#     (pull-through cache) mode mirroring Docker Hub
+#   - community/modules/container/apptainer-runtime and apptainer-app,
+#     staging an app pulled through that mirror as an Apptainer SIF
+#
+# The staged app is OpenFOAM, mirrored from the public OpenCFD image on
+# Docker Hub (docker.io/opencfd/openfoam-default). Verify the current tag at
+# https://hub.docker.com/r/opencfd/openfoam-default/tags before deploying,
+# and update openfoam_image_tag below if it has moved on.
+
+blueprint_name: apptainer-artifact-registry-openfoam
+
+validators:
+- validator: test_apis_enabled
+  skip: true # skipping this validator, since "service-enablement" will take care of it.
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: apptainer-ar-openfoam
+  region: us-central1
+  zone: us-central1-a
+
+  shared_root: /shared
+  vm_machine_type: e2-standard-4
+
+  openfoam_app_id: openfoam
+  openfoam_display_name: OpenFOAM
+  openfoam_upstream_image: opencfd/openfoam-default
+  openfoam_image_tag: "2406"
+
+  # apptainer exec bypasses the image's Docker ENTRYPOINT, which is what
+  # normally sources OpenFOAM's environment (WM_PROJECT_DIR, LD_LIBRARY_PATH,
+  # etc.) on `docker run`. Source the same etc/bashrc explicitly instead, and
+  # exec whatever OpenFOAM command the caller asked for as "$@" - this makes
+  # the wrapper a generic launcher for any solver/utility in the suite
+  # (simpleFoam, blockMesh, ...), not just one hardcoded binary.
+  openfoam_entrypoint: bash
+  openfoam_entrypoint_args:
+  - "-c"
+  - source /usr/lib/openfoam/openfoam$(vars.openfoam_image_tag)/etc/bashrc && exec "$@"
+  - openfoam
+
+  prereq_runners:
+  - type: shell
+    destination: install-prereqs.sh
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      dnf install -y epel-release
+      dnf install -y environment-modules
+
+  openfoam_smoke_test_runners:
+  - type: shell
+    destination: run-openfoam-smoke-test.sh
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      wrapper_path="$(vars.shared_root)/bin/$(vars.openfoam_app_id)"
+      log_file=/var/log/openfoam-smoke-test.log
+      if "$wrapper_path" simpleFoam -help >"$log_file" 2>&1; then
+        echo "openfoam smoke test: OK" >>"$log_file"
+      else
+        echo "openfoam smoke test: FAILED" >>"$log_file"
+        exit 1
+      fi
+
+deployment_groups:
+- group: setup
+  modules:
+
+  - id: enable_apis
+    source: community/modules/project/service-enablement
+    settings:
+      gcp_service_list:
+      - artifactregistry.googleapis.com
+
+- group: primary
+  modules:
+
+  - id: network
+    source: modules/network/vpc
+
+  - id: hpc_service_account
+    source: modules/project/service-account
+    settings:
+      name: sa
+      project_roles:
+      - artifactregistry.reader
+      - storage.objectViewer
+
+  - id: appsfs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    settings:
+      name: $(vars.deployment_name)-appsfs
+      local_mounts:
+      - $(vars.shared_root)
+
+  - id: openfoam_registry
+    source: community/modules/container/artifact-registry
+    settings:
+      repo_mode: REMOTE_REPOSITORY
+      format: DOCKER
+      repo_public_repository: DOCKER_HUB
+
+  - id: apptainer-runtime
+    source: community/modules/container/apptainer-runtime
+    use: [appsfs]
+
+  - id: shared-app
+    source: community/modules/container/apptainer-app
+    use: [appsfs]
+    outputs:
+    - wrapper_path
+    settings:
+      app_id: $(vars.openfoam_app_id)
+      display_name: $(vars.openfoam_display_name)
+      image_ref: $(openfoam_registry.registry_url)/$(vars.openfoam_upstream_image):$(vars.openfoam_image_tag)
+      install_apptainer: true
+      entrypoint: $(vars.openfoam_entrypoint)
+      entrypoint_args: $(vars.openfoam_entrypoint_args)
+      bind_paths:
+      - $(appsfs.network_storage[0].local_mount):$(appsfs.network_storage[0].local_mount)
+
+  - id: app-startup
+    source: modules/scripts/startup-script
+    outputs:
+    - startup_script
+    settings:
+      runners: $(flatten([vars.prereq_runners, apptainer-runtime.startup_runners, shared-app.startup_runners, vars.openfoam_smoke_test_runners]))
+
+  - id: vm
+    source: modules/compute/vm-instance
+    use: [network, appsfs, app-startup]
+    outputs:
+    - name
+    settings:
+      name_prefix: $(vars.deployment_name)-vm
+      machine_type: $(vars.vm_machine_type)
+      service_account_email: $(hpc_service_account.service_account_email)
+      allow_automatic_updates: false
+
+  - id: wait
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: $(vm.name[0])
