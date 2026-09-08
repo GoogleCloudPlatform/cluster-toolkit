@@ -3149,10 +3149,8 @@ func TestProcessNodePoolCapacity_FlavorsAndLabels(t *testing.T) {
 				},
 			},
 			wantFlavor: "flavor-default",
-			wantLabels: map[string]string{
-				"cloud.google.com/gke-nodepool": "cpu-np",
-			},
-			wantErr: false,
+			wantLabels: map[string]string{}, // flavor-default is generic across CPU pools and should NOT have gke-nodepool label
+			wantErr:    false,
 		},
 		{
 			name: "CPU Pool (Head)",
@@ -3230,10 +3228,8 @@ func TestProcessNodePoolCapacity_FlavorsAndLabels(t *testing.T) {
 				},
 			},
 			wantFlavor: "flavor-default",
-			wantLabels: map[string]string{
-				"cloud.google.com/gke-nodepool": "system",
-			},
-			wantErr: false,
+			wantLabels: map[string]string{}, // flavor-default is generic across CPU pools and should NOT have gke-nodepool label
+			wantErr:    false,
 		},
 	}
 
@@ -4472,5 +4468,341 @@ func TestValidateNamespaceExists(t *testing.T) {
 				t.Errorf("expected no error, but got: %v", err)
 			}
 		})
+	}
+}
+
+func TestGetMTCDaemonSet(t *testing.T) {
+	t.Run("Static name multitier-driver", func(t *testing.T) {
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				if name == "multitier-driver" {
+					return &unstructured.Unstructured{
+						Object: map[string]interface{}{
+							"metadata": map[string]interface{}{
+								"name": "multitier-driver",
+							},
+						},
+					}, nil
+				}
+				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
+			},
+		}
+		ds, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		if ds.GetName() != "multitier-driver" {
+			t.Errorf("expected DaemonSet name multitier-driver, got %s", ds.GetName())
+		}
+	})
+
+	t.Run("Dynamic name multitier-driver-uuid discovered via list", func(t *testing.T) {
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
+			},
+			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				return &unstructured.UnstructuredList{
+					Items: []unstructured.Unstructured{
+						{
+							Object: map[string]interface{}{
+								"metadata": map[string]interface{}{
+									"name": "multitier-driver-fd6c6ab5-2191-47e6-8e95-11b3d9ac7cb6",
+									"labels": map[string]interface{}{
+										"k8s-app": "high-scale-checkpointing",
+									},
+								},
+							},
+						},
+					},
+				}, nil
+			},
+		}
+		ds, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		expectedName := "multitier-driver-fd6c6ab5-2191-47e6-8e95-11b3d9ac7cb6"
+		if ds.GetName() != expectedName {
+			t.Errorf("expected DaemonSet name %s, got %s", expectedName, ds.GetName())
+		}
+	})
+
+	t.Run("403 Forbidden on Get returns error without listing", func(t *testing.T) {
+		listCalled := false
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name, fmt.Errorf("forbidden"))
+			},
+			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				listCalled = true
+				return nil, nil
+			},
+		}
+		_, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
+		if err == nil {
+			t.Fatalf("expected error, got nil")
+		}
+		if !isForbiddenError(err) {
+			t.Errorf("expected forbidden error, got %v", err)
+		}
+		if listCalled {
+			t.Errorf("expected List not to be called when Get returns 403 Forbidden")
+		}
+	})
+}
+
+func TestGetMTCDaemonSet_EdgeCases(t *testing.T) {
+	t.Run("404 NotFound when Get fails and List returns no matching DaemonSets", func(t *testing.T) {
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
+			},
+			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				return &unstructured.UnstructuredList{
+					Items: []unstructured.Unstructured{
+						{
+							Object: map[string]interface{}{
+								"metadata": map[string]interface{}{
+									"name":   "kube-proxy",
+									"labels": map[string]interface{}{"k8s-app": "kube-proxy"},
+								},
+							},
+						},
+					},
+				}, nil
+			},
+		}
+		ds, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
+		if err == nil {
+			t.Fatalf("expected NotFound error, got nil")
+		}
+		if !apierrors.IsNotFound(err) {
+			t.Errorf("expected IsNotFound(err) == true, got %v", err)
+		}
+		if ds != nil {
+			t.Errorf("expected nil ds, got %v", ds)
+		}
+	})
+
+	t.Run("403 Forbidden on List propagates error", func(t *testing.T) {
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
+			},
+			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				return nil, apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, "", fmt.Errorf("forbidden"))
+			},
+		}
+		_, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
+		if err == nil {
+			t.Fatalf("expected error, got nil")
+		}
+		if !isForbiddenError(err) {
+			t.Errorf("expected forbidden error, got %v", err)
+		}
+	})
+
+	t.Run("Filters unrelated DaemonSets and matches by label", func(t *testing.T) {
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
+			},
+			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				return &unstructured.UnstructuredList{
+					Items: []unstructured.Unstructured{
+						{
+							Object: map[string]interface{}{
+								"metadata": map[string]interface{}{
+									"name": "unrelated-daemonset",
+								},
+							},
+						},
+						{
+							Object: map[string]interface{}{
+								"metadata": map[string]interface{}{
+									"name": "custom-checkpoint-driver",
+									"labels": map[string]interface{}{
+										"k8s-app": "high-scale-checkpointing",
+									},
+								},
+							},
+						},
+					},
+				}, nil
+			},
+		}
+		ds, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		if ds.GetName() != "custom-checkpoint-driver" {
+			t.Errorf("expected custom-checkpoint-driver, got %s", ds.GetName())
+		}
+	})
+}
+
+func TestRestartMTCDriverPods_DynamicName(t *testing.T) {
+	patchedName := ""
+	dynClient := &mockDynamicClient{
+		getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+			if name == "multitier-driver-8f2c7adf-1b1e-47e4-ba2e-104ffa2c846b" {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{
+							"name":       "multitier-driver-8f2c7adf-1b1e-47e4-ba2e-104ffa2c846b",
+							"generation": int64(1),
+						},
+						"status": map[string]interface{}{
+							"observedGeneration":     int64(1),
+							"desiredNumberScheduled": int64(4),
+							"numberReady":            int64(4),
+							"updatedNumberScheduled": int64(4),
+						},
+					},
+				}, nil
+			}
+			return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
+		},
+		listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+			return &unstructured.UnstructuredList{
+				Items: []unstructured.Unstructured{
+					{
+						Object: map[string]interface{}{
+							"metadata": map[string]interface{}{
+								"name": "multitier-driver-8f2c7adf-1b1e-47e4-ba2e-104ffa2c846b",
+								"labels": map[string]interface{}{
+									"k8s-app": "high-scale-checkpointing",
+								},
+							},
+						},
+					},
+				},
+			}, nil
+		},
+		patchFunc: func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
+			patchedName = name
+			return &unstructured.Unstructured{}, nil
+		},
+	}
+
+	restartMTCDriverPods(context.Background(), dynClient, "gke-managed-checkpointing")
+	expectedName := "multitier-driver-8f2c7adf-1b1e-47e4-ba2e-104ffa2c846b"
+	if patchedName != expectedName {
+		t.Errorf("expected patched DaemonSet name %s, got %s", expectedName, patchedName)
+	}
+}
+
+func TestRestartMTCDriverPods_ForbiddenAndNotFound(t *testing.T) {
+	t.Run("403 Forbidden on Patch skips pod deletion fallback", func(t *testing.T) {
+		deleteCalled := false
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": "multitier-driver"},
+					},
+				}, nil
+			},
+			patchFunc: func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name, fmt.Errorf("forbidden"))
+			},
+			deleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
+				deleteCalled = true
+				return nil
+			},
+		}
+
+		restartMTCDriverPods(context.Background(), dynClient, "gke-managed-checkpointing")
+		if deleteCalled {
+			t.Errorf("expected delete fallback NOT to be called when patch returns 403 Forbidden")
+		}
+	})
+
+	t.Run("404 NotFound on getMTCDaemonSet skips pod deletion fallback", func(t *testing.T) {
+		deleteCalled := false
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
+			},
+			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{}}, nil
+			},
+			deleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
+				deleteCalled = true
+				return nil
+			},
+		}
+
+		restartMTCDriverPods(context.Background(), dynClient, "gke-managed-checkpointing")
+		if deleteCalled {
+			t.Errorf("expected delete fallback NOT to be called when DaemonSet is not found")
+		}
+	})
+}
+
+func TestCalculateClusterCapacity_MultipleCPUPools(t *testing.T) {
+	setupMockMachineConfig(t)
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2d-standard-2 --zone=us-central1-b --format=json": {
+			{ExitCode: 0, Stdout: `{"guestCpus": 2, "memoryMb": 8192}`},
+		},
+		"gcloud compute machine-types describe c3d-standard-4 --zone=us-central1-b --format=json": {
+			{ExitCode: 0, Stdout: `{"guestCpus": 4, "memoryMb": 16384}`},
+		},
+	}
+	mockExecutor := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExecutor)
+	orc.projectID = "test-project"
+
+	cluster := gkeCluster{
+		NodePools: []gkeJobNodePool{
+			{
+				Name:             "system",
+				Config:           gkeNodePoolConfig{MachineType: "n2d-standard-2", Taints: []gkeTaint{{Key: "components.gke.io/gke-managed-components", Value: "true", Effect: "NoSchedule"}}},
+				InitialNodeCount: 1,
+			},
+			{
+				Name:             "debug",
+				Config:           gkeNodePoolConfig{MachineType: "n2d-standard-2"},
+				InitialNodeCount: 2,
+			},
+			{
+				Name:             "local-ssd",
+				Config:           gkeNodePoolConfig{MachineType: "n2d-standard-2"},
+				InitialNodeCount: 1,
+			},
+			{
+				Name:             "hp-pool",
+				Config:           gkeNodePoolConfig{MachineType: "c3d-standard-4"},
+				InitialNodeCount: 1,
+			},
+		},
+	}
+
+	cap, _, err := orc.calculateClusterCapacity(cluster, "us-central1-b")
+	if err != nil {
+		t.Fatalf("calculateClusterCapacity failed: %v", err)
+	}
+
+	// 2 debug nodes * 2 cpus + 1 local-ssd node * 2 cpus + 1 hp-pool node * 4 cpus = 10 cpus
+	if cap.CPUs != 10 {
+		t.Errorf("expected 10 CPUs total, got %d", cap.CPUs)
+	}
+	// 2*8GB + 1*8GB + 1*16GB = 40GB
+	if cap.MemoryGi != 40 {
+		t.Errorf("expected 40 GiB total memory, got %d", cap.MemoryGi)
+	}
+
+	defaultFlavor, exists := cap.Flavors["flavor-default"]
+	if !exists {
+		t.Fatalf("expected flavor-default to exist in calculated flavors")
+	}
+	if defaultFlavor.CPUs != 10 {
+		t.Errorf("expected flavor-default to have 10 CPUs, got %d", defaultFlavor.CPUs)
+	}
+	// Verify flavor-default has NO cloud.google.com/gke-nodepool label!
+	if npLabel, ok := defaultFlavor.NodeLabels["cloud.google.com/gke-nodepool"]; ok {
+		t.Errorf("expected flavor-default not to have cloud.google.com/gke-nodepool label, but got %q", npLabel)
 	}
 }

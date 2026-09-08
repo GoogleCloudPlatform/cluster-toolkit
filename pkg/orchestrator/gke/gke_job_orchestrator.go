@@ -702,20 +702,30 @@ func isDaemonSetRolloutComplete(dsObj *unstructured.Unstructured) bool {
 	return false
 }
 
-func checkDaemonSetReady(ctx context.Context, client dynamic.Interface, namespace string) (bool, error) {
-	dsObj, err := client.Resource(daemonsetGVR).Namespace(namespace).Get(ctx, "multitier-driver", metav1.GetOptions{})
-	if err != nil {
-		if isForbiddenError(err) {
-			logging.Warn("Insufficient RBAC permissions to get multitier-driver DaemonSet status (403 Forbidden). Proceeding with job submission.")
-			return true, nil
+func getMTCDaemonSet(ctx context.Context, client dynamic.Interface, namespace string) (*unstructured.Unstructured, error) {
+	// First attempt direct get of "multitier-driver" in case it exists with static name.
+	if dsObj, err := client.Resource(daemonsetGVR).Namespace(namespace).Get(ctx, "multitier-driver", metav1.GetOptions{}); err == nil {
+		if dsObj.GetName() == "" {
+			dsObj.SetName("multitier-driver")
 		}
-		if apierrors.IsNotFound(err) {
-			logging.Warn("MTC multitier-driver DaemonSet not found in %s. Proceeding with job submission.", namespace)
-			return true, nil
-		}
-		return false, err
+		return dsObj, nil
+	} else if isForbiddenError(err) {
+		return nil, err
 	}
-	return isDaemonSetRolloutComplete(dsObj), nil
+
+	// In GKE, HighScaleCheckpointing names the DaemonSet "multitier-driver-<instanceHandle>".
+	// List DaemonSets in the namespace to find it.
+	dsList, err := client.Resource(daemonsetGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	for i := range dsList.Items {
+		ds := &dsList.Items[i]
+		if strings.HasPrefix(ds.GetName(), "multitier-driver") || ds.GetLabels()["k8s-app"] == "high-scale-checkpointing" {
+			return ds, nil
+		}
+	}
+	return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, "multitier-driver")
 }
 
 var daemonSetPollInterval = 2 * time.Second
@@ -726,7 +736,22 @@ func waitForMTCDriverDaemonSetReady(ctx context.Context, client dynamic.Interfac
 	waitCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 
-	if ready, err := checkDaemonSetReady(waitCtx, client, namespace); ready && err == nil {
+	dsObj, err := getMTCDaemonSet(waitCtx, client, namespace)
+	if err != nil {
+		if isForbiddenError(err) {
+			logging.Warn("Insufficient RBAC permissions to get multitier-driver DaemonSet status (403 Forbidden). Proceeding with job submission.")
+			return
+		}
+		if apierrors.IsNotFound(err) {
+			logging.Warn("MTC multitier-driver DaemonSet not found in %s. Proceeding with job submission.", namespace)
+			return
+		}
+		logging.Warn("Error finding MTC multitier-driver DaemonSet in %s: %v. Proceeding with job submission.", namespace, err)
+		return
+	}
+
+	dsName := dsObj.GetName()
+	if isDaemonSetRolloutComplete(dsObj) {
 		return
 	}
 
@@ -736,13 +761,20 @@ func waitForMTCDriverDaemonSetReady(ctx context.Context, client dynamic.Interfac
 	for {
 		select {
 		case <-waitCtx.Done():
-			logging.Warn("Timed out or context canceled waiting for MTC multitier-driver DaemonSet in %s to become ready. Proceeding with job submission.", namespace)
+			logging.Warn("Timed out or context canceled waiting for MTC multitier-driver DaemonSet %s in %s to become ready. Proceeding with job submission.", dsName, namespace)
 			return
 		case <-ticker.C:
-			if ready, err := checkDaemonSetReady(waitCtx, client, namespace); ready && err == nil {
+			currentObj, err := client.Resource(daemonsetGVR).Namespace(namespace).Get(waitCtx, dsName, metav1.GetOptions{})
+			if err != nil {
+				if isForbiddenError(err) {
+					logging.Warn("Insufficient RBAC permissions to get multitier-driver DaemonSet status (403 Forbidden). Proceeding with job submission.")
+					return
+				}
+				logging.Warn("Retrying get of multitier-driver DaemonSet %s: %v", dsName, err)
+				continue
+			}
+			if isDaemonSetRolloutComplete(currentObj) {
 				return
-			} else if err != nil {
-				logging.Warn("Retrying get of multitier-driver DaemonSet: %v", err)
 			}
 		}
 	}
@@ -750,16 +782,32 @@ func waitForMTCDriverDaemonSetReady(ctx context.Context, client dynamic.Interfac
 
 // restartMTCDriverPods restarts the multitier-driver DaemonSet to pick up updated service account tokens.
 func restartMTCDriverPods(ctx context.Context, client dynamic.Interface, namespace string) {
-	patchData := fmt.Appendf(nil, `{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}`, time.Now().UTC().Format(time.RFC3339))
-	if _, err := client.Resource(daemonsetGVR).Namespace(namespace).Patch(ctx, "multitier-driver", types.StrategicMergePatchType, patchData, metav1.PatchOptions{}); err == nil {
-		logging.Info("Triggered rolling restart of multitier-driver DaemonSet in %s", namespace)
-		waitForMTCDriverDaemonSetReady(ctx, client, namespace)
-		return
+	if dsObj, err := getMTCDaemonSet(ctx, client, namespace); err == nil {
+		dsName := dsObj.GetName()
+		patchData := fmt.Appendf(nil, `{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}`, time.Now().UTC().Format(time.RFC3339))
+		_, patchErr := client.Resource(daemonsetGVR).Namespace(namespace).Patch(ctx, dsName, types.StrategicMergePatchType, patchData, metav1.PatchOptions{})
+		if patchErr == nil {
+			logging.Info("Triggered rolling restart of %s DaemonSet in %s", dsName, namespace)
+			waitForMTCDriverDaemonSetReady(ctx, client, namespace)
+			return
+		} else if isForbiddenError(patchErr) {
+			logging.Warn("Insufficient RBAC permissions to restart %s DaemonSet in %s (403 Forbidden). Skipping driver restart.", dsName, namespace)
+			return
+		}
+		logging.Warn("Failed to patch DaemonSet %s for restart: %v. Falling back to pod deletion.", dsName, patchErr)
 	} else if isForbiddenError(err) {
-		logging.Warn("Insufficient RBAC permissions to restart multitier-driver DaemonSet in %s (403 Forbidden). Skipping driver restart.", namespace)
+		logging.Warn("Insufficient RBAC permissions to get multitier-driver DaemonSet in %s (403 Forbidden). Skipping driver restart.", namespace)
+		return
+	} else if apierrors.IsNotFound(err) {
+		logging.Warn("MTC multitier-driver DaemonSet not found in %s. Skipping driver restart.", namespace)
 		return
 	}
 
+	deleteMTCDriverPodsFallback(ctx, client, namespace)
+	waitForMTCDriverDaemonSetReady(ctx, client, namespace)
+}
+
+func deleteMTCDriverPodsFallback(ctx context.Context, client dynamic.Interface, namespace string) {
 	listOpts := metav1.ListOptions{
 		LabelSelector: "k8s-app=high-scale-checkpointing",
 	}
@@ -797,7 +845,6 @@ func restartMTCDriverPods(ctx context.Context, client dynamic.Interface, namespa
 		// and decrement status.numberReady before we poll for readiness.
 		time.Sleep(daemonSetPollInterval)
 	}
-	waitForMTCDriverDaemonSetReady(ctx, client, namespace)
 }
 
 // updateMTCServiceAccountAnnotation updates the MTC KSA with the node GSA Workload Identity annotation and restarts driver pods.
@@ -995,8 +1042,7 @@ func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location st
 		flavor = accFlavor
 	}
 
-	isHardwareAccel := len(np.Config.Accelerators) > 0 || len(cap.Accelerators) > 0
-	if !isHardwareAccel && !g.isSystemPool(np) {
+	if flavor == "pathways-flavor" {
 		nodeLabels["cloud.google.com/gke-nodepool"] = np.Name
 	}
 
