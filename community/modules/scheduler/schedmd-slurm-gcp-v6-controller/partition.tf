@@ -140,7 +140,7 @@ locals {
   # Filter out null or empty strings from zone policy allow sets
   nodeset_mig_zones = {
     for k, mig in local.nodeset_migs : k => [
-      for z in try(coalesce(mig.zone_policy_allow, []), []) : z if z != null && z != ""
+      for z in(mig.zone_policy_allow != null ? mig.zone_policy_allow : []) : z if z != null && z != ""
     ]
   }
 }

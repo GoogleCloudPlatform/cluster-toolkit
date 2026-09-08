@@ -1811,10 +1811,6 @@ class Lookup:
     def nodeset_is_tpu(self, nodeset_name=None) -> bool:
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
 
-    def is_mig_engine(self) -> bool:
-        """Returns True if the cluster deployment default is configured with provisioning_engine == 'MIG'."""
-        return getattr(self.cfg, "provisioning_engine", "BULK_INSERT") == "MIG"
-
     def is_nodeset_mig(self, nodeset_name: str) -> bool:
         """Returns True if a specific NodeSet is configured with or resolved to MIG."""
         nodeset = self.cfg.nodeset.get(nodeset_name)
@@ -1829,7 +1825,7 @@ class Lookup:
             return True
         if getattr(nodeset, "mig_name", None) is not None:
             return True
-        return self.is_mig_engine()
+        return False
 
     def is_node_mig(self, node_name: str) -> bool:
         """Returns True if the node belongs to a MIG-backed NodeSet."""

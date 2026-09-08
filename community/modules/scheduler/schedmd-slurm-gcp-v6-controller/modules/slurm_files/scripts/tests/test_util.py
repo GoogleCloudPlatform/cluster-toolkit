@@ -841,20 +841,9 @@ def test_compute_service_custom_universe_domain(mocker):
     assert kwargs.get("client_options").universe_domain == "apis-sovereign.goog"
 
 
-def test_is_mig_engine():
-    cfg_bulk = TstCfg(provisioning_engine="BULK_INSERT")
-    lkp_bulk = util.Lookup(cfg_bulk)
-    assert not lkp_bulk.is_mig_engine()
-
-    cfg_mig = TstCfg(provisioning_engine="MIG")
-    lkp_mig = util.Lookup(cfg_mig)
-    assert lkp_mig.is_mig_engine()
-
-
 def test_mig_name():
     cfg = TstCfg(
         slurm_cluster_name="testcl",
-        provisioning_engine="MIG",
         nodeset={
             "ns1": TstNodeset(nodeset_name="ns1", node_count_dynamic_max=100),
             "ns2": TstNodeset(nodeset_name="ns2", node_count_dynamic_max=1200),
@@ -868,7 +857,6 @@ def test_mig_name():
 def test_is_node_mig():
     cfg = TstCfg(
         slurm_cluster_name="testcl",
-        provisioning_engine="AUTO",
         nodeset={
             "ns_mig": TstNodeset(nodeset_name="ns_mig", mig_name="testcl-ns_mig-mig-0", provisioning_engine="MIG"),
             "ns_bulk": TstNodeset(nodeset_name="ns_bulk", provisioning_engine="BULK_INSERT"),
@@ -879,21 +867,6 @@ def test_is_node_mig():
     assert not lkp.is_nodeset_mig("ns_bulk")
     assert lkp.is_node_mig("testcl-ns_mig-0")
     assert not lkp.is_node_mig("testcl-ns_bulk-0")
-
-    # Cluster-level MIG with explicit NodeSet-level BULK_INSERT override
-    cfg_cluster_mig = TstCfg(
-        slurm_cluster_name="testcl",
-        provisioning_engine="MIG",
-        nodeset={
-            "ns_mig_cluster": TstNodeset(nodeset_name="ns_mig_cluster"),
-            "ns_bulk_override": TstNodeset(nodeset_name="ns_bulk_override", provisioning_engine="BULK_INSERT"),
-        }
-    )
-    lkp_cluster = util.Lookup(cfg_cluster_mig)
-    assert lkp_cluster.is_nodeset_mig("ns_mig_cluster")
-    assert not lkp_cluster.is_nodeset_mig("ns_bulk_override")
-    assert lkp_cluster.is_node_mig("testcl-ns_mig_cluster-0")
-    assert not lkp_cluster.is_node_mig("testcl-ns_bulk_override-0")
 
     # Cross-NodeSet Isolation: Legacy NodeSet without provisioning_engine in a hybrid cluster
     cfg_hybrid = TstCfg(
