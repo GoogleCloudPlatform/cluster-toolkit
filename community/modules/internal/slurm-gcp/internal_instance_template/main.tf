@@ -246,6 +246,13 @@ resource "google_compute_instance_template" "tpl" {
     for_each = var.reservation_affinity != null ? [var.reservation_affinity] : []
     content {
       type = reservation_affinity.value.type
+      dynamic "specific_reservation" {
+        for_each = try(reservation_affinity.value.specific_reservation, null) != null ? [reservation_affinity.value.specific_reservation] : []
+        content {
+          key    = specific_reservation.value.key
+          values = specific_reservation.value.values
+        }
+      }
     }
   }
 
