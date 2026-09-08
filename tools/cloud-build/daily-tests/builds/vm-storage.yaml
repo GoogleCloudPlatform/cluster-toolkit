@@ -97,6 +97,7 @@ steps:
           $$PRIORITY_LINE
           serviceAccountName: test-kueue-cluster-runner-ksa
           restartPolicy: Never
+          terminationGracePeriodSeconds: 1800 # Grants 30 minutes for terraform destroy to finish gracefully if cancelled
           containers:
           - name: runner
             image: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
@@ -130,7 +131,7 @@ steps:
               set -x -e
               cd /workspace
 
-              DEPLOYMENT_NAME="vm-storage-$$BUILD_ID_SHORT"
+              DEPLOYMENT_NAME="vmstorage-$$BUILD_ID_SHORT"
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh

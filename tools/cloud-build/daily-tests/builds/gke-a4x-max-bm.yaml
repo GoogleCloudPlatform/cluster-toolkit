@@ -80,13 +80,13 @@ steps:
 
     bash tools/add_ttl_label.sh "$${EXAMPLE_BP}"
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} full_build_id=$BUILD_ID" \
+        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} full_build_id=$BUILD_ID chs_repo=$${CHS_REPO}" \
         --extra-vars="@tools/cloud-build/daily-tests/tests/gke-a4x-max-bm.yml" \
         --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
         --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
         --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
         --extra-vars="triage_cloud_run_url_override=$$TRIAGE_CLOUD_RUN_URL"
-  secretEnv: ['GCLUSTER_GCS_PATH', 'TRIAGE_GCS_BUCKET', 'TRIAGE_PROJECT_NUMBER', 'TRIAGE_INVOKER_SA', 'TRIAGE_CLOUD_RUN_URL']
+  secretEnv: ['GCLUSTER_GCS_PATH', 'CHS_REPO', 'TRIAGE_GCS_BUCKET', 'TRIAGE_PROJECT_NUMBER', 'TRIAGE_INVOKER_SA', 'TRIAGE_CLOUD_RUN_URL']
 availableSecrets:
   secretManager:
   - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
@@ -99,3 +99,5 @@ availableSecrets:
     env: 'TRIAGE_INVOKER_SA'
   - versionName: projects/${PROJECT_ID}/secrets/triage-cloud-run-url/versions/latest
     env: 'TRIAGE_CLOUD_RUN_URL'
+  - versionName: projects/${PROJECT_ID}/secrets/cluster-health-scanner/versions/latest
+    env: 'CHS_REPO'

@@ -149,7 +149,7 @@ steps:
               echo '    use: [network1]'                     >> \$$SG_EXAMPLE
               echo '    settings:'                           >> \$$SG_EXAMPLE
               echo '      machine_type: n2d-standard-2'       >> \$$SG_EXAMPLE
-              echo '      zone: us-central1-a'               >> \$$SG_EXAMPLE
+              echo '      zone: us-east4-a'               >> \$$SG_EXAMPLE
 
               echo '  - id: ubuntu_pool'                                         >> \$$SG_EXAMPLE
               echo '    source: modules/compute/gke-node-pool'                   >> \$$SG_EXAMPLE

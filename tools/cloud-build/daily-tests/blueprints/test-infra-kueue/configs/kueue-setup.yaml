@@ -1,0 +1,298 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: compute-flavor
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: test-lock-flavor
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: test-lock-flavor-2
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: cluster-queue-test-locks
+spec:
+  namespaceSelector: {}
+  resourceGroups:
+  - coveredResources:
+    - cpu
+    - memory
+    flavors:
+    - name: compute-flavor
+      resources:
+      - name: cpu
+        nominalQuota: 100
+      - name: memory
+        nominalQuota: 400Gi
+  - coveredResources:
+    - test-locks/slurm
+    - test-locks/ml-slurm
+    - test-locks/slurm-gcp-v6-rocky8
+    - test-locks/slurm-gcp-v6-ubuntu
+    - test-locks/slurm-gcp-v6-debian
+    - test-locks/slurm-gcp-v6-reconfig-size
+    - test-locks/slurm-gcp-v6-ssd
+    - test-locks/hpc-build-slurm-image
+    - test-locks/hpc-enterprise-slurm
+    - test-locks/hcls
+    - test-locks/a2-highgpu
+    - test-locks/gke-a2-highgpu-kueue-onspot
+    - test-locks/a3-ultragpu
+    - test-locks/a3-highgpu
+    - test-locks/a3-megagpu
+    - test-locks/gke-a3-megagpu-onspot
+    - test-locks/ml-a3-highgpu-onspot-slurm
+    - test-locks/gke-a3-ultragpu-onspot
+    - test-locks/gke-a3-highgpu-onspot
+    - test-locks/ml-a3-ultragpu-onspot-slurm
+    - test-locks/ml-a3-ultragpu-onspot-jbvms
+    - test-locks/a4-highgpu
+    - test-locks/gke-a4-onspot
+    - test-locks/a4x
+    - test-locks/gke-a4x
+    - test-locks/ml-a4-highgpu-onspot-slurm
+    - test-locks/ml-gke-e2e
+    - test-locks/ml-gke
+    - test-locks/g4-standard
+    - test-locks/ml-g4-onspot-slurm
+    - test-locks/ml-a4x-highgpu-slurm
+    - test-locks/ml-a3-megagpu-onspot-slurm
+    - test-locks/h4d
+    - test-locks/h4d-vm
+    - test-locks/gke-h4d-onspot
+    - test-locks/ml-h4d-onspot-slurm
+    - test-locks/tpu-v6e
+    - test-locks/gke-tpu-v6e
+    - test-locks/gke-g4-onspot
+    - test-locks/ansible-vm
+    - test-locks/batch-mpi
+    - test-locks/crd-ubuntu
+    - test-locks/netapp-volumes
+    - test-locks/crd
+    - test-locks/e2e
+    - test-locks/gke-inactive-reservation
+    - test-locks/gke-managed-hyperdisk
+    - test-locks/gke-storage
+    - test-locks/vm-storage
+    - test-locks/slurm-storage
+    - test-locks/slurm-rapid-storage
+    - test-locks/gke
+    - test-locks/htc-slurm
+    - test-locks/htcondor
+    - test-locks/monitoring
+    - test-locks/packer
+    - test-locks/pfs-managed-lustre-slurm
+    - test-locks/pfs-managed-lustre-vm
+    - test-locks/slurm-flex
+    - test-locks/slurm-gcp-v6-simple-job
+    - test-locks/slurm-gcp-v6-startup-scripts
+    flavors:
+    - name: test-lock-flavor
+      resources:
+      - name: test-locks/slurm
+        nominalQuota: 5
+      - name: test-locks/ml-slurm
+        nominalQuota: 1
+      - name: test-locks/slurm-gcp-v6-rocky8
+        nominalQuota: 1
+      - name: test-locks/slurm-gcp-v6-ubuntu
+        nominalQuota: 1
+      - name: test-locks/slurm-gcp-v6-debian
+        nominalQuota: 1
+      - name: test-locks/slurm-gcp-v6-reconfig-size
+        nominalQuota: 1
+      - name: test-locks/slurm-gcp-v6-ssd
+        nominalQuota: 1
+      - name: test-locks/hpc-build-slurm-image
+        nominalQuota: 1
+      - name: test-locks/hpc-enterprise-slurm
+        nominalQuota: 1
+      - name: test-locks/hcls
+        nominalQuota: 1
+      - name: test-locks/a2-highgpu
+        nominalQuota: 3
+      - name: test-locks/gke-a2-highgpu-kueue-onspot
+        nominalQuota: 1
+      - name: test-locks/a3-ultragpu
+        nominalQuota: 3
+      - name: test-locks/a3-highgpu
+        nominalQuota: 3
+      - name: test-locks/a3-megagpu
+        nominalQuota: 3
+      - name: test-locks/gke-a3-megagpu-onspot
+        nominalQuota: 1
+      - name: test-locks/ml-a3-highgpu-onspot-slurm
+        nominalQuota: 1
+      - name: test-locks/gke-a3-ultragpu-onspot
+        nominalQuota: 1
+      - name: test-locks/gke-a3-highgpu-onspot
+        nominalQuota: 1
+      - name: test-locks/ml-a3-ultragpu-onspot-slurm
+        nominalQuota: 1
+      - name: test-locks/ml-a3-ultragpu-onspot-jbvms
+        nominalQuota: 1
+      - name: test-locks/a4-highgpu
+        nominalQuota: 3
+      - name: test-locks/gke-a4-onspot
+        nominalQuota: 1
+      - name: test-locks/a4x
+        nominalQuota: 3
+      - name: test-locks/gke-a4x
+        nominalQuota: 1
+      - name: test-locks/ml-a4-highgpu-onspot-slurm
+        nominalQuota: 1
+      - name: test-locks/ml-gke-e2e
+        nominalQuota: 1
+      - name: test-locks/ml-gke
+        nominalQuota: 1
+      - name: test-locks/g4-standard
+        nominalQuota: 3
+      - name: test-locks/ml-g4-onspot-slurm
+        nominalQuota: 1
+      - name: test-locks/ml-a4x-highgpu-slurm
+        nominalQuota: 1
+      - name: test-locks/ml-a3-megagpu-onspot-slurm
+        nominalQuota: 1
+      - name: test-locks/h4d
+        nominalQuota: 3
+      - name: test-locks/h4d-vm
+        nominalQuota: 1
+      - name: test-locks/gke-h4d-onspot
+        nominalQuota: 1
+      - name: test-locks/ml-h4d-onspot-slurm
+        nominalQuota: 1
+      - name: test-locks/tpu-v6e
+        nominalQuota: 3
+      - name: test-locks/gke-tpu-v6e
+        nominalQuota: 1
+      - name: test-locks/gke-g4-onspot
+        nominalQuota: 1
+      - name: test-locks/ansible-vm
+        nominalQuota: 1
+      - name: test-locks/batch-mpi
+        nominalQuota: 1
+      - name: test-locks/crd-ubuntu
+        nominalQuota: 1
+      - name: test-locks/netapp-volumes
+        nominalQuota: 1
+      - name: test-locks/crd
+        nominalQuota: 1
+      - name: test-locks/e2e
+        nominalQuota: 1
+      - name: test-locks/gke-inactive-reservation
+        nominalQuota: 1
+      - name: test-locks/gke-managed-hyperdisk
+        nominalQuota: 1
+      - name: test-locks/gke-storage
+        nominalQuota: 1
+      - name: test-locks/vm-storage
+        nominalQuota: 1
+      - name: test-locks/slurm-storage
+        nominalQuota: 1
+      - name: test-locks/slurm-rapid-storage
+        nominalQuota: 1
+      - name: test-locks/gke
+        nominalQuota: 1
+      - name: test-locks/htc-slurm
+        nominalQuota: 1
+      - name: test-locks/htcondor
+        nominalQuota: 1
+      - name: test-locks/monitoring
+        nominalQuota: 1
+      - name: test-locks/packer
+        nominalQuota: 1
+      - name: test-locks/pfs-managed-lustre-slurm
+        nominalQuota: 1
+      - name: test-locks/pfs-managed-lustre-vm
+        nominalQuota: 1
+      - name: test-locks/slurm-flex
+        nominalQuota: 1
+      - name: test-locks/slurm-gcp-v6-simple-job
+        nominalQuota: 1
+      - name: test-locks/slurm-gcp-v6-startup-scripts
+        nominalQuota: 1
+  - coveredResources:
+    - test-locks/slurm-gcp-v6-topology
+    - test-locks/slurm-gke
+    - test-locks/spack-gromacs
+    - test-locks/gcluster-dockerfile
+    - test-locks/gke-managed-lustre
+    - test-locks/z4m
+    - test-locks/z4m-vm
+    - test-locks/gke-g4-confidential
+    - test-locks/tpu7x-standard
+    - test-locks/gke-tpu-7x
+    - test-locks/tpu-v5e
+    - test-locks/gke-tpu-v5e
+    - test-locks/tpu-v5p
+    - test-locks/gke-tpu-v5p
+    - test-locks/batch
+    flavors:
+    - name: test-lock-flavor-2
+      resources:
+      - name: test-locks/slurm-gcp-v6-topology
+        nominalQuota: 1
+      - name: test-locks/slurm-gke
+        nominalQuota: 1
+      - name: test-locks/spack-gromacs
+        nominalQuota: 1
+      - name: test-locks/gcluster-dockerfile
+        nominalQuota: 1
+      - name: test-locks/gke-managed-lustre
+        nominalQuota: 1
+      - name: test-locks/z4m
+        nominalQuota: 3
+      - name: test-locks/z4m-vm
+        nominalQuota: 1
+      - name: test-locks/gke-g4-confidential
+        nominalQuota: 1
+      - name: test-locks/tpu7x-standard
+        nominalQuota: 3
+      - name: test-locks/gke-tpu-7x
+        nominalQuota: 1
+      - name: test-locks/tpu-v5e
+        nominalQuota: 3
+      - name: test-locks/gke-tpu-v5e
+        nominalQuota: 1
+      - name: test-locks/tpu-v5p
+        nominalQuota: 3
+      - name: test-locks/gke-tpu-v5p
+        nominalQuota: 1
+      - name: test-locks/batch
+        nominalQuota: 1
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  name: local-queue-test-locks
+  namespace: default
+spec:
+  clusterQueue: cluster-queue-test-locks
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: emergency-hotfix-priority
+value: 10000
+globalDefault: false
+description: Highest priority for emergency hotfix PR tests.

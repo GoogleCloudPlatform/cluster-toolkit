@@ -116,11 +116,9 @@ steps:
             - name: PROJECT_ID
               value: "$PROJECT_ID"
             - name: NUM_NODES
-              value: "12"
+              value: "2"
             - name: MIN_NODES
-              value: "6"
-            - name: ZONE
-              value: "us-central1-b"
+              value: "2"
             - name: PROVISIONING_MODEL
               value: "$_PROVISIONING_MODEL"
             - name: MACHINE_TYPE
@@ -163,6 +161,12 @@ steps:
               trap cleanup_pod EXIT SIGTERM SIGINT
 
               set -e -u -o pipefail
+              echo "Sourcing find_available_zone.sh to determine zone."
+              source /workspace/tools/cloud-build/wait_for_available_zone.sh
+              if [ -z "\$${ZONE:-}" ]; then
+                echo "ERROR: ZONE not found" >&2
+                exit 1
+              fi
               REGION="\$${ZONE%-*}"
               echo "Using ZONE=\$$ZONE and REGION=\$$REGION"
 
