@@ -67,7 +67,7 @@ def validate_boh_report(filepath: str) -> None:
         print(p)
 
     if failed:
-        print("\nFailed Tests:")
+        print("\nNon-Success Tests:")
         for f in sorted(set(failed)):
             print(f)
         print(f"\nERROR: CHS Bill of Health {report_id} failed with {len(failed)} non-success test(s).")
