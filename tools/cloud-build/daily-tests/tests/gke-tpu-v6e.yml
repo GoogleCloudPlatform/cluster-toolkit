@@ -45,7 +45,6 @@ instance_type: "tpuv6e"
 scheduler: "gke"
 chs_nodepools: "gke-tpu-v6e-pool"
 chs_suites:
-- lite
 - standard
 post_deploy_tests:
 - test-validation/test-gke-tpu.yml

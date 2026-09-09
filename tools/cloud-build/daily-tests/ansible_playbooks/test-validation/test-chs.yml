@@ -122,64 +122,8 @@
       register: chs_json_reports
 
     - name: Validate CHS Bill of Health JSON report test results
-      ansible.builtin.shell: |
-        python3 -c '
-        import json, sys
-
-        filepath = "{{ item.path }}"
-        try:
-            with open(filepath) as f:
-                data = json.load(f)
-        except Exception as e:
-            sys.exit(0)
-
-        if not isinstance(data, dict) or "test_results" not in data:
-            sys.exit(0)
-
-        report_id = data.get("report_id", "unknown")
-        print(f"=== CHS Bill of Health Report Validation: {report_id} ===")
-
-        passed = []
-        failed = []
-
-        for tr in data.get("test_results", []):
-            tname = tr.get("test_name", "unknown")
-            tlevel = tr.get("test_level", "")
-            r_status = tr.get("result_status")
-
-            metric_failures = []
-            for m in tr.get("metrics", []):
-                vc = m.get("validation_criteria", {})
-                vc_status = vc.get("result_status")
-                if vc_status and vc_status != "RESULT_STATUS_SUCCESS":
-                    k = m.get("key")
-                    metric_failures.append(f"{k}: {vc_status}")
-
-            is_success = (r_status == "RESULT_STATUS_SUCCESS" or r_status is None) and not metric_failures
-
-            lbl = f"{tname} ({tlevel})" if tlevel else tname
-            if is_success:
-                passed.append(lbl)
-            else:
-                st = r_status if r_status else "FAILED"
-                fail_msg = f"{lbl} -> {st}"
-                if metric_failures:
-                    fail_msg += " [" + ", ".join(metric_failures) + "]"
-                failed.append(fail_msg)
-
-        print(f"\nPassed Tests ({len(passed)}):")
-        for p in sorted(set(passed)):
-            print(f"  [PASS] {p}")
-
-        if failed:
-            print(f"\nFailed Tests ({len(failed)}):")
-            for f in sorted(set(failed)):
-                print(f"  [FAIL] {f}")
-            print(f"\nERROR: CHS Bill of Health report {report_id} failed with {len(failed)} test failure(s).")
-            sys.exit(1)
-
-        print(f"\nSUCCESS: CHS Bill of Health report {report_id} passed all tests.")
-        '
+      ansible.builtin.command:
+        cmd: "python3 {{ playbook_dir }}/validate_chs_boh.py '{{ item.path }}'"
       loop: "{{ chs_json_reports.files }}"
       loop_control:
         label: "{{ item.path | basename }}"
