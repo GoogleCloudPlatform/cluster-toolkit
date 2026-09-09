@@ -25,6 +25,7 @@ tags:
 substitutions:
   _PROVISIONING_MODEL: ""
   _TEST_PREFIX: "" # Default to no prefix
+  _ZONE: "" # Optional zone override for manual debugging
 
 timeout: 86400s
 queueTtl: 86400s  # 24hr
@@ -129,6 +130,8 @@ steps:
               value: "gs://$${OPTIONS_BUCKET}/a3hoptions.txt"
             - name: _TEST_PREFIX
               value: "${_TEST_PREFIX}"
+            - name: _ZONE
+              value: "${_ZONE}"
             - name: PROVISIONING_MODEL
               value: "$_PROVISIONING_MODEL"
             - name: GCLUSTER_GCS_PATH
@@ -158,8 +161,13 @@ steps:
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
               trap cleanup_pod EXIT SIGTERM SIGINT
 
-              echo "Sourcing find_available_zone.sh to determine zone."
-              source /workspace/tools/cloud-build/wait_for_available_zone.sh
+              if [ -n "${_ZONE}" ]; then
+                ZONE="${_ZONE}"
+                echo "INFO: Manual override requested. Forcing ZONE=\$$ZONE"
+              else
+                echo "Sourcing find_available_zone.sh to determine zone."
+                source /workspace/tools/cloud-build/wait_for_available_zone.sh
+              fi
               if [ -z "\$${ZONE:-}" ]; then
                 echo "ERROR: ZONE not found" >&2
                 exit 1
