@@ -117,13 +117,13 @@
         - "{{ chs_temp_dir.path }}"
         - "."
         - "./results"
-        patterns: "*boh*.json,*.json"
+        patterns: "bill_of_health.json,*boh*.json"
         recurse: true
       register: chs_json_reports
 
     - name: Validate CHS Bill of Health JSON report test results
       ansible.builtin.command:
-        cmd: "python3 {{ playbook_dir }}/validate_chs_boh.py '{{ item.path }}'"
+        cmd: "python3 {{ playbook_dir }}/validate_chs_boh.py '{{ item.path }}' --project='{{ project | default(lookup('env', 'PROJECT_ID') | default('hpc-toolkit-dev')) }}' --bucket='{{ chs_bucket | default('chs-results') }}'"
       loop: "{{ chs_json_reports.files }}"
       loop_control:
         label: "{{ item.path | basename }}"

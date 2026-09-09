@@ -13,11 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import json
+import os
 import sys
 
 
-def validate_boh_report(filepath: str) -> None:
+def validate_boh_report(filepath: str, project_id: str, bucket_name: str) -> None:
     try:
         with open(filepath) as f:
             data = json.load(f)
@@ -30,7 +32,7 @@ def validate_boh_report(filepath: str) -> None:
         return
 
     report_id = data.get("report_id", "unknown")
-    gcs_link = f"https://pantheon.corp.google.com/storage/browser/_details/chs-results/bills_of_health/{report_id}.json?project=hpc-toolkit-dev"
+    gcs_link = f"https://pantheon.corp.google.com/storage/browser/_details/{bucket_name}/bills_of_health/{report_id}.json?project={project_id}"
 
     print(f"\n=== CHS Bill of Health: {report_id} ===")
     print(f"BOH Storage Link: {gcs_link}\n")
@@ -48,13 +50,15 @@ def validate_boh_report(filepath: str) -> None:
         has_metric_failure = False
         for m in tr.get("metrics", []):
             vc = m.get("validation_criteria", {})
-            if vc.get("result_status") and vc.get("result_status") != "RESULT_STATUS_SUCCESS":
+            vc_status = vc.get("result_status")
+            if vc_status and vc_status != "RESULT_STATUS_SUCCESS":
                 has_metric_failure = True
                 break
 
+        # Explicitly require RESULT_STATUS_SUCCESS (or None if no error present)
         is_success = (r_status == "RESULT_STATUS_SUCCESS" or r_status is None) and not has_metric_failure
 
-        raw_status = r_status if r_status else "UNKNOWN"
+        raw_status = r_status if r_status else ("RESULT_STATUS_SUCCESS" if is_success else "RESULT_STATUS_FAILED")
         entry = f"  - [{raw_status}] {lbl}"
 
         if is_success:
@@ -77,10 +81,21 @@ def validate_boh_report(filepath: str) -> None:
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: validate_chs_boh.py <filepath>")
-        sys.exit(1)
-    validate_boh_report(sys.argv[1])
+    parser = argparse.ArgumentParser(description="Validate CHS Bill of Health JSON report.")
+    parser.add_argument("filepath", help="Path to Bill of Health JSON report file")
+    parser.add_argument(
+        "--project",
+        default=os.environ.get("PROJECT_ID", "hpc-toolkit-dev"),
+        help="GCP Project ID for storage link",
+    )
+    parser.add_argument(
+        "--bucket",
+        default=os.environ.get("CHS_BUCKET", "chs-results"),
+        help="GCS Bucket Name for storage link",
+    )
+    args = parser.parse_args()
+
+    validate_boh_report(args.filepath, args.project, args.bucket)
 
 
 if __name__ == "__main__":
