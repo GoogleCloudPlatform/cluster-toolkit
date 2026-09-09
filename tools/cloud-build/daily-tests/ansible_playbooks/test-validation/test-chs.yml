@@ -111,13 +111,26 @@
       loop_control:
         label: "{{ item.item }}"
 
-    - name: Validate CHS Bill of Health JSON report for non-success results
+    - name: Find CHS Bill of Health JSON report in local workspace
+      ansible.builtin.find:
+        paths:
+        - "{{ chs_temp_dir.path }}"
+        - "."
+        - "./results"
+        patterns: "*.json"
+        recurse: true
+      register: chs_json_reports
+
+    - name: Check Bill of Health JSON report for non-success status
       ansible.builtin.shell: |
         set -e
-        if jq -e '.. | select(.result_status? and .result_status? != "RESULT_STATUS_SUCCESS")' *.json; then
-          echo "ERROR: Found non-success result status in CHS Bill of Health JSON report!"
+        if jq -e '.. | select(.result_status? and .result_status? != "RESULT_STATUS_SUCCESS")' "{{ item.path }}"; then
+          echo "ERROR: Found non-success result status in Bill of Health {{ item.path }}"
           exit 1
         fi
+      loop: "{{ chs_json_reports.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
       changed_when: false
 
   rescue:
