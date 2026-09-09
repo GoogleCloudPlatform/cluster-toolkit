@@ -81,6 +81,9 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
   * [hpc-slurm-google-cloud-dedicated.yaml](#hpc-slurm-google-cloud-dedicatedyaml-) ![community-badge]
+  * [slurm-hybrid-cloud-burst](#slurm-hybrid-cloud-burst-) ![community-badge]
+    * [primary-cluster.yaml](../community/examples/slurm-hybrid-cloud-burst/primary-cluster.yaml)
+    * [burst-cluster.yaml](../community/examples/slurm-hybrid-cloud-burst/burst-cluster.yaml)
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1849,6 +1852,18 @@ Creates a Slurm cluster on C3 machine types for Google Cloud Dedicated (GCD) and
 The deployment instructions can be found in the [README](../community/examples/hpc-slurm-google-cloud-dedicated/README.md).
 
 [hpc-slurm-google-cloud-dedicated.yaml]: ../community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml
+
+### [slurm-hybrid-cloud-burst] ![community-badge]
+
+Deploys a Multi-Cluster Slurm environment with Elastic Cloud Bursting across two autonomous projects in commercial Google Cloud Platform (GCP). Includes cross-cluster SAuth discovery, automatic compute nodes autoscaling on Burst Cluster, and shared `/home` filesystem mounting over VPC peering.
+
+This directory includes the following blueprints:
+* [`primary-cluster.yaml`](../community/examples/slurm-hybrid-cloud-burst/primary-cluster.yaml): Primary on-premises simulation cluster with persistent head node, static compute nodes, and Filestore `/home`.
+* [`burst-cluster.yaml`](../community/examples/slurm-hybrid-cloud-burst/burst-cluster.yaml): Cloud burst target cluster with dynamic autoscaling compute nodes.
+
+The deployment instructions can be found in the [README](../community/examples/slurm-hybrid-cloud-burst/README.md).
+
+[slurm-hybrid-cloud-burst]: ../community/examples/slurm-hybrid-cloud-burst/README.md
 
 ## Blueprint Schema
 

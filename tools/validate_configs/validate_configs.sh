@@ -140,6 +140,8 @@ EXCLUDE_EXAMPLE["community/examples/sycomp/sycomp-storage-slurm.yaml"]=
 EXCLUDE_EXAMPLE["community/examples/sycomp/sycomp-storage-expansion.yaml"]=
 EXCLUDE_EXAMPLE["community/examples/eda/eda-hybrid-cloud.yaml"]=
 EXCLUDE_EXAMPLE["community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml"]=
+EXCLUDE_EXAMPLE["community/examples/slurm-hybrid-cloud-burst/primary-cluster.yaml"]=
+EXCLUDE_EXAMPLE["community/examples/slurm-hybrid-cloud-burst/burst-cluster.yaml"]=
 
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}
