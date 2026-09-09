@@ -113,67 +113,11 @@
 
     - name: Validate CHS Bill of Health JSON report for non-success results
       ansible.builtin.shell: |
-        python3 -c '
-        import json, sys, os, re, subprocess
-
-        stdout_data = """{{ item.stdout }}"""
-
-        match = re.search(r"([0-9]{8}-[0-9]{6}_[A-Za-z0-9_-]+)", stdout_data)
-        if not match:
-            print("WARNING: Could not find CHS report ID in stdout.")
-            sys.exit(0)
-
-        report_id = match.group(1)
-        json_filename = f"{report_id}.json"
-
-        local_candidates = [
-            os.path.expanduser(f"~/.chs/results/{json_filename}"),
-            f"./{json_filename}",
-            f"./results/{json_filename}",
-            f"{{ chs_temp_dir.path }}/{json_filename}"
-        ]
-
-        data = None
-        for path in local_candidates:
-            if os.path.exists(path):
-                with open(path) as f:
-                    data = json.load(f)
-                break
-
-        if data is None:
-            try:
-                gcs_path = f"gs://chs-results/bills_of_health/{json_filename}"
-                raw = subprocess.check_output(["gcloud", "storage", "cat", gcs_path], stderr=subprocess.DEVNULL)
-                data = json.loads(raw)
-            except Exception as e:
-                print(f"WARNING: Could not fetch CHS BOH JSON report for {report_id}: {e}")
-                sys.exit(0)
-
-        failures = []
-        for tr in data.get("test_results", []):
-            name = tr.get("test_name", "unknown")
-            level = tr.get("test_level", "")
-            status = tr.get("result_status")
-            if status and status != "RESULT_STATUS_SUCCESS":
-                failures.append(f"{name} ({level}): {status}")
-            for m in tr.get("metrics", []):
-                vc = m.get("validation_criteria", {})
-                vc_status = vc.get("result_status")
-                if vc_status and vc_status != "RESULT_STATUS_SUCCESS":
-                    k = m.get("key")
-                    failures.append(f"{name} ({level}) metric '\''{k}'\'': {vc_status}")
-
-        if failures:
-            print(f"ERROR: CHS Bill of Health report {report_id} contains non-success test result(s):")
-            for f in sorted(set(failures)):
-                print(f"  - {f}")
-            sys.exit(1)
-
-        print(f"CHS Bill of Health report {report_id} validation passed (0 failures).")
-        '
-      loop: "{{ chs_runs.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+        set -e
+        if jq -e '.. | select(.result_status? and .result_status? != "RESULT_STATUS_SUCCESS")' *.json; then
+          echo "ERROR: Found non-success result status in CHS Bill of Health JSON report!"
+          exit 1
+        fi
       changed_when: false
 
   rescue:
