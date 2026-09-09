@@ -68,7 +68,7 @@ steps:
 - id: generate-job-manifest
   name: gcr.io/cloud-builders/gcloud
   entrypoint: /bin/bash
-  secretEnv: ['SA_EMAIL', 'GCLUSTER_GCS_PATH', 'TRIAGE_GCS_BUCKET', 'TRIAGE_PROJECT_NUMBER', 'TRIAGE_INVOKER_SA', 'TRIAGE_CLOUD_RUN_URL']
+  secretEnv: ['SA_EMAIL', 'GCLUSTER_GCS_PATH', 'CHS_REPO', 'TRIAGE_GCS_BUCKET', 'TRIAGE_PROJECT_NUMBER', 'TRIAGE_INVOKER_SA', 'TRIAGE_CLOUD_RUN_URL']
   args:
   - -c
   - |
@@ -123,6 +123,8 @@ steps:
               value: "$BUILD_ID"
             - name: GCLUSTER_GCS_PATH
               value: "$$GCLUSTER_GCS_PATH"
+            - name: CHS_REPO
+              value: "$$CHS_REPO"
             - name: TRIAGE_GCS_BUCKET
               value: "$$TRIAGE_GCS_BUCKET"
             - name: TRIAGE_PROJECT_NUMBER
@@ -138,7 +140,7 @@ steps:
               echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/gke-a4x-max-bm.yaml"
               cd /workspace
 
-              DEPLOYMENT_NAME="a4x-max-bm-$$BUILD_ID_SHORT"
+              DEPLOYMENT_NAME="a4x-max-$$BUILD_ID_SHORT"
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
@@ -182,7 +184,7 @@ steps:
               bash tools/add_ttl_label.sh "\$$EXAMPLE_BP"
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-                  --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
+                  --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID chs_repo=\$$CHS_REPO" \
                   --extra-vars="@tools/cloud-build/daily-tests/tests/gke-a4x-max-bm.yml" \
                   --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
                   --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \

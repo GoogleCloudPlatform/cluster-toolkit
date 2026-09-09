@@ -137,7 +137,7 @@ steps:
               echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/gke-tpu-v6e-flex.yaml"
               cd /workspace
 
-              DEPLOYMENT_NAME="gke-tpu-v6e-flex-$$BUILD_ID_SHORT"
+              DEPLOYMENT_NAME="gk-t-v6-flx-$$BUILD_ID_SHORT"
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
