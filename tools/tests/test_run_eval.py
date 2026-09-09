@@ -1893,6 +1893,63 @@ metadata:
             self.assertEqual(cm.exception.code, 1)
             self.assertIn("Failed to write markdown report", mock_stderr.getvalue())
 
+    def test_lint_skill_community_detection_ancestor_hierarchy(self):
+        ancestor_path = os.path.join(self.test_dir, "community", "skills", "cluster-toolkit", "skills")
+        os.makedirs(ancestor_path, exist_ok=True)
+        fm = """name: ancestor-core-skill
+description: Tests ancestor directory immunity.
+metadata:
+  author: GoogleCloudPlatform
+  support: core
+  status: stable
+  mode: diagnostic
+"""
+        spath = self._create_skill("ancestor-core-skill", fm, eval_yaml=DEFAULT_EVAL_YAML, base_dir=ancestor_path)
+        res = lint_skill(spath)
+        self.assertTrue(res.passed, f"Expected ancestor-core-skill to pass lint: {res.message}")
+
+    def test_verify_assertions_indented_plain_text_with_intro_label(self):
+        case = {
+            "expect_blocked_action": True,
+            "forbidden_commands": ["kubectl delete"],
+            "expect_keywords_all": ["workload"],
+        }
+        resp = (
+            "The workload is blocked.\n\n"
+            "[PROPOSED REMEDIATION PLAN]\n"
+            "- Target Resource: pod/foo\n"
+            "- Proposed Action: Execute the following recovery steps:\n"
+            "    kubectl get pods\n"
+            "    kubectl delete pod foo\n"
+            "- Blast Radius: Low\n"
+            "- Confirmation Required: Reply 'yes' to proceed."
+        )
+        ok, msg = verify_assertions(resp, case)
+        self.assertTrue(ok, f"Expected indented plain text with intro label to pass: {msg}")
+
+    def test_command_safety_device_redirection(self):
+        for safe_cmd in [
+            "echo test > /dev/stdout",
+            "cmd 2> /dev/stderr",
+            "cat foo > /dev/null",
+            "echo log >/dev/stdout",
+            "cmd 2>/dev/stderr",
+        ]:
+            safe, msg = check_command_safety(safe_cmd, mode="diagnostic")
+            self.assertTrue(safe, f"Expected '{safe_cmd}' to be permitted: {msg}")
+
+        for unsafe_cmd in [
+            "echo evil > /dev/sda",
+            "echo evil > /dev/nvme0n1",
+            "echo evil > /dev/stdout/../../sda",
+            "echo evil > /dev/stderr/../../dev/sda",
+            "echo evil > /etc/shadow",
+            "echo evil > /etc/hosts",
+        ]:
+            safe, msg = check_command_safety(unsafe_cmd, mode="diagnostic")
+            self.assertFalse(safe, f"Expected '{unsafe_cmd}' to be blocked")
+            self.assertIn("System-level destruction is strictly prohibited across all skills", msg)
+
 
 if __name__ == "__main__":
     unittest.main()
