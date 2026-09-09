@@ -21,13 +21,11 @@ description: >
 compatibility: "Requires kubectl and access to a GKE cluster with Kueue (>=v0.8) installed."
 metadata:
   author: GoogleCloudPlatform
+  support: core
   status: experimental
+  mode: diagnostic
   domain: gke
-allowed-tools: Bash(kubectl:*)
-allowed_read_only_commands:
-  - "kubectl get"
-  - "kubectl describe"
-  - "kubectl logs"
+allowed-tools: Bash(kubectl get:*) Bash(kubectl describe:*) Bash(kubectl logs:*)
 ---
 
 # GKE Kueue Workload & Admission Debugging Playbook
