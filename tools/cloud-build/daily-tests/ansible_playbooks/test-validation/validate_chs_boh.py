@@ -55,19 +55,20 @@ def validate_boh_report(filepath: str) -> None:
         is_success = (r_status == "RESULT_STATUS_SUCCESS" or r_status is None) and not has_metric_failure
 
         if is_success:
-            passed.append(lbl)
+            passed.append(f"  - [PASS] {lbl}")
         else:
-            failed.append(lbl)
+            status_label = r_status.replace("RESULT_STATUS_", "") if r_status else "FAILED"
+            failed.append(f"  - [{status_label}] {lbl}")
 
     print("Passed Tests:")
     for p in sorted(set(passed)):
-        print(f"  - [PASS] {p}")
+        print(p)
 
     if failed:
-        print("\nFailed Tests:")
+        print("\nNon-Success / Failed Tests:")
         for f in sorted(set(failed)):
-            print(f"  - [FAIL] {f}")
-        print(f"\nERROR: CHS Bill of Health {report_id} failed with {len(failed)} failed test(s).")
+            print(f)
+        print(f"\nERROR: CHS Bill of Health {report_id} failed with {len(failed)} non-success test(s).")
         sys.exit(1)
 
     print(f"\nSUCCESS: All tests in CHS Bill of Health {report_id} passed.")
