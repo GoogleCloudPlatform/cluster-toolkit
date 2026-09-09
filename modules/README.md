@@ -258,11 +258,11 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
   a startup script to install HTCondor and exports a list of required APIs
 * **[ramble-execute]** ![community-badge] ![experimental-badge] : Creates a
   startup script to execute
-  [Ramble](https://github.com/GoogleCloudPlatform/ramble) commands on a target
+  [Ramble](https://github.com/Ramble-Project/ramble) commands on a target
   VM
 * **[ramble-setup]** ![community-badge] ![experimental-badge] : Creates a
   startup script to install
-  [Ramble](https://github.com/GoogleCloudPlatform/ramble) on an instance or a
+  [Ramble](https://github.com/Ramble-Project/ramble) on an instance or a
   slurm login or controller.
 * **[spack-setup]** ![community-badge] ![experimental-badge] : Creates a startup
   script to install [Spack](https://github.com/spack/spack) on an instance or a
@@ -532,7 +532,7 @@ vm-instance module:
     use:
     - network1
     settings:
-      machine_type: e2-medium
+      machine_type: n2d-standard-2
     outputs:
     - internal_ip
     - name: external_ip

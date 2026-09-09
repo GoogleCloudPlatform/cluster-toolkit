@@ -31,7 +31,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [batch-mpi.yaml](#batch-mpiyaml-) ![core-badge]
   * [pfs-managed-lustre-vm.yaml](#pfs-managed-lustre-vmyaml-) ![core-badge]
   * [pfs-managed-lustre-slurm.yaml](#pfs-managed-lustre-slurmyaml-) ![core-badge]
-  * [rapid-storage-slurm.yaml](#rapid-storage-slurmyaml-) ![core-badge]
+  * [storage-slurm.yaml](#storage-slurmyaml-) ![core-badge]
   * [gke-managed-lustre.yaml](#gke-managed-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
@@ -47,7 +47,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [af3-slurm.yaml](#af3-slurmyaml--) ![core-badge] ![experimental-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml-) ![core-badge]
   * [ml-gke](#ml-gkeyaml-) ![core-badge]
-  * [storage-gke](#storage-gkeyaml-) ![core-badge]
+  * [storage-gke.yaml](#storage-gkeyaml-) ![core-badge]
+  * [storage-vm.yaml](#storage-vmyaml-) ![core-badge]
   * [gke-managed-hyperdisk.yaml](#gke-managed-hyperdiskyaml--) ![core-badge] ![experimental-badge]
   * [gke-a3-ultragpu.yaml](#gke-a3-ultragpuyaml-) ![core-badge]
   * [gke-a3-megagpu](#gke-a3-megagpuyaml-) ![core-badge]
@@ -79,6 +80,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gcloud-example.yaml](#gcloud-exampleyaml--) ![community-badge] ![experimental-badge]
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
+  * [hpc-slurm-google-cloud-dedicated.yaml](#hpc-slurm-google-cloud-dedicatedyaml-) ![community-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -150,6 +152,8 @@ subcommands as well:
 > This feature only supports variables of string type. If you set configuration
 > in both the blueprint and CLI, the tool uses values at CLI. "gcs" is set as
 > type by default.
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
 
 [terraform backends]: https://developer.hashicorp.com/terraform/language/backend
 [configuration block]: https://developer.hashicorp.com/terraform/language/backend#define-a-backend-block
@@ -697,7 +701,7 @@ To destroy the cluster,Run below command:
 ```
 
 [pfs-managed-lustre-slurm.yaml]: ./pfs-managed-lustre-slurm.yaml
-### [rapid-storage-slurm.yaml] ![core-badge]
+### [storage-slurm.yaml] ![core-badge]
 
 This blueprint showcases the integration of several storage solutions:
 
@@ -707,7 +711,10 @@ This blueprint showcases the integration of several storage solutions:
     * Note: A maximum of one cache per zone can be created for each bucket. For example, a bucket in `us-east1` can have caches in `us-east1-b` and `us-east1-c`.
     * Refer to [Create a Cache](https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache) for more parameter details.
 
-[rapid-storage-slurm.yaml]: ./rapid-storage-slurm.yaml
+* **Hyperdisk Storage Pools:**
+  * The `schedmd-slurm-gcp-v6-controller`, `schedmd-slurm-gcp-v6-login`, and `schedmd-slurm-gcp-v6-nodeset` modules attach persistent disks directly from pre-provisioned `hyperdisk-balanced` and `hyperdisk-throughput` Storage Pools, allowing you to share IOPS and throughput capacity across the cluster.
+
+[storage-slurm.yaml]: ./storage-slurm.yaml
 
 ### [gke-managed-lustre.yaml] ![core-badge]
 
@@ -1296,6 +1303,12 @@ credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 
 [ml-gke.yaml]: ../examples/ml-gke.yaml
 
+### [storage-vm.yaml] ![core-badge]
+
+Creates a standalone VM instance and securely attaches persistent disks that are provisioned directly into specified `hyperdisk-balanced` and `hyperdisk-throughput` Storage Pools. This allows the VM to share IOPS and throughput capacity from the pre-provisioned pools.
+
+[storage-vm.yaml]: ./storage-vm.yaml
+
 ### [storage-gke.yaml] ![core-badge]
 
 This blueprint showcases the integration of several storage solutions:
@@ -1318,6 +1331,9 @@ This blueprint showcases the integration of several storage solutions:
     * **SSD Persistent Disk (`pd-ssd`) ephemeral volume**: A Persistent Disk is dynamically created and managed for the job's lifecycle.
     * **Balanced Persistent Disk (`pd-balanced`) ephemeral volume**: Similar to `pd-ssd`, a Persistent Disk is created and cleaned up with the job.
   * When using `pd-ssd` or `pd-balanced`, a persistent disk is automatically created upon job submission and cleaned up when the job is deleted.
+
+* **Hyperdisk Storage Pools:**
+  * The `gke-persistent-volume` module dynamically provisions Persistent Volumes (PVs) that draw directly from `hyperdisk-balanced` and `hyperdisk-throughput` Storage Pools, allowing workloads to share aggregate disk performance.
 
 > [!Note]
 > The Kubernetes API server will only allow requests from authorized networks.
@@ -1825,6 +1841,14 @@ Four pre-existing NFS volumes are mounted to `/home`, `/tools`, `/library` and `
 The deployment instructions can be found in the [README](../community/examples/eda/README.md).
 
 [eda-hybrid-cloud.yaml]: ../community/examples/eda/eda-hybrid-cloud.yaml
+
+### [hpc-slurm-google-cloud-dedicated.yaml] ![community-badge]
+
+Creates a Slurm cluster on C3 machine types for Google Cloud Dedicated (GCD) and sovereign cloud environments using Packer to pre-build a custom Slurm image based on Rocky Linux 8, configured with NFS home directories, SAuth authentication, and Hyperdisk Balanced storage.
+
+The deployment instructions can be found in the [README](../community/examples/hpc-slurm-google-cloud-dedicated/README.md).
+
+[hpc-slurm-google-cloud-dedicated.yaml]: ../community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml
 
 ## Blueprint Schema
 

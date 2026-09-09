@@ -154,6 +154,14 @@ variable "additional_networks" {
     ])
     error_message = "In var.additional_networks, you must specify at least one of 'network', 'subnetwork', or 'network_attachment'. You cannot specify 'network' or 'subnetwork' alongside 'network_attachment'."
   }
+  validation {
+    condition = alltrue([
+      for nic in var.additional_networks : (
+        nic.network_attachment == null || nic.network_attachment == "" || can(regex("^(?:https://www.googleapis.com/compute/[^/]+/)?projects/[^/]+/regions/[^/]+/networkAttachments/[^/]+$", nic.network_attachment))
+      )
+    ])
+    error_message = "In var.additional_networks, 'network_attachment' must be the full resource URI: projects/{project}/regions/{region}/networkAttachments/{name}."
+  }
 }
 
 variable "access_config" {
@@ -457,8 +465,14 @@ variable "provisioning_model" {
 
 variable "reservation_affinity" {
   description = "Specifies the reservations that this instance can consume from."
-  type        = object({ type = string })
-  default     = null
+  type = object({
+    type = string
+    specific_reservation = optional(object({
+      key    = string
+      values = list(string)
+    }))
+  })
+  default = null
 }
 
 

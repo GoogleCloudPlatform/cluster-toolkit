@@ -155,6 +155,7 @@ deployment_groups:
       system_node_pool_taints: []
       enable_private_endpoint: false # Allows access from authorized public IPs
       enable_pathways_for_tpus: $(vars.enable_pathways_for_tpus)
+      enable_private_ipv6_google_access: false
       enable_gcsfuse_csi: true # enable GCS Fuse for the cluster
       configure_workload_identity_sa: true
       master_authorized_networks:

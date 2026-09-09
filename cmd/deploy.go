@@ -16,14 +16,19 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
 	"hpc-toolkit/pkg/validators"
+	"os"
 	"path/filepath"
+	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -88,6 +93,10 @@ func doDeploy(cmd *cobra.Command, deplRoot string, skipSecurity bool) {
 
 	if len(requiredTools) > 0 {
 		checkDependencies(cmd, requiredTools...)
+	}
+
+	if os.Getenv("GHPC_SKIP_BUCKET_CREATION") != "true" {
+		checkErr(createGcsBucketsIfMissing(cmd.Context(), bp), ctx)
 	}
 
 	checkErr(validateRuntimeDependencies(deplRoot, groups), ctx)
@@ -178,4 +187,65 @@ func deployTerraformGroup(groupDir string, artifactsDir string, applyBehavior sh
 		return err
 	}
 	return shell.ExportOutputs(tf, artifactsDir, applyBehavior, outputFormat)
+}
+
+func createGcsBucketsIfMissing(ctx context.Context, bp config.Blueprint) error {
+	buckets, err := modulewriter.GetUniqueGcsBuckets(bp)
+	if err != nil {
+		return err
+	}
+
+	var client *storage.Client
+	defer func() {
+		if client != nil {
+			_ = client.Close()
+		}
+	}()
+
+	for _, bucketName := range buckets {
+		if client == nil {
+			client, err = storage.NewClient(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to initialize GCS client: %w", err)
+			}
+		}
+
+		bucketHandle := client.Bucket(bucketName)
+		ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+		_, err = bucketHandle.Attrs(ctxTimeout)
+		cancel()
+
+		if errors.Is(err, storage.ErrBucketNotExist) {
+			if !flagAutoApprove {
+				prompt := fmt.Sprintf("The required Terraform state bucket '%s' is missing. We can create it now, but for data safety, 'gcluster destroy' will not delete it later. You must delete it manually when done.\nAlternatively, you can create it manually via `gcloud storage buckets create gs://%s` and then re-run this command.\nCreate it automatically? [y/N]: ", bucketName, bucketName)
+				if !confirmActionFunc(prompt) {
+					return fmt.Errorf("user aborted")
+				}
+			} else {
+				logging.Info("The required Terraform state bucket '%s' is missing. Auto-approving creation. Note: for data safety, 'gcluster destroy' will not delete it later. You must delete it manually when done.", bucketName)
+			}
+
+			projectID := config.GetKeyFromBlueprint("project_id", bp)
+			if projectID == "" {
+				return fmt.Errorf("cannot create bucket: project_id is missing or invalid in blueprint vars")
+			}
+
+			region := config.GetKeyFromBlueprint("region", bp)
+			var bucketAttrs *storage.BucketAttrs
+			if region != "" {
+				bucketAttrs = &storage.BucketAttrs{Location: region}
+			}
+
+			ctxCreate, cancelCreate := context.WithTimeout(ctx, 30*time.Second)
+			err = bucketHandle.Create(ctxCreate, projectID, bucketAttrs)
+			cancelCreate()
+
+			if err != nil {
+				return fmt.Errorf("failed to create GCS bucket %q: %w", bucketName, err)
+			}
+		} else if err != nil {
+			logging.Warn("Unable to verify if GCS bucket %q exists: %v", bucketName, err)
+		}
+	}
+	return nil
 }

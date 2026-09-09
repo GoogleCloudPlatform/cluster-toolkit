@@ -99,7 +99,16 @@ func TestStateFilePath(t *testing.T) {
 	}
 }
 
+func useFileStore(t *testing.T) {
+	oldStore := store
+	store = &FilePrereqStore{}
+	t.Cleanup(func() {
+		store = oldStore
+	})
+}
+
 func TestLoadPrereqState_Success(t *testing.T) {
+	useFileStore(t)
 	tempDir, err := os.MkdirTemp("", "prereq-load-test")
 	if err != nil {
 		t.Fatal(err)
@@ -136,6 +145,7 @@ func TestLoadPrereqState_Success(t *testing.T) {
 }
 
 func TestSavePrereqState_Success(t *testing.T) {
+	useFileStore(t)
 	tempDir, err := os.MkdirTemp("", "prereq-save-test")
 	if err != nil {
 		t.Fatal(err)
@@ -177,6 +187,7 @@ func TestSavePrereqState_Success(t *testing.T) {
 }
 
 func TestLoadPrereqState_CorruptedFile(t *testing.T) {
+	useFileStore(t)
 	tempDir, err := os.MkdirTemp("", "prereq-corrupt-test")
 	if err != nil {
 		t.Fatal(err)
@@ -204,6 +215,7 @@ func TestLoadPrereqState_CorruptedFile(t *testing.T) {
 }
 
 func TestSavePrereqState_WriteError(t *testing.T) {
+	useFileStore(t)
 	tempDir, err := os.MkdirTemp("", "prereq-write-error-test")
 	if err != nil {
 		t.Fatal(err)
@@ -422,9 +434,17 @@ func TestEnsurePrerequisites_DockerCreds(t *testing.T) {
 		return shell.CommandResult{ExitCode: 0}
 	}
 
+	origGetADCSetupCommand := getADCSetupCommandFunc
+	defer func() { getADCSetupCommandFunc = origGetADCSetupCommand }()
+	getADCSetupCommandFunc = func() string { return "" }
+
 	origStore := store
 	defer func() { store = origStore }()
-	store = &mockPrereqStore{}
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp: time.Now().Add(-48 * time.Hour), // Stale
+		},
+	}
 
 	cmd := &cobra.Command{}
 	projectID := "test-project"
@@ -433,7 +453,7 @@ func TestEnsurePrerequisites_DockerCreds(t *testing.T) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 
-	err := ensurePrerequisites(cmd, &projectID, location)
+	err := ensurePrerequisites(cmd, projectID, location)
 	if err == nil {
 		t.Error("expected error because prerequisites are missing, got nil")
 	}
@@ -454,3 +474,172 @@ func (m *mockPrereqStore) Load() PrereqState {
 }
 
 func (m *mockPrereqStore) Save(state PrereqState) {}
+
+func TestEnsureBasicPrerequisites_InvalidProject(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	origExecuteCommand := shell.ExecuteCommand
+	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+
+	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+		cmdStr := name + " " + strings.Join(args, " ")
+		switch {
+		case strings.HasPrefix(cmdStr, "gcloud auth list"):
+			return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
+		case cmdStr == "gcloud projects describe invalid-project":
+			return shell.CommandResult{ExitCode: 1, Stderr: "Project not found"}
+		default:
+			return shell.CommandResult{ExitCode: 0}
+		}
+	}
+
+	origStore := store
+	defer func() { store = origStore }()
+	store = &mockPrereqStore{}
+
+	origGetADCSetupCommand := getADCSetupCommandFunc
+	defer func() { getADCSetupCommandFunc = origGetADCSetupCommand }()
+	getADCSetupCommandFunc = func() string { return "" }
+
+	cmd := &cobra.Command{}
+	projectID := "invalid-project"
+
+	err := ensureBasicPrerequisites(cmd, projectID)
+	if err == nil {
+		t.Fatal("expected error because project is invalid, got nil")
+	}
+
+	expectedErrorMsg := "project \"invalid-project\" is invalid or inaccessible"
+	if !strings.Contains(err.Error(), expectedErrorMsg) {
+		t.Errorf("expected error to contain %q, but got: %v", expectedErrorMsg, err)
+	}
+}
+
+func TestEnsureBasicPrerequisites_SaveState(t *testing.T) {
+	useFileStore(t)
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	origExecuteCommand := shell.ExecuteCommand
+	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+
+	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+		return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
+	}
+
+	origGetADCSetupCommand := getADCSetupCommandFunc
+	defer func() { getADCSetupCommandFunc = origGetADCSetupCommand }()
+	getADCSetupCommandFunc = func() string { return "" }
+
+	cmd := &cobra.Command{}
+	projectID := "test-project"
+
+	err := ensureBasicPrerequisites(cmd, projectID)
+	if err != nil {
+		t.Fatalf("expected nil error, got: %v", err)
+	}
+
+	state := store.Load()
+	if !state.GCloudSDKInstalled {
+		t.Error("expected GCloudSDKInstalled to be true")
+	}
+	if !state.GCloudProjectConfigured {
+		t.Error("expected GCloudProjectConfigured to be true")
+	}
+	if !state.GCloudAuthenticated {
+		t.Error("expected GCloudAuthenticated to be true")
+	}
+	if !state.ADCConfigured {
+		t.Error("expected ADCConfigured to be true")
+	}
+	if !state.KubectlInstalled {
+		t.Error("expected KubectlInstalled to be true")
+	}
+	if !state.GKEGCloudAuthPluginInstalled {
+		t.Error("expected GKEGCloudAuthPluginInstalled to be true")
+	}
+	if state.LastCheckedProjectID != "test-project" {
+		t.Errorf("expected LastCheckedProjectID to be 'test-project', got: %s", state.LastCheckedProjectID)
+	}
+	if time.Since(state.LastCheckedTimestamp) > 5*time.Second {
+		t.Errorf("expected LastCheckedTimestamp to be recent, got: %v", state.LastCheckedTimestamp)
+	}
+}
+
+func TestEnsureBasicPrerequisites_RestrictedPermissions_Proceeds(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	origExecuteCommand := shell.ExecuteCommand
+	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+
+	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+		cmdStr := name + " " + strings.Join(args, " ")
+		switch {
+		case strings.HasPrefix(cmdStr, "gcloud auth list"):
+			return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
+		case cmdStr == "gcloud projects describe restricted-project":
+			return shell.CommandResult{ExitCode: 1, Stderr: "ERROR: (gcloud.projects.describe) PERMISSION_DENIED: The caller does not have permission"}
+		default:
+			return shell.CommandResult{ExitCode: 0}
+		}
+	}
+
+	origStore := store
+	defer func() { store = origStore }()
+	store = &mockPrereqStore{}
+
+	origGetADCSetupCommand := getADCSetupCommandFunc
+	defer func() { getADCSetupCommandFunc = origGetADCSetupCommand }()
+	getADCSetupCommandFunc = func() string { return "" }
+
+	cmd := &cobra.Command{}
+	projectID := "restricted-project"
+
+	err := ensureBasicPrerequisites(cmd, projectID)
+	if err != nil {
+		t.Fatalf("expected nil error when user lacks resourcemanager permission, got: %v", err)
+	}
+}
+
+func TestEnsureBasicPrerequisites_ProjectNameContainsPermission_Fails(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	origExecuteCommand := shell.ExecuteCommand
+	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+
+	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+		cmdStr := name + " " + strings.Join(args, " ")
+		switch {
+		case strings.HasPrefix(cmdStr, "gcloud auth list"):
+			return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
+		case cmdStr == "gcloud projects describe my-permission-test":
+			return shell.CommandResult{ExitCode: 1, Stderr: "ERROR: (gcloud.projects.describe) NOT_FOUND: Project 'my-permission-test' was not found"}
+		default:
+			return shell.CommandResult{ExitCode: 0}
+		}
+	}
+
+	origStore := store
+	defer func() { store = origStore }()
+	store = &mockPrereqStore{}
+
+	origGetADCSetupCommand := getADCSetupCommandFunc
+	defer func() { getADCSetupCommandFunc = origGetADCSetupCommand }()
+	getADCSetupCommandFunc = func() string { return "" }
+
+	cmd := &cobra.Command{}
+	projectID := "my-permission-test"
+
+	err := ensureBasicPrerequisites(cmd, projectID)
+	// It should hard fail because it is a NOT_FOUND error, NOT a true IAM permission error.
+	if err == nil {
+		t.Fatal("expected error because project does not exist, but got nil")
+	}
+
+	if !strings.Contains(err.Error(), "NOT_FOUND") {
+		t.Errorf("expected error to contain NOT_FOUND, got: %v", err)
+	}
+}

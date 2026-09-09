@@ -1,0 +1,213 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - region is defined
+    - custom_vars.project is defined
+    - custom_vars.compute_type is defined
+    - custom_vars.workload_image is defined
+    - custom_vars.workload_command is defined
+    - custom_vars.expected_log_output is defined
+
+- name: Get cluster credentials for GCluster operations
+  delegate_to: localhost
+  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
+
+- name: Configure docker credentials for GCluster prerequisite checks
+  delegate_to: localhost
+  ansible.builtin.command: "{{ item }}"
+  loop:
+  - "gcloud auth configure-docker gcr.io --quiet"
+  - "gcloud auth configure-docker {{ region }}-docker.pkg.dev --quiet"
+  changed_when: false
+
+- name: Set test local facts
+  ansible.builtin.set_fact:
+    job_name: "job-{{ build | default('test') }}"
+    dry_run_file: "/tmp/{{ deployment_name }}-job-dry-run.yaml"
+
+- name: Execute GCluster Job Submit Dry-Run
+  delegate_to: localhost
+  ansible.builtin.command:
+    argv:
+    - "{{ workspace }}/gcluster"
+    - "job"
+    - "submit"
+    - "--name"
+    - "{{ job_name }}"
+    - "--compute-type"
+    - "{{ custom_vars.compute_type }}"
+    - "--project"
+    - "{{ custom_vars.project }}"
+    - "--location"
+    - "{{ region }}"
+    - "--cluster"
+    - "{{ deployment_name }}"
+    - "--image"
+    - "{{ custom_vars.workload_image }}"
+    - "--command"
+    - "{{ custom_vars.workload_command }}"
+    - "--dry-run-out"
+    - "{{ dry_run_file }}"
+  changed_when: false
+
+- name: Read generated Dry-Run manifest
+  delegate_to: localhost
+  ansible.builtin.slurp:
+    src: "{{ dry_run_file }}"
+  register: dry_run_content
+
+- name: Parse and Assert Dry-Run manifest content
+  ansible.builtin.set_fact:
+    dry_run_yaml: "{{ dry_run_content.content | b64decode | from_yaml }}"
+
+- name: Validate manifest is a JobSet
+  ansible.builtin.assert:
+    that:
+    - dry_run_yaml.kind == "JobSet"
+    fail_msg: "Generated manifest is not a JobSet, kind found: {{ dry_run_yaml.kind }}"
+
+# ==========================================
+# WORKFLOW 2: Submit & Verification
+# ==========================================
+
+- name: Submit the actual job to GKE
+  delegate_to: localhost
+  ansible.builtin.shell:
+    cmd: "yes | {{ workspace }}/gcluster job submit --name {{ job_name }} --compute-type {{ custom_vars.compute_type }} --project {{ custom_vars.project }} --location {{ region }} --cluster {{ deployment_name }} --image {{ custom_vars.workload_image }} --command '{{ custom_vars.workload_command }}'"
+  register: submission_output
+  changed_when: false
+
+- name: Block to wait for job completion, assert logs and clean up on failure
+  block:
+  - name: Wait for JobSet resource creation
+    delegate_to: localhost
+    ansible.builtin.command: kubectl get jobset "{{ job_name }}"
+    register: jobset_check
+    until: jobset_check.rc == 0
+    retries: 12
+    delay: 5
+    changed_when: false
+
+  - name: List GCluster jobs
+    delegate_to: localhost
+    ansible.builtin.command: >
+      {{ workspace }}/gcluster job list
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ custom_vars.project }}
+    register: list_output
+    changed_when: false
+
+  - name: Verify job is in list
+    ansible.builtin.assert:
+      that:
+      - job_name in list_output.stdout
+      fail_msg: "Job {{ job_name }} was not found in the gcluster job list."
+
+  - name: Wait for job to complete
+    delegate_to: localhost
+    ansible.builtin.command: >
+      {{ workspace }}/gcluster job list
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ custom_vars.project }}
+    register: list_state_output
+    until: >
+      (list_state_output.stdout_lines | select('search', job_name) | select('search', 'Succeeded') | list | length > 0) or
+      (list_state_output.stdout_lines | select('search', job_name) | select('search', 'Failed') | list | length > 0)
+    retries: 60
+    delay: 10
+    changed_when: false
+
+  - name: Fail if job failed
+    ansible.builtin.assert:
+      that:
+      - list_state_output.stdout_lines | select('search', job_name) | select('search', 'Succeeded') | list | length > 0
+      fail_msg: "Job {{ job_name }} failed in GKE."
+
+  - name: Fetch job logs
+    delegate_to: localhost
+    ansible.builtin.command: >
+      {{ workspace }}/gcluster job logs "{{ job_name }}"
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ custom_vars.project }}
+    register: job_logs
+    changed_when: false
+
+  - name: Print job logs
+    ansible.builtin.debug:
+      msg: "{{ job_logs.stdout }}"
+
+  - name: Assert expected log output is found
+    ansible.builtin.assert:
+      that:
+      - job_logs.stdout is search(custom_vars.expected_log_output)
+      fail_msg: "Failed to find expected output: '{{ custom_vars.expected_log_output }}' in job logs."
+
+  rescue:
+  - name: "FAILURE: Job failed execution. Gathering GCluster diagnostic inspection."
+    ansible.builtin.debug:
+      msg: "Workload failed or did not print the expected output. Commencing diagnostics."
+
+  - name: Run GCluster diagnostic inspection on failure
+    delegate_to: localhost
+    ansible.builtin.command: >
+      {{ workspace }}/gcluster job inspect
+      --name "{{ job_name }}"
+      --show
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ custom_vars.project }}
+    register: inspect_report
+    changed_when: false
+    ignore_errors: true
+
+  - name: Print GCluster diagnostic inspection report
+    ansible.builtin.debug:
+      msg: "{{ inspect_report.stdout_lines | default('No diagnostic report generated') }}"
+
+  - name: Get all job container logs on failure (GCluster)
+    delegate_to: localhost
+    ansible.builtin.command: >
+      {{ workspace }}/gcluster job logs "{{ job_name }}"
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ custom_vars.project }}
+    register: all_logs_failure
+    changed_when: false
+    ignore_errors: true
+
+  - name: Print all job logs on failure
+    ansible.builtin.debug:
+      msg: "{{ all_logs_failure.stdout | default('No job logs found') }}"
+
+  - name: Force failure of Ansible run
+    ansible.builtin.fail:
+      msg: "Integration test failed to verify GCluster job execution."
+
+  always:
+  - name: Clean up workload (cancel job)
+    delegate_to: localhost
+    ansible.builtin.command: >
+      {{ workspace }}/gcluster job cancel "{{ job_name }}"
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ custom_vars.project }}
+    ignore_errors: true

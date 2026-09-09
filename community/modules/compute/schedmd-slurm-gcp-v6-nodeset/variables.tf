@@ -529,6 +529,14 @@ variable "additional_networks" {
     ])
     error_message = "In var.additional_networks, you must specify at least one of 'network', 'subnetwork', or 'network_attachment'. You cannot specify 'network' or 'subnetwork' alongside 'network_attachment'."
   }
+  validation {
+    condition = alltrue([
+      for nic in var.additional_networks : (
+        nic.network_attachment == null || nic.network_attachment == "" || can(regex("^(?:https://www.googleapis.com/compute/[^/]+/)?projects/[^/]+/regions/[^/]+/networkAttachments/[^/]+$", nic.network_attachment))
+      )
+    ])
+    error_message = "In var.additional_networks, 'network_attachment' must be the full resource URI: projects/{project}/regions/{region}/networkAttachments/{name}."
+  }
 }
 
 variable "access_config" {
@@ -694,4 +702,14 @@ variable "machine_configs" {
   description = "Definition of GCE machine types and counts"
   type        = any
   default     = {}
+}
+
+variable "provisioning_engine" {
+  description = "Compute node provisioning engine: 'AUTO', 'MIG', or 'BULK_INSERT'. Note: When using 'MIG', 'node_count_dynamic_max' must be explicitly set to 0 and 'enable_placement' must be set to false."
+  type        = string
+  default     = "AUTO"
+  validation {
+    condition     = contains(["AUTO", "MIG", "BULK_INSERT"], var.provisioning_engine)
+    error_message = "Variable 'provisioning_engine' must be 'AUTO', 'MIG', or 'BULK_INSERT'."
+  }
 }

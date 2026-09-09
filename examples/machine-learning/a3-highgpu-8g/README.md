@@ -44,10 +44,12 @@ gcluster --version
 
 The blueprint is split into 3 deployment groups:
 
-1. Group 1 provisions the system network, gpu network and 1 Filestore instance for mounting `/home`
+1. Group 1 provisions the system network, gpu network and 1 Managed Lustre instance for mounting `/home`
 across the cluster.
 2. Group 2 builds a custom image installing Slurm on an Ubuntu 22.04 image. The image
-runs a kernel patched with performance enhancements for the a3-highgpu-8g VM.
+runs a custom GCP TCPX kernel patched with performance enhancements for the a3-highgpu-8g VM.
+As part of this build, the Lustre client modules are explicitly compiled via DKMS against the TCPX kernel
+so that the managed Lustre `/home` directory can mount successfully when the nodes boot.
 3. Group 3 provisions Slurm cluster and a3-highgpu-8g nodes using the custom image.
 
 ## First time considerations
@@ -286,6 +288,15 @@ sbatch build-nccl-tests.sh
 ```shell
 sbatch run-nccl-tests.sh
 ```
+
+## Destroy the VMs
+
+```bash
+#!/bin/bash
+./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
+```
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
 
 [consume]: https://cloud.google.com/compute/docs/instances/reservations-consume#consuming_instances_from_any_matching_reservation
 [tkdeps]: https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies

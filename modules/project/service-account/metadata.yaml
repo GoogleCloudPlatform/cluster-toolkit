@@ -34,3 +34,10 @@ ghpc:
       vars: [prefix]
       deprecated: true
     error_message: "Unsupported variable: 'prefix'. Please use 'deployment_name' instead."
+  - validator: regex
+    inputs:
+      vars: [deployment_name, name]
+      concat: true
+      separator: "-"
+      pattern: "^[a-z][-a-z0-9]{4,28}[a-z0-9]$"
+    error_message: "The combined service account ID (deployment_name + name) must be between 6 and 30 characters, start with a lowercase letter, contain only lowercase alphanumeric characters and dashes, and cannot end with a dash."

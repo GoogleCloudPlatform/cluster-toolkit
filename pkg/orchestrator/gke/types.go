@@ -21,10 +21,13 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
+	"net/http"
 	"strings"
+	"sync"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
 	compute "google.golang.org/api/compute/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -33,7 +36,49 @@ const (
 	tpuTopologyLabel = "cloud.google.com/gke-tpu-topology"
 	// nodePoolLabel is the GKE label for the node pool name.
 	nodePoolLabel = "cloud.google.com/gke-nodepool"
+	// multitierCheckpointCSIDriver is the CSI driver for Multi-Tier Checkpointing (MTC).
+	multitierCheckpointCSIDriver = "multitier-checkpoint.csi.storage.gke.io"
 )
+
+// checkpointConfigurationGVR defines the GroupVersionResource for GKE CheckpointConfiguration resources.
+var checkpointConfigurationGVR = schema.GroupVersionResource{
+	Group:    "checkpointing.gke.io",
+	Version:  "v1",
+	Resource: "checkpointconfigurations",
+}
+
+// namespaceGVR defines the GroupVersionResource for core Kubernetes Namespace resources.
+var namespaceGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "namespaces",
+}
+
+// serviceAccountGVR defines the GroupVersionResource for core Kubernetes ServiceAccount resources.
+var serviceAccountGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "serviceaccounts",
+}
+
+// podGVR defines the GroupVersionResource for core Kubernetes Pod resources.
+var podGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "pods",
+}
+
+// daemonsetGVR defines the GroupVersionResource for apps/v1 DaemonSet resources.
+var daemonsetGVR = schema.GroupVersionResource{
+	Group:    "apps",
+	Version:  "v1",
+	Resource: "daemonsets",
+}
+
+// HTTPClient abstracts HTTP GET calls for testability and thread safety.
+type HTTPClient interface {
+	Get(url string) (*http.Response, error)
+}
 
 type Executor interface {
 	ExecuteCommand(name string, args ...string) shell.CommandResult
@@ -89,6 +134,8 @@ type GKEOrchestrator struct {
 	slicingTopologiesChecked    bool
 	slicingTopologiesDetected   bool
 	gkeCustomTemplatesPath      string
+	httpClient                  HTTPClient
+	httpOnce                    sync.Once
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -184,6 +231,7 @@ type ManifestOptions struct {
 	IsPathwaysJob                 bool
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
+	MLDiagnosticsEnabled          bool
 	Verbose                       bool
 	Env                           map[string]string
 	AdditionalManifests           []string
@@ -315,6 +363,9 @@ type JobSetCondition struct {
 }
 
 type JobSetStatus struct {
+	Spec struct {
+		Suspend bool `json:"suspend"`
+	} `json:"spec"`
 	Status struct {
 		Conditions []JobSetCondition `json:"conditions"`
 	} `json:"status"`
@@ -380,6 +431,7 @@ type jobSetTemplateData struct {
 	IsGPU                         bool
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
+	MLDiagnosticsEnabled          bool
 }
 
 // Types for parsing kubectl get nodes -o json

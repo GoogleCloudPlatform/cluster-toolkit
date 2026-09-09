@@ -1,0 +1,231 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# limitations under the License.
+
+---
+tags:
+- vm
+- m.vpc
+- m.vm-instance
+
+substitutions:
+  _TEST_PREFIX: ""
+  _ZONE: "us-central1-b"
+
+timeout: 86400s
+queueTtl: 86400s  # 24hr
+logsBucket: "gs://$PROJECT_NUMBER.cloudbuild-logs.googleusercontent.com"
+
+steps:
+# 1. Build and push workspace container containing the current code layer
+- id: build-workspace-image
+  name: gcr.io/cloud-builders/docker
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    set -eo pipefail
+    docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID -f- . <<EOF
+    FROM us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:latest
+    COPY . /workspace
+    WORKDIR /workspace
+    EOF
+
+    MAX_RETRIES=3
+    for i in $$(seq 1 $$MAX_RETRIES); do
+      echo "Push attempt $$i of $$MAX_RETRIES..."
+      if docker push us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID; then
+        echo "The image pushed successfully!"
+        break
+      fi
+
+      if [ "$$i" -eq "$$MAX_RETRIES" ]; then
+        echo "The image push failed after $$MAX_RETRIES attempts. (Check https://status.cloud.google.com/ for server outages)"
+        exit 1
+      fi
+
+      echo "The image push failed, retrying in 10 seconds..."
+      sleep 10
+    done
+
+# 2. Retrieve GCS Bucket name from Secret Manager and generate Job YAML
+- id: generate-job-manifest
+  name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  secretEnv: ['SA_EMAIL', 'GCLUSTER_GCS_PATH', 'TRIAGE_GCS_BUCKET', 'TRIAGE_PROJECT_NUMBER', 'TRIAGE_INVOKER_SA', 'TRIAGE_CLOUD_RUN_URL']
+  args:
+  - -c
+  - |
+    set -eo pipefail
+    BUILD_ID_SHORT=$$(echo "$BUILD_ID" | cut -c1-6)
+
+    # Determine the priority class based on the test prefix.
+    if [ "${_TEST_PREFIX}" == "hotfix-" ]; then
+      PRIORITY_LINE="priorityClassName: emergency-hotfix-priority"
+    else
+      PRIORITY_LINE=""
+    fi
+
+    SA_UNIQUE_ID=$(gcloud iam service-accounts describe "$$SA_EMAIL" --project="$PROJECT_ID" --format="value(uniqueId)")
+    OSLOGIN_USER="sa_$${SA_UNIQUE_ID}"
+
+    cat <<EOF > job.yaml
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: vm-storage-$$BUILD_ID_SHORT
+      namespace: default
+      labels:
+        kueue.x-k8s.io/queue-name: local-queue-test-locks
+        build-id: "$BUILD_ID"
+    spec:
+      suspend: true # Required for Kueue: the job must be created in suspended state for Kueue to manage it
+      backoffLimit: 0
+      template:
+        metadata:
+          annotations:
+            cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+        spec:
+          $$PRIORITY_LINE
+          serviceAccountName: test-kueue-cluster-runner-ksa
+          restartPolicy: Never
+          terminationGracePeriodSeconds: 1800 # Grants 30 minutes for terraform destroy to finish gracefully if cancelled
+          containers:
+          - name: runner
+            image: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
+            env:
+            - name: ANSIBLE_HOST_KEY_CHECKING
+              value: "false"
+            - name: ANSIBLE_CONFIG
+              value: "/workspace/tools/cloud-build/ansible.cfg"
+            - name: _TEST_PREFIX
+              value: "${_TEST_PREFIX}"
+            - name: ZONE
+              value: "${_ZONE}"
+            - name: BUILD_ID
+              value: "$BUILD_ID"
+            - name: PROJECT_ID
+              value: "$PROJECT_ID"
+            - name: GCLUSTER_GCS_PATH
+              value: "$$GCLUSTER_GCS_PATH"
+            - name: TRIAGE_GCS_BUCKET
+              value: "$$TRIAGE_GCS_BUCKET"
+            - name: TRIAGE_PROJECT_NUMBER
+              value: "$$TRIAGE_PROJECT_NUMBER"
+            - name: TRIAGE_INVOKER_SA
+              value: "$$TRIAGE_INVOKER_SA"
+            - name: TRIAGE_CLOUD_RUN_URL
+              value: "$$TRIAGE_CLOUD_RUN_URL"
+            command: ["/bin/bash", "-c"]
+            args:
+            - |
+
+              set -x -e
+              cd /workspace
+
+              DEPLOYMENT_NAME="vmstorage-$$BUILD_ID_SHORT"
+
+              RUN_CLEANUP=true
+              source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
+              trap cleanup_pod EXIT SIGTERM SIGINT
+
+              REGION="\$${ZONE%-*}"
+              bash tools/get_binary.sh "\$$_TEST_PREFIX"
+
+              BLUEPRINT="examples/storage-vm.yaml"
+              bash tools/add_ttl_label.sh \$$BLUEPRINT
+
+
+              echo "Checking if required storage pools exist..."
+              if ! gcloud compute storage-pools describe test-pool-balanced --project=$PROJECT_ID --zone=\$$ZONE >/dev/null 2>&1; then
+                echo "ERROR: Storage pool 'test-pool-balanced' does not exist."
+                echo "Please create it by running the following command:"
+                echo "gcloud compute storage-pools create test-pool-balanced"
+                echo "    --project=$PROJECT_ID"
+                echo "    --zone=\$$ZONE"
+                echo "    --provisioned-capacity=10240GB"
+                echo "    --provisioned-iops=10000"
+                echo "    --provisioned-throughput=1024"
+                echo "    --storage-pool-type=hyperdisk-balanced"
+                exit 1
+              fi
+              if ! gcloud compute storage-pools describe test-pool-throughput --project=$PROJECT_ID --zone=\$$ZONE >/dev/null 2>&1; then
+                echo "ERROR: Storage pool 'test-pool-throughput' does not exist."
+                echo "Please create it by running the following command:"
+                echo "gcloud compute storage-pools create test-pool-throughput"
+                echo "    --project=$PROJECT_ID"
+                echo "    --zone=\$$ZONE"
+                echo "    --provisioned-capacity=28672GB"
+                echo "    --provisioned-throughput=500"
+                echo "    --storage-pool-type=hyperdisk-throughput"
+                exit 1
+              fi
+
+
+              ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+                --user="$$OSLOGIN_USER" --extra-vars="project=\$$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
+                --extra-vars="region=\$$REGION zone=\$$ZONE" \
+                --extra-vars="hyperdisk_balanced_pool=test-pool-balanced hyperdisk_throughput_pool=test-pool-throughput" \
+                --extra-vars="@tools/cloud-build/daily-tests/tests/vm-storage.yml" \
+                --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
+                --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
+                --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
+                --extra-vars="triage_cloud_run_url_override=$$TRIAGE_CLOUD_RUN_URL" &
+              ANSIBLE_PID=\$$!
+
+              wait \$$ANSIBLE_PID
+              RUN_CLEANUP=false
+
+            resources:
+              requests:
+                cpu: 200m
+                memory: "2Gi"
+                test-locks/vm-storage: 1
+              limits:
+                cpu: 1
+                memory: "2Gi"
+                test-locks/vm-storage: 1
+    EOF
+
+# 3. Submit and Monitor GKE Kueue Job with Retry
+- id: submit-and-monitor-gke-job
+  name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  args:
+  - tools/cloud-build/submit_and_monitor_kueue_job.sh
+  - vm-storage
+  - $BUILD_ID
+
+# 4. Cleanup the built image from Registry to save costs
+- id: cleanup-image
+  name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  allowFailure: true
+  env:
+  - 'PROJECT_ID=$PROJECT_ID'
+  - 'BUILD_ID=$BUILD_ID'
+  args:
+  - tools/cloud-build/image_cleanup.sh
+
+availableSecrets:
+  secretManager:
+  - versionName: projects/${PROJECT_ID}/secrets/sa-email/versions/latest
+    env: 'SA_EMAIL'
+  - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
+    env: 'GCLUSTER_GCS_PATH'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-gcs-bucket/versions/latest
+    env: 'TRIAGE_GCS_BUCKET'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-project-number/versions/latest
+    env: 'TRIAGE_PROJECT_NUMBER'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-invoker-sa/versions/latest
+    env: 'TRIAGE_INVOKER_SA'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-cloud-run-url/versions/latest
+    env: 'TRIAGE_CLOUD_RUN_URL'

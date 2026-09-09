@@ -45,7 +45,10 @@ vars:
   # The name of the compute engine reservation of G4 confidential nodes
   reservation:
 
-  # Set to true to enable Confidential Storage (Hyperdisk Balanced)
+  # Set to true to enable Confidential Storage (Hyperdisk Balanced).
+  # Note: GCluster dynamically sets the GKE system node pool boot disk type to 'hyperdisk-balanced'
+  # when this is true, and automatically falls back to GKE's default standard boot disk when set to false
+  # to ensure VM compatibility.
   enable_confidential_storage: false
 
   # The Customer-Managed Encryption Key (CMEK) path (required if enable_confidential_storage is true)
@@ -146,7 +149,6 @@ deployment_groups:
       cluster_reference_type: NAME
       system_node_pool_machine_type: "n2d-standard-16"
       system_node_pool_disk_size_gb: 100
-      system_node_pool_disk_type: "hyperdisk-balanced"
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
       enable_private_endpoint: false

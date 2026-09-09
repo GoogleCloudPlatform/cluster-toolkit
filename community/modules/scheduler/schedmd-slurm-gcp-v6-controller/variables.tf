@@ -251,6 +251,17 @@ variable "login_nodes" {
     ]))
     error_message = "In var.login_nodes[*].additional_networks, you must specify at least one of 'network', 'subnetwork', or 'network_attachment'. You cannot specify 'network' or 'subnetwork' alongside 'network_attachment'."
   }
+
+  validation {
+    condition = alltrue(flatten([
+      for ln in var.login_nodes : [
+        for nic in(ln.additional_networks != null ? ln.additional_networks : []) : (
+          nic.network_attachment == null || nic.network_attachment == "" || can(regex("^(?:https://www.googleapis.com/compute/[^/]+/)?projects/[^/]+/regions/[^/]+/networkAttachments/[^/]+$", nic.network_attachment))
+        )
+      ]
+    ]))
+    error_message = "In var.login_nodes[*].additional_networks, 'network_attachment' must be the full resource URI: projects/{project}/regions/{region}/networkAttachments/{name}."
+  }
 }
 
 ############
@@ -304,8 +315,9 @@ variable "nodeset" {
       use_job_duration = bool
       use_bulk_insert  = bool
     })
-    labels       = optional(map(string), {})
-    machine_type = optional(string)
+    provisioning_engine = optional(string, "AUTO")
+    labels              = optional(map(string), {})
+    machine_type        = optional(string)
     advanced_machine_features = object({
       enable_nested_virtualization = optional(bool)
       threads_per_core             = optional(number)
@@ -399,6 +411,17 @@ variable "nodeset" {
       ]
     ]))
     error_message = "In var.nodeset[*].additional_networks, you must specify at least one of 'network', 'subnetwork', or 'network_attachment'. You cannot specify 'network' or 'subnetwork' alongside 'network_attachment'."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for ns in var.nodeset : [
+        for nic in(ns.additional_networks != null ? ns.additional_networks : []) : (
+          nic.network_attachment == null || nic.network_attachment == "" || can(regex("^(?:https://www.googleapis.com/compute/[^/]+/)?projects/[^/]+/regions/[^/]+/networkAttachments/[^/]+$", nic.network_attachment))
+        )
+      ]
+    ]))
+    error_message = "In var.nodeset[*].additional_networks, 'network_attachment' must be the full resource URI: projects/{project}/regions/{region}/networkAttachments/{name}."
   }
 }
 

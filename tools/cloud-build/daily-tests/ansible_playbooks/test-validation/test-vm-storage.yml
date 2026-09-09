@@ -1,0 +1,40 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Verify VM Boot Disk Storage Pool
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    gcloud compute disks describe {{ deployment_name }}-0 --project={{ project }} --zone={{ zone }} --format="value(storagePool)"
+  register: vm_boot_pool
+  changed_when: false
+
+- name: Assert VM Boot Disk is in Balanced Pool
+  delegate_to: localhost
+  ansible.builtin.assert:
+    that:
+    - hyperdisk_balanced_pool in vm_boot_pool.stdout
+
+- name: Verify VM Additional Disk Storage Pool
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    gcloud compute disks describe {{ deployment_name }}-disk-0 --project={{ project }} --zone={{ zone }} --format="value(storagePool)"
+  register: vm_data_pool
+  changed_when: false
+
+- name: Assert VM Additional Disk is in Throughput Pool
+  delegate_to: localhost
+  ansible.builtin.assert:
+    that:
+    - hyperdisk_throughput_pool in vm_data_pool.stdout

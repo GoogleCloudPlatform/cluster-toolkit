@@ -21,7 +21,7 @@ vars:
   deployment_name: cluster-01
   region: us-central1
   gcp_public_cidrs_access_enabled: false
-  authorized_cidr: <your-ip-address>/32
+  authorized_cidr:  # <your-ip-address>/32
 
 deployment_groups:
 - group: primary

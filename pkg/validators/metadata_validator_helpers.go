@@ -219,12 +219,7 @@ func IterateRuleTargets(
 	// Only support `vars:` in module metadata validators (each treated as a module.setting name).
 	// `settings:` support has been removed to enforce a single convention.
 	varsList, _ := parseStringList(rule.Inputs["vars"])
-	optional := true
-	if v, ok := rule.Inputs["optional"]; ok {
-		if b, ok := v.(bool); ok {
-			optional = b
-		}
-	}
+	optional, _ := parseBoolInput(rule.Inputs, "optional", true)
 
 	// Interpret each var name as module.settings.<name>
 	return processModuleSettings(bp, mod, group, modIdx, varsList, optional, handler)

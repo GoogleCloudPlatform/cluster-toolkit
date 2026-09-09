@@ -56,3 +56,5 @@ deployment file with the variable of choice below.
 ```
 
 Replace [DEPLOYMENT_FOLDER] with the appropriate value.
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

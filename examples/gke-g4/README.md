@@ -118,3 +118,5 @@ To destroy all resources associated with creating the GKE cluster, run the follo
 ```
 
 Replace `CLUSTER-NAME` with the name of your cluster. For the clusters created with Cluster Toolkit, the cluster name is based on the `deployment_name` used in vars in deployment file.
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

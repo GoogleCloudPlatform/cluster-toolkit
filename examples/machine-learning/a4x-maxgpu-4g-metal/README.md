@@ -24,7 +24,7 @@ This blueprint installs and configures several key software components. While th
 * **NVIDIA CUDA Toolkit:** 13.0 (and related `datacenter-gpu-manager` packages)
 * **Mellanox OFED (DOCA):** 3.2.0 for Ubuntu 24.04 arm64-sbsa
 * **Mellanox Firmware Tools (MFT):** 4.34.0-145
-* **Slurm:** Git ref `6.12.1` from `https://github.com/GoogleCloudPlatform/slurm-gcp`
+* **Slurm:** Git ref `6.12.3` from `https://github.com/GoogleCloudPlatform/slurm-gcp`
 * **NCCL Plugin Image:** `us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-gib-a4x-max-arm64` (Version: `v1.1.1`)
 * **ASAPd Image:** `us-docker.pkg.dev/gce-ai-infra/asapd-lite/asapd-lite:v0.0.8`
 
@@ -114,6 +114,8 @@ vars:
 #!/bin/bash
 ./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
 ```
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
 
 Selective deployment and teardown for this blueprint are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
 
