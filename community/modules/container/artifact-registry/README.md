@@ -47,6 +47,17 @@ Create a standard Docker repository.
     format: DOCKER
 ```
 
+Create a standard Docker repository with a custom name.
+
+```yaml
+- id: custom_registry
+  source: community/modules/container/artifact-registry
+  settings:
+    repository_name: my-custom-repo
+    repo_mode: STANDARD_REPOSITORY
+    format: DOCKER
+```
+
 Mirror of public Docker Hub repository.
 
 ```yaml
@@ -145,6 +156,7 @@ No modules.
 | <a name="input_repo_public_repository"></a> [repo\_public\_repository](#input\_repo\_public\_repository) | For REMOTE\_REPOSITORY, name of a known public repo as per the Terraform module<br/>(e.g., DOCKER\_HUB) or null for custom repo. | `string` | `null` | no |
 | <a name="input_repo_username"></a> [repo\_username](#input\_repo\_username) | Username for external repository. | `string` | `null` | no |
 | <a name="input_repository_base"></a> [repository\_base](#input\_repository\_base) | For APT/YUM public repos, repository\_base (e.g., 'DEBIAN', 'UBUNTU'). | `string` | `null` | no |
+| <a name="input_repository_name"></a> [repository\_name](#input\_repository\_name) | The repository name (ID) for the Artifact Registry repository. If null, deployment\_name (lowercased, with dots and underscores replaced with hyphens) with a random suffix is used. | `string` | `null` | no |
 | <a name="input_repository_path"></a> [repository\_path](#input\_repository\_path) | For APT/YUM public repos, repository\_path (e.g., 'debian/dists/buster'). | `string` | `null` | no |
 | <a name="input_use_upstream_credentials"></a> [use\_upstream\_credentials](#input\_use\_upstream\_credentials) | Configure Service Account to use upstream credentials for REMOTE\_REPOSITORY:<br/>If true, a username/password is used for the REMOTE\_REPOSITORY mirror.<br/>If false (or if repo\_password == null), no password is created at all.<br/>Note: Blueprint credentials will be stored in Secrets Manager. | `bool` | `false` | no |
 | <a name="input_user_managed_replication"></a> [user\_managed\_replication](#input\_user\_managed\_replication) | (Optional) A list of objects to enable user-managed replication.<br/>Each object can have:<br/>  location        = string<br/>  kms\_key\_name    = optional(string)<br/>If empty, auto replication is used. | <pre>list(object({<br/>    location     = string<br/>    kms_key_name = optional(string)<br/>  }))</pre> | `[]` | no |
@@ -153,5 +165,9 @@ No modules.
 
 | Name | Description |
 | ---- | ----------- |
-| <a name="output_registry_url"></a> [registry\_url](#output\_registry\_url) | The URL of the created artifact registry. |
+| <a name="output_registry_url"></a> [registry\_url](#output\_registry\_url) | The URL of the artifact registry repo. |
+| <a name="output_repo_url"></a> [repo\_url](#output\_repo\_url) | The URL of the artifact registry repo. |
+| <a name="output_repository_id"></a> [repository\_id](#output\_repository\_id) | The ID of the created artifact registry repository. |
+| <a name="output_repository_name"></a> [repository\_name](#output\_repository\_name) | The name (ID) of the created artifact registry repository. |
+| <a name="output_repository_resource_name"></a> [repository\_resource\_name](#output\_repository\_resource\_name) | The full resource name of the repository. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -27,6 +27,17 @@ variable "deployment_name" {
   type        = string
 }
 
+variable "repository_name" {
+  description = "The repository name (ID) for the Artifact Registry repository. If null, deployment_name (lowercased, with dots and underscores replaced with hyphens) with a random suffix is used."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.repository_name == null ? true : can(regex("^[a-z][-a-z0-9]{0,61}[a-z0-9]$", var.repository_name))
+    error_message = "The repository_name must be between 2 and 63 characters, start with a lowercase letter, end with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens."
+  }
+}
+
 variable "labels" {
   description = "Labels to add to the artifact registry. Key-value pairs."
   type        = map(string)
