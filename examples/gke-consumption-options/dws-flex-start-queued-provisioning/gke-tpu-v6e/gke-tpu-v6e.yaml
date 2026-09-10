@@ -241,9 +241,9 @@ deployment_groups:
       jobset:
         install: true
 
-  # When utilizing GCS Fuse Storage Profiles, you must ensure the GKE Service Agent
-  # possesses the 'gke.gcsfuse.profileUser' custom IAM role assigned out-of-band.
-  # Please refer to 'modules/file-system/gke-persistent-volume/README.md' for instructions.
+  # When utilizing GCS Fuse Storage Profiles, the GKE Service Agent requires permissions on the
+  # bucket to manage storage caching. By default, this module automatically grants 'roles/storage.admin'.
+  # For least-privilege custom role configuration or shared buckets, see modules/file-system/gke-persistent-volume/README.md.
   # Persistent Volume for training data using GCS Fuse Storage Profile
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
