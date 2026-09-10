@@ -1,0 +1,45 @@
+#!/bin/bash
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+set -e
+
+echo "Starting generic auto-mount for GCS bucket: ${mount_gcs_bucket}"
+
+mkdir -p "${mount_path}"
+
+# Ensure gcsfuse is installed
+if ! command -v gcsfuse &> /dev/null; then
+  echo "Installing gcsfuse..."
+  CODENAME=""
+  if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    CODENAME="$VERSION_CODENAME"
+  fi
+  if [ -z "$CODENAME" ] && command -v lsb_release &> /dev/null; then
+    CODENAME=$(lsb_release -c -s)
+  fi
+  CODENAME=$${CODENAME:-bookworm}
+  export GCSFUSE_REPO="gcsfuse-$CODENAME"
+  sudo mkdir -p /usr/share/keyrings
+  curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+  echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt $GCSFUSE_REPO main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list
+  sudo apt-get update
+  sudo apt-get install -y gcsfuse
+fi
+
+# Mount the bucket
+echo "Mounting ${mount_gcs_bucket} to ${mount_path}..."
+sudo gcsfuse --implicit-dirs -o allow_other "${mount_gcs_bucket}" "${mount_path}"
+echo "Mount successful."

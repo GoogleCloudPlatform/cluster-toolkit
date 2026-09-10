@@ -57,6 +57,8 @@ Modules that are still in development and less stable are labeled with the
   Notebook. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
 * **[gke-nodeset]** ![community-badge] ![experimental-badge] : Create a slinky nodeset to be used by the [gke-partition] module.
 * **[gke-partition]** ![community-badge] ![experimental-badge] : Creates a slinky partition to be used by a [slurm-controller][schedmd-slurm-gcp-v6-controller].
+* **[colab]** ![community-badge] ![experimental-badge] : Creates a Vertex AI
+  Colab Enterprise runtime template and runtime instance.
 
 [vm-instance]: compute/vm-instance/README.md
 [cloud-run]: compute/cloud-run/README.md
@@ -70,6 +72,7 @@ Modules that are still in development and less stable are labeled with the
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
 [mig]: ../community/modules/compute/mig/README.md
 [notebook]: ../community/modules/compute/notebook/README.md
+[colab]: ../community/modules/agent-platform/colab/README.md
 [fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
 
 ### Database
