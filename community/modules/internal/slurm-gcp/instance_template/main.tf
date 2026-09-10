@@ -55,12 +55,12 @@ locals {
   source_image_family = (
     var.source_image_family != "" && var.source_image_family != null
     ? var.source_image_family
-    : "slurm-gcp-6-12-hpc-rocky-linux-9"
+    : "aci-cpu-rocky-linux-9-slurm-2605-amd64"
   )
   source_image_project = (
     var.source_image_project != "" && var.source_image_project != null
     ? var.source_image_project
-    : "projects/schedmd-slurm-public/global/images/family"
+    : "projects/advanced-compute-images/global/images/family"
   )
 
   source_image = (

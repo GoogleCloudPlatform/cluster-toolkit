@@ -73,8 +73,8 @@ deployment_groups:
       name: c60
       machine_type: c2-standard-60
       instance_image:
-        family: slurm-gcp-6-12-hpc-rocky-linux-8
-        project: schedmd-slurm-public
+        family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+        project: advanced-compute-images
 
   - id: nodeset_3
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
@@ -83,8 +83,8 @@ deployment_groups:
       name: cd112
       machine_type: c2d-standard-112
       instance_image:
-        family: slurm-gcp-6-12-hpc-rocky-linux-8
-        project: schedmd-slurm-public
+        family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+        project: advanced-compute-images
       advanced_machine_features:
         threads_per_core: null # Use platform default value
 
