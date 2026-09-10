@@ -73,6 +73,7 @@
         accept_hostkey: true
       environment:
         GIT_HTTP_EXTRAHEADER: "Authorization: Bearer {{ gcp_access_token.stdout | trim }}"
+      no_log: true
       async: 120
       poll: 10
 
