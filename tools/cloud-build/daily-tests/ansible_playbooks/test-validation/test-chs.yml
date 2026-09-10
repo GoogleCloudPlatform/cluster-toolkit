@@ -63,6 +63,7 @@
       ansible.builtin.command: gcloud auth print-access-token
       register: gcp_access_token
       changed_when: false
+      no_log: true
 
     - name: Clone CHS repository
       ansible.builtin.git:
