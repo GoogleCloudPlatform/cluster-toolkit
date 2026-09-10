@@ -93,6 +93,18 @@
           if (!activeStatuses.includes(data.status)) {
             location.reload();
           } else {
+            // Surface a stalled bootstrap (still initialising well past the
+            // expected time) so it doesn't spin silently forever.
+            if (data.stalled) {
+              var warn = document.getElementById("cluster-stall-warning");
+              if (!warn) {
+                warn = document.createElement("div");
+                warn.id = "cluster-stall-warning";
+                warn.className = "alert alert-warning";
+                document.getElementById("status-p").appendChild(warn);
+              }
+              warn.textContent = data.message;
+            }
             setTimeout(pollClusterStatus, 5000);
           }
         },

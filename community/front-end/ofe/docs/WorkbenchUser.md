@@ -58,7 +58,7 @@ remember that these filesystems can only be mounted if they are operational at
 the time the workbench is started.
 
 Within the workbench there are methods for accessing GCP cloud storage (via the
-`gsutil` command) and `git`.
+`gcloud storage` command) and `git`.
 
 ## Access workbench
 

@@ -35,7 +35,7 @@ else
 fi
 
 cd /tmp
-gsutil -m cp -r "gs://${BUCKET}/clusters/ansible_setup" /tmp
+gcloud storage cp --recursive "gs://${BUCKET}/clusters/ansible_setup" /tmp
 cd /tmp/ansible_setup
 
 # Set up facts file

@@ -40,6 +40,7 @@
     name:
     - requests
     - pexpect
+    - PyYAML
     - google-cloud-storage
     - google-cloud-pubsub
 

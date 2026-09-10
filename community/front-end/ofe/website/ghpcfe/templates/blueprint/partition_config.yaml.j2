@@ -1,4 +1,4 @@
-{#
+{% comment %}
 Copyright 2026 "Google LLC"
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +12,7 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-#}
+{% endcomment %}
 
 - source: community/modules/compute/schedmd-slurm-gcp-v6-partition
   kind: terraform
@@ -70,6 +70,6 @@ limitations under the License.
         count: {{ part.GPU_per_node }}
     {% endif %}
     startup_script: |
-      echo "******************************************** CALLING COMPUTE STARTUP"
       #!/bin/bash
-      gsutil cp gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_compute.sh - | bash
+      echo "******************************************** CALLING COMPUTE STARTUP"
+      gcloud storage cat gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_compute.sh | bash
