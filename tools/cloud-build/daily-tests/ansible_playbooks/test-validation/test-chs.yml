@@ -65,6 +65,7 @@
         dest: "{{ chs_temp_dir.path }}"
         version: release
         accept_hostkey: true
+      no_log: true
       async: 120
       poll: 10
 
