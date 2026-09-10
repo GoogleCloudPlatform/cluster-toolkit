@@ -245,10 +245,10 @@ gcloud container clusters update CLUSTER_NAME \
 
 ## 3\. Cluster Toolkit Team Updates
 
-Periodically, the Cluster Toolkit team will update the default versions defined in the modules to incorporate new stable GKE versions. To adopt these new defaults:
+Periodically, the Cluster Toolkit team will update the default versions defined in the modules to incorporate new stable GKE versions. To adopt these new defaults for **new** deployments:
 
 1. **Update Toolkit**: You should update your Cluster Toolkit installation by downloading the latest cluster toolkit binary.  
-2. **Re-Deploy**: Regenerate your Terraform code from your blueprints using the updated toolkit and apply the changes. This ensures you pick up the new defaults without necessarily hardcoding versions in your blueprints.
+2. **Deploy New Clusters or Node Pools**: Regenerate your Terraform code from your blueprints using the updated toolkit. Newly provisioned clusters or newly added node pools will automatically adopt the updated defaults. Pre-existing clusters and node pools remain on their current version (ignored via `lifecycle.ignore_changes`).
 
 ```shell
 ./gcluster deploy <path-to-blueprint.yaml>
@@ -259,7 +259,7 @@ Periodically, the Cluster Toolkit team will update the default versions defined 
 When performing manual upgrades, following aspects need to be considered:
 
 * **Disruption and Reboots**:
-  * Upgrading GKE node pools requires node replacement or restarts. Whether triggered via blueprint redeployment, `gcloud` CLI, or the Cloud Console, upgrading a node pool initiates a rolling update. This process replaces old nodes with new ones running the updated version, which is disruptive as pods will be evicted and rescheduled.
+  * Upgrading GKE node pools requires node replacement or restarts. Whether triggered via `gcloud` CLI, the Cloud Console, or GKE auto-upgrades, upgrading a node pool initiates a rolling update. This process replaces old nodes with new ones running the updated version, which is disruptive as pods will be evicted and rescheduled.
   * Standard rolling upgrades are disruptive to tightly-coupled distributed workloads (e.g., multi-node training jobs using `JobSet`). Losing a single node in a distributed job usually causes the entire job to fail. For these workloads, operators should gracefully pause or drain their jobs (e.g., scaling JobSets/deployments to 0) and verify that a successful checkpoint has been saved to persistent storage before initiating a node pool upgrade.
 * **Pod Disruption Budgets (PDBs)**: GKE respects PDBs during upgrades. If a PDB is overly restrictive, it can block or slow down the upgrade process. Conversely, ensure PDBs are configured correctly to maintain application availability during the rolling update.  
 * **Storage Persistence**: Temporary storage volumes (like `emptyDir`) are deleted when nodes are replaced. Persistent disks (PVs) are unaffected.  
