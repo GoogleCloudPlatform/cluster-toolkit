@@ -530,12 +530,7 @@ func TestVerifyStaticSlicingActive(t *testing.T) {
 				orc.clusterDesc.NodePools = tt.nodePools
 			}
 
-			job := &orchestrator.JobDefinition{
-				MachineType: tt.machineType,
-				Topology:    tt.requestedTopo,
-			}
-
-			got, err := orc.verifyStaticSlicingActive(job)
+			got, err := orc.verifyStaticSlicingActive(tt.machineType, tt.requestedTopo)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("verifyStaticSlicingActive() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -546,7 +541,7 @@ func TestVerifyStaticSlicingActive(t *testing.T) {
 			if tt.verifyCacheHit && err == nil && got == tt.wantActive {
 				// Clear mock executor to ensure subsequent call is satisfied entirely from cache
 				orc.executor = NewMockExecutor(nil)
-				got2, err2 := orc.verifyStaticSlicingActive(job)
+				got2, err2 := orc.verifyStaticSlicingActive(tt.machineType, tt.requestedTopo)
 				if err2 != nil || got2 != tt.wantActive {
 					t.Errorf("cache hit failed: got %v, err %v", got2, err2)
 				}
@@ -1058,8 +1053,8 @@ func TestCheckNodePoolsDynamicSlicing_PolicyLookupAndCaching(t *testing.T) {
 				},
 			},
 			mockResponses: map[string][]shell.CommandResult{
-				"gcloud compute resource-policies describe tpu7x-policy --region=us-central1 --project=cloud-tpu-dev --format=value(workloadPolicy.acceleratorTopologyMode)": {
-					{ExitCode: 0, Stdout: "PROVISION_ONLY\n"},
+				"gcloud compute resource-policies describe tpu7x-policy --region=us-central1 --project=cloud-tpu-dev --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"tpu7x-policy","workloadPolicy":{"acceleratorTopologyMode":"PROVISION_ONLY"}}`},
 				},
 			},
 			wantResult: true,
@@ -1093,11 +1088,37 @@ func TestCheckNodePoolsDynamicSlicing_PolicyLookupAndCaching(t *testing.T) {
 				},
 			},
 			mockResponses: map[string][]shell.CommandResult{
-				"gcloud compute resource-policies describe tpu7x-policy --region=us-central1 --project=cloud-tpu-dev --format=value(workloadPolicy.acceleratorTopologyMode)": {
-					{ExitCode: 0, Stdout: "PROVISION_ONLY\n"},
+				"gcloud compute resource-policies describe tpu7x-policy --region=us-central1 --project=cloud-tpu-dev --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"tpu7x-policy","workloadPolicy":{"acceleratorTopologyMode":"PROVISION_ONLY"}}`},
 				},
 			},
 			wantResult: true,
+			wantErr:    false,
+		},
+		{
+			name: "Success - Permission denied reading policy logs warning and assumes non-dynamic slicing without failing",
+			opts: ManifestOptions{
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "cloud-tpu-dev",
+				Topology:        "2x2x2",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "np-0",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						PolicyName: "restricted-policy",
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe restricted-policy --region=us-central1 --project=cloud-tpu-dev --format=json": {
+					{ExitCode: 1, Stderr: "ERROR: (gcloud.compute.resource-policies.describe) Some requests did not succeed: - Required 'compute.resourcePolicies.get' permission for '...'"},
+				},
+			},
+			wantResult: false,
 			wantErr:    false,
 		},
 		{
@@ -1119,8 +1140,8 @@ func TestCheckNodePoolsDynamicSlicing_PolicyLookupAndCaching(t *testing.T) {
 				},
 			},
 			mockResponses: map[string][]shell.CommandResult{
-				"gcloud compute resource-policies describe invalid-policy --region=us-central1 --project=cloud-tpu-dev --format=value(workloadPolicy.acceleratorTopologyMode)": {
-					{ExitCode: 1, Stderr: "ERROR: (gcloud.compute.resource-policies.describe) Could not fetch resource policy"},
+				"gcloud compute resource-policies describe invalid-policy --region=us-central1 --project=cloud-tpu-dev --format=json": {
+					{ExitCode: 1, Stderr: "ERROR: (gcloud.compute.resource-policies.describe) Internal error occurred"},
 				},
 			},
 			wantResult: false,
@@ -1135,15 +1156,15 @@ func TestCheckNodePoolsDynamicSlicing_PolicyLookupAndCaching(t *testing.T) {
 			g.projectID = tt.opts.ProjectID
 			g.clusterDesc.NodePools = tt.nodePools
 
-			got, err := g.checkNodePoolsDynamicSlicing("tpu7x-standard-4t", tt.opts, true)
+			got, err := g.checkNodePoolsDynamicSlicing("tpu7x-standard-4t", tt.opts)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("checkNodePoolsDynamicSlicing() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if got != tt.wantResult {
 				t.Errorf("checkNodePoolsDynamicSlicing() = %v, want %v", got, tt.wantResult)
 			}
-			if tt.wantResult && len(g.policyCache) == 0 {
-				t.Errorf("expected policyCache to be populated")
+			if tt.wantResult && len(g.resourcePolicyCache) == 0 {
+				t.Errorf("expected resourcePolicyCache to be populated")
 			}
 		})
 	}
