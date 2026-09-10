@@ -79,7 +79,7 @@ This section guides you through the cluster creation process.
    - `machine_type`: the machine type of the TPU.
    - `tpu_topology`: the TPU placement topology for the node pool.
    - `authorized_cidr`: The IP address range you want to allow to connect with the cluster.
-   - `reservation`: the name of the compute engine reservation for your TPU 7x nodes.
+   - `reservation_affinity`: the reservation settings (by default, specify the reservation name under Option 1, or uncomment an alternative consumption model such as DWS Flex Start, DWS Flex Start + Queued Provisioning, Spot, or On-Demand).
 
     > **Note:** The `static_node_count` is now automatically calculated from `machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`. For further details, please refer [appendix](#node-count-calculation)
 
