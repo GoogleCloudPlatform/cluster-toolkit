@@ -238,10 +238,8 @@ deployment_groups:
       jobset:
         install: true
 
-  # When utilizing GCS Fuse Storage Profiles, the GKE Service Agent requires permissions on the
-  # bucket to manage storage caching. By default, this module automatically grants 'roles/storage.admin'.
-  # For least-privilege custom role configuration or shared buckets, see modules/file-system/gke-persistent-volume/README.md.
-  # Persistent Volume for training data using GCS Fuse Storage Profile
+  # Persistent Volume for training data using GCS Fuse Storage Profile.
+  # For shared buckets or custom IAM roles, see modules/file-system/gke-persistent-volume/README.md
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
     use: [training_bucket, gke-tpu-v6-cluster]
