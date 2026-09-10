@@ -59,12 +59,19 @@
         suffix: chs_clone
       register: chs_temp_dir
 
+    - name: Get GCP access token for Git authentication
+      ansible.builtin.command: gcloud auth print-access-token
+      register: gcp_access_token
+      changed_when: false
+
     - name: Clone CHS repository
       ansible.builtin.git:
         repo: "{{ chs_repo }}"
         dest: "{{ chs_temp_dir.path }}"
         version: release
         accept_hostkey: true
+      environment:
+        GIT_HTTP_EXTRAHEADER: "Authorization: Bearer {{ gcp_access_token.stdout | trim }}"
       async: 120
       poll: 10
 
