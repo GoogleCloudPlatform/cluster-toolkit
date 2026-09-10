@@ -513,11 +513,30 @@ func TestResolveTPUWorkloadPolicy(t *testing.T) {
 				"gcloud compute resource-policies describe tpu7x-16-2x2x2-placement-policy --region=us-central1 --project=my-project --format=json": {
 					{ExitCode: 0, Stdout: `{"name":"tpu7x-16-2x2x2-placement-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"2x2x4"}}`},
 				},
-				"gcloud compute resource-policies list --project=my-project --filter=region:( us-central1 ) AND workloadPolicy.acceleratorTopology=2x2x2 AND workloadPolicy.type=HIGH_THROUGHPUT --format=value(name)": {
+				"gcloud compute resource-policies list --project=my-project --filter=region:( us-central1 ) AND workloadPolicy.acceleratorTopology=2x2x2 AND workloadPolicy.type=HIGH_THROUGHPUT --format=value(name,workloadPolicy.acceleratorTopologyMode)": {
 					{ExitCode: 0, Stdout: "valid-regional-2x2x2-policy\n"},
 				},
 			},
 			wantPolicy: "valid-regional-2x2x2-policy",
+		},
+		{
+			name: "Canonical policy describe returns PROVISION_ONLY mode, falls back to regional list and skips non-static modes",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe tpu7x-16-2x2x2-placement-policy --region=us-central1 --project=my-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"tpu7x-16-2x2x2-placement-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"2x2x2","acceleratorTopologyMode":"PROVISION_ONLY"}}`},
+				},
+				"gcloud compute resource-policies list --project=my-project --filter=region:( us-central1 ) AND workloadPolicy.acceleratorTopology=2x2x2 AND workloadPolicy.type=HIGH_THROUGHPUT --format=value(name,workloadPolicy.acceleratorTopologyMode)": {
+					{ExitCode: 0, Stdout: "dynamic-candidate PROVISION_ONLY\nfuture-flavor FUTURE_MODE\nstatic-regional-2x2x2-policy AUTO_CONNECT\n"},
+				},
+			},
+			wantPolicy: "static-regional-2x2x2-policy",
 		},
 		{
 			name: "Permission denied on describe falls back to canonical policy name without error",
@@ -548,7 +567,7 @@ func TestResolveTPUWorkloadPolicy(t *testing.T) {
 				"gcloud compute resource-policies describe tpu7x-16-2x2x2-placement-policy": {
 					{ExitCode: 1, Stderr: "ERROR: not found"},
 				},
-				"gcloud compute resource-policies list --project=my-project --filter=region:( us-central1 ) AND workloadPolicy.acceleratorTopology=2x2x2 AND workloadPolicy.type=HIGH_THROUGHPUT --format=value(name)": {
+				"gcloud compute resource-policies list --project=my-project --filter=region:( us-central1 ) AND workloadPolicy.acceleratorTopology=2x2x2 AND workloadPolicy.type=HIGH_THROUGHPUT --format=value(name,workloadPolicy.acceleratorTopologyMode)": {
 					{ExitCode: 0, Stdout: "custom-regional-2x2x2-policy\n"},
 				},
 			},

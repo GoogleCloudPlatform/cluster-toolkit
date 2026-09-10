@@ -240,7 +240,7 @@ func (g *GKEOrchestrator) checkNodePoolsDynamicSlicing(requestedMachineName stri
 	}
 
 	for _, np := range g.clusterDesc.NodePools {
-		if !config.IsTPU(np.Config.MachineType) || !strings.EqualFold(np.Config.MachineType, requestedMachineName) || np.PlacementPolicy == nil {
+		if !strings.EqualFold(np.Config.MachineType, requestedMachineName) || np.PlacementPolicy == nil {
 			continue
 		}
 

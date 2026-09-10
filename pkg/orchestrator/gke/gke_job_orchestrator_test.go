@@ -94,6 +94,7 @@ func newTestGKEOrchestrator(executor Executor) *GKEOrchestrator {
 		topologyCache:            make(map[string]string),
 		dynamicSlicingCache:      make(map[string]bool),
 		staticSlicingCache:       make(map[string]bool),
+		resourcePolicyCache:      make(map[string]*GCEWorkloadPolicy),
 	}
 }
 
