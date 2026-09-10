@@ -193,7 +193,7 @@ script or config file. Here's what you would execute to get the default folder s
 By default, input to the datapipeline step should be deposited in as
 
 ```bash
-gsutil cp your-folding.json gs://[your-globally-unique-af3-jobs-bucket]/data_pipeline_toprocess
+gcloud storage cp your-folding.json gs://[your-globally-unique-af3-jobs-bucket]/data_pipeline_toprocess
 ```
 
 Results will be found in
@@ -205,7 +205,7 @@ gs://[your-globally-unique-af3-jobs-bucket]/data_pipeline_results
 For inference, jobs should be deposited in
 
 ```bash
-gsutil cp your-folding.json gs://[your-globally-unique-af3-jobs-bucket]/inference_toprocess
+gcloud storage cp your-folding.json gs://[your-globally-unique-af3-jobs-bucket]/inference_toprocess
 ```
 
 Results will be found in

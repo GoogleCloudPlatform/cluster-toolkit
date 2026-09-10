@@ -55,7 +55,7 @@ small number of prerequisites that must be installed ahead of time:
 - [Git](https://github.com/git-guides/install-git)
 - [Terraform CLI](https://www.terraform.io/downloads) installation
 - [Google Cloud CLI](https://cloud.google.com/cli) installation (`gcloud`
-  and `gsutil` utilities)
+  CLI including `gcloud storage`)
   
 #### Download TKFE
 

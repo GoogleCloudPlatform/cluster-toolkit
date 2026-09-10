@@ -136,7 +136,7 @@ steps:
 
               DEPLOYMENT_NAME="gke-g4-conf-$$BUILD_ID_SHORT"
               echo "Checking for and clearing leaked Terraform state locks..."
-              gsutil rm "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
