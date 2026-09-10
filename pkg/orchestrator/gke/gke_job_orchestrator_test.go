@@ -3936,6 +3936,22 @@ func TestEnsureMTCWorkloadIdentity_Restart(t *testing.T) {
 		patchedDS := false
 		dynClient := &mockDynamicClient{
 			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				if name == "multitier-driver" {
+					return &unstructured.Unstructured{
+						Object: map[string]interface{}{
+							"metadata": map[string]interface{}{
+								"name":       "multitier-driver",
+								"generation": int64(1),
+							},
+							"status": map[string]interface{}{
+								"observedGeneration":     int64(1),
+								"desiredNumberScheduled": int64(1),
+								"numberReady":            int64(1),
+								"updatedNumberScheduled": int64(1),
+							},
+						},
+					}, nil
+				}
 				return &unstructured.Unstructured{
 					Object: map[string]interface{}{
 						"metadata": map[string]interface{}{
@@ -3977,6 +3993,22 @@ func TestEnsureMTCWorkloadIdentity_Restart(t *testing.T) {
 		deletedPods := []string{}
 		dynClient := &mockDynamicClient{
 			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				if name == "multitier-driver" {
+					return &unstructured.Unstructured{
+						Object: map[string]interface{}{
+							"metadata": map[string]interface{}{
+								"name":       "multitier-driver",
+								"generation": int64(1),
+							},
+							"status": map[string]interface{}{
+								"observedGeneration":     int64(1),
+								"desiredNumberScheduled": int64(1),
+								"numberReady":            int64(1),
+								"updatedNumberScheduled": int64(1),
+							},
+						},
+					}, nil
+				}
 				return &unstructured.Unstructured{
 					Object: map[string]interface{}{
 						"metadata": map[string]interface{}{
@@ -4043,6 +4075,10 @@ func TestEnsureMTCWorkloadIdentity_RBAC(t *testing.T) {
 		},
 	}
 
+	oldInterval := daemonSetPollInterval
+	daemonSetPollInterval = 1 * time.Millisecond
+	defer func() { daemonSetPollInterval = oldInterval }()
+
 	t.Run("Get SA fails - Self-healing logs warning and continues without failing job", func(t *testing.T) {
 		dynClient := &mockDynamicClient{
 			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
@@ -4103,6 +4139,22 @@ func TestEnsureMTCWorkloadIdentity_RBAC(t *testing.T) {
 	t.Run("403 Forbidden on List driver pods - Continues gracefully", func(t *testing.T) {
 		dynClient := &mockDynamicClient{
 			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				if name == "multitier-driver" {
+					return &unstructured.Unstructured{
+						Object: map[string]interface{}{
+							"metadata": map[string]interface{}{
+								"name":       "multitier-driver",
+								"generation": int64(1),
+							},
+							"status": map[string]interface{}{
+								"observedGeneration":     int64(1),
+								"desiredNumberScheduled": int64(1),
+								"numberReady":            int64(1),
+								"updatedNumberScheduled": int64(1),
+							},
+						},
+					}, nil
+				}
 				return &unstructured.Unstructured{
 					Object: map[string]interface{}{
 						"metadata": map[string]interface{}{
@@ -4113,6 +4165,9 @@ func TestEnsureMTCWorkloadIdentity_RBAC(t *testing.T) {
 			},
 			updateFunc: func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
 				return obj, nil
+			},
+			patchFunc: func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, fmt.Errorf("patch failed")
 			},
 			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
 				return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "", fmt.Errorf("forbidden"))
@@ -4129,19 +4184,19 @@ func TestEnsureMTCWorkloadIdentity_RBAC(t *testing.T) {
 	})
 }
 
-func TestWaitForMTCDriverDaemonSetReady(t *testing.T) {
+func TestWaitForDaemonSetRollout(t *testing.T) {
 	oldInterval := daemonSetPollInterval
 	daemonSetPollInterval = 1 * time.Millisecond
 	defer func() { daemonSetPollInterval = oldInterval }()
 
 	t.Run("DaemonSet ready immediately", func(t *testing.T) {
+		calls := 0
 		dynClient := &mockDynamicClient{
 			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				calls++
 				return &unstructured.Unstructured{
 					Object: map[string]interface{}{
-						"metadata": map[string]interface{}{
-							"generation": int64(2),
-						},
+						"metadata": map[string]interface{}{"generation": int64(2)},
 						"status": map[string]interface{}{
 							"observedGeneration":     int64(2),
 							"desiredNumberScheduled": int64(3),
@@ -4152,10 +4207,13 @@ func TestWaitForMTCDriverDaemonSetReady(t *testing.T) {
 				}, nil
 			},
 		}
-		waitForMTCDriverDaemonSetReady(context.Background(), dynClient, "gke-managed-checkpointing")
+		waitForDaemonSetRollout(context.Background(), dynClient, "gke-managed-checkpointing", "multitier-driver-uuid")
+		if calls != 1 {
+			t.Errorf("expected 1 call for immediate ready, got %d", calls)
+		}
 	})
 
-	t.Run("DaemonSet ready after polling", func(t *testing.T) {
+	t.Run("DaemonSet rollout completes after polling", func(t *testing.T) {
 		calls := 0
 		dynClient := &mockDynamicClient{
 			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
@@ -4163,9 +4221,7 @@ func TestWaitForMTCDriverDaemonSetReady(t *testing.T) {
 				if calls < 2 {
 					return &unstructured.Unstructured{
 						Object: map[string]interface{}{
-							"metadata": map[string]interface{}{
-								"generation": int64(2),
-							},
+							"metadata": map[string]interface{}{"generation": int64(2)},
 							"status": map[string]interface{}{
 								"observedGeneration":     int64(2),
 								"desiredNumberScheduled": int64(3),
@@ -4177,9 +4233,7 @@ func TestWaitForMTCDriverDaemonSetReady(t *testing.T) {
 				}
 				return &unstructured.Unstructured{
 					Object: map[string]interface{}{
-						"metadata": map[string]interface{}{
-							"generation": int64(2),
-						},
+						"metadata": map[string]interface{}{"generation": int64(2)},
 						"status": map[string]interface{}{
 							"observedGeneration":     int64(2),
 							"desiredNumberScheduled": int64(3),
@@ -4190,7 +4244,7 @@ func TestWaitForMTCDriverDaemonSetReady(t *testing.T) {
 				}, nil
 			},
 		}
-		waitForMTCDriverDaemonSetReady(context.Background(), dynClient, "gke-managed-checkpointing")
+		waitForDaemonSetRollout(context.Background(), dynClient, "gke-managed-checkpointing", "multitier-driver-uuid")
 		if calls < 2 {
 			t.Errorf("expected at least 2 calls for polling, got %d", calls)
 		}
@@ -4199,42 +4253,140 @@ func TestWaitForMTCDriverDaemonSetReady(t *testing.T) {
 	t.Run("403 Forbidden returns gracefully", func(t *testing.T) {
 		dynClient := &mockDynamicClient{
 			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "daemonsets"}, "multitier-driver", fmt.Errorf("forbidden"))
+				return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "daemonsets"}, name, fmt.Errorf("forbidden"))
 			},
 		}
-		waitForMTCDriverDaemonSetReady(context.Background(), dynClient, "gke-managed-checkpointing")
+		waitForDaemonSetRollout(context.Background(), dynClient, "gke-managed-checkpointing", "multitier-driver-uuid")
 	})
 
-	t.Run("DaemonSet NotFound returns gracefully", func(t *testing.T) {
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "daemonsets"}, "multitier-driver")
-			},
-		}
-		waitForMTCDriverDaemonSetReady(context.Background(), dynClient, "gke-managed-checkpointing")
-	})
-
-	t.Run("Context canceled/timeout returns gracefully", func(t *testing.T) {
+	t.Run("Context canceled returns gracefully", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
-		cancel() // Cancel immediately
+		cancel()
 		dynClient := &mockDynamicClient{
 			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{}, nil
+			},
+		}
+		waitForDaemonSetRollout(ctx, dynClient, "gke-managed-checkpointing", "multitier-driver-uuid")
+	})
+
+	t.Run("Transient error during polling retries and succeeds", func(t *testing.T) {
+		calls := 0
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				calls++
+				if calls == 1 {
+					return nil, fmt.Errorf("transient network failure")
+				}
 				return &unstructured.Unstructured{
 					Object: map[string]interface{}{
-						"metadata": map[string]interface{}{
-							"generation": int64(2),
-						},
+						"metadata": map[string]interface{}{"generation": int64(2)},
 						"status": map[string]interface{}{
 							"observedGeneration":     int64(2),
 							"desiredNumberScheduled": int64(3),
-							"numberReady":            int64(1),
-							"updatedNumberScheduled": int64(1),
+							"numberReady":            int64(3),
+							"updatedNumberScheduled": int64(3),
 						},
 					},
 				}, nil
 			},
 		}
-		waitForMTCDriverDaemonSetReady(ctx, dynClient, "gke-managed-checkpointing")
+		waitForDaemonSetRollout(context.Background(), dynClient, "gke-managed-checkpointing", "multitier-driver-uuid")
+		if calls < 2 {
+			t.Errorf("expected at least 2 polling calls after transient retry, got %d", calls)
+		}
+	})
+}
+
+func TestIsDaemonSetRolloutComplete(t *testing.T) {
+	tests := []struct {
+		name      string
+		gen       int64
+		obsGen    int64
+		desired   int64
+		ready     int64
+		updated   int64
+		wantReady bool
+	}{
+		{
+			name:      "zero desired scheduled pods (uninitialized)",
+			gen:       1,
+			obsGen:    1,
+			desired:   0,
+			ready:     0,
+			updated:   0,
+			wantReady: false,
+		},
+		{
+			name:      "observedGeneration behind spec generation",
+			gen:       2,
+			obsGen:    1,
+			desired:   3,
+			ready:     3,
+			updated:   3,
+			wantReady: false,
+		},
+		{
+			name:      "ready pods less than desired",
+			gen:       2,
+			obsGen:    2,
+			desired:   3,
+			ready:     2,
+			updated:   3,
+			wantReady: false,
+		},
+		{
+			name:      "updated pods less than desired",
+			gen:       2,
+			obsGen:    2,
+			desired:   3,
+			ready:     3,
+			updated:   2,
+			wantReady: false,
+		},
+		{
+			name:      "all pods ready and updated",
+			gen:       2,
+			obsGen:    2,
+			desired:   3,
+			ready:     3,
+			updated:   3,
+			wantReady: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dsObj := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"generation": tt.gen,
+					},
+					"status": map[string]interface{}{
+						"observedGeneration":     tt.obsGen,
+						"desiredNumberScheduled": tt.desired,
+						"numberReady":            tt.ready,
+						"updatedNumberScheduled": tt.updated,
+					},
+				},
+			}
+			got := isDaemonSetRolloutComplete(dsObj)
+			if got != tt.wantReady {
+				t.Errorf("isDaemonSetRolloutComplete() = %v, want %v", got, tt.wantReady)
+			}
+		})
+	}
+
+	t.Run("nil dsObj returns false", func(t *testing.T) {
+		if isDaemonSetRolloutComplete(nil) {
+			t.Errorf("isDaemonSetRolloutComplete(nil) = true, want false")
+		}
+	})
+
+	t.Run("nil dsObj.Object returns false", func(t *testing.T) {
+		if isDaemonSetRolloutComplete(&unstructured.Unstructured{}) {
+			t.Errorf("isDaemonSetRolloutComplete(empty) = true, want false")
+		}
 	})
 }
 
@@ -4603,6 +4755,46 @@ func TestGetMTCDaemonSet_EdgeCases(t *testing.T) {
 		}
 	})
 
+	t.Run("Context canceled on Get returns error without calling List", func(t *testing.T) {
+		listCalled := false
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, context.Canceled
+			},
+			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				listCalled = true
+				return &unstructured.UnstructuredList{}, nil
+			},
+		}
+		_, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
+		if err == nil {
+			t.Fatalf("expected context.Canceled error, got nil")
+		}
+		if listCalled {
+			t.Errorf("expected List NOT to be called when Get returns context.Canceled")
+		}
+	})
+
+	t.Run("Transient network error on Get returns error without calling List", func(t *testing.T) {
+		listCalled := false
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, fmt.Errorf("connection refused")
+			},
+			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				listCalled = true
+				return &unstructured.UnstructuredList{}, nil
+			},
+		}
+		_, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
+		if err == nil {
+			t.Fatalf("expected network error, got nil")
+		}
+		if listCalled {
+			t.Errorf("expected List NOT to be called when Get returns network error")
+		}
+	})
+
 	t.Run("Filters unrelated DaemonSets and matches by label", func(t *testing.T) {
 		dynClient := &mockDynamicClient{
 			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
@@ -4643,6 +4835,10 @@ func TestGetMTCDaemonSet_EdgeCases(t *testing.T) {
 }
 
 func TestRestartMTCDriverPods_DynamicName(t *testing.T) {
+	oldInterval := daemonSetPollInterval
+	daemonSetPollInterval = 1 * time.Millisecond
+	defer func() { daemonSetPollInterval = oldInterval }()
+
 	patchedName := ""
 	dynClient := &mockDynamicClient{
 		getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
@@ -4694,6 +4890,10 @@ func TestRestartMTCDriverPods_DynamicName(t *testing.T) {
 }
 
 func TestRestartMTCDriverPods_ForbiddenAndNotFound(t *testing.T) {
+	oldInterval := daemonSetPollInterval
+	daemonSetPollInterval = 1 * time.Millisecond
+	defer func() { daemonSetPollInterval = oldInterval }()
+
 	t.Run("403 Forbidden on Patch skips pod deletion fallback", func(t *testing.T) {
 		deleteCalled := false
 		dynClient := &mockDynamicClient{
@@ -4737,6 +4937,68 @@ func TestRestartMTCDriverPods_ForbiddenAndNotFound(t *testing.T) {
 		restartMTCDriverPods(context.Background(), dynClient, "gke-managed-checkpointing")
 		if deleteCalled {
 			t.Errorf("expected delete fallback NOT to be called when DaemonSet is not found")
+		}
+	})
+
+	t.Run("Unexpected error on getMTCDaemonSet skips pod deletion fallback", func(t *testing.T) {
+		deleteCalled := false
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, fmt.Errorf("connection timeout")
+			},
+			deleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
+				deleteCalled = true
+				return nil
+			},
+		}
+
+		restartMTCDriverPods(context.Background(), dynClient, "gke-managed-checkpointing")
+		if deleteCalled {
+			t.Errorf("expected delete fallback NOT to be called when getMTCDaemonSet returns unexpected error")
+		}
+	})
+
+	t.Run("Non-forbidden error on Patch triggers pod deletion fallback", func(t *testing.T) {
+		deleteCalled := false
+		dynClient := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{
+							"name": "multitier-driver",
+						},
+						"status": map[string]interface{}{
+							"observedGeneration":     int64(1),
+							"desiredNumberScheduled": int64(1),
+							"numberReady":            int64(1),
+							"updatedNumberScheduled": int64(1),
+						},
+					},
+				}, nil
+			},
+			patchFunc: func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, fmt.Errorf("internal patch error")
+			},
+			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				return &unstructured.UnstructuredList{
+					Items: []unstructured.Unstructured{
+						{
+							Object: map[string]interface{}{
+								"metadata": map[string]interface{}{"name": "multitier-driver-pod-1"},
+							},
+						},
+					},
+				}, nil
+			},
+			deleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
+				deleteCalled = true
+				return nil
+			},
+		}
+
+		restartMTCDriverPods(context.Background(), dynClient, "gke-managed-checkpointing")
+		if !deleteCalled {
+			t.Errorf("expected delete fallback to be called when patch fails with non-forbidden error")
 		}
 	})
 }
