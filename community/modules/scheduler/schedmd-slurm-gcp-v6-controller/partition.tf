@@ -107,7 +107,7 @@ module "nodeset_cleanup" {
 }
 
 locals {
-  # NodeSet-level engine resolution: DWS Flex automatically resolves to MIG; standard compute nodes default to BULK_INSERT (MIG is opt-in)
+  # NodeSet-level engine resolution: DWS Flex automatically resolves to MIG; standard compute nodes default to BULK_INSERT (MIG is strictly opt-in)
   nodeset_resolved_engine = {
     for name, ns in local.nodeset_map : name => (
       ns.dws_flex.enabled && !ns.dws_flex.use_bulk_insert ? "MIG" : (
@@ -117,10 +117,28 @@ locals {
     )
   }
 
-  # Multiple instance groups when node count exceeds 1000
+  # GPU count resolution: uses ns.gpu_count, falls back to ns.gpu.count, then 4
+  nodeset_gpu_count = {
+    for name, ns in local.nodeset_map : name => coalesce(try(ns.gpu_count, null), try(ns.gpu.count, null), 4)
+  }
+
+  # Slicing size for MIG NodeSets: for accelerator topologies (e.g. A4X with 1x72),
+  # slice size is (dim1 * dim2) / gpus_per_vm. Kept null when no topology is configured.
+  nodeset_slice_size = {
+    for name, ns in local.nodeset_map : name => (
+      ns.accelerator_topology != null && ns.accelerator_topology != "" ? (
+        max(1, floor(
+          (tonumber(split("x", lower(trimspace(ns.accelerator_topology)))[0]) * tonumber(split("x", lower(trimspace(ns.accelerator_topology)))[1])) /
+          max(1, local.nodeset_gpu_count[name])
+        ))
+      ) : null
+    )
+  }
+
+  # Multiple instance groups when node count exceeds slice size (1000 for standard MIGs, or hosts_per_slice for GPU topologies)
   nodeset_migs = merge([
     for name, ns in local.nodeset_map : {
-      for idx in range(ceil(max(ns.node_count_static + ns.node_count_dynamic_max, 1) / 1000.0)) : (
+      for idx in range(ceil(max(ns.node_count_static + ns.node_count_dynamic_max, 1) / (coalesce(local.nodeset_slice_size[name], 1000) * 1.0))) : (
         "${name}-mig-${idx}"
         ) => {
         nodeset_name       = name
@@ -151,6 +169,27 @@ data "google_compute_zones" "available" {
   region   = each.value
 }
 
+resource "google_compute_resource_policy" "nodeset_workload_policy" {
+  for_each = {
+    for k, mig in local.nodeset_migs : k => mig
+    if mig.nodeset.accelerator_topology != null && mig.nodeset.accelerator_topology != ""
+  }
+
+  # Ensure resource policy name adheres to GCE's 63-character RFC 1035 limit, stripping trailing hyphens
+  name = (
+    length("${each.value.mig_name}-wp") <= 63 ?
+    "${each.value.mig_name}-wp" :
+    "${replace(substr("${local.slurm_cluster_name}-${each.value.nodeset_name}", 0, 63 - length("-mig-${each.value.index}-wp")), "/-+$/", "")}-mig-${each.value.index}-wp"
+  )
+  region  = each.value.region
+  project = var.project_id
+
+  workload_policy {
+    type                 = "HIGH_THROUGHPUT"
+    accelerator_topology = lower(trimspace(each.value.nodeset.accelerator_topology))
+  }
+}
+
 resource "google_compute_region_instance_group_manager" "nodeset_mig" {
   for_each           = local.nodeset_migs
   name               = each.value.mig_name
@@ -161,6 +200,17 @@ resource "google_compute_region_instance_group_manager" "nodeset_mig" {
 
   version {
     instance_template = each.value.template_link
+  }
+
+  dynamic "resource_policies" {
+    for_each = (
+      each.value.nodeset.accelerator_topology != null && each.value.nodeset.accelerator_topology != ""
+      ? [google_compute_resource_policy.nodeset_workload_policy[each.key].self_link]
+      : []
+    )
+    content {
+      workload_policy = resource_policies.value
+    }
   }
 
   distribution_policy_zones = length(local.nodeset_mig_zones[each.key]) > 0 ? local.nodeset_mig_zones[each.key] : (
@@ -220,6 +270,7 @@ locals {
     enable_maintenance_reservation   = ns.enable_maintenance_reservation
     enable_opportunistic_maintenance = ns.enable_opportunistic_maintenance
     accelerator_topology             = ns.accelerator_topology
+    slice_size                       = local.nodeset_slice_size[ns.nodeset_name]
   }]
 }
 

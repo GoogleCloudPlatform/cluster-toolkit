@@ -1816,14 +1816,21 @@ class Lookup:
         nodeset = self.cfg.nodeset.get(nodeset_name)
         if not nodeset:
             return False
-        if getattr(nodeset, "dws_flex", None) and getattr(nodeset.dws_flex, "enabled", False):
-            return False
-        engine = getattr(nodeset, "provisioning_engine", None)
+        dws_flex = nodeset.get("dws_flex") if isinstance(nodeset, dict) else getattr(nodeset, "dws_flex", None)
+        if dws_flex:
+            enabled = dws_flex.get("enabled", False) if isinstance(dws_flex, dict) else getattr(dws_flex, "enabled", False)
+            if enabled:
+                return False
+        engine = nodeset.get("provisioning_engine") if isinstance(nodeset, dict) else getattr(nodeset, "provisioning_engine", None)
         if engine == "BULK_INSERT":
             return False
         if engine == "MIG":
             return True
-        if getattr(nodeset, "mig_name", None) is not None:
+        topo = nodeset.get("accelerator_topology") if isinstance(nodeset, dict) else getattr(nodeset, "accelerator_topology", None)
+        if topo:
+            return True
+        mig_name = nodeset.get("mig_name") if isinstance(nodeset, dict) else getattr(nodeset, "mig_name", None)
+        if mig_name and not isinstance(mig_name, dict):
             return True
         return False
 
@@ -1836,11 +1843,54 @@ class Lookup:
         """Returns target MIG name for a given NodeSet, indexed from 0 for consistent scale expansion."""
         return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-mig-{index}"
 
+    def nodeset_slice_size(self, nodeset_name: str) -> int:
+        """Returns the slice size (hosts per slice) for a given NodeSet.
+        
+        For accelerator topologies (e.g. A4X with 1x72), computes hosts per slice
+        or reads slice_size from config. Defaults to 1000 for standard MIGs.
+        """
+        nodeset = self.cfg.nodeset.get(nodeset_name)
+        if not nodeset:
+            return 1000
+        slice_val = nodeset.get("slice_size") if isinstance(nodeset, dict) else getattr(nodeset, "slice_size", None)
+        if slice_val:
+            try:
+                return max(1, int(slice_val))
+            except (ValueError, TypeError):
+                pass
+        topo = nodeset.get("accelerator_topology") if isinstance(nodeset, dict) else getattr(nodeset, "accelerator_topology", None)
+        if topo:
+            log.debug(f"slice_size not present in config for {nodeset_name}; computing from accelerator_topology {topo}")
+            try:
+                dims = [int(x) for x in topo.lower().strip().split("x")]
+                if len(dims) == 2 and dims[0] > 0 and dims[1] > 0:
+                    total_gpus = dims[0] * dims[1]
+                    gpus_per_vm = 4
+                    gpu_attr = nodeset.get("gpu") if isinstance(nodeset, dict) else getattr(nodeset, "gpu", None)
+                    if gpu_attr and hasattr(gpu_attr, "count") and gpu_attr.count:
+                        gpus_per_vm = int(gpu_attr.count)
+                    elif isinstance(gpu_attr, dict) and "count" in gpu_attr and gpu_attr["count"]:
+                        gpus_per_vm = int(gpu_attr["count"])
+                    else:
+                        template_link = nodeset.get("instance_template") if isinstance(nodeset, dict) else getattr(nodeset, "instance_template", None)
+                        if template_link:
+                            try:
+                                t_info = self.template_info(template_link)
+                                if t_info and t_info.machine_type and t_info.machine_type.accelerators:
+                                    gpus_per_vm = t_info.machine_type.accelerators[0].count
+                            except Exception:
+                                pass
+                    return max(1, total_gpus // max(1, gpus_per_vm))
+            except Exception as e:
+                log.warning(f"Failed to calculate slice size from topology {topo} for {nodeset_name}: {e}")
+        return 1000
+
     def node_mig_name(self, node_name: str) -> str:
         """Returns the specific MIG name for a given node."""
         nodeset_name = self.node_nodeset_name(node_name)
         idx = self.node_index(node_name)
-        mig_idx = idx // 1000
+        slice_size = self.nodeset_slice_size(nodeset_name)
+        mig_idx = idx // slice_size
         return self.mig_name(nodeset_name, index=mig_idx)
 
     def node_is_fr(self, node_name:str) -> bool:

@@ -1129,6 +1129,54 @@ func TestConditionalValidator_Triggers(t *testing.T) {
 			t.Fatalf("validation should have skipped, but got error: %v", err)
 		}
 	})
+
+	t.Run("passes_when_triggers_map_matches", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"provisioning_engine":  cty.StringVal("MIG"),
+			"enable_placement":     cty.True,
+			"accelerator_topology": cty.StringVal("1x72"),
+		})
+		rule := modulereader.ValidationRule{
+			Validator: "conditional",
+			Inputs: map[string]interface{}{
+				"triggers": map[string]interface{}{
+					"provisioning_engine": "MIG",
+					"enable_placement":    true,
+				},
+				"dependent": "accelerator_topology",
+			},
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("expected triggers map to pass, got: %v", err)
+		}
+	})
+
+	t.Run("fails_when_triggers_map_matches_but_dependent_missing", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"provisioning_engine": cty.StringVal("MIG"),
+			"enable_placement":    cty.True,
+		})
+		rule := modulereader.ValidationRule{
+			Validator: "conditional",
+			Inputs: map[string]interface{}{
+				"triggers": map[string]interface{}{
+					"provisioning_engine": "MIG",
+					"enable_placement":    true,
+				},
+				"dependent": "accelerator_topology",
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected error when triggers match and dependent is missing, got nil")
+		}
+		expectedMsg := `variable "accelerator_topology" is required when [enable_placement=true, provisioning_engine=MIG] condition is met`
+		if !strings.Contains(err.Error(), expectedMsg) {
+			t.Fatalf("expected error message %q, got %q", expectedMsg, err.Error())
+		}
+	})
 }
 
 func TestConditionalValidator_Dependents(t *testing.T) {
@@ -1527,6 +1575,61 @@ func TestConditionalRegexValidator(t *testing.T) {
 		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
 		if err != nil {
 			t.Fatalf("unexpected error when trigger is unknown: %v", err)
+		}
+	})
+
+	// 8. Fails when required is true and dependent is empty/missing
+	t.Run("fails_when_required_and_dependent_is_empty", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"dws_flex": cty.ObjectVal(map[string]cty.Value{
+				"enabled": cty.True,
+			}),
+			"enable_placement": cty.True,
+		})
+		reqRule := modulereader.ValidationRule{
+			Validator: "conditional_regex",
+			Inputs: map[string]interface{}{
+				"triggers": map[string]interface{}{
+					"dws_flex.enabled": true,
+					"enable_placement": true,
+				},
+				"dependent": "machine_type",
+				"pattern":   "^(a3-ultragpu-|a4-|h4d-)",
+				"required":  true,
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], reqRule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected error when required is true and dependent is missing, got nil")
+		}
+	})
+
+	// 9. Passes when required is true and dependent is unknown (dynamic reference)
+	t.Run("passes_when_required_and_dependent_is_unknown", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"dws_flex": cty.ObjectVal(map[string]cty.Value{
+				"enabled": cty.True,
+			}),
+			"enable_placement": cty.True,
+			"machine_type":     cty.UnknownVal(cty.String),
+		})
+		reqRule := modulereader.ValidationRule{
+			Validator: "conditional_regex",
+			Inputs: map[string]interface{}{
+				"triggers": map[string]interface{}{
+					"dws_flex.enabled": true,
+					"enable_placement": true,
+				},
+				"dependent": "machine_type",
+				"pattern":   "^(a3-ultragpu-|a4-|h4d-)",
+				"required":  true,
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], reqRule, bp.Groups[0], 0)
+		if err != nil {
+			t.Fatalf("expected validation to pass/defer when required is true and dependent is unknown, got: %v", err)
 		}
 	})
 }

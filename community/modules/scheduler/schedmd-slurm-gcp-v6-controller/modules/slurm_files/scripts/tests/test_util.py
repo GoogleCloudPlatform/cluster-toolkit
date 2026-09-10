@@ -971,6 +971,8 @@ def test_is_nodeset_mig():
             "flex_ns": TstNodeset(nodeset_name="flex_ns", provisioning_engine="MIG", dws_flex=types.SimpleNamespace(enabled=True)),
             "bulk_ns": TstNodeset(nodeset_name="bulk_ns", provisioning_engine="BULK_INSERT"),
             "bulk_override_ns": TstNodeset(nodeset_name="bulk_override_ns", provisioning_engine="BULK_INSERT", mig_name="testcl-bulk_override_ns-mig-0"),
+            "topo_auto_ns": TstNodeset(nodeset_name="topo_auto_ns", provisioning_engine="AUTO", accelerator_topology="1x72"),
+            "topo_default_ns": TstNodeset(nodeset_name="topo_default_ns", accelerator_topology="1x72"),
         },
     )
     lkp = util.Lookup(cfg)
@@ -978,6 +980,8 @@ def test_is_nodeset_mig():
     assert lkp.is_nodeset_mig("flex_ns") is False
     assert lkp.is_nodeset_mig("bulk_ns") is False
     assert lkp.is_nodeset_mig("bulk_override_ns") is False
+    assert lkp.is_nodeset_mig("topo_auto_ns") is True
+    assert lkp.is_nodeset_mig("topo_default_ns") is True
 
 
 def test_mig_name_multi_mig():
@@ -1293,3 +1297,103 @@ def test_check_sackd_ready_retry_and_exhaustion(mocker):
     mock_run.assert_called_with("systemctl status sackd", timeout=30, check=False)
     assert mock_sleep.call_count == 1
     mock_sleep.assert_has_calls([call(10.0)])
+
+
+def test_nodeset_slice_size():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "std_ns": TstNodeset(nodeset_name="std_ns"),
+            "explicit_slice_ns": TstNodeset(nodeset_name="explicit_slice_ns", slice_size=18),
+            "a4x_ns": TstNodeset(nodeset_name="a4x_ns", accelerator_topology="1x72", gpu={"count": 4}),
+            "a4x_2slice_ns": TstNodeset(nodeset_name="a4x_2slice_ns", accelerator_topology="2x72", gpu={"count": 4}),
+            "a3_topo_ns": TstNodeset(nodeset_name="a3_topo_ns", accelerator_topology="1x16", gpu={"count": 8}),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    assert lkp.nodeset_slice_size("std_ns") == 1000
+    assert lkp.nodeset_slice_size("explicit_slice_ns") == 18
+    assert lkp.nodeset_slice_size("a4x_ns") == 18
+    assert lkp.nodeset_slice_size("a4x_2slice_ns") == 36
+    assert lkp.nodeset_slice_size("a3_topo_ns") == 2
+    assert lkp.nodeset_slice_size("non_existent_ns") == 1000
+
+
+def test_nodeset_slice_size_no_attrdict_autovivification():
+    raw_dict = util.AttrDict({"nodeset_name": "cpu_ns"})
+    cfg = TstCfg(slurm_cluster_name="testcl")
+    setattr(cfg, "nodeset", {"cpu_ns": raw_dict})
+    lkp = util.Lookup(cfg)
+    assert lkp.nodeset_slice_size("cpu_ns") == 1000
+    assert lkp.is_nodeset_mig("cpu_ns") is False
+    # Confirm keys were not auto-vivified into raw_dict
+    assert "slice_size" not in raw_dict
+    assert "accelerator_topology" not in raw_dict
+    assert "provisioning_engine" not in raw_dict
+    assert "mig_name" not in raw_dict
+
+
+def test_node_mig_name_gpu_topology_slices():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                node_count_static=36,
+                accelerator_topology="1x72",
+                gpu={"count": 4},
+                slice_size=18,
+                provisioning_engine="MIG",
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    # Slice 0 (nodes 0-17) -> mig-0
+    assert lkp.node_mig_name("testcl-a4x-0") == "testcl-a4x-mig-0"
+    assert lkp.node_mig_name("testcl-a4x-17") == "testcl-a4x-mig-0"
+
+    # Slice 1 (nodes 18-35) -> mig-1
+    assert lkp.node_mig_name("testcl-a4x-18") == "testcl-a4x-mig-1"
+    assert lkp.node_mig_name("testcl-a4x-35") == "testcl-a4x-mig-1"
+
+
+@unittest.mock.patch("util.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_suspend_mig_nodes_gpu_topology_slices(mock_compute_prop, mock_execute):
+    import suspend
+
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                region="us-central1",
+                node_count_static=36,
+                accelerator_topology="1x72",
+                gpu={"count": 4},
+                slice_size=18,
+                provisioning_engine="MIG",
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    mock_execute.side_effect = lambda req: req.execute()
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+        "managedInstances": [
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-a4x-0"},
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-a4x-18"},
+        ]
+    }
+
+    # Suspend nodes across both slices
+    suspend.suspend_mig_nodes(["testcl-a4x-0", "testcl-a4x-18"], lkp=lkp)
+
+    delete_calls = mock_compute.regionInstanceGroupManagers().deleteInstances.call_args_list
+    assert len(delete_calls) == 2
+    del_migs = {call.kwargs["instanceGroupManager"] for call in delete_calls}
+    assert del_migs == {"testcl-a4x-mig-0", "testcl-a4x-mig-1"}

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"sort"
 	"strings"
 
 	"hpc-toolkit/pkg/config"
@@ -610,27 +611,25 @@ func (r *RequiredValidator) Validate(
 // It enforces that a 'dependent' variable is set or matches a value when a 'trigger' variable condition is met.
 type ConditionalValidator struct{}
 
-// Validate checks if the dependent variable satisfies the condition when the trigger variable is set.
-func (c *ConditionalValidator) Validate(
+// evalLegacyTrigger evaluates a single legacy 'trigger' variable condition.
+func evalLegacyTrigger(
 	bp config.Blueprint,
+	group config.Group,
+	modIdx int,
 	mod config.Module,
 	rule modulereader.ValidationRule,
-	group config.Group,
-	modIdx int) error {
-
-	optional, _ := parseBoolInput(rule.Inputs, "optional", true)
-
-	modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
-
+	optional bool,
+	modPath config.Path,
+) (bool, string, error) {
 	triggerName, ok := parseString(rule.Inputs["trigger"])
 	if !ok {
-		return config.BpError{Err: fmt.Errorf("validation rule for module %q is missing 'trigger'", mod.ID), Path: modPath}
+		return false, "", config.BpError{Err: fmt.Errorf("validation rule for module %q is missing 'trigger' or 'triggers'", mod.ID), Path: modPath}
 	}
 
 	triggerVal, _, err := getModuleSettingValues(bp, group, modIdx, mod, triggerName)
 	if err != nil {
 		if !optional {
-			return config.BpError{
+			return false, "", config.BpError{
 				Err:  fmt.Errorf("setting %q not found in module %q settings", triggerName, mod.ID),
 				Path: config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Settings.Dot(triggerName),
 			}
@@ -642,11 +641,62 @@ func (c *ConditionalValidator) Validate(
 	expectedRawVal, isExpectedGiven := rule.Inputs["trigger_value"]
 	triggerExpectedVal := convertToCty(expectedRawVal)
 
-	conditionMet := false
 	if !isExpectedGiven {
-		conditionMet = isVarSet(triggerVal)
-	} else {
-		conditionMet = ValuesMatch(triggerVal, evaluateAndFlatten(triggerExpectedVal))
+		return isVarSet(triggerVal), triggerName, nil
+	}
+	return ValuesMatch(triggerVal, evaluateAndFlatten(triggerExpectedVal)), triggerName, nil
+}
+
+// evalTrigger evaluates either compound 'triggers' or a legacy single 'trigger'.
+func (c *ConditionalValidator) evalTrigger(
+	bp config.Blueprint,
+	group config.Group,
+	modIdx int,
+	mod config.Module,
+	rule modulereader.ValidationRule,
+	modPath config.Path,
+) (bool, string, error) {
+	triggersRaw, hasTriggers := rule.Inputs["triggers"].(map[string]interface{})
+	if hasTriggers {
+		if !evalTriggers(bp, group, modIdx, mod, triggersRaw) {
+			return false, "", nil
+		}
+		var triggerDescs []string
+		for k, v := range triggersRaw {
+			triggerDescs = append(triggerDescs, fmt.Sprintf("%s=%v", k, v))
+		}
+		sort.Strings(triggerDescs)
+		return true, fmt.Sprintf("[%s]", strings.Join(triggerDescs, ", ")), nil
+	}
+
+	optional, _ := parseBoolInput(rule.Inputs, "optional", true)
+	met, name, err := evalLegacyTrigger(bp, group, modIdx, mod, rule, optional, modPath)
+	if err != nil {
+		return false, "", err
+	}
+	return met, fmt.Sprintf("%q", name), nil
+}
+
+func formatMissingDependentMsg(rule modulereader.ValidationRule, dependentName, triggerDesc string) string {
+	if rule.ErrorMessage != "" {
+		return rule.ErrorMessage
+	}
+	return fmt.Sprintf("variable %q is required when %s condition is met", dependentName, triggerDesc)
+}
+
+// Validate checks if the dependent variable satisfies the condition when the trigger variable is set.
+func (c *ConditionalValidator) Validate(
+	bp config.Blueprint,
+	mod config.Module,
+	rule modulereader.ValidationRule,
+	group config.Group,
+	modIdx int) error {
+
+	modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
+
+	conditionMet, triggerDesc, err := c.evalTrigger(bp, group, modIdx, mod, rule, modPath)
+	if err != nil {
+		return err
 	}
 	if !conditionMet {
 		return nil // Condition not met; skip validation for the dependent variable.
@@ -668,10 +718,7 @@ func (c *ConditionalValidator) Validate(
 
 	if !isDepExpectedGiven {
 		if !isVarSet(dependentVal) {
-			msg := rule.ErrorMessage
-			if msg == "" {
-				msg = fmt.Sprintf("variable %q is required when %q condition is met", dependentName, triggerName)
-			}
+			msg := formatMissingDependentMsg(rule, dependentName, triggerDesc)
 			return config.BpError{Err: fmt.Errorf("%s", msg), Path: depPath}
 		}
 		return nil
@@ -711,11 +758,25 @@ func (c *ConditionalRegexValidator) Validate(
 		return nil
 	}
 
+	rawVal, _ := getSettingWithFallback(bp, group, modIdx, mod, dependent)
+	if rawVal != cty.NilVal && !rawVal.IsKnown() {
+		// Defer validation when the value is dynamically computed or unknown at validation time
+		return nil
+	}
+
 	dependentVal, known, depPath, err := resolveSettingToString(bp, group, modIdx, mod, dependent, true, true)
 	if err != nil {
 		return err
 	}
+	required, _ := parseBoolInput(rule.Inputs, "required", false)
 	if !known || dependentVal == "" {
+		if required {
+			msg := rule.ErrorMessage
+			if msg == "" {
+				msg = fmt.Sprintf("variable %q is required when conditions are met", dependent)
+			}
+			return config.BpError{Err: fmt.Errorf("%s", msg), Path: depPath}
+		}
 		return nil
 	}
 

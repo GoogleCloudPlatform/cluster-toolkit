@@ -89,6 +89,10 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
     if not nodes:
         return
 
+    # Invalidate cached managed instances to ensure fresh live state from GCE
+    lkp.get_mig_instances.cache_clear()
+    lkp.get_mig_repairing_instances.cache_clear()
+
     # Group nodes by target MIG (to support multiple MIGs for >1000 nodes)
     nodes_by_mig: Dict[str, List[str]] = {}
     for node in nodes:
