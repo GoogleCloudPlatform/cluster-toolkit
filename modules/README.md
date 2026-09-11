@@ -111,6 +111,8 @@ Modules that are still in development and less stable are labeled with the
   configures an NFS server that can be mounted by other VM.
 * **[weka-client]** ![community-badge] ![experimental-badge] : Installs client
   and mounts [WEKA](https://www.weka.io/) filesystems.
+* **[stage-to-gcs]** ![community-badge] ![experimental-badge] : Stages and
+  synchronizes files and directories into Cloud Storage buckets from local filesystem paths or remote Git repositories.
 
 [filestore]: file-system/filestore/README.md
 [netapp-volume]: file-system/netapp-volume/README.md
@@ -121,6 +123,7 @@ Modules that are still in development and less stable are labeled with the
 [cloud-storage-bucket]: file-system/cloud-storage-bucket/README.md
 [gke-persistent-volume]: file-system/gke-persistent-volume/README.md
 [weka-client]: ../community/modules/file-system/weka-client/README.md
+[stage-to-gcs]: ../community/modules/agent-platform/stage-to-gcs/README.md
 
 ### IAM
 
