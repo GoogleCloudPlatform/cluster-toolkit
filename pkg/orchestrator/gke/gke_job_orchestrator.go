@@ -298,7 +298,24 @@ func (g *GKEOrchestrator) fetchLogsWithRetry(ns, selector, containerName string)
 		return res, fmt.Errorf("failed to get logs: %s\n%s", res.Stderr, res.Stdout)
 	}
 
+	jobsetName := extractJobSetNameFromSelector(selector)
+	if jobsetName != "" {
+		warnEvents := g.checkJobSetWarningEvents(ns, jobsetName)
+		if warnEvents != "" {
+			return res, fmt.Errorf("timed out waiting for job to start; JobSet reported warning events:\n%s\nlatest error: %s\n%s", warnEvents, res.Stderr, res.Stdout)
+		}
+	}
 	return res, fmt.Errorf("timed out waiting for job to start; latest error: %s\n%s", res.Stderr, res.Stdout)
+}
+
+func extractJobSetNameFromSelector(selector string) string {
+	for _, part := range strings.Split(selector, ",") {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "jobset.sigs.k8s.io/jobset-name=") {
+			return strings.TrimPrefix(part, "jobset.sigs.k8s.io/jobset-name=")
+		}
+	}
+	return ""
 }
 
 func findWorkloadContainer(containers []string) string {
@@ -314,13 +331,7 @@ func findWorkloadContainer(containers []string) string {
 }
 
 func (g *GKEOrchestrator) getFirstContainerName(ns, selector string) string {
-	var jobsetName string
-	for _, part := range strings.Split(selector, ",") {
-		if strings.HasPrefix(part, "jobset.sigs.k8s.io/jobset-name=") {
-			jobsetName = strings.TrimPrefix(part, "jobset.sigs.k8s.io/jobset-name=")
-			break
-		}
-	}
+	jobsetName := extractJobSetNameFromSelector(selector)
 	if jobsetName != "" {
 		res := g.executor.ExecuteCommand("kubectl", "get", "jobsets.jobset.x-k8s.io", jobsetName, "-n", ns, "-o", "jsonpath="+jobSetContainerNamesJSONPath)
 		if res.ExitCode == 0 && strings.TrimSpace(res.Stdout) != "" {
@@ -482,10 +493,17 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
 	}
 
-	return assembleManifest(buf.String(), opts.AdditionalManifests), nil
+	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
+	if err := ValidateJobSetManifest(manifest); err != nil {
+		return "", err
+	}
+	return manifest, nil
 }
 
 func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, workloadName string) error {
+	if err := ValidateJobSetManifest(manifestContent); err != nil {
+		return err
+	}
 	if outputManifestPath != "" {
 		logging.Info("Saving GKE manifest to %s", outputManifestPath)
 		if err := os.WriteFile(outputManifestPath, []byte(manifestContent), 0644); err != nil {
@@ -1946,12 +1964,15 @@ func (g *GKEOrchestrator) generatePodFailurePolicy(exitCodes []int) (string, err
 	}
 
 	var validCodes []int
+	seen := make(map[int]bool)
 	for _, code := range exitCodes {
-		if code == 0 {
-			logging.Info("Warning: Exit code 0 (success) cannot be used in PodFailurePolicy. Ignoring it.")
-			continue
+		if code < 1 || code > 255 {
+			return "", fmt.Errorf("invalid exit code %d in restart-on-exit-codes: exit codes must be between 1 and 255", code)
 		}
-		validCodes = append(validCodes, code)
+		if !seen[code] {
+			seen[code] = true
+			validCodes = append(validCodes, code)
+		}
 	}
 
 	if len(validCodes) == 0 {
@@ -2156,13 +2177,32 @@ func (g *GKEOrchestrator) findTargetWorkload(ns, workloadName string, timeout ti
 		time.Sleep(pollInterval)
 	}
 
+	warnEvents := g.checkJobSetWarningEvents(ns, workloadName)
+	var warnSuffix string
+	if warnEvents != "" {
+		warnSuffix = fmt.Sprintf("\nJobSet warning events:\n%s", warnEvents)
+	}
+
 	if lastErr != nil {
-		return "", fmt.Errorf("failed to find Kueue workload for jobset %s: %w", workloadName, lastErr)
+		return "", fmt.Errorf("failed to find Kueue workload for jobset %s: %w%s", workloadName, lastErr, warnSuffix)
 	}
 	if timeout <= 0 {
-		return "", fmt.Errorf("failed to find Kueue workload for jobset %s", workloadName)
+		return "", fmt.Errorf("failed to find Kueue workload for jobset %s%s", workloadName, warnSuffix)
 	}
-	return "", fmt.Errorf("failed to find Kueue workload for jobset %s (timed out waiting for Kueue to create workload)", workloadName)
+	return "", fmt.Errorf("failed to find Kueue workload for jobset %s (timed out waiting for Kueue to create workload)%s", workloadName, warnSuffix)
+}
+
+func (g *GKEOrchestrator) checkJobSetWarningEvents(ns, workloadName string) string {
+	if workloadName == "" {
+		return ""
+	}
+	res := g.executor.ExecuteCommand("kubectl", "get", "events", "-n", ns,
+		fmt.Sprintf("--field-selector=involvedObject.name=%s,type=Warning", workloadName),
+		"--no-headers")
+	if res.ExitCode == 0 && strings.TrimSpace(res.Stdout) != "" {
+		return strings.TrimSpace(res.Stdout)
+	}
+	return ""
 }
 
 func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, jobConsoleLink, workloadName string) error {
@@ -2171,11 +2211,17 @@ func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, 
 		"workload", targetWorkloadName, "-n", ns, "--timeout="+timeout)
 
 	if waitRes.ExitCode != 0 {
+		warnEvents := g.checkJobSetWarningEvents(ns, workloadName)
+		var warnSuffix string
+		if warnEvents != "" {
+			logging.Error("JobSet '%s' reported warning events:\n%s", workloadName, warnEvents)
+			warnSuffix = fmt.Sprintf("\nJobSet warning events:\n%s", warnEvents)
+		}
 		if strings.Contains(waitRes.Stderr, "timed out waiting") || strings.Contains(waitRes.Stdout, "timed out waiting") {
 			logging.Error("Timed out waiting for job '%s' to finish. Check its status in the Cloud Console: %s", workloadName, jobConsoleLink)
-			return fmt.Errorf("job timed out")
+			return fmt.Errorf("job timed out%s", warnSuffix)
 		}
-		return fmt.Errorf("error waiting for job completion: %s\n%s", waitRes.Stderr, waitRes.Stdout)
+		return fmt.Errorf("error waiting for job completion: %s\n%s%s", waitRes.Stderr, waitRes.Stdout, warnSuffix)
 	}
 	return nil
 }

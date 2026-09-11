@@ -5210,3 +5210,122 @@ func TestRefreshGKEAuth_DNSEndpoint(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractJobSetNameFromSelector(t *testing.T) {
+	tests := []struct {
+		name     string
+		selector string
+		expected string
+	}{
+		{
+			name:     "single jobset selector",
+			selector: "jobset.sigs.k8s.io/jobset-name=my-job",
+			expected: "my-job",
+		},
+		{
+			name:     "multi-part selector",
+			selector: "jobset.sigs.k8s.io/jobset-name=my-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0",
+			expected: "my-job",
+		},
+		{
+			name:     "jobset selector in middle of list",
+			selector: "app=train,jobset.sigs.k8s.io/jobset-name=my-job,slice-index=0",
+			expected: "my-job",
+		},
+		{
+			name:     "jobset selector at end of list with whitespace",
+			selector: "app=train, slice-index=0 , jobset.sigs.k8s.io/jobset-name=my-job",
+			expected: "my-job",
+		},
+		{
+			name:     "empty value in jobset selector",
+			selector: "jobset.sigs.k8s.io/jobset-name=",
+			expected: "",
+		},
+		{
+			name:     "no jobset in selector",
+			selector: "app=nginx,role=frontend",
+			expected: "",
+		},
+		{
+			name:     "empty selector",
+			selector: "",
+			expected: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := extractJobSetNameFromSelector(tc.selector)
+			if got != tc.expected {
+				t.Errorf("extractJobSetNameFromSelector(%q) = %q, want %q", tc.selector, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestCheckJobSetWarningEvents(t *testing.T) {
+	tests := []struct {
+		name          string
+		workloadName  string
+		mockResponses map[string][]shell.CommandResult
+		expected      string
+	}{
+		{
+			name:         "warning event found",
+			workloadName: "my-job",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get events -n default --field-selector=involvedObject.name=my-job,type=Warning --no-headers": {
+					{
+						ExitCode: 0,
+						Stdout:   "Warning FailedCreate jobset/my-job error creating job: Job.batch \"my-job-worker-0\" is invalid",
+					},
+				},
+			},
+			expected: "Warning FailedCreate jobset/my-job error creating job: Job.batch \"my-job-worker-0\" is invalid",
+		},
+		{
+			name:         "no events found",
+			workloadName: "my-job",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get events -n default --field-selector=involvedObject.name=my-job,type=Warning --no-headers": {
+					{
+						ExitCode: 0,
+						Stdout:   "",
+					},
+				},
+			},
+			expected: "",
+		},
+		{
+			name:         "kubectl error (e.g. 403 forbidden)",
+			workloadName: "my-job",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get events -n default --field-selector=involvedObject.name=my-job,type=Warning --no-headers": {
+					{
+						ExitCode: 1,
+						Stderr:   "Error from server (Forbidden): events is forbidden",
+					},
+				},
+			},
+			expected: "",
+		},
+		{
+			name:         "empty workload name",
+			workloadName: "",
+			expected:     "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(tc.mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
+
+			got := orc.checkJobSetWarningEvents("default", tc.workloadName)
+			if got != tc.expected {
+				t.Errorf("checkJobSetWarningEvents() = %q, want %q", got, tc.expected)
+			}
+		})
+	}
+}

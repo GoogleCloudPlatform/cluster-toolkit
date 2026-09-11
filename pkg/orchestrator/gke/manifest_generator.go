@@ -15,15 +15,18 @@
 package gke
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"io"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	k8syamlutil "k8s.io/apimachinery/pkg/util/yaml"
 	k8syaml "sigs.k8s.io/yaml"
 )
 
@@ -58,7 +61,11 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("failed to execute jobset template: %w", err)
 	}
-	return assembleManifest(buf.String(), opts.AdditionalManifests), nil
+	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
+	if err := ValidateJobSetManifest(manifest); err != nil {
+		return "", err
+	}
+	return manifest, nil
 }
 
 func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string, indent int) (string, error) {
@@ -332,4 +339,85 @@ func indentYaml(s string, indent int) string {
 		}
 	}
 	return strings.Join(result, "\n")
+}
+
+type jobSetValidationSpec struct {
+	APIVersion string `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string `json:"kind" yaml:"kind"`
+	Spec       struct {
+		ReplicatedJobs []struct {
+			Name     string `json:"name" yaml:"name"`
+			Template struct {
+				Spec struct {
+					PodFailurePolicy interface{} `json:"podFailurePolicy" yaml:"podFailurePolicy"`
+					Template         struct {
+						Spec struct {
+							RestartPolicy string `json:"restartPolicy" yaml:"restartPolicy"`
+						} `json:"spec" yaml:"spec"`
+					} `json:"template" yaml:"template"`
+				} `json:"spec" yaml:"spec"`
+			} `json:"template" yaml:"template"`
+		} `json:"replicatedJobs" yaml:"replicatedJobs"`
+	} `json:"spec" yaml:"spec"`
+}
+
+type jobValidationSpec struct {
+	APIVersion string `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string `json:"kind" yaml:"kind"`
+	Spec       struct {
+		PodFailurePolicy interface{} `json:"podFailurePolicy" yaml:"podFailurePolicy"`
+		Template         struct {
+			Spec struct {
+				RestartPolicy string `json:"restartPolicy" yaml:"restartPolicy"`
+			} `json:"spec" yaml:"spec"`
+		} `json:"template" yaml:"template"`
+	} `json:"spec" yaml:"spec"`
+}
+
+func splitYAMLDocuments(content string) []string {
+	var docs []string
+	reader := k8syamlutil.NewYAMLReader(bufio.NewReader(strings.NewReader(content)))
+	for {
+		doc, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			break
+		}
+		if len(bytes.TrimSpace(doc)) > 0 {
+			docs = append(docs, string(doc))
+		}
+	}
+	return docs
+}
+
+// ValidateJobSetManifest validates that any JobSet or Job resources in the manifest conform
+// to Kubernetes batch/v1 validation constraints (e.g. podFailurePolicy requires restartPolicy: Never).
+func ValidateJobSetManifest(manifestContent string) error {
+	docs := splitYAMLDocuments(manifestContent)
+	for _, doc := range docs {
+		var jsDoc jobSetValidationSpec
+		if err := k8syaml.Unmarshal([]byte(doc), &jsDoc); err == nil && jsDoc.Kind == "JobSet" {
+			for _, rj := range jsDoc.Spec.ReplicatedJobs {
+				if rj.Template.Spec.PodFailurePolicy != nil {
+					restartPolicy := rj.Template.Spec.Template.Spec.RestartPolicy
+					if restartPolicy != "Never" {
+						return fmt.Errorf("invalid JobSet manifest: replicatedJob %q specifies podFailurePolicy with restartPolicy %q; only \"Never\" is supported when podFailurePolicy is specified", rj.Name, restartPolicy)
+					}
+				}
+			}
+		}
+
+		var jDoc jobValidationSpec
+		if err := k8syaml.Unmarshal([]byte(doc), &jDoc); err == nil && jDoc.Kind == "Job" {
+			if jDoc.Spec.PodFailurePolicy != nil {
+				restartPolicy := jDoc.Spec.Template.Spec.RestartPolicy
+				if restartPolicy != "Never" {
+					return fmt.Errorf("invalid Job manifest: specifies podFailurePolicy with restartPolicy %q; only \"Never\" is supported when podFailurePolicy is specified", restartPolicy)
+				}
+			}
+		}
+	}
+	return nil
 }
