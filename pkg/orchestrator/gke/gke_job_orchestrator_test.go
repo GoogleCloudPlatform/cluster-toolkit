@@ -5222,3 +5222,221 @@ func TestRefreshGKEAuth_DNSEndpoint(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractJobSetNameFromSelector(t *testing.T) {
+	tests := []struct {
+		name     string
+		selector string
+		expected string
+	}{
+		{
+			name:     "single jobset selector",
+			selector: "jobset.sigs.k8s.io/jobset-name=my-job",
+			expected: "my-job",
+		},
+		{
+			name:     "multi-part selector",
+			selector: "jobset.sigs.k8s.io/jobset-name=my-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0",
+			expected: "my-job",
+		},
+		{
+			name:     "jobset selector in middle of list",
+			selector: "app=train,jobset.sigs.k8s.io/jobset-name=my-job,slice-index=0",
+			expected: "my-job",
+		},
+		{
+			name:     "jobset selector at end of list with whitespace",
+			selector: "app=train, slice-index=0 , jobset.sigs.k8s.io/jobset-name=my-job",
+			expected: "my-job",
+		},
+		{
+			name:     "set-based selector with comma inside parentheses before jobset selector",
+			selector: "environment in (production, qa),jobset.sigs.k8s.io/jobset-name=my-job",
+			expected: "my-job",
+		},
+		{
+			name:     "set-based jobset selector with single value",
+			selector: "jobset.sigs.k8s.io/jobset-name in (my-job)",
+			expected: "my-job",
+		},
+		{
+			name:     "double equals operator",
+			selector: "jobset.sigs.k8s.io/jobset-name==my-job",
+			expected: "my-job",
+		},
+		{
+			name:     "empty value in jobset selector",
+			selector: "jobset.sigs.k8s.io/jobset-name=",
+			expected: "",
+		},
+		{
+			name:     "no jobset in selector",
+			selector: "app=nginx,role=frontend",
+			expected: "",
+		},
+		{
+			name:     "empty selector",
+			selector: "",
+			expected: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := extractJobSetNameFromSelector(tc.selector)
+			if got != tc.expected {
+				t.Errorf("extractJobSetNameFromSelector(%q) = %q, want %q", tc.selector, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestCheckJobSetWarningEvents(t *testing.T) {
+	tests := []struct {
+		name          string
+		workloadName  string
+		mockResponses map[string][]shell.CommandResult
+		expected      string
+	}{
+		{
+			name:         "warning event found",
+			workloadName: "my-job",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get events -n default --field-selector=involvedObject.name=my-job,involvedObject.kind=JobSet,type=Warning --request-timeout=10s --no-headers": {
+					{
+						ExitCode: 0,
+						Stdout:   "Warning FailedCreate jobset/my-job error creating job: Job.batch \"my-job-worker-0\" is invalid",
+					},
+				},
+			},
+			expected: "Warning FailedCreate jobset/my-job error creating job: Job.batch \"my-job-worker-0\" is invalid",
+		},
+		{
+			name:         "no events found",
+			workloadName: "my-job",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get events -n default --field-selector=involvedObject.name=my-job,involvedObject.kind=JobSet,type=Warning --request-timeout=10s --no-headers": {
+					{
+						ExitCode: 0,
+						Stdout:   "",
+					},
+				},
+			},
+			expected: "",
+		},
+		{
+			name:         "kubectl error (e.g. 403 forbidden)",
+			workloadName: "my-job",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get events -n default --field-selector=involvedObject.name=my-job,involvedObject.kind=JobSet,type=Warning --request-timeout=10s --no-headers": {
+					{
+						ExitCode: 1,
+						Stderr:   "Error from server (Forbidden): events is forbidden",
+					},
+				},
+			},
+			expected: "",
+		},
+		{
+			name:         "empty workload name",
+			workloadName: "",
+			expected:     "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(tc.mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
+
+			got := orc.checkJobSetWarningEvents("default", tc.workloadName)
+			if got != tc.expected {
+				t.Errorf("checkJobSetWarningEvents() = %q, want %q", got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestGeneratePodFailurePolicy(t *testing.T) {
+	orc := &GKEOrchestrator{}
+
+	tests := []struct {
+		name       string
+		exitCodes  []int
+		expectErr  bool
+		wantEmpty  bool
+		wantSubstr string
+	}{
+		{
+			name:      "nil slice",
+			exitCodes: nil,
+			wantEmpty: true,
+		},
+		{
+			name:      "empty slice",
+			exitCodes: []int{},
+			wantEmpty: true,
+		},
+		{
+			name:      "only zero exit code",
+			exitCodes: []int{0},
+			expectErr: true,
+		},
+		{
+			name:       "valid exit codes",
+			exitCodes:  []int{137, 143},
+			wantSubstr: "values:\n    - 137\n    - 143",
+		},
+		{
+			name:       "valid with duplicates",
+			exitCodes:  []int{137, 137, 143},
+			wantSubstr: "values:\n    - 137\n    - 143",
+		},
+		{
+			name:       "boundary valid min (1) and max (255)",
+			exitCodes:  []int{1, 255},
+			wantSubstr: "values:\n    - 1\n    - 255",
+		},
+		{
+			name:      "boundary invalid above 255 (256)",
+			exitCodes: []int{256},
+			expectErr: true,
+		},
+		{
+			name:      "mixed valid and invalid codes",
+			exitCodes: []int{137, -1, 143},
+			expectErr: true,
+		},
+		{
+			name:      "negative exit code",
+			exitCodes: []int{-1},
+			expectErr: true,
+		},
+		{
+			name:      "exit code above 255",
+			exitCodes: []int{300},
+			expectErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := orc.generatePodFailurePolicy(tc.exitCodes)
+			if tc.expectErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil with result: %s", res)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expected no error, got: %v", err)
+			}
+			if tc.wantEmpty && res != "" {
+				t.Errorf("expected empty result, got %q", res)
+			}
+			if tc.wantSubstr != "" && !strings.Contains(res, tc.wantSubstr) {
+				t.Errorf("expected result to contain %q, got:\n%s", tc.wantSubstr, res)
+			}
+		})
+	}
+}
