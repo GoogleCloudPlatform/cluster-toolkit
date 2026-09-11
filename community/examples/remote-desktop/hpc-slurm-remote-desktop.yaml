@@ -1,0 +1,222 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: hpc-slurm-remote-desktop
+
+vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  enable_slurm_auth: true
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: hpc-slurm-remote-desktop
+  region: us-central1
+  zone: us-central1-a
+
+  slurm_cluster_name: slurmdesktop
+  slurm_image:
+    family: slurm-gcp-6-12-hpc-rocky-linux-9
+    project: schedmd-slurm-public
+
+  controller_machine_type: e2-standard-4
+  login_machine_type: n2-standard-4
+  compute_machine_type: n2-standard-4
+  viz_machine_type: n2-standard-8
+
+  controller_startup_scripts_timeout: 1800
+  login_startup_scripts_timeout: 1800
+  compute_startup_scripts_timeout: 1800
+
+  homefs_name: $(vars.deployment_name)-homefs
+  sharedfs_name: $(vars.deployment_name)-sharedfs
+  shared_root: /shared
+  desktop_endpoint_dir: /shared/ghpc-remote-desktop/endpoints
+
+  # Read from Secret Manager by each instance at boot, so no secret value
+  # appears in this blueprint or in Terraform state. Create it with:
+  #   openssl rand -base64 48 | gcloud secrets create ghpc-desktop-proxy-secret \
+  #     --project PROJECT_ID --replication-policy automatic --data-file=-
+  secret_project_id: $(vars.project_id)
+  desktop_proxy_secret_id: ghpc-desktop-proxy-secret
+
+  # IAP's TCP-forwarding range only. This blueprint runs the brokers in 'trusted_proxy' mode.
+  # Do not widen this to RFC1918 without putting an authenticating proxy in front.
+  # (hpc-slurm-remote-desktop-gateway.yaml may be more suitable for this)
+  desktop_allowed_ingress_cidrs:
+  - 35.235.240.0/20
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: services-api
+    source: community/modules/project/service-enablement
+    settings:
+      gcp_service_list:
+      - secretmanager.googleapis.com
+
+  # Both desktop hosts read the proxy secret through this account. Attaching a
+  # service account replaces the default compute account, so everything the
+  # instances rely on has to be granted here - including reading the
+  # startup-script bucket, which is easy to miss.
+  - id: desktop-service-account
+    source: modules/project/service-account
+    settings:
+      project_id: $(vars.project_id)
+      deployment_name: $(vars.deployment_name)
+      name: desktop
+      project_roles:
+      - storage.objectViewer
+      - secretmanager.secretAccessor
+      - logging.logWriter
+      - monitoring.metricWriter
+
+  - id: network
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net
+      subnetwork_name: $(vars.deployment_name)-subnet
+
+  - id: homefs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    outputs:
+    - network_storage
+    settings:
+      name: $(vars.homefs_name)
+      metadata:
+        enable-oslogin: "TRUE"
+      local_mounts:
+      - /home
+
+  - id: sharedfs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    outputs:
+    - network_storage
+    settings:
+      name: $(vars.sharedfs_name)
+      metadata:
+        enable-oslogin: "TRUE"
+      local_mounts:
+      - $(vars.shared_root)
+
+  - id: desktop-firewall
+    source: modules/network/firewall-rules
+    use: [network]
+    settings:
+      ingress_rules:
+      - name: $(vars.deployment_name)-desktop-brokers
+        description: Allow IAP-tunnelled noVNC access to desktop brokers
+        source_ranges: $(vars.desktop_allowed_ingress_cidrs)
+        target_tags:
+        - ghpc-novnc-desktop
+        allow:
+        - protocol: tcp
+          ports:
+          - "6080"
+
+  - id: compute-nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, homefs, sharedfs]
+    settings:
+      instance_image: $(vars.slurm_image)
+      machine_type: $(vars.compute_machine_type)
+      advanced_machine_features:
+        threads_per_core: 1
+      on_host_maintenance: MIGRATE
+      node_count_static: 1
+      node_count_dynamic_max: 0
+      allow_automatic_updates: false
+
+  - id: compute-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute-nodeset]
+    settings:
+      partition_name: compute
+      exclusive: false
+      is_default: true
+
+  - id: login-desktop-runtime
+    source: community/modules/remote-desktop/novnc-runtime
+    settings:
+      secret_project_id: $(vars.secret_project_id)
+      novnc_proxy_secret_id: $(vars.desktop_proxy_secret_id)
+      novnc_identity_mode: trusted_proxy
+      desktop_endpoint_dir: $(vars.desktop_endpoint_dir)
+      desktop_endpoint_name: login
+      slurm_auth_mode: auto
+      vnc_backend: tigervnc
+
+  - id: login-desktop-startup
+    source: modules/scripts/startup-script
+    settings:
+      runners: $(login-desktop-runtime.startup_runners)
+
+  - id: slurm-login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      instance_image: $(vars.slurm_image)
+      machine_type: $(vars.login_machine_type)
+      allow_automatic_updates: false
+      enable_login_public_ips: false
+      service_account_email: $(desktop-service-account.service_account_email)
+      service_account_scopes:
+      - https://www.googleapis.com/auth/cloud-platform
+      tags:
+      - ghpc-novnc-desktop
+
+  - id: slurm-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, homefs, sharedfs, slurm-login, compute-partition]
+    settings:
+      enable_slurm_auth: $(vars.enable_slurm_auth)
+      slurm_cluster_name: $(vars.slurm_cluster_name)
+      instance_image: $(vars.slurm_image)
+      machine_type: $(vars.controller_machine_type)
+      allow_automatic_updates: false
+      enable_controller_public_ips: false
+      login_startup_script: $(login-desktop-startup.startup_script)
+      controller_startup_scripts_timeout: $(vars.controller_startup_scripts_timeout)
+      login_startup_scripts_timeout: $(vars.login_startup_scripts_timeout)
+      compute_startup_scripts_timeout: $(vars.compute_startup_scripts_timeout)
+      login_network_storage:
+      - server_ip: $(homefs.network_storage[0].server_ip)
+        remote_mount: $(homefs.network_storage[0].remote_mount)
+        local_mount: $(homefs.network_storage[0].local_mount)
+        fs_type: $(homefs.network_storage[0].fs_type)
+        mount_options: $(homefs.network_storage[0].mount_options)
+      - server_ip: $(sharedfs.network_storage[0].server_ip)
+        remote_mount: $(sharedfs.network_storage[0].remote_mount)
+        local_mount: $(sharedfs.network_storage[0].local_mount)
+        fs_type: $(sharedfs.network_storage[0].fs_type)
+        mount_options: $(sharedfs.network_storage[0].mount_options)
+
+  - id: viz-desktop
+    source: community/modules/remote-desktop/novnc-desktop
+    use: [network, homefs, sharedfs]
+    settings:
+      instance_image: $(vars.slurm_image)
+      machine_type: $(vars.viz_machine_type)
+      allowed_ingress_cidrs: []
+      enable_public_ips: false
+      service_account_email: $(desktop-service-account.service_account_email)
+      service_account_scopes:
+      - https://www.googleapis.com/auth/cloud-platform
+      desktop_endpoint_dir: $(vars.desktop_endpoint_dir)
+      desktop_endpoint_name: viz
+      secret_project_id: $(vars.secret_project_id)
+      novnc_proxy_secret_id: $(vars.desktop_proxy_secret_id)
+      novnc_identity_mode: trusted_proxy
+      vnc_backend: turbovnc

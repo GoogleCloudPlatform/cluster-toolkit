@@ -212,8 +212,16 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 
 * **[chrome-remote-desktop]** ![community-badge] ![experimental-badge] : Creates
   a GPU accelerated Chrome Remote Desktop.
+* **[novnc-runtime]** ![community-badge] ![experimental-badge] : Builds the
+  startup-script runners for a per-user XFCE + noVNC desktop runtime, to be
+  layered onto an existing host such as a Slurm login node.
+* **[novnc-desktop]** ![community-badge] ![experimental-badge] : Creates a
+  standalone VM that serves per-user XFCE desktops through noVNC using the
+  [novnc-runtime] module.
 
 [chrome-remote-desktop]: ../community/modules/remote-desktop/chrome-remote-desktop/README.md
+[novnc-runtime]: ../community/modules/remote-desktop/novnc-runtime/README.md
+[novnc-desktop]: ../community/modules/remote-desktop/novnc-desktop/README.md
 
 ### Scheduler
 

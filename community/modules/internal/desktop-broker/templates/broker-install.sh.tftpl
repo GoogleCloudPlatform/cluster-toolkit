@@ -1,0 +1,125 @@
+#!/bin/bash
+# Installs the per-user desktop broker package and its virtualenv.
+set -euo pipefail
+
+install_root=${jsonencode(install_root)}
+broker_dir=${jsonencode(broker_dir)}
+broker_config_path=${jsonencode(broker_config_path)}
+broker_app_dir=${jsonencode(broker_app_dir)}
+broker_state_dir=${jsonencode(broker_state_dir)}
+broker_log_dir=${jsonencode(broker_log_dir)}
+broker_runtime_dir=${jsonencode(broker_runtime_dir)}
+broker_service_path=${jsonencode(broker_service_path)}
+broker_venv_dir=${jsonencode(broker_venv_dir)}
+broker_python_path=${jsonencode(broker_python_path)}
+broker_pip_path=${jsonencode(broker_pip_path)}
+requires_units=${jsonencode(requires_units)}
+
+proxy_secret_id=${jsonencode(proxy_secret_id)}
+proxy_secret_version=${jsonencode(proxy_secret_version)}
+
+# A literal arrives base64-encoded: a secret is arbitrary bytes, and expanding
+# one inside a double-quoted assignment would let a value containing $(...) or a
+# backtick execute here.
+proxy_secret_b64=${jsonencode(proxy_secret_b64)}
+
+${read_secret_sh}
+
+if command -v dnf >/dev/null 2>&1; then
+  dnf install -y curl python3 python3-pip tar
+elif command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y curl python3 python3-pip python3-venv tar
+else
+  echo "Unsupported package manager for the desktop broker" >&2
+  exit 1
+fi
+
+install -d -m 0755 "$install_root" "$broker_dir" "$broker_app_dir" "$broker_log_dir" "$broker_venv_dir"
+# Session records name each user, their uid, their display number and - on the
+# tcp transport - their RFB password.
+install -d -m 0700 "$broker_state_dir"
+# Parent of the per-user 0700 runtime directories, so it must stay traversable.
+# On tmpfs, so a socket or password file cannot outlive a reboot.
+install -d -m 0755 "$broker_runtime_dir"
+
+# The package is staged as individual files, so tighten permissions across the
+# whole tree rather than per file.
+find "$broker_app_dir" -type d -exec chmod 0755 {} +
+find "$broker_app_dir" -type f -name '*.py' -exec chmod 0644 {} +
+
+python3 -m venv "$broker_venv_dir"
+"$broker_pip_path" install --upgrade pip
+"$broker_pip_path" install 'aiohttp~=3.10'
+
+
+# ---------------------------------------------------------------- secrets
+# The staged config carries no secrets; they are fetched here and merged in
+# before the broker is ever started. Passed through the environment rather than
+# argv so they do not appear in "ps" output.
+if [ -n "$proxy_secret_b64" ]; then
+  GHPC_PROXY_SECRET="$(printf '%s' "$proxy_secret_b64" | base64 -d)"
+else
+  GHPC_PROXY_SECRET="$(read_secret "$proxy_secret_id" "$proxy_secret_version")"
+fi
+export GHPC_PROXY_SECRET
+
+
+python3 - "$broker_config_path" <<'EOF_INJECT_SECRETS'
+import json
+import os
+import sys
+
+config_path = sys.argv[1]
+with open(config_path, encoding="utf-8") as handle:
+    config = json.load(handle)
+
+config["proxy_secret"] = os.environ["GHPC_PROXY_SECRET"]
+
+temp_path = config_path + ".tmp"
+with open(temp_path, "w", encoding="utf-8") as handle:
+    json.dump(config, handle, indent=2, sort_keys=True)
+os.chmod(temp_path, 0o600)
+os.replace(temp_path, config_path)
+EOF_INJECT_SECRETS
+unset GHPC_PROXY_SECRET
+
+# Holds the desktop proxy secret.
+chmod 0600 "$broker_config_path"
+
+# ---------------------------------------------------------------- service
+cat >"$broker_service_path" <<EOF_BROKER_SERVICE
+[Unit]
+Description=GHPC per-user desktop broker
+After=network-online.target $requires_units
+Wants=network-online.target
+$([ -n "$requires_units" ] && echo "Requires=$requires_units")
+
+[Service]
+Type=simple
+Environment=PYTHONPATH=$broker_app_dir
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=$broker_python_path -m desktop_broker.main --config $broker_config_path
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF_BROKER_SERVICE
+
+systemctl daemon-reload
+systemctl enable --now ghpc-desktop-broker.service
+
+# Fail the runner rather than leave a broker that is not actually serving.
+for _ in $(seq 1 30); do
+  if curl -fsS -o /dev/null "http://127.0.0.1:${jsonencode(broker_listen_port)}/healthz"; then
+    echo "Desktop broker is serving on port ${jsonencode(broker_listen_port)}"
+    exit 0
+  fi
+  sleep 2
+done
+
+echo "Desktop broker did not become healthy" >&2
+journalctl -u ghpc-desktop-broker.service --no-pager | tail -50 >&2
+exit 1

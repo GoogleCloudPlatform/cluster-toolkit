@@ -1,0 +1,57 @@
+#!/bin/bash
+set -euo pipefail
+
+runner_path="$(mktemp /tmp/ghpc-netstorage-mount.XXXXXX.sh)"
+
+cleanup() {
+  rm -f "$runner_path"
+}
+
+trap cleanup EXIT
+
+cat <<'EOF_GHPC_RUNNER' | base64 -d > "$runner_path"
+${runner_content_b64}
+EOF_GHPC_RUNNER
+
+chmod 0755 "$runner_path"
+
+# Some hosts, such as Slurm login nodes, may have already mounted the same
+# source on the same target via another startup path before this wrapper runs.
+# In that case, the underlying mount helper can reject the duplicate /etc/fstab
+# entry because of option drift (for example `_netdev` added elsewhere, or the
+# kernel reporting `nfs4` for an `nfs` mount). Treat an already-mounted
+# matching source/target as success before invoking the wrapped helper.
+if [ -n "${runner_args}" ]; then
+  # shellcheck disable=SC2086
+  eval "set -- ${runner_args}"
+  if [ "$#" -ge 4 ]; then
+    source_spec="$2"
+    if [ "$4" != "gcsfuse" ]; then
+      source_spec="$1:$2"
+    fi
+    target_mount="$3"
+    if findmnt --source "$source_spec" --target "$target_mount" >/dev/null 2>&1; then
+      echo "Mount runner skipping $source_spec -> $target_mount; already mounted"
+      exit 0
+    fi
+  fi
+fi
+
+last_exit_code=1
+for attempt in $(seq 1 ${retry_attempts}); do
+  if "$runner_path" ${runner_args}; then
+    exit 0
+  fi
+  last_exit_code=$?
+  if [ "$attempt" -lt ${retry_attempts} ]; then
+    echo "Mount runner attempt $attempt/${retry_attempts} failed; retrying in ${retry_seconds}s"
+    sleep ${retry_seconds}
+  fi
+done
+
+%{ if continue_on_err ~}
+echo "Mount runner failed after ${retry_attempts} attempts, but continuing because nofail is set"
+exit 0
+%{ else ~}
+exit "$last_exit_code"
+%{ endif ~}
