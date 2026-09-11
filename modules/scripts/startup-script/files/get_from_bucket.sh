@@ -51,7 +51,11 @@ stdlib::get_from_bucket() {
 	local attempt=0
 	local max_retries=7
 	# store gcs command as array and then split when called by stdlib::cmd
-	gcs_command=(gcloud storage cp --no-user-output-enabled)
+	if stdlib::cmd gcloud help storage cp &>/dev/null; then
+		gcs_command=(gcloud storage cp --no-user-output-enabled)
+	else
+		gcs_command=(gsutil -q cp)
+	fi
 	while [[ $attempt -le $max_retries ]]; do
 		if [[ $attempt -gt 0 ]]; then
 			local wait=$((2 ** attempt))
