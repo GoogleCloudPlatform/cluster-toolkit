@@ -15,12 +15,13 @@
 from typing import Optional, Type
 
 import pytest
-from mock import Mock
+from mock import Mock, PropertyMock, call
 from datetime import datetime, timezone, timedelta
 import unittest
 
 from common import TstNodeset, TstCfg # needed to import util
 import util
+from setup import check_slurmdbd_ready, check_sackd_ready
 from util import NodeState, MachineType, AcceleratorInfo, UpcomingMaintenance, InstanceResourceStatus, FutureReservation, ReservationDetails
 from google.api_core.client_options import ClientOptions  # noqa: E402
 from googleapiclient.errors import HttpError # type: ignore
@@ -1112,3 +1113,183 @@ def test_slurmsync_mig_auto_repair(mock_lookup, mock_compute_prop, mock_inst):
                 action_recovered_fqdn = slurmsync.get_node_action("testcl-ns-2.c.testproj.internal")
                 assert isinstance(action_recovered_fqdn, slurmsync.NodeActionIdle)
                 mock_get_reason.assert_called_with("testcl-ns-2")
+
+
+def test_is_target_controller_up_hostname_containing_role():
+    line = "Slurmctld(backup) at primary-cluster-controller-1 is UP"
+    assert util._is_target_controller_up(line, "primary") is False
+    assert util._is_target_controller_up(line, "backup") is True
+
+def test_wait_slurmctld_up_timeout(mocker):
+    mocker.patch("socket.gethostname", return_value="slurmctld-0")
+    mocker.patch("util.run", return_value=Mock(returncode=1, stdout="", stderr="DOWN"))
+    mocker.patch("util.sleep")
+    lkp = util.Lookup(TstCfg())
+    with pytest.raises(TimeoutError, match=r"slurmctld \(primary\) is not fully up"):
+        util.wait_slurmctld_up(lkp, timeout=2)
+
+def test_is_target_controller_up():
+    # Single controller ping format ('Slurmctld (primary)...')
+    output_single_up = "Slurmctld (primary) at controller is UP"
+    output_single_down = "Slurmctld (primary) at controller is DOWN"
+    assert util._is_target_controller_up(output_single_up, "primary") is True
+    assert util._is_target_controller_up(output_single_down, "primary") is False
+
+    # HA primary
+    output_ha_restarting_primary = (
+        "Slurmctld(primary) at slurmctld-0 is DOWN\n"
+        "Slurmctld(backup) at slurmctld-1 is UP"
+    )
+    assert util._is_target_controller_up(output_ha_restarting_primary, "primary") is False
+
+    # HA backup
+    assert util._is_target_controller_up(output_ha_restarting_primary, "backup") is True
+
+    output_ha_both_up = (
+        "Slurmctld(primary) at slurmctld-0 is UP\n"
+        "Slurmctld(backup) at slurmctld-1 is UP"
+    )
+    assert util._is_target_controller_up(output_ha_both_up, "primary") is True
+    assert util._is_target_controller_up(output_ha_both_up, "backup") is True
+
+    # Overlapping hostname checks: ensure 'primary' or 'backup' in hostname does not produce false positives
+    output_ha_hostname_primary = (
+        "Slurmctld(primary) at primary-cluster-controller-0 is DOWN\n"
+        "Slurmctld(backup) at primary-cluster-controller-1 is UP"
+    )
+    assert util._is_target_controller_up(output_ha_hostname_primary, "primary") is False
+    assert util._is_target_controller_up(output_ha_hostname_primary, "backup") is True
+
+    output_ha_hostname_backup = (
+        "Slurmctld(primary) at backup-cluster-controller-0 is UP\n"
+        "Slurmctld(backup) at backup-cluster-controller-1 is DOWN"
+    )
+    assert util._is_target_controller_up(output_ha_hostname_backup, "primary") is True
+    assert util._is_target_controller_up(output_ha_hostname_backup, "backup") is False
+
+
+def test_is_active_controller(mocker):
+    mocker.patch.object(util.Lookup, "is_controller", PropertyMock(return_value=True))
+    mocker.patch.object(util.Lookup, "scontrol", PropertyMock(return_value="scontrol"))
+
+    cfg = TstCfg(slurm_backup_controller_name="slurmctld-1")
+    lkp = util.Lookup(cfg)
+
+    # Primary active: Primary node (-0), primary UP
+    mocker.patch("socket.gethostname", return_value="slurmctld-0")
+    mocker.patch(
+        "util.run",
+        return_value=Mock(
+            returncode=0,
+            stdout="Slurmctld(primary) at slurmctld-0 is UP\nSlurmctld(backup) at slurmctld-1 is UP",
+            stderr="",
+        ),
+    )
+    assert util.is_active_controller(lkp) is True
+
+    # Backup takeover: Backup node (-1), primary DOWN, backup UP
+    mocker.patch("socket.gethostname", return_value="slurmctld-1")
+    mocker.patch(
+        "util.run",
+        return_value=Mock(
+            returncode=0,
+            stdout="Slurmctld(primary) at slurmctld-0 is DOWN\nSlurmctld(backup) at slurmctld-1 is UP",
+            stderr="",
+        ),
+    )
+    assert util.is_active_controller(lkp) is True
+
+    # Backup takeover with hostname containing 'primary': Backup node (-1), primary DOWN, backup UP
+    mocker.patch("socket.gethostname", return_value="primary-cluster-controller-1")
+    lkp_primary_cluster = util.Lookup(TstCfg(slurm_backup_controller_name="primary-cluster-controller-1"))
+    mocker.patch(
+        "util.run",
+        return_value=Mock(
+            returncode=0,
+            stdout="Slurmctld(primary) at primary-cluster-controller-0 is DOWN\nSlurmctld(backup) at primary-cluster-controller-1 is UP",
+            stderr="",
+        ),
+    )
+    assert util.is_active_controller(lkp_primary_cluster) is True
+
+    # Backup standby: Backup node (-1), primary UP
+    mocker.patch("socket.gethostname", return_value="slurmctld-1")
+    mocker.patch(
+        "util.run",
+        return_value=Mock(
+            returncode=0,
+            stdout="Slurmctld(primary) at slurmctld-0 is UP\nSlurmctld(backup) at slurmctld-1 is UP",
+            stderr="",
+        ),
+    )
+    assert util.is_active_controller(lkp) is False
+
+    # Non-HA: No backup controller configured
+    mock_run = mocker.patch("util.run")
+    lkp_non_ha = util.Lookup(TstCfg(slurm_backup_controller_name=None))
+    assert util.is_active_controller(lkp_non_ha) is True
+    mock_run.assert_not_called()
+
+
+def test_check_slurmdbd_ready_fast_success(mocker):
+    """Verify check_slurmdbd_ready returns immediately on first try when ready without sleeping."""
+    mock_run = mocker.patch("setup.run", return_value=Mock(returncode=0))
+    mock_sleep = mocker.patch("setup.time.sleep")
+
+    check_slurmdbd_ready(maxtries=30, max_interval=15.0)
+
+    mock_run.assert_called_once_with(
+        f"{util.slurmdirs.prefix}/bin/sacctmgr -n -i show cluster",
+        check=False,
+        timeout=10,
+    )
+    mock_sleep.assert_not_called()
+
+
+def test_check_slurmdbd_ready_retry_and_timeout(mocker):
+    """Verify check_slurmdbd_ready retries on failure and raises RuntimeError on timeout."""
+    mock_run = mocker.patch("setup.run", return_value=Mock(returncode=1))
+    mock_sleep = mocker.patch("setup.time.sleep")
+
+    with pytest.raises(RuntimeError, match="Slurmdbd is not ready"):
+        check_slurmdbd_ready(maxtries=4, max_interval=15.0)
+
+    assert mock_run.call_count == 4
+    assert mock_sleep.call_count == 4
+    mock_sleep.assert_has_calls([call(10.0), call(15.0), call(15.0), call(15.0)])
+
+
+def test_check_sackd_ready_fast_success(mocker):
+    """Verify check_sackd_ready enables and starts sackd without sleeping when healthy."""
+    mock_run = mocker.patch("setup.run", return_value=Mock(returncode=0))
+    mock_sleep = mocker.patch("setup.time.sleep")
+
+    check_sackd_ready(maxtries=40, interval=15.0)
+
+    assert mock_run.call_args_list == [
+        call("systemctl enable sackd", timeout=30),
+        call("systemctl restart sackd", timeout=60, check=False),
+        call("systemctl is-active sackd", timeout=15, check=False),
+    ]
+    mock_sleep.assert_not_called()
+
+
+def test_check_sackd_ready_retry_and_exhaustion(mocker):
+    """Verify check_sackd_ready retries with backoff and calls status upon exhaustion."""
+    mock_run = mocker.patch(
+        "setup.run",
+        side_effect=[
+            Mock(returncode=0),  # enable sackd
+            Mock(returncode=1),  # try 1 restart fails
+            Mock(returncode=1),  # try 2 restart fails
+            Mock(returncode=3),  # status sackd
+        ],
+    )
+    mock_sleep = mocker.patch("setup.time.sleep")
+
+    check_sackd_ready(maxtries=2, interval=15.0)
+
+    assert mock_run.call_count == 4
+    mock_run.assert_called_with("systemctl status sackd", timeout=30, check=False)
+    assert mock_sleep.call_count == 2
+    mock_sleep.assert_has_calls([call(10.0), call(15.0)])
