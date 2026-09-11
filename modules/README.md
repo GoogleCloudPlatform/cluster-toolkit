@@ -290,8 +290,21 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 ### Security
 
 * **[kubernetes-secret]** ![core-badge] : Creates a Kubernetes secret in a specified namespace on a given GKE cluster.
+* **[kms-key]** ![community-badge] ![experimental-badge] : Creates a Cloud KMS
+  key ring and symmetric CryptoKey for customer-managed encryption (CMEK).
+  Supports keys co-located with the workload or held in a dedicated key project.
+* **[kms-key-iam]** ![community-badge] ![experimental-badge] : Grants key-level
+  encrypt/decrypt access on a CryptoKey to the service agents that encrypt with
+  it. CMEK consumers should `use` this module, so they are ordered behind the
+  grants rather than merely behind the key.
+* **[pre-existing-kms-key]** ![community-badge] ![experimental-badge] : Looks up
+  a CryptoKey that already exists, for keys owned by a security team or created
+  outside Terraform. Interchangeable with kms-key downstream.
 
 [kubernetes-secret]: security/kubernetes-secret/README.md
+[kms-key]: ../community/modules/security/kms-key/README.md
+[kms-key-iam]: ../community/modules/security/kms-key-iam/README.md
+[pre-existing-kms-key]: ../community/modules/security/pre-existing-kms-key/README.md
 
 ## Module Fields
 

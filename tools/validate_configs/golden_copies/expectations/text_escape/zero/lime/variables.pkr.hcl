@@ -74,6 +74,16 @@ variable "tags" {
   default     = null
 }
 
+variable "image_encryption_key" {
+  description = <<-DOC
+    The full resource name of a Cloud KMS CryptoKey used to encrypt the
+    produced image (CMEK). The Compute Engine service agent must hold
+    roles/cloudkms.cryptoKeyEncrypterDecrypter on the key.
+  DOC
+  type        = string
+  default     = null
+}
+
 variable "image_family" {
   description = "The family name of the image to be built. Defaults to `deployment_name`"
   type        = string

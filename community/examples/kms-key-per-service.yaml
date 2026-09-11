@@ -1,0 +1,269 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: kms-key-per-service
+
+# A CMEK Slurm cluster with one key per class of resource, each granted only
+# to the service agent that uses it. community/examples/kms-key.yaml is the
+# same cluster with a single key shared by everything; start there. This one
+# exists to show three things that example cannot:
+#
+#   1. Least privilege. The Compute Engine agent can decrypt the disks and
+#      nothing else; the Cloud Storage agent can decrypt the Slurm
+#      configuration bucket and nothing else. Compromising one agent does not
+#      expose data belonging to the other. Splitting keys also means a key can
+#      be rotated, or its versions disabled, without touching unrelated data.
+#
+#   2. Adopting a key the blueprint does not own. The Filestore key here is
+#      created outside the blueprint and looked up with pre-existing-kms-key,
+#      which is how a key provisioned by a security team, or held in a
+#      dedicated key project, is used. It is never in Terraform state, so
+#      `terraform destroy` cannot touch it.
+#
+#   3. disk_encryption_key_service_account. The debug nodeset names the
+#      cluster's own service account as the encryption identity instead of
+#      letting Compute Engine use its service agent. That is why the disk key
+#      grants both -- see the comment on disk_key_iam below.
+#
+# Each key needs its own kms-key-iam module: the grants are what consumers
+# depend on, and one module per key keeps each key granted to exactly one
+# agent. `use` a key module directly and the resource is ordered behind the
+# key but not the grant, which fails intermittently.
+#
+# Cost note: this builds a real cluster -- a controller, a login node and a
+# 1 TiB ZONAL Filestore instance are charged from the moment they exist.
+#
+# Teardown note: deletion_policy has no default -- disk_key and bucket_key
+# are both set to ABANDON below, so `terraform destroy` leaves both keys'
+# versions enabled and the resources they encrypted stay decryptable; the
+# adopted filestore_key is never touched either way, since
+# pre-existing-kms-key never creates a resource for destroy to act on. Key
+# rings and CryptoKey names are retained regardless of deletion_policy
+# (Cloud KMS never frees either), so redeploying under the same
+# deployment_name still fails on the retained rings; use a fresh
+# deployment_name, or point key_ring_id at the retained ring with a new
+# key_name. Set a key module's deletion_policy to DELETE instead only once
+# you have deliberately decided that key's data is disposable.
+vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: true
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: kms-per-service
+  region: us-central1
+  zone: us-central1-a
+
+  # An existing CryptoKey for the Filestore instance, created outside this
+  # blueprint. Replace with a real one; the module fails at plan time if it
+  # does not exist or is not a symmetric ENCRYPT_DECRYPT key. To make one:
+  #
+  #   gcloud kms keyrings create my-filestore-keyring --location=us-central1
+  #   gcloud kms keys create my-filestore-key --location=us-central1 \
+  #       --keyring=my-filestore-keyring --purpose=encryption
+  #
+  # It may live in another project; set filestore_key_project accordingly.
+  filestore_key_project: $(vars.project_id)
+  filestore_key_ring: my-filestore-keyring
+  filestore_key_name: my-filestore-key
+
+  # Provision the service agents before deploying -- they are created on
+  # demand, and a grant to an agent that does not exist yet fails:
+  #
+  #   gcloud storage service-agent --project=PROJECT_ID
+  #   gcloud beta services identity create --service=file.googleapis.com --project=PROJECT_ID
+  #   gcloud beta services identity create --service=compute.googleapis.com --project=PROJECT_ID
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+# test_apis_enabled runs at blueprint-expansion time, before any module is
+# applied, so the service-enablement module below cannot satisfy it on a
+# project where the API is still off. Skipping the validator is what lets
+# the module do the enabling; without the skip a cold project fails before
+# it gets the chance.
+validators:
+- validator: test_apis_enabled
+  skip: true  # enable_apis below turns cloudkms on
+
+deployment_groups:
+- group: primary
+  modules:
+
+  # The kms-key, kms-key-iam and pre-existing-kms-key modules all declare
+  # cloudkms.googleapis.com in their metadata, so a project that has never
+  # used Cloud KMS needs it switched on before the key can be created.
+  - id: enable_apis
+    source: community/modules/project/service-enablement
+    settings:
+      gcp_service_list: ["cloudkms.googleapis.com"]
+  - id: network
+    source: modules/network/vpc
+
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [network]
+
+  - id: hpc_service_account
+    source: modules/project/service-account
+    settings:
+      project_id: $(vars.project_id)
+      name: cluster
+      project_roles:
+      - compute.instanceAdmin.v1
+
+  # --- Disk key: boot and additional disks -----------------------------
+  - id: disk_key
+    source: community/modules/security/kms-key
+    settings:
+      project_id: $(vars.project_id)
+      location: $(vars.region)
+      key_ring_name: $(vars.deployment_name)-disk-ring
+      key_name: $(vars.deployment_name)-disk-key
+      # ABANDON: boot/scratch disks are routinely recreated, but the data on
+      # them may not be, so this key outlives `terraform destroy` by default.
+      deletion_policy: ABANDON
+
+  - id: disk_key_iam
+    source: community/modules/security/kms-key-iam
+    use: [disk_key]
+    settings:
+      project_id: $(vars.project_id)
+      # `compute` covers every disk whose encryption request Compute Engine
+      # makes as its own service agent, which is the default. The debug
+      # nodeset below overrides that with the cluster's service account, so
+      # that identity needs the grant too -- an override moves the
+      # requirement, it does not remove it.
+      service_agents: [compute]
+      custom_service_accounts:
+      - $(hpc_service_account.service_account_email)
+
+  # --- Storage key: the Slurm configuration bucket ----------------------
+  - id: bucket_key
+    source: community/modules/security/kms-key
+    settings:
+      project_id: $(vars.project_id)
+      location: $(vars.region)
+      key_ring_name: $(vars.deployment_name)-bucket-ring
+      key_name: $(vars.deployment_name)-bucket-key
+      # ABANDON: the Slurm configuration bucket is recreated on every
+      # deployment, but nothing about that requires destroying this key too.
+      deletion_policy: ABANDON
+
+  - id: bucket_key_iam
+    source: community/modules/security/kms-key-iam
+    use: [bucket_key]
+    settings:
+      project_id: $(vars.project_id)
+      service_agents: [storage]
+
+  # --- Filestore key: adopted, not created ------------------------------
+  - id: filestore_key
+    source: community/modules/security/pre-existing-kms-key
+    settings:
+      project_id: $(vars.filestore_key_project)
+      location: $(vars.region)
+      key_ring_name: $(vars.filestore_key_ring)
+      key_name: $(vars.filestore_key_name)
+
+  - id: filestore_key_iam
+    source: community/modules/security/kms-key-iam
+    use: [filestore_key]
+    settings:
+      # The agent belongs to the workload project even when the key does
+      # not, which is what makes a dedicated key project work.
+      project_id: $(vars.project_id)
+      service_agents: [filestore]
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network, private_service_access, filestore_key_iam]
+    settings:
+      local_mount: /home
+      # ZONAL is the cheapest tier supporting CMEK; BASIC_HDD does not.
+      # size_gb is the tier minimum, since this is a demonstration.
+      filestore_tier: ZONAL
+      size_gb: 1024
+
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, disk_key_iam]
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      allow_automatic_updates: false
+      # Encrypt as the cluster's own service account rather than the
+      # Compute Engine service agent. Both are granted on disk_key above.
+      disk_encryption_key_service_account: $(hpc_service_account.service_account_email)
+
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - debug_nodeset
+    settings:
+      partition_name: debug
+      exclusive: false # allows nodes to stay up after jobs are done
+      is_default: true
+
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, disk_key_iam]
+    settings:
+      node_count_dynamic_max: 20
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+      # `use` cannot reach inside a caller-supplied list of objects, so the
+      # key is written in explicitly here while the boot disk above gets it
+      # automatically.
+      additional_disks:
+      - device_name: scratch0
+        disk_name: null
+        disk_size_gb: 375
+        disk_type: pd-balanced
+        disk_labels: {}
+        auto_delete: true
+        boot: false
+        disk_encryption_key: $(disk_key_iam.disk_encryption_key)
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - compute_nodeset
+    settings:
+      partition_name: compute
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network, disk_key_iam]
+    settings:
+      machine_type: n2-standard-4
+      enable_login_public_ips: true
+
+  # The controller takes both keys: disk_key_iam for its boot disk (via
+  # `use`), and bucket_key_iam for the Slurm configuration bucket. `use`
+  # would bind whichever came first to both settings, so the bucket key is
+  # named explicitly to keep the split.
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - debug_partition
+    - compute_partition
+    - homefs
+    - slurm_login
+    - disk_key_iam
+    settings:
+      enable_controller_public_ips: true
+      slurm_bucket_kms_key: $(bucket_key_iam.slurm_bucket_kms_key)
