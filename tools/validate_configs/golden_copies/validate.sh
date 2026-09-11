@@ -26,7 +26,7 @@ run_test() {
 	bpFile=$(basename "$bp")
 	DEPLOYMENT="golden_copy_deployment"
 	PROJECT="invalid-project"
-	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_quota_availability"
+	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_quota_availability,test_machine_type_in_zone,test_reservation_exists,test_disk_type_in_zone"
 	GHPC_PATH="${cwd}/ghpc"
 	# Cover the three possible starting sequences for local sources: ./ ../ /
 	LOCAL_SOURCE_PATTERN='source:\s\+\(\./\|\.\./\|/\)'
@@ -79,6 +79,9 @@ run_test() {
 	find . -name "README.md" -exec rm {} \;
 	sed -i -E 's/(ghpc_version: )(.*)/\1golden/' .ghpc/artifacts/expanded_blueprint.yaml
 	sed -i '/- validator: test_quota_availability/,+1d' .ghpc/artifacts/expanded_blueprint.yaml
+        sed -i '/- validator: test_machine_type_in_zone/,+1d' .ghpc/artifacts/expanded_blueprint.yaml
+        sed -i '/- validator: test_reservation_exists/,+1d' .ghpc/artifacts/expanded_blueprint.yaml
+        sed -i '/- validator: test_disk_type_in_zone/,+1d' .ghpc/artifacts/expanded_blueprint.yaml
 
 	# Compare the deployment folder with the golden copy
 	diff --recursive --color='auto' --exclude="previous_deployment_groups" \
