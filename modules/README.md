@@ -193,10 +193,13 @@ Modules that are still in development and less stable are labeled with the
 * **[workload_identity_binding]** ![core-badge] : Creates a Workload Identity binding between a Google Service Account (GSA) and a Kubernetes Service Account (KSA).
 * **[service-enablement]** ![community-badge] ![experimental-badge] : Allows enabling
   various APIs for a Google Cloud Project.
+* **[project-metadata]** ![community-badge] ![experimental-badge] : Sets project compute
+  metadata items for a Google Cloud project.
 
 [service-account]: ../modules/project/service-account/README.md
 [workload_identity_binding]: project/workload_identity_binding/README.md
 [service-enablement]: ../community/modules/project/service-enablement/README.md
+[project-metadata]: ../community/modules/project/project-metadata/README.md
 
 ### Pub/Sub
 
