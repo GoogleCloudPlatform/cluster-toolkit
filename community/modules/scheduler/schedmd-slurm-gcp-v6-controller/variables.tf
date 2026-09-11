@@ -167,6 +167,7 @@ variable "login_nodes" {
         network_tier = string
       })), [])
       network            = optional(string)
+      network_attachment = optional(string)
       network_ip         = optional(string, "")
       nic_type           = optional(string)
       queue_count        = optional(number)
@@ -235,6 +236,31 @@ variable "login_nodes" {
   validation {
     condition     = length(distinct([for x in var.login_nodes : x.group_name])) == length(var.login_nodes)
     error_message = "All login_nodes must have a unique group name."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for ln in var.login_nodes : [
+        for nic in(ln.additional_networks != null ? ln.additional_networks : []) : (
+          # Cannot specify network or subnetwork alongside network_attachment
+          !(((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "")) && (nic.network_attachment != null && nic.network_attachment != "")) &&
+          # Must specify at least one of network, subnetwork, or network_attachment
+          ((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "") || (nic.network_attachment != null && nic.network_attachment != ""))
+        )
+      ]
+    ]))
+    error_message = "In var.login_nodes[*].additional_networks, you must specify at least one of 'network', 'subnetwork', or 'network_attachment'. You cannot specify 'network' or 'subnetwork' alongside 'network_attachment'."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for ln in var.login_nodes : [
+        for nic in(ln.additional_networks != null ? ln.additional_networks : []) : (
+          nic.network_attachment == null || nic.network_attachment == "" || can(regex("^(?:https://www.googleapis.com/compute/[^/]+/)?projects/[^/]+/regions/[^/]+/networkAttachments/[^/]+$", nic.network_attachment))
+        )
+      ]
+    ]))
+    error_message = "In var.login_nodes[*].additional_networks, 'network_attachment' must be the full resource URI: projects/{project}/regions/{region}/networkAttachments/{name}."
   }
 }
 
@@ -334,25 +360,26 @@ variable "nodeset" {
     source_image         = optional(string)
     subnetwork_self_link = string
     additional_networks = optional(list(object({
-      network            = string
-      subnetwork         = string
-      subnetwork_project = string
-      network_ip         = string
-      nic_type           = string
-      stack_type         = string
-      queue_count        = number
-      access_config = list(object({
+      network            = optional(string)
+      subnetwork         = optional(string)
+      subnetwork_project = optional(string)
+      network_attachment = optional(string)
+      network_ip         = optional(string, "")
+      nic_type           = optional(string)
+      stack_type         = optional(string)
+      queue_count        = optional(number)
+      access_config = optional(list(object({
         nat_ip       = string
         network_tier = string
-      }))
-      ipv6_access_config = list(object({
+      })), [])
+      ipv6_access_config = optional(list(object({
         network_tier = string
-      }))
-      alias_ip_range = list(object({
+      })), [])
+      alias_ip_range = optional(list(object({
         ip_cidr_range         = string
         subnetwork_range_name = string
-      }))
-    })))
+      })), [])
+    })), [])
     access_config = optional(list(object({
       nat_ip       = string
       network_tier = string
@@ -371,6 +398,31 @@ variable "nodeset" {
     zone_policy_deny  = set(string)
   }))
   default = []
+
+  validation {
+    condition = alltrue(flatten([
+      for ns in var.nodeset : [
+        for nic in(ns.additional_networks != null ? ns.additional_networks : []) : (
+          # Cannot specify network or subnetwork alongside network_attachment
+          !(((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "")) && (nic.network_attachment != null && nic.network_attachment != "")) &&
+          # Must specify at least one of network, subnetwork, or network_attachment
+          ((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "") || (nic.network_attachment != null && nic.network_attachment != ""))
+        )
+      ]
+    ]))
+    error_message = "In var.nodeset[*].additional_networks, you must specify at least one of 'network', 'subnetwork', or 'network_attachment'. You cannot specify 'network' or 'subnetwork' alongside 'network_attachment'."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for ns in var.nodeset : [
+        for nic in(ns.additional_networks != null ? ns.additional_networks : []) : (
+          nic.network_attachment == null || nic.network_attachment == "" || can(regex("^(?:https://www.googleapis.com/compute/[^/]+/)?projects/[^/]+/regions/[^/]+/networkAttachments/[^/]+$", nic.network_attachment))
+        )
+      ]
+    ]))
+    error_message = "In var.nodeset[*].additional_networks, 'network_attachment' must be the full resource URI: projects/{project}/regions/{region}/networkAttachments/{name}."
+  }
 }
 
 variable "nodeset_tpu" {

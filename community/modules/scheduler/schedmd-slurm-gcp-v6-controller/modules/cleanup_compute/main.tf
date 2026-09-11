@@ -13,10 +13,12 @@
 # limitations under the License.
 
 locals {
-  cleanup_dependencies_agg = flatten([
+  cleanup_dependencies_agg = compact(flatten([
     var.nodeset.subnetwork_self_link,
     var.nodeset.additional_networks[*].subnetwork,
-  var.nodeset_template])
+    var.nodeset.additional_networks[*].network_attachment,
+    var.nodeset_template
+  ]))
 }
 
 # Can not use variadic list in `depends_on`, wrap it into a collection of `null_resource`

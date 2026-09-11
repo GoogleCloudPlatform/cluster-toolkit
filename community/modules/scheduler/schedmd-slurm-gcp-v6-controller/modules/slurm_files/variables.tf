@@ -560,4 +560,8 @@ variable "controller_network_attachment" {
   description = "SelfLink for NetworkAttachment to be attached to the controller, if any."
   type        = string
   default     = null
+  validation {
+    condition     = var.controller_network_attachment == null || var.controller_network_attachment == "" || can(regex("^(?:https://www.googleapis.com/compute/[^/]+/)?projects/[^/]+/regions/[^/]+/networkAttachments/[^/]+$", var.controller_network_attachment))
+    error_message = "Variable 'controller_network_attachment' must be the full resource URI: projects/{project}/regions/{region}/networkAttachments/{name}."
+  }
 }
