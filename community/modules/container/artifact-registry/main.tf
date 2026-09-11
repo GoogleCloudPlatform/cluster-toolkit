@@ -21,36 +21,17 @@ locals {
   # Auto (i.e., empty) vs user-managed replication
   auto = length(var.user_managed_replication) == 0 ? true : false
 
-  # For remote custom repositories, parse out host to create a base_component name
-  mirror_url_no_proto = var.repo_mirror_url != null ? replace(replace(var.repo_mirror_url, "https://", ""), "http://", "") : ""
-  mirror_host         = local.mirror_url_no_proto != "" ? split("/", local.mirror_url_no_proto)[0] : ""
-
-  base_component = replace(
-    replace(
-      replace(
-        lower(
-          local.mirror_host != ""
-          ? "${var.format}-${var.repo_mode}-${local.mirror_host}"
-          : "${var.format}-${var.repo_mode}-nohost"
-        ),
-        "\\.", "-"
-      ),
-      "/", "-"
-    ),
-    "_", "-"
+  # The final name for the artifact registry repository
+  repository_name = var.repository_name != null ? var.repository_name : replace(
+    lower("${var.deployment_name}-${random_id.resource_name_suffix.hex}"),
+    "/[_.]/",
+    "-"
   )
 
-  repository_suffix = random_id.resource_name_suffix.hex
-
-  # The final name for the artifact registry repository
-  repository_name = replace(
-    replace(
-      lower(
-        format("%s-%s", local.base_component, local.repository_suffix)
-      ),
-      ".", "-"
-    ),
-    "/", "-"
+  repo_url = (
+    contains(["APT", "YUM"], upper(var.format)) ?
+    "${var.region}-${lower(var.format)}.pkg.dev/projects/${var.project_id}/${local.repository_name}" :
+    "${var.region}-${lower(var.format)}.pkg.dev/${var.project_id}/${local.repository_name}"
   )
 
   # The secret name is derived from the repository name
