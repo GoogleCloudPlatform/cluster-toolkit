@@ -1151,13 +1151,18 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 			return fmt.Errorf("failed to check if LocalQueue exists: %w", err)
 		}
 		if !exists {
-			promptMsg := fmt.Sprintf("LocalQueue '%s' does not exist in namespace '%s'. Do you want gcluster to create default Kueue resources (ClusterQueue and LocalQueue) with calculated cluster capacity?", localQueue, ns)
+			availableQueues := g.listLocalQueues(ns)
+			availableStr := ""
+			if len(availableQueues) > 0 {
+				availableStr = fmt.Sprintf(" Available LocalQueues in namespace '%s': %s.", ns, strings.Join(availableQueues, ", "))
+			}
+			promptMsg := fmt.Sprintf("LocalQueue '%s' does not exist in namespace '%s'.%s Do you want gcluster to create default Kueue resources (ClusterQueue and LocalQueue) with calculated cluster capacity?", localQueue, ns, availableStr)
 			if shell.PromptYesNo(promptMsg) {
 				if err := g.createDefaultQueues(localQueue, ns); err != nil {
 					return err
 				}
 			} else {
-				return fmt.Errorf("LocalQueue '%s' does not exist in namespace '%s' and user declined to create default queues. Please create one manually or specify an existing queue using --queue flag", localQueue, ns)
+				return fmt.Errorf("LocalQueue '%s' does not exist in namespace '%s' and user declined to create default queues.%s Please create one manually or specify an existing queue using --queue flag", localQueue, ns, availableStr)
 			}
 		}
 

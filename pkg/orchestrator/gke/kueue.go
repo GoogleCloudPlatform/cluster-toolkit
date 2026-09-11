@@ -30,6 +30,7 @@ import (
 	"hpc-toolkit/pkg/shell"
 
 	"gopkg.in/yaml.v2"
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 // -----------------------------------------------------------------------------
@@ -82,21 +83,43 @@ var kueueCRDs = []string{
 	"workloads.kueue.x-k8s.io",
 }
 
-// -----------------------------------------------------------------------------
-// 2. Kueue Job Queue Resolution & Setup (Job-Level)
-// -----------------------------------------------------------------------------
+// parseKueueQueueName extracts and validates the Kueue LocalQueue name.
+// Supports bare names ("my-queue") and resource paths ("namespaces/default/localQueues/my-queue").
+func parseKueueQueueName(raw string) (string, error) {
+	queueName := strings.TrimSuffix(strings.TrimSpace(raw), "/")
+	if strings.Contains(queueName, "/") {
+		queueName = extractURIPart(queueName, "localQueues")
+		if queueName == "" || strings.Contains(queueName, "/") {
+			return "", fmt.Errorf("invalid queue name %q: must not contain slashes", raw)
+		}
+	}
+
+	if queueName == "" {
+		return "", fmt.Errorf("queue name cannot be empty")
+	}
+
+	if errs := validation.IsDNS1123Subdomain(queueName); len(errs) > 0 {
+		return "", fmt.Errorf("invalid queue name %q: %s", queueName, strings.Join(errs, ", "))
+	}
+
+	return queueName, nil
+}
 
 // resolveKueueQueue resolves which Kueue LocalQueue to use for job submission.
 // Precedence rules:
-// 1. If requestedQueueName is specified explicitly by the user, return it directly.
+// 1. If requestedQueueName is specified explicitly by the user, validate and return it directly.
 // 2. If 0 LocalQueues are found in the namespace, fall back to defaultLocalQueue ("default").
 // 3. If exactly 1 LocalQueue is found, auto-discover and return it.
 // 4. If multiple LocalQueues exist, check for standard "default", then "multislice-queue".
 // 5. If multiple non-standard LocalQueues exist, return an error asking the user to specify --queue.
 func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName, ns string) (string, error) {
 	if requestedQueueName != "" {
-		logging.Info("Using provided Kueue LocalQueue: %s", requestedQueueName)
-		return requestedQueueName, nil
+		cleanName, err := parseKueueQueueName(requestedQueueName)
+		if err != nil {
+			return "", err
+		}
+		logging.Info("Using provided Kueue LocalQueue: %s", cleanName)
+		return cleanName, nil
 	}
 
 	res := g.executor.ExecuteCommand("kubectl", "get", "localqueue", "-n", ns, "-o", "jsonpath={.items[*].metadata.name}")
@@ -126,6 +149,15 @@ func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName, ns string) (stri
 	}
 
 	return "", fmt.Errorf("multiple LocalQueues found (%v) and no standard '%s' or '%s' present. Please specify which one to use using --queue flag", queues, defaultLocalQueue, multisliceLocalQueue)
+}
+
+// listLocalQueues returns a slice of existing LocalQueue names in the given namespace.
+func (g *GKEOrchestrator) listLocalQueues(ns string) []string {
+	res := g.executor.ExecuteCommand("kubectl", "get", "localqueue", "-n", ns, "-o", "jsonpath={.items[*].metadata.name}")
+	if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) == "" {
+		return nil
+	}
+	return strings.Fields(strings.TrimSpace(res.Stdout))
 }
 
 // checkLocalQueueExists checks if a LocalQueue with the given name exists in the namespace.
