@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM us-central1-docker.pkg.dev/hpc-toolkit-dev/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
+# PROJECT_ID is passed from Cloud Build to dynamically set the repository 
+ARG PROJECT_ID
+
+FROM us-central1-docker.pkg.dev/${PROJECT_ID}/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
 
 RUN apt-get -y update && apt-get -y install gnupg && \
     mkdir -p /usr/share/keyrings && \
