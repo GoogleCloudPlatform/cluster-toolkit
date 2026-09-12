@@ -99,7 +99,8 @@ def schedule_evenly(builds: list[str], start: int, end: int) -> dict[str, int]:
 
 def check_resource_constraints(schedule: dict[str, int]) -> bool:
     for tests, min_distance in TEMPORAL_CONSTRAINTS:
-        for a, b  in itertools.combinations(tests, 2):
+        active_tests = [t for t in tests if t in schedule]
+        for a, b in itertools.combinations(active_tests, 2):
             if abs(schedule[a] - schedule[b]) < min_distance:
                 return False
     return True

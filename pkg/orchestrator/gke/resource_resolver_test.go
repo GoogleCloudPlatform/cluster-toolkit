@@ -530,12 +530,7 @@ func TestVerifyStaticSlicingActive(t *testing.T) {
 				orc.clusterDesc.NodePools = tt.nodePools
 			}
 
-			job := &orchestrator.JobDefinition{
-				MachineType: tt.machineType,
-				Topology:    tt.requestedTopo,
-			}
-
-			got, err := orc.verifyStaticSlicingActive(job)
+			got, err := orc.verifyStaticSlicingActive(tt.machineType, tt.requestedTopo)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("verifyStaticSlicingActive() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -546,7 +541,7 @@ func TestVerifyStaticSlicingActive(t *testing.T) {
 			if tt.verifyCacheHit && err == nil && got == tt.wantActive {
 				// Clear mock executor to ensure subsequent call is satisfied entirely from cache
 				orc.executor = NewMockExecutor(nil)
-				got2, err2 := orc.verifyStaticSlicingActive(job)
+				got2, err2 := orc.verifyStaticSlicingActive(tt.machineType, tt.requestedTopo)
 				if err2 != nil || got2 != tt.wantActive {
 					t.Errorf("cache hit failed: got %v, err %v", got2, err2)
 				}
@@ -671,229 +666,6 @@ func TestResolveHardwareRequirements_NAPIncompatibilities(t *testing.T) {
 				}
 				if !strings.Contains(err.Error(), tt.expectedErrMatch) {
 					t.Errorf("expected error to contain %q, got: %v", tt.expectedErrMatch, err)
-				}
-			} else {
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-			}
-		})
-	}
-}
-
-func TestValidateConsumptionForStaticCluster(t *testing.T) {
-	tests := []struct {
-		name        string
-		napEnabled  bool
-		napLimits   map[string]int64
-		nodePools   []gkeJobNodePool
-		job         orchestrator.JobDefinition
-		wantErr     bool
-		expectedErr string
-	}{
-		{
-			name:       "Static Cluster - Explicit on-demand flag fails",
-			napEnabled: false,
-			job: orchestrator.JobDefinition{
-				GKENAPProvisioning: "on-demand",
-			},
-			wantErr:     true,
-			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning \"on-demand\", --gke-nap-reservation \"\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
-		},
-		{
-			name:       "Static Cluster - Empty string consumption model",
-			napEnabled: false,
-			job: orchestrator.JobDefinition{
-				GKENAPProvisioning: "",
-			},
-			wantErr: false,
-		},
-		{
-			name:       "Static Cluster - Consumption model flag set to spot",
-			napEnabled: false,
-			job: orchestrator.JobDefinition{
-				GKENAPProvisioning: "spot",
-			},
-			wantErr:     true,
-			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning \"spot\", --gke-nap-reservation \"\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
-		},
-		{
-			name:       "Static Cluster - Reservation name flag set",
-			napEnabled: false,
-			job: orchestrator.JobDefinition{
-				GKENAPProvisioning: "on-demand",
-				GKENAPReservation:  "my-res",
-			},
-			wantErr:     true,
-			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning \"on-demand\", --gke-nap-reservation \"my-res\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
-		},
-		{
-			name:       "NAP Cluster - Machine type in NAP limits",
-			napEnabled: true,
-			napLimits: map[string]int64{
-				"tpu-v6e-slice": 100,
-			},
-			job: orchestrator.JobDefinition{
-				MachineType:        "ct6e-standard-8t", // TPU
-				GKENAPProvisioning: "spot",
-			},
-			wantErr: false,
-		},
-		{
-			name:       "NAP Cluster - Machine type not in limits, but matches static pool",
-			napEnabled: true,
-			napLimits:  map[string]int64{},
-			nodePools: []gkeJobNodePool{
-				{
-					Config: gkeNodePoolConfig{
-						MachineType: "n2-standard-4",
-						Labels: map[string]string{
-							"cloud.google.com/gke-provisioning": "spot",
-						},
-					},
-				},
-			},
-			job: orchestrator.JobDefinition{
-				ComputeType:        "n2-standard-4",
-				MachineType:        "n2-standard-4",
-				GKENAPProvisioning: "spot",
-			},
-			wantErr:     true,
-			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
-		},
-		{
-			name:       "NAP Cluster - Machine type not in limits, and mismatches static pool",
-			napEnabled: true,
-			napLimits:  map[string]int64{},
-			nodePools: []gkeJobNodePool{
-				{
-					Config: gkeNodePoolConfig{
-						MachineType: "n2-standard-4",
-						Labels: map[string]string{
-							"cloud.google.com/gke-provisioning": "standard",
-						},
-					},
-				},
-			},
-			job: orchestrator.JobDefinition{
-				ComputeType:        "n2-standard-4",
-				MachineType:        "n2-standard-4",
-				GKENAPProvisioning: "spot",
-			},
-			wantErr:     true,
-			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
-		},
-		{
-			name:       "NAP Cluster - Machine type covered by generic TPU limit fallback",
-			napEnabled: true,
-			napLimits: map[string]int64{
-				"google.com/tpu": 100,
-			},
-			job: orchestrator.JobDefinition{
-				MachineType:        "ct6e-standard-8t",
-				GKENAPProvisioning: "spot",
-			},
-			wantErr: false,
-		},
-		{
-			name:       "NAP Cluster - Machine type with unknown GPU accelerator fails fast",
-			napEnabled: true,
-			napLimits:  map[string]int64{},
-			job: orchestrator.JobDefinition{
-				MachineType:        "my-unknown-gpu-machine",
-				GKENAPProvisioning: "spot",
-			},
-			wantErr:     true,
-			expectedErr: "unknown accelerator label: \"unknown-gpu\"",
-		},
-		{
-			name:       "NAP Cluster - TPU: Specific limit configured, requesting different TPU (Should Fail)",
-			napEnabled: true,
-			napLimits: map[string]int64{
-				"tpu-v6e-slice":  8,
-				"google.com/tpu": 8,
-			},
-			job: orchestrator.JobDefinition{
-				MachineType:        "ct5lp-hightpu-4t", // TPU v5e (tpu-v5-lite-podslice)
-				GKENAPProvisioning: "spot",
-			},
-			wantErr:     true,
-			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
-		},
-		{
-			name:       "NAP Cluster - GPU: Specific limit configured, requesting different GPU (Should Fail)",
-			napEnabled: true,
-			napLimits: map[string]int64{
-				"nvidia-h100-mega-80gb": 8,
-				"nvidia.com/gpu":        8,
-			},
-			job: orchestrator.JobDefinition{
-				MachineType:        "g2-standard-12", // L4 GPU (nvidia-l4)
-				GKENAPProvisioning: "spot",
-			},
-			wantErr:     true,
-			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
-		},
-		{
-			name:       "NAP Cluster - GPU: Generic limit only, requesting GPU (Should Pass)",
-			napEnabled: true,
-			napLimits: map[string]int64{
-				"nvidia.com/gpu": 8,
-			},
-			job: orchestrator.JobDefinition{
-				MachineType:        "g2-standard-12",
-				GKENAPProvisioning: "spot",
-			},
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			orc := newTestGKEOrchestrator(nil)
-			orc.napEnabled = tt.napEnabled
-			orc.napLimits = tt.napLimits
-			orc.clusterDesc.NodePools = tt.nodePools
-			orc.machineCapCache = map[string]MachineTypeCap{
-				"n2-standard-4:": {
-					GuestCpus: 4,
-					MemoryMb:  16000,
-				},
-				"my-unknown-gpu-machine:": {
-					GuestCpus: 8,
-					MemoryMb:  32000,
-					Accelerators: []struct {
-						Count int    `json:"guestAcceleratorCount"`
-						Type  string `json:"guestAcceleratorType"`
-					}{
-						{
-							Count: 1,
-							Type:  "unknown-gpu",
-						},
-					},
-				},
-				"g2-standard-12:": {
-					GuestCpus: 12,
-					MemoryMb:  48000,
-					Accelerators: []struct {
-						Count int    `json:"guestAcceleratorCount"`
-						Type  string `json:"guestAcceleratorType"`
-					}{
-						{
-							Count: 1,
-							Type:  "nvidia-l4",
-						},
-					},
-				},
-			}
-
-			err := orc.validateConsumptionForStaticCluster(&tt.job)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("expected error, got nil")
-				}
-				if !strings.Contains(err.Error(), tt.expectedErr) {
-					t.Errorf("expected error containing %q, got: %v", tt.expectedErr, err)
 				}
 			} else {
 				if err != nil {
@@ -1058,8 +830,8 @@ func TestCheckNodePoolsDynamicSlicing_PolicyLookupAndCaching(t *testing.T) {
 				},
 			},
 			mockResponses: map[string][]shell.CommandResult{
-				"gcloud compute resource-policies describe tpu7x-policy --region=us-central1 --project=cloud-tpu-dev --format=value(workloadPolicy.acceleratorTopologyMode)": {
-					{ExitCode: 0, Stdout: "PROVISION_ONLY\n"},
+				"gcloud compute resource-policies describe tpu7x-policy --region=us-central1 --project=cloud-tpu-dev --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"tpu7x-policy","workloadPolicy":{"acceleratorTopologyMode":"PROVISION_ONLY"}}`},
 				},
 			},
 			wantResult: true,
@@ -1093,11 +865,37 @@ func TestCheckNodePoolsDynamicSlicing_PolicyLookupAndCaching(t *testing.T) {
 				},
 			},
 			mockResponses: map[string][]shell.CommandResult{
-				"gcloud compute resource-policies describe tpu7x-policy --region=us-central1 --project=cloud-tpu-dev --format=value(workloadPolicy.acceleratorTopologyMode)": {
-					{ExitCode: 0, Stdout: "PROVISION_ONLY\n"},
+				"gcloud compute resource-policies describe tpu7x-policy --region=us-central1 --project=cloud-tpu-dev --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"tpu7x-policy","workloadPolicy":{"acceleratorTopologyMode":"PROVISION_ONLY"}}`},
 				},
 			},
 			wantResult: true,
+			wantErr:    false,
+		},
+		{
+			name: "Success - Permission denied reading policy logs warning and assumes non-dynamic slicing without failing",
+			opts: ManifestOptions{
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "cloud-tpu-dev",
+				Topology:        "2x2x2",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "np-0",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						PolicyName: "restricted-policy",
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe restricted-policy --region=us-central1 --project=cloud-tpu-dev --format=json": {
+					{ExitCode: 1, Stderr: "ERROR: (gcloud.compute.resource-policies.describe) Some requests did not succeed: - Required 'compute.resourcePolicies.get' permission for '...'"},
+				},
+			},
+			wantResult: false,
 			wantErr:    false,
 		},
 		{
@@ -1119,8 +917,8 @@ func TestCheckNodePoolsDynamicSlicing_PolicyLookupAndCaching(t *testing.T) {
 				},
 			},
 			mockResponses: map[string][]shell.CommandResult{
-				"gcloud compute resource-policies describe invalid-policy --region=us-central1 --project=cloud-tpu-dev --format=value(workloadPolicy.acceleratorTopologyMode)": {
-					{ExitCode: 1, Stderr: "ERROR: (gcloud.compute.resource-policies.describe) Could not fetch resource policy"},
+				"gcloud compute resource-policies describe invalid-policy --region=us-central1 --project=cloud-tpu-dev --format=json": {
+					{ExitCode: 1, Stderr: "ERROR: (gcloud.compute.resource-policies.describe) Internal error occurred"},
 				},
 			},
 			wantResult: false,
@@ -1135,15 +933,338 @@ func TestCheckNodePoolsDynamicSlicing_PolicyLookupAndCaching(t *testing.T) {
 			g.projectID = tt.opts.ProjectID
 			g.clusterDesc.NodePools = tt.nodePools
 
-			got, err := g.checkNodePoolsDynamicSlicing("tpu7x-standard-4t", tt.opts, true)
+			got, err := g.checkNodePoolsDynamicSlicing("tpu7x-standard-4t", tt.opts)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("checkNodePoolsDynamicSlicing() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if got != tt.wantResult {
 				t.Errorf("checkNodePoolsDynamicSlicing() = %v, want %v", got, tt.wantResult)
 			}
-			if tt.wantResult && len(g.policyCache) == 0 {
-				t.Errorf("expected policyCache to be populated")
+			if tt.wantResult && len(g.resourcePolicyCache) == 0 {
+				t.Errorf("expected resourcePolicyCache to be populated")
+			}
+		})
+	}
+}
+
+func TestParseResourcePolicyURI(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		wantPolicy  string
+		wantProject string
+		wantRegion  string
+	}{
+		{
+			name:       "Plain policy name",
+			input:      "my-policy",
+			wantPolicy: "my-policy",
+		},
+		{
+			name:        "Relative resource URI",
+			input:       "projects/my-project/regions/us-central1/resourcePolicies/my-policy",
+			wantPolicy:  "my-policy",
+			wantProject: "my-project",
+			wantRegion:  "us-central1",
+		},
+		{
+			name:        "Full HTTPS URL with compute/v1",
+			input:       "https://www.googleapis.com/compute/v1/projects/my-project/regions/us-central1/resourcePolicies/my-policy",
+			wantPolicy:  "my-policy",
+			wantProject: "my-project",
+			wantRegion:  "us-central1",
+		},
+		{
+			name:        "Relative resource URI with trailing slash",
+			input:       "projects/my-project/regions/us-central1/resourcePolicies/my-policy/",
+			wantPolicy:  "my-policy",
+			wantProject: "my-project",
+			wantRegion:  "us-central1",
+		},
+		{
+			name:        "Full HTTPS URL with subdomain compute.googleapis.com",
+			input:       "https://compute.googleapis.com/compute/v1/projects/prod-project/regions/europe-west4/resourcePolicies/prod-policy",
+			wantPolicy:  "prod-policy",
+			wantProject: "prod-project",
+			wantRegion:  "europe-west4",
+		},
+		{
+			name:        "Incomplete resource URI ending at resourcePolicies with trailing slash",
+			input:       "projects/my-project/regions/us-central1/resourcePolicies/",
+			wantPolicy:  "",
+			wantProject: "my-project",
+			wantRegion:  "us-central1",
+		},
+		{
+			name:        "Incomplete resource URI ending at resourcePolicies without trailing slash",
+			input:       "projects/my-project/regions/us-central1/resourcePolicies",
+			wantPolicy:  "",
+			wantProject: "my-project",
+			wantRegion:  "us-central1",
+		},
+		{
+			name:        "Resource policy named resourcepolicies-xyz in full URI",
+			input:       "projects/my-project/regions/us-central1/resourcePolicies/resourcepolicies-xyz",
+			wantPolicy:  "resourcepolicies-xyz",
+			wantProject: "my-project",
+			wantRegion:  "us-central1",
+		},
+		{
+			name:        "Non-canonical path without resourcePolicies collection returns empty policy name",
+			input:       "custom/resourcepolicies-xyz",
+			wantPolicy:  "",
+			wantProject: "",
+			wantRegion:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseResourcePolicyURI(tt.input)
+			if got.Name != tt.wantPolicy {
+				t.Errorf("parseResourcePolicyURI(%q).Name = %q, want %q", tt.input, got.Name, tt.wantPolicy)
+			}
+			if got.Project != tt.wantProject {
+				t.Errorf("parseResourcePolicyURI(%q).Project = %q, want %q", tt.input, got.Project, tt.wantProject)
+			}
+			if got.Region != tt.wantRegion {
+				t.Errorf("parseResourcePolicyURI(%q).Region = %q, want %q", tt.input, got.Region, tt.wantRegion)
+			}
+		})
+	}
+}
+
+func TestResolveWorkloadPlacementPolicy(t *testing.T) {
+	tests := []struct {
+		name          string
+		job           *orchestrator.JobDefinition
+		isTPU7x       bool
+		mockResponses map[string][]shell.CommandResult
+		wantPolicy    string
+		wantErr       bool
+	}{
+		{
+			name: "Placement policy already specified on job is verified and preserved",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+				PlacementPolicy: "user-specified-policy",
+			},
+			isTPU7x: true,
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe user-specified-policy --region=us-central1 --project=my-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"user-specified-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"2x2x2"}}`},
+				},
+			},
+			wantPolicy: "user-specified-policy",
+		},
+		{
+			name: "Placement policy specified as relative URI is sanitized and verified",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+				PlacementPolicy: "projects/my-project/regions/us-central1/resourcePolicies/user-specified-policy",
+			},
+			isTPU7x: true,
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe user-specified-policy --region=us-central1 --project=my-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"user-specified-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"2x2x2"}}`},
+				},
+			},
+			wantPolicy: "user-specified-policy",
+		},
+		{
+			name: "Placement policy specified as HTTPS URL is sanitized and verified",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+				PlacementPolicy: "https://www.googleapis.com/compute/v1/projects/my-project/regions/us-central1/resourcePolicies/user-specified-policy",
+			},
+			isTPU7x: true,
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe user-specified-policy --region=us-central1 --project=my-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"user-specified-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"2x2x2"}}`},
+				},
+			},
+			wantPolicy: "user-specified-policy",
+		},
+		{
+			name: "Placement policy with URI in dry-run mode is sanitized without GCE call",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+				DryRunManifest:  "/tmp/job.yaml",
+				PlacementPolicy: "projects/my-project/regions/us-central1/resourcePolicies/user-specified-policy",
+			},
+			isTPU7x:    true,
+			wantPolicy: "user-specified-policy",
+		},
+		{
+			name: "Non-TPU workload sanitizes placement policy URI without GCE query",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "a3-highgpu-8g",
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+				PlacementPolicy: "projects/my-project/regions/us-central1/resourcePolicies/gpu-policy",
+			},
+			isTPU7x:    false,
+			wantPolicy: "gpu-policy",
+		},
+		{
+			name: "Placement policy project mismatch returns error",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+				PlacementPolicy: "projects/other-project/regions/us-central1/resourcePolicies/user-specified-policy",
+			},
+			isTPU7x: true,
+			wantErr: true,
+		},
+		{
+			name: "Placement policy region mismatch returns error",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+				PlacementPolicy: "projects/my-project/regions/europe-west4/resourcePolicies/user-specified-policy",
+			},
+			isTPU7x: true,
+			wantErr: true,
+		},
+		{
+			name: "Placement policy not found (404) returns error",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+				PlacementPolicy: "missing-policy",
+			},
+			isTPU7x: true,
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe missing-policy --region=us-central1 --project=my-project --format=json": {
+					{ExitCode: 1, Stderr: "ERROR: (gcloud.compute.resource-policies.describe) The resource 'projects/my-project/regions/us-central1/resourcePolicies/missing-policy' was not found"},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Placement policy topology mismatch returns error",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+				PlacementPolicy: "mismatched-policy",
+			},
+			isTPU7x: true,
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe mismatched-policy --region=us-central1 --project=my-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"mismatched-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"2x2x4"}}`},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Placement policy PROVISION_ONLY mode on static workload returns error",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+				PlacementPolicy: "dynamic-policy",
+			},
+			isTPU7x: true,
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe dynamic-policy --region=us-central1 --project=my-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"dynamic-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"2x2x2","acceleratorTopologyMode":"PROVISION_ONLY"}}`},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Placement policy invalid type returns error",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+				PlacementPolicy: "group-policy",
+			},
+			isTPU7x: true,
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe group-policy --region=us-central1 --project=my-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"group-policy","region":"us-central1","workloadPolicy":{"type":"GROUP_PLACEMENT","acceleratorTopology":"2x2x2"}}`},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Placement policy permission denied (403) warns and proceeds",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+				PlacementPolicy: "forbidden-policy",
+			},
+			isTPU7x: true,
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe forbidden-policy --region=us-central1 --project=my-project --format=json": {
+					{ExitCode: 1, Stderr: "ERROR: (gcloud.compute.resource-policies.describe) 403 Forbidden: Required 'compute.resourcePolicies.get' permission"},
+				},
+			},
+			wantPolicy: "forbidden-policy",
+		},
+		{
+			name: "Incomplete placement policy URI missing name returns error",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+				PlacementPolicy: "projects/my-project/regions/us-central1/resourcePolicies/",
+			},
+			isTPU7x: true,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExecutor := NewMockExecutor(tt.mockResponses)
+			g := newTestGKEOrchestrator(mockExecutor)
+			g.projectID = tt.job.ProjectID
+
+			err := g.resolveWorkloadPlacementPolicy(tt.job, tt.isTPU7x, false)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("resolveWorkloadPlacementPolicy() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && tt.job.PlacementPolicy != tt.wantPolicy {
+				t.Errorf("resolveWorkloadPlacementPolicy() placementPolicy = %q, want %q", tt.job.PlacementPolicy, tt.wantPolicy)
 			}
 		})
 	}

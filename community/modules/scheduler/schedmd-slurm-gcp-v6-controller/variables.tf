@@ -289,8 +289,9 @@ variable "nodeset" {
       use_job_duration = bool
       use_bulk_insert  = bool
     })
-    labels       = optional(map(string), {})
-    machine_type = optional(string)
+    provisioning_engine = optional(string, "AUTO")
+    labels              = optional(map(string), {})
+    machine_type        = optional(string)
     advanced_machine_features = object({
       enable_nested_virtualization = optional(bool)
       threads_per_core             = optional(number)

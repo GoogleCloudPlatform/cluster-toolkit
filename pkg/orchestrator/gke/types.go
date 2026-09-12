@@ -130,7 +130,7 @@ type GKEOrchestrator struct {
 	dynamicSlicingCache         map[string]bool
 	staticSlicingCache          map[string]bool
 	topologyCache               map[string]string
-	policyCache                 map[string]string
+	resourcePolicyCache         map[string]*GCEWorkloadPolicy
 	slicingTopologiesChecked    bool
 	slicingTopologiesDetected   bool
 	gkeCustomTemplatesPath      string
@@ -304,6 +304,15 @@ type gkeAutoscaling struct {
 	TotalMaxNodeCount int  `json:"totalMaxNodeCount"`
 }
 
+// GCEWorkloadPolicy represents a Google Compute Engine workload resource policy.
+type GCEWorkloadPolicy struct {
+	Name                    string `json:"name"`
+	Region                  string `json:"region"`
+	AcceleratorTopology     string `json:"acceleratorTopology,omitempty"`
+	AcceleratorTopologyMode string `json:"acceleratorTopologyMode,omitempty"`
+	Type                    string `json:"type,omitempty"`
+}
+
 type gkePlacementPolicy struct {
 	PolicyName              string `json:"policyName,omitempty"`
 	AcceleratorTopologyMode string `json:"acceleratorTopologyMode,omitempty"`
@@ -348,6 +357,11 @@ type gkeHighScaleCheckpointingConfig struct {
 
 type controlPlaneEndpointsConfig struct {
 	DnsEndpointConfig *dnsEndpointConfig `json:"dnsEndpointConfig,omitempty"`
+	IPEndpointsConfig *ipEndpointsConfig `json:"ipEndpointsConfig,omitempty"`
+}
+
+type ipEndpointsConfig struct {
+	EnablePublicEndpoint bool `json:"enablePublicEndpoint,omitempty"`
 }
 
 type dnsEndpointConfig struct {
@@ -502,7 +516,64 @@ type kueueWorkloadList struct {
 // parsedReservation holds the extracted components of a GCE reservation URI/path.
 type parsedReservation struct {
 	Project  string
+	Zone     string
 	Name     string
 	Block    string
 	Subblock string
+}
+
+// parsedResourcePolicy holds the extracted components of a GCE resource policy URI/path.
+type parsedResourcePolicy struct {
+	Project string
+	Region  string
+	Name    string
+}
+
+// reservationListItem represents an entry in the JSON response from gcloud compute reservations list.
+type reservationListItem struct {
+	Zone                string `json:"zone"`
+	SpecificReservation struct {
+		InstanceProperties struct {
+			MachineType string `json:"machineType"`
+		} `json:"instanceProperties"`
+	} `json:"specificReservation"`
+}
+
+// gceResourcePolicyRaw represents the raw JSON output from gcloud compute resource-policies describe.
+type gceResourcePolicyRaw struct {
+	Name           string `json:"name"`
+	Region         string `json:"region"`
+	WorkloadPolicy struct {
+		AcceleratorTopology     string `json:"acceleratorTopology"`
+		AcceleratorTopologyMode string `json:"acceleratorTopologyMode"`
+		Type                    string `json:"type"`
+	} `json:"workloadPolicy"`
+}
+
+// extractURIPart returns the path segment immediately following the given key segment in a slash-delimited URI or URL.
+// Comparison is case-insensitive.
+// E.g., extractURIPart("projects/p/regions/r/resourcePolicies/name", "regions") -> "r"
+func extractURIPart(uri, key string) string {
+	uri = strings.TrimSuffix(strings.TrimSpace(uri), "/")
+	for {
+		part, rest, found := strings.Cut(uri, "/")
+		if strings.EqualFold(part, key) {
+			val, _, _ := strings.Cut(rest, "/")
+			return val
+		}
+		if !found {
+			break
+		}
+		uri = rest
+	}
+	return ""
+}
+
+// isPermissionDenied returns true if the error text indicates a GCP IAM permission denial (403).
+func isPermissionDenied(errStr string) bool {
+	lower := strings.ToLower(errStr)
+	return strings.Contains(lower, "permission denied") ||
+		strings.Contains(lower, "permission_denied") ||
+		strings.Contains(lower, "required 'compute.") ||
+		(strings.Contains(lower, "403") && strings.Contains(lower, "forbidden"))
 }

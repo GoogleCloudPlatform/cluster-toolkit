@@ -292,3 +292,157 @@ func TestGeneratePathwaysManifest_MLDiagnosticsDisabled(t *testing.T) {
 		t.Errorf("Expected manifest to NOT contain ML Diagnostics label when disabled, got:\n%s", manifest)
 	}
 }
+
+func TestGenerateGKEManifest_OlderTPU_Default(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "tpu-v4-job",
+		CommandToRun:    "echo hello",
+		ComputeType:     "ct4p-hightpu-4t",
+		Topology:        "2x2x2",
+		NumSlices:       1,
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "mock-project",
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "2x2x2"}},
+		"gcloud compute machine-types describe ct4p-hightpu-4t --zone=us-central1-a --format=json":                              {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v4-podslice"}]}`}},
+	}
+	orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "v4-pool", Config: gkeNodePoolConfig{MachineType: "ct4p-hightpu-4t"}},
+	}
+
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	if job.NodesPerSlice != 2 {
+		t.Fatalf("expected NodesPerSlice to be 2 for 2x2x2 topology on ct4p-hightpu-4t, got %d", job.NodesPerSlice)
+	}
+	if job.PlacementPolicy != "" {
+		t.Errorf("expected PlacementPolicy to be empty for TPU v4, got %q", job.PlacementPolicy)
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	if strings.Contains(manifest, "cloud.google.com/placement-policy-name") {
+		t.Errorf("Did not expect cloud.google.com/placement-policy-name in TPU v4 manifest:\n%s", manifest)
+	}
+	if strings.Contains(manifest, "cloud.google.com/gke-placement-group") {
+		t.Errorf("Did not expect cloud.google.com/gke-placement-group in TPU v4 manifest:\n%s", manifest)
+	}
+	if !strings.Contains(manifest, "cloud.google.com/gke-tpu-accelerator: tpu-v4-podslice") {
+		t.Errorf("Expected cloud.google.com/gke-tpu-accelerator: tpu-v4-podslice in manifest:\n%s", manifest)
+	}
+	if !strings.Contains(manifest, "cloud.google.com/gke-tpu-topology: 2x2x2") {
+		t.Errorf("Expected cloud.google.com/gke-tpu-topology: 2x2x2 in manifest:\n%s", manifest)
+	}
+}
+
+func TestGenerateGKEManifest_OlderTPU_UserSpecifiedPlacement(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "tpu-v4-job",
+		CommandToRun:    "echo hello",
+		ComputeType:     "ct4p-hightpu-4t",
+		Topology:        "2x2x2",
+		NumSlices:       1,
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "mock-project",
+		PlacementPolicy: "my-custom-tpu-policy",
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "2x2x2"}},
+		"gcloud compute machine-types describe ct4p-hightpu-4t --zone=us-central1-a --format=json":                              {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v4-podslice"}]}`}},
+	}
+	orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "v4-pool", Config: gkeNodePoolConfig{MachineType: "ct4p-hightpu-4t"}},
+	}
+
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	if !strings.Contains(manifest, "cloud.google.com/placement-policy-name: my-custom-tpu-policy") {
+		t.Errorf("Expected cloud.google.com/placement-policy-name for TPU when specified, got:\n%s", manifest)
+	}
+	if strings.Contains(manifest, "cloud.google.com/gke-placement-group") {
+		t.Errorf("Did not expect cloud.google.com/gke-placement-group on TPU, got:\n%s", manifest)
+	}
+}
+
+func TestGenerateGKEManifest_GPU_Placement(t *testing.T) {
+	setupMockMachineConfig(t)
+	gpuJob := orchestrator.JobDefinition{
+		WorkloadName:    "gpu-job",
+		CommandToRun:    "echo hello",
+		ComputeType:     "a3-highgpu-8g",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "mock-project",
+		PlacementPolicy: "my-gpu-group",
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: ""}},
+		"gcloud compute machine-types describe a3-highgpu-8g --zone=us-central1-a --format=json":                                {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "nvidia-h100-80gb"}]}`}},
+	}
+	orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "gpu-pool", Config: gkeNodePoolConfig{MachineType: "a3-highgpu-8g"}},
+	}
+
+	gpuProfile, isDyn, isStat, err := orc.resolveHardwareRequirements(&gpuJob)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed for GPU: %v", err)
+	}
+
+	gpuOpts, err := orc.PrepareManifestOptions(gpuJob, "test-image:latest", gpuProfile, isDyn, isStat)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed for GPU: %v", err)
+	}
+
+	gpuManifest, err := orc.GenerateGKEManifest(gpuOpts, gpuProfile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed for GPU: %v", err)
+	}
+
+	if !strings.Contains(gpuManifest, "cloud.google.com/gke-placement-group: my-gpu-group") {
+		t.Errorf("Expected cloud.google.com/gke-placement-group for GPU, got:\n%s", gpuManifest)
+	}
+	if strings.Contains(gpuManifest, "cloud.google.com/placement-policy-name") {
+		t.Errorf("Did not expect cloud.google.com/placement-policy-name for GPU, got:\n%s", gpuManifest)
+	}
+}
