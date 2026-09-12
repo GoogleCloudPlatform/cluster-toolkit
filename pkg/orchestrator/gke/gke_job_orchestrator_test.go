@@ -2839,6 +2839,12 @@ func TestSharedReservationManifestGeneration(t *testing.T) {
 	orc.napLimits = map[string]int64{
 		"nvidia.com/gpu": 100,
 	}
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute reservations describe my-shared-res --zone=us-central1-a --project=my-owner-project --format=json": {
+			{ExitCode: 0, Stdout: `{"name":"my-shared-res","specificReservation":{"instanceProperties":{"machineType":"a3-highgpu-8g"}}}`},
+		},
+	}
+	orc.executor = NewMockExecutor(mockResponses)
 	// Mock machine capabilities fetcher to avoid actual API calls
 	orc.machineCapCache = map[string]MachineTypeCap{
 		"a3-highgpu-8g:us-central1-a": {
@@ -2901,6 +2907,12 @@ func TestSharedReservationSubblockManifestGeneration(t *testing.T) {
 	orc.napLimits = map[string]int64{
 		"nvidia.com/gpu": 100,
 	}
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute reservations describe my-shared-res --zone=us-central1-a --project=my-owner-project --format=json": {
+			{ExitCode: 0, Stdout: `{"name":"my-shared-res","specificReservation":{"instanceProperties":{"machineType":"a3-highgpu-8g"}}}`},
+		},
+	}
+	orc.executor = NewMockExecutor(mockResponses)
 	// Mock machine capabilities fetcher to avoid actual API calls
 	orc.machineCapCache = map[string]MachineTypeCap{
 		"a3-highgpu-8g:us-central1-a": {

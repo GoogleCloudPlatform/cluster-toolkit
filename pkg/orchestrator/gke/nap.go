@@ -15,6 +15,7 @@
 package gke
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path"
@@ -83,13 +84,6 @@ func (g *GKEOrchestrator) validateGPUNAPLimit(resolvedType string, cap MachineTy
 	return g.napLimits["nvidia.com/gpu"] > 0, nil
 }
 
-func (g *GKEOrchestrator) checkNAPFlagsSupported(hasNAPFlags bool, job *orchestrator.JobDefinition) error {
-	if !g.napEnabled && hasNAPFlags {
-		return fmt.Errorf("GKE NAP provisioning options (--gke-nap-provisioning %q, --gke-nap-reservation %q) are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled. The current cluster does not have NAP enabled.\nRemediation: Enable Node Auto-Provisioning on your cluster to use these options, or submit your job without them", job.GKENAPProvisioning, job.GKENAPReservation)
-	}
-	return nil
-}
-
 func (g *GKEOrchestrator) getConfiguredLimitsError(computeType string) error {
 	var configuredLimits []string
 	for k, v := range g.napLimits {
@@ -102,14 +96,12 @@ func (g *GKEOrchestrator) getConfiguredLimitsError(computeType string) error {
 }
 
 func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.JobDefinition) error {
-	hasNAPFlags := job.GKENAPProvisioning != ""
-
-	if err := g.checkNAPFlagsSupported(hasNAPFlags, job); err != nil {
-		return err
+	if job.GKENAPProvisioning == "" {
+		return nil
 	}
 
-	if !g.napEnabled || !hasNAPFlags {
-		return nil
+	if !g.napEnabled {
+		return fmt.Errorf("GKE NAP provisioning options (--gke-nap-provisioning %q, --gke-nap-reservation %q) are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled. The current cluster does not have NAP enabled.\nRemediation: Enable Node Auto-Provisioning on your cluster to use these options, or submit your job without them", job.GKENAPProvisioning, job.GKENAPReservation)
 	}
 
 	// NAP flags were requested. Validate strictly against GKE NAP limits.
@@ -121,7 +113,161 @@ func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.
 		return g.getConfiguredLimitsError(job.ComputeType)
 	}
 
+	return g.validateNAPReservation(job)
+}
+
+// validateNAPReservation verifies that the requested GCE reservation exists and is compatible.
+func (g *GKEOrchestrator) validateNAPReservation(job *orchestrator.JobDefinition) error {
+	if job.GKENAPProvisioning != "reservation" || job.GKENAPReservation == "" {
+		return nil
+	}
+
+	res := parseReservationURI(job.GKENAPReservation)
+	if res.Name == "" {
+		return fmt.Errorf("invalid reservation URI %q: unable to determine reservation name", job.GKENAPReservation)
+	}
+
+	if job.DryRunManifest != "" {
+		return nil
+	}
+
+	clusterRegion := shell.ExtractRegion(job.ClusterLocation)
+	if res.Zone != "" && clusterRegion != "" {
+		resRegion := shell.ExtractRegion(res.Zone)
+		if resRegion != "" && !strings.EqualFold(resRegion, clusterRegion) {
+			return fmt.Errorf("reservation %q belongs to zone %q (region %q), but cluster is in region %q", res.Name, res.Zone, resRegion, clusterRegion)
+		}
+	}
+
+	projectID := res.Project
+	if projectID == "" {
+		projectID = job.ProjectID
+	}
+
+	zone := res.Zone
+	if zone == "" && len(strings.Split(job.ClusterLocation, "-")) == 3 {
+		zone = job.ClusterLocation
+	}
+
+	if zone != "" {
+		return g.validateZonalReservation(res.Name, zone, projectID, job.MachineType)
+	}
+
+	return g.validateRegionalReservation(res.Name, job.ClusterLocation, projectID, job.MachineType)
+}
+
+func (g *GKEOrchestrator) validateZonalReservation(name, zone, projectID, expectedMachineType string) error {
+	resCmd := g.executor.ExecuteCommand("gcloud", "compute", "reservations", "describe", name, "--zone="+zone, "--project="+projectID, "--format=json")
+	if resCmd.ExitCode != 0 {
+		stderrLower := strings.ToLower(resCmd.Stderr)
+		if strings.Contains(stderrLower, "not found") || strings.Contains(stderrLower, "404") {
+			return fmt.Errorf("reservation %q does not exist in zone %s (project %s)", name, zone, projectID)
+		}
+		if isPermissionDenied(stderrLower) {
+			logging.Warn("Permission denied querying reservation %q in zone %s (project %s): %s. Proceeding without reservation validation.", name, zone, projectID, resCmd.Stderr)
+			return nil
+		}
+		return fmt.Errorf("failed to describe reservation %q: %s", name, resCmd.Stderr)
+	}
+
+	var rData struct {
+		SpecificReservation struct {
+			InstanceProperties struct {
+				MachineType string `json:"machineType"`
+			} `json:"instanceProperties"`
+		} `json:"specificReservation"`
+	}
+	if err := json.Unmarshal([]byte(resCmd.Stdout), &rData); err != nil {
+		return fmt.Errorf("failed to parse reservation describe json: %w", err)
+	}
+	var resMachineType string
+	if rawMT := rData.SpecificReservation.InstanceProperties.MachineType; rawMT != "" {
+		resMachineType = path.Base(rawMT)
+	}
+	var expected string
+	if expectedMachineType != "" {
+		expected = path.Base(expectedMachineType)
+	}
+	if resMachineType != "" && expected != "" && resMachineType != expected {
+		return fmt.Errorf("reservation %q is configured for machine type %q, which does not match requested machine type %q", name, resMachineType, expectedMachineType)
+	}
 	return nil
+}
+
+func (g *GKEOrchestrator) validateRegionalReservation(name, clusterLocation, projectID, expectedMachineType string) error {
+	filter := fmt.Sprintf("name=( '%s' )", name)
+	listCmd := g.executor.ExecuteCommand("gcloud", "compute", "reservations", "list", "--project="+projectID, "--filter="+filter, "--format=json")
+	if listCmd.ExitCode != 0 {
+		if isPermissionDenied(strings.ToLower(listCmd.Stderr)) {
+			logging.Warn("Permission denied listing reservations for %q in project %s: %s. Proceeding without reservation validation.", name, projectID, listCmd.Stderr)
+			return nil
+		}
+		return fmt.Errorf("failed to list reservations for %q: %s", name, listCmd.Stderr)
+	}
+
+	var listData []reservationListItem
+	if err := json.Unmarshal([]byte(listCmd.Stdout), &listData); err != nil {
+		return fmt.Errorf("failed to parse reservations list json: %w", err)
+	}
+
+	if len(listData) == 0 {
+		return fmt.Errorf("reservation %q does not exist in project %s", name, projectID)
+	}
+
+	return checkRegionalReservationMatch(name, clusterLocation, expectedMachineType, listData)
+}
+
+func checkRegionalReservationMatch(name, clusterLocation, expectedMachineType string, listData []reservationListItem) error {
+	clusterRegion := shell.ExtractRegion(clusterLocation)
+	var expected string
+	if expectedMachineType != "" {
+		expected = path.Base(expectedMachineType)
+	}
+
+	foundInRegion, mismatched := findRegionalReservationMismatches(listData, clusterRegion, expected)
+	if foundInRegion {
+		if len(mismatched) == 0 {
+			return nil
+		}
+		return fmt.Errorf("reservation %q is configured for machine type(s) %v, which does not match requested machine type %q", name, mismatched, expectedMachineType)
+	}
+
+	if clusterRegion != "" {
+		return fmt.Errorf("reservation %q was found in zones %v, which do not match cluster region %q", name, collectItemZones(listData), clusterRegion)
+	}
+	return nil
+}
+
+func findRegionalReservationMismatches(listData []reservationListItem, clusterRegion, expected string) (bool, []string) {
+	var foundInRegion bool
+	var mismatched []string
+	for _, item := range listData {
+		if item.Zone == "" || (clusterRegion != "" && !strings.HasPrefix(path.Base(item.Zone), clusterRegion)) {
+			continue
+		}
+		foundInRegion = true
+		var resMT string
+		if rawMT := item.SpecificReservation.InstanceProperties.MachineType; rawMT != "" {
+			resMT = path.Base(rawMT)
+		}
+		if resMT != "" && expected != "" && resMT == expected {
+			return true, nil
+		}
+		if resMT != "" {
+			mismatched = append(mismatched, resMT)
+		}
+	}
+	return foundInRegion, mismatched
+}
+
+func collectItemZones(listData []reservationListItem) []string {
+	var zones []string
+	for _, item := range listData {
+		if item.Zone != "" {
+			zones = append(zones, path.Base(item.Zone))
+		}
+	}
+	return zones
 }
 
 // resolveFallbackName returns a fallback reservation name from the URI parts.
@@ -131,46 +277,47 @@ func resolveFallbackName(parts []string) string {
 	}
 	// If it has reservationBlocks, the name is the one before it
 	for i, part := range parts {
-		if part == "reservationBlocks" && i > 0 {
+		if strings.EqualFold(part, "reservationBlocks") && i > 0 {
 			return parts[i-1]
 		}
 	}
-	// Fallback to last element
-	return parts[len(parts)-1]
+	// Fallback to last element, unless it's the collection name itself
+	last := parts[len(parts)-1]
+	if strings.EqualFold(last, "reservations") {
+		return ""
+	}
+	return last
 }
 
 // parseReservationURI parses a GCE reservation resource URI or reservation path into its components.
 // E.g.,
 // - "my-res" -> Name: "my-res"
 // - "projects/my-project/reservations/my-res" -> Project: "my-project", Name: "my-res"
+// - "projects/my-project/zones/us-central1-a/reservations/my-res" -> Project: "my-project", Zone: "us-central1-a", Name: "my-res"
+// - "https://www.googleapis.com/compute/v1/projects/my-project/zones/us-central1-a/reservations/my-res" -> Project: "my-project", Zone: "us-central1-a", Name: "my-res"
 // - "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> Project: "my-project", Name: "my-res", Block: "block-1", Subblock: "subblock-2"
 func parseReservationURI(resName string) parsedReservation {
-	resName = strings.TrimSuffix(resName, "/")
-	var parsed parsedReservation
+	resName = strings.TrimSuffix(strings.TrimSpace(resName), "/")
 	if !strings.Contains(resName, "/") {
-		parsed.Name = strings.ToLower(resName)
-		return parsed
+		return parsedReservation{Name: strings.ToLower(resName)}
 	}
 
-	parts := strings.Split(resName, "/")
-	for i := 0; i < len(parts)-1; i++ {
-		switch parts[i] {
-		case "projects":
-			parsed.Project = strings.ToLower(parts[i+1])
-		case "reservations":
-			parsed.Name = strings.ToLower(parts[i+1])
-		case "reservationBlocks":
-			parsed.Block = strings.ToLower(parts[i+1])
-		case "reservationSubBlocks":
-			parsed.Subblock = strings.ToLower(parts[i+1])
-		}
+	name := extractURIPart(resName, "reservations")
+	if name == "" {
+		name = resolveFallbackName(strings.Split(resName, "/"))
+	}
+	subblock := extractURIPart(resName, "reservationsubblocks")
+	if subblock == "" {
+		subblock = extractURIPart(resName, "subblocks")
 	}
 
-	if parsed.Name == "" {
-		parsed.Name = strings.ToLower(resolveFallbackName(parts))
+	return parsedReservation{
+		Project:  strings.ToLower(extractURIPart(resName, "projects")),
+		Zone:     strings.ToLower(extractURIPart(resName, "zones")),
+		Name:     strings.ToLower(name),
+		Block:    strings.ToLower(extractURIPart(resName, "reservationblocks")),
+		Subblock: strings.ToLower(subblock),
 	}
-
-	return parsed
 }
 
 func isSpecificGPUKey(key string) bool {
@@ -303,6 +450,11 @@ func (g *GKEOrchestrator) resolveTPUWorkloadPolicy(machineType, topology, cluste
 		if isDryRun {
 			logging.Info("Dry-run: Could not determine cluster region or project. Assuming workload policy %q for topology %s. Ensure it exists in your target cluster's region.", canonicalPolicyName, topology)
 		}
+		return canonicalPolicyName, nil
+	}
+
+	if isDryRun {
+		logging.Info("Dry-run: Assuming workload policy %q for topology %s. Ensure it exists before applying the manifest, or create it using:\n  gcloud compute resource-policies create workload-policy %s --region=%s --project=%s --type=HIGH_THROUGHPUT --accelerator-topology=%s", canonicalPolicyName, topology, canonicalPolicyName, region, resolvedProjID, topology)
 		return canonicalPolicyName, nil
 	}
 
