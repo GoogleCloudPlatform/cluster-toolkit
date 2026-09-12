@@ -446,3 +446,102 @@ func TestGenerateGKEManifest_GPU_Placement(t *testing.T) {
 		t.Errorf("Did not expect cloud.google.com/placement-policy-name for GPU, got:\n%s", gpuManifest)
 	}
 }
+
+func TestGenerateGKEManifest_DefaultDevShm(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "shm-job",
+		CommandToRun:    "echo test",
+		ComputeType:     "ct4p-hightpu-4t",
+		Topology:        "2x2x2",
+		NumSlices:       1,
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "mock-project",
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "2x2x2"}},
+		"gcloud compute machine-types describe ct4p-hightpu-4t --zone=us-central1-a --format=json":                              {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v4-podslice"}]}`}},
+	}
+	orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "v4-pool", Config: gkeNodePoolConfig{MachineType: "ct4p-hightpu-4t"}},
+	}
+
+	profile, isDyn, isStat, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDyn, isStat)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	if !strings.Contains(manifest, "mountPath: /dev/shm") || !strings.Contains(manifest, "name: dshm-workload-container") {
+		t.Errorf("Expected /dev/shm volumeMount with name dshm-workload-container in manifest, got:\n%s", manifest)
+	}
+	if !strings.Contains(manifest, "medium: Memory") {
+		t.Errorf("Expected emptyDir with medium: Memory in manifest, got:\n%s", manifest)
+	}
+}
+
+func TestGenerateGKEManifest_DefaultDevShm_ParallelContainers(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:          "shm-parallel-job",
+		CommandToRun:          "echo test",
+		ComputeType:           "tpu7x",
+		Topology:              "2x2x1",
+		NumSlices:             1,
+		ClusterLocation:       "us-central1-a",
+		ProjectID:             "mock-project",
+		UseParallelContainers: true,
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
+		"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v7x-slice"}]}`},
+		},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "v7x-pool", Config: gkeNodePoolConfig{MachineType: "tpu7x-standard-4t"}},
+	}
+
+	profile, isDyn, isStat, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDyn, isStat)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	if !strings.Contains(manifest, "name: dshm-workload-container-1") {
+		t.Errorf("Expected dshm-workload-container-1 in manifest, got:\n%s", manifest)
+	}
+	if !strings.Contains(manifest, "name: dshm-workload-container-2") {
+		t.Errorf("Expected dshm-workload-container-2 in manifest, got:\n%s", manifest)
+	}
+}
