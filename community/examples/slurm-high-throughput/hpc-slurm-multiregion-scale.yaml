@@ -1,0 +1,165 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: hpc-slurm-multiregion-scale
+
+vars:
+  enable_slurm_auth: true
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: hpc-slurm-multiregion-scale
+  region: us-central1
+  zone: us-central1-a
+  enable_spot_vm: true
+  compute_machine_type: n2-standard-128
+  enable_placement: true
+  node_count_dynamic_max_per_region: 500
+  login_machine_type: n2-standard-4
+  controller_machine_type: n2-standard-8
+
+  # Multi-Zonal Lists per Region
+  central_zones:
+  - us-central1-a
+  - us-central1-b
+  - us-central1-c
+  - us-central1-f
+
+  east_zones:
+  - us-east4-a
+  - us-east4-b
+  - us-east4-c
+
+  west_zones:
+  - us-west1-a
+  - us-west1-b
+  - us-west1-c
+
+deployment_groups:
+- group: primary
+  modules:
+  # 1. Global VPC Network with Subnets across 3 US Regions
+  - id: network
+    source: modules/network/vpc
+    settings:
+      subnetworks:
+      - subnet_name: central-subnet
+        subnet_region: us-central1
+        subnet_ip: 10.0.0.0/16
+      - subnet_name: east-subnet
+        subnet_region: us-east4
+        subnet_ip: 10.1.0.0/16
+      - subnet_name: west-subnet
+        subnet_region: us-west1
+        subnet_ip: 10.2.0.0/16
+
+  # 2. Shared NFS Filesystem (/home) in Primary Region
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network]
+    settings:
+      local_mount: /home
+
+  # 3. Dynamic Nodeset for Region 1: US Central (4 Zones)
+  - id: nodeset_central
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_static: 0
+      node_count_dynamic_max: $(vars.node_count_dynamic_max_per_region)
+      machine_type: $(vars.compute_machine_type)
+      enable_spot_vm: $(vars.enable_spot_vm)
+      enable_placement: $(vars.enable_placement)
+      region: us-central1
+      zone: us-central1-a
+      zones: $(vars.central_zones)
+      zone_target_shape: ANY
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+
+  # 4. Dynamic Nodeset for Region 2: US East (3 Zones)
+  - id: nodeset_east
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    settings:
+      node_count_static: 0
+      node_count_dynamic_max: $(vars.node_count_dynamic_max_per_region)
+      machine_type: $(vars.compute_machine_type)
+      enable_spot_vm: $(vars.enable_spot_vm)
+      enable_placement: $(vars.enable_placement)
+      subnetwork_self_link: $(network.subnetworks["us-east4/east-subnet"].self_link)
+      region: us-east4
+      zone: us-east4-a
+      zones: $(vars.east_zones)
+      zone_target_shape: ANY
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+
+  # 5. Dynamic Nodeset for Region 3: US West (3 Zones)
+  - id: nodeset_west
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    settings:
+      node_count_static: 0
+      node_count_dynamic_max: $(vars.node_count_dynamic_max_per_region)
+      machine_type: $(vars.compute_machine_type)
+      enable_spot_vm: $(vars.enable_spot_vm)
+      enable_placement: $(vars.enable_placement)
+      subnetwork_self_link: $(network.subnetworks["us-west1/west-subnet"].self_link)
+      region: us-west1
+      zone: us-west1-a
+      zones: $(vars.west_zones)
+      zone_target_shape: ANY
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+
+  # 6. Unified Compute Partition Aggregating All 3 Regions & 10 Zones
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - nodeset_central
+    - nodeset_east
+    - nodeset_west
+    settings:
+      partition_name: compute
+      is_default: true
+      partition_conf:
+        SuspendTime: 300               # Auto-decommission idle nodes after 5 mins
+        ResumeTimeout: 900             # 15-min buffer for massive parallel provisioning
+        SuspendTimeout: 600            # 10-min buffer for bulk node teardown
+
+  # 7. Login Node
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      machine_type: $(vars.login_machine_type)
+      enable_login_public_ips: true
+
+  # 8. Slurm Controller Sized & Tuned for Multi-Region High Throughput & Scaling
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - compute_partition
+    - homefs
+    - slurm_login
+    settings:
+      machine_type: $(vars.controller_machine_type)
+      enable_controller_public_ips: true
+      cloud_parameters:
+        resume_rate: 300               # Staggers VM boot to protect Filestore NFS
+        tree_width: 65533              # High-throughput flat communication hierarchy
+        scheduler_parameters:          # Native first-class scheduler batching
+        - defer
+        - bf_continue
+        - batch_sched_delay=1
