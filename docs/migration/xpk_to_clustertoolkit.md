@@ -26,7 +26,7 @@ Google Cloud is standardizing AI/ML infrastructure orchestration on **Cluster To
 - **Shorthand Compute Resolution**: Pass TPU shorthand directly to `--compute-type` (e.g., `--compute-type v6e-16`), automatically deducing machine types, VMs per slice, and TPU topology.
 - **Streamlined Workload Submission**: Submit multi-node TPU and GPU workloads directly using `gcluster job submit` integrated with JobSet and Kueue.
 - **On-the-Fly Image Building**: Build container images directly during submission using `--base-image` and `--build-context` via Crane when `GCLUSTER_IMAGE_REPO` is set.
-- **Inline Storage Mounting & Mount Options**: Mount Cloud Storage buckets (`gs://`), PVCs (`pvc://`), or Filestore (`filestore://`) inline during job submission using the `--mount` flag with custom GCS Fuse options (`options=<options>`), replacing separate `xpk storage attach` workflows.
+- **Inline Storage Mounting & Mount Options**: Mount Cloud Storage buckets (`gs://`), Kubernetes PVCs (by claim name), or Filestore (`filestore://`) inline during job submission using the `--mount` flag with custom GCS Fuse options (`options=<options>`), replacing separate `xpk storage attach` workflows.
 - **Advanced Features**: Support for Multi-Tier Checkpointing (MTC), Pathways multi-host workloads, parallel containers, and AI Accelerators (NVIDIA A3 High/Mega/Ultra, A4/GB200, Google TPU v4, v5e, v5p, v6e, and TPU v7x).
 
 ---
@@ -38,7 +38,7 @@ Google Cloud is standardizing AI/ML infrastructure orchestration on **Cluster To
 | **Infrastructure Provisioning** | Imperative (`xpk cluster create` with CLI flags) | Declarative Blueprint (`gcluster deploy <blueprint_file.yaml>`) |
 | **State Management** | Implicit / GCS bucket state | Terraform state backed by GCS |
 | **Workload Submission** | `xpk workload create` | `gcluster job submit` |
-| **Storage Attaching** | `xpk storage attach` (separate step) | Inline `--mount` flag with `gcluster job submit` (`gs://`, `pvc://`, `filestore://`) |
+| **Storage Attaching** | `xpk storage attach` (separate step) | Inline `--mount` flag with `gcluster job submit` (`gs://`, `filestore://`, or PVC claim name) |
 | **Mount Options** | `--mount-options` | Inline `options=<options>` within `--mount` (GCS `gs://` volumes exclusively) |
 | **Parallel Containers** | Enabled by default for TPU v7/v7x | Enabled by default; disable via `--gke-disable-parallel-containers` |
 | **Pathways Support** | `xpk workload create-pathways` | `gcluster job submit --pathways` |
@@ -198,9 +198,9 @@ Submit workloads in Cluster Toolkit using `gcluster job submit`.
 > [!TIP]
 > For a comprehensive walkthrough of job submission capabilities, prerequisite configuration, image building, and persistent storage, see the [gcluster Job Submission Guide](../gcluster_job_guide.md).
 
-### 🧠 Compute Type Simplification
+### 🧠 Compute Type & Topology Resolution
 
-You can pass TPU shorthand directly into `--compute-type` (e.g., `--compute-type v6e-16` or `--compute-type v5e-8`). `gcluster` automatically resolves the machine type, calculates VMs per slice, and deduces the TPU topology without requiring an explicit `--topology` flag unless you are overriding defaults.
+Supported hardware shorthands (such as `v6e-4`, `v4-8`, `l4-8`, `h100-80gb-8`) can be passed directly into `--compute-type`. For configurations where the shorthand is not in the static map (such as `v5e-*`), or when specifying multi-slice topologies, pass the resolved GCE machine type with explicit `--topology` (e.g., `--compute-type ct5lp-hightpu-4t --topology 4x4` or `--compute-type ct6e-standard-4t --topology 4x4`). Note that for TPU 7x, an explicit `--topology` is always mandatory (e.g. `--compute-type tpu7x-standard-4t --topology 4x4x8`).
 
 ### 📋 1:1 Flag Mapping Matrix
 
@@ -212,13 +212,13 @@ You can pass TPU shorthand directly into `--compute-type` (e.g., `--compute-type
 | `--zone <ZONE>` / `--region <REGION>` | `--location <LOC>` | Target cluster region or zone |
 | `--docker-image <IMG>` | `--image <IMG>` | Container image URL |
 | `--command "<CMD>"` | `--command "<CMD>"` | Main entrypoint command |
-| `--tpu-type <TYPE>` / `--device-type <TYPE>` | `--compute-type <TYPE>` | Accepts shorthand directly (e.g. `v6e-16`, `v5e-8`) or GCE machine type (`ct6e-standard-4t`) |
+| `--tpu-type <TYPE>` / `--device-type <TYPE>` | `--compute-type <TYPE> [--topology <TOP>]` | Accepts shorthand directly (e.g. `v6e-4`, `v4-8`, `l4-8`) or GCE machine type with topology (e.g. `ct5lp-hightpu-4t --topology 4x4`, `tpu7x-standard-4t --topology 4x4x8`) |
 | `--num-slices <N>` | `--num-slices <N>` | Number of TPU slices |
 | `--num-nodes <N>` | `--num-nodes <N>` | GPU/CPU jobs only. Omit `--num-nodes` for TPU jobs |
 | `--priority <PRIORITY>` | `--priority <PRIORITY>` | Kueue queue priority (`low`, `medium`, `high`) |
 | `--wait-for-job-completion` | `--await-job-completion` | Blocks CLI until job finishes |
 | `--env KEY=VAL` | `--env KEY=VAL` | Environment variables |
-| `--storage <NAME>` | `--mount <SRC>;<DEST>[;<MODE>][;options=<OPTS>]` | Inline storage mount (`gs://`, `pvc://`, `filestore://`). Mode defaults to `ro`. **Note**: `options=` is supported exclusively for GCS volumes (`gs://`) |
+| `--storage <NAME>` | `--mount <SRC>;<DEST>[;<MODE>][;options=<OPTS>]` | Inline storage mount (`gs://`, `filestore://`, or PVC claim name). Mode defaults to `ro`. **Note**: `options=` is supported exclusively for GCS volumes (`gs://`) |
 | `--use-parallel-containers false` | `--gke-disable-parallel-containers` | Explicitly disables parallel containers on TPU v7/v7x hardware |
 | `--service-account <SA>` | `--service-account <SA>` | Kubernetes service account name |
 | `--max-restarts <N>` | `--restarts <N>` | Maximum JobSet restarts |
@@ -243,7 +243,7 @@ You can pass TPU shorthand directly into `--compute-type` (e.g., `--compute-type
 #   --env LOG_LEVEL=DEBUG \
 #   --priority high
 
-# Cluster Toolkit Equivalent (Shorthand compute type):
+# Cluster Toolkit Equivalent (TPU v6e with topology):
 gcluster job submit \
   --name llama3-train \
   --cluster my-tpu-cluster \
@@ -251,7 +251,8 @@ gcluster job submit \
   --location us-central1-a \
   --image us-docker.pkg.dev/my-project/my-repo/llama3:latest \
   --command 'python3 train.py --batch_size=32' \
-  --compute-type v6e-16 \
+  --compute-type ct6e-standard-4t \
+  --topology 4x4 \
   --priority high \
   --env LOG_LEVEL=DEBUG
 ```
@@ -291,7 +292,8 @@ gcluster job submit \
   --cluster my-tpu-cluster \
   --project my-gcp-project \
   --location us-central1-a \
-  --compute-type tpu7x-128 \
+  --compute-type tpu7x-standard-4t \
+  --topology 4x4x8 \
   --image us-docker.pkg.dev/my-project/my-repo/train:v1 \
   --command 'python3 train.py' \
   --gke-disable-parallel-containers
@@ -308,7 +310,8 @@ gcluster job submit \
   --cluster my-tpu-cluster \
   --project my-gcp-project \
   --location us-central1-a \
-  --compute-type v5e-16 \
+  --compute-type ct5lp-hightpu-4t \
+  --topology 4x4 \
   --image us-docker.pkg.dev/my-project/my-repo/pw-app:v1 \
   --pathways-gcs-location gs://my-bucket/pathways-tmp \
   --pathways-headless
@@ -322,7 +325,8 @@ gcluster job submit \
   --cluster my-tpu-cluster \
   --project my-gcp-project \
   --location us-central1-a \
-  --compute-type v6e-16 \
+  --compute-type ct6e-standard-4t \
+  --topology 4x4 \
   --image us-docker.pkg.dev/my-project/my-repo/train:v1 \
   --command 'python3 train.py' \
   --gke-mtc-enabled \
@@ -341,7 +345,7 @@ gcluster job submit \
 | `xpk cluster describe` | `gcluster cluster describe` | Describe cluster status |
 | `xpk workload create` | `gcluster job submit` | Submits JobSet workload |
 | `xpk workload create-pathways` | `gcluster job submit --pathways` | Submits Pathways workload |
-| `xpk storage attach` | Inline `--mount` flag with `gcluster job submit` | Supports `gs://`, `pvc://`, `filestore://`. `options=` is GCS `gs://` exclusive |
+| `xpk storage attach` | Inline `--mount` flag with `gcluster job submit` | Supports `gs://`, `filestore://`, and PVC claim names. `options=` is GCS `gs://` exclusive |
 | `xpk workload list` | `gcluster job list` | List active workloads |
 | `xpk workload delete` | `gcluster job cancel <workload_name>` | Cancel running workload |
 | `xpk inspector` | `gcluster job logs <workload_name>` | View workload logs |
