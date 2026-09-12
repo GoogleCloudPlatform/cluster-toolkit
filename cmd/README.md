@@ -135,6 +135,6 @@ gcluster destroy DEPLOYMENT_DIRECTORY [flags]
 
 * `--only <strings>`: Only destroy groups with the given names (comma-separated).
 * `--skip <strings>`: Skip destroying groups with the given names (comma-separated).
-* `--robust`: Perform a robust destroy, including firewall rule cleanup.
+* `--robust`: Perform a robust destroy, including firewall rule cleanup (default: true, pass `--robust=false` to disable).
 
 Refer to the [Selective Deployment and Exclusion Guide](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/machine-learning/README.md#selective-deployment-and-destruction-using---only-and---skip-flags) for more information on managing or skipping specific group destruction.
