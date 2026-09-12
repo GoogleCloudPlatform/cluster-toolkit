@@ -117,10 +117,16 @@ This reference provides a comprehensive mapping of commands, flags, and options 
 
 | XPK Flag | Cluster Toolkit Blueprint Equivalent | Notes |
 | :--- | :--- | :--- |
-| `--sub-slicing` | `enable_dynamic_slicing_for_tpus: true` (TPU 7x `vars:`) | Enables GKE Slice Controller for dynamic sub-slicing topologies. Requires GKE >= 1.35.0-gke.274500 and Kueue/JobSet. Non-7x blueprints fall back to `enable_slice_controller: true` on `gke-cluster`. |
-| `--super-slicing` | `enable_dynamic_slicing_for_tpus: true` (TPU 7x `vars:`) | Enables GKE Slice Controller for super-slicing topologies. Requires GKE >= 1.35.0-gke.274500 and Kueue/JobSet. Non-7x blueprints fall back to `enable_slice_controller: true` on `gke-cluster`. |
-| `--num-cubes <n>` | *(Not supported)* | Configure total cube count through slice `tpu_topology` instead. |
+| `--sub-slicing` | `enable_dynamic_slicing_for_tpus: true` (TPU 7x `vars:`) | Enables GKE Slice Controller for dynamic sub-slicing topologies. Requires GKE >= 1.35.0-gke.274500 and Kueue/JobSet. Non-7x blueprints fall back to `enable_slice_controller: true` on `gke-cluster`. Cannot be combined with `--spot`/`--flex`/`--on-demand` (see note below). |
+| `--super-slicing` | `enable_dynamic_slicing_for_tpus: true` (TPU 7x `vars:`) | Enables GKE Slice Controller for super-slicing topologies. Requires GKE >= 1.35.0-gke.274500 and Kueue/JobSet. Non-7x blueprints fall back to `enable_slice_controller: true` on `gke-cluster`. Cannot be combined with `--spot`/`--flex`/`--on-demand` (see note below). |
+| `--num-cubes <n>` | `num_slices: <n>` | xpk assigns `num_slices = num_cubes` (`xpk/src/xpk/commands/cluster.py:361`) and rejects the two being different. Only valid with `--super-slicing`. |
 | `--pathways-gce-machine-type <type>` | *(Not supported)* | Pathways CPU pool in Cluster Toolkit is hardcoded to `n4-standard-64` (`modules/scheduler/gke-cluster/main.tf:661`). |
+
+> [!WARNING]
+> On TPU 7x, dynamic slicing sets `accelerator_topology_mode: PROVISION_ONLY` on the node pool, which Cluster Toolkit only permits when
+> `reservation_affinity.consume_reservation_type` is `SPECIFIC_RESERVATION` (`modules/compute/gke-node-pool/main.tf:482`).
+> `--spot`, `--flex` and `--on-demand` all force `NO_RESERVATION`, so combining them with a slicing flag produces a blueprint that cannot pass `terraform plan`.
+> Use `--reservation` with slicing, or drop the slicing flag.
 
 ---
 

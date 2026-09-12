@@ -320,6 +320,10 @@ def parse_workload_create(
       "--cluster": "--cluster",
       "--project": "--project",
       "--zone": "--location",
+      # Not registered in xpk v1.16.0 (--zone's help text at
+      # xpk/src/xpk/parser/common.py:106 references --region as a planned
+      # alternative). Accepted defensively so forward-compatible and
+      # partially-migrated commands still translate.
       "--region": "--location",
       "--location": "--location",
       "--num-slices": "--num-slices",
@@ -869,8 +873,15 @@ def parse_cluster_create(
   if parsed.authorized_networks:
     cidrs = [c.strip() for c in parsed.authorized_networks.split(",") if c.strip()]
     if len(cidrs) > 1:
+      # The canonical blueprints' only consumer of $(vars.authorized_cidr) is
+      # this list, so the first entry must keep referencing it. Inlining every
+      # CIDR would orphan the global variable and trip
+      # testDeploymentVariableNotUsed.
       cluster_module_settings["master_authorized_networks"] = [
-          {"cidr_block": c, "display_name": f"access-net-{i+1}"}
+          {
+              "cidr_block": "$(vars.authorized_cidr)" if i == 0 else c,
+              "display_name": f"access-net-{i+1}",
+          }
           for i, c in enumerate(cidrs)
       ]
       blueprint_vars["authorized_cidr"] = cidrs[0]
@@ -1014,12 +1025,23 @@ def parse_cluster_create(
     # elsewhere would trip testDeploymentVariableNotUsed.
     if str(device_type or "").lower().startswith("tpu7x"):
       blueprint_vars["enable_dynamic_slicing_for_tpus"] = True
-      nodepool_module_settings["accelerator_topology_mode"] = "PROVISION_ONLY"
-      if not parsed.reservation:
+      # accelerator_topology_mode: PROVISION_ONLY is only valid alongside
+      # reservation_affinity.consume_reservation_type == SPECIFIC_RESERVATION
+      # (modules/compute/gke-node-pool/main.tf:482). --spot, --flex and
+      # --on-demand all force NO_RESERVATION, so emitting it there would
+      # produce a blueprint that cannot pass `terraform plan`.
+      if parsed.reservation:
+        nodepool_module_settings["accelerator_topology_mode"] = "PROVISION_ONLY"
+      else:
         warnings.append(
-            "enable_dynamic_slicing_for_tpus: true requires a specific compute"
-            " reservation (`--reservation`). Ensure a reservation is provided"
-            " or configured in the blueprint."
+            "CONFLICT: dynamic slicing requires nodepool"
+            " accelerator_topology_mode: PROVISION_ONLY, which Cluster Toolkit"
+            " only permits when reservation_affinity.consume_reservation_type"
+            " is SPECIFIC_RESERVATION (gke-node-pool/main.tf:482). --spot,"
+            " --flex and --on-demand all force NO_RESERVATION, so they cannot"
+            " be combined with --sub-slicing/--super-slicing."
+            " accelerator_topology_mode was omitted; supply --reservation or"
+            " drop the slicing flag."
         )
       warnings.append(
           "enable_dynamic_slicing_for_tpus: true requires GKE >= "
@@ -1036,11 +1058,29 @@ def parse_cluster_create(
       )
 
   if parsed.num_cubes:
-    warnings.append(
-        "--num-cubes has no direct Cluster Toolkit flag; express the cube count "
-        "through tpu_topology instead (1 cube = 64 chips / 4x4x4 mesh; total "
-        f"chips = {parsed.num_cubes} * 64)."
-    )
+    # xpk treats --num-cubes as an alias for --num-slices: it rejects the two
+    # being different and assigns num_slices = num_cubes when only the latter
+    # is given (xpk/src/xpk/commands/cluster.py:348-363).
+    if not is_flag_true(parsed.super_slicing):
+      warnings.append(
+          "--num-cubes can only be used with --super-slicing in xpk; xpk exits"
+          " with an error otherwise."
+      )
+    if parsed.num_slices and str(parsed.num_slices) != str(parsed.num_cubes):
+      warnings.append(
+          f"--num-cubes ({parsed.num_cubes}) differs from --num-slices"
+          f" ({parsed.num_slices}); xpk rejects this combination. Using"
+          " --num-slices for num_slices."
+      )
+    elif not parsed.num_slices:
+      try:
+        blueprint_vars["num_slices"] = int(parsed.num_cubes)
+      except ValueError:
+        blueprint_vars["num_slices"] = parsed.num_cubes
+      warnings.append(
+          "--num-cubes maps to num_slices (xpk sets num_slices = num_cubes;"
+          " cluster.py:361)."
+      )
   if (
       parsed.num_nodes
       and not is_flag_true(parsed.flex)
@@ -1113,7 +1153,16 @@ def parse_cluster_create(
       or is_flag_true(parsed.managed_mldiagnostics)
   ):
     cluster_module_settings["enable_ml_diagnostics"] = True
-    cluster_module_settings["configure_workload_identity_sa"] = True
+    # Note: no Terraform precondition couples ML diagnostics to workload
+    # identity, so configure_workload_identity_sa is deliberately NOT enabled
+    # here -- doing so would create a service account and IAM bindings the
+    # user did not ask for.
+    warnings.append(
+        "enable_ml_diagnostics requires GKE >= the version named in"
+        " gke-cluster/main.tf:796. Several canonical blueprints also set"
+        " configure_workload_identity_sa: true alongside it; enable that"
+        " separately if your workloads need it."
+    )
 
   m_interval = parsed.host_maintenance_interval or parsed.maintenance_interval
   if m_interval:
@@ -1122,6 +1171,11 @@ def parse_cluster_create(
   if is_flag_true(parsed.enable_mtc):
     cluster_module_settings["enable_multi_tier_checkpointing"] = True
     cluster_module_settings["enable_gcsfuse_csi"] = True
+    warnings.append(
+        "enable_gcsfuse_csi: true was enabled automatically because"
+        " enable_multi_tier_checkpointing requires it"
+        " (gke-cluster/main.tf:176-177)."
+    )
 
   if parsed.private_endpoint_subnetwork:
     warnings.append(
@@ -1252,13 +1306,20 @@ def format_cluster_output(
   if v.get("enable_flex_start") is True:
     vars_list.append("enable_flex_start=true")
   vars_str = ",".join(vars_list)
+  # Angle brackets are shell redirection operators, so `<YOUR_PROJECT_ID>`
+  # pasted into a terminal silently creates a junk file instead of erroring.
+  # Render placeholders bare, then wrap in DOUBLE quotes: that neutralises
+  # `<`, `>` and spaces while still letting shell variables carried over from
+  # the source xpk script (e.g. zone=$ZONE) expand as the user expects.
+  vars_str = re.sub(r"<([A-Za-z_][A-Za-z0-9_]*)>", r"\1", vars_str)
 
   result += "\nInstruction & Deployment Command:\n"
   result += (
       "# Merge the above vars and module settings into your canonical"
-      " blueprint (e.g. examples/gke-tpu-v6e/gke-tpu-v6e.yaml) and deploy:\n"
+      " blueprint (e.g. examples/gke-tpu-v6e/gke-tpu-v6e.yaml) and deploy"
+      "\n# (replace any remaining uppercase placeholders first):\n"
   )
-  result += f"gcluster deploy <blueprint_file.yaml> --vars {vars_str}\n"
+  result += f'gcluster deploy BLUEPRINT_FILE.yaml --vars "{vars_str}"\n'
   return result
 
 

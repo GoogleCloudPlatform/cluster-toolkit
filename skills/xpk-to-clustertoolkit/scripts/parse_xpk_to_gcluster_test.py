@@ -23,6 +23,17 @@ from unittest import mock
 import parse_xpk_to_gcluster
 
 
+def emitted_yaml(output: str) -> str:
+  """Returns only the emitted YAML, stripping `# Note:`/`# Warning:` prose.
+
+  Warning text frequently names the very settings a test wants to assert are
+  absent, so `assertNotIn` against the raw output gives false failures.
+  """
+  return "\n".join(
+      line for line in output.splitlines() if not line.lstrip().startswith("#")
+  )
+
+
 class ParseXpkToGclusterTest(unittest.TestCase):
 
   def test_is_tpu_hardware(self):
@@ -113,8 +124,8 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     self.assertIn("blueprint_name: test-cluster", output)
     self.assertIn("vars:", output)
     self.assertIn(
-        "gcluster deploy <blueprint_file.yaml> --vars"
-        " project_id=my-proj,deployment_name=test-cluster,zone=us-central1-a,region=us-central1",
+        "gcluster deploy BLUEPRINT_FILE.yaml --vars"
+        ' "project_id=my-proj,deployment_name=test-cluster,zone=us-central1-a,region=us-central1"',
         output,
     )
     self.assertNotIn("gcluster create", output)
@@ -1393,26 +1404,58 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     self.assertIn("enable_slice_controller: true", out)
     self.assertIn("does not declare enable_dynamic_slicing_for_tpus", out)
 
-  def test_num_cubes_warning(self):
+  def test_num_cubes_maps_to_num_slices(self):
+    # xpk assigns num_slices = num_cubes (commands/cluster.py:361), so
+    # --num-cubes alone must not silently under-provision slices.
     cmd = (
         "xpk cluster create --cluster c1 --project p1 --zone us-central1-a"
-        " --tpu-type tpu7x-4x4x4 --super-slicing --num-cubes 2"
+        " --tpu-type tpu7x-4x4x4 --super-slicing --num-cubes 4"
     )
     out = parse_xpk_to_gcluster.parse_xpk_command(cmd)
-    self.assertIn(
-        "--num-cubes has no direct Cluster Toolkit flag; express the cube count through tpu_topology instead (1 cube = 64 chips / 4x4x4 mesh; total chips = 2 * 64).",
-        out,
+    self.assertIn("num_slices: 4", out)
+    self.assertIn("--num-cubes maps to num_slices", out)
+    self.assertNotIn("tpu_topology instead", out)
+
+  def test_num_cubes_matching_num_slices_is_not_duplicated(self):
+    cmd = (
+        "xpk cluster create --cluster c1 --project p1 --zone us-central1-a"
+        " --tpu-type tpu7x-4x4x4 --super-slicing --num-cubes 2 --num-slices 2"
     )
+    out = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("num_slices: 2", out)
+    self.assertNotIn("differs from --num-slices", out)
+
+  def test_num_cubes_conflicting_with_num_slices_warns(self):
+    cmd = (
+        "xpk cluster create --cluster c1 --project p1 --zone us-central1-a"
+        " --tpu-type tpu7x-4x4x4 --super-slicing --num-cubes 2 --num-slices 4"
+    )
+    out = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("differs from --num-slices", out)
+    self.assertIn("num_slices: 4", out)
+
+  def test_num_cubes_without_super_slicing_warns(self):
+    cmd = (
+        "xpk cluster create --cluster c1 --project p1 --zone us-central1-a"
+        " --tpu-type tpu7x-4x4x4 --num-cubes 2"
+    )
+    out = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("can only be used with --super-slicing", out)
 
   def test_dynamic_slicing_tpu7x_invariants(self):
+    # PROVISION_ONLY requires SPECIFIC_RESERVATION
+    # (modules/compute/gke-node-pool/main.tf:482), so it is only emitted
+    # when a reservation is supplied.
     cmd = (
         "xpk cluster create --cluster c1 --project p1 --zone us-central1-a"
         " --tpu-type tpu7x-4x4x4 --super-slicing"
     )
     out = parse_xpk_to_gcluster.parse_xpk_command(cmd)
     self.assertIn("enable_dynamic_slicing_for_tpus: true", out)
-    self.assertIn("accelerator_topology_mode: PROVISION_ONLY", out)
-    self.assertIn("requires a specific compute reservation (`--reservation`)", out)
+    self.assertNotIn(
+        "accelerator_topology_mode: PROVISION_ONLY", emitted_yaml(out)
+    )
+    self.assertIn("CONFLICT: dynamic slicing requires", out)
 
     cmd_with_res = (
         "xpk cluster create --cluster c1 --project p1 --zone us-central1-a"
@@ -1420,8 +1463,25 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     )
     out_with_res = parse_xpk_to_gcluster.parse_xpk_command(cmd_with_res)
     self.assertIn("enable_dynamic_slicing_for_tpus: true", out_with_res)
-    self.assertIn("accelerator_topology_mode: PROVISION_ONLY", out_with_res)
-    self.assertNotIn("requires a specific compute reservation (`--reservation`)", out_with_res)
+    self.assertIn(
+        "accelerator_topology_mode: PROVISION_ONLY", emitted_yaml(out_with_res)
+    )
+    self.assertNotIn("CONFLICT: dynamic slicing requires", out_with_res)
+
+  def test_dynamic_slicing_conflicts_with_no_reservation_consumption(self):
+    # --spot, --flex and --on-demand all force NO_RESERVATION, which cannot
+    # coexist with accelerator_topology_mode: PROVISION_ONLY.
+    for flag in ("--spot", "--flex", "--on-demand"):
+      with self.subTest(flag=flag):
+        cmd = (
+            "xpk cluster create --cluster c1 --project p1 --zone us-central1-a"
+            f" --tpu-type tpu7x-4x4x4 --super-slicing {flag}"
+        )
+        out = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+        self.assertNotIn(
+            "accelerator_topology_mode: PROVISION_ONLY", emitted_yaml(out)
+        )
+        self.assertIn("CONFLICT: dynamic slicing requires", out)
 
   def test_gke_version_mappings(self):
     cmd_prefix = (
@@ -1459,7 +1519,10 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     )
     out = parse_xpk_to_gcluster.parse_xpk_command(cmd)
     self.assertIn("master_authorized_networks:", out)
-    self.assertIn("cidr_block: 10.0.0.0/8", out)
+    # The first entry must keep referencing the global variable, otherwise
+    # authorized_cidr is orphaned and testDeploymentVariableNotUsed fails.
+    self.assertIn("cidr_block: $(vars.authorized_cidr)", out)
+    self.assertIn("authorized_cidr: 10.0.0.0/8", out)
     self.assertIn("cidr_block: 192.168.1.0/24", out)
     self.assertIn("display_name: access-net-1", out)
     self.assertIn("display_name: access-net-2", out)
@@ -1471,9 +1534,44 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     )
     out = parse_xpk_to_gcluster.parse_xpk_command(cmd)
     self.assertIn("enable_multi_tier_checkpointing: true", out)
+    # Hard Terraform precondition (gke-cluster/main.tf:176-177): enabled
+    # automatically, but the user must be told.
     self.assertIn("enable_gcsfuse_csi: true", out)
+    self.assertIn("enable_gcsfuse_csi: true was enabled automatically", out)
     self.assertIn("enable_ml_diagnostics: true", out)
-    self.assertIn("configure_workload_identity_sa: true", out)
+    # No Terraform precondition couples ML diagnostics to workload identity,
+    # so we must not create a service account the user did not request.
+    self.assertNotIn(
+        "configure_workload_identity_sa: true", emitted_yaml(out)
+    )
+
+  def test_deploy_command_is_shell_paste_safe(self):
+    # Angle brackets would be interpreted as shell redirections, silently
+    # creating junk files when the user pastes the suggested command.
+    cmd = "xpk cluster create --cluster c1 --tpu-type v6e-16"
+    out = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    deploy_line = next(
+        line for line in out.splitlines() if line.startswith("gcluster deploy")
+    )
+    self.assertNotIn("<", deploy_line)
+    self.assertNotIn(">", deploy_line)
+    self.assertIn("YOUR_PROJECT_ID", deploy_line)
+
+  def test_deploy_command_preserves_shell_variable_expansion(self):
+    # Migrated scripts routinely carry shell variables through. Single-quoting
+    # the --vars value would render them literal, so double quotes are
+    # required: they neutralise `<`/`>` while still allowing expansion.
+    cmd = (
+        "xpk cluster create --cluster $CLUSTER --zone $ZONE --project $PROJ"
+        " --tpu-type v6e-16"
+    )
+    out = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    deploy_line = next(
+        line for line in out.splitlines() if line.startswith("gcluster deploy")
+    )
+    self.assertIn('--vars "', deploy_line)
+    self.assertNotIn("--vars '", deploy_line)
+    self.assertIn("zone=$ZONE", deploy_line)
 
   def test_pathways_flags_isolation_on_standard_workload(self):
     cmd = (

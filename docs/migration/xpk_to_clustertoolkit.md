@@ -243,7 +243,7 @@ Supported hardware shorthands (such as `v6e-4`, `v4-8`, `l4-8`, `h100-80gb-8`) c
 #   --env LOG_LEVEL=DEBUG \
 #   --priority high
 
-# Cluster Toolkit Equivalent (TPU v6e with topology):
+# Cluster Toolkit Equivalent (Shorthand compute type):
 gcluster job submit \
   --name llama3-train \
   --cluster my-tpu-cluster \
@@ -251,11 +251,12 @@ gcluster job submit \
   --location us-central1-a \
   --image us-docker.pkg.dev/my-project/my-repo/llama3:latest \
   --command 'python3 train.py --batch_size=32' \
-  --compute-type ct6e-standard-4t \
-  --topology 4x4 \
+  --compute-type v6e-16 \
   --priority high \
   --env LOG_LEVEL=DEBUG
 ```
+
+The shorthand `v6e-16` resolves to machine type `ct6e-standard-4t` and topology `4x4`. To pin them explicitly instead, substitute `--compute-type ct6e-standard-4t --topology 4x4`.
 
 #### B. Inline Storage Mounting & Mount Options (`--mount`)
 
