@@ -32,8 +32,8 @@ project_id = "invalid-project"
 region = "us-central1"
 
 slurm_image = {
-  family  = "slurm-gcp-6-12-hpc-rocky-linux-8"
-  project = "schedmd-slurm-public"
+  family  = "aci-cpu-rocky-linux-9-slurm-2605-amd64"
+  project = "advanced-compute-images"
 }
 
 zone = "us-central1-a"
