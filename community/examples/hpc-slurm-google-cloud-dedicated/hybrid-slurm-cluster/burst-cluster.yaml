@@ -13,7 +13,7 @@
 # limitations under the License.
 
 ---
-blueprint_name: hpc-c3-slurm-google-cloud-dedicated
+blueprint_name: burst-cluster
 
 # These validators query public Google APIs that are unreachable from a GCD private
 # universe (apis-<location>.goog), so gcluster create would fail before generating
@@ -36,20 +36,24 @@ validators:
   skip: true
 
 vars:
-  project_id: # <project-id>
-  deployment_name: hpc-slurm
+  project_id: # <project-id> e.g., my-gcd-project
+  deployment_name: burst-cluster
   region: us-central1
   zone: us-central1-a
   universe_domain: googleapis.com # apis-<location>.goog
-  service_account_email: default # <account-id>-compute@developer.gserviceaccount.com
+  service_account_email: # <account-id>-compute@developer.gserviceaccount.com
+  # To enable SSH access to the login node, add your client CIDR e.g. ["x.x.x.x/32"] or ["0.0.0.0/0"]
+  authorized_ssh_ranges: []
+  nfs_server_ip: # <IP_OF_PRIMARY_CLUSTER_NFS_SERVER> e.g., 10.128.0.X or internal DNS name
+  primary_controller_ip: "" # (Optional) <IP_OF_PRIMARY_CLUSTER_CONTROLLER> e.g., 10.128.0.3
 
-  # Image Build Settings
-  source_image_family: rocky-linux-9-optimized-gcp
-  source_image_project: rocky-linux-cloud # <partition>-system:rocky-linux-cloud
+  # Instance & Image Settings (Slurm image built by the Primary Cluster blueprint)
   image_build_machine_type: c3-standard-4
-  build_slurm_from_git_ref: 6.12.3
   built_instance_image:
     family: slurm-rocky9
+    # Defaults to this project, i.e. the image was copied into Project B (README section 3.C).
+    # To read the image directly from Project A instead, set this to <PROJECT_A_ID> and grant
+    # Project B's service agent roles/compute.imageUser on Project A.
     project: $(vars.project_id)
 
 terraform_providers:
@@ -74,92 +78,43 @@ deployment_groups:
 - group: setup
   modules:
   - id: network
-    source: modules/network/pre-existing-vpc
+    source: modules/network/vpc
     settings:
-      network_name: default
-      subnetwork_name: default
-
-  - id: slurm-build-script
-    source: modules/scripts/startup-script
-    settings:
-      install_ansible: false
-      runners:
-      - type: shell
-        destination: prep-for-slurm-build.sh
-        content: |
-          #!/bin/bash
-          set -e -o pipefail
-          # Ensure SELinux allows NFS home directories
-          setsebool -P use_nfs_home_dirs 1 || true
-          # Slurm build will install and set python3.12 as the default python3
-          dnf install -y python3.12 python3.12-pip perl-ExtUtils-MakeMaker perl-devel
-          python3.12 -m pip install pip --upgrade
-          python3.12 -m pip install ansible==8.7.0
-          export PATH=/usr/local/bin:$PATH
-          ansible --version
-          n=0
-          until [ "$n" -ge 3 ] || ( { dnf install -y --disablerepo=ciq-sigcloud-next nfs-utils 2>/dev/null || dnf install -y nfs-utils; } && ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents ); do
-            ((n=n+1))
-            sleep 5
-          done
-      - type: data
-        destination: /var/tmp/slurm_vars.json
-        # Add or update slurm-gcp flags as required, https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/ansible/playbook.yml
-        content: |
-          {
-            "reboot": false,
-            "install_cuda": false,
-            "nvidia_version": "latest",
-            "install_ompi": true,
-            "install_lustre": false,
-            "install_gcsfuse": true,
-            "allow_kernel_upgrades": false,
-            "monitoring_agent": "cloud-ops",
-            "install_managed_lustre": false
-          }
-
-      - type: shell
-        destination: install_slurm.sh
-        content: |
-          #!/bin/bash
-          set -e -o pipefail
-          dnf update -y
-          dnf install -y epel-release git ansible-core
-          ansible-pull -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_slurm_from_git_ref) \
-              -i localhost, --limit localhost --connection=local \
-              -e @/var/tmp/slurm_vars.json ansible/playbook.yml
-
-- group: build-slurm
-  modules:
-  - id: custom-slurm-image
-    source: modules/packer/custom-image
-    kind: packer
-    use: [network, slurm-build-script]
-    settings:
-      source_image_project_id: [$(vars.source_image_project)]
-      source_image_family: $(vars.source_image_family)
-      machine_type: $(vars.image_build_machine_type)
-      image_family: $(vars.built_instance_image.family)
-      disk_type: hyperdisk-balanced
-      zone: $(vars.zone)
-      omit_external_ip: false
-      image_licenses: []
-      state_timeout: 30m
+      network_name: $(vars.deployment_name)-net
+      allowed_ssh_ip_ranges: $(vars.authorized_ssh_ranges)
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-subnet
+        subnet_region: $(vars.region)
+        subnet_ip: "10.130.0.0/20"
+      firewall_rules:
+      - name: $(vars.deployment_name)-allow-peering
+        ranges: ["10.128.0.0/20", "10.130.0.0/20"]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
 
 - group: cluster
   modules:
+  # Mount Primary Cluster's Shared NFS Server for /home
   - id: homefs
-    source: community/modules/file-system/nfs-server
-    use: [network]
+    source: modules/file-system/pre-existing-network-storage
     settings:
-      local_mounts: [/home, /opt/apps]
-      machine_type: $(vars.image_build_machine_type)
-      boot_disk_type: hyperdisk-balanced
-      type: hyperdisk-balanced
-      disk_size: 100
-      instance_image:
-        family: $(vars.built_instance_image.family)
-        project: $(vars.project_id)
+      server_ip: $(vars.nfs_server_ip)
+      remote_mount: /exports/home
+      local_mount: /home
+      fs_type: nfs
+
+  # Mount Primary Cluster's Shared NFS Server for /opt/apps
+  - id: appsfs
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      server_ip: $(vars.nfs_server_ip)
+      remote_mount: /exports/opt/apps
+      local_mount: /opt/apps
+      fs_type: nfs
 
   - id: ssh_config
     source: modules/scripts/startup-script
@@ -228,15 +183,85 @@ deployment_groups:
             fi
           fi
 
-          # 4. Restart sshd so it loads DEFAULT:SHA1 crypto policy for RSA keys
+          # 4. Restart sshd and silence ops-agent in GCD
           systemctl restart sshd
+          systemctl stop google-cloud-ops-agent 2>/dev/null || true
+          systemctl disable google-cloud-ops-agent 2>/dev/null || true
 
-  - id: c3_nodeset
+          # 5. On Burst Cluster Controller: Synchronously import Primary Cluster's master key and configure accounting host
+          if hostname | grep -q controller; then
+            KEY_SRC=""
+            for i in `seq 1 60`; do
+              for f in /home/.shared_slurm.key /home/shared_slurm.key; do
+                [ -s "$f" ] && KEY_SRC="$f" && break 2
+              done
+              sleep 1
+            done
+            if [ -n "$KEY_SRC" ]; then
+              mkdir -p /etc/slurm /var/spool/slurm /slurm/key_distribution
+              cp -f "$KEY_SRC" /etc/slurm/slurm.key
+              cp -f "$KEY_SRC" /var/spool/slurm/slurm.key
+              cp -f "$KEY_SRC" /slurm/key_distribution/slurm.key
+              chown -R slurm:slurm /etc/slurm/slurm.key /var/spool/slurm/slurm.key /slurm/key_distribution/slurm.key
+              chmod 400 /etc/slurm/slurm.key /var/spool/slurm/slurm.key /slurm/key_distribution/slurm.key
+            fi
+
+            PRIMARY_CTRL_IP="$(vars.primary_controller_ip)"
+            if [ -z "$PRIMARY_CTRL_IP" ]; then
+              for i in `seq 1 60`; do
+                for f in /home/.primary_cluster_ctrl_ip /home/primary_cluster_ctrl_ip; do
+                  [ -s "$f" ] && PRIMARY_CTRL_IP=`cat "$f" 2>/dev/null | tr -d '[:space:]'` && break 2
+                done
+                sleep 1
+              done
+            fi
+
+            if [ -n "$PRIMARY_CTRL_IP" ]; then
+              for i in `seq 1 60`; do
+                [ -s /etc/slurm/slurm.conf ] && break
+                sleep 1
+              done
+              if [ -s /etc/slurm/slurm.conf ] && ! grep -q "AccountingStorageExternalHost" /etc/slurm/slurm.conf; then
+                echo "AccountingStorageExternalHost=$PRIMARY_CTRL_IP:6819" >> /etc/slurm/slurm.conf
+                scontrol reconfigure 2>/dev/null || true
+                # Registration with an external slurmdbd is established at daemon init, so a
+                # reconfigure may not be enough. Restart only when slurmctld is already running:
+                # an unconditional restart would also start it before slurm-gcp setup finishes.
+                # If it is not running yet, it reads the line above when it starts.
+                if systemctl is-active --quiet slurmctld; then
+                  systemctl restart slurmctld 2>/dev/null || true
+                fi
+              fi
+            fi
+          fi
+
+          # 6. On Burst Cluster Login: Import Primary Cluster master key and configure slurm config link
+          if hostname | grep -q login; then
+            mkdir -p /etc/slurm /usr/local/etc
+            ln -sfn /etc/slurm /usr/local/etc/slurm
+            KEY_SRC=""
+            for i in `seq 1 60`; do
+              for f in /home/.shared_slurm.key /home/shared_slurm.key; do
+                [ -s "$f" ] && KEY_SRC="$f" && break 2
+              done
+              sleep 1
+            done
+            if [ -n "$KEY_SRC" ]; then
+              cp -f "$KEY_SRC" /etc/slurm/slurm.key
+              chown slurm:slurm /etc/slurm/slurm.key 2>/dev/null || true
+              chmod 400 /etc/slurm/slurm.key
+            else
+              echo "WARNING: Primary Cluster slurm.key not found on /home within 60s" >&2
+            fi
+          fi
+
+  # Dynamic Elastic Bursting Nodeset (c3-standard-176)
+  - id: burst_b_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, ssh_config]
     settings:
-      node_count_static: 2
-      node_count_dynamic_max: 0
+      node_count_static: 0
+      node_count_dynamic_max: 16  # Elastic autoscaling nodes
       machine_type: c3-standard-176
       disk_type: hyperdisk-balanced
       bandwidth_tier: gvnic_enabled
@@ -247,18 +272,18 @@ deployment_groups:
       # placement_max_distance: 2
       instance_image:
         family: $(vars.built_instance_image.family)
-        project: $(vars.project_id)
+        project: $(vars.built_instance_image.project)
       instance_image_custom: true
       service_account_email: $(vars.service_account_email)
       service_account_scopes: &id001
       - https://www.googleapis.com/auth/cloud-platform
       enable_oslogin: false
 
-  - id: c3_partition
+  - id: burst_b_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [c3_nodeset]
+    use: [burst_b_nodeset]
     settings:
-      partition_name: compute
+      partition_name: burst
       is_default: true
       exclusive: false
 
@@ -271,7 +296,7 @@ deployment_groups:
       enable_login_public_ips: true
       instance_image:
         family: $(vars.built_instance_image.family)
-        project: $(vars.project_id)
+        project: $(vars.built_instance_image.project)
       instance_image_custom: true
       service_account_email: $(vars.service_account_email)
       service_account_scopes: *id001
@@ -279,8 +304,9 @@ deployment_groups:
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [network, c3_partition, homefs, slurm_login]
+    use: [network, burst_b_partition, homefs, appsfs, slurm_login]
     settings:
+      slurm_cluster_name: burst
       controller_startup_script: $(ssh_config.controller_startup_script)
       machine_type: $(vars.image_build_machine_type)
       disk_type: hyperdisk-balanced
@@ -290,9 +316,10 @@ deployment_groups:
       enable_controller_public_ips: false
       instance_image:
         family: $(vars.built_instance_image.family)
-        project: $(vars.project_id)
+        project: $(vars.built_instance_image.project)
       instance_image_custom: true
       service_account_email: $(vars.service_account_email)
       service_account_scopes: *id001
+      enable_default_mounts: false
       enable_slurm_auth: true
       enable_oslogin: false
