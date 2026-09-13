@@ -46,7 +46,10 @@ You can use two different methods to install Cluster Toolkit:
 
 ### Using the pre-built bundle (recommended)
 
-For the easiest setup, download the appropriate bundle for your operating system and architecture (e.g., `gcluster_bundle_linux_amd64.zip`, `gcluster_bundle_linux_arm64.zip`, `gcluster_bundle_mac_amd64.zip`, or `gcluster_bundle_mac_arm64.zip`) from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. These bundles include the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
+> [!WARNING]
+> **Security Notice**: To protect against known vulnerabilities, we recommend using the latest stable release (**v1.103.0 or later**). For details, see the [Cluster Toolkit Security Bulletins](https://docs.cloud.google.com/cluster-toolkit/docs/security-bulletins).
+
+For the easiest setup, download the appropriate bundle for your operating system and architecture (e.g., `gcluster_bundle_linux_amd64.tgz`, `gcluster_bundle_linux_arm64.tgz`, `gcluster_bundle_mac_amd64.tgz`, or `gcluster_bundle_mac_arm64.tgz`) from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. These bundles include the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
 
 #### Bundle compatibility matrix
 
@@ -62,15 +65,15 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 | **Windows** | ❎ | Please [Build from source](#building-from-source). |
 
 > [!NOTE]
-> Multi-architecture builds (amd64 and arm64) are available starting with version 1.85.0. Tarball bundles (.tgz) are supported starting with version 1.89.0.
+> Multi-architecture builds (amd64 and arm64) are available starting with version 1.85.0. Tarball bundles (`.tgz`) are supported starting with version 1.89.0.
 
 1. Download and extract the bundle:
 
-    For versions v1.89.0 and newer (Multi-architecture Tarball):
+    **For versions v1.89.0 and newer (Multi-architecture Tarball):**
 
     ```shell
     # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
-    # Set the desired version TAG (e.g., v1.89.0)
+    # Set the desired version TAG (e.g., v1.103.0)
     TAG=vX.Y.Z
     # Set your OS (linux or mac) and architecture (amd64 or arm64)
     OS="linux"
@@ -79,10 +82,14 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     mkdir -p cluster-toolkit && curl -L https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster_bundle_${OS}_${ARCH}.tgz | tar -xz -C cluster-toolkit && cd cluster-toolkit
     ```
 
-    For versions v1.85.0 through v1.88.0 (Multi-architecture Zip):
+    **For legacy versions v1.85.0 through v1.88.0 (Multi-architecture Zip):**
+
+    > [!NOTE]
+    > Versions prior to v1.89.0 were distributed as `.zip` archives. These legacy releases are affected by security advisories; upgrading to **v1.103.0 or later** is recommended.
 
     ```shell
     # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
+    # Note: Versions prior to v1.103.0 are subject to security advisories (see https://docs.cloud.google.com/cluster-toolkit/docs/security-bulletins)
     # Set the desired version TAG (e.g., v1.85.0)
     TAG=vX.Y.Z
     # Set your OS (linux or mac) and architecture (amd64 or arm64)
