@@ -26,6 +26,7 @@ if PARENT_DIR not in sys.path:
 import setup_network_storage
 from setup_network_storage import (
     _probe_tcp_port,
+    is_controller_mount,
     setup_network_storage as run_setup_network_storage,
     wait_for_controller_nfs,
 )
@@ -195,3 +196,76 @@ def test_setup_network_storage_client_preflight_failure_aborts_before_fstab():
         # Verify /etc/fstab was never copied or opened
         mock_copy.assert_not_called()
         mock_fstab.assert_not_called()
+
+
+def test_is_controller_mount_skips_dns_for_control_host():
+    mock_lkp = MagicMock()
+    mock_lkp.is_controller = False
+    mock_lkp.control_host = "slurm-controller"
+    mock_lkp.control_host_addr = "10.0.0.2"
+
+    mount = NSMount(
+        server_ip="slurm-controller",
+        remote_mount=Path("/home"),
+        local_mount=Path("/home"),
+        fs_type="nfs",
+        mount_options="_netdev",
+    )
+
+    with patch("setup_network_storage.lookup", return_value=mock_lkp), \
+         patch("util.host_lookup") as mock_host_lookup:
+        assert is_controller_mount(mount) is True
+        # Ensure expensive DNS resolution with retry backoff is NEVER called
+        mock_host_lookup.assert_not_called()
+
+
+def test_is_controller_mount_skips_dns_for_control_host_addr():
+    mock_lkp = MagicMock()
+    mock_lkp.is_controller = False
+    mock_lkp.control_host = "slurm-controller"
+    mock_lkp.control_host_addr = "10.0.0.2"
+
+    mount = NSMount(
+        server_ip="10.0.0.2",
+        remote_mount=Path("/home"),
+        local_mount=Path("/home"),
+        fs_type="nfs",
+        mount_options="_netdev",
+    )
+
+    with patch("setup_network_storage.lookup", return_value=mock_lkp), \
+         patch("util.host_lookup") as mock_host_lookup:
+        assert is_controller_mount(mount) is True
+        mock_host_lookup.assert_not_called()
+
+
+def test_setup_network_storage_preflight_short_circuits_is_controller_mount():
+    mock_lkp = MagicMock()
+    mock_lkp.is_controller = False
+    mock_lkp.control_host = "slurm-controller"
+    mock_lkp.control_host_addr = "10.0.0.2"
+    mock_lkp.cfg.enable_slurm_auth = False
+    mock_lkp.munge_mount = None
+
+    home_mount = NSMount(
+        server_ip="slurm-controller",
+        remote_mount=Path("/home"),
+        local_mount=Path("/home"),
+        fs_type="nfs",
+        mount_options="_netdev",
+    )
+
+    with patch("setup_network_storage.lookup", return_value=mock_lkp), \
+         patch("setup_network_storage.resolve_network_storage", return_value=[home_mount]), \
+         patch("setup_network_storage.is_controller_mount") as mock_is_controller_mount, \
+         patch("setup_network_storage.wait_for_controller_nfs") as mock_wait, \
+         patch("setup_network_storage.mount_fstab"), \
+         patch("setup_network_storage.munge_mount_handler"), \
+         patch("pathlib.Path.is_file", return_value=True), \
+         patch("shutil.copy2"), \
+         patch("util.mkdirp"), \
+         patch("builtins.open", mock_open()):
+        run_setup_network_storage()
+        # When server matches control_host, is_controller_mount must be short-circuited
+        mock_is_controller_mount.assert_not_called()
+        mock_wait.assert_called_once_with("slurm-controller", {"/home"}, timeout=360)

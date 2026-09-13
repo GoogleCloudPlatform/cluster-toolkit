@@ -111,20 +111,28 @@ def is_controller_mount(mount) -> bool:
         return lookup().is_controller
     # NOTE: Valid Lustre server_ip can take the form of '<IP>@tcp'
     server_ip = str(mount.server_ip).split("@")[0]
+    control_host = lookup().control_host
+    control_host_addr = lookup().control_host_addr
+
+    # Fast-path string equality checks bypass DNS lookup to avoid retry delays during node boot
+    if control_host is not None and server_ip == control_host:
+        return True
+    if control_host_addr is not None and server_ip == control_host_addr:
+        return True
+    if lookup().is_controller and (
+        server_ip in ("127.0.0.1", "localhost")
+        or server_ip == lookup().hostname
+    ):
+        return True
+
     try:
         mount_addr = util.host_lookup(server_ip) if server_ip else None
     except Exception:
         mount_addr = None
-    control_host = lookup().control_host
-    control_host_addr = lookup().control_host_addr
+
     return (
         (mount_addr is not None and mount_addr == control_host_addr)
-        or (control_host is not None and server_ip == control_host)
-        or (lookup().is_controller and (
-            server_ip in ("127.0.0.1", "localhost")
-            or server_ip == lookup().hostname
-            or mount_addr in ("127.0.0.1", "localhost")
-        ))
+        or (lookup().is_controller and mount_addr in ("127.0.0.1", "localhost"))
     )
 
 def _probe_tcp_port(host: str, port: int = 2049, timeout: float = 2.0) -> bool:
@@ -212,9 +220,15 @@ def setup_network_storage():
 
         controller_mounts_by_server: dict[str, set[str]] = {}
         for m in candidate_mounts:
-            if m.fs_type == "nfs" and is_controller_mount(m) and m.server_ip:
+            if m.fs_type == "nfs" and m.server_ip:
                 server = str(m.server_ip).split("@")[0]
-                controller_mounts_by_server.setdefault(server, set()).add(str(m.remote_mount))
+                is_controller = (
+                    (lkp.control_host is not None and server == lkp.control_host)
+                    or (lkp.control_host_addr is not None and server == lkp.control_host_addr)
+                    or is_controller_mount(m)
+                )
+                if is_controller:
+                    controller_mounts_by_server.setdefault(server, set()).add(str(m.remote_mount))
 
         for server, paths in controller_mounts_by_server.items():
             wait_for_controller_nfs(server, paths, timeout=360)
