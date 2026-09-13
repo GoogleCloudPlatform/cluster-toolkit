@@ -15,6 +15,7 @@
 ---
 
 timeout: 3600s
+logsBucket: "gs://$PROJECT_NUMBER.cloudbuild-logs.googleusercontent.com"
 steps:
 # Make tests requires full history. Perform deep fetch.
 - id: git-fetch-unshallow
