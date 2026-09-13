@@ -234,10 +234,6 @@ spec:
         backoffLimitPerIndex: 4000
         podReplacementPolicy: Failed
         maxFailedIndexes: 0
-{{- if .PodFailurePolicy }}
-        podFailurePolicy:
-{{(StructuralData .PodFailurePolicy)}}
-{{- end }}
         template:
           metadata:
             labels:
