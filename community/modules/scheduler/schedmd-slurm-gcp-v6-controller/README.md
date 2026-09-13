@@ -427,6 +427,7 @@ limitations under the License.
 | [google_compute_region_instance_group_manager.controller_regional_mig](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_instance_group_manager) | resource |
 | [google_compute_region_instance_group_manager.nodeset_mig](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_instance_group_manager) | resource |
 | [google_compute_region_per_instance_config.controller_regional_stateful_ips](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_per_instance_config) | resource |
+| [google_compute_resource_policy.nodeset_workload_policy](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_resource_policy) | resource |
 | [google_secret_manager_secret.cloudsql](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret) | resource |
 | [google_secret_manager_secret_iam_member.cloudsql_secret_accessor](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
 | [google_secret_manager_secret_version.cloudsql_version](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_version) | resource |

@@ -34,6 +34,12 @@ module "gpu" {
 
 locals {
   guest_accelerator = module.gpu.guest_accelerator
+  # Fallback to regex extraction (e.g. "-4g" -> 4, "-8g" -> 8); defaults to 4 for A4X GB200 NVL72 chassis
+  gpu_count = try(
+    local.guest_accelerator[0].count,
+    tonumber(regex("-([0-9]+)g", var.machine_type)[0]),
+    4
+  )
 
   disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
 
@@ -104,6 +110,7 @@ locals {
     enable_oslogin             = var.enable_oslogin
     enable_shielded_vm         = var.enable_shielded_vm
     gpu                        = one(local.guest_accelerator)
+    gpu_count                  = local.gpu_count
     accelerator_topology       = var.accelerator_topology
 
     labels                    = local.labels
