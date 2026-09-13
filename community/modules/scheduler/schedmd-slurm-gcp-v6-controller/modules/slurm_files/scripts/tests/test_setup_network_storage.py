@@ -184,6 +184,21 @@ def test_wait_for_controller_nfs_tier2_fallback():
         mock_sleep.assert_called_once_with(0.5)
 
 
+def test_wait_for_controller_nfs_retries_on_unready_exports_then_succeeds():
+    attempts = 0
+
+    def mock_check(server, expected_paths, timeout=3.0):
+        nonlocal attempts
+        attempts += 1
+        return attempts >= 3
+
+    with patch("setup_network_storage._probe_tcp_port", return_value=True), \
+         patch("setup_network_storage._check_nfs_exports_showmount", side_effect=mock_check), \
+         patch("time.sleep"):
+        wait_for_controller_nfs("10.0.0.1", ["/home"], timeout=30)
+        assert attempts == 3
+
+
 def test_wait_for_controller_nfs_empty_paths():
     with patch("setup_network_storage._probe_tcp_port", return_value=True), \
          patch("time.sleep") as mock_sleep:

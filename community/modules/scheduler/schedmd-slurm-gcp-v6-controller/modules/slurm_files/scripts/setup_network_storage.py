@@ -235,15 +235,19 @@ def _probe_nfs_mount(
 
     probe_dir = Path(tempfile.mkdtemp(prefix=".nfs_probe_", dir=str(probe_base)))
 
-    cmd = (
-        f"mount -t nfs -o ro,soft,timeo=20,retrans=1,retry=0 "
-        f"{server}:{remote_path} {probe_dir}"
-    )
+    cmd = [
+        "mount",
+        "-t",
+        "nfs",
+        "-o",
+        "ro,soft,timeo=20,retrans=1,retry=0",
+        f"{server}:{remote_path}",
+        str(probe_dir),
+    ]
     try:
         res = run(cmd, timeout=timeout, check=False)
         if res.returncode == 0:
             log.info(f"Transient probe mount succeeded for {server}:{remote_path}.")
-            run(f"umount -l {probe_dir}", timeout=10, check=False)
             return True
         else:
             log.debug(f"Probe mount {server}:{remote_path} returned {res.returncode}: {res.stderr}")
@@ -311,26 +315,29 @@ def wait_for_controller_nfs(
 
     # Step 2: Actively verify exports (Tier 1 showmount -> Tier 2 transient probe)
     exports_ready = False
-    for wait in util.backoff_delay(start_delay, timeout=timeout):
-        # Tier 1: showmount probe
-        showmount_res = _check_nfs_exports_showmount(server, normalized_expected, timeout=3.0)
-        if showmount_res is True:
-            exports_ready = True
-            break
-        elif showmount_res is False:
-            # Server is running and reachable on RPC, but exportfs -ra hasn't exported these shares yet
-            pass
-        else:
-            # Tier 2 Fallback: Port 111 firewalled, showmount missing, or NFSv4-only
-            if sample_path and _probe_nfs_mount(server, sample_path, timeout=4.0):
+    remaining_timeout = deadline - time.monotonic()
+    if remaining_timeout > 0.05:
+        step2_start = min(start_delay, remaining_timeout)
+        for wait in util.backoff_delay(step2_start, timeout=remaining_timeout):
+            # Tier 1: showmount probe
+            showmount_res = _check_nfs_exports_showmount(server, normalized_expected, timeout=3.0)
+            if showmount_res is True:
                 exports_ready = True
                 break
+            elif showmount_res is False:
+                # Server is running and reachable on RPC, but exportfs -ra hasn't exported these shares yet
+                pass
+            else:
+                # Tier 2 Fallback: Port 111 firewalled, showmount missing, or NFSv4-only
+                if sample_path and _probe_nfs_mount(server, sample_path, timeout=4.0):
+                    exports_ready = True
+                    break
 
-        if time.monotonic() >= deadline:
-            break
+            if time.monotonic() >= deadline:
+                break
 
-        sleep_sec = min(wait * random.uniform(0.8, 1.2), max(0.0, deadline - time.monotonic()))
-        time.sleep(sleep_sec)
+            sleep_sec = min(wait * random.uniform(0.8, 1.2), max(0.0, deadline - time.monotonic()))
+            time.sleep(sleep_sec)
 
     if not exports_ready:
         raise TimeoutError(
