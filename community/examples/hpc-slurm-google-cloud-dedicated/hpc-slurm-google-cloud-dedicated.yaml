@@ -14,6 +14,27 @@
 
 ---
 blueprint_name: hpc-c3-slurm-google-cloud-dedicated
+
+# These validators query public Google APIs that are unreachable from a GCD private
+# universe (apis-<location>.goog), so gcluster create would fail before generating
+# anything. On commercial GCP you can safely delete this block to restore the
+# pre-flight checks.
+validators:
+- validator: test_project_exists
+  skip: true
+- validator: test_apis_enabled
+  skip: true
+- validator: test_region_exists
+  skip: true
+- validator: test_zone_exists
+  skip: true
+- validator: test_zone_in_region
+  skip: true
+- validator: test_machine_type_in_zone
+  skip: true
+- validator: test_disk_type_in_zone
+  skip: true
+
 vars:
   project_id: # <project-id>
   deployment_name: hpc-slurm
@@ -23,12 +44,12 @@ vars:
   service_account_email: default # <account-id>-compute@developer.gserviceaccount.com
 
   # Image Build Settings
-  source_image_family: rocky-linux-8-optimized-gcp
-  source_image_project: rocky-linux-cloud
+  source_image_family: rocky-linux-9-optimized-gcp
+  source_image_project: rocky-linux-cloud # <partition>-system:rocky-linux-cloud
   image_build_machine_type: c3-standard-4
   build_slurm_from_git_ref: 6.12.3
   built_instance_image:
-    family: slurm-c3-rocky8
+    family: slurm-rocky9
     project: $(vars.project_id)
 
 terraform_providers:
@@ -166,6 +187,9 @@ deployment_groups:
             if ! id "$user" &>/dev/null; then
               UID_HASH=`printf "%s" "$user" | cksum | cut -d' ' -f1`
               USER_UID=`expr 2000 + $UID_HASH % 58000`
+              while getent passwd "$USER_UID" >/dev/null || getent group "$USER_UID" >/dev/null; do
+                USER_UID=`expr $USER_UID + 1`
+              done
               groupadd -g "$USER_UID" "$user" || true
               useradd -u "$USER_UID" -g "$USER_UID" -m -s /bin/bash "$user"
             fi
@@ -200,7 +224,7 @@ deployment_groups:
           # 3. Disable StrictHostKeyChecking safely for internal network jumps only
           if ! grep -q "Host 10.\*" /etc/ssh/ssh_config; then
             if ! grep -q "StrictHostKeyChecking no" /etc/ssh/ssh_config; then
-              echo -e "Host 10.* 172.16.* 192.168.* *.internal *\n    StrictHostKeyChecking no\n    UserKnownHostsFile=/dev/null" >> /etc/ssh/ssh_config
+              echo -e "Host 10.* 172.16.* 192.168.* *.internal\n    StrictHostKeyChecking no\n    UserKnownHostsFile=/dev/null" >> /etc/ssh/ssh_config
             fi
           fi
 

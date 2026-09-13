@@ -15,6 +15,10 @@
 ---
 blueprint_name: burst-cluster
 
+# These validators query public Google APIs that are unreachable from a GCD private
+# universe (apis-<location>.goog), so gcluster create would fail before generating
+# anything. On commercial GCP you can safely delete this block to restore the
+# pre-flight checks.
 validators:
 - validator: test_project_exists
   skip: true
@@ -36,17 +40,20 @@ vars:
   deployment_name: burst-cluster
   region: us-central1
   zone: us-central1-a
-  universe_domain: # e.g., apis-<location>.goog or custom universe domain
+  universe_domain: googleapis.com # apis-<location>.goog
   service_account_email: # <account-id>-compute@developer.gserviceaccount.com
   # To enable SSH access to the login node, add your client CIDR e.g. ["x.x.x.x/32"] or ["0.0.0.0/0"]
   authorized_ssh_ranges: []
   nfs_server_ip: # <IP_OF_PRIMARY_CLUSTER_NFS_SERVER> e.g., 10.128.0.X or internal DNS name
   primary_controller_ip: "" # (Optional) <IP_OF_PRIMARY_CLUSTER_CONTROLLER> e.g., 10.128.0.3
 
-  # Instance & Image Settings (Reusing built image from Primary Cluster)
+  # Instance & Image Settings (Slurm image built by the Primary Cluster blueprint)
   image_build_machine_type: c3-standard-4
   built_instance_image:
-    family: slurm-c3-rocky8
+    family: slurm-rocky9
+    # Defaults to this project, i.e. the image was copied into Project B (README section 3.C).
+    # To read the image directly from Project A instead, set this to <PROJECT_A_ID> and grant
+    # Project B's service agent roles/compute.imageUser on Project A.
     project: $(vars.project_id)
 
 terraform_providers:
@@ -217,6 +224,13 @@ deployment_groups:
               if [ -s /etc/slurm/slurm.conf ] && ! grep -q "AccountingStorageExternalHost" /etc/slurm/slurm.conf; then
                 echo "AccountingStorageExternalHost=$PRIMARY_CTRL_IP:6819" >> /etc/slurm/slurm.conf
                 scontrol reconfigure 2>/dev/null || true
+                # Registration with an external slurmdbd is established at daemon init, so a
+                # reconfigure may not be enough. Restart only when slurmctld is already running:
+                # an unconditional restart would also start it before slurm-gcp setup finishes.
+                # If it is not running yet, it reads the line above when it starts.
+                if systemctl is-active --quiet slurmctld; then
+                  systemctl restart slurmctld 2>/dev/null || true
+                fi
               fi
             fi
           fi
@@ -258,7 +272,7 @@ deployment_groups:
       # placement_max_distance: 2
       instance_image:
         family: $(vars.built_instance_image.family)
-        project: $(vars.project_id)
+        project: $(vars.built_instance_image.project)
       instance_image_custom: true
       service_account_email: $(vars.service_account_email)
       service_account_scopes: &id001
@@ -282,7 +296,7 @@ deployment_groups:
       enable_login_public_ips: true
       instance_image:
         family: $(vars.built_instance_image.family)
-        project: $(vars.project_id)
+        project: $(vars.built_instance_image.project)
       instance_image_custom: true
       service_account_email: $(vars.service_account_email)
       service_account_scopes: *id001
@@ -302,7 +316,7 @@ deployment_groups:
       enable_controller_public_ips: false
       instance_image:
         family: $(vars.built_instance_image.family)
-        project: $(vars.project_id)
+        project: $(vars.built_instance_image.project)
       instance_image_custom: true
       service_account_email: $(vars.service_account_email)
       service_account_scopes: *id001

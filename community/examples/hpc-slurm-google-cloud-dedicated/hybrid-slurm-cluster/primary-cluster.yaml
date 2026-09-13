@@ -15,6 +15,10 @@
 ---
 blueprint_name: primary-cluster
 
+# These validators query public Google APIs that are unreachable from a GCD private
+# universe (apis-<location>.goog), so gcluster create would fail before generating
+# anything. On commercial GCP you can safely delete this block to restore the
+# pre-flight checks.
 validators:
 - validator: test_project_exists
   skip: true
@@ -36,18 +40,18 @@ vars:
   deployment_name: primary-cluster
   region: us-central1
   zone: us-central1-a
-  universe_domain: # e.g., apis-<location>.goog or custom universe domain
+  universe_domain: googleapis.com # apis-<location>.goog
   service_account_email: # <account-id>-compute@developer.gserviceaccount.com
   # To enable SSH access to the login node, add your client CIDR e.g. ["x.x.x.x/32"] or ["0.0.0.0/0"]
   authorized_ssh_ranges: []
 
   # Image Build & Instance Settings
-  source_image_family: rocky-linux-8-optimized-gcp
-  source_image_project: rocky-linux-cloud
+  source_image_family: rocky-linux-9-optimized-gcp
+  source_image_project: rocky-linux-cloud # <partition>-system:rocky-linux-cloud
   image_build_machine_type: c3-standard-4
   build_slurm_from_git_ref: 6.12.1
   built_instance_image:
-    family: slurm-c3-rocky8
+    family: slurm-rocky9
     project: $(vars.project_id)
 
 terraform_providers:
@@ -274,7 +278,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, ssh_config]
     settings:
-      node_count_static: 0
+      node_count_static: 1
       node_count_dynamic_max: 16
       machine_type: c3-standard-176
       disk_type: hyperdisk-balanced

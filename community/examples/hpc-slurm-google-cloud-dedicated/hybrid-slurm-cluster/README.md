@@ -8,7 +8,7 @@ This directory contains the blueprints, playbooks, test scripts, and architectur
 
 The testbed simulates an enterprise customer's on-premises HPC cluster bursting into Google Cloud without requiring physical datacenter hardware. It deploys two independent Slurm clusters across two isolated GCD projects connected via high-performance VPC routing:
 
-* **Primary Cluster (`primary-cluster`)**: Simulates the **On-Premises / Primary Cluster** (persistent head node, static compute nodes, and a standalone NFS server).
+* **Primary Cluster (`primary-cluster`)**: Simulates the **On-Premises / Primary Cluster** (persistent head node, 1 static compute node that autoscales to `N` on demand, and a standalone NFS server).
 * **Burst Cluster (`burst-cluster`)**: Simulates the **Cloud Burst Target** in Google Cloud (lightweight head node, 0 static nodes, and dynamic compute nodes that autoscale from `0 -> N` on demand).
 
 ```text
@@ -24,8 +24,8 @@ The testbed simulates an enterprise customer's on-premises HPC cluster bursting 
                 :                                               |
                 : (mounts NFS)                                  v
                 :                               +---------------------------------+
-                :                               |  Static Compute Nodes           |
-                :                               |  (primary-cluster-compute-0, 1) |
+                :                               |  Compute Nodes (1 static, 0->N) |
+                :                               |  (primary-cluster-compute-0...) |
                 v                               +---------------------------------+
   +-------------------------------------------------------------+
   |  Shared Standalone NFS Storage Instance (10.128.0.2)
@@ -48,7 +48,7 @@ The testbed simulates an enterprise customer's on-premises HPC cluster bursting 
                                                                 v
                                                 +---------------------------------+
                                                 |  Dynamic Compute Nodes (0 -> N) |
-                                                |  (burst-cluster-burst-0, 1, ...) |
+                                                |  (burst-cluster-burst-0...)     |
                                                 +---------------------------------+
 
 ====================================================================================================
@@ -112,16 +112,45 @@ To ensure deterministic, conflict-free routing without requiring manual network 
 > In enterprise GCD environments where networking is managed centrally via Fabric FAST or CFT Shared VPCs, you can deploy into pre-existing networks instead. Simply replace `modules/network/vpc` with `modules/network/pre-existing-vpc` in the blueprints and configure your network and subnetwork names.
 
 ### C. Cross-Project Custom Slurm Image Sharing
-If reusing a pre-baked Slurm Rocky Linux image across projects:
+
+The Burst Cluster in Project B needs access to the Slurm image built by the Primary Cluster in Project A. There are two ways to arrange this.
+
+**Option 1 — Copy the image into Project B.** This is what the blueprint defaults assume:
 
 ```bash
-gcloud compute images copy rocky-linux-8-optimized-gcp-v20240129 \
-  --source-project=<PROJECT_B_ID> \
-  --destination-project=<PROJECT_A_ID> \
-  --destination-image=rocky-linux-8-optimized-gcp-v20240129
+# Resolve the current image name from the family (avoids hardcoding a dated build):
+IMAGE_NAME=$(gcloud compute images describe-from-family slurm-rocky9 \
+  --project=<PROJECT_A_ID> \
+  --format="value(name)")
+
+gcloud compute images create "${IMAGE_NAME}" \
+  --source-image="${IMAGE_NAME}" \
+  --source-image-project=<PROJECT_A_ID> \
+  --family=slurm-rocky9 \
+  --project=<PROJECT_B_ID>
 ```
 
-*(Or reference `source_image_project: <IMAGE_PROJECT>`, `source_image_family: rocky-linux-8-optimized-gcp`).*
+**Option 2 — Read the image in place from Project A.** Point `built_instance_image.project` in `burst-cluster.yaml` at Project A:
+
+```yaml
+vars:
+  built_instance_image:
+    family: slurm-rocky9
+    project: <PROJECT_A_ID>
+```
+
+Then grant Project B's service agent permission to read images from Project A:
+
+```bash
+gcloud projects add-iam-policy-binding <PROJECT_A_ID> \
+  --member="serviceAccount:<PROJECT_B_NUMBER>-compute@developer.gserviceaccount.com" \
+  --role="roles/compute.imageUser"
+```
+
+> [!IMPORTANT]
+> Option 2 requires both halves. Setting `built_instance_image.project` without the `roles/compute.imageUser` grant turns the `404: image not found` error into a `403: permission denied`.
+
+*(Alternatively, skip image sharing entirely and rebuild in Project B from the base OS image by setting `source_image_project` and `source_image_family`. In GCD these are `<partition>-system:rocky-linux-cloud` and `rocky-linux-9-optimized-gcp`; on commercial GCP the project is `rocky-linux-cloud`.)*
 
 ---
 
@@ -133,37 +162,7 @@ gcloud compute images copy rocky-linux-8-optimized-gcp-v20240129 \
 > Primary Cluster **must be deployed first and reach running state** before Burst Cluster is provisioned.
 > Primary Cluster provisions its VPC network (`primary-cluster-net`), the shared NFS server VM (`/home`), generates the master SAuth encryption key (`slurm.key`), and writes its internal IP (`primary_cluster_ctrl_ip`). Burst Cluster requires Primary Cluster's NFS Server IP (`NFS_IP`) to mount `/home` and bootstrap on boot.
 
-### One-Time Setup: Build Custom Slurm OS Image with Packer
-
-In Google Cloud Dedicated (GCD), public SchedMD marketplace images are not available. A custom Slurm VM image (Rocky Linux 8 with Slurm v6) must be built inside the project using the embedded `build-slurm` Packer deployment group in `primary-cluster.yaml`.
-
-> [!NOTE]
-> **This build step is only required ONCE per project/environment.**
->
-> Once the image is baked into family `slurm-c3-rocky8`:
->
-> * It is permanently saved in your project and can be reused indefinitely across Primary Cluster and Burst Cluster.
-> * Standard cluster deployments only need to deploy `--only setup,cluster`, skipping the ~20-minute Packer build.
-> * If you are reusing a pre-baked Slurm image or copied one from another project (see Section 3.C), you can skip this step entirely.
-
-To build the Slurm image:
-
-```bash
-# 1. Create deployment definition for Primary Cluster:
-./gcluster create community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml
-
-# 2. Deploy VPC network and build scripts:
-./gcluster deploy primary-cluster --only setup --auto-approve
-
-# 3. Build the custom Slurm OS image with Packer (takes ~20-25 minutes):
-./gcluster deploy primary-cluster --only build-slurm --auto-approve
-```
-
-Once the Packer build completes, the image is registered under family `slurm-c3-rocky8` in your project and is ready for cluster provisioning.
-
----
-
-### Step 1: Deploy Primary Cluster (Project A)
+### Before You Begin: Configure and Create the Deployment
 
 Configure the `vars` block in `community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml` with your project parameters:
 
@@ -178,14 +177,48 @@ vars:
   authorized_ssh_ranges: ["<CLIENT_IP_OR_CIDR>"] # e.g. ["x.x.x.x/32"], or ["0.0.0.0/0"] for open access
 ```
 
-Navigate to your Cluster Toolkit directory:
+From your Cluster Toolkit directory, create the deployment definition:
 
 ```bash
-# 1. Create deployment definition for Primary Cluster:
 ./gcluster create community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml
+```
 
-# 2. Deploy Primary Cluster infrastructure (VPC network, NFS, and Slurm nodes):
-#    Since the Slurm image was already built (or copied), deploy only setup and cluster:
+> [!NOTE]
+> Run `gcluster create` **once**. Every step below reuses the same `primary-cluster/` deployment
+> directory; re-running it fails with `deployment folder "primary-cluster" already exists`.
+> If you change `vars` later, re-create with `-w` to overwrite.
+
+---
+
+### One-Time Setup: Build Custom Slurm OS Image with Packer
+
+In Google Cloud Dedicated (GCD), public SchedMD marketplace images are not available. A custom Slurm VM image (Rocky Linux 9 with Slurm v6) must be built inside the project using the embedded `build-slurm` Packer deployment group in `primary-cluster.yaml`.
+
+> [!NOTE]
+> **This build step is only required ONCE per project/environment.**
+>
+> Once the image is baked into family `slurm-rocky9`:
+>
+> * It is permanently saved in your project and can be reused indefinitely across Primary Cluster and Burst Cluster.
+> * Standard cluster deployments only need to deploy `--only setup,cluster`, skipping the ~20-minute Packer build.
+> * If you are reusing a pre-baked Slurm image or copied one from another project (see Section 3.C), you can skip this step entirely.
+
+To build the Slurm image:
+
+```bash
+# Deploy the VPC network and build the custom Slurm OS image (takes ~20-25 minutes):
+./gcluster deploy primary-cluster --only setup,build-slurm --auto-approve
+```
+
+Once the Packer build completes, the image is registered under family `slurm-rocky9` in your project and is ready for cluster provisioning.
+
+---
+
+### Step 1: Deploy Primary Cluster (Project A)
+
+```bash
+# Deploy Primary Cluster infrastructure (VPC network, NFS, and Slurm nodes).
+# The `setup` group is idempotent, so this is safe whether or not you ran the Packer build above.
 ./gcluster deploy primary-cluster --auto-approve --only setup,cluster
 ```
 
@@ -198,7 +231,7 @@ Once Primary Cluster finishes deploying, retrieve the internal IP of the standal
 ```bash
 NFS_IP=$(gcloud compute instances list \
   --project=<PROJECT_A_ID> \
-  --filter="name ~ primary-cluster AND name ~ nfs" \
+  --filter="labels.ghpc_module:nfs-server AND labels.ghpc_deployment:primary-cluster" \
   --format="value(networkInterfaces[0].networkIP)")
 echo "Primary Cluster NFS Server IP: ${NFS_IP}"
 ```
@@ -222,6 +255,11 @@ vars:
   service_account_email: <PROJECT_B_NUMBER>-compute@developer.gserviceaccount.com
   authorized_ssh_ranges: ["<CLIENT_IP_OR_CIDR>"] # e.g. ["x.x.x.x/32"], or ["0.0.0.0/0"] for open access
   nfs_server_ip: <NFS_IP> # Set to Primary Cluster NFS Server IP
+
+  # Reuse the Slurm image built by the Primary Cluster (see Section 3.C).
+  built_instance_image:
+    family: slurm-rocky9
+    project: <PROJECT_B_ID> # Set to <PROJECT_A_ID> to read the image from Project A instead
 ```
 
 Create the deployment files and provision **only** Burst Cluster's VPC network and firewalls (`setup` group):
