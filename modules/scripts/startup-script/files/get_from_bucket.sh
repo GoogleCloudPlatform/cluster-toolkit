@@ -13,16 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Given a url and filename, download an object to the vardir. When the installed
-# version of gcloud is >=402.0.0 (Sept. 2022), then gcloud storage is used to
-# fetch from the bucket. Otherwise gsutil is used. Note, the service account for
-# the instance must be properly configured with a role having authorization to
-# get objects from the bucket.
+# Given a url and filename, download an object to the vardir. gcloud storage is
+# used to fetch from the bucket. Note, the service account for the instance must
+# be properly configured with a role having authorization to get objects from
+# the bucket.
 #
 # This function is intended for single file downloads and no attempt is made to
-# verify the checksum other than the default behavior of gcloud or gsutil.
+# verify the checksum other than the default behavior of gcloud.
 #
-# This function has no other platform dependencies other than gcloud / gsutil.
+# This function has no other platform dependencies other than gcloud.
 
 # This code originated from: https://github.com/terraform-google-modules/terraform-google-startup-scripts?ref=v1.0.0
 stdlib::get_from_bucket() {

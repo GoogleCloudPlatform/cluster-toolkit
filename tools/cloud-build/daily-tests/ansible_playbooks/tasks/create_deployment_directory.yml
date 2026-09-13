@@ -51,7 +51,7 @@
 
 - name: Uploading deployment
   ansible.builtin.command:
-    cmd: gsutil cp "{{ deployment_name }}.tgz" "gs://{{ state_bucket }}/{{ test_name }}/"
+    cmd: gcloud storage cp "{{ deployment_name }}.tgz" "gs://{{ state_bucket }}/{{ test_name }}/"
     chdir: "{{ workspace }}"
   changed_when: True
 

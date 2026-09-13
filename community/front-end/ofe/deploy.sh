@@ -656,16 +656,16 @@ setup() {
 
 LINE
 
-	# -- Check for terraform and gsutil
+	# -- Check for terraform and gcloud
 	#
 	if ! command -v terraform &>/dev/null; then
 		error "Error:"
 		error "    Please ensure terraform (version 0.13 or higher) is in your \$PATH"
 		exit 1
 	fi
-	if ! command -v gsutil &>/dev/null; then
+	if ! command -v gcloud &>/dev/null; then
 		error "Error:"
-		error "    Please ensure gsutil (part of Google Cloud Tools)  is in your \$PATH"
+		error "    Please ensure gcloud (part of Google Cloud Tools)  is in your \$PATH"
 		exit 1
 	fi
 

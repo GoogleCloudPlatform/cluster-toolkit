@@ -640,7 +640,7 @@ def _verify_params(message, keys):
 
 def _get_upload_command(target_dir, url):
     if url.startswith("gs://"):
-        return f"gsutil cp -r '{target_dir.as_posix()}' '{url}'"
+        return f"gcloud storage cp -r '{target_dir.as_posix()}' '{url}'"
     if url.startswith("s3://"):
         return f"aws s3 cp --recursive '{target_dir.as_posix()}' '{url}'"
 
@@ -649,7 +649,7 @@ def _get_upload_command(target_dir, url):
 
 def _get_download_command(target_dir, url):
     if url.startswith("gs://"):
-        return f"gsutil cp -r '{url}' '{target_dir.as_posix()}'"
+        return f"gcloud storage cp -r '{url}' '{target_dir.as_posix()}'"
     if url.startswith("s3://"):
         ret = f"""
 output=$(aws s3 cp --recursive --dryrun '{url}' '{target_dir.as_posix()}')
@@ -683,8 +683,8 @@ def _make_run_script(job_dir, uid, gid, orig_run_script):
         fname = script_url.path.split("/")[-1] if not recursive_fetch else ""
         if script_url.scheme == "gs":
             fetch = (
-                "gsutil "
-                f"{'-m cp -r ' if recursive_fetch else ''}"
+                "gcloud storage cp "
+                f"{'-r ' if recursive_fetch else ''}"
                 f"'{text}' "
                 f"'{job_dir.as_posix()}'"
             )

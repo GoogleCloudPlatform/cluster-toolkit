@@ -93,7 +93,8 @@ class Deployment:
 
     def upload_deployment(self):
         cmd = [
-              "gsutil",
+              "gcloud",
+              "storage",
               "cp",
               "%s.tgz" % (self.deployment_name),
               "gs://%s/%s/" % (self.state_bucket, self.deployment_name)

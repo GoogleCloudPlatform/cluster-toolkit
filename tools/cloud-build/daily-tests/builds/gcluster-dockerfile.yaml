@@ -115,7 +115,7 @@ steps:
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gsutil rm "gs://daily-tests-tf-state/*/dockerfile-test/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/*/dockerfile-test/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               cleanup_pod() {

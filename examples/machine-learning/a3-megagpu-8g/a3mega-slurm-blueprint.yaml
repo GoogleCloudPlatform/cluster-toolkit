@@ -417,9 +417,9 @@ deployment_groups:
         content: |
           #!/bin/bash
           # IMPORTANT: This script should be run *last* in any sequence of setup steps
-          # that use 'gsutil' or other gcloud commands.
+          # that use 'gcloud storage' or other gcloud commands.
           # This is because removing the Snap version of the GCloud SDK can temporarily
-          # break existing 'gsutil' paths, which might disrupt other scripts still running
+          # break existing 'gcloud' paths, which might disrupt other scripts still running
           # that rely on the Snap-installed version.
 
           set -e -o pipefail
@@ -440,7 +440,7 @@ deployment_groups:
           curl -o /usr/share/keyrings/cloud.google.asc https://packages.cloud.google.com/apt/doc/apt-key.gpg
           apt-get update
           apt-get install --assume-yes google-cloud-cli
-          # Clean up the bash executable hash for subsequent steps using gsutil
+          # Clean up the bash executable hash for subsequent steps using gcloud
           hash -r
 
 - group: slurm-build

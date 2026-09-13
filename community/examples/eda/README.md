@@ -207,7 +207,7 @@ Depending on the software you want to use, different installation paths may be r
 
   In general, you need to bring the binaries to your EDA cluster for which it is
   useful to use a Google Cloud Storage bucket, which is accessible from any machine using the
-  gsutil command and which can be mounted in the cluster.
+  `gcloud storage` command and which can be mounted in the cluster.
 
   As this installation process only needs to be done once and at the same time may require time,
   we recommend to do this installation in a separate deployment group before you bring up the cluster.

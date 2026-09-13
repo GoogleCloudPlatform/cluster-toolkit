@@ -171,7 +171,7 @@ No modules.
 | <a name="output_anywhere_cache_ids"></a> [anywhere\_cache\_ids](#output\_anywhere\_cache\_ids) | The IDs of the created Anywhere Cache instances. |
 | <a name="output_client_install_runner"></a> [client\_install\_runner](#output\_client\_install\_runner) | Runner that performs client installation needed to use gcs fuse. |
 | <a name="output_gcs_bucket_name"></a> [gcs\_bucket\_name](#output\_gcs\_bucket\_name) | Bucket name. |
-| <a name="output_gcs_bucket_path"></a> [gcs\_bucket\_path](#output\_gcs\_bucket\_path) | The gsutil bucket path with format of `gs://<bucket-name>`. |
+| <a name="output_gcs_bucket_path"></a> [gcs\_bucket\_path](#output\_gcs\_bucket\_path) | The gcloud storage bucket path with format of `gs://<bucket-name>`. |
 | <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Runner that mounts the cloud storage bucket with gcs fuse. |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a remote network storage to be mounted by fs-tab. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
