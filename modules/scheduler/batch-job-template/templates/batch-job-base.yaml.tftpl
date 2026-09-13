@@ -29,6 +29,9 @@ taskGroups:
       %{~ if tasks_per_node != null ~}
       taskCountPerNode: ${tasks_per_node}
       %{~ endif ~}
+      %{~ if parallelism != null ~}
+      parallelism: ${parallelism}
+      %{~ endif ~}
       requireHostsFile: ${require_hosts_file}
       permissiveSsh: ${permissive_ssh}
 %{~ if instance_template != null }
