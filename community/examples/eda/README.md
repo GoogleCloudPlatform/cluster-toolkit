@@ -27,7 +27,7 @@ Two example blueprints are provided.
 
 This blueprint assumes that all compute and data resides in the cloud.
 
-In the base deployment group (see [deployment stages](#deployment_stages)) it provisions a new network and multiple volumes to store your data. Adjust the volume sizes to suit your requirements before deployment. If your volumes are larger than 15 TiB, creating them as [large volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes) adds performance benefits. One limitation currently is that Slurm will only use the first IP of a large volume. If you need to utilize the full performance of the 6 IP addresses a large volume provides, you can instead utilize the approach with pre-existing volumes and CloudDNS mentioned in eda-hybrid-cloud blueprint description.
+In the base deployment group (see [deployment stages](#deployment_stages)) it provisions a new network and multiple volumes to store your data. Adjust the volume sizes to suit your requirements before deployment. If your volumes are larger than 15 TiB, creating them as [large volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes) adds performance benefits. The blueprint creates a private Cloud DNS zone and configures every volume with a DNS record. For large-capacity volumes, the record contains all NFS endpoint IPs so Slurm clients use the volume FQDN and are distributed across the endpoints through DNS round-robin.
 
 The cluster deployment group deploys a managed instance group which is managed by Slurm.
 
@@ -37,7 +37,7 @@ When scaling down the deployment, make sure to only destroy the *compute* deploy
 
 This blueprint assumes you are using NetApp Volumes [FlexCache](https://docs.cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/cache-ontap-volumes/overview) to enable a [hybrid cloud EDA](https://community.netapp.com/t5/Tech-ONTAP-Blogs/NetApp-FlexCache-Enhancing-hybrid-EDA-with-Google-Cloud-NetApp-Volumes/ba-p/462768) environment.
 
-The base deployment group (see [deployment stages](#deployment_stages)) connects to an existing network and mounts multiple volumes. This blueprint assumes you have pre-existing volumes for "tools", "libraries", "home" and "scratch". Before deployment, update `server_ip` and `remote_mount` parameters of the respective volumes in the blueprint declarations to reflect the actual IP and export path of your existing volumes. Using existing volumes also avoids the danger of being deleted accidentally when deleting the base deployment group.
+The base deployment group (see [deployment stages](#deployment_stages)) connects to an existing network and mounts multiple volumes. This blueprint assumes you have pre-existing volumes for "tools", "libraries", "home" and "scratch". Before deployment, set each `*_server_ips` blueprint variable to the complete list of NFS endpoint IPs for that volume and update its `remote_mount` parameter with the export path. The blueprint creates private DNS records from those addresses and supplies the resulting FQDNs to the storage modules. Using existing volumes also avoids the danger of them being deleted accidentally when deleting the base deployment group.
 
 The volumes used can be regular NetApp Volume [volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview), [large volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes) or [FlexCache volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/cache-ontap-volumes/overview).
 
@@ -52,7 +52,7 @@ FlexCache offers the following features which enable bursting on-premises worklo
 
 It can accelerate metadata- or throughput-heavy read workloads considerably.
 
-FlexCache and Large Volumes offer six IP addresses per volume which all provide access to the same data. Currently Cluster Toolkit only uses one of these IPs. Support for using all 6 IPs is planned for a later release. To spread your compute nodes over all IPs today, you can use CloudDNS to create an DNS record with all 6 IPs and specify that DNS name instead of individual IPs in the blueprint. CloudDNS will return one of the 6 IPs in a round-robin fashion on lookups.
+FlexCache and large-capacity volumes offer multiple IP addresses per volume, all of which provide access to the same data. The EDA blueprints publish these addresses in private Cloud DNS and mount the storage by FQDN instead of selecting one IP. Cloud DNS returns the addresses in round-robin order, distributing client mounts across the available endpoints. Resolver caching means the distribution is not guaranteed to be perfectly even.
 
 The cluster deployment group deploys a managed instance group which is managed by Slurm.
 
@@ -86,6 +86,7 @@ storage intact and b) you can build software before you deploy your cluster.
 >
 > - Compute Engine
 > - NetApp Volumes
+> - Cloud DNS
 >
 > To avoid continued billing after use closely follow the
 > [teardown instructions](#teardown-instructions). To generate a cost estimate based on
@@ -112,7 +113,7 @@ storage intact and b) you can build software before you deploy your cluster.
    make
    ```
 
-1. Change parameters in your blueprint file to reflect your requirements. Examples are VPC names for existing networks, H4D instance group node limits or export paths of existing NFS volumes.
+1. Change parameters in your blueprint file to reflect your requirements. Examples are VPC names for existing networks, H4D instance group node limits, or, for `eda-hybrid-cloud`, each volume's `*_server_ips` list and `remote_mount` export path.
 
 1. Generate the deployment folder after replacing `<blueprint>` with the name of the blueprint (`eda-all-on-cloud` or `eda-hybrid-cloud`) and `<project_id>`, `region` and `zone` with your project details.
 

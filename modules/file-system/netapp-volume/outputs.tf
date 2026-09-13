@@ -16,7 +16,7 @@
 output "network_storage" {
   description = "Describes a NetApp Volumes volume."
   value = {
-    server_ip             = local.server_ip
+    server_ip             = local.mount_server
     remote_mount          = local.remote_mount
     local_mount           = var.local_mount
     fs_type               = local.fs_type
@@ -63,4 +63,9 @@ output "capacity_gb" {
 output "server_ips" {
   description = "List of IP addresses of the volume."
   value       = local.server_ips
+}
+
+output "mount_fqdn" {
+  description = "FQDN for NFS mount when dns_config is set; null otherwise."
+  value       = local.mount_fqdn
 }
