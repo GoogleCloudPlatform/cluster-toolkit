@@ -233,18 +233,18 @@ def _probe_nfs_mount(
     except Exception:
         probe_base = Path(tempfile.gettempdir())
 
-    probe_dir = Path(tempfile.mkdtemp(prefix=".nfs_probe_", dir=str(probe_base)))
-
-    cmd = [
-        "mount",
-        "-t",
-        "nfs",
-        "-o",
-        "ro,soft,timeo=20,retrans=1,retry=0",
-        f"{server}:{remote_path}",
-        str(probe_dir),
-    ]
+    probe_dir: Optional[Path] = None
     try:
+        probe_dir = Path(tempfile.mkdtemp(prefix=".nfs_probe_", dir=str(probe_base)))
+        cmd = [
+            "mount",
+            "-t",
+            "nfs",
+            "-o",
+            "ro,soft,timeo=20,retrans=1,retry=0",
+            f"{server}:{remote_path}",
+            str(probe_dir),
+        ]
         res = run(cmd, timeout=timeout, check=False)
         if res.returncode == 0:
             log.info(f"Transient probe mount succeeded for {server}:{remote_path}.")
@@ -256,13 +256,14 @@ def _probe_nfs_mount(
         log.debug(f"Probe mount {server}:{remote_path} exception: {e}")
         return False
     finally:
-        try:
-            if probe_dir.is_mount():
-                run(f"umount -l {probe_dir}", timeout=10, check=False)
-            if probe_dir.is_dir():
-                probe_dir.rmdir()
-        except Exception:
-            pass
+        if probe_dir is not None:
+            try:
+                if probe_dir.is_mount():
+                    run(f"umount -l {probe_dir}", timeout=10, check=False)
+                if probe_dir.is_dir():
+                    probe_dir.rmdir()
+            except Exception:
+                pass
 
 
 def wait_for_controller_nfs(
@@ -289,7 +290,6 @@ def wait_for_controller_nfs(
 
     deadline = time.monotonic() + timeout
     start_delay = min(1.5, float(timeout))
-    sample_path = sorted(normalized_expected)[0] if normalized_expected else None
 
     # Step 1: Wait for TCP 2049 readiness (Tier 0)
     port_2049_open = False
@@ -329,7 +329,10 @@ def wait_for_controller_nfs(
                 pass
             else:
                 # Tier 2 Fallback: Port 111 firewalled, showmount missing, or NFSv4-only
-                if sample_path and _probe_nfs_mount(server, sample_path, timeout=4.0):
+                if normalized_expected and all(
+                    _probe_nfs_mount(server, path, timeout=4.0)
+                    for path in sorted(normalized_expected)
+                ):
                     exports_ready = True
                     break
 
@@ -367,12 +370,12 @@ def setup_network_storage():
         key_mnt = lkp.slurm_key_mount if lkp.cfg.enable_slurm_auth else lkp.munge_mount
 
         candidate_mounts = list(mounts)
-        if key_mnt and getattr(key_mnt, "fs_type", None) == "nfs":
+        if key_mnt and (getattr(key_mnt, "fs_type", None) or "").lower() == "nfs":
             candidate_mounts.append(key_mnt)
 
         controller_mounts_by_server: dict[str, set[str]] = {}
         for m in candidate_mounts:
-            if m.fs_type == "nfs" and m.server_ip:
+            if (m.fs_type or "").lower() == "nfs" and m.server_ip:
                 server = str(m.server_ip).split("@")[0]
                 is_controller = (
                     (lkp.control_host is not None and server == lkp.control_host)
