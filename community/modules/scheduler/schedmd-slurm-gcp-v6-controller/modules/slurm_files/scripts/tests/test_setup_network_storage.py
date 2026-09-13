@@ -25,6 +25,9 @@ if PARENT_DIR not in sys.path:
 
 import setup_network_storage
 from setup_network_storage import (
+    _check_nfs_exports_showmount,
+    _find_showmount,
+    _probe_nfs_mount,
     _probe_tcp_port,
     is_controller_mount,
     setup_network_storage as run_setup_network_storage,
@@ -64,6 +67,99 @@ def test_probe_tcp_port_os_errors():
             assert _probe_tcp_port("10.0.0.1", port=2049) is False
 
 
+def test_find_showmount():
+    with patch("shutil.which", return_value="/usr/sbin/showmount"):
+        assert _find_showmount() == "/usr/sbin/showmount"
+
+    with patch("shutil.which", return_value=None), \
+         patch("pathlib.Path.is_file", return_value=True), \
+         patch("os.access", return_value=True):
+        assert _find_showmount() == "/usr/sbin/showmount"
+
+    with patch("shutil.which", return_value=None), \
+         patch("pathlib.Path.is_file", return_value=False):
+        assert _find_showmount() is None
+
+
+def test_check_nfs_exports_showmount_success():
+    showmount_output = """Export list for 10.0.0.1:
+/home                *
+/opt/apps            10.0.0.0/16
+/slurm/key_distribution (everyone)
+"""
+    mock_res = MagicMock(returncode=0, stdout=showmount_output)
+    with patch("setup_network_storage._find_showmount", return_value="/usr/sbin/showmount"), \
+         patch("setup_network_storage._probe_tcp_port", return_value=True), \
+         patch("setup_network_storage.run", return_value=mock_res) as mock_run:
+        result = _check_nfs_exports_showmount("10.0.0.1", {"/home", "/opt/apps"})
+        assert result is True
+        mock_run.assert_called_once()
+
+
+def test_check_nfs_exports_showmount_missing_share():
+    showmount_output = """Export list for 10.0.0.1:
+/home *
+"""
+    mock_res = MagicMock(returncode=0, stdout=showmount_output)
+    with patch("setup_network_storage._find_showmount", return_value="/usr/sbin/showmount"), \
+         patch("setup_network_storage._probe_tcp_port", return_value=True), \
+         patch("setup_network_storage.run", return_value=mock_res):
+        result = _check_nfs_exports_showmount("10.0.0.1", {"/home", "/opt/apps"})
+        assert result is False
+
+
+def test_check_nfs_exports_showmount_port111_unreachable():
+    with patch("setup_network_storage._find_showmount", return_value="/usr/sbin/showmount"), \
+         patch("setup_network_storage._probe_tcp_port", return_value=False), \
+         patch("setup_network_storage.run") as mock_run:
+        result = _check_nfs_exports_showmount("10.0.0.1", {"/home"})
+        assert result is None
+        # Must NOT call showmount if port 111 is unreachable
+        mock_run.assert_not_called()
+
+
+def test_check_nfs_exports_showmount_binary_missing():
+    with patch("setup_network_storage._find_showmount", return_value=None):
+        result = _check_nfs_exports_showmount("10.0.0.1", {"/home"})
+        assert result is None
+
+
+def test_check_nfs_exports_showmount_command_error():
+    mock_res = MagicMock(returncode=1, stderr="RPC: Program not registered")
+    with patch("setup_network_storage._find_showmount", return_value="/usr/sbin/showmount"), \
+         patch("setup_network_storage._probe_tcp_port", return_value=True), \
+         patch("setup_network_storage.run", return_value=mock_res):
+        result = _check_nfs_exports_showmount("10.0.0.1", {"/home"})
+        assert result is None
+
+
+def test_check_nfs_exports_showmount_exception():
+    with patch("setup_network_storage._find_showmount", return_value="/usr/sbin/showmount"), \
+         patch("setup_network_storage._probe_tcp_port", return_value=True), \
+         patch("setup_network_storage.run", side_effect=RuntimeError("exec error")):
+        result = _check_nfs_exports_showmount("10.0.0.1", {"/home"})
+        assert result is None
+
+
+def test_probe_nfs_mount_success():
+    mock_res = MagicMock(returncode=0)
+    with patch("setup_network_storage.run", return_value=mock_res) as mock_run, \
+         patch("pathlib.Path.is_mount", return_value=True), \
+         patch("pathlib.Path.rmdir"):
+        result = _probe_nfs_mount("10.0.0.1", "/home", timeout=5.0)
+        assert result is True
+        assert any("umount -l" in str(call) for call in mock_run.call_args_list)
+
+
+def test_probe_nfs_mount_failure():
+    mock_res = MagicMock(returncode=32, stderr="mount.nfs: access denied by server")
+    with patch("setup_network_storage.run", return_value=mock_res), \
+         patch("pathlib.Path.is_mount", return_value=False), \
+         patch("pathlib.Path.rmdir"):
+        result = _probe_nfs_mount("10.0.0.1", "/home", timeout=5.0)
+        assert result is False
+
+
 def test_wait_for_controller_nfs_invalid_timeout():
     with pytest.raises(TimeoutError, match="Invalid timeout 0s"):
         wait_for_controller_nfs("10.0.0.1", ["/home"], timeout=0)
@@ -71,32 +167,31 @@ def test_wait_for_controller_nfs_invalid_timeout():
         wait_for_controller_nfs("10.0.0.1", ["/home"], timeout=-5)
 
 
-def test_wait_for_controller_nfs_happy_path():
+def test_wait_for_controller_nfs_happy_path_tier1():
     with patch("setup_network_storage._probe_tcp_port", return_value=True), \
+         patch("setup_network_storage._check_nfs_exports_showmount", return_value=True), \
          patch("time.sleep") as mock_sleep:
         wait_for_controller_nfs("10.0.0.1", ["/home", "/apps"], timeout=10)
-        # Settle delay must be called
-        mock_sleep.assert_called_once_with(2.0)
+        mock_sleep.assert_called_once_with(0.5)
 
 
-def test_wait_for_controller_nfs_retries_port_2049_then_succeeds():
-    probe_calls = 0
-
-    def probe_side_effect(host, port=2049, timeout=2.0):
-        nonlocal probe_calls
-        probe_calls += 1
-        return probe_calls >= 3
-
-    with patch("setup_network_storage._probe_tcp_port", side_effect=probe_side_effect), \
+def test_wait_for_controller_nfs_tier2_fallback():
+    with patch("setup_network_storage._probe_tcp_port", return_value=True), \
+         patch("setup_network_storage._check_nfs_exports_showmount", return_value=None), \
+         patch("setup_network_storage._probe_nfs_mount", return_value=True), \
          patch("time.sleep") as mock_sleep:
-        wait_for_controller_nfs("10.0.0.1", [Path("/home")], timeout=30)
-        assert probe_calls == 3
-        # Ensure the final settle delay was called
-        assert mock_sleep.call_args_list[-1][0] == (2.0,)
+        wait_for_controller_nfs("10.0.0.1", ["/home"], timeout=10)
+        mock_sleep.assert_called_once_with(0.5)
 
 
-def test_wait_for_controller_nfs_timeout():
-    # Simulate time advancing past deadline
+def test_wait_for_controller_nfs_empty_paths():
+    with patch("setup_network_storage._probe_tcp_port", return_value=True), \
+         patch("time.sleep") as mock_sleep:
+        wait_for_controller_nfs("10.0.0.1", [], timeout=10)
+        mock_sleep.assert_called_once_with(0.5)
+
+
+def test_wait_for_controller_nfs_port_2049_timeout():
     fake_time = [100.0]
 
     def mock_monotonic():
@@ -106,7 +201,22 @@ def test_wait_for_controller_nfs_timeout():
     with patch("setup_network_storage._probe_tcp_port", return_value=False), \
          patch("time.monotonic", side_effect=mock_monotonic), \
          patch("time.sleep"):
-        with pytest.raises(TimeoutError, match=r"Timed out after 5s waiting for NFS service on 10\.0\.0\.1:2049"):
+        with pytest.raises(TimeoutError, match=r"Timed out after 5s waiting for NFS port 2049 on 10\.0\.0\.1"):
+            wait_for_controller_nfs("10.0.0.1", ["/home"], timeout=5)
+
+
+def test_wait_for_controller_nfs_exports_timeout():
+    fake_time = [100.0]
+
+    def mock_monotonic():
+        fake_time[0] += 5.0
+        return fake_time[0]
+
+    with patch("setup_network_storage._probe_tcp_port", return_value=True), \
+         patch("setup_network_storage._check_nfs_exports_showmount", return_value=False), \
+         patch("time.monotonic", side_effect=mock_monotonic), \
+         patch("time.sleep"):
+        with pytest.raises(TimeoutError, match=r"Timed out after 5s waiting for controller '10\.0\.0\.1' to export"):
             wait_for_controller_nfs("10.0.0.1", ["/home"], timeout=5)
 
 
