@@ -15,9 +15,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Union
+from typing import Iterable, List, Optional, Set, Union
 
 import os
+import posixpath
+import random
+import socket
 import sys
 import stat
 import time
@@ -124,6 +127,69 @@ def is_controller_mount(mount) -> bool:
         ))
     )
 
+def _probe_tcp_port(host: str, port: int = 2049, timeout: float = 2.0) -> bool:
+    """Check if TCP port is accepting connections (pure Python, IPv4/IPv6 compatible)."""
+    if not host or not host.strip():
+        return False
+    try:
+        with socket.create_connection((host.strip(), port), timeout=timeout):
+            return True
+    except (OSError, TypeError, OverflowError):
+        return False
+
+
+def wait_for_controller_nfs(
+    server: str,
+    expected_paths: Iterable[Union[str, Path]],
+    timeout: int = 360,
+) -> None:
+    """Wait for controller NFS server to become available and exports to settle.
+
+    Raises TimeoutError if controller NFS service fails to become reachable before timeout.
+    Uses pure Python TCP port 2049 probing with jittered backoff, followed by a settle delay
+    to allow exportfs -ra to complete.
+    """
+    if timeout <= 0:
+        raise TimeoutError(f"Invalid timeout {timeout}s waiting for controller NFS server '{server}'.")
+
+    normalized_expected = {posixpath.normpath(str(p)) for p in expected_paths}
+    log.info(
+        f"Waiting up to {timeout}s for controller NFS server '{server}' "
+        f"and exports {sorted(normalized_expected)}..."
+    )
+
+    deadline = time.monotonic() + timeout
+    attempt = 0
+    port_open = False
+    start_delay = min(1.5, float(timeout))
+
+    for wait in util.backoff_delay(start_delay, timeout=timeout):
+        attempt += 1
+        if time.monotonic() >= deadline:
+            break
+
+        if _probe_tcp_port(server, port=2049, timeout=2.0):
+            port_open = True
+            log.info(f"NFS TCP port 2049 is open on {server} (attempt {attempt}).")
+            break
+
+        sleep_duration = wait * random.uniform(0.8, 1.2)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(sleep_duration, remaining))
+
+    if not port_open:
+        raise TimeoutError(
+            f"Timed out after {timeout}s waiting for NFS service on {server}:2049. "
+            "Controller setup may have failed or NFS service crashed."
+        )
+
+    # Settle delay ensures exportfs -ra on controller has completed
+    log.info(f"NFS server reachable on {server}. Waiting 2.0s settle delay for exports.")
+    time.sleep(2.0)
+
+
 def setup_network_storage():
     """prepare network fs mounts and add them to fstab"""
     log.info("Set up network storage")
@@ -134,7 +200,26 @@ def setup_network_storage():
     else:
         mounts = all_mounts
 
-    # Determine fstab entries and write them out
+    # PRE-FLIGHT: On non-controller instances, wait for controller NFS exports
+    # BEFORE modifying system /etc/fstab
+    if not lookup().is_controller:
+        lkp = lookup()
+        key_mnt = lkp.slurm_key_mount if lkp.cfg.enable_slurm_auth else lkp.munge_mount
+
+        candidate_mounts = list(mounts)
+        if key_mnt and getattr(key_mnt, "fs_type", None) == "nfs":
+            candidate_mounts.append(key_mnt)
+
+        controller_mounts_by_server: dict[str, set[str]] = {}
+        for m in candidate_mounts:
+            if m.fs_type == "nfs" and is_controller_mount(m) and m.server_ip:
+                server = str(m.server_ip).split("@")[0]
+                controller_mounts_by_server.setdefault(server, set()).add(str(m.remote_mount))
+
+        for server, paths in controller_mounts_by_server.items():
+            wait_for_controller_nfs(server, paths, timeout=360)
+
+    # Determine fstab entries and write them out ONLY after pre-flight validation succeeds
     fstab_entries = []
     for mount in mounts:
         local_mount = mount.local_mount
