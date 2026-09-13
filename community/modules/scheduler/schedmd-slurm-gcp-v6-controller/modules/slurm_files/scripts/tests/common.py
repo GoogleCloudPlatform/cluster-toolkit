@@ -74,7 +74,8 @@ class TstCfg:
     nodeset: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_tpu: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_dyn: dict[str, TstNodeset] = field(default_factory=dict)
-    
+    hybrid: Optional[bool] = False
+
     install_dir: Optional[str] = None
     output_dir: Optional[str] = None
     slurm_bin_dir: Optional[str] = "/usr/bin"

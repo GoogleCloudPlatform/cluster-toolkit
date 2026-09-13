@@ -248,6 +248,12 @@ def wait_for_file(file_path: Path, timeout: int = 300):
 def munge_mount_handler():
     if lookup().is_controller:
         return
+
+    munge_key = Path(dirs.munge / "munge.key")
+    if munge_key.is_file():
+        log.info("Key already in place")
+        return
+
     mnt = lookup().munge_mount
 
     log.info(f"Mounting munge share to: {mnt.local_mount}")
@@ -283,7 +289,6 @@ def munge_mount_handler():
     else:
         raise err
 
-    munge_key = Path(dirs.munge / "munge.key")
     src_key = Path(mnt.local_mount / "munge.key")
     wait_for_file(src_key)
     log.info(f"Copy munge.key from: {mnt.local_mount}")
@@ -303,6 +308,13 @@ def munge_mount_handler():
 def slurm_key_mount_handler():
     if lookup().is_controller:
         return
+
+    file_name = "slurm.key"
+    slurm_key = Path(util.slurmdirs.etc / file_name)
+    if slurm_key.is_file():
+        log.info("Key already in place")
+        return
+
     mnt = lookup().slurm_key_mount
 
     log.info(f"Mounting slurm_key share to: {mnt.local_mount}")
@@ -336,15 +348,13 @@ def slurm_key_mount_handler():
     else:
         raise err
 
-    file_name = "slurm.key"
-    dst = Path(util.slurmdirs.etc / file_name)
     src_key = mnt.local_mount / file_name
     wait_for_file(src_key)
     log.info(f"Copy slurm.key from: {mnt.local_mount}")
-    shutil.copy2(src_key, dst)
+    shutil.copy2(src_key, slurm_key)
 
     log.info("Restrict permissions of slurm.key")
-    util.chown_slurm(dst, mode=0o400)
+    util.chown_slurm(slurm_key, mode=0o400)
 
     log.info(f"Unmount {mnt.local_mount}")
     if mnt.fs_type == "gcsfuse":
