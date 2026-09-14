@@ -164,7 +164,7 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, c
 
 	targetWorkload := fmt.Sprintf("jobset-%s", workloadName)
 	if g.kubeClient != nil {
-		if tw, err := g.findTargetWorkload(workloadNamespace, workloadName); err == nil {
+		if tw, err := g.findTargetWorkload(workloadNamespace, workloadName, 2*time.Second); err == nil {
 			targetWorkload = tw
 		}
 	}

@@ -16,7 +16,16 @@ blueprint_name: a3high-slurm
 
 vars:
   sys_net_range: 172.16.0.0/16
-  filestore_ip_range: 192.168.0.0/29
+  # Managed-Lustre instance name. This should be unique for each deployment.
+  lustre_instance_id: $(vars.deployment_name)-lustre
+
+  # The values of size_gib and per_unit_storage_throughput are co-related
+  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  # Storage capacity of the lustre instance in GiB
+  lustre_size_gib: 36000
+
+  # Maximum throughput of the lustre instance in MBps per TiB
+  per_unit_storage_throughput: 500
   source_image_project_id: ubuntu-os-cloud
   source_image_family: ubuntu-2204-lts
   local_mount_homefs: /home
@@ -26,7 +35,7 @@ vars:
   localssd_mountpoint: /mnt/localssd
   enable_nvidia_dcgm: true
   disk_size_gb: 200
-  build_slurm_from_git_ref: 6.12.1
+  build_slurm_from_git_ref: 6.12.3
   #Provisioning models (set to true or fill in reservation name, pick only one)
   a3_reservation_name: "" # supply reservation name
   a3_dws_flex_enabled: false
@@ -58,15 +67,22 @@ deployment_groups:
       network_count: 4
       subnetwork_cidr_suffix: 20
 
-  - id: homefs
-    source: modules/file-system/filestore
+  - id: private_service_access
+    source: modules/network/private-service-access
     use:
     - sysnet
+
+  - id: homefs
+    source: modules/file-system/managed-lustre
+    use:
+    - sysnet
+    - private_service_access
     settings:
-      filestore_tier: BASIC_SSD
-      size_gb: 2560
-      reserved_ip_range: $(vars.filestore_ip_range)
+      name: $(vars.lustre_instance_id)
+      size_gib: $(vars.lustre_size_gib)
       local_mount: $(vars.local_mount_homefs)
+      remote_mount: lustrefs
+      per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
 
 - group: build-script
   modules:
@@ -301,8 +317,7 @@ deployment_groups:
             "monitoring_agent": "cloud-ops",
             "nvidia_version": "latest",
             "allow_kernel_upgrades": true, # tcpx kernel is held and gcp kernel is removed as the last task
-            "install_nvidia_repo": false,
-            "monitoring_agent": "cloud-ops",
+            "install_nvidia_repo": false
           }
 
       - type: shell
@@ -316,6 +331,29 @@ deployment_groups:
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
+
+      - type: shell
+        destination: install_tcpx_lustre.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          curl -fsSL https://us-apt.pkg.dev/doc/repo-signing-key.gpg | gpg --yes --dearmor -o /usr/share/keyrings/lustre-client.gpg
+          echo "deb [signed-by=/usr/share/keyrings/lustre-client.gpg] https://us-apt.pkg.dev/projects/lustre-client-binaries lustre-client-ubuntu-jammy main" > /etc/apt/sources.list.d/artifact-registry.list
+          apt-get update
+          TCPX_KERNEL_VERSION=`(ls -d /lib/modules/*tcpx* 2>/dev/null || true) | sort -V | tail -n 1 | xargs -r basename`
+          if [ -n "${TCPX_KERNEL_VERSION}" ]; then
+            echo "Installing Lustre client modules for kernel ${TCPX_KERNEL_VERSION}..."
+            if ! apt-get install -y lustre-client-modules-${TCPX_KERNEL_VERSION}; then
+              echo "Pre-compiled package lustre-client-modules-${TCPX_KERNEL_VERSION} not found. Installing via DKMS for ${TCPX_KERNEL_VERSION}..."
+              apt-get install -y dkms linux-headers-${TCPX_KERNEL_VERSION} lustre-client-modules-dkms lustre-client-utils
+              echo "Building DKMS modules specifically for ${TCPX_KERNEL_VERSION}..."
+              dkms autoinstall -k "${TCPX_KERNEL_VERSION}"
+            fi
+          else
+            echo "ERROR: No tcpx kernel modules directory found under /lib/modules/." >&2
+            exit 1
+          fi
 
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf

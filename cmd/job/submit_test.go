@@ -16,6 +16,7 @@ package job
 
 import (
 	"bytes"
+	"context"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 	"os"
@@ -160,12 +161,13 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
-	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
-		return &mockOrchestrator{}
-	}
-
 	// Reset flags before each test
 	setupSubmitTestEnv(t)
+
+	mockOrc := &mockOrchestrator{}
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return mockOrc
+	}
 
 	output, err := executeCommand(JobCmd,
 		"submit",
@@ -177,6 +179,7 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 		"--project", "test-project",
 		"--dry-run-out", tmpfile.Name(),
 		"--compute-type", "n2-standard-4",
+		"--enable-ml-diagnostics",
 	)
 
 	if err != nil {
@@ -199,6 +202,10 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 
 	if !strings.Contains(manifestStr, "image: busybox") {
 		t.Errorf("manifest does not contain correct image")
+	}
+
+	if !mockOrc.SubmittedJob.MLDiagnosticsEnabled {
+		t.Errorf("Expected MLDiagnosticsEnabled to be true in submitted JobDefinition")
 	}
 }
 
@@ -285,6 +292,11 @@ func setupSubmitTestEnv(t *testing.T) {
 	location = ""
 	projectID = ""
 	workloadName = ""
+
+	// Reset MTc & ML Diagnostics global flags to prevent state bleeding across test cases
+	enableMLDiagnostics = false
+	gkeMtcEnabled = false
+	gkeMtcRamdiskDirectory = ""
 	kueueQueueName = ""
 	numNodes = 1
 	numSlices = 1
@@ -321,6 +333,7 @@ func setupSubmitTestEnv(t *testing.T) {
 	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
 		return &mockOrchestrator{}
 	}
+	enableMLDiagnostics = false
 	gkeMtcEnabled = false
 	gkeMtcRamdiskDirectory = ""
 }
@@ -328,6 +341,7 @@ func setupSubmitTestEnv(t *testing.T) {
 type mockOrchestrator struct {
 	orchestrator.JobOrchestrator
 	initializeFunc func(string, string, string) (string, error)
+	SubmittedJob   orchestrator.JobDefinition
 }
 
 func (m *mockOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
@@ -338,6 +352,7 @@ func (m *mockOrchestrator) Initialize(clusterName, location, projectID string) (
 }
 
 func (m *mockOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
+	m.SubmittedJob = job
 	if job.DryRunManifest != "" {
 		var content string
 		if job.IsPathwaysJob {
@@ -409,9 +424,7 @@ func TestParseDurationToSeconds(t *testing.T) {
 func TestSubmitCmd_MissingRepoEnvVar(t *testing.T) {
 	setupSubmitTestEnv(t)
 
-	origRepo := os.Getenv("GCLUSTER_IMAGE_REPO")
-	os.Setenv("GCLUSTER_IMAGE_REPO", "")
-	defer os.Setenv("GCLUSTER_IMAGE_REPO", origRepo)
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
 
 	oldStore := store
 	defer func() { store = oldStore }()
@@ -441,6 +454,49 @@ func TestSubmitCmd_MissingRepoEnvVar(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "GCLUSTER_IMAGE_REPO environment variable is required") {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestSubmitCmd_MissingRepoEnvVar_DynamicSuggestions(t *testing.T) {
+	setupSubmitTestEnv(t)
+
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	oldLookup := lookupArtifactRegistryRepos
+	defer func() { lookupArtifactRegistryRepos = oldLookup }()
+	lookupArtifactRegistryRepos = func(ctx context.Context, projectID, location string) ([]string, bool) {
+		return []string{"repo1", "repo2", "repo3"}, false
+	}
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "fail-test",
+		"--base-image", "python:3.9-slim",
+		"--build-context", "job_details",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+	)
+
+	if err == nil {
+		t.Fatal("expected error for missing GCLUSTER_IMAGE_REPO, got nil")
+	}
+
+	expectedMsg := "GCLUSTER_IMAGE_REPO environment variable is required when using --build-context.\n\nAvailable Docker repositories in project 'test-project' and region 'us-central1' are: 'repo1', 'repo2', 'repo3'.\n\nTo view all repositories, you can run:\n\t> gcloud artifacts repositories list --project=test-project --location=us-central1 --filter=\"format=DOCKER\" --format=\"value(name.basename())\"\n\nPlease set your environment variable to one of these (e.g., export GCLUSTER_IMAGE_REPO=repo1)"
+	if !strings.Contains(err.Error(), expectedMsg) {
+		t.Errorf("unexpected error: %v\nexpected contained: %v", err, expectedMsg)
 	}
 }
 

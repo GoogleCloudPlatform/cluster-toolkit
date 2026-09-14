@@ -1,0 +1,165 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: test-kueue-cluster
+
+vars:
+  # The following variables should be over-written in the deployment.yaml file.
+  # Your GCP Project ID
+  project_id: ## Set GCP Project ID Here ##
+
+  # This should be unique across all of your Cluster Toolkit Deployments.
+  deployment_name: test-kueue-cluster
+
+  # The GCP Region used for this deployment.
+  region: us-central1
+
+  # The GCP Zone used for this deployment.
+  zone: us-central1-c
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
+  authorized_cidr: "<your-ip-address>/32"
+
+  gcp_public_cidrs_access_enabled: true
+
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/vpc
+    settings:
+      subnetwork_name: $(vars.deployment_name)-subnet
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-subnet
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+
+  - id: test_runner_gsa
+    source: modules/project/service-account
+    settings:
+      name: runner-gsa
+      project_roles:
+      - editor
+      - servicenetworking.networksAdmin
+      - compute.osAdminLogin
+      - iam.serviceAccountUser
+      - resourcemanager.projectIamAdmin
+      - container.admin
+      - iam.serviceAccountAdmin
+      - iam.serviceAccountTokenCreator
+      - secretmanager.admin
+      - cloudkms.cryptoKeyEncrypterDecrypter
+      - iap.tunnelResourceAccessor
+
+  - id: node_pool_sa
+    source: modules/project/service-account
+    settings:
+      name: node-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - artifactregistry.reader
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network1, node_pool_sa]
+    settings:
+      system_node_pool_machine_type: e2-standard-4
+      enable_private_endpoint: false
+      gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
+      configure_workload_identity_sa: true
+      region: $(vars.region)
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr)
+        display_name: "kubectl-access-network"
+      labels:
+        time-to-live: "3000-12-31"
+
+  - id: compute_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, node_pool_sa]
+    settings:
+      machine_type: e2-standard-4
+      initial_node_count: 1
+      autoscaling_total_max_nodes: 100
+      autoscaling_total_min_nodes: 1
+      zones: [$(vars.zone)]
+      service_account_scopes:
+      - https://www.googleapis.com/auth/cloud-platform
+
+  - id: ksa_gsa_binding
+    source: modules/project/workload_identity_binding
+    settings:
+      project_id: $(vars.project_id)
+      service_account_email: $(test_runner_gsa.service_account_email)
+      namespace: default
+      k8s_service_account_name: $(vars.deployment_name)-runner-ksa
+
+  - id: kueue_reaper_gsa
+    source: modules/project/service-account
+    settings:
+      name: reaper
+      project_roles:
+      - cloudbuild.builds.viewer
+
+  - id: kueue_reaper_binding
+    source: modules/project/workload_identity_binding
+    settings:
+      project_id: $(vars.project_id)
+      service_account_email: $(kueue_reaper_gsa.service_account_email)
+      namespace: default
+      k8s_service_account_name: kueue-reaper-ksa
+
+- group: kueue-config
+  modules:
+  - id: kueue_and_manifests
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      kueue:
+        install: true
+        config_path: $(ghpc_stage("configs/kueue-setup.yaml"))
+      apply_manifests:
+      - name: test-runner-ksa
+        content: |
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: $(vars.deployment_name)-runner-ksa
+            namespace: default
+            annotations:
+              iam.gke.io/gcp-service-account: $(test_runner_gsa.service_account_email)
+      - name: dummy-device-plugin
+        source: $(ghpc_stage("configs/dummy-device-plugin.yaml"))
+      - name: kueue-reaper-ksa
+        content: |
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: kueue-reaper-ksa
+            namespace: default
+            annotations:
+              iam.gke.io/gcp-service-account: $(kueue_reaper_gsa.service_account_email)
+      - name: kueue-reaper-pod
+        source: $(ghpc_stage("configs/kueue-reaper-pod.yaml"))

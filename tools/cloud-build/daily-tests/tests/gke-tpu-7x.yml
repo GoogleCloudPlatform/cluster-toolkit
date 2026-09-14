@@ -37,7 +37,7 @@ custom_vars:
   instance_labels:
     tpu7x_onspot: true
   enable_spot: true
-  gcs_bucket: "ml-diagnostics-test"
+  gcs_bucket: "ml-diagnostics-test-{{ project }}"
   image_tag: "us-central1-docker.pkg.dev/{{ project }}/ml-diagnostics-test/sample-diagnostics-job:1.0.0"
   tpu_accelerator: tpu7x
   tpu_topology: 2x2x1
@@ -45,6 +45,7 @@ custom_vars:
   jobset_name: sample-tpu-jobset
 instance_type: "tpu7x"
 scheduler: "gke"
+chs_nodepools: "gke-tpu-7x-pool"
 chs_suites:
 - lite
 - standard

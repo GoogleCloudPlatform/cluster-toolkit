@@ -108,7 +108,10 @@ func TestLoadContext_Success(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	loaded := loadContext()
+	loaded, err := loadContext()
+	if err != nil {
+		t.Fatalf("LoadContext() error = %v", err)
+	}
 	if loaded != ctx {
 		t.Errorf("LoadContext() = %+v, want %+v", loaded, ctx)
 	}
@@ -123,7 +126,10 @@ func TestLoadContext_NotExist(t *testing.T) {
 
 	t.Setenv("HOME", tempDir)
 
-	loaded := loadContext()
+	loaded, err := loadContext()
+	if err != nil {
+		t.Fatalf("LoadContext() error = %v", err)
+	}
 	expected := Context{}
 	if loaded != expected {
 		t.Errorf("LoadContext() = %+v, want %+v", loaded, expected)
@@ -149,7 +155,10 @@ func TestLoadContext_CorruptFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	loaded := loadContext()
+	loaded, err := loadContext()
+	if err == nil {
+		t.Fatalf("LoadContext() expected error for corrupt file")
+	}
 	expected := Context{}
 	if loaded != expected {
 		t.Errorf("LoadContext() = %+v, want %+v", loaded, expected)

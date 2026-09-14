@@ -25,7 +25,7 @@ vars:
     family: ubuntu-2204-lts
     project: ubuntu-os-cloud
   # instance_image:
-  #   family: debian-11
+  #   family: debian-12
   #   project: debian-cloud
 
 deployment_groups:

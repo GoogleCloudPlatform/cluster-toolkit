@@ -37,6 +37,18 @@
     dry_run_file: "/tmp/{{ deployment_name }}-pw-dry-run.yaml"
     templated_command: "{{ custom_vars.workload_command | replace('GCS_BUCKET', custom_vars.gcs_bucket) }}"
 
+- name: Check if ML Diagnostics GCS bucket exists
+  delegate_to: localhost
+  ansible.builtin.command: gcloud storage buckets describe gs://{{ custom_vars.gcs_bucket }} --project {{ custom_vars.project }}
+  register: bucket_check
+  failed_when: false
+  changed_when: false
+
+- name: Create ML Diagnostics GCS bucket
+  delegate_to: localhost
+  ansible.builtin.command: gcloud storage buckets create gs://{{ custom_vars.gcs_bucket }} --project {{ custom_vars.project }} --location {{ region | default('us-central1') }}
+  when: bucket_check.rc != 0
+
 # ==========================================
 # WORKFLOW 1: Dry-Run Validation & Env Check
 # ==========================================

@@ -17,6 +17,7 @@ package gke
 import (
 	"bytes"
 	"fmt"
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"strings"
@@ -118,6 +119,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		Scheduler:          job.GKEScheduler,
 		IsDynamicSlicing:   isDynamicSlicing,
 		IsStaticSlicing:    isStaticSlicing,
+		IsTPU:              config.IsTPU(job.MachineType) || config.IsTPU(originalAccelType),
 	}
 
 	// Reuse GCluster's existing GKE accelerator label mapping and algorithmically
@@ -165,6 +167,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		Env:                           job.Env,
 		IsPathwaysJob:                 job.IsPathwaysJob,
 		Pathways:                      job.Pathways,
+		MLDiagnosticsEnabled:          job.MLDiagnosticsEnabled,
 		GKEMTCEnabled:                 job.GKEMTCEnabled,
 		GKEMTCRamdiskDirectory:        job.GKEMTCRamdiskDirectory,
 	}

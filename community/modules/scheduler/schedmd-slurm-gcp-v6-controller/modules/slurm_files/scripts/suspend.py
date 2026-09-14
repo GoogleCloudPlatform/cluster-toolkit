@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Any
+from typing import List, Any, Dict
 import argparse
 import logging
 
@@ -84,14 +84,130 @@ def delete_instances(instances):
 
 
 
+def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
+    """Deletes specific instance names from MIG and reduces target size atomically."""
+    if not nodes:
+        return
+
+    # Group nodes by target MIG (to support multiple MIGs for >1000 nodes)
+    nodes_by_mig: Dict[str, List[str]] = {}
+    for node in nodes:
+        mig_name = lkp.node_mig_name(node)
+        nodes_by_mig.setdefault(mig_name, []).append(node)
+
+    for mig_name, mig_nodes in nodes_by_mig.items():
+        region = lkp.node_region(mig_nodes[0])
+
+        # Resolve instance URLs from MIG or local lookup
+        mig_inst_map = {}
+        mig_list_success = False
+        try:
+            mig_data = lkp.get_mig_instances(lkp.project, region, mig_name)
+            for item in mig_data.get("managedInstances", []):
+                if item.get("instance"):
+                    mig_inst_map[item["instance"].split("/")[-1]] = item["instance"]
+                    if item.get("name"):
+                        mig_inst_map[item["name"]] = item["instance"]
+            mig_list_success = True
+        except Exception as e:
+            log.warning(f"Could not list managed instances for MIG {mig_name}: {e}")
+            mig_inst_map = {}
+            mig_list_success = False
+
+        links = []
+        seen_links = set()
+        for node in mig_nodes:
+            short_name = node.split(".")[0]
+            if short_name in mig_inst_map:
+                link = mig_inst_map[short_name]
+                if link not in seen_links:
+                    links.append(link)
+                    seen_links.add(link)
+            elif not mig_list_success:
+                # Only guess fallback URLs if listManagedInstances failed completely
+                inst = lkp.instance(short_name)
+                zone = getattr(inst, "zone", None)
+                if zone:
+                    zone_name = zone.split("/")[-1]
+                    link = f"zones/{zone_name}/instances/{short_name}"
+                    if link not in seen_links:
+                        links.append(link)
+                        seen_links.add(link)
+                else:
+                    # If the instance does not exist in GCE, skip it to prevent batch rejection
+                    log.debug(f"Instance {short_name} does not exist in GCE; skipping deleteInstances.")
+            else:
+                log.debug(f"Node {node} is not present in MIG {mig_name}; skipping deleteInstances.")
+
+        if links:
+            active_nodes = [l.split("/")[-1] for l in links]
+            log.info(f"Deleting {len(links)} MIG instances ({to_hostlist(active_nodes)}) from MIG {mig_name}")
+            for chunk_links in util.chunked(links, n=1000):
+                req = lkp.compute.regionInstanceGroupManagers().deleteInstances(
+                    project=lkp.project,
+                    region=region,
+                    instanceGroupManager=mig_name,
+                    body={
+                        "instances": chunk_links,
+                        "skipInstancesOnValidationError": True,
+                    }
+                )
+                try:
+                    res = util.ensure_execute(req)
+                    log.debug(f"deleteInstances response for {mig_name}: {res}")
+                except Exception as e:
+                    log.error(f"Failed deleteInstances for MIG {mig_name}: {e}")
+                finally:
+                    lkp.get_mig_instances.cache_clear()
+                    lkp.get_mig_repairing_instances.cache_clear()
+        else:
+            log.info(f"No active instances found to delete in MIG {mig_name}")
+
+        # Clean up Per-Instance Configurations (PICs) for all requested nodes after instance deletion
+        all_short_names = list({n.split(".")[0] for n in mig_nodes})
+        for chunk_names in util.chunked(all_short_names, n=1000):
+            try:
+                pic_del_req = lkp.compute.regionInstanceGroupManagers().deletePerInstanceConfigs(
+                    project=lkp.project,
+                    region=region,
+                    instanceGroupManager=mig_name,
+                    body={"names": chunk_names},
+                )
+                util.ensure_execute(pic_del_req)
+                log.debug(f"deletePerInstanceConfigs submitted for {mig_name}: {chunk_names}")
+            except Exception as e:
+                log.debug(f"deletePerInstanceConfigs note for {mig_name} on {chunk_names}: {e}", exc_info=log.isEnabledFor(logging.DEBUG))
+
+
 def suspend_nodes(nodes: List[str]) -> None:
     lkp = lookup()
     other_nodes, tpu_nodes = util.separate(lkp.node_is_tpu, nodes)
     bulk_nodes, flex_nodes = util.separate(lkp.is_flex_node, other_nodes)
 
-    mig_flex.suspend_flex_nodes(flex_nodes, lkp)
-    delete_instances(bulk_nodes)
-    tpu.delete_tpu_instances(tpu_nodes)
+    if flex_nodes:
+        try:
+            mig_flex.suspend_flex_nodes(flex_nodes, lkp)
+        except Exception:
+            log.exception(f"Failed to suspend flex nodes {flex_nodes}")
+
+    non_mig_nodes, mig_nodes = util.separate(lkp.is_node_mig, bulk_nodes)
+    if mig_nodes:
+        try:
+            suspend_mig_nodes(mig_nodes, lkp)
+        except Exception:
+            log.exception(f"Failed to suspend MIG nodes {mig_nodes}")
+
+    if non_mig_nodes:
+        try:
+            delete_instances(non_mig_nodes)
+        except Exception:
+            log.exception(f"Failed to suspend bulk nodes {non_mig_nodes}")
+
+    if tpu_nodes:
+        try:
+            tpu.delete_tpu_instances(tpu_nodes)
+        except Exception:
+            log.exception(f"Failed to delete TPU instances {tpu_nodes}")
 
 
 def main(nodelist):
