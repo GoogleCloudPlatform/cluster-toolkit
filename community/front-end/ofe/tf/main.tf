@@ -53,10 +53,15 @@ EOT
 
   # Content hash over everything staged into the control bucket. Clusters pull
   # their bootstrap/ansible files from the bucket at boot, so the staged copy
-  # must be re-uploaded whenever any source file changes.
-  gcs_bucket_root  = "${path.module}/../infrastructure_files/gcs_bucket"
-  gcs_bucket_files = fileset(local.gcs_bucket_root, "**")
-  gcs_bucket_hash  = sha256(join(",", [for f in local.gcs_bucket_files : filesha256("${local.gcs_bucket_root}/${f}")]))
+  # must be re-uploaded whenever any source file changes. Local build
+  # artifacts (e.g. __pycache__, .DS_Store) are excluded so a developer's
+  # working tree does not trigger a spurious re-upload.
+  gcs_bucket_root = "${path.module}/../infrastructure_files/gcs_bucket"
+  gcs_bucket_files = [
+    for f in fileset(local.gcs_bucket_root, "**") : f
+    if !can(regex("(^|/)(__pycache__|\\.DS_Store)(/|$)", f))
+  ]
+  gcs_bucket_hash = sha256(join(",", [for f in local.gcs_bucket_files : filesha256("${local.gcs_bucket_root}/${f}")]))
 }
 
 
