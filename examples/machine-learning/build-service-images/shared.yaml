@@ -16,7 +16,7 @@ vars:
   region: us-central1
   zone: us-central1-a
 
-  slurm_gcp_version: 6.12.3
+  slurm_gcp_version: 6.13.1
 
   # to supply
   family:
