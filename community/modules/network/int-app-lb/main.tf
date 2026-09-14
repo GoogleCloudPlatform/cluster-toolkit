@@ -59,7 +59,7 @@ resource "google_compute_forwarding_rule" "default" {
   subnetwork            = var.subnetwork_self_link
   ip_address            = google_compute_address.default.address
   load_balancing_scheme = "INTERNAL_MANAGED"
-  port_range            = local.is_https ? "443" : "80"
+  port_range            = coalesce(var.port_range, local.is_https ? "443" : "80")
   target                = local.is_https ? google_compute_region_target_https_proxy.default[0].id : google_compute_region_target_http_proxy.default[0].id
   labels                = local.labels
 }
@@ -149,17 +149,10 @@ resource "google_compute_region_url_map" "default" {
     default_service = google_compute_region_backend_service.default[local.default_endpoint_name].id
 
     dynamic "path_rule" {
-      for_each = flatten([
-        for name, config in var.endpoints : [
-          for path in config.paths : {
-            path    = path
-            service = google_compute_region_backend_service.default[name].id
-          }
-        ]
-      ])
+      for_each = { for name, config in var.endpoints : name => config if length(config.paths) > 0 }
       content {
-        paths   = [path_rule.value.path]
-        service = path_rule.value.service
+        paths   = path_rule.value.paths
+        service = google_compute_region_backend_service.default[path_rule.key].id
       }
     }
   }

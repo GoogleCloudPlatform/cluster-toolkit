@@ -48,8 +48,8 @@ variable "lb_name" {
   type        = string
   default     = "internal-app-lb"
   validation {
-    condition     = can(regex("^[a-z]([-a-z0-9]*[a-z0-9])?$", var.lb_name)) && length(var.lb_name) <= 63
-    error_message = "The lb_name must be a valid resource name: 1-63 lowercase alphanumeric characters or hyphens, starting with a letter and ending with an alphanumeric character."
+    condition     = can(regex("^[a-z]([-a-z0-9]*[a-z0-9])?$", var.lb_name)) && length(var.lb_name) <= 47
+    error_message = "The lb_name must be a valid resource name: 1-47 lowercase alphanumeric characters or hyphens, starting with a letter and ending with an alphanumeric character."
   }
 }
 
@@ -143,6 +143,10 @@ variable "health_check_timeout_sec" {
   description = "How long (in seconds) to wait before claiming failure."
   type        = number
   default     = 5
+  validation {
+    condition     = var.health_check_timeout_sec <= var.health_check_interval_sec
+    error_message = "The health_check_timeout_sec must be less than or equal to health_check_interval_sec."
+  }
 }
 
 variable "healthy_threshold" {
@@ -159,6 +163,12 @@ variable "unhealthy_threshold" {
 
 variable "ip_address" {
   description = "The static internal IP address to assign to the forwarding rule. If null, one will be automatically assigned."
+  type        = string
+  default     = null
+}
+
+variable "port_range" {
+  description = "The port or port range that the forwarding rule listens on. If null, defaults to 443 for HTTPS or 80 for HTTP."
   type        = string
   default     = null
 }

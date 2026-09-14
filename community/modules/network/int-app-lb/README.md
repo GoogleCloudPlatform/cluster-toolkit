@@ -19,6 +19,9 @@ It provides advanced traffic management, support for regional backends (like Man
 
 This module is primarily intended for exposing the Slurm REST API (`slurmrestd`) in High-Availability setups, but is generic enough to route traffic for any internal L7 application.
 
+> [!IMPORTANT]
+> **Proxy-Only Subnet Prerequisite**: Google Cloud Regional Internal Application Load Balancers require an active proxy-only subnet in the deployment region (`purpose = "REGIONAL_MANAGED_PROXY"`, `role = "ACTIVE"`). Ensure your VPC configuration defines one prior to deploying this module.
+
 ### Example
 
 ```yaml
@@ -99,6 +102,7 @@ No modules.
 | <a name="input_lb_name"></a> [lb\_name](#input\_lb\_name) | The name for the Load Balancer resources. | `string` | `"internal-app-lb"` | no |
 | <a name="input_log_config"></a> [log\_config](#input\_log\_config) | Logging configuration for this backend service. | <pre>object({<br/>    enable      = bool<br/>    sample_rate = optional(number, 1.0)<br/>  })</pre> | `null` | no |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The network self-link to attach the load balancer to. | `string` | n/a | yes |
+| <a name="input_port_range"></a> [port\_range](#input\_port\_range) | The port or port range that the forwarding rule listens on. If null, defaults to 443 for HTTPS or 80 for HTTP. | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to deploy to. | `string` | n/a | yes |
 | <a name="input_protocol"></a> [protocol](#input\_protocol) | The protocol to use to talk to the backend. Can be HTTP, HTTPS, or HTTP2. | `string` | `"HTTP"` | no |
 | <a name="input_region"></a> [region](#input\_region) | The region to deploy to. | `string` | n/a | yes |
