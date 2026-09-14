@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# PROJECT_ID is passed from Cloud Build to dynamically set the repository 
-ARG PROJECT_ID
+# PROJECT_ID is dynamically passed by Cloud Build during CI/CD.
+# To override this default for local builds, use the --build-arg flag:
+# docker build --build-arg PROJECT_ID=your-custom-project-id .
+ARG PROJECT_ID=hpc-toolkit-dev
 
 FROM us-central1-docker.pkg.dev/${PROJECT_ID}/hpc-toolkit-repo/hpc-toolkit-partial-build:precommit
 
