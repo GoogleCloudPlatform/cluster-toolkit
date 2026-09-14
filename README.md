@@ -65,11 +65,9 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 | **Windows** | ❎ | Please [Build from source](#building-from-source). |
 
 > [!NOTE]
-> Multi-architecture builds (amd64 and arm64) are available starting with version 1.85.0. Tarball bundles (`.tgz`) are supported starting with version 1.89.0.
+> Official release bundles are distributed as multi-architecture tarballs (`.tgz`) for Linux and macOS (amd64 and arm64).
 
 1. Download and extract the bundle:
-
-    **For versions v1.89.0 and newer (Multi-architecture Tarball):**
 
     ```shell
     # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
@@ -80,25 +78,6 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     ARCH="amd64"
     # Download and extract the platform-specific bundle in a single step
     mkdir -p cluster-toolkit && curl -L https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster_bundle_${OS}_${ARCH}.tgz | tar -xz -C cluster-toolkit && cd cluster-toolkit
-    ```
-
-    **For legacy versions v1.85.0 through v1.88.0 (Multi-architecture Zip):**
-
-    > [!NOTE]
-    > Versions prior to v1.89.0 were distributed as `.zip` archives. These legacy releases are affected by security advisories; upgrading to **v1.103.0 or later** is recommended.
-
-    ```shell
-    # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
-    # Note: Versions prior to v1.103.0 are subject to security advisories (see https://docs.cloud.google.com/cluster-toolkit/docs/security-bulletins)
-    # Set the desired version TAG (e.g., v1.85.0)
-    TAG=vX.Y.Z
-    # Set your OS (linux or mac) and architecture (amd64 or arm64)
-    OS="linux"
-    ARCH="amd64"
-    # Download and extract the platform-specific bundle
-    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster_bundle_${OS}_${ARCH}.zip
-    unzip gcluster_bundle_${OS}_${ARCH}.zip -d cluster-toolkit/
-    cd cluster-toolkit
     ```
 
 2. Verify the installation:
