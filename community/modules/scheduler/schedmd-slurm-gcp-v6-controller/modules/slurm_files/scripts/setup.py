@@ -201,7 +201,10 @@ def mount_save_state_disk():
     util.run(f"systemctl daemon-reload")
 
     os.makedirs(mount_point, exist_ok=True)
-    util.run(f"mount {mount_point}")
+    if util.run(f"mountpoint -q {mount_point}", check=False).returncode == 0:
+        log.info(f"Mount point {mount_point} is already mounted. Skipping mount.")
+    else:
+        util.run(f"mount {mount_point}")
 
     util.chown_slurm(mount_point)
 
