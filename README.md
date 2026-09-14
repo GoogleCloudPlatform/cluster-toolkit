@@ -46,26 +46,18 @@ You can use two different methods to install Cluster Toolkit:
 
 ### Using the pre-built bundle (recommended)
 
-> [!WARNING]
-> **Security Notice**: To protect against known vulnerabilities, we recommend using the latest stable release (**v1.103.0 or later**). For details, see the [Cluster Toolkit Security Bulletins](https://docs.cloud.google.com/cluster-toolkit/docs/security-bulletins).
-
-For the easiest setup, download the appropriate bundle for your operating system and architecture (e.g., `gcluster_bundle_linux_amd64.tgz`, `gcluster_bundle_linux_arm64.tgz`, `gcluster_bundle_mac_amd64.tgz`, or `gcluster_bundle_mac_arm64.tgz`) from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. These bundles include the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
+For the easiest setup, download the appropriate bundle for your operating system and architecture from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. These bundles include the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
 
 #### Bundle compatibility matrix
-
-The pre-built bundles are compiled for Linux and macOS execution environments and support the deployment of the following cluster operating systems.
 
 ##### Execution platform (where the binary runs)
 
 | Platform | Support Status | Notes |
 | :--- | :---: | :--- |
-| **Linux (amd64 / arm64)** | ✅ | Pre-compiled on Debian Bullseye. Includes amd64 (x86_64) and arm64 builds starting v1.85.0. |
+| **Linux (amd64 / arm64)** | ✅ | Pre-compiled on Debian Bullseye. |
 | **Google Cloud Shell** | ✅ | Native support via the Linux amd64 binary. |
-| **macOS (amd64 / arm64)** | ✅ | Native support via the Mac binary. Includes amd64 (Intel) and arm64 (Apple Silicon) builds starting v1.85.0. |
+| **macOS (amd64 / arm64)** | ✅ | Native support via the Mac binary. |
 | **Windows** | ❎ | Please [Build from source](#building-from-source). |
-
-> [!NOTE]
-> Official release bundles are distributed as multi-architecture tarballs (`.tgz`) for Linux and macOS (amd64 and arm64).
 
 1. Download and extract the bundle:
 
