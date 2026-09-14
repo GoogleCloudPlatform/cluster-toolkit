@@ -412,7 +412,18 @@ func TestParseReservationURI(t *testing.T) {
 			input: "https://www.googleapis.com/compute/v1/projects/my-project/zones/us-central1-a/reservations/my-res",
 			want: parsedReservation{
 				Project: "my-project",
+				Zone:    "us-central1-a",
 				Name:    "my-res",
+			},
+		},
+		{
+			input: "https://www.googleapis.com/compute/v1/projects/my-project/zones/us-central1-a/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2",
+			want: parsedReservation{
+				Project:  "my-project",
+				Zone:     "us-central1-a",
+				Name:     "my-res",
+				Block:    "block-1",
+				Subblock: "subblock-2",
 			},
 		},
 		{
@@ -428,6 +439,22 @@ func TestParseReservationURI(t *testing.T) {
 				Name:     "my-res",
 				Block:    "block-1",
 				Subblock: "subblock-2",
+			},
+		},
+		{
+			input: "projects/my-project/zones/us-central1-a/reservations/",
+			want: parsedReservation{
+				Project: "my-project",
+				Zone:    "us-central1-a",
+				Name:    "",
+			},
+		},
+		{
+			input: "projects/my-project/zones/us-central1-a/reservations",
+			want: parsedReservation{
+				Project: "my-project",
+				Zone:    "us-central1-a",
+				Name:    "",
 			},
 		},
 	}
@@ -452,16 +479,6 @@ func TestResolveTPUWorkloadPolicy(t *testing.T) {
 		wantErr       bool
 	}{
 		{
-			name: "Placement policy already specified on job is preserved",
-			job: &orchestrator.JobDefinition{
-				MachineType:     "tpu7x-standard-4t",
-				Topology:        "2x2x2",
-				NodesPerSlice:   2,
-				PlacementPolicy: "user-specified-policy",
-			},
-			wantPolicy: "user-specified-policy",
-		},
-		{
 			name: "Discovered from existing matching node pool",
 			job: &orchestrator.JobDefinition{
 				MachineType:   "tpu7x-standard-4t",
@@ -483,6 +500,37 @@ func TestResolveTPUWorkloadPolicy(t *testing.T) {
 				},
 			},
 			wantPolicy: "existing-nodepool-policy",
+		},
+		{
+			name: "Existing node pool with PROVISION_ONLY policy is skipped for static workload",
+			job: &orchestrator.JobDefinition{
+				MachineType:     "tpu7x-standard-4t",
+				Topology:        "2x2x2",
+				NodesPerSlice:   2,
+				ClusterLocation: "us-central1-c",
+				ProjectID:       "my-project",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "dynamic-tpu7x-pool",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+						Labels: map[string]string{
+							"cloud.google.com/gke-tpu-topology": "2x2x2",
+						},
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						PolicyName:              "dynamic-slicing-policy",
+						AcceleratorTopologyMode: "PROVISION_ONLY",
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe tpu7x-16-2x2x2-placement-policy --region=us-central1 --project=my-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"tpu7x-16-2x2x2-placement-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"2x2x2"}}`},
+				},
+			},
+			wantPolicy: "tpu7x-16-2x2x2-placement-policy",
 		},
 		{
 			name: "Discovered from describe of canonical policy",
@@ -616,17 +664,6 @@ func TestResolveTPUWorkloadPolicy(t *testing.T) {
 			},
 			wantPolicy: "tpu7x-16-2x2x2-placement-policy",
 		},
-		{
-			name: "Single-node slice does not assign workload placement policy",
-			job: &orchestrator.JobDefinition{
-				MachineType:     "tpu7x-standard-4t",
-				Topology:        "2x2x1",
-				NodesPerSlice:   1,
-				ClusterLocation: "us-central1-c",
-				ProjectID:       "my-project",
-			},
-			wantPolicy: "",
-		},
 	}
 
 	for _, tt := range tests {
@@ -636,56 +673,448 @@ func TestResolveTPUWorkloadPolicy(t *testing.T) {
 			g.projectID = tt.job.ProjectID
 			g.clusterDesc.NodePools = tt.nodePools
 
-			err := g.resolveTPU7xWorkloadPolicyIfRequired(tt.job, true, false)
+			policy, err := g.resolveTPUWorkloadPolicy(tt.job.MachineType, tt.job.Topology, tt.job.ClusterLocation, tt.job.ProjectID, tt.job.DryRunManifest != "")
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("resolveTPU7xWorkloadPolicyIfRequired() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("resolveTPUWorkloadPolicy() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if tt.job.PlacementPolicy != tt.wantPolicy {
-				t.Errorf("resolveTPU7xWorkloadPolicyIfRequired() placementPolicy = %q, want %q", tt.job.PlacementPolicy, tt.wantPolicy)
+			if !tt.wantErr && policy != tt.wantPolicy {
+				t.Errorf("resolveTPUWorkloadPolicy() = %q, want %q", policy, tt.wantPolicy)
 			}
 		})
 	}
 }
 
-func TestBuildNodeSelector_PlacementPolicy(t *testing.T) {
-	g := newTestGKEOrchestrator(nil)
-	g.machineCapCache["tpu7x-standard-4t:"] = MachineTypeCap{}
-	g.machineCapCache["a3-highgpu-8g:"] = MachineTypeCap{}
+func TestValidateConsumptionForStaticCluster(t *testing.T) {
+	tests := []struct {
+		name        string
+		napEnabled  bool
+		napLimits   map[string]int64
+		nodePools   []gkeJobNodePool
+		job         orchestrator.JobDefinition
+		wantErr     bool
+		expectedErr string
+	}{
+		{
+			name:       "Static Cluster - Explicit on-demand flag fails",
+			napEnabled: false,
+			job: orchestrator.JobDefinition{
+				GKENAPProvisioning: "on-demand",
+			},
+			wantErr:     true,
+			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning \"on-demand\", --gke-nap-reservation \"\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
+		},
+		{
+			name:       "Static Cluster - Empty string consumption model",
+			napEnabled: false,
+			job: orchestrator.JobDefinition{
+				GKENAPProvisioning: "",
+			},
+			wantErr: false,
+		},
+		{
+			name:       "Static Cluster - Consumption model flag set to spot",
+			napEnabled: false,
+			job: orchestrator.JobDefinition{
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning \"spot\", --gke-nap-reservation \"\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
+		},
+		{
+			name:       "Static Cluster - Reservation name flag set",
+			napEnabled: false,
+			job: orchestrator.JobDefinition{
+				GKENAPProvisioning: "on-demand",
+				GKENAPReservation:  "my-res",
+			},
+			wantErr:     true,
+			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning \"on-demand\", --gke-nap-reservation \"my-res\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
+		},
+		{
+			name:       "NAP Cluster - Machine type in NAP limits",
+			napEnabled: true,
+			napLimits: map[string]int64{
+				"tpu-v6e-slice": 100,
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "ct6e-standard-8t", // TPU
+				GKENAPProvisioning: "spot",
+			},
+			wantErr: false,
+		},
+		{
+			name:       "NAP Cluster - Machine type not in limits, but matches static pool",
+			napEnabled: true,
+			napLimits:  map[string]int64{},
+			nodePools: []gkeJobNodePool{
+				{
+					Config: gkeNodePoolConfig{
+						MachineType: "n2-standard-4",
+						Labels: map[string]string{
+							"cloud.google.com/gke-provisioning": "spot",
+						},
+					},
+				},
+			},
+			job: orchestrator.JobDefinition{
+				ComputeType:        "n2-standard-4",
+				MachineType:        "n2-standard-4",
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
+		},
+		{
+			name:       "NAP Cluster - Machine type not in limits, and mismatches static pool",
+			napEnabled: true,
+			napLimits:  map[string]int64{},
+			nodePools: []gkeJobNodePool{
+				{
+					Config: gkeNodePoolConfig{
+						MachineType: "n2-standard-4",
+						Labels: map[string]string{
+							"cloud.google.com/gke-provisioning": "standard",
+						},
+					},
+				},
+			},
+			job: orchestrator.JobDefinition{
+				ComputeType:        "n2-standard-4",
+				MachineType:        "n2-standard-4",
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
+		},
+		{
+			name:       "NAP Cluster - Machine type covered by generic TPU limit fallback",
+			napEnabled: true,
+			napLimits: map[string]int64{
+				"google.com/tpu": 100,
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "ct6e-standard-8t",
+				GKENAPProvisioning: "spot",
+			},
+			wantErr: false,
+		},
+		{
+			name:       "NAP Cluster - Machine type with unknown GPU accelerator fails fast",
+			napEnabled: true,
+			napLimits:  map[string]int64{},
+			job: orchestrator.JobDefinition{
+				MachineType:        "my-unknown-gpu-machine",
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "unknown accelerator label: \"unknown-gpu\"",
+		},
+		{
+			name:       "NAP Cluster - TPU: Specific limit configured, requesting different TPU (Should Fail)",
+			napEnabled: true,
+			napLimits: map[string]int64{
+				"tpu-v6e-slice":  8,
+				"google.com/tpu": 8,
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "ct5lp-hightpu-4t", // TPU v5e (tpu-v5-lite-podslice)
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
+		},
+		{
+			name:       "NAP Cluster - GPU: Specific limit configured, requesting different GPU (Should Fail)",
+			napEnabled: true,
+			napLimits: map[string]int64{
+				"nvidia-h100-mega-80gb": 8,
+				"nvidia.com/gpu":        8,
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "g2-standard-12", // L4 GPU (nvidia-l4)
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
+		},
+		{
+			name:       "NAP Cluster - GPU: Generic limit only, requesting GPU (Should Pass)",
+			napEnabled: true,
+			napLimits: map[string]int64{
+				"nvidia.com/gpu": 8,
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "g2-standard-12",
+				GKENAPProvisioning: "spot",
+			},
+			wantErr: false,
+		},
+	}
 
-	// 1. TPU workload uses cloud.google.com/placement-policy-name
-	tpuJob := orchestrator.JobDefinition{
-		MachineType: "tpu7x-standard-4t",
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := newTestGKEOrchestrator(nil)
+			orc.napEnabled = tt.napEnabled
+			orc.napLimits = tt.napLimits
+			orc.clusterDesc.NodePools = tt.nodePools
+			orc.machineCapCache = map[string]MachineTypeCap{
+				"n2-standard-4:": {
+					GuestCpus: 4,
+					MemoryMb:  16000,
+				},
+				"my-unknown-gpu-machine:": {
+					GuestCpus: 8,
+					MemoryMb:  32000,
+					Accelerators: []struct {
+						Count int    `json:"guestAcceleratorCount"`
+						Type  string `json:"guestAcceleratorType"`
+					}{
+						{
+							Count: 1,
+							Type:  "unknown-gpu",
+						},
+					},
+				},
+				"g2-standard-12:": {
+					GuestCpus: 12,
+					MemoryMb:  48000,
+					Accelerators: []struct {
+						Count int    `json:"guestAcceleratorCount"`
+						Type  string `json:"guestAcceleratorType"`
+					}{
+						{
+							Count: 1,
+							Type:  "nvidia-l4",
+						},
+					},
+				},
+			}
+
+			err := orc.validateConsumptionForStaticCluster(&tt.job)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tt.expectedErr) {
+					t.Errorf("expected error containing %q, got: %v", tt.expectedErr, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
 	}
-	tpuOpts := SchedulingOptions{
-		PlacementPolicy: "tpu7x-16-2x2x2-placement-policy",
-		IsTPU:           true,
-	}
-	tpuSelectorStr, err := g.buildNodeSelector(tpuOpts, tpuJob, false)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(tpuSelectorStr, "cloud.google.com/placement-policy-name: tpu7x-16-2x2x2-placement-policy") {
-		t.Errorf("Expected cloud.google.com/placement-policy-name in %s", tpuSelectorStr)
-	}
-	if strings.Contains(tpuSelectorStr, "cloud.google.com/gke-placement-group") {
-		t.Errorf("Did not expect cloud.google.com/gke-placement-group in %s", tpuSelectorStr)
+}
+
+func TestValidateNAPReservation(t *testing.T) {
+	tests := []struct {
+		name          string
+		job           *orchestrator.JobDefinition
+		mockResponses map[string][]shell.CommandResult
+		wantErr       bool
+	}{
+		{
+			name: "Valid reservation matching machine type succeeds",
+			job: &orchestrator.JobDefinition{
+				GKENAPProvisioning: "reservation",
+				GKENAPReservation:  "my-res",
+				MachineType:        "ct5p-hightpu-4t",
+				ClusterLocation:    "us-central1-a",
+				ProjectID:          "my-project",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute reservations describe my-res --zone=us-central1-a --project=my-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"my-res","specificReservation":{"instanceProperties":{"machineType":"ct5p-hightpu-4t"}}}`},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Reservation in full HTTPS URL with zone parsed and validated",
+			job: &orchestrator.JobDefinition{
+				GKENAPProvisioning: "reservation",
+				GKENAPReservation:  "https://www.googleapis.com/compute/v1/projects/my-owner/zones/us-central1-b/reservations/shared-res",
+				MachineType:        "ct5p-hightpu-4t",
+				ClusterLocation:    "us-central1-a",
+				ProjectID:          "my-project",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute reservations describe shared-res --zone=us-central1-b --project=my-owner --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"shared-res","specificReservation":{"instanceProperties":{"machineType":"ct5p-hightpu-4t"}}}`},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Reservation not found (404) returns error",
+			job: &orchestrator.JobDefinition{
+				GKENAPProvisioning: "reservation",
+				GKENAPReservation:  "missing-res",
+				MachineType:        "ct5p-hightpu-4t",
+				ClusterLocation:    "us-central1-a",
+				ProjectID:          "my-project",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute reservations describe missing-res --zone=us-central1-a --project=my-project --format=json": {
+					{ExitCode: 1, Stderr: "ERROR: (gcloud.compute.reservations.describe) The resource 'projects/my-project/zones/us-central1-a/reservations/missing-res' was not found"},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Reservation machine type mismatch returns error",
+			job: &orchestrator.JobDefinition{
+				GKENAPProvisioning: "reservation",
+				GKENAPReservation:  "wrong-type-res",
+				MachineType:        "ct5p-hightpu-4t",
+				ClusterLocation:    "us-central1-a",
+				ProjectID:          "my-project",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute reservations describe wrong-type-res --zone=us-central1-a --project=my-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"wrong-type-res","specificReservation":{"instanceProperties":{"machineType":"a3-highgpu-8g"}}}`},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Reservation 403 Forbidden degrades gracefully with warning",
+			job: &orchestrator.JobDefinition{
+				GKENAPProvisioning: "reservation",
+				GKENAPReservation:  "forbidden-res",
+				MachineType:        "ct5p-hightpu-4t",
+				ClusterLocation:    "us-central1-a",
+				ProjectID:          "my-project",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute reservations describe forbidden-res --zone=us-central1-a --project=my-project --format=json": {
+					{ExitCode: 1, Stderr: "ERROR: (gcloud.compute.reservations.describe) 403 Forbidden: Required 'compute.reservations.get' permission"},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Reservation check skipped on dry-run",
+			job: &orchestrator.JobDefinition{
+				GKENAPProvisioning: "reservation",
+				GKENAPReservation:  "dry-run-res",
+				MachineType:        "ct5p-hightpu-4t",
+				ClusterLocation:    "us-central1-a",
+				ProjectID:          "my-project",
+				DryRunManifest:     "/tmp/job.yaml",
+			},
+			wantErr: false,
+		},
+		{
+			name: "Regional cluster reservation matching region and partial URI machine type succeeds",
+			job: &orchestrator.JobDefinition{
+				GKENAPProvisioning: "reservation",
+				GKENAPReservation:  "reg-res",
+				MachineType:        "ct5p-hightpu-4t",
+				ClusterLocation:    "us-central1",
+				ProjectID:          "my-project",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute reservations list": {
+					{ExitCode: 0, Stdout: `[{"zone":"projects/my-project/zones/us-central1-a","specificReservation":{"instanceProperties":{"machineType":"zones/us-central1-a/machineTypes/ct5p-hightpu-4t"}}}]`},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Regional cluster reservation found in different region returns error",
+			job: &orchestrator.JobDefinition{
+				GKENAPProvisioning: "reservation",
+				GKENAPReservation:  "reg-res",
+				MachineType:        "ct5p-hightpu-4t",
+				ClusterLocation:    "us-central1",
+				ProjectID:          "my-project",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute reservations list": {
+					{ExitCode: 0, Stdout: `[{"zone":"europe-west4-a","specificReservation":{"instanceProperties":{"machineType":"ct5p-hightpu-4t"}}}]`},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Reservation URI with region locality mismatch returns error",
+			job: &orchestrator.JobDefinition{
+				GKENAPProvisioning: "reservation",
+				GKENAPReservation:  "projects/my-project/zones/europe-west4-a/reservations/my-res",
+				MachineType:        "ct5p-hightpu-4t",
+				ClusterLocation:    "us-central1",
+				ProjectID:          "my-project",
+			},
+			wantErr: true,
+		},
+		{
+			name: "Zonal reservation with malformed JSON returns error",
+			job: &orchestrator.JobDefinition{
+				GKENAPProvisioning: "reservation",
+				GKENAPReservation:  "corrupt-res",
+				MachineType:        "ct5p-hightpu-4t",
+				ClusterLocation:    "us-central1-a",
+				ProjectID:          "my-project",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute reservations describe corrupt-res --zone=us-central1-a --project=my-project --format=json": {
+					{ExitCode: 0, Stdout: `{invalid-json`},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Regional cluster multi-zone reservation with first zone mismatch and second zone match succeeds",
+			job: &orchestrator.JobDefinition{
+				GKENAPProvisioning: "reservation",
+				GKENAPReservation:  "reg-res",
+				MachineType:        "ct5p-hightpu-4t",
+				ClusterLocation:    "us-central1",
+				ProjectID:          "my-project",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute reservations list": {
+					{ExitCode: 0, Stdout: `[
+						{"zone":"projects/my-project/zones/us-central1-a","specificReservation":{"instanceProperties":{"machineType":"a3-highgpu-8g"}}},
+						{"zone":"projects/my-project/zones/us-central1-b","specificReservation":{"instanceProperties":{"machineType":"ct5p-hightpu-4t"}}}
+					]`},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Regional cluster multi-zone reservation with all zones mismatched returns error",
+			job: &orchestrator.JobDefinition{
+				GKENAPProvisioning: "reservation",
+				GKENAPReservation:  "reg-res",
+				MachineType:        "ct5p-hightpu-4t",
+				ClusterLocation:    "us-central1",
+				ProjectID:          "my-project",
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute reservations list": {
+					{ExitCode: 0, Stdout: `[
+						{"zone":"projects/my-project/zones/us-central1-a","specificReservation":{"instanceProperties":{"machineType":"a3-highgpu-8g"}}},
+						{"zone":"projects/my-project/zones/us-central1-b","specificReservation":{"instanceProperties":{"machineType":"n1-standard-4"}}}
+					]`},
+				},
+			},
+			wantErr: true,
+		},
 	}
 
-	// 2. Non-TPU workload uses cloud.google.com/gke-placement-group
-	nonTpuJob := orchestrator.JobDefinition{
-		MachineType: "a3-highgpu-8g",
-	}
-	nonTpuOpts := SchedulingOptions{
-		PlacementPolicy: "compact-placement-group",
-	}
-	nonTpuSelectorStr, err := g.buildNodeSelector(nonTpuOpts, nonTpuJob, false)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(nonTpuSelectorStr, "cloud.google.com/gke-placement-group: compact-placement-group") {
-		t.Errorf("Expected cloud.google.com/gke-placement-group in %s", nonTpuSelectorStr)
-	}
-	if strings.Contains(nonTpuSelectorStr, "cloud.google.com/placement-policy-name") {
-		t.Errorf("Did not expect cloud.google.com/placement-policy-name in %s", nonTpuSelectorStr)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExecutor := NewMockExecutor(tt.mockResponses)
+			g := newTestGKEOrchestrator(mockExecutor)
+			g.projectID = tt.job.ProjectID
+
+			err := g.validateNAPReservation(tt.job)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("validateNAPReservation() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }

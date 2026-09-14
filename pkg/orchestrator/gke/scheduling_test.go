@@ -16,7 +16,10 @@ package gke
 
 import (
 	"slices"
+	"strings"
 	"testing"
+
+	"hpc-toolkit/pkg/orchestrator"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -57,6 +60,33 @@ func TestGetNodeSelector(t *testing.T) {
 			},
 			wantKey:   "cloud.google.com/gke-placement-group",
 			wantValue: "compact-placement",
+		},
+		{
+			name: "tpu placement policy with relative URI is sanitized to bare name",
+			opts: SchedulingOptions{
+				PlacementPolicy: "projects/my-proj/regions/us-central1/resourcePolicies/tpu-policy",
+				IsTPU:           true,
+			},
+			wantKey:   "cloud.google.com/placement-policy-name",
+			wantValue: "tpu-policy",
+		},
+		{
+			name: "non-tpu placement policy with HTTPS URL is sanitized to bare name",
+			opts: SchedulingOptions{
+				PlacementPolicy: "https://www.googleapis.com/compute/v1/projects/my-proj/regions/us-central1/resourcePolicies/gpu-policy",
+				IsTPU:           false,
+			},
+			wantKey:   "cloud.google.com/gke-placement-group",
+			wantValue: "gpu-policy",
+		},
+		{
+			name: "placement policy with trailing slash is sanitized to bare name",
+			opts: SchedulingOptions{
+				PlacementPolicy: "projects/my-proj/regions/us-central1/resourcePolicies/trailing-policy/",
+				IsTPU:           true,
+			},
+			wantKey:   "cloud.google.com/placement-policy-name",
+			wantValue: "trailing-policy",
 		},
 		{
 			name: "skip pipe separated values (goes to affinity)",
@@ -369,5 +399,64 @@ func TestGetAffinity_ConstraintsAndMerging(t *testing.T) {
 				t.Errorf("Expected to find requirement for key %s", tt.wantKey)
 			}
 		})
+	}
+}
+
+func TestBuildNodeSelector_PlacementPolicy(t *testing.T) {
+	g := newTestGKEOrchestrator(nil)
+	g.machineCapCache["tpu7x-standard-4t:"] = MachineTypeCap{}
+	g.machineCapCache["a3-highgpu-8g:"] = MachineTypeCap{}
+
+	// 1. TPU workload uses cloud.google.com/placement-policy-name
+	tpuJob := orchestrator.JobDefinition{
+		MachineType: "tpu7x-standard-4t",
+	}
+	tpuOpts := SchedulingOptions{
+		PlacementPolicy: "tpu7x-16-2x2x2-placement-policy",
+		IsTPU:           true,
+	}
+	tpuSelectorStr, err := g.buildNodeSelector(tpuOpts, tpuJob, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(tpuSelectorStr, "cloud.google.com/placement-policy-name: tpu7x-16-2x2x2-placement-policy") {
+		t.Errorf("Expected cloud.google.com/placement-policy-name in %s", tpuSelectorStr)
+	}
+	if strings.Contains(tpuSelectorStr, "cloud.google.com/gke-placement-group") {
+		t.Errorf("Did not expect cloud.google.com/gke-placement-group in %s", tpuSelectorStr)
+	}
+
+	// 2. Non-TPU workload uses cloud.google.com/gke-placement-group
+	nonTpuJob := orchestrator.JobDefinition{
+		MachineType: "a3-highgpu-8g",
+	}
+	nonTpuOpts := SchedulingOptions{
+		PlacementPolicy: "compact-placement-group",
+	}
+	nonTpuSelectorStr, err := g.buildNodeSelector(nonTpuOpts, nonTpuJob, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(nonTpuSelectorStr, "cloud.google.com/gke-placement-group: compact-placement-group") {
+		t.Errorf("Expected cloud.google.com/gke-placement-group in %s", nonTpuSelectorStr)
+	}
+	if strings.Contains(nonTpuSelectorStr, "cloud.google.com/placement-policy-name") {
+		t.Errorf("Did not expect cloud.google.com/placement-policy-name in %s", nonTpuSelectorStr)
+	}
+
+	// 3. Placement policy passed as URI with trailing slash is sanitized into bare name
+	uriJob := orchestrator.JobDefinition{
+		MachineType: "tpu7x-standard-4t",
+	}
+	uriOpts := SchedulingOptions{
+		PlacementPolicy: "projects/my-proj/regions/us-central1/resourcePolicies/tpu7x-16-2x2x2-placement-policy/",
+		IsTPU:           true,
+	}
+	uriSelectorStr, err := g.buildNodeSelector(uriOpts, uriJob, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(uriSelectorStr, "cloud.google.com/placement-policy-name: tpu7x-16-2x2x2-placement-policy") {
+		t.Errorf("Expected sanitized placement policy name in %s", uriSelectorStr)
 	}
 }
