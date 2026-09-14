@@ -24,7 +24,7 @@
   ansible.builtin.command: >-
     gcloud compute instances list
     --filter="labels.ghpc_deployment={{ deployment_name }}"
-    --format='json(name,zone,id,status)'
+    --format='json(name,zone,id,status,resourceStatus.physicalHost)'
 - name: Print instance information
   when: instances is defined
   ansible.builtin.debug:

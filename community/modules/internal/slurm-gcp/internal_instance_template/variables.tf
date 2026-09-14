@@ -409,8 +409,14 @@ variable "provisioning_model" {
 
 variable "reservation_affinity" {
   description = "Specifies the reservations that this instance can consume from."
-  type        = object({ type = string })
-  default     = null
+  type = object({
+    type = string
+    specific_reservation = optional(object({
+      key    = string
+      values = list(string)
+    }))
+  })
+  default = null
 }
 
 variable "confidential_instance_type" {
