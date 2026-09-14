@@ -28,7 +28,7 @@ variable "deployment_name" {
 }
 
 variable "repository_name" {
-  description = "The repository name (ID) for the Artifact Registry repository. If null, deployment_name (lowercased, with dots and underscores replaced with hyphens) with a random suffix is used."
+  description = "The repository name (ID) for the Artifact Registry repository. If null, a default value will be created using the deployment_name and a random suffix."
   type        = string
   default     = null
 

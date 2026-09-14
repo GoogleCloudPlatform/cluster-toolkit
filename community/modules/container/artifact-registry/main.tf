@@ -21,17 +21,26 @@ locals {
   # Auto (i.e., empty) vs user-managed replication
   auto = length(var.user_managed_replication) == 0 ? true : false
 
-  # The final name for the artifact registry repository
-  repository_name = var.repository_name != null ? var.repository_name : replace(
-    lower("${var.deployment_name}-${random_id.resource_name_suffix.hex}"),
-    "/[_.]/",
-    "-"
+  # Determine name of the artifact registry repository
+  # 1. Lowercase first, then collapse sequences of non-alphanumeric chars into a single hyphen
+  raw_dep_slug = replace(lower(var.deployment_name), "/[^a-z0-9]+/", "-")
+
+  # 2. Strip edge hyphens, slice to 55 chars, and strip any trailing hyphen introduced by slicing
+  clean_dep_name = trimsuffix(substr(trim(local.raw_dep_slug, "-"), 0, 55), "-")
+
+  # 3. Assemble: always starts with 'ar-', ends with '[0-9a-f]', length <= 63, preserves uniqueness
+  default_repo_name = (
+    local.clean_dep_name != ""
+    ? "ar-${local.clean_dep_name}-${random_id.resource_name_suffix.hex}"
+    : "ar-${random_id.resource_name_suffix.hex}"
   )
+
+  repository_name = var.repository_name != null ? var.repository_name : local.default_repo_name
 
   repo_url = (
     contains(["APT", "YUM"], upper(var.format)) ?
-    "${var.region}-${lower(var.format)}.pkg.dev/projects/${var.project_id}/${local.repository_name}" :
-    "${var.region}-${lower(var.format)}.pkg.dev/${var.project_id}/${local.repository_name}"
+    "${var.region}-${lower(var.format)}.pkg.dev/projects/${var.project_id}/${google_artifact_registry_repository.artifact_registry.repository_id}" :
+    "${var.region}-${lower(var.format)}.pkg.dev/${var.project_id}/${google_artifact_registry_repository.artifact_registry.repository_id}"
   )
 
   # The secret name is derived from the repository name
