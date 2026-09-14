@@ -235,7 +235,9 @@ def _normalize_slurm_state(state):
 
 
 def _parse_slurm_time(value):
-    if not value or value in ["Unknown", "None", "N/A"]:
+    # UNLIMITED is what Slurm reports for the end time of a running or
+    # non-expiring job, so it is an absent time rather than an unparsable one.
+    if not value or value in ["Unknown", "None", "N/A", "UNLIMITED"]:
         return None
 
     for fmt in [
@@ -252,25 +254,47 @@ def _parse_slurm_time(value):
     return None
 
 
-def _slurm_get_job_info_from_sacct(jobid):
+def _slurm_get_job_info_from_sacct(jobid, timeout=10, retries=2):
     """Returns final job state information from sacct when a job leaves squeue"""
     try:
-        proc = subprocess.run(
-            [
-                "sacct",
-                "-X",
-                "--noheader",
-                "--parsable2",
-                "--format=JobID,State,Start,End",
-                "--jobs",
-                str(jobid),
-            ],
-            check=True,
-            encoding="utf-8",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=30,
-        )
+        for attempt in range(retries + 1):
+            try:
+                proc = subprocess.run(
+                    [
+                        "sacct",
+                        "-X",
+                        "--noheader",
+                        "--parsable2",
+                        "--format=JobID,State,Start,End",
+                        "--jobs",
+                        str(jobid),
+                    ],
+                    check=True,
+                    encoding="utf-8",
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=timeout,
+                )
+                break
+            except subprocess.TimeoutExpired:
+                logger.warning(
+                    "sacct timed out for job %s (attempt %d/%d)",
+                    jobid,
+                    attempt + 1,
+                    retries + 1,
+                )
+                if attempt == retries:
+                    logger.error(
+                        "sacct repeatedly timed out for job %s; giving up for now",
+                        jobid,
+                    )
+                    return None
+        # A requeued job has one accounting row per run all under the same JobID.
+        # Take the latest rather than whichever comes first.
+        # Rows with no parseable start time sort earliest so a row that has one always wins.
+        latest_start = None
+        latest_result = None
+
         for line in proc.stdout.splitlines():
             if not line.strip():
                 continue
@@ -294,11 +318,33 @@ def _slurm_get_job_info_from_sacct(jobid):
             if end_epoch is not None:
                 result["end_time"] = {"number": end_epoch}
 
-            if normalized_state:
-                logger.info(
-                    "sacct returned job %s with state %s", jobid, normalized_state
+            if not result:
+                continue
+
+            is_active = normalized_state in ["PENDING", "RUNNING", "CONFIGURING"]
+            was_active = latest_result is not None and latest_result.get(
+                "job_state", [None]
+            )[0] in ["PENDING", "RUNNING", "CONFIGURING"]
+
+            if (
+                latest_result is None
+                or (is_active and not was_active)
+                or (
+                    not was_active
+                    and start_epoch is not None
+                    and (latest_start is None or start_epoch >= latest_start)
                 )
-            return result or None
+            ):
+                latest_start = start_epoch
+                latest_result = result
+
+        if latest_result:
+            job_state = latest_result.get("job_state")
+            if job_state:
+                logger.info(
+                    "sacct returned job %s with state %s", jobid, job_state[0]
+                )
+            return latest_result
     except Exception as err:
         logger.error("sacct lookup failed for job %s", jobid, exc_info=err)
 
@@ -311,7 +357,7 @@ def _slurm_get_job_info(jobid):
     # and this can be changed to something more sane.  For now, call squeue
     try:
         proc = subprocess.run(
-            ["squeue", "--json"], check=True, stdout=subprocess.PIPE
+            ["squeue", "--json"], check=True, stdout=subprocess.PIPE, timeout=10
         )
         output = json.loads(proc.stdout)
         for job in output["jobs"]:
