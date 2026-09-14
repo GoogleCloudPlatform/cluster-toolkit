@@ -79,9 +79,9 @@ run_test() {
 	find . -name "README.md" -exec rm {} \;
 	sed -i -E 's/(ghpc_version: )(.*)/\1golden/' .ghpc/artifacts/expanded_blueprint.yaml
 	sed -i '/- validator: test_quota_availability/,+1d' .ghpc/artifacts/expanded_blueprint.yaml
-        sed -i '/- validator: test_machine_type_in_zone/,+1d' .ghpc/artifacts/expanded_blueprint.yaml
-        sed -i '/- validator: test_reservation_exists/,+1d' .ghpc/artifacts/expanded_blueprint.yaml
-        sed -i '/- validator: test_disk_type_in_zone/,+1d' .ghpc/artifacts/expanded_blueprint.yaml
+    sed -i '/- validator: test_machine_type_in_zone/,+1d' .ghpc/artifacts/expanded_blueprint.yaml
+    sed -i '/- validator: test_reservation_exists/,+1d' .ghpc/artifacts/expanded_blueprint.yaml
+    sed -i '/- validator: test_disk_type_in_zone/,+1d' .ghpc/artifacts/expanded_blueprint.yaml
 
 	# Compare the deployment folder with the golden copy
 	diff --recursive --color='auto' --exclude="previous_deployment_groups" \
