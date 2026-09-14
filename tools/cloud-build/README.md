@@ -40,3 +40,13 @@ pre-commit run generate-kueue-locks --all-files
 cd tools/cloud-build/provision
 ./apply_kueue_locks.sh
 ```
+
+## Unit Testing
+
+Unit tests for Cloud Build scripts (including zone discovery, stockout exclusion, and retry injection in `find_available_zone.sh` and `submit_and_monitor_kueue_job.sh`) are located in `tools/tests/test_cloud_build_zone_retry.py`.
+
+To run the unit tests:
+
+```bash
+python3 -m unittest tools/tests/test_cloud_build_zone_retry.py -v
+```

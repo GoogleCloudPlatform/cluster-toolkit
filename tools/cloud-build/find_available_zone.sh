@@ -365,6 +365,14 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 	for ZONE in "${ZONES_ARRAY[@]}"; do
 		REGION=${ZONE%-*}
 
+		# Check for explicit zone exclusion (e.g. from retry harness or manual override)
+		if [[ -n "${EXCLUDE_ZONES:-}" ]]; then
+			if [[ " ${EXCLUDE_ZONES//,/ } " == *" ${ZONE} "* ]]; then
+				echo "INFO: Skipping ${ZONE} - Zone explicitly excluded via EXCLUDE_ZONES."
+				continue
+			fi
+		fi
+
 		if [[ "${CHECK_FILESTORE:-false}" == "true" ]]; then
 			if ! echo "${FILESTORE_ZONES}" | grep -x -E -q "${ZONE}|${REGION}"; then
 				echo "INFO: Skipping ${ZONE} - Filestore not available in this zone or region."
@@ -377,6 +385,16 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 		fi
 
 		if [[ "${CHECK_LUSTRE:-false}" == "true" ]]; then
+			# Temporary capacity mitigation for regional Managed Lustre exhaustion.
+			# Set LUSTRE_EXCLUDE_ZONES="none" to bypass defaults.
+			LUSTRE_EXCLUDE="${LUSTRE_EXCLUDE_ZONES:-us-west1-a us-west1-b us-west1-c us-south1-b europe-west2-c}"
+			if [[ "${LUSTRE_EXCLUDE}" != "none" ]]; then
+				if [[ " ${LUSTRE_EXCLUDE//,/ } " == *" ${ZONE} "* ]]; then
+					echo "INFO: Skipping ${ZONE} - Zone excluded due to known Managed Lustre capacity exhaustion."
+					continue
+				fi
+			fi
+
 			if ! echo "${LUSTRE_ZONES}" | grep -x -q "${ZONE}"; then
 				echo "INFO: Skipping ${ZONE} - Managed Lustre not available in this zone."
 				continue

@@ -54,6 +54,7 @@ trap cleanup_cb SIGTERM SIGINT
 MAX_RETRIES=3
 RETRY_DELAY=300
 ATTEMPT=1
+ACCUMULATED_EXCLUDE_ZONES=""
 
 while true; do
 	echo "=== ATTEMPT $ATTEMPT: Submitting Kueue Job ==="
@@ -109,6 +110,28 @@ while true; do
 	if [ $ATTEMPT -ge $MAX_RETRIES ]; then
 		echo "ERROR: Job failed to find zone capacity after $MAX_RETRIES attempts." >&2
 		exit 1
+	fi
+
+	# Dynamically extract the failed zone from the job logs so the next attempt tries an alternative zone
+	FAILED_ZONE=$(sed -n 's/.*resource exhausted: not enough resources available to fulfill the request in \([a-z0-9-]*\).*/\1/p' /workspace/job_logs.txt | tail -n 1 || true)
+	if [ -z "$FAILED_ZONE" ]; then
+		FAILED_ZONE=$(sed -n 's/.*Deploying in ZONE: \([a-z0-9-]*\).*/\1/p' /workspace/job_logs.txt | tail -n 1 || true)
+	fi
+
+	if [ -n "$FAILED_ZONE" ] && [ -f "/workspace/job.yaml" ]; then
+		echo "INFO: Detected capacity/resource exhaustion in zone: ${FAILED_ZONE}"
+		if [ -z "$ACCUMULATED_EXCLUDE_ZONES" ]; then
+			ACCUMULATED_EXCLUDE_ZONES="${FAILED_ZONE}"
+		elif [[ ! " ${ACCUMULATED_EXCLUDE_ZONES} " == *" ${FAILED_ZONE} "* ]]; then
+			ACCUMULATED_EXCLUDE_ZONES="${ACCUMULATED_EXCLUDE_ZONES} ${FAILED_ZONE}"
+		fi
+
+		echo "INFO: Injecting EXCLUDE_ZONES='${ACCUMULATED_EXCLUDE_ZONES}' into /workspace/job.yaml for attempt $((ATTEMPT + 1))..."
+		if grep -q "name: EXCLUDE_ZONES" /workspace/job.yaml; then
+			sed -i '/name: EXCLUDE_ZONES/{n;s/value: .*/value: "'"$ACCUMULATED_EXCLUDE_ZONES"'"/}' /workspace/job.yaml
+		elif grep -q "env:" /workspace/job.yaml; then
+			awk -v val="$ACCUMULATED_EXCLUDE_ZONES" '/^[[:space:]]*env:/ { in_env=1 } !done && in_env && /^[[:space:]]*- name:/ { match($0, /^[[:space:]]*/); ind=substr($0, RSTART, RLENGTH); print ind "- name: EXCLUDE_ZONES\n" ind "  value: \"" val "\""; done=1 } 1' /workspace/job.yaml > /workspace/job.yaml.tmp && mv /workspace/job.yaml.tmp /workspace/job.yaml
+		fi
 	fi
 
 	sleep $RETRY_DELAY
