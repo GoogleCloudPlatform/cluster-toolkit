@@ -152,6 +152,55 @@ func TestResolveKueueQueue(t *testing.T) {
 			wantErr:       false,
 		},
 		{
+			name:          "User requested name with resource path",
+			requestedName: "namespaces/default/localQueues/custom-q",
+			kubectlOutput: "",
+			wantName:      "custom-q",
+			wantErr:       false,
+		},
+		{
+			name:          "User requested invalid RFC 1123 name (uppercase)",
+			requestedName: "CustomQueue",
+			kubectlOutput: "",
+			wantName:      "",
+			wantErr:       true,
+		},
+		{
+			name:          "User requested invalid RFC 1123 name (underscore)",
+			requestedName: "custom_q",
+			kubectlOutput: "",
+			wantName:      "",
+			wantErr:       true,
+		},
+		{
+			name:          "User requested invalid RFC 1123 name (starts with hyphen)",
+			requestedName: "-custom-q",
+			kubectlOutput: "",
+			wantName:      "",
+			wantErr:       true,
+		},
+		{
+			name:          "User requested invalid RFC 1123 name (raw slash path)",
+			requestedName: "custom/invalid/queue",
+			kubectlOutput: "",
+			wantName:      "",
+			wantErr:       true,
+		},
+		{
+			name:          "User requested invalid RFC 1123 name (ends with hyphen)",
+			requestedName: "custom-q-",
+			kubectlOutput: "",
+			wantName:      "",
+			wantErr:       true,
+		},
+		{
+			name:          "User requested invalid RFC 1123 name (exceeds 253 characters)",
+			requestedName: strings.Repeat("a", 254),
+			kubectlOutput: "",
+			wantName:      "",
+			wantErr:       true,
+		},
+		{
 			name:          "No queues found, fallback to default",
 			requestedName: "",
 			kubectlOutput: "",
@@ -1138,5 +1187,78 @@ func TestCheckKueueInstallPermissions_MissingPermission(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "missing required RBAC permissions: ['create namespaces', 'create clusterroles.rbac.authorization.k8s.io']") {
 		t.Errorf("checkKueueInstallPermissions error = %v; want aggregated missing permissions list", err)
+	}
+}
+
+func TestParseKueueQueueName(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantQueue string
+		wantErr   bool
+	}{
+		{
+			name:      "Valid simple name",
+			input:     "default",
+			wantQueue: "default",
+		},
+		{
+			name:      "Valid with hyphens and dots",
+			input:     "my-team.queue-1",
+			wantQueue: "my-team.queue-1",
+		},
+		{
+			name:      "Resource path parsed to bare name",
+			input:     "namespaces/team-a/localQueues/custom-q",
+			wantQueue: "custom-q",
+		},
+		{
+			name:    "Uppercase rejected",
+			input:   "DefaultQueue",
+			wantErr: true,
+		},
+		{
+			name:    "Underscore rejected",
+			input:   "default_queue",
+			wantErr: true,
+		},
+		{
+			name:    "Starts with hyphen rejected",
+			input:   "-default",
+			wantErr: true,
+		},
+		{
+			name:    "Ends with hyphen rejected",
+			input:   "custom-q-",
+			wantErr: true,
+		},
+		{
+			name:    "Name exceeding 253 characters rejected",
+			input:   strings.Repeat("a", 254),
+			wantErr: true,
+		},
+		{
+			name:      "Max length 253 characters valid RFC 1123 subdomain succeeds",
+			input:     strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 60),
+			wantQueue: strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 60),
+			wantErr:   false,
+		},
+		{
+			name:    "Empty name rejected",
+			input:   "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseKueueQueueName(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseKueueQueueName(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+			if got != tt.wantQueue {
+				t.Errorf("parseKueueQueueName(%q) = %q, want %q", tt.input, got, tt.wantQueue)
+			}
+		})
 	}
 }
