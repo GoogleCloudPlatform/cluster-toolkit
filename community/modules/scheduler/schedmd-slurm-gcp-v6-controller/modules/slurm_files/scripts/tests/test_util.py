@@ -1112,3 +1112,26 @@ def test_slurmsync_mig_auto_repair(mock_lookup, mock_compute_prop, mock_inst):
                 action_recovered_fqdn = slurmsync.get_node_action("testcl-ns-2.c.testproj.internal")
                 assert isinstance(action_recovered_fqdn, slurmsync.NodeActionIdle)
                 mock_get_reason.assert_called_with("testcl-ns-2")
+
+
+@pytest.mark.parametrize(
+    "restart,expect_restart",
+    [
+        (True, True),
+        (False, False),
+    ],
+)
+def test_scontrol_reconfigure(restart, expect_restart, mocker):
+    """`scontrol reconfigure` always runs; the slurmctld restart is opt-out.
+
+    `update_topology` runs on every node power-up, so restarting slurmctld there
+    put a controller restart on the autoscaling hot path.
+    """
+    mock_run = mocker.patch("util.run")
+    lkp = mocker.Mock(scontrol="scontrol")
+
+    util.scontrol_reconfigure(lkp, restart=restart)
+
+    commands = [c.args[0] for c in mock_run.call_args_list]
+    assert "scontrol reconfigure" in commands
+    assert ("sudo systemctl restart slurmctld.service" in commands) == expect_restart
