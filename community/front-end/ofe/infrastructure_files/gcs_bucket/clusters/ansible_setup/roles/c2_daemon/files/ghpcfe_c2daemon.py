@@ -318,9 +318,19 @@ def _slurm_get_job_info_from_sacct(jobid, timeout=10, retries=2):
             if not result:
                 continue
 
-            if latest_result is None or (
-                start_epoch is not None
-                and (latest_start is None or start_epoch >= latest_start)
+            is_active = normalized_state in ["PENDING", "RUNNING", "CONFIGURING"]
+            was_active = latest_result is not None and latest_result.get(
+                "job_state", [None]
+            )[0] in ["PENDING", "RUNNING", "CONFIGURING"]
+
+            if (
+                latest_result is None
+                or (is_active and not was_active)
+                or (
+                    not was_active
+                    and start_epoch is not None
+                    and (latest_start is None or start_epoch >= latest_start)
+                )
             ):
                 latest_start = start_epoch
                 latest_result = result
