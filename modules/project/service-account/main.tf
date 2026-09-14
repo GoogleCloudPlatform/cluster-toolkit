@@ -35,3 +35,11 @@ module "service_account" {
   project_id         = var.project_id
   project_roles      = [for role in var.project_roles : "${var.project_id}=>roles/${role}"]
 }
+
+resource "time_sleep" "wait_for_service_account" {
+  create_duration = "30s"
+
+  depends_on = [
+    module.service_account
+  ]
+}

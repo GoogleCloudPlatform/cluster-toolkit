@@ -48,10 +48,11 @@ sed -i -e 's/SELINUX=enforcing/SELINUX=permissive/g' /etc/selinux/config
 printf "####################\n#### Installing required packages\n####################\n"
 dnf install -y epel-release
 dnf update -y --security
+dnf update -y expat
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
 
 dnf install -y terraform
-dnf install --best -y google-cloud-sdk nano make gcc python3.12-devel unzip git \
+dnf install --best -y google-cloud-cli nano make gcc python3.12-devel unzip git \
 	rsync wget nginx bind-utils policycoreutils-python-utils \
 	packer supervisor python3-certbot-nginx jq
 curl --silent --show-error --location https://github.com/mikefarah/yq/releases/download/v4.13.4/yq_linux_amd64 --output /usr/local/bin/yq

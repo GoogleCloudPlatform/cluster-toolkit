@@ -1120,14 +1120,14 @@ func TestGetMachineType(t *testing.T) {
 							{
 								ID: config.ModuleID("gke_cluster"),
 								Settings: config.NewDict(map[string]cty.Value{
-									"system_node_pool_machine_type": cty.StringVal("e2-standard-16"),
+									"system_node_pool_machine_type": cty.StringVal("n2d-standard-16"),
 								}),
 							},
 						},
 					},
 				},
 			},
-			want: "e2-standard-16",
+			want: "n2d-standard-16",
 		},
 		{
 			name: "Extracts default machine_type when omitted from blueprint",

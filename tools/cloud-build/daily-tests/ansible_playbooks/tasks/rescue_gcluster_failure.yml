@@ -37,7 +37,7 @@
   ansible.builtin.include_tasks:
     file: cleanup_existing_psa.yml
   vars:
-    psa_network: "{{ actual_network | default(network) }}"
+    psa_network: "{{ actual_network | default(network | default('')) }}"
 
 - name: Destroy block
   block:

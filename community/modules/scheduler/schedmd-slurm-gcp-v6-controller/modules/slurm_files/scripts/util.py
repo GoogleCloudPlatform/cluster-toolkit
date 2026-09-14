@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Union
+from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Union, Set
 import argparse
 import base64
 from dataclasses import dataclass, field
@@ -312,13 +312,13 @@ class Instance:
       resource_status=InstanceResourceStatus.from_json(jo.get("resourceStatus")),
       scheduling=NSDict(jo.get("scheduling")),
       role = jo.get("labels", {}).get("slurm_instance_role"),
-      metadata = {k["key"]: k["value"] for k in jo.get("metadata", {}).get("items", [])}
+      metadata = {k["key"]: k["value"] for k in jo.get("metadata", {}).get("items", [])},
     )
 
 
 @dataclass(frozen=True)
 class NSMount:
-    server_ip: str
+    server_ip: Optional[str]
     local_mount: Path
     remote_mount: Path
     fs_type: str
@@ -672,10 +672,24 @@ def compute_service(version="beta"):
         return googleapiclient.http.HttpRequest(new_http, *args, **kwargs)
 
     ver = endpoint_version(ApiEndpoint.COMPUTE)
-    disc_url = googleapiclient.discovery.DISCOVERY_URI
     if ver:
         version = ver
-        disc_url = disc_url.replace(DEFAULT_UNIVERSE_DOMAIN, universe_domain())
+
+    ud = universe_domain()
+    if ud and ud != DEFAULT_UNIVERSE_DOMAIN:
+        discovery_opts = dict(
+            client_options=ClientOptions(
+                api_endpoint=f"https://compute.{ud}/compute/{version}/",
+                universe_domain=ud,
+            ),
+            static_discovery=True,
+        )
+    else:
+        discovery_opts = dict(
+            discoveryServiceUrl=googleapiclient.discovery.DISCOVERY_URI,
+            static_discovery=False,
+            cache_discovery=False, # See https://github.com/googleapis/google-api-python-client/issues/299
+        )
 
     log.debug(f"Using version={version} of Google Compute Engine API")
     return googleapiclient.discovery.build(
@@ -684,8 +698,7 @@ def compute_service(version="beta"):
         requestBuilder=build_request,
         credentials=credentials,
         developerKey=dev_key,
-        discoveryServiceUrl=disc_url,
-        cache_discovery=False, # See https://github.com/googleapis/google-api-python-client/issues/299
+        **discovery_opts,
     )
 
 def storage_client() -> storage.Client:
@@ -693,11 +706,14 @@ def storage_client() -> storage.Client:
     Config-independent storage client
     """
     ud = universe_domain()
-    # Check if we need a custom universe domain, otherwise pass None
+    api_endpoint = f"https://storage.{ud}" if (ud and ud != DEFAULT_UNIVERSE_DOMAIN) else None
     universe_domain_val = ud if (ud and ud != DEFAULT_UNIVERSE_DOMAIN) else None
-    
+
     return storage.Client(
-        client_options=ClientOptions(universe_domain=universe_domain_val)
+        client_options=ClientOptions(
+            api_endpoint=api_endpoint,
+            universe_domain=universe_domain_val,
+        )
     )
 
 
@@ -1440,6 +1456,23 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
     """execute list or dict<req_id, request> as batch requests
     retry if retry_cb returns true
     """
+    # Custom universe domains (GCD / Sovereign Cloud) do not support BatchHttpRequest.
+    if universe_domain() != DEFAULT_UNIVERSE_DOMAIN:
+        assert retry_cb is None, "retry_cb not supported for non-default universe domains"
+        if not isinstance(requests, dict):
+            requests = {str(k): v for k, v in enumerate(requests)}
+        done, failed = {}, {}
+        with ThreadPoolExecutor(max_workers=32) as exe:
+            future_to_rid = {exe.submit(ensure_execute, req): rid for rid, req in requests.items()}
+            for future in as_completed(future_to_rid):
+                rid = future_to_rid[future]
+                try:
+                    done[rid] = future.result()
+                except Exception as e:
+                    log_err(f"compute request exception {rid}: {e}")
+                    failed[rid] = (requests[rid], e)
+        return done, failed
+
     BATCH_LIMIT = 1000
     if not isinstance(requests, dict):
         requests = {str(k): v for k, v in enumerate(requests)}  # rid generated here
@@ -1641,11 +1674,13 @@ class Lookup:
 
     @property
     def control_host(self):
-        return self.cfg.slurm_control_host
-
+        return (
+            self.cfg.slurm_control_host
+            or (self.hostname if self.is_controller else f"{self.cfg.slurm_cluster_name}-controller")
+        )
     @cached_property
     def control_host_addr(self):
-        return self.control_addr or host_lookup(self.cfg.slurm_control_host)
+        return self.control_addr or (host_lookup(self.control_host) if self.control_host else None)
 
     @property
     def control_host_port(self):
@@ -1775,6 +1810,38 @@ class Lookup:
 
     def nodeset_is_tpu(self, nodeset_name=None) -> bool:
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
+
+    def is_nodeset_mig(self, nodeset_name: str) -> bool:
+        """Returns True if a specific NodeSet is configured with or resolved to MIG."""
+        nodeset = self.cfg.nodeset.get(nodeset_name)
+        if not nodeset:
+            return False
+        if getattr(nodeset, "dws_flex", None) and getattr(nodeset.dws_flex, "enabled", False):
+            return False
+        engine = getattr(nodeset, "provisioning_engine", None)
+        if engine == "BULK_INSERT":
+            return False
+        if engine == "MIG":
+            return True
+        if getattr(nodeset, "mig_name", None) is not None:
+            return True
+        return False
+
+    def is_node_mig(self, node_name: str) -> bool:
+        """Returns True if the node belongs to a MIG-backed NodeSet."""
+        nodeset_name = self.node_nodeset_name(node_name)
+        return self.is_nodeset_mig(nodeset_name)
+
+    def mig_name(self, nodeset_name: str, index: int = 0) -> str:
+        """Returns target MIG name for a given NodeSet, indexed from 0 for consistent scale expansion."""
+        return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-mig-{index}"
+
+    def node_mig_name(self, node_name: str) -> str:
+        """Returns the specific MIG name for a given node."""
+        nodeset_name = self.node_nodeset_name(node_name)
+        idx = self.node_index(node_name)
+        mig_idx = idx // 1000
+        return self.mig_name(nodeset_name, index=mig_idx)
 
     def node_is_fr(self, node_name:str) -> bool:
         return bool(self.node_nodeset(node_name).future_reservation)
@@ -1976,18 +2043,50 @@ class Lookup:
             project=project, zone=zone, reservation=name).execute()
 
     @lru_cache()
-    def get_mig(self, project: str, region: str, self_link:str) -> Any:
+    def get_mig(self, project: str, region: str, self_link: str) -> Any:
         """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
-        return self.compute.regionInstanceGroupManagers().get(project=project, region=region, instanceGroupManager=self_link).execute()
+        req = self.compute.regionInstanceGroupManagers().get(project=project, region=region, instanceGroupManager=self_link)
+        return ensure_execute(req)
 
-    @lru_cache
-    def get_mig_instances(self, project: str, region: str, self_link:str) -> Any:
-        return self.compute.regionInstanceGroupManagers().listManagedInstances(project=project, region=region, instanceGroupManager=self_link).execute() 
+    @lru_cache()
+    def get_mig_instances(self, project: str, region: str, self_link: str) -> Any:
+        """Returns all managed instances for a given MIG, handling pagination."""
+        all_instances = []
+        page_token = None
+        while True:
+            req = (
+                self.compute.regionInstanceGroupManagers()
+                .listManagedInstances(
+                    project=project,
+                    region=region,
+                    instanceGroupManager=self_link,
+                    pageToken=page_token,
+                )
+            )
+            res = ensure_execute(req)
+            all_instances.extend(res.get("managedInstances", []) if isinstance(res, dict) else [])
+            page_token = res.get("nextPageToken") if isinstance(res, dict) else None
+            if not page_token:
+                break
+        return {"managedInstances": all_instances}
+
+    @lru_cache()
+    def get_mig_repairing_instances(self, project: str, region: str, self_link: str) -> Set[str]:
+        """Returns the set of instance names currently in REPAIRING state in a given MIG."""
+        mig_insts = self.get_mig_instances(project, region, self_link)
+        repairing: Set[str] = set()
+        for m_inst in mig_insts.get("managedInstances", []):
+            if m_inst.get("currentAction") in ("REPAIRING", "RESTARTING", "RECREATING"):
+                name = m_inst.get("name") or (m_inst.get("instance") or "").split("/")[-1]
+                if name:
+                    repairing.add(name)
+        return repairing
 
     @lru_cache()
     def get_mig_list(self, project: str, region: str) -> Any:
         """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
-        return self.compute.regionInstanceGroupManagers().list(project=project, region=region).execute()
+        req = self.compute.regionInstanceGroupManagers().list(project=project, region=region)
+        return ensure_execute(req)
 
     @lru_cache()
     def _get_future_reservation(self, project:str, zone:str, name: str) -> Any:
@@ -2257,8 +2356,8 @@ class Lookup:
     def etc_dir(self) -> Path:
         return Path(self.cfg.output_dir or slurmdirs.etc)
 
-    def controller_mount_server_ip(self) -> str:
-        return self.control_addr or self.control_host
+    def controller_mount_server_ip(self) -> Optional[str]:
+        return self.control_addr or self.control_host or (self.hostname if self.is_controller else None)
 
     def normalize_ns_mount(self, ns: Union[dict, NSMount]) -> NSMount:
         if isinstance(ns, NSMount):
@@ -2320,13 +2419,14 @@ class Lookup:
     def is_provisioning_flex_node(self, node:str) -> bool:
         if not self.is_flex_node(node):
             return False
-        if self.instance(node) is not None:
+        short_name = node.split(".")[0]
+        if self.instance(short_name) is not None:
             return True
 
-        nodeset = self.node_nodeset(node)
+        nodeset = self.node_nodeset(short_name)
         zones = nodeset.zone_policy_allow
         assert len(zones) > 0
-        region = self.node_region(node)
+        region = self.node_region(short_name)
 
         potential_migs=[]
         mig_list=self.get_mig_list(self.project, region)
@@ -2335,17 +2435,24 @@ class Lookup:
             return False
 
         for mig in mig_list["items"]:
-            if not mig.get("instanceTemplate"): #possibly an old MIG
-                return False
-            if mig["instanceTemplate"] == self.node_template(node) and mig["currentActions"]["creating"] > 0:
+            template = mig.get("instanceTemplate") or (mig.get("versions", [{}])[0].get("instanceTemplate") if mig.get("versions") else None)
+            if not template:
+                continue
+            creating_count = mig.get("currentActions", {}).get("creating", 0) if mig.get("currentActions") else 0
+            if trim_self_link(template) == trim_self_link(self.node_template(short_name)) and creating_count > 0:
                 potential_migs.append(self.get_mig_instances(self.project, region, trim_self_link(mig["selfLink"])))
 
         if not potential_migs:
             return False
 
-        for instance_collection in potential_migs[0]["managedInstances"]:
-            if node in instance_collection["name"] and instance_collection["currentAction"]=="CREATING":
-                return True
+        for inst_group in potential_migs:
+            for instance_collection in inst_group.get("managedInstances", []):
+                inst_name = (
+                    instance_collection.get("name")
+                    or (instance_collection.get("instance") or "").split("/")[-1]
+                )
+                if short_name == inst_name and instance_collection.get("currentAction") == "CREATING":
+                    return True
         return False
     
     def cluster_regions(self) -> list[str]:

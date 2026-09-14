@@ -3,7 +3,6 @@ apiVersion: checkpointing.gke.io/v1
 kind: CheckpointConfiguration
 metadata:
   name: default
-  namespace: ${jsonencode(namespace)}
 spec:
 %{ if inMemoryVolumeSize != null && inMemoryVolumeSize != "" ~}
   inMemoryVolumeSize: ${jsonencode(inMemoryVolumeSize)}
