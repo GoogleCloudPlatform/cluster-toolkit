@@ -21,10 +21,13 @@ description: >
 compatibility: "Requires python3, gcluster, and Cluster Toolkit blueprints."
 metadata:
   author: GoogleCloudPlatform
-  status: stable
+  status: experimental
   domain: migration
 allowed-tools: Bash(python3:*,gcluster:*,kubectl:*,curl:*,cat:*,ls:*,find:*,git:*)
 ---
+
+> [!WARNING]
+> This skill is experimental. Always review generated blueprints and command translations before execution, and explicitly request confirmation for any mutating deployments.
 
 <!-- pymarkdown:disable heading-style,single-title -->
 
