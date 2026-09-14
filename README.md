@@ -50,7 +50,7 @@ For the easiest setup, download the appropriate bundle for your operating system
 
 #### Bundle compatibility matrix
 
-##### Execution platform (where the binary runs)
+The pre-built bundles are compiled for Linux and macOS execution environments and support the deployment of the following cluster operating systems.
 
 | Platform | Support Status | Notes |
 | :--- | :---: | :--- |
