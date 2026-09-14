@@ -57,7 +57,26 @@ ATTEMPT=1
 
 while true; do
 	echo "=== ATTEMPT $ATTEMPT: Submitting Kueue Job ==="
-	kubectl apply -f /workspace/job.yaml
+
+	SUBMIT_RETRIES=3
+	SUBMIT_ATTEMPT=1
+
+	while true; do
+		echo "Executing job submission (attempt ${SUBMIT_ATTEMPT}/${SUBMIT_RETRIES})..."
+
+		if kubectl apply -f /workspace/job.yaml; then
+			break
+		fi
+
+		if ((SUBMIT_ATTEMPT >= SUBMIT_RETRIES)); then
+			echo "ERROR: Failed to apply job manifest after ${SUBMIT_RETRIES} attempts." >&2
+			exit 1
+		fi
+
+		echo "WARNING: kubectl apply failed. Retrying in 5s..." >&2
+		sleep 5
+		SUBMIT_ATTEMPT=$((SUBMIT_ATTEMPT + 1))
+	done
 
 	set +e
 	(
