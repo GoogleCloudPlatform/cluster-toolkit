@@ -1118,7 +1118,6 @@ def test_slurmsync_mig_auto_repair(mock_lookup, mock_compute_prop, mock_inst):
                 assert isinstance(action_recovered_fqdn, slurmsync.NodeActionIdle)
                 mock_get_reason.assert_called_with("testcl-ns-2")
 
-
 def test_is_target_controller_up_hostname_containing_role():
     line = "Slurmctld(backup) at primary-cluster-controller-1 is UP"
     assert util._is_target_controller_up(line, "primary") is False
@@ -1567,7 +1566,6 @@ def _mk_tpu_tpl(machine_name: str):
         ("n1-standard-4", None, None, 1),
     ],
 )
-
 def test_node_tpu_info_and_chunk_size(
     machine_type, topology, expected_type, expected_chunk_size
 ):
@@ -1581,16 +1579,17 @@ def test_node_tpu_info_and_chunk_size(
     lkp.template_info = Mock(return_value=_mk_tpu_tpl(machine_type))
     if expected_type is ValueError:
         with pytest.raises(ValueError, match="Unsupported TPU machine type"):
-            lkp.node_tpu_info(ns) # type: ignore[arg-type]
+            lkp.node_tpu_info(ns)  # type: ignore[arg-type]
     elif expected_type is None:
-        assert lkp.node_tpu_info(ns) is None # type: ignore[arg-type]
-        assert lkp.get_tpu_chunk_size(ns) == expected_chunk_size # type: ignore[arg-type]
+        assert lkp.node_tpu_info(ns) is None  # type: ignore[arg-type]
+        assert lkp.get_tpu_chunk_size(ns) == expected_chunk_size  # type: ignore[arg-type]
     else:
-        info = lkp.node_tpu_info(ns) # type: ignore[arg-type]
+        info = lkp.node_tpu_info(ns)  # type: ignore[arg-type]
         assert info is not None
         assert info.type == expected_type
         assert info.tpus_per_node == 4
-        assert lkp.get_tpu_chunk_size(ns) == expected_chunk_size # type: ignore[arg-type]
+        assert lkp.get_tpu_chunk_size(ns) == expected_chunk_size  # type: ignore[arg-type]
+
 
 def test_tpu_lookup_and_device_constrain():
     from common import TstPartition
@@ -1645,9 +1644,9 @@ def test_tpu_lookup_and_device_constrain():
     assert lkp.is_tpu_dynamic_nodeset("tpu7xd") is True
 
     assert lkp.is_tpu_nodeset("cpu") is False
-    assert lkp.is_tpu_static_partition(cfg.partitions["p_static"]) is True # type: ignore[arg-type]
-    assert lkp.is_tpu_dynamic_partition(cfg.partitions["p_dyn"]) is True # type: ignore[arg-type]
-    assert lkp.is_tpu_partition(cfg.partitions["p_cpu"]) is False # type: ignore[arg-type]
+    assert lkp.is_tpu_static_partition(cfg.partitions["p_static"]) is True  # type: ignore[arg-type]
+    assert lkp.is_tpu_dynamic_partition(cfg.partitions["p_dyn"]) is True  # type: ignore[arg-type]
+    assert lkp.is_tpu_partition(cfg.partitions["p_cpu"]) is False  # type: ignore[arg-type]
 
     assert lkp.remove_device_constrain_nodeset("v6es") is False
     assert lkp.remove_device_constrain_nodeset("tpu7xd") is True
@@ -1659,3 +1658,100 @@ def test_tpu_lookup_and_device_constrain():
         0: ["c-v6es-0", "c-v6es-1"],
         1: ["c-v6es-2", "c-v6es-3"],
     }
+
+
+# ==============================================================================
+# Tests for to_leaf_name, trim_self_link, and get_operation_req
+# ==============================================================================
+
+
+@pytest.mark.parametrize(
+    "val,expected",
+    [
+        ("https://www.googleapis.com/compute/v1/projects/p/zones/us-central1-a", "us-central1-a"),
+        ("https://www.googleapis.com/compute/v1/projects/p/zones/us-central1-a/", "us-central1-a"),
+        ("https://www.googleapis.com/compute/v1/projects/p/zones/us-central1-a///", "us-central1-a"),
+        ("projects/p/regions/us-central1", "us-central1"),
+        ("us-central1-a", "us-central1-a"),
+        ("  us-central1-a/  ", "us-central1-a"),
+        ("  https://compute.googleapis.com/compute/v1/projects/p/zones/us-central1-a /  ", "us-central1-a"),
+        ("a", "a"),
+        ("//", ""),
+        (" / ", ""),
+        ("   ", ""),
+        ("", ""),
+        (None, ""),
+        ("///", ""),
+    ],
+)
+def test_to_leaf_name(val, expected):
+    assert util.to_leaf_name(val) == expected
+
+
+@pytest.mark.parametrize(
+    "link,expected",
+    [
+        ("https://www.googleapis.com/compute/v1/projects/p/regions/us-central1", "us-central1"),
+        ("https://www.googleapis.com/compute/v1/projects/p/regions/us-central1/", "us-central1"),
+        ("us-central1", "us-central1"),  # Previously raised Exception!
+        ("bare-resource-name", "bare-resource-name"),
+        ("", ""),
+    ],
+)
+def test_trim_self_link_idempotent(link, expected):
+    """Verify trim_self_link is non-throwing and idempotent on bare names."""
+    assert util.trim_self_link(link) == expected
+
+
+def test_get_operation_req_zonal():
+    lkp = unittest.mock.MagicMock()
+    lkp.project = "test-project"
+
+    # Full selfLink with trailing slash
+    util.get_operation_req(
+        lkp,
+        "https://compute.googleapis.com/compute/v1/projects/p/zones/us-central1-a/operations/op-123/",
+        zone="https://compute.googleapis.com/compute/v1/projects/p/zones/us-central1-a/",
+    )
+    lkp.compute.zoneOperations().get.assert_called_with(
+        project="test-project", zone="us-central1-a", operation="op-123"
+    )
+
+    # Bare zone name
+    util.get_operation_req(lkp, "op-456", zone="us-east1-b")
+    lkp.compute.zoneOperations().get.assert_called_with(
+        project="test-project", zone="us-east1-b", operation="op-456"
+    )
+
+
+def test_get_operation_req_regional():
+    lkp = unittest.mock.MagicMock()
+    lkp.project = "test-project"
+
+    util.get_operation_req(
+        lkp, "op-789", region="https://.../regions/europe-west4/"
+    )
+    lkp.compute.regionOperations().get.assert_called_with(
+        project="test-project", region="europe-west4", operation="op-789"
+    )
+
+
+def test_get_operation_req_global():
+    lkp = unittest.mock.MagicMock()
+    lkp.project = "test-project"
+
+    util.get_operation_req(lkp, "op-global")
+    lkp.compute.globalOperations().get.assert_called_with(
+        project="test-project", operation="op-global"
+    )
+
+
+def test_get_operation_req_empty_name():
+    lkp = unittest.mock.MagicMock()
+    lkp.project = "test-project"
+
+    with pytest.raises(ValueError, match="Invalid operation name"):
+        util.get_operation_req(lkp, "")
+
+    with pytest.raises(ValueError, match="Invalid operation name"):
+        util.get_operation_req(lkp, "   ///   ")
