@@ -69,17 +69,19 @@ This section guides you through the cluster creation process, ensuring that your
    * `machine_type`: the machine type of the TPU.
    * `tpu_topology`: the TPU placement topology for pod slice node pool.
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine to call Terraform.
-   * `reservation`: the name of the compute engine reservation of TPU v6e nodes.
+   * `reservation_affinity`: the reservation settings (by default, specify the reservation name under Option 1, or uncomment an alternative consumption model such as DWS Flex Start, DWS Flex Start + Queued Provisioning, Spot, or On-Demand).
 
     > **Note:** The `static_node_count` is now automatically calculated from `machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`.
 
     To modify advanced settings, edit `examples/gke-tpu-v6e/gke-tpu-v6e.yaml`.
 
-1. To use on-demand capacity, you can remove the reservation usage by making the following changes.
-   1. Remove the `reservation` variable from the [`gke-tpu-v6e-deployment.yaml`](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml) file.
-   1. Remove the `reservation_affinity` block from the nodepool module.
+1. Choose a consumption model. The deployment file lists five mutually exclusive options; Option 1 (Specific Reservation) is active by default. To use a different one, comment out Option 1 and uncomment the option you want:
 
-1. To utilize spot instances, remove the reservation variable from gke-tpu-v6e-deployment.yaml and add spot: true. In gke-tpu-v6e.yaml, replace the reservation_affinity block under gke-tpu-v6e-pool module with spot: $(vars.spot)
+   * **Option 1 - Specific Reservation:** consume capacity from a named Compute Engine reservation.
+   * **Option 2 - DWS Flex Start:** request capacity through Dynamic Workload Scheduler. Set `autoscaling_max_node_count` to the node count implied by your topology.
+   * **Option 3 - DWS Flex Start + Queued Provisioning:** as above, with jobs queued through Kueue. Also uncomment `kueue_configuration_path`.
+   * **Option 4 - Spot:** consume pre-emptible Spot capacity.
+   * **Option 5 - On-Demand:** consume standard on-demand capacity.
 
 1. Generate [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp) to provide access to Terraform.
 
