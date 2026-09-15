@@ -1,0 +1,116 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: readiness-${stage}
+  namespace: ${namespace}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: readiness-${stage}
+  namespace: ${namespace}
+rules:
+- apiGroups: ["gateway.networking.k8s.io"]
+  resources: [gateways, httproutes]
+  verbs: [get, list]
+- apiGroups: [agentgateway.dev]
+  resources: [agentgatewaybackends]
+  verbs: [get, list]
+- apiGroups: [apps]
+  resources: [deployments]
+  verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: readiness-${stage}
+  namespace: ${namespace}
+subjects:
+- kind: ServiceAccount
+  name: readiness-${stage}
+  namespace: ${namespace}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: readiness-${stage}
+%{ if stage == "gateway-api" ~}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ${namespace}-gateway-api-ready
+rules:
+- apiGroups: [apiextensions.k8s.io]
+  resources: [customresourcedefinitions]
+  resourceNames:
+  - gateways.gateway.networking.k8s.io
+  - httproutes.gateway.networking.k8s.io
+  - gatewayclasses.gateway.networking.k8s.io
+  verbs: [get]
+- apiGroups: [gateway.networking.k8s.io]
+  resources: [gatewayclasses]
+  resourceNames: [gke-l7-rilb]
+  verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ${namespace}-gateway-api-ready
+subjects:
+- kind: ServiceAccount
+  name: readiness-gateway-api
+  namespace: ${namespace}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ${namespace}-gateway-api-ready
+%{ endif ~}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: readiness-${stage}
+  namespace: ${namespace}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: readiness-${stage}
+      restartPolicy: Never
+      containers:
+      - name: wait
+        image: python:3.12.12-slim
+        command: [python3, -u, -c]
+        args:
+        - |
+          ${indent(10, script)}
+        env:
+        - name: NAMESPACE
+          value: ${namespace}
+        - name: STAGE
+          value: ${stage}
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
