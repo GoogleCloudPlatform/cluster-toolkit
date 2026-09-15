@@ -1,0 +1,229 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: agentgateway-gke
+
+vars:
+  project_id: # Set your project ID.
+  deployment_name: # Use a unique name of at most 20 characters.
+  # Google Cloud region for the cluster, subnets and internal load balancer.
+  region: us-central1
+  authorized_cidr: # Deployment runner public IP, for example 203.0.113.1/32.
+  # Select a GKE version matching this prefix in the REGULAR release channel.
+  gke_version_prefix: "1.35."
+  # Helm chart version shared by agentgateway-crds and agentgateway.
+  agentgateway_version: v1.5.0
+  # Model inference endpoint location that is independent of the cluster's region.
+  vertex_location: global
+  # Gemini model used by the gateway, overriding the request's model field.
+  vertex_model: gemini-2.5-flash
+  # Kubernetes namespace for the controller, proxy, routes and provider secrets.
+  namespace: agentgateway-system
+
+  # Create node/proxy service accounts and their IAM roles/bindings. Set false
+  # to use administrator-provisioned accounts without creating or updating IAM.
+  # See README.md "Use existing service accounts" for the required permissions.
+  create_service_accounts: true
+  # Existing Google service account for GKE nodes. Required when
+  # create_service_accounts is false; must remain empty when true.
+  node_service_account_email: ""
+  # Existing Google service account for proxy access to Gemini models through
+  # Workload Identity. Required when create_service_accounts is false;
+  # must remain empty when true.
+  proxy_service_account_email: ""
+
+  # Existing Opaque secrets in namespace, each with an Authorization key.
+  # Supply secret names, not API keys; leave empty to disable that provider.
+  openai_secret_name: ""
+  anthropic_secret_name: ""
+
+deployment_groups:
+- group: infrastructure
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings:
+      ips_per_nat: 1
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-subnet
+        subnet_region: $(vars.region)
+        subnet_ip: 10.1.0.0/20
+        subnet_private_access: "true"
+      - subnet_name: $(vars.deployment_name)-proxy
+        subnet_region: $(vars.region)
+        subnet_ip: 10.1.16.0/24
+        purpose: REGIONAL_MANAGED_PROXY
+        role: ACTIVE
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-subnet
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+
+  - id: identity
+    source: community/modules/project/agentgateway-identity
+    settings:
+      create_service_accounts: $(vars.create_service_accounts)
+      node_service_account_email: $(vars.node_service_account_email)
+      proxy_service_account_email: $(vars.proxy_service_account_email)
+
+  - id: vertex_permissions
+    source: community/modules/project/vertex-ai-prediction
+    settings:
+      enabled: $(vars.create_service_accounts)
+      service_account_email: $(identity.proxy_service_account_email)
+
+  - id: cluster
+    source: modules/scheduler/gke-cluster
+    use: [network]
+    settings:
+      version_prefix: $(vars.gke_version_prefix)
+      release_channel: REGULAR
+      service_account_email: $(identity.node_service_account_email)
+      enable_gateway_api: true
+      enable_inference_gateway: false
+      # This CPU-only cluster does not need GPU metrics. Match GKE's returned
+      # component order to avoid repeated Terraform updates for list ordering.
+      # Shared-module issue: https://github.com/GoogleCloudPlatform/cluster-toolkit/issues/6331
+      enable_dcgm_monitoring: false
+      monitoring_components:
+      - SYSTEM_COMPONENTS
+      - STORAGE
+      - HPA
+      - POD
+      - DAEMONSET
+      - DEPLOYMENT
+      - STATEFULSET
+      - CADVISOR
+      - KUBELET
+      - JOBSET
+      enable_private_nodes: true
+      enable_private_endpoint: false
+      gcp_public_cidrs_access_enabled: false
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr)
+        display_name: deployment-runner
+      system_node_pool_machine_type: e2-standard-4
+      system_node_pool_disk_type: pd-balanced
+      system_node_pool_disk_size_gb: 50
+      system_node_pool_node_count:
+        total_min_nodes: 1
+        total_max_nodes: 2
+      system_node_pool_taints: []
+    outputs: [instructions]
+
+  - id: load_balancer_firewall
+    source: modules/network/firewall-rules
+    use: [network]
+    settings:
+      ingress_rules:
+      - name: $(vars.deployment_name)-gateway-proxy
+        source_ranges: [10.1.16.0/24, 35.191.0.0/16, 130.211.0.0/22]
+        target_service_accounts: [$(identity.node_service_account_email)]
+        allow:
+        - protocol: tcp
+          ports: ["8080", "15021"]
+
+- group: controller
+  modules:
+  - id: gateway_api_ready
+    source: modules/management/kubectl-apply
+    use: [cluster]
+    settings:
+      apply_manifests:
+      - source: $(ghpc_stage("./files/readiness.yaml.tftpl"))
+        name: gateway-api-ready
+        namespace: $(vars.namespace)
+        template_vars:
+          namespace: $(vars.namespace)
+          stage: gateway-api
+          script: $(file(ghpc_stage("./files/readiness.py")))
+
+  - id: agentgateway_crds
+    source: community/modules/management/direct-helm-install
+    use: [cluster]
+    settings:
+      release_name: agentgateway-crds
+      namespace: $(vars.namespace)
+      chart_name: oci://cr.agentgateway.dev/charts/agentgateway-crds
+      chart_version: $(vars.agentgateway_version)
+      dependencies: [$(tostring(gateway_api_ready.k8s_prerequisites_ready))]
+
+  - id: agentgateway_controller
+    source: community/modules/management/direct-helm-install
+    use: [cluster]
+    settings:
+      release_name: agentgateway
+      namespace: $(vars.namespace)
+      chart_name: oci://cr.agentgateway.dev/charts/agentgateway
+      chart_version: $(vars.agentgateway_version)
+      dependencies: [$(agentgateway_crds.release_completion_id)]
+      atomic: true
+      timeout: 900
+      values_yaml:
+      - |
+        controller:
+          extraEnv:
+            AGW_ENABLE_EXPERIMENTAL_GATEWAY_API_FEATURES: "false"
+        inferenceExtension:
+          enabled: false
+
+- group: gateway
+  modules:
+  - id: gateway_configuration
+    source: modules/management/kubectl-apply
+    use: [cluster]
+    settings:
+      apply_manifests:
+      - source: $(ghpc_stage("./files/gateway.yaml.tftpl"))
+        name: agentgateway-configuration
+        namespace: $(vars.namespace)
+        template_vars:
+          namespace: $(vars.namespace)
+          service_account: $(identity.proxy_service_account_email)
+          project_id: $(vars.project_id)
+          vertex_location: $(vars.vertex_location)
+          vertex_model: $(vars.vertex_model)
+          openai_secret_name: $(vars.openai_secret_name)
+          anthropic_secret_name: $(vars.anthropic_secret_name)
+      - source: $(ghpc_stage("./files/readiness.yaml.tftpl"))
+        name: agentgateway-ready
+        namespace: $(vars.namespace)
+        template_vars:
+          namespace: $(vars.namespace)
+          stage: gateway
+          script: $(file(ghpc_stage("./files/readiness.py")))
+
+- group: ingress
+  modules:
+  - id: internal_ingress
+    source: modules/management/kubectl-apply
+    use: [cluster]
+    settings:
+      apply_manifests:
+      - source: $(ghpc_stage("./files/ingress.yaml.tftpl"))
+        name: agentgateway-ingress
+        namespace: $(vars.namespace)
+        template_vars:
+          namespace: $(vars.namespace)
+      - source: $(ghpc_stage("./files/readiness.yaml.tftpl"))
+        name: ingress-ready
+        namespace: $(vars.namespace)
+        template_vars:
+          namespace: $(vars.namespace)
+          stage: ingress
+          script: $(file(ghpc_stage("./files/readiness.py")))

@@ -1,0 +1,158 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayParameters
+metadata:
+  name: agentgateway-proxy
+  namespace: ${namespace}
+spec:
+  service:
+    spec:
+      type: ClusterIP
+  serviceAccount:
+    metadata:
+      annotations:
+        iam.gke.io/gcp-service-account: ${service_account}
+  deployment:
+    spec:
+      replicas: 1
+      template:
+        spec:
+          containers:
+          - name: agentgateway
+            resources:
+              requests:
+                cpu: 250m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: agentgateway-proxy
+  namespace: ${namespace}
+spec:
+  gatewayClassName: agentgateway
+  infrastructure:
+    parametersRef:
+      group: agentgateway.dev
+      kind: AgentgatewayParameters
+      name: agentgateway-proxy
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 8080
+    allowedRoutes:
+      namespaces:
+        from: Same
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: vertex-ai
+  namespace: ${namespace}
+spec:
+  ai:
+    provider:
+      vertexai:
+        projectId: ${jsonencode(project_id)}
+        region: ${jsonencode(vertex_location)}
+        model: ${jsonencode(vertex_model)}
+  policies:
+    auth:
+      gcp:
+        type: AccessToken
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: vertex-ai
+  namespace: ${namespace}
+spec:
+  parentRefs:
+  - name: agentgateway-proxy
+    sectionName: http
+  rules:
+  - matches:
+    - path:
+        type: Exact
+        value: /v1/chat/completions
+    timeouts:
+      request: 300s
+    backendRefs:
+    - group: agentgateway.dev
+      kind: AgentgatewayBackend
+      name: vertex-ai
+%{ for provider, secret_name in {openai = openai_secret_name, anthropic = anthropic_secret_name} ~}
+%{ if secret_name != "" ~}
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: ${provider}
+  namespace: ${namespace}
+spec:
+  ai:
+    provider:
+      ${provider}: {}
+  policies:
+    auth:
+      secretRef:
+        name: ${jsonencode(secret_name)}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ${provider}
+  namespace: ${namespace}
+spec:
+  parentRefs:
+  - name: agentgateway-proxy
+    sectionName: http
+  rules:
+  - matches:
+    - path:
+        type: Exact
+        value: /${provider}/v1/chat/completions
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplaceFullPath
+          replaceFullPath: /v1/chat/completions
+    timeouts:
+      request: 300s
+    backendRefs:
+    - group: agentgateway.dev
+      kind: AgentgatewayBackend
+      name: ${provider}
+%{ endif ~}
+%{ endfor ~}
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: agentgateway-proxy
+  namespace: ${namespace}
+spec:
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: agentgateway-proxy
+  endpoints:
+  - port: 15020
+    path: /metrics
+    interval: 30s
