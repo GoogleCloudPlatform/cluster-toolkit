@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: hpc-slurm-ubuntu2204-v6
+blueprint_name: hpc-slurm-ubuntu2404-v6
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
@@ -24,7 +24,7 @@ vars:
   slurm_image:
     # Please refer to the following link for the latest images:
     # https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
-    family: aci-gpu-u2204-slurm-2511-cuda-130-nvidia-580-amd64
+    family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-amd64
     project: advanced-compute-images
 
 deployment_groups:

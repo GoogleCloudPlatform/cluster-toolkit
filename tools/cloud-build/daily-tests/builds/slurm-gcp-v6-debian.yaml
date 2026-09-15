@@ -125,7 +125,7 @@ steps:
               trap cleanup_pod EXIT SIGTERM SIGINT
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
-              BLUEPRINT="community/examples/hpc-slurm-ubuntu2204.yaml"
+              BLUEPRINT="community/examples/hpc-slurm-ubuntu2404.yaml"
               bash tools/add_ttl_label.sh \$$BLUEPRINT
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \

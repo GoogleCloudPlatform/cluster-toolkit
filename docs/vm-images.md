@@ -173,7 +173,7 @@ description of our support for Windows images.
   <td></td>
   <td>✓</td>
   <td><a href="../examples/hpc-slurm.yaml">✓</a></td>
-  <td><a href="../community/examples/hpc-slurm-ubuntu2204.yaml">✓</a></td>
+  <td><a href="../community/examples/hpc-slurm-ubuntu2404.yaml">✓</a></td>
 </tr>
 <tr>
   <th>Startup script</th>
@@ -282,7 +282,7 @@ These instructions apply to the following modules:
 [batch-job]: ../modules/scheduler/batch-job-template
 [batch-login]: ../modules/scheduler/batch-login-node
 [htcondor-setup]: ../community/modules/scheduler/htcondor-setup
-[hpc-slurm-ubuntu2204.yaml]: ../community/examples/hpc-slurm-ubuntu2204.yaml
+[hpc-slurm-ubuntu2404.yaml]: ../community/examples/hpc-slurm-ubuntu2404.yaml
 
 [htc-htcondor.yaml]: ../community/examples/htc-htcondor.yaml
 [vm-startup.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-startup.yaml
