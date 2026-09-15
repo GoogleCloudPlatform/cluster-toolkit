@@ -219,8 +219,12 @@ func TestAdditionalNetworks(t *testing.T) {
 
 	for p, ty := range queryInputFields("additional_networks", t) {
 		got := typeexpr.TypeString(ty)
-		if got != want && got != wantPSC {
-			t.Errorf("%s has unexpected type, got:\n%s\nwant either standard:\n%s\nor PSC-enabled:\n%s", p, got, want, wantPSC)
+		expected := want
+		if strings.Contains(string(p), "schedmd-slurm") {
+			expected = wantPSC
+		}
+		if got != expected {
+			t.Errorf("%s has unexpected type, got:\n%s\nwant:\n%s", p, got, expected)
 		}
 	}
 }

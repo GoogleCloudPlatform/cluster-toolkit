@@ -194,12 +194,19 @@ variable "nodeset" {
         for nic in(ns.additional_networks != null ? ns.additional_networks : []) : (
           # Cannot specify network or subnetwork alongside network_attachment
           !(((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "")) && (nic.network_attachment != null && nic.network_attachment != "")) &&
+          # Cannot specify subnetwork_project, access_config, ipv6_access_config, or alias_ip_range alongside network_attachment
+          (nic.network_attachment == null || nic.network_attachment == "" || (
+            (nic.subnetwork_project == null || nic.subnetwork_project == "") &&
+            length(try(nic.access_config, [])) == 0 &&
+            length(try(nic.ipv6_access_config, [])) == 0 &&
+            length(try(nic.alias_ip_range, [])) == 0
+          )) &&
           # Must specify at least one of network, subnetwork, or network_attachment
           ((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "") || (nic.network_attachment != null && nic.network_attachment != ""))
         )
       ]
     ]))
-    error_message = "In var.nodeset[*].additional_networks, you must specify at least one of 'network', 'subnetwork', or 'network_attachment'. You cannot specify 'network' or 'subnetwork' alongside 'network_attachment'."
+    error_message = "In var.nodeset[*].additional_networks, you must specify at least one of 'network', 'subnetwork', or 'network_attachment'. When 'network_attachment' is set, you cannot specify 'network', 'subnetwork', 'subnetwork_project', 'access_config', 'ipv6_access_config', or 'alias_ip_range'."
   }
 
   validation {
