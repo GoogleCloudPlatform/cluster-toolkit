@@ -76,6 +76,7 @@ func (g *GKEOrchestrator) SetExecutor(e Executor) {
 
 func (g *GKEOrchestrator) SetDynamicClient(c dynamic.Interface) {
 	g.dynClient = c
+	g.syncKubeClient()
 }
 
 func (g *GKEOrchestrator) SetKubeClient(c KubeClient) {
@@ -1781,9 +1782,7 @@ func (g *GKEOrchestrator) validateTargetNamespaceExists(job *orchestrator.JobDef
 }
 
 func (g *GKEOrchestrator) getKubeClient() KubeClient {
-	if g.kubeClient == nil {
-		g.kubeClient = &DefaultKubeClient{dynClient: g.dynClient}
-	}
+	g.syncKubeClient()
 	return g.kubeClient
 }
 
@@ -2000,8 +1999,27 @@ func (g *GKEOrchestrator) generateImagePullSecrets(secrets string) string {
 	return string(b)
 }
 
+func (g *GKEOrchestrator) syncKubeClient() {
+	if g.kubeClient == nil {
+		g.kubeClient = &DefaultKubeClient{dynClient: g.dynClient}
+	} else if defaultClient, ok := g.kubeClient.(*DefaultKubeClient); ok {
+		defaultClient.dynClient = g.dynClient
+	}
+}
+
+func (g *GKEOrchestrator) needsDynamicClientInit() bool {
+	if g.kubeClient == nil {
+		return true
+	}
+	if defaultClient, ok := g.kubeClient.(*DefaultKubeClient); ok {
+		return defaultClient.dynClient == nil
+	}
+	return false
+}
+
 func (g *GKEOrchestrator) getDynamicClient() (dynamic.Interface, error) {
 	if g.dynClient != nil {
+		g.syncKubeClient()
 		return g.dynClient, nil
 	}
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
@@ -2015,11 +2033,7 @@ func (g *GKEOrchestrator) getDynamicClient() (dynamic.Interface, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
 	}
-	if g.kubeClient == nil {
-		g.kubeClient = &DefaultKubeClient{dynClient: g.dynClient}
-	} else if defaultClient, ok := g.kubeClient.(*DefaultKubeClient); ok && defaultClient.dynClient == nil {
-		defaultClient.dynClient = g.dynClient
-	}
+	g.syncKubeClient()
 	return g.dynClient, nil
 }
 
@@ -2136,6 +2150,11 @@ func calculatePollInterval(timeout time.Duration) time.Duration {
 }
 
 func (g *GKEOrchestrator) findTargetWorkload(ns, workloadName string, timeout time.Duration) (string, error) {
+	if g.needsDynamicClientInit() {
+		if _, err := g.getDynamicClient(); err != nil {
+			return "", fmt.Errorf("kubernetes client is not initialized: %w", err)
+		}
+	}
 	if g.kubeClient == nil {
 		return "", fmt.Errorf("kubernetes client is not initialized")
 	}
@@ -2310,12 +2329,18 @@ func (g *GKEOrchestrator) buildTopologyAnnotation(topology string, machineType s
 
 // DeleteJobSet deletes a JobSet resource in the specified namespace.
 func (d *DefaultKubeClient) DeleteJobSet(namespace string, name string) error {
+	if d.dynClient == nil {
+		return fmt.Errorf("kubernetes dynamic client is not initialized")
+	}
 	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
 	return d.dynClient.Resource(gvr).Namespace(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
 }
 
 // ListWorkloads lists matching Kueue workloads in the specified namespace.
 func (d *DefaultKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
+	if d.dynClient == nil {
+		return nil, fmt.Errorf("kubernetes dynamic client is not initialized")
+	}
 	// First, retrieve the JobSet to get its UID
 	jobsetGVR := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
 	jobset, err := d.dynClient.Resource(jobsetGVR).Namespace(namespace).Get(context.TODO(), workloadName, metav1.GetOptions{})
@@ -2347,6 +2372,9 @@ func (d *DefaultKubeClient) ListWorkloads(namespace string, workloadName string)
 
 // ListJobSets retrieves job statuses for JobSets matching the given label selector in the namespace.
 func (d *DefaultKubeClient) ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error) {
+	if d.dynClient == nil {
+		return nil, fmt.Errorf("kubernetes dynamic client is not initialized")
+	}
 	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
 	list, err := d.dynClient.Resource(gvr).Namespace(namespace).List(context.Background(), metav1.ListOptions{
 		LabelSelector: labelSelector,

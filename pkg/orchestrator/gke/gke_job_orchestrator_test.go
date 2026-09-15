@@ -788,6 +788,7 @@ func TestFindTargetWorkload(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "nonexistent"))
 			mockKube := &MockKubeClient{
 				Workloads:          tt.mockWorkloads,
 				WorkloadsResponses: tt.mockWorkloadsResponses,
@@ -815,6 +816,39 @@ func TestFindTargetWorkload(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("Lazy initialization when kubeClient is nil or has nil dynClient", func(t *testing.T) {
+		mockDyn := &mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				obj := &unstructured.Unstructured{}
+				obj.SetUID(types.UID("jobset-uid-lazy"))
+				return obj, nil
+			},
+			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				wl := unstructured.Unstructured{}
+				wl.SetName("jobset-workload-lazy")
+				return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{wl}}, nil
+			},
+		}
+
+		// Case 1: kubeClient is nil, dynClient is set on orchestrator
+		orc1 := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc1.kubeClient = nil
+		orc1.dynClient = mockDyn
+		got1, err1 := orc1.findTargetWorkload("default", "test-workload", 50*time.Millisecond)
+		if err1 != nil || got1 != "jobset-workload-lazy" {
+			t.Errorf("findTargetWorkload with nil kubeClient = (%q, %v), want (%q, nil)", got1, err1, "jobset-workload-lazy")
+		}
+
+		// Case 2: kubeClient is DefaultKubeClient with nil dynClient, dynClient is set on orchestrator
+		orc2 := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc2.kubeClient = &DefaultKubeClient{dynClient: nil}
+		orc2.dynClient = mockDyn
+		got2, err2 := orc2.findTargetWorkload("default", "test-workload", 50*time.Millisecond)
+		if err2 != nil || got2 != "jobset-workload-lazy" {
+			t.Errorf("findTargetWorkload with nil DefaultKubeClient.dynClient = (%q, %v), want (%q, nil)", got2, err2, "jobset-workload-lazy")
+		}
+	})
 }
 
 func TestGetJobSetStatus(t *testing.T) {
