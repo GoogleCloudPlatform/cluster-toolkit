@@ -202,6 +202,12 @@ Modules that are still in development and less stable are labeled with the
 
 ### Project
 
+* **[agentgateway-identity](../community/modules/project/agentgateway-identity/README.md)** ![community-badge] ![experimental-badge]:
+  Creates agentgateway node and proxy identities, or uses existing accounts without IAM writes.
+
+* **[vertex-ai-prediction](../community/modules/project/vertex-ai-prediction/README.md)** ![community-badge] ![experimental-badge]:
+  Creates a custom role granting only Agent Platform prediction access to a service account.
+
 * **[service-account]** ![core-badge] : Creates [service
   accounts](https://cloud.google.com/iam/docs/service-accounts) for a GCP
   project.

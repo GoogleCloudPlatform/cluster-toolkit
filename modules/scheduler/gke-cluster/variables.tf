@@ -602,6 +602,12 @@ variable "enable_external_dns_endpoint" {
   default     = false
 }
 
+variable "enable_gateway_api" {
+  description = "Enable the GKE Standard Gateway API channel and HttpLoadBalancing addon without installing Inference Extension CRDs. Inference Gateway also enables these prerequisites independently of this setting."
+  type        = bool
+  default     = false
+}
+
 variable "enable_inference_gateway" {
   description = "If true, enables GKE features required for Inference Gateway, including the HttpLoadBalancing addon, and installs required CRDs."
   type        = bool
