@@ -93,18 +93,16 @@ spec:
                 {{- end }}
                 {{- end }}
                 volumeMounts:
-                - name: dshm-{{ .Name }}
+                - name: dshm
                   mountPath: /dev/shm
 {{- if $.VolumeMountsYAML }}
 {{(StructuralData $.VolumeMountsYAML)}}
 {{- end }}
               {{- end }}
               volumes:
-              {{- range .Containers }}
-              - name: dshm-{{ .Name }}
+              - name: dshm
                 emptyDir:
                   medium: Memory
-              {{- end }}
 {{- if .VolumesYAML }}
 {{(StructuralData .VolumesYAML)}}
 {{- end }}

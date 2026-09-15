@@ -486,8 +486,8 @@ func TestGenerateGKEManifest_DefaultDevShm(t *testing.T) {
 		t.Fatalf("GenerateGKEManifest failed: %v", err)
 	}
 
-	if !strings.Contains(manifest, "mountPath: /dev/shm") || !strings.Contains(manifest, "name: dshm-workload-container") {
-		t.Errorf("Expected /dev/shm volumeMount with name dshm-workload-container in manifest, got:\n%s", manifest)
+	if !strings.Contains(manifest, "mountPath: /dev/shm") || !strings.Contains(manifest, "name: dshm") {
+		t.Errorf("Expected /dev/shm volumeMount with name dshm in manifest, got:\n%s", manifest)
 	}
 	if !strings.Contains(manifest, "medium: Memory") {
 		t.Errorf("Expected emptyDir with medium: Memory in manifest, got:\n%s", manifest)
@@ -538,10 +538,16 @@ func TestGenerateGKEManifest_DefaultDevShm_ParallelContainers(t *testing.T) {
 		t.Fatalf("GenerateGKEManifest failed: %v", err)
 	}
 
-	if !strings.Contains(manifest, "name: dshm-workload-container-1") {
-		t.Errorf("Expected dshm-workload-container-1 in manifest, got:\n%s", manifest)
+	// Verify that both containers share the single dshm volume.
+	dshmCount := strings.Count(manifest, "name: dshm")
+	// Expected: 2 container volumeMounts + 1 pod volume definition = 3 occurrences
+	if dshmCount != 3 {
+		t.Errorf("Expected exactly 3 occurrences of 'name: dshm' (2 container mounts + 1 volume), got %d in manifest:\n%s", dshmCount, manifest)
 	}
-	if !strings.Contains(manifest, "name: dshm-workload-container-2") {
-		t.Errorf("Expected dshm-workload-container-2 in manifest, got:\n%s", manifest)
+	if !strings.Contains(manifest, "mountPath: /dev/shm") {
+		t.Errorf("Expected mountPath: /dev/shm in manifest, got:\n%s", manifest)
+	}
+	if !strings.Contains(manifest, "medium: Memory") {
+		t.Errorf("Expected emptyDir with medium: Memory in manifest, got:\n%s", manifest)
 	}
 }
