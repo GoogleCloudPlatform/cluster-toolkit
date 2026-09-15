@@ -14,7 +14,7 @@
 
 ---
 
-test_name: hpc-slurm-v6-ubuntu2204
+test_name: hpc-slurm-v6-ubuntu2404
 deployment_name: "ubun-v6-{{ build }}"
 # Manually adding the slurm_cluster_name for use in node names, which filters
 # non-alphanumeric chars and is capped at 10 chars.
