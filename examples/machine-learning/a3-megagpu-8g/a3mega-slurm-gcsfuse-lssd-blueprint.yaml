@@ -613,7 +613,7 @@ deployment_groups:
         content: |
           #!/bin/bash
           # IMPORTANT: This script should be run *last* in any sequence of setup steps
-          # that use 'gcloud storage' or other gcloud commands.
+          # that use 'gcloud' commands (such as 'gcloud storage').
           # This is because removing the Snap version of the GCloud SDK can temporarily
           # break existing 'gcloud' paths, which might disrupt other scripts still running
           # that rely on the Snap-installed version.
