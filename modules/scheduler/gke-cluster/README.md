@@ -101,6 +101,18 @@ The current implementations has the following limitations:
 - General addon configuration is not supported
 - Only regional cluster is supported
 
+### Gateway API
+
+Set `enable_gateway_api: true` to enable the GKE Standard
+[Gateway API](https://gateway-api.sigs.k8s.io/) channel
+and the `HttpLoadBalancing` addon without installing
+[Inference Extension](https://gateway-api-inference-extension.sigs.k8s.io/) CRDs.
+GKE requires the `HttpLoadBalancing` addon for its managed Gateway controller;
+see [Deploying Gateways](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/deploying-gateways#before_you_begin).
+You can also install other Gateway API controllers, including agentgateway.
+This setting does not install agentgateway. Since GKE owns the Gateway API CRDs,
+do not replace them with separately managed manifests.
+
 ### GKE Inference Gateway
 
 Setting `enable_inference_gateway` to `true` will enable the `HttpLoadBalancing`
@@ -199,6 +211,7 @@ limitations under the License.
 | <a name="input_enable_external_dns_endpoint"></a> [enable\_external\_dns\_endpoint](#input\_enable\_external\_dns\_endpoint) | Allow [DNS-based approach](https://cloud.google.com/kubernetes-engine/docs/concepts/network-isolation#dns-based_endpoint) for accessing the GKE control plane.<br/>Refer this [dedicated blog](https://cloud.google.com/blog/products/containers-kubernetes/new-dns-based-endpoint-for-the-gke-control-plane) for more details. | `bool` | `false` | no |
 | <a name="input_enable_filestore_csi"></a> [enable\_filestore\_csi](#input\_enable\_filestore\_csi) | The status of the Filestore Container Storage Interface (CSI) driver addon, which allows the usage of filestore instance as volumes. | `bool` | `false` | no |
 | <a name="input_enable_fqdn_network_policy"></a> [enable\_fqdn\_network\_policy](#input\_enable\_fqdn\_network\_policy) | Enable FQDN Network Policy on the cluster. This feature requires GKE Dataplane V2 to be enabled. | `bool` | `false` | no |
+| <a name="input_enable_gateway_api"></a> [enable\_gateway\_api](#input\_enable\_gateway\_api) | Enable the GKE Standard Gateway API channel and HttpLoadBalancing addon without installing Inference Extension CRDs. Inference Gateway also enables these prerequisites independently of this setting. | `bool` | `false` | no |
 | <a name="input_enable_gcfs"></a> [enable\_gcfs](#input\_enable\_gcfs) | Enable the Google Container Filesystem (GCFS) for Image Streaming at the cluster level. | `bool` | `false` | no |
 | <a name="input_enable_gcsfuse_csi"></a> [enable\_gcsfuse\_csi](#input\_enable\_gcsfuse\_csi) | The status of the GCSFuse Container Storage Interface (CSI) driver addon, which allows the usage of a GCS bucket as volumes. | `bool` | `false` | no |
 | <a name="input_enable_inference_gateway"></a> [enable\_inference\_gateway](#input\_enable\_inference\_gateway) | If true, enables GKE features required for Inference Gateway, including the HttpLoadBalancing addon, and installs required CRDs. | `bool` | `false` | no |
