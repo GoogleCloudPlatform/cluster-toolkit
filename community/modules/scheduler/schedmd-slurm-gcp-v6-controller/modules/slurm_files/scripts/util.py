@@ -479,15 +479,36 @@ def get_template_gpu(template):
     return gpu
 
 
-def trim_self_link(link: str):
-    """get resource name from self link url, eg.
+def to_leaf_name(val: Optional[str]) -> str:
+    """Extract leaf resource name from a self-link, URL path, or bare name.
+
+    Strips leading/trailing whitespace, trailing slashes, and extracts the
+    rightmost path segment. Idempotent on already-trimmed names. Safe on empty
+    or None inputs.
+
+    Examples:
+        'https://.../zones/us-central1-a' -> 'us-central1-a'
+        'https://.../zones/us-central1-a/' -> 'us-central1-a'
+        'us-central1-a' -> 'us-central1-a'
+        '  us-central1-a/  ' -> 'us-central1-a'
+        '///' -> ''
+        '' -> ''
+        None -> ''
+    """
+    if not val:
+        return ""
+    cleaned = str(val).strip().rstrip("/").strip()
+    if not cleaned:
+        return ""
+    return cleaned.rsplit("/", 1)[-1].strip()
+
+
+def trim_self_link(link: str) -> str:
+    """get resource name from self link url or bare name, eg.
     https://.../v1/projects/<project>/regions/<region>
     -> <region>
     """
-    try:
-        return link[link.rindex("/") + 1 :]
-    except ValueError:
-        raise Exception(f"'/' not found, not a self link: '{link}' ")
+    return to_leaf_name(link)
 
 
 def get_self_link_component(link: str, component_name: str):
@@ -1529,12 +1550,30 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
     return done, failed
 
 
-def get_operation_req(lkp: "Lookup", name: str, region: Optional[str]=None, zone: Optional[str]=None) -> Any:
-  if zone:
-    return lkp.compute.zoneOperations().get(project=lkp.project, zone=zone, operation=name)
-  elif region:
-    return lkp.compute.regionOperations().get(project=lkp.project, region=region, operation=name)
-  return lkp.compute.globalOperations().get(project=lkp.project, operation=name)
+def get_operation_req(
+    lkp: "Lookup",
+    name: str,
+    region: Optional[str] = None,
+    zone: Optional[str] = None,
+) -> Any:
+    """Constructs a Compute Engine Operation get request with sanitized resource names."""
+    op_name = to_leaf_name(name)
+    if not op_name:
+        raise ValueError(f"Invalid operation name: '{name}'")
+    zone_leaf = to_leaf_name(zone)
+    region_leaf = to_leaf_name(region)
+
+    if zone_leaf:
+        return lkp.compute.zoneOperations().get(
+            project=lkp.project, zone=zone_leaf, operation=op_name
+        )
+    elif region_leaf:
+        return lkp.compute.regionOperations().get(
+            project=lkp.project, region=region_leaf, operation=op_name
+        )
+    return lkp.compute.globalOperations().get(
+        project=lkp.project, operation=op_name
+    )
 
 def wait_request(operation, project: str):
     """makes the appropriate wait request for a given operation"""
