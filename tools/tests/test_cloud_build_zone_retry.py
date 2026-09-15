@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2026 "Google LLC"
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,6 +36,9 @@ import tempfile
 import unittest
 import yaml
 
+UPDATE_SCRIPT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "../cloud-build/update_job_exclude_zones.py")
+)
 
 SAMPLE_JOB_YAML = """\
 apiVersion: batch/v1
@@ -89,60 +92,220 @@ class TestCloudBuildZoneRetry(unittest.TestCase):
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=True)
         self.assertEqual(result.stdout.strip(), "us-west1-b")
 
-    def test_extract_failed_zone_from_deploying_log_fallback(self):
-        """Test fallback extraction from 'Deploying in ZONE: <zone>' line."""
+    def test_extract_failed_zone_from_spot_stockout_log(self):
+        """Test extracting zone from 'Deploying in ZONE:' only when capacity error is present."""
         log_content = (
-            "INFO: Trying provisioning model: SPOT\n"
             "Deploying in ZONE: us-south1-b, MODEL: SPOT\n"
             "Starting terraform deployment...\n"
-            "Generic retriable failure occurred.\n"
+            "google_compute_region_instance_group_manager: ZONE_RESOURCE_POOL_EXHAUSTED\n"
         )
         log_file = os.path.join(self.test_dir, "job_logs.txt")
         with open(log_file, "w", encoding="utf-8") as f:
             f.write(log_content)
 
-        cmd = f"sed -n 's/.*Deploying in ZONE: \\([a-z0-9-]*\\).*/\\1/p' {log_file} | tail -n 1"
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=True)
+        script = f"""
+        FAILED_ZONE=$(sed -n 's/.*resource exhausted: not enough resources available to fulfill the request in \\([a-z0-9-]*\\).*/\\1/p' {log_file} | tail -n 1 || true)
+        if [ -z "$FAILED_ZONE" ]; then
+            if grep -qE "ZONE_RESOURCE_POOL_EXHAUSTED|does not have enough resources available" {log_file}; then
+                FAILED_ZONE=$(sed -n 's/.*Deploying in ZONE: \\([a-z0-9-]*\\).*/\\1/p' {log_file} | tail -n 1 || true)
+            fi
+        fi
+        echo "$FAILED_ZONE"
+        """
+        result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)
         self.assertEqual(result.stdout.strip(), "us-south1-b")
 
-    def test_yaml_env_injection_and_subsequent_update(self):
-        """Test injecting EXCLUDE_ZONES into Kueue job.yaml and updating it on retry."""
+    def test_no_zone_extraction_on_non_capacity_retriable_error(self):
+        """Verify that non-capacity transient errors do not extract or blacklist healthy zones."""
+        log_content = (
+            "Deploying in ZONE: us-central1-a, MODEL: SPOT\n"
+            "Error: googleapi: Error 429: Rate Limit Exceeded, RATE_LIMIT_EXCEEDED\n"
+        )
+        log_file = os.path.join(self.test_dir, "job_logs.txt")
+        with open(log_file, "w", encoding="utf-8") as f:
+            f.write(log_content)
+
+        script = f"""
+        FAILED_ZONE=$(sed -n 's/.*resource exhausted: not enough resources available to fulfill the request in \\([a-z0-9-]*\\).*/\\1/p' {log_file} | tail -n 1 || true)
+        if [ -z "$FAILED_ZONE" ]; then
+            if grep -qE "ZONE_RESOURCE_POOL_EXHAUSTED|does not have enough resources available" {log_file}; then
+                FAILED_ZONE=$(sed -n 's/.*Deploying in ZONE: \\([a-z0-9-]*\\).*/\\1/p' {log_file} | tail -n 1 || true)
+            fi
+        fi
+        echo "$FAILED_ZONE"
+        """
+        result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)
+        self.assertEqual(result.stdout.strip(), "")
+
+    def test_update_job_exclude_zones_basic_injection_and_update(self):
+        """Test update_job_exclude_zones.py injecting and updating EXCLUDE_ZONES."""
         job_file = os.path.join(self.test_dir, "job.yaml")
         with open(job_file, "w", encoding="utf-8") as f:
             f.write(SAMPLE_JOB_YAML)
 
-        # 1. First failure in us-west1-b -> Initial injection via awk
-        zone1 = "us-west1-b"
-        awk_cmd = (
-            f'awk -v val="{zone1}" \'/^[[:space:]]*env:/ {{ in_env=1 }} '
-            f'!done && in_env && /^[[:space:]]*- name:/ {{ match($0, /^[[:space:]]*/); '
-            f'ind=substr($0, RSTART, RLENGTH); print ind "- name: EXCLUDE_ZONES\\n" ind '
-            f'"  value: \\"" val "\\""; done=1 }} 1\' {job_file} > {job_file}.tmp && mv {job_file}.tmp {job_file}'
+        # 1. First injection
+        subprocess.run(
+            ["python3", UPDATE_SCRIPT, "--inject", "--file", job_file, "--zones", "us-west1-b"],
+            check=True,
         )
-        subprocess.run(awk_cmd, shell=True, check=True)
 
         with open(job_file, "r", encoding="utf-8") as f:
             parsed = yaml.safe_load(f)
 
-        env_list = parsed["spec"]["template"]["spec"]["containers"][0]["env"]
-        exclude_entry = next((e for e in env_list if e["name"] == "EXCLUDE_ZONES"), None)
-        self.assertIsNotNone(exclude_entry, "EXCLUDE_ZONES should have been injected")
-        self.assertEqual(exclude_entry["value"], "us-west1-b")
+        runner = next(c for c in parsed["spec"]["template"]["spec"]["containers"] if c["name"] == "runner")
+        entry = next((e for e in runner["env"] if e["name"] == "EXCLUDE_ZONES"), None)
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["value"], "us-west1-b")
 
-        # 2. Second failure in us-south1-b -> Accumulate zones and update via sed
-        accumulated = "us-west1-b us-south1-b"
-        sed_cmd = (
-            f"sed -i '/name: EXCLUDE_ZONES/{{n;s/value: .*/value: \"{accumulated}\"/}}' {job_file}"
+        # 2. Extraction
+        res = subprocess.run(
+            ["python3", UPDATE_SCRIPT, "--extract", "--file", job_file],
+            capture_output=True,
+            text=True,
+            check=True,
         )
-        subprocess.run(sed_cmd, shell=True, check=True)
+        self.assertEqual(res.stdout.strip(), "us-west1-b")
+
+        # 3. Update with accumulated zones
+        subprocess.run(
+            ["python3", UPDATE_SCRIPT, "--inject", "--file", job_file, "--zones", "us-west1-b us-south1-b"],
+            check=True,
+        )
 
         with open(job_file, "r", encoding="utf-8") as f:
             parsed_retry = yaml.safe_load(f)
 
-        env_list_retry = parsed_retry["spec"]["template"]["spec"]["containers"][0]["env"]
-        exclude_entry_retry = next((e for e in env_list_retry if e["name"] == "EXCLUDE_ZONES"), None)
-        self.assertIsNotNone(exclude_entry_retry)
-        self.assertEqual(exclude_entry_retry["value"], "us-west1-b us-south1-b")
+        runner_retry = next(c for c in parsed_retry["spec"]["template"]["spec"]["containers"] if c["name"] == "runner")
+        entry_retry = next((e for e in runner_retry["env"] if e["name"] == "EXCLUDE_ZONES"), None)
+        self.assertIsNotNone(entry_retry)
+        self.assertEqual(entry_retry["value"], "us-west1-b us-south1-b")
+
+    def test_update_job_exclude_zones_preserves_metadata_and_sidecars(self):
+        """Test that metadata labels (env: staging) and sidecar containers are not corrupted."""
+        complex_job = """\
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-job
+  labels:
+    env: staging
+    app: test
+spec:
+  template:
+    spec:
+      containers:
+      - name: sidecar
+        image: gcr.io/sidecar:latest
+        env:
+        - name: SIDECAR_CONFIG
+          value: "default"
+      - name: runner
+        image: gcr.io/runner:latest
+        env:
+        - name: CHECK_LUSTRE
+          value: "true"
+      volumes:
+      - name: scratch
+        emptyDir: {}
+"""
+        job_file = os.path.join(self.test_dir, "job.yaml")
+        with open(job_file, "w", encoding="utf-8") as f:
+            f.write(complex_job)
+
+        subprocess.run(
+            ["python3", UPDATE_SCRIPT, "--inject", "--file", job_file, "--zones", "us-west1-a us-west1-b"],
+            check=True,
+        )
+
+        with open(job_file, "r", encoding="utf-8") as f:
+            parsed = yaml.safe_load(f)
+
+        # Verify metadata label was NOT modified or confused with container env
+        self.assertEqual(parsed["metadata"]["labels"]["env"], "staging")
+
+        # Verify sidecar container env was NOT injected
+        sidecar = next(c for c in parsed["spec"]["template"]["spec"]["containers"] if c["name"] == "sidecar")
+        self.assertFalse(any(e["name"] == "EXCLUDE_ZONES" for e in sidecar["env"]))
+
+        # Verify runner container received EXCLUDE_ZONES
+        runner = next(c for c in parsed["spec"]["template"]["spec"]["containers"] if c["name"] == "runner")
+        entry = next((e for e in runner["env"] if e["name"] == "EXCLUDE_ZONES"), None)
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["value"], "us-west1-a us-west1-b")
+
+    def test_update_job_exclude_zones_inverted_key_order(self):
+        """Test extraction and update when value: precedes name: in YAML."""
+        inverted_job = """\
+apiVersion: batch/v1
+kind: Job
+spec:
+  template:
+    spec:
+      containers:
+      - name: runner
+        image: gcr.io/runner:latest
+        env:
+        - value: "us-central1-a us-central1-b"
+          name: EXCLUDE_ZONES
+        - name: CHECK_LUSTRE
+          value: "true"
+"""
+        job_file = os.path.join(self.test_dir, "job.yaml")
+        with open(job_file, "w", encoding="utf-8") as f:
+            f.write(inverted_job)
+
+        # Extract pre-existing
+        res = subprocess.run(
+            ["python3", UPDATE_SCRIPT, "--extract", "--file", job_file],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertEqual(res.stdout.strip(), "us-central1-a us-central1-b")
+
+        # Update
+        subprocess.run(
+            ["python3", UPDATE_SCRIPT, "--inject", "--file", job_file, "--zones", "us-central1-a us-central1-b us-west1-b"],
+            check=True,
+        )
+
+        with open(job_file, "r", encoding="utf-8") as f:
+            parsed = yaml.safe_load(f)
+
+        runner = next(c for c in parsed["spec"]["template"]["spec"]["containers"] if c["name"] == "runner")
+        entry = next((e for e in runner["env"] if e["name"] == "EXCLUDE_ZONES"), None)
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["value"], "us-central1-a us-central1-b us-west1-b")
+
+    def test_update_job_exclude_zones_missing_env_fallback(self):
+        """Test injection when runner container has no env block at all."""
+        no_env_job = """\
+apiVersion: batch/v1
+kind: Job
+spec:
+  template:
+    spec:
+      containers:
+      - name: runner
+        image: gcr.io/runner:latest
+        command: ["bash"]
+"""
+        job_file = os.path.join(self.test_dir, "job.yaml")
+        with open(job_file, "w", encoding="utf-8") as f:
+            f.write(no_env_job)
+
+        subprocess.run(
+            ["python3", UPDATE_SCRIPT, "--inject", "--file", job_file, "--zones", "europe-west2-c"],
+            check=True,
+        )
+
+        with open(job_file, "r", encoding="utf-8") as f:
+            parsed = yaml.safe_load(f)
+
+        runner = next(c for c in parsed["spec"]["template"]["spec"]["containers"] if c["name"] == "runner")
+        self.assertEqual(len(runner["env"]), 1)
+        self.assertEqual(runner["env"][0]["name"], "EXCLUDE_ZONES")
+        self.assertEqual(runner["env"][0]["value"], "europe-west2-c")
 
     def test_zone_exclusion_matching_token_safety(self):
         """Test that token-padded pattern matching correctly isolates zone names."""

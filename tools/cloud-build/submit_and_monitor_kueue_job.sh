@@ -55,6 +55,9 @@ MAX_RETRIES=3
 RETRY_DELAY=300
 ATTEMPT=1
 ACCUMULATED_EXCLUDE_ZONES=""
+if [ -f "/workspace/job.yaml" ]; then
+	ACCUMULATED_EXCLUDE_ZONES=$(python3 tools/cloud-build/update_job_exclude_zones.py --extract --file /workspace/job.yaml 2>/dev/null || true)
+fi
 
 while true; do
 	echo "=== ATTEMPT $ATTEMPT: Submitting Kueue Job ==="
@@ -112,10 +115,13 @@ while true; do
 		exit 1
 	fi
 
-	# Dynamically extract the failed zone from the job logs so the next attempt tries an alternative zone
+	# Dynamically extract the failed zone from the job logs if failure was due to capacity exhaustion
 	FAILED_ZONE=$(sed -n 's/.*resource exhausted: not enough resources available to fulfill the request in \([a-z0-9-]*\).*/\1/p' /workspace/job_logs.txt | tail -n 1 || true)
 	if [ -z "$FAILED_ZONE" ]; then
-		FAILED_ZONE=$(sed -n 's/.*Deploying in ZONE: \([a-z0-9-]*\).*/\1/p' /workspace/job_logs.txt | tail -n 1 || true)
+		# Only fall back to deployed zone if the logs confirm a VM capacity/stockout error
+		if grep -qE "ZONE_RESOURCE_POOL_EXHAUSTED|does not have enough resources available" /workspace/job_logs.txt; then
+			FAILED_ZONE=$(sed -n 's/.*Deploying in ZONE: \([a-z0-9-]*\).*/\1/p' /workspace/job_logs.txt | tail -n 1 || true)
+		fi
 	fi
 
 	if [ -n "$FAILED_ZONE" ] && [ -f "/workspace/job.yaml" ]; then
@@ -127,11 +133,7 @@ while true; do
 		fi
 
 		echo "INFO: Injecting EXCLUDE_ZONES='${ACCUMULATED_EXCLUDE_ZONES}' into /workspace/job.yaml for attempt $((ATTEMPT + 1))..."
-		if grep -q "name: EXCLUDE_ZONES" /workspace/job.yaml; then
-			sed -i '/name: EXCLUDE_ZONES/{n;s/value: .*/value: "'"$ACCUMULATED_EXCLUDE_ZONES"'"/}' /workspace/job.yaml
-		elif grep -q "env:" /workspace/job.yaml; then
-			awk -v val="$ACCUMULATED_EXCLUDE_ZONES" '/^[[:space:]]*env:/ { in_env=1 } !done && in_env && /^[[:space:]]*- name:/ { match($0, /^[[:space:]]*/); ind=substr($0, RSTART, RLENGTH); print ind "- name: EXCLUDE_ZONES\n" ind "  value: \"" val "\""; done=1 } 1' /workspace/job.yaml > /workspace/job.yaml.tmp && mv /workspace/job.yaml.tmp /workspace/job.yaml
-		fi
+		python3 tools/cloud-build/update_job_exclude_zones.py --inject --file /workspace/job.yaml --zones "$ACCUMULATED_EXCLUDE_ZONES"
 	fi
 
 	sleep $RETRY_DELAY
