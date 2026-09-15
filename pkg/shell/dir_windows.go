@@ -43,12 +43,9 @@ func isDirWritable(path string) bool {
 		return false
 	}
 	probePath := filepath.Join(path, ".gcluster_probe_"+randSuffix)
-	fullPath, err := windows.FullPath(probePath)
+	fullPath, err := filepath.Abs(probePath)
 	if err != nil {
-		fullPath, err = filepath.Abs(probePath)
-		if err != nil {
-			return false
-		}
+		return false
 	}
 	path16, err := windows.UTF16PtrFromString(fixLongPath(fullPath))
 	if err != nil {
