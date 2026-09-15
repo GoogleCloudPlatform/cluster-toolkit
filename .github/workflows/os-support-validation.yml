@@ -61,3 +61,22 @@ jobs:
     - name: Dry-Run Test on Target OS
       run: |
         docker run --rm -v "$(pwd)/gcluster:/gcluster" ${{ matrix.image }} /gcluster --version
+
+  validate-windows:
+    name: Verify on Windows
+    runs-on: windows-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 #v4.4.0
+    - name: Set up Go 1.26
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff #v5.6.0
+      with:
+        go-version: '1.26'
+    - name: Run Shell Unit Tests
+      run: go test -v ./pkg/shell/...
+    - name: Build Binary
+      run: go build -o gcluster.exe .
+    - name: Verify Binary Execution
+      run: |
+        .\gcluster.exe --version
+        .\gcluster.exe --help
