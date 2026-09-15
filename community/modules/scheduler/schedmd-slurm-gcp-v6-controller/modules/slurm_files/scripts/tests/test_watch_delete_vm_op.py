@@ -411,14 +411,16 @@ def test_is_message_expired_edge_cases():
     from watch_delete_vm_op import _is_message_expired, MAX_MESSAGE_AGE_HOURS
 
     now_utc = datetime.now(timezone.utc)
-    now_naive = datetime.now()
+    now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
 
     # m.created is None
     m_none = MagicMock(created=None)
     assert _is_message_expired(m_none, now_utc) is False
 
     # m.created is naive datetime
-    m_naive = MagicMock(created=datetime.now() - timedelta(hours=7))
+    m_naive = MagicMock(
+        created=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=7)
+    )
     assert _is_message_expired(m_naive, now_utc) is True
 
     # now is naive datetime
@@ -497,7 +499,7 @@ def test_watch_vm_delete_ops_cancelled_future(tmp_path):
     mock_future.cancelled.return_value = True
 
     with patch("local_pubsub.subscription", return_value=sub):
-        with patch("watch_delete_vm_op.ThreadPoolExecutor") as mock_exe_cls:
+        with patch("watch_delete_vm_op._DaemonThreadPoolExecutor") as mock_exe_cls:
             mock_exe = MagicMock()
             mock_exe_cls.return_value = mock_exe
             mock_exe.submit.return_value = mock_future
@@ -508,3 +510,81 @@ def test_watch_vm_delete_ops_cancelled_future(tmp_path):
     remaining = local_pubsub.Subscription(p).pull(10)
     assert len(remaining) == 1
     assert remaining[0].data["node"] == "node-cancel"
+
+
+def test_daemon_thread_pool_executor():
+    """Verify _DaemonThreadPoolExecutor creates daemon threads and cleans up cleanly on shutdown."""
+    import threading
+    import time
+    from concurrent.futures.thread import _threads_queues
+    from watch_delete_vm_op import _DaemonThreadPoolExecutor
+
+    # Test 1: Verify daemon status, _threads_queues exclusion, and non-blocking shutdown while tasks run
+    exe = _DaemonThreadPoolExecutor(max_workers=1, thread_name_prefix="test_daemon")
+    started = threading.Event()
+    unblock = threading.Event()
+
+    def running_task():
+        started.set()
+        unblock.wait(timeout=2)
+        return threading.current_thread().daemon
+
+    f_running = exe.submit(running_task)
+    f_pending = exe.submit(lambda: "queued")
+
+    assert started.wait(timeout=2) is True
+    # Verify active worker threads are daemon and not tracked by _threads_queues
+    for t in exe._threads:
+        assert t.daemon is True
+        assert t not in _threads_queues
+
+    # Non-waiting shutdown should return immediately without blocking on the running task
+    t0 = time.time()
+    exe.shutdown(wait=False, cancel_futures=True)
+    shutdown_duration = time.time() - t0
+    assert shutdown_duration < 0.2, f"Shutdown took {shutdown_duration}s, expected immediate return"
+
+    # Queued pending future should be cancelled by cancel_futures=True
+    assert f_pending.cancelled() is True
+
+    # New task submissions should be rejected after shutdown
+    try:
+        exe.submit(lambda: None)
+        assert False, "Expected RuntimeError when submitting after shutdown"
+    except RuntimeError:
+        pass
+
+    # Unblock and allow the running task to finish cleanly
+    unblock.set()
+    assert f_running.result(timeout=2) is True
+
+    # Verify active worker threads remain absent from _threads_queues
+    for t in exe._threads:
+        assert t not in _threads_queues
+
+
+def test_daemon_thread_pool_executor_py38_fallback():
+    """Verify _DaemonThreadPoolExecutor.shutdown fallback path for Python < 3.9."""
+    import threading
+    from unittest.mock import patch
+    from watch_delete_vm_op import _DaemonThreadPoolExecutor
+
+    exe = _DaemonThreadPoolExecutor(max_workers=1, thread_name_prefix="test_daemon_py38")
+    started = threading.Event()
+    unblock = threading.Event()
+
+    def running_task():
+        started.set()
+        unblock.wait(timeout=2)
+        return "done"
+
+    f_running = exe.submit(running_task)
+    f_pending = exe.submit(lambda: "queued")
+    assert started.wait(timeout=2) is True
+
+    with patch("sys.version_info", (3, 8, 10)):
+        exe.shutdown(wait=False, cancel_futures=True)
+
+    assert f_pending.cancelled() is True
+    unblock.set()
+    assert f_running.result(timeout=2) == "done"

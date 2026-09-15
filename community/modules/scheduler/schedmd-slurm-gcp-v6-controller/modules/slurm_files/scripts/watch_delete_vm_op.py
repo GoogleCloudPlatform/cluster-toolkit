@@ -13,13 +13,18 @@
 # limitations under the License.
 
 from concurrent.futures import CancelledError, ThreadPoolExecutor, wait
+from concurrent.futures.thread import _threads_queues, _worker
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import http.client
 import logging
+import queue
 import socket
 import ssl
+import sys
+import threading
 from typing import Any, Optional
+import weakref
 
 from googleapiclient.errors import HttpError  # type: ignore
 import httplib2
@@ -262,6 +267,65 @@ def _is_message_expired(m: local_pubsub.Message, now: datetime) -> bool:
     return (now - created).total_seconds() > MAX_MESSAGE_AGE_SECONDS
 
 
+class _DaemonThreadPoolExecutor(ThreadPoolExecutor):
+    """ThreadPoolExecutor that creates daemon worker threads.
+
+    By default, standard ThreadPoolExecutor threads are non-daemon and are joined
+    by Python's atexit handler (_python_exit), which can cause slurmsync to hang on
+    exit if workers are stuck on long-running network requests or retries.
+    This subclass marks worker threads as daemon, avoids registering them in the
+    global atexit queue (_threads_queues), and defensively evicts them on non-waiting
+    shutdown to ensure worker threads never block process termination or hold the
+    slurmsync PID lock.
+    """
+
+    def _adjust_thread_count(self) -> None:
+        if self._idle_semaphore.acquire(timeout=0):
+            return
+
+        def weakref_cb(_, q=self._work_queue):
+            q.put(None)
+
+        num_threads = len(self._threads)
+        if num_threads < self._max_workers:
+            thread_name = f"{self._thread_name_prefix or self}_{num_threads}"
+            t = threading.Thread(
+                name=thread_name,
+                target=_worker,
+                args=(
+                    weakref.ref(self, weakref_cb),
+                    self._work_queue,
+                    self._initializer,
+                    self._initargs,
+                ),
+                daemon=True,
+            )
+            t.start()
+            self._threads.add(t)  # type: ignore[attr-defined]
+            # Note: We intentionally do NOT register t in _threads_queues.
+            # In standard ThreadPoolExecutor, _threads_queues[t] = self._work_queue
+            # causes _python_exit to join worker threads on interpreter shutdown,
+            # even for daemon threads. Omitting registration ensures that these
+            # daemon threads will never block interpreter shutdown.
+
+    def shutdown(self, wait: bool = True, *, cancel_futures: bool = False) -> None:
+        if sys.version_info >= (3, 9):
+            super().shutdown(wait=wait, cancel_futures=cancel_futures)
+        else:
+            if cancel_futures:
+                while True:
+                    try:
+                        work_item = self._work_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    if work_item is not None:
+                        work_item.future.cancel()
+            super().shutdown(wait=wait)
+        if not wait:
+            for t in list(self._threads):
+                _threads_queues.pop(t, None)  # type: ignore[attr-defined]
+
+
 def watch_vm_delete_ops(lkp: util.Lookup) -> None:
     """Polls and monitors VM deletion operations with concurrency and TTL handling."""
     sub = local_pubsub.subscription(TOPIC)
@@ -330,7 +394,7 @@ def watch_vm_delete_ops(lkp: util.Lookup) -> None:
         # Phase 2: Parallel GCE API polling for remaining operations
         if pending_api_checks:
             num_workers = min(MAX_WATCH_WORKERS, len(pending_api_checks))
-            exe = ThreadPoolExecutor(
+            exe = _DaemonThreadPoolExecutor(
                 max_workers=num_workers,
                 thread_name_prefix="watch_delete_vm_op",
             )
