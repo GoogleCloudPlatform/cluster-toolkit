@@ -17,9 +17,11 @@ package job
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"unicode"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -103,11 +105,57 @@ func createTempConfigFile(sourcePath string) (string, error) {
 	return tempFileName, nil
 }
 
-func runSystemEditor(editor, filePath string) error {
-	editorParts := strings.Fields(editor)
-	if len(editorParts) == 0 {
-		return fmt.Errorf("editor command is empty")
+func isQuote(r rune) bool {
+	return r == '"' || r == '\''
+}
+
+func parseEditorArgs(editor string) ([]string, error) {
+	var parts []string
+	var current strings.Builder
+	var quote rune
+	hasToken := false
+
+	for _, r := range strings.TrimSpace(editor) {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			} else {
+				current.WriteRune(r)
+			}
+		case isQuote(r):
+			quote = r
+			hasToken = true
+		case unicode.IsSpace(r):
+			if hasToken {
+				parts = append(parts, current.String())
+				current.Reset()
+				hasToken = false
+			}
+		default:
+			current.WriteRune(r)
+			hasToken = true
+		}
 	}
+
+	if quote != 0 {
+		return nil, fmt.Errorf("unclosed quote in editor command: %s", editor)
+	}
+	if hasToken {
+		parts = append(parts, current.String())
+	}
+	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
+		return nil, fmt.Errorf("editor command is empty")
+	}
+	return parts, nil
+}
+
+func runSystemEditor(editor, filePath string) error {
+	editorParts, err := parseEditorArgs(editor)
+	if err != nil {
+		return err
+	}
+
 	args := append(editorParts[1:], filePath)
 	c := exec.Command(editorParts[0], args...)
 	c.Stdin = os.Stdin
@@ -134,6 +182,10 @@ func validateAndApplyConfig(tempFileName, targetFile string) error {
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&tempConfig); err != nil {
 			return fmt.Errorf("config file contains structural errors or invalid JSON: %w", err)
+		}
+		var extra any
+		if err := decoder.Decode(&extra); err != io.EOF {
+			return fmt.Errorf("config file contains structural errors or invalid JSON: unexpected trailing data")
 		}
 	}
 
