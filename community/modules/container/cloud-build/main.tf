@@ -54,7 +54,7 @@ locals {
 
   source_dir = local.is_local_dir_mode ? (startswith(var.cloud_build_dir, "/") ? var.cloud_build_dir : "${path.root}/${var.cloud_build_dir}") : ""
   local_source_hash = local.is_local_dir_mode && local.source_dir != "" ? try(
-    sha256(join("", [for f in sort(fileset(local.source_dir, "**")) : filesha256("${local.source_dir}/${f}") if !startswith(f, ".terraform") && !startswith(f, ".ghpc") && !startswith(f, ".git")])),
+    sha256(join("", [for f in sort(fileset(local.source_dir, "**")) : filesha256("${local.source_dir}/${f}") if !can(regex("(^|/)\\.(git|ghpc|terraform)(/|$)", f))])),
     ""
   ) : ""
 }
