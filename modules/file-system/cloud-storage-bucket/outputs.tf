@@ -53,7 +53,7 @@ output "mount_runner" {
 }
 
 output "gcs_bucket_path" {
-  description = "The gsutil bucket path with format of `gs://<bucket-name>`."
+  description = "The Cloud Storage bucket URI with format of `gs://<bucket-name>`."
   # cannot use resource attribute, will cause lookup failure in startup-script
   value = "gs://${local.name}"
 
