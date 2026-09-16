@@ -26,11 +26,16 @@ fi
 gcloud container clusters get-credentials test-kueue-cluster --region=us-central1
 BUILD_ID_SHORT=$(echo "$BUILD_ID" | cut -c1-6)
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+JOB_FILE="${JOB_FILE:-/workspace/job.yaml}"
+JOB_LOGS="${JOB_LOGS:-/workspace/job_logs.txt}"
+mkdir -p "$(dirname "$JOB_LOGS")"
+
 # Read the actual job name from the manifest to handle cases where tests use abbreviated names.
 # Strip any YAML quotes and suppress errors if the file doesn't exist yet.
 JOB_NAME=""
-if [ -f "/workspace/job.yaml" ]; then
-	JOB_NAME=$(grep -m 1 -E '^ *name:' /workspace/job.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
+if [ -f "$JOB_FILE" ]; then
+	JOB_NAME=$(grep -m 1 -E '^ *name:' "$JOB_FILE" | awk '{print $2}' | tr -d '"' | tr -d "'")
 fi
 
 if [ -z "$JOB_NAME" ]; then
@@ -55,8 +60,8 @@ MAX_RETRIES=3
 RETRY_DELAY=300
 ATTEMPT=1
 ACCUMULATED_EXCLUDE_ZONES=""
-if [ -f "/workspace/job.yaml" ]; then
-	ACCUMULATED_EXCLUDE_ZONES=$(python3 tools/cloud-build/update_job_exclude_zones.py --extract --file /workspace/job.yaml 2>/dev/null || true)
+if [ -f "$JOB_FILE" ]; then
+	ACCUMULATED_EXCLUDE_ZONES=$(python3 "${SCRIPT_DIR}/update_job_exclude_zones.py" --extract --file "$JOB_FILE" 2>/dev/null || true)
 fi
 
 while true; do
@@ -68,7 +73,7 @@ while true; do
 	while true; do
 		echo "Executing job submission (attempt ${SUBMIT_ATTEMPT}/${SUBMIT_RETRIES})..."
 
-		if kubectl apply -f /workspace/job.yaml; then
+		if kubectl apply -f "$JOB_FILE"; then
 			break
 		fi
 
@@ -84,11 +89,11 @@ while true; do
 
 	set +e
 	(
-		bash tools/cloud-build/monitor_kueue_job.sh \
+		bash "${SCRIPT_DIR}/monitor_kueue_job.sh" \
 			test-kueue-cluster \
 			us-central1 \
 			"$JOB_NAME" \
-			default | tee /workspace/job_logs.txt
+			default | tee "$JOB_LOGS"
 		exit "${PIPESTATUS[0]}"
 	) &
 	MONITOR_PID=$!
@@ -103,7 +108,7 @@ while true; do
 
 	# Check if the failure was specifically due to a lack of GCP zone capacity.
 	# If so, retry. If it's a real error (like a terraform syntax error), fail immediately.
-	if bash tools/cloud-build/check_retriable_error.sh /workspace/job_logs.txt; then
+	if bash "${SCRIPT_DIR}/check_retriable_error.sh" "$JOB_LOGS"; then
 		echo "WARNING: Retriable error detected. Kueue Job has already been deleted. Retrying in $RETRY_DELAY seconds..."
 	else
 		echo "ERROR: Test failed due to an actual error (not zone capacity). Failing pipeline." >&2
@@ -116,15 +121,15 @@ while true; do
 	fi
 
 	# Dynamically extract the failed zone from the job logs if failure was due to capacity exhaustion
-	FAILED_ZONE=$(sed -n 's/.*resource exhausted: not enough resources available to fulfill the request in \([a-z0-9-]*\).*/\1/p' /workspace/job_logs.txt | tail -n 1 || true)
+	FAILED_ZONE=$(sed -n 's/.*resource exhausted: not enough resources available to fulfill the request in \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
 	if [ -z "$FAILED_ZONE" ]; then
-		# Only fall back to deployed zone if the logs confirm a VM capacity/stockout error
-		if grep -qE "ZONE_RESOURCE_POOL_EXHAUSTED|does not have enough resources available" /workspace/job_logs.txt; then
-			FAILED_ZONE=$(sed -n 's/.*Deploying in ZONE: \([a-z0-9-]*\).*/\1/p' /workspace/job_logs.txt | tail -n 1 || true)
+		# Only fall back to deployed zone if the logs confirm a VM/Lustre capacity or stockout error
+		if grep -q -i -E "ZONE_RESOURCE_POOL_EXHAUSTED|not enough resources available|resource exhausted|stockout" "$JOB_LOGS"; then
+			FAILED_ZONE=$(sed -n 's/.*Deploying in ZONE: \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
 		fi
 	fi
 
-	if [ -n "$FAILED_ZONE" ] && [ -f "/workspace/job.yaml" ]; then
+	if [ -n "$FAILED_ZONE" ] && [ -f "$JOB_FILE" ]; then
 		echo "INFO: Detected capacity/resource exhaustion in zone: ${FAILED_ZONE}"
 		if [ -z "$ACCUMULATED_EXCLUDE_ZONES" ]; then
 			ACCUMULATED_EXCLUDE_ZONES="${FAILED_ZONE}"
@@ -132,8 +137,8 @@ while true; do
 			ACCUMULATED_EXCLUDE_ZONES="${ACCUMULATED_EXCLUDE_ZONES} ${FAILED_ZONE}"
 		fi
 
-		echo "INFO: Injecting EXCLUDE_ZONES='${ACCUMULATED_EXCLUDE_ZONES}' into /workspace/job.yaml for attempt $((ATTEMPT + 1))..."
-		python3 tools/cloud-build/update_job_exclude_zones.py --inject --file /workspace/job.yaml --zones "$ACCUMULATED_EXCLUDE_ZONES"
+		echo "INFO: Injecting EXCLUDE_ZONES='${ACCUMULATED_EXCLUDE_ZONES}' into ${JOB_FILE} for attempt $((ATTEMPT + 1))..."
+		python3 "${SCRIPT_DIR}/update_job_exclude_zones.py" --inject --file "$JOB_FILE" --zones "$ACCUMULATED_EXCLUDE_ZONES"
 	fi
 
 	sleep $RETRY_DELAY

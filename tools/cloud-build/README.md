@@ -41,6 +41,19 @@ cd tools/cloud-build/provision
 ./apply_kueue_locks.sh
 ```
 
+## Zone Stockout Handling and EXCLUDE_ZONES
+
+When integration tests experience GCP physical capacity exhaustion (e.g., Compute Engine Spot VM stockout or Managed Lustre storage exhaustion), `submit_and_monitor_kueue_job.sh` catches the failure, extracts the exhausted zone, and automatically injects `EXCLUDE_ZONES="<zone>"` into the test job manifest for the next retry attempt.
+
+If you need to proactively prevent a test from attempting specific zones on Attempt 1, you can define `EXCLUDE_ZONES` directly in your test's container environment or Cloud Build trigger:
+
+```yaml
+- name: EXCLUDE_ZONES
+  value: "us-west1-b europe-west2-c"
+```
+
+The retry harness will preserve any pre-existing exclusions and accumulate any additional exhausted zones on top of them during retries.
+
 ## Unit Testing
 
 Unit tests for Cloud Build scripts (including zone discovery, stockout exclusion, and retry injection in `find_available_zone.sh` and `submit_and_monitor_kueue_job.sh`) are located in `tools/tests/test_cloud_build_zone_retry.py`.

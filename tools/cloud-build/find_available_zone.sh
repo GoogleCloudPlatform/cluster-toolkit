@@ -385,11 +385,8 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 		fi
 
 		if [[ "${CHECK_LUSTRE:-false}" == "true" ]]; then
-			# Temporary capacity mitigation for regional Managed Lustre exhaustion.
-			# Set LUSTRE_EXCLUDE_ZONES="none" to bypass defaults.
-			LUSTRE_EXCLUDE="${LUSTRE_EXCLUDE_ZONES:-us-west1-a us-west1-b us-west1-c us-south1-b europe-west2-c}"
-			if [[ "${LUSTRE_EXCLUDE}" != "none" ]]; then
-				if [[ " ${LUSTRE_EXCLUDE//,/ } " == *" ${ZONE} "* ]]; then
+			if [[ -n "${LUSTRE_EXCLUDE_ZONES:-}" && "${LUSTRE_EXCLUDE_ZONES}" != "none" ]]; then
+				if [[ " ${LUSTRE_EXCLUDE_ZONES//,/ } " == *" ${ZONE} "* ]]; then
 					echo "INFO: Skipping ${ZONE} - Zone excluded due to known Managed Lustre capacity exhaustion."
 					continue
 				fi

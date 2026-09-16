@@ -37,7 +37,10 @@ import unittest
 import yaml
 
 UPDATE_SCRIPT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "../cloud-build/update_job_exclude_zones.py")
+    os.path.join(
+        os.path.dirname(__file__),
+        "../cloud-build/update_job_exclude_zones.py",
+    )
 )
 
 SAMPLE_JOB_YAML = """\
@@ -74,49 +77,90 @@ class TestCloudBuildZoneRetry(unittest.TestCase):
         shutil.rmtree(self.test_dir)
 
     def test_extract_failed_zone_from_lustre_exhaustion_log(self):
-        """Test extracting failed zone from Terraform/Managed Lustre resource exhausted logs."""
+        """Test extracting failed zone from Managed Lustre exhaustion logs."""
         log_content = (
             "module.homefs.google_lustre_instance.lustre_instance: Creating...\n"
             "Error: Error waiting for creating Instance: Error code 8, message: "
-            "resource exhausted: not enough resources available to fulfill the request in us-west1-b\n"
+            "resource exhausted: not enough resources available to fulfill the "
+            "request in us-west1-b\n"
             "with module.homefs.google_lustre_instance.lustre_instance,\n"
         )
         log_file = os.path.join(self.test_dir, "job_logs.txt")
         with open(log_file, "w", encoding="utf-8") as f:
             f.write(log_content)
 
-        cmd = (
-            f"sed -n 's/.*resource exhausted: not enough resources available to fulfill the request in "
-            f"\\([a-z0-9-]*\\).*/\\1/p' {log_file} | tail -n 1"
+        pattern = (
+            r".*resource exhausted: not enough resources available to fulfill "
+            r"the request in \([a-z0-9-]*\).*"
         )
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=True)
+        cmd = f"sed -n 's/{pattern}/\\1/p' {log_file} | tail -n 1"
+        result = subprocess.run(
+            cmd, shell=True, capture_output=True, text=True, check=True
+        )
         self.assertEqual(result.stdout.strip(), "us-west1-b")
 
+    def test_check_retriable_error_matches_lustre_internal_resource_exhaustion(self):
+        """Test check_retriable_error.sh matches Lustre internal resource exhaustion."""
+        cloud_build_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../cloud-build")
+        )
+        check_script = os.path.join(cloud_build_dir, "check_retriable_error.sh")
+        error_msg = (
+            "Error waiting for creating Instance: Error code 8, message: "
+            "resource exhausted: system limit for internal resources has been reached\n"
+        )
+        log_file = os.path.join(self.test_dir, "lustre_stockout_log.txt")
+        with open(log_file, "w", encoding="utf-8") as f:
+            f.write(error_msg)
+
+        res = subprocess.run(
+            ["bash", check_script, log_file],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(res.returncode, 0)
+
     def test_extract_failed_zone_from_spot_stockout_log(self):
-        """Test extracting zone from 'Deploying in ZONE:' only when capacity error is present."""
+        """Test extracting zone from 'Deploying in ZONE:' only on capacity error."""
         log_content = (
             "Deploying in ZONE: us-south1-b, MODEL: SPOT\n"
             "Starting terraform deployment...\n"
-            "google_compute_region_instance_group_manager: ZONE_RESOURCE_POOL_EXHAUSTED\n"
+            "google_compute_region_instance_group_manager: "
+            "ZONE_RESOURCE_POOL_EXHAUSTED\n"
         )
         log_file = os.path.join(self.test_dir, "job_logs.txt")
         with open(log_file, "w", encoding="utf-8") as f:
             f.write(log_content)
 
+        extract_pattern = (
+            r".*resource exhausted: not enough resources available to fulfill "
+            r"the request in \([a-z0-9-]*\).*"
+        )
+        zone_pattern = r".*Deploying in ZONE: \([a-z0-9-]*\).*"
+        capacity_pattern = (
+            "ZONE_RESOURCE_POOL_EXHAUSTED|"
+            "not enough resources available|"
+            "resource exhausted|"
+            "stockout"
+        )
         script = f"""
-        FAILED_ZONE=$(sed -n 's/.*resource exhausted: not enough resources available to fulfill the request in \\([a-z0-9-]*\\).*/\\1/p' {log_file} | tail -n 1 || true)
+        FAILED_ZONE=$(sed -n 's/{extract_pattern}/\\1/p' {log_file} |
+            tail -n 1 || true)
         if [ -z "$FAILED_ZONE" ]; then
-            if grep -qE "ZONE_RESOURCE_POOL_EXHAUSTED|does not have enough resources available" {log_file}; then
-                FAILED_ZONE=$(sed -n 's/.*Deploying in ZONE: \\([a-z0-9-]*\\).*/\\1/p' {log_file} | tail -n 1 || true)
+            if grep -q -i -E "{capacity_pattern}" {log_file}; then
+                FAILED_ZONE=$(sed -n 's/{zone_pattern}/\\1/p' {log_file} |
+                    tail -n 1 || true)
             fi
         fi
         echo "$FAILED_ZONE"
         """
-        result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            ["bash", "-c", script], capture_output=True, text=True, check=True
+        )
         self.assertEqual(result.stdout.strip(), "us-south1-b")
 
     def test_no_zone_extraction_on_non_capacity_retriable_error(self):
-        """Verify that non-capacity transient errors do not extract or blacklist healthy zones."""
+        """Verify that non-capacity transient errors do not extract healthy zones."""
         log_content = (
             "Deploying in ZONE: us-central1-a, MODEL: SPOT\n"
             "Error: googleapi: Error 429: Rate Limit Exceeded, RATE_LIMIT_EXCEEDED\n"
@@ -125,17 +169,113 @@ class TestCloudBuildZoneRetry(unittest.TestCase):
         with open(log_file, "w", encoding="utf-8") as f:
             f.write(log_content)
 
+        extract_pattern = (
+            r".*resource exhausted: not enough resources available to fulfill "
+            r"the request in \([a-z0-9-]*\).*"
+        )
+        zone_pattern = r".*Deploying in ZONE: \([a-z0-9-]*\).*"
+        capacity_pattern = (
+            "ZONE_RESOURCE_POOL_EXHAUSTED|"
+            "not enough resources available|"
+            "resource exhausted|"
+            "stockout"
+        )
         script = f"""
-        FAILED_ZONE=$(sed -n 's/.*resource exhausted: not enough resources available to fulfill the request in \\([a-z0-9-]*\\).*/\\1/p' {log_file} | tail -n 1 || true)
+        FAILED_ZONE=$(sed -n 's/{extract_pattern}/\\1/p' {log_file} |
+            tail -n 1 || true)
         if [ -z "$FAILED_ZONE" ]; then
-            if grep -qE "ZONE_RESOURCE_POOL_EXHAUSTED|does not have enough resources available" {log_file}; then
-                FAILED_ZONE=$(sed -n 's/.*Deploying in ZONE: \\([a-z0-9-]*\\).*/\\1/p' {log_file} | tail -n 1 || true)
+            if grep -q -i -E "{capacity_pattern}" {log_file}; then
+                FAILED_ZONE=$(sed -n 's/{zone_pattern}/\\1/p' {log_file} |
+                    tail -n 1 || true)
             fi
         fi
         echo "$FAILED_ZONE"
         """
-        result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            ["bash", "-c", script], capture_output=True, text=True, check=True
+        )
         self.assertEqual(result.stdout.strip(), "")
+
+    def test_extract_failed_zone_case_insensitive_variants(self):
+        """Test case-insensitive detection of all capacity exhaustion variants."""
+        cases = [
+            (
+                "Deploying in ZONE: us-central1-a, MODEL: SPOT\n"
+                "Error: googleapi: Error code 8, message: "
+                "resource exhausted: system limit for internal resources "
+                "has been reached\n",
+                "us-central1-a",
+            ),
+            (
+                "Deploying in ZONE: us-east4-c, MODEL: SPOT\n"
+                "google_compute_region_instance_group_manager: "
+                "zone_resource_pool_exhausted\n",
+                "us-east4-c",
+            ),
+            (
+                "Deploying in ZONE: us-west4-b, MODEL: SPOT\n"
+                "Error: Instance group manager experienced a STOCKOUT "
+                "during creation\n",
+                "us-west4-b",
+            ),
+            (
+                "Deploying in ZONE: us-west1-c, MODEL: SPOT\n"
+                "Compute Engine does NOT ENOUGH RESOURCES AVAILABLE "
+                "in the specified zone.\n",
+                "us-west1-c",
+            ),
+            (
+                "Deploying in ZONE: europe-west4-a, MODEL: SPOT\n"
+                "Error: Resource Exhausted when creating compute instance.\n",
+                "europe-west4-a",
+            ),
+            (
+                "Deploying in ZONE: us-central1-a, MODEL: SPOT\n"
+                "Error: Rate Limit Exceeded (HTTP 429)\n",
+                "",
+            ),
+            (
+                "Deploying in ZONE: us-central1-a, MODEL: SPOT\n"
+                "Error: 503 Service Unavailable\n",
+                "",
+            ),
+        ]
+
+        extract_pattern = (
+            r".*resource exhausted: not enough resources available to fulfill "
+            r"the request in \([a-z0-9-]*\).*"
+        )
+        zone_pattern = r".*Deploying in ZONE: \([a-z0-9-]*\).*"
+        capacity_pattern = (
+            "ZONE_RESOURCE_POOL_EXHAUSTED|"
+            "not enough resources available|"
+            "resource exhausted|"
+            "stockout"
+        )
+        for log_snippet, expected_zone in cases:
+            log_file = os.path.join(self.test_dir, "test_job_logs.txt")
+            with open(log_file, "w", encoding="utf-8") as f:
+                f.write(log_snippet)
+
+            script = f"""
+            FAILED_ZONE=$(sed -n 's/{extract_pattern}/\\1/p' {log_file} |
+                tail -n 1 || true)
+            if [ -z "$FAILED_ZONE" ]; then
+                if grep -q -i -E "{capacity_pattern}" {log_file}; then
+                    FAILED_ZONE=$(sed -n 's/{zone_pattern}/\\1/p' {log_file} |
+                        tail -n 1 || true)
+                fi
+            fi
+            echo "$FAILED_ZONE"
+            """
+            result = subprocess.run(
+                ["bash", "-c", script], capture_output=True, text=True, check=True
+            )
+            self.assertEqual(
+                result.stdout.strip(),
+                expected_zone,
+                f"Failed for log snippet:\n{log_snippet}",
+            )
 
     def test_update_job_exclude_zones_basic_injection_and_update(self):
         """Test update_job_exclude_zones.py injecting and updating EXCLUDE_ZONES."""
@@ -145,14 +285,26 @@ class TestCloudBuildZoneRetry(unittest.TestCase):
 
         # 1. First injection
         subprocess.run(
-            ["python3", UPDATE_SCRIPT, "--inject", "--file", job_file, "--zones", "us-west1-b"],
+            [
+                "python3",
+                UPDATE_SCRIPT,
+                "--inject",
+                "--file",
+                job_file,
+                "--zones",
+                "us-west1-b",
+            ],
             check=True,
         )
 
         with open(job_file, "r", encoding="utf-8") as f:
             parsed = yaml.safe_load(f)
 
-        runner = next(c for c in parsed["spec"]["template"]["spec"]["containers"] if c["name"] == "runner")
+        runner = next(
+            c
+            for c in parsed["spec"]["template"]["spec"]["containers"]
+            if c["name"] == "runner"
+        )
         entry = next((e for e in runner["env"] if e["name"] == "EXCLUDE_ZONES"), None)
         self.assertIsNotNone(entry)
         self.assertEqual(entry["value"], "us-west1-b")
@@ -168,20 +320,35 @@ class TestCloudBuildZoneRetry(unittest.TestCase):
 
         # 3. Update with accumulated zones
         subprocess.run(
-            ["python3", UPDATE_SCRIPT, "--inject", "--file", job_file, "--zones", "us-west1-b us-south1-b"],
+            [
+                "python3",
+                UPDATE_SCRIPT,
+                "--inject",
+                "--file",
+                job_file,
+                "--zones",
+                "us-west1-b us-south1-b",
+            ],
             check=True,
         )
 
         with open(job_file, "r", encoding="utf-8") as f:
             parsed_retry = yaml.safe_load(f)
 
-        runner_retry = next(c for c in parsed_retry["spec"]["template"]["spec"]["containers"] if c["name"] == "runner")
-        entry_retry = next((e for e in runner_retry["env"] if e["name"] == "EXCLUDE_ZONES"), None)
+        runner_retry = next(
+            c
+            for c in parsed_retry["spec"]["template"]["spec"]["containers"]
+            if c["name"] == "runner"
+        )
+        entry_retry = next(
+            (e for e in runner_retry["env"] if e["name"] == "EXCLUDE_ZONES"),
+            None,
+        )
         self.assertIsNotNone(entry_retry)
         self.assertEqual(entry_retry["value"], "us-west1-b us-south1-b")
 
     def test_update_job_exclude_zones_preserves_metadata_and_sidecars(self):
-        """Test that metadata labels (env: staging) and sidecar containers are not corrupted."""
+        """Test metadata labels and sidecars are not corrupted."""
         complex_job = """\
 apiVersion: batch/v1
 kind: Job
@@ -213,7 +380,15 @@ spec:
             f.write(complex_job)
 
         subprocess.run(
-            ["python3", UPDATE_SCRIPT, "--inject", "--file", job_file, "--zones", "us-west1-a us-west1-b"],
+            [
+                "python3",
+                UPDATE_SCRIPT,
+                "--inject",
+                "--file",
+                job_file,
+                "--zones",
+                "us-west1-a us-west1-b",
+            ],
             check=True,
         )
 
@@ -224,11 +399,19 @@ spec:
         self.assertEqual(parsed["metadata"]["labels"]["env"], "staging")
 
         # Verify sidecar container env was NOT injected
-        sidecar = next(c for c in parsed["spec"]["template"]["spec"]["containers"] if c["name"] == "sidecar")
+        sidecar = next(
+            c
+            for c in parsed["spec"]["template"]["spec"]["containers"]
+            if c["name"] == "sidecar"
+        )
         self.assertFalse(any(e["name"] == "EXCLUDE_ZONES" for e in sidecar["env"]))
 
         # Verify runner container received EXCLUDE_ZONES
-        runner = next(c for c in parsed["spec"]["template"]["spec"]["containers"] if c["name"] == "runner")
+        runner = next(
+            c
+            for c in parsed["spec"]["template"]["spec"]["containers"]
+            if c["name"] == "runner"
+        )
         entry = next((e for e in runner["env"] if e["name"] == "EXCLUDE_ZONES"), None)
         self.assertIsNotNone(entry)
         self.assertEqual(entry["value"], "us-west1-a us-west1-b")
@@ -265,14 +448,26 @@ spec:
 
         # Update
         subprocess.run(
-            ["python3", UPDATE_SCRIPT, "--inject", "--file", job_file, "--zones", "us-central1-a us-central1-b us-west1-b"],
+            [
+                "python3",
+                UPDATE_SCRIPT,
+                "--inject",
+                "--file",
+                job_file,
+                "--zones",
+                "us-central1-a us-central1-b us-west1-b",
+            ],
             check=True,
         )
 
         with open(job_file, "r", encoding="utf-8") as f:
             parsed = yaml.safe_load(f)
 
-        runner = next(c for c in parsed["spec"]["template"]["spec"]["containers"] if c["name"] == "runner")
+        runner = next(
+            c
+            for c in parsed["spec"]["template"]["spec"]["containers"]
+            if c["name"] == "runner"
+        )
         entry = next((e for e in runner["env"] if e["name"] == "EXCLUDE_ZONES"), None)
         self.assertIsNotNone(entry)
         self.assertEqual(entry["value"], "us-central1-a us-central1-b us-west1-b")
@@ -295,14 +490,26 @@ spec:
             f.write(no_env_job)
 
         subprocess.run(
-            ["python3", UPDATE_SCRIPT, "--inject", "--file", job_file, "--zones", "europe-west2-c"],
+            [
+                "python3",
+                UPDATE_SCRIPT,
+                "--inject",
+                "--file",
+                job_file,
+                "--zones",
+                "europe-west2-c",
+            ],
             check=True,
         )
 
         with open(job_file, "r", encoding="utf-8") as f:
             parsed = yaml.safe_load(f)
 
-        runner = next(c for c in parsed["spec"]["template"]["spec"]["containers"] if c["name"] == "runner")
+        runner = next(
+            c
+            for c in parsed["spec"]["template"]["spec"]["containers"]
+            if c["name"] == "runner"
+        )
         self.assertEqual(len(runner["env"]), 1)
         self.assertEqual(runner["env"][0]["name"], "EXCLUDE_ZONES")
         self.assertEqual(runner["env"][0]["value"], "europe-west2-c")
@@ -331,7 +538,12 @@ spec:
         # Single element match
         check_zone "europe-west2-c" "europe-west2-c"
         """
-        result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            ["bash", "-c", script],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
         outputs = result.stdout.strip().splitlines()
         self.assertEqual(outputs[0], "EXCLUDED")
         self.assertEqual(outputs[1], "EXCLUDED")
@@ -339,14 +551,17 @@ spec:
         self.assertEqual(outputs[3], "ALLOWED")
         self.assertEqual(outputs[4], "EXCLUDED")
 
-    def test_find_available_zone_lustre_defaults_and_override(self):
-        """Test default Lustre exclusions, bypass with 'none', and non-Lustre immunity."""
+    def test_find_available_zone_lustre_no_defaults_and_filtering(self):
+        """Test Lustre has no default exclusions and filters when configured."""
         script = """
         filter_zones() {
             local CHECK_LUSTRE=$1
             local LUSTRE_EXCLUDE_ZONES=$2
             local EXCLUDE_ZONES=$3
-            local ZONES=("us-west1-a" "us-west1-b" "us-west1-c" "us-south1-b" "europe-west2-c" "us-central1-a")
+            local ZONES=(
+                "us-west1-a" "us-west1-b" "us-west1-c"
+                "us-south1-b" "europe-west2-c" "us-central1-a"
+            )
             local KEPT=()
 
             for ZONE in "${ZONES[@]}"; do
@@ -357,9 +572,9 @@ spec:
                 fi
 
                 if [[ "${CHECK_LUSTRE:-false}" == "true" ]]; then
-                    LUSTRE_EXCLUDE="${LUSTRE_EXCLUDE_ZONES:-us-west1-a us-west1-b us-west1-c us-south1-b europe-west2-c}"
-                    if [[ "${LUSTRE_EXCLUDE}" != "none" ]]; then
-                        if [[ " ${LUSTRE_EXCLUDE//,/ } " == *" ${ZONE} "* ]]; then
+                    if [[ -n "${LUSTRE_EXCLUDE_ZONES:-}" && \
+                          "${LUSTRE_EXCLUDE_ZONES}" != "none" ]]; then
+                        if [[ " ${LUSTRE_EXCLUDE_ZONES//,/ } " == *" ${ZONE} "* ]]; then
                             continue
                         fi
                     fi
@@ -370,25 +585,188 @@ spec:
             echo "${KEPT[*]}"
         }
 
-        # Case 1: CHECK_LUSTRE=true, default exclusions active -> only us-central1-a survives
+        # Case 1: CHECK_LUSTRE=true, no exclusions -> all survive
         filter_zones "true" "" ""
 
-        # Case 2: CHECK_LUSTRE=false (e.g. JBVM or GKE non-Lustre test) -> all survive
+        # Case 2: CHECK_LUSTRE=false, no exclusions -> all survive
         filter_zones "false" "" ""
 
-        # Case 3: CHECK_LUSTRE=true, but LUSTRE_EXCLUDE_ZONES="none" -> all survive
+        # Case 3: CHECK_LUSTRE=true, LUSTRE_EXCLUDE_ZONES="none" -> all survive
         filter_zones "true" "none" ""
 
-        # Case 4: Custom EXCLUDE_ZONES="us-central1-a" with CHECK_LUSTRE=false -> us-central1-a filtered out
+        # Case 4: Space-delimited LUSTRE_EXCLUDE_ZONES -> filtered out
+        filter_zones "true" "us-west1-a us-west1-b" ""
+
+        # Case 5: Comma-delimited LUSTRE_EXCLUDE_ZONES -> filtered out
+        filter_zones "true" "us-south1-b,europe-west2-c" ""
+
+        # Case 6: Custom EXCLUDE_ZONES with CHECK_LUSTRE=false -> filtered out
         filter_zones "false" "" "us-central1-a"
+
+        # Case 7: Both EXCLUDE_ZONES and LUSTRE_EXCLUDE_ZONES set -> both filtered
+        filter_zones "true" "us-west1-a" "us-central1-a"
         """
-        result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            ["bash", "-c", script], capture_output=True, text=True, check=True
+        )
         outputs = result.stdout.strip().splitlines()
 
-        self.assertEqual(outputs[0], "us-central1-a")
-        self.assertEqual(outputs[1], "us-west1-a us-west1-b us-west1-c us-south1-b europe-west2-c us-central1-a")
-        self.assertEqual(outputs[2], "us-west1-a us-west1-b us-west1-c us-south1-b europe-west2-c us-central1-a")
-        self.assertEqual(outputs[3], "us-west1-a us-west1-b us-west1-c us-south1-b europe-west2-c")
+        all_zones = (
+            "us-west1-a us-west1-b us-west1-c us-south1-b europe-west2-c us-central1-a"
+        )
+        self.assertEqual(outputs[0], all_zones)
+        self.assertEqual(outputs[1], all_zones)
+        self.assertEqual(outputs[2], all_zones)
+        self.assertEqual(
+            outputs[3], "us-west1-c us-south1-b europe-west2-c us-central1-a"
+        )
+        self.assertEqual(
+            outputs[4], "us-west1-a us-west1-b us-west1-c us-central1-a"
+        )
+        self.assertEqual(
+            outputs[5], "us-west1-a us-west1-b us-west1-c us-south1-b europe-west2-c"
+        )
+        self.assertEqual(
+            outputs[6], "us-west1-b us-west1-c us-south1-b europe-west2-c"
+        )
+
+    def test_script_dir_and_job_file_portability(self):
+        """Test SCRIPT_DIR dynamic resolution and custom JOB_FILE/JOB_LOGS."""
+        repo_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+        cloud_build_dir = os.path.join(repo_dir, "tools", "cloud-build")
+        submit_script = os.path.join(cloud_build_dir, "submit_and_monitor_kueue_job.sh")
+
+        # 1. Verify exact portable constructs in submit_and_monitor_kueue_job.sh
+        with open(submit_script, "r", encoding="utf-8") as f:
+            submit_content = f.read()
+
+        self.assertIn(
+            'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"',
+            submit_content,
+        )
+        self.assertIn(
+            'JOB_FILE="${JOB_FILE:-/workspace/job.yaml}"',
+            submit_content,
+        )
+        self.assertIn(
+            'JOB_LOGS="${JOB_LOGS:-/workspace/job_logs.txt}"',
+            submit_content,
+        )
+        self.assertIn(
+            'kubectl apply -f "$JOB_FILE"',
+            submit_content,
+        )
+        self.assertIn(
+            'bash "${SCRIPT_DIR}/check_retriable_error.sh" "$JOB_LOGS"',
+            submit_content,
+        )
+        self.assertIn(
+            'python3 "${SCRIPT_DIR}/update_job_exclude_zones.py" --inject'
+            ' --file "$JOB_FILE" --zones "$ACCUMULATED_EXCLUDE_ZONES"',
+            submit_content,
+        )
+
+        # 2. Verify BASH_SOURCE resolution behavior when invoked from arbitrary CWD
+        sub_dir = os.path.join(self.test_dir, "nested_bin")
+        os.makedirs(sub_dir)
+        dir_probe_script = os.path.join(sub_dir, "probe_dir.sh")
+        with open(dir_probe_script, "w", encoding="utf-8") as f:
+            f.write(
+                "#!/bin/bash\n"
+                'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\n'
+                'echo "$SCRIPT_DIR"\n'
+            )
+
+        probe_res = subprocess.run(
+            ["bash", dir_probe_script],
+            cwd=self.test_dir,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertEqual(probe_res.stdout.strip(), sub_dir)
+
+        # 3. Test fallback when JOB_FILE and JOB_LOGS are unset
+        res_default = subprocess.run(
+            [
+                "bash",
+                "-c",
+                'JOB_FILE="${JOB_FILE:-/workspace/job.yaml}"; '
+                'JOB_LOGS="${JOB_LOGS:-/workspace/job_logs.txt}"; '
+                'echo "$JOB_FILE|$JOB_LOGS"',
+            ],
+            env={
+                k: v
+                for k, v in os.environ.items()
+                if k not in ("JOB_FILE", "JOB_LOGS")
+            },
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertEqual(
+            res_default.stdout.strip(),
+            "/workspace/job.yaml|/workspace/job_logs.txt",
+        )
+
+        # 4. Test SCRIPT_DIR helpers and custom JOB_FILE / JOB_LOGS from arbitrary CWD
+        custom_job_file = os.path.join(self.test_dir, "custom_job.yaml")
+        with open(custom_job_file, "w", encoding="utf-8") as f:
+            f.write(SAMPLE_JOB_YAML)
+
+        custom_job_logs = os.path.join(self.test_dir, "logs", "custom_job_logs.txt")
+
+        runner_script = os.path.join(self.test_dir, "run_portability_test.sh")
+        with open(runner_script, "w", encoding="utf-8") as f:
+            f.write(
+                "#!/bin/bash\n"
+                "set -e\n"
+                f'SCRIPT_DIR="{cloud_build_dir}"\n'
+                'JOB_FILE="${JOB_FILE:-/workspace/job.yaml}"\n'
+                'JOB_LOGS="${JOB_LOGS:-/workspace/job_logs.txt}"\n'
+                'mkdir -p "$(dirname "$JOB_LOGS")"\n'
+                'if [ -f "$JOB_FILE" ]; then\n'
+                '    JOB_NAME=$(grep -m 1 -E \'^ *name:\' "$JOB_FILE" | '
+                'awk \'{print $2}\' | tr -d \'"\' | tr -d "\'")\n'
+                'fi\n'
+                'echo "JOB_NAME=$JOB_NAME"\n'
+                'ACCUMULATED_EXCLUDE_ZONES=""\n'
+                'if [ -f "$JOB_FILE" ]; then\n'
+                '    ACCUMULATED_EXCLUDE_ZONES=$(python3 '
+                '"${SCRIPT_DIR}/update_job_exclude_zones.py" '
+                '--extract --file "$JOB_FILE" 2>/dev/null || true)\n'
+                'fi\n'
+                'echo "INITIAL_EXCLUDE=$ACCUMULATED_EXCLUDE_ZONES"\n'
+                'python3 "${SCRIPT_DIR}/update_job_exclude_zones.py" '
+                '--inject --file "$JOB_FILE" --zones "us-west1-b us-central1-a"\n'
+                'echo "resource exhausted" > "$JOB_LOGS"\n'
+                'bash "${SCRIPT_DIR}/check_retriable_error.sh" "$JOB_LOGS"\n'
+            )
+
+        env = dict(os.environ, JOB_FILE=custom_job_file, JOB_LOGS=custom_job_logs)
+        run_res = subprocess.run(
+            ["bash", runner_script],
+            cwd=self.test_dir,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertIn("JOB_NAME=ml-a3-ultragpu-onspot-slurm-123456", run_res.stdout)
+        self.assertIn("INITIAL_EXCLUDE=", run_res.stdout)
+        self.assertTrue(os.path.exists(custom_job_logs))
+
+        # Verify custom_job_file was correctly updated
+        with open(custom_job_file, "r", encoding="utf-8") as f:
+            parsed = yaml.safe_load(f)
+        runner = next(
+            c
+            for c in parsed["spec"]["template"]["spec"]["containers"]
+            if c["name"] == "runner"
+        )
+        entry = next((e for e in runner["env"] if e["name"] == "EXCLUDE_ZONES"), None)
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["value"], "us-west1-b us-central1-a")
 
 
 if __name__ == "__main__":
