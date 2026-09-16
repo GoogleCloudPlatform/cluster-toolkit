@@ -82,7 +82,7 @@ variable "service_account" {
   type        = string
   default     = null
   validation {
-    condition     = var.service_account == null || var.service_account == "" || can(regex("^[a-z0-9-]+@[a-z0-9-]+\\.iam\\.gserviceaccount\\.com$", var.service_account)) || can(regex("^[a-zA-Z0-9_-]+$", var.service_account))
+    condition     = var.service_account == null || var.service_account == "" || can(regex("^[^@]+@[^@]+\\.[^@]+$", var.service_account)) || can(regex("^[a-zA-Z0-9_-]+$", var.service_account))
     error_message = "service_account must be null, empty, a full service account email, or a service account name."
   }
 }
