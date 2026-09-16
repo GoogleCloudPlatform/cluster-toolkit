@@ -19,7 +19,9 @@ package shell
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
@@ -27,6 +29,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -43,6 +46,7 @@ type CommandResult struct {
 	Stdout   string
 	Stderr   string
 	ExitCode int
+	Err      error
 }
 
 // Command represents a shell command that can be executed.
@@ -71,26 +75,24 @@ func (c *Command) Execute() CommandResult {
 	c.cmd.Stderr = &c.stderr
 
 	err := c.cmd.Run()
+
+	result := CommandResult{
+		Stdout: c.stdout.String(),
+		Stderr: c.stderr.String(),
+		Err:    err,
+	}
+
 	if err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
-			return CommandResult{
-				Stdout:   c.stdout.String(),
-				Stderr:   c.stderr.String(),
-				ExitCode: exitError.ExitCode(),
-			}
+			result.ExitCode = exitError.ExitCode()
+		} else {
+			result.ExitCode = 1
 		}
-		// If it's not an ExitError, it's some other error during command execution
-		return CommandResult{
-			Stdout:   c.stdout.String(),
-			Stderr:   c.stderr.String(),
-			ExitCode: 1, // Generic error code
-		}
+	} else {
+		result.ExitCode = 0
 	}
-	return CommandResult{
-		Stdout:   c.stdout.String(),
-		Stderr:   c.stderr.String(),
-		ExitCode: 0,
-	}
+
+	return result
 }
 
 // ExecuteCommand executes a shell command and returns its output and exit code.
@@ -228,4 +230,44 @@ func ExtractRegion(location string) string {
 		return parts[0] + "-" + parts[1]
 	}
 	return location
+}
+
+// ExecuteCommandWithTimeout executes a shell command but forcibly kills the
+// process if it does not complete within the provided timeout duration.
+func ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...string) CommandResult {
+	// Create a context that automatically cancels after the timeout
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+
+	err := cmd.Run()
+
+	if err != nil && ctx.Err() == context.DeadlineExceeded {
+		err = context.DeadlineExceeded
+	}
+
+	result := CommandResult{
+		Stdout: stdoutBuf.String(),
+		Stderr: stderrBuf.String(),
+		Err:    err,
+	}
+
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			result.ExitCode = 124
+		} else if exitError, ok := err.(*exec.ExitError); ok {
+			result.ExitCode = exitError.ExitCode()
+		} else {
+			result.ExitCode = -1
+		}
+	} else {
+		result.ExitCode = 0
+	}
+
+	return result
 }

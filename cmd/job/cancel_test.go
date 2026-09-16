@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCancelCmd_Success(t *testing.T) {
@@ -56,6 +57,10 @@ func (m *mockCancelExecutor) ExecuteCommand(name string, args ...string) shell.C
 		return shell.CommandResult{ExitCode: 0, Stdout: "{}"}
 	}
 	return shell.CommandResult{ExitCode: 0}
+}
+
+func (m *mockCancelExecutor) ExecuteCommandWithTimeout(_ time.Duration, name string, args ...string) shell.CommandResult {
+	return m.ExecuteCommand(name, args...)
 }
 
 func (m *mockCancelExecutor) ExecuteCommandStream(name string, args ...string) error {

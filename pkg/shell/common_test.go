@@ -17,9 +17,12 @@ limitations under the License.
 package shell
 
 import (
+	"context"
+	"errors"
 	"hpc-toolkit/pkg/config"
 	"os"
 	"path/filepath"
+	"time"
 
 	. "gopkg.in/check.v1"
 )
@@ -165,4 +168,29 @@ func (s *MySuite) TestAskForConfirmation_No(c *C) {
 
 	got := PromptYesNo("Test prompt")
 	c.Assert(got, Equals, false)
+}
+
+func (s *MySuite) TestExecuteCommandWithTimeout_SuccessfulExecution(c *C) {
+	timeout := 2 * time.Second
+
+	result := ExecuteCommandWithTimeout(timeout, "echo", "hello world")
+
+	c.Assert(result.Err, IsNil, Commentf("Expected successful execution, got error: %v", result.Err))
+	c.Assert(result.ExitCode, Equals, 0)
+
+	expectedOutput := "hello world\n"
+	c.Assert(result.Stdout, Equals, expectedOutput)
+}
+
+func (s *MySuite) TestExecuteCommandWithTimeout_KillsHangingProcess(c *C) {
+	timeout := 100 * time.Millisecond
+
+	result := ExecuteCommandWithTimeout(timeout, "sleep", "5")
+
+	c.Assert(result.Err, NotNil, Commentf("Expected an error due to timeout, but got nil"))
+
+	isTimeoutErr := errors.Is(result.Err, context.DeadlineExceeded)
+	c.Assert(isTimeoutErr, Equals, true, Commentf("Expected context timeout error, got: %v", result.Err))
+
+	c.Assert(result.ExitCode, Equals, 124, Commentf("Expected ExitCode 124 for a timed-out process, got: %d", result.ExitCode))
 }

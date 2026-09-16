@@ -117,6 +117,10 @@ func (m *MockExecutor) ExecuteCommand(name string, args ...string) shell.Command
 	}
 }
 
+func (m *MockExecutor) ExecuteCommandWithTimeout(_ time.Duration, name string, args ...string) shell.CommandResult {
+	return m.ExecuteCommand(name, args...)
+}
+
 func (m *MockExecutor) ExecuteCommandStream(name string, args ...string) error {
 	// Mock implementation: just return nil to satisfy interface
 	return nil

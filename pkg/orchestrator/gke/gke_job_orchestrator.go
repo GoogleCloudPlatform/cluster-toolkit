@@ -2303,6 +2303,10 @@ func (d *DefaultExecutor) ExecuteCommand(name string, args ...string) shell.Comm
 	return shell.ExecuteCommand(name, args...)
 }
 
+func (d *DefaultExecutor) ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...string) shell.CommandResult {
+	return shell.ExecuteCommandWithTimeout(timeout, name, args...)
+}
+
 func (d *DefaultExecutor) ExecuteCommandStream(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
