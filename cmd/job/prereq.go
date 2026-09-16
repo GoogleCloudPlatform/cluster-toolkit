@@ -17,6 +17,7 @@ package job
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/shell"
@@ -28,6 +29,8 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2/google"
 )
+
+var executeCmdWithTimeoutFunc = shell.ExecuteCommandWithTimeout
 
 type PrereqStore interface {
 	Load() PrereqState
@@ -115,7 +118,19 @@ func ensureGCloudSDKInstalled() error {
 
 // ensureGCloudAuthenticated checks if gcloud is authenticated.
 func ensureGCloudAuthenticated() error {
-	result := shell.ExecuteCommand("gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
+	timeoutDuration := 30 * time.Second
+
+	result := executeCmdWithTimeoutFunc(timeoutDuration, "gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
+
+	if result.Err != nil {
+		if errors.Is(result.Err, context.DeadlineExceeded) {
+			return fmt.Errorf("gcloud authentication check timed out after %v. Please check your network connection", timeoutDuration)
+		}
+		if result.ExitCode == -1 {
+			return fmt.Errorf("failed to execute gcloud: %w", result.Err)
+		}
+	}
+
 	if result.ExitCode != 0 || strings.TrimSpace(result.Stdout) == "" {
 		return fmt.Errorf("gcloud is not authenticated")
 	}
@@ -243,7 +258,18 @@ func isPermissionDeniedError(stderr string, projectID string) bool {
 
 // ensureProjectExists checks if the project exists and is accessible.
 func ensureProjectExists(projectID string) error {
-	result := shell.ExecuteCommand("gcloud", "projects", "describe", projectID)
+	timeoutDuration := 30 * time.Second
+
+	result := executeCmdWithTimeoutFunc(timeoutDuration, "gcloud", "projects", "describe", projectID)
+	if result.Err != nil {
+		if errors.Is(result.Err, context.DeadlineExceeded) {
+			return fmt.Errorf("gcloud project validation timed out after %v. Please check your network connection", timeoutDuration)
+		}
+		if result.ExitCode == -1 {
+			return fmt.Errorf("failed to execute gcloud: %w", result.Err)
+		}
+	}
+
 	if result.ExitCode != 0 {
 		stderr := strings.TrimSpace(result.Stderr)
 		if isPermissionDeniedError(stderr, projectID) {
@@ -343,7 +369,21 @@ func checkArtifactRegistryAPI(projectID string, state *PrereqState, missing *[]m
 	if projectID == "" {
 		return
 	}
-	apiResult := shell.ExecuteCommand("gcloud", "services", "list", "--filter=NAME:artifactregistry.googleapis.com", "--format=value(STATE)", "--project", projectID)
+
+	timeoutDuration := 30 * time.Second
+
+	apiResult := executeCmdWithTimeoutFunc(timeoutDuration, "gcloud", "services", "list", "--filter=NAME:artifactregistry.googleapis.com", "--format=value(STATE)", "--project", projectID)
+
+	if errors.Is(apiResult.Err, context.DeadlineExceeded) {
+		logging.Warn("Network timeout while checking Artifact Registry API state. Assuming it needs verification.")
+
+		*missing = append(*missing, missingPrereq{
+			name:     fmt.Sprintf("Artifact Registry API (verification timed out after %v)", timeoutDuration),
+			commands: []string{fmt.Sprintf("gcloud services enable artifactregistry.googleapis.com --project %s --quiet", projectID)},
+		})
+		return
+	}
+
 	if strings.TrimSpace(apiResult.Stdout) != "ENABLED" {
 		*missing = append(*missing, missingPrereq{
 			name:     "Artifact Registry API",

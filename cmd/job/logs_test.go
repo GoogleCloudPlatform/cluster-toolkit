@@ -20,6 +20,7 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"strings"
 	"testing"
+	"time"
 )
 
 type mockLogsExecutor struct{}
@@ -32,6 +33,10 @@ func (m *mockLogsExecutor) ExecuteCommand(name string, args ...string) shell.Com
 		return shell.CommandResult{ExitCode: 0, Stdout: "mock logs output"}
 	}
 	return shell.CommandResult{ExitCode: 0}
+}
+
+func (m *mockLogsExecutor) ExecuteCommandWithTimeout(_ time.Duration, name string, args ...string) shell.CommandResult {
+	return m.ExecuteCommand(name, args...)
 }
 
 func (m *mockLogsExecutor) ExecuteCommandStream(name string, args ...string) error {
