@@ -105,10 +105,13 @@ func createTempConfigFile(sourcePath string) (string, error) {
 	return tempFileName, nil
 }
 
+// isQuote reports whether r is a single or double quote character.
 func isQuote(r rune) bool {
 	return r == '"' || r == '\''
 }
 
+// parseEditorArgs splits an editor command into its executable and arguments,
+// respecting single and double quotes.
 func parseEditorArgs(editor string) ([]string, error) {
 	var parts []string
 	var current strings.Builder

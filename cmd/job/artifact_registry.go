@@ -30,10 +30,13 @@ var newArtifactRegistryService = func(ctx context.Context) (*artifactregistry.Se
 	return artifactregistry.NewService(ctx)
 }
 
+// isDockerRepo reports whether repo is a non-nil Docker format repository.
 func isDockerRepo(repo *artifactregistry.Repository) bool {
 	return repo != nil && strings.EqualFold(repo.Format, "DOCKER")
 }
 
+// collectDockerRepos appends Docker repository IDs to suggestions, up to max,
+// and reports whether more were found beyond the limit.
 func collectDockerRepos(repos []*artifactregistry.Repository, suggestions []string, max int) ([]string, bool) {
 	for _, repo := range repos {
 		if !isDockerRepo(repo) {

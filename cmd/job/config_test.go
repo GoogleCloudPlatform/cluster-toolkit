@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -124,23 +125,27 @@ func TestConfigShowCmd(t *testing.T) {
 	}
 }
 
-func TestRunSystemEditor(t *testing.T) {
+func TestParseEditorArgs(t *testing.T) {
 	tests := []struct {
 		name      string
 		editor    string
+		expected  []string
 		expectErr string
 	}{
 		{
-			name:   "editor with flags succeeds",
-			editor: "true --wait",
+			name:     "editor with flags",
+			editor:   "code --wait",
+			expected: []string{"code", "--wait"},
 		},
 		{
-			name:   "quoted executable path succeeds",
-			editor: `"/bin/echo" -n`,
+			name:     "quoted executable path with spaces",
+			editor:   `"/Applications/Sublime Text.app/subl" -w`,
+			expected: []string{"/Applications/Sublime Text.app/subl", "-w"},
 		},
 		{
-			name:   "empty quoted flag succeeds",
-			editor: `true ""`,
+			name:     "empty quoted flag is preserved",
+			editor:   `emacsclient -c -a ""`,
+			expected: []string{"emacsclient", "-c", "-a", ""},
 		},
 		{
 			name:      "empty editor returns error",
@@ -156,13 +161,18 @@ func TestRunSystemEditor(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := runSystemEditor(tc.editor, "/dev/null")
+			got, err := parseEditorArgs(tc.editor)
 			if tc.expectErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.expectErr) {
 					t.Fatalf("expected error containing %q, got: %v", tc.expectErr, err)
 				}
-			} else if err != nil {
+				return
+			}
+			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
+			}
+			if !slices.Equal(got, tc.expected) {
+				t.Errorf("expected %q, got %q", tc.expected, got)
 			}
 		})
 	}
