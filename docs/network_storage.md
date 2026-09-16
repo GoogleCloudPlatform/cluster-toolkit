@@ -43,6 +43,13 @@ Volumes:
 3. Flex Unified — 1 GiB
 4. Flex Unified large capacity — 4800 GiB; set `large_capacity_config.constituent_count`
 
+### Mounting large-capacity volumes and FlexCache
+
+Large-capacity volumes and FlexCache caches expose the same NFS export on multiple IP addresses. For best performance, clients should resolve a DNS name that contains every endpoint IP rather than mounting a single address.
+
+1. **Volumes created by `netapp-volume`** — Provision a private [`dns-managed-zone`][dns-managed-zone] and set `dns_config.managed_zone_name` on the volume. The module creates a round-robin A record and sets `network_storage.server_ip` to the FQDN. Slurm and VM `use:` wiring then mount by hostname.
+2. **Pre-existing volumes and FlexCache** — Create the private zone yourself (the zone module accepts `recordsets`) and set `server_ip` on [`pre-existing-network-storage`][pre-existing-network-storage] to the FQDN. See [`examples/netapp-volumes-slurm.yaml`](../examples/netapp-volumes-slurm.yaml) and the [EDA hybrid blueprint](../community/examples/eda/eda-hybrid-cloud.yaml).
+
 ### Not supported by these modules
 
 1. Flex File
@@ -159,3 +166,4 @@ GCS FUSE (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
 [netapp-volumes]: ../modules/file-system/netapp-volume/README.md
 [netapp-storage-pool]: ../modules/file-system/netapp-storage-pool/README.md
+[dns-managed-zone]: ../modules/network/dns-managed-zone/README.md

@@ -33,10 +33,10 @@ docker build --build-arg BASE_IMAGE=<base_image> \
 Example:
 
 ```bash
-docker build --build-arg CLUSTER_TOOLKIT_REF=v1.40.0 -t gcluster -t ghpc .
+docker build --build-arg CLUSTER_TOOLKIT_REF=v1.103.0 -t gcluster -t ghpc .
 ```
 
-The above example builds an image tagged `gcluster` and sets the `CLUSTER_TOOLKIT_REF` to the Git tag `v1.40.0` while using the default values for other arguments.
+The above example builds an image tagged `gcluster` and sets the `CLUSTER_TOOLKIT_REF` to the Git tag `v1.103.0` (ensuring `>= v1.103.0` for security compliance with [Cluster Toolkit Security Bulletins](https://docs.cloud.google.com/cluster-toolkit/docs/security-bulletins)) while using the default values for other arguments.
 
 ## Run the Cluster Toolkit Docker Image
 To run the Cluster Toolkit Docker image, use the following command:

@@ -49,11 +49,14 @@ Google Cloud is standardizing AI/ML infrastructure orchestration on **Cluster To
 
 ### ⚙️ Installing `gcluster`
 
+> [!WARNING]
+> **Security Notice**: To protect against known vulnerabilities, we recommend installing the latest stable release (**v1.103.0 or later**). For details, see the [Cluster Toolkit Security Bulletins](https://docs.cloud.google.com/cluster-toolkit/docs/security-bulletins).
+
 Download the latest `gcluster` binary release for your operating system:
 
 ```bash
 # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
-# Set the desired version TAG (e.g., v1.89.0)
+# Set the desired version TAG (e.g., v1.103.0)
 TAG=vX.Y.Z
 # Set your OS (linux or mac) and architecture (amd64 or arm64)
 OS="linux"
