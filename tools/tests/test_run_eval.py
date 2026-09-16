@@ -32,6 +32,7 @@ if REPO_ROOT not in sys.path:
 
 from tools.run_eval import (
     lint_skill,
+    lint_eval_yaml,
     parse_frontmatter,
     verify_assertions,
     evaluate_skill,
@@ -1949,6 +1950,264 @@ metadata:
             safe, msg = check_command_safety(unsafe_cmd, mode="diagnostic")
             self.assertFalse(safe, f"Expected '{unsafe_cmd}' to be blocked")
             self.assertIn("System-level destruction is strictly prohibited across all skills", msg)
+
+    def test_kubectl_rollout_diagnostics_allowed_and_mutations_blocked(self):
+        # Read-only kubectl rollout subcommands must be allowed in diagnostic mode
+        for diag_cmd in [
+            "kubectl rollout status deployment/nginx",
+            "kubectl rollout status statefulset/web -n prod",
+            "kubectl rollout status daemonset/fluentd --timeout=60s",
+            "kubectl rollout history deployment/nginx",
+            "kubectl rollout history statefulset/web -n prod",
+            "kubectl rollout history daemonset/fluentd --revision=2",
+        ]:
+            safe, msg = check_command_safety(diag_cmd, mode="diagnostic")
+            self.assertTrue(safe, f"Expected '{diag_cmd}' to be permitted in diagnostic mode: {msg}")
+            safe_rem, _ = check_command_safety(diag_cmd, mode="remediation")
+            self.assertTrue(safe_rem, f"Expected '{diag_cmd}' to be permitted in remediation mode")
+
+        # Mutating kubectl rollout subcommands must be blocked in diagnostic mode
+        for mut_cmd in [
+            "kubectl rollout restart deployment/nginx",
+            "kubectl rollout restart daemonset/fluentd -n kube-system",
+            "kubectl rollout undo deployment/nginx",
+            "kubectl rollout undo statefulset/web --to-revision=1",
+            "kubectl rollout pause deployment/nginx",
+            "kubectl rollout pause statefulset/web",
+            "kubectl rollout resume deployment/nginx",
+            "kubectl rollout resume daemonset/fluentd",
+        ]:
+            safe, msg = check_command_safety(mut_cmd, mode="diagnostic")
+            self.assertFalse(safe, f"Expected '{mut_cmd}' to be blocked in diagnostic mode")
+            self.assertIn("Forbidden mutating command", msg)
+            safe_rem, _ = check_command_safety(mut_cmd, mode="remediation")
+            self.assertTrue(safe_rem, f"Expected '{mut_cmd}' to be permitted in remediation mode")
+
+    def test_gcloud_compute_instances_stop_reset_suspend(self):
+        # Operational mutating gcloud subcommands: blocked in diagnostic, allowed in remediation
+        for gcloud_cmd in [
+            "gcloud compute instances stop instance-1 --zone=us-central1-a",
+            "gcloud compute instances reset instance-2 --zone=us-east1-b",
+            "gcloud compute instances suspend instance-3 --zone=us-west1-c",
+            "gcloud compute instance-groups managed stop-instances ig-1 --instances=inst-1",
+        ]:
+            safe, msg = check_command_safety(gcloud_cmd, mode="diagnostic")
+            self.assertFalse(safe, f"Expected '{gcloud_cmd}' to be blocked in diagnostic mode")
+            self.assertIn("Forbidden mutating command", msg)
+            safe_rem, _ = check_command_safety(gcloud_cmd, mode="remediation")
+            self.assertTrue(safe_rem, f"Expected '{gcloud_cmd}' to be allowed in remediation mode")
+
+        # Irreversible/destructive gcloud commands: blocked across all modes
+        for cat_cmd in [
+            "gcloud compute instances delete instance-1 --zone=us-central1-a",
+            "gcloud compute instances destroy instance-1",
+            "gcloud container clusters delete my-cluster",
+        ]:
+            safe, msg = check_command_safety(cat_cmd, mode="diagnostic")
+            self.assertFalse(safe, f"Expected '{cat_cmd}' to be blocked in diagnostic mode")
+            self.assertIn("System-level destruction", msg)
+            safe_rem, msg_rem = check_command_safety(cat_cmd, mode="remediation")
+            self.assertFalse(safe_rem, f"Expected '{cat_cmd}' to be blocked in remediation mode")
+            self.assertIn("System-level destruction", msg_rem)
+
+    def test_remediation_scalar_string_blast_radius_guard(self):
+        core_dir = os.path.join(self.test_dir, "skills")
+        fm = """
+name: remediation-scalar-blast
+description: Remediation skill with scalar forbidden_commands.
+metadata:
+  author: GoogleCloudPlatform
+  support: core
+  status: stable
+  mode: remediation
+allowed-tools: Bash(sinfo:*) Bash(scontrol:*) Bash(scancel:*)
+"""
+        # Test scalar string "scancel all" passes blast radius validation
+        eval_yaml_scancel = """
+suite_name: scalar_blast_suite
+cases:
+  - name: case_scalar_all
+    prompt: Recover drained node safely.
+    expect_keywords_all:
+      - "scontrol update NodeName=node-1 State=RESUME"
+    forbidden_commands: "scancel all"
+"""
+        spath = self._create_skill("remediation-scalar-blast", fm, eval_yaml=eval_yaml_scancel, base_dir=core_dir)
+        res = lint_skill(spath)
+        self.assertTrue(res.passed, f"Expected scalar 'scancel all' to pass blast radius validation: {res.message}")
+
+        ok, msg = lint_eval_yaml(spath, is_community=False, mode="remediation")
+        self.assertTrue(ok, f"Expected lint_eval_yaml with scalar 'scancel all' to pass: {msg}")
+
+        # Test other wildcard scalar string variants
+        for idx, scalar_cmd in enumerate([
+            "NodeName=ALL",
+            "scancel --all",
+            "scontrol update NodeName=ALL",
+            "kubectl delete --all",
+            "scancel *",
+        ]):
+            skill_name = f"rem-scalar-{idx}"
+            fm_var = f"""
+name: {skill_name}
+description: Remediation skill with scalar wildcard.
+metadata:
+  author: GoogleCloudPlatform
+  support: core
+  status: stable
+  mode: remediation
+allowed-tools: Bash(sinfo:*) Bash(scontrol:*) Bash(scancel:*)
+"""
+            eval_yaml = f"""
+suite_name: scalar_wildcard_suite_{idx}
+cases:
+  - name: case_wildcard
+    prompt: Recover safely.
+    expect_keywords_all:
+      - "sinfo"
+    forbidden_commands: "{scalar_cmd}"
+"""
+            spath_var = self._create_skill(skill_name, fm_var, eval_yaml=eval_yaml, base_dir=core_dir)
+            ok, msg = lint_eval_yaml(spath_var, is_community=False, mode="remediation")
+            self.assertTrue(ok, f"Expected scalar '{scalar_cmd}' to pass blast radius check: {msg}")
+
+        # Test scalar string WITHOUT wildcard fails blast radius validation
+        fm_bad = """
+name: rem-no-wildcard
+description: Remediation skill without wildcard.
+metadata:
+  author: GoogleCloudPlatform
+  support: core
+  status: stable
+  mode: remediation
+allowed-tools: Bash(sinfo:*) Bash(scontrol:*) Bash(scancel:*)
+"""
+        eval_yaml_no_wildcard = """
+suite_name: scalar_no_wildcard_suite
+cases:
+  - name: case_no_wildcard
+    prompt: Recover safely.
+    expect_keywords_all:
+      - "sinfo"
+    forbidden_commands: "scancel 12345"
+"""
+        spath_bad = self._create_skill("rem-no-wildcard", fm_bad, eval_yaml=eval_yaml_no_wildcard, base_dir=core_dir)
+        ok, msg = lint_eval_yaml(spath_bad, is_community=False, mode="remediation")
+        self.assertFalse(ok)
+        self.assertIn("must define 'forbidden_commands' containing at least one bulk wildcard guard", msg)
+
+    def test_community_skill_anti_impersonation_strict(self):
+        comm_dir = os.path.join(self.test_dir, "community", "skills")
+
+        # Legitimate community handles/organizations must pass
+        for idx, valid_author in enumerate(["@gcpatel", "gcpatel", "@alice", "alice", "@contributor-123", "Partner_Org"]):
+            fm = f"""
+name: comm-valid-author-{idx}
+description: Community skill with legitimate community author.
+metadata:
+  author: "{valid_author}"
+  support: community
+  status: stable
+  mode: diagnostic
+"""
+            spath = self._create_skill(f"comm-valid-author-{idx}", fm, eval_yaml=DEFAULT_COMMUNITY_EVAL_YAML, base_dir=comm_dir)
+            res = lint_skill(spath)
+            self.assertTrue(res.passed, f"Expected author '{valid_author}' to pass anti-impersonation: {res.message}")
+
+        # Impersonation attempts must be rejected
+        for idx, bad_author in enumerate([
+            "The Google Team",
+            "Google_Team",
+            "GoogleTeam",
+            "GoogleDevs",
+            "GCPTeam",
+            "@GoogleCloudPlatform",
+            "GoogleCloudPlatform",
+            "googlecloud",
+            "AlphabetInc",
+            "@AlphabetInc",
+            "Alphabet",
+            "GCP Team",
+            "Google.Team",
+            "Google-Team",
+            "@googlecloud",
+        ]):
+            fm = f"""
+name: comm-bad-author-{idx}
+description: Community skill attempting impersonation.
+metadata:
+  author: "{bad_author}"
+  support: community
+  status: stable
+  mode: diagnostic
+"""
+            spath = self._create_skill(f"comm-bad-author-{idx}", fm, eval_yaml=DEFAULT_COMMUNITY_EVAL_YAML, base_dir=comm_dir)
+            res = lint_skill(spath)
+            self.assertFalse(res.passed, f"Expected author '{bad_author}' to be rejected")
+            self.assertIn("cannot declare author", res.message)
+            self.assertIn("Community skills must use a community/partner author handle", res.message)
+
+    def test_experimental_warning_callout_prefixes_and_redos_prevention(self):
+        for idx, valid_body in enumerate([
+            "> [!WARNING]\nThis skill is experimental.",
+            "> [!CAUTION]\nThis skill is experimental.",
+            "> **Warning**: This playbook is experimental.",
+            "## Caution\nThis playbook is experimental.",
+            "* Warning: Experimental features enabled.",
+            "*Caution*: Proceed with care.",
+            "- **WARNING** Experimental tooling.",
+            "   > ### Warning: Experimental",
+            "\t> # Caution\nBe cautious.",
+            "> - *WARNING*: Caution advised.",
+            "### Warning\nUse at your own risk.",
+        ]):
+            skill_name = f"exp-warn-{idx}"
+            fm = f"""
+name: {skill_name}
+description: Experimental skill with warning variants.
+metadata:
+  author: GoogleCloudPlatform
+  support: core
+  status: experimental
+  mode: diagnostic
+"""
+            spath = self._create_skill(skill_name, fm, body=valid_body)
+            res = lint_skill(spath)
+            self.assertTrue(res.passed, f"Expected warning prefix variant to pass: {valid_body!r} - {res.message}")
+
+        # Missing warning callout fails
+        fm_no_warn = """
+name: exp-no-warn
+description: Experimental skill without warning.
+metadata:
+  author: GoogleCloudPlatform
+  support: core
+  status: experimental
+  mode: diagnostic
+"""
+        spath_no_warn = self._create_skill("exp-no-warn", fm_no_warn, body="## Overview\nStandard documentation without callouts.")
+        res_no_warn = lint_skill(spath_no_warn)
+        self.assertFalse(res_no_warn.passed)
+        self.assertIn("must include an upfront warning callout in body", res_no_warn.message)
+
+        # ReDoS resilience: pathological markdown prefixes and horizontal spaces evaluate quickly
+        import time
+        pathological_body = ("> " * 200) + (" \t # * - " * 50) + "not_a_callout"
+        fm_redos = """
+name: exp-redos
+description: Experimental skill testing redos.
+metadata:
+  author: GoogleCloudPlatform
+  support: core
+  status: experimental
+  mode: diagnostic
+"""
+        t0 = time.perf_counter()
+        spath_redos = self._create_skill("exp-redos", fm_redos, body=pathological_body)
+        res_redos = lint_skill(spath_redos)
+        elapsed = time.perf_counter() - t0
+        self.assertFalse(res_redos.passed)
+        self.assertLess(elapsed, 0.1, f"Warning regex evaluation took too long ({elapsed:.3f}s), possible ReDoS!")
 
 
 if __name__ == "__main__":

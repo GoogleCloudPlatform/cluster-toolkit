@@ -58,19 +58,18 @@ CATASTROPHIC_PATTERNS = [
 # Tier 2: Controlled Operational Mutations (Blocked in 'diagnostic' mode; permitted in 'remediation' mode for core skills)
 OPERATIONAL_MUTATING_PATTERNS = [
     # Kubernetes resource operations
-    re.compile(r"\bkubectl\b[^;&|\n]*?\b(?:delete|drain|cordon|uncordon|patch|replace|scale|apply|create|edit|run|taint|label|rollout|exec|cp|attach)\b", re.IGNORECASE),
+    re.compile(r"\bkubectl\b[^;&|\n]*?\b(?:delete|drain|cordon|uncordon|patch|replace|scale|apply|create|edit|run|taint|label|exec|cp|attach)\b", re.IGNORECASE),
+    re.compile(r"\bkubectl\b[^;&|\n]*?\brollout\b[^;&|\n]*?\b(?:restart|undo|pause|resume)\b", re.IGNORECASE),
     # Slurm workload / node state operations
     re.compile(r"\bscontrol\b[^;&|\n]*?\b(?:update|delete|reboot|drain|resume)\b", re.IGNORECASE),
     re.compile(r"(?:^|[\s;`|&\"'()\[\]/\\])(?:scancel|sbatch)\b", re.IGNORECASE),
     # Incremental Terraform / Helm / GCloud deployment operations
     re.compile(r"\bterraform\b[^;&|\n]*?\b(?:apply|taint|import)\b", re.IGNORECASE),
     re.compile(r"\bhelm\b[^;&|\n]*?\b(?:delete)\b", re.IGNORECASE),
-    re.compile(r"\bgcloud\b[^;&|\n]*?\b(?:terminate)\b", re.IGNORECASE),
+    re.compile(r"\bgcloud\b[^;&|\n]*?\b(?:stop|reset|suspend)\b", re.IGNORECASE),
     # Targeted process signals
     re.compile(r"(?:^|[\s;`|&\"'()\[\]/\\])(?:kill|pkill)\b", re.IGNORECASE),
 ]
-
-FORBIDDEN_MUTATING_PATTERNS = CATASTROPHIC_PATTERNS + OPERATIONAL_MUTATING_PATTERNS
 
 @dataclass(frozen=True)
 class LintResult:
@@ -284,9 +283,9 @@ def lint_eval_yaml(skill_path: str, is_community: bool = False, mode: str = "dia
     if mode == "remediation":
         # Autonomous remediation skills must enforce non-blind execution with bounded blast radius.
         # At least one test case must define forbidden_commands containing a wildcard or bulk destruction guard.
-        wildcard_pattern = re.compile(r"(?:\b(?:ALL|all|--all)\b|(?:\s|^)\*(?:\s|$)|[*])")
+        wildcard_pattern = re.compile(r"(?:\b(?:ALL|all|--all)\b|[*])")
         has_blast_radius_guard = any(
-            any(wildcard_pattern.search(str(fcmd)) for fcmd in (raw_case.get("forbidden_commands") or []) if fcmd)
+            any(wildcard_pattern.search(str(fcmd)) for fcmd in _coerce_to_string_list(raw_case.get("forbidden_commands")) if fcmd)
             for raw_case in data["cases"]
             if isinstance(raw_case, dict)
         )
@@ -423,7 +422,7 @@ def lint_skill(skill_path: str, community_dir: Optional[str] = None) -> LintResu
     if status == "experimental":
         has_warning = bool(
             re.search(
-                r"(?:\[!(?:WARNING|CAUTION)\]|^\s*[>#*_\s-]*\b(?:warning|caution)\b)",
+                r"(?:\[!(?:WARNING|CAUTION)\]|^[ \t>#*_-]*\b(?:warning|caution)\b)",
                 body_text,
                 re.IGNORECASE | re.MULTILINE,
             )
@@ -448,7 +447,12 @@ def lint_skill(skill_path: str, community_dir: Optional[str] = None) -> LintResu
     if is_community:
         # Anti-impersonation: community skills must not declare Google/GoogleCloudPlatform
         clean_author = re.sub(r"^@", "", author_str).strip()
-        if re.search(r"^(google|alphabet|gcp)", clean_author, re.IGNORECASE):
+        # Split delimiters and camelCase/PascalCase boundaries into spaces
+        normalized_author = re.sub(r"[_.-]", " ", clean_author)
+        normalized_author = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", normalized_author)
+        normalized_author = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", normalized_author)
+        impersonation_pattern = re.compile(r"\b(?:google|alphabet|gcp)\b|googlecloud|alphabetinc", re.IGNORECASE)
+        if impersonation_pattern.search(normalized_author) or impersonation_pattern.search(clean_author):
             return LintResult(
                 skill_name,
                 False,
