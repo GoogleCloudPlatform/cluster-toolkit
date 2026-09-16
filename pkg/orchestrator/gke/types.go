@@ -225,12 +225,26 @@ type StorageManager struct {
 
 // MountInfo represents parsed volume mount options
 type MountInfo struct {
-	Name      string
-	Source    string
-	MountPath string
-	Type      string
-	ReadOnly  bool
-	Options   string
+	Name                string
+	Source              string
+	MountPath           string
+	Type                string
+	ReadOnly            bool
+	Options             string
+	SubPath             string
+	NeedsGCSFuseSidecar bool
+	Attributes          map[string]string
+}
+
+type GCSFusePVPVCTemplateParams struct {
+	PVName           string
+	PVCName          string
+	Namespace        string
+	StorageClassName string
+	Capacity         string
+	VolumeHandle     string
+	MountOptions     []string
+	VolumeAttributes map[string]string
 }
 
 type FlavorCapacity struct {
