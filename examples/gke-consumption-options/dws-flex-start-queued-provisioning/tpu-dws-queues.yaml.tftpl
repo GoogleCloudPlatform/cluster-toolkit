@@ -19,10 +19,19 @@ metadata:
 spec:
   nodeLabels:
     cloud.google.com/gke-tpu-accelerator: ${accelerator_type}
+    %{ if tpu_topology != "" }cloud.google.com/gke-tpu-topology: ${tpu_topology}%{ endif }
   tolerations:
   - effect: NoSchedule
     key: google.com/tpu
     value: "present"
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ResourceFlavor
+metadata:
+  name: pathways-flavor
+spec:
+  nodeLabels:
+    cloud.google.com/gke-nodepool: cpu-np
 ---
 apiVersion: kueue.x-k8s.io/v1beta2
 kind: AdmissionCheck
@@ -51,22 +60,48 @@ kind: ClusterQueue
 metadata:
   name: "cluster-queue"
 spec:
+  preemption:
+    reclaimWithinCohort: Never # Don't preempt other queues in the cohort.
+    withinClusterQueue: LowerPriority
   namespaceSelector: {}
   resourceGroups:
-  - coveredResources: ["google.com/tpu"]
+  - coveredResources: ["google.com/tpu", "cpu", "memory"]
     flavors:
     - name: "tpu-flavor"
       resources:
       - name: "google.com/tpu"
         nominalQuota: ${tpu_quota}
-  admissionChecks:
-  - dws-prov
+      - name: "cpu"
+        nominalQuota: ${tpu_flavor_cpu_quota} # High default to avoid limiting TPU pods by CPU
+      - name: "memory"
+        nominalQuota: ${tpu_flavor_memory_quota} # High default to avoid limiting TPU pods by Memory
+    - name: pathways-flavor
+      resources:
+      - name: "google.com/tpu"
+        nominalQuota: "0"
+      - name: cpu
+        nominalQuota: ${pathways_cpu_quota}
+      - name: memory
+        nominalQuota: ${pathways_memory_quota}
+  admissionChecksStrategy:
+    admissionChecks:
+    - name: dws-prov
+      onFlavors:
+      - tpu-flavor
 ---
 apiVersion: kueue.x-k8s.io/v1beta2
 kind: LocalQueue
 metadata:
   namespace: "default"
   name: "dws-local-queue"
+spec:
+  clusterQueue: "cluster-queue"
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata:
+  namespace: ${namespace}
+  name: user-queue
 spec:
   clusterQueue: "cluster-queue"
 ---
