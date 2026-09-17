@@ -117,12 +117,6 @@ ghpc:
     error_message: "MIG provisioning engine only supports enable_placement when accelerator_topology is specified (e.g. '1x72')."
   - validator: conditional
     inputs:
-      trigger: accelerator_topology
-      dependent: enable_placement
-      dependent_value: true
-    error_message: "When 'accelerator_topology' is specified, 'enable_placement' must be set to true."
-  - validator: conditional
-    inputs:
       triggers:
         # A null expected value in 'triggers' matches when the setting is set (non-null)
         accelerator_topology: null
