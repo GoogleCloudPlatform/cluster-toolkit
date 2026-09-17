@@ -87,7 +87,7 @@ To achieve this, when creating nodepools with A3 Series machine type, pass in a 
   - Provide sample workload to showcase how it will be updated with the required components injected, and how it can be deployed.
   - Allow user to use the provided script to update their own workload and deploy.
 
-The GPUDirect supports included in the Cluster Toolkit aim to automate the [GPUDirect User Guid](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl) and provide better usability.
+The GPUDirect supports included in the Cluster Toolkit aim to automate the [GPUDirect User Guide](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl) and provide better usability.
 
 > **_NOTE:_** You must [enable multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster) feature when creating the GKE cluster. When gke-cluster depends on multivpc (with the use keyword), multi networking will be automatically enabled on the cluster creation.
 > When gke-cluster or pre-existing-gke-cluster  depends on multivpc (with the use keyword), the [network objects](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#create-gke-environment) required for multi networking will be created on the cluster.

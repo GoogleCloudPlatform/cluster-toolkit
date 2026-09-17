@@ -916,7 +916,7 @@ The blueprint contains 3 groups:
 ### [hpc-slurm-ubuntu2204.yaml] ![community-badge]
 
 Similar to the [hpc-slurm.yaml] example, but using Ubuntu 22.04 instead of CentOS 7.
-[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cluster Toolkit team.
+[Other operating systems] are supported by SchedMD for the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cluster Toolkit team.
 
 The cluster will support 2 partitions named `debug` and `compute`.
 The `debug` partition is the default partition and runs on smaller

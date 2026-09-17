@@ -62,7 +62,7 @@ Within the workbench there are methods for accessing GCP cloud storage (via the
 
 ## Access workbench
 
-Once the workbench is is configured you will be presented with the details
+Once the workbench is configured you will be presented with the details
 page, which will contain a create link to start the workbench.
 
 ![workbench step 3](images/Workbench_userguide/create3.png)
