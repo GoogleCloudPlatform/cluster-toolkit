@@ -483,6 +483,8 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                 successful_creates.extend(chunk_nodes)
             except Exception as e:
                 log.error(f"Failed createInstances for MIG {mig_name} on nodes {to_hostlist(chunk_nodes)}: {e}")
+                reason = getattr(e, "_get_reason", lambda: str(e))()
+                action, admin_comment = error_handler.classify_gcp_error(reason, str(e))
                 nodes_to_cleanup = (
                     list(dict.fromkeys(successful_creates + chunk_nodes))
                     if excl_job_id is not None
@@ -495,6 +497,10 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                         f"skipping inline cleanup, deferring reclamation to the suspend path."
                     )
                     nodes_to_cleanup = []
+                    # Only REQUEUE issues `state=power_down`, which runs SuspendProgram.
+                    # `state=down` alone may never reclaim the VMs we declined to delete.
+                    action = error_handler.Action.REQUEUE
+                    admin_comment = "MIG createInstances outcome unobserved; requeued so suspend reclaims instances"
                 if nodes_to_cleanup:
                     log.warning(
                         f"Cleaning up {len(nodes_to_cleanup)} failed/aborted MIG instances: {to_hostlist(nodes_to_cleanup)}"
@@ -507,13 +513,6 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                         suspend.suspend_mig_nodes(nodes_to_cleanup, lkp)
                     except Exception as clean_err:
                         log.error(f"Failed cleaning up instances {nodes_to_cleanup}: {clean_err}")
-                reason = getattr(e, "_get_reason", lambda: str(e))()
-                action, admin_comment = error_handler.classify_gcp_error(reason, str(e))
-                if deferred_reclaim:
-                    # Only REQUEUE issues `state=power_down`, which runs SuspendProgram.
-                    # `state=down` alone may never reclaim the VMs we declined to delete.
-                    action = error_handler.Action.REQUEUE
-                    admin_comment = "MIG createInstances outcome unobserved; requeued so suspend reclaims instances"
                 failed_nodes = [n.split(".")[0] for n in nodes] if excl_job_id is not None else chunk_nodes
                 handle_resume_failure(
                     failed_nodes,

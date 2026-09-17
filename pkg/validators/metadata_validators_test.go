@@ -1182,8 +1182,13 @@ func TestConditionalValidator_Triggers(t *testing.T) {
 func TestConditionalValidator_TriggersNilExpectedValue(t *testing.T) {
 	// A nil trigger value resolves through the module defaults, so the module must be
 	// registered; without this the lookup of an unset trigger panics in InfoOrDie.
-	modulereader.SetModuleInfo("test/module", "terraform", modulereader.ModuleInfo{})
-	modulereader.SetModuleInfo("test/module", "", modulereader.ModuleInfo{})
+	const testSource = "test/nil-trigger-module"
+	modulereader.SetModuleInfo(testSource, "terraform", modulereader.ModuleInfo{})
+	modulereader.SetModuleInfo(testSource, "", modulereader.ModuleInfo{})
+	t.Cleanup(func() {
+		modulereader.SetModuleInfo(testSource, "terraform", modulereader.ModuleInfo{})
+		modulereader.SetModuleInfo(testSource, "", modulereader.ModuleInfo{})
+	})
 
 	baseBP := config.Blueprint{
 		BlueprintName: "test-bp",
@@ -1191,7 +1196,7 @@ func TestConditionalValidator_TriggersNilExpectedValue(t *testing.T) {
 			{
 				Name: "primary",
 				Modules: []config.Module{
-					{ID: "test-module", Source: "test/module", Settings: config.NewDict(map[string]cty.Value{})},
+					{ID: "test-module", Source: testSource, Settings: config.NewDict(map[string]cty.Value{})},
 				},
 			},
 		},
