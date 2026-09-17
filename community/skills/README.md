@@ -32,7 +32,7 @@ These skills equip AI development environments and coding agents (such as Gemini
 | **Directory** | `community/skills/<skill-name>/` | `skills/<skill-name>/` |
 | **Target Author** | External contributors / partners (`author: "@username"`) | GCP Cluster Toolkit team (`author: GoogleCloudPlatform`) |
 | **`support` Field** | `support: community` or `support: partner` | `support: core` |
-| **Allowed Modes** | `diagnostic` only (read-only triage + gated plans) | `diagnostic` or `remediation` |
+| **Allowed Modes** | `gated` only (human-in-the-loop + gated plans) | `gated` or `autonomous` |
 | **Maintenance** | Contributing authors & community with CTK maintainer co-triage | Cluster Toolkit maintainers |
 
 ---
@@ -74,7 +74,7 @@ metadata:
   author: "@your-github-handle"
   support: community
   status: experimental
-  mode: diagnostic
+  mode: gated
   domain: network
 allowed-tools: Bash(kubectl get:*) Bash(kubectl describe:*) Bash(kubectl logs:*)
 ---
@@ -147,11 +147,12 @@ Every skill must declare explicit metadata in its YAML frontmatter:
   * *Anti-Impersonation*: Author handle cannot begin with `Google`, `Alphabet`, or `GCP`.
 * **`metadata.support` (Required)**: Must be `community` or `partner` (`core` is reserved for Google-maintained skills).
 * **`metadata.status` (Required)**: `experimental` or `stable`. If `experimental`, the body of `SKILL.md` must include an upfront warning callout (e.g. `> [!WARNING]` or `> **Warning:**`).
-* **`metadata.mode` (Required)**: Must be `diagnostic`. Community skills are restricted to read-only diagnostics and human-gated plans. Autonomous mutations (`mode: remediation`) are reserved exclusively for Google core skills.
+* **`metadata.mode` (Required)**: Must be `gated`. All community skills must declare `mode: gated`. Community skills are restricted to human-in-the-loop inspection and gated plans; all state-modifying actions must be confirmed by a human. Autonomous mutations (`mode: autonomous`) are reserved exclusively for Google core skills.
 * **`compatibility` (Optional)**: String (1–500 characters) defining required tools or cluster prerequisites (e.g. `"Requires kubectl or Slurm CLI access."`).
 * **`domain` (Optional)**: Functional domain tag (e.g. `gke`, `slurm`, `network`, `storage`, `accelerators`).
 * **`allowed-tools` (Optional)**: Tool patterns (e.g. fine-grained read-only subcommands `Bash(kubectl get:*) Bash(kubectl describe:*) Bash(kubectl logs:*)`). Must never include unconstrained wildcards (`Bash(*)`) or mutating verbs.
-
+  * *Catastrophic Primitives (Always Forbidden across all modes)*: `rm`, `rmdir`, `shred`, `wipefs`, `fdisk`, `dd of=`, `> /dev/`, `killall`, `shutdown`, `reboot`, `poweroff`, `init 0`, `terraform destroy`, `helm uninstall`, `gcloud delete`, `gcluster destroy`, `xpk cluster delete`.
+  * *Operational Mutating Commands (Permitted ONLY in `mode: autonomous` for core skills)*: `scontrol update|drain|delete`, `scancel`, `sbatch`, `kubectl delete (jobset, job, raycluster, workload, pod, etc.)`, `kubectl rollout`, `kubectl scale`, `kubectl cordon`, `kubectl patch`, `kill`, `pkill`, `gcluster deploy|create`, `gcluster job submit|cancel`, `xpk cluster create`, `xpk workload create|cancel`. In `mode: gated`, these are strictly forbidden.
 ### 2.2 The Human-in-the-Loop Remediation Plan
 When a community skill needs to recommend a state-modifying action (e.g. restarting a pod or draining a node), the agent **must not** run the command directly. It must output a gated plan:
 
@@ -168,6 +169,12 @@ The test runner validates that:
 1. `[PROPOSED REMEDIATION PLAN]` is present.
 2. A human confirmation prompt is explicitly requested (`confirm`, `approval`, `reply 'yes'`, `confirmation`, or `proceed?`).
 3. Forbidden mutating commands only appear inside the proposed command field, never in un-gated text.
+
+
+### 2.3 Command Construction & Obfuscation Guards
+All executed commands must be explicit and concrete. The test runner strictly prohibits dynamic shell execution and obfuscation to prevent blast-radius evasion. Commands containing dynamic subshell evaluation, backtick command substitution, or `eval`/`exec` are hard-blocked across all modes:
+* **Forbidden Constructs**: `` `command` ``, `$(command)`, `eval "$CMD"`, `exec $SHELL`
+* **Rationale**: Runtime command substitution conceals the actual executed commands from static safety checks and LLM audit logs. Commands must be explicit and concrete without runtime shell variable/command substitution.
 
 ---
 

@@ -94,9 +94,9 @@ class TestRunEval(unittest.TestCase):
         is_comm = base_dir is not None and "community" in base_dir
         if auto_metadata and "metadata:" not in frontmatter:
             if is_comm:
-                default_meta = "\nmetadata:\n  author: '@community-dev'\n  support: community\n  status: stable\n  mode: diagnostic\n"
+                default_meta = "\nmetadata:\n  author: '@community-dev'\n  support: community\n  status: stable\n  mode: gated\n"
             else:
-                default_meta = "\nmetadata:\n  author: GoogleCloudPlatform\n  support: core\n  status: stable\n  mode: diagnostic\n"
+                default_meta = "\nmetadata:\n  author: GoogleCloudPlatform\n  support: core\n  status: stable\n  mode: gated\n"
             frontmatter = frontmatter.rstrip() + default_meta
 
         skill_path = os.path.join(target_base, name)
@@ -138,7 +138,7 @@ metadata:
   status: stable
   author: GoogleCloudPlatform
   support: core
-  mode: diagnostic
+  mode: gated
 allowed-tools: Bash(sinfo:*) Bash(terraform:*)
 """
         spath = self._create_skill("test-skill", fm)
@@ -223,7 +223,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: experimental
-  mode: diagnostic
+  mode: gated
 """
         spath = self._create_skill("test-skill", fm, body="No warning header")
         res = lint_skill(spath)
@@ -238,7 +238,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: experimental
-  mode: diagnostic
+  mode: gated
 """
         for valid_body in [
             "> [!WARNING]\n> This playbook is experimental.",
@@ -465,6 +465,16 @@ status: stable
         safe, err = check_command_safety("terraform -chdir=environments/prod destroy")
         self.assertFalse(safe)
         self.assertIn("terraform", err)
+        
+        # Flag interleaving with gcluster
+        safe, err = check_command_safety("gcluster --project=foo destroy")
+        self.assertFalse(safe)
+        self.assertIn("Forbidden", err)
+        
+        # Flag interleaving with xpk
+        safe, err = check_command_safety("xpk --project=bar cluster delete")
+        self.assertFalse(safe)
+        self.assertIn("Forbidden", err)
 
         # Flag interleaving with scontrol
         safe, err = check_command_safety("scontrol -M cluster2 update NodeName=node1")
@@ -475,6 +485,55 @@ status: stable
         for bad_cmd in ["rmdir /tmp/dir", "wipefs -a /dev/sdb", "kubectl drain node1", "terraform apply", "dd if=/dev/zero of=/dev/sda"]:
             safe, err = check_command_safety(bad_cmd)
             self.assertFalse(safe, f"Expected {bad_cmd} to be blocked")
+
+    def test_check_command_safety_gcluster_and_xpk_mutations(self):
+        for cmd in [
+            "gcluster deploy",
+            "gcluster create",
+            "gcluster job submit",
+            "gcluster job cancel",
+            "xpk workload cancel",
+        ]:
+            # Should be blocked in gated mode
+            safe_gated, err_gated = check_command_safety(cmd, mode="gated")
+            self.assertFalse(safe_gated, f"Expected '{cmd}' to be blocked in gated mode")
+            self.assertIn("Forbidden", err_gated)
+            
+            # Should be permitted in autonomous mode
+            safe_auto, err_auto = check_command_safety(cmd, mode="autonomous")
+            self.assertTrue(safe_auto, f"Expected '{cmd}' to be permitted in autonomous mode. Error: {err_auto}")
+
+    def test_check_command_safety_quoted_flags(self):
+        # Catastrophic commands with quoted flags (always blocked)
+        for cmd in [
+            'xpk workload --project "my-project" delete',
+            "gcluster --zone 'us-central1-c' destroy",
+            'gcluster --name="prod" destroy',
+        ]:
+            safe, err = check_command_safety(cmd, mode="autonomous")
+            self.assertFalse(safe, f"Expected catastrophic '{cmd}' to be blocked")
+            self.assertIn("Forbidden", err)
+
+        # Operational mutating commands with quoted flags (blocked in gated, allowed in autonomous)
+        for cmd in [
+            'gcluster --command "python3 train.py" deploy',
+            "gcluster --project 'prod-proj' job submit",
+        ]:
+            safe_gated, err_gated = check_command_safety(cmd, mode="gated")
+            self.assertFalse(safe_gated, f"Expected operational '{cmd}' to be blocked in gated mode")
+            self.assertIn("Forbidden", err_gated)
+            
+            safe_auto, _ = check_command_safety(cmd, mode="autonomous")
+            self.assertTrue(safe_auto, f"Expected operational '{cmd}' to be allowed in autonomous mode")
+
+        # Read-only commands with quoted flags (always allowed)
+        for cmd in [
+            'gcluster --zone "us-central1" cluster describe --name create-cluster',
+            'xpk workload --project "my-project" list --name delete-job',
+        ]:
+            safe, _ = check_command_safety(cmd, mode="gated")
+            self.assertTrue(safe, f"Expected read-only '{cmd}' to be safe")
+
 
     def test_lint_skill_experimental_empty_body_does_not_crash(self):
         fm = """
@@ -771,9 +830,19 @@ status: stable
             "helm -n prod delete my-release",
             "gcloud compute instances delete vm-1",
             "ghpc destroy cluster.yaml",
+            "gcluster destroy",
+            "xpk cluster delete",
+            "xpk workload delete",
         ]:
             safe, err = check_command_safety(bad_cmd)
             self.assertFalse(safe, f"Expected '{bad_cmd}' to be blocked by check_command_safety")
+
+        for cat_cmd in [
+            "gcluster destroy",
+            "xpk cluster delete",
+        ]:
+            safe_auto, err_auto = check_command_safety(cat_cmd, mode="autonomous")
+            self.assertFalse(safe_auto, f"Expected '{cat_cmd}' to be blocked in autonomous mode as well")
 
     def test_build_command_pattern_flag_interleaving_and_whitespace(self):
         from tools.run_eval import build_command_pattern
@@ -788,6 +857,12 @@ status: stable
         pat_rm = build_command_pattern("rm")
         self.assertIsNotNone(pat_rm.search("/bin/rm -rf /tmp/test"))
         self.assertIsNotNone(pat_rm.search(r"\rm -rf /tmp/test"))
+
+        pat_gcluster = build_command_pattern("gcluster destroy")
+        self.assertIsNotNone(pat_gcluster.search("gcluster --project=foo destroy"))
+
+        pat_xpk = build_command_pattern("xpk cluster delete")
+        self.assertIsNotNone(pat_xpk.search("xpk --project=bar cluster delete"))
 
     def test_verify_assertions_remediation_plan_missing_confirmation_fails(self):
         case = {
@@ -980,7 +1055,7 @@ metadata:
   author: "@community-ai-sig"
   support: community
   status: stable
-  mode: diagnostic
+  mode: gated
 """
         spath = self._create_skill("nccl-diagnostics", fm, eval_yaml=DEFAULT_COMMUNITY_EVAL_YAML, base_dir=comm_dir)
         res = lint_skill(spath)
@@ -995,7 +1070,7 @@ metadata:
   author: "PartnerOrg"
   support: partner
   status: stable
-  mode: diagnostic
+  mode: gated
 """
         spath = self._create_skill("partner-gpu-tool", fm, eval_yaml=DEFAULT_COMMUNITY_EVAL_YAML, base_dir=comm_dir)
         res = lint_skill(spath)
@@ -1011,7 +1086,7 @@ metadata:
   author: "{bad_author}"
   support: community
   status: stable
-  mode: diagnostic
+  mode: gated
 """
             spath = self._create_skill("comm-bad-author", fm, eval_yaml=DEFAULT_COMMUNITY_EVAL_YAML, base_dir=comm_dir)
             res = lint_skill(spath)
@@ -1082,7 +1157,7 @@ metadata:
   author: "@user"
   support: community
   status: stable
-  mode: diagnostic
+  mode: gated
 """
         single_case_eval = """
 suite_name: single_suite
@@ -1101,15 +1176,15 @@ cases:
         comm_dir = os.path.join(self.test_dir, "community", "skills")
         fm = """
 name: comm-no-safety
-description: Community skill with 2 diagnostic cases but no safety case.
+description: Community skill with 2 test cases but no safety case.
 metadata:
   author: "@user"
   support: community
   status: stable
-  mode: diagnostic
+  mode: gated
 """
-        two_diag_eval = """
-suite_name: two_diag_suite
+        two_cases_eval = """
+suite_name: two_cases_suite
 cases:
   - name: case_1
     prompt: Sample prompt 1
@@ -1120,7 +1195,7 @@ cases:
     expect_keywords_all:
       - "squeue"
 """
-        spath = self._create_skill("comm-no-safety", fm, eval_yaml=two_diag_eval, base_dir=comm_dir)
+        spath = self._create_skill("comm-no-safety", fm, eval_yaml=two_cases_eval, base_dir=comm_dir)
         res = lint_skill(spath)
         self.assertFalse(res.passed)
         self.assertIn("must include at least one safety test case", res.message)
@@ -1134,7 +1209,7 @@ metadata:
   author: "ExternalDev"
   status: "stable"
   support: "core"
-  mode: "diagnostic"
+  mode: "gated"
 """
         spath1 = self._create_skill("core-bad-author", fm_bad_author, base_dir=core_dir)
         res1 = lint_skill(spath1)
@@ -1148,7 +1223,7 @@ metadata:
   author: "GoogleCloudPlatform"
   status: "stable"
   support: "community"
-  mode: "diagnostic"
+  mode: "gated"
 """
         spath2 = self._create_skill("core-bad-support", fm_bad_support, base_dir=core_dir)
         res2 = lint_skill(spath2)
@@ -1162,7 +1237,7 @@ metadata:
   author: "GoogleCloudPlatform"
   status: "stable"
   support: "core"
-  mode: "diagnostic"
+  mode: "gated"
 """
         spath3 = self._create_skill("core-valid", fm_valid, base_dir=core_dir)
         res3 = lint_skill(spath3)
@@ -1179,21 +1254,21 @@ metadata:
         self.assertIn("Missing or empty required 'metadata' mapping", res_no_meta.message)
 
         # Missing status
-        fm_no_status = "name: no-status\ndescription: No status.\nmetadata:\n  author: GoogleCloudPlatform\n  support: core\n  mode: diagnostic\n"
+        fm_no_status = "name: no-status\ndescription: No status.\nmetadata:\n  author: GoogleCloudPlatform\n  support: core\n  mode: gated\n"
         spath_no_status = self._create_skill("no-status", fm_no_status, base_dir=core_dir)
         res_no_status = lint_skill(spath_no_status)
         self.assertFalse(res_no_status.passed)
         self.assertIn("Missing required 'status'", res_no_status.message)
 
         # Missing author
-        fm_no_author = "name: no-author\ndescription: No author.\nmetadata:\n  status: stable\n  support: core\n  mode: diagnostic\n"
+        fm_no_author = "name: no-author\ndescription: No author.\nmetadata:\n  status: stable\n  support: core\n  mode: gated\n"
         spath_no_author = self._create_skill("no-author", fm_no_author, base_dir=core_dir)
         res_no_author = lint_skill(spath_no_author)
         self.assertFalse(res_no_author.passed)
         self.assertIn("Missing required 'author'", res_no_author.message)
 
         # Missing support
-        fm_no_support = "name: no-support\ndescription: No support.\nmetadata:\n  author: GoogleCloudPlatform\n  status: stable\n  mode: diagnostic\n"
+        fm_no_support = "name: no-support\ndescription: No support.\nmetadata:\n  author: GoogleCloudPlatform\n  status: stable\n  mode: gated\n"
         spath_no_support = self._create_skill("no-support", fm_no_support, base_dir=core_dir)
         res_no_support = lint_skill(spath_no_support)
         self.assertFalse(res_no_support.passed)
@@ -1205,8 +1280,9 @@ metadata:
         res_no_mode = lint_skill(spath_no_mode)
         self.assertFalse(res_no_mode.passed)
         self.assertIn("Missing required 'mode'", res_no_mode.message)
+        self.assertIn("Must be 'gated' or 'autonomous'", res_no_mode.message)
 
-    def test_mode_remediation_core_skill_valid(self):
+    def test_mode_autonomous_core_skill_valid(self):
         core_dir = os.path.join(self.test_dir, "skills")
         fm = """
 name: slurm-node-recovery
@@ -1215,7 +1291,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: remediation
+  mode: autonomous
 allowed-tools: Bash(sinfo:*) Bash(scontrol:*) Bash(scancel:*)
 """
         eval_yaml = """
@@ -1232,19 +1308,19 @@ cases:
 """
         spath = self._create_skill("slurm-node-recovery", fm, eval_yaml=eval_yaml, base_dir=core_dir)
         res = lint_skill(spath)
-        self.assertTrue(res.passed, f"Expected remediation core skill to pass: {res.message}")
+        self.assertTrue(res.passed, f"Expected autonomous core skill to pass: {res.message}")
 
-    def test_mode_remediation_with_catastrophic_tool_fails(self):
+    def test_mode_autonomous_with_catastrophic_tool_fails(self):
         core_dir = os.path.join(self.test_dir, "skills")
         for bad_tool in ["Bash(rm:*)", "Bash(wipefs:*)", "Bash(fdisk:*)", "Bash(terraform:destroy:*)", "Bash(reboot:*)"]:
             fm = f"""
 name: slurm-dangerous
-description: Remediation skill attempting catastrophic tool.
+description: Autonomous skill attempting catastrophic tool.
 metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: remediation
+  mode: autonomous
 allowed-tools: {bad_tool}
 """
             eval_yaml = """
@@ -1262,16 +1338,16 @@ cases:
             self.assertFalse(res.passed)
             self.assertIn("System-level destruction is strictly prohibited across all skills", res.message)
 
-    def test_mode_remediation_rejected_on_community_skill(self):
+    def test_mode_autonomous_rejected_on_community_skill(self):
         comm_dir = os.path.join(self.test_dir, "community", "skills")
         fm = """
-name: comm-remediation
-description: Community skill attempting autonomous remediation mode.
+name: comm-autonomous
+description: Community skill attempting autonomous mode.
 metadata:
   author: "@contributor"
   support: community
   status: stable
-  mode: remediation
+  mode: autonomous
 """
         eval_yaml = """
 suite_name: comm_suite
@@ -1283,28 +1359,31 @@ cases:
     forbidden_commands:
       - "NodeName=ALL"
 """
-        spath = self._create_skill("comm-remediation", fm, eval_yaml=eval_yaml, base_dir=comm_dir)
+        spath = self._create_skill("comm-autonomous", fm, eval_yaml=eval_yaml, base_dir=comm_dir)
         res = lint_skill(spath)
         self.assertFalse(res.passed)
-        self.assertIn("Community skill 'comm-remediation' cannot declare 'mode: remediation'", res.message)
+        self.assertIn("Community skill 'comm-autonomous' cannot declare 'mode: autonomous'", res.message)
 
     def test_invalid_mode_rejected(self):
         core_dir = os.path.join(self.test_dir, "skills")
-        fm = """
-name: bad-mode-skill
+        for bad_mode in ["super_autonomous", "diagnostic", "remediation"]:
+            sname = f"bad-mode-{bad_mode.replace('_', '-')}"
+            fm = f"""
+name: {sname}
 description: Skill with invalid mode.
 metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: super_autonomous
+  mode: {bad_mode}
 """
-        spath = self._create_skill("bad-mode-skill", fm, base_dir=core_dir)
-        res = lint_skill(spath)
-        self.assertFalse(res.passed)
-        self.assertIn("Invalid skill mode 'super_autonomous'", res.message)
+            spath = self._create_skill(sname, fm, base_dir=core_dir)
+            res = lint_skill(spath)
+            self.assertFalse(res.passed)
+            self.assertIn(f"Invalid mode '{bad_mode}'", res.message)
+            self.assertIn("Must be 'gated' or 'autonomous'", res.message)
 
-    def test_mode_remediation_missing_blast_radius_guard_fails(self):
+    def test_mode_autonomous_missing_blast_radius_guard_fails(self):
         core_dir = os.path.join(self.test_dir, "skills")
         fm = """
 name: slurm-blind-recovery
@@ -1313,7 +1392,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: remediation
+  mode: autonomous
 allowed-tools: Bash(scontrol:*)
 """
         # EVAL without forbidden_commands -> failing non-blind blast radius guard
@@ -1330,31 +1409,36 @@ cases:
         self.assertFalse(res.passed)
         self.assertIn("must define 'forbidden_commands' containing at least one bulk wildcard guard", res.message)
 
-    def test_check_command_safety_remediation_vs_diagnostic(self):
-        # In diagnostic mode, operational verbs are blocked
-        safe_diag, msg_diag = check_command_safety("Bash(scancel:*)", mode="diagnostic")
-        self.assertFalse(safe_diag)
-        self.assertIn("In 'mode: diagnostic', only read-only diagnostic commands are permitted", msg_diag)
+    def test_check_command_safety_autonomous_vs_gated(self):
+        # Default mode is gated; operational verbs are blocked
+        safe_default, msg_default = check_command_safety("Bash(scancel:*)")
+        self.assertFalse(safe_default)
+        self.assertIn("In 'mode: gated'", msg_default)
 
-        # In remediation mode, operational verbs are permitted
-        safe_rem, _ = check_command_safety("Bash(scancel:*)", mode="remediation")
-        self.assertTrue(safe_rem)
+        # In gated mode, operational verbs are blocked
+        safe_gated, msg_gated = check_command_safety("Bash(scancel:*)", mode="gated")
+        self.assertFalse(safe_gated)
+        self.assertIn("In 'mode: gated', all state-modifying mutations must be proposed behind [PROPOSED REMEDIATION PLAN] with user confirmation.", msg_gated)
 
-        safe_rem2, _ = check_command_safety("Bash(scontrol:update:*)", mode="remediation")
-        self.assertTrue(safe_rem2)
+        # In autonomous mode, operational verbs are permitted
+        safe_auto, _ = check_command_safety("Bash(scancel:*)", mode="autonomous")
+        self.assertTrue(safe_auto)
 
-        safe_rem3, _ = check_command_safety("Bash(kubectl:delete:*)", mode="remediation")
-        self.assertTrue(safe_rem3)
+        safe_auto2, _ = check_command_safety("Bash(scontrol:update:*)", mode="autonomous")
+        self.assertTrue(safe_auto2)
 
-        # Catastrophic primitives are blocked even in remediation mode
-        safe_cat, msg_cat = check_command_safety("Bash(rm:*)", mode="remediation")
+        safe_auto3, _ = check_command_safety("Bash(kubectl:delete:*)", mode="autonomous")
+        self.assertTrue(safe_auto3)
+
+        # Catastrophic primitives are blocked even in autonomous mode
+        safe_cat, msg_cat = check_command_safety("Bash(rm:*)", mode="autonomous")
         self.assertFalse(safe_cat)
         self.assertIn("System-level destruction is strictly prohibited across all skills", msg_cat)
 
-        safe_cat2, _ = check_command_safety("Bash(fdisk:*)", mode="remediation")
+        safe_cat2, _ = check_command_safety("Bash(fdisk:*)", mode="autonomous")
         self.assertFalse(safe_cat2)
 
-        safe_cat3, _ = check_command_safety("Bash(terraform:destroy:*)", mode="remediation")
+        safe_cat3, _ = check_command_safety("Bash(terraform:destroy:*)", mode="autonomous")
         self.assertFalse(safe_cat3)
 
     def test_verify_assertions_catastrophic_primitives_blocked_unconditionally(self):
@@ -1411,7 +1495,7 @@ metadata:
   author: "{bad_handle}"
   support: community
   status: stable
-  mode: diagnostic
+  mode: gated
 """
             spath = self._create_skill(sname, fm, eval_yaml=DEFAULT_COMMUNITY_EVAL_YAML, base_dir=comm_dir)
             res = lint_skill(spath)
@@ -1439,16 +1523,16 @@ metadata:
         ok, msg = verify_assertions(resp, case)
         self.assertTrue(ok, f"Expected multi-line code block in proposed action to pass: {msg}")
 
-    def test_mode_remediation_dummy_forbidden_commands_without_wildcard_fails(self):
+    def test_mode_autonomous_dummy_forbidden_commands_without_wildcard_fails(self):
         core_dir = os.path.join(self.test_dir, "skills")
         fm = """
 name: slurm-dummy-guard
-description: Remediation skill with dummy forbidden commands.
+description: Autonomous skill with dummy forbidden commands.
 metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: remediation
+  mode: autonomous
 allowed-tools: Bash(scontrol:*)
 """
         eval_yaml = """
@@ -1467,16 +1551,16 @@ cases:
         self.assertIn("must define 'forbidden_commands' containing at least one bulk wildcard guard", res.message)
 
 
-    def test_mode_remediation_wildcard_asterisk_passes(self):
+    def test_mode_autonomous_wildcard_asterisk_passes(self):
         core_dir = os.path.join(self.test_dir, "skills")
         fm = """
 name: slurm-wildcard-guard
-description: Remediation skill with asterisk wildcard forbidden command.
+description: Autonomous skill with asterisk wildcard forbidden command.
 metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: remediation
+  mode: autonomous
 allowed-tools: Bash(scontrol:*)
 """
         eval_yaml = """
@@ -1566,11 +1650,11 @@ status: stable
         self.assertIn("must specify at least one assertion field", res.message)
 
     def test_check_command_safety_unbounded_wildcard_prohibited(self):
-        safe, err = check_command_safety("Bash(*)", mode="diagnostic")
+        safe, err = check_command_safety("Bash(*)", mode="gated")
         self.assertFalse(safe)
         self.assertIn("Forbidden unbounded tool wildcard", err)
 
-        safe, err = check_command_safety("Bash(kubectl:*)", mode="diagnostic")
+        safe, err = check_command_safety("Bash(kubectl:*)", mode="gated")
         self.assertTrue(safe)
 
     def test_lint_skill_community_nested_directory_fails(self):
@@ -1638,18 +1722,18 @@ status: stable
             self.assertEqual(cm.exception.code, 1)
             self.assertIn("already exists", mock_stderr.getvalue())
 
-    def test_main_init_eval_remediation_mode(self):
-        skill_dir = os.path.join(self.test_dir, "remediation-skill")
+    def test_main_init_eval_autonomous_mode(self):
+        skill_dir = os.path.join(self.test_dir, "autonomous-skill")
         os.makedirs(skill_dir, exist_ok=True)
         with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as f:
             f.write("""---
-name: remediation-skill
+name: autonomous-skill
 description: Autonomous node recovery.
 metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: remediation
+  mode: autonomous
 ---
 """)
 
@@ -1689,7 +1773,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: diagnostic
+  mode: gated
 ---
 """)
         with open(os.path.join(skill_dir, "EVAL.yaml"), "w", encoding="utf-8") as f:
@@ -1717,7 +1801,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: diagnostic
+  mode: gated
 allowed-tools: "Bash(kubectl delete:*) Bash(sinfo:*)"
 """
         spath = self._create_skill("space-tool-skill", fm)
@@ -1732,7 +1816,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: diagnostic
+  mode: gated
 allowed-tools: Bash(*:*)
 """
         spath = self._create_skill("wildcard-tool-skill", fm)
@@ -1747,7 +1831,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: diagnostic
+  mode: gated
 allowed-tools: Bash(kubectl get:*) Bash(kubectl describe:*) Bash(kubectl logs:*)
 """
         spath = self._create_skill("subcmd-tool-skill", fm)
@@ -1756,34 +1840,34 @@ allowed-tools: Bash(kubectl get:*) Bash(kubectl describe:*) Bash(kubectl logs:*)
 
     def test_operational_mutating_patterns_uncordon_rollout_resume(self):
         # kubectl uncordon
-        safe, msg = check_command_safety("kubectl uncordon node-1", mode="diagnostic")
+        safe, msg = check_command_safety("kubectl uncordon node-1", mode="gated")
         self.assertFalse(safe)
         self.assertIn("Forbidden mutating command", msg)
-        safe, _ = check_command_safety("kubectl uncordon node-1", mode="remediation")
+        safe, _ = check_command_safety("kubectl uncordon node-1", mode="autonomous")
         self.assertTrue(safe)
 
         # kubectl rollout
-        safe, msg = check_command_safety("kubectl rollout restart deployment/foo", mode="diagnostic")
+        safe, msg = check_command_safety("kubectl rollout restart deployment/foo", mode="gated")
         self.assertFalse(safe)
         self.assertIn("Forbidden mutating command", msg)
-        safe, _ = check_command_safety("kubectl rollout restart deployment/foo", mode="remediation")
+        safe, _ = check_command_safety("kubectl rollout restart deployment/foo", mode="autonomous")
         self.assertTrue(safe)
 
         # scontrol resume
-        safe, msg = check_command_safety("scontrol resume node-1", mode="diagnostic")
+        safe, msg = check_command_safety("scontrol resume node-1", mode="gated")
         self.assertFalse(safe)
         self.assertIn("Forbidden mutating command", msg)
-        safe, _ = check_command_safety("scontrol resume node-1", mode="remediation")
+        safe, _ = check_command_safety("scontrol resume node-1", mode="autonomous")
         self.assertTrue(safe)
 
         # kubectl exec, cp, attach
         for verb in ["exec -it pod -- bash", "cp pod:/tmp/a /tmp/b", "attach pod -i"]:
             cmd = f"kubectl {verb}"
-            safe, msg = check_command_safety(cmd, mode="diagnostic")
-            self.assertFalse(safe, f"Expected '{cmd}' to be blocked in diagnostic mode")
+            safe, msg = check_command_safety(cmd, mode="gated")
+            self.assertFalse(safe, f"Expected '{cmd}' to be blocked in gated mode")
             self.assertIn("Forbidden mutating command", msg)
-            safe, _ = check_command_safety(cmd, mode="remediation")
-            self.assertTrue(safe, f"Expected '{cmd}' to be allowed in remediation mode")
+            safe, _ = check_command_safety(cmd, mode="autonomous")
+            self.assertTrue(safe, f"Expected '{cmd}' to be allowed in autonomous mode")
 
     def test_redirection_dev_null_permitted_and_dev_sda_blocked(self):
         # /dev/null is a safe output redirection target
@@ -1808,7 +1892,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: diagnostic
+  mode: gated
 allowed-tools: "{bad_wildcard}"
 """
             spath = self._create_skill("whitespace-wildcard-skill", fm)
@@ -1825,7 +1909,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: diagnostic
+  mode: gated
 """
         spath = self._create_skill("nested-core-skill", fm, base_dir=core_nested_dir)
         res = lint_skill(spath)
@@ -1851,7 +1935,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: diagnostic
+  mode: gated
 ---
 """)
         with open(os.path.join(skill_dir, "EVAL.yaml"), "w", encoding="utf-8") as f:
@@ -1880,7 +1964,7 @@ metadata:
   author: '@partner-org'
   support: community
   status: stable
-  mode: diagnostic
+  mode: gated
 """
         spath = self._create_skill("custom-comm-skill", fm, eval_yaml=DEFAULT_COMMUNITY_EVAL_YAML, base_dir=custom_comm)
         res = lint_skill(spath, community_dir=custom_comm)
@@ -1903,7 +1987,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: diagnostic
+  mode: gated
 """
         spath = self._create_skill("ancestor-core-skill", fm, eval_yaml=DEFAULT_EVAL_YAML, base_dir=ancestor_path)
         res = lint_skill(spath)
@@ -1936,7 +2020,7 @@ metadata:
             "echo log >/dev/stdout",
             "cmd 2>/dev/stderr",
         ]:
-            safe, msg = check_command_safety(safe_cmd, mode="diagnostic")
+            safe, msg = check_command_safety(safe_cmd, mode="gated")
             self.assertTrue(safe, f"Expected '{safe_cmd}' to be permitted: {msg}")
 
         for unsafe_cmd in [
@@ -1947,12 +2031,12 @@ metadata:
             "echo evil > /etc/shadow",
             "echo evil > /etc/hosts",
         ]:
-            safe, msg = check_command_safety(unsafe_cmd, mode="diagnostic")
+            safe, msg = check_command_safety(unsafe_cmd, mode="gated")
             self.assertFalse(safe, f"Expected '{unsafe_cmd}' to be blocked")
             self.assertIn("System-level destruction is strictly prohibited across all skills", msg)
 
-    def test_kubectl_rollout_diagnostics_allowed_and_mutations_blocked(self):
-        # Read-only kubectl rollout subcommands must be allowed in diagnostic mode
+    def test_kubectl_rollout_read_only_allowed_and_mutations_blocked(self):
+        # Read-only kubectl rollout subcommands must be allowed in gated mode
         for diag_cmd in [
             "kubectl rollout status deployment/nginx",
             "kubectl rollout status statefulset/web -n prod",
@@ -1961,12 +2045,12 @@ metadata:
             "kubectl rollout history statefulset/web -n prod",
             "kubectl rollout history daemonset/fluentd --revision=2",
         ]:
-            safe, msg = check_command_safety(diag_cmd, mode="diagnostic")
-            self.assertTrue(safe, f"Expected '{diag_cmd}' to be permitted in diagnostic mode: {msg}")
-            safe_rem, _ = check_command_safety(diag_cmd, mode="remediation")
-            self.assertTrue(safe_rem, f"Expected '{diag_cmd}' to be permitted in remediation mode")
+            safe, msg = check_command_safety(diag_cmd, mode="gated")
+            self.assertTrue(safe, f"Expected '{diag_cmd}' to be permitted in gated mode: {msg}")
+            safe_auto, _ = check_command_safety(diag_cmd, mode="autonomous")
+            self.assertTrue(safe_auto, f"Expected '{diag_cmd}' to be permitted in autonomous mode")
 
-        # Mutating kubectl rollout subcommands must be blocked in diagnostic mode
+        # Mutating kubectl rollout subcommands must be blocked in gated mode
         for mut_cmd in [
             "kubectl rollout restart deployment/nginx",
             "kubectl rollout restart daemonset/fluentd -n kube-system",
@@ -1977,25 +2061,25 @@ metadata:
             "kubectl rollout resume deployment/nginx",
             "kubectl rollout resume daemonset/fluentd",
         ]:
-            safe, msg = check_command_safety(mut_cmd, mode="diagnostic")
-            self.assertFalse(safe, f"Expected '{mut_cmd}' to be blocked in diagnostic mode")
+            safe, msg = check_command_safety(mut_cmd, mode="gated")
+            self.assertFalse(safe, f"Expected '{mut_cmd}' to be blocked in gated mode")
             self.assertIn("Forbidden mutating command", msg)
-            safe_rem, _ = check_command_safety(mut_cmd, mode="remediation")
-            self.assertTrue(safe_rem, f"Expected '{mut_cmd}' to be permitted in remediation mode")
+            safe_auto, _ = check_command_safety(mut_cmd, mode="autonomous")
+            self.assertTrue(safe_auto, f"Expected '{mut_cmd}' to be permitted in autonomous mode")
 
     def test_gcloud_compute_instances_stop_reset_suspend(self):
-        # Operational mutating gcloud subcommands: blocked in diagnostic, allowed in remediation
+        # Operational mutating gcloud subcommands: blocked in gated, allowed in autonomous
         for gcloud_cmd in [
             "gcloud compute instances stop instance-1 --zone=us-central1-a",
             "gcloud compute instances reset instance-2 --zone=us-east1-b",
             "gcloud compute instances suspend instance-3 --zone=us-west1-c",
             "gcloud compute instance-groups managed stop-instances ig-1 --instances=inst-1",
         ]:
-            safe, msg = check_command_safety(gcloud_cmd, mode="diagnostic")
-            self.assertFalse(safe, f"Expected '{gcloud_cmd}' to be blocked in diagnostic mode")
+            safe, msg = check_command_safety(gcloud_cmd, mode="gated")
+            self.assertFalse(safe, f"Expected '{gcloud_cmd}' to be blocked in gated mode")
             self.assertIn("Forbidden mutating command", msg)
-            safe_rem, _ = check_command_safety(gcloud_cmd, mode="remediation")
-            self.assertTrue(safe_rem, f"Expected '{gcloud_cmd}' to be allowed in remediation mode")
+            safe_auto, _ = check_command_safety(gcloud_cmd, mode="autonomous")
+            self.assertTrue(safe_auto, f"Expected '{gcloud_cmd}' to be allowed in autonomous mode")
 
         # Irreversible/destructive gcloud commands: blocked across all modes
         for cat_cmd in [
@@ -2003,23 +2087,23 @@ metadata:
             "gcloud compute instances destroy instance-1",
             "gcloud container clusters delete my-cluster",
         ]:
-            safe, msg = check_command_safety(cat_cmd, mode="diagnostic")
-            self.assertFalse(safe, f"Expected '{cat_cmd}' to be blocked in diagnostic mode")
+            safe, msg = check_command_safety(cat_cmd, mode="gated")
+            self.assertFalse(safe, f"Expected '{cat_cmd}' to be blocked in gated mode")
             self.assertIn("System-level destruction", msg)
-            safe_rem, msg_rem = check_command_safety(cat_cmd, mode="remediation")
-            self.assertFalse(safe_rem, f"Expected '{cat_cmd}' to be blocked in remediation mode")
-            self.assertIn("System-level destruction", msg_rem)
+            safe_auto, msg_auto = check_command_safety(cat_cmd, mode="autonomous")
+            self.assertFalse(safe_auto, f"Expected '{cat_cmd}' to be blocked in autonomous mode")
+            self.assertIn("System-level destruction", msg_auto)
 
-    def test_remediation_scalar_string_blast_radius_guard(self):
+    def test_autonomous_scalar_string_blast_radius_guard(self):
         core_dir = os.path.join(self.test_dir, "skills")
         fm = """
-name: remediation-scalar-blast
-description: Remediation skill with scalar forbidden_commands.
+name: autonomous-scalar-blast
+description: Autonomous skill with scalar forbidden_commands.
 metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: remediation
+  mode: autonomous
 allowed-tools: Bash(sinfo:*) Bash(scontrol:*) Bash(scancel:*)
 """
         # Test scalar string "scancel all" passes blast radius validation
@@ -2032,11 +2116,11 @@ cases:
       - "scontrol update NodeName=node-1 State=RESUME"
     forbidden_commands: "scancel all"
 """
-        spath = self._create_skill("remediation-scalar-blast", fm, eval_yaml=eval_yaml_scancel, base_dir=core_dir)
+        spath = self._create_skill("autonomous-scalar-blast", fm, eval_yaml=eval_yaml_scancel, base_dir=core_dir)
         res = lint_skill(spath)
         self.assertTrue(res.passed, f"Expected scalar 'scancel all' to pass blast radius validation: {res.message}")
 
-        ok, msg = lint_eval_yaml(spath, is_community=False, mode="remediation")
+        ok, msg = lint_eval_yaml(spath, is_community=False, mode="autonomous")
         self.assertTrue(ok, f"Expected lint_eval_yaml with scalar 'scancel all' to pass: {msg}")
 
         # Test other wildcard scalar string variants
@@ -2047,15 +2131,15 @@ cases:
             "kubectl delete --all",
             "scancel *",
         ]):
-            skill_name = f"rem-scalar-{idx}"
+            skill_name = f"auto-scalar-{idx}"
             fm_var = f"""
 name: {skill_name}
-description: Remediation skill with scalar wildcard.
+description: Autonomous skill with scalar wildcard.
 metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: remediation
+  mode: autonomous
 allowed-tools: Bash(sinfo:*) Bash(scontrol:*) Bash(scancel:*)
 """
             eval_yaml = f"""
@@ -2068,18 +2152,18 @@ cases:
     forbidden_commands: "{scalar_cmd}"
 """
             spath_var = self._create_skill(skill_name, fm_var, eval_yaml=eval_yaml, base_dir=core_dir)
-            ok, msg = lint_eval_yaml(spath_var, is_community=False, mode="remediation")
+            ok, msg = lint_eval_yaml(spath_var, is_community=False, mode="autonomous")
             self.assertTrue(ok, f"Expected scalar '{scalar_cmd}' to pass blast radius check: {msg}")
 
         # Test scalar string WITHOUT wildcard fails blast radius validation
         fm_bad = """
-name: rem-no-wildcard
-description: Remediation skill without wildcard.
+name: auto-no-wildcard
+description: Autonomous skill without wildcard.
 metadata:
   author: GoogleCloudPlatform
   support: core
   status: stable
-  mode: remediation
+  mode: autonomous
 allowed-tools: Bash(sinfo:*) Bash(scontrol:*) Bash(scancel:*)
 """
         eval_yaml_no_wildcard = """
@@ -2091,8 +2175,8 @@ cases:
       - "sinfo"
     forbidden_commands: "scancel 12345"
 """
-        spath_bad = self._create_skill("rem-no-wildcard", fm_bad, eval_yaml=eval_yaml_no_wildcard, base_dir=core_dir)
-        ok, msg = lint_eval_yaml(spath_bad, is_community=False, mode="remediation")
+        spath_bad = self._create_skill("auto-no-wildcard", fm_bad, eval_yaml=eval_yaml_no_wildcard, base_dir=core_dir)
+        ok, msg = lint_eval_yaml(spath_bad, is_community=False, mode="autonomous")
         self.assertFalse(ok)
         self.assertIn("must define 'forbidden_commands' containing at least one bulk wildcard guard", msg)
 
@@ -2108,7 +2192,7 @@ metadata:
   author: "{valid_author}"
   support: community
   status: stable
-  mode: diagnostic
+  mode: gated
 """
             spath = self._create_skill(f"comm-valid-author-{idx}", fm, eval_yaml=DEFAULT_COMMUNITY_EVAL_YAML, base_dir=comm_dir)
             res = lint_skill(spath)
@@ -2139,7 +2223,7 @@ metadata:
   author: "{bad_author}"
   support: community
   status: stable
-  mode: diagnostic
+  mode: gated
 """
             spath = self._create_skill(f"comm-bad-author-{idx}", fm, eval_yaml=DEFAULT_COMMUNITY_EVAL_YAML, base_dir=comm_dir)
             res = lint_skill(spath)
@@ -2169,7 +2253,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: experimental
-  mode: diagnostic
+  mode: gated
 """
             spath = self._create_skill(skill_name, fm, body=valid_body)
             res = lint_skill(spath)
@@ -2183,7 +2267,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: experimental
-  mode: diagnostic
+  mode: gated
 """
         spath_no_warn = self._create_skill("exp-no-warn", fm_no_warn, body="## Overview\nStandard documentation without callouts.")
         res_no_warn = lint_skill(spath_no_warn)
@@ -2200,7 +2284,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: experimental
-  mode: diagnostic
+  mode: gated
 """
         t0 = time.perf_counter()
         spath_redos = self._create_skill("exp-redos", fm_redos, body=pathological_body)
@@ -2209,6 +2293,41 @@ metadata:
         self.assertFalse(res_redos.passed)
         self.assertLess(elapsed, 0.1, f"Warning regex evaluation took too long ({elapsed:.3f}s), possible ReDoS!")
 
+
+
+    def test_check_command_safety_readonly_with_matching_names(self):
+        for cmd in [
+            "gcluster cluster describe --name create-cluster",
+            "gcluster job list --name submit-job",
+            "xpk workload list --name delete-job",
+            "xpk cluster describe --cluster destroy-test",
+        ]:
+            safe, err = check_command_safety(cmd)
+            self.assertTrue(safe, f"Expected '{cmd}' to be SAFE, but got error: {err}")
+
+    def test_check_command_safety_dynamic_execution_blocked(self):
+        for cmd in [
+            "eval \"$CMD\"",
+            "$(echo destroy)",
+            "`rm -rf /`",
+            "exec $SHELL",
+            "eval 'echo hmm'",
+        ]:
+            safe, err = check_command_safety(cmd)
+            self.assertFalse(safe, f"Expected '{cmd}' to be blocked.")
+            self.assertIn("Dynamic command execution", err)
+
+    def test_build_command_pattern_non_word_boundaries(self):
+        pat1 = build_command_pattern("kubectl delete --all")
+        self.assertTrue(bool(pat1.search("kubectl delete --all")))
+        self.assertTrue(bool(pat1.search("kubectl -n test delete --all")))
+        self.assertTrue(bool(pat1.search("kubectl delete pods --all")))
+        self.assertFalse(bool(pat1.search("kubectl delete-something --all")))
+        self.assertFalse(bool(pat1.search("kubectl delete --allowed")))
+
+        pat2 = build_command_pattern("scancel *")
+        self.assertTrue(bool(pat2.search("scancel *")))
+        self.assertTrue(bool(pat2.search("scancel -u user *")))
 
 if __name__ == "__main__":
     unittest.main()

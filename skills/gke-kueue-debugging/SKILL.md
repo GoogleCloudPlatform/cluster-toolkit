@@ -23,7 +23,7 @@ metadata:
   author: GoogleCloudPlatform
   support: core
   status: experimental
-  mode: diagnostic
+  mode: gated
   domain: gke
 allowed-tools: Bash(kubectl get:*) Bash(kubectl describe:*) Bash(kubectl logs:*)
 ---
