@@ -2,6 +2,12 @@
 
 **Target Audience**: External Google Cloud customers currently using the `xpk` CLI tool for GKE TPU/GPU cluster deployment and AI/ML workload orchestration.
 
+> [!TIP]
+> **Automated Migration Assistance**: For users utilizing AI coding assistants (e.g., Gemini Code Assist), an automated `xpk-to-clustertoolkit` skill is available in the `skills/` directory to help translate scripts and documentation.
+>
+> [!WARNING]
+> **Experimental Tooling**: The automated migration skill is experimental. All generated blueprints and command translations should be thoroughly reviewed for correctness before execution.
+
 ---
 
 ## 📖 Table of Contents
@@ -56,7 +62,7 @@ Download the latest `gcluster` binary release for your operating system:
 
 ```bash
 # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
-# Set the desired version TAG (e.g., v1.103.0)
+# Set the desired version TAG (e.g., v1.104.0)
 TAG=vX.Y.Z
 # Set your OS (linux or mac) and architecture (amd64 or arm64)
 OS="linux"
@@ -227,6 +233,7 @@ Supported hardware shorthands (such as `v6e-4`, `v4-8`, `l4-8`, `h100-80gb-8`) c
 | `--max-restarts <N>` | `--restarts <N>` | Maximum JobSet restarts |
 | `--ttl-seconds-after-finished <SEC>` | `--gke-ttl-after-finished <SEC>` | TTL after job completion |
 | `--termination-grace-period-seconds <SEC>` | `--grace-period <SEC>` | Grace period before SIGKILL |
+| `--output-manifest-file <FILE>` | `--dry-run-out <FILE>` | Outputs the generated Kubernetes manifest to a file instead of applying it |
 | `--base-docker-image <IMG>` + `--script-dir <DIR>` | `--base-image <IMG>` + `--build-context <DIR>` | Builds image on the fly (requires `GCLUSTER_IMAGE_REPO` env var) |
 
 ### 🛠️ Workload Migration Examples
@@ -344,7 +351,7 @@ gcluster job submit \
 | XPK Command | Cluster Toolkit (`gcluster`) Equivalent | Notes |
 | :--- | :--- | :--- |
 | `xpk cluster create` | `gcluster deploy <blueprint_file.yaml>` | Provision GKE cluster & TPU node pools |
-| `xpk cluster delete` | `gcluster destroy <deployment_name>` | Tear down infrastructure |
+| `xpk cluster delete` | `gcluster destroy <deployment_directory>` | Tear down infrastructure |
 | `xpk cluster list` | `gcluster cluster list` | List active clusters |
 | `xpk cluster describe` | `gcluster cluster describe` | Describe cluster status |
 | `xpk workload create` | `gcluster job submit` | Submits JobSet workload |

@@ -75,8 +75,9 @@ This reference provides a comprehensive mapping of commands, flags, and options 
 | `--mtc-enabled` | `--gke-mtc-enabled` | Enables Multi-Tier Checkpointing sidecar/annotations. |
 | `--wait-for-job-completion` | `--await-job-completion` | Blocks CLI until workload completes or fails. |
 | `--enable-debug-logs` | `--verbose` | Emits detailed debug logging during job submission. |
-| `--deploy-stacktrace-sidecar` | `--verbose` | Emits detailed debug logging during job submission. |
+| `--deploy-stacktrace-sidecar` | `--enable-ml-diagnostics` | Enables ML Diagnostics sidecar. |
 | `--skip-prereqs` | `--skip-prereqs` | Skips local environment checks (`gcloud`, `kubectl`, docker auth). |
+| `--output-manifest-file <file>` | `--dry-run-out <file>` | Outputs the generated Kubernetes manifest to a file instead of applying it. |
 | `--storage <spec>` | `--mount "<src>;<dest>;ro"` | Workload storage mount placeholder. Defaults to safe read-only `;ro` (matching gcluster default); requires verifying PVC, mount point, and mode from XPK Storage CRD before submission. |
 | `--mount-options <opts>` | `--mount "...;options=<opts>"` | Supported exclusively for Cloud Storage buckets (`gs://`). |
 | `--env <k=v>` | `--env <k=v>` | Environment variables passed to workload container. |
