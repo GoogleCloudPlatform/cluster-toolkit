@@ -1064,7 +1064,8 @@ class ParseXpkToGclusterTest(unittest.TestCase):
         ' --docker-image gcr.io/img:v1 --command "echo hi"'
     )
     out = parse_xpk_to_gcluster.parse_xpk_command(cmd)
-    self.assertIn("--verbose", out)
+    self.assertIn("--enable-ml-diagnostics", out)
+    self.assertNotIn("--verbose", out)
     self.assertNotIn("Unmapped", out)
 
   def test_workload_create_registered_submit_flags_passthrough(self):

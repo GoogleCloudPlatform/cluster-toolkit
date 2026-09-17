@@ -378,7 +378,7 @@ def parse_workload_create(
       "--mtc-enabled": "--gke-mtc-enabled",
       "--headless": "--pathways-headless",
       "--enable-debug-logs": "--verbose",
-      "--deploy-stacktrace-sidecar": "--verbose",
+      "--deploy-stacktrace-sidecar": "--enable-ml-diagnostics",
       "--skip-prereqs": "--skip-prereqs",
   }
 
@@ -846,7 +846,17 @@ def parse_cluster_create(
       warnings.append(str(m_type))
     else:
       is_tpu = resolve_is_tpu(device_type, m_type, bool(parsed.tpu_type))
-      blueprint_vars["machine_type"] = m_type
+      if is_tpu:
+        blueprint_vars["machine_type"] = m_type
+      elif is_unified_gpu_hardware(m_type, device_type):
+        warnings.append(
+            f"Omitted 'machine_type: {m_type}' from global vars because modern "
+            "unified GPU blueprints (e.g. A3 Mega/High/Ultra, A4) hardcode the "
+            "machine type in the node pool settings. Merging this key into vars "
+            "may cause testDeploymentVariableNotUsed errors."
+        )
+      else:
+        blueprint_vars["machine_type"] = m_type
       if top and top not in ("N/A", "UNKNOWN"):
         blueprint_vars["tpu_topology"] = top
       elif is_tpu:
