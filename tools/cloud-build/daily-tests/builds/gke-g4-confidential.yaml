@@ -146,6 +146,10 @@ steps:
 
               bash tools/add_ttl_label.sh "\$$EXAMPLE_BP"
 
+              # Validate and wait for hardware reservation capacity before deployment
+              echo "INFO: Checking GCE reservation capacity"
+              bash tools/cloud-build/wait_for_available_reservation.sh "g4-reservation-0" "us-south1-a" "$PROJECT_ID"
+
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
                   --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
                   --extra-vars="@tools/cloud-build/daily-tests/tests/gke-g4-confidential.yml" \
