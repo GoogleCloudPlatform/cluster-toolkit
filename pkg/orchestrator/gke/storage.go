@@ -460,20 +460,18 @@ func truncatePVCName(name string, maxLen int) string {
 	return name
 }
 
-// resolveNamespace returns the namespace manifests are applied into, or "default".
-func (sm *StorageManager) resolveNamespace(job orchestrator.JobDefinition) string {
-	var ns string
-	if sm.orchestrator != nil {
-		var err error
-		ns, err = sm.orchestrator.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
-		if err != nil {
-			logging.Warn("failed to get current namespace: %v. Defaulting to 'default' for PV name.", err)
-		}
+func (sm *StorageManager) resolveNamespace(job orchestrator.JobDefinition) (string, error) {
+	if sm.orchestrator == nil {
+		return "default", nil
+	}
+	ns, err := sm.orchestrator.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve namespace for storage gateway: %w", err)
 	}
 	if ns == "" {
-		ns = "default"
+		return "", fmt.Errorf("resolved an empty namespace for storage gateway. Specify one explicitly with --gke-namespace")
 	}
-	return ns
+	return ns, nil
 }
 
 func (sm *StorageManager) generateFilestoreResources(pm parsedMount, idx int, job orchestrator.JobDefinition, state *mountBuildState) (MountInfo, string, error) {
@@ -504,7 +502,10 @@ func (sm *StorageManager) generateFilestoreResources(pm parsedMount, idx int, jo
 	pvcName := fmt.Sprintf("gcluster-filestore-%s-%s", resolvedName, share)
 	pvcName = truncatePVCName(sanitizePVCName(pvcName), maxGeneratedPVCNameLength)
 
-	ns := sm.resolveNamespace(job)
+	ns, err := sm.resolveNamespace(job)
+	if err != nil {
+		return MountInfo{}, "", err
+	}
 	pvName := sanitizePVCName(fmt.Sprintf("%s-%s", pvcName, ns))
 
 	info := MountInfo{
@@ -651,7 +652,10 @@ func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx in
 
 	profileShortName := strings.TrimPrefix(pm.Profile, "gcsfusecsi-")
 	pvcName := gcsFuseGatewayPVCName(bucket, profileShortName, pm.Options, pm.Attributes)
-	ns := sm.resolveNamespace(job)
+	ns, err := sm.resolveNamespace(job)
+	if err != nil {
+		return MountInfo{}, "", err
+	}
 	pvName := gcsFuseGatewayPVName(pvcName, ns)
 
 	info := MountInfo{
