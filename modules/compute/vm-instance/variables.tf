@@ -149,13 +149,13 @@ variable "labels" {
 }
 
 variable "service_account_email" {
-  description = "Service account e-mail address to use with the node pool"
+  description = "Service account e-mail address to use with the VM instance."
   type        = string
   default     = null
 }
 
 variable "service_account_scopes" {
-  description = "Scopes to use with the node pool."
+  description = "Scopes to use with the VM instance."
   type        = set(string)
   default     = ["https://www.googleapis.com/auth/cloud-platform"]
 }
