@@ -37,11 +37,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// mountBuildState maps generated PV name -> Pod volume name to de-duplicate gateways within a job.
-type mountBuildState struct {
-	gatewayVolumeNames map[string]string
-}
-
 func newMountBuildState() *mountBuildState {
 	return &mountBuildState{gatewayVolumeNames: map[string]string{}}
 }
@@ -203,15 +198,6 @@ func missingDestOrFormatErr(vStr string) error {
 	return fmt.Errorf("invalid volume format: %s. Expected format: <src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]", vStr)
 }
 
-type parsedMount struct {
-	Src        string
-	Dest       string
-	Options    string
-	Profile    string // Resolved StorageClass name; empty for inline CSI.
-	Attributes map[string]string
-	ReadOnly   bool
-}
-
 var gcsFuseProfileStorageClasses = map[string]string{
 	"training":                 "gcsfusecsi-training",
 	"checkpointing":            "gcsfusecsi-checkpointing",
@@ -320,11 +306,6 @@ func parseVolumeAttributes(raw string) (map[string]string, error) {
 func repeatedSegmentErr(segment, vStr, joinHint string) error {
 	return fmt.Errorf("%s may only be specified once per --mount, but %q specifies it more than once.%s",
 		segment, vStr, joinHint)
-}
-
-type mountSegments struct {
-	RawProfile string
-	ProfileSet bool // Distinct from RawProfile != "" so an empty `profile=` fails validation.
 }
 
 func parseMountSegments(segments []string, vStr string, pm *parsedMount) (mountSegments, error) {
