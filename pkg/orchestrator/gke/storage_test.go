@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -1644,6 +1646,81 @@ func TestGCSFuseProfile_TemplateQuotesInjectedValues(t *testing.T) {
 	if got := nestedString(t, findDoc(t, docs, "PersistentVolumeClaim"), "metadata", "namespace"); got != hostileNS {
 		t.Errorf("PVC namespace = %q, want the hostile value preserved verbatim as one scalar", got)
 	}
+}
+
+// profileStorageManager returns a StorageManager whose namespace is preset so no cluster call is made.
+func profileStorageManager(customTemplatesPath string) *StorageManager {
+	return &StorageManager{orchestrator: &GKEOrchestrator{
+		gkeCustomTemplatesPath: customTemplatesPath,
+		namespace:              "default",
+	}}
+}
+
+func writeCustomGatewayTemplate(t *testing.T, dir, body string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "gcs_fuse_pv_pvc.tmpl"), []byte(body), 0644); err != nil {
+		t.Fatalf("failed to write custom template: %v", err)
+	}
+}
+
+func TestGCSFuseProfile_HonorsCustomTemplateOverride(t *testing.T) {
+	const mount = "gs://imagenet-dataset;/data;ro;profile=training"
+
+	t.Run("override is used", func(t *testing.T) {
+		dir := t.TempDir()
+		writeCustomGatewayTemplate(t, dir, `apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ printf "%q" .PVName }}
+  annotations:
+    example.com/rendered-by: custom-template
+spec:
+  storageClassName: {{ printf "%q" .StorageClassName }}
+  claimRef:
+    namespace: {{ printf "%q" .Namespace }}
+    name: {{ printf "%q" .PVCName }}
+`)
+
+		_, manifests, err := profileStorageManager(dir).ProcessMounts([]string{mount}, orchestrator.JobDefinition{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		pv := findDoc(t, splitManifestDocs(t, manifests[0]), "PersistentVolume")
+		if got := nestedString(t, pv, "metadata", "annotations", "example.com/rendered-by"); got != "custom-template" {
+			t.Errorf("annotation = %q, want the override to have been rendered", got)
+		}
+		if _, embedded := pv["metadata"].(map[string]interface{})["labels"]; embedded {
+			t.Error("embedded default was rendered instead of the override")
+		}
+		// Params the override omits must still be supplied, not error.
+		if got := nestedString(t, pv, "spec", "claimRef", "name"); got != "gcluster-gcsfuse-imagenet-dataset-training" {
+			t.Errorf("claimRef.name = %q", got)
+		}
+	})
+
+	t.Run("falls back to embedded when absent", func(t *testing.T) {
+		_, manifests, err := profileStorageManager(t.TempDir()).ProcessMounts([]string{mount}, orchestrator.JobDefinition{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		pv := findDoc(t, splitManifestDocs(t, manifests[0]), "PersistentVolume")
+		if got := nestedString(t, pv, "metadata", "labels", "gcluster.google.com/managed-by"); got != "cluster-toolkit" {
+			t.Errorf("managed-by label = %q, want the embedded default to have been used", got)
+		}
+	})
+
+	t.Run("unknown field in override is reported", func(t *testing.T) {
+		dir := t.TempDir()
+		writeCustomGatewayTemplate(t, dir, "name: {{ .NoSuchField }}\n")
+
+		_, _, err := profileStorageManager(dir).ProcessMounts([]string{mount}, orchestrator.JobDefinition{})
+		if err == nil {
+			t.Fatal("expected an error when the override references an unknown field")
+		}
+		if !strings.Contains(err.Error(), "GCSFuse PV/PVC template") {
+			t.Errorf("error = %v, want it to name the offending template", err)
+		}
+	})
 }
 
 func TestGCSFuseProfile_SubPathIsDelegatedToPod(t *testing.T) {

@@ -234,7 +234,7 @@ Accepted values are `training`, `checkpointing` and `serving` (the canonical
 with the storage profiles installed; verify with
 `kubectl get sc -l gke-gcsfuse/profile=true`.
 
-> [!WARNING]
+> [!IMPORTANT]
 > **`profile=serving` requires the bucket and the cluster to be in the same
 > region.** GKE documents this co-location as *mandatory* for the
 > `gcsfusecsi-serving` profile, and equally mandatory whenever Rapid Cache
@@ -242,9 +242,7 @@ with the storage profiles installed; verify with
 > performance recommendation you can trade away: a cross-region bucket is
 > unsupported in these configurations.
 >
-> `gcluster` does **not** validate this today. A mismatch is not rejected at
-> submit time and surfaces later as degraded or failing mounts. Check the bucket
-> location yourself before submitting:
+> Confirm the bucket's location before submitting:
 >
 > ```bash
 > gcloud storage buckets describe gs://<YOUR_BUCKET_NAME> --format="value(location)"
@@ -310,8 +308,9 @@ Behaviour worth knowing:
 Prerequisites and permissions:
 
 * Make sure the relevant IAM bindings for the bucket and the storage profile are
-  in place before submitting; `gcluster` does not pre-validate them today, so a
-  missing binding surfaces as a Pod that fails to mount.
+  in place before submitting. See
+  [`modules/file-system/gke-persistent-volume/README.md`](../modules/file-system/gke-persistent-volume/README.md)
+  for the roles the GKE Service Agent needs.
 * `gcluster job submit` needs `create` on `persistentvolumes` and
   `persistentvolumeclaims` in the target namespace, since it applies the gateway
   manifests alongside the JobSet.
@@ -399,11 +398,11 @@ needed:
 Caveats:
 
 * **Rapid Cache requires the bucket and the cluster to be in the same region.**
-  See the warning at the top of this section - this applies to `training` and
-  `checkpointing` too, once the cache is enabled.
-* Enabling Rapid Cache requires the Anywhere Cache IAM role. `gcluster` does not
-  pre-validate it, so a missing binding shows up as a Pod that fails to mount
-  rather than as a submit-time error.
+  See the requirement noted under `profile=` above - this applies to `training`
+  and `checkpointing` too, once the cache is enabled.
+* Enabling Rapid Cache requires the Anywhere Cache IAM role to be granted to the
+  GKE Service Agent on the bucket. See
+  [`modules/file-system/gke-persistent-volume/README.md`](../modules/file-system/gke-persistent-volume/README.md).
 * Because `attributes=` participates in the gateway name hash, a mount with
   Rapid Cache enabled gets its own gateway and will not share one with an
   otherwise identical mount that leaves it off. Use the same `attributes=`
