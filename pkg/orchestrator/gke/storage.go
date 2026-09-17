@@ -37,6 +37,16 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+const (
+	volumeAttributeKeyCharset = `[A-Za-z0-9][A-Za-z0-9._-]*`
+	maxGeneratedPVCNameLength = 189
+
+	gcsFuseGatewayPrefix   = "gcluster-gcsfuse"
+	gcsFuseGatewayCapacity = "5Gi" // Ignored by GCSFuse CSI driver, required by Kubernetes.
+
+	gatewayNameDigestLength = 10
+)
+
 func newMountBuildState() *mountBuildState {
 	return &mountBuildState{gatewayVolumeNames: map[string]string{}}
 }
@@ -223,8 +233,6 @@ func normalizeProfileName(profile string) (string, error) {
 	}
 	return sc, nil
 }
-
-const volumeAttributeKeyCharset = `[A-Za-z0-9][A-Za-z0-9._-]*`
 
 var volumeAttributeKeyPattern = regexp.MustCompile(`^` + volumeAttributeKeyCharset + `$`)
 
@@ -448,10 +456,6 @@ func validateSrcScheme(src string, vStr string) error {
 	return fmt.Errorf("invalid volume format: %s. Unsupported scheme.", vStr)
 }
 
-// maxGeneratedPVCNameLength leaves room for "-<namespace>" (up to 63 chars)
-// within the 253-character Kubernetes object name limit.
-const maxGeneratedPVCNameLength = 189
-
 // truncatePVCName enforces maxLen without leaving a trailing '-'.
 func truncatePVCName(name string, maxLen int) string {
 	if len(name) > maxLen {
@@ -547,11 +551,6 @@ func (sm *StorageManager) generateFilestoreResources(pm parsedMount, idx int, jo
 	return info, pvYAML, nil
 }
 
-const (
-	gcsFuseGatewayPrefix   = "gcluster-gcsfuse"
-	gcsFuseGatewayCapacity = "5Gi" // Ignored by GCSFuse CSI driver, required by Kubernetes.
-)
-
 var gcsBucketNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 
 func splitGCSSource(src string) (bucket string, subPath string, err error) {
@@ -617,8 +616,6 @@ func gcsFuseGatewayPVCName(bucket, profileShortName, options string, attrs map[s
 func gcsFuseGatewayPVName(claim, namespace string) string {
 	return sanitizePVCName(fmt.Sprintf("%s-%s", claim, namespace))
 }
-
-const gatewayNameDigestLength = 10
 
 func shortenWithDigest(name, identity string, maxLen int) string {
 	sum := sha256.Sum256([]byte(identity))
