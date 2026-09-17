@@ -57,7 +57,7 @@ One example of an error message which appears in `resume.log` due to insufficien
 bulkInsert operation errors: VM_MIN_COUNT_NOT_REACHED
 ```
 
-When this happens, the the output of `sacct` will show the job's status as `NODE_FAIL`.
+When this happens, the output of `sacct` will show the job's status as `NODE_FAIL`.
 
 Jobs submitted via `srun` will not be requeued, however jobs submitted via `sbatch` will be requeued with a random delay/jitter (1-2 minutes).
 
