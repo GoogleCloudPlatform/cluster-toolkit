@@ -300,10 +300,16 @@ Behaviour worth knowing:
 > ```
 >
 > The `gcluster.google.com/managed-by: cluster-toolkit` label is written onto
-> every GCS FUSE storage-profile gateway `gcluster` creates, so the selector
-> above will not touch storage you created yourself. Note it is *only* on those
-> gateways: the PV/PVC pair generated for a `filestore://` mount carries no
-> labels, so it is not matched by the selector and is left alone.
+> every storage gateway `gcluster` creates - both GCS FUSE storage-profile
+> gateways and the PV/PVC pair generated for a `filestore://` mount - so the
+> selector above covers all of them and will not touch storage you created
+> yourself. A second label, `gcluster.google.com/storage-type`, records the
+> backend (`gcsfuse` or `filestore`) if you want to narrow the selector to one
+> of them:
+>
+> ```bash
+> kubectl get pvc,pv -l gcluster.google.com/storage-type=gcsfuse
+> ```
 
 Prerequisites and permissions:
 

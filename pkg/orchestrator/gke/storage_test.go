@@ -894,6 +894,9 @@ func TestProcessMounts_Filestore_SingleMountGolden(t *testing.T) {
 kind: PersistentVolume
 metadata:
   name: gcluster-filestore-myinstance-share-default
+  labels:
+    gcluster.google.com/managed-by: cluster-toolkit
+    gcluster.google.com/storage-type: filestore
 spec:
   capacity:
     storage: 2048Gi
@@ -907,6 +910,9 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: gcluster-filestore-myinstance-share
+  labels:
+    gcluster.google.com/managed-by: cluster-toolkit
+    gcluster.google.com/storage-type: filestore
 spec:
   accessModes:
   - ReadWriteMany
