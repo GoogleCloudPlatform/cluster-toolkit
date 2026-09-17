@@ -34,10 +34,11 @@ module "gpu" {
 
 locals {
   guest_accelerator = module.gpu.guest_accelerator
-  # Fallback to regex extraction (e.g. "-4g" -> 4, "-8g" -> 8); defaults to 4 for A4X GB200 NVL72 chassis
-  gpu_count = try(
-    local.guest_accelerator[0].count,
-    tonumber(regex("-([0-9]+)g", var.machine_type)[0]),
+  # GPUs per VM: attached accelerators, else the "-Ng" suffix in the machine type name.
+  # The literal fallback never sizes a slice MIG; outputs.tf requires a determinable count there.
+  gpu_count = coalesce(
+    try(local.guest_accelerator[0].count, null),
+    try(tonumber(regex("-([0-9]+)g", var.machine_type)[0]), null),
     4
   )
 
@@ -111,7 +112,8 @@ locals {
     enable_shielded_vm         = var.enable_shielded_vm
     gpu                        = one(local.guest_accelerator)
     gpu_count                  = local.gpu_count
-    accelerator_topology       = var.accelerator_topology
+    # Normalize once: util.py has_block_topology() compares against "1x72" exactly.
+    accelerator_topology = var.accelerator_topology == null ? null : lower(trimspace(var.accelerator_topology))
 
     labels                    = local.labels
     machine_type              = var.machine_type

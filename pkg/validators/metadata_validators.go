@@ -852,14 +852,27 @@ func getSettingWithFallback(
 	return cty.NilVal, path
 }
 
+// matchTrigger reports whether an actual setting value satisfies an expected trigger value.
+//
+// Null handling is deliberately asymmetric and is relied upon by compound 'triggers' maps:
+//   - expected is null  -> matches when the setting IS set (the "any value" idiom, e.g.
+//     'accelerator_topology: null' means "whenever a topology is configured").
+//   - actual is null    -> matches only when the expected value is itself unset/falsy, so a
+//     rule keyed on 'foo: false' still fires for a module that never sets foo.
+//
+// Caveat: isVarSet is a truthiness check, not a presence check. The number 0, the empty
+// string, and the boolean false all report as NOT set. Rules that need to match a literal
+// false therefore rely on the module default resolving to a concrete false via
+// getSettingWithFallback, which then takes the equality path below rather than either
+// null path.
 func matchTrigger(actualVal, expectedVal cty.Value) bool {
-	if actualVal == cty.NilVal || actualVal.IsNull() {
-		if !isVarSet([]cty.Value{expectedVal}) {
-			return true
-		}
-		return expectedVal != cty.NilVal && expectedVal.IsKnown() && !expectedVal.IsNull() && expectedVal.Type() == cty.Bool && expectedVal.False()
+	if expectedVal == cty.NilVal || (expectedVal.IsKnown() && expectedVal.IsNull()) {
+		return isVarSet([]cty.Value{actualVal})
 	}
-	if !actualVal.IsKnown() || !expectedVal.IsKnown() || expectedVal == cty.NilVal {
+	if actualVal == cty.NilVal || actualVal.IsNull() {
+		return !isVarSet([]cty.Value{expectedVal})
+	}
+	if !actualVal.IsKnown() || !expectedVal.IsKnown() {
 		return false
 	}
 	eq := actualVal.Equals(expectedVal)

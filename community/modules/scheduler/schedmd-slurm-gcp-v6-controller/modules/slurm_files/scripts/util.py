@@ -1826,9 +1826,6 @@ class Lookup:
             return False
         if engine == "MIG":
             return True
-        topo = nodeset.get("accelerator_topology") if isinstance(nodeset, dict) else getattr(nodeset, "accelerator_topology", None)
-        if topo:
-            return True
         mig_name = nodeset.get("mig_name") if isinstance(nodeset, dict) else getattr(nodeset, "mig_name", None)
         if mig_name and not isinstance(mig_name, dict):
             return True
@@ -1866,11 +1863,12 @@ class Lookup:
                 if len(dims) == 2 and dims[0] > 0 and dims[1] > 0:
                     total_gpus = dims[0] * dims[1]
                     gpus_per_vm = 4
-                    gpu_attr = nodeset.get("gpu") if isinstance(nodeset, dict) else getattr(nodeset, "gpu", None)
-                    if gpu_attr and hasattr(gpu_attr, "count") and gpu_attr.count:
-                        gpus_per_vm = int(gpu_attr.count)
-                    elif isinstance(gpu_attr, dict) and "count" in gpu_attr and gpu_attr["count"]:
-                        gpus_per_vm = int(gpu_attr["count"])
+                    gpu_cnt = nodeset.get("gpu_count") if isinstance(nodeset, dict) else getattr(nodeset, "gpu_count", None)
+                    if not gpu_cnt:
+                        gpu_attr = nodeset.get("gpu") if isinstance(nodeset, dict) else getattr(nodeset, "gpu", None)
+                        gpu_cnt = gpu_attr.get("count") if isinstance(gpu_attr, dict) else getattr(gpu_attr, "count", None)
+                    if gpu_cnt:
+                        gpus_per_vm = int(gpu_cnt)
                     else:
                         template_link = nodeset.get("instance_template") if isinstance(nodeset, dict) else getattr(nodeset, "instance_template", None)
                         if template_link:

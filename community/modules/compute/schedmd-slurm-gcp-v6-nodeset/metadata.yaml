@@ -123,13 +123,11 @@ ghpc:
     error_message: "When 'accelerator_topology' is specified, 'enable_placement' must be set to true."
   - validator: conditional
     inputs:
-      trigger: accelerator_topology
+      triggers:
+        # A null expected value in 'triggers' matches when the setting is set (non-null)
+        accelerator_topology: null
+        provisioning_engine: "MIG"
+        dws_flex.enabled: false
       dependent: node_count_dynamic_max
       dependent_value: 0
-    error_message: "When 'accelerator_topology' is specified, 'node_count_dynamic_max' must be explicitly set to 0."
-  - validator: conditional
-    inputs:
-      trigger: accelerator_topology
-      dependent: provisioning_engine
-      dependent_value: "MIG"
-    error_message: "Compute NodeSets with accelerator_topology require explicit opt-in to the MIG provisioning engine (set provisioning_engine = 'MIG')."
+    error_message: "When 'accelerator_topology' is specified with 'provisioning_engine: MIG', 'node_count_dynamic_max' must be explicitly set to 0."

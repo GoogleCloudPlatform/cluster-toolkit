@@ -231,6 +231,69 @@ def test_dws_flex_placement_not_short_circuited():
   assert static_alloc[0].nodes == static_nodes
 
 
+def test_topology_without_mig_optin_keeps_runtime_placement():
+  """Zero-regression guard: A4X nodesets with accelerator_topology but WITHOUT an
+  explicit provisioning_engine = 'MIG' opt-in must keep the pre-existing Bulk Insert
+  behavior, i.e. runtime placement policies are still allocated for them."""
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      nodeset={
+          # Existing production A4X blueprints: topology set, engine left at AUTO.
+          "a4x_auto": TstNodeset(
+              nodeset_name="a4x_auto",
+              region="us-central1",
+              node_count_static=18,
+              accelerator_topology="1x72",
+              provisioning_engine="AUTO",
+              enable_placement=True,
+          ),
+          # Explicit Bulk Insert with topology.
+          "a4x_bulk": TstNodeset(
+              nodeset_name="a4x_bulk",
+              region="us-central1",
+              node_count_static=18,
+              accelerator_topology="1x72",
+              provisioning_engine="BULK_INSERT",
+              enable_placement=True,
+          ),
+      },
+  )
+  lkp = util.Lookup(cfg)
+
+  # Neither nodeset is a MIG nodeset: MIG is strictly opt-in.
+  assert lkp.is_nodeset_mig("a4x_auto") is False
+  assert lkp.is_nodeset_mig("a4x_bulk") is False
+
+  with unittest.mock.patch("resume.valid_placement_node") as mock_valid:
+    mock_valid.return_value = True
+    # A4X reports 4 accelerators per VM from machineTypes.get. Terraform does NOT emit
+    # slice_size for these nodesets (they never opted in to MIG), so hosts-per-slice must
+    # be derived from this live machine type -- 72 / 4 = 18 -- exactly as on the base branch.
+    mt = util.NSDict(
+        family="a4x",
+        name="a4x-highgpu-4g",
+        accelerators=[util.NSDict(count=4, type="nvidia-gb200")],
+    )
+    lkp.template_info = unittest.mock.Mock(return_value=unittest.mock.Mock(machine_type=mt))
+    for ns_name in ("a4x_auto", "a4x_bulk"):
+      ns = lkp.cfg.nodeset[ns_name]
+      # Terraform must not have handed these nodesets a precomputed slice size.
+      # TstNodeset is a dataclass, not an NSDict, so use getattr here.
+      assert not getattr(ns, "slice_size", None), f"{ns_name}: slice_size leaked to a non-MIG nodeset"
+      assert not getattr(ns, "gpu_count", None), f"{ns_name}: gpu_count leaked to a non-MIG nodeset"
+      # Chunking falls back to the live machine type, not to a config-supplied value.
+      assert resume.calculate_chunk_size(ns, lkp) == 18, f"{ns_name}: chunk size regressed"
+
+      nodes = [f"c-{ns_name}-0", f"c-{ns_name}-1"]
+      alloc = resume._allocate_nodes_to_placements(nodes, excl_job_id=77, lkp=lkp)
+      # A runtime placement policy must still be produced (NOT short-circuited to no_pp).
+      assert len(alloc) == 1, f"{ns_name}: expected one placement group"
+      assert alloc[0].placement is not None, (
+          f"{ns_name}: runtime placement policy was dropped - this is a Bulk Insert regression"
+      )
+      assert alloc[0].nodes == nodes
+
+
 @unittest.mock.patch("resume.ensure_execute")
 @unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
 def test_resume_mig_nodes(mock_compute_prop, mock_execute):
@@ -1018,3 +1081,198 @@ def test_resume_mig_nodes_inflight_deletion_timeout_multislice_cleanup(mock_comp
     mock_handle_failure.assert_called_once()
     assert mock_handle_failure.call_args[0][0] == ["testcl-a4x-0", "testcl-a4x-18"]
     assert mock_handle_failure.call_args[0][3] == error_handler.Action.REQUEUE
+
+
+def test_calculate_hosts_per_topo_integrated_gpu_machine_type():
+    """Verify integrated-GPU machine types (where GCE machineTypes.get returns accelerators=[]) extract GPU count from machine_type.name."""
+    mt = util.NSDict(name="a4x-highgpu-4g", accelerators=[])
+    assert resume.calculate_hosts_per_topo("1x72", mt) == 18
+
+    mt_8g = util.NSDict(name="a3-ultragpu-8g", accelerators=[])
+    assert resume.calculate_hosts_per_topo("1x72", mt_8g) == 9
+
+
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch("suspend.suspend_mig_nodes")
+@unittest.mock.patch("resume.wait_for_operation")
+@unittest.mock.patch("util.Lookup.compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_non_exclusive_cleanup_on_failure(mock_compute_prop, mock_wait, mock_suspend, mock_handle_failure):
+    """Verify failed createInstances on non-exclusive jobs (excl_job_id=None) cleans up failed chunk_nodes via suspend_mig_nodes."""
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                node_count_static=18,
+                accelerator_topology="1x72",
+                gpu_count=4,
+                slice_size=18,
+                provisioning_engine="MIG",
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {"managedInstances": []}
+    mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
+        "instanceTemplate": "projects/testproj/global/instanceTemplates/tmpl"
+    }
+    mock_op = unittest.mock.MagicMock()
+    mock_op.execute.return_value = {"name": "op-fail", "selfLink": "https://compute.googleapis.com/op-fail"}
+    mock_compute.regionInstanceGroupManagers().createInstances.return_value = mock_op
+    # Operation completes with an error, driving resume_mig_nodes into its cleanup branch
+    mock_wait.return_value = {
+        "name": "op-fail",
+        "status": "DONE",
+        "error": {"errors": [{"code": "ZONE_RESOURCE_POOL_EXHAUSTED", "message": "Stockout"}]},
+    }
+
+    resume.resume_mig_nodes(["testcl-a4x-0", "testcl-a4x-1"], excl_job_id=None, lkp=lkp)
+
+    # Non-exclusive job: only the failed chunk_nodes are cleaned up in GCE (no prior-slice rollback)
+    mock_suspend.assert_called_once()
+    assert mock_suspend.call_args[0][0] == ["testcl-a4x-0", "testcl-a4x-1"]
+    mock_handle_failure.assert_called_once()
+    assert mock_handle_failure.call_args[0][0] == ["testcl-a4x-0", "testcl-a4x-1"]
+
+
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch("suspend.suspend_mig_nodes")
+@unittest.mock.patch("resume.wait_for_operation")
+@unittest.mock.patch("util.Lookup.compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_no_cleanup_when_operation_unobservable(mock_compute_prop, mock_wait, mock_suspend, mock_handle_failure):
+    """GCE accepted createInstances but polling the operation died.
+
+    The instances are very likely provisioning normally, so resume must NOT delete them.
+    The nodes are still marked down, leaving reclamation to Slurm's suspend path.
+    """
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                node_count_static=18,
+                accelerator_topology="1x72",
+                gpu_count=4,
+                slice_size=18,
+                provisioning_engine="MIG",
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {"managedInstances": []}
+    mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
+        "instanceTemplate": "projects/testproj/global/instanceTemplates/tmpl"
+    }
+    mock_op = unittest.mock.MagicMock()
+    # Request accepted: a selfLink is returned, so the operation is in flight.
+    mock_op.execute.return_value = {"name": "op-inflight", "selfLink": "https://compute.googleapis.com/op-inflight"}
+    mock_compute.regionInstanceGroupManagers().createInstances.return_value = mock_op
+    # Polling the operation dies; the outcome is unknown, not known-failed.
+    mock_wait.side_effect = TimeoutError("lost visibility polling operation")
+
+    resume.resume_mig_nodes(["testcl-a4x-0", "testcl-a4x-1"], excl_job_id=None, lkp=lkp)
+
+    mock_suspend.assert_not_called()
+    mock_handle_failure.assert_called_once()
+    assert mock_handle_failure.call_args[0][0] == ["testcl-a4x-0", "testcl-a4x-1"]
+
+
+
+
+def test_calculate_chunk_size_without_slice_size_uses_live_machine_type():
+  """Zero-regression guard for the Bulk Insert / DWS Flex path.
+
+  Terraform only emits slice_size for static MIG nodesets. When it is absent,
+  calculate_chunk_size must derive hosts-per-slice from the live GCE machine type
+  (calculate_hosts_per_topo), exactly as on the base branch -- NOT from the config's
+  gpu/gpu_count, and NOT from lkp.nodeset_slice_size(), which prefers config values.
+
+  The machine type here reports 1 GPU while the config carries a deliberately wrong
+  gpu=4 / gpu_count=4, so the two derivations give different answers (8 vs 2) and the
+  test can tell which one ran.
+  """
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      nodeset={
+          "g": TstNodeset(
+              nodeset_name="g",
+              instance_template="t_g",
+              accelerator_topology="1x8",
+              provisioning_engine="BULK_INSERT",
+              # Deliberately wrong config values; must be ignored on this path.
+              gpu=util.NSDict(count=4, type="nvidia-l4"),
+              gpu_count=4,
+          ),
+      },
+  )
+  lkp = util.Lookup(cfg)
+  mt = util.NSDict(family="g2", name="g2-standard-4",
+                   accelerators=[util.NSDict(count=1, type="nvidia-l4")])
+  lkp.template_info = unittest.mock.Mock(return_value=unittest.mock.Mock(machine_type=mt))
+
+  # 8 GPUs in the topology / 1 GPU per VM = 8 hosts. Deriving from the config's bogus
+  # gpu_count=4 would yield 2.
+  assert resume.calculate_chunk_size(lkp.cfg.nodeset["g"], lkp) == 8
+
+
+def test_calculate_chunk_size_prefers_slice_size_on_mig_path():
+  """Complement of the above: when Terraform DID supply slice_size (static MIG only),
+  it is authoritative and no machineTypes lookup is needed."""
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      nodeset={
+          "a4x": TstNodeset(
+              nodeset_name="a4x",
+              instance_template="t_a4x",
+              accelerator_topology="1x72",
+              provisioning_engine="MIG",
+              slice_size=18,
+              gpu_count=4,
+          ),
+      },
+  )
+  lkp = util.Lookup(cfg)
+  lkp.template_info = unittest.mock.Mock(
+      side_effect=AssertionError("template_info must not be called when slice_size is present")
+  )
+  assert resume.calculate_chunk_size(lkp.cfg.nodeset["a4x"], lkp) == 18
+
+
+@unittest.mock.patch("suspend.suspend_mig_nodes")
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch("resume.wait_for_operation")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_unobservable_operation_requeues_so_suspend_reclaims(
+    mock_compute_prop, mock_wait, mock_handle_failure, mock_suspend):
+  """When wait_for_operation dies we skip inline deletion on purpose, because the VMs are
+  probably healthy. That defers reclamation to the suspend path -- which only runs if the
+  nodes are returned to power_down. handle_resume_failure only issues power_down on the
+  REQUEUE branch, so this path must force REQUEUE or the VMs are orphaned."""
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      provisioning_engine="MIG",
+      nodeset={"n": TstNodeset(nodeset_name="n", node_count_static=2,
+                               provisioning_engine="MIG",
+                               instance_template="projects/p/global/instanceTemplates/t1")},
+  )
+  lkp = util.Lookup(cfg)
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
+      "instanceTemplate": "projects/p/global/instanceTemplates/t1"
+  }
+  # GCE accepted the request, then polling blew up: the ambiguous window.
+  mock_wait.side_effect = RuntimeError("controller lost the operation")
+
+  with unittest.mock.patch("resume.ensure_execute", return_value={"selfLink": "op/1"}):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1"], None, lkp, None)
+
+  # No inline deletion of possibly-healthy VMs.
+  mock_suspend.assert_not_called()
+  # ...but the nodes are requeued, which is what actually triggers power_down -> suspend.
+  mock_handle_failure.assert_called_once()
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.REQUEUE

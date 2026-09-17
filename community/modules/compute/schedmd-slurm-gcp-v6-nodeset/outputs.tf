@@ -43,18 +43,31 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || var.provisioning_engine == "MIG"
-    error_message = "Compute NodeSets with accelerator_topology require explicit opt-in to the MIG provisioning engine (set provisioning_engine = 'MIG')."
-  }
-
-  precondition {
     condition     = var.accelerator_topology == null || var.accelerator_topology == "" || can(regex("^[1-9][0-9]*[xX][1-9][0-9]*$", trimspace(var.accelerator_topology)))
     error_message = "accelerator_topology must be formatted as '<dim1>x<dim2>' with positive integers (e.g. '1x72')."
   }
 
   precondition {
-    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || length(local.guest_accelerator) > 0 || can(regex("^(a[2-4]x?|g2|h4d)", var.machine_type))
+    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || length(local.guest_accelerator) > 0 || can(regex("^(a[2-4]x?|g[2-4]|h4d)", var.machine_type))
     error_message = "accelerator_topology can only be configured on machine types with attached GPUs or accelerators."
+  }
+
+  # GCE accepts acceleratorTopology in a HIGH_THROUGHPUT workload policy only on these families;
+  # Bulk Insert binds it via runtime placement policies instead, hence the MIG-only gate. H4D is
+  # excluded: it has no accelerators and expresses locality via maxTopologyDistance.
+  precondition {
+    condition     = !(var.provisioning_engine == "MIG" && !var.dws_flex.enabled && var.accelerator_topology != null && var.accelerator_topology != "") || can(regex("^(a3-highgpu-8g|a3-megagpu-8g|a3-ultragpu|a4-|a4x-)", var.machine_type))
+    error_message = "accelerator_topology with provisioning_engine = 'MIG' requires a machine type that supports HIGH_THROUGHPUT workload policies with an accelerator topology (A3 High 8g, A3 Mega 8g, A3 Ultra, A4, A4X, A4X Max). Use provisioning_engine = 'BULK_INSERT' for other machine types."
+  }
+
+  # local.gpu_count falls back to a literal 4 when the count is resolvable from neither
+  # guest_accelerator nor the machine-type name. Fine for a chunk size, but on the MIG path it
+  # would satisfy the divisibility checks below off a guess and build slice MIGs of wrong size.
+  precondition {
+    condition = !(var.provisioning_engine == "MIG" && !var.dws_flex.enabled && var.accelerator_topology != null && var.accelerator_topology != "") || (
+      length(local.guest_accelerator) > 0 || can(regex("-[0-9]+g", var.machine_type))
+    )
+    error_message = "accelerator_topology with provisioning_engine = 'MIG' requires a machine type whose GPU count is determinable, either from an attached guest_accelerator or from a '-<N>g' suffix in the machine type name."
   }
 
   precondition {
@@ -63,7 +76,7 @@ output "nodeset" {
   }
 
   precondition {
-    condition = (var.accelerator_topology == null || var.accelerator_topology == "") || (
+    condition = (var.accelerator_topology == null || var.accelerator_topology == "" || var.provisioning_engine != "MIG" || var.dws_flex.enabled) || (
       var.node_count_static > 0 && try(
         var.node_count_static % (
           (tonumber(split("x", lower(trimspace(var.accelerator_topology)))[0]) * tonumber(split("x", lower(trimspace(var.accelerator_topology)))[1])) / local.gpu_count
@@ -71,7 +84,7 @@ output "nodeset" {
         false
       )
     )
-    error_message = "When accelerator_topology is specified, node_count_static must be greater than 0 and an integer multiple of the slice size ((dim1 * dim2) / gpus_per_machine)."
+    error_message = "When accelerator_topology is specified with provisioning_engine = 'MIG', node_count_static must be greater than 0 and an integer multiple of the slice size ((dim1 * dim2) / gpus_per_machine)."
   }
 
   precondition {
@@ -144,11 +157,8 @@ output "nodeset" {
 
   precondition {
     condition = !(
-      var.node_count_dynamic_max > 0 && (
-        (var.provisioning_engine == "MIG" && !var.dws_flex.enabled) ||
-        (var.accelerator_topology != null && var.accelerator_topology != "")
-      )
+      var.node_count_dynamic_max > 0 && var.provisioning_engine == "MIG" && !var.dws_flex.enabled
     )
-    error_message = "Dynamic compute NodeSets with provisioning_engine = 'MIG' (or accelerator_topology) are currently not supported. Please explicitly set node_count_dynamic_max = 0."
+    error_message = "Dynamic compute NodeSets with provisioning_engine = 'MIG' are currently not supported. Please explicitly set node_count_dynamic_max = 0."
   }
 }

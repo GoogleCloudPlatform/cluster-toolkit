@@ -161,6 +161,13 @@ locals {
       for z in(mig.zone_policy_allow != null ? mig.zone_policy_allow : []) : z if z != null && z != ""
     ]
   }
+
+  # Shards that get a workload policy, keyed by shard, value = normalized topology.
+  # Normalized again here because var.nodeset can be supplied by a hand-written object.
+  nodeset_mig_topo = {
+    for k, mig in local.nodeset_migs : k => lower(trimspace(mig.nodeset.accelerator_topology))
+    if mig.nodeset.accelerator_topology != null && trimspace(mig.nodeset.accelerator_topology) != ""
+  }
 }
 
 data "google_compute_zones" "available" {
@@ -170,23 +177,40 @@ data "google_compute_zones" "available" {
 }
 
 resource "google_compute_resource_policy" "nodeset_workload_policy" {
-  for_each = {
-    for k, mig in local.nodeset_migs : k => mig
-    if mig.nodeset.accelerator_topology != null && mig.nodeset.accelerator_topology != ""
-  }
+  for_each = local.nodeset_mig_topo
 
-  # Ensure resource policy name adheres to GCE's 63-character RFC 1035 limit, stripping trailing hyphens
+  # Topology is in the name so a topology change yields a new policy; create_before_destroy
+  # then avoids a 409 on the replacement. This does NOT spare the MIG: the provider's
+  # ForceNewIfChange on resource_policies.0.workload_policy reads the unknown new self_link as
+  # a removal, so the RIGM is replaced too. Changing accelerator_topology destroys running VMs.
+  # Name is capped at 63 chars (RFC 1035); the md5 digest keeps truncated names unique.
   name = (
-    length("${each.value.mig_name}-wp") <= 63 ?
-    "${each.value.mig_name}-wp" :
-    "${replace(substr("${local.slurm_cluster_name}-${each.value.nodeset_name}", 0, 63 - length("-mig-${each.value.index}-wp")), "/-+$/", "")}-mig-${each.value.index}-wp"
+    length("${local.nodeset_migs[each.key].mig_name}-${each.value}-wp") <= 63 ?
+    "${local.nodeset_migs[each.key].mig_name}-${each.value}-wp" :
+    format("%s-%s-mig-%d-%s-wp",
+      replace(substr(
+        "${local.slurm_cluster_name}-${local.nodeset_migs[each.key].nodeset_name}",
+        0,
+        min(
+          length("${local.slurm_cluster_name}-${local.nodeset_migs[each.key].nodeset_name}"),
+          max(1, 63 - 9 - length("-mig-${local.nodeset_migs[each.key].index}-${each.value}-wp"))
+        )
+      ), "/-+$/", ""),
+      substr(md5(each.key), 0, 8),
+      local.nodeset_migs[each.key].index,
+      each.value
+    )
   )
-  region  = each.value.region
+  region  = local.nodeset_migs[each.key].region
   project = var.project_id
 
   workload_policy {
     type                 = "HIGH_THROUGHPUT"
-    accelerator_topology = lower(trimspace(each.value.nodeset.accelerator_topology))
+    accelerator_topology = each.value
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
@@ -203,8 +227,9 @@ resource "google_compute_region_instance_group_manager" "nodeset_mig" {
   }
 
   dynamic "resource_policies" {
+    # Index the map that created the policies rather than re-deriving the condition.
     for_each = (
-      each.value.nodeset.accelerator_topology != null && each.value.nodeset.accelerator_topology != ""
+      contains(keys(local.nodeset_mig_topo), each.key)
       ? [google_compute_resource_policy.nodeset_workload_policy[each.key].self_link]
       : []
     )
@@ -216,6 +241,8 @@ resource "google_compute_region_instance_group_manager" "nodeset_mig" {
   distribution_policy_zones = length(local.nodeset_mig_zones[each.key]) > 0 ? local.nodeset_mig_zones[each.key] : (
     var.zone != null && contains(data.google_compute_zones.available[each.value.region].names, var.zone) ? [var.zone] : null
   )
+  # Scoped per MIG: slices of one nodeset can land in different zones unless zone_policy_allow
+  # pins one. NVLink is intact within a slice; cross-slice jobs may pay cross-zone latency.
   distribution_policy_target_shape = "ANY_SINGLE_ZONE"
 
   # Proactive Lockout Guardrail: Compute NodeSet MIGs must never use PROACTIVE
@@ -270,7 +297,11 @@ locals {
     enable_maintenance_reservation   = ns.enable_maintenance_reservation
     enable_opportunistic_maintenance = ns.enable_opportunistic_maintenance
     accelerator_topology             = ns.accelerator_topology
-    slice_size                       = local.nodeset_slice_size[ns.nodeset_name]
+    # Static MIG nodesets only: resume.py prefers slice_size over the live machine type, so
+    # emitting it elsewhere would move the source of truth. The !dws_flex term must match the
+    # gates on nodeset_migs and mig_name above -- Flex resolves to "MIG" but gets no slice MIG.
+    slice_size = (local.nodeset_resolved_engine[ns.nodeset_name] == "MIG" && !ns.dws_flex.enabled) ? local.nodeset_slice_size[ns.nodeset_name] : null
+    gpu_count  = (local.nodeset_resolved_engine[ns.nodeset_name] == "MIG" && !ns.dws_flex.enabled) ? local.nodeset_gpu_count[ns.nodeset_name] : null
   }]
 }
 

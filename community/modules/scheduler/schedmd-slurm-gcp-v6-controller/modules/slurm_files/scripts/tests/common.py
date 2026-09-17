@@ -47,6 +47,7 @@ class TstNodeset:
     placement_max_distance: Optional[int] = None
     accelerator_topology: Optional[str] = ""
     slice_size: Optional[int] = None
+    gpu_count: Optional[int] = None
     gpu: Optional[Any] = None
     future_reservation: Optional[str] = ""
     subnetwork: str = "projects/p/regions/us-central1/subnetworks/default"

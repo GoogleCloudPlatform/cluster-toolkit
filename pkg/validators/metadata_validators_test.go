@@ -1179,6 +1179,60 @@ func TestConditionalValidator_Triggers(t *testing.T) {
 	})
 }
 
+func TestConditionalValidator_TriggersNilExpectedValue(t *testing.T) {
+	// A nil trigger value resolves through the module defaults, so the module must be
+	// registered; without this the lookup of an unset trigger panics in InfoOrDie.
+	modulereader.SetModuleInfo("test/module", "terraform", modulereader.ModuleInfo{})
+	modulereader.SetModuleInfo("test/module", "", modulereader.ModuleInfo{})
+
+	baseBP := config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{ID: "test-module", Source: "test/module", Settings: config.NewDict(map[string]cty.Value{})},
+				},
+			},
+		},
+	}
+	validator := ConditionalValidator{}
+
+	rule := modulereader.ValidationRule{
+		Validator:    "conditional",
+		ErrorMessage: "When 'accelerator_topology' is specified with 'provisioning_engine: MIG', 'node_count_dynamic_max' must be explicitly set to 0.",
+		Inputs: map[string]interface{}{
+			"triggers": map[string]interface{}{
+				"accelerator_topology": nil,
+				"provisioning_engine":  "MIG",
+				"dws_flex.enabled":     false,
+			},
+			"dependent":       "node_count_dynamic_max",
+			"dependent_value": 0,
+		},
+	}
+
+	bp := baseBP
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+		"accelerator_topology":   cty.StringVal("1x72"),
+		"provisioning_engine":    cty.StringVal("MIG"),
+		"node_count_dynamic_max": cty.NumberIntVal(4),
+	})
+	if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err == nil {
+		t.Fatalf("expected validation error when accelerator_topology is set with MIG and dynamic max > 0, got nil")
+	}
+
+	// Should NOT fire when accelerator_topology is not set
+	bp2 := baseBP
+	bp2.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+		"provisioning_engine":    cty.StringVal("MIG"),
+		"node_count_dynamic_max": cty.NumberIntVal(4),
+	})
+	if err := validator.Validate(bp2, bp2.Groups[0].Modules[0], rule, bp2.Groups[0], 0); err != nil {
+		t.Fatalf("expected no validation error when accelerator_topology is not set, got: %v", err)
+	}
+}
+
 func TestConditionalValidator_Dependents(t *testing.T) {
 	baseBP := config.Blueprint{
 		BlueprintName: "test-bp",
