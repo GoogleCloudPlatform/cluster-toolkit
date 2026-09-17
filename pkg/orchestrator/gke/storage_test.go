@@ -15,6 +15,7 @@
 package gke
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"reflect"
@@ -1599,6 +1600,52 @@ func TestGCSFuseProfile_ManifestRendering(t *testing.T) {
 	assertProfilePVCSpec(t, findDoc(t, docs, "PersistentVolumeClaim"), wantPV, wantPVC)
 }
 
+func renderGCSFuseGateway(t *testing.T, params GCSFusePVPVCTemplateParams) string {
+	t.Helper()
+	var g *GKEOrchestrator
+	tmpl, err := g.parseGKETextTemplate("gcs_fuse_pv_pvc.tmpl")
+	if err != nil {
+		t.Fatalf("failed to parse template: %v", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, params); err != nil {
+		t.Fatalf("failed to execute template: %v", err)
+	}
+	return buf.String()
+}
+
+func TestGCSFuseProfile_TemplateQuotesInjectedValues(t *testing.T) {
+	// text/template applies no escaping, so every injection point must be %q-quoted.
+	hostileNS := "evil\n    name: hijacked-pvc\n  # "
+	manifest := renderGCSFuseGateway(t, GCSFusePVPVCTemplateParams{
+		PVName:           "gcluster-gcsfuse-b-training-default",
+		PVCName:          "gcluster-gcsfuse-b-training",
+		Namespace:        hostileNS,
+		StorageClassName: "gcsfusecsi-training",
+		Capacity:         "1Gi",
+		VolumeHandle:     "b",
+		VolumeAttributes: map[string]string{"fileCacheCapacity": "100Gi"},
+	})
+
+	docs := splitManifestDocs(t, manifest)
+	if len(docs) != 2 {
+		t.Fatalf("expected 2 documents (PV + PVC), got %d:\n%s", len(docs), manifest)
+	}
+
+	claimRef, ok := nested(t, findDoc(t, docs, "PersistentVolume"), "spec", "claimRef").(map[string]interface{})
+	if !ok {
+		t.Fatalf("claimRef is not a map:\n%s", manifest)
+	}
+	wantClaimRef := map[string]interface{}{"namespace": hostileNS, "name": "gcluster-gcsfuse-b-training"}
+	if !reflect.DeepEqual(claimRef, wantClaimRef) {
+		t.Errorf("claimRef = %#v, want %#v; an injected key means a value escaped its scalar", claimRef, wantClaimRef)
+	}
+
+	if got := nestedString(t, findDoc(t, docs, "PersistentVolumeClaim"), "metadata", "namespace"); got != hostileNS {
+		t.Errorf("PVC namespace = %q, want the hostile value preserved verbatim as one scalar", got)
+	}
+}
+
 func TestGCSFuseProfile_SubPathIsDelegatedToPod(t *testing.T) {
 	sm := &StorageManager{}
 	infos, manifests, err := sm.ProcessMounts(
@@ -1671,7 +1718,7 @@ func TestGCSFuseProfile_RapidCacheWildcardRendersValidYAML(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(manifests[0], `anywhereCacheZones: "*"`) {
+	if !strings.Contains(manifests[0], `"anywhereCacheZones": "*"`) {
 		t.Errorf("expected a quoted wildcard in the rendered PV, got:\n%s", manifests[0])
 	}
 	pv := findDoc(t, splitManifestDocs(t, manifests[0]), "PersistentVolume")
