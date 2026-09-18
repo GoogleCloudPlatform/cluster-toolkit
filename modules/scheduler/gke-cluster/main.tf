@@ -767,6 +767,7 @@ module "kubectl_apply" {
   apply_manifests = concat(flatten([
     for idx, network_info in local.all_networks : [
       {
+        name   = "netparam-${substr(network_info.name, 0, 35)}"
         source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
         template_vars = {
           name            = network_info.name,
@@ -776,6 +777,7 @@ module "kubectl_apply" {
         }
       },
       {
+        name          = "netobj-${substr(network_info.name, 0, 37)}"
         source        = "${path.module}/templates/network-object.yaml.tftpl",
         template_vars = { name = network_info.name }
       }
@@ -783,6 +785,7 @@ module "kubectl_apply" {
     ]),
     var.enable_inference_gateway ? [
       {
+        name          = "inference-gateway"
         source        = "https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.0/manifests.yaml",
         template_vars = {}
       }

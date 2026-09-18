@@ -54,6 +54,7 @@ module "kubectl_apply" {
     [
       # create StorageClass in the cluster
       {
+        name = "sc-${local.storage_type}"
         content = templatefile(
           "${path.module}/storage-class/${local.storage_class_name}.yaml.tftpl",
           {
@@ -69,6 +70,7 @@ module "kubectl_apply" {
         wait_for_rollout = false
       },
       var.namespace != "default" ? [{
+        name = "ns-${substr(var.namespace, 0, 41)}"
         content = templatefile(
           "${path.module}/persistent-volume-claim/namespace.yaml.tftpl",
           {
@@ -80,6 +82,7 @@ module "kubectl_apply" {
       flatten([
         for idx in range(var.pvc_count) : [
           {
+            name = "pvc-${substr(local.pvc_name_prefix, 0, 30)}-${idx}"
             content = templatefile(
               "${path.module}/persistent-volume-claim/${(local.pvc_name_prefix)}.yaml.tftpl",
               {

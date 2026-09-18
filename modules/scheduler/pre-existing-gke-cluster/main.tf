@@ -26,6 +26,7 @@ locals {
   apply_manifests_rdma_networks = flatten([
     for idx, network_info in local.rdma_networks : [
       {
+        name   = "netparam-${substr(var.rdma_subnetwork_name_prefix, 0, 30)}-${idx}"
         source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
         template_vars = {
           name            = "${var.rdma_subnetwork_name_prefix}-${idx}",
@@ -35,6 +36,7 @@ locals {
         }
       },
       {
+        name          = "netobj-${substr(var.rdma_subnetwork_name_prefix, 0, 32)}-${idx}"
         source        = "${path.module}/templates/network-object.yaml.tftpl",
         template_vars = { name = "${var.rdma_subnetwork_name_prefix}-${idx}" }
       }
@@ -44,6 +46,7 @@ locals {
   apply_manifests_non_rdma_networks = flatten([
     for idx, network_info in local.non_rdma_networks : [
       {
+        name   = "netparam-${substr(network_info.subnetwork, 0, 35)}"
         source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
         template_vars = {
           name            = network_info.subnetwork
@@ -53,6 +56,7 @@ locals {
         }
       },
       {
+        name          = "netobj-${substr(network_info.subnetwork, 0, 37)}"
         source        = "${path.module}/templates/network-object.yaml.tftpl",
         template_vars = { name = network_info.subnetwork }
       }
