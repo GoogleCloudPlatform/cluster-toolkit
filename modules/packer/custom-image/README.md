@@ -268,6 +268,7 @@ No resources.
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Type of persistent disk to provision | `string` | `"pd-balanced"` | no |
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration (var.shielded\_instance\_config). | `bool` | `false` | no |
 | <a name="input_gcloud_path_override"></a> [gcloud\_path\_override](#input\_gcloud\_path\_override) | Path to the directory containing the gcloud binary to use as an override for local execution. | `string` | `""` | no |
+| <a name="input_image_encryption_key"></a> [image\_encryption\_key](#input\_image\_encryption\_key) | The full resource name of a Cloud KMS CryptoKey used to encrypt the<br/>produced image (CMEK). The Compute Engine service agent must hold<br/>roles/cloudkms.cryptoKeyEncrypterDecrypter on the key. | `string` | `null` | no |
 | <a name="input_image_family"></a> [image\_family](#input\_image\_family) | The family name of the image to be built. Defaults to `deployment_name` | `string` | `null` | no |
 | <a name="input_image_licenses"></a> [image\_licenses](#input\_image\_licenses) | List of licenses to apply to the image | `list(string)` | <pre>[<br/>  "projects/click-to-deploy-images/global/licenses/hpc-toolkit-vm-image"<br/>]</pre> | no |
 | <a name="input_image_name"></a> [image\_name](#input\_image\_name) | The name of the image to be built. If not supplied, it will be set to image\_family-$ISO\_TIMESTAMP | `string` | `null` | no |

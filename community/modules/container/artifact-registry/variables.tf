@@ -39,6 +39,21 @@ variable "repo_password" {
   default     = null
 }
 
+variable "repository_kms_key_name" {
+  description = <<-DOC
+    The full resource name of a Cloud KMS CryptoKey used to encrypt the
+    Artifact Registry repository contents (CMEK). The Artifact Registry
+    service agent must hold roles/cloudkms.cryptoKeyEncrypterDecrypter on
+    the key before repository creation, and the key location must match
+    the repository location. Encryption mode is fixed at creation.
+    This is distinct from user_managed_replication[].kms_key_name, which
+    encrypts only the Secret Manager secret created for remote-repository
+    credentials.
+  DOC
+  type        = string
+  default     = null
+}
+
 variable "user_managed_replication" {
   description = <<-DOC
     (Optional) A list of objects to enable user-managed replication.

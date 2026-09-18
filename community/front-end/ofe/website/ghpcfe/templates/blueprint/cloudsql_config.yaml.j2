@@ -21,3 +21,9 @@ limitations under the License.
   settings:
     sql_instance_name: sql-{{ cluster_id }}
     tier: "db-g1-small"
+    {% if cmek %}
+    encryption_key_name: {{ cmek.cloudsql_key }}
+    user_managed_replication:
+    - location: {{ cluster.cloud_region }}
+      kms_key_name: {{ cmek.secret_key }}
+    {% endif %}

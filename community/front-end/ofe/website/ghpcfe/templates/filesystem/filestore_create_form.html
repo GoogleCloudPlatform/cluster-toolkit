@@ -70,6 +70,13 @@
         <small class="form-text text-muted">{{ form.performance_tier.help_text }}</small>
     </div>
     <div class="form-group">
+      {{ form.cmek_key.errors }}
+      {{ form.cmek_key.label_tag }}
+      {{ form.cmek_key }}
+{% include "_cmek_key_datalist.html" %}
+        <small class="form-text text-muted">{{ form.cmek_key.help_text }}</small>
+    </div>
+    <div class="form-group">
       {{ form.share_name.errors }}
       {{ form.share_name.label_tag }}
       {{ form.share_name }}
