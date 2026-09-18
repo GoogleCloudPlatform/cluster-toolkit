@@ -90,7 +90,14 @@ validators:
   skip: true  # enable_apis below turns cloudkms on
 
 deployment_groups:
-- group: primary
+
+# API enablement is its own deployment group, applied to completion before
+# `primary` begins. Inside a single group there is nothing to order the two
+# against each other: service-enablement publishes no outputs, so `use` has
+# nothing to bind to, and Terraform would create the key ring concurrently
+# with google_project_service switching cloudkms on. A separate group is
+# what turns "API first" into an ordering rather than a race.
+- group: setup
   modules:
 
   # The kms-key, kms-key-iam and pre-existing-kms-key modules all declare
@@ -100,6 +107,9 @@ deployment_groups:
     source: community/modules/project/service-enablement
     settings:
       gcp_service_list: ["cloudkms.googleapis.com"]
+
+- group: primary
+  modules:
   - id: network
     source: modules/network/vpc
 

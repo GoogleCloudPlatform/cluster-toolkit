@@ -53,6 +53,20 @@ created first and fail with a KMS `PERMISSION_DENIED` that depends only on how
 Terraform happened to schedule the two. kms-key-iam re-exports the same id
 ordered behind its grants, under a name matching each consumer's own input.
 
+### Enabling the Cloud KMS API
+
+This module declares `cloudkms.googleapis.com` in its metadata, so a project
+that has never used Cloud KMS needs the API switched on before the key ring can
+be created. When the blueprint enables it with [service-enablement], put that
+module in an **earlier deployment group** rather than alongside this one:
+service-enablement publishes no outputs, so `use` has nothing to bind to, and
+within one group Terraform creates the key ring concurrently with
+`google_project_service` rather than after it. [kms-key.yaml] shows the
+two-group layout.
+
+[service-enablement]: ../../project/service-enablement/README.md
+[kms-key.yaml]: ../../../examples/kms-key.yaml
+
 ## Lifecycle and naming
 
 Cloud KMS makes several of this module's inputs permanent, so they deserve

@@ -21,5 +21,9 @@ terraform {
       version = ">= 7.33.0"
     }
   }
+  provider_meta "google" {
+    module_name = "blueprints/terraform/hpc-toolkit:kms-key/v1.103.0"
+  }
+
   required_version = ">= 1.12.2"
 }
