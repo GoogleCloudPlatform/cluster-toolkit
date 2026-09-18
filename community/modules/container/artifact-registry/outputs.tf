@@ -14,5 +14,5 @@
 
 output "registry_url" {
   description = "The URL of the created artifact registry."
-  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${var.deployment_name}"
+  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.artifact_registry.repository_id}"
 }

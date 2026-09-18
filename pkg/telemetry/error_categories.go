@@ -321,7 +321,6 @@ const (
 	ErrTypeStartupScriptTimeout                      = "STARTUP_SCRIPT_TIMEOUT"
 	ErrTypeStateUploadFail                           = "STATE_UPLOAD_FAIL"
 	ErrTypeStaticAddressesQuotaExceeded              = "STATIC_ADDRESSES_QUOTA_EXCEEDED"
-	ErrTypeExtraStockout                             = "STOCKOUT"
 	ErrTypeStockoutGke                               = "STOCKOUT_GKE"
 	ErrTypeStockoutTpu                               = "STOCKOUT_TPU"
 	ErrTypeSubnetworkNicInstanceFailure              = "SUBNETWORK_NIC_INSTANCE_FAILURE"
@@ -399,10 +398,10 @@ var extraSubstringErrMatchers = []struct {
 	{"nodes to be ready, found", ErrTypeOmniaNodeReadyTimeout},
 	{"\u2502 Error: Unsupported attribute", ErrTypeTfWrongAttribute},
 	{"\u2502 Error: Inconsistent dependency lock file", ErrTypeTfInconsistentDependency},
-	{"VM instance is currently unavailable in the", ErrTypeExtraStockout},
-	{"A c2-standard-60 VM instance is currently unavailable", ErrTypeExtraStockout},
-	{"does not currently have sufficient capacity for the requested resources", ErrTypeExtraStockout},
-	{"nvidia-tesla-t4-vws accelerator(s) is currently unavailable in the", ErrTypeExtraStockout},
+	{"VM instance is currently unavailable in the", ErrTypeStockout},
+	{"A c2-standard-60 VM instance is currently unavailable", ErrTypeStockout},
+	{"does not currently have sufficient capacity for the requested resources", ErrTypeStockout},
+	{"nvidia-tesla-t4-vws accelerator(s) is currently unavailable in the", ErrTypeStockout},
 	{"try in another zone where Cloud TPU Nodes are offered", ErrTypeStockoutTpu},
 	{"not resumed by ResumeTimeout", ErrTypeUnknownStartupTimeoutTpu},
 	{"No resources found in default namespace.", ErrTypeNoResourcesInDefaultNamespace},

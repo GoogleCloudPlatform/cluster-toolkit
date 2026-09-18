@@ -66,3 +66,5 @@ To avoid incurring charges for the resources created, destroy the deployment:
 ```bash
 ./gcluster destroy DEPLOYMENT_NAME
 ```
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

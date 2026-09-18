@@ -35,7 +35,7 @@ MessageTimeout=60
 SlurmctldHost={control_host}({control_addr})
 
 AuthType=auth/{auth_key}
-AuthInfo=cred_expire=120
+AuthInfo=cred_expire=120,ttl=120
 AuthAltTypes=auth/jwt
 CredType=cred/{auth_key}
 MpiDefault={mpi_default}

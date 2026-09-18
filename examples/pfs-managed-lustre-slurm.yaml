@@ -33,8 +33,7 @@ vars:
   per_unit_storage_throughput: 500
   kms_key: ""
   slurm_image:
-    # Pinned to working version prior to July 10, 2026 due to Lustre client incompatibility on Rocky 9.8
-    name: slurm-gcp-6-12-hpc-rocky-linux-9-20260519
+    family: slurm-gcp-6-12-hpc-rocky-linux-9
     project: schedmd-slurm-public
 
 # Documentation for each of the modules used below can be found at

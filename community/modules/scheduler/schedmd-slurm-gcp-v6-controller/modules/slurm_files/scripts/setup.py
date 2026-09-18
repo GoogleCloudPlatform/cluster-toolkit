@@ -301,6 +301,9 @@ def setup_key(lkp: util.Lookup, is_primary: bool = True) -> None:
     if lkp.cfg.enable_slurm_auth:
         # Put key into shared volume for distribution
         if is_primary:
+            util.mkdirp(util.slurmdirs.key_distribution)
+            util.chown_slurm(util.slurmdirs.key_distribution, mode=0o755)
+
             distributed = util.slurmdirs.key_distribution / file_name
             shutil.copyfile(dst, distributed)
             util.chown_slurm(distributed, mode=0o400)
@@ -715,6 +718,19 @@ def setup_cloud_ops() -> None:
 
     with open("/etc/google-cloud-ops-agent/config.yaml", "r") as f:
         file = yaml.safe_load(f)
+
+    # Guard: skip if config is empty or missing the expected slurm receivers structure.
+    # This happens when the ops agent is installed with a default empty config (comments only).
+    if (
+        not isinstance(file, dict)
+        or not isinstance(logging := file.get("logging"), dict)
+        or not isinstance(receivers := logging.get("receivers"), dict)
+        or "setup" not in receivers
+    ):
+        log.warning(
+            "google-cloud-ops-agent config is missing expected structure, skipping cloud ops customization"
+        )
+        return
 
     # Update setup receiver path
     file["logging"]["receivers"]["setup"]["include_paths"] = ["/var/log/slurm/setup.log"]

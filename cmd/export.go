@@ -68,6 +68,8 @@ func runExportCmd(cmd *cobra.Command, args []string) {
 		checkErr(errors.New("export command is supported for Terraform modules only"), ctx)
 	}
 
+	checkDependencies(cmd, "terraform")
+
 	tf, err := shell.ConfigureTerraform(groupDir)
 	checkErr(err, ctx)
 

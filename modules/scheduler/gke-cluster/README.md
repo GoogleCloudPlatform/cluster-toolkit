@@ -110,8 +110,8 @@ limitations under the License.
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.20.0 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.20.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.44.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.44.0 |
 | <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | >= 2.36 |
 | <a name="requirement_time"></a> [time](#requirement\_time) | ~> 0.13 |
 
@@ -119,8 +119,8 @@ limitations under the License.
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_google"></a> [google](#provider\_google) | >= 7.20.0 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.20.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.44.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.44.0 |
 | <a name="provider_kubernetes"></a> [kubernetes](#provider\_kubernetes) | >= 2.36 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 | <a name="provider_time"></a> [time](#provider\_time) | ~> 0.13 |
@@ -129,6 +129,7 @@ limitations under the License.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
+| <a name="module_high_scale_checkpointing_version_check"></a> [high\_scale\_checkpointing\_version\_check](#module\_high\_scale\_checkpointing\_version\_check) | ../../internal/semver_compare | n/a |
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
 | <a name="module_mldiagnostics_version_check"></a> [mldiagnostics\_version\_check](#module\_mldiagnostics\_version\_check) | ../../internal/semver_compare | n/a |
 | <a name="module_slice_controller_version_check"></a> [slice\_controller\_version\_check](#module\_slice\_controller\_version\_check) | ../../internal/semver_compare | n/a |
@@ -141,12 +142,16 @@ limitations under the License.
 | [google-beta_google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_cluster) | resource |
 | [google-beta_google_container_node_pool.cpu_np](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
 | [google-beta_google_container_node_pool.system_node_pools](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
+| [google_service_account_iam_member.mtc_node_workload_identity](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account_iam_member) | resource |
 | [kubernetes_labels.workload_namespace_labels](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/labels) | resource |
 | [kubernetes_namespace.user_namespace](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/namespace) | resource |
+| [terraform_data.validate_high_scale_checkpointing_version](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.validate_ml_diagnostics_version](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [time_static.exclusion_start](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/static) | resource |
 | [google-beta_google_container_engine_versions.version_prefix_filter](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/data-sources/google_container_engine_versions) | data source |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
+| [google_compute_machine_types.available_system_machines](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_machine_types) | data source |
+| [google_compute_zones.available](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_zones) | data source |
 | [google_project.project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
 
 ## Inputs
@@ -182,6 +187,7 @@ limitations under the License.
 | <a name="input_enable_master_global_access"></a> [enable\_master\_global\_access](#input\_enable\_master\_global\_access) | Whether the cluster master is accessible globally (from any region) or only within the same region as the private endpoint. | `bool` | `false` | no |
 | <a name="input_enable_ml_diagnostics"></a> [enable\_ml\_diagnostics](#input\_enable\_ml\_diagnostics) | Enables ML Diagnostics on the GKE cluster. | `bool` | `false` | no |
 | <a name="input_enable_multi_networking"></a> [enable\_multi\_networking](#input\_enable\_multi\_networking) | Enables [multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster) (Requires GKE Enterprise). This setting is immutable on clusters and enables [Dataplane V2](https://cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2?hl=en). If null, will determine state based on if additional\_networks are passed in. | `bool` | `null` | no |
+| <a name="input_enable_multi_tier_checkpointing"></a> [enable\_multi\_tier\_checkpointing](#input\_enable\_multi\_tier\_checkpointing) | The status of the High Scale Checkpointing addon (Multi-Tier Checkpointing). This feature allows GKE to manage local SSD checkpoints and background uploads to Cloud Storage for highly resilient machine learning workloads. | `bool` | `false` | no |
 | <a name="input_enable_node_local_dns_cache"></a> [enable\_node\_local\_dns\_cache](#input\_enable\_node\_local\_dns\_cache) | Enable GKE NodeLocal DNSCache addon to improve DNS lookup latency | `bool` | `false` | no |
 | <a name="input_enable_parallelstore_csi"></a> [enable\_parallelstore\_csi](#input\_enable\_parallelstore\_csi) | The status of the Google Compute Engine Parallelstore Container Storage Interface (CSI) driver addon, which allows the usage of a parallelstore as volumes. | `bool` | `false` | no |
 | <a name="input_enable_pathways_for_tpus"></a> [enable\_pathways\_for\_tpus](#input\_enable\_pathways\_for\_tpus) | If true, conditionally deploys a dedicated CPU node pool (cpu-np) using n4-standard-64 instances. | `bool` | `false` | no |
@@ -225,9 +231,9 @@ limitations under the License.
 | <a name="input_system_node_pool_enabled"></a> [system\_node\_pool\_enabled](#input\_system\_node\_pool\_enabled) | Create a system node pool. | `bool` | `true` | no |
 | <a name="input_system_node_pool_image_type"></a> [system\_node\_pool\_image\_type](#input\_system\_node\_pool\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_system_node_pool_kubernetes_labels"></a> [system\_node\_pool\_kubernetes\_labels](#input\_system\_node\_pool\_kubernetes\_labels) | Kubernetes labels to be applied to each node in the node group. Key-value pairs.<br/>(The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified) | `map(string)` | `null` | no |
-| <a name="input_system_node_pool_machine_type"></a> [system\_node\_pool\_machine\_type](#input\_system\_node\_pool\_machine\_type) | Machine type for the system node pool. Defaults to n2d-standard-4 if confidential nodes are enabled, otherwise e2-standard-4. | `string` | `null` | no |
+| <a name="input_system_node_pool_machine_type"></a> [system\_node\_pool\_machine\_type](#input\_system\_node\_pool\_machine\_type) | Machine type for the system node pool. Defaults to 'n2d-standard-4' if confidential nodes are enabled. Otherwise, it defaults to 'n4-standard-4' if available in the target region/zones, falling back to 'n2d-standard-4'. | `string` | `null` | no |
 | <a name="input_system_node_pool_name"></a> [system\_node\_pool\_name](#input\_system\_node\_pool\_name) | Name of the system node pool. | `string` | `"system"` | no |
-| <a name="input_system_node_pool_node_count"></a> [system\_node\_pool\_node\_count](#input\_system\_node\_pool\_node\_count) | The total min and max nodes to be maintained in the system node pool. | <pre>object({<br/>    total_min_nodes = number<br/>    total_max_nodes = number<br/>  })</pre> | <pre>{<br/>  "total_max_nodes": 10,<br/>  "total_min_nodes": 2<br/>}</pre> | no |
+| <a name="input_system_node_pool_node_count"></a> [system\_node\_pool\_node\_count](#input\_system\_node\_pool\_node\_count) | The total min and max nodes to be maintained in the system node pool. | <pre>object({<br/>    total_min_nodes = number<br/>    total_max_nodes = number<br/>  })</pre> | <pre>{<br/>  "total_max_nodes": 150,<br/>  "total_min_nodes": 2<br/>}</pre> | no |
 | <a name="input_system_node_pool_taints"></a> [system\_node\_pool\_taints](#input\_system\_node\_pool\_taints) | Taints to be applied to the system node pool. | <pre>list(object({<br/>    key    = string<br/>    value  = any<br/>    effect = string<br/>  }))</pre> | <pre>[<br/>  {<br/>    "effect": "NO_SCHEDULE",<br/>    "key": "components.gke.io/gke-managed-components",<br/>    "value": true<br/>  }<br/>]</pre> | no |
 | <a name="input_system_node_pool_zones"></a> [system\_node\_pool\_zones](#input\_system\_node\_pool\_zones) | The zones to use for the system node pool. If not specified, the cluster default node zone(s) will be used. | `list(string)` | `null` | no |
 | <a name="input_timeout_create"></a> [timeout\_create](#input\_timeout\_create) | Timeout for creating a node pool | `string` | `null` | no |
@@ -254,5 +260,6 @@ limitations under the License.
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to connect to the created cluster. |
 | <a name="output_k8s_service_account_name"></a> [k8s\_service\_account\_name](#output\_k8s\_service\_account\_name) | Name of k8s service account. |
 | <a name="output_namespace"></a> [namespace](#output\_namespace) | The namespace where Workload Identity is configured (created if not 'default'). |
+| <a name="output_node_service_account"></a> [node\_service\_account](#output\_node\_service\_account) | The GCP Service Account email used by the GKE node pools. |
 | <a name="output_system_node_pool_id"></a> [system\_node\_pool\_id](#output\_system\_node\_pool\_id) | The ID of the system node pool. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

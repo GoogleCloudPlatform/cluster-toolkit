@@ -41,7 +41,7 @@ SlurmctldHost={control_host}({control_addr})
 
 
 AuthType=auth/{auth_key}
-AuthInfo=cred_expire=600
+AuthInfo=cred_expire=600,ttl=600
 AuthAltTypes=auth/jwt
 CredType=cred/{auth_key}
 MpiDefault={mpi_default}

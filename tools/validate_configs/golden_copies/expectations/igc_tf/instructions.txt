@@ -31,3 +31,10 @@ Infrastructure should be destroyed in reverse order of creation:
 
 terraform -chdir=golden_copy_deployment/one destroy
 terraform -chdir=golden_copy_deployment/zero destroy
+
+The following buckets were used for Terraform state and will not be automatically deleted by gcluster destroy:
+
+us-east4-c
+
+Please browse to the Cloud Console to remove them:
+https://console.cloud.google.com/storage/browser

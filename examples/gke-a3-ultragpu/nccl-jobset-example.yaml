@@ -36,18 +36,6 @@ spec:
             annotations:
               kueue.x-k8s.io/podset-preferred-topology: "kubernetes.io/hostname"
               networking.gke.io/default-interface: 'eth0'
-              networking.gke.io/interfaces: |
-                [
-                  {"interfaceName":"eth0","network":"default"},
-                  {"interfaceName":"eth2","network":"rdma-0"},
-                  {"interfaceName":"eth3","network":"rdma-1"},
-                  {"interfaceName":"eth4","network":"rdma-2"},
-                  {"interfaceName":"eth5","network":"rdma-3"},
-                  {"interfaceName":"eth6","network":"rdma-4"},
-                  {"interfaceName":"eth7","network":"rdma-5"},
-                  {"interfaceName":"eth8","network":"rdma-6"},
-                  {"interfaceName":"eth9","network":"rdma-7"}
-                ]
           spec:
             # Limit benchmark run duration
             activeDeadlineSeconds: 3600
@@ -84,6 +72,9 @@ spec:
             - name: proc-sys
               hostPath:
                 path: /proc/sys
+            resourceClaims:
+            - name: rdma
+              resourceClaimTemplateName: default-rdma
 
             initContainers:
             - name: gpu-healthcheck
@@ -218,3 +209,5 @@ spec:
                   nvidia.com/gpu: 8
                 requests:
                   nvidia.com/gpu: 8
+                claims:
+                - name: rdma

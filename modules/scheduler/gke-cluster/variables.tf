@@ -200,12 +200,18 @@ variable "enable_gcsfuse_csi" {
   default     = false
 }
 
-
 variable "enable_persistent_disk_csi" {
   description = "The status of the Google Compute Engine Persistent Disk Container Storage Interface (CSI) driver addon, which allows the usage of a PD as volumes."
   type        = bool
   default     = true
 }
+
+variable "enable_multi_tier_checkpointing" {
+  description = "The status of the High Scale Checkpointing addon (Multi-Tier Checkpointing). This feature allows GKE to manage local SSD checkpoints and background uploads to Cloud Storage for highly resilient machine learning workloads."
+  type        = bool
+  default     = false
+}
+
 
 variable "enable_parallelstore_csi" {
   description = "The status of the Google Compute Engine Parallelstore Container Storage Interface (CSI) driver addon, which allows the usage of a parallelstore as volumes."
@@ -249,10 +255,6 @@ variable "monitoring_components" {
   ]
 }
 
-
-
-
-
 variable "enable_node_local_dns_cache" {
   description = "Enable GKE NodeLocal DNSCache addon to improve DNS lookup latency"
   type        = bool
@@ -285,12 +287,12 @@ variable "system_node_pool_node_count" {
   })
   default = {
     total_min_nodes = 2
-    total_max_nodes = 10
+    total_max_nodes = 150
   }
 }
 
 variable "system_node_pool_machine_type" {
-  description = "Machine type for the system node pool. Defaults to n2d-standard-4 if confidential nodes are enabled, otherwise e2-standard-4."
+  description = "Machine type for the system node pool. Defaults to 'n2d-standard-4' if confidential nodes are enabled. Otherwise, it defaults to 'n4-standard-4' if available in the target region/zones, falling back to 'n2d-standard-4'."
   type        = string
   default     = null
 }
@@ -383,6 +385,13 @@ variable "master_authorized_networks" {
     display_name = string
   }))
   default = []
+
+  validation {
+    condition     = var.master_authorized_networks == null ? true : can([for net in var.master_authorized_networks : cidrhost(net.cidr_block, 0)])
+    error_message = "Validation failed due to invalid CIDR IP address in 'master_authorized_networks.cidr_block'. All values must be in CIDR format (e.g. 1.2.3.4/32)."
+  }
+
+
 }
 
 variable "service_account_email" {

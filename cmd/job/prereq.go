@@ -122,6 +122,8 @@ func ensureGCloudAuthenticated() error {
 	return nil
 }
 
+var getADCSetupCommandFunc = getADCSetupCommand
+
 // getADCSetupCommand checks if Application Default Credentials are valid and returns the setup command if not.
 func getADCSetupCommand() string {
 	creds, err := google.FindDefaultCredentials(context.Background(), "https://www.googleapis.com/auth/cloud-platform")
@@ -224,19 +226,48 @@ func isDockerCredsConfigured(region string) bool {
 	return config.CredHelpers[pkgDevReg] == "gcloud"
 }
 
-// EnsurePrerequisites checks all necessary gcloud and kubectl prerequisites.
-func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string) error {
+// isPermissionDeniedError checks if the error indicates a 403 / permission denied response.
+func isPermissionDeniedError(stderr string, projectID string) bool {
+	safeStderr := stderr
+	if projectID != "" {
+		safeStderr = strings.ReplaceAll(stderr, projectID, "")
+	}
+	lower := strings.ToLower(safeStderr)
+	return strings.Contains(lower, "permission_denied") ||
+		strings.Contains(lower, "permission") ||
+		strings.Contains(lower, "forbidden") ||
+		strings.Contains(lower, "not authorized") ||
+		strings.Contains(lower, "access denied") ||
+		strings.Contains(lower, "403")
+}
+
+// ensureProjectExists checks if the project exists and is accessible.
+func ensureProjectExists(projectID string) error {
+	result := shell.ExecuteCommand("gcloud", "projects", "describe", projectID)
+	if result.ExitCode != 0 {
+		stderr := strings.TrimSpace(result.Stderr)
+		if isPermissionDeniedError(stderr, projectID) {
+			logging.Warn("Could not verify project %q existence due to restricted IAM permissions; proceeding anyway.", projectID)
+			return nil
+		}
+		return fmt.Errorf("failed to validate project: %s", stderr)
+	}
+	return nil
+}
+
+// ensureBasicPrerequisites checks for gcloud, auth, project existence, and kubectl.
+func ensureBasicPrerequisites(cmd *cobra.Command, projectID string) error {
 	if dryRunManifest != "" {
 		return nil
 	}
 
 	state := store.Load()
 
-	if !isStateStale(state, *projectID) {
-		logging.Info("Skipping checks; prerequisites are fresh (project: %s, checked: %v ago).", state.LastCheckedProjectID, time.Since(state.LastCheckedTimestamp).Round(time.Second))
+	if !isStateStale(state, projectID) {
+		logging.Info("Skipping basic checks; prerequisites are fresh (project: %s, checked: %v ago).", state.LastCheckedProjectID, time.Since(state.LastCheckedTimestamp).Round(time.Second))
 		return nil
 	}
-	logging.Info("Prerequisites state is stale or project ID changed, performing fresh check.")
+
 	state = PrereqState{}
 
 	var missing []missingPrereq
@@ -245,59 +276,133 @@ func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string)
 	if err := ensureGCloudSDKInstalled(); err != nil {
 		return err
 	}
-	state.GCloudSDKInstalled = true
 
 	// Check GCloud Auth
+	gcloudAuthOK := false
 	if err := ensureGCloudAuthenticated(); err != nil {
 		missing = append(missing, missingPrereq{name: "Google Cloud Authentication", commands: []string{"gcloud auth login"}})
 	} else {
-		state.GCloudAuthenticated = true
+		gcloudAuthOK = true
 	}
 
 	// Check ADC
-	if adcCmd := getADCSetupCommand(); adcCmd != "" {
+	adcCmd := getADCSetupCommandFunc()
+	if adcCmd != "" {
 		missing = append(missing, missingPrereq{name: "Application Default Credentials (ADC)", commands: []string{adcCmd}})
-	} else {
-		state.ADCConfigured = true
 	}
 
 	checkK8sDependencies(&state, &missing)
 
-	// Check Docker creds
+	// Run project validation if auth is OK, regardless of other missing checks
+	var projectErr error
+	if gcloudAuthOK && projectID != "" {
+		projectErr = ensureProjectExists(projectID)
+	}
+
+	// Now decide what to return
+	if projectErr != nil {
+		if len(missing) > 0 {
+			printMissingPrereqs(cmd, missing)
+		}
+		return fmt.Errorf("project %q is invalid or inaccessible: %w", projectID, projectErr)
+	}
+
+	if len(missing) > 0 {
+		printMissingPrereqs(cmd, missing)
+		return fmt.Errorf("some basic prerequisites are missing")
+	}
+
+	// All basic checks passed! Save state.
+	state.GCloudSDKInstalled = true
+	state.GCloudProjectConfigured = true
+	state.GCloudAuthenticated = true
+	state.ADCConfigured = (adcCmd == "")
+	// state.KubectlInstalled and state.GKEGCloudAuthPluginInstalled are already set inside checkK8sDependencies
+
+	state.LastCheckedTimestamp = time.Now()
+	state.LastCheckedProjectID = projectID
+	store.Save(state)
+
+	return nil
+}
+
+// hasPassedBasicPrerequisites checks if all basic prerequisite checks are fresh and marked as passed.
+func hasPassedBasicPrerequisites(state PrereqState, projectID string) bool {
+	if isStateStale(state, projectID) {
+		return false
+	}
+	return state.GCloudSDKInstalled &&
+		state.GCloudProjectConfigured &&
+		state.GCloudAuthenticated &&
+		state.ADCConfigured &&
+		state.KubectlInstalled &&
+		state.GKEGCloudAuthPluginInstalled
+}
+
+func checkArtifactRegistryAPI(projectID string, state *PrereqState, missing *[]missingPrereq) {
+	if projectID == "" {
+		return
+	}
+	apiResult := shell.ExecuteCommand("gcloud", "services", "list", "--filter=NAME:artifactregistry.googleapis.com", "--format=value(STATE)", "--project", projectID)
+	if strings.TrimSpace(apiResult.Stdout) != "ENABLED" {
+		*missing = append(*missing, missingPrereq{
+			name:     "Artifact Registry API",
+			commands: []string{fmt.Sprintf("gcloud services enable artifactregistry.googleapis.com --project %s --quiet", projectID)},
+		})
+	} else {
+		state.ArtifactRegistryAPIEnabled = true
+	}
+}
+
+func checkDockerCredentials(location string, state *PrereqState, missing *[]missingPrereq) {
 	region := shell.ExtractRegion(location)
 	if !isDockerCredsConfigured(region) {
 		cmds := []string{"gcloud auth configure-docker gcr.io --quiet"}
 		if region != "" {
 			cmds = append(cmds, fmt.Sprintf("gcloud auth configure-docker %s-docker.pkg.dev --quiet", region))
 		}
-		missing = append(missing, missingPrereq{
+		*missing = append(*missing, missingPrereq{
 			name:     "Docker Credentials",
 			commands: cmds,
 		})
 	} else {
 		state.DockerCredsConfigured = true
 	}
+}
 
-	// Check Artifact Registry API
-	if *projectID != "" {
-		apiResult := shell.ExecuteCommand("gcloud", "services", "list", "--filter=NAME:artifactregistry.googleapis.com", "--format=value(STATE)", "--project", *projectID)
-		if strings.TrimSpace(apiResult.Stdout) != "ENABLED" {
-			missing = append(missing, missingPrereq{
-				name:     "Artifact Registry API",
-				commands: []string{fmt.Sprintf("gcloud services enable artifactregistry.googleapis.com --project %s --quiet", *projectID)},
-			})
-		} else {
-			state.ArtifactRegistryAPIEnabled = true
-		}
+// EnsurePrerequisites checks all necessary gcloud and kubectl prerequisites.
+func ensurePrerequisites(cmd *cobra.Command, projectID string, location string) error {
+	if dryRunManifest != "" {
+		return nil
 	}
+
+	state := store.Load()
+
+	if !isStateStale(state, projectID) && state.DockerCredsConfigured && state.ArtifactRegistryAPIEnabled {
+		logging.Info("Skipping checks; prerequisites are fresh (project: %s, checked: %v ago).", state.LastCheckedProjectID, time.Since(state.LastCheckedTimestamp).Round(time.Second))
+		return nil
+	}
+
+	// Safety check: if basic checks haven't run or are not recorded as passed, run them now.
+	if !hasPassedBasicPrerequisites(state, projectID) {
+		if err := ensureBasicPrerequisites(cmd, projectID); err != nil {
+			return err
+		}
+		state = store.Load() // Reload the state updated by ensureBasicPrerequisites
+	}
+
+	var missing []missingPrereq
+
+	checkArtifactRegistryAPI(projectID, &state, &missing)
+	checkDockerCredentials(location, &state, &missing)
 
 	if len(missing) > 0 {
 		printMissingPrereqs(cmd, missing)
-		return fmt.Errorf("job could not be submitted because some prerequisites are missing.")
+		return fmt.Errorf("job could not be submitted because some prerequisites are missing")
 	}
 
 	state.LastCheckedTimestamp = time.Now()
-	state.LastCheckedProjectID = *projectID
+	state.LastCheckedProjectID = projectID
 	store.Save(state)
 
 	logging.Info("Prerequisites checked successfully.")

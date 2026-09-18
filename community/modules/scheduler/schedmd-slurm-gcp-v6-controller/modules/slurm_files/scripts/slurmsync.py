@@ -44,7 +44,7 @@ from util import (
     dirs,
 )
 from util import lookup
-from suspend import delete_instances
+from suspend import suspend_nodes
 import tpu
 import conf
 import watch_delete_vm_op
@@ -97,7 +97,7 @@ class NodeActionDelete():
     def apply(self, nodes:List[str]) -> None:
         hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} instances to delete ({hostlist})")
-        delete_instances(nodes)
+        suspend_nodes(nodes)
 
 @dataclass(frozen=True)
 class NodeActionPrempt():
@@ -292,7 +292,25 @@ def get_node_action(nodename: str) -> NodeAction:
         return _find_tpu_node_action(nodename, state)
 
     # split below is workaround for VMs whose hostname is FQDN
-    inst = lkp.instance(nodename.split(".")[0])
+    short_nodename = nodename.split(".")[0]
+    inst = lkp.instance(short_nodename)
+
+    # For MIG compute nodes, detect active GCE Auto-Healing repairs
+    if lkp.is_node_mig(nodename):
+        try:
+            mig_name = lkp.node_mig_name(nodename)
+            region = lkp.node_region(nodename)
+            if short_nodename in lkp.get_mig_repairing_instances(lkp.project, region, mig_name):
+                if state is not None and state.base != "DOWN":
+                    return NodeActionDown(reason="MIG Auto-Healing instance repair in progress")
+                return NodeActionUnchanged()
+            elif inst and inst.status == "RUNNING" and state is not None and state.base == "DOWN":
+                if "MIG Auto-Healing" in (get_node_reason(short_nodename) or ""):
+                    log.info(f"{short_nodename} recovered by MIG auto-healing; resuming node to idle")
+                    return NodeActionIdle()
+        except Exception as e:
+            log.debug(f"Failed to check managed instance repair status for {nodename}: {e}")
+
     power_flags = frozenset(
         ("POWER_DOWN", "POWERING_UP", "POWERING_DOWN", "POWERED_DOWN")
     ) & (state.flags if state is not None else set())

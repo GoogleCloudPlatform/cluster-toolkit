@@ -34,27 +34,28 @@ func contextFilePath() (string, error) {
 	return filepath.Join(stateDir, contextFileName), nil
 }
 
-func loadContext() Context {
+func loadContext() (Context, error) {
 	filePath, err := contextFilePath()
 	if err != nil {
 		logging.Error("Failed to get context file path: %v", err)
-		return Context{}
+		return Context{}, err
 	}
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			logging.Error("Failed to read context from %s: %v", filePath, err)
+		if os.IsNotExist(err) {
+			return Context{}, nil
 		}
-		return Context{}
+		logging.Error("Failed to read context from %s: %v", filePath, err)
+		return Context{}, err
 	}
 
 	var ctx Context
 	if err := json.Unmarshal(data, &ctx); err != nil {
 		logging.Error("Failed to unmarshal context from %s: %v", filePath, err)
-		return Context{}
+		return Context{}, err
 	}
-	return ctx
+	return ctx, nil
 }
 
 func saveContext(ctx Context) error {

@@ -141,7 +141,17 @@ ghpc:
 ### Regex Validator
 The `regex` validator ensures that input variables match a specific regular expression pattern. This is commonly used to enforce Google Cloud naming conventions or specific software requirements (like Slurm partition name lengths).
 
-**Example definition in `metadata.yaml`:**
+It also supports validating concatenated values across multiple variables (e.g., combined Service Account IDs) by setting `concat: true`.
+
+**Supported Inputs:**
+* `vars` (list of strings, required): The list of variable names to validate.
+* `pattern` (string, required): The regular expression pattern to match.
+* `concat` (boolean, optional, default `false`): If `true`, concatenates the values of all variables in `vars` before matching against `pattern`.
+* `separator` (string, optional, default `""`): Delimiter used to join variable values when `concat: true`.
+* `allow_null` (list of strings, optional): Variables in `vars` that are permitted to be `null`/empty without failing validation when `concat: true`.
+* `optional` (boolean, optional, default `true`): If `true`, validation is skipped if variables are missing or unresolved.
+
+**Basic Example in `metadata.yaml`:**
 
 ```yaml
 ghpc:
@@ -151,6 +161,20 @@ ghpc:
         vars: [partition_name]
         pattern: "^[a-z0-9]{1,10}$"
       error_message: "partition_name must be lowercase alphanumeric and max 10 characters."
+```
+
+**Concatenation Example in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+    - validator: regex
+      inputs:
+        vars: [deployment_name, name]
+        concat: true
+        separator: "-"
+        pattern: "^[a-z][-a-z0-9]{4,28}[a-z0-9]$"
+      error_message: "The combined service account ID (deployment_name + name) must be between 6 and 30 characters, start with a lowercase letter, contain only lowercase alphanumeric characters and dashes, and cannot end with a dash."
 ```
 
 ### Allowed Enum Validator

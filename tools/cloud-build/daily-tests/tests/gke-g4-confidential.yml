@@ -42,6 +42,11 @@ cli_deployment_vars:
   reservation: "g4-reservation-0"
 custom_vars:
   project: "{{ project }}"
+  compute_type: "rtx-6000-1"
+  workload_image: "nvidia/cuda:12.6.0-base-ubuntu22.04"
+  workload_command: "nvidia-smi"
+  expected_log_output: "NVIDIA RTX PRO 6000"
 post_deploy_tests:
 - test-validation/test-gke-job.yml
 - test-validation/test-gke-g4-confidential.yml
+- test-validation/test-gcluster-job.yml

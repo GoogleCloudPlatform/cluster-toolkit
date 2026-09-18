@@ -139,6 +139,13 @@ resource "google_storage_bucket_iam_binding" "viewers" {
   members = var.viewers
 }
 
+resource "google_storage_bucket_iam_member" "object_users" {
+  for_each = var.object_users
+  bucket   = google_storage_bucket.bucket.name
+  role     = "roles/storage.objectUser"
+  member   = each.value
+}
+
 resource "google_storage_anywhere_cache" "cache_instances" {
   for_each = var.anywhere_cache != null ? toset(var.anywhere_cache.zones) : toset([])
 

@@ -15,6 +15,7 @@
 package job
 
 import (
+	"context"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"os"
@@ -62,11 +63,12 @@ var (
 	gkeScheduler           string
 	platform               string
 
-	awaitJobCompletion bool
-	timeout            string
-	priority           string
-	verbose            bool
-	volumeStr          []string
+	awaitJobCompletion  bool
+	timeout             string
+	priority            string
+	verbose             bool
+	enableMLDiagnostics bool
+	volumeStr           []string
 
 	gkeMtcEnabled          bool
 	gkeMtcRamdiskDirectory string
@@ -103,16 +105,17 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			return fmt.Errorf("required flag \"command\" not set")
 		}
 
-		if err := validateImageFlags(); err != nil {
+		if err := validateImageFlags(cmd.Context(), projectID, location); err != nil {
 			return err
 		}
 
 		if err := validatePathwaysFlags(); err != nil {
 			return err
 		}
-
-		if err := ensurePrerequisites(cmd, &projectID, location); err != nil {
-			return err
+		if !skipPrereqs {
+			if err := ensurePrerequisites(cmd, projectID, location); err != nil {
+				return err
+			}
 		}
 
 		if err := validateGKENAPFlags(); err != nil {
@@ -186,7 +189,8 @@ func init() {
 	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
 
 	SubmitCmd.Flags().BoolVar(&gkeMtcEnabled, "gke-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC).")
-	SubmitCmd.Flags().StringVar(&gkeMtcRamdiskDirectory, "gke-mtc-ramdisk-dir", "", "Ramdisk directory for Multi-Tier Checkpointing (MTC).")
+	SubmitCmd.Flags().StringVar(&gkeMtcRamdiskDirectory, "gke-mtc-ramdisk-dir", "", "Ramdisk directory path for Multi-Tier Checkpointing (MTC). Required when --gke-mtc-enabled is set.")
+	SubmitCmd.Flags().BoolVar(&enableMLDiagnostics, "enable-ml-diagnostics", false, "Enables ML Diagnostics for the workload. Requires the target cluster to have ML Diagnostics explicitly enabled.")
 	SubmitCmd.Flags().StringVar(&gkeCustomTemplatesPath, "gke-custom-templates-path", "", "Path to a local directory containing custom GKE templates overrides.")
 
 	_ = SubmitCmd.MarkFlagRequired("name")
@@ -261,6 +265,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		Timeout:                       timeout,
 		PriorityClassName:             priority,
 		Verbose:                       verbose,
+		MLDiagnosticsEnabled:          enableMLDiagnostics,
 		GKEMTCEnabled:                 gkeMtcEnabled,
 		GKEMTCRamdiskDirectory:        gkeMtcRamdiskDirectory,
 		GkeCustomTemplatesPath:        gkeCustomTemplatesPath,
@@ -334,14 +339,14 @@ func validatePathwaysFlags() error {
 	return nil
 }
 
-func validateImageFlags() error {
+func validateImageFlags(ctx context.Context, projectID, location string) error {
 	if pathways.Headless {
 		return nil
 	}
 	if err := validateImageSources(); err != nil {
 		return err
 	}
-	return validateBuildContext()
+	return validateBuildContext(ctx, projectID, location)
 }
 
 func validateImageSources() error {
@@ -357,12 +362,39 @@ func validateImageSources() error {
 	return nil
 }
 
-func validateBuildContext() error {
+func validateBuildContext(ctx context.Context, projectID, location string) error {
 	if buildContext == "" {
 		return nil
 	}
 	if os.Getenv("GCLUSTER_IMAGE_REPO") == "" {
-		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo)")
+		suggestions, hasMore := lookupArtifactRegistryRepos(ctx, projectID, location)
+
+		region := shell.ExtractRegion(location)
+
+		projPrint := projectID
+		if projPrint == "" {
+			projPrint = "<PROJECT_ID>"
+		}
+		regPrint := region
+		if regPrint == "" {
+			regPrint = "<REGION>"
+		}
+
+		if len(suggestions) > 0 {
+			reposStr := "'" + strings.Join(suggestions, "', '") + "'"
+			if hasMore {
+				reposStr += " (and more)"
+			}
+			return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context.\n\n"+
+				"Available Docker repositories in project '%s' and region '%s' are: %s.\n\n"+
+				"To view all repositories, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --filter=\"format=DOCKER\" --format=\"value(name.basename())\"\n\n"+
+				"Please set your environment variable to one of these (e.g., export GCLUSTER_IMAGE_REPO=%s)",
+				projPrint, regPrint, reposStr, projPrint, regPrint, suggestions[0])
+		}
+		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. "+
+			"Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo).\n\n"+
+			"To see available repositories manually, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --filter=\"format=DOCKER\" --format=\"value(name.basename())\"",
+			projPrint, regPrint)
 	}
 	if os.Getenv("USER") == "" && os.Getenv("USERNAME") == "" {
 		return fmt.Errorf("failed to determine user identity from environment (tried USER and USERNAME). This is required to ensure unique image tagging when using --build-context")

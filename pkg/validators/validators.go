@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/dependencies"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulereader"
 	"strings"
@@ -27,10 +28,22 @@ import (
 )
 
 func projectError(p string) error {
+	hint := "It is possible the machine you are working on has not been authenticated.\n"
+	if dependencies.HasBinary("gcloud") {
+		hint += "Try to run `gcloud auth application-default login`"
+	} else {
+		hint += "How to fix:\n" +
+			"1. Recommended: Install the Google Cloud SDK and authenticate.\n" +
+			"   -> Install: https://cloud.google.com/sdk/docs/install\n" +
+			"   -> Authenticate: Run `gcloud auth application-default login`\n\n" +
+			"2. Alternative: Use a Service Account Key file (Air-gapped/Minimal VMs).\n" +
+			"   -> Set the environment variable:\n" +
+			"      export GOOGLE_APPLICATION_CREDENTIALS=\"/path/to/your/key.json\""
+	}
+
 	return config.HintError{
-		Err: fmt.Errorf("project %q does not exist or your credentials do not have permission to access it", p),
-		Hint: "It is possible the machine you are working on has not been authenticated.\n" +
-			"Try to run `gcloud auth application-default login`",
+		Err:  fmt.Errorf("project %q does not exist or your credentials do not have permission to access it", p),
+		Hint: hint,
 	}
 }
 
@@ -75,7 +88,6 @@ const (
 	testMachineTypeInZone             = "test_machine_type_in_zone"
 	testReservationExistsName         = "test_reservation_exists"
 	testDiskTypeInZone                = "test_disk_type_in_zone"
-	testGCSFuseIAMRoleExistsName      = "test_gcsfuse_iam_role_exists"
 )
 
 func implementations() map[string]func(config.Blueprint, config.Dict) error {
@@ -91,7 +103,6 @@ func implementations() map[string]func(config.Blueprint, config.Dict) error {
 		testMachineTypeInZone:             testMachineTypeInZoneAvailability,
 		testReservationExistsName:         testReservationExists,
 		testDiskTypeInZone:                testDiskTypeInZoneAvailability,
-		testGCSFuseIAMRoleExistsName:      testGCSFuseIAMRoleExists,
 	}
 }
 
@@ -219,19 +230,6 @@ func inputsAsStrings(inputs config.Dict) (map[string]string, error) {
 	return ms, nil
 }
 
-func blueprintHasGCSFuse(bp config.Blueprint) bool {
-	hasGCSFuse := false
-	bp.WalkModulesSafe(func(_ config.ModulePath, mod *config.Module) {
-		if strings.Contains(mod.Source, "gke-persistent-volume") && mod.Settings.Has("gcsfuse_storage_class_name") {
-			v := mod.Settings.Get("gcsfuse_storage_class_name")
-			if !v.IsNull() && v.Type() == cty.String && v.AsString() != "" {
-				hasGCSFuse = true
-			}
-		}
-	})
-	return hasGCSFuse
-}
-
 // Creates a list of default validators for the given blueprint,
 // inspect the blueprint for global variables that exist and add an appropriate validators.
 func defaults(bp config.Blueprint) []config.Validator {
@@ -260,13 +258,6 @@ func defaults(bp config.Blueprint) []config.Validator {
 			Validator: testApisEnabledName,
 			Inputs:    inputs,
 		})
-
-		if blueprintHasGCSFuse(bp) {
-			defaults = append(defaults, config.Validator{
-				Validator: testGCSFuseIAMRoleExistsName,
-				Inputs:    inputs,
-			})
-		}
 	}
 
 	if projectIDExists && regionExists {

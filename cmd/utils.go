@@ -138,3 +138,12 @@ func isGroupSelected(g config.GroupName) bool {
 	}
 	return true
 }
+
+func hasSelectedGroupOfKind(bp config.Blueprint, kind config.ModuleKind) bool {
+	for _, g := range bp.Groups {
+		if isGroupSelected(g.Name) && g.Kind() == kind {
+			return true
+		}
+	}
+	return false
+}

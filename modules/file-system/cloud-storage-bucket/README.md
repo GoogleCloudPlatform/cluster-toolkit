@@ -131,6 +131,7 @@ No modules.
 | [google-beta_google_storage_anywhere_cache.cache_instances](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_storage_anywhere_cache) | resource |
 | [google-beta_google_storage_bucket.bucket](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_storage_bucket) | resource |
 | [google_storage_bucket_iam_binding.viewers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_binding) | resource |
+| [google_storage_bucket_iam_member.object_users](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_member) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 
 ## Inputs
@@ -150,6 +151,7 @@ No modules.
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | The mount point where the contents of the device may be accessed after mounting. | `string` | `"/mnt"` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Mount options to be put in fstab. Note: `implicit_dirs` makes it easier to work with objects added by other tools, but there is a performance impact. See: [more information](https://github.com/GoogleCloudPlatform/gcsfuse/blob/master/docs/semantics.md#implicit-directories) | `string` | `"defaults,_netdev,implicit_dirs"` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Name Prefix. | `string` | `null` | no |
+| <a name="input_object_users"></a> [object\_users](#input\_object\_users) | A map of static keys to accounts that can read, write, and list objects in this bucket (roles/storage.objectUser) | `map(string)` | `{}` | no |
 | <a name="input_placement_zones"></a> [placement\_zones](#input\_placement\_zones) | A list of locations for data placement. This can be a zone for a zonal bucket or a region for a regional bucket. When using this, `storage_class` must be `RAPID` for zonal buckets or `REGIONAL` for regional buckets. | `list(string)` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which GCS bucket will be created. | `string` | n/a | yes |
 | <a name="input_public_access_prevention"></a> [public\_access\_prevention](#input\_public\_access\_prevention) | Bucket public access can be controlled by setting a value of either `inherited` or `enforced`. <br/>When set to `enforced`, public access to the bucket is blocked.<br/>If set to `inherited`, the bucket's public access prevention depends on whether it is subject to the organization policy constraint for public access prevention.<br/><br/>See Cloud documentation for more details:<br/><br/>https://cloud.google.com/storage/docs/public-access-prevention | `string` | `null` | no |

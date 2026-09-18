@@ -104,3 +104,5 @@ vars:
 #!/bin/bash
 ./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
 ```
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

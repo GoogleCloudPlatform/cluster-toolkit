@@ -1,7 +1,7 @@
 Running System Benchmarks with Ramble
 =====================================
 
-[Ramble](https://github.com/GoogleCloudPlatform/ramble) is an open source
+[Ramble](https://github.com/Ramble-Project/ramble) is an open source
 multi-platform experimentation framework written in python. It can be used
 to easily reproduce benchmark results across systems, and here
 we will use it to run a series of system benchmarks.

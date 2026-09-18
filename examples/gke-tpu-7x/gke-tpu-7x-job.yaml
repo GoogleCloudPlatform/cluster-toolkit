@@ -25,6 +25,9 @@ spec:
   nodeSelector:
     cloud.google.com/gke-tpu-accelerator: tpu7x
     cloud.google.com/gke-tpu-topology: <YOUR_TPU_TOPOLOGY> # E.g. 2x2x1
+  resourceClaims:
+  - name: netdev
+    resourceClaimTemplateName: default-netdev
   containers:
   - name: tpu-job
     image: python:3.12
@@ -44,3 +47,5 @@ spec:
         google.com/tpu: <CHIPS_PER_NODE> # e.g., 4 for tpu7x-standard-4t
       limits:
         google.com/tpu: <CHIPS_PER_NODE> # e.g., 4 for tpu7x-standard-4t
+      claims:
+      - name: netdev

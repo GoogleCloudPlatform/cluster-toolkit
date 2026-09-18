@@ -59,12 +59,24 @@
         suffix: chs_clone
       register: chs_temp_dir
 
+    - name: Get GCP access token for Git authentication
+      ansible.builtin.command: gcloud auth print-access-token
+      register: gcp_access_token
+      changed_when: false
+      no_log: true
+
     - name: Clone CHS repository
       ansible.builtin.git:
         repo: "{{ chs_repo }}"
         dest: "{{ chs_temp_dir.path }}"
         version: release
         accept_hostkey: true
+      environment:
+        GIT_HTTP_EXTRAHEADER: "Authorization: Bearer {{ gcp_access_token.stdout | trim }}"
+        GIT_CONFIG_COUNT: "1"
+        GIT_CONFIG_KEY_0: "http.https://cluster-toolkit.googlesource.com.extraHeader"
+        GIT_CONFIG_VALUE_0: "Authorization: Bearer {{ gcp_access_token.stdout | trim }}"
+      no_log: true
       async: 120
       poll: 10
 
@@ -93,12 +105,16 @@
     - name: "Run CHS suites"
       ansible.builtin.shell: |
         set -e -u
-        chs run --suite {{ item }}
+        chs run -y --suite {{ item }} {{ chs_target }}
       loop: "{{ chs_suites | default(['standard']) }}"
       register: chs_runs
       async: 3000
       poll: 10
       changed_when: false
+      vars:
+        target_flag: "{{ '--nodepools' if scheduler == 'gke' else ('--partitions' if scheduler == 'slurm' else '') }}"
+        target_val: "{{ (chs_nodepools if scheduler == 'gke' else (chs_partitions if scheduler == 'slurm' else '')) | default('') }}"
+        chs_target: "{{ target_flag + ' ' + target_val if (target_flag and target_val) else '' }}"
 
     - name: CHS run output
       ansible.builtin.debug:

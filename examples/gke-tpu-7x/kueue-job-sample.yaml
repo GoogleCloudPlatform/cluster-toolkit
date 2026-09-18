@@ -32,6 +32,9 @@ spec:
             nodeSelector:
               cloud.google.com/gke-tpu-accelerator: tpu7x
               cloud.google.com/gke-tpu-topology: 2x2x1 # 4 chips
+            resourceClaims:
+            - name: netdev
+              resourceClaimTemplateName: default-netdev
             containers:
             - name: tpu-job
               image: ubuntu:22.04
@@ -48,3 +51,5 @@ spec:
                   google.com/tpu: "4" # 4 chips per pod * 1 pod = 4 chips
                 limits:
                   google.com/tpu: "4" # 4 chips per pod * 1 pod = 4 chips
+                claims:
+                - name: netdev

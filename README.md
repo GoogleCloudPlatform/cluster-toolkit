@@ -46,52 +46,30 @@ You can use two different methods to install Cluster Toolkit:
 
 ### Using the pre-built bundle (recommended)
 
-For the easiest setup, download the appropriate bundle for your operating system and architecture (e.g., `gcluster_bundle_linux_amd64.zip`, `gcluster_bundle_linux_arm64.zip`, `gcluster_bundle_mac_amd64.zip`, or `gcluster_bundle_mac_arm64.zip`) from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. These bundles include the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
+For the easiest setup, download the appropriate bundle for your operating system and architecture from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. These bundles include the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
 
 #### Bundle compatibility matrix
 
 The pre-built bundles are compiled for Linux and macOS execution environments and support the deployment of the following cluster operating systems.
 
-##### Execution platform (where the binary runs)
-
 | Platform | Support Status | Notes |
 | :--- | :---: | :--- |
-| **Linux (amd64 / arm64)** | ✅ | Pre-compiled on Debian Bullseye. Includes amd64 (x86_64) and arm64 builds starting v1.85.0. |
+| **Linux (amd64 / arm64)** | ✅ | Pre-compiled on Debian Bullseye. |
 | **Google Cloud Shell** | ✅ | Native support via the Linux amd64 binary. |
-| **macOS (amd64 / arm64)** | ✅ | Native support via the Mac binary. Includes amd64 (Intel) and arm64 (Apple Silicon) builds starting v1.85.0. |
+| **macOS (amd64 / arm64)** | ✅ | Native support via the Mac binary. |
 | **Windows** | ❎ | Please [Build from source](#building-from-source). |
-
-> [!NOTE]
-> Multi-architecture builds (amd64 and arm64) are available starting with version 1.85.0. Tarball bundles (.tgz) are supported starting with version 1.89.0.
 
 1. Download and extract the bundle:
 
-    For versions v1.89.0 and newer (Multi-architecture Tarball):
-
     ```shell
     # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
-    # Set the desired version TAG (e.g., v1.89.0)
+    # Set the desired version TAG (e.g., v1.103.0)
     TAG=vX.Y.Z
     # Set your OS (linux or mac) and architecture (amd64 or arm64)
     OS="linux"
     ARCH="amd64"
     # Download and extract the platform-specific bundle in a single step
     mkdir -p cluster-toolkit && curl -L https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster_bundle_${OS}_${ARCH}.tgz | tar -xz -C cluster-toolkit && cd cluster-toolkit
-    ```
-
-    For versions v1.85.0 through v1.88.0 (Multi-architecture Zip):
-
-    ```shell
-    # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
-    # Set the desired version TAG (e.g., v1.85.0)
-    TAG=vX.Y.Z
-    # Set your OS (linux or mac) and architecture (amd64 or arm64)
-    OS="linux"
-    ARCH="amd64"
-    # Download and extract the platform-specific bundle
-    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster_bundle_${OS}_${ARCH}.zip
-    unzip gcluster_bundle_${OS}_${ARCH}.zip -d cluster-toolkit/
-    cd cluster-toolkit
     ```
 
 2. Verify the installation:
@@ -188,6 +166,15 @@ After installing `gcluster`, you can deploy, manage, and destroy infrastructure 
    ./gcluster destroy hpc-slurm
    ```
 
+### Automatic Dependency Management
+
+When running commands like `deploy` or `destroy` in non-interactive environments (such as CI/CD pipelines), the toolkit can automatically download missing HashiCorp dependencies (**Terraform** and **Packer**) by passing the `--download-dependencies` flag.
+
+- `--download-dependencies`: Automatically download missing dependencies without prompting.
+- `--download-dependencies=false`: Fail immediately if any required dependencies are missing.
+
+In interactive terminals, this flag is optional; the toolkit will ask for confirmation before downloading missing dependencies.
+
 For detailed guides, blueprint syntax, and configuration options, see the [Google Cloud documentation site](https://cloud.google.com/cluster-toolkit/docs/overview).
 
 ## Job submission (gcluster job submit)
@@ -200,6 +187,30 @@ Ensure your environment is set up before submitting jobs:
 - A deployed GKE cluster managed by Cluster Toolkit (with Kueue and JobSet enabled).
 - `kubectl` and `gke-gcloud-auth-plugin` installed and authenticated (`gcloud auth login`).
 - For on-the-fly builds (`--build-context`), set `export GCLUSTER_IMAGE_REPO=<repository-name>` to specify your Artifact Registry repository name (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo`).
+
+### Configure default settings
+
+To reduce boilerplate in `job submit` commands, you can set default configuration values for `project`, `location`, and `cluster`.
+
+You can open your default system text editor interactively:
+
+```bash
+./gcluster job config set
+```
+
+Or you can set values individually:
+
+```bash
+./gcluster job config set project my-project
+./gcluster job config set cluster my-cluster
+./gcluster job config set location us-central1-a
+```
+
+Check the active configuration using:
+
+```bash
+./gcluster job config show
+```
 
 ### Submit a JobSet
 

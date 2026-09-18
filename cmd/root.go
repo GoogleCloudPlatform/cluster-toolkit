@@ -76,7 +76,6 @@ func init() {
 	addColorFlag(rootCmd.PersistentFlags())
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		initColor()
-		initDependencies(cmd)
 		initTelemetry(cmd, args)
 	}
 

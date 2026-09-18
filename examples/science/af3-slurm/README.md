@@ -233,7 +233,7 @@ Build Pool. The `gcloud` command to create a custom build pool is shown below.
 
 ```bash
 gcloud builds worker-pools create mypool --region=<your region> --worker-disk-size=100 \
---worker-machine-type=e2-highmem-8
+--worker-machine-type=n2d-highmem-8
 ```
 
 With a custom build pool created, the Cloud Build command is as follows (use the [apptainer_cloudbuild.yaml](adm/apptainer_cloudbuild.yaml)):

@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM golang:bullseye
+FROM golang:1.26-trixie
 
-RUN apt-get -y update && apt-get install -y python3-pip git shellcheck && \
+RUN apt-get -y update && apt-get install -y python3-pip python3-venv git \
+    shellcheck && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN pip install pre-commit && rm -rf ~/.cache/pip/*
+RUN python3 -m venv /opt/venv && \
+    /opt/venv/bin/pip install pre-commit && \
+    rm -rf ~/.cache/pip/*
+ENV PATH="/opt/venv/bin:${PATH}"
 
 RUN go install github.com/terraform-docs/terraform-docs@latest      && \
     go install golang.org/x/lint/golint@latest                      && \

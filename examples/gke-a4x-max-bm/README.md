@@ -208,3 +208,5 @@ cd ~/cluster-toolkit
 ```
 
 Replace CLUSTER_NAME with the name of your cluster. For the clusters created with Cluster Toolkit, the cluster name is based on the DEPLOYMENT_NAME.
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

@@ -1,0 +1,50 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: storage-vm
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: vm-storage
+  region: us-central1
+  zone: us-central1-b
+  test_name: vm-storage
+  network_name: default-net
+  # To use Storage Pools, they must be pre-created before deployment.
+  # Replace 'your-pool-balanced' and 'your-pool-throughput' with your storage pool names.
+  hyperdisk_balanced_storage_pool: projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-balanced
+  hyperdisk_throughput_storage_pool: projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-throughput
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.network_name)
+      network_description: "Test network for $(vars.test_name) in $(vars.region)"
+  - id: vm
+    source: modules/compute/vm-instance
+    use:
+    - network
+    settings:
+      machine_type: c3d-standard-4
+      instance_count: 1
+      disk_type: hyperdisk-balanced
+      disk_storage_pool: $(vars.hyperdisk_balanced_storage_pool)
+      additional_persistent_disks:
+        count: 1
+        type: hyperdisk-throughput
+        size: 2048
+        storage_pool: $(vars.hyperdisk_throughput_storage_pool)

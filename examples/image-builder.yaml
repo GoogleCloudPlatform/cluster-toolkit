@@ -27,7 +27,7 @@ vars:
   custom_image:
     family: my-slurm-image
     project: $(vars.project_id)
-  disk_size: 32
+  disk_size: 50
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md

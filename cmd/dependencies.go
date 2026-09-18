@@ -29,16 +29,7 @@ func addDependenciesFlags(flagset *pflag.FlagSet) {
 	flagset.BoolVar(&downloadDependencies, "download-dependencies", false, "Automatically download missing dependencies. Pass --download-dependencies=false to fail if missing.")
 }
 
-func initDependencies(cmd *cobra.Command) {
-	allowedCmds := map[string]bool{
-		"deploy":         true,
-		"destroy":        true,
-		"export-outputs": true,
-	}
-	if !allowedCmds[cmd.Name()] {
-		return
-	}
-
+func checkDependencies(cmd *cobra.Command, tools ...string) {
 	decision := dependencies.DownloadDecisionAsk
 	if cmd.Flags().Changed("download-dependencies") {
 		if downloadDependencies {
@@ -48,7 +39,7 @@ func initDependencies(cmd *cobra.Command) {
 		}
 	}
 
-	if err := ensureDependenciesFn(decision); err != nil {
+	if err := ensureDependenciesFn(decision, tools...); err != nil {
 		logging.Fatal("Failed to setup dependencies: %v", err)
 	}
 }

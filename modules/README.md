@@ -72,6 +72,21 @@ Modules that are still in development and less stable are labeled with the
 [notebook]: ../community/modules/compute/notebook/README.md
 [fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
 
+### Container
+
+* **[apptainer-runtime]** ![community-badge] ![experimental-badge] : Prepares
+  the shared Apptainer runtime layout and modulefile tree on a mounted path.
+* **[apptainer-app]** ![community-badge] ![experimental-badge] : Stages an
+  Artifact Registry image as an Apptainer SIF, with a wrapper command,
+  modulefile, and manifest.
+* **[artifact-registry]** ![community-badge] ![experimental-badge] : Creates and
+  manages Google Cloud Artifact Registry repositories, including remote
+  repositories with pull-through caching.
+
+[apptainer-runtime]: ../community/modules/container/apptainer-runtime/README.md
+[apptainer-app]: ../community/modules/container/apptainer-app/README.md
+[artifact-registry]: ../community/modules/container/artifact-registry/README.md
+
 ### Database
 
 * **[redis]** ![core-badge] : Deploys a Google Cloud Memorystore for Redis instance.
@@ -258,11 +273,11 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
   a startup script to install HTCondor and exports a list of required APIs
 * **[ramble-execute]** ![community-badge] ![experimental-badge] : Creates a
   startup script to execute
-  [Ramble](https://github.com/GoogleCloudPlatform/ramble) commands on a target
+  [Ramble](https://github.com/Ramble-Project/ramble) commands on a target
   VM
 * **[ramble-setup]** ![community-badge] ![experimental-badge] : Creates a
   startup script to install
-  [Ramble](https://github.com/GoogleCloudPlatform/ramble) on an instance or a
+  [Ramble](https://github.com/Ramble-Project/ramble) on an instance or a
   slurm login or controller.
 * **[spack-setup]** ![community-badge] ![experimental-badge] : Creates a startup
   script to install [Spack](https://github.com/spack/spack) on an instance or a
@@ -545,7 +560,7 @@ vm-instance module:
     use:
     - network1
     settings:
-      machine_type: e2-medium
+      machine_type: n2d-standard-2
     outputs:
     - internal_ip
     - name: external_ip

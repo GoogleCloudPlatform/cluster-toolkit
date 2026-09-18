@@ -15,6 +15,11 @@
 name: Label External PRs
 
 on:
+  # zizmor: ignore[dangerous-triggers] -- checkout uses the default ref (base
+  # branch), never the PR head/fork commit, so untrusted code is never checked
+  # out or executed. The script only reads constrained values (PR author login,
+  # PR number, target branch name) from the event payload into shell variables;
+  # no PR-supplied content (title, body, files) is interpolated or executed.
   pull_request_target:
     branches:
     - develop
@@ -35,15 +40,19 @@ jobs:
 
     steps:
     - name: Checkout repo
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      with:
+        persist-credentials: false
 
     - name: Add external label only for develop PRs
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_EVENT_PULL_REQUEST_USER_LOGIN: ${{ github.event.pull_request.user.login }}
+        GITHUB_EVENT_PULL_REQUEST_BASE_REF: ${{ github.event.pull_request.base.ref }}
       run: |
-          AUTHOR="${{ github.event.pull_request.user.login }}"
+          AUTHOR="${GITHUB_EVENT_PULL_REQUEST_USER_LOGIN}"
           PR_NUMBER="${{ github.event.pull_request.number }}"
-          TARGET_BRANCH="${{ github.event.pull_request.base.ref }}"
+          TARGET_BRANCH="${GITHUB_EVENT_PULL_REQUEST_BASE_REF}"
 
           echo "Author: $AUTHOR"
           echo "Target branch: $TARGET_BRANCH"

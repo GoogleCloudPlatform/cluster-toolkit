@@ -115,3 +115,5 @@ To destroy all resources created by the blueprint, run the following command:
 ```
 
 Replace `DEPLOYMENT_NAME` with the `deployment_name` you specified in your deployment file.
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

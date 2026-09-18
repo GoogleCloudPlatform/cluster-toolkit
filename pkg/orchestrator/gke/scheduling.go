@@ -17,6 +17,7 @@ package gke
 import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ type SchedulingOptions struct {
 	PlacementPolicy    string
 	Topology           string
 	Scheduler          string
+	IsTPU              bool
 	NodeAffinityLabels map[string]string
 	IsDynamicSlicing   bool
 	IsStaticSlicing    bool
@@ -37,7 +39,18 @@ func getNodeSelector(opts SchedulingOptions) (map[string]string, error) {
 	nodeSelector := make(map[string]string)
 
 	if opts.PlacementPolicy != "" {
-		nodeSelector["cloud.google.com/gke-placement-group"] = opts.PlacementPolicy
+		// In GKE, placement policy labels differ by accelerator architecture:
+		// 1. TPUs (specifically TPU 7x multi-host NAP): GKE requires referencing a pre-created
+		//    GCE Workload Policy (HIGH_THROUGHPUT) via "cloud.google.com/placement-policy-name".
+		// 2. Non-TPUs (GPUs/CPUs): GKE NAP uses "cloud.google.com/gke-placement-group" to dynamically
+		//    generate compact placement groups on the fly for co-located VM scheduling.
+		// Slashes from full URIs/paths are stripped so the label value conforms to Kubernetes RFC 1123 format.
+		policyName := path.Base(strings.TrimSuffix(strings.TrimSpace(opts.PlacementPolicy), "/"))
+		if opts.IsTPU {
+			nodeSelector["cloud.google.com/placement-policy-name"] = policyName
+		} else {
+			nodeSelector["cloud.google.com/gke-placement-group"] = policyName
+		}
 	}
 
 	for k, v := range opts.NodeAffinityLabels {

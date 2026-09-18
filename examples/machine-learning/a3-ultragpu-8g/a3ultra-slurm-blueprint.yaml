@@ -413,7 +413,7 @@ deployment_groups:
     settings:
       disk_size_gb: 300
       enable_login_public_ips: true
-      machine_type: e2-standard-16
+      machine_type: n2d-standard-16
 
   - id: controller_startup
     source: modules/scripts/startup-script
@@ -472,7 +472,7 @@ deployment_groups:
       enable_controller_public_ips: true
       disk_type: pd-extreme
       disk_size_gb: 300
-      machine_type: e2-standard-16
+      machine_type: n2d-standard-16
       controller_startup_script: $(controller_startup.startup_script)
       enable_external_prolog_epilog: true
       compute_startup_scripts_timeout: 1800
