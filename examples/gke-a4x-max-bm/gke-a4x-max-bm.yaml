@@ -262,7 +262,7 @@ deployment_groups:
         path: $(vars.gib_installer_path)
         template_vars:
           image: "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-arm64"
-          version: v1.1.2
+          version: v1.1.3
           accelerator_count: 4
           node_affinity:
             requiredDuringSchedulingIgnoredDuringExecution:
