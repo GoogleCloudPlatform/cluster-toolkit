@@ -36,6 +36,9 @@ cli_deployment_vars:
   authorized_cidr: "{{ build_ip.stdout }}/32"
   gcp_public_cidrs_access_enabled: true
   k8s_service_account_name: "{{ k8s_service_account_name}}"
+  spot: "{{ enable_spot | default(true) }}"
+  placement_policy:
+    type: COMPACT
 custom_vars:
   project: "{{ project }}"
   instance_labels:

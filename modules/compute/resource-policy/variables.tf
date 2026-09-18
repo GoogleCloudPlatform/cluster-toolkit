@@ -20,7 +20,7 @@ variable "project_id" {
 }
 
 variable "region" {
-  description = "The region for the the resource policy."
+  description = "The region for the resource policy."
   type        = string
 }
 
