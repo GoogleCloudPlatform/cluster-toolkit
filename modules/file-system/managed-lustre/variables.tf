@@ -146,3 +146,39 @@ variable "enable_dynamic_tier" {
   type        = bool
   default     = false
 }
+
+variable "multinic" {
+  description = <<-EOT
+    Multi-NIC (LNet Multi-Rail) client configuration.
+
+    Requires a second NIC on the clients in the SAME VPC as nic0. The client
+    rails are discovered at boot by VPC membership, so GPU/RDMA NICs in other
+    VPCs are ignored automatically.
+  EOT
+  type = object({
+    enabled      = optional(bool, false)
+    lnet_options = optional(string, "lnet_numa_range=1000000 lnet_peer_discovery_disabled=0")
+    table_base   = optional(number, 101)
+    rp_filter    = optional(number, 2)
+    # LNet servers open callback connections back to the client on tcp:988
+    # and tcp:1021-1023. Scope the ingress rule to the PSA tenant range and
+    # target the clients' network tag.
+    create_firewall = optional(bool, true)
+    psa_ip_ranges   = optional(list(string), [])
+    client_tags     = optional(list(string), [])
+    # Extra cloud-config keys merged into the emitted document. Needed where a
+    # blueprint already uses metadata.user-data for something else, e.g.
+    # a4high's create_hostname_file - user-data is a single-valued key.
+    extra_cloud_config = optional(any, {})
+  })
+  default = {}
+
+  validation {
+    condition     = !(var.multinic.enabled && var.multinic.create_firewall) || length(var.multinic.psa_ip_ranges) > 0
+    error_message = "multinic.create_firewall requires multinic.psa_ip_ranges (use the private_service_access module's cidr_range)."
+  }
+  validation {
+    condition     = !(var.multinic.enabled && var.multinic.create_firewall) || length(var.multinic.client_tags) > 0
+    error_message = "multinic.create_firewall requires multinic.client_tags, and the SAME tags must appear in the compute nodeset's `tags` setting. Without a match the firewall rule targets a tag no instance carries and is silently inert."
+  }
+}
