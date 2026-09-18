@@ -315,6 +315,9 @@ variable "nodeset" {
       count = number
       type  = string
     }))
+    # Resolved GPU count per VM, used to derive accelerator topology slice sizes.
+    # Declared explicitly so it is not dropped during object type conversion.
+    gpu_count            = optional(number)
     accelerator_topology = optional(string, null)
     dws_flex = object({
       enabled          = bool
