@@ -32,6 +32,7 @@ module "template" {
   disk_resource_manager_tags          = var.login_nodes.disk_resource_manager_tags
   disk_size_gb                        = var.login_nodes.disk_size_gb
   disk_type                           = var.login_nodes.disk_type
+  disk_storage_pool                   = var.login_nodes.disk_storage_pool
   enable_confidential_vm              = var.login_nodes.enable_confidential_vm
   enable_oslogin                      = var.login_nodes.enable_oslogin
   enable_shielded_vm                  = var.login_nodes.enable_shielded_vm

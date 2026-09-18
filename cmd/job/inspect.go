@@ -46,6 +46,7 @@ func runInspectCmd(cmd *cobra.Command, args []string) error {
 		ProjectID:       projectID,
 		ClusterName:     clusterName,
 		ClusterLocation: location,
+		GKENamespace:    gkeNamespace,
 		WorkloadName:    inspectWorkloadName,
 		OutputPath:      inspectOutputPath,
 		Show:            inspectShow,

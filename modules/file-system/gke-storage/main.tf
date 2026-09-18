@@ -36,6 +36,13 @@ check "private_vpc_connection_peering" {
   }
 }
 
+check "storage_pool_supported_types" {
+  assert {
+    condition     = var.disk_storage_pool == null || var.disk_storage_pool == "" || contains(["hyperdisk-balanced", "hyperdisk-throughput"], lower(var.storage_type))
+    error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
+  }
+}
+
 module "kubectl_apply" {
   source = "../../management/kubectl-apply"
 
@@ -57,6 +64,7 @@ module "kubectl_apply" {
             topology_zones              = var.sc_topology_zones
             enable_confidential_storage = var.enable_confidential_storage
             disk_encryption_kms_key     = var.disk_encryption_kms_key
+            disk_storage_pool           = var.disk_storage_pool
         })
         wait_for_rollout = false
       },

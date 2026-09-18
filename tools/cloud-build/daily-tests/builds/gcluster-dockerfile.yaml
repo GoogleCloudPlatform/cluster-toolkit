@@ -18,54 +18,235 @@ tags: [dockerfile, m.pre-existing-vpc, m.vm-instance, vm]
 substitutions:
   _TEST_PREFIX: "" # Default to no prefix
 
-timeout: 3600s  # 1hr
+timeout: 86400s
+queueTtl: 86400s  # 24hr
+logsBucket: "gs://$PROJECT_NUMBER.cloudbuild-logs.googleusercontent.com"
+
 steps:
-- id: check_for_running_build
-  name: gcr.io/cloud-builders/gcloud
-  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/gcluster-dockerfile.yaml"
+# 1. Build gcluster base image
+- id: build-gcluster-base
+  name: gcr.io/cloud-builders/docker
+  args: ['build', '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/gcluster-base:$BUILD_ID', 'tools/cloud-build/images/cluster-toolkit-dockerfile/']
 
-# uses a pre-built Google Cloud image containing Docker CLI tool.
-- id: build-docker-image
-  name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-t', 'gcluster', 'tools/cloud-build/images/cluster-toolkit-dockerfile/']
-
-- id: modify-blueprint
-  name: 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner' # Using an image with bash
-  script: |
-    #!/usr/bin/env bash
-    set -ex
-    BLUEPRINT="tools/cloud-build/daily-tests/blueprints/e2e.yaml"
-
-    echo "--- Modifying Blueprint with add_ttl_label.sh ---"
-    bash tools/add_ttl_label.sh "${BLUEPRINT}"
-
-- id: create-deployment-folder
-  name: 'gcluster'
+# 2. Build and push workspace container containing the current code layer
+- id: build-workspace-image
+  name: gcr.io/cloud-builders/docker
+  entrypoint: /bin/bash
   args:
-  - 'create'
-  - 'tools/cloud-build/daily-tests/blueprints/e2e.yaml'
-  - '--out'
-  - '/workspace'
-  - '--vars'
-  - 'project_id=$PROJECT_ID,deployment_name=dockerfile-test,region=us-central1,zone=us-central1-a'
+  - -c
+  - |
+    set -eo pipefail
+    docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/gcluster-test:$BUILD_ID -f- . <<EOF
+    FROM us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/gcluster-base:$BUILD_ID
+    # Override entrypoint to bash since gcluster base has ENTRYPOINT ["gcluster"]
+    ENTRYPOINT ["/bin/bash"]
+    COPY . /workspace
+    WORKDIR /workspace
+    EOF
+    docker push us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/gcluster-test:$BUILD_ID
 
-- id: deploy-resources
-  name: 'gcluster'
-  args: ['deploy', '/workspace/dockerfile-test', '--auto-approve']
+# 3. Generate Job YAML
+- id: generate-job-manifest
+  name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    set -eo pipefail
+    BUILD_ID_SHORT=$$(echo "$BUILD_ID" | cut -c1-6)
 
-- id: check-on-resources
-  name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
-  automapSubstitutions: true
-  script: |
-    #!/usr/bin/env bash
-    set -ex
+    if [ "${_TEST_PREFIX}" == "hotfix-" ]; then
+      PRIORITY_LINE="priorityClassName: emergency-hotfix-priority"
+    else
+      PRIORITY_LINE=""
+    fi
 
-    depl_name="dockerfile-test"
-    zone="us-central1-a"
+    cat <<EOF > job.yaml
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: gcluster-dockerfile-$$BUILD_ID_SHORT
+      namespace: default
+      labels:
+        kueue.x-k8s.io/queue-name: local-queue-test-locks
+        build-id: "$BUILD_ID"
+    spec:
+      suspend: true
+      backoffLimit: 0
+      template:
+        metadata:
+          annotations:
+            cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+        spec:
+          $$PRIORITY_LINE
+          terminationGracePeriodSeconds: 1800
+          serviceAccountName: test-kueue-cluster-runner-ksa
+          restartPolicy: Never
+          containers:
+          - name: runner
+            image: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/gcluster-test:$BUILD_ID
+            env:
+            - name: PROJECT_ID
+              value: "$PROJECT_ID"
+            - name: BUILD_ID
+              value: "$BUILD_ID"
+            command: ["/bin/bash", "-c"]
+            args:
+            - |
+              set -x -e
+              echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/gcluster-dockerfile.yaml"
+              cd /workspace
 
-    # check instance was created
-    gcloud compute instances describe "${depl_name}-0" --project="$PROJECT_ID" --zone="$zone" >/dev/null
+              RUN_CLEANUP=true
+              cleanup_pod() {
+                local exit_code=\$$?
+                trap - EXIT SIGTERM SIGINT ERR
+                set +e
 
-- id: destroy-resources
-  name: 'gcluster'
-  args: ['destroy', '/workspace/dockerfile-test', '--auto-approve', '--robust']
+                if [ "\$$RUN_CLEANUP" = "false" ]; then
+                  exit 0
+                fi
+                if [ \$$exit_code -eq 0 ]; then exit_code=1; fi
+
+                echo ""
+                echo "=========================================================================="
+                echo "CAUGHT SIGTERM OR SCRIPT ERROR! Destroying resources..."
+                echo "=========================================================================="
+                if [ -d "/workspace/dockerfile-test" ]; then
+                  gcluster destroy /workspace/dockerfile-test --auto-approve --robust || true
+                fi
+
+                echo "Graceful cleanup finished."
+                exit \$$exit_code
+              }
+              trap cleanup_pod EXIT SIGTERM SIGINT ERR
+
+              echo "=== STAGE: modify-blueprint ==="
+              BLUEPRINT="tools/cloud-build/daily-tests/blueprints/e2e.yaml"
+              echo "--- Modifying Blueprint with add_ttl_label.sh ---"
+              bash tools/add_ttl_label.sh "\$$BLUEPRINT"
+
+              echo "=== STAGE: create-deployment-folder ==="
+              gcluster create tools/cloud-build/daily-tests/blueprints/e2e.yaml --out /workspace --vars project_id=$PROJECT_ID,deployment_name=dockerfile-test,region=us-central1,zone=us-central1-a
+
+              echo "=== STAGE: deploy-resources ==="
+              gcluster deploy /workspace/dockerfile-test --auto-approve
+
+              echo "=== STAGE: check-on-resources ==="
+              depl_name="dockerfile-test"
+              zone="us-central1-a"
+              gcloud compute instances describe "\$${depl_name}-0" --project="$PROJECT_ID" --zone="\$$zone" >/dev/null
+
+              echo "=== STAGE: destroy-resources ==="
+              gcluster destroy /workspace/dockerfile-test --auto-approve --robust
+
+              RUN_CLEANUP=false
+            resources:
+              requests:
+                cpu: 200m
+                memory: "2Gi"
+                test-locks/gcluster-dockerfile: 1
+              limits:
+                cpu: 1
+                memory: "2Gi"
+                test-locks/gcluster-dockerfile: 1
+    EOF
+
+# 4. Submit and Monitor GKE Kueue Job with Retry
+- id: submit-and-monitor-gke-job
+  name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    set -eo pipefail
+    gcloud container clusters get-credentials test-kueue-cluster --region=us-central1
+    BUILD_ID_SHORT=$$(echo "$BUILD_ID" | cut -c1-6)
+    JOB_NAME="gcluster-dockerfile-$$BUILD_ID_SHORT"
+
+    cleanup_cb() {
+      echo ""
+      echo "=========================================================================="
+      echo "PIPELINE CANCELLED: The Cloud Build step received a termination signal."
+      echo "Deleting GKE Kueue Job ($$JOB_NAME) to force the Pod to clean itself up!"
+      echo "=========================================================================="
+      kubectl delete job "$$JOB_NAME" -n default || true
+      exit 1
+    }
+    trap cleanup_cb SIGTERM SIGINT
+
+    MAX_RETRIES=10
+    RETRY_DELAY=300
+    ATTEMPT=1
+
+    while true; do
+      echo "=== ATTEMPT $$ATTEMPT: Submitting Kueue Job ==="
+      kubectl apply -f /workspace/job.yaml
+
+      set +e
+      ( bash tools/cloud-build/monitor_kueue_job.sh \
+          test-kueue-cluster \
+          us-central1 \
+          "$$JOB_NAME" \
+          default | tee /workspace/job_logs.txt; exit $${PIPESTATUS[0]} ) &
+      MONITOR_PID=$$!
+      wait $$MONITOR_PID
+      EXIT_CODE=$$?
+      set -e
+
+      if [ $$EXIT_CODE -eq 0 ]; then
+        echo "Job succeeded!"
+        break
+      fi
+
+      if bash tools/cloud-build/check_retriable_error.sh /workspace/job_logs.txt; then
+        echo "WARNING: Retriable error detected. Kueue Job has already been deleted. Retrying in $$RETRY_DELAY seconds..."
+      else
+        echo "ERROR: Test failed due to an actual error (not zone capacity). Failing pipeline." >&2
+        exit 1
+      fi
+
+      if [ $$ATTEMPT -ge $$MAX_RETRIES ]; then
+        echo "ERROR: Job failed to find zone capacity after $$MAX_RETRIES attempts." >&2
+        exit 1
+      fi
+
+      sleep $$RETRY_DELAY
+      ATTEMPT=$$((ATTEMPT + 1))
+    done
+
+# 5. Cleanup the built images from Registry to save costs
+- id: cleanup-images
+  name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  allowFailure: true
+  args:
+  - -c
+  - |
+    set -eo pipefail
+    IMAGE="us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/gcluster-test:$BUILD_ID"
+    MAX_RETRIES=5
+    RETRY_DELAY=10
+    ATTEMPT=1
+
+    echo "Starting cleanup for image: $$IMAGE"
+
+    while [ "$$ATTEMPT" -le "$$MAX_RETRIES" ]; do
+      echo "Attempt $$ATTEMPT of $$MAX_RETRIES..."
+
+      if gcloud artifacts docker images delete "$$IMAGE" --quiet; then
+        echo "Image successfully deleted."
+        exit 0
+      fi
+
+      if [ "$$ATTEMPT" -lt "$$MAX_RETRIES" ]; then
+        echo "Deletion failed. Retrying in $$RETRY_DELAY seconds..."
+        sleep $$RETRY_DELAY
+      fi
+
+      ATTEMPT=$$((ATTEMPT + 1))
+    done
+
+    echo "Failed to delete image after $$MAX_RETRIES attempts."
+    echo "Image will be handled by Artifact Registry background cleanup policies."
+    exit 1

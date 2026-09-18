@@ -3,10 +3,12 @@
 Creates a symmetric Cloud KMS CryptoKey, in a key ring it creates
 (`key_ring_name`) or one that already exists (`key_ring_id`). It supports both
 co-located keys (pass the workload project as `project_id`) and centralized keys
-(pass a dedicated key project). The CryptoKey uses
-`deletion_policy = "ABANDON"`, so an ordinary `terraform destroy` removes the
-CryptoKey from Terraform state without deleting the key ring, the CryptoKey, or
-any CryptoKeyVersion.
+(pass a dedicated key project). `deletion_policy` has no default and must be
+set explicitly: `"ABANDON"` (recommended for most blueprints) leaves the
+CryptoKey's key version(s) enabled after `terraform destroy`; `"DELETE"`
+destroys them, rendering data encrypted with the key permanently
+unrecoverable. Neither setting frees the key ring or the CryptoKey name --
+see "Lifecycle and naming" below.
 
 This module creates the key and nothing else. Two companions complete the set:
 
@@ -25,14 +27,13 @@ This module creates the key and nothing else. Two companions complete the set:
     location: us-central1
     key_ring_name: my-keyring
     key_name: my-key
+    deletion_policy: ABANDON   # required; see "Lifecycle and naming" below
 
 - id: kms_key_iam
   source: community/modules/security/kms-key-iam
   use: [kms_key]
   settings:
-    service_agent_principals:
-    - "serviceAccount:service-PROJECT_NUMBER@cloud-filer.iam.gserviceaccount.com"
-    - "serviceAccount:service-PROJECT_NUMBER@compute-system.iam.gserviceaccount.com"
+    service_agents: [compute, filestore]
 
 - id: homefs
   source: modules/file-system/filestore
@@ -72,15 +73,20 @@ care before the first apply:
   retained ring as `key_ring_id` together with a fresh `key_name`, or choose new
   names (for example derived from `deployment_name`). Nothing is silently
   reused and nothing is lost, but a redeploy is never fully automatic.
-* **Teardown is non-destructive by default.** `terraform destroy` drops the
-  key ring and CryptoKey from Terraform state but leaves them, and every key
-  version, intact and enabled in Cloud KMS. Data encrypted with the key
-  therefore stays decryptable after the deployment is gone. Set
-  `deletion_policy = "DELETE"` only for a key whose data is genuinely
-  disposable: that destroys every key version and makes anything they protect
-  permanently unrecoverable. Unlike `protection_level` and
-  `destroy_scheduled_duration`, `deletion_policy` is an in-place update, so it
-  can be changed on an existing key by re-applying.
+* **`deletion_policy` is required, with no default, because the two values
+  have severe and opposite consequences.** `ABANDON` leaves every key
+  version intact and enabled after `terraform destroy`, so data encrypted
+  with the key stays decryptable after the deployment is gone -- the
+  recommended choice for most blueprints, since key material routinely
+  outlives the deployment that created it. `DELETE` schedules every key
+  version for destruction instead, after which anything encrypted with them
+  is permanently unrecoverable; choose it only once you have deliberately
+  decided this key's data is disposable. Neither frees the key ring or
+  CryptoKey name (Cloud KMS never frees either). Unlike `protection_level`
+  and `destroy_scheduled_duration`, `deletion_policy` is an in-place update,
+  so it can be changed on an existing key by re-applying -- including
+  switching an existing key to ABANDON before a teardown you want it to
+  survive.
 * **`protection_level` and `destroy_scheduled_duration` are chosen at creation,
   not changed later.** Cloud KMS cannot alter either on an existing CryptoKey,
   so Terraform would have to replace the CryptoKey — which fails with
@@ -97,8 +103,64 @@ care before the first apply:
 
 Automatic rotation creates a new primary version but does not re-encrypt
 existing data or retire old versions, so previous versions remain required
-for previously encrypted data. This module never disables, destroys, or
-deletes a key version.
+for previously encrypted data. This module never disables or destroys a key
+version outside of `terraform destroy`, whose effect on existing versions is
+controlled entirely by `deletion_policy`.
+
+## Testing
+
+`terraform validate` passes on this module in isolation.
+
+`deletion_policy` omitted entirely -- fails at blueprint-expansion time,
+before Terraform is ever invoked, and surfaces the full ABANDON/DELETE
+guidance directly in the error rather than sending the caller to the README:
+
+```console
+$ ./ghpc create BLUEPRINT.yaml -o DEPLOYMENT_DIR
+Error: a required setting "deletion_policy" is missing from a module "kms_key"
+Hint: "deletion_policy" description: What `terraform destroy` does with the CryptoKey this module created.
+Required -- there is no default. ...
+```
+
+`deletion_policy = "DELETE"`, set explicitly:
+
+```console
+$ gcloud kms keys versions list --key=KEY --keyring=KEYRING --location=LOCATION --project=PROJECT_ID
+NAME                                                                                         STATE
+projects/PROJECT_ID/locations/LOCATION/keyRings/KEYRING/cryptoKeys/KEY/cryptoKeyVersions/1  ENABLED
+
+$ ./ghpc destroy DEPLOYMENT_DIR --auto-approve
+...
+Apply complete! Resources: 0 added, 0 changed, 2 destroyed.
+
+$ gcloud kms keys versions list --key=KEY --keyring=KEYRING --location=LOCATION --project=PROJECT_ID
+NAME                                                                                         STATE
+projects/PROJECT_ID/locations/LOCATION/keyRings/KEYRING/cryptoKeys/KEY/cryptoKeyVersions/1  DESTROY_SCHEDULED
+```
+
+`deletion_policy = "ABANDON"`, same steps:
+
+```console
+$ ./ghpc destroy DEPLOYMENT_DIR --auto-approve
+...
+Apply complete! Resources: 0 added, 0 changed, 2 destroyed.
+
+$ gcloud kms keys versions list --key=KEY --keyring=KEYRING --location=LOCATION --project=PROJECT_ID
+NAME                                                                                         STATE
+projects/PROJECT_ID/locations/LOCATION/keyRings/KEYRING/cryptoKeys/KEY/cryptoKeyVersions/1  ENABLED
+```
+
+Terraform's own resource count (`2 destroyed`) is identical either way --
+only the `gcloud` output tells the two apart.
+
+Also deployed as part of a full Slurm cluster and confirmed to actually
+encrypt a controller boot disk and a Filestore instance (`gcloud compute
+disks describe` / `gcloud filestore instances describe
+--format="value(...kmsKeyName)"`), with a real Slurm job running
+successfully against it. Grant placement is [kms-key-iam]'s concern; see
+that module's Testing section.
+
+[kms-key-iam]: ../kms-key-iam/README.md
 
 ## License
 
@@ -145,7 +207,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_deletion_policy"></a> [deletion\_policy](#input\_deletion\_policy) | What `terraform destroy` does with the CryptoKey.<br/><br/>  ABANDON  drop it from Terraform state, leaving the CryptoKey and<br/>           every key version intact and enabled in Cloud KMS<br/>  DELETE   destroy all key versions, rendering data encrypted with<br/>           them permanently unrecoverable<br/><br/>ABANDON is the default because key material routinely outlives the<br/>deployment that created it, and because destroying versions cannot be<br/>undone. Only set DELETE for a key whose data is genuinely disposable.<br/><br/>Changing this is an in-place update, so it can be set on an existing<br/>key by re-applying -- unlike protection\_level and<br/>destroy\_scheduled\_duration, which are fixed at creation. | `string` | `"ABANDON"` | no |
+| <a name="input_deletion_policy"></a> [deletion\_policy](#input\_deletion\_policy) | What `terraform destroy` does with the CryptoKey this module created.<br/>Required -- there is no default. The consequences of each value are<br/>severe and opposite enough (permanent data loss vs. a key that outlives<br/>every deployment) that picking one silently, for you, is worse than<br/>making every blueprint author decide and write it down.<br/><br/>  ABANDON  drop it from Terraform state, leaving the CryptoKey and<br/>           every key version intact and enabled in Cloud KMS<br/>  DELETE   destroy all key versions, rendering data encrypted with<br/>           them permanently unrecoverable<br/><br/>ABANDON is the recommended choice for most blueprints: key material<br/>routinely outlives the deployment that created it (a Filestore instance<br/>or bucket meant to survive `terraform destroy`, a key shared by more<br/>than this one deployment), and destroying versions cannot be undone.<br/>Choose DELETE only when you have deliberately decided the data this key<br/>protects is disposable and should not outlive this deployment -- for<br/>example short-lived scratch resources recreated from scratch on every<br/>deploy.<br/><br/>Neither setting frees the CryptoKey name: Cloud KMS never deletes a<br/>CryptoKey resource itself, only DELETE additionally destroys its<br/>version(s). A key adopted with the pre-existing-kms-key module is never<br/>affected by this variable, since that module never creates a<br/>google\_kms\_crypto\_key resource for `terraform destroy` to act on.<br/><br/>Changing this is an in-place update, so it can be set on an existing<br/>key by re-applying -- unlike protection\_level and<br/>destroy\_scheduled\_duration, which are fixed at creation. | `string` | n/a | yes |
 | <a name="input_destroy_scheduled_duration"></a> [destroy\_scheduled\_duration](#input\_destroy\_scheduled\_duration) | The period a CryptoKeyVersion spends in DESTROY\_SCHEDULED before transitioning to DESTROYED, expressed as a duration string ending in "s" (seconds), e.g. "2592000s" for 30 days. Chosen at creation and immutable afterwards; use a new key\_name to change it. See the module README. | `string` | `"2592000s"` | no |
 | <a name="input_key_name"></a> [key\_name](#input\_key\_name) | The permanent name of the symmetric CryptoKey. Cloud KMS CryptoKey names cannot be renamed and cannot be reused once destroyed. | `string` | n/a | yes |
 | <a name="input_key_ring_id"></a> [key\_ring\_id](#input\_key\_ring\_id) | The id of an existing Cloud KMS key ring to create the CryptoKey in, for<br/>example "projects/my-project/locations/us-central1/keyRings/my-keyring".<br/>Set this instead of key\_ring\_name to reuse a key ring rather than create<br/>one, which is what makes it possible to hold many CryptoKeys in a single<br/>long-lived ring and to redeploy after a teardown that retained the ring.<br/>Exactly one of key\_ring\_name or key\_ring\_id must be supplied. | `string` | `null` | no |

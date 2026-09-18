@@ -47,11 +47,15 @@ resource "google_kms_crypto_key" "this" {
   destroy_scheduled_duration = var.destroy_scheduled_duration
   labels                     = local.labels
 
-  # Defaults to ABANDON: ordinary blueprint teardown must not destroy key
-  # material, because data encrypted with this key may outlive the
-  # deployment. Note the consequence of ABANDON -- any change that forces
-  # replacement of this resource (for example protection_level) cannot
-  # succeed, since Cloud KMS will not reuse the abandoned name.
+  # Required, no default: the consequences (permanent data loss vs. a key
+  # that outlives every deployment) are too severe and too opposite to pick
+  # silently on the caller's behalf. See the variable description for the
+  # ABANDON-vs-DELETE guidance. Either way, Cloud KMS never frees the
+  # CryptoKey name itself -- only DELETE additionally destroys the key
+  # version(s) and the data they protect. A key adopted via
+  # pre-existing-kms-key is never affected by this setting: that module
+  # never creates a google_kms_crypto_key resource, so it has nothing for
+  # `terraform destroy` to act on here.
   deletion_policy = var.deletion_policy
 
   version_template {

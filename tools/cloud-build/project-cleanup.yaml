@@ -13,6 +13,9 @@
 # limitations under the License.
 
 ---
+options:
+  defaultLogsBucketBehavior: REGIONAL_USER_OWNED_BUCKET
+
 timeout: 28800s
 steps:
 - name: gcr.io/cloud-builders/gcloud

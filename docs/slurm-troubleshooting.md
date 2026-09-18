@@ -18,6 +18,8 @@ Possible causes could be [insufficient quota](#insufficient-quota),
 for the service account attached to the controller. Also see the
 [Slurm user guide](https://docs.google.com/document/u/1/d/e/2PACX-1vS0I0IcgVvby98Rdo91nUjd7E9u83oIMCM4arne-9_IdBg6BdV1lBpUcSje_PyHcbAaErC1rY7p4u1g/pub).
 
+> **Note on Automated GCP Constraints:** If batch jobs (`sbatch`) encounter GCP Quota or Capacity (Stockout) failures, they will be automatically requeued. To prevent these failures from aggressively retrying and hammering the GCP API, the Cluster Toolkit directly applies a randomized `StartTime` delay (1-2 minutes) to the job. During this random delay/jitter, the job will wait in a `PENDING` state. Interactive `srun` jobs fail immediately.
+
 #### Insufficient Quota
 
 It may be that you have sufficient quota to deploy your cluster but insufficient
@@ -57,7 +59,7 @@ bulkInsert operation errors: VM_MIN_COUNT_NOT_REACHED
 
 When this happens, the the output of `sacct` will show the job's status as `NODE_FAIL`.
 
-Jobs submitted via `srun` will not be requeued, however jobs submitted via `sbatch` will be requeued.
+Jobs submitted via `srun` will not be requeued, however jobs submitted via `sbatch` will be requeued with a random delay/jitter (1-2 minutes).
 
 #### Placement Groups (Slurm)
 

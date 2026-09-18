@@ -75,6 +75,11 @@ Before deploying, fill out the `gke-g4-confidential-deployment.yaml` file with y
 | `reservation` | (Optional) The name of a zonal GCE reservation matching `g4-standard-48` to consume capacity from. |
 | `enable_confidential_storage` | (Optional) Set to `true` to enable Confidential Storage, encrypting both the Kubernetes dynamic PVs (using CMEK) and the VM boot disks of all GKE nodes (system and workload). Defaults to `false`. |
 | `disk_encryption_kms_key` | (Optional) The resource path to your Cloud KMS key used for CMEK storage encryption. Defaults to empty (`""`). |
+| `local_ssd_count_nvme_block` | (Optional) Number of Local SSDs to attach as raw block NVMe devices (supports `0` or `4` for `g4-standard-48`). Defaults to `0` (no SSDs attached). |
+| `local_ssd_count_ephemeral_storage` | (Optional) Number of Local SSDs to format as ephemeral emptyDir scratch storage (supports `0` or `4` for `g4-standard-48`). Defaults to `0` (no SSDs attached). |
+
+> [!IMPORTANT]
+> The `local_ssd_count_nvme_block` and `local_ssd_count_ephemeral_storage` settings are mutually exclusive in the underlying GKE node pool module. Specifying non-zero values for both at the same time will cause a Terraform planning error.
 
 ### (Optional) KMS CMEK Setup for Storage
 
@@ -320,6 +325,65 @@ PyTorch Version: 2.2.0a0+81ea7a4
 CUDA Available: True
 Device Name: NVIDIA RTX PRO 6000 Blackwell Server Edition
 SUCCESS: G4 GPU computation completed successfully!
+```
+
+---
+
+### Step 4: Verify PCIe Secure Bandwidth (nvbandwidth)
+This test measures the secure PCIe link speed between the CPU and GPU using the NVIDIA `nvbandwidth` tool, operating via driver-managed secure bounce buffers, to verify functional data path execution and collect baseline transfer speeds.
+
+**Significance of the Test:**
+On G4 Confidential VMs (which support 1 GPU max and do not support multi-node clustering), standard multi-node collective communication libraries like NCCL are not applicable. Instead, running `nvbandwidth` is the primary way to stress-test the secure hardware path between the AMD SEV-SNP encrypted CPU and the NVIDIA CC-enabled Blackwell GPU, ensuring that the PCIe hardware encryption engine does not cause data bottlenecks or driver hangs under heavy memory load.
+
+> [!NOTE]
+> The test job is pre-configured with the `-s` / `--skipVerification` flag. Because CPU host memory is encrypted, the tool's data verification step (which attempts to copy results directly to standard CPU stack memory) will trigger a security boundary violation and halt the GPU. Leaving this flag active is required for the test to execute cleanly.
+
+1. Submit the bandwidth test job:
+
+   ```bash
+   kubectl create -f examples/gke-g4-confidential/g4-verification-nvbandwidth.yaml
+   ```
+
+2. Monitor the execution (Note: compilation and CUDA JIT translation take up to 2 minutes on first startup):
+
+   ```bash
+   kubectl logs jobs/g4-verification-nvbandwidth -f
+   ```
+
+3. Print the logs to verify PCIe bandwidth results (the following shows sample log output from a test run):
+
+**Expected Log Output:**
+
+```text
+Detected platform using encrypted bounce buffers for CPU<->GPU traffic.
+
+g4-verification-nvbandwidth-l55w6
+Device 0: NVIDIA RTX PRO 6000 Blackwell Server Edition (00000000:05:00)
+
+Running host_to_device_memcpy_ce.
+memcpy CE CPU(row) -> GPU(column) bandwidth (GB/s)
+           0
+ 0     15.69
+
+SUM host_to_device_memcpy_ce 15.69
+COEFFICIENT_OF_VARIATION host_to_device_memcpy_ce 0.00
+
+Running device_to_host_memcpy_ce.
+memcpy CE CPU(row) <- GPU(column) bandwidth (GB/s)
+           0
+ 0     18.58
+
+SUM device_to_host_memcpy_ce 18.58
+COEFFICIENT_OF_VARIATION device_to_host_memcpy_ce 0.02
+
+Waived host_to_device_bidirectional_memcpy_ce: bounce-buffer confidential computing enabled
+Waived device_to_host_bidirectional_memcpy_ce: bounce-buffer confidential computing enabled
+```
+
+To clean up the job resource once complete, run:
+
+```bash
+kubectl delete job g4-verification-nvbandwidth
 ```
 
 ---

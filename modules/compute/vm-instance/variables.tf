@@ -62,6 +62,12 @@ variable "auto_delete_boot_disk" {
   default     = true
 }
 
+variable "disk_storage_pool" {
+  description = "Storage pool to use for the boot disk. Note that storage pools are only supported with Hyperdisk types. For boot disks, only hyperdisk-balanced is supported. You must provide an existing storage pool, as this module does not create new ones."
+  type        = string
+  default     = null
+}
+
 variable "local_ssd_count" {
   description = "The number of local SSDs to attach to each VM. See https://cloud.google.com/compute/docs/disks/local-ssd."
   type        = number
@@ -75,13 +81,15 @@ variable "local_ssd_interface" {
 }
 
 variable "additional_persistent_disks" {
-  description = "Configurations of additional disks to be included on the partition nodes."
+  description = "Configurations of additional disks to be included on the partition nodes. Note that storage_pool is only supported with Hyperdisk types (balanced or throughput). You must provide an existing storage pool, as this module does not create new ones."
   type = object({
-    count = optional(number, 0)
-    type  = optional(string, "pd-balanced")
-    size  = optional(number, 200)
+    count        = optional(number, 0)
+    type         = optional(string, "pd-balanced")
+    size         = optional(number, 200)
+    storage_pool = optional(string)
   })
-  default = {}
+  default  = {}
+  nullable = false
 }
 
 variable "name_prefix" {

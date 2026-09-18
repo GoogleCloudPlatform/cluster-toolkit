@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"text/template"
 	"time"
 
 	"hpc-toolkit/pkg/logging"
@@ -33,15 +32,12 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// filestoreTmpl is the pre-parsed template for Filestore configuration.
-var filestoreTmpl = template.Must(template.ParseFS(templatesFS, "templates/filestore.tmpl"))
-
 // ProcessMounts parses mount strings and generates necessary K8s resources.
 func (sm *StorageManager) ProcessMounts(mounts []string, job orchestrator.JobDefinition) ([]MountInfo, []string, error) {
 	var mountInfos []MountInfo
 	var additionalManifests []string
 	for i, vStr := range mounts {
-		src, dest, readOnly, err := sm.parseSingleVolume(vStr)
+		src, dest, options, readOnly, err := sm.parseSingleVolume(vStr)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -65,13 +61,15 @@ func (sm *StorageManager) ProcessMounts(mounts []string, job orchestrator.JobDef
 			volType = "hostPath"
 		}
 
-		mountInfos = append(mountInfos, MountInfo{
+		mountInfo := MountInfo{
 			Name:      fmt.Sprintf("vol-%d", i),
 			Source:    src,
 			MountPath: dest,
 			Type:      volType,
 			ReadOnly:  readOnly,
-		})
+			Options:   options,
+		}
+		mountInfos = append(mountInfos, mountInfo)
 	}
 
 	return mountInfos, additionalManifests, nil
@@ -83,7 +81,7 @@ func (sm *StorageManager) ValidateMounts(mounts []string) error {
 	seenDestinations := make(map[string]bool)
 
 	for _, vStr := range mounts {
-		src, dest, _, err := sm.parseSingleVolume(vStr)
+		src, dest, _, _, err := sm.parseSingleVolume(vStr)
 		if err != nil {
 			return err
 		}
@@ -97,68 +95,51 @@ func (sm *StorageManager) ValidateMounts(mounts []string) error {
 		seenSources[src] = true
 		seenDestinations[dest] = true
 	}
-
 	return nil
-}
-
-func (sm *StorageManager) parseSingleVolume(vStr string) (src, dest string, readOnly bool, err error) {
-	src, dest, readOnly, err = parseSrcDest(vStr)
-	if err != nil {
-		return "", "", false, err
-	}
-	if err := validateSrcScheme(src, vStr); err != nil {
-		return "", "", false, err
-	}
-	return src, dest, readOnly, nil
 }
 
 func missingDestOrFormatErr(vStr string) error {
 	if strings.HasPrefix(vStr, "gs://") || strings.HasPrefix(vStr, "filestore://") {
 		return fmt.Errorf("invalid volume format: %s. Missing destination.", vStr)
 	}
-	return fmt.Errorf("invalid volume format: %s. Expected format: <src>:<dest>[:<mode>]", vStr)
+	return fmt.Errorf("invalid volume format: %s. Expected format: <src>;<dest>[;<mode>][;options=<options>]", vStr)
 }
 
-func parseVolumeMode(vStr string) (stripped string, readOnly bool, err error) {
-	idx := strings.LastIndex(vStr, ":")
-	if idx <= 0 || idx == len(vStr)-1 {
-		return "", false, missingDestOrFormatErr(vStr)
+func (sm *StorageManager) parseSingleVolume(vStr string) (src, dest, options string, readOnly bool, err error) {
+	parts := strings.Split(vStr, ";")
+	if len(parts) < 2 {
+		return "", "", "", false, missingDestOrFormatErr(vStr)
 	}
 
-	lastPart := vStr[idx+1:]
-	if lastPart == "ro" || lastPart == "rw" {
-		return vStr[:idx], (lastPart == "ro"), nil
+	src = parts[0]
+	dest = parts[1]
+	readOnly = true // default
+
+	for _, part := range parts[2:] {
+		if part == "ro" {
+			readOnly = true
+		} else if part == "rw" {
+			readOnly = false
+		} else if strings.HasPrefix(part, "options=") {
+			options = strings.TrimPrefix(part, "options=")
+		} else {
+			return "", "", "", false, fmt.Errorf("invalid volume option or mode: %s", part)
+		}
 	}
-	return vStr, true, nil
-}
-
-func parseSrcDest(vStr string) (src, dest string, readOnly bool, err error) {
-	origVStr := vStr
-
-	vStrWithoutMode, readOnly, err := parseVolumeMode(vStr)
-	if err != nil {
-		return "", "", false, err
-	}
-
-	idx := strings.LastIndex(vStrWithoutMode, ":")
-	if idx <= 0 || idx == len(vStrWithoutMode)-1 {
-		return "", "", false, missingDestOrFormatErr(origVStr)
-	}
-
-	src = vStrWithoutMode[:idx]
-	dest = vStrWithoutMode[idx+1:]
 
 	if src == "" || dest == "" || !strings.HasPrefix(dest, "/") {
-		return "", "", false, missingDestOrFormatErr(origVStr)
+		return "", "", "", false, missingDestOrFormatErr(vStr)
 	}
 
-	// Ensure scheme colons are not mistaken for delimiters when destination is missing
-	if (strings.HasPrefix(vStrWithoutMode, "gs://") && !strings.HasPrefix(src, "gs://")) ||
-		(strings.HasPrefix(vStrWithoutMode, "filestore://") && !strings.HasPrefix(src, "filestore://")) {
-		return "", "", false, missingDestOrFormatErr(origVStr)
+	if options != "" && !strings.HasPrefix(src, "gs://") {
+		return "", "", "", false, fmt.Errorf("options= is currently only supported for GCS fuse volumes (gs://...)")
 	}
 
-	return src, dest, readOnly, nil
+	if err := validateSrcScheme(src, vStr); err != nil {
+		return "", "", "", false, err
+	}
+
+	return src, dest, options, readOnly, nil
 }
 
 func extractHost(hostStr string) string {
@@ -235,7 +216,7 @@ func (sm *StorageManager) handleFilestoreMount(src, dest string, readOnly bool, 
 	var ns string
 	if sm.orchestrator != nil {
 		var err error
-		ns, err = sm.orchestrator.getCurrentNamespace()
+		ns, err = sm.orchestrator.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
 		if err != nil {
 			logging.Warn("failed to get current namespace: %v. Defaulting to 'default' for PV name.", err)
 		}
@@ -244,6 +225,11 @@ func (sm *StorageManager) handleFilestoreMount(src, dest string, readOnly bool, 
 		ns = "default"
 	}
 	pvName := sanitizePVCName(fmt.Sprintf("%s-%s", pvcName, ns))
+
+	filestoreTmpl, err := sm.orchestrator.parseGKETextTemplate("filestore.tmpl")
+	if err != nil {
+		return MountInfo{}, "", fmt.Errorf("failed to parse filestore template: %w", err)
+	}
 
 	var buf bytes.Buffer
 	err = filestoreTmpl.Execute(&buf, map[string]string{
@@ -289,10 +275,6 @@ func sanitizePVCName(name string) string {
 
 // AddVolumeOptions marshals and indents the volume and volume mount specifications into the manifest options.
 func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountInfo) {
-	if len(vols) == 0 {
-		return
-	}
-
 	var volSpecs []map[string]interface{}
 	var mountSpecs []map[string]interface{}
 	gcsFuseEnabled := false
@@ -303,6 +285,25 @@ func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountIn
 		if v.Type == "gcsfuse" {
 			gcsFuseEnabled = true
 		}
+	}
+
+	if opts.GKEMTCEnabled {
+		ramdiskDir := opts.GKEMTCRamdiskDirectory
+		mountSpecs = append(mountSpecs,
+			map[string]interface{}{"name": "cache", "mountPath": ramdiskDir},
+		)
+		volSpecs = append(volSpecs,
+			map[string]interface{}{"name": "cache", "csi": map[string]interface{}{"driver": "multitier-checkpoint.csi.storage.gke.io"}},
+		)
+	}
+
+	if opts.IsPathwaysJob && opts.Pathways.ColocatedPythonSidecarImage != "" {
+		mountSpecs = append(mountSpecs, map[string]interface{}{"name": "sidecar-shared-memory", "mountPath": "/tmp/sidecar"})
+		volSpecs = append(volSpecs, map[string]interface{}{"name": "sidecar-shared-memory", "emptyDir": map[string]interface{}{"medium": "Memory"}})
+	}
+
+	if len(volSpecs) == 0 {
+		return
 	}
 
 	opts.GCSFuseEnabled = gcsFuseEnabled
@@ -332,12 +333,16 @@ func buildVolumeSpec(v MountInfo) map[string]interface{} {
 	}
 	switch v.Type {
 	case "gcsfuse":
+		volumeAttributes := map[string]interface{}{
+			"bucketName": strings.TrimPrefix(v.Source, "gs://"),
+		}
+		if v.Options != "" {
+			volumeAttributes["mountOptions"] = v.Options
+		}
 		spec["csi"] = map[string]interface{}{
-			"driver":   "gcsfuse.csi.storage.gke.io",
-			"readOnly": v.ReadOnly,
-			"volumeAttributes": map[string]interface{}{
-				"bucketName": strings.TrimPrefix(v.Source, "gs://"),
-			},
+			"driver":           "gcsfuse.csi.storage.gke.io",
+			"readOnly":         v.ReadOnly,
+			"volumeAttributes": volumeAttributes,
 		}
 	case "hostPath":
 		spec["hostPath"] = map[string]interface{}{

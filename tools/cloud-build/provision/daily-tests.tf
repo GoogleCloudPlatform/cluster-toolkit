@@ -45,3 +45,40 @@ module "daily_test_schedule" {
   trigger  = google_cloudbuild_trigger.daily_test[each.key]
   schedule = each.value
 }
+
+resource "google_cloudbuild_trigger" "daily_test_migrated" {
+  for_each = toset(var.kueue_migrated_tests)
+  name     = "DAILY-test-${each.key}"
+  project  = var.daily_tests_project_id
+  tags     = [local.notify_chat_tag]
+  # For projects with BYOSA enforced (e.g. hpc-toolkit-dev-2), export the service account environment variable before applying:
+  # export TF_VAR_daily_tests_service_account="projects/MY_PROJECT/serviceAccounts/my-service-account@MY_PROJECT.iam.gserviceaccount.com"
+  service_account = var.daily_tests_service_account
+
+  git_file_source {
+    path      = "tools/cloud-build/daily-tests/builds/${each.key}.yaml"
+    revision  = local.ref_develop
+    uri       = var.repo_uri
+    repo_type = "GITHUB"
+  }
+
+  source_to_build {
+    uri       = var.repo_uri
+    ref       = local.ref_develop
+    repo_type = "GITHUB"
+  }
+  # Following fields will be auto-set by CloudBuild after creation
+  # Specify it explicitly to reduce discreppancy.
+  ignored_files  = []
+  included_files = []
+  substitutions = {
+    _TEST_PREFIX = "daily-"
+  }
+}
+
+module "daily_test_schedule_migrated" {
+  source   = "./trigger-schedule"
+  for_each = toset(var.kueue_migrated_tests)
+  trigger  = google_cloudbuild_trigger.daily_test_migrated[each.key]
+  schedule = data.external.list_tests_midnight.result[each.key]
+}

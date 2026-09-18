@@ -53,3 +53,13 @@ vars:
 
   # The Customer-Managed Encryption Key (CMEK) path (required if enable_confidential_storage is true)
   disk_encryption_kms_key: ""
+
+  # (Optional) Local SSD storage configuration (supports 0 or 4 for g4-standard-48).
+  # Defaults to 0 (no SSDs attached).
+  # Note: These settings are mutually exclusive. Uncommenting both will cause a Terraform planning error.
+  #
+  # Exposes Local SSDs as raw /dev/nvmeX block devices:
+  # local_ssd_count_nvme_block: 4
+  #
+  # Formats and mounts Local SSDs for GKE ephemeral scratch storage (emptyDir):
+  # local_ssd_count_ephemeral_storage: 4

@@ -15,9 +15,6 @@
 blueprint_name: a3high-slurm
 
 vars:
-  # Set to true to enable the secure Slurm Native Authentication standard.
-  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
-  enable_slurm_auth: false
   sys_net_range: 172.16.0.0/16
   filestore_ip_range: 192.168.0.0/29
   source_image_project_id: ubuntu-os-cloud
@@ -193,7 +190,9 @@ deployment_groups:
               - cuda-toolkit-12-8
               - nvidia-dkms-580-server-open
               - nvidia-driver-580-server-open
-              - datacenter-gpu-manager-4-cuda13
+              - datacenter-gpu-manager-4-core=1:4.6.1-1
+              - datacenter-gpu-manager-4-dev=1:4.6.1-1
+              - datacenter-gpu-manager-4-cuda13=1:4.6.1-1
               - libnvidia-nscq-580
               - nvidia-container-toolkit
             tasks:
@@ -207,12 +206,13 @@ deployment_groups:
                 state: present
             - name: Install NVIDIA Packages
               ansible.builtin.apt:
-                name: "{{ item }}"
-                update_cache: true
-              loop: "{{ nvidia_packages }}"
+                name: "{{ nvidia_packages }}"
+                update_cache: yes
+                allow_downgrade: yes
+
             - name: Freeze NVIDIA drivers and CUDA
               ansible.builtin.dpkg_selections:
-                name: "{{ item }}"
+                name: "{{ item.split('=')[0] }}"
                 selection: hold
               loop: "{{ nvidia_packages }}"
             - name: Create nvidia-persistenced override directory

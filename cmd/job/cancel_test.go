@@ -67,10 +67,6 @@ type mockKubeClient struct {
 	err       error
 }
 
-func (m *mockKubeClient) GetJobNamespace(workloadName string) (string, error) {
-	return m.namespace, m.err
-}
-
 func (m *mockKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
 	return nil, nil
 }
@@ -79,11 +75,11 @@ func (m *mockKubeClient) DeleteJobSet(namespace string, name string) error {
 	return m.err
 }
 
-func (m *mockKubeClient) ListJobSets(labelSelector string) ([]orchestrator.JobStatus, error) {
+func (m *mockKubeClient) ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error) {
 	return []orchestrator.JobStatus{}, m.err
 }
 
-func (m *mockKubeClient) GetCurrentNamespace() (string, error) {
+func (m *mockKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
 	if m.namespace != "" {
 		return m.namespace, nil
 	}

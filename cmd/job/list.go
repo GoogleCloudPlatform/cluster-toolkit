@@ -58,9 +58,10 @@ func init() {
 func runListWorkloads(cmd *cobra.Command, args []string) error {
 
 	opts := orchestrator.ListOptions{
+		ProjectID:       projectID,
 		ClusterName:     clusterName,
 		ClusterLocation: location,
-		ProjectID:       projectID,
+		GKENamespace:    gkeNamespace,
 		Status:          filterStatus,
 		NameContains:    filterName,
 	}

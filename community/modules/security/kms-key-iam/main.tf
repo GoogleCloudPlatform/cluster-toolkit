@@ -35,10 +35,14 @@ locals {
     "serviceAccount:${format(local.service_agent_formats[agent], data.google_project.this.number)}"
   ])
 
+  custom = toset([
+    for sa in var.custom_service_accounts : "serviceAccount:${sa}"
+  ])
+
   # Union rather than either/or: only agents belonging to var.project_id can
   # be derived, so a key in one project granting agents from another needs
   # the explicit list as well.
-  principals = setunion(local.derived, var.service_agent_principals)
+  principals = setunion(local.derived, local.custom)
 }
 
 # Resolves the project number behind the service-agent addresses, so callers
@@ -48,7 +52,7 @@ data "google_project" "this" {
 }
 
 resource "google_kms_crypto_key_iam_member" "this" {
-  for_each = local.principals
+  for_each = var.skip_iam_role_grants ? [] : local.principals
 
   crypto_key_id = var.crypto_key_id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"

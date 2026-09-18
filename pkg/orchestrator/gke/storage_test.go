@@ -34,12 +34,13 @@ func TestParseSingleVolume(t *testing.T) {
 		wantSrc    string
 		wantDest   string
 		wantRO     bool
+		wantOpts   string
 		wantErr    bool
 		wantErrSub string
 	}{
 		{
 			name:     "valid hostPath",
-			input:    "/host/path:/container/path",
+			input:    "/host/path;/container/path",
 			wantSrc:  "/host/path",
 			wantDest: "/container/path",
 			wantRO:   true,
@@ -47,7 +48,7 @@ func TestParseSingleVolume(t *testing.T) {
 		},
 		{
 			name:     "valid hostPath rw",
-			input:    "/host/path:/container/path:rw",
+			input:    "/host/path;/container/path;rw",
 			wantSrc:  "/host/path",
 			wantDest: "/container/path",
 			wantRO:   false,
@@ -55,7 +56,7 @@ func TestParseSingleVolume(t *testing.T) {
 		},
 		{
 			name:     "valid pvc",
-			input:    "my-pvc:/data",
+			input:    "my-pvc;/data",
 			wantSrc:  "my-pvc",
 			wantDest: "/data",
 			wantRO:   true,
@@ -63,7 +64,7 @@ func TestParseSingleVolume(t *testing.T) {
 		},
 		{
 			name:     "valid gcsfuse",
-			input:    "gs://my-bucket:/data",
+			input:    "gs://my-bucket;/data",
 			wantSrc:  "gs://my-bucket",
 			wantDest: "/data",
 			wantRO:   true,
@@ -71,7 +72,7 @@ func TestParseSingleVolume(t *testing.T) {
 		},
 		{
 			name:     "valid filestore",
-			input:    "filestore://my-instance/share:/data",
+			input:    "filestore://my-instance/share;/data",
 			wantSrc:  "filestore://my-instance/share",
 			wantDest: "/data",
 			wantRO:   true,
@@ -79,7 +80,7 @@ func TestParseSingleVolume(t *testing.T) {
 		},
 		{
 			name:     "valid filestore with port",
-			input:    "filestore://10.0.0.2:2049/share:/data",
+			input:    "filestore://10.0.0.2:2049/share;/data",
 			wantSrc:  "filestore://10.0.0.2:2049/share",
 			wantDest: "/data",
 			wantRO:   true,
@@ -87,7 +88,7 @@ func TestParseSingleVolume(t *testing.T) {
 		},
 		{
 			name:     "valid filestore with port and mode",
-			input:    "filestore://10.0.0.2:2049/share:/data:rw",
+			input:    "filestore://10.0.0.2:2049/share;/data;rw",
 			wantSrc:  "filestore://10.0.0.2:2049/share",
 			wantDest: "/data",
 			wantRO:   false,
@@ -95,13 +96,13 @@ func TestParseSingleVolume(t *testing.T) {
 		},
 		{
 			name:       "invalid scheme",
-			input:      "parallelstore://my-instance/share:/data",
+			input:      "parallelstore://my-instance/share;/data",
 			wantErr:    true,
 			wantErrSub: "Unsupported scheme",
 		},
 		{
 			name:       "invalid scheme with mode",
-			input:      "parallelstore://my-instance/share:/data:ro",
+			input:      "parallelstore://my-instance/share;/data;ro",
 			wantErr:    true,
 			wantErrSub: "Unsupported scheme",
 		},
@@ -119,13 +120,13 @@ func TestParseSingleVolume(t *testing.T) {
 		},
 		{
 			name:       "missing destination for gcsfuse with mode",
-			input:      "gs://my-bucket:rw",
+			input:      "gs://my-bucket;rw",
 			wantErr:    true,
 			wantErrSub: "Missing destination",
 		},
 		{
 			name:       "missing destination for filestore with mode",
-			input:      "filestore://my-instance/share:ro",
+			input:      "filestore://my-instance/share;ro",
 			wantErr:    true,
 			wantErrSub: "Missing destination",
 		},
@@ -137,7 +138,7 @@ func TestParseSingleVolume(t *testing.T) {
 		},
 		{
 			name:     "valid filestore IPv6",
-			input:    "filestore://[2001:db8::1]/share:/data",
+			input:    "filestore://[2001:db8::1]/share;/data",
 			wantSrc:  "filestore://[2001:db8::1]/share",
 			wantDest: "/data",
 			wantRO:   true,
@@ -145,7 +146,7 @@ func TestParseSingleVolume(t *testing.T) {
 		},
 		{
 			name:     "valid filestore IPv6 rw",
-			input:    "filestore://[2001:db8::1]/share:/data:rw",
+			input:    "filestore://[2001:db8::1]/share;/data;rw",
 			wantSrc:  "filestore://[2001:db8::1]/share",
 			wantDest: "/data",
 			wantRO:   false,
@@ -157,11 +158,49 @@ func TestParseSingleVolume(t *testing.T) {
 			wantErr:    true,
 			wantErrSub: "Missing destination",
 		},
+		{
+			name:     "valid gcsfuse with options",
+			input:    "gs://my-bucket;/data;options=logging:severity:info",
+			wantSrc:  "gs://my-bucket",
+			wantDest: "/data",
+			wantRO:   true,
+			wantOpts: "logging:severity:info",
+		},
+		{
+			name:     "valid gcsfuse with options and rw",
+			input:    "gs://my-bucket;/data;rw;options=logging:severity:info",
+			wantSrc:  "gs://my-bucket",
+			wantDest: "/data",
+			wantRO:   false,
+			wantOpts: "logging:severity:info",
+		},
+		{
+			name:     "valid gcsfuse with options and rw flipped",
+			input:    "gs://my-bucket;/data;options=logging:severity:info;rw",
+			wantSrc:  "gs://my-bucket",
+			wantDest: "/data",
+			wantRO:   false,
+			wantOpts: "logging:severity:info",
+		},
+		{
+			name:       "options not supported for non-gcs",
+			input:      "my-pvc;/data;options=abc",
+			wantErr:    true,
+			wantErrSub: "options= is currently only supported for GCS",
+		},
+		{
+			name:     "valid gcsfuse with multiple comma-separated options",
+			input:    "gs://my-bucket;/data;options=logging:severity:info,enable-atomic-rename-object:true",
+			wantSrc:  "gs://my-bucket",
+			wantDest: "/data",
+			wantRO:   true,
+			wantOpts: "logging:severity:info,enable-atomic-rename-object:true",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			src, dest, readOnly, err := sm.parseSingleVolume(tc.input)
+			src, dest, options, readOnly, err := sm.parseSingleVolume(tc.input)
 
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("parseSingleVolume() error = %v, wantErr %v", err, tc.wantErr)
@@ -182,6 +221,9 @@ func TestParseSingleVolume(t *testing.T) {
 			if readOnly != tc.wantRO {
 				t.Errorf("parseSingleVolume() readOnly = %v, want %v", readOnly, tc.wantRO)
 			}
+			if options != tc.wantOpts {
+				t.Errorf("parseSingleVolume() options = %v, want %v", options, tc.wantOpts)
+			}
 		})
 	}
 }
@@ -190,8 +232,8 @@ func TestValidateMounts(t *testing.T) {
 	sm := &StorageManager{}
 
 	mounts := []string{
-		"gs://my-bucket:/data",
-		"my-pvc:/data", // duplicate dest
+		"gs://my-bucket;/data",
+		"my-pvc;/data", // duplicate dest
 	}
 	err := sm.ValidateMounts(mounts)
 	if err == nil || !strings.Contains(err.Error(), "duplicate volume destination") {
@@ -199,8 +241,8 @@ func TestValidateMounts(t *testing.T) {
 	}
 
 	mounts = []string{
-		"gs://my-bucket:/data1",
-		"gs://my-bucket:/data2", // duplicate src
+		"gs://my-bucket;/data1",
+		"gs://my-bucket;/data2", // duplicate src
 	}
 	err = sm.ValidateMounts(mounts)
 	if err == nil || !strings.Contains(err.Error(), "duplicate volume source") {
@@ -208,7 +250,7 @@ func TestValidateMounts(t *testing.T) {
 	}
 
 	mounts = []string{
-		"parallelstore://foo:/data", // unsupported scheme
+		"parallelstore://foo;/data", // unsupported scheme
 	}
 	err = sm.ValidateMounts(mounts)
 	if err == nil || !strings.Contains(err.Error(), "Unsupported scheme") {
@@ -216,8 +258,8 @@ func TestValidateMounts(t *testing.T) {
 	}
 
 	mounts = []string{
-		"gs://my-bucket:/data1",
-		"my-pvc:/data2",
+		"gs://my-bucket;/data1",
+		"my-pvc;/data2",
 	}
 	err = sm.ValidateMounts(mounts)
 	if err != nil {
@@ -230,9 +272,9 @@ func TestProcessMounts_Basic(t *testing.T) {
 	job := orchestrator.JobDefinition{}
 
 	mounts := []string{
-		"gs://my-bucket:/data",
-		"/host/path:/host",
-		"my-pvc:/pvc",
+		"gs://my-bucket;/data",
+		"/host/path;/host",
+		"my-pvc;/pvc",
 	}
 
 	infos, manifests, err := sm.ProcessMounts(mounts, job)
@@ -269,7 +311,7 @@ func TestProcessMounts_Filestore_IP(t *testing.T) {
 
 	// Test valid IP-based Filestore mount
 	mounts := []string{
-		"filestore://10.0.0.2/share:/data",
+		"filestore://10.0.0.2/share;/data",
 	}
 
 	infos, manifests, err := sm.ProcessMounts(mounts, job)
@@ -304,7 +346,7 @@ func TestProcessMounts_Filestore_Sanitize(t *testing.T) {
 
 	// Test sanitization of PVC Name (lowercase, underscores and slashes to hyphens)
 	mounts := []string{
-		"filestore://10.0.0.2/MY_complex_SHARE/sub_folder/sub_subfolder:/data",
+		"filestore://10.0.0.2/MY_complex_SHARE/sub_folder/sub_subfolder;/data",
 	}
 
 	infos, manifests, err := sm.ProcessMounts(mounts, job)
@@ -324,7 +366,7 @@ func TestProcessMounts_Filestore_Sanitize(t *testing.T) {
 
 	// Test double/leading slashes in share name
 	mounts = []string{
-		"filestore://10.0.0.2//my_share_name:/data",
+		"filestore://10.0.0.2//my_share_name;/data",
 	}
 	infos, manifests, err = sm.ProcessMounts(mounts, job)
 	if err != nil {
@@ -340,7 +382,7 @@ func TestProcessMounts_Filestore_Sanitize(t *testing.T) {
 
 	// Test special characters in share name (collapse multiple hyphens, trim trailing hyphens)
 	mounts = []string{
-		"filestore://10.0.0.2/share@name.with-dots_and_stuff!:/data",
+		"filestore://10.0.0.2/share@name.with-dots_and_stuff!;/data",
 	}
 	infos, manifests, err = sm.ProcessMounts(mounts, job)
 	if err != nil {
@@ -371,7 +413,7 @@ func TestProcessMounts_Filestore_Mock(t *testing.T) {
 		ClusterLocation: "us-central1-a",
 	}
 	mountsMock := []string{
-		"filestore://my-filestore-instance/my_share:/data",
+		"filestore://my-filestore-instance/my_share;/data",
 	}
 
 	infosMock, manifestsMock, errMock := smMock.ProcessMounts(mountsMock, jobMock)
@@ -400,8 +442,8 @@ func TestProcessMounts_Filestore_TrailingSlash(t *testing.T) {
 
 	// Test trailing slash handling in Filestore mount URI (single and multiple)
 	mountsSlash := []string{
-		"filestore://10.0.0.2/share/:/data",
-		"filestore://10.0.0.2/share///:/data2",
+		"filestore://10.0.0.2/share/;/data",
+		"filestore://10.0.0.2/share///;/data2",
 	}
 	infosSlash, manifestsSlash, errSlash := sm.ProcessMounts(mountsSlash, job)
 	if errSlash != nil {
@@ -455,19 +497,19 @@ func TestProcessMounts_Filestore_Invalid(t *testing.T) {
 	job := orchestrator.JobDefinition{}
 
 	// Test invalid empty share name
-	_, _, err := sm.ProcessMounts([]string{"filestore://10.0.0.2/:/data"}, job)
+	_, _, err := sm.ProcessMounts([]string{"filestore://10.0.0.2/;/data"}, job)
 	if err == nil || !strings.Contains(err.Error(), "Expected format: filestore://") {
 		t.Errorf("expected error for empty share name, got %v", err)
 	}
 
 	// Test invalid empty share name with multiple slashes
-	_, _, err = sm.ProcessMounts([]string{"filestore://10.0.0.2///:/data"}, job)
+	_, _, err = sm.ProcessMounts([]string{"filestore://10.0.0.2///;/data"}, job)
 	if err == nil || !strings.Contains(err.Error(), "Expected format: filestore://") {
 		t.Errorf("expected error for empty share name with multiple slashes, got %v", err)
 	}
 
 	// Test invalid empty instance name
-	_, _, err = sm.ProcessMounts([]string{"filestore:///share:/data"}, job)
+	_, _, err = sm.ProcessMounts([]string{"filestore:///share;/data"}, job)
 	if err == nil || !strings.Contains(err.Error(), "Expected format: filestore://") {
 		t.Errorf("expected error for empty instance name, got %v", err)
 	}
@@ -478,7 +520,7 @@ func TestProcessMounts_Filestore_Invalid(t *testing.T) {
 			return "", "", 0, fmt.Errorf("filestore API lookup failed")
 		},
 	}
-	_, _, err = smMockError.ProcessMounts([]string{"filestore://my-instance/share:/data"}, job)
+	_, _, err = smMockError.ProcessMounts([]string{"filestore://my-instance/share;/data"}, job)
 	if err == nil || !strings.Contains(err.Error(), "filestore API lookup failed") {
 		t.Errorf("expected API lookup error, got %v", err)
 	}
@@ -610,7 +652,7 @@ func TestProcessMounts_Filestore_Ambiguous(t *testing.T) {
 		ClusterLocation: "us-central1-a",
 	}
 	mounts1 := []string{
-		"filestore://my-filestore/share:/data",
+		"filestore://my-filestore/share;/data",
 	}
 
 	infos1, manifests1, err := sm.ProcessMounts(mounts1, job1)
@@ -685,7 +727,7 @@ func TestProcessMounts_Filestore_Fallback(t *testing.T) {
 		ProjectID: "my-project",
 	}
 	mountsIP := []string{
-		"filestore://10.0.0.3/share:/data",
+		"filestore://10.0.0.3/share;/data",
 	}
 
 	infos1, manifests1, err := smAPIFail.ProcessMounts(mountsIP, job)
@@ -719,7 +761,7 @@ func TestProcessMounts_Filestore_Fallback(t *testing.T) {
 
 	// Case 3: Name Resolution Failure (Name should fail, not fallback)
 	mountsName := []string{
-		"filestore://my-filestore-instance/share:/data",
+		"filestore://my-filestore-instance/share;/data",
 	}
 	_, _, err = smAPIFail.ProcessMounts(mountsName, job)
 	if err == nil {
@@ -774,7 +816,7 @@ func TestProcessMounts_Filestore_LocationOverlap(t *testing.T) {
 		ClusterLocation: "europe-west10",
 	}
 	mounts := []string{
-		"filestore://my-filestore/share:/data",
+		"filestore://my-filestore/share;/data",
 	}
 
 	infos, manifests, err := sm.ProcessMounts(mounts, job)
@@ -818,7 +860,7 @@ func TestProcessMounts_Filestore_PVNameLengthLimit(t *testing.T) {
 		ClusterLocation: "us-central1",
 	}
 	mounts := []string{
-		"filestore://a-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-long-name/a-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-long-share:/data",
+		"filestore://a-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-long-name/a-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-very-long-share;/data",
 	}
 
 	infos, manifests, err := sm.ProcessMounts(mounts, job)
@@ -883,8 +925,8 @@ func TestProcessMounts_Filestore_Caching(t *testing.T) {
 		ClusterLocation: "us-central1",
 	}
 	mounts := []string{
-		"filestore://inst1/share1:/data1",
-		"filestore://inst2/share2:/data2",
+		"filestore://inst1/share1;/data1",
+		"filestore://inst2/share2;/data2",
 	}
 
 	_, _, err := sm.ProcessMounts(mounts, job)
@@ -927,7 +969,7 @@ func TestProcessMounts_Filestore_IPv6(t *testing.T) {
 		ClusterLocation: "us-central1",
 	}
 	mounts := []string{
-		"filestore://[2001:db8::1]/share:/data",
+		"filestore://[2001:db8::1]/share;/data",
 	}
 
 	infos, manifests, err := smResolved.ProcessMounts(mounts, job)
@@ -966,7 +1008,7 @@ func TestProcessMounts_Filestore_IPv6(t *testing.T) {
 
 	// Case 3: Invalid IPv6 format in scheme
 	invalidMounts := []string{
-		"filestore://[2001:db8::1:invalid]/share:/data",
+		"filestore://[2001:db8::1:invalid]/share;/data",
 	}
 	_, _, err = smResolved.ProcessMounts(invalidMounts, job)
 	if err == nil {

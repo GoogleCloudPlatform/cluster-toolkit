@@ -154,6 +154,12 @@ variable "disk_type" {
   default     = "pd-standard"
 }
 
+variable "disk_storage_pool" {
+  description = "Storage pool to use for the boot disk. Note that storage pools are only supported with Hyperdisk types. For boot disks, only hyperdisk-balanced is supported. You must provide an existing storage pool, as this module does not create new ones."
+  type        = string
+  default     = null
+}
+
 variable "disk_labels" {
   description = "Labels to be assigned to boot disk, provided as a map"
   type        = map(string)
@@ -202,6 +208,7 @@ variable "additional_disks" {
     boot                                = bool
     disk_size_gb                        = optional(number)
     disk_type                           = optional(string)
+    disk_storage_pool                   = optional(string)
     disk_labels                         = map(string)
     disk_resource_manager_tags          = map(string)
     disk_encryption_key                 = optional(string)

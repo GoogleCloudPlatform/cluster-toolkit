@@ -1,0 +1,51 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+tags:
+- m.pre-existing-vpc
+- m.vm-instance
+- vm
+
+substitutions:
+  _TEST_PREFIX: "" # Default to no prefix
+
+timeout: 3600s  # 1hr
+steps:
+# While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
+- id: check_for_running_build
+  name: gcr.io/cloud-builders/gcloud
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/e2e.yaml"
+
+- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  automapSubstitutions: true
+  script: |
+    #!/usr/bin/env bash
+    set -ex
+
+    depl_name="e2e-${BUILD_ID:0:6}"
+    region="us-central1"
+    zone="us-central1-a"
+    vars="project_id=$PROJECT_ID,deployment_name=$depl_name,region=$region,zone=$zone"
+
+    cd /workspace
+    bash tools/get_binary.sh "" "true"
+    BLUEPRINT="tools/cloud-build/daily-tests/blueprints/e2e.yaml"
+    bash tools/add_ttl_label.sh "${BLUEPRINT}"
+    ./gcluster deploy "${BLUEPRINT}" --vars="$vars" --auto-approve
+
+    # check instance was created
+    gcloud compute instances describe "${depl_name}-0" --project="$PROJECT_ID" --zone="$zone" >/dev/null
+
+    ./gcluster destroy "$depl_name" --auto-approve --robust

@@ -20,6 +20,8 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -227,14 +229,30 @@ func (g *GKEOrchestrator) verifyStaticSlicingActive(job *orchestrator.JobDefinit
 }
 
 func (g *GKEOrchestrator) checkNodePoolsDynamicSlicing(requestedMachineName string, opts ManifestOptions, isTPU7x bool) (bool, error) {
+	if !isTPU7x {
+		return false, nil
+	}
+
+	projID := opts.ProjectID
+	if projID == "" {
+		projID = g.projectID
+	}
+
 	for _, np := range g.clusterDesc.NodePools {
-		if !strings.EqualFold(np.Config.MachineType, requestedMachineName) {
+		if !strings.EqualFold(np.Config.MachineType, requestedMachineName) || np.PlacementPolicy == nil {
 			continue
 		}
 
-		isProvisionOnly := isTPU7x && np.PlacementPolicy != nil && np.PlacementPolicy.AcceleratorTopologyMode == "PROVISION_ONLY"
+		mode := np.PlacementPolicy.AcceleratorTopologyMode
+		if mode == "" && np.PlacementPolicy.PolicyName != "" {
+			var err error
+			mode, err = g.getComputeResourcePolicyModeCached(np.PlacementPolicy.PolicyName, opts.ClusterLocation, projID)
+			if err != nil {
+				return false, fmt.Errorf("failed to fetch compute resource policy %q for node pool %q: %w", np.PlacementPolicy.PolicyName, np.Name, err)
+			}
+		}
 
-		if isProvisionOnly {
+		if strings.EqualFold(mode, "PROVISION_ONLY") {
 			if err := validateTPU7xTopology(opts.Topology, requestedMachineName); err != nil {
 				return true, err
 			}
@@ -245,6 +263,46 @@ func (g *GKEOrchestrator) checkNodePoolsDynamicSlicing(requestedMachineName stri
 
 	logging.Info("Node pool does not have dynamic topology subset requirement. Dynamic-slicing not active.")
 	return false, nil
+}
+
+// getComputeResourcePolicyModeCached retrieves the AcceleratorTopologyMode for a given resource policy,
+// utilizing a local cache to avoid redundant gcloud calls.
+func (g *GKEOrchestrator) getComputeResourcePolicyModeCached(policyName, location, projectID string) (string, error) {
+	if g.policyCache == nil {
+		g.policyCache = make(map[string]string)
+	}
+
+	// GKE cluster metadata may return policyName as a full GCP resource path
+	// (e.g. projects/123456789/regions/us-central1/resourcePolicies/my-policy).
+	// Extract the short policy name using path.Base to ensure consistent cache keys.
+	shortPolicyName := path.Base(policyName)
+	if mode, found := g.policyCache[shortPolicyName]; found {
+		return mode, nil
+	}
+
+	mode, err := g.fetchComputeResourcePolicyTopologyMode(shortPolicyName, location, projectID)
+	if err != nil {
+		return "", err
+	}
+
+	g.policyCache[shortPolicyName] = mode
+	return mode, nil
+}
+
+func (g *GKEOrchestrator) fetchComputeResourcePolicyTopologyMode(shortPolicyName, location, projectID string) (string, error) {
+	region := shell.ExtractRegion(location)
+
+	res := g.executor.ExecuteCommand("gcloud", "compute", "resource-policies", "describe", shortPolicyName, "--region="+region, "--project="+projectID, "--format=value(workloadPolicy.acceleratorTopologyMode)")
+	if res.ExitCode != 0 {
+		return "", fmt.Errorf("gcloud compute resource-policies describe failed: %s\n"+
+			"To resolve this issue:\n"+
+			"  1. Check IAM: Ensure your GCP credentials have 'compute.resourcePolicies.get' permission (e.g., 'roles/compute.viewer').\n"+
+			"  2. Verify Policy: Test manual access by running:\n"+
+			"     gcloud compute resource-policies describe %s --region=%s --project=%s",
+			res.Stderr, shortPolicyName, region, projectID)
+	}
+
+	return strings.TrimSpace(res.Stdout), nil
 }
 
 func validateTPU7xTopology(topology string, machineType string) error {

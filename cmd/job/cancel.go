@@ -35,6 +35,7 @@ func runCancelJob(cmd *cobra.Command, args []string) error {
 		ClusterName:     clusterName,
 		ClusterLocation: location,
 		ProjectID:       projectID,
+		GKENamespace:    gkeNamespace,
 	}
 
 	return orc.CancelJob(jobName, opts)

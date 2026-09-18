@@ -6,9 +6,11 @@ security team, held in a dedicated key project, or created outside Terraform
 entirely.
 
 Nothing here is created, so `terraform destroy` leaves the key completely
-untouched: it is never in Terraform state to begin with. That is a stronger
-guarantee than [kms-key] offers, where the key is created and then deliberately
-abandoned rather than deleted.
+untouched: it is never in Terraform state to begin with, regardless of any
+`deletion_policy` setting. That is a stronger guarantee than [kms-key] offers
+for a key it created: `kms-key` requires the caller to choose
+`deletion_policy` explicitly, and `"DELETE"` destroys its key's version(s)
+on `terraform destroy`.
 
 This module does not grant anyone access to the key. Pass `crypto_key_id` to a
 [kms-key-iam] module, and have CMEK consumers `use` that.
@@ -28,8 +30,7 @@ This module does not grant anyone access to the key. Pass `crypto_key_id` to a
   source: community/modules/security/kms-key-iam
   use: [existing_key]
   settings:
-    service_agent_principals:
-    - "serviceAccount:service-PROJECT_NUMBER@compute-system.iam.gserviceaccount.com"
+    service_agents: [compute]
 ```
 
 `project_id` is the *key* project, which need not be the project the encrypted
@@ -45,8 +46,46 @@ created — by which point the error names the consumer rather than the key.
 The identity running Terraform needs `cloudkms.cryptoKeys.get` on the key (for
 example `roles/cloudkms.viewer` on the key or its ring), and — if a
 [kms-key-iam] module is granting on it — `cloudkms.cryptoKeys.setIamPolicy`.
+If permissions on this key are managed out-of-band instead (for example by a
+security team), set `skip_iam_role_grants: true` on the [kms-key-iam] module
+using it: this module never needs `setIamPolicy`, but a granting
+`kms-key-iam` module does unless that option is set.
 
 A key can only encrypt resources in its own location, unless it is `global`.
+
+## Testing
+
+`terraform validate` passes on this module in isolation.
+
+Key created out of band, then adopted by a blueprint using this module:
+
+```console
+$ gcloud kms keys create KEY --keyring=KEYRING --location=LOCATION --purpose=encryption --project=PROJECT_ID
+
+$ ./ghpc deploy DEPLOYMENT_DIR --auto-approve
+...
+Cloud infrastructure in deployment group ... is already applied
+
+$ terraform state list | grep -i kms
+module.imported_key.data.google_kms_crypto_key.this
+module.imported_key.data.google_kms_key_ring.this
+
+$ ./ghpc destroy DEPLOYMENT_DIR --auto-approve
+...
+Cloud infrastructure in deployment group ... is already destroyed
+
+$ gcloud kms keys versions list --key=KEY --keyring=KEYRING --location=LOCATION --project=PROJECT_ID
+NAME                                                                                         STATE
+projects/PROJECT_ID/locations/LOCATION/keyRings/KEYRING/cryptoKeys/KEY/cryptoKeyVersions/1  ENABLED
+```
+
+`deploy` and `destroy` both report there is nothing to apply or destroy --
+this module never puts the key in Terraform state to begin with, so the key
+stays `ENABLED` regardless of what `deletion_policy` a [kms-key] module
+elsewhere in the same blueprint is set to.
+
+Also deployed as part of a full Slurm cluster and confirmed to actually
+encrypt a controller boot disk and a Filestore instance.
 
 [kms-key]: ../kms-key/README.md
 [kms-key-iam]: ../kms-key-iam/README.md

@@ -124,13 +124,13 @@ def test_group_nodes_bulk(mock_create_placements, mock_tpu):
     "c-n:jobNone:g0:0": BulkChunk(
       nodes=["c-n-1", "c-n-2"], prefix="c-n", chunk_idx=0, excl_job_id=None, placement_group="g0"),
     "c-n:job1:g10:0": BulkChunk(
-      nodes=["c-n-0"], prefix="c-n", chunk_idx=0, excl_job_id=1, placement_group="g10"),
+      nodes=["c-n-0"], prefix="c-n", chunk_idx=0, excl_job_id=1, placement_group="g10", is_job_request=True),
     "c-t:0": BulkChunk(
       nodes=["c-t-8", "c-t-9"], prefix="c-t", chunk_idx=0, excl_job_id=None, placement_group=None),
     "c-t:job2:0": BulkChunk(
-      nodes=["c-t-0", "c-t-1"], prefix="c-t", chunk_idx=0, excl_job_id=2, placement_group=None),
+      nodes=["c-t-0", "c-t-1"], prefix="c-t", chunk_idx=0, excl_job_id=2, placement_group=None, is_job_request=True),
     "c-t:job2:1": BulkChunk(
-      nodes=["c-t-2", "c-t-3"], prefix="c-t", chunk_idx=1, excl_job_id=2, placement_group=None),
+      nodes=["c-t-2", "c-t-3"], prefix="c-t", chunk_idx=1, excl_job_id=2, placement_group=None, is_job_request=True),
   }
 
 

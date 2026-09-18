@@ -173,6 +173,7 @@ resource "google_container_node_pool" "node_pool" {
   node_config {
     disk_size_gb                = var.disk_size_gb
     disk_type                   = var.disk_type
+    storage_pools               = (var.disk_storage_pool != null && var.disk_storage_pool != "") ? [var.disk_storage_pool] : null
     resource_labels             = local.labels
     labels                      = local.kubernetes_labels
     service_account             = var.service_account_email
@@ -346,6 +347,18 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = !(length(compact(local.input_reservation_suffixes)) > 0 && length((var.zones != null ? var.zones : [])) == 0)
       error_message = "var.zones must be explicitly provided when using an extended reservation block."
+    }
+    precondition {
+      condition     = var.disk_storage_pool == null || var.disk_storage_pool == "" || can(regex("^hyperdisk-", lower(var.disk_type)))
+      error_message = "Storage pools are only supported with Hyperdisks. You must specify a valid hyperdisk disk_type."
+    }
+    precondition {
+      condition     = var.disk_type == null || !startswith(lower(var.disk_type), "hyperdisk-") || lower(var.disk_type) == "hyperdisk-balanced"
+      error_message = "When using Hyperdisks for boot disks, only hyperdisk-balanced is supported."
+    }
+    precondition {
+      condition     = var.disk_type == null || lower(var.disk_type) != "hyperdisk-balanced" || var.disk_size_gb == null || var.disk_size_gb >= 4
+      error_message = "The minimum capacity for hyperdisk-balanced is 4 GB."
     }
     precondition {
       condition     = (var.max_pods_per_node == null) || (data.google_container_cluster.gke_cluster.networking_mode == "VPC_NATIVE")

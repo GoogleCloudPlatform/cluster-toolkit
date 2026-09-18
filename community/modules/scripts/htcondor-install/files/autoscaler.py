@@ -18,6 +18,8 @@
 # Script for resizing managed instance group (MIG) cluster size based
 # on the number of jobs in the Condor Queue.
 
+from absl import app
+from absl import flags
 from collections import OrderedDict
 from datetime import datetime
 from pprint import pprint
@@ -25,9 +27,11 @@ from googleapiclient import discovery
 from oauth2client.client import GoogleCredentials
 
 import argparse
+import os
 import math
-import htcondor
-import classad
+import time
+import htcondor2 as htcondor
+import classad2 as classad
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--p", required=True, help="Project id", type=str)
@@ -223,8 +227,8 @@ class AutoScaler:
 
         print(f"Last negotiation cycle occurred at: {datetime.fromtimestamp(last_negotiation_cycle_time)}")
         idle_job_query = classad.ExprTree(f"JobStatus == 1 && QDate < {last_negotiation_cycle_time}")
-        idle_job_ads = schedd.query(constraint=idle_job_query.and_(spot_query),
-                                    projection=job_attributes)
+        combined_query_str = f'JobStatus == 1 && QDate < {last_negotiation_cycle_time} && RequireId == "{self.instance_group_manager}"'
+        idle_job_ads = schedd.query(constraint=combined_query_str, projection=job_attributes)
 
         total_idle_request_cpus = sum(j[REQUEST_CPUS_ATTRIBUTE] for j in idle_job_ads)
         print(f"Total CPUs requested by idle jobs: {total_idle_request_cpus}")
@@ -263,19 +267,34 @@ class AutoScaler:
 
         # Find VMs that are idle (no dynamic slots created from partitionable
         # slots) in the MIG handled by this autoscaler
-        filter_idle_vms = classad.ExprTree("PartitionableSlot && NumDynamicSlots==0")
-        filter_claimed_vms = classad.ExprTree("PartitionableSlot && NumDynamicSlots>0")
+        filter_idle_vms = classad.ExprTree(f"PartitionableSlot && NumDynamicSlots==0")
+        filter_claimed_vms = classad.ExprTree(f"PartitionableSlot && NumDynamicSlots>0")
         filter_mig = classad.ExprTree(f"regexp(\".*/{self.instance_group_manager}$\", CloudCreatedBy)")
+        combined_node_query = (
+                f'PartitionableSlot && NumDynamicSlots == 0 && '
+                f'regexp(".*/{self.instance_group_manager}$", CloudCreatedBy)'
+        )
+
+        filter_mig_str = f"regexp(\".*/{self.instance_group_manager}$\", CloudCreatedBy)"
+        filter_claimed_vms_str = "PartitionableSlot && NumDynamicSlots>0"
+
         # A full list of Machine (StartD) ClassAd attributes can be found at
         # https://htcondor.readthedocs.io/en/latest/classad-attributes/machine-classad-attributes.html
-        idle_node_ads = coll.query(htcondor.AdTypes.Startd,
-            constraint=filter_idle_vms.and_(filter_mig),
-            projection=["Machine", "CloudZone"])
+
+        idle_node_ads = coll.query(
+            ad_type=htcondor.AdTypes.Startd,
+            constraint=combined_node_query,
+            projection=["Machine", "CloudZone"]
+        )
 
         NODENAME_ATTRIBUTE = "Machine"
-        claimed_node_ads = coll.query(htcondor.AdTypes.Startd,
-            constraint=filter_claimed_vms.and_(filter_mig),
-            projection=[NODENAME_ATTRIBUTE])
+        combined_constraint = classad.ExprTree(f"({filter_mig_str}) && ({filter_claimed_vms_str})")
+
+        claimed_node_ads = coll.query(
+            htcondor.AdType.Startd,  # Note: htcondor.AdTypes.Startd is replaced by htcondor.DaemonTypes.Startd or AdTypes if still supported, but DaemonTypes is standard in v2.
+            constraint=combined_constraint,
+            projection=[NODENAME_ATTRIBUTE]
+        )
         claimed_nodes = [ ad[NODENAME_ATTRIBUTE].split(".")[0] for ad in claimed_node_ads]
 
         # treat OrderedDict as a set by ignoring key values; this set will

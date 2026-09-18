@@ -64,14 +64,47 @@ variable "service_agents" {
   }
 }
 
-variable "service_agent_principals" {
-  description = "Fully qualified principal strings granted roles/cloudkms.cryptoKeyEncrypterDecrypter on the CryptoKey, e.g. \"serviceAccount:service-PROJECT_NUMBER@compute-system.iam.gserviceaccount.com\". Use this for principals service_agents cannot derive: agents belonging to a different project, or a user-managed service account. Unioned with service_agents; each principal must already exist."
-  type        = set(string)
+variable "custom_service_accounts" {
+  description = "Bare email addresses of user-managed service accounts to grant roles/cloudkms.cryptoKeyEncrypterDecrypter on the CryptoKey, e.g. \"my-sa@my-project.iam.gserviceaccount.com\". Use this for identities service_agents cannot derive: a custom disk_encryption_key_service_account, or an agent belonging to a different project. Do not include the \"serviceAccount:\" prefix; the module adds it. Unioned with service_agents; each account must already exist."
+  type        = list(string)
   default     = []
   nullable    = false
 
   validation {
-    condition     = alltrue([for p in var.service_agent_principals : startswith(p, "serviceAccount:")])
-    error_message = "Every value in service_agent_principals must begin with \"serviceAccount:\"."
+    condition     = alltrue([for a in var.custom_service_accounts : !startswith(a, "serviceAccount:")])
+    error_message = "custom_service_accounts must be bare email addresses, not principal strings -- omit the \"serviceAccount:\" prefix, which the module adds automatically."
+  }
+
+  validation {
+    condition     = alltrue([for a in var.custom_service_accounts : can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.gserviceaccount\\.com$", a))])
+    error_message = "Each value in custom_service_accounts must be a service account email ending in \".gserviceaccount.com\", e.g. my-sa@my-project.iam.gserviceaccount.com."
+  }
+}
+
+variable "skip_iam_role_grants" {
+  description = <<-EOT
+    Skip creating the IAM grants this module normally creates, while every
+    output still resolves crypto_key_id as usual. Set this when permissions
+    on the key are managed out-of-band by someone else -- for example a
+    security team granting roles/cloudkms.cryptoKeyEncrypterDecrypter on a
+    pre-existing-kms-key key directly -- and the identity running this
+    module lacks cloudkms.admin/setIamPolicy on it. Without this, Terraform
+    would attempt the grant anyway and fail with a 403, even though the
+    caller only wanted this module's `use`-wiring convenience.
+
+    service_agents and custom_service_accounts must both be empty when this
+    is true. Setting either alongside skip_iam_role_grants would otherwise
+    look like a grant request that silently does nothing, which is exactly
+    the kind of surprising behavior this variable exists to prevent.
+    EOT
+  type        = bool
+  default     = false
+  nullable    = false
+
+  validation {
+    condition = !var.skip_iam_role_grants || (
+      length(var.service_agents) == 0 && length(var.custom_service_accounts) == 0
+    )
+    error_message = "service_agents and custom_service_accounts must be empty when skip_iam_role_grants is true -- there is nothing to grant when this module isn't managing IAM."
   }
 }

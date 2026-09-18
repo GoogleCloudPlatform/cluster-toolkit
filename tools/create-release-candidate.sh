@@ -86,7 +86,7 @@ esac
 NEW_VERSION="${NEW_MAJOR}.${NEW_MINOR}.${NEW_PATCH}"
 NEW_TAG="v${NEW_VERSION}"
 
-RC_BRANCH=release-candidate
+RC_BRANCH="release-candidate-${NEW_TAG}"
 V_BRANCH="version/${NEW_TAG}"
 REMOTE_NAME=origin
 

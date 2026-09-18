@@ -21,6 +21,13 @@ trap "printf '\nCaught Ctrl+c. Exiting...\n'; exit" INT
 TAG=$(date +%s)
 TEST_DIR=${PWD}/nccl-tests-"${TAG}"
 SOFTWARE_INSTALL=${1:-/opt/apps}
+NCCL_MNNVL_ENABLE=${2:-"1"}
+
+NCCL_NVLS_ENABLE=${NCCL_NVLS_ENABLE:-"2"}
+NCCL_P2P_DISABLE=${NCCL_P2P_DISABLE:-"0"}
+NCCL_SHM_DISABLE=${NCCL_SHM_DISABLE:-"0"}
+NCCL_DEBUG=${NCCL_DEBUG:-"INFO"}
+NCCL_DEBUG_SUBSYS=${NCCL_DEBUG_SUBSYS:-"INIT,ENV,NET,COLL,NVLS"}
 
 cat <<EOF
 This script will install the following packages using on this VM:
@@ -77,7 +84,8 @@ EOF
 fi
 
 # Install ramble and make world read/writeable.
-sudo git clone --depth 1 -c feature.manyFiles=true https://github.com/GoogleCloudPlatform/ramble.git "${SOFTWARE_INSTALL}"/ramble || true
+sudo git clone -c feature.manyFiles=true https://github.com/GoogleCloudPlatform/ramble.git "${SOFTWARE_INSTALL}"/ramble || true
+sudo git -C "${SOFTWARE_INSTALL}"/ramble checkout 2a020babedd68be15448f3893d2a245fcaa8bd73
 sudo chmod -R a+w "${SOFTWARE_INSTALL}"/ramble
 
 # Create python environment for ramble, and install requirements
@@ -95,6 +103,8 @@ ramble workspace create -a -d "${TEST_DIR}"
 cat <<EOF >"${TEST_DIR}"/configs/ramble.yaml
 # Ramble Configuration for NCCL Tests
 ramble:
+  config:
+    overwrite_inventories: true
   modifiers:
   - name: pyxis-enroot
   - name: nccl-gib
@@ -104,9 +114,9 @@ ramble:
     srun_args: >-
       --mpi=pmix
       --container-workdir /third_party/nccl-tests/build/
-      --container-env LD_LIBRARY_PATH
+      --container-env {container_env_vars}
       --container-image {container_path}
-      --container-mounts "/usr/local/gib,/var/tmp"
+      --container-mounts={experiment_run_dir}:{experiment_run_dir}
       --container-writable
       --wait=60
       --kill-on-bad-exit=1
@@ -116,27 +126,51 @@ ramble:
     hostlist: \${SLURM_JOB_NODELIST}
 
     container_dir: "${SOFTWARE_INSTALL}/ramble/sqsh"
-    container_name: nccl-plugin-gib-diagnostic-arm64-v1.1.2
+    container_name: nccl-plugin-gib-diagnostic-arm64:v1.1.2
     container_uri: docker://us-docker.pkg.dev#gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic-arm64:v1.1.2
     # processes_per_node: 4
     processes_per_node: '{gpus_per_node}'
     gpus_per_node: '4'
     nccl-tests_path: null
+    cuda_visible_devices: 0,1,2,3
 
   env_vars:
     set:
-      OMPI_MCA_btl_tcp_if_include: eth0,eth1
-      PMIX_MCA_gds: ^ds12
-      UCX_NET_DEVICES: gpu0rdma0,gpu1rdma0,gpu2rdma0,gpu3rdma0,gpu0rdma1,gpu1rdma1,gpu2rdma1,gpu3rdma1
-      PMIX_MCA_psec: native
-      UCX_IB_FORK_INIT: n
-      NCCL_NET: gIB
-      NCCL_SOCKET_IFNAME: eth0,eth1
-      NCCL_IB_HCA: "=mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7"
-      LD_LIBRARY_PATH: /usr/local/gib/lib64:usr/local/nvidia/lib
+      # NCCL Debug Logging
+      NCCL_DEBUG: ${NCCL_DEBUG}
+      NCCL_DEBUG_SUBSYS: ${NCCL_DEBUG_SUBSYS}
+      NCCL_DEBUG_FILE: "{experiment_run_dir}/nccl_debug_%h_%p.log"
+
+      # Enable GPUDirect Data-Direct & DMABUF over RDMA
+      NCCL_NET_GIB_ENABLE: "1"
+      NCCL_DMABUF_ENABLE: "1"
+      NCCL_IB_DATA_DIRECT: "1"
+
+      # All 8 adapters listed in PCIe GPU order (GPU 0..3)
+      NCCL_IB_HCA: "mlx5_2,mlx5_3,mlx5_0,mlx5_1,mlx5_6,mlx5_7,mlx5_4,mlx5_5"
+
+      # Open MPI bootstrap tuning
+      OMPI_MCA_coll: "^hcoll"
+      OMPI_MCA_btl: "tcp,self"
+      OMPI_MCA_btl_tcp_if_include: "eth0"
+      OMPI_MCA_pml: "^ucx"
+      PMIX_MCA_gds: "^ds12"
+
+      # UCX tuning
+      UCX_IB_GID_INDEX: 3
+      UCX_NET_DEVICES: gpu0rdma0,gpu0rdma1,gpu1rdma0,gpu1rdma1,gpu2rdma0,gpu2rdma1,gpu3rdma0,gpu3rdma1
+
+      # NCCL tuning
       NCCL_IB_GID_INDEX: 3
-      NCCL_DEBUG: DEBUG
-      NCCL_DEBUG_SUBSYS: INIT,ENV,NET,GRAPH
+      NCCL_SOCKET_IFNAME: eth0
+      NCCL_NVLS_ENABLE: ${NCCL_NVLS_ENABLE}
+      NCCL_MNNVL_ENABLE: ${NCCL_MNNVL_ENABLE}
+      NCCL_P2P_DISABLE: ${NCCL_P2P_DISABLE}
+      NCCL_SHM_DISABLE: ${NCCL_SHM_DISABLE}
+
+      LD_LIBRARY_PATH: /usr/local/gib/lib64:/usr/mpi/gcc/openmpi-4.1.9a1/lib:/usr/local/cuda/lib64:/usr/lib/aarch64-linux-gnu
+    unset:
+    - NCCL_BUFFSIZE
 
   applications:
     nccl-tests:
