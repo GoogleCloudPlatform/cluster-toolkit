@@ -23,6 +23,6 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:project-info/v1.103.0"
+    module_name = "blueprints/terraform/hpc-toolkit:pre-existing-project/v1.103.0"
   }
 }

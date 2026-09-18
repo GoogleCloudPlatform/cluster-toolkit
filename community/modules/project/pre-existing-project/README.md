@@ -1,17 +1,38 @@
-# Project Info Module
+## Description
 
-Fetches GCP project information such as project ID, project name, and project number, and exposes them as outputs.
+This module discovers a Google Cloud project that already exists and outputs
+project attributes (project ID, project name, and project number) for use by
+other modules.
 
----
+Intended for blueprints that need project attributes in YAML interpolation, for
+example when passing values to externally-sourced modules. Modules within this
+repository should use `data "google_project"` directly.
 
-## Example Usage
+### Example
+
+The blueprint below discovers an existing project and uses its project number to
+build a Pub/Sub subscription filter that matches Cloud Batch job notifications.
+The filter requires the project number, which is only known at apply time, and
+the externally-sourced [terraform-google-pubsub] module cannot look it up
+itself, so `pre-existing-project` supplies it through YAML interpolation.
 
 ```yaml
-  - id: project-info
-    source: community/modules/internal/project/project-info
+  - id: project
+    source: community/modules/project/pre-existing-project
     settings:
       project_id: $(vars.project_id)
+
+  - id: batch-notifications
+    source: git::https://github.com/terraform-google-modules/terraform-google-pubsub.git
+    settings:
+      project_id: $(vars.project_id)
+      topic: $(vars.topic_name)
+      pull_subscriptions:
+      - name: $(vars.deployment_name)-subscription
+        filter: 'hasPrefix(attributes.JobName, "projects/$(project.project_number)/locations/$(vars.region)/jobs/$(vars.deployment_name)-")'
 ```
+
+[terraform-google-pubsub]: https://github.com/terraform-google-modules/terraform-google-pubsub
 
 ## License
 
