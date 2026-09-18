@@ -41,3 +41,12 @@ output "capacity_gib" {
   description = "File share capacity in GiB."
   value       = google_lustre_instance.lustre_instance.capacity_gib
 }
+
+output "lnet_multinic_metadata" {
+  description = <<-EOT
+    Instance metadata to merge into compute nodesets for LNet Multi-Rail
+    configuration (empty when multinic is disabled). If multiple managed-lustre
+    instances exist in a blueprint, wire this output once per nodeset.
+  EOT
+  value       = var.multinic.enabled ? { user-data = local.multinic_user_data } : {}
+}
