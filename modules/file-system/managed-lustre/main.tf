@@ -37,6 +37,42 @@ locals {
   destination_path            = "/"
   per_unit_storage_throughput = var.enable_dynamic_tier ? null : coalesce(var.per_unit_storage_throughput, 500)
 
+  multinic_setup_script = file("${path.module}/scripts/multi-nic-lustre-setup.sh")
+
+  # Defines the cloud-init payload that provisions the Multi-NIC setup script,
+  # systemd service, and environment configuration on client nodes at boot.
+  # Built as a map and yamlencode'd to ensure `#cloud-config` stays on line 1.
+  multinic_cloud_config = merge({ create_hostname_file = true }, var.multinic.extra_cloud_config, {
+    write_files = [
+      {
+        path        = "/usr/local/sbin/multi-nic-lustre-setup.sh"
+        permissions = "0755"
+        content     = local.multinic_setup_script
+      },
+      {
+        path        = "/etc/systemd/system/multi-nic-lustre.service"
+        permissions = "0644"
+        content     = file("${path.module}/files/multi-nic-lustre.service")
+      },
+      {
+        path        = "/etc/google/multinic-lustre.env"
+        permissions = "0644"
+        content = join("\n", [
+          "MULTINIC_LNET_OPTIONS=\"${var.multinic.lnet_options}\"",
+          "MULTINIC_TABLE_BASE=${var.multinic.table_base}",
+          "MULTINIC_RP_FILTER=${var.multinic.rp_filter}",
+          "",
+        ])
+      },
+    ]
+    runcmd = [
+      "systemctl daemon-reload",
+      "systemctl enable --now multi-nic-lustre.service",
+    ]
+  })
+
+  multinic_user_data = "#cloud-config\n${yamlencode(local.multinic_cloud_config)}"
+
   install_managed_lustre_client_runner = {
     "type"        = "shell"
     "source"      = "${path.module}/scripts/install-managed-lustre-client.sh"
@@ -118,4 +154,22 @@ resource "google_lustre_instance" "lustre_instance" {
       EOF
     interpreter = ["bash", "-c"]
   }
+}
+
+resource "google_compute_firewall" "lnet_callback_ingress" {
+  count   = var.multinic.enabled && var.multinic.create_firewall ? 1 : 0
+  name    = "${local.instance_id}-allow-lnet-callbacks"
+  project = var.project_id
+
+  network = replace(var.network_id, "projects/${var.project_id}/global/networks/", "")
+
+  direction     = "INGRESS"
+  source_ranges = var.multinic.psa_ip_ranges
+
+  allow {
+    protocol = "tcp"
+    ports    = ["988", "1021-1023"]
+  }
+
+  target_tags = var.multinic.client_tags
 }
