@@ -27,7 +27,7 @@ Please see the [blueprint catalog](https://cloud.google.com/hpc-toolkit/docs/set
 > modules that have their own image specification. Please read the
 > documentation for any module utilized.
 
-When an Cluster Toolkit blueprint points to a predefined source module (e.g.
+When a Cluster Toolkit blueprint points to a predefined source module (e.g.
 `community/modules/compute/schedmd-slurm-gcp-v6-nodeset`), generally the
 module has a default image defined. In order to override this default image, a
 user may specify the `instance_image` setting in the yaml blueprint, within
