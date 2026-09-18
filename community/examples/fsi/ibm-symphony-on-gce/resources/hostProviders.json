@@ -1,0 +1,53 @@
+{
+    "version": 2,
+    "providers":[
+        {
+            "name": "gcpgceinst",
+            "enabled": 1,
+            "plugin": "gcpgce",
+            "confPath": "${HF_CONFDIR}/providers/gcpgceinst/",
+            "workPath": "${HF_WORKDIR}/providers/gcpgceinst/",
+            "logPath": "${HF_LOGDIR}/"
+        },
+        {
+            "name": "awsinst",
+            "enabled": 1,
+            "plugin": "aws",
+            "confPath": "${HF_CONFDIR}/providers/awsinst/",
+            "workPath": "${HF_WORKDIR}/providers/awsinst/",
+            "logPath": "${HF_LOGDIR}/"
+        },
+        {
+            "name": "ibmcloudinst",
+            "enabled": 1,
+            "plugin": "ibmcloud",
+            "confPath": "${HF_CONFDIR}/providers/ibmcloudinst/",
+            "workPath": "${HF_WORKDIR}/providers/ibmcloudinst/",
+            "logPath": "${HF_LOGDIR}/"
+        },
+        {
+            "name": "azureinst",
+            "enabled": 1,
+            "plugin": "azure",
+            "confPath": "${HF_CONFDIR}/providers/azureinst/",
+            "workPath": "${HF_WORKDIR}/providers/azureinst/",
+            "logPath": "${HF_LOGDIR}/"
+        },
+        {
+            "name": "openshiftinst",
+            "enabled": 1,
+            "plugin": "openshift",
+            "confPath": "${HF_CONFDIR}/providers/openshiftinst/",
+            "workPath": "${HF_WORKDIR}/providers/openshiftinst/",
+            "logPath": "${HF_LOGDIR}/"
+        },
+        {
+            "name": "ibmcloudgen2inst",
+            "enabled": 0,
+            "plugin": "ibmcloudgen2",
+            "confPath": "${HF_CONFDIR}/providers/ibmcloudgen2inst/",
+            "workPath": "${HF_WORKDIR}/providers/ibmcloudgen2inst/",
+            "logPath": "${HF_LOGDIR}/"
+        }
+    ]
+}
