@@ -17,9 +17,13 @@ package gke
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"path"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -33,47 +37,80 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+const (
+	volumeAttributeKeyCharset = `[A-Za-z0-9][A-Za-z0-9._-]*`
+	maxGeneratedPVCNameLength = 189
+
+	gcsFuseGatewayPrefix   = "gcluster-gcsfuse"
+	gcsFuseGatewayCapacity = "5Gi" // Ignored by GCSFuse CSI driver, required by Kubernetes.
+
+	gatewayNameDigestLength = 10
+)
+
+func newMountBuildState() *mountBuildState {
+	return &mountBuildState{gatewayVolumeNames: map[string]string{}}
+}
+
 // ProcessMounts parses mount strings and generates necessary K8s resources.
 func (sm *StorageManager) ProcessMounts(mounts []string, job orchestrator.JobDefinition) ([]MountInfo, []string, error) {
 	var mountInfos []MountInfo
 	var additionalManifests []string
+	state := newMountBuildState()
+
 	for i, vStr := range mounts {
-		src, dest, options, readOnly, err := sm.parseSingleVolume(vStr)
+		pm, err := sm.parseSingleVolume(vStr)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		if strings.HasPrefix(src, "filestore://") {
-			info, manifest, err := sm.handleFilestoreMount(src, dest, readOnly, i, job)
-			if err != nil {
-				return nil, nil, err
-			}
-			mountInfos = append(mountInfos, info)
-			if manifest != "" {
-				additionalManifests = append(additionalManifests, manifest)
-			}
-			continue
+		info, manifest, err := sm.dispatchMount(pm, i, job, state)
+		if err != nil {
+			return nil, nil, err
 		}
-
-		volType := "pvc"
-		if strings.HasPrefix(src, "gs://") {
-			volType = "gcsfuse"
-		} else if strings.HasPrefix(src, "/") {
-			volType = "hostPath"
+		mountInfos = append(mountInfos, info)
+		if manifest != "" {
+			additionalManifests = append(additionalManifests, manifest)
 		}
-
-		mountInfo := MountInfo{
-			Name:      fmt.Sprintf("vol-%d", i),
-			Source:    src,
-			MountPath: dest,
-			Type:      volType,
-			ReadOnly:  readOnly,
-			Options:   options,
-		}
-		mountInfos = append(mountInfos, mountInfo)
 	}
 
 	return mountInfos, additionalManifests, nil
+}
+
+func (sm *StorageManager) dispatchMount(pm parsedMount, idx int, job orchestrator.JobDefinition, state *mountBuildState) (MountInfo, string, error) {
+	switch {
+	case strings.HasPrefix(pm.Src, "filestore://"):
+		return sm.generateFilestoreResources(pm, idx, job, state)
+	case strings.HasPrefix(pm.Src, "gs://") && pm.Profile != "":
+		return sm.generateGCSFuseProfileResources(pm, idx, job, state)
+	default:
+		return buildPodLevelMount(pm, idx), "", nil
+	}
+}
+
+func buildPodLevelMount(pm parsedMount, idx int) MountInfo {
+	volType := "pvc"
+	if strings.HasPrefix(pm.Src, "gs://") {
+		volType = "gcsfuse"
+	} else if strings.HasPrefix(pm.Src, "/") {
+		volType = "hostPath"
+	}
+
+	info := MountInfo{
+		Name:      fmt.Sprintf("vol-%d", idx),
+		Source:    pm.Src,
+		MountPath: pm.Dest,
+		Type:      volType,
+		ReadOnly:  pm.ReadOnly,
+		Options:   pm.Options,
+	}
+
+	// Warn here rather than in parseSingleVolume so ValidateMounts + ProcessMounts does not warn twice.
+	if volType == "gcsfuse" && len(pm.Attributes) > 0 {
+		info.Attributes = pm.Attributes
+		warnProfileOnlyAttributes(pm.Attributes, pm.Src)
+	}
+
+	return info
 }
 
 func normalizeMountPath(p string) string {
@@ -113,23 +150,28 @@ func (sm *StorageManager) ValidateMounts(mounts []string) error {
 	seenDestinations := make(map[string]bool)
 
 	for _, vStr := range mounts {
-		src, dest, _, _, err := sm.parseSingleVolume(vStr)
+		pm, err := sm.parseSingleVolume(vStr)
 		if err != nil {
 			return err
 		}
 
-		cleanDest := normalizeMountPath(dest)
-		if err := checkReservedSystemPath(cleanDest, fmt.Sprintf("mount destination %q", dest)); err != nil {
+		cleanDest := normalizeMountPath(pm.Dest)
+		if err := checkReservedSystemPath(cleanDest, fmt.Sprintf("mount destination %q", pm.Dest)); err != nil {
 			return err
 		}
 
-		if seenSources[src] {
-			return fmt.Errorf("duplicate volume source: %s", src)
+		sourceKey := pm.Src
+		if pm.Profile != "" {
+			sourceKey = pm.Src + ";profile=" + pm.Profile
+		}
+
+		if seenSources[sourceKey] {
+			return fmt.Errorf("duplicate volume source: %s", pm.Src)
 		}
 		if seenDestinations[cleanDest] {
-			return fmt.Errorf("duplicate volume destination: %s", dest)
+			return fmt.Errorf("duplicate volume destination: %s", pm.Dest)
 		}
-		seenSources[src] = true
+		seenSources[sourceKey] = true
 		seenDestinations[cleanDest] = true
 	}
 	return nil
@@ -148,11 +190,11 @@ func (sm *StorageManager) ValidateRamdiskDir(ramdiskDir string, rawMounts []stri
 		return err
 	}
 	for _, m := range rawMounts {
-		_, dest, _, _, err := sm.parseSingleVolume(m)
+		pm, err := sm.parseSingleVolume(m)
 		if err != nil {
 			return err
 		}
-		if normalizeMountPath(dest) == cleanRamdisk {
+		if normalizeMountPath(pm.Dest) == cleanRamdisk {
 			return fmt.Errorf("--gke-mtc-ramdisk-dir path %q conflicts with duplicate mount destination in --mount flag", ramdiskDir)
 		}
 	}
@@ -163,44 +205,218 @@ func missingDestOrFormatErr(vStr string) error {
 	if strings.HasPrefix(vStr, "gs://") || strings.HasPrefix(vStr, "filestore://") {
 		return fmt.Errorf("invalid volume format: %s. Missing destination.", vStr)
 	}
-	return fmt.Errorf("invalid volume format: %s. Expected format: <src>;<dest>[;<mode>][;options=<options>]", vStr)
+	return fmt.Errorf("invalid volume format: %s. Expected format: <src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]", vStr)
 }
 
-func (sm *StorageManager) parseSingleVolume(vStr string) (src, dest, options string, readOnly bool, err error) {
-	parts := strings.Split(vStr, ";")
-	if len(parts) < 2 {
-		return "", "", "", false, missingDestOrFormatErr(vStr)
+var gcsFuseProfileStorageClasses = map[string]string{
+	"training":                 "gcsfusecsi-training",
+	"checkpointing":            "gcsfusecsi-checkpointing",
+	"serving":                  "gcsfusecsi-serving",
+	"gcsfusecsi-training":      "gcsfusecsi-training",
+	"gcsfusecsi-checkpointing": "gcsfusecsi-checkpointing",
+	"gcsfusecsi-serving":       "gcsfusecsi-serving",
+}
+
+func supportedGCSFuseProfiles() []string {
+	names := make([]string, 0, len(gcsFuseProfileStorageClasses))
+	for name := range gcsFuseProfileStorageClasses {
+		names = append(names, name)
 	}
+	sort.Strings(names)
+	return names
+}
 
-	src = parts[0]
-	dest = parts[1]
-	readOnly = true // default
+func normalizeProfileName(profile string) (string, error) {
+	sc, ok := gcsFuseProfileStorageClasses[strings.ToLower(strings.TrimSpace(profile))]
+	if !ok {
+		return "", fmt.Errorf("unsupported storage profile %q. Supported values are: %s", profile, strings.Join(supportedGCSFuseProfiles(), ", "))
+	}
+	return sc, nil
+}
 
-	for _, part := range parts[2:] {
-		if part == "ro" {
-			readOnly = true
-		} else if part == "rw" {
-			readOnly = false
-		} else if strings.HasPrefix(part, "options=") {
-			options = strings.TrimPrefix(part, "options=")
-		} else {
-			return "", "", "", false, fmt.Errorf("invalid volume option or mode: %s", part)
+var volumeAttributeKeyPattern = regexp.MustCompile(`^` + volumeAttributeKeyCharset + `$`)
+
+// profileOnlyVolumeAttributes override gcsfusecsi-* StorageClass parameters and have no effect on inline mounts.
+var profileOnlyVolumeAttributes = map[string]bool{
+	"anywhereCacheZones":                    true,
+	"anywhereCacheTTL":                      true,
+	"anywhereCacheAdmissionPolicy":          true,
+	"bucketScanTimeout":                     true,
+	"bucketScanResyncPeriod":                true,
+	"fuseMemoryAllocatableFactor":           true,
+	"fuseEphemeralStorageAllocatableFactor": true,
+	"fuseFileCacheMediumPriority":           true,
+}
+
+func warnProfileOnlyAttributes(attrs map[string]string, src string) {
+	var flagged []string
+	for key := range attrs {
+		if profileOnlyVolumeAttributes[key] {
+			flagged = append(flagged, key)
+		}
+	}
+	if len(flagged) == 0 {
+		return
+	}
+	sort.Strings(flagged)
+	logging.Warn("mount %q sets volume attribute(s) %s without profile=. These override storage profile StorageClass parameters and are expected to have no effect on an inline mount. Add profile=<training|checkpointing|serving> if you intended them to apply.",
+		src, strings.Join(flagged, ", "))
+}
+
+// volumeAttributeSeparator splits on ',' only when followed by `<key>=`, allowing comma-separated attribute values.
+var volumeAttributeSeparator = regexp.MustCompile(`^[,\s]*(?:` + volumeAttributeKeyCharset + `\s*=|$)`)
+
+func splitVolumeAttributes(raw string) []string {
+	var parts []string
+	start := 0
+	for i := 0; i < len(raw); i++ {
+		if raw[i] != ',' {
+			continue
+		}
+		if !volumeAttributeSeparator.MatchString(raw[i+1:]) {
+			continue
+		}
+		parts = append(parts, raw[start:i])
+		start = i + 1
+	}
+	return append(parts, raw[start:])
+}
+
+func parseVolumeAttributes(raw string) (map[string]string, error) {
+	attrs := map[string]string{}
+	for _, kv := range splitVolumeAttributes(raw) {
+		kv = strings.TrimSpace(kv)
+		if kv == "" {
+			continue
+		}
+		pair := strings.SplitN(kv, "=", 2)
+		if len(pair) != 2 || strings.TrimSpace(pair[0]) == "" {
+			return nil, fmt.Errorf("invalid volume attribute %q. Expected format: attributes=<key>=<value>[,<key>=<value>...]", kv)
+		}
+		key := strings.TrimSpace(pair[0])
+		if !volumeAttributeKeyPattern.MatchString(key) {
+			return nil, fmt.Errorf("invalid volume attribute key %q. Keys may only contain letters, digits, '.', '_' and '-'", key)
+		}
+		if key == "mountOptions" {
+			return nil, fmt.Errorf("volume attribute %q is not accepted; use options=<opt1>,<opt2> instead, which gcluster renders into the correct field for both inline and storage-profile mounts", key)
+		}
+		if _, dup := attrs[key]; dup {
+			return nil, fmt.Errorf("duplicate volume attribute key %q", key)
+		}
+		attrs[key] = strings.TrimSpace(pair[1])
+	}
+	if len(attrs) == 0 {
+		return nil, fmt.Errorf("attributes= was specified but no key=value pairs were provided")
+	}
+	return attrs, nil
+}
+
+func repeatedSegmentErr(segment, vStr, joinHint string) error {
+	return fmt.Errorf("%s may only be specified once per --mount, but %q specifies it more than once.%s",
+		segment, vStr, joinHint)
+}
+
+func parseMountSegments(segments []string, vStr string, pm *parsedMount) (mountSegments, error) {
+	var out mountSegments
+	optionsSet := false
+	attributesSet := false
+
+	for _, part := range segments {
+		switch {
+		case part == "ro":
+			pm.ReadOnly = true
+		case part == "rw":
+			pm.ReadOnly = false
+		case strings.HasPrefix(part, "options="):
+			if optionsSet {
+				return out, repeatedSegmentErr("options=", vStr,
+					" Pass every mount option in one comma separated list instead: options=<opt1>,<opt2>")
+			}
+			optionsSet = true
+			pm.Options = strings.TrimPrefix(part, "options=")
+		case strings.HasPrefix(part, "profile="):
+			if out.ProfileSet {
+				return out, repeatedSegmentErr("profile=", vStr,
+					" A mount is backed by exactly one storage profile; use a second --mount to read the same bucket through another profile")
+			}
+			out.RawProfile = strings.TrimPrefix(part, "profile=")
+			out.ProfileSet = true
+		case strings.HasPrefix(part, "attributes="):
+			if attributesSet {
+				return out, repeatedSegmentErr("attributes=", vStr,
+					" Pass every attribute in one comma separated list instead: attributes=<k1>=<v1>,<k2>=<v2>")
+			}
+			attributesSet = true
+			attrs, err := parseVolumeAttributes(strings.TrimPrefix(part, "attributes="))
+			if err != nil {
+				return out, err
+			}
+			pm.Attributes = attrs
+		default:
+			return out, fmt.Errorf("invalid volume option or mode: %s", part)
 		}
 	}
 
-	if src == "" || dest == "" || !strings.HasPrefix(dest, "/") {
-		return "", "", "", false, missingDestOrFormatErr(vStr)
+	return out, nil
+}
+
+func validateGCSOnlySegments(pm parsedMount, profileSet bool) error {
+	if strings.HasPrefix(pm.Src, "gs://") {
+		return nil
+	}
+	if pm.Options != "" {
+		return fmt.Errorf("options= is currently only supported for GCS fuse volumes (gs://...)")
+	}
+	if profileSet {
+		return fmt.Errorf("profile= is only supported for GCS fuse volumes (gs://...)")
+	}
+	if len(pm.Attributes) > 0 {
+		return fmt.Errorf("attributes= is only supported for GCS fuse volumes (gs://...)")
+	}
+	return nil
+}
+
+func (sm *StorageManager) parseSingleVolume(vStr string) (parsedMount, error) {
+	parts := strings.Split(vStr, ";")
+	if len(parts) < 2 {
+		return parsedMount{}, missingDestOrFormatErr(vStr)
 	}
 
-	if options != "" && !strings.HasPrefix(src, "gs://") {
-		return "", "", "", false, fmt.Errorf("options= is currently only supported for GCS fuse volumes (gs://...)")
+	pm := parsedMount{
+		Src:      parts[0],
+		Dest:     parts[1],
+		ReadOnly: true, // default
 	}
 
-	if err := validateSrcScheme(src, vStr); err != nil {
-		return "", "", "", false, err
+	segments, err := parseMountSegments(parts[2:], vStr, &pm)
+	if err != nil {
+		return parsedMount{}, err
 	}
 
-	return src, dest, options, readOnly, nil
+	if pm.Src == "" || pm.Dest == "" || !strings.HasPrefix(pm.Dest, "/") {
+		return parsedMount{}, missingDestOrFormatErr(vStr)
+	}
+
+	if err := validateGCSOnlySegments(pm, segments.ProfileSet); err != nil {
+		return parsedMount{}, err
+	}
+
+	if segments.ProfileSet {
+		sc, err := normalizeProfileName(segments.RawProfile)
+		if err != nil {
+			return parsedMount{}, err
+		}
+		pm.Profile = sc
+		if _, _, err := splitGCSSource(pm.Src); err != nil {
+			return parsedMount{}, err
+		}
+	}
+
+	if err := validateSrcScheme(pm.Src, vStr); err != nil {
+		return parsedMount{}, err
+	}
+
+	return pm, nil
 }
 
 func extractHost(hostStr string) string {
@@ -240,7 +456,30 @@ func validateSrcScheme(src string, vStr string) error {
 	return fmt.Errorf("invalid volume format: %s. Unsupported scheme.", vStr)
 }
 
-func (sm *StorageManager) handleFilestoreMount(src, dest string, readOnly bool, idx int, job orchestrator.JobDefinition) (MountInfo, string, error) {
+// truncatePVCName enforces maxLen without leaving a trailing '-'.
+func truncatePVCName(name string, maxLen int) string {
+	if len(name) > maxLen {
+		name = strings.TrimRight(name[:maxLen], "-")
+	}
+	return name
+}
+
+func (sm *StorageManager) resolveNamespace(job orchestrator.JobDefinition) (string, error) {
+	if sm.orchestrator == nil {
+		return "default", nil
+	}
+	ns, err := sm.orchestrator.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve namespace for storage gateway: %w", err)
+	}
+	if ns == "" {
+		return "", fmt.Errorf("resolved an empty namespace for storage gateway. Specify one explicitly with --gke-namespace")
+	}
+	return ns, nil
+}
+
+func (sm *StorageManager) generateFilestoreResources(pm parsedMount, idx int, job orchestrator.JobDefinition, state *mountBuildState) (MountInfo, string, error) {
+	src, dest, readOnly := pm.Src, pm.Dest, pm.ReadOnly
 	trimmed := strings.TrimPrefix(src, "filestore://")
 	trimmed = strings.TrimRight(trimmed, "/")
 	parts := strings.SplitN(trimmed, "/", 2)
@@ -265,27 +504,31 @@ func (sm *StorageManager) handleFilestoreMount(src, dest string, readOnly bool, 
 	capacityStr := fmt.Sprintf("%dGi", capacityGb)
 
 	pvcName := fmt.Sprintf("gcluster-filestore-%s-%s", resolvedName, share)
-	pvcName = sanitizePVCName(pvcName)
-	// Truncate pvcName to avoid PV name collisions when the namespace is appended.
-	// A PV name is derived from <pvc-name>-<namespace>. A namespace can be up to 63
-	// characters. By limiting the PVC name to 189, we ensure the combined name does not
-	// exceed the 253-character limit and cause truncation that could lead to collisions.
-	if len(pvcName) > 189 {
-		pvcName = strings.TrimRight(pvcName[:189], "-")
-	}
+	pvcName = truncatePVCName(sanitizePVCName(pvcName), maxGeneratedPVCNameLength)
 
-	var ns string
-	if sm.orchestrator != nil {
-		var err error
-		ns, err = sm.orchestrator.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
-		if err != nil {
-			logging.Warn("failed to get current namespace: %v. Defaulting to 'default' for PV name.", err)
-		}
-	}
-	if ns == "" {
-		ns = "default"
+	ns, err := sm.resolveNamespace(job)
+	if err != nil {
+		return MountInfo{}, "", err
 	}
 	pvName := sanitizePVCName(fmt.Sprintf("%s-%s", pvcName, ns))
+
+	info := MountInfo{
+		Source:    pvcName,
+		MountPath: dest,
+		Type:      "pvc",
+		ReadOnly:  readOnly,
+	}
+
+	if state != nil {
+		if existing, ok := state.gatewayVolumeNames[pvName]; ok {
+			info.Name = existing
+			return info, "", nil
+		}
+	}
+	info.Name = fmt.Sprintf("vol-%d", idx)
+	if state != nil {
+		state.gatewayVolumeNames[pvName] = info.Name
+	}
 
 	filestoreTmpl, err := sm.orchestrator.parseGKETextTemplate("filestore.tmpl")
 	if err != nil {
@@ -305,15 +548,151 @@ func (sm *StorageManager) handleFilestoreMount(src, dest string, readOnly bool, 
 	}
 	pvYAML := buf.String()
 
-	info := MountInfo{
-		Name:      fmt.Sprintf("vol-%d", idx),
-		Source:    pvcName,
-		MountPath: dest,
-		Type:      "pvc",
-		ReadOnly:  readOnly,
+	return info, pvYAML, nil
+}
+
+var gcsBucketNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
+
+func splitGCSSource(src string) (bucket string, subPath string, err error) {
+	trimmed := strings.TrimPrefix(src, "gs://")
+	trimmed = strings.Trim(trimmed, "/")
+	if trimmed == "" {
+		return "", "", fmt.Errorf("invalid GCS mount %q: bucket name is missing. Expected format: gs://<bucket>[/<path>]", src)
+	}
+	parts := strings.SplitN(trimmed, "/", 2)
+	bucket = parts[0]
+	if !gcsBucketNamePattern.MatchString(bucket) {
+		return "", "", fmt.Errorf("invalid GCS bucket name %q in mount %q", bucket, src)
+	}
+	if len(parts) > 1 {
+		subPath = strings.Trim(parts[1], "/")
+	}
+	return bucket, subPath, nil
+}
+
+// customGatewayOptionsHash returns a deterministic suffix for custom options/attributes, or "" when none are supplied.
+func customGatewayOptionsHash(options string, attrs map[string]string) string {
+	if options == "" && len(attrs) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(attrs))
+	for k := range attrs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var sb strings.Builder
+	sb.WriteString(options)
+	for _, k := range keys {
+		sb.WriteString("\x00")
+		sb.WriteString(k)
+		sb.WriteString("=")
+		sb.WriteString(attrs[k])
+	}
+	sum := sha256.Sum256([]byte(sb.String()))
+	return hex.EncodeToString(sum[:])[:6]
+}
+
+// gcsFuseGatewayPVCName builds the deterministic PVC name for a (bucket, profile) gateway.
+func gcsFuseGatewayPVCName(bucket, profileShortName, options string, attrs map[string]string) string {
+	suffix := sanitizePVCName(profileShortName)
+	if hash := customGatewayOptionsHash(options, attrs); hash != "" {
+		suffix += "-" + hash
 	}
 
-	return info, pvYAML, nil
+	prefix := gcsFuseGatewayPrefix + "-"
+	budget := maxGeneratedPVCNameLength - len(prefix) - len(suffix) - 1
+
+	name := sanitizePVCName(bucket)
+	// Append a digest if sanitization collapsed '.' or '_' so distinct buckets never collide.
+	lossy := name != bucket
+	if budget > 0 && (lossy || len(name) > budget) {
+		name = shortenWithDigest(name, bucket, budget)
+	}
+
+	return sanitizePVCName(prefix + name + "-" + suffix)
+}
+
+func gcsFuseGatewayPVName(claim, namespace string) string {
+	return sanitizePVCName(fmt.Sprintf("%s-%s", claim, namespace))
+}
+
+func shortenWithDigest(name, identity string, maxLen int) string {
+	sum := sha256.Sum256([]byte(identity))
+	digest := hex.EncodeToString(sum[:])[:gatewayNameDigestLength]
+	keep := maxLen - len(digest) - 1
+	if keep < 1 {
+		return digest[:min(len(digest), maxLen)]
+	}
+	if keep > len(name) {
+		keep = len(name)
+	}
+	return strings.TrimRight(name[:keep], "-") + "-" + digest
+}
+
+func splitMountOptions(options string) []string {
+	var out []string
+	for _, opt := range strings.Split(options, ",") {
+		if opt = strings.TrimSpace(opt); opt != "" {
+			out = append(out, opt)
+		}
+	}
+	return out
+}
+
+// generateGCSFuseProfileResources renders the PV/PVC gateway backing a storage-profile mount.
+func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx int, job orchestrator.JobDefinition, state *mountBuildState) (MountInfo, string, error) {
+	bucket, subPath, err := splitGCSSource(pm.Src)
+	if err != nil {
+		return MountInfo{}, "", err
+	}
+
+	profileShortName := strings.TrimPrefix(pm.Profile, "gcsfusecsi-")
+	pvcName := gcsFuseGatewayPVCName(bucket, profileShortName, pm.Options, pm.Attributes)
+	ns, err := sm.resolveNamespace(job)
+	if err != nil {
+		return MountInfo{}, "", err
+	}
+	pvName := gcsFuseGatewayPVName(pvcName, ns)
+
+	info := MountInfo{
+		Source:              pvcName,
+		MountPath:           pm.Dest,
+		Type:                "pvc",
+		ReadOnly:            pm.ReadOnly,
+		SubPath:             subPath,
+		NeedsGCSFuseSidecar: true,
+	}
+
+	if existing, ok := state.gatewayVolumeNames[pvName]; ok {
+		info.Name = existing
+		return info, "", nil
+	}
+	info.Name = fmt.Sprintf("vol-%d", idx)
+	state.gatewayVolumeNames[pvName] = info.Name
+
+	tmpl, err := sm.orchestrator.parseGKETextTemplate("gcs_fuse_pv_pvc.tmpl")
+	if err != nil {
+		return MountInfo{}, "", fmt.Errorf("failed to parse GCSFuse PV/PVC template: %w", err)
+	}
+
+	params := GCSFusePVPVCTemplateParams{
+		PVName:           pvName,
+		PVCName:          pvcName,
+		Namespace:        ns,
+		StorageClassName: pm.Profile,
+		Capacity:         gcsFuseGatewayCapacity,
+		VolumeHandle:     bucket,
+		MountOptions:     splitMountOptions(pm.Options),
+		VolumeAttributes: pm.Attributes,
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, params); err != nil {
+		return MountInfo{}, "", fmt.Errorf("failed to execute GCSFuse PV/PVC template: %w", err)
+	}
+
+	return info, buf.String(), nil
 }
 
 func sanitizePVCName(name string) string {
@@ -339,11 +718,15 @@ func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountIn
 	var volSpecs []map[string]interface{}
 	var mountSpecs []map[string]interface{}
 	gcsFuseEnabled := false
+	seenVolumes := make(map[string]bool)
 
 	for _, v := range vols {
 		mountSpecs = append(mountSpecs, buildVolumeMountSpec(v))
-		volSpecs = append(volSpecs, buildVolumeSpec(v))
-		if v.Type == "gcsfuse" {
+		if !seenVolumes[v.Name] {
+			seenVolumes[v.Name] = true
+			volSpecs = append(volSpecs, buildVolumeSpec(v))
+		}
+		if v.Type == "gcsfuse" || v.NeedsGCSFuseSidecar {
 			gcsFuseEnabled = true
 		}
 	}
@@ -382,6 +765,9 @@ func buildVolumeMountSpec(v MountInfo) map[string]interface{} {
 		"name":      v.Name,
 		"mountPath": v.MountPath,
 	}
+	if v.SubPath != "" {
+		mountSpec["subPath"] = v.SubPath
+	}
 	if v.ReadOnly {
 		mountSpec["readOnly"] = true
 	}
@@ -399,6 +785,9 @@ func buildVolumeSpec(v MountInfo) map[string]interface{} {
 		}
 		if v.Options != "" {
 			volumeAttributes["mountOptions"] = v.Options
+		}
+		for key, value := range v.Attributes {
+			volumeAttributes[key] = value
 		}
 		spec["csi"] = map[string]interface{}{
 			"driver":           "gcsfuse.csi.storage.gke.io",
