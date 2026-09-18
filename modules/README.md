@@ -82,10 +82,13 @@ Modules that are still in development and less stable are labeled with the
 * **[artifact-registry]** ![community-badge] ![experimental-badge] : Creates and
   manages Google Cloud Artifact Registry repositories, including remote
   repositories with pull-through caching.
+* **[cloud-build]** ![community-badge] ![experimental-badge] : Executes Google
+  Cloud Build jobs.
 
 [apptainer-runtime]: ../community/modules/container/apptainer-runtime/README.md
 [apptainer-app]: ../community/modules/container/apptainer-app/README.md
 [artifact-registry]: ../community/modules/container/artifact-registry/README.md
+[cloud-build]: ../community/modules/container/cloud-build/README.md
 
 ### Database
 
