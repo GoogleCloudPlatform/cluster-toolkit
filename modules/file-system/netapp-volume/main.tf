@@ -40,7 +40,7 @@ locals {
   full_path    = split(":", google_netapp_volume.netapp_volume.mount_options[0].export_full)
   server_ip    = local.full_path[0]
   remote_mount = local.full_path[1]
-  # Large volumes will have 6 IPs
+  # Large volumes will have multiple IPs
   server_ips    = [for ip in google_netapp_volume.netapp_volume.mount_options[*].export_full : split(":", ip)[0]]
   fs_type       = "nfs"
   mount_options = var.mount_options
@@ -53,7 +53,7 @@ locals {
   mount_runner = {
     "type"        = "shell"
     "source"      = "${path.module}/scripts/mount.sh"
-    "args"        = "\"${join(",", local.server_ips)}\" \"${local.remote_mount}\" \"${var.local_mount}\" \"${local.fs_type}\" \"${local.mount_options}\""
+    "args"        = "\"${local.mount_runner_server}\" \"${local.remote_mount}\" \"${var.local_mount}\" \"${local.fs_type}\" \"${local.mount_options}\""
     "destination" = "mount${replace(var.local_mount, "/", "_")}.sh"
   }
 }
