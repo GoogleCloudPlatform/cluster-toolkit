@@ -1661,9 +1661,17 @@ under the same `deployment_name` fails on the retained ring — use a fresh
 `deployment_name`, or set the module's `key_ring_id` to the retained ring
 together with a new `key_name`. See the [kms-key] README for details.
 
+The blueprint has two deployment groups. `setup` turns on
+`cloudkms.googleapis.com` with [service-enablement] and is applied to
+completion first; `primary` builds the cluster. The split is what orders API
+enablement before key-ring creation — service-enablement publishes no outputs,
+so within a single group there would be nothing for `use` to bind to and
+Terraform would create the key ring concurrently with the API being enabled.
+
 [kms-key.yaml]: ../community/examples/kms-key.yaml
 [kms-key]: ../community/modules/security/kms-key/README.md
 [kms-key-iam]: ../community/modules/security/kms-key-iam/README.md
+[service-enablement]: ../community/modules/project/service-enablement/README.md
 
 ### [kms-key-per-service.yaml] ![community-badge] ![experimental-badge]
 
