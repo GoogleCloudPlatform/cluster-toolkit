@@ -12,7 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+output "repo_url" {
+  description = "The URL of the artifact registry repo."
+  value       = local.repo_url
+}
+
 output "registry_url" {
-  description = "The URL of the created artifact registry."
-  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.artifact_registry.repository_id}"
+  description = "The URL of the artifact registry repo. (Deprecated: Use 'repo_url' instead)"
+  # Technically, this is the repo URL, not the registry URL; preserved for backward compatibility
+  value = local.repo_url
+}
+
+output "repository_id" {
+  description = "The ID of the created artifact registry repository."
+  value       = google_artifact_registry_repository.artifact_registry.repository_id
+}
+
+output "repository_name" {
+  description = "The name (ID) of the created artifact registry repository."
+  value       = google_artifact_registry_repository.artifact_registry.repository_id
+}
+
+output "repository_resource_name" {
+  description = "The full resource name of the repository."
+  value       = google_artifact_registry_repository.artifact_registry.name
 }
