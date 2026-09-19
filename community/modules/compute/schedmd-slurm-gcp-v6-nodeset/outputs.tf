@@ -60,7 +60,7 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = (var.accelerator_topology == null || var.accelerator_topology == "") || try(tonumber(split("x", lower(trimspace(var.accelerator_topology)))[1]) % local.gpu_count == 0, false)
+    condition     = (var.accelerator_topology == null || var.accelerator_topology == "") || length(local.guest_accelerator) == 0 || try(tonumber(split("x", lower(trimspace(var.accelerator_topology)))[1]) % local.gpu_count == 0, false)
     error_message = "The second dimension (<dim2>) of accelerator_topology must be divisible by the number of GPUs per machine."
   }
 
@@ -149,5 +149,20 @@ output "nodeset" {
       var.node_count_dynamic_max > 0 && var.provisioning_engine == "MIG" && !var.dws_flex.enabled
     )
     error_message = "Dynamic compute NodeSets with provisioning_engine = 'MIG' are currently not supported. Please explicitly set node_count_dynamic_max = 0."
+  }
+
+  precondition {
+    condition     = !(startswith(var.machine_type, "ct") || startswith(var.machine_type, "tpu")) || endswith(var.machine_type, "-4t")
+    error_message = "TPU nodesets currently only support 4-chip machine types ending in '-4t' (e.g. ct6e-standard-4t, tpu7x-standard-4t, ct5p-hightpu-4t)."
+  }
+
+  precondition {
+    condition     = !(startswith(var.machine_type, "ct") || startswith(var.machine_type, "tpu")) || var.node_count_static == 0 || var.accelerator_topology != null
+    error_message = "Static TPU nodesets (node_count_static > 0) require accelerator_topology to be specified."
+  }
+
+  precondition {
+    condition     = !(startswith(var.machine_type, "ct") || startswith(var.machine_type, "tpu")) || !(var.node_count_static > 0 && var.node_count_dynamic_max > 0)
+    error_message = "TPU nodesets cannot mix static and dynamic nodes; set either node_count_static > 0 or node_count_dynamic_max > 0."
   }
 }

@@ -1,0 +1,155 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+blueprint_name: tpu7x-slurm
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: tpu7x-slurm
+  region: us-central1
+  zone: us-central1-c
+  tpu_cluster_size: 16
+  tpu_accelerator_topology: 4x4x4
+  tpu_dynamic_max_nodes: 16
+  disk_size_gb: 100
+
+  # Image settings
+  instance_image:
+    project: advanced-compute-images-dev
+    family: aci-tpu-u2404-slurm-2605-amd64
+
+  #Provisioning models (set to true or fill in reservation name, pick only one)
+  tpu_reservation_name: "" # supply reservation name
+  tpu_dws_flex_enabled: false
+  tpu_enable_spot_vm: false
+
+  # Managed Lustre is only supported in specific regions and zones
+  # Please refer https://cloud.google.com/managed-lustre/docs/locations
+
+  # Managed-Lustre instance name. This should be unique for each deployment.
+  lustre_instance_id: $(vars.deployment_name)-lustre
+
+  # The values of size_gib and per_unit_storage_throughput are co-related
+  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  # Storage capacity of the lustre instance in GiB
+  lustre_size_gib: 36000
+
+  # Maximum throughput of the lustre instance in MBps per TiB
+  per_unit_storage_throughput: 500
+
+deployment_groups:
+- group: cluster-env
+  modules:
+  - id: slurm-network
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-1
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.64.0/18
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [slurm-network]
+
+  - id: homefs
+    source: modules/file-system/managed-lustre
+    use:
+    - slurm-network
+    - private_service_access
+    settings:
+      size_gib: $(vars.lustre_size_gib)
+      name: $(vars.lustre_instance_id)
+      local_mount: /home
+      remote_mount: lustrefs
+      per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
+
+- group: cluster
+  modules:
+  - id: tpu_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [slurm-network]
+    settings:
+      machine_type: tpu7x-standard-4t
+      accelerator_topology: $(vars.tpu_accelerator_topology)
+      enable_public_ips: true
+      node_count_static: $(vars.tpu_cluster_size)
+      node_count_dynamic_max: 0
+      disk_type: hyperdisk-balanced
+      reservation_name: $(vars.tpu_reservation_name)
+      enable_spot_vm: $(vars.tpu_enable_spot_vm)
+      dws_flex:
+        enabled: $(vars.tpu_dws_flex_enabled)
+
+  - id: tpu_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [tpu_nodeset]
+    settings:
+      partition_name: tpu
+      resume_timeout: 1200
+      suspend_timeout: 600
+      exclusive: false
+      is_default: true
+
+  - id: tpu_dyn_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [slurm-network]
+    settings:
+      machine_type: tpu7x-standard-4t
+      enable_public_ips: true
+      node_count_static: 0
+      node_count_dynamic_max: $(vars.tpu_dynamic_max_nodes)
+      disk_type: hyperdisk-balanced
+      reservation_name: $(vars.tpu_reservation_name)
+      enable_spot_vm: $(vars.tpu_enable_spot_vm)
+      dws_flex:
+        enabled: $(vars.tpu_dws_flex_enabled)
+
+  - id: tpu_dyn_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [tpu_dyn_nodeset]
+    settings:
+      partition_name: tpu-dyn
+      resume_timeout: 1200
+      suspend_timeout: 600
+      exclusive: true
+      is_default: false
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [slurm-network]
+    settings:
+      machine_type: n2-standard-4
+      enable_login_public_ips: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - tpu_partition
+    - tpu_dyn_partition
+    - slurm_login
+    - slurm-network
+    - homefs
+    settings:
+      machine_type: n2-standard-4
+      enable_controller_public_ips: true

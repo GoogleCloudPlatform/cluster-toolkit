@@ -66,6 +66,7 @@ class ResumeJobData:
     job_id: int
     partition: str
     nodes_alloc: List[str]
+    accelerator_topology: Optional[str] = None
 
 @dataclass(frozen=True)
 class ResumeData:
@@ -86,6 +87,7 @@ def get_resume_file_data() -> Optional[ResumeData]:
             job_id = jo.get("job_id"),
             partition = jo.get("partition"),
             nodes_alloc = util.to_hostnames(jo.get("nodes_alloc")),
+            accelerator_topology = jo["layout"].split("=")[-1] if jo.get("layout") else None,
         )
         jobs.append(job)
     return ResumeData(jobs=jobs)
@@ -278,7 +280,12 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
         
         model = nodes[0]
         
-        if lkp.is_flex_node(model):
+        if lkp.is_tpu_node(model) and lkp.is_static_node(model):
+            ns = lkp.node_nodeset(model)
+            chunk_size = lkp.get_tpu_chunk_size(ns)
+            chunks_dict = lkp.group_tpu_nodes_by_chunk_idx(nodes, chunk_size)
+            return [chunks_dict[idx] for idx in sorted(chunks_dict.keys())]
+        elif lkp.is_flex_node(model):
             chunk_size = ZONAL_MIG_SIZE_LIMIT
         elif lkp.is_node_mig(model):
             # Static MIG nodes handle multi-MIG routing and 1000-node createInstances
@@ -557,13 +564,15 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             "node bulk groups: \n{}".format(yaml.safe_dump(grouped_nodelists).rstrip())
         )
 
-    tpu_chunks, flex_chunks, mig_chunks = [], [], []
+    tpu_chunks, gce_tpu_chunks, flex_chunks, mig_chunks = [], [], [], []
     bi_inserts = {}
 
     for group, chunk in grouped_nodes.items():
         model = chunk.nodes[0]
 
-        if lkp.node_is_tpu(model):
+        if lkp.is_tpu_node(model):
+            gce_tpu_chunks.append(chunk)
+        elif lkp.node_is_tpu(model):
             tpu_chunks.append(chunk.nodes)
         elif lkp.is_flex_node(model):
             flex_chunks.append(chunk)
@@ -573,6 +582,37 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             bi_inserts[group] = create_instances_request(
                 chunk.nodes, chunk.placement_group, chunk.excl_job_id, chunk.is_job_request
             )
+
+    for chunk in gce_tpu_chunks:
+        try:
+            job_topo = None
+            if resume_data and chunk.excl_job_id is not None:
+                for job in resume_data.jobs:
+                    if job.job_id == chunk.excl_job_id and job.accelerator_topology:
+                        job_topo = job.accelerator_topology
+                        break
+            mig_flex.resume_tpu_chunk(chunk.nodes, chunk.excl_job_id, lkp, topology=job_topo)
+        except Exception as tpu_exc:
+            err_msg = str(tpu_exc)
+            action, admin_comment = error_handler.classify_gcp_error("TPU_RESUME_ERROR", err_msg)
+            # Notify and set admincomment FIRST while the job is still alive in CF (before state=down kills srun)
+            if chunk.excl_job_id is not None:
+                run(f"{lkp.scontrol} update jobid={chunk.excl_job_id} admincomment={shlex.quote(admin_comment)}", check=False)
+                run(f"{lkp.scontrol} notify {chunk.excl_job_id} {shlex.quote(admin_comment)}", check=False)
+                time.sleep(1.0)
+            # Return dynamic TPU nodes to power_down (idle~). Pass resume_data=None since admincomment/notify
+            # were already sent above while the job was alive in CF, avoiding "Job has already finished" errors on srun.
+            is_invalid = "INVALID_FIELD_VALUE" in err_msg
+            handle_resume_failure(
+                chunk.nodes,
+                f"GCP TPU Error: {err_msg}",
+                None,
+                error_handler.Action.REQUEUE,
+                admin_comment,
+            )
+            if chunk.excl_job_id is not None and is_invalid:
+                scancel_bin = str(Path(lkp.scontrol).with_name("scancel"))
+                run(f"{scancel_bin} {chunk.excl_job_id}", check=False)
 
     for chunk in flex_chunks:
         try:
@@ -897,8 +937,9 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
 
     # Static MIG NodeSets already have their Workload Policies provisioned by Terraform
     # and bound to each slice MIG. Skip runtime GCE placement policy allocation.
+    # GCE TPU nodesets get their workload policy from mig_flex at resume time, so skip them too.
     # (Note: DWS Flex NodeSets must continue to runtime placement policy allocation).
-    if lkp.node_is_tpu(model) or (lkp.is_node_mig(model) and not lkp.is_flex_node(model)):
+    if lkp.is_tpu_node(model) or lkp.node_is_tpu(model) or (lkp.is_node_mig(model) and not lkp.is_flex_node(model)):
         return no_pp
 
     topo = nodeset.get("accelerator_topology") if isinstance(nodeset, dict) else getattr(nodeset, "accelerator_topology", None)
@@ -908,6 +949,7 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
     
     if excl_job_placement and len(nodes) < 2:
         return no_pp # don't create placement_policy for just one node
+
     if not (nodeset.enable_placement and valid_placement_node(model)):
         return no_pp
     

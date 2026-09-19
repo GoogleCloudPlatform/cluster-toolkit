@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
 from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Union, Set
 import argparse
 import base64
@@ -1627,6 +1628,12 @@ class ReservationDetails:
         return self.reservation_mode == "CALENDAR"
 
 @dataclass(frozen=True)
+class TpuInfo:
+    """Represents information about a TPU generation and chip count per node."""
+    type: str
+    tpus_per_node: int
+
+@dataclass(frozen=True)
 class FutureReservation:
     project: str
     zone: str
@@ -2455,8 +2462,149 @@ class Lookup:
                 mount_options="defaults,hard,intr,_netdev",
             )
 
+    def is_tpu_nodeset(self, nodeset_name: str) -> bool:
+        """Checks if the nodeset uses a TPU machine type."""
+        try:
+            nodeset = self.cfg.nodeset.get(nodeset_name)
+            if not nodeset or not isinstance(getattr(nodeset, "instance_template", None), str):
+                return False
+            template = self.template_info(nodeset.instance_template)
+            family = template.machine_type.family.lower()
+            return family.startswith("ct") or family.startswith("tpu")
+        except Exception:
+            log.exception("Failed to check if nodeset uses TPU")
+            return False
+
+    def is_tpu_partition(self, partition: NSDict) -> bool:
+        """Checks if the partition contains a nodeset with a TPU machine type."""
+        return any(self.is_tpu_nodeset(ns) for ns in partition.partition_nodeset)
+
+    def is_tpu_node(self, nodename: str) -> bool:
+        """Checks if the node machine type uses a TPU machine type."""
+        return self.is_tpu_nodeset(self.node_nodeset_name(nodename))
+
+    def has_tpu_nodesets(self) -> bool:
+        """Checks if any nodeset uses a TPU machine type."""
+        return any(
+            self.is_tpu_nodeset(n.nodeset_name)
+            for n in self.cfg.nodeset.values()
+        )
+
+    def is_tpu_static_nodeset(self, nodeset_name: str) -> bool:
+        if not self.is_tpu_nodeset(nodeset_name):
+            return False
+        nodeset = self.cfg.nodeset.get(nodeset_name)
+        return bool(nodeset and self.static_dynamic_sizes(nodeset)[0] > 0)
+
+    def is_tpu_static_partition(self, partition: NSDict) -> bool:
+        return bool(partition.partition_nodeset) and all(
+            self.is_tpu_static_nodeset(ns) for ns in partition.partition_nodeset
+        )
+
+    def is_tpu_dynamic_nodeset(self, nodeset_name: str) -> bool:
+        """Checks if the nodeset is a dynamic TPU nodeset."""
+        if not self.is_tpu_nodeset(nodeset_name):
+            return False
+        nodeset = self.cfg.nodeset.get(nodeset_name)
+        return bool(nodeset and self.static_dynamic_sizes(nodeset)[1] > 0)
+
+    def is_tpu_dynamic_partition(self, partition: NSDict) -> bool:
+        """Checks if the partition is a dynamic TPU partition (all dynamic nodesets)."""
+        return bool(partition.partition_nodeset) and all(
+            self.is_tpu_dynamic_nodeset(ns) for ns in partition.partition_nodeset
+        )
+
+    def node_tpu_info(self, nodeset: NSDict) -> Optional[TpuInfo]:
+        """
+        Returns TPU mapping from instance template machine family to TPU
+        generation and tpus per chip.
+        """
+        if not self.is_tpu_nodeset(nodeset.nodeset_name):
+            return None
+        machine_type = self.template_info(nodeset.instance_template).machine_type
+        family = machine_type.family.lower()
+        name = machine_type.name.lower()
+        # Initial support is limited to TPU *-4t machine types
+        if not name.endswith("-4t"):
+            raise ValueError(
+                f"Unsupported TPU machine type family: {name}"
+            )
+        if family.startswith(("ct5l", "ct5lp")):
+            return TpuInfo(
+                type="v5e",
+                tpus_per_node=4,
+            )
+        elif family.startswith("ct5p"):
+            return TpuInfo(
+                type="v5p",
+                tpus_per_node=4,
+            )
+        elif family.startswith("ct6e"):
+            return TpuInfo(
+                type="v6e",
+                tpus_per_node=4,
+            )
+        elif family.startswith("tpu7x"):
+            return TpuInfo(
+                type="tpu7x",
+                tpus_per_node=4,
+            )
+        elif family.startswith("tpu7"):
+            return TpuInfo(
+                type="7",
+                tpus_per_node=4,
+            )
+        else:
+            raise ValueError(
+                f"Unsupported TPU machine type family: {family}"
+            )
+
+    def get_tpu_chunk_size(self, ns: NSDict) -> int:
+        """Calculates chunk size (number of nodes per block) for a TPU nodeset."""
+        tpu_info = self.node_tpu_info(ns)
+        chips_per_slice = (
+            math.prod(int(p) for p in ns.accelerator_topology.lower().split("x"))
+            if getattr(ns, "accelerator_topology", None)
+            else 1
+        )
+        return max(1, chips_per_slice // (tpu_info.tpus_per_node if tpu_info else 1))
+
+    def group_tpu_nodes_by_chunk_idx(
+        self, nodes: Iterable[str], chunk_size: int
+    ) -> Dict[int, List[str]]:
+        """Groups TPU nodes safely into chunk dictionaries based on node index."""
+        chunks_dict = defaultdict(list)
+        for node in nodes:
+            try:
+                chunk_idx = self.node_index(node) // chunk_size
+                chunks_dict[chunk_idx].append(node)
+            except Exception:
+                log.warning(f"Could not parse node index for {node}. Skipping.")
+        return chunks_dict
+
+    def remove_device_constrain_nodeset(self, nodeset_name: str) -> bool:
+        """Checks if the nodeset uses a machine type requiring device constrain removal."""
+        try:
+            nodeset = self.cfg.nodeset.get(nodeset_name)
+            if not nodeset or not isinstance(getattr(nodeset, "instance_template", None), str):
+                return False
+            template = self.template_info(nodeset.instance_template)
+            return template.machine_type.family.lower().startswith(("tpu7x", "ct5p"))
+        except Exception:
+            log.exception("Failed to check if nodeset requires device constrain removal")
+            return False
+
+    def remove_device_constrain(self) -> bool:
+        """Checks if any nodeset requires device constrain removal."""
+        return any(
+            self.remove_device_constrain_nodeset(n.nodeset_name)
+            for n in self.cfg.nodeset.values()
+        )
+
     def is_flex_node(self, node: str) -> bool:
         try:
+            if self.is_tpu_node(node):
+                return False
             nodeset = self.node_nodeset(node)
             if nodeset.dws_flex.use_bulk_insert:
                 return False #For legacy flex support

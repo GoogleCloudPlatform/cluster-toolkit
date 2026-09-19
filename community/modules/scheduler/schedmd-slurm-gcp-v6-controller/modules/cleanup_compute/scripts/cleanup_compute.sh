@@ -94,10 +94,19 @@ while true; do
 done
 
 echo "Deleting resource policies"
-policies_filter="name:${cluster_name}-slurmgcp-managed-${nodeset_name}-*"
+policies_filter="name:${cluster_name}-slurmgcp-managed-${nodeset_name}-* OR name:${cluster_name}-slurmgcp-${nodeset_name}-wp-*"
 gcloud compute resource-policies list --format="value(selfLink)" --filter="${policies_filter}" | while read -r line; do
 	echo "Deleting resource policy: $line"
 	gcloud compute resource-policies delete --quiet "${line}" || {
 		echo "Failed to delete resource policy: $line"
+	}
+done
+
+echo "Deleting copied instance templates"
+templates_filter="labels.slurm_cluster_name=${cluster_name} AND labels.slurm_nodeset=${nodeset_name} AND labels.slurm_template_role=copy"
+gcloud compute instance-templates list --format="value(selfLink)" --filter="${templates_filter}" | while read -r line; do
+	echo "Deleting instance template: $line"
+	gcloud compute instance-templates delete --quiet "${line}" || {
+		echo "Failed to delete instance template: $line"
 	}
 done

@@ -92,6 +92,12 @@ class NodeActionPowerDownForce():
         log.info(f"{len(nodes)} instances to power down ({hostlist})")
         run(f"{lookup().scontrol} update nodename={hostlist} state=power_down_force")
 
+@dataclass(frozen=True)
+class NodeActionDeleteMIG():
+    def apply(self, nodes: List[str]) -> None:
+        hostlist = util.to_hostlist(nodes)
+        log.info(f"{len(nodes)} mig-managed instances to delete ({hostlist})")
+        suspend_nodes(nodes)
 
 @dataclass(frozen=True)
 class NodeActionDelete():
@@ -363,11 +369,19 @@ def get_node_action(nodename: str) -> NodeAction:
         if age < threshold:
             log.info(f"{nodename} not marked as orphan, it started less than {threshold.seconds}s ago ({age.seconds}s)")
             return NodeActionUnchanged()
+        if lkp.is_flex_node(nodename) or lkp.is_tpu_node(nodename):
+            return NodeActionDeleteMIG()
         return NodeActionDelete()
+    elif (
+        (state is None or "POWERED_DOWN" in state.flags)
+        and inst.status == "TERMINATED"
+        and lkp.is_tpu_node(nodename)
+    ):
+        return NodeActionDeleteMIG()
     elif state is None:
         # if state is None here, the instance exists but it's not in Slurm
         return NodeActionUnknown(slurm_state=state, instance_state=inst.status)
-    elif lkp.is_flex_node(nodename) and "POWERING_UP" in state.flags:
+    elif (lkp.is_flex_node(nodename) or lkp.is_tpu_node(nodename)) and "POWERING_UP" in state.flags:
         threshold = timedelta(seconds=int(lkp.cfg.compute_startup_scripts_timeout) * 2) #extra buffer for unexpectedly long startup scripts
         if util.now() - inst.creation_timestamp > threshold:
             log.info(f"{nodename} was unable to join the cluster after {threshold.seconds}s, potential failure on VM startup. Powering down...")
@@ -405,7 +419,7 @@ def _get_resource_policies_in_region(lkp: util.Lookup, region: str) -> list[Any]
     res = []
     act = lkp.compute.resourcePolicies()
     op = act.list(project=lkp.project, region=region)
-    prefix = f"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-"
+    prefix = f"{lkp.cfg.slurm_cluster_name}-slurmgcp-"
     while op is not None:
         result = ensure_execute(op)
         res.extend([p for p in result.get("items", []) if p.get("name", "").startswith(prefix)])
@@ -445,10 +459,19 @@ def sync_placement_groups():
     pg_regex = re.compile(
         rf"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-(?P<ns>[^\s\-]+)-(?P<job_id>\d+)-(?P<index>\d+)"
     )
-    
+    tpu_wp_regex = re.compile(
+        rf"{lkp.cfg.slurm_cluster_name}-slurmgcp-(?P<ns>.+?)-wp-\d+(?:-\d+)*$"
+    )
+
     for pg in _get_resource_policies(lkp):
         name = pg["name"]
-    
+
+        if mtch := tpu_wp_regex.match(name):
+            ns_name = mtch.group("ns")
+            if ns_name not in lkp.cfg.nodeset:
+                log.info(f"Nodeset {ns_name} is not found, deleting its TPU workload policy {name}")
+                to_delete.append(pg["selfLink"])
+            continue
         if (mtch := pg_regex.match(name)) is None:
             log.warning(f"Unexpected resource policy {name=}")
             continue

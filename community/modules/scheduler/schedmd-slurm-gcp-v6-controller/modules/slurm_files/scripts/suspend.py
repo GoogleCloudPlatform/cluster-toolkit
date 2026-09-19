@@ -215,7 +215,14 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
 def suspend_nodes(nodes: List[str]) -> None:
     lkp = lookup()
     other_nodes, tpu_nodes = util.separate(lkp.node_is_tpu, nodes)
+    other_nodes, gce_tpu_nodes = util.separate(lkp.is_tpu_node, other_nodes)
     bulk_nodes, flex_nodes = util.separate(lkp.is_flex_node, other_nodes)
+
+    if gce_tpu_nodes:
+        try:
+            mig_flex.suspend_tpu_nodes(gce_tpu_nodes, lkp)
+        except Exception:
+            log.exception(f"Failed to suspend GCE TPU nodes {gce_tpu_nodes}")
 
     if flex_nodes:
         try:

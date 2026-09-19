@@ -1,0 +1,235 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+tags:
+- m.custom-image
+- m.filestore
+- m.schedmd-slurm-gcp-v6-controller
+- m.schedmd-slurm-gcp-v6-login
+- m.schedmd-slurm-gcp-v6-nodeset
+- m.schedmd-slurm-gcp-v6-partition
+- m.startup-script
+- m.vpc
+- slurm6
+- tpu
+
+substitutions:
+  _PROVISIONING_MODEL: ""
+  _TEST_PREFIX: ""
+
+timeout: 86400s
+queueTtl: 86400s
+logsBucket: "gs://$PROJECT_NUMBER.cloudbuild-logs.googleusercontent.com"
+steps:
+# 1. Build and push workspace container containing the current code layer
+- id: build-workspace-image
+  name: gcr.io/cloud-builders/docker
+  entrypoint: /bin/bash
+  env:
+  - 'PROJECT_ID=$PROJECT_ID'
+  - 'BUILD_ID=$BUILD_ID'
+  args:
+  - tools/cloud-build/image_build_push.sh
+
+# 2. Generate Kueue Job Manifest
+- id: generate-job-manifest
+  name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  secretEnv: ['SA_EMAIL', 'GCLUSTER_GCS_PATH', 'CHS_REPO', 'TRIAGE_GCS_BUCKET', 'TRIAGE_PROJECT_NUMBER', 'TRIAGE_INVOKER_SA', 'TRIAGE_CLOUD_RUN_URL']
+  args:
+  - -c
+  - |
+    set -eo pipefail
+    BUILD_ID_SHORT=$$(echo "$BUILD_ID" | cut -c1-6)
+    OPTIONS_BUCKET="hpc-ctk1357"
+
+    if [ "${_TEST_PREFIX}" == "hotfix-" ]; then
+      PRIORITY_LINE="priorityClassName: emergency-hotfix-priority"
+    else
+      PRIORITY_LINE=""
+    fi
+
+    SA_UNIQUE_ID=$$(gcloud iam service-accounts describe "$$SA_EMAIL" --project="$PROJECT_ID" --format="value(uniqueId)")
+    OSLOGIN_USER="sa_$${SA_UNIQUE_ID}"
+
+    cat <<EOF > job.yaml
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: ml-tpu7x-onspot-slurm-$$BUILD_ID_SHORT
+      namespace: default
+      labels:
+        kueue.x-k8s.io/queue-name: local-queue-test-locks
+        build-id: "$BUILD_ID"
+    spec:
+      suspend: true
+      backoffLimit: 0
+      activeDeadlineSeconds: 14400
+      template:
+        metadata:
+          annotations:
+            cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+        spec:
+          $$PRIORITY_LINE
+          terminationGracePeriodSeconds: 1800
+          serviceAccountName: test-kueue-cluster-runner-ksa
+          restartPolicy: Never
+          containers:
+          - name: runner
+            image: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
+            env:
+            - name: ANSIBLE_HOST_KEY_CHECKING
+              value: "false"
+            - name: ANSIBLE_CONFIG
+              value: "/workspace/tools/cloud-build/ansible.cfg"
+            - name: PROJECT_ID
+              value: "$PROJECT_ID"
+            - name: NUM_NODES
+              value: "1"
+            - name: MACHINE_TYPE
+              value: "tpu7x-standard-4t"
+            - name: INSTANCE_PREFIX
+              value: "t7xsp"
+            - name: BUILD_ID
+              value: "$BUILD_ID"
+            - name: OPTIONS_BUCKET
+              value: "$$OPTIONS_BUCKET"
+            - name: OPTIONS_GCS_PATH
+              value: "gs://$${OPTIONS_BUCKET}/tpu7xoptions.txt"
+            - name: ENABLE_SPOT_FALLBACK
+              value: "true"
+            - name: _TEST_PREFIX
+              value: "${_TEST_PREFIX}"
+            - name: PROVISIONING_MODEL
+              value: "$_PROVISIONING_MODEL"
+            - name: GCLUSTER_GCS_PATH
+              value: "$$GCLUSTER_GCS_PATH"
+            - name: TRIAGE_GCS_BUCKET
+              value: "$$TRIAGE_GCS_BUCKET"
+            - name: TRIAGE_PROJECT_NUMBER
+              value: "$$TRIAGE_PROJECT_NUMBER"
+            - name: TRIAGE_INVOKER_SA
+              value: "$$TRIAGE_INVOKER_SA"
+            - name: TRIAGE_CLOUD_RUN_URL
+              value: "$$TRIAGE_CLOUD_RUN_URL"
+            - name: CHS_REPO
+              value: "$$CHS_REPO"
+            command: ["/bin/bash", "-c"]
+            args:
+            - |
+              set -e -u -o pipefail
+              echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/ml-tpu7x-onspot-slurm.yaml"
+
+              DEPLOYMENT_NAME="tpu7x-slurm-$$BUILD_ID_SHORT"
+
+              echo "Checking for and clearing leaked Terraform state locks..."
+              gcloud storage rm -q -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+
+              RUN_CLEANUP=true
+              source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
+              trap cleanup_pod EXIT SIGTERM SIGINT
+
+              set -x
+              cd /workspace
+              bash tools/get_binary.sh "${_TEST_PREFIX}"
+
+              REGION="us-central1"
+              ZONE="us-central1-c"
+              BLUEPRINT="/workspace/examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-packer-blueprint.yaml"
+
+              sed -i 's/tpu_cluster_size: 8/tpu_cluster_size: 1/' \$$BLUEPRINT
+              sed -i 's/tpu_dynamic_max_nodes: 4/tpu_dynamic_max_nodes: 1/' \$$BLUEPRINT
+              sed -i 's/tpu_accelerator_topology: 2x4x4/tpu_accelerator_topology: 2x2x1/' \$$BLUEPRINT
+              sed -i "s/built_image_family: slurm-tpu-v7x-ubuntu2404/built_image_family: slurm-tpu-v7x-$$BUILD_ID_SHORT/" \$$BLUEPRINT
+
+              ENABLE_SPOT="true"
+              SLURM_VARS_FILE="tools/cloud-build/daily-tests/tests/ml-tpu7x-onspot-slurm.yml"
+
+              if [[ "\$${PROVISIONING_MODEL:-}" == "STANDARD" ]]; then
+                ENABLE_SPOT="false"
+                sed -i 's/tpu_enable_spot_vm: true/tpu_enable_spot_vm: false/' \$$BLUEPRINT
+                sed -i '/instance_labels:/,+1d' "\$$SLURM_VARS_FILE"
+                sed -i '/enable_spot: true/d' "\$$SLURM_VARS_FILE"
+                sed -i '/tpu_enable_spot_vm: true/d' "\$$SLURM_VARS_FILE"
+              else
+                echo "INFO: Using \$$SLURM_VARS_FILE as it is for SPOT provisioning."
+                sed -i 's/tpu_enable_spot_vm: false/tpu_enable_spot_vm: true/' \$$BLUEPRINT
+              fi
+
+              bash tools/add_ttl_label.sh \$$BLUEPRINT
+
+              ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+                --user="$$OSLOGIN_USER" \
+                --extra-vars="project=\$$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID chs_repo=\$$CHS_REPO" \
+                --extra-vars="region=\$$REGION zone=\$$ZONE" \
+                --extra-vars="enable_spot=\$$ENABLE_SPOT" \
+                --extra-vars="@\$$SLURM_VARS_FILE" \
+                --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
+                --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
+                --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
+                --extra-vars="triage_cloud_run_url_override=$$TRIAGE_CLOUD_RUN_URL" &
+              ANSIBLE_PID=\$$!
+
+              wait \$$ANSIBLE_PID
+              RUN_CLEANUP=false
+            resources:
+              requests:
+                cpu: 200m
+                memory: "2Gi"
+                test-locks/tpu7x-standard: 1
+                test-locks/ml-tpu7x-onspot-slurm: 1
+              limits:
+                cpu: 1
+                memory: "2Gi"
+                test-locks/tpu7x-standard: 1
+                test-locks/ml-tpu7x-onspot-slurm: 1
+    EOF
+
+# 3. Submit and Monitor GKE Kueue Job with Retry
+- id: submit-and-monitor-gke-job
+  name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  args:
+  - tools/cloud-build/submit_and_monitor_kueue_job.sh
+  - ml-tpu7x-onspot-slurm
+  - $BUILD_ID
+
+# 4. Cleanup the built image from Registry to save costs
+- id: cleanup-image
+  name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  allowFailure: true
+  env:
+  - 'PROJECT_ID=$PROJECT_ID'
+  - 'BUILD_ID=$BUILD_ID'
+  args:
+  - tools/cloud-build/image_cleanup.sh
+
+availableSecrets:
+  secretManager:
+  - versionName: projects/${PROJECT_ID}/secrets/sa-email/versions/latest
+    env: 'SA_EMAIL'
+  - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
+    env: 'GCLUSTER_GCS_PATH'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-gcs-bucket/versions/latest
+    env: 'TRIAGE_GCS_BUCKET'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-project-number/versions/latest
+    env: 'TRIAGE_PROJECT_NUMBER'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-invoker-sa/versions/latest
+    env: 'TRIAGE_INVOKER_SA'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-cloud-run-url/versions/latest
+    env: 'TRIAGE_CLOUD_RUN_URL'
+  - versionName: projects/${PROJECT_ID}/secrets/cluster-health-scanner/versions/latest
+    env: 'CHS_REPO'
