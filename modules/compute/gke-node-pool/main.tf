@@ -343,6 +343,10 @@ resource "google_container_node_pool" "node_pool" {
       # Ignore local/ephemeral ssd configs as they are tied to machine types.
       node_config[0].ephemeral_storage_local_ssd_config,
       node_config[0].local_nvme_ssd_block_config,
+      # Suppress GKE API read drift where type="COMPACT" is omitted on GET
+      placement_policy[0].type,
+      # Decouple from GKE background auto-upgrades and out-of-band gcloud upgrades
+      version,
     ]
     precondition {
       condition     = !(length(compact(local.input_reservation_suffixes)) > 0 && length((var.zones != null ? var.zones : [])) == 0)
