@@ -25,6 +25,7 @@ module "kubectl_apply" {
   project_id = var.project_id
 
   apply_manifests = [{
+    name   = "nodeset-${substr("${var.slurm_cluster_name}-${var.nodeset_name}", 0, 36)}"
     source = local.manifest_path,
     template_vars = {
       slurm_namespace = var.slurm_namespace,

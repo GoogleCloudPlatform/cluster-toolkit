@@ -231,7 +231,8 @@ deployment_groups:
     use: [gke_cluster]
     settings:
       apply_manifests:
-      - source: $(ghpc_stage("../modules/management/kubectl-apply/manifests/checkpoint-configuration.yaml.tftpl"))
+      - name: checkpoint-configuration
+        source: $(ghpc_stage("../modules/management/kubectl-apply/manifests/checkpoint-configuration.yaml.tftpl"))
         template_vars:
           namespace: "default"
           inMemoryVolumeSize: "50Gi"

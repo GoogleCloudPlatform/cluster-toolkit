@@ -180,7 +180,8 @@ deployment_groups:
       jobset:
         install: true
       apply_manifests:
-      - source: "https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.8.2/deploy/v2beta1/mpi-operator.yaml"
+      - name: mpi-operator
+        source: "https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.8.2/deploy/v2beta1/mpi-operator.yaml"
 
   # Filestore
   - id: filestore
