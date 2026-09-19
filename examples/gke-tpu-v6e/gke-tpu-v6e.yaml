@@ -43,8 +43,16 @@ vars:
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
 
-  # The name of the compute engine reservation of TPU v6e nodes
-  reservation:
+  # Consumption model variables
+  spot: false
+  reservation_affinity: {consume_reservation_type: "NO_RESERVATION", specific_reservations: []}
+  enable_flex_start: false
+  auto_repair: true
+  enable_queued_provisioning: false
+  autoscaling_min_node_count: $(null)
+  autoscaling_max_node_count: $(null)
+  autoscaling_total_min_nodes: 0
+  kueue_configuration_path: $(null)
 
   system_node_pool_disk_size_gb: 200
   v6e_node_pool_disk_size_gb: 100
@@ -152,10 +160,14 @@ deployment_groups:
       enable_dranet: true
       zones: [$(vars.zone)]
       disk_size_gb: $(vars.v6e_node_pool_disk_size_gb)
-      reservation_affinity:
-        consume_reservation_type: SPECIFIC_RESERVATION
-        specific_reservations:
-        - name: $(vars.reservation)
+      spot: $(vars.spot)
+      reservation_affinity: $(vars.reservation_affinity)
+      enable_flex_start: $(vars.enable_flex_start)
+      auto_repair: "$((vars.enable_flex_start) ? false : vars.auto_repair)"
+      enable_queued_provisioning: $(vars.enable_queued_provisioning)
+      autoscaling_min_node_count: $(vars.autoscaling_min_node_count)
+      autoscaling_max_node_count: $(vars.autoscaling_max_node_count)
+      autoscaling_total_min_nodes: $(vars.autoscaling_total_min_nodes)
       placement_policy:
         type: COMPACT
         tpu_topology: $(vars.tpu_topology)
@@ -167,11 +179,11 @@ deployment_groups:
     settings:
       kueue:
         install: true
-        ## Custom kueue config path
-        # config_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+        config_path: $(vars.kueue_configuration_path)
         config_template_vars:
-          tpu_quota: $(vars.num_slices * gke-tpu-v6e-pool.node_count_static * gke-tpu-v6e-pool.tpu_chips_per_node)
+          tpu_quota: '$(vars.num_slices * (vars.enable_flex_start ? vars.autoscaling_max_node_count : gke-tpu-v6e-pool.node_count_static) * gke-tpu-v6e-pool.tpu_chips_per_node)'
           accelerator_type: $(vars.accelerator_type)
+          tpu_topology: $(vars.tpu_topology)
           namespace: $(vars.user_namespace)
       jobset:
         install: true

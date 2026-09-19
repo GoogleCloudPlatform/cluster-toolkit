@@ -48,8 +48,37 @@ vars:
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
 
-  # The name of the compute engine reservation of TPU v6e nodes
-  reservation:
-
   # The namespace to be configured for running workloads
   user_namespace: default
+
+## Choose ONE consumption model from the options below (default is Specific Reservation):
+
+## --- Option 1: Specific Reservation ---
+## See for more information: https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/compute/gke-node-pool#using-gce-reservations
+  reservation_affinity:
+    consume_reservation_type: SPECIFIC_RESERVATION
+    specific_reservations:
+    - name:
+
+## --- Option 2: DWS Flex Start ---
+  # For TPUs, max node count should be num of chips based on topology divided by
+  # num chips for the machine type (e.g. 4 for ct6e-standard-4t).
+  # Reference: https://cloud.google.com/tpu/docs/v6e
+  #enable_flex_start: true
+  #autoscaling_min_node_count: 0
+  #autoscaling_max_node_count: 4
+
+## --- Option 3: DWS Flex Start + Queued Provisioning ---
+  ## Change this variable if you want to have a custom kueue config file
+  #kueue_configuration_path: $(ghpc_stage("../gke-consumption-options/dws-flex-start-queued-provisioning/tpu-dws-queues.yaml.tftpl"))
+  #enable_flex_start: true
+  #enable_queued_provisioning: true
+  #autoscaling_min_node_count: 0
+  #autoscaling_max_node_count: 4
+
+## --- Option 4: Spot ---
+  #spot: true
+
+## --- Option 5: On-Demand ---
+  #reservation_affinity:
+  #  consume_reservation_type: NO_RESERVATION
