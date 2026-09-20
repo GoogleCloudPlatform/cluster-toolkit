@@ -75,13 +75,7 @@ This section guides you through the cluster creation process, ensuring that your
 
     To modify advanced settings, edit `examples/gke-tpu-v6e/gke-tpu-v6e.yaml`.
 
-1. Choose a consumption model. The deployment file lists five mutually exclusive options; Option 1 (Specific Reservation) is active by default. To use a different one, comment out Option 1 and uncomment the option you want:
-
-   * **Option 1 - Specific Reservation:** consume capacity from a named Compute Engine reservation.
-   * **Option 2 - DWS Flex Start:** request capacity through Dynamic Workload Scheduler. Set `autoscaling_max_node_count` to the node count implied by your topology.
-   * **Option 3 - DWS Flex Start + Queued Provisioning:** as above, with jobs queued through Kueue. Also uncomment `kueue_configuration_path`.
-   * **Option 4 - Spot:** consume pre-emptible Spot capacity.
-   * **Option 5 - On-Demand:** consume standard on-demand capacity.
+    > **Note:** Queued provisioning (Option 3) is only supported on multi-host TPU slices. For more information, see [About flex-start provisioning mode](https://cloud.google.com/kubernetes-engine/docs/concepts/dws).
 
 1. Generate [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp) to provide access to Terraform.
 
