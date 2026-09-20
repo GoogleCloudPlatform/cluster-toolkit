@@ -71,6 +71,7 @@ vars:
   #autoscaling_max_node_count: 1
 
 ## --- Option 3: DWS Flex Start + Queued Provisioning ---
+  # Requires a multi-host TPU slice
   ## Change this variable if you want to have a custom kueue config file
   #kueue_configuration_path: $(ghpc_stage("../dws-sample-workloads/tpu-dws-queues.yaml.tftpl"))
   #enable_flex_start: true
@@ -82,5 +83,4 @@ vars:
   #spot: true
 
 ## --- Option 5: On-Demand ---
-  #reservation_affinity:
-  #  consume_reservation_type: NO_RESERVATION
+  # No variables needed; comment out Option 1 and leave the rest commented.
