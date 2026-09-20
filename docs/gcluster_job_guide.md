@@ -177,11 +177,11 @@ Mounts must use the format: `--mount "<src>;<dest>[;<mode>][;profile=<profile>][
 * `mode` is optional and defaults to `ro` (read-only). To allow writes, append `;rw`.
 * `options` is optional and allows passing custom mount options (currently only supported for GCS fuse volumes).
 * `profile` is optional, GCS-only, and selects a [GKE Cloud Storage FUSE storage profile](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles) (see below).
-* `attributes` is optional, GCS-only, and sets CSI `volumeAttributes` on the volume. It works with or without `profile=`:
-  * **without `profile=`** the attributes are set directly on the inline CSI volume (for example `fileCacheCapacity`, `gcsfuseLoggingSeverity`, `skipCSIBucketAccessCheck`).
-  * **with `profile=`** they are set on the generated PersistentVolume, where they *override* the storage profile's StorageClass parameters (for example `anywhereCacheZones`, `bucketScanTimeout`, `fuseMemoryAllocatableFactor`).
+* `attributes` is optional, GCS-only and sets key-value pairs for CSI volume settings (`key=val,...`).
+  * **Without `profile=`**: Applies standard [GCSFuse CSI volume attributes](https://docs.cloud.google.com/kubernetes-engine/docs/reference/cloud-storage-fuse-csi-driver/volume-attr) directly to the inline mount.
+  * **With `profile=`**: Overrides default [storage profile StorageClass parameters](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#storageclass_configuration_reference) on the generated PVs.
 
-  Attributes that exist only to override a StorageClass parameter have no effect without `profile=`; `gcluster` warns about the ones it knows about rather than rejecting them, so a newly released attribute is never blocked. Use `options=` rather than `attributes=mountOptions=...` for gcsfuse mount flags - `gcluster` routes `options=` into the correct field on both paths and rejects `mountOptions` as an attribute to keep the two from silently overwriting each other.
+  NOTE: Use `options=` rather than `attributes=mountOptions=...` for gcsfuse mount flags; `gcluster` routes `options=` into the correct field on both paths and rejects `mountOptions` as an attribute to keep the two from silently overwriting each other.
 
 **Supported volume sources (`<src>`):**
 * **Cloud Storage**: `gs://<bucket-name>` (mounts via GCS Fused Driver)
