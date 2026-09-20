@@ -577,7 +577,7 @@ module "kubectl_apply" {
   apply_manifests = var.install_gpu_direct_manifests ? flatten([
     for idx, manifest in local.gpu_direct_setting.gpu_direct_manifests : [
       {
-        name   = "gpudir-${substr(local.pool_name_prefix, 0, 30)}-nic${idx}"
+        name   = length("gpudir-${local.pool_name_prefix}-nic${idx}") <= 44 ? "gpudir-${local.pool_name_prefix}-nic${idx}" : "gpudir-${substr(local.pool_name_prefix, 0, 25)}-${substr(sha1(local.pool_name_prefix), 0, 5)}-nic${idx}"
         source = manifest
       }
     ]
@@ -591,7 +591,7 @@ module "dranet_template_apply" {
 
   apply_manifests = (local.enable_dranet_actual && var.install_dranet_template) ? [
     {
-      name   = "dranet-${substr(local.pool_name_prefix, 0, 37)}"
+      name   = length(local.pool_name_prefix) <= 37 ? "dranet-${local.pool_name_prefix}" : "dranet-${substr(local.pool_name_prefix, 0, 31)}-${substr(sha1(local.pool_name_prefix), 0, 5)}"
       source = "${path.module}/resource-claim-template.yaml.tftpl"
       template_vars = {
         template_name     = local.dranet_template_name_actual

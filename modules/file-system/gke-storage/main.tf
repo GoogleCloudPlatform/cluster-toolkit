@@ -70,7 +70,7 @@ module "kubectl_apply" {
         wait_for_rollout = false
       },
       var.namespace != "default" ? [{
-        name = "ns-${substr(var.namespace, 0, 41)}"
+        name = length(var.namespace) <= 41 ? "ns-${var.namespace}" : "ns-${substr(var.namespace, 0, 35)}-${substr(sha1(var.namespace), 0, 5)}"
         content = templatefile(
           "${path.module}/persistent-volume-claim/namespace.yaml.tftpl",
           {
@@ -82,7 +82,7 @@ module "kubectl_apply" {
       flatten([
         for idx in range(var.pvc_count) : [
           {
-            name = "pvc-${substr(local.pvc_name_prefix, 0, 30)}-${idx}"
+            name = length(local.pvc_name_prefix) <= 30 ? "pvc-${local.pvc_name_prefix}-${idx}" : "pvc-${substr(local.pvc_name_prefix, 0, 24)}-${substr(sha1(local.pvc_name_prefix), 0, 5)}-${idx}"
             content = templatefile(
               "${path.module}/persistent-volume-claim/${(local.pvc_name_prefix)}.yaml.tftpl",
               {

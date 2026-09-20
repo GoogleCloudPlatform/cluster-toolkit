@@ -26,7 +26,7 @@ locals {
   apply_manifests_rdma_networks = flatten([
     for idx, network_info in local.rdma_networks : [
       {
-        name   = "netparam-${substr(var.rdma_subnetwork_name_prefix, 0, 30)}-${idx}"
+        name   = length("${var.rdma_subnetwork_name_prefix}-${idx}") <= 35 ? "netparam-${var.rdma_subnetwork_name_prefix}-${idx}" : "netparam-${substr("${var.rdma_subnetwork_name_prefix}-${idx}", 0, 29)}-${substr(sha1("${var.rdma_subnetwork_name_prefix}-${idx}"), 0, 5)}"
         source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
         template_vars = {
           name            = "${var.rdma_subnetwork_name_prefix}-${idx}",
@@ -36,7 +36,7 @@ locals {
         }
       },
       {
-        name          = "netobj-${substr(var.rdma_subnetwork_name_prefix, 0, 32)}-${idx}"
+        name          = length("${var.rdma_subnetwork_name_prefix}-${idx}") <= 37 ? "netobj-${var.rdma_subnetwork_name_prefix}-${idx}" : "netobj-${substr("${var.rdma_subnetwork_name_prefix}-${idx}", 0, 31)}-${substr(sha1("${var.rdma_subnetwork_name_prefix}-${idx}"), 0, 5)}"
         source        = "${path.module}/templates/network-object.yaml.tftpl",
         template_vars = { name = "${var.rdma_subnetwork_name_prefix}-${idx}" }
       }
@@ -46,7 +46,7 @@ locals {
   apply_manifests_non_rdma_networks = flatten([
     for idx, network_info in local.non_rdma_networks : [
       {
-        name   = "netparam-${substr(network_info.subnetwork, 0, 35)}"
+        name   = length(network_info.subnetwork) <= 35 ? "netparam-${network_info.subnetwork}" : "netparam-${substr(network_info.subnetwork, 0, 29)}-${substr(sha1(network_info.subnetwork), 0, 5)}"
         source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
         template_vars = {
           name            = network_info.subnetwork
@@ -56,7 +56,7 @@ locals {
         }
       },
       {
-        name          = "netobj-${substr(network_info.subnetwork, 0, 37)}"
+        name          = length(network_info.subnetwork) <= 37 ? "netobj-${network_info.subnetwork}" : "netobj-${substr(network_info.subnetwork, 0, 31)}-${substr(sha1(network_info.subnetwork), 0, 5)}"
         source        = "${path.module}/templates/network-object.yaml.tftpl",
         template_vars = { name = network_info.subnetwork }
       }
