@@ -56,6 +56,9 @@ vars:
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   accelerator_type: nvidia-gb200
   version_prefix: "1.35."
+  # GPU driver version to install on the GPU nodes.
+  # Defaults to "DEFAULT" for stability. Can be set to "LATEST" if your workload requires the newest driver patches.
+  gpu_driver_version: DEFAULT
   system_node_pool_disk_size_gb: 200
   a4x_node_pool_disk_size_gb: 100
   k8s_service_account_name: workload-identity-k8s-sa
@@ -245,7 +248,7 @@ deployment_groups:
       - type: nvidia-gb200
         count: 4
         gpu_driver_installation_config:
-          gpu_driver_version: LATEST
+          gpu_driver_version: $(vars.gpu_driver_version)
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:

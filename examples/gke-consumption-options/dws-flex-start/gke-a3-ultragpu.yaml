@@ -30,6 +30,10 @@ vars:
   system_node_pool_disk_size_gb: 100
   a3ultra_node_pool_disk_size_gb: 100
 
+  # GPU driver version to install on the GPU nodes.
+  # Defaults to "DEFAULT" for stability. Can be set to "LATEST" if your workload requires the newest driver patches.
+  gpu_driver_version: DEFAULT
+
 deployment_groups:
 - group: primary
   modules:
@@ -166,7 +170,7 @@ deployment_groups:
       - type: nvidia-h200-141gb
         count: 8
         gpu_driver_installation_config:
-          gpu_driver_version: LATEST
+          gpu_driver_version: $(vars.gpu_driver_version)
       additional_networks:
         $(concat(
           [{

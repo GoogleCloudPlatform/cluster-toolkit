@@ -35,6 +35,9 @@ vars:
   a3ultra_node_pool_disk_size_gb: 100
   accelerator_type: nvidia-h200-141gb
   version_prefix: "1.35."
+  # GPU driver version to install on the GPU nodes.
+  # Defaults to "DEFAULT" for stability. Can be set to "LATEST" if your workload requires the newest driver patches.
+  gpu_driver_version: DEFAULT
 
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
@@ -206,7 +209,7 @@ deployment_groups:
       - type: $(vars.accelerator_type)
         count: 8
         gpu_driver_installation_config:
-          gpu_driver_version: LATEST
+          gpu_driver_version: $(vars.gpu_driver_version)
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
