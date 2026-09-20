@@ -206,7 +206,24 @@ Mounting a GCS bucket (read-write):
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
+  --service-account "workload-identity-k8s-sa" \
   --mount "gs://<YOUR_BUCKET_NAME>;/data;rw;options=logging:severity:info,enable-atomic-rename-object:true"
+```
+
+*(Note: Use `--service-account <KSA_NAME>` to specify the Kubernetes Service Account configured with Workload Identity access to read/write the bucket).*
+
+Mounting GCS buckets with storage profiles:
+
+```bash
+./gcluster job submit \
+  --name my-training-job \
+  --command "python app.py" \
+  --compute-type n2-standard-32 \
+  --base-image python:3.9-slim \
+  --build-context job_details \
+  --service-account "workload-identity-k8s-sa" \
+  --mount "gs://<DATASET_BUCKET>/imagenet;/data;ro;profile=training" \
+  --mount "gs://<CKPT_BUCKET>/run-42;/checkpoints;rw;profile=checkpointing"
 ```
 
 Mounting an existing PVC named `lustre-pvc` (read-only):
@@ -223,18 +240,14 @@ Mounting an existing PVC named `lustre-pvc` (read-only):
 
 #### GCS FUSE storage profiles (`profile=`)
 
-GKE ships pre-tuned StorageClasses for Cloud Storage FUSE. Because a
-StorageClass cannot be referenced from an inline CSI volume, adding `profile=`
-to a `gs://` mount switches that mount from an inline CSI volume to a
-PersistentVolume/PersistentVolumeClaim pair that `gcluster` generates and
-applies alongside your JobSet.
+`gcluster` supports [GKE Cloud Storage FUSE storage profiles](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles) for automated performance tuning on AI/ML workloads. Adding `profile=` to a `gs://` mount automatically generates and applies the required PersistentVolume and PersistentVolumeClaim alongside your JobSet.
 
-Accepted values are `training`, `checkpointing` and `serving` (the canonical
-`gcsfusecsi-<name>` StorageClass names are also accepted). Requires GKE
-`1.35.1-gke.1616000` or later with the Cloud Storage FUSE CSI driver enabled
-(`enable_gcsfuse_csi` on Cluster Toolkit clusters). Verify with
-`kubectl get sc -l gke-gcsfuse/profile=true`, which lists the three
-`gcsfusecsi-*` StorageClasses.
+To choose the appropriate profile for your workload, see [Select performance profile](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#select-performance-profile). Accepted values are `training`, `checkpointing`, and `serving` (canonical `gcsfusecsi-<name>` names are also accepted).
+
+##### Prerequisites and IAM permissions
+
+* **GKE Version**: Requires GKE `1.35.1-gke.1616000` or later with the Cloud Storage FUSE CSI driver enabled (`enable_gcsfuse_csi` on Cluster Toolkit deployed clusters). Verify with `kubectl get sc -l gke-gcsfuse/profile=true`, which lists the three StorageClasses.
+* **GKE Service Agent Role**: The GKE Service Agent requires bucket permissions to inspect bucket metadata and tune settings (see [Configure IAM permissions](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#configure_permissions)). For clusters provisioned using the Cluster Toolkit, this IAM binding is automated when provisioning buckets via the [`gke-persistent-volume`](../modules/file-system/gke-persistent-volume/README.md) module.
 
 > [!IMPORTANT]
 > **`profile=serving` requires the bucket and the cluster to be in the same
@@ -252,18 +265,6 @@ Accepted values are `training`, `checkpointing` and `serving` (the canonical
 > requirement, though same-region buckets remain the better choice for
 > throughput and egress cost.
 
-```bash
-./gcluster job submit \
-  --name my-training-job \
-  --command "python app.py" \
-  --compute-type n2-standard-32 \
-  --base-image python:3.9-slim \
-  --build-context job_details \
-  --service-account "workload-identity-k8s-sa" \
-  --mount "gs://<DATASET_BUCKET>/imagenet;/data;ro;profile=training" \
-  --mount "gs://<CKPT_BUCKET>/run-42;/checkpoints;rw;profile=checkpointing"
-```
-
 Behaviour worth knowing:
 
 * The generated claim is named `gcluster-gcsfuse-<bucket>-<profile>` and the
@@ -273,109 +274,6 @@ Behaviour worth knowing:
 * Supplying custom `options=` or `attributes=` gives that mount its own gateway
   (a short hash is appended to the name) so it cannot clash with the immutable
   spec of an already existing shared gateway.
-
-Prerequisites and permissions:
-
-* Make sure the relevant IAM bindings for the bucket and the storage profile are
-  in place before submitting. See
-  [`modules/file-system/gke-persistent-volume/README.md`](../modules/file-system/gke-persistent-volume/README.md)
-  for the roles the GKE Service Agent needs.
-* Use `--service-account <KSA_NAME>` (e.g. `workload-identity-k8s-sa`) to specify the Kubernetes Service Account configured with Workload Identity access to read/write the bucket.
-
-##### Large buckets and the `only-dir` escape hatch
-
-GKE optimizes a Cloud Storage FUSE volume by scanning it up front. Its own PV
-example narrows that scan with a `mountOptions: - only-dir=<BUCKET_DIR_PATH>`
-entry, documented as: *"If specified, GKE scans this path for optimization. If
-omitted, GKE scans the entire bucket."*
-
-`gcluster` deliberately does **not** set `only-dir`. The gateway exposes the
-bucket root and each container is scoped with `volumeMounts[].subPath`, which is
-what lets one gateway serve every directory and every job using that bucket. The
-tradeoff is exactly the one above: **GKE scans the whole bucket, not just the
-directory you mount.** The storage profiles set `bucketScanTimeout: "2m"`, so on
-a very large bucket the scan can hit that timeout and fall back to partial scan
-results, costing you some of the profile's optimization.
-
-If that happens, opt a single mount out by passing `only-dir` yourself. Custom
-`options=` already routes a mount to its own dedicated gateway (via the option
-hash in the gateway name), so this does not disturb the shared gateway used by
-other mounts or other jobs:
-
-```bash
-./gcluster job submit \
-  --name my-training-job \
-  --command "python app.py" \
-  --compute-type n2-standard-32 \
-  --base-image python:3.9-slim \
-  --build-context job_details \
-  --service-account "workload-identity-k8s-sa" \
-  --mount "gs://<DATASET_BUCKET>;/data;ro;profile=training;options=only-dir=imagenet"
-```
-
-> [!CAUTION]
-> When you use `only-dir`, give the source as the **bare bucket**
-> (`gs://<DATASET_BUCKET>`), not `gs://<DATASET_BUCKET>/imagenet`. The two
-> mechanisms stack: `only-dir` re-roots the volume at that directory, and a sub
-> path in the source is *then* applied on top of it as `subPath`. Writing
-> `gs://<DATASET_BUCKET>/imagenet;...;options=only-dir=imagenet` resolves to
-> `imagenet/imagenet` and the mount will be empty or fail, with nothing in the
-> error pointing at the cause.
-
-The alternative to `only-dir` is to raise the scan budget instead of narrowing
-the scan, by overriding the profile's StorageClass parameter for that mount:
-`attributes=bucketScanTimeout=5m`. That also produces a dedicated gateway.
-
-##### Rapid Cache (`anywhereCacheZones`)
-
-Per GKE: *"Training and Checkpointing profiles don't have Rapid Cache enabled by
-default. To enable it for these workloads, add the `anywhereCacheZones`
-parameter to your PV manifest under the `spec.csi.volumeAttributes` field."*
-That field is what `attributes=` writes to, so no extra `gcluster` support is
-needed:
-
-```bash
-./gcluster job submit \
-  --name my-training-job \
-  --command "python app.py" \
-  --compute-type n2-standard-32 \
-  --base-image python:3.9-slim \
-  --build-context job_details \
-  --service-account "workload-identity-k8s-sa" \
-  --mount "gs://<DATASET_BUCKET>/imagenet;/data;ro;profile=training;attributes=anywhereCacheZones=*"
-```
-
-* `anywhereCacheZones` selects the zones the cache lives in. GKE accepts a
-  comma-separated list of zones, or `*` for every zone available to the cluster.
-  Omitting it, or setting it to `none`, leaves Rapid Cache disabled. A
-  multi-zone list is written inline:
-  `attributes=anywhereCacheZones=us-central1-a,us-central1-b`.
-
-  > [!NOTE]
-  > `attributes=` also uses `,` to separate `key=value` pairs, so it decides per
-  > comma: a `,` ends the current value only when the text after it is a new
-  > `<key>=`. `us-central1-b` is not (no `=` follows), so it stays part of the
-  > zone list, while
-  > `attributes=anywhereCacheZones=us-central1-a,bucketScanTimeout=5m` is read
-  > as two attributes. The one thing this cannot express is a value that
-  > genuinely contains `,<something>=`; no GKE parameter requires that.
-
-* `anywhereCacheTTL` sets how long cached data is retained.
-* `anywhereCacheAdmissionPolicy` controls what gets cached; valid values are
-  `admit-on-first-miss` and `admit-on-second-miss`.
-
-Caveats:
-
-* **Rapid Cache requires the bucket and the cluster to be in the same region.**
-  See the requirement noted under `profile=` above - this applies to `training`
-  and `checkpointing` too, once the cache is enabled.
-* Enabling Rapid Cache requires the Anywhere Cache IAM role to be granted to the
-  GKE Service Agent on the bucket. See
-  [`modules/file-system/gke-persistent-volume/README.md`](../modules/file-system/gke-persistent-volume/README.md).
-* Because `attributes=` participates in the gateway name hash, a mount with
-  Rapid Cache enabled gets its own gateway and will not share one with an
-  otherwise identical mount that leaves it off. Use the same `attributes=`
-  spelling across jobs that should share a gateway.
 
 ### 4.5 Example: Submit Job with Custom Environment Variables
 
