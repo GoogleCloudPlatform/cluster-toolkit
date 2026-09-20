@@ -230,17 +230,17 @@ PersistentVolume/PersistentVolumeClaim pair that `gcluster` generates and
 applies alongside your JobSet.
 
 Accepted values are `training`, `checkpointing` and `serving` (the canonical
-`gcsfusecsi-<name>` StorageClass names are also accepted). Requires a cluster
-with the storage profiles installed; verify with
-`kubectl get sc -l gke-gcsfuse/profile=true`.
+`gcsfusecsi-<name>` StorageClass names are also accepted). Requires GKE
+`1.35.1-gke.1616000` or later with the Cloud Storage FUSE CSI driver enabled
+(`enable_gcsfuse_csi` on Cluster Toolkit clusters). Verify with
+`kubectl get sc -l gke-gcsfuse/profile=true`, which lists the three
+`gcsfusecsi-*` StorageClasses.
 
 > [!IMPORTANT]
 > **`profile=serving` requires the bucket and the cluster to be in the same
 > region.** GKE documents this co-location as *mandatory* for the
 > `gcsfusecsi-serving` profile, and equally mandatory whenever Rapid Cache
-> (`anywhereCacheZones`, see below) is enabled - on any profile. It is not a
-> performance recommendation you can trade away: a cross-region bucket is
-> unsupported in these configurations.
+> (`anywhereCacheZones`, see below) is enabled - on any profile.
 >
 > Confirm the bucket's location before submitting:
 >
@@ -255,10 +255,11 @@ with the storage profiles installed; verify with
 ```bash
 ./gcluster job submit \
   --name my-training-job \
-  --command "python train.py" \
-  --compute-type a3-highgpu-8g \
+  --command "python app.py" \
+  --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
+  --service-account "workload-identity-k8s-sa" \
   --mount "gs://<DATASET_BUCKET>/imagenet;/data;ro;profile=training" \
   --mount "gs://<CKPT_BUCKET>/run-42;/checkpoints;rw;profile=checkpointing"
 ```
@@ -269,47 +270,9 @@ Behaviour worth knowing:
   PersistentVolume `gcluster-gcsfuse-<bucket>-<profile>-<namespace>`. The names
   are deterministic, so several jobs that use the same bucket and profile in the
   same namespace **share one gateway** rather than each creating their own.
-  Bucket names containing `.` or `_` cannot be used verbatim in a Kubernetes
-  object name, so those gateways get a short hash appended; `my.bucket` and
-  `my-bucket` therefore stay distinct gateways.
-* The PersistentVolume always exposes the **bucket root**. A sub path in the
-  source (`gs://bucket/some/folder`) is applied per container through
-  `volumeMounts[].subPath`, and `ro`/`rw` through `volumeMounts[].readOnly`, so
-  one gateway serves every sub path and access mode.
 * Supplying custom `options=` or `attributes=` gives that mount its own gateway
   (a short hash is appended to the name) so it cannot clash with the immutable
   spec of an already existing shared gateway.
-* The PersistentVolume uses `persistentVolumeReclaimPolicy: Retain`. It is
-  created statically, so no Kubernetes controller ever reclaims it on its own.
-  Cloud Storage bucket contents are never touched by any part of this.
-
-> [!IMPORTANT]
-> **Known limitation: storage gateways are not reclaimed automatically.**
-> Nothing in `gcluster` deletes a gateway PV/PVC today - not job completion, not
-> `ttlSecondsAfterFinished`, and not `gcluster job cancel`. This is not a leak
-> that breaks anything: the gateway is deterministic per (bucket, profile,
-> namespace) and is *reused* by the next job that mounts the same bucket with the
-> same profile, so resubmitting works and no bucket data is affected. The cost is
-> a leftover PV/PVC object pair per distinct gateway.
->
-> Remove them by hand when you no longer need them:
->
-> ```bash
-> kubectl get pvc,pv -l gcluster.google.com/managed-by=cluster-toolkit
-> kubectl delete pvc,pv -l gcluster.google.com/managed-by=cluster-toolkit
-> ```
->
-> The `gcluster.google.com/managed-by: cluster-toolkit` label is written onto
-> every storage gateway `gcluster` creates - both GCS FUSE storage-profile
-> gateways and the PV/PVC pair generated for a `filestore://` mount - so the
-> selector above covers all of them and will not touch storage you created
-> yourself. A second label, `gcluster.google.com/storage-type`, records the
-> backend (`gcsfuse` or `filestore`) if you want to narrow the selector to one
-> of them:
->
-> ```bash
-> kubectl get pvc,pv -l gcluster.google.com/storage-type=gcsfuse
-> ```
 
 Prerequisites and permissions:
 
@@ -317,9 +280,7 @@ Prerequisites and permissions:
   in place before submitting. See
   [`modules/file-system/gke-persistent-volume/README.md`](../modules/file-system/gke-persistent-volume/README.md)
   for the roles the GKE Service Agent needs.
-* `gcluster job submit` needs `create` on `persistentvolumes` and
-  `persistentvolumeclaims` in the target namespace, since it applies the gateway
-  manifests alongside the JobSet.
+* Use `--service-account <KSA_NAME>` (e.g. `workload-identity-k8s-sa`) to specify the Kubernetes Service Account configured with Workload Identity access to read/write the bucket.
 
 ##### Large buckets and the `only-dir` escape hatch
 
@@ -344,10 +305,11 @@ other mounts or other jobs:
 ```bash
 ./gcluster job submit \
   --name my-training-job \
-  --command "python train.py" \
-  --compute-type a3-highgpu-8g \
+  --command "python app.py" \
+  --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
+  --service-account "workload-identity-k8s-sa" \
   --mount "gs://<DATASET_BUCKET>;/data;ro;profile=training;options=only-dir=imagenet"
 ```
 
@@ -375,10 +337,11 @@ needed:
 ```bash
 ./gcluster job submit \
   --name my-training-job \
-  --command "python train.py" \
-  --compute-type a3-highgpu-8g \
+  --command "python app.py" \
+  --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
+  --service-account "workload-identity-k8s-sa" \
   --mount "gs://<DATASET_BUCKET>/imagenet;/data;ro;profile=training;attributes=anywhereCacheZones=*"
 ```
 
