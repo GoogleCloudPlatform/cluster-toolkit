@@ -25,6 +25,7 @@ controller_node: "{{ slurm_cluster_name }}-controller"
 network: "{{ test_name }}-net-0"
 scheduler: "slurm"
 instance_type: "a4"
+chs_partitions: "a4high"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml
