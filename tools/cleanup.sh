@@ -34,7 +34,7 @@ log() {
 
 check_dependencies() {
 	log "INFO" "Checking for required command-line tools..."
-	local dependencies=("gcloud" "awk" "grep" "sort" "date" "sed" "basename")
+	local dependencies=("gcloud" "awk" "grep" "sort" "date" "sed" "basename" "python3")
 	local missing_deps=()
 
 	for cmd in "${dependencies[@]}"; do
