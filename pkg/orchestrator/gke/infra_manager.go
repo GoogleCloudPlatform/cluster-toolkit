@@ -16,7 +16,6 @@ package gke
 
 import (
 	"bytes"
-	"embed"
 	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/logging"
@@ -31,9 +30,6 @@ import (
 
 	"gopkg.in/yaml.v2"
 )
-
-//go:embed templates/*
-var templatesFS embed.FS
 
 const defaultJobSetVersion = "v0.10.1"
 
