@@ -194,7 +194,7 @@ Modules that are still in development and less stable are labeled with the
 * **[service-enablement]** ![community-badge] ![experimental-badge] : Allows enabling
   various APIs for a Google Cloud Project.
 * **[pre-existing-project]** ![community-badge] ![experimental-badge] : Retrieves
-  information about an existing GCP project (ID, name, number) and exposes it as
+  information about an existing GCP project (name, number) and exposes it as
   outputs.
 
 [service-account]: ../modules/project/service-account/README.md

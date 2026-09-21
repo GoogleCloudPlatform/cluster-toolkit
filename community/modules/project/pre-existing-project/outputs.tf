@@ -19,11 +19,6 @@ output "project_number" {
   value       = data.google_project.this.number
 }
 
-output "project_id" {
-  description = "The GCP project ID"
-  value       = data.google_project.this.project_id
-}
-
 output "project_name" {
   description = "The display name of the GCP project"
   value       = data.google_project.this.name

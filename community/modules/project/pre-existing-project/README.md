@@ -1,8 +1,7 @@
 ## Description
 
 This module discovers a Google Cloud project that already exists and outputs
-project attributes (project ID, project name, and project number) for use by
-other modules.
+project attributes (project name and project number) for use by other modules.
 
 Intended for blueprints that need project attributes in YAML interpolation, for
 example when passing values to externally-sourced modules. Modules within this
@@ -84,7 +83,6 @@ No modules.
 
 | Name | Description |
 | ---- | ----------- |
-| <a name="output_project_id"></a> [project\_id](#output\_project\_id) | The GCP project ID |
 | <a name="output_project_name"></a> [project\_name](#output\_project\_name) | The display name of the GCP project |
 | <a name="output_project_number"></a> [project\_number](#output\_project\_number) | The GCP project number retrieved from the project ID |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
