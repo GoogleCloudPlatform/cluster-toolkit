@@ -72,7 +72,7 @@ Modules that are still in development and less stable are labeled with the
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
 [mig]: ../community/modules/compute/mig/README.md
 [notebook]: ../community/modules/compute/notebook/README.md
-[colab]: ../community/modules/agent-platform/colab/README.md
+[colab]: ../community/modules/compute/colab/README.md
 [fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
 
 ### Database

@@ -41,5 +41,8 @@ fi
 
 # Mount the bucket
 echo "Mounting ${mount_gcs_bucket} to ${mount_path}..."
-sudo gcsfuse --implicit-dirs -o allow_other "${mount_gcs_bucket}" "${mount_path}"
+sudo gcsfuse --implicit-dirs -o allow_other \
+  --uid "$(id -u jupyter)" --gid "$(id -g jupyter)" \
+  --file-mode 664 --dir-mode 775 \
+  "${mount_gcs_bucket}" "${mount_path}"
 echo "Mount successful."

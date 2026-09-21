@@ -17,19 +17,11 @@
 variable "project_id" {
   description = "GCP project ID."
   type        = string
-  validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.project_id))
-    error_message = "Project ID must be 6 to 30 characters long, start with a lowercase letter, end with a letter or digit, and contain only lowercase letters, digits, and hyphens."
-  }
 }
 
 variable "region" {
   description = "GCP region where the Colab runtime and template will be provisioned."
   type        = string
-  validation {
-    condition     = can(regex("^[a-z0-9-]+$", var.region))
-    error_message = "Region must be a valid GCP region identifier (e.g. 'us-central1', 'europe-west1')."
-  }
 }
 
 variable "deployment_name" {
@@ -39,6 +31,21 @@ variable "deployment_name" {
     condition     = can(regex("^[a-zA-Z0-9_-]+$", var.deployment_name))
     error_message = "deployment_name must be a non-empty string containing only alphanumeric characters, hyphens, or underscores."
   }
+}
+
+variable "module_instance_id" {
+  description = "Unique ID of this module instance (automatically populated by gcluster)."
+  type        = string
+  default     = "colab"
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9_-]+$", var.module_instance_id))
+    error_message = "module_instance_id must be a non-empty string containing only alphanumeric characters, hyphens, or underscores."
+  }
+}
+
+variable "runtime_user" {
+  description = "The user email for the Colab runtime (required by Colab Enterprise, e.g. 'user@example.com')."
+  type        = string
 }
 
 variable "mount_gcs_bucket" {
@@ -58,7 +65,6 @@ variable "environment_variables" {
   type        = map(string)
   default     = {}
 }
-
 
 variable "post_startup_script_behavior" {
   description = "Execution behavior for post_startup_script ('RUN_ONCE', 'RUN_EVERY_START', 'DOWNLOAD_AND_RUN_EVERY_START')."
@@ -94,9 +100,14 @@ variable "accelerator_count" {
 }
 
 variable "disk_type" {
-  description = "Persistent disk type for the Colab runtime VM ('pd-standard', 'pd-ssd', 'pd-balanced')."
+  description = "Persistent disk type for the Colab runtime VM ('pd-standard', 'pd-balanced', 'pd-ssd', 'hyperdisk-balanced')."
   type        = string
   default     = "pd-balanced"
+
+  validation {
+    condition     = contains(["pd-standard", "pd-balanced", "pd-ssd", "hyperdisk-balanced"], var.disk_type)
+    error_message = "disk_type must be one of: pd-standard, pd-balanced, pd-ssd, hyperdisk-balanced."
+  }
 }
 
 variable "disk_size_gb" {
@@ -128,28 +139,17 @@ variable "subnetwork" {
 }
 
 variable "idle_timeout" {
-  description = "Optional idle timeout duration for automatic shutdown (e.g. '14400s' for 4 hours)."
+  description = "Optional idle timeout duration after which the runtime is automatically shut down (e.g. '14400s' for 4 hours). Valid range is [10m, 24h] (600s to 86400s). An input of '0s' disables the idle shutdown feature."
   type        = string
   default     = null
   validation {
     condition     = var.idle_timeout == null || can(regex("^[0-9]+s$", var.idle_timeout))
-    error_message = "idle_timeout must be a valid duration string ending in 's' (e.g., '3600s')."
+    error_message = "idle_timeout must be a valid duration string ending in 's' (e.g., '3600s', '0s')."
   }
 }
 
-variable "runtime_user" {
-  description = "The user email for the Colab runtime. Defaults to active gcloud/Terraform user if not set."
-  type        = string
-  default     = null
-}
-
-# tflint-ignore: terraform_unused_declarations
-variable "module_instance_id" {
-  description = "Unique ID of this module instance (automatically populated by gcluster)."
-  type        = string
-  default     = "agent-platform-colab"
-  validation {
-    condition     = can(regex("^[a-zA-Z0-9_-]+$", var.module_instance_id))
-    error_message = "module_instance_id must be a non-empty string containing only alphanumeric characters, hyphens, or underscores."
-  }
+variable "labels" {
+  description = "Labels to assign to the Colab runtime template."
+  type        = map(string)
+  default     = {}
 }

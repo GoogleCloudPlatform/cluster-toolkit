@@ -14,19 +14,17 @@
  * limitations under the License.
  */
 
-terraform {
-  required_version = ">= 1.12.2"
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 5.20.0"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = ">= 3.0.0"
-    }
-  }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:colab/v1.103.0"
-  }
+output "id" {
+  description = "The unique resource name of the Colab runtime template."
+  value       = google_colab_runtime_template.template.id
+}
+
+output "template_name" {
+  description = "The name of the Colab runtime template."
+  value       = google_colab_runtime_template.template.name
+}
+
+output "runtime_name" {
+  description = "The name of the Colab runtime."
+  value       = google_colab_runtime.runtime.name
 }

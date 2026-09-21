@@ -14,32 +14,29 @@
  * limitations under the License.
  */
 
-data "google_client_openid_userinfo" "default" {}
-
-resource "random_id" "suffix" {
-  byte_length = 4
+locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "colab", ghpc_role = "compute" })
 }
 
 locals {
-  # Sanitize deployment name to comply with GCP naming conventions (lowercase, hyphens only, no underscores)
-  clean_deploy_name = lower(replace(var.deployment_name, "_", "-"))
-
-  # Ensure the generated IDs do not exceed the 63-character limit for Vertex AI resources
-  template_id  = "${substr(local.clean_deploy_name, 0, 49)}-tmpl-${random_id.suffix.hex}"
-  runtime_id   = "${substr(local.clean_deploy_name, 0, 51)}-rt-${random_id.suffix.hex}"
-  runtime_user = var.runtime_user != null && var.runtime_user != "" ? var.runtime_user : data.google_client_openid_userinfo.default.email
+  dn  = substr(lower(replace(var.deployment_name, "_", "-")), 0, 24)
+  mid = substr(lower(replace(var.module_instance_id, "_", "-")), 0, 25)
+  # "colab-" (6) + dn (24) + "-" (1) + mid (25) + "-tmpl" (5) = 61 <= 63
+  template_id = "colab-${local.dn}-${local.mid}-tmpl"
+  runtime_id  = "colab-${local.dn}-${local.mid}-rt"
 
   has_mount_bucket = var.mount_gcs_bucket != null && var.mount_gcs_bucket != ""
 
-  effective_post_startup_script_url = local.has_mount_bucket ? "gs://${var.mount_gcs_bucket}/scripts/mount_gcs_${var.deployment_name}.sh" : null
+  effective_post_startup_script_url = local.has_mount_bucket ? "gs://${var.mount_gcs_bucket}/scripts/mount_gcs_${local.template_id}.sh" : null
 }
 
 resource "google_storage_bucket_object" "mount_script" {
   count  = local.has_mount_bucket ? 1 : 0
-  name   = "scripts/mount_gcs_${var.deployment_name}.sh"
+  name   = "scripts/mount_gcs_${local.template_id}.sh"
   bucket = var.mount_gcs_bucket
 
-  content = templatefile("${path.module}/templates/mount_gcs.sh.tfpl", {
+  content = templatefile("${path.module}/templates/mount_gcs.sh.tftpl", {
     mount_gcs_bucket = var.mount_gcs_bucket
     mount_path       = var.mount_path
   })
@@ -50,6 +47,7 @@ resource "google_colab_runtime_template" "template" {
   display_name = local.template_id
   location     = var.region
   project      = var.project_id
+  labels       = local.labels
 
   machine_spec {
     machine_type      = var.colab_machine_type
@@ -110,7 +108,7 @@ resource "google_colab_runtime" "runtime" {
   display_name = local.runtime_id
   location     = var.region
   project      = var.project_id
-  runtime_user = local.runtime_user
+  runtime_user = var.runtime_user
 
   notebook_runtime_template_ref {
     notebook_runtime_template = google_colab_runtime_template.template.id
