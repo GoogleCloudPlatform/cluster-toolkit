@@ -14,17 +14,12 @@
  * limitations under the License.
  */
 
-
-resource "google_project_service" "enabled_service" {
-  project            = var.project_id
-  service            = var.service
-  disable_on_destroy = false
+output "service_agent_email" {
+  description = "Service Agent email"
+  value       = google_project_service_identity.service_identity.email
 }
 
-resource "google_project_service_identity" "service_identity" {
-  provider = google-beta
-  project  = var.project_id
-  service  = var.service
-
-  depends_on = [google_project_service.enabled_service]
+output "service_agent_member" {
+  description = "Service Agent IAM member string (e.g., serviceAccount:email@...)"
+  value       = google_project_service_identity.service_identity.member
 }

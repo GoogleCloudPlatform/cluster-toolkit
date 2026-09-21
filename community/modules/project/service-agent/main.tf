@@ -14,7 +14,18 @@
  * limitations under the License.
  */
 
-output "service_agent_email" {
-  description = "Service Agent email"
-  value       = google_project_service_identity.service_identity.email
+
+resource "google_project_service" "enabled_service" {
+  count              = var.enable_service ? 1 : 0
+  project            = var.project_id
+  service            = var.service
+  disable_on_destroy = var.disable_on_destroy
+}
+
+resource "google_project_service_identity" "service_identity" {
+  provider = google-beta
+  project  = var.project_id
+  service  = var.service
+
+  depends_on = [google_project_service.enabled_service]
 }
