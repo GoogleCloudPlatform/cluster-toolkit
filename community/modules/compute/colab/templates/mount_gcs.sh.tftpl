@@ -13,6 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+exec > /tmp/mount_gcs.log 2>&1
+set -x
+
 set -e
 
 echo "Starting generic auto-mount for GCS bucket: ${mount_gcs_bucket}"
@@ -41,8 +44,5 @@ fi
 
 # Mount the bucket
 echo "Mounting ${mount_gcs_bucket} to ${mount_path}..."
-sudo gcsfuse --implicit-dirs -o allow_other \
-  --uid "$(id -u jupyter)" --gid "$(id -g jupyter)" \
-  --file-mode 664 --dir-mode 775 \
-  "${mount_gcs_bucket}" "${mount_path}"
+sudo gcsfuse --implicit-dirs -o allow_other --file-mode 777 --dir-mode 777 "${mount_gcs_bucket}" "${mount_path}"
 echo "Mount successful."

@@ -21,6 +21,10 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 7.26.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
   provider_meta "google" {
     module_name = "blueprints/terraform/hpc-toolkit:colab/v1.103.0"

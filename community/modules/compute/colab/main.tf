@@ -19,12 +19,16 @@ locals {
   labels = merge(var.labels, { ghpc_module = "colab", ghpc_role = "compute" })
 }
 
+resource "random_id" "resource_name_suffix" {
+  byte_length = 4
+}
+
 locals {
-  dn  = substr(lower(replace(var.deployment_name, "_", "-")), 0, 24)
-  mid = substr(lower(replace(var.module_instance_id, "_", "-")), 0, 25)
-  # "colab-" (6) + dn (24) + "-" (1) + mid (25) + "-tmpl" (5) = 61 <= 63
-  template_id = "colab-${local.dn}-${local.mid}-tmpl"
-  runtime_id  = "colab-${local.dn}-${local.mid}-rt"
+  dn  = substr(lower(replace(var.deployment_name, "_", "-")), 0, 20)
+  mid = substr(lower(replace(var.module_instance_id, "_", "-")), 0, 20)
+  # "colab-" (6) + dn (20) + "-" (1) + mid (20) + "-" (1) + suffix (8) + "-tmpl" (5) = 61 <= 63
+  template_id = "colab-${local.dn}-${local.mid}-${random_id.resource_name_suffix.hex}-tmpl"
+  runtime_id  = "colab-${local.dn}-${local.mid}-${random_id.resource_name_suffix.hex}-rt"
 
   has_mount_bucket = var.mount_gcs_bucket != null && var.mount_gcs_bucket != ""
 
