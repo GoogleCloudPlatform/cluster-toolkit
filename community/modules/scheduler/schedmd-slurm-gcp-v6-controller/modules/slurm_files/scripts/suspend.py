@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Optional
 import argparse
 import logging
 
@@ -125,6 +125,7 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
 
         links: List[str] = []
         seen_links: set[str] = set()
+        fallback_zones: Optional[List[str]] = None
         for node in mig_nodes:
             short_name = node.split(".")[0]
             if short_name in mig_inst_map:
@@ -142,19 +143,24 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
                         links.append(link)
                         seen_links.add(link)
                 elif short_name in mig_unplaced_names:
-                    nodeset = lkp.node_nodeset(node)
-                    zones = list(getattr(nodeset, "zone_policy_allow", None) or [])
-                    if not zones:
-                        try:
-                            reg_info = util.ensure_execute(
-                                lkp.compute.regions().get(project=lkp.project, region=region)
-                            )
-                            zones = [z.split("/")[-1] for z in reg_info.get("zones", []) if z]
-                        except Exception:
-                            pass
-                    if not zones:
-                        zones = [f"{region}-{z}" for z in ("a", "b", "c", "f")]
-                    for z in zones:
+                    if fallback_zones is None:
+                        nodeset = lkp.node_nodeset(mig_nodes[0])
+                        resolved_zones = list(getattr(nodeset, "zone_policy_allow", None) or [])
+                        if not resolved_zones:
+                            try:
+                                reg_info = util.ensure_execute(
+                                    lkp.compute.regions().get(project=lkp.project, region=region)
+                                )
+                                resolved_zones = [z.split("/")[-1] for z in reg_info.get("zones", []) if z]
+                            except Exception:
+                                pass
+                        # Only memoise a genuinely resolved list. Leaving the cache unset on
+                        # failure keeps the per-node retry of the pre-hoist behaviour, so one
+                        # transient error cannot pin the whole shard to the static zone guess.
+                        if resolved_zones:
+                            fallback_zones = resolved_zones
+                    zones_for_node = fallback_zones or [f"{region}-{z}" for z in ("a", "b", "c", "f")]
+                    for z in zones_for_node:
                         z_name = z.split("/")[-1]
                         link = f"zones/{z_name}/instances/{short_name}"
                         if link not in seen_links:
