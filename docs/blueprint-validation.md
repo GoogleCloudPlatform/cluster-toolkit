@@ -273,6 +273,28 @@ ghpc:
       error_message: "slurm_control_host is required when enable_hybrid is true."
 ```
 
+### Conditional Regex Validator
+The `conditional_regex` validator enforces that a dependent variable matches a specific regular expression only when a trigger variable condition is met. This validator supports an optional `match_expected` flag (defaults to `true`), which if set to `false` ensures the dependent variable does not match the pattern.
+
+A `pattern` must be provided, which is the regular expression to match against. Trigger condition can be specified with `trigger` and `trigger_value`, or multiple triggers using `triggers` (a map of variable names to their expected values).
+
+If the dependent variable is unset, empty, or cannot be resolved at create time, the check is skipped. Pair this with the `conditional` validator if the variable must also be present.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+    - validator: conditional_regex
+      inputs:
+        trigger: enable_custom_domain
+        trigger_value: true
+        dependent: custom_domain_name
+        pattern: "^[a-z0-9.-]+\\.[a-z]{2,}$"
+        match_expected: true
+      error_message: "custom_domain_name must be a valid domain when enable_custom_domain is true."
+```
+
 Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.
 
 ## Skipping or Disabling Validators
