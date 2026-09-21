@@ -156,9 +156,12 @@ deployment_groups:
     use: [gke_cluster]
     settings:
       apply_manifests:
-      - source: $(vars.nccl_config_path)
-      - source: $(vars.nri_device_injector_path)
-      - source: $(vars.nccl_tcpx_installer_path)
+      - name: nccl-config
+        source: $(vars.nccl_config_path)
+      - name: nri-device-injector
+        source: $(vars.nri_device_injector_path)
+      - name: nccl-tcpx-installer
+        source: $(vars.nccl_tcpx_installer_path)
         template_vars:
           accelerator_type: $(vars.accelerator_type)
           version: $(vars.nccl_tcpx_version)
