@@ -186,6 +186,7 @@ deployment_groups:
       workload_policy:
         accelerator_topology: $(vars.tpu_topology)
         type: "HIGH_THROUGHPUT"
+        accelerator_topology_mode: '$(vars.enable_dynamic_slicing_for_tpus ? "PROVISION_ONLY" : null)'
 
   - id: gke-tpu-7x-pool
     source: modules/compute/gke-node-pool
