@@ -208,6 +208,9 @@ Modules that are still in development and less stable are labeled with the
 * **[workload_identity_binding]** ![core-badge] : Creates a Workload Identity binding between a Google Service Account (GSA) and a Kubernetes Service Account (KSA).
 * **[service-enablement]** ![community-badge] ![experimental-badge] : Allows enabling
   various APIs for a Google Cloud Project.
+* **[service-agent]** ![community-badge] ![experimental-badge] : Creates the
+  service agent for a Google Cloud API and exposes its email and IAM member
+  string as outputs.
 * **[pre-existing-project]** ![community-badge] ![experimental-badge] : Retrieves
   information about an existing GCP project (name, number) and exposes it as
   outputs.
@@ -215,6 +218,7 @@ Modules that are still in development and less stable are labeled with the
 [service-account]: ../modules/project/service-account/README.md
 [workload_identity_binding]: project/workload_identity_binding/README.md
 [service-enablement]: ../community/modules/project/service-enablement/README.md
+[service-agent]: ../community/modules/project/service-agent/README.md
 [pre-existing-project]: ../community/modules/project/pre-existing-project/README.md
 
 ### Pub/Sub
