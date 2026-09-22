@@ -38,9 +38,10 @@ import (
 )
 
 const (
-	// Excludes '/' deliberately: it blocks the kubelet-reserved
-	// csi.storage.k8s.io/* volume attributes, such as serviceAccount.name.
 	volumeAttributeKeyCharset = `[A-Za-z0-9][A-Za-z0-9._-]*`
+	// A gateway PV is named <pvc>-<namespace> and must fit the 253 character DNS
+	// subdomain limit, so the PVC budget reserves 63 for the namespace label plus
+	// the joining '-'.
 	maxGeneratedPVCNameLength = 189
 
 	gcsFuseGatewayPrefix   = "gcluster-gcsfuse"
@@ -624,10 +625,6 @@ func gcsFuseGatewayPVCName(bucket, profileShortName, options string, attrs map[s
 	return sanitizePVCName(prefix + name + "-" + suffix)
 }
 
-func gcsFuseGatewayPVName(claim, namespace string) string {
-	return sanitizePVCName(fmt.Sprintf("%s-%s", claim, namespace))
-}
-
 func shortenWithDigest(name, identity string, maxLen int) string {
 	sum := sha256.Sum256([]byte(identity))
 	digest := hex.EncodeToString(sum[:])[:gatewayNameDigestLength]
@@ -664,7 +661,7 @@ func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx in
 	if err != nil {
 		return MountInfo{}, "", err
 	}
-	pvName := gcsFuseGatewayPVName(pvcName, ns)
+	pvName := sanitizePVCName(pvcName + "-" + ns)
 
 	info := MountInfo{
 		Source:              pvcName,
