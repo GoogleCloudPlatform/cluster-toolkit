@@ -57,6 +57,9 @@ locals {
     sha256(join("", [for f in sort(fileset(local.source_dir, "**")) : filesha256("${local.source_dir}/${f}") if !can(regex("(^|/)\\.(git|ghpc|terraform)(/|$)", f))])),
     ""
   ) : ""
+
+  # Resolve local source directory from template_vars (_LOCAL_SOURCE_DIR or _EXAMPLE_DIR fallback)
+  local_source_input = lookup(var.template_vars, "_LOCAL_SOURCE_DIR", lookup(var.template_vars, "_EXAMPLE_DIR", ""))
 }
 
 data "google_client_config" "default" {}
@@ -81,17 +84,18 @@ resource "terraform_data" "build" {
     interpreter = ["/bin/bash", "-c"]
 
     environment = {
-      PROJECT_ID      = var.project_id
-      REGION          = var.region
-      CLOUD_BUILD_DIR = var.cloud_build_dir != null ? var.cloud_build_dir : ""
-      REPO_URL        = local.is_git_mode ? var.repo_url : ""
-      REPO_REF        = var.repo_ref != null ? var.repo_ref : ""
-      CONFIG_CONTENT  = local.rendered_config
-      GCS_STAGING_DIR = var.gcs_staging_dir != null ? var.gcs_staging_dir : ""
-      SERVICE_ACCOUNT = local.service_acct_target
-      SUBSTITUTIONS   = local.substitutions_str
-      SKIP_IF_EXISTS  = join(",", var.skip_if_exists)
-      ACCESS_TOKEN    = data.google_client_config.default.access_token
+      PROJECT_ID       = var.project_id
+      REGION           = var.region
+      CLOUD_BUILD_DIR  = var.cloud_build_dir != null ? var.cloud_build_dir : ""
+      REPO_URL         = local.is_git_mode ? var.repo_url : ""
+      REPO_REF         = var.repo_ref != null ? var.repo_ref : ""
+      CONFIG_CONTENT   = local.rendered_config
+      GCS_STAGING_DIR  = var.gcs_staging_dir != null ? var.gcs_staging_dir : ""
+      SERVICE_ACCOUNT  = local.service_acct_target
+      SUBSTITUTIONS    = local.substitutions_str
+      SKIP_IF_EXISTS   = join(",", var.skip_if_exists)
+      ACCESS_TOKEN     = data.google_client_config.default.access_token
+      LOCAL_SOURCE_DIR = local.local_source_input
     }
 
     command = <<-EOT
@@ -209,14 +213,36 @@ resource "terraform_data" "build" {
         BUILD_ARGS+=("--substitutions=$SUBSTITUTIONS")
       fi
 
-      if [ -n "$REPO_URL" ] || [ -z "$CLOUD_BUILD_DIR" ]; then
-        if [ -n "$REPO_URL" ]; then
-          echo "--> [INFO] Submitting Cloud Build job with --no-source (remote Git: $REPO_URL, ref: $REPO_REF)..."
-        else
-          echo "--> [INFO] Submitting Cloud Build job with --no-source (self-contained config)..."
+      STAGE_DIR="$TMP_WORKSPACE/source_stage"
+      mkdir -p "$STAGE_DIR"
+      HAS_LOCAL_SOURCE=0
+
+      if [ -n "$REPO_URL" ]; then
+        # When REPO_URL is set, cloud_build_dir refers to the path in the remote Git repository.
+        # Core source code is cloned remotely. Stage local directory (if specified) so it can be overlaid in the build.
+        if [ -n "$LOCAL_SOURCE_DIR" ]; then
+          RESOLVED_LOCAL_SRC=$(resolve_local_dir "$LOCAL_SOURCE_DIR")
+          if [ -d "$RESOLVED_LOCAL_SRC" ]; then
+            echo "--> [INFO] Found local source directory: $RESOLVED_LOCAL_SRC. Staging for upload..."
+            SRC_NAME=$(basename "$RESOLVED_LOCAL_SRC")
+            mkdir -p "$STAGE_DIR/$SRC_NAME"
+            cp -r "$RESOLVED_LOCAL_SRC/." "$STAGE_DIR/$SRC_NAME/"
+            HAS_LOCAL_SOURCE=1
+          fi
         fi
+
+        if [ "$HAS_LOCAL_SOURCE" -eq 1 ]; then
+          echo "--> [INFO] Submitting Cloud Build job with local source overlay and remote Git repository ($REPO_URL)..."
+          gcloud builds submit "$STAGE_DIR" "$${BUILD_ARGS[@]}"
+        else
+          echo "--> [INFO] Submitting Cloud Build job with --no-source (remote Git: $REPO_URL, ref: $REPO_REF)..."
+          gcloud builds submit --no-source "$${BUILD_ARGS[@]}"
+        fi
+      elif [ -z "$CLOUD_BUILD_DIR" ]; then
+        echo "--> [INFO] Submitting Cloud Build job with --no-source (self-contained config)..."
         gcloud builds submit --no-source "$${BUILD_ARGS[@]}"
       else
+        # When REPO_URL is not set, cloud_build_dir is the local source directory.
         RESOLVED_DIR=$(resolve_local_dir "$CLOUD_BUILD_DIR")
         if [ ! -d "$RESOLVED_DIR" ]; then
           echo "ERROR: Local Cloud Build source directory not found: $RESOLVED_DIR (configured cloud_build_dir: $CLOUD_BUILD_DIR)" >&2
