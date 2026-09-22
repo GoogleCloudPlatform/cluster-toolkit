@@ -747,7 +747,11 @@ def main():
                 reasons.append("topology changed")
             try:
                 log.info(f"Reconfiguring Slurm ({', '.join(reasons)}).")
-                util.scontrol_reconfigure(lkp)
+                # Restart slurmctld only for a config change. A topology-only
+                # change is picked up by `scontrol reconfigure` alone, and
+                # update_topology runs on every node power-up, so restarting
+                # there would flap nodes registering during the restart window.
+                util.scontrol_reconfigure(lkp, restart=config_changed)
                 # Only dump summary after successful reconfigure so it reflects Slurm's view
                 if topology_changed and topology_summary is not None:
                     topology_summary.dump(lkp)
