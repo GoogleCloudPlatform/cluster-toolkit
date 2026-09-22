@@ -193,7 +193,13 @@ func TestParseSingleVolume(t *testing.T) {
 			name:       "options not supported for non-gcs",
 			input:      "my-pvc;/data;options=abc",
 			wantErr:    true,
-			wantErrSub: "options= is currently only supported for GCS",
+			wantErrSub: "options= can only be used with GCS",
+		},
+		{
+			name:       "every unsupported segment is reported in one error",
+			input:      "filestore://my-instance/share;/data;options=abc;profile=training;attributes=x=1",
+			wantErr:    true,
+			wantErrSub: "options=, profile=, attributes= can only be used with GCS",
 		},
 		{
 			name:     "valid gcsfuse with multiple comma-separated options",
@@ -270,13 +276,13 @@ func TestParseSingleVolume(t *testing.T) {
 			name:       "profile not supported for filestore",
 			input:      "filestore://my-instance/share;/data;profile=training",
 			wantErr:    true,
-			wantErrSub: "profile= is only supported for GCS fuse volumes",
+			wantErrSub: "profile= can only be used with GCS fuse volumes",
 		},
 		{
 			name:       "profile not supported for pvc",
 			input:      "my-pvc;/data;profile=training",
 			wantErr:    true,
-			wantErrSub: "profile= is only supported for GCS fuse volumes",
+			wantErrSub: "profile= can only be used with GCS fuse volumes",
 		},
 		{
 			// volumeAttributes is one CSI field that exists on an inline

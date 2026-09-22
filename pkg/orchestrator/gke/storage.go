@@ -376,16 +376,23 @@ func validateGCSOnlySegments(pm parsedMount, profileSet bool) error {
 	if strings.HasPrefix(pm.Src, "gs://") {
 		return nil
 	}
+
+	var unsupportedSegments []string
 	if pm.Options != "" {
-		return fmt.Errorf("options= is currently only supported for GCS fuse volumes (gs://...)")
+		unsupportedSegments = append(unsupportedSegments, "options=")
 	}
 	if profileSet {
-		return fmt.Errorf("profile= is only supported for GCS fuse volumes (gs://...)")
+		unsupportedSegments = append(unsupportedSegments, "profile=")
 	}
 	if len(pm.Attributes) > 0 {
-		return fmt.Errorf("attributes= is only supported for GCS fuse volumes (gs://...)")
+		unsupportedSegments = append(unsupportedSegments, "attributes=")
 	}
-	return nil
+	if len(unsupportedSegments) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf("volume source %q is not a GCS bucket; %s can only be used with GCS fuse volumes (gs://...)",
+		pm.Src, strings.Join(unsupportedSegments, ", "))
 }
 
 func (sm *StorageManager) parseSingleVolume(vStr string) (parsedMount, error) {
