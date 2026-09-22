@@ -17,9 +17,3 @@ spec:
   requirements:
     services:
     - storage.googleapis.com
-ghpc:
-  validators:
-  - validator: exclusive
-    inputs:
-      vars: [content, source_path]
-    error_message: "At most one of 'content' or 'source_path' can be specified."

@@ -14,11 +14,15 @@
  * limitations under the License.
  */
 
-resource "google_storage_bucket_object" "file" {
-  name           = var.object_path
-  bucket         = var.bucket_name
-  content        = var.content
-  source         = var.source_path
-  content_type   = var.content_type
-  detect_md5hash = var.source_path != null ? filemd5(substr(var.source_path, 0, 1) == "/" ? var.source_path : "${path.root}/${var.source_path}") : null
+terraform {
+  required_version = ">= 1.12.2"
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = ">= 6.41"
+    }
+  }
+  provider_meta "google" {
+    module_name = "blueprints/terraform/hpc-toolkit:gcs-objects/v1.104.0"
+  }
 }
