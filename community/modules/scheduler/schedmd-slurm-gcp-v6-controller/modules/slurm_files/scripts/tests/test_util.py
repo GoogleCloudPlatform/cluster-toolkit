@@ -19,7 +19,7 @@ from mock import Mock, PropertyMock, call
 from datetime import datetime, timezone, timedelta
 import unittest
 
-from common import TstNodeset, TstCfg # needed to import util
+from common import TstNodeset, TstCfg, TstPartition # needed to import util
 import util
 from setup import check_slurmdbd_ready, check_sackd_ready
 from util import NodeState, MachineType, AcceleratorInfo, UpcomingMaintenance, InstanceResourceStatus, FutureReservation, ReservationDetails
@@ -971,6 +971,8 @@ def test_is_nodeset_mig():
             "flex_ns": TstNodeset(nodeset_name="flex_ns", provisioning_engine="MIG", dws_flex=types.SimpleNamespace(enabled=True)),
             "bulk_ns": TstNodeset(nodeset_name="bulk_ns", provisioning_engine="BULK_INSERT"),
             "bulk_override_ns": TstNodeset(nodeset_name="bulk_override_ns", provisioning_engine="BULK_INSERT", mig_name="testcl-bulk_override_ns-mig-0"),
+            "topo_auto_ns": TstNodeset(nodeset_name="topo_auto_ns", provisioning_engine="AUTO", accelerator_topology="1x72"),
+            "topo_default_ns": TstNodeset(nodeset_name="topo_default_ns", accelerator_topology="1x72"),
         },
     )
     lkp = util.Lookup(cfg)
@@ -978,6 +980,8 @@ def test_is_nodeset_mig():
     assert lkp.is_nodeset_mig("flex_ns") is False
     assert lkp.is_nodeset_mig("bulk_ns") is False
     assert lkp.is_nodeset_mig("bulk_override_ns") is False
+    assert lkp.is_nodeset_mig("topo_auto_ns") is False
+    assert lkp.is_nodeset_mig("topo_default_ns") is False
 
 
 def test_mig_name_multi_mig():
@@ -1293,3 +1297,249 @@ def test_check_sackd_ready_retry_and_exhaustion(mocker):
     mock_run.assert_called_with("systemctl status sackd", timeout=30, check=False)
     assert mock_sleep.call_count == 1
     mock_sleep.assert_has_calls([call(10.0)])
+
+
+def test_nodeset_slice_size():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "std_ns": TstNodeset(nodeset_name="std_ns"),
+            "explicit_slice_ns": TstNodeset(nodeset_name="explicit_slice_ns", slice_size=18),
+            "a4x_ns": TstNodeset(nodeset_name="a4x_ns", accelerator_topology="1x72", gpu={"count": 4}),
+            "a4x_2slice_ns": TstNodeset(nodeset_name="a4x_2slice_ns", accelerator_topology="2x72", gpu={"count": 4}),
+            "a3_topo_ns": TstNodeset(nodeset_name="a3_topo_ns", accelerator_topology="1x16", gpu={"count": 8}),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    assert lkp.nodeset_slice_size("std_ns") == 1000
+    assert lkp.nodeset_slice_size("explicit_slice_ns") == 18
+    assert lkp.nodeset_slice_size("a4x_ns") == 18
+    assert lkp.nodeset_slice_size("a4x_2slice_ns") == 36
+    assert lkp.nodeset_slice_size("a3_topo_ns") == 2
+    assert lkp.nodeset_slice_size("non_existent_ns") == 1000
+
+
+def test_nodeset_slice_size_no_attrdict_autovivification():
+    raw_dict = util.AttrDict({"nodeset_name": "cpu_ns"})
+    cfg = TstCfg(slurm_cluster_name="testcl")
+    setattr(cfg, "nodeset", {"cpu_ns": raw_dict})
+    lkp = util.Lookup(cfg)
+    assert lkp.nodeset_slice_size("cpu_ns") == 1000
+    assert lkp.is_nodeset_mig("cpu_ns") is False
+    # Confirm keys were not auto-vivified into raw_dict
+    assert "slice_size" not in raw_dict
+    assert "accelerator_topology" not in raw_dict
+    assert "provisioning_engine" not in raw_dict
+    assert "mig_name" not in raw_dict
+
+
+def test_node_mig_name_gpu_topology_slices():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                node_count_static=36,
+                accelerator_topology="1x72",
+                gpu={"count": 4},
+                slice_size=18,
+                provisioning_engine="MIG",
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    # Slice 0 (nodes 0-17) -> mig-0
+    assert lkp.node_mig_name("testcl-a4x-0") == "testcl-a4x-mig-0"
+    assert lkp.node_mig_name("testcl-a4x-17") == "testcl-a4x-mig-0"
+
+    # Slice 1 (nodes 18-35) -> mig-1
+    assert lkp.node_mig_name("testcl-a4x-18") == "testcl-a4x-mig-1"
+    assert lkp.node_mig_name("testcl-a4x-35") == "testcl-a4x-mig-1"
+
+
+@unittest.mock.patch("util.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_suspend_mig_nodes_gpu_topology_slices(mock_compute_prop, mock_execute):
+    import suspend
+
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                region="us-central1",
+                node_count_static=36,
+                accelerator_topology="1x72",
+                gpu={"count": 4},
+                slice_size=18,
+                provisioning_engine="MIG",
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    mock_execute.side_effect = lambda req: req.execute()
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+        "managedInstances": [
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-a4x-0"},
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-a4x-18"},
+        ]
+    }
+
+    # Suspend nodes across both slices
+    suspend.suspend_mig_nodes(["testcl-a4x-0", "testcl-a4x-18"], lkp=lkp)
+
+    delete_calls = mock_compute.regionInstanceGroupManagers().deleteInstances.call_args_list
+    assert len(delete_calls) == 2
+    del_migs = {call.kwargs["instanceGroupManager"] for call in delete_calls}
+    assert del_migs == {"testcl-a4x-mig-0", "testcl-a4x-mig-1"}
+
+
+def test_nodeset_slice_size_attrdict_no_autovivification():
+    gpu_attr = util.AttrDict(type="nvidia-gb200")
+    nodeset = TstNodeset(
+        nodeset_name="a4x",
+        node_count_static=36,
+        accelerator_topology="1x72",
+        gpu=gpu_attr,
+        instance_template="projects/testproj/global/instanceTemplates/a4x-tmpl",
+    )
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={"a4x": nodeset},
+    )
+    lkp = util.Lookup(cfg)
+
+    mock_tmpl = unittest.mock.MagicMock()
+    mock_accel = unittest.mock.MagicMock()
+    mock_accel.count = 8
+    mock_tmpl.machine_type.accelerators = [mock_accel]
+    lkp.template_info = unittest.mock.MagicMock(return_value=mock_tmpl)
+
+    slice_size = lkp.nodeset_slice_size("a4x")
+
+    assert "count" not in gpu_attr
+    lkp.template_info.assert_called_once_with("projects/testproj/global/instanceTemplates/a4x-tmpl")
+    assert slice_size == 9
+
+
+def test_is_nodeset_mig_strict_opt_in():
+    """Verify is_nodeset_mig honors strict opt-in: accelerator_topology with AUTO or BULK_INSERT returns False."""
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "a4x_auto": TstNodeset(
+                nodeset_name="a4x_auto",
+                accelerator_topology="1x72",
+                provisioning_engine="AUTO",
+            ),
+            "a4x_bi": TstNodeset(
+                nodeset_name="a4x_bi",
+                accelerator_topology="1x72",
+                provisioning_engine="BULK_INSERT",
+            ),
+            "a4x_mig": TstNodeset(
+                nodeset_name="a4x_mig",
+                accelerator_topology="1x72",
+                provisioning_engine="MIG",
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    assert lkp.is_nodeset_mig("a4x_auto") is False
+    assert lkp.is_nodeset_mig("a4x_bi") is False
+    assert lkp.is_nodeset_mig("a4x_mig") is True
+
+
+
+def test_has_block_topology_requires_exact_lowercase_topology():
+    """Pins the contract that forces the nodeset module to normalize accelerator_topology.
+
+    has_block_topology() compares against the literal "1x72". The nodeset module's
+    outputs accept "1X72" and " 1x72 " (the validation regex is case-insensitive and
+    trims), and every Terraform consumer normalizes with lower(trimspace(...)). If the
+    value written into config.yaml were NOT normalized at source, such a nodeset would
+    build correct slice MIGs with correct workload policies and then silently drop from
+    topology/block to topology/tree, straddling NVLink domains with no error raised.
+
+    If this test starts failing, do not relax it -- check that
+    community/modules/compute/schedmd-slurm-gcp-v6-nodeset/main.tf still emits
+    lower(trimspace(var.accelerator_topology)).
+    """
+    def _cfg(topo):
+        return TstCfg(
+            slurm_cluster_name="c",
+            nodeset={
+                "a4x": TstNodeset(
+                    nodeset_name="a4x",
+                    accelerator_topology=topo,
+                    reservation_name="a4x-res",
+                ),
+            },
+            partitions={"p": TstPartition(partition_name="p", partition_nodeset=["a4x"])},
+        )
+
+    part = NSDict(partition_name="p", partition_nodeset=["a4x"])
+
+    # Normalized value: block topology is enabled.
+    assert util.Lookup(_cfg("1x72")).has_block_topology(part) is True
+
+    # Un-normalized variants must NOT silently enable block topology. These are exactly
+    # the strings the nodeset module is responsible for folding into "1x72".
+    for bad in ("1X72", "1x72 ", " 1x72"):
+        assert util.Lookup(_cfg(bad)).has_block_topology(part) is False, (
+            f"has_block_topology matched {bad!r}; the exact-match contract changed"
+        )
+
+    # A reservation is still required (pre-existing behavior, unchanged).
+    no_res = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={"a4x": TstNodeset(nodeset_name="a4x", accelerator_topology="1x72", reservation_name="")},
+    )
+    assert util.Lookup(no_res).has_block_topology(part) is False
+
+
+def test_nodeset_slice_size_absent_for_non_mig_nodesets():
+    """Zero-regression guard: Terraform must only hand slice_size/gpu_count to static MIG
+    nodesets. partition.tf gates both on
+    (nodeset_resolved_engine == "MIG" && !dws_flex.enabled).
+
+    DWS Flex resolves to engine "MIG" but gets no slice MIGs, so it must be excluded too --
+    it keeps using the runtime placement path, which derives hosts-per-slice from the live
+    GCE machine type.
+    """
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={
+            # AUTO/BULK_INSERT and DWS Flex: Terraform emits null for both fields.
+            "a4x_auto": TstNodeset(nodeset_name="a4x_auto", accelerator_topology="1x72",
+                                   provisioning_engine="BULK_INSERT"),
+            "a4x_flex": TstNodeset(nodeset_name="a4x_flex", accelerator_topology="1x72",
+                                   provisioning_engine="MIG",
+                                   dws_flex=util.NSDict(enabled=True, use_bulk_insert=False)),
+            # Static MIG: Terraform supplies the authoritative slice size.
+            "a4x_mig": TstNodeset(nodeset_name="a4x_mig", accelerator_topology="1x72",
+                                  provisioning_engine="MIG", slice_size=18, gpu_count=4),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    for ns in ("a4x_auto", "a4x_flex"):
+        # TstNodeset is a dataclass, not an NSDict, so use getattr here. Production config
+        # is an NSDict and takes the .get() branch in util/resume; both are covered.
+        assert getattr(lkp.cfg.nodeset[ns], "slice_size", None) is None, f"{ns}: slice_size leaked"
+        assert getattr(lkp.cfg.nodeset[ns], "gpu_count", None) is None, f"{ns}: gpu_count leaked"
+
+    # Neither is a MIG nodeset at runtime, so node_mig_name is never reached for them.
+    assert lkp.is_nodeset_mig("a4x_auto") is False
+    assert lkp.is_nodeset_mig("a4x_flex") is False
+    assert lkp.is_nodeset_mig("a4x_mig") is True
+
+    # The static MIG nodeset shards on 18; a MIG nodeset without a topology keeps 1000.
+    assert lkp.nodeset_slice_size("a4x_mig") == 18
+    assert lkp.node_mig_name("c-a4x_mig-17") == "c-a4x_mig-mig-0"
+    assert lkp.node_mig_name("c-a4x_mig-18") == "c-a4x_mig-mig-1"

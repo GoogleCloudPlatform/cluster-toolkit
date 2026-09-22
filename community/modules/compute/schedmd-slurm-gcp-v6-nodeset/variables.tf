@@ -343,7 +343,7 @@ variable "guest_accelerator" {
 
 variable "accelerator_topology" {
   type        = string
-  description = "Specifies the shape of the Accelerator (GPU/TPU) slice."
+  description = "Specifies the shape of the Accelerator (GPU/TPU) slice. Note: When set, 'enable_placement' must be set to true (and 'node_count_dynamic_max' must be explicitly set to 0 when using 'provisioning_engine = MIG'). Warning: on a deployed nodeset using 'provisioning_engine = MIG', ANY change to this value - including changing one topology for another, and removing it - forces replacement of the managed instance group and destroys its running VMs. Drain the nodeset before changing it."
   nullable    = true
   default     = null
 }
@@ -712,7 +712,7 @@ variable "machine_configs" {
 }
 
 variable "provisioning_engine" {
-  description = "Compute node provisioning engine: 'AUTO', 'MIG', or 'BULK_INSERT'. Note: When using 'MIG', 'node_count_dynamic_max' must be explicitly set to 0 and 'enable_placement' must be set to false."
+  description = "Compute node provisioning engine: 'AUTO', 'MIG', or 'BULK_INSERT'. Note: When using 'MIG', 'node_count_dynamic_max' must be explicitly set to 0, and 'enable_placement' is only supported when 'accelerator_topology' is specified. (Note: DWS Flex NodeSets should leave 'provisioning_engine' as 'AUTO')."
   type        = string
   default     = "AUTO"
   validation {
