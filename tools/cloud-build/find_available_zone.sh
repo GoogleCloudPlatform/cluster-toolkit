@@ -316,6 +316,75 @@ check_lustre_quota() {
 		return 1
 	fi
 }
+declare -A CPU_QUOTA_CACHE=()
+check_cpu_quota() {
+	local region=$1
+	local required_cpus=${REQUIRED_CPU_QUOTA:-0}
+	local metric=${CPU_QUOTA_METRIC:-"N2D_CPUS"}
+
+	if [[ ! "${required_cpus}" =~ ^[0-9]+$ ]]; then
+		required_cpus=0
+	fi
+
+	if [[ "${required_cpus}" -le 0 ]]; then
+		return 0
+	fi
+
+	local cache_key="${region}/${metric}/${required_cpus}"
+	if [[ -n "${CPU_QUOTA_CACHE[$cache_key]:-}" ]]; then
+		return "${CPU_QUOTA_CACHE[$cache_key]}"
+	fi
+
+	local quota_json
+	if ! quota_json=$(gcloud compute regions describe "${region}" \
+		--project="${PROJECT_ID}" --format="json" 2>/dev/null); then
+		echo "WARN: Could not describe region ${region} to read ${metric} quota. Failing-open."
+		CPU_QUOTA_CACHE[$cache_key]=0
+		return 0
+	fi
+
+	if ! echo "${quota_json}" | jq -e . >/dev/null 2>&1; then
+		echo "WARN: Unparsable quota payload for ${region}. Failing-open."
+		CPU_QUOTA_CACHE[$cache_key]=0
+		return 0
+	fi
+
+	local limit usage
+	limit=$(echo "${quota_json}" | jq -r --arg m "${metric}" \
+		'[.quotas[]? | select(.metric == $m) | .limit] | first // empty' 2>/dev/null || true)
+	usage=$(echo "${quota_json}" | jq -r --arg m "${metric}" \
+		'[.quotas[]? | select(.metric == $m) | .usage] | first // empty' 2>/dev/null || true)
+
+	if [[ -z "${limit}" || "${limit}" == "null" ]]; then
+		echo "WARN: ${metric} quota not reported for ${region}. Failing-open and assuming capacity exists."
+		CPU_QUOTA_CACHE[$cache_key]=0
+		return 0
+	fi
+
+	if ! limit=$(printf "%.0f" "${limit}" 2>/dev/null); then
+		echo "WARN: Invalid ${metric} limit format for ${region}. Failing-open."
+		CPU_QUOTA_CACHE[$cache_key]=0
+		return 0
+	fi
+
+	if ! usage=$(printf "%.0f" "${usage:-0}" 2>/dev/null); then usage=0; fi
+	if [[ ! "${usage}" =~ ^[0-9]+$ ]]; then usage=0; fi
+
+	if [[ "${limit}" -lt 0 ]]; then
+		CPU_QUOTA_CACHE[$cache_key]=0
+		return 0
+	fi
+
+	local remaining=$((limit - usage))
+	if [[ "${remaining}" -ge "${required_cpus}" ]]; then
+		CPU_QUOTA_CACHE[$cache_key]=0
+		return 0
+	else
+		echo "INFO: Insufficient ${metric} quota in ${region} (Limit: ${limit}, Usage: ${usage}, Required: ${required_cpus})."
+		CPU_QUOTA_CACHE[$cache_key]=1
+		return 1
+	fi
+}
 
 if ! GCS_CONTENT=$(gcloud storage cat "${OPTIONS_GCS_PATH}"); then
 	echo "ERROR: Failed to read ${OPTIONS_GCS_PATH}." >&2
@@ -371,6 +440,12 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 				echo "INFO: Skipping ${ZONE} - Zone explicitly excluded via EXCLUDE_ZONES."
 				continue
 			fi
+		fi
+
+		# Check region for support VMs.
+		if ! check_cpu_quota "${REGION}"; then
+			echo "INFO: Skipping ${ZONE} - CPU quota check failed in region ${REGION}."
+			continue
 		fi
 
 		if [[ "${CHECK_FILESTORE:-false}" == "true" ]]; then
