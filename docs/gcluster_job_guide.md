@@ -210,7 +210,7 @@ Mounting a GCS bucket (read-write):
   --mount "gs://<YOUR_BUCKET_NAME>;/data;rw;options=logging:severity:info,enable-atomic-rename-object:true"
 ```
 
-*(Note: Use `--service-account <KSA_NAME>` to specify the Kubernetes Service Account configured with Workload Identity access to read/write the bucket).*
+*(Note: Replace `<YOUR_BUCKET_NAME>` with the name of your own bucket. Use `--service-account <KSA_NAME>` to specify the Kubernetes Service Account configured with Workload Identity access to read/write the bucket).*
 
 Mounting GCS buckets with storage profiles:
 
@@ -222,9 +222,11 @@ Mounting GCS buckets with storage profiles:
   --base-image python:3.9-slim \
   --build-context job_details \
   --service-account "workload-identity-k8s-sa" \
-  --mount "gs://<DATASET_BUCKET>/imagenet;/data;ro;profile=training" \
-  --mount "gs://<CKPT_BUCKET>/run-42;/checkpoints;rw;profile=checkpointing"
+  --mount "gs://<YOUR_DATASET_BUCKET>/imagenet;/data;ro;profile=training" \
+  --mount "gs://<YOUR_CHECKPOINT_BUCKET>/run-42;/checkpoints;rw;profile=checkpointing"
 ```
+
+*(Note: Replace `<YOUR_DATASET_BUCKET>` and `<YOUR_CHECKPOINT_BUCKET>` with the names of your own buckets).*
 
 Mounting an existing PVC named `lustre-pvc` (read-only):
 
