@@ -393,15 +393,3 @@ func (g *GKEOrchestrator) checkClusterConnectivity() error {
 	logging.Info("Cluster connectivity verified.")
 	return nil
 }
-
-func (g *GKEOrchestrator) checkDynamicSlicingViaGKE() bool {
-	for _, np := range g.clusterDesc.NodePools {
-		if np.PlacementPolicy != nil {
-			mode := np.PlacementPolicy.AcceleratorTopologyMode
-			if mode == "PROVISION_ONLY" {
-				return true
-			}
-		}
-	}
-	return false
-}
