@@ -30,6 +30,6 @@ output "placement_policy" {
 }
 
 output "accelerator_topology_mode" {
-  description = "The accelerator topology mode for the resource policy."
-  value       = var.workload_policy.accelerator_topology_mode
+  description = "The accelerator topology mode for the resource policy (defaults to `PROVISION_ONLY` when `enable_dynamic_slicing_for_tpus` is true)."
+  value       = local.accelerator_topology_mode
 }

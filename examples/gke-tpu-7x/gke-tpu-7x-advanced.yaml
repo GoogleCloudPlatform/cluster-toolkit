@@ -52,11 +52,9 @@ vars:
   # Accelerator type for Kueue configuration
   accelerator_type: tpu7x
 
-  # Enable Dynamic Slicing for TPUs
+  # Enable Dynamic Slicing for TPUs (enables the GKE Slice Controller, configures Kueue for dynamic slicing,
+  # and automatically sets workload_policy accelerator_topology_mode to "PROVISION_ONLY")
   enable_dynamic_slicing_for_tpus: false
-
-  # Accelerator topology mode for TPU workload policy (must be set to "PROVISION_ONLY" when enable_dynamic_slicing_for_tpus is true)
-  accelerator_topology_mode: null
 
   # The namespace to be configured for running workloads
   user_namespace: default
@@ -186,10 +184,10 @@ deployment_groups:
       name: "tpu7x-workload-policy"
       project_id: $(vars.project_id)
       region: $(vars.region)
+      enable_dynamic_slicing_for_tpus: $(vars.enable_dynamic_slicing_for_tpus)
       workload_policy:
         accelerator_topology: $(vars.tpu_topology)
         type: "HIGH_THROUGHPUT"
-        accelerator_topology_mode: $(vars.accelerator_topology_mode)
 
   - id: gke-tpu-7x-pool
     source: modules/compute/gke-node-pool

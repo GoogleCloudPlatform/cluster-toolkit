@@ -19,6 +19,10 @@ resource "random_id" "resource_name_suffix" {
 
 locals {
   name = "${var.name}-${random_id.resource_name_suffix.hex}"
+  accelerator_topology_mode = coalesce(
+    var.workload_policy.accelerator_topology_mode,
+    var.enable_dynamic_slicing_for_tpus ? "PROVISION_ONLY" : null
+  )
 }
 
 resource "google_compute_resource_policy" "policy" {
@@ -34,7 +38,7 @@ resource "google_compute_resource_policy" "policy" {
       type                      = var.workload_policy.type
       max_topology_distance     = var.workload_policy.max_topology_distance
       accelerator_topology      = var.workload_policy.accelerator_topology
-      accelerator_topology_mode = var.workload_policy.accelerator_topology_mode
+      accelerator_topology_mode = local.accelerator_topology_mode
     }
   }
 
@@ -49,8 +53,12 @@ resource "google_compute_resource_policy" "policy" {
 
   lifecycle {
     precondition {
-      condition     = var.workload_policy.accelerator_topology_mode == null || (var.workload_policy.type != null && var.workload_policy.accelerator_topology != null)
+      condition     = local.accelerator_topology_mode == null || (var.workload_policy.type != null && var.workload_policy.accelerator_topology != null)
       error_message = "Both workload_policy.type and workload_policy.accelerator_topology must be set when accelerator_topology_mode is specified."
+    }
+    precondition {
+      condition     = !var.enable_dynamic_slicing_for_tpus || local.accelerator_topology_mode == "PROVISION_ONLY"
+      error_message = "When enable_dynamic_slicing_for_tpus is true, workload_policy.accelerator_topology_mode must be 'PROVISION_ONLY' (or left unset so it defaults to 'PROVISION_ONLY')."
     }
   }
 }

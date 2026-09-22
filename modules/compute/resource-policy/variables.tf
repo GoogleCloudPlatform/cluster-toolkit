@@ -49,7 +49,7 @@ variable "group_placement_max_distance" {
 }
 
 variable "workload_policy" {
-  description = "Describes the workload policy"
+  description = "Describes the workload policy. When `enable_dynamic_slicing_for_tpus` is true and `accelerator_topology_mode` is not explicitly set (`null`), `accelerator_topology_mode` automatically defaults to `PROVISION_ONLY`."
   type = object({
     type                      = optional(string, null)
     max_topology_distance     = optional(string, null)
@@ -63,4 +63,11 @@ variable "workload_policy" {
     accelerator_topology_mode = null
   }
   nullable = false
+}
+
+variable "enable_dynamic_slicing_for_tpus" {
+  description = "If true, automatically defaults `workload_policy.accelerator_topology_mode` to `PROVISION_ONLY` when `accelerator_topology_mode` is not explicitly set."
+  type        = bool
+  default     = false
+  nullable    = false
 }
