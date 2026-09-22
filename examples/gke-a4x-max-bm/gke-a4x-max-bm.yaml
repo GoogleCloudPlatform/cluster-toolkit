@@ -277,7 +277,8 @@ deployment_groups:
                   values:
                   - arm64
       apply_manifests:
-      - source: $(vars.nvidia_dra_driver_path)
+      - name: nvidia-dra-driver
+        source: $(vars.nvidia_dra_driver_path)
 
   - id: job-template
     source: modules/compute/gke-job-template
@@ -314,10 +315,8 @@ deployment_groups:
       force_destroy: false
       enable_hierarchical_namespace: true
 
-  # When utilizing GCS Fuse Storage Profiles, you must ensure the GKE Service Agent
-  # possesses the 'gke.gcsfuse.profileUser' custom IAM role assigned out-of-band.
-  # Please refer to 'modules/file-system/gke-persistent-volume/README.md' for instructions.
-  # Persistent Volume for training data using GCS Fuse Storage Profile
+  # Persistent Volume for training data using GCS Fuse Storage Profile.
+  # For shared buckets or custom IAM roles, see modules/file-system/gke-persistent-volume/README.md
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
     use: [training_bucket, a4x-max-cluster]

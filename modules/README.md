@@ -72,6 +72,21 @@ Modules that are still in development and less stable are labeled with the
 [notebook]: ../community/modules/compute/notebook/README.md
 [fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
 
+### Container
+
+* **[apptainer-runtime]** ![community-badge] ![experimental-badge] : Prepares
+  the shared Apptainer runtime layout and modulefile tree on a mounted path.
+* **[apptainer-app]** ![community-badge] ![experimental-badge] : Stages an
+  Artifact Registry image as an Apptainer SIF, with a wrapper command,
+  modulefile, and manifest.
+* **[artifact-registry]** ![community-badge] ![experimental-badge] : Creates and
+  manages Google Cloud Artifact Registry repositories, including remote
+  repositories with pull-through caching.
+
+[apptainer-runtime]: ../community/modules/container/apptainer-runtime/README.md
+[apptainer-app]: ../community/modules/container/apptainer-app/README.md
+[artifact-registry]: ../community/modules/container/artifact-registry/README.md
+
 ### Database
 
 * **[redis]** ![core-badge] : Deploys a Google Cloud Memorystore for Redis instance.
@@ -196,11 +211,15 @@ Modules that are still in development and less stable are labeled with the
 * **[service-agent]** ![community-badge] ![experimental-badge] : Creates the
   service agent for a Google Cloud API and exposes its email and IAM member
   string as outputs.
+* **[pre-existing-project]** ![community-badge] ![experimental-badge] : Retrieves
+  information about an existing GCP project (name, number) and exposes it as
+  outputs.
 
 [service-account]: ../modules/project/service-account/README.md
 [workload_identity_binding]: project/workload_identity_binding/README.md
 [service-enablement]: ../community/modules/project/service-enablement/README.md
 [service-agent]: ../community/modules/project/service-agent/README.md
+[pre-existing-project]: ../community/modules/project/pre-existing-project/README.md
 
 ### Pub/Sub
 
