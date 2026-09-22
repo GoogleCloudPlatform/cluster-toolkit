@@ -30,16 +30,18 @@ locals {
   job_template_contents = templatefile(
     "${path.module}/templates/batch-job-base.yaml.tftpl",
     {
-      synchronized       = var.mpi_mode
-      runnables          = local.runnables
-      task_count         = var.task_count
-      tasks_per_node     = local.tasks_per_node
-      require_hosts_file = var.mpi_mode
-      permissive_ssh     = var.mpi_mode
-      log_policy         = var.log_policy
-      instance_template  = local.instance_template
-      nfs_volumes        = local.native_batch_network_storage
-      labels             = local.labels
+      synchronized          = var.mpi_mode
+      runnables             = local.runnables
+      task_count            = var.task_count
+      parallelism           = var.parallelism
+      tasks_per_node        = local.tasks_per_node
+      require_hosts_file    = var.mpi_mode
+      permissive_ssh        = var.mpi_mode
+      log_policy            = var.log_policy
+      instance_template     = local.instance_template
+      service_account_email = try(var.service_account.email, null)
+      nfs_volumes           = local.native_batch_network_storage
+      labels                = local.labels
     }
   )
 

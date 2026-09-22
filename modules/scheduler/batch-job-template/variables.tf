@@ -63,7 +63,13 @@ variable "task_count" {
 }
 
 variable "task_count_per_node" {
-  description = "Max number of tasks that can be run on a VM at the same time. If not specified, Batch will decide a value."
+  description = "Max number of tasks that can run on a VM at the same time. If not specified, Batch will decide a value."
+  type        = number
+  default     = null
+}
+
+variable "parallelism" {
+  description = "Max number of tasks that can run in parallel across the job. If not specified, Batch will decide a value (defaults to min(task_count, 1000))."
   type        = number
   default     = null
 }
@@ -123,10 +129,17 @@ variable "enable_public_ips" {
 }
 
 variable "service_account" {
-  description = "Service account to attach to the Google Cloud Batch compute node. Ignored if `instance_template` is provided."
+  description = "Service account to attach to the Google Cloud Batch compute node and Batch job allocationPolicy (`scopes` is ignored if `instance_template` is provided)."
   type = object({
-    email  = string,
-    scopes = set(string)
+    email = string,
+    scopes = optional(set(string), [
+      "https://www.googleapis.com/auth/devstorage.read_only",
+      "https://www.googleapis.com/auth/logging.write",
+      "https://www.googleapis.com/auth/monitoring.write",
+      "https://www.googleapis.com/auth/servicecontrol",
+      "https://www.googleapis.com/auth/service.management.readonly",
+      "https://www.googleapis.com/auth/trace.append"
+    ])
   })
   default = {
     email = null
