@@ -38,6 +38,8 @@ import (
 )
 
 const (
+	// Excludes '/' deliberately: it blocks the kubelet-reserved
+	// csi.storage.k8s.io/* volume attributes, such as serviceAccount.name.
 	volumeAttributeKeyCharset = `[A-Za-z0-9][A-Za-z0-9._-]*`
 	maxGeneratedPVCNameLength = 189
 
@@ -263,6 +265,15 @@ func warnProfileOnlyAttributes(attrs map[string]string, src string) {
 		src, strings.Join(flagged, ", "))
 }
 
+// reservedVolumeAttributes are derived by gcluster from other --mount segments, so
+// accepting them from attributes= would give the rendered manifest two sources of
+// truth. Keys here MUST stay in sync with those written by buildVolumeSpec.
+// Matching is case sensitive, as the GCSFuse CSI driver treats attribute keys.
+var reservedVolumeAttributes = map[string]string{
+	"mountOptions": "use options=<opt1>,<opt2> instead, which gcluster renders into the correct field for both inline and storage-profile mounts",
+	"bucketName":   "the bucket is taken from the mount source, src=gs://<bucket>",
+}
+
 // volumeAttributeSeparator splits on ',' only when followed by `<key>=`, allowing comma-separated attribute values.
 var volumeAttributeSeparator = regexp.MustCompile(`^[,\s]*(?:` + volumeAttributeKeyCharset + `\s*=|$)`)
 
@@ -297,8 +308,8 @@ func parseVolumeAttributes(raw string) (map[string]string, error) {
 		if !volumeAttributeKeyPattern.MatchString(key) {
 			return nil, fmt.Errorf("invalid volume attribute key %q. Keys may only contain letters, digits, '.', '_' and '-'", key)
 		}
-		if key == "mountOptions" {
-			return nil, fmt.Errorf("volume attribute %q is not accepted; use options=<opt1>,<opt2> instead, which gcluster renders into the correct field for both inline and storage-profile mounts", key)
+		if hint, reserved := reservedVolumeAttributes[key]; reserved {
+			return nil, fmt.Errorf("volume attribute %q is not accepted; %s", key, hint)
 		}
 		if _, dup := attrs[key]; dup {
 			return nil, fmt.Errorf("duplicate volume attribute key %q", key)
@@ -780,6 +791,8 @@ func buildVolumeSpec(v MountInfo) map[string]interface{} {
 	}
 	switch v.Type {
 	case "gcsfuse":
+		// Keys derived here are rejected from attributes= by reservedVolumeAttributes;
+		// add any new derived key there too.
 		volumeAttributes := map[string]interface{}{
 			"bucketName": strings.TrimPrefix(v.Source, "gs://"),
 		}

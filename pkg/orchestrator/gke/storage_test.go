@@ -2350,20 +2350,24 @@ func TestInlineAttributes_ProfileOnlyKeyIsWarnedNotRejected(t *testing.T) {
 	}
 }
 
-func TestVolumeAttributes_MountOptionsKeyRejected(t *testing.T) {
+// Every reserved key must be refused on both the inline and the storage-profile
+// path, since each renders volumeAttributes through a different code path.
+func TestVolumeAttributes_ReservedKeysRejected(t *testing.T) {
 	sm := &StorageManager{}
 
-	for _, mount := range []string{
-		"gs://my-bucket;/data;attributes=mountOptions=implicit-dirs",
-		"gs://my-bucket;/data;profile=training;attributes=mountOptions=implicit-dirs",
-	} {
-		_, err := sm.parseSingleVolume(mount)
-		if err == nil {
-			t.Errorf("%s: expected mountOptions to be rejected as an attribute", mount)
-			continue
-		}
-		if !strings.Contains(err.Error(), "use options=") {
-			t.Errorf("%s: error should point at options=, got: %v", mount, err)
+	for key, hint := range reservedVolumeAttributes {
+		for _, mount := range []string{
+			fmt.Sprintf("gs://my-bucket;/data;attributes=%s=some-value", key),
+			fmt.Sprintf("gs://my-bucket;/data;profile=training;attributes=%s=some-value", key),
+		} {
+			_, err := sm.parseSingleVolume(mount)
+			if err == nil {
+				t.Errorf("%s: expected reserved attribute %q to be rejected", mount, key)
+				continue
+			}
+			if !strings.Contains(err.Error(), hint) {
+				t.Errorf("%s: error should carry the %q hint, got: %v", mount, key, err)
+			}
 		}
 	}
 }

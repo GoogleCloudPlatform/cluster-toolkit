@@ -181,7 +181,7 @@ Mounts must use the format: `--mount "<src>;<dest>[;<mode>][;profile=<profile>][
   * **Without `profile=`**: Applies standard [GCSFuse CSI volume attributes](https://docs.cloud.google.com/kubernetes-engine/docs/reference/cloud-storage-fuse-csi-driver/volume-attr) directly to the inline mount.
   * **With `profile=`**: Overrides default [storage profile StorageClass parameters](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#storageclass_configuration_reference) on the generated PVs.
 
-  NOTE: Use `options=` rather than `attributes=mountOptions=...` for gcsfuse mount flags; `gcluster` routes `options=` into the correct field on both paths and rejects `mountOptions` as an attribute to keep the two from silently overwriting each other.
+  NOTE: `gcluster` derives some CSI volume attributes from the rest of the `--mount` spec, and supplying one of them through `attributes=` fails validation with an error, so the two cannot silently overwrite each other. Use `options=<opt1>,<opt2>` instead of `attributes=mountOptions=...` for gcsfuse mount flags, and `src=gs://<bucket>` instead of `attributes=bucketName=...` for the bucket.
 
 **Supported volume sources (`<src>`):**
 * **Cloud Storage**: `gs://<bucket-name>` (mounts via GCS Fused Driver)
