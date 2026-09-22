@@ -29,6 +29,7 @@ cli_deployment_vars:
   authorized_cidr: "{{ build_ip.stdout }}/32"
   machine_type: g4-standard-48
   num_gpus: 1
+  spot: "{{ enable_spot | default(true) }}"
 custom_vars:
   project: "{{ project }}"
   instance_labels:
