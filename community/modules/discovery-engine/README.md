@@ -1,8 +1,42 @@
 # Discovery Engine and Assistant Module
 
-Provisions Discovery Engine generative chat engine and assistant endpoints using Google Cloud REST endpoints.
+Provisions Discovery Engine (Vertex AI Search and Conversation) generative chat
+engine and assistant endpoints using Google Cloud REST endpoints.
 
 ---
+
+## Prerequisites
+
+### IAM Permissions
+
+The deploying identity (user or service account) must have the following IAM
+roles on the target project:
+
+* `roles/discoveryengine.editor` (or `roles/discoveryengine.admin`)
+* `roles/serviceusage.serviceUsageConsumer`
+
+### Authentication
+
+The provisioner scripts interact with the Discovery Engine REST API using an
+OAuth2 access token. The module automatically resolves tokens in the following
+order:
+
+1. `ACCESS_TOKEN` or `GOOGLE_OAUTH_ACCESS_TOKEN` environment variable.
+2. Application Default Credentials (`gcloud auth application-default print-access-token`).
+3. Active gcloud user credentials (`gcloud auth print-access-token`).
+
+Ensure that Application Default Credentials or `gcloud` is authenticated prior to
+running `gcluster deploy` or `terraform apply`.
+
+## Lifecycle & Destroy Behavior
+
+* **Creation**: The module checks for existing engines and assistants before
+  issuing create requests to ensure idempotency.
+* **Destruction**: On `terraform destroy`, `local-exec` provisioners issue
+  `DELETE` requests to clean up the assistant and chat engine from the GCP project.
+  Active credentials and network access must be available during destroy. If
+  credentials cannot be obtained, deletion is skipped with a warning to avoid
+  halting the Terraform destroy lifecycle.
 
 ## Example
 
