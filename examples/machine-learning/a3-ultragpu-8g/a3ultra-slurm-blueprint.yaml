@@ -28,7 +28,7 @@ vars:
   # Cluster env settings
   network_address_range: 172.16.0.0/16
   primary_subnet: 172.16.0.0/20
-  lustre_subnet: 172.16.16.0/20
+  secondary_subnet: 172.16.16.0/20
   rdma_net_range: 192.168.128.0/18
   # Cluster Settings
   local_ssd_mountpoint: /mnt/localssd
@@ -40,9 +40,9 @@ vars:
   a3u_dws_flex_enabled: false
   a3u_enable_spot_vm: false
 
-  # Multi-NIC Managed Lustre configuration
-  enable_multinic_lustre: true
-  multinic_client_tag: $(vars.deployment_name)-lustre-client
+  # Multi-NIC configuration
+  enable_multinic: true
+  multinic_client_tag: $(vars.deployment_name)-multinic-client
 
   # Managed Lustre is only supported in specific regions and zones
   # Please refer https://cloud.google.com/managed-lustre/docs/locations
@@ -72,9 +72,9 @@ deployment_groups:
       - subnet_name: $(vars.base_network_name)-sub-0
         subnet_region: $(vars.region)
         subnet_ip: $(vars.primary_subnet)
-      - subnet_name: $(vars.base_network_name)-lustre-subnet
+      - subnet_name: $(vars.base_network_name)-sub-1
         subnet_region: $(vars.region)
-        subnet_ip: $(vars.lustre_subnet)
+        subnet_ip: $(vars.secondary_subnet)
       firewall_rules:
       - name: $(vars.base_network_name)-internal
         ranges: [$(vars.network_address_range)]
@@ -110,7 +110,7 @@ deployment_groups:
       local_mount: /home
       remote_mount: lustrefs
       multinic:
-        enabled: $(vars.enable_multinic_lustre)
+        enabled: $(vars.enable_multinic)
         psa_ip_ranges: [$(private_service_access.cidr_range)]
         client_tags: [$(vars.multinic_client_tag)]
       per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
@@ -376,7 +376,7 @@ deployment_groups:
         $(concat(
           [{
             network=null,
-            subnetwork="projects/${vars.project_id}/regions/${vars.region}/subnetworks/${vars.base_network_name}-lustre-subnet",
+            subnetwork="projects/${vars.project_id}/regions/${vars.region}/subnetworks/${vars.base_network_name}-sub-1",
             subnetwork_project=vars.project_id,
             nic_type="GVNIC",
             queue_count=null,

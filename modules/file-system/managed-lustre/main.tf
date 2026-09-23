@@ -161,7 +161,8 @@ resource "google_compute_firewall" "lnet_callback_ingress" {
   name    = "${local.instance_id}-allow-lnet-callbacks"
   project = var.project_id
 
-  network = replace(var.network_id, "projects/${var.project_id}/global/networks/", "")
+  # network_id is projects/<project>/global/networks/<name>
+  network = split("/", var.network_id)[4]
 
   direction     = "INGRESS"
   source_ranges = var.multinic.psa_ip_ranges
