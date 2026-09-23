@@ -21,7 +21,7 @@ locals {
 
   # Note: The apiVersion associated with the kueue resources should be kueue.x-k8s.io/v1beta2 when using v0.15.0 or higher.
   # Refer: https://github.com/kubernetes-sigs/kueue/blob/main/CHANGELOG/CHANGELOG-0.15.md#v0150
-  kueue_supported_versions = ["0.18.2", "0.17.1", "0.16.0", "0.15.3", "0.15.2", "0.15.1", "0.15.0"]
+  kueue_supported_versions = ["0.19.5", "0.18.2", "0.17.1", "0.16.0", "0.15.3", "0.15.2", "0.15.1", "0.15.0"]
 
   # Officially supported latest helm chart versions of Jobset.
   # For details refer the official change log https://github.com/kubernetes-sigs/jobset/releases
@@ -148,7 +148,7 @@ variable "kueue" {
   type = object({
     # ATTENTION: If you update the KUEUE's default version below, please also update the corresponding
     # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go. (note the 'v' prefix there)
-    version                         = optional(string, "0.18.2")
+    version                         = optional(string, "0.19.5")
     install                         = optional(bool, false)
     config_path                     = optional(string, null)
     config_template_vars            = optional(map(any), null)
