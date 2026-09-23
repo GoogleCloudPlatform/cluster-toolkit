@@ -20,19 +20,25 @@ variable "project_id" {
 }
 
 variable "metadata" {
-  description = "A map of key/value pairs to set as project compute metadata items."
-  type        = map(string)
-  default     = {}
+  description = "Project compute metadata items to set as a list of key-value objects."
+  type = list(object({
+    key   = string
+    value = string
+  }))
+
+  validation {
+    condition     = length(distinct([for m in var.metadata : m.key])) == length(var.metadata)
+    error_message = "metadata keys must be unique."
+  }
 }
 
-variable "key" {
-  description = "Optional single metadata key (if not using the metadata map)."
+variable "deletion_policy" {
+  description = "The deletion policy for the metadata items. Can be 'DELETE' (removes the key from project metadata on destroy) or 'ABANDON' (leaves the metadata key in place on destroy)."
   type        = string
-  default     = ""
-}
+  default     = "DELETE"
 
-variable "value" {
-  description = "Optional single metadata value (if not using the metadata map)."
-  type        = string
-  default     = ""
+  validation {
+    condition     = contains(["DELETE", "ABANDON"], var.deletion_policy)
+    error_message = "deletion_policy must be either 'DELETE' or 'ABANDON'."
+  }
 }

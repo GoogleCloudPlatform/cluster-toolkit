@@ -1,23 +1,51 @@
 # Project Metadata Module
 
-Sets one or more Google Cloud Compute Engine project metadata items (`google_compute_project_metadata_item`). Accepts either a single `key` and `value` pair or a map of `metadata` dictionary items.
+Sets one or more Google Cloud Compute Engine project metadata items using `google_compute_project_metadata_item`.
 
-## Example
+## Important Considerations
+
+### 1. Project-Wide Scope
+Compute project metadata applies to **every virtual machine instance in the project**, including instances not created or managed by this blueprint. Special metadata keys such as `enable-oslogin`, `ssh-keys`, and `startup-script` alter behavior project-wide.
+
+### 2. Pre-Existing Keys and Collisions
+The underlying `google_compute_project_metadata_item` resource requires Terraform to create and manage the metadata key from its inception. If a key is already present in project metadata outside Terraform state (e.g., set via `gcloud compute project-info add-metadata` or another deployment), Terraform will fail during apply:
+
+```text
+Error: key "<key>" already present in metadata for project "<project>". Use `terraform import` to manage it with Terraform
+```
+
+* **Recommended Scoping**: Always namespace metadata keys with deployment- or experiment-specific prefixes (e.g., `"$(vars.user_experiment_name)_USER_EXPERIMENT_NAME"` or `"$(vars.deployment_name)_MY_KEY"`). This avoids collisions when multiple deployments share the same GCP project.
+* **Recovery / Migration Step**: If a key was created outside of Terraform and needs to be managed by this module, remove it from the project before applying:
+
+  ```bash
+  gcloud compute project-info remove-metadata --keys <key> --project <project_id>
+  ```
+
+  Then re-run `gcluster deploy`.
+
+### 3. Deletion Policy
+By default (`deletion_policy = "DELETE"`), destroying the deployment removes the managed metadata keys from the project. If other project workloads or downstream tools depend on the metadata persisting after the deployment is torn down, set `deletion_policy: "ABANDON"`.
+
+---
+
+## Example Usage
 
 ```yaml
-- group: project-metadata
+- group: metadata
   modules:
-  - id: set-metadata
+  - id: set-project-metadata
     source: community/modules/project/project-metadata
     settings:
-      project_id: my-project-id
-      key: custom_metadata_key
-      value: custom_metadata_value
-      # OR using a map:
-      # metadata:
-      #   KEY_1: VALUE_1
-      #   KEY_2: VALUE_2
+      project_id: $(vars.project_id)
+      deletion_policy: "DELETE" # or "ABANDON"
+      metadata:
+        - key: "$(vars.user_experiment_name)_USER_EXPERIMENT_NAME"
+          value: $(vars.user_experiment_name)
+        - key: "$(vars.deployment_name)_STATUS"
+          value: "deployed"
 ```
+
+---
 
 ## License
 
@@ -63,10 +91,9 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_key"></a> [key](#input\_key) | Optional single metadata key (if not using the metadata map). | `string` | `""` | no |
-| <a name="input_metadata"></a> [metadata](#input\_metadata) | A map of key/value pairs to set as project compute metadata items. | `map(string)` | `{}` | no |
+| <a name="input_deletion_policy"></a> [deletion\_policy](#input\_deletion\_policy) | The deletion policy for the metadata items. Can be 'DELETE' (removes the key from project metadata on destroy) or 'ABANDON' (leaves the metadata key in place on destroy). | `string` | `"DELETE"` | no |
+| <a name="input_metadata"></a> [metadata](#input\_metadata) | Project compute metadata items to set as a list of key-value objects. | <pre>list(object({<br/>    key   = string<br/>    value = string<br/>  }))</pre> | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID where compute metadata will be set. | `string` | n/a | yes |
-| <a name="input_value"></a> [value](#input\_value) | Optional single metadata value (if not using the metadata map). | `string` | `""` | no |
 
 ## Outputs
 

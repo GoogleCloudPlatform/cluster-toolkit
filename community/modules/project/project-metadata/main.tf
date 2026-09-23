@@ -14,13 +14,10 @@
  * limitations under the License.
  */
 
-locals {
-  combined_metadata = var.key != "" ? merge(var.metadata, { (var.key) = var.value }) : var.metadata
-}
-
 resource "google_compute_project_metadata_item" "items" {
-  for_each = local.combined_metadata
-  project  = var.project_id
-  key      = each.key
-  value    = each.value
+  for_each        = { for m in var.metadata : m.key => m.value }
+  project         = var.project_id
+  key             = each.key
+  value           = each.value
+  deletion_policy = var.deletion_policy
 }
