@@ -185,7 +185,8 @@ To ensure a reliable deployment, you must manually enforce the correct order of 
     settings:
       apply_manifests:
       # This manifest contains the CRDs for Kueue
-      - source: "https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/refs/heads/develop/modules/management/kubectl-apply/manifests/kueue-v0.11.4.yaml"
+      - name: kueue-crds
+        source: "https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/refs/heads/develop/modules/management/kubectl-apply/manifests/kueue-v0.11.4.yaml"
     ```
 
 2. **Run the deployment** (`gcluster deploy` or `terraform apply`).
@@ -198,10 +199,12 @@ To ensure a reliable deployment, you must manually enforce the correct order of 
     settings:
       apply_manifests:
       # The CRD manifest is still present
-      - source: "https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/refs/heads/develop/modules/management/kubectl-apply/manifests/kueue-v0.11.4.yaml"
+      - name: kueue-crds
+        source: "https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/refs/heads/develop/modules/management/kubectl-apply/manifests/kueue-v0.11.4.yaml"
 
       # Now, add your configuration manifest
-      - source: "https://gist.githubusercontent.com/YourUser/..." # Your configuration URL
+      - name: kueue-config
+        source: "https://gist.githubusercontent.com/YourUser/..." # Your configuration URL
     ```
 
 4. **Run the deployment command again.** Since the CRDs are now guaranteed to exist in the cluster, this second apply will succeed reliably.

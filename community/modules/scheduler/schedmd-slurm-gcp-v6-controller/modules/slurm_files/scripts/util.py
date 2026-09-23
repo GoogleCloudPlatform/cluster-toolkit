@@ -1816,14 +1816,18 @@ class Lookup:
         nodeset = self.cfg.nodeset.get(nodeset_name)
         if not nodeset:
             return False
-        if getattr(nodeset, "dws_flex", None) and getattr(nodeset.dws_flex, "enabled", False):
-            return False
-        engine = getattr(nodeset, "provisioning_engine", None)
+        dws_flex = nodeset.get("dws_flex") if isinstance(nodeset, dict) else getattr(nodeset, "dws_flex", None)
+        if dws_flex:
+            enabled = dws_flex.get("enabled", False) if isinstance(dws_flex, dict) else getattr(dws_flex, "enabled", False)
+            if enabled:
+                return False
+        engine = nodeset.get("provisioning_engine") if isinstance(nodeset, dict) else getattr(nodeset, "provisioning_engine", None)
         if engine == "BULK_INSERT":
             return False
         if engine == "MIG":
             return True
-        if getattr(nodeset, "mig_name", None) is not None:
+        mig_name = nodeset.get("mig_name") if isinstance(nodeset, dict) else getattr(nodeset, "mig_name", None)
+        if mig_name and not isinstance(mig_name, dict):
             return True
         return False
 
@@ -1836,11 +1840,55 @@ class Lookup:
         """Returns target MIG name for a given NodeSet, indexed from 0 for consistent scale expansion."""
         return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-mig-{index}"
 
+    def nodeset_slice_size(self, nodeset_name: str) -> int:
+        """Returns the slice size (hosts per slice) for a given NodeSet.
+        
+        For accelerator topologies (e.g. A4X with 1x72), computes hosts per slice
+        or reads slice_size from config. Defaults to 1000 for standard MIGs.
+        """
+        nodeset = self.cfg.nodeset.get(nodeset_name)
+        if not nodeset:
+            return 1000
+        slice_val = nodeset.get("slice_size") if isinstance(nodeset, dict) else getattr(nodeset, "slice_size", None)
+        if slice_val:
+            try:
+                return max(1, int(slice_val))
+            except (ValueError, TypeError):
+                pass
+        topo = nodeset.get("accelerator_topology") if isinstance(nodeset, dict) else getattr(nodeset, "accelerator_topology", None)
+        if topo:
+            log.debug(f"slice_size not present in config for {nodeset_name}; computing from accelerator_topology {topo}")
+            try:
+                dims = [int(x) for x in topo.lower().strip().split("x")]
+                if len(dims) == 2 and dims[0] > 0 and dims[1] > 0:
+                    total_gpus = dims[0] * dims[1]
+                    gpus_per_vm = 4
+                    gpu_cnt = nodeset.get("gpu_count") if isinstance(nodeset, dict) else getattr(nodeset, "gpu_count", None)
+                    if not gpu_cnt:
+                        gpu_attr = nodeset.get("gpu") if isinstance(nodeset, dict) else getattr(nodeset, "gpu", None)
+                        gpu_cnt = gpu_attr.get("count") if isinstance(gpu_attr, dict) else getattr(gpu_attr, "count", None)
+                    if gpu_cnt:
+                        gpus_per_vm = int(gpu_cnt)
+                    else:
+                        template_link = nodeset.get("instance_template") if isinstance(nodeset, dict) else getattr(nodeset, "instance_template", None)
+                        if template_link:
+                            try:
+                                t_info = self.template_info(template_link)
+                                if t_info and t_info.machine_type and t_info.machine_type.accelerators:
+                                    gpus_per_vm = t_info.machine_type.accelerators[0].count
+                            except Exception:
+                                pass
+                    return max(1, total_gpus // max(1, gpus_per_vm))
+            except Exception as e:
+                log.warning(f"Failed to calculate slice size from topology {topo} for {nodeset_name}: {e}")
+        return 1000
+
     def node_mig_name(self, node_name: str) -> str:
         """Returns the specific MIG name for a given node."""
         nodeset_name = self.node_nodeset_name(node_name)
         idx = self.node_index(node_name)
-        mig_idx = idx // 1000
+        slice_size = self.nodeset_slice_size(nodeset_name)
+        mig_idx = idx // slice_size
         return self.mig_name(nodeset_name, index=mig_idx)
 
     def node_is_fr(self, node_name:str) -> bool:
@@ -2488,11 +2536,84 @@ def update_config(cfg: NSDict) -> None:
     global _lkp
     _lkp = Lookup(cfg)
 
+def _is_target_controller_up(output: str, target_role: str) -> bool:
+    """Check if a specific controller role ('primary' or 'backup') is UP in scontrol ping output."""
+    role = target_role.lower()
+    for line in output.splitlines():
+        line_lower = line.lower()
+        if f"({role}" in line_lower or f"{role} controller" in line_lower:
+            is_up = any(s in line_lower for s in ("is up", ": up", "(up)"))
+            is_down = any(s in line_lower for s in ("is down", ": down", "(down)"))
+            if is_up and not is_down:
+                return True
+    return False
+
+
+def wait_slurmctld_up(lkp: Lookup, timeout: float = 60) -> None:
+    """Wait for local slurmctld daemon to respond to scontrol ping and report UP status.
+    This ensures scontrol reconfigure does not fail due to slurmctld not being ready
+    after a service restart.
+    """
+    log.info("Waiting for slurmctld to be fully up...")
+    hostname = socket.gethostname().split(".")[0]
+    backup_name = lkp.cfg.get("slurm_backup_controller_name")
+    backup_short = backup_name.split(".")[0] if backup_name else ""
+    is_backup = bool(backup_short) and (hostname == backup_short or hostname.endswith("-1"))
+    target_role = "backup" if is_backup else "primary"
+
+    for wait in backoff_delay(0.5, timeout=timeout):
+        try:
+            res = run(f"{lkp.scontrol} ping", check=False, timeout=5)
+            output = (res.stdout + res.stderr).lower()
+            if _is_target_controller_up(output, target_role):
+                log.info(f"slurmctld ({target_role}) is fully up.")
+                return
+        except Exception as e:
+            log.debug(f"scontrol ping check failed: {e}")
+        if wait > 0:
+            sleep(wait)
+    raise TimeoutError(f"slurmctld ({target_role}) is not fully up after {timeout} seconds")
+
+
 def scontrol_reconfigure(lkp: Lookup) -> None:
     log.info("Running systemctl restart slurmctld.service")
     run("sudo systemctl restart slurmctld.service", timeout=30)
+    wait_slurmctld_up(lkp)
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure")
+
+
+def is_active_controller(lkp: Lookup) -> bool:
+    """Returns True if the local node is the currently active Slurm controller.
+    In non-HA setups, always returns True for the controller.
+    In HA setups, queries scontrol ping to check if local node is active primary or active takeover backup.
+    """
+    if not lkp.is_controller:
+        return False
+
+    backup_name = lkp.cfg.get("slurm_backup_controller_name")
+    if not backup_name:
+        return True
+
+    hostname = socket.gethostname().split(".")[0]
+    backup_short = backup_name.split(".")[0] if backup_name else ""
+    is_backup_instance = (backup_short and hostname == backup_short) or hostname.endswith("-1")
+
+    try:
+        res = run(f"{lkp.scontrol} ping", check=False, timeout=5)
+        output = (res.stdout + res.stderr).lower()
+
+        primary_up = _is_target_controller_up(output, "primary")
+        backup_up = _is_target_controller_up(output, "backup")
+
+        if not is_backup_instance:
+            return primary_up
+        else:
+            return (not primary_up) and backup_up
+    except Exception as e:
+        log.warning(f"Failed to query scontrol ping for HA active check: {e}")
+        return not is_backup_instance
+
 
 def slurm_version_gte(v1: str, v2: str) -> bool:
     """Returns true if v1 >= v2, expects YY.MM format"""

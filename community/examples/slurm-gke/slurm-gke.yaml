@@ -126,7 +126,8 @@ deployment_groups:
     use: [gke_cluster]
     settings:
       apply_manifests:
-      - source: $(ghpc_stage("./files/slurm-namespace.yaml.tftpl"))
+      - name: slurm-namespace
+        source: $(ghpc_stage("./files/slurm-namespace.yaml.tftpl"))
         template_vars:
           namespace: $(vars.slurm_namespace)
 
