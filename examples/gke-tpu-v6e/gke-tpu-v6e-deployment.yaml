@@ -61,15 +61,14 @@ vars:
     - name:
 
 ## --- Option 2: DWS Flex Start ---
-  # For TPUs, max node count should be num of chips based on topology divided by
-  # num chips for the machine type (e.g. 4 for ct6e-standard-4t).
-  # Reference: https://cloud.google.com/tpu/docs/v6e
+  ## For TPUs, max node count should be num of chips based on topology divided by num chips for the machine type (e.g. 4 for ct6e-standard-4t).
+  ## Reference: https://cloud.google.com/tpu/docs/v6e
   #enable_flex_start: true
   #autoscaling_min_node_count: 0
   #autoscaling_max_node_count: 4
 
 ## --- Option 3: DWS Flex Start + Queued Provisioning ---
-  # Requires a multi-host TPU slice
+  ## Requires a multi-host TPU slice
   ## Change this variable if you want to have a custom kueue config file
   #kueue_configuration_path: $(ghpc_stage("../dws-sample-workloads/tpu-dws-queues.yaml.tftpl"))
   #enable_flex_start: true
@@ -81,4 +80,4 @@ vars:
   #spot: true
 
 ## --- Option 5: On-Demand ---
-  # No variables needed; comment out Option 1 and leave the rest commented.
+  ## No variables needed; comment out Option 1 and leave the rest commented.
