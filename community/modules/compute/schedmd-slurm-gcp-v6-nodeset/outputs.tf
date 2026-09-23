@@ -33,13 +33,47 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = var.accelerator_topology == null || var.enable_placement
+    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || var.enable_placement
     error_message = "accelerator_topology requires enable_placement to be set to true."
   }
 
   precondition {
-    condition     = (var.accelerator_topology == null) || try(tonumber(split("x", var.accelerator_topology)[1]) % local.guest_accelerator[0].count == 0, false)
-    error_message = "accelerator_topology must be divisible by number of gpus in machine."
+    condition     = !(var.provisioning_engine == "MIG" && !var.dws_flex.enabled && var.enable_placement && (var.accelerator_topology == null || var.accelerator_topology == ""))
+    error_message = "MIG provisioning engine only supports enable_placement when accelerator_topology is specified (e.g. '1x72')."
+  }
+
+  precondition {
+    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || can(regex("^[1-9][0-9]*[xX][1-9][0-9]*$", trimspace(var.accelerator_topology)))
+    error_message = "accelerator_topology must be formatted as '<dim1>x<dim2>' with positive integers (e.g. '1x72')."
+  }
+
+  precondition {
+    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || length(local.guest_accelerator) > 0 || can(regex("^(a[2-4]x?|g2)", var.machine_type))
+    error_message = "accelerator_topology can only be configured on machine types with attached GPUs or accelerators."
+  }
+
+  # GCE accepts acceleratorTopology in a HIGH_THROUGHPUT workload policy only on A4X / A4X Max;
+  # Bulk Insert binds it via runtime placement policies instead, hence the MIG-only gate.
+  precondition {
+    condition     = !(var.provisioning_engine == "MIG" && !var.dws_flex.enabled && var.accelerator_topology != null && var.accelerator_topology != "") || can(regex("^a4x-", var.machine_type))
+    error_message = "accelerator_topology with provisioning_engine = 'MIG' requires a machine type that supports HIGH_THROUGHPUT workload policies with an accelerator topology (A4X, A4X Max). Use provisioning_engine = 'BULK_INSERT' for other machine types."
+  }
+
+  precondition {
+    condition     = (var.accelerator_topology == null || var.accelerator_topology == "") || try(tonumber(split("x", lower(trimspace(var.accelerator_topology)))[1]) % local.gpu_count == 0, false)
+    error_message = "The second dimension (<dim2>) of accelerator_topology must be divisible by the number of GPUs per machine."
+  }
+
+  precondition {
+    condition = (var.accelerator_topology == null || var.accelerator_topology == "" || var.provisioning_engine != "MIG" || var.dws_flex.enabled) || (
+      var.node_count_static > 0 && try(
+        var.node_count_static % (
+          (tonumber(split("x", lower(trimspace(var.accelerator_topology)))[0]) * tonumber(split("x", lower(trimspace(var.accelerator_topology)))[1])) / local.gpu_count
+        ) == 0,
+        false
+      )
+    )
+    error_message = "When accelerator_topology is specified with provisioning_engine = 'MIG', node_count_static must be greater than 0 and an integer multiple of the slice size ((dim1 * dim2) / gpus_per_machine)."
   }
 
   precondition {
@@ -111,12 +145,9 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = !(var.node_count_dynamic_max > 0 && !var.dws_flex.enabled && var.provisioning_engine == "MIG")
-    error_message = "Dynamic compute NodeSets with provisioning_engine = 'MIG' are currently not supported. When using provisioning_engine = 'MIG', please explicitly set node_count_dynamic_max = 0."
-  }
-
-  precondition {
-    condition     = !(var.provisioning_engine == "MIG" && var.enable_placement && !var.dws_flex.enabled)
-    error_message = "MIG engine currently does not support runtime dynamic compact placement policies (enable_placement = true). Please set enable_placement = false when using provisioning_engine = 'MIG'. Compact placement and Workload Policies for MIGs will be supported in a future release."
+    condition = !(
+      var.node_count_dynamic_max > 0 && var.provisioning_engine == "MIG" && !var.dws_flex.enabled
+    )
+    error_message = "Dynamic compute NodeSets with provisioning_engine = 'MIG' are currently not supported. Please explicitly set node_count_dynamic_max = 0."
   }
 }

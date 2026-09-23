@@ -1,22 +1,156 @@
 # GKE H4D Blueprint
 
-This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found [here](https://cloud.google.com/blog/products/compute/new-h4d-vms-optimized-for-hpc).
+This blueprint uses GKE to provision a Kubernetes cluster and an H4D node pool, along with networks and service accounts. Information about H4D machines can be found [here](https://cloud.google.com/blog/products/compute/new-h4d-vms-optimized-for-hpc).
 
 > **_NOTE:_** The required GKE version for H4D support is >= 1.32.11-gke.1174000.
 
-## Steps to deploy the H4D blueprint
-Refer to [Run high performance computing (HPC) workloads with H4D](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/run-hpc-workloads#cluster-toolkit) for instructions on creating the GKE-H4D cluster.
+## Create a cluster
+
+Follow these steps to configure and deploy the GKE-H4D cluster.
+
+> [!NOTE]
+> If you create multiple clusters using these blueprints, ensure that all VPC and subnet names are unique per project to avoid resource conflicts.
+
+1. [Set up Cluster Toolkit](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment). We recommend using Cloud Shell to do so because the dependencies are already pre-installed for Cluster Toolkit.
+
+2. Create a Cloud Storage bucket to store the state of the Terraform deployment:
+
+   ```sh
+   gcloud storage buckets create gs://BUCKET_NAME \
+       --project=PROJECT_ID \
+       --default-storage-class=STANDARD \
+       --location=COMPUTE_REGION \
+       --uniform-bucket-level-access
+   gcloud storage buckets update gs://BUCKET_NAME --versioning
+   ```
+
+3. In `examples/gke-h4d/gke-h4d-deployment.yaml`, configure the general deployment settings:
+   - `bucket`: The name of the Cloud Storage bucket created in step 2.
+   - `project_id`: Your Google Cloud project ID.
+   - `deployment_name`: A unique name for your cluster deployment.
+   - `region`: The GCP region for the cluster (e.g., `asia-southeast1`).
+   - `zone`: The GCP zone for the H4D node pool (e.g., `asia-southeast1-a`).
+   - `authorized_cidr`: The IP CIDR block permitted to access the Kubernetes control plane (e.g., `0.0.0.0/0` to allow all authorized users, or `<YOUR-IP-ADDRESS>/32`).
+
+4. Select a consumption model:
+   In `examples/gke-h4d/gke-h4d-deployment.yaml`, select **ONE** consumption model from the options provided. Option 1 (Specific Reservation) is uncommented by default. To use another consumption model, uncomment the desired option and comment out Option 1.
+
+5. Generate Application Default Credentials (ADC) for Terraform:
+
+   ```sh
+   gcloud auth application-default login
+   ```
+
+6. Deploy the blueprint:
+
+   ```sh
+   ./gcluster deploy examples/gke-h4d/gke-h4d.yaml -d examples/gke-h4d/gke-h4d-deployment.yaml
+   ```
+
+   When prompted, select `(A)pply` to provision the VPC networks, Falcon IRDMA RDMA network, service accounts, GKE cluster, and H4D node pool.
+
+---
+
+## Running Workloads
+
+### DWS Flex Start Test Job
+When using DWS Flex Start (Option 2 or Option 3), the node pool initializes with 0 nodes and scales up on demand when matching jobs are scheduled.
+
+A sample batch job is provided at `examples/gke-h4d/test-job-flex.yaml`.
+
+Any job applied to this node pool must meet the following requirements:
+- **Flex Start Selector**: Workloads must include `nodeSelector: cloud.google.com/gke-flex-start: "true"`.
+- **Tolerations**: Because the `h4d-pool` node pool is tainted (`node-type=h4d:NoSchedule`) to prevent generic workloads from scheduling on HPC nodes, workloads **must** include the matching toleration:
+
+  ```yaml
+  tolerations:
+  - key: "node-type"
+    operator: "Equal"
+    value: "h4d"
+    effect: "NoSchedule"
+  ```
+
+#### Execution and Monitoring Steps
+1. Connect to the GKE cluster:
+
+   ```sh
+   gcloud container clusters get-credentials <cluster-name> --region <region> --project <project-id>
+   ```
+
+2. Submit the sample test job:
+
+   ```sh
+   kubectl apply -f examples/gke-h4d/test-job-flex.yaml
+   ```
+
+3. Monitor the scale-up and execution lifecycle:
+   - **Check Pod Status**: Initially, pods will be `Pending` because the H4D node pool is at size 0:
+
+     ```sh
+     kubectl get pods -w
+     ```
+
+     ```text
+     NAME              READY   STATUS    RESTARTS   AGE
+     h4d-job-1-q2ksv   0/1     Pending   0          10s
+     h4d-job-2-j9wla   0/1     Pending   0          10s
+     ```
+
+   - **Inspect Autoscaler Events**: Check pod events to verify GKE Cluster Autoscaler triggered provisioning for the H4D group:
+
+     ```sh
+     kubectl describe pods -l job-name=h4d-job-1
+     ```
+
+     Look for the `TriggeredScaleUp` event:
+
+     ```text
+     Events:
+       Type    Reason            Age   From                Message
+       ----    ------            ---   ----                -------
+       Normal  TriggeredScaleUp  15s   cluster-autoscaler  pod triggered scale-up by cluster-autoscaler: group h4d-pool-xxxx
+     ```
+
+   - **Track Node Readiness**: After the physical H4D VMs boot and register, the pods transition to `Running`:
+
+     ```sh
+     kubectl get nodes -w
+     ```
+
+   - **Observe Completion**: Once the sleep workload finishes, the pods will transition to `Completed`:
+
+     ```sh
+     kubectl get pods
+     ```
+
+     ```text
+     NAME              READY   STATUS      RESTARTS   AGE
+     h4d-job-1-q2ksv   0/1     Completed   0          2m
+     h4d-job-2-j9wla   0/1     Completed   0          2m
+     ```
+
+4. Clean up the test job:
+
+   ```sh
+   kubectl delete -f examples/gke-h4d/test-job-flex.yaml
+   ```
+
+> [!NOTE]
+> Since the node pool is configured with `max_run_duration: 900` (15 minutes), any provisioned nodes will be terminated by GKE after 15 minutes, or scaled down to 0 by Cluster Autoscaler when idle.
+
+---
 
 ## Run a test using the MPI Operator
+
 The MPI Operator is installed on the cluster during the deployment. To run a test using the MPI Operator on the GKE H4D cluster, refer to https://github.com/GoogleCloudPlatform/kubernetes-engine-samples/tree/main/hpc/mpi.
 
 ## Clean Up
-To destroy all resources associated with creating the GKE cluster, run the following command:
+To destroy all resources associated with the deployment, run:
 
 ```sh
-./gcluster destroy CLUSTER-NAME
+./gcluster destroy CLUSTER_NAME
 ```
 
-Replace `CLUSTER-NAME` with the `deployment_name` used in the blueprint vars block.
+Replace `CLUSTER_NAME` with the `deployment_name` specified in your deployment file.
 
-**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
+**Note:** GCS buckets created for Terraform state storage are not deleted by `./gcluster destroy` and must be removed manually if no longer needed.

@@ -468,7 +468,7 @@ Request a specific TPU slice topology using `--topology`.
   --base-image python:3.9-slim \
   --build-context job_details \
   --command "python app.py" \
-  --compute-type tpu-v6e-slice \
+  --compute-type v6e-16 \
   --topology 4x4
 ```
 
@@ -1012,7 +1012,7 @@ To submit a dynamic slicing workload targeting TPU v7x nodes, enter the followin
 ./gcluster job submit \
   --name my-dynamic-slice-job \
   --command "python train.py" \
-  --compute-type tpu-v7x-slice \
+  --compute-type tpu7x \
   --topology 4x4x4
 ```
 

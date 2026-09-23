@@ -28,3 +28,8 @@ output "managed_zone_id" {
   description = "The fully qualified ID of the DNS Managed Zone."
   value       = google_dns_managed_zone.zone.id
 }
+
+output "dns_name" {
+  description = "The DNS suffix of the managed zone (for example, gcnv.internal.)."
+  value       = google_dns_managed_zone.zone.dns_name
+}

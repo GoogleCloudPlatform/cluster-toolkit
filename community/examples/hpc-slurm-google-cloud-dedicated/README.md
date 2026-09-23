@@ -216,3 +216,9 @@ srun -N 2 hostname
 ```shell
 ./gcluster destroy <deployment_name> --auto-approve
 ```
+
+---
+
+## Multi-Cluster & Cloud Bursting
+
+For deploying Multi-Cluster Slurm with Elastic Cloud Bursting across two autonomous GCD projects, see [hybrid-slurm-cluster](./hybrid-slurm-cluster/README.md).

@@ -77,11 +77,15 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-a4x](#gke-a4x-) ![core-badge]
   * [gke-a4x-max-bm](#gke-a4x-max-bm-) ![core-badge]
   * [netapp-volumes.yaml](#netapp-volumesyaml-) ![core-badge]
+  * [netapp-volumes-slurm.yaml](#netapp-volumes-slurmyaml-) ![core-badge]
   * [gke-tpu-7x](#gke-tpu-7x-) ![core-badge]
   * [gcloud-example.yaml](#gcloud-exampleyaml--) ![community-badge] ![experimental-badge]
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
   * [hpc-slurm-google-cloud-dedicated.yaml](#hpc-slurm-google-cloud-dedicatedyaml-) ![community-badge]
+  * [hybrid-slurm-cluster (GCD)](#hybrid-slurm-cluster-gcd-) ![community-badge]
+    * [primary-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml)
+    * [burst-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml)
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -915,7 +919,7 @@ The blueprint contains 3 groups:
 ### [hpc-slurm-ubuntu2204.yaml] ![community-badge]
 
 Similar to the [hpc-slurm.yaml] example, but using Ubuntu 22.04 instead of CentOS 7.
-[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cluster Toolkit team.
+[Other operating systems] are supported by SchedMD for the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed on this page have been tested by the Cluster Toolkit team.
 
 The cluster will support 2 partitions named `debug` and `compute`.
 The `debug` partition is the default partition and runs on smaller
@@ -1817,6 +1821,27 @@ To destroy all resources associated with creating the GKE cluster, run the follo
 [auto-tiering]: https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/manage-auto-tiering
 [netapp-volumes.yaml]: ../examples/netapp-volumes.yaml
 
+### [netapp-volumes-slurm.yaml] ![core-badge]
+
+This blueprint creates a basic Slurm cluster that mounts a Flex Unified large-capacity NetApp volume at `/home`. A private Cloud DNS zone publishes all NFS endpoint IPs under one FQDN so Slurm clients are distributed across endpoints. Auto-tiering is enabled on the storage pool and volume.
+
+#### Steps to deploy the blueprint
+
+```shell
+./gcluster create examples/netapp-volumes-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}" --vars region=us-central1 --vars zone=us-central1-a
+./gcluster deploy netapp-volumes-slurm
+```
+
+After the cluster is deployed, SSH to the Slurm login node and confirm `/home` is mounted over NFS by FQDN.
+
+#### Clean Up
+
+```sh
+./gcluster destroy netapp-volumes-slurm
+```
+
+[netapp-volumes-slurm.yaml]: ../examples/netapp-volumes-slurm.yaml
+
 ### [gke-tpu-7x] ![core-badge]
 
 This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/examples/gke-tpu-7x/README.md).
@@ -1833,7 +1858,7 @@ of creating and deleting a network, subnet, and VM instance.
 
 ### [eda-all-on-cloud.yaml] ![community-badge]
 
-Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also creates two new VPC networks, a network called `eda-net` which connects VMs, Slurm and storage and a RDMA network called `eda-rdma-net` between the H4D nodes, along with four [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview) mounted to `/home`, `/tools`, `/library` and `/scratch`. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
+Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also creates two new VPC networks, a network called `eda-net` which connects VMs, Slurm and storage and a RDMA network called `eda-rdma-net` between the H4D nodes, along with four [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview) mounted to `/home`, `/tools`, `/library` and `/scratch`. Each volume is published in a private Cloud DNS zone so Slurm clients mount by FQDN and use every NFS endpoint IP. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
 
 The deployment instructions can be found in the [README](../community/examples/eda/README.md).
 
@@ -1843,7 +1868,7 @@ The deployment instructions can be found in the [README](../community/examples/e
 
 Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also connects to one existing user network which connects VMs, Slurm and storage and creates a RDMA network called `eda-rdma-net` for low latency communication between the compute nodes. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
 
-Four pre-existing NFS volumes are mounted to `/home`, `/tools`, `/library` and `/scratch`. Using [FlexCache](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/cache-ontap-volumes/overview) volumes allows to bring on-premises data to Google Cloud compute, without having to manually copy the data. This enables "burst to the cloud" use cases.
+Four pre-existing NFS volumes are mounted to `/home`, `/tools`, `/library` and `/scratch`. Set each `*_server_ips` variable to the complete list of endpoint IPs; the blueprint creates private Cloud DNS records and mounts the volumes by FQDN. Using [FlexCache](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/cache-ontap-volumes/overview) volumes allows to bring on-premises data to Google Cloud compute, without having to manually copy the data. This enables "burst to the cloud" use cases.
 
 The deployment instructions can be found in the [README](../community/examples/eda/README.md).
 
@@ -1856,6 +1881,18 @@ Creates a Slurm cluster on C3 machine types for Google Cloud Dedicated (GCD) and
 The deployment instructions can be found in the [README](../community/examples/hpc-slurm-google-cloud-dedicated/README.md).
 
 [hpc-slurm-google-cloud-dedicated.yaml]: ../community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml
+
+### [hybrid-slurm-cluster (GCD)] ![community-badge]
+
+Deploys a Multi-Cluster Slurm environment with Elastic Cloud Bursting across two autonomous projects in Google Cloud Dedicated (GCD) and sovereign cloud environments. Includes cross-cluster SAuth discovery, automatic compute nodes autoscaling on Burst Cluster, standalone NFS server, custom Rocky Linux Slurm image, and shared `/home` filesystem mounting over VPC peering.
+
+This directory includes the following blueprints:
+* [`primary-cluster.yaml`](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml): Primary cluster on GCD with standalone NFS server and custom-built Rocky Linux Slurm image.
+* [`burst-cluster.yaml`](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml): Cloud burst target cluster on GCD with dynamic autoscaling compute nodes.
+
+The deployment instructions can be found in the [README](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/README.md).
+
+[hybrid-slurm-cluster (GCD)]: ../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/README.md
 
 ## Blueprint Schema
 

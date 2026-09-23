@@ -34,6 +34,9 @@ cli_deployment_vars:
   static_node_count: "{{ static_node_count }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   gcp_public_cidrs_access_enabled: true
+  spot: "{{ enable_spot | default(true) }}"
+  placement_policy:
+    type: COMPACT
 custom_vars:
   project: "{{ project }}"
   instance_labels:

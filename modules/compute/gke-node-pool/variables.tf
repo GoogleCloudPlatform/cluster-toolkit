@@ -273,7 +273,7 @@ variable "service_account_email" {
 }
 
 variable "service_account_scopes" {
-  description = "Scopes to to use with the node pool."
+  description = "Scopes to use with the node pool."
   type        = set(string)
   default     = ["https://www.googleapis.com/auth/cloud-platform"]
 }

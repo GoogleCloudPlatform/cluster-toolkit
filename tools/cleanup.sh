@@ -34,7 +34,7 @@ log() {
 
 check_dependencies() {
 	log "INFO" "Checking for required command-line tools..."
-	local dependencies=("gcloud" "awk" "grep" "sort" "date" "sed" "basename")
+	local dependencies=("gcloud" "awk" "grep" "sort" "date" "sed" "basename" "python3")
 	local missing_deps=()
 
 	for cmd in "${dependencies[@]}"; do
@@ -775,7 +775,7 @@ process_iam_deleted_members() {
 	log "INFO" "--- Processing: IAM Role Bindings for Deleted Service Accounts (Bulk) ---"
 
 	# Run the python bulk script inline
-	if ! python3 - "$PROJECT_ID" "$DRY_RUN" <<'EOF'; then
+	if ! python3 - "$PROJECT_ID" "$DRY_RUN" <<'EOF'
 import json, os, subprocess, sys, tempfile
 
 project_id = sys.argv[1]
@@ -849,6 +849,7 @@ except Exception as e:
     print(f"ERROR: An unexpected error occurred: {e}")
     sys.exit(1)
 EOF
+	then
 		log "ERROR" "Bulk IAM cleanup failed."
 		((ERROR_COUNT++)) || true
 	else
