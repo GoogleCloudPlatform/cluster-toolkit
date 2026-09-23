@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,6 +29,10 @@ if [ -z "$TOKEN" ]; then
 fi
 
 if [ -z "$TOKEN" ]; then
+	if [ "$ACTION" = "destroy" ]; then
+		echo "WARNING: Failed to obtain GCP access token during destroy. Skipping remote API deletion." >&2
+		exit 0
+	fi
 	echo "ERROR: Failed to obtain GCP access token using 'gcloud auth application-default print-access-token' or 'gcloud auth print-access-token'." >&2
 	echo "Please ensure Application Default Credentials (ADC) or gcloud is authenticated." >&2
 	exit 1

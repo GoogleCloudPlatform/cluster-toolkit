@@ -32,8 +32,7 @@ resource "terraform_data" "engine" {
   ]
 
   provisioner "local-exec" {
-    interpreter = ["/bin/bash"]
-    command     = "${path.module}/scripts/manage_discovery_engine.sh"
+    command = "${path.module}/scripts/manage_discovery_engine.sh"
 
     environment = {
       ACTION     = "create"
@@ -47,9 +46,8 @@ resource "terraform_data" "engine" {
   }
 
   provisioner "local-exec" {
-    when        = destroy
-    interpreter = ["/bin/bash"]
-    command     = "${path.module}/scripts/manage_discovery_engine.sh"
+    when    = destroy
+    command = "${path.module}/scripts/manage_discovery_engine.sh"
 
     environment = {
       ACTION     = "destroy"
@@ -86,8 +84,7 @@ resource "terraform_data" "assistant" {
   ]
 
   provisioner "local-exec" {
-    interpreter = ["/bin/bash"]
-    command     = "${path.module}/scripts/manage_discovery_engine.sh"
+    command = "${path.module}/scripts/manage_discovery_engine.sh"
 
     environment = {
       ACTION       = "create"
@@ -102,9 +99,8 @@ resource "terraform_data" "assistant" {
   }
 
   provisioner "local-exec" {
-    when        = destroy
-    interpreter = ["/bin/bash"]
-    command     = "${path.module}/scripts/manage_discovery_engine.sh"
+    when    = destroy
+    command = "${path.module}/scripts/manage_discovery_engine.sh"
 
     environment = {
       ACTION       = "destroy"
