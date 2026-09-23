@@ -58,6 +58,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml--) ![community-badge] ![experimental-badge]
+  * [fsi/gce-symphony.yaml](#fsi-gce-symphonyyaml--) ![community-badge] ![experimental-badge]
+  * [fsi/gke-symphony.yaml](#fsi-gke-symphonyyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm-slurm.yaml](#tutorial-starccm-slurmyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
@@ -1575,6 +1577,23 @@ This blueprint will take you through a tutorial on an FSI Value at Risk calculat
 * Vertex AI Notebooks
 
 See the [full tutorial here](../docs/tutorials/fsi-montecarlo-on-batch/README.md).
+
+### [fsi/gce-symphony.yaml](../community/examples/fsi/ibm-symphony-on-gce/symphony.yaml) ![community-badge] ![experimental-badge]
+
+#### IBM Spectrum Symphony on Google Compute Engine (GCE)
+
+This project provides a blueprint for deploying an [IBM Spectrum Symphony](https://www.ibm.com/products/spectrum-symphony) cluster on Google Cloud Platform using the [Google Cloud Cluster Toolkit](https://cloud.google.com/cluster-toolkit). The blueprint automates infrastructure provisioning, custom base image creation via Packer, and Symphony cluster installation with dynamic cloud bursting to Compute Engine Managed Instance Groups (MIGs) via Symphony Host Factory.
+
+See the [full tutorial here](../community/examples/fsi/ibm-symphony-on-gce/README.md).
+
+### [fsi/gke-symphony.yaml](../community/examples/fsi/ibm-symphony-on-gke/symphony.yaml) ![community-badge] ![experimental-badge]
+
+#### IBM Spectrum Symphony on Google Kubernetes Engine (GKE)
+
+This project provides a blueprint for deploying an [IBM Spectrum Symphony](https://www.ibm.com/products/spectrum-symphony) cluster on Google Cloud Platform using the [Google Cloud Cluster Toolkit](https://cloud.google.com/cluster-toolkit) and Google Kubernetes Engine (GKE). The blueprint automates infrastructure provisioning, custom base image creation via Packer, Artifact Registry repository creation, GKE cluster setup with the Google Symphony Kubernetes Operator, and Symphony Host Factory integration for elastic containerized compute bursting into GKE.
+
+
+See the [full tutorial here](../community/examples/fsi/ibm-symphony-on-gce/README.md).
 
 ### [tutorial-starccm-slurm.yaml] ![community-badge] ![experimental-badge]
 
