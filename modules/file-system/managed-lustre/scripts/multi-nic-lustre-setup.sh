@@ -28,16 +28,41 @@ MD="http://metadata.google.internal/computeMetadata/v1/instance"
 HDR="Metadata-Flavor: Google"
 md_get() { curl -s -f -H "$HDR" "$1" 2>/dev/null || true; }
 
+# Default gateway of the NIC at metadata index $1. Must come from metadata:
+# GCE gives the guest a /32, so the real subnet size is not knowable locally.
+md_gw_at_idx() { md_get "${MD}/network-interfaces/${1}/gateway"; }
+
+# Gateway of the metadata NIC whose MAC matches Linux interface $1. Only used
+# for an explicit NIC list; discovery below records gateways as it goes.
+md_gw_for_nic() {
+	local nic="$1" mac idx cand_mac
+	mac="$(cat "/sys/class/net/${nic}/address" 2>/dev/null)"
+	[[ -z "$mac" ]] && return 0
+	idx=0
+	while true; do
+		cand_mac="$(md_get "${MD}/network-interfaces/${idx}/mac")"
+		[[ -z "$cand_mac" ]] && return 0
+		if [[ "$cand_mac" == "$mac" ]]; then
+			md_gw_at_idx "$idx"
+			return 0
+		fi
+		idx=$((idx + 1))
+	done
+}
+
 # shellcheck source=/dev/null
 [[ -r /etc/google/multinic-lustre.env ]] && . /etc/google/multinic-lustre.env
 
 LNET_OPTIONS="${MULTINIC_LNET_OPTIONS:-$(md_get "${MD}/attributes/multinic-lustre-lnet-options")}"
-LNET_OPTIONS="${LNET_OPTIONS:-lnet_numa_range=1000000 lnet_peer_discovery_disabled=0}"
+LNET_OPTIONS="${LNET_OPTIONS:-lnet_numa_range=1000000 lnet_peer_discovery_disabled=1}"
 TABLE_ID="${MULTINIC_TABLE_BASE:-101}"
 RPF="${MULTINIC_RP_FILTER:-2}"
 
 # $1 (optional): comma-separated explicit NIC list.
 SEC_NICS="$(echo "${1:-}" | tr ',' ' ' | xargs)"
+
+# Linux ifname -> default gateway, populated by the discovery walk below.
+declare -A NIC_GW
 
 if [[ -z "$SEC_NICS" ]]; then
 	PRIMARY_VPC="$(md_get "${MD}/network-interfaces/0/network")"
@@ -62,6 +87,7 @@ if [[ -z "$SEC_NICS" ]]; then
 					[[ "$CAND_NAME" == "lo" ]] && continue
 					if [[ "$(cat "$CAND/address" 2>/dev/null)" == "$NIC_MAC" ]]; then
 						SEC_NICS="$SEC_NICS $CAND_NAME"
+						NIC_GW["$CAND_NAME"]="$(md_gw_at_idx "$IDX")"
 						break
 					fi
 				done
@@ -100,7 +126,14 @@ for NIC in $SEC_NICS; do
 		continue
 	fi
 
-	GW="$(echo "$SEC_IP" | awk -F. '{print $1"."$2"."$3".1"}')"
+	# Gateway from discovery, else a metadata lookup by MAC.
+	GW="${NIC_GW[$NIC]:-}"
+	[[ -z "$GW" ]] && GW="$(md_gw_for_nic "$NIC")"
+	if [[ -z "$GW" ]]; then
+		# Metadata unreachable: guess the .1 of the /24. Wrong on wider subnets.
+		GW="$(echo "$SEC_IP" | awk -F. '{print $1"."$2"."$3".1"}')"
+		echo "multi-nic-lustre: $NIC gateway absent from metadata, assuming $GW"
+	fi
 	ip route add default via "$GW" dev "$NIC" table "$TABLE_NAME" || true
 	ip rule add from "$SEC_IP" table "$TABLE_NAME" || true
 	TABLE_ID=$((TABLE_ID + 1))

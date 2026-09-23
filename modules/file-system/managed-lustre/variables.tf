@@ -156,8 +156,13 @@ variable "multinic" {
     VPCs are ignored automatically.
   EOT
   type = object({
-    enabled      = optional(bool, false)
-    lnet_options = optional(string, "lnet_numa_range=1000000 lnet_peer_discovery_disabled=0")
+    enabled = optional(bool, false)
+    # Keep peer discovery disabled (lnet_peer_discovery_disabled=1). Having
+    # peer discovery enabled creates issues with multi-nic server + numa to nic
+    # settings, that is, it creates cross numa traffic on serverside.
+    # numa_range=1000000: hides CPU socket distance from LNet so peers spread
+    # over both rails instead of all picking the nearest NIC.
+    lnet_options = optional(string, "lnet_numa_range=1000000 lnet_peer_discovery_disabled=1")
     table_base   = optional(number, 101)
     rp_filter    = optional(number, 2)
     # LNet servers open callback connections back to the client on tcp:988
@@ -166,9 +171,8 @@ variable "multinic" {
     create_firewall = optional(bool, true)
     psa_ip_ranges   = optional(list(string), [])
     client_tags     = optional(list(string), [])
-    # Extra cloud-config keys merged into the emitted document. Needed where a
-    # blueprint already uses metadata.user-data for something else, e.g.
-    # a4high's create_hostname_file - user-data is a single-valued key.
+    # Extra cloud-config keys merged into the emitted yaml. Needed where a
+    # blueprint already uses metadata.user-data
     extra_cloud_config = optional(any, {})
   })
   default = {}
