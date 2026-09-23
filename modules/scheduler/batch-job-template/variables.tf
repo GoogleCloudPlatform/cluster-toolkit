@@ -63,7 +63,7 @@ variable "task_count" {
 }
 
 variable "task_count_per_node" {
-  description = "Max number of tasks that can run on a VM at the same time. If not specified, Batch will decide a value."
+  description = "Max number of tasks that can be run on a VM at the same time. If not specified, Batch will decide a value."
   type        = number
   default     = null
 }

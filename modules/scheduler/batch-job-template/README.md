@@ -189,7 +189,7 @@ limitations under the License.
 | <a name="input_submit"></a> [submit](#input\_submit) | When set to true, the generated job file will be submitted automatically to Google Cloud as part of terraform apply. | `bool` | `false` | no |
 | <a name="input_subnetwork"></a> [subnetwork](#input\_subnetwork) | The subnetwork that the Batch job should run on. Defaults to 'default' subnet. Ignored if `instance_template` is provided. | `any` | `null` | no |
 | <a name="input_task_count"></a> [task\_count](#input\_task\_count) | Number of parallel tasks | `number` | `1` | no |
-| <a name="input_task_count_per_node"></a> [task\_count\_per\_node](#input\_task\_count\_per\_node) | Max number of tasks that can run on a VM at the same time. If not specified, Batch will decide a value. | `number` | `null` | no |
+| <a name="input_task_count_per_node"></a> [task\_count\_per\_node](#input\_task\_count\_per\_node) | Max number of tasks that can be run on a VM at the same time. If not specified, Batch will decide a value. | `number` | `null` | no |
 
 ## Outputs
 

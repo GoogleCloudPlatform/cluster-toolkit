@@ -34,7 +34,6 @@ locals {
       synchronized          = var.mpi_mode
       runnables             = local.runnables
       task_count            = var.task_count
-      parallelism           = var.parallelism
       parallelism           = local.parallelism
       tasks_per_node        = local.tasks_per_node
       require_hosts_file    = var.mpi_mode
