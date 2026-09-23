@@ -21,11 +21,11 @@ locals {
 
   # Note: The apiVersion associated with the kueue resources should be kueue.x-k8s.io/v1beta2 when using v0.15.0 or higher.
   # Refer: https://github.com/kubernetes-sigs/kueue/blob/main/CHANGELOG/CHANGELOG-0.15.md#v0150
-  kueue_supported_versions = ["0.17.1", "0.16.0", "0.15.3", "0.15.2", "0.15.1", "0.15.0"]
+  kueue_supported_versions = ["0.18.2", "0.17.1", "0.16.0", "0.15.3", "0.15.2", "0.15.1", "0.15.0"]
 
   # Officially supported latest helm chart versions of Jobset.
   # For details refer the official change log https://github.com/kubernetes-sigs/jobset/releases
-  jobset_supported_versions    = ["0.10.1", "0.10.0", "0.9.1", "0.9.0"]
+  jobset_supported_versions    = ["0.12.0", "0.10.1", "0.10.0", "0.9.1", "0.9.0"]
   gib_supported_versions_x86   = ["v1.1.2", "v1.1.0", "v1.0.6", "v1.0.5", "v1.0.3", "v1.0.2"]
   gib_supported_versions_arm64 = ["v1.1.2", "v1.1.0", "v1.0.7"]
   gib_supported_versions = var.target_architecture == "arm64" ? (
@@ -148,7 +148,7 @@ variable "kueue" {
   type = object({
     # ATTENTION: If you update the KUEUE's default version below, please also update the corresponding
     # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go. (note the 'v' prefix there)
-    version                         = optional(string, "0.17.1")
+    version                         = optional(string, "0.18.2")
     install                         = optional(bool, false)
     config_path                     = optional(string, null)
     config_template_vars            = optional(map(any), null)
@@ -183,7 +183,7 @@ variable "jobset" {
   description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
   type = object({
     install           = optional(bool, false)
-    version           = optional(string, "0.10.1")
+    version           = optional(string, "0.12.0")
     controller_cpu    = optional(string, null)
     controller_memory = optional(string, null)
   })
