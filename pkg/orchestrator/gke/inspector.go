@@ -135,27 +135,18 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	logWorkloadList(outputTarget, g.executor, "QUEUED", "", targetNamespace)
 	logWorkloadList(outputTarget, g.executor, "RUNNING", "", targetNamespace)
 
-	workloadNamespace := g.inspectWorkload(writer, opts.WorkloadName, opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
+	g.inspectWorkload(writer, opts.WorkloadName, targetNamespace)
 
 	// --- 7. Console Links ---
-	logConsoleLinks(outputTarget, opts, workloadNamespace)
+	logConsoleLinks(outputTarget, opts, targetNamespace)
 
 	logging.Info("Cluster inspection report saved to %s", filePath)
 	return nil
 }
 
-func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, clusterName, clusterLocation, projectID string) string {
-	workloadNamespace := "default"
+func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, workloadNamespace string) {
 	if workloadName == "" {
-		return workloadNamespace
-	}
-
-	ns, err := g.getCurrentNamespace(clusterName, clusterLocation, projectID)
-	if err == nil {
-		workloadNamespace = ns
-	} else {
-		// Non-critical diagnostic path.
-		logging.Warn("Failed to get current namespace, defaulting to 'default' for inspection: %v", err)
+		return
 	}
 
 	logWorkloadList(writer.writer, g.executor, "EVERYTHING", workloadName, workloadNamespace)
@@ -163,6 +154,9 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, c
 	writer.runAndLog(fmt.Sprintf("JobSet: Config for %s", workloadName), "kubectl", "describe", "jobsets", workloadName, "-n", workloadNamespace)
 
 	targetWorkload := fmt.Sprintf("jobset-%s", workloadName)
+	if g.needsDynamicClientInit() {
+		_, _ = g.getDynamicClient()
+	}
 	if g.kubeClient != nil {
 		if tw, err := g.findTargetWorkload(workloadNamespace, workloadName, 2*time.Second); err == nil {
 			targetWorkload = tw
@@ -170,7 +164,6 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, c
 	}
 	writer.runAndLog(fmt.Sprintf("Kueue: Workload config for %s", workloadName), "kubectl", "describe", "workloads", targetWorkload, "-n", workloadNamespace)
 
-	return workloadNamespace
 }
 
 func logNodeCounts(w io.Writer, exec Executor) {

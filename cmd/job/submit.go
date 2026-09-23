@@ -128,6 +128,10 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			}
 		}
 
+		if err := validateRestartOnExitCodes(restartOnExitCodes); err != nil {
+			return err
+		}
+
 		priority = strings.ToLower(priority)
 
 		return nil
@@ -443,6 +447,15 @@ func ensureDryRunDir(path string) error {
 			return fmt.Errorf("directory %q does not exist. Please check your path for typos or create the directory manually", dir)
 		}
 		return fmt.Errorf("failed to check directory %s: %w", dir, err)
+	}
+	return nil
+}
+
+func validateRestartOnExitCodes(codes []int) error {
+	for _, code := range codes {
+		if code <= 0 || code > 255 {
+			return fmt.Errorf("invalid exit code %d in --restart-on-exit-codes: exit codes must be between 1 and 255", code)
+		}
 	}
 	return nil
 }

@@ -30,6 +30,7 @@ cli_deployment_vars:
   tpu_topology: "{{ tpu_topology }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   user_namespace: ai-workloads
+  spot: "{{ enable_spot | default(true) }}"
 custom_vars:
   project: "{{ project }}"
   user_namespace: ai-workloads
@@ -45,6 +46,7 @@ custom_vars:
   jobset_name: sample-tpu-jobset
 instance_type: "tpu7x"
 scheduler: "gke"
+chs_nodepools: "gke-tpu-7x-pool"
 chs_suites:
 - lite
 - standard

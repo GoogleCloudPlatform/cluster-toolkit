@@ -343,7 +343,7 @@ variable "guest_accelerator" {
 
 variable "accelerator_topology" {
   type        = string
-  description = "Specifies the shape of the Accelerator (GPU/TPU) slice."
+  description = "Specifies the shape of the Accelerator (GPU/TPU) slice. Note: When set, 'enable_placement' must be set to true (and 'node_count_dynamic_max' must be explicitly set to 0 when using 'provisioning_engine = MIG'). Warning: on a deployed nodeset using 'provisioning_engine = MIG', ANY change to this value - including changing one topology for another, and removing it - forces replacement of the managed instance group and destroys its running VMs. Drain the nodeset before changing it."
   nullable    = true
   default     = null
 }
@@ -495,12 +495,13 @@ variable "subnetwork_self_link" {
 }
 
 variable "additional_networks" {
-  description = "Additional network interface details for GCE, if any."
+  description = "Additional network interface details for GCE, if any. For Private Service Connect interfaces, 'network_attachment' must be the full resource URI: projects/{project}/regions/{region}/networkAttachments/{name}."
   default     = []
   type = list(object({
     network            = optional(string)
-    subnetwork         = string
+    subnetwork         = optional(string)
     subnetwork_project = optional(string)
+    network_attachment = optional(string)
     network_ip         = optional(string, "")
     nic_type           = optional(string)
     stack_type         = optional(string)
@@ -517,6 +518,32 @@ variable "additional_networks" {
       subnetwork_range_name = string
     })), [])
   }))
+  validation {
+    condition = alltrue([
+      for nic in var.additional_networks : (
+        # Cannot specify network or subnetwork alongside network_attachment
+        !(((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "")) && (nic.network_attachment != null && nic.network_attachment != "")) &&
+        # Cannot specify subnetwork_project, access_config, ipv6_access_config, or alias_ip_range alongside network_attachment
+        (nic.network_attachment == null || nic.network_attachment == "" || (
+          (nic.subnetwork_project == null || nic.subnetwork_project == "") &&
+          length(try(nic.access_config, [])) == 0 &&
+          length(try(nic.ipv6_access_config, [])) == 0 &&
+          length(try(nic.alias_ip_range, [])) == 0
+        )) &&
+        # Must specify at least one of network, subnetwork, or network_attachment
+        ((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "") || (nic.network_attachment != null && nic.network_attachment != ""))
+      )
+    ])
+    error_message = "In var.additional_networks, you must specify at least one of 'network', 'subnetwork', or 'network_attachment'. When 'network_attachment' is set, you cannot specify 'network', 'subnetwork', 'subnetwork_project', 'access_config', 'ipv6_access_config', or 'alias_ip_range'."
+  }
+  validation {
+    condition = alltrue([
+      for nic in var.additional_networks : (
+        nic.network_attachment == null || nic.network_attachment == "" || can(regex("^(?:https://www.googleapis.com/compute/[^/]+/)?projects/[^/]+/regions/[^/]+/networkAttachments/[^/]+$", nic.network_attachment))
+      )
+    ])
+    error_message = "In var.additional_networks, 'network_attachment' must be the full resource URI: projects/{project}/regions/{region}/networkAttachments/{name}."
+  }
 }
 
 variable "access_config" {
@@ -682,4 +709,14 @@ variable "machine_configs" {
   description = "Definition of GCE machine types and counts"
   type        = any
   default     = {}
+}
+
+variable "provisioning_engine" {
+  description = "Compute node provisioning engine: 'AUTO', 'MIG', or 'BULK_INSERT'. Note: When using 'MIG', 'node_count_dynamic_max' must be explicitly set to 0, and 'enable_placement' is only supported when 'accelerator_topology' is specified. (Note: DWS Flex NodeSets should leave 'provisioning_engine' as 'AUTO')."
+  type        = string
+  default     = "AUTO"
+  validation {
+    condition     = contains(["AUTO", "MIG", "BULK_INSERT"], var.provisioning_engine)
+    error_message = "Variable 'provisioning_engine' must be 'AUTO', 'MIG', or 'BULK_INSERT'."
+  }
 }

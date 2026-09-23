@@ -85,6 +85,9 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-google-cloud-dedicated.yaml](#hpc-slurm-google-cloud-dedicatedyaml-) ![community-badge]
   * [hpc-slurm-scale.yaml](#hpc-slurm-scaleyaml-) ![community-badge]
   * [hpc-slurm-multiregion-scale.yaml](#hpc-slurm-multiregion-scaleyaml-) ![community-badge]
+  * [hybrid-slurm-cluster (GCD)](#hybrid-slurm-cluster-gcd-) ![community-badge]
+  * [primary-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml)
+  * [burst-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml)
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1896,6 +1899,17 @@ Creates a massive-scale, multi-region Slurm cluster provisioning up to 1,500 dyn
 The deployment instructions can be found in the [README](../community/examples/slurm-high-throughput/README.md).
 
 [hpc-slurm-multiregion-scale.yaml]: ../community/examples/slurm-high-throughput/hpc-slurm-multiregion-scale.yaml
+### [hybrid-slurm-cluster (GCD)] ![community-badge]
+
+Deploys a Multi-Cluster Slurm environment with Elastic Cloud Bursting across two autonomous projects in Google Cloud Dedicated (GCD) and sovereign cloud environments. Includes cross-cluster SAuth discovery, automatic compute nodes autoscaling on Burst Cluster, standalone NFS server, custom Rocky Linux Slurm image, and shared `/home` filesystem mounting over VPC peering.
+
+This directory includes the following blueprints:
+* [`primary-cluster.yaml`](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml): Primary cluster on GCD with standalone NFS server and custom-built Rocky Linux Slurm image.
+* [`burst-cluster.yaml`](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml): Cloud burst target cluster on GCD with dynamic autoscaling compute nodes.
+
+The deployment instructions can be found in the [README](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/README.md).
+
+[hybrid-slurm-cluster (GCD)]: ../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/README.md
 
 ## Blueprint Schema
 
