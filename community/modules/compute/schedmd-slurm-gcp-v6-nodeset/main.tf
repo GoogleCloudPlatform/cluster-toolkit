@@ -42,6 +42,12 @@ locals {
     4
   )
 
+  is_tpu = startswith(var.machine_type, "ct") || startswith(var.machine_type, "tpu")
+  tpu_slice_vms = local.is_tpu && var.accelerator_topology != null ? try(
+    (tonumber(split("x", var.accelerator_topology)[0]) * tonumber(split("x", var.accelerator_topology)[1]) * coalesce(try(tonumber(split("x", var.accelerator_topology)[2]), null), 1)) / 4,
+    0
+  ) : 0
+
   disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
 
   metadata = merge(

@@ -33,7 +33,7 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || var.enable_placement
+    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || var.enable_placement || local.is_tpu
     error_message = "accelerator_topology requires enable_placement to be set to true."
   }
 
@@ -42,13 +42,14 @@ output "nodeset" {
     error_message = "MIG provisioning engine only supports enable_placement when accelerator_topology is specified (e.g. '1x72')."
   }
 
+  # TPU topologies are 3-dimensional (e.g. "4x4x4"), so they are validated separately below.
   precondition {
-    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || can(regex("^[1-9][0-9]*[xX][1-9][0-9]*$", trimspace(var.accelerator_topology)))
+    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || local.is_tpu || can(regex("^[1-9][0-9]*[xX][1-9][0-9]*$", trimspace(var.accelerator_topology)))
     error_message = "accelerator_topology must be formatted as '<dim1>x<dim2>' with positive integers (e.g. '1x72')."
   }
 
   precondition {
-    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || length(local.guest_accelerator) > 0 || can(regex("^(a[2-4]x?|g2)", var.machine_type))
+    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || local.is_tpu || length(local.guest_accelerator) > 0 || can(regex("^(a[2-4]x?|g2)", var.machine_type))
     error_message = "accelerator_topology can only be configured on machine types with attached GPUs or accelerators."
   }
 
@@ -60,7 +61,7 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = (var.accelerator_topology == null || var.accelerator_topology == "") || length(local.guest_accelerator) == 0 || try(tonumber(split("x", lower(trimspace(var.accelerator_topology)))[1]) % local.gpu_count == 0, false)
+    condition     = (var.accelerator_topology == null || var.accelerator_topology == "") || local.is_tpu || try(tonumber(split("x", lower(trimspace(var.accelerator_topology)))[1]) % local.gpu_count == 0, false)
     error_message = "The second dimension (<dim2>) of accelerator_topology must be divisible by the number of GPUs per machine."
   }
 
@@ -152,17 +153,17 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = !(startswith(var.machine_type, "ct") || startswith(var.machine_type, "tpu")) || endswith(var.machine_type, "-4t")
+    condition     = !local.is_tpu || endswith(var.machine_type, "-4t")
     error_message = "TPU nodesets currently only support 4-chip machine types ending in '-4t' (e.g. ct6e-standard-4t, tpu7x-standard-4t, ct5p-hightpu-4t)."
   }
 
   precondition {
-    condition     = !(startswith(var.machine_type, "ct") || startswith(var.machine_type, "tpu")) || var.node_count_static == 0 || var.accelerator_topology != null
-    error_message = "Static TPU nodesets (node_count_static > 0) require accelerator_topology to be specified."
+    condition     = !local.is_tpu || var.node_count_static == 0 || (local.tpu_slice_vms >= 1 && floor(local.tpu_slice_vms) == local.tpu_slice_vms && var.node_count_static % local.tpu_slice_vms == 0)
+    error_message = "Static TPU nodesets (node_count_static > 0) require a valid accelerator_topology (e.g. 2x2x4), and node_count_static must be a multiple of the slice VM count (total_chips / 4)."
   }
 
   precondition {
-    condition     = !(startswith(var.machine_type, "ct") || startswith(var.machine_type, "tpu")) || !(var.node_count_static > 0 && var.node_count_dynamic_max > 0)
+    condition     = !local.is_tpu || !(var.node_count_static > 0 && var.node_count_dynamic_max > 0)
     error_message = "TPU nodesets cannot mix static and dynamic nodes; set either node_count_static > 0 or node_count_dynamic_max > 0."
   }
 }

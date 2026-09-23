@@ -19,13 +19,14 @@ terraform_backend_defaults:
     bucket: # supply bucket name to store Terraform state (created automatically by gcluster if missing)
 
 vars:
-  deployment_name: # supply unique deployment name
-  project_id: # supply existing project id
-  region: # supply region with tpu7x-standard-4t capacity in reservation
-  zone: # supply zone with tpu7x-standard-4t capacity in reservation
-  tpu_cluster_size: 16 # supply number of tpu7x-standard-4t VMs (4 chips per VM)
-  tpu_dynamic_max_nodes: 16 # supply maximum number of tpu7x-standard-4t VMs for dynamic nodes
-  tpu_accelerator_topology: 4x4x4 # supply TPU topology matching tpu_cluster_size (e.g. 2x2x2 for 2 VMs, 2x4x4 for 8 VMs, 4x4x4 for 16 VMs)
+  deployment_name: # supply unique deployment name (e.g. tpu7x-slurm)
+  project_id: # supply existing GCP project ID
+  region: # supply region (e.g. us-central1)
+  zone: # supply zone (e.g. us-central1-c)
+  tpu_static_nodes: # supply total static tpu7x-standard-4t VM nodes (4 TPU chips/node; multiple of slice VMs, e.g. 8 for one 2x4x4 slice or two 2x2x4 slices)
+  tpu_dynamic_max_nodes: # max dynamic tpu7x-standard-4t nodes (e.g. 4)
+  tpu_accelerator_topology: # topology per static TPU slice (e.g. 2x2x4)
+  # Note: slice VMs = total chips / 4, e.g. 2x2x4 = 4 nodes/slice, 2x4x4 = 8 nodes/slice
   tpu_reservation_name: # supply tpu7x-standard-4t reservation name
 
 # Additional provisioning models (pick only one), can be used to substitute `tpu_reservation_name`:

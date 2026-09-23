@@ -308,17 +308,23 @@ def get_instance_template_copy(nodeset: NSDict, lkp: util.Lookup) -> str:
         **properties.get("labels", {}),
         "slurm_template_role": "copy",
     }
+    # TPU reservations require RESERVATION_BOUND and DELETE on termination in the template
     if getattr(nodeset, "reservation_name", None):
-        res_short_name = util.trim_self_link(nodeset.reservation_name)
+        local_prefix = f"projects/{lkp.project}/reservations/"
+        res_name = (
+            nodeset.reservation_name[len(local_prefix):]
+            if nodeset.reservation_name.startswith(local_prefix)
+            else nodeset.reservation_name
+        )
         properties["reservationAffinity"] = {
             "consumeReservationType": "SPECIFIC_RESERVATION",
             "key": f"compute.{util.universe_domain()}/reservation-name",
-            "values": [res_short_name],
+            "values": [res_name],
         }
         scheduling = properties.setdefault("scheduling", {})
         scheduling["provisioningModel"] = "RESERVATION_BOUND"
         scheduling["instanceTerminationAction"] = "DELETE"
-    # TPU ct6e family strictly requires SMT threadsPerCore = 2.
+    # Remove threadsPerCore=1 default since TPU machine types reject custom SMT settings
     if lkp.is_tpu_nodeset(nodeset.nodeset_name):
         if isinstance(properties.get("advancedMachineFeatures"), dict):
             properties["advancedMachineFeatures"].pop("threadsPerCore", None)
@@ -345,7 +351,7 @@ def get_instance_template_copy(nodeset: NSDict, lkp: util.Lookup) -> str:
 
 def get_mig_for_node(node: str, lkp: util.Lookup) -> tuple[Optional[str], List[str]]:
     """Returns (mig_self_link, all_nodes_in_mig) for the MIG managing the given node."""
-    # Check if GCE VM instance already exists and has created-by metadata
+    # Check VM metadata first; if VM hasn't booted yet, fall back to matching MIG description (slurm_nodes:...)
     inst = lkp.instance(node)
     mig_link = inst.metadata.get("created-by") if inst else None
     # Query MIGs in zone (if single zone) or region to find description & peer nodes
@@ -441,23 +447,31 @@ def _resume_single_tpu_node(
 ) -> None:
     """Resumes a single TPU slice by creating its own dedicated zonal/regional MIG."""
     first_node = chunk[0]
-    existing_mig, existing_peers = get_mig_for_node(first_node, lkp)
-    if existing_mig:
-        if not lkp.is_static_node(first_node):
-            log.warning(
-                "Deleting stale dynamic TPU MIG %s for nodes %s before resuming new slice.",
-                existing_mig,
-                existing_peers or chunk,
-            )
-            _delete_tpu_mig(existing_mig, existing_peers or chunk, lkp)
-        else:
+    if lkp.is_static_node(first_node):
+        existing_mig, _ = get_mig_for_node(first_node, lkp)
+        if existing_mig:
+            # Reuse existing static MIG to avoid hitting GCE API limits and losing queue position
             log.info(
                 "TPU node %s already managed by MIG %s. Skipping.", first_node, existing_mig
             )
             return
+    else:
+        # Delete leftover dynamic MIG from any previous cancelled job across all slice nodes
+        seen_migs: set[str] = set()
+        for n in chunk:
+            existing_mig, existing_peers = get_mig_for_node(n, lkp)
+            if existing_mig and existing_mig not in seen_migs:
+                seen_migs.add(existing_mig)
+                log.warning(
+                    "Deleting stale dynamic TPU MIG %s for nodes %s before resuming new slice.",
+                    existing_mig,
+                    existing_peers or chunk,
+                )
+                _delete_tpu_mig(existing_mig, existing_peers or chunk, lkp)
     model = chunk[0]
     nodeset = lkp.node_nodeset(model)
     region = lkp.node_region(model)
+    # Static nodes get topology from blueprint; dynamic nodes get it from --layout
     if lkp.is_static_node(model):
         topology = lkp.nodeset_accelerator_topology(nodeset.nodeset_name)
     else:
@@ -484,6 +498,7 @@ def _resume_single_tpu_node(
     mig_name = f"{lkp.cfg.slurm_cluster_name}-{nodeset.nodeset_name}-{uuid.uuid4().hex[:8]}"
     zones = nodeset.zone_policy_allow or []
     is_zonal = len(zones) == 1
+    # Create MIG with targetSize=0 and workload policy, then boot VMs via createInstances
     mig_req_body = dict(
         name=mig_name,
         versions=[dict(instanceTemplate=get_instance_template_copy(nodeset, lkp))],
@@ -604,6 +619,17 @@ def suspend_tpu_nodes(nodes: List[str], lkp: util.Lookup) -> None:
         else:
             log.error("Cannot find MIG for TPU node %s", node)
     for mig_link, mig_nodes in by_mig.items():
+        all_mig_nodes = mig_all_peers.get(mig_link, mig_nodes)
+        # Keep static MIG if VMs haven't booted yet so we reuse it instead of hitting GCE API limits
+        if lkp.is_static_node(mig_nodes[0]) and all(
+            lkp.instance(n) is None for n in all_mig_nodes
+        ):
+            log.info(
+                "Static TPU MIG %s has no backing VMs yet (waiting for GCE capacity); keeping MIG instead of deleting.",
+                mig_link,
+            )
+            continue
+        # Delete the whole slice MIG and power down remaining peer nodes
         _delete_tpu_mig(mig_link, mig_nodes, lkp)
         phantom_nodes = set(mig_all_peers.get(mig_link, [])) - set(nodes)
         if phantom_nodes:

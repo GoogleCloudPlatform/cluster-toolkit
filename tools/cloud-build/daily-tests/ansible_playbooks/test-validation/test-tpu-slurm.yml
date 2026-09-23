@@ -62,14 +62,14 @@
     executable: /bin/bash
   changed_when: false
 
-- name: Verify srun on Static TPU partition (cgroup ConstrainDevices=no and VFIO devices)
+- name: Verify srun on Static TPU partition (mounts, cgroup ConstrainDevices=no, and VFIO devices)
   ansible.builtin.command: >
     srun -N {{ custom_vars.num_slurm_nodes | default(1) }}
     -p {{ custom_vars.tpu_partition }}
-    --gres=tpu:{{ custom_vars.tpu_type }}:{{ custom_vars.expected_tpu_chips }}
     --layout={{ custom_vars.tpu_type }}={{ custom_vars.tpu_topology }}
     bash -c '
     set -e
+    mount | grep -q "on /home "
     grep -q "^ConstrainDevices=no" /usr/local/etc/slurm/cgroup.conf
     VFIO_COUNT=$(ls -1 /dev/vfio/devices/vfio* | wc -l)
     echo "Static partition $(hostname): Found ${VFIO_COUNT} VFIO TPU devices"
@@ -83,7 +83,6 @@
 #   ansible.builtin.command: >
 #     srun -N {{ custom_vars.num_slurm_nodes | default(1) }}
 #     -p {{ custom_vars.tpu_dyn_partition }}
-#     --gres=tpu:{{ custom_vars.tpu_type }}:{{ custom_vars.expected_tpu_chips }}
 #     --layout={{ custom_vars.tpu_type }}={{ custom_vars.tpu_topology }}
 #     bash -c '
 #     set -e
@@ -120,7 +119,6 @@
       #SBATCH --job-name=tpu7x-sbatch-test
       #SBATCH --partition={{ custom_vars.tpu_partition }}
       #SBATCH --nodes={{ custom_vars.num_slurm_nodes | default(1) }}
-      #SBATCH --gres=tpu:{{ custom_vars.tpu_type }}:{{ custom_vars.expected_tpu_chips }}
       #SBATCH --layout={{ custom_vars.tpu_type }}={{ custom_vars.tpu_topology }}
       #SBATCH --output=%x_%j.out
       #SBATCH --error=%x_%j.err

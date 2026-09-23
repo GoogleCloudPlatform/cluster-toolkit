@@ -135,7 +135,7 @@ steps:
               DEPLOYMENT_NAME="tpu7x-slurm-$$BUILD_ID_SHORT"
 
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -q -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm -q "gs://daily-tests-tf-state/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
@@ -147,11 +147,15 @@ steps:
 
               REGION="us-central1"
               ZONE="us-central1-c"
-              BLUEPRINT="/workspace/examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-packer-blueprint.yaml"
+              BLUEPRINT="/workspace/examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml"
 
-              sed -i 's/tpu_cluster_size: 8/tpu_cluster_size: 1/' \$$BLUEPRINT
-              sed -i 's/tpu_dynamic_max_nodes: 4/tpu_dynamic_max_nodes: 1/' \$$BLUEPRINT
-              sed -i 's/tpu_accelerator_topology: 2x4x4/tpu_accelerator_topology: 2x2x1/' \$$BLUEPRINT
+              sed -i "s/^  project_id:.*/  project_id: \$$PROJECT_ID/" \$$BLUEPRINT
+              sed -i "s/^  deployment_name:.*/  deployment_name: \$$DEPLOYMENT_NAME/" \$$BLUEPRINT
+              sed -i "s/^  region:.*/  region: \$$REGION/" \$$BLUEPRINT
+              sed -i "s/^  zone:.*/  zone: \$$ZONE/" \$$BLUEPRINT
+              sed -i 's/^  tpu_static_nodes:.*/  tpu_static_nodes: 1/' \$$BLUEPRINT
+              sed -i 's/^  tpu_dynamic_max_nodes:.*/  tpu_dynamic_max_nodes: 1/' \$$BLUEPRINT
+              sed -i 's/^  tpu_accelerator_topology:.*/  tpu_accelerator_topology: 2x2x1/' \$$BLUEPRINT
               sed -i "s/built_image_family: slurm-tpu-v7x-ubuntu2404/built_image_family: slurm-tpu-v7x-$$BUILD_ID_SHORT/" \$$BLUEPRINT
 
               ENABLE_SPOT="true"

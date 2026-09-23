@@ -87,6 +87,7 @@ def get_resume_file_data() -> Optional[ResumeData]:
             job_id = jo.get("job_id"),
             partition = jo.get("partition"),
             nodes_alloc = util.to_hostnames(jo.get("nodes_alloc")),
+            # Parse topology from job layout (e.g., tpu7x=2x2x2 -> 2x2x2)
             accelerator_topology = jo["layout"].split("=")[-1] if jo.get("layout") else None,
         )
         jobs.append(job)
@@ -280,6 +281,7 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
         
         model = nodes[0]
         
+        # Group static TPU nodes by slice size so each slice gets its own MIG
         if lkp.is_tpu_node(model) and lkp.is_static_node(model):
             ns = lkp.node_nodeset(model)
             chunk_size = lkp.get_tpu_chunk_size(ns)
@@ -595,13 +597,12 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
         except Exception as tpu_exc:
             err_msg = str(tpu_exc)
             action, admin_comment = error_handler.classify_gcp_error("TPU_RESUME_ERROR", err_msg)
-            # Notify and set admincomment FIRST while the job is still alive in CF (before state=down kills srun)
+            # Notify the job before marking nodes down so srun prints the error
             if chunk.excl_job_id is not None:
                 run(f"{lkp.scontrol} update jobid={chunk.excl_job_id} admincomment={shlex.quote(admin_comment)}", check=False)
                 run(f"{lkp.scontrol} notify {chunk.excl_job_id} {shlex.quote(admin_comment)}", check=False)
                 time.sleep(1.0)
-            # Return dynamic TPU nodes to power_down (idle~). Pass resume_data=None since admincomment/notify
-            # were already sent above while the job was alive in CF, avoiding "Job has already finished" errors on srun.
+            # Reset nodes back to idle~ and cancel the job if the config/layout was invalid
             is_invalid = "INVALID_FIELD_VALUE" in err_msg
             handle_resume_failure(
                 chunk.nodes,

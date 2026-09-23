@@ -466,6 +466,7 @@ def sync_placement_groups():
     for pg in _get_resource_policies(lkp):
         name = pg["name"]
 
+        # Keep reusable TPU workload policies unless their nodeset was removed
         if mtch := tpu_wp_regex.match(name):
             ns_name = mtch.group("ns")
             if ns_name not in lkp.cfg.nodeset:

@@ -49,21 +49,18 @@ trap 'rm -f "$tmpfile"' EXIT
 
 echo "Deleting managed instance groups"
 mig_filter="name:${cluster_name}-${nodeset_name}-*"
-gcloud compute instance-groups managed list --format="value(self_link)" --filter="${mig_filter}" >"$tmpfile"
-while batch="$(head -n 5)" && [[ ${#batch} -gt 0 ]]; do
-	groups=$(echo "$batch" | paste -sd " " -) # concat into a single space-separated line
-	# The lack of quotes around ${groups} is intentional and causes each new space-separated "word" to
-	# be treated as independent arguments. See PR#2523
-	# shellcheck disable=SC2086
-	for _ in $( #occasionally MIGs will fail to delete due to some active transformation happening, so let's retry
-		seq 1 $MAX_ATTEMPTS
-	); do
-		if gcloud compute instance-groups managed delete --quiet ${groups}; then
-			break
-		fi
-		echo "MIG deletion failed, retrying"
-	done
-done <"$tmpfile"
+for _ in $(seq 1 $MAX_ATTEMPTS); do
+	gcloud compute instance-groups managed list --format="value(self_link)" --filter="${mig_filter}" >"$tmpfile"
+	[[ ! -s "$tmpfile" ]] && break
+	while batch="$(head -n 5)" && [[ ${#batch} -gt 0 ]]; do
+		groups=$(echo "$batch" | paste -sd " " -) # concat into a single space-separated line
+		# shellcheck disable=SC2086
+		gcloud compute instance-groups managed delete --quiet ${groups} || {
+			echo "MIG deletion failed, retrying"
+			sleep 5
+		}
+	done <"$tmpfile"
+done
 true >"$tmpfile" # Wipe contents of tmp file
 
 echo "Deleting compute nodes"
@@ -103,7 +100,7 @@ gcloud compute resource-policies list --format="value(selfLink)" --filter="${pol
 done
 
 echo "Deleting copied instance templates"
-templates_filter="labels.slurm_cluster_name=${cluster_name} AND labels.slurm_nodeset=${nodeset_name} AND labels.slurm_template_role=copy"
+templates_filter="properties.labels.slurm_cluster_name=${cluster_name} AND properties.labels.slurm_nodeset=${nodeset_name} AND properties.labels.slurm_template_role=copy"
 gcloud compute instance-templates list --format="value(selfLink)" --filter="${templates_filter}" | while read -r line; do
 	echo "Deleting instance template: $line"
 	gcloud compute instance-templates delete --quiet "${line}" || {

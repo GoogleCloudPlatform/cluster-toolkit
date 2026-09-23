@@ -75,6 +75,7 @@ class SlurmConfigGeneratorV2605(SlurmConfigGeneratorV2511):
         return conf_options
 
     def make_cloud_conf(self) -> str:
+        # Set feature tags on static and dynamic TPU nodesets
         for nodeset in self.lkp.cfg.nodeset.values():
             if tpu := self.lkp.node_tpu_info(nodeset):
                 nodeset.node_conf["Gres"] = f"tpu:{tpu.type}:{tpu.tpus_per_node}"
@@ -86,6 +87,7 @@ class SlurmConfigGeneratorV2605(SlurmConfigGeneratorV2511):
         return super().make_cloud_conf()
 
     def partitionlines(self, partition) -> str:
+        # Keep static TPU nodes up on idle; power down dynamic TPU nodes after each job
         if self.lkp.is_tpu_partition(partition):
             partition.partition_conf.setdefault("Oversubscribe", "Exclusive")
             if self.lkp.is_tpu_static_partition(partition):
@@ -119,6 +121,7 @@ class SlurmConfigGeneratorV2605(SlurmConfigGeneratorV2511):
         return "\n".join(combined)
 
     def install_cgroup_conf(self) -> None:
+        # tpu7x and v5p have dual cores per chip (8 VFIO devices for 4 chips), so set ConstrainDevices=no
         if not self.lkp.remove_device_constrain():
             return super().install_cgroup_conf()
 
@@ -140,6 +143,7 @@ class SlurmConfigGeneratorV2605(SlurmConfigGeneratorV2511):
         block_is_default = any(self.lkp.has_block_topology(p) for p in self.lkp.cfg.partitions.values())
         sections = topo.render_yaml(block_is_default=block_is_default)
 
+        # Group static TPU nodes into slice blocks for block topology
         tpu_blocks = []
         for ns in self.lkp.cfg.nodeset.values():
             if self.lkp.is_tpu_static_nodeset(ns.nodeset_name):
@@ -167,6 +171,7 @@ class SlurmConfigGeneratorV2605(SlurmConfigGeneratorV2511):
             f.write("---\n\n")
             yaml.dump(sections, f, sort_keys=False)
 
+        # Pad file if size is a multiple of 4096 bytes to avoid Slurm configless transfer bug
         if yaml_file.stat().st_size % 4096 == 0:
             with yaml_file.open("a") as f:
                 f.write("\n")

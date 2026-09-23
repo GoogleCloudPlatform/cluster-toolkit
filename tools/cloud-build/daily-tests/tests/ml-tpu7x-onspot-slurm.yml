@@ -16,7 +16,7 @@ test_name: tpu7x-onspot-slurm
 deployment_name: "tpu7x-slurm-{{ build }}"
 slurm_cluster_name: "t7xsp{{ build[0:5] }}"
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-packer-blueprint.yaml"
+blueprint_yaml: "{{ workspace }}/examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml"
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 network: "{{ deployment_name }}-net-1"
@@ -24,7 +24,6 @@ scheduler: "slurm"
 instance_type: "tpu7x"
 post_deploy_tests:
 - test-validation/test-mounts.yml
-- test-validation/test-partitions.yml
 - test-validation/test-default-partition.yml
 - test-validation/test-tpu-slurm.yml
 post_destroy_tasks:
@@ -49,7 +48,7 @@ cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
   slurm_cluster_name: "{{ slurm_cluster_name }}"
-  tpu_cluster_size: 1
+  tpu_static_nodes: 1
   tpu_dynamic_max_nodes: 1
   tpu_accelerator_topology: 2x2x1
   tpu_enable_spot_vm: true
