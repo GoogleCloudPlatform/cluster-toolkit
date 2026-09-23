@@ -15,7 +15,7 @@
  */
 
 output "id" {
-  description = "A composite ID ensuring all staged files and directories have finished uploading."
+  description = "A composite ID ensuring all staged files and directories have finished synchronizing."
   value = join(",", concat(
     [for d in terraform_data.stage_gcs_directory : d.id],
     [for f in terraform_data.stage_gcs_file : f.id]
@@ -25,19 +25,36 @@ output "id" {
 output "bucket_name" {
   description = "Name of the target Google Cloud Storage bucket."
   value       = var.bucket_name
+  depends_on = [
+    terraform_data.stage_gcs_directory,
+    terraform_data.stage_gcs_file,
+  ]
 }
 
 output "staged_directory_uris" {
   description = "List of destination GCS URIs (gs://...) for staged directories."
   value       = [for d in local.staged_directories : d.destination_uri]
+  depends_on = [
+    terraform_data.stage_gcs_directory,
+  ]
 }
 
 output "staged_file_uris" {
   description = "List of destination GCS URIs (gs://...) for staged files."
   value       = [for f in local.staged_files : f.destination_uri]
+  depends_on = [
+    terraform_data.stage_gcs_file,
+  ]
 }
 
 output "all_staged_uris" {
   description = "Combined list of all destination GCS URIs managed by this module."
-  value       = distinct(concat([for d in local.staged_directories : d.destination_uri], [for f in local.staged_files : f.destination_uri]))
+  value = distinct(concat(
+    [for d in local.staged_directories : d.destination_uri],
+    [for f in local.staged_files : f.destination_uri]
+  ))
+  depends_on = [
+    terraform_data.stage_gcs_directory,
+    terraform_data.stage_gcs_file,
+  ]
 }

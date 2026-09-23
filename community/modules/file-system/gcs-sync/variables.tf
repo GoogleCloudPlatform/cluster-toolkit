@@ -25,19 +25,19 @@ variable "bucket_name" {
 }
 
 variable "repo_url" {
-  description = "Default Git repository URL to clone files/directories from. If omitted or null, local filesystem paths are used by default."
+  description = "Default Git repository URL to clone files/directories from."
   type        = string
   default     = null
 }
 
 variable "repo_ref" {
-  description = "Default Git branch, commit, or tag to checkout when using Git repositories."
+  description = "Default Git branch, commit SHA, or tag to checkout. It is strongly recommended to pin this to a specific commit SHA or tag rather than a mutable branch name (e.g. 'main') so triggers_replace detects upstream updates."
   type        = string
   default     = "main"
 }
 
 variable "directories" {
-  description = "List of directories to stage/sync to the GCS bucket. Each entry defines a source directory (local or remote Git) and a destination path in the bucket."
+  description = "List of directories to synchronize to the GCS bucket from a remote Git repository."
   type = list(object({
     source_path      = string
     destination_path = string
@@ -46,10 +46,26 @@ variable "directories" {
     exclude          = optional(list(string), [".*Dockerfile$"])
   }))
   default = []
+
+  validation {
+    condition = alltrue([
+      for d in var.directories :
+      try(coalesce(d.repo_url, var.repo_url), null) != null
+    ])
+    error_message = "Each entry in directories must set repo_url (or inherit var.repo_url); use the gcs-objects module for local files and directories."
+  }
+
+  validation {
+    condition = alltrue([
+      for d in var.directories :
+      trim(d.destination_path, "/") != ""
+    ])
+    error_message = "destination_path cannot be empty or root ('/'). To protect other bucket contents, syncing with delete-unmatched must be scoped to a subpath prefix."
+  }
 }
 
 variable "files" {
-  description = "List of individual files to stage/upload to the GCS bucket. Each entry defines a source file (local or remote Git) and a destination object path in the bucket."
+  description = "List of individual files to synchronize to the GCS bucket from a remote Git repository."
   type = list(object({
     source_path      = string
     destination_path = string
@@ -57,4 +73,12 @@ variable "files" {
     repo_ref         = optional(string)
   }))
   default = []
+
+  validation {
+    condition = alltrue([
+      for f in var.files :
+      try(coalesce(f.repo_url, var.repo_url), null) != null
+    ])
+    error_message = "Each entry in files must set repo_url (or inherit var.repo_url); use the gcs-objects module for local files and directories."
+  }
 }
