@@ -2462,6 +2462,7 @@ class Lookup:
                 mount_options="defaults,hard,intr,_netdev",
             )
 
+    @lru_cache(maxsize=None)
     def is_tpu_nodeset(self, nodeset_name: str) -> bool:
         """Checks if the nodeset uses a TPU machine type."""
         try:
@@ -2481,7 +2482,10 @@ class Lookup:
 
     def is_tpu_node(self, nodename: str) -> bool:
         """Checks if the node machine type uses a TPU machine type."""
-        return self.is_tpu_nodeset(self.node_nodeset_name(nodename))
+        try:
+            return self.is_tpu_nodeset(self.node_nodeset_name(nodename))
+        except Exception:
+            return False
 
     def has_tpu_nodesets(self) -> bool:
         """Checks if any nodeset uses a TPU machine type."""

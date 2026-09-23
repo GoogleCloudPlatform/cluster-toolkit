@@ -43,9 +43,15 @@ locals {
   )
 
   is_tpu = startswith(var.machine_type, "ct") || startswith(var.machine_type, "tpu")
-  tpu_slice_vms = local.is_tpu && var.accelerator_topology != null ? try(
-    (tonumber(split("x", var.accelerator_topology)[0]) * tonumber(split("x", var.accelerator_topology)[1]) * coalesce(try(tonumber(split("x", var.accelerator_topology)[2]), null), 1)) / 4,
-    0
+  tpu_topo_valid = var.accelerator_topology != null && var.accelerator_topology != "" && can(
+    regex("^[1-9][0-9]*[xX][1-9][0-9]*([xX][1-9][0-9]*)?$", trimspace(var.accelerator_topology))
+  )
+  tpu_slice_vms = local.is_tpu && local.tpu_topo_valid ? (
+    (
+      tonumber(split("x", lower(trimspace(var.accelerator_topology)))[0]) *
+      tonumber(split("x", lower(trimspace(var.accelerator_topology)))[1]) *
+      coalesce(try(tonumber(split("x", lower(trimspace(var.accelerator_topology)))[2]), null), 1)
+    ) / 4
   ) : 0
 
   disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }

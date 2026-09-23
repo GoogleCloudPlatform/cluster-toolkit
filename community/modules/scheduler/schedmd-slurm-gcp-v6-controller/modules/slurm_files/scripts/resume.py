@@ -596,7 +596,8 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             mig_flex.resume_tpu_chunk(chunk.nodes, chunk.excl_job_id, lkp, topology=job_topo)
         except Exception as tpu_exc:
             err_msg = str(tpu_exc)
-            action, admin_comment = error_handler.classify_gcp_error("TPU_RESUME_ERROR", err_msg)
+            reason = getattr(tpu_exc, "_get_reason", lambda: err_msg)()
+            _, admin_comment = error_handler.classify_gcp_error(reason, err_msg)
             # Notify the job before marking nodes down so srun prints the error
             if chunk.excl_job_id is not None:
                 run(f"{lkp.scontrol} update jobid={chunk.excl_job_id} admincomment={shlex.quote(admin_comment)}", check=False)
