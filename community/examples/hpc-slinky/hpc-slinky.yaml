@@ -195,4 +195,5 @@ deployment_groups:
     use: [gke_cluster]
     settings:
       apply_manifests:
-      - source: $(vars.exporter_pod_monitoring_path)
+      - name: exporter-pod-monitoring
+        source: $(vars.exporter_pod_monitoring_path)
