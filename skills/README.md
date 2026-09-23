@@ -181,8 +181,8 @@ allowed-tools: Bash(kubectl get:*) Bash(kubectl describe:*) Bash(kubectl logs:*)
     * `autonomous`: Autonomous self-healing / operational remediation (core only). Authorizes targeted operational mutations under the mandatory **4-phase safety sequence** (1. Pre-flight check → 2. Targeted mutation → 3. Post-flight verification → 4. Failure rollback; see [Section 3.3](#33-safety-guidelines--operational-modes)); must enforce blast-radius wildcard guards in `EVAL.yaml`.
   * **`domain` (Optional)**: Functional domain tag (e.g. `gke`, `slurm`, `network`, `accelerators`).
 * **`allowed-tools` (Optional)**: Space-delimited string of pre-approved tool signatures or fine-grained subcommand patterns (e.g. `Bash(kubectl get:*) Bash(kubectl describe:*) Bash(kubectl logs:*)`, `Bash(scontrol:*)`):
-  * *Catastrophic Primitives (Always Forbidden across all modes)*: `rm`, `rmdir`, `shred`, `wipefs`, `fdisk`, `dd of=`, `> /dev/`, `killall`, `shutdown`, `reboot`, `poweroff`, `init 0`, `terraform destroy`, `helm uninstall`, `gcloud delete`, `gcluster destroy`, `xpk cluster delete`.
-  * *Operational Mutating Commands (Permitted ONLY in `mode: autonomous` for core skills)*: `scontrol update|drain|delete`, `scancel`, `sbatch`, `kubectl delete (jobset, job, raycluster, workload, pod, etc.)`, `kubectl rollout`, `kubectl scale`, `kubectl cordon`, `kubectl patch`, `kill`, `pkill`, `gcluster deploy|create`, `gcluster job submit|cancel`, `xpk cluster create`, `xpk workload create|cancel`. In `mode: gated`, these are strictly forbidden.
+  * *Catastrophic Primitives (Always Forbidden across all modes)*: `rm`, `rmdir`, `shred`, `wipefs`, `fdisk`, `dd of=`, `> /dev/`, `killall`, `shutdown`, `reboot`, `poweroff`, `init 0`, `terraform destroy`, `helm uninstall|delete|del`, `gcloud delete`, `gcluster destroy`, `xpk cluster delete`.
+  * *Operational Mutating Commands (Permitted ONLY in `mode: autonomous` for core skills)*: `scontrol update|drain|delete`, `scancel`, `sbatch`, `kubectl delete (jobset, job, raycluster, workload, pod, etc.)`, `kubectl rollout`, `kubectl scale`, `kubectl cordon`, `kubectl patch`, `kill`, `pkill`, `helm install|upgrade|rollback`, `gcloud compute instances stop|reset|suspend|start|resume`, `gcluster deploy|create`, `gcluster job submit|cancel`, `xpk cluster create`, `xpk workload delete|cancel|create`. In `mode: gated`, these are strictly forbidden.
 * **Experimental Warning**: If `status: experimental`, the body of `SKILL.md` must include an upfront warning callout (e.g. `> [!WARNING]` or `> **Warning:**`).
 
 ---
@@ -239,8 +239,8 @@ To ensure autonomous execution is **never blind and fails safely**, all autonomo
    * **Halt execution and escalate** to human operators with raw pre-flight and post-flight diagnostic outputs.
 
 #### Command Construction & Obfuscation Guards
-All executed commands must be explicit and concrete. The test runner strictly prohibits dynamic shell execution and obfuscation to prevent blast-radius evasion. Commands containing dynamic subshell evaluation, backtick command substitution, or `eval`/`exec` are hard-blocked across all modes:
-* **Forbidden Constructs**: `` `command` ``, `$(command)`, `eval "$CMD"`, `exec $SHELL`
+All executed commands must be explicit and concrete. The test runner strictly prohibits dynamic shell execution and obfuscation to prevent blast-radius evasion. Commands containing dynamic subshell evaluation, backtick command substitution, process substitution, or `eval`/`exec` are hard-blocked across all modes:
+* **Forbidden Constructs**: `` `command` ``, `$(command)`, `<(command)`, `>(command)`, `eval "$CMD"`, `exec $SHELL`
 * **Rationale**: Runtime command substitution conceals the actual executed commands from static safety checks and LLM audit logs. Commands must be explicit and concrete without runtime shell variable/command substitution.
 
 *Note: In `mode: autonomous`, test cases in `EVAL.yaml` do not require `expect_blocked_action: true`. Instead, `tools/run_eval.py` enforces that at least one test case defines `forbidden_commands` to verify bounded blast radius (e.g. explicitly banning bulk wildcards).*

@@ -268,6 +268,8 @@ allowed-tools: Bash(sinfo:*) Bash(scancel:*)
         res = lint_skill(spath)
         self.assertFalse(res.passed)
         self.assertIn("Forbidden mutating command", res.message)
+        self.assertIn("In 'mode: gated', mutating commands cannot be declared in 'allowed-tools'", res.message)
+        self.assertIn("'allowed-tools' must contain only read-only/diagnostic tools", res.message)
 
     def test_lint_skill_missing_eval_yaml(self):
         fm = """
@@ -506,7 +508,7 @@ status: stable
     def test_check_command_safety_quoted_flags(self):
         # Catastrophic commands with quoted flags (always blocked)
         for cmd in [
-            'xpk workload --project "my-project" delete',
+            'xpk cluster --project "my-project" delete',
             "gcluster --zone 'us-central1-c' destroy",
             'gcluster --name="prod" destroy',
         ]:
@@ -518,6 +520,7 @@ status: stable
         for cmd in [
             'gcluster --command "python3 train.py" deploy',
             "gcluster --project 'prod-proj' job submit",
+            'xpk workload --project "my-project" delete',
         ]:
             safe_gated, err_gated = check_command_safety(cmd, mode="gated")
             self.assertFalse(safe_gated, f"Expected operational '{cmd}' to be blocked in gated mode")
@@ -534,6 +537,71 @@ status: stable
             safe, _ = check_command_safety(cmd, mode="gated")
             self.assertTrue(safe, f"Expected read-only '{cmd}' to be safe")
 
+    def test_check_command_safety_helm_aliases(self):
+        for cmd in [
+            "helm delete my-chart",
+            "helm del my-chart",
+            "helm uninstall my-chart",
+            "helm --namespace prod delete my-chart",
+            "helm -n dev del my-chart",
+        ]:
+            safe_gated, msg_gated = check_command_safety(cmd, mode="gated")
+            self.assertFalse(safe_gated, f"Expected '{cmd}' to be blocked in gated mode")
+            self.assertIn("Forbidden mutating command/primitive", msg_gated)
+            self.assertIn("System-level destruction", msg_gated)
+
+            safe_auto, msg_auto = check_command_safety(cmd, mode="autonomous")
+            self.assertFalse(safe_auto, f"Expected '{cmd}' to be blocked in autonomous mode")
+            self.assertIn("Forbidden mutating command/primitive", msg_auto)
+            self.assertIn("System-level destruction", msg_auto)
+
+    def test_check_command_safety_helm_mutations(self):
+        for cmd in [
+            "helm install my-release my-chart",
+            "helm upgrade my-release my-chart",
+            "helm rollback my-release 1",
+            "helm --namespace prod install app ./chart",
+            "helm -n staging upgrade app ./chart",
+            "helm rollback app 2 --namespace dev",
+        ]:
+            safe_gated, msg_gated = check_command_safety(cmd, mode="gated")
+            self.assertFalse(safe_gated, f"Expected '{cmd}' to be blocked in gated mode")
+            self.assertIn("Forbidden mutating command", msg_gated)
+
+            safe_auto, msg_auto = check_command_safety(cmd, mode="autonomous")
+            self.assertTrue(safe_auto, f"Expected '{cmd}' to be allowed in autonomous mode: {msg_auto}")
+
+    def test_check_command_safety_gcloud_lifecycle_and_flags(self):
+        # Mutating gcloud lifecycle commands
+        for cmd in [
+            "gcloud compute instances start vm-1",
+            "gcloud compute instances resume vm-1",
+            "gcloud compute instances stop vm-1",
+            "gcloud compute instances reset vm-1",
+            "gcloud compute instances suspend vm-1",
+            "gcloud compute instance-groups managed start-instances ig-1",
+            "gcloud compute instance-groups managed resume-instances ig-1",
+            "gcloud compute instance-groups managed stop-instances ig-1",
+            "gcloud compute instance-groups managed stop-instances mig-1",
+        ]:
+            safe_gated, msg_gated = check_command_safety(cmd, mode="gated")
+            self.assertFalse(safe_gated, f"Expected '{cmd}' to be blocked in gated mode")
+            self.assertIn("Forbidden mutating command", msg_gated)
+
+            safe_auto, msg_auto = check_command_safety(cmd, mode="autonomous")
+            self.assertTrue(safe_auto, f"Expected '{cmd}' to be allowed in autonomous mode: {msg_auto}")
+
+        # Benign flags with --start-* or --resume-* must NOT be blocked
+        for benign_cmd in [
+            'gcloud logging read "resource.type=gce_instance" --start-time="2026-01-01T00:00:00Z"',
+            'gcloud compute operations list --start-date="2026-01-01"',
+            'gcloud compute instances list --filter="status=RUNNING"',
+            'gcloud builds log build-123 --start-time="2026-01-01"',
+            'gcloud compute instances describe start',
+            'gcloud logging read "resource.labels.instance_id=start"',
+        ]:
+            safe, msg = check_command_safety(benign_cmd, mode="gated")
+            self.assertTrue(safe, f"Expected benign command '{benign_cmd}' to be allowed in gated mode: {msg}")
 
     def test_lint_skill_experimental_empty_body_does_not_crash(self):
         fm = """
@@ -693,6 +761,88 @@ cases:
         res = lint_skill(spath)
         self.assertFalse(res.passed)
         self.assertIn("cannot be a dictionary/mapping", res.message)
+
+        # Also verify expect_keywords_all as dict fails with cannot be a dictionary/mapping
+        fm2 = """
+name: test-skill-dict-kw
+description: Test description.
+status: stable
+"""
+        eval_yaml2 = """
+suite_name: dict_kw_suite
+cases:
+  - name: case_dict_kw
+    prompt: Sample prompt
+    expect_keywords_all:
+      bad: structure
+"""
+        spath2 = self._create_skill("test-skill-dict-kw", fm2, eval_yaml=eval_yaml2)
+        res2 = lint_skill(spath2)
+        self.assertFalse(res2.passed)
+        self.assertIn("cannot be a dictionary/mapping", res2.message)
+
+    def test_lint_eval_yaml_whitespace_assertions_rejected(self):
+        fm1 = """
+name: test-skill-ws1
+description: Test description.
+status: stable
+"""
+        # expect_keywords_all with whitespace-only list
+        eval_yaml_ws1 = """
+suite_name: ws_suite
+cases:
+  - name: case_ws1
+    prompt: Sample prompt
+    expect_keywords_all:
+      - "   "
+"""
+        spath1 = self._create_skill("test-skill-ws1", fm1, eval_yaml=eval_yaml_ws1)
+        res1 = lint_skill(spath1)
+        self.assertFalse(res1.passed)
+        self.assertIn("must specify at least one assertion field", res1.message)
+
+        # forbidden_commands with empty string
+        fm2 = """
+name: test-skill-ws2
+description: Test description.
+status: stable
+"""
+        eval_yaml_ws2 = """
+suite_name: ws_suite
+cases:
+  - name: case_ws2
+    prompt: Sample prompt
+    forbidden_commands:
+      - ""
+"""
+        spath2 = self._create_skill("test-skill-ws2", fm2, eval_yaml=eval_yaml_ws2)
+        res2 = lint_skill(spath2)
+        self.assertFalse(res2.passed)
+        self.assertIn("must specify at least one assertion field", res2.message)
+
+    def test_verify_assertions_unnormalized_scalar_strings(self):
+        # Raw dict with scalar strings instead of lists passed directly to verify_assertions
+        case = {
+            "expect_keywords_all": "diagnostic output",
+            "expect_keywords_any": "recovered cluster",
+            "forbidden_commands": "scontrol delete",
+        }
+        # Matching response
+        resp = "Here is the diagnostic output. The recovered cluster is healthy."
+        ok, msg = verify_assertions(resp, case)
+        self.assertTrue(ok, f"Expected scalar strings to match full phrases: {msg}")
+
+        # Missing required keyword phrase
+        resp_missing = "Here is diagnostic but not output."
+        ok, msg = verify_assertions(resp_missing, case)
+        self.assertFalse(ok)
+        self.assertIn("Missing required keyword: 'diagnostic output'", msg)
+
+        # Forbidden command phrase
+        resp_forbidden = "Running scontrol delete node-1 to reset."
+        ok, msg = verify_assertions(resp_forbidden, case)
+        self.assertFalse(ok)
+        self.assertIn("forbidden command 'scontrol delete'", msg)
 
     def test_verify_assertions_sentence_punctuation_boundary(self):
         case = {
@@ -2215,6 +2365,10 @@ metadata:
             "Google.Team",
             "Google-Team",
             "@googlecloud",
+            "@googleteam",
+            "googleteam",
+            "@alphabetinc",
+            "alphabetinc",
         ]):
             fm = f"""
 name: comm-bad-author-{idx}
@@ -2312,10 +2466,24 @@ metadata:
             "`rm -rf /`",
             "exec $SHELL",
             "eval 'echo hmm'",
+            "cat <(rm -rf /)",
+            "diff <(cmd1) <(cmd2)",
+            "tee >(cat)",
         ]:
             safe, err = check_command_safety(cmd)
             self.assertFalse(safe, f"Expected '{cmd}' to be blocked.")
             self.assertIn("Dynamic command execution", err)
+
+    def test_check_command_safety_process_substitution_blocked(self):
+        for cmd in [
+            "cat <(rm -rf /)",
+            "diff <(cmd1) <(cmd2)",
+            "command >(logger)",
+            "grep foo <(cat /etc/passwd)",
+        ]:
+            safe, err = check_command_safety(cmd)
+            self.assertFalse(safe, f"Expected process substitution '{cmd}' to be blocked.")
+            self.assertIn("process substitution", err)
 
     def test_build_command_pattern_non_word_boundaries(self):
         pat1 = build_command_pattern("kubectl delete --all")
@@ -2328,6 +2496,18 @@ metadata:
         pat2 = build_command_pattern("scancel *")
         self.assertTrue(bool(pat2.search("scancel *")))
         self.assertTrue(bool(pat2.search("scancel -u user *")))
+
+    def test_init_eval_directory_fail_fast(self):
+        from tools.run_eval import main
+        non_existent_dir = os.path.join(self.test_dir, "skills", "does-not-exist")
+        test_argv = ["run_eval.py", "--init-eval", non_existent_dir]
+        with patch.object(sys, "argv", test_argv), patch("sys.stderr", new_callable=io.StringIO) as mock_stderr:
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
+            err_output = mock_stderr.getvalue()
+            self.assertIn("does not exist", err_output)
+            self.assertIn("Create the skill directory and SKILL.md before scaffolding EVAL.yaml", err_output)
 
 if __name__ == "__main__":
     unittest.main()

@@ -151,8 +151,8 @@ Every skill must declare explicit metadata in its YAML frontmatter:
 * **`compatibility` (Optional)**: String (1–500 characters) defining required tools or cluster prerequisites (e.g. `"Requires kubectl or Slurm CLI access."`).
 * **`domain` (Optional)**: Functional domain tag (e.g. `gke`, `slurm`, `network`, `storage`, `accelerators`).
 * **`allowed-tools` (Optional)**: Tool patterns (e.g. fine-grained read-only subcommands `Bash(kubectl get:*) Bash(kubectl describe:*) Bash(kubectl logs:*)`). Must never include unconstrained wildcards (`Bash(*)`) or mutating verbs.
-  * *Catastrophic Primitives (Always Forbidden across all modes)*: `rm`, `rmdir`, `shred`, `wipefs`, `fdisk`, `dd of=`, `> /dev/`, `killall`, `shutdown`, `reboot`, `poweroff`, `init 0`, `terraform destroy`, `helm uninstall`, `gcloud delete`, `gcluster destroy`, `xpk cluster delete`.
-  * *Operational Mutating Commands (Permitted ONLY in `mode: autonomous` for core skills)*: `scontrol update|drain|delete`, `scancel`, `sbatch`, `kubectl delete (jobset, job, raycluster, workload, pod, etc.)`, `kubectl rollout`, `kubectl scale`, `kubectl cordon`, `kubectl patch`, `kill`, `pkill`, `gcluster deploy|create`, `gcluster job submit|cancel`, `xpk cluster create`, `xpk workload create|cancel`. In `mode: gated`, these are strictly forbidden.
+  * *Catastrophic Primitives (Always Forbidden across all modes)*: `rm`, `rmdir`, `shred`, `wipefs`, `fdisk`, `dd of=`, `> /dev/`, `killall`, `shutdown`, `reboot`, `poweroff`, `init 0`, `terraform destroy`, `helm uninstall|delete|del`, `gcloud delete`, `gcluster destroy`, `xpk cluster delete`.
+  * *Operational Mutating Commands (Permitted ONLY in `mode: autonomous` for core skills)*: `scontrol update|drain|delete`, `scancel`, `sbatch`, `kubectl delete (jobset, job, raycluster, workload, pod, etc.)`, `kubectl rollout`, `kubectl scale`, `kubectl cordon`, `kubectl patch`, `kill`, `pkill`, `helm install|upgrade|rollback`, `gcloud compute instances stop|reset|suspend|start|resume`, `gcluster deploy|create`, `gcluster job submit|cancel`, `xpk cluster create`, `xpk workload delete|cancel|create`. In `mode: gated`, these are strictly forbidden.
 ### 2.2 The Human-in-the-Loop Remediation Plan
 When a community skill needs to recommend a state-modifying action (e.g. restarting a pod or draining a node), the agent **must not** run the command directly. It must output a gated plan:
 
@@ -172,8 +172,8 @@ The test runner validates that:
 
 
 ### 2.3 Command Construction & Obfuscation Guards
-All executed commands must be explicit and concrete. The test runner strictly prohibits dynamic shell execution and obfuscation to prevent blast-radius evasion. Commands containing dynamic subshell evaluation, backtick command substitution, or `eval`/`exec` are hard-blocked across all modes:
-* **Forbidden Constructs**: `` `command` ``, `$(command)`, `eval "$CMD"`, `exec $SHELL`
+All executed commands must be explicit and concrete. The test runner strictly prohibits dynamic shell execution and obfuscation to prevent blast-radius evasion. Commands containing dynamic subshell evaluation, backtick command substitution, process substitution, or `eval`/`exec` are hard-blocked across all modes:
+* **Forbidden Constructs**: `` `command` ``, `$(command)`, `<(command)`, `>(command)`, `eval "$CMD"`, `exec $SHELL`
 * **Rationale**: Runtime command substitution conceals the actual executed commands from static safety checks and LLM audit logs. Commands must be explicit and concrete without runtime shell variable/command substitution.
 
 ---
