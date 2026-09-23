@@ -54,6 +54,18 @@ func newMountBuildState() *mountBuildState {
 	return &mountBuildState{gatewayVolumeNames: map[string]string{}}
 }
 
+// volumeNameFor returns the Pod volume name serving pvName, assigning one from idx the first time
+// the gateway is seen. reused is true when an earlier mount already claimed the gateway, in which
+// case its manifest has been rendered and must not be rendered again.
+func (s *mountBuildState) volumeNameFor(pvName string, idx int) (name string, reused bool) {
+	if existing, ok := s.gatewayVolumeNames[pvName]; ok {
+		return existing, true
+	}
+	name = fmt.Sprintf("vol-%d", idx)
+	s.gatewayVolumeNames[pvName] = name
+	return name, false
+}
+
 // ProcessMounts parses mount strings and generates necessary K8s resources.
 func (sm *StorageManager) ProcessMounts(mounts []string, job orchestrator.JobDefinition) ([]MountInfo, []string, error) {
 	var mountInfos []MountInfo
@@ -538,15 +550,10 @@ func (sm *StorageManager) generateFilestoreResources(pm parsedMount, idx int, jo
 		ReadOnly:  readOnly,
 	}
 
-	if state != nil {
-		if existing, ok := state.gatewayVolumeNames[pvName]; ok {
-			info.Name = existing
-			return info, "", nil
-		}
-	}
-	info.Name = fmt.Sprintf("vol-%d", idx)
-	if state != nil {
-		state.gatewayVolumeNames[pvName] = info.Name
+	name, reused := state.volumeNameFor(pvName, idx)
+	info.Name = name
+	if reused {
+		return info, "", nil
 	}
 
 	filestoreTmpl, err := sm.orchestrator.parseGKETextTemplate("filestore.tmpl")
@@ -679,12 +686,11 @@ func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx in
 		NeedsGCSFuseSidecar: true,
 	}
 
-	if existing, ok := state.gatewayVolumeNames[pvName]; ok {
-		info.Name = existing
+	name, reused := state.volumeNameFor(pvName, idx)
+	info.Name = name
+	if reused {
 		return info, "", nil
 	}
-	info.Name = fmt.Sprintf("vol-%d", idx)
-	state.gatewayVolumeNames[pvName] = info.Name
 
 	tmpl, err := sm.orchestrator.parseGKETextTemplate("gcs_fuse_pv_pvc.tmpl")
 	if err != nil {
