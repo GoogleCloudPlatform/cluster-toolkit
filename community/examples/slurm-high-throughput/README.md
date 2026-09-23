@@ -40,7 +40,7 @@ and extreme-scale workloads (50,000 to 100,000+ cores) on Google Cloud Platform.
 
 | Blueprint File | Scale Target | Geographic Scope | Topology & Networking | Primary Use Case |
 | :--- | :--- | :--- | :--- | :--- |
-| [**`hpc-slurm-scale.yaml`**](./hpc-slurm-scale.yaml) | **50,000 to 102,400 Cores** (800 Nodes) | **Single Region** (`us-central1`) | Single Regional `/15` High-Capacity Subnet across 4 Zones | **Recommended Default**: Production Batch & HTC workloads requiring local I/O, lowest network latency, and zero inter-region egress cost |
+| [**`hpc-slurm-scale.yaml`**](./hpc-slurm-scale.yaml) | **50,000 to 102,400 Cores** (800 Nodes) | **Single Region** (`us-central1`) | Single Regional `/21` High-Capacity Subnet across 4 Zones | **Recommended Default**: Production Batch & HTC workloads requiring local I/O, lowest network latency, and zero inter-region egress cost |
 | [**`hpc-slurm-multiregion-scale.yaml`**](./hpc-slurm-multiregion-scale.yaml) | **96,000+ Cores** (1,500 Nodes) | **Multi-Region** (`us-central1`, `us-east4`, `us-west1`) | Global VPC with 3 Regional Subnets across 10 Zones | Regional capacity stockout mitigation for batch & HTC workloads |
 
 ### Choosing Between Single-Region and Multi-Region
@@ -141,6 +141,32 @@ distinct Google Cloud regions (`us-central1`, `us-east4`, and `us-west1`).
   - `TreeWidth = 65533`: Flat communication hierarchy preventing intermediate
     fanout hops and RPC packet drops in cloud networks.
 
+- **Regional Node Features & Geographic Constraints**:
+  - Each regional nodeset is labeled with a corresponding Slurm node feature:
+    `region_central`, `region_east`, and `region_west`.
+  - **HTC Batch Arrays (Default)**: Parameter sweeps and single-node batch
+    jobs submitted without constraints (`sbatch --array=1-1500 -N 1 -p compute`)
+    draw Spot capacity from whichever region has available capacity across
+    Google Cloud.
+  - **Multi-Node & Locality Constraints**: Multi-node jobs or latency-sensitive
+    tasks can specify `--constraint=region_central` (or `-C region_east`,
+    `-C region_west`) to enforce that all allocated instances reside within the
+    same regional network fabric, preventing cross-WAN job allocations.
+- **Shared Storage and Task I/O Best Practices**:
+  - The shared Cloud Filestore NFS instance is hosted in `us-central1` and is
+    intended for configuration files, user scripts, and environment setups.
+  - For high-throughput batch task I/O and large dataset processing across
+    regions, workloads should write output to fast local scratch (`/tmp`) or
+    directly to Google Cloud Storage (via `gcloud storage` or Cloud Storage FUSE)
+    rather than writing high-frequency log streams to the central Filestore over
+    WAN links.
+- **Non-Compact Placement for Spot Scaling**:
+  - `enable_placement: false` is configured by default. While compact placement
+    benefits tightly-coupled MPI jobs, it restricts VM allocation to a single
+    physical cluster, which frequently leads to `ZONE_RESOURCE_POOL_EXHAUSTED`
+    stockouts when requesting massive pools of Spot VMs. Disabling compact
+    placement maximizes dynamic Spot VM acquisition across all 10 zones.
+
 #### Scale Target
 
 - **Supports up to 1,500 parallel dynamic nodes (96,000+ to 192,000 cores)**
@@ -172,8 +198,15 @@ up to 800 dynamic nodes (**51,200 to 102,400 Cores**) across 4 zones in
     Cores max capacity).
   - With `n2d-standard-64`: **800 nodes × 64 vCPUs = 51,200 Cores** (50K+ Cores
     max capacity).
-- **High-Throughput Subnet**: Deploys a `/15` primary VPC subnet providing
-  131,072 private IP addresses for mass dynamic provisioning.
+- **High-Throughput Subnet**: Deploys a `/21` primary VPC subnet providing
+  2,048 private IP addresses for mass dynamic provisioning (sized for 800+
+  compute nodes with 2x headroom).
+- **High-Port Cloud NAT**: Configures `ips_per_nat: 8` (allocating 8 NAT IPs
+  providing ~512k ephemeral ports) to prevent port pool exhaustion and dropped
+  packets during simultaneous boot storms.
+- **Non-Compact Placement for Spot Scaling**: Sets `enable_placement: false`
+  to maximize Spot VM acquisition across all 4 zones without encountering single-rack
+  physical stockout constraints (`ZONE_RESOURCE_POOL_EXHAUSTED`).
 - **Multi-Zonal Dynamic Failover**: Uses `zones: [us-central1-a, b, c, f]` with
   `zone_target_shape: ANY` for dynamic zonal failover.
 - **Full Slurm Scale Tunings**: Configured with identical scale parameters
@@ -317,7 +350,9 @@ nodes. You can adapt it in two ways:
 | **Network Egress Cost** | **Zero** cross-region data egress charges | Incurs inter-region data egress charges |
 | **Shared Storage (NFS) I/O** | Local regional low-latency file access | Cross-region I/O latency for remote nodes |
 | **Stockout Resilience** | High (4 zones within 1 region) | **Maximum** (10 zones across 3 regions) |
-| **Network Architecture** | Single Regional `/15` Subnet (131,072 IPs) | Global VPC with 3 Regional `/16` Subnets |
+| **Network Architecture** | Single Regional `/21` Subnet (2,048 IPs) | Global VPC with 3 Regional `/16` Subnets |
+| **Cloud NAT Allocation** | `ips_per_nat: 8` (~512k ports) | `ips_per_nat: 8` per region (~512k ports/region) |
+| **Placement Policy** | `enable_placement: false` (Spot availability) | `enable_placement: false` (Spot availability) |
 | **Nodeset Layout** | Single Unified Dynamic Nodeset | **3 Regional Nodesets** (`nodeset_central, east, west`) |
 | **`ResumeRate`** | **`300 nodes/min`** *(Paced wave rate)* | **`300 nodes/min`** *(Paced wave rate)* |
 | **`ResumeTimeout`** | **`900 sec`** *(15-minute buffer for NFS mounts)* | **`900 sec`** *(15-minute buffer for NFS mounts)* |
@@ -404,7 +439,22 @@ Submit a 1,500-task array across all 3 regions:
 ```bash
 sbatch --array=1-1500 -N 1 -p compute \
   --job-name=multiregion-96k \
+  --output=/tmp/slurm-%A_%a.out \
   --wrap='hostname; echo "Task $SLURM_ARRAY_TASK_ID ran on $(hostname) in $(basename $(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/zone))"; sleep 5'
+```
+
+> [!TIP]
+> **Storage Best Practice**: Pointing `--output=/tmp/slurm-%A_%a.out` (or
+> `--output=/dev/null`) directs log output to fast local instance scratch storage.
+> For large-scale task arrays, writing hundreds or thousands of concurrent log
+> files directly to `/home` will flood the shared NFS queue and saturate I/O.
+
+If submitting multi-node jobs where all instances must reside within the same
+regional network fabric, use the `--constraint` (`-C`) flag:
+
+```bash
+# Constrain 4 nodes strictly to us-central1 (no cross-region WAN routing):
+sbatch -N 4 -C region_central --job-name=mpi-4node --wrap='srun hostname'
 ```
 
 Monitor execution:
@@ -437,6 +487,7 @@ Submit a 300-task array:
 ```bash
 sbatch --array=1-300 -N 1 -p compute \
   --job-name=burst-300 \
+  --output=/tmp/slurm-%A_%a.out \
   --wrap='hostname; sleep 15'
 ```
 
@@ -459,6 +510,9 @@ sacct -j <JOB_ID> -X \
   - `us-central1`: **32,000 CPUs**
   - `us-east4`: **32,000 CPUs**
   - `us-west1`: **32,000 CPUs**
+- **Compute Engine API: Persistent Disk (Standard/Balanced - `DISKS_TOTAL_GB`)**:
+  - **150,000 GB** total across regions (~50,000 GB each in `us-central1`,
+    `us-east4`, `us-west1` for 100 GB boot disks across 1,500 dynamic nodes)
 - **Cloud Filestore API**: 1,024 GB (Basic HDD / Standard) in `us-central1`
 - **VPC Network**: In-use IP addresses ≥ 1,500 across subnets
 
@@ -466,5 +520,7 @@ sacct -j <JOB_ID> -X \
 
 - **Compute Engine API: Spot N2D / N2 CPUs**: **51,200 to 102,400 CPUs** in
   `us-central1`
+- **Compute Engine API: Persistent Disk (Standard/Balanced - `DISKS_TOTAL_GB`)**:
+  - **80,000 GB** in `us-central1` (100 GB boot disks for 800 dynamic nodes)
 - **Cloud Filestore API**: 1,024 GB (Basic HDD / Standard) in `us-central1`
-- **VPC Subnet**: `/15` subnet (131,072 IP addresses)
+- **VPC Subnet**: `/21` subnet (2,048 IP addresses)

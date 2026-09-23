@@ -24,10 +24,10 @@ vars:
   zone: us-central1-a
   enable_spot_vm: true
   compute_machine_type: n2d-standard-64
-  enable_placement: true
+  enable_placement: false # Disabled to maximize multi-zone Spot capacity and prevent stockouts
   node_count_dynamic_max_per_region: 500
   login_machine_type: n2-standard-4
-  controller_machine_type: n2-standard-8
+  controller_machine_type: n2-standard-16 # Sized for 1,500-node multi-region RPC traffic & accounting
   staged_configs: $(ghpc_stage("../../modules/scheduler/schedmd-slurm-gcp-v6-controller/etc"))
 
   # Multi-Zonal Lists per Region
@@ -54,6 +54,7 @@ deployment_groups:
   - id: network
     source: modules/network/vpc
     settings:
+      ips_per_nat: 8 # 8 NAT IPs per region to support massive concurrent node boots
       subnetworks:
       - subnet_name: central-subnet
         subnet_region: $(vars.region)
@@ -66,6 +67,9 @@ deployment_groups:
         subnet_ip: 10.2.0.0/16
 
   # 2. Shared NFS Filesystem (/home) in Primary Region
+  # Note: Co-located in us-central1 for controller/login configs and user scripts.
+  # For high-throughput batch task I/O across regions, workloads should write to
+  # local node scratch (/tmp) or Google Cloud Storage to avoid cross-region NFS contention.
   - id: homefs
     source: modules/file-system/filestore
     use: [network]
@@ -90,6 +94,8 @@ deployment_groups:
       zone_target_shape: ANY
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
+      node_conf:
+        Feature: region_central,us-central1
 
   # 4. Dynamic Nodeset for Region 2: US East (3 Zones)
   - id: nodeset_east
@@ -107,6 +113,8 @@ deployment_groups:
       zone_target_shape: ANY
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
+      node_conf:
+        Feature: region_east,us-east4
 
   # 5. Dynamic Nodeset for Region 3: US West (3 Zones)
   - id: nodeset_west
@@ -124,6 +132,8 @@ deployment_groups:
       zone_target_shape: ANY
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
+      node_conf:
+        Feature: region_west,us-west1
 
   # 6. Unified Compute Partition Aggregating All 3 Regions & 10 Zones
   - id: compute_partition

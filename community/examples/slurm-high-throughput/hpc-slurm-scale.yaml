@@ -24,7 +24,7 @@ vars:
   zone: us-central1-a
   enable_spot_vm: true # Spot VM support for cost-effective scaling
   compute_machine_type: n2-standard-128
-  enable_placement: true
+  enable_placement: false # Disabled to maximize multi-zone Spot capacity and prevent stockouts
   node_count_dynamic_max: 800 # 800 dynamic nodes
   login_machine_type: n2-standard-4 # Cost-effective machine type with high availability
   controller_machine_type: n2-standard-8
@@ -38,14 +38,15 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  # 1. VPC Network with explicit /15 subnet (131,072 IP addresses)
+  # 1. VPC Network with /21 subnet (2,048 IP addresses) and high-port Cloud NAT
   - id: network
     source: modules/network/vpc
     settings:
+      ips_per_nat: 8 # 8 NAT IPs (~512k ephemeral ports) to handle simultaneous node boots
       subnetworks:
       - subnet_name: scale-subnet
         subnet_region: $(vars.region)
-        subnet_ip: 10.0.0.0/15
+        subnet_ip: 10.0.0.0/21
 
   # 2. Shared NFS Filesystem (/home)
   - id: homefs
