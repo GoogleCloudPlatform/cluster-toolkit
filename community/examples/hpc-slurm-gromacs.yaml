@@ -89,12 +89,12 @@ deployment_groups:
         spack config --scope defaults add config:build_stage:/sw/spack/spack-stage
         spack config --scope defaults add -f /tmp/projections-config.yaml
 
-        spack install --prefer-binary gcc@13.1.0 target=x86_64
+        spack install gcc@13.1.0 target=x86_64
         spack load gcc@13.1.0 target=x86_64
         spack compiler find --scope site
 
-        spack install --prefer-binary intel-oneapi-mpi@2021.9.0%gcc@13.1.0
-        spack install --prefer-binary gromacs@2020.6 %gcc@13.1.0 ^intel-oneapi-mpi@2021.9.0
+        spack install intel-oneapi-mpi@2021.9.0%gcc@13.1.0
+        spack install gromacs@2020.6 %gcc@13.1.0 ^intel-oneapi-mpi@2021.9.0
 
   - id: script
     source: modules/scripts/startup-script
