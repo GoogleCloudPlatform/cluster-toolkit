@@ -30,6 +30,7 @@ cli_deployment_vars:
   tpu_topology: "{{ tpu_topology }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   user_namespace: ai-workloads
+  spot: "{{ enable_spot | default(true) }}"
 custom_vars:
   project: "{{ project }}"
   user_namespace: ai-workloads
