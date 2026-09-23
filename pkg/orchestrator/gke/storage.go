@@ -54,9 +54,6 @@ func newMountBuildState() *mountBuildState {
 	return &mountBuildState{gatewayVolumeNames: map[string]string{}}
 }
 
-// volumeNameFor returns the Pod volume name serving pvName, assigning one from idx the first time
-// the gateway is seen. reused is true when an earlier mount already claimed the gateway, in which
-// case its manifest has been rendered and must not be rendered again.
 func (s *mountBuildState) volumeNameFor(pvName string, idx int) (name string, reused bool) {
 	if existing, ok := s.gatewayVolumeNames[pvName]; ok {
 		return existing, true
