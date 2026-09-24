@@ -17,7 +17,6 @@ vars:
   machine_type: tpu7x-standard-4t
   accelerator_type: tpu7x
   enable_dynamic_slicing_for_tpus: true
-  accelerator_topology_mode: "PROVISION_ONLY"
 ```
 
 #### Key cluster configuration requirements
@@ -25,7 +24,7 @@ vars:
 Configuring dynamic slicing requires the following settings:
 
 * **Hardware and accelerator type:** Specify a TPU v7x machine type (`tpu7x-standard-4t`) and set `accelerator_type: tpu7x`.
-* **Enable dynamic slicing and topology mode:** Set `enable_dynamic_slicing_for_tpus: true` and `accelerator_topology_mode: "PROVISION_ONLY"` in the `vars` block. This setting deploys the GKE TPU Slice Controller, configures the workload policy with `PROVISION_ONLY` topology mode, and configures dynamic partition-level topology definitions.
+* **Enable dynamic slicing:** Set `enable_dynamic_slicing_for_tpus: true` in the `vars` block. This setting deploys the GKE TPU Slice Controller, automatically configures the `workload_policy` module's `accelerator_topology_mode` to `PROVISION_ONLY` (or `AUTO_ONLY` when disabled, unless explicitly overridden in `workload_policy`), and configures dynamic partition-level topology definitions.
 * **Kueue dynamic slicing configuration:** When you set `enable_dynamic_slicing_for_tpus: true`, Cluster Toolkit automatically uses the default dynamic slicing Kueue configuration template (the `modules/management/kubectl-apply/kueue/kueue-configuration-dynamic-slicing.yaml.tftpl` file, or `kueue-configuration-dynamic-slicing-pathways.yaml.tftpl` when Pathways is also enabled), which registers the `tpu-flavor` (or `flavor-tpu7x`) `ResourceFlavor` targeting `cloud.google.com/gke-tpu-accelerator: tpu7x` and enables Topology-Aware Scheduling (TAS). You can optionally override this setting by passing a custom template path using `kueue.config_path` in the `kubectl-apply` module settings.
 
 ### 1.2 Capabilities and workload scheduling (`gcluster job submit`)

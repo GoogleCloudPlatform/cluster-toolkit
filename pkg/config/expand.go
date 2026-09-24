@@ -174,6 +174,7 @@ func (bp Blueprint) expandModule(mp ModulePath, m *Module) error {
 	if err := expandHardwareSettings(bp, m); err != nil {
 		return err
 	}
+	expandWorkloadPolicy(bp, m)
 
 	// Inject machine_configs if supported by the module
 	for _, input := range m.InfoOrDie().Inputs {
@@ -650,4 +651,62 @@ func (bp *Blueprint) deduplicateDranetTemplates() {
 			m.Settings = m.Settings.With("install_dranet_template", cty.BoolVal(true))
 		}
 	})
+}
+
+func isResourcePolicy(m *Module) bool {
+	path := strings.Split(m.Source, "?")[0]
+	return strings.HasSuffix(path, "modules/compute/resource-policy")
+}
+
+// expandWorkloadPolicy automatically configures workload_policy.accelerator_topology_mode
+// on modules/compute/resource-policy when GKE TPU dynamic slicing is configured in the blueprint
+// and accelerator_topology_mode is not explicitly set by the user.
+func expandWorkloadPolicy(bp Blueprint, m *Module) {
+	if !isResourcePolicy(m) || !m.Settings.Has("workload_policy") {
+		return
+	}
+
+	wpVal := m.Settings.Get("workload_policy")
+	if !wpVal.IsKnown() || wpVal.IsNull() || !wpVal.Type().IsObjectType() {
+		return
+	}
+
+	wpMap := wpVal.AsValueMap()
+	if modeVal, ok := wpMap["accelerator_topology_mode"]; wpMap == nil || (ok && !modeVal.IsNull()) {
+		return
+	}
+
+	if targetModeVal := resolveDefaultTopologyMode(bp); targetModeVal != cty.NilVal {
+		wpMap["accelerator_topology_mode"] = targetModeVal
+		m.Settings = m.Settings.With("workload_policy", cty.ObjectVal(wpMap))
+	}
+}
+
+func resolveDefaultTopologyMode(bp Blueprint) cty.Value {
+	var targetModeVal cty.Value
+	bp.WalkModulesSafe(func(_ ModulePath, mod *Module) {
+		if targetModeVal == cty.NilVal && mod.Settings.Has("enable_slice_controller") {
+			targetModeVal = topologyModeFromSliceController(bp, mod.Settings.Get("enable_slice_controller"))
+		}
+	})
+
+	if targetModeVal == cty.NilVal && bp.Vars.Has("enable_dynamic_slicing_for_tpus") {
+		return MustParseExpression(`(var.enable_dynamic_slicing_for_tpus) ? "PROVISION_ONLY" : "AUTO_ONLY"`).AsValue()
+	}
+	return targetModeVal
+}
+
+func topologyModeFromSliceController(bp Blueprint, scVal cty.Value) cty.Value {
+	if exp, ok := IsExpressionValue(scVal); ok {
+		exprStr := fmt.Sprintf(`(%s) ? "PROVISION_ONLY" : "AUTO_ONLY"`, strings.TrimSpace(string(exp.Tokenize().Bytes())))
+		return MustParseExpression(exprStr).AsValue()
+	}
+	ev, err := bp.Eval(scVal)
+	if err != nil || !ev.IsKnown() || ev.IsNull() || ev.Type() != cty.Bool {
+		return cty.NilVal
+	}
+	if ev.True() {
+		return cty.StringVal("PROVISION_ONLY")
+	}
+	return cty.StringVal("AUTO_ONLY")
 }
