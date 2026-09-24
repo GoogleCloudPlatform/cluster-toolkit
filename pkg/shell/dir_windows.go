@@ -27,6 +27,8 @@ import (
 
 // fixLongPath extends paths >= 248 characters with the \\?\ prefix (or \\?\UNC\
 // for network shares) to bypass the legacy Windows MAX_PATH limitation.
+// 248 is used instead of MAX_PATH (260) because Windows APIs historically restrict
+// directory creation and path manipulation to 248 characters to reserve room for 8.3 filenames (12 chars).
 func fixLongPath(path string) string {
 	if len(path) < 248 || strings.HasPrefix(path, `\\?\`) || strings.HasPrefix(path, `\\.\`) {
 		return path
@@ -63,6 +65,6 @@ func isDirWritable(path string) bool {
 	if err != nil {
 		return false
 	}
-	_ = windows.CloseHandle(handle)
+	defer windows.CloseHandle(handle)
 	return true
 }

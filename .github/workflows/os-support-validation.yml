@@ -72,11 +72,27 @@ jobs:
       uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff #v5.6.0
       with:
         go-version: '1.26'
-    - name: Run Shell Unit Tests
-      run: go test -v ./pkg/shell/...
+    - name: Run Core Unit Tests
+      run: go test -v ./pkg/shell/... ./pkg/modulereader/... ./pkg/sourcereader/...
     - name: Build Binary
       run: go build -o gcluster.exe .
     - name: Verify Binary Execution
       run: |
         .\gcluster.exe --version
         .\gcluster.exe --help
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e #v4.0.1
+      with:
+        terraform_version: "1.12.2"
+        terraform_wrapper: false
+    - name: Verify Deployment Creation & Terraform Validation
+      env:
+        GHPC_MOCK_MACHINE_CONFIG: '{"gpus": {}, "tpus": {}, "cpus": {}}'
+      run: |
+        # Offline validation: cloud-dependent validators are skipped to avoid indefinite
+        # network retries against unauthenticated GCP endpoints. Offline semantic validators remain active.
+        .\gcluster.exe create tools/cloud-build/daily-tests/blueprints/e2e.yaml --skip-validators="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_quota_availability,test_machine_type_in_zone,test_reservation_exists,test_disk_type_in_zone" --vars="project_id=test-project,deployment_name=ci-test-dep,region=us-central1,zone=us-central1-a" -o test-deployment
+        terraform -chdir=test-deployment/ci-test-dep/first init -backend=false
+        terraform -chdir=test-deployment/ci-test-dep/first validate
+        terraform -chdir=test-deployment/ci-test-dep/second init -backend=false
+        terraform -chdir=test-deployment/ci-test-dep/second validate
