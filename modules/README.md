@@ -57,6 +57,8 @@ Modules that are still in development and less stable are labeled with the
   Notebook. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
 * **[gke-nodeset]** ![community-badge] ![experimental-badge] : Create a slinky nodeset to be used by the [gke-partition] module.
 * **[gke-partition]** ![community-badge] ![experimental-badge] : Creates a slinky partition to be used by a [slurm-controller][schedmd-slurm-gcp-v6-controller].
+* **[colab]** ![community-badge] ![experimental-badge] : Creates a Vertex AI
+  Colab Enterprise runtime template and runtime instance.
 
 [vm-instance]: compute/vm-instance/README.md
 [cloud-run]: compute/cloud-run/README.md
@@ -70,7 +72,23 @@ Modules that are still in development and less stable are labeled with the
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
 [mig]: ../community/modules/compute/mig/README.md
 [notebook]: ../community/modules/compute/notebook/README.md
+[colab]: ../community/modules/compute/colab/README.md
 [fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
+
+### Container
+
+* **[apptainer-runtime]** ![community-badge] ![experimental-badge] : Prepares
+  the shared Apptainer runtime layout and modulefile tree on a mounted path.
+* **[apptainer-app]** ![community-badge] ![experimental-badge] : Stages an
+  Artifact Registry image as an Apptainer SIF, with a wrapper command,
+  modulefile, and manifest.
+* **[artifact-registry]** ![community-badge] ![experimental-badge] : Creates and
+  manages Google Cloud Artifact Registry repositories, including remote
+  repositories with pull-through caching.
+
+[apptainer-runtime]: ../community/modules/container/apptainer-runtime/README.md
+[apptainer-app]: ../community/modules/container/apptainer-app/README.md
+[artifact-registry]: ../community/modules/container/artifact-registry/README.md
 
 ### Database
 
@@ -113,6 +131,8 @@ Modules that are still in development and less stable are labeled with the
   and mounts [WEKA](https://www.weka.io/) filesystems.
 * **[gcs-objects]** ![community-badge] ![experimental-badge] : Declaratively creates
   and manages objects in a Google Cloud Storage (GCS) bucket from inline content, local files, or directories.
+* **[gcs-sync]** ![community-badge] ![experimental-badge] : Synchronizes files
+  and directories from remote Git repositories into Cloud Storage buckets at apply time.
 
 [filestore]: file-system/filestore/README.md
 [netapp-volume]: file-system/netapp-volume/README.md
@@ -124,6 +144,7 @@ Modules that are still in development and less stable are labeled with the
 [gke-persistent-volume]: file-system/gke-persistent-volume/README.md
 [weka-client]: ../community/modules/file-system/weka-client/README.md
 [gcs-objects]: ../community/modules/file-system/gcs-objects/README.md
+[gcs-sync]: ../community/modules/file-system/gcs-sync/README.md
 
 ### IAM
 
@@ -196,10 +217,18 @@ Modules that are still in development and less stable are labeled with the
 * **[workload_identity_binding]** ![core-badge] : Creates a Workload Identity binding between a Google Service Account (GSA) and a Kubernetes Service Account (KSA).
 * **[service-enablement]** ![community-badge] ![experimental-badge] : Allows enabling
   various APIs for a Google Cloud Project.
+* **[service-agent]** ![community-badge] ![experimental-badge] : Creates the
+  service agent for a Google Cloud API and exposes its email and IAM member
+  string as outputs.
+* **[pre-existing-project]** ![community-badge] ![experimental-badge] : Retrieves
+  information about an existing GCP project (name, number) and exposes it as
+  outputs.
 
 [service-account]: ../modules/project/service-account/README.md
 [workload_identity_binding]: project/workload_identity_binding/README.md
 [service-enablement]: ../community/modules/project/service-enablement/README.md
+[service-agent]: ../community/modules/project/service-agent/README.md
+[pre-existing-project]: ../community/modules/project/pre-existing-project/README.md
 
 ### Pub/Sub
 

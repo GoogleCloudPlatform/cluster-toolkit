@@ -69,17 +69,13 @@ This section guides you through the cluster creation process, ensuring that your
    * `machine_type`: the machine type of the TPU.
    * `tpu_topology`: the TPU placement topology for pod slice node pool.
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine to call Terraform.
-   * `reservation`: the name of the compute engine reservation of TPU v6e nodes.
+   * `reservation_affinity`: the reservation settings (by default, specify the reservation name under Option 1, or uncomment an alternative consumption model such as DWS Flex Start, DWS Flex Start + Queued Provisioning, Spot, or On-Demand).
 
     > **Note:** The `static_node_count` is now automatically calculated from `machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`.
 
     To modify advanced settings, edit `examples/gke-tpu-v6e/gke-tpu-v6e.yaml`.
 
-1. To use on-demand capacity, you can remove the reservation usage by making the following changes.
-   1. Remove the `reservation` variable from the [`gke-tpu-v6e-deployment.yaml`](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml) file.
-   1. Remove the `reservation_affinity` block from the nodepool module.
-
-1. To utilize spot instances, remove the reservation variable from gke-tpu-v6e-deployment.yaml and add spot: true. In gke-tpu-v6e.yaml, replace the reservation_affinity block under gke-tpu-v6e-pool module with spot: $(vars.spot)
+    > **Note:** Queued provisioning (Option 3) is only supported on multi-host TPU slices. For more information, see [About flex-start provisioning mode](https://cloud.google.com/kubernetes-engine/docs/concepts/dws).
 
 1. Generate [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp) to provide access to Terraform.
 

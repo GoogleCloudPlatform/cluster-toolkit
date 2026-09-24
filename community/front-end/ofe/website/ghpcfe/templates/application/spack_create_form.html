@@ -82,7 +82,7 @@ $( function() {
       {{ form.cluster }}
       {# We're explicit here, because 'select' can't be 'readonly', only    #}
       {# 'disabled'                                                         #}
-      {# And 'disabled' HTML elements aren't sent with form data.  We we    #}
+      {# And 'disabled' HTML elements aren't sent with form data.  We       #}
       {#   augment with a hidden field                                      #}
       <input type="hidden" name="cluster" class="form-control" id="id_cluster" value="{{ cluster.id }}">
     </div>
