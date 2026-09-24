@@ -269,13 +269,14 @@ To choose the appropriate profile for your workload, see [Select performance pro
 
 Behaviour worth knowing:
 
-* The generated claim is named `gcluster-gcsfuse-v1-<bucket>-<profile>` and the
-  PersistentVolume `gcluster-gcsfuse-v1-<bucket>-<profile>-<namespace>`. The names
-  are deterministic, so several jobs that use the same bucket and profile in the
-  same namespace **share one gateway** rather than each creating their own.
-* Supplying custom `options=` or `attributes=` gives that mount its own gateway
-  (a short hash is appended to the name) so it cannot clash with the immutable
-  spec of an already existing shared gateway.
+* The generated claim is named `gcluster-gcsfuse-<bucket>-<profile>-<hash>` and the
+  PersistentVolume `gcluster-gcsfuse-<bucket>-<profile>-<hash>-<namespace>`, where
+  `<hash>` is a short digest of the volume's settings. The names are
+  deterministic, so several jobs that use the same bucket, profile, and settings
+  in the same namespace **share one gateway** rather than each creating their own.
+* Any change to the settings gives the mount its own gateway, so
+  it never clashes with the immutable spec of an existing one. Running jobs keep
+  using the old gateway.
 
 ##### Managing gateways
 

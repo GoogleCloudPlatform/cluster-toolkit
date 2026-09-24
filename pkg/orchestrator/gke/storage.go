@@ -19,6 +19,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net"
 	"path"
@@ -45,7 +46,7 @@ const (
 	// the joining '-'.
 	maxGeneratedPVCNameLength = 189
 
-	gcsFuseGatewayPrefix   = "gcluster-gcsfuse-v1"
+	gcsFuseGatewayPrefix   = "gcluster-gcsfuse"
 	gcsFuseGatewayCapacity = "5Gi" // Ignored by GCSFuse CSI driver, required by Kubernetes.
 
 	gatewayNameDigestLength = 10
@@ -188,9 +189,8 @@ func (sm *StorageManager) ValidateMounts(mounts []string) error {
 		if pm.Profile != "" {
 			sourceKey += ";profile=" + pm.Profile
 		}
-		if hash := customGatewayOptionsHash(pm.Options, pm.Attributes); hash != "" {
-			sourceKey += ";" + hash
-		}
+		// %v prints map keys in sorted order, so the key is independent of attribute order.
+		sourceKey += fmt.Sprintf(";options=%s;attributes=%v", pm.Options, pm.Attributes)
 
 		if seenSources[sourceKey] {
 			return fmt.Errorf("duplicate volume source: %s", pm.Src)
@@ -622,35 +622,25 @@ func splitGCSSource(src string) (bucket string, subPath string, err error) {
 	return bucket, subPath, nil
 }
 
-// customGatewayOptionsHash returns a deterministic suffix for custom options/attributes, or "" when none are supplied.
-func customGatewayOptionsHash(options string, attrs map[string]string) string {
-	if options == "" && len(attrs) == 0 {
-		return ""
+// gatewaySpecHash digests the PV spec fields checkExistingGatewayPV compares. Naming gateways by it means any spec
+// change (options, attributes, template, capacity, new defaults) yields a new gateway instead of clashing with the
+// immutable spec of an existing one.
+func gatewaySpecHash(renderedYAML string) (string, error) {
+	var pv existingGatewayPV
+	if err := yaml.Unmarshal([]byte(renderedYAML), &pv); err != nil {
+		return "", err
 	}
-	keys := make([]string, 0, len(attrs))
-	for k := range attrs {
-		keys = append(keys, k)
+	spec, err := json.Marshal(pv.Spec)
+	if err != nil {
+		return "", err
 	}
-	sort.Strings(keys)
-
-	var sb strings.Builder
-	sb.WriteString(options)
-	for _, k := range keys {
-		sb.WriteString("\x00")
-		sb.WriteString(k)
-		sb.WriteString("=")
-		sb.WriteString(attrs[k])
-	}
-	sum := sha256.Sum256([]byte(sb.String()))
-	return hex.EncodeToString(sum[:])[:6]
+	sum := sha256.Sum256(spec)
+	return hex.EncodeToString(sum[:])[:6], nil
 }
 
-// gcsFuseGatewayPVCName builds the deterministic PVC name for a (bucket, profile) gateway.
-func gcsFuseGatewayPVCName(bucket, profileShortName, options string, attrs map[string]string) string {
-	suffix := sanitizePVCName(profileShortName)
-	if hash := customGatewayOptionsHash(options, attrs); hash != "" {
-		suffix += "-" + hash
-	}
+// gcsFuseGatewayPVCName builds the deterministic PVC name for a (bucket, profile, spec) gateway.
+func gcsFuseGatewayPVCName(bucket, profileShortName, specHash string) string {
+	suffix := sanitizePVCName(profileShortName) + "-" + specHash
 
 	prefix := gcsFuseGatewayPrefix + "-"
 	budget := maxGeneratedPVCNameLength - len(prefix) - len(suffix) - 1
@@ -691,39 +681,18 @@ func splitMountOptions(options string) []string {
 // generateGCSFuseProfileResources renders the PV/PVC gateway backing a storage-profile mount.
 func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx int, job orchestrator.JobDefinition, state *mountBuildState) (MountInfo, string, error) {
 	bucket := strings.TrimPrefix(pm.Src, "gs://")
-	subPath := pm.SubPath
 
 	profileShortName := strings.TrimPrefix(pm.Profile, "gcsfusecsi-")
-	pvcName := gcsFuseGatewayPVCName(bucket, profileShortName, pm.Options, pm.Attributes)
 	ns, err := sm.resolveNamespace(job)
 	if err != nil {
 		return MountInfo{}, "", err
-	}
-	pvName := sanitizePVCName(pvcName + "-" + ns)
-
-	info := MountInfo{
-		Source:              pvcName,
-		MountPath:           pm.Dest,
-		Type:                "pvc",
-		ReadOnly:            pm.ReadOnly,
-		SubPath:             subPath,
-		NeedsGCSFuseSidecar: true,
-	}
-
-	name, reused := state.volumeNameFor(pvName, idx)
-	info.Name = name
-	if reused {
-		return info, "", nil
 	}
 
 	tmpl, err := sm.orchestrator.parseGKETextTemplate("gcs_fuse_pv_pvc.tmpl")
 	if err != nil {
 		return MountInfo{}, "", fmt.Errorf("failed to parse GCSFuse PV/PVC template: %w", err)
 	}
-
 	params := GCSFusePVPVCTemplateParams{
-		PVName:           pvName,
-		PVCName:          pvcName,
 		Namespace:        ns,
 		StorageClassName: pm.Profile,
 		Capacity:         gcsFuseGatewayCapacity,
@@ -736,6 +705,34 @@ func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx in
 		StorageType:      storageTypeGCSFuse,
 	}
 
+	// Render once without names to derive the spec hash the names are built from.
+	var specBuf bytes.Buffer
+	if err := tmpl.Execute(&specBuf, params); err != nil {
+		return MountInfo{}, "", fmt.Errorf("failed to execute GCSFuse PV/PVC template: %w", err)
+	}
+	specHash, err := gatewaySpecHash(specBuf.String())
+	if err != nil {
+		return MountInfo{}, "", fmt.Errorf("failed to parse rendered GCSFuse PV: %w", err)
+	}
+	pvcName := gcsFuseGatewayPVCName(bucket, profileShortName, specHash)
+	pvName := sanitizePVCName(pvcName + "-" + ns)
+
+	info := MountInfo{
+		Source:              pvcName,
+		MountPath:           pm.Dest,
+		Type:                "pvc",
+		ReadOnly:            pm.ReadOnly,
+		SubPath:             pm.SubPath,
+		NeedsGCSFuseSidecar: true,
+	}
+
+	name, reused := state.volumeNameFor(pvName, idx)
+	info.Name = name
+	if reused {
+		return info, "", nil
+	}
+
+	params.PVName, params.PVCName = pvName, pvcName
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, params); err != nil {
 		return MountInfo{}, "", fmt.Errorf("failed to execute GCSFuse PV/PVC template: %w", err)
