@@ -346,36 +346,32 @@ def get_instance_template_copy(nodeset: NSDict, lkp: util.Lookup) -> str:
             raise RuntimeError(f"Failed to copy instance template: {res}")
     return new_self_link
 
-def get_mig_for_node(node: str, lkp: util.Lookup) -> tuple[Optional[str], List[str]]:
-    """Returns (mig_self_link, all_nodes_in_mig) for the MIG managing the given node."""
+def get_mig_for_node(node: str, lkp: util.Lookup) -> tuple[Optional[str], List[str], bool]:
+    """Returns (mig_self_link, all_nodes_in_mig, is_creating) for the MIG managing the given node."""
     # Check VM metadata first; if VM hasn't booted yet, fall back to matching MIG description (slurm_nodes:...)
     inst = lkp.instance(node)
     mig_link = inst.metadata.get("created-by") if inst else None
     # Query MIGs in zone (if single zone) or region to find description & peer nodes
     nodeset = lkp.node_nodeset(node)
     zones = getattr(nodeset, "zone_policy_allow", None) or []
-    region = lkp.node_region(node)
     mig_items = []
     try:
-        if len(zones) == 1:
-            zonal_res = (
-                lkp.compute.instanceGroupManagers()
-                .list(project=lkp.project, zone=zones[0])
-                .execute()
-            )
-            mig_items.extend(zonal_res.get("items", []))
-        else:
-            reg_list = lkp.get_mig_list(lkp.project, region)
-            if reg_list and "items" in reg_list:
-                mig_items.extend(reg_list["items"])
+        mig_list = (
+            lkp.get_mig_list(lkp.project, zone=zones[0])
+            if len(zones) == 1
+            else lkp.get_mig_list(lkp.project, lkp.node_region(node))
+        )
+        if mig_list and "items" in mig_list:
+            mig_items.extend(mig_list["items"])
     except Exception as e:
         log.error("Failed to list MIGs for node %s: %s", node, e)
     for mig_item in mig_items:
         desc = mig_item.get("description") or ""
         peers = util.to_hostnames(desc.split(":", 1)[1]) if desc.startswith("slurm_nodes:") else []
         if (mig_link and util.trim_self_link(mig_item.get("selfLink", "")) == util.trim_self_link(mig_link)) or (node in peers):
-            return mig_item.get("selfLink") or mig_link, peers
-    return (mig_link, [node]) if mig_link else (None, [])
+            is_creating = (mig_item.get("currentActions") or {}).get("creating", 0) > 0
+            return mig_item.get("selfLink") or mig_link, peers, is_creating
+    return (mig_link, [node], False) if mig_link else (None, [], False)
 
 def _get_tpu_full_chunk(model: str, expected_size: int, lkp: util.Lookup) -> List[str]:
     """Returns the full static slice chunk of TPU nodes that 'model' belongs to."""
@@ -445,18 +441,25 @@ def _resume_single_tpu_node(
     """Resumes a single TPU slice by creating its own dedicated zonal/regional MIG."""
     first_node = chunk[0]
     if lkp.is_static_node(first_node):
-        existing_mig, _ = get_mig_for_node(first_node, lkp)
+        existing_mig, existing_peers, is_creating = get_mig_for_node(first_node, lkp)
         if existing_mig:
-            # Reuse existing static MIG to avoid hitting GCE API limits and losing queue position
-            log.info(
-                "TPU node %s already managed by MIG %s. Skipping.", first_node, existing_mig
-            )
-            return
+            if all(lkp.instance(n) is None for n in (existing_peers or chunk)) and not is_creating:
+                log.warning(
+                    "Deleting dead static TPU MIG %s (no VMs and not creating) before re-provisioning.",
+                    existing_mig,
+                )
+                _delete_tpu_mig(existing_mig, existing_peers or chunk, lkp)
+            else:
+                # Reuse existing static MIG to avoid hitting GCE API limits and losing queue position
+                log.info(
+                    "TPU node %s already managed by MIG %s. Skipping.", first_node, existing_mig
+                )
+                return
     else:
         # Delete leftover dynamic MIG from any previous cancelled job across all slice nodes
         seen_migs: set[str] = set()
         for n in chunk:
-            existing_mig, existing_peers = get_mig_for_node(n, lkp)
+            existing_mig, existing_peers, _ = get_mig_for_node(n, lkp)
             if existing_mig and existing_mig not in seen_migs:
                 seen_migs.add(existing_mig)
                 log.warning(
@@ -605,12 +608,14 @@ def suspend_tpu_nodes(nodes: List[str], lkp: util.Lookup) -> None:
     log.info("Suspending TPU nodes: %s", nodes)
     by_mig = defaultdict(list)
     mig_all_peers: dict[str, List[str]] = {}
+    mig_creating: dict[str, bool] = {}
     for node in nodes:
         if any(node in peers for peers in mig_all_peers.values()):
             continue
-        mig_link, peers = get_mig_for_node(node, lkp)
+        mig_link, peers, is_creating = get_mig_for_node(node, lkp)
         if mig_link:
             by_mig[mig_link].append(node)
+            mig_creating[mig_link] = is_creating
             if peers:
                 mig_all_peers[mig_link] = peers
         else:
@@ -618,8 +623,10 @@ def suspend_tpu_nodes(nodes: List[str], lkp: util.Lookup) -> None:
     for mig_link, mig_nodes in by_mig.items():
         all_mig_nodes = mig_all_peers.get(mig_link, mig_nodes)
         # Keep static MIG if VMs haven't booted yet so we reuse it instead of hitting GCE API limits
-        if lkp.is_static_node(mig_nodes[0]) and all(
-            lkp.instance(n) is None for n in all_mig_nodes
+        if (
+            lkp.is_static_node(mig_nodes[0])
+            and all(lkp.instance(n) is None for n in all_mig_nodes)
+            and mig_creating.get(mig_link, False)
         ):
             log.info(
                 "Static TPU MIG %s has no backing VMs yet (waiting for GCE capacity); keeping MIG instead of deleting.",

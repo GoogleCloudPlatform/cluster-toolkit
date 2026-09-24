@@ -2138,9 +2138,14 @@ class Lookup:
         return repairing
 
     @lru_cache()
-    def get_mig_list(self, project: str, region: str) -> Any:
+    def get_mig_list(
+        self, project: str, region: Optional[str] = None, zone: Optional[str] = None
+    ) -> Any:
         """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
-        req = self.compute.regionInstanceGroupManagers().list(project=project, region=region)
+        if zone:
+            req = self.compute.instanceGroupManagers().list(project=project, zone=zone)
+        else:
+            req = self.compute.regionInstanceGroupManagers().list(project=project, region=region)
         return ensure_execute(req)
 
     @lru_cache()
@@ -2462,7 +2467,6 @@ class Lookup:
                 mount_options="defaults,hard,intr,_netdev",
             )
 
-    @lru_cache(maxsize=None)
     def is_tpu_nodeset(self, nodeset_name: str) -> bool:
         """Checks if the nodeset uses a TPU machine type."""
         try:
