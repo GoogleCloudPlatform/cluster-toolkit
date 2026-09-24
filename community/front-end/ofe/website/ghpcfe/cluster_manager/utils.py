@@ -211,6 +211,43 @@ def run_terraform(target_dir, command, arguments=None, extra_env=None):
         del new_env["SSH_AUTH_SOCK"]
     new_env.update(extra_env)
 
+    # Some Cluster Toolkit modules (e.g. the Slurm controller's compute-node
+    # cleanup) run `gcloud` directly from an apply/destroy-time local-exec
+    # provisioner. The gcloud CLI does not read GOOGLE_APPLICATION_CREDENTIALS
+    # -- that only feeds Terraform's own provider and client libraries -- so
+    # without an explicit gcloud auth context those provisioners silently run
+    # as whatever account (if any) is ambiently active and typically do
+    # nothing. Give this invocation its own isolated gcloud config, activated
+    # with the same credential, so any local-exec that shells out to gcloud
+    # is authenticated as the identity the operation was actually run with.
+    creds_file = new_env.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if creds_file and command in ("apply", "destroy"):
+        gcloud_config_dir = Path(target_dir) / ".gcloud_config"
+        gcloud_config_dir.mkdir(exist_ok=True)
+        new_env["CLOUDSDK_CONFIG"] = str(gcloud_config_dir)
+        try:
+            project_id = json.loads(Path(creds_file).read_text()).get("project_id")
+        except (OSError, ValueError):
+            project_id = None
+        activate_cmd = [
+            "gcloud", "--quiet", "auth", "activate-service-account",
+            f"--key-file={creds_file}",
+        ]
+        if project_id:
+            activate_cmd.append(f"--project={project_id}")
+        try:
+            subprocess.run(
+                activate_cmd, env=new_env, check=True,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        except (subprocess.CalledProcessError, OSError) as err:
+            # Best-effort: a module without a gcloud-dependent provisioner is
+            # unaffected, and we must not block the terraform operation itself.
+            logger.warning(
+                "Could not activate gcloud auth context for %s: %s",
+                target_dir, err,
+            )
+
     with log_out_fn.open("wb") as log_out:
         with log_err_fn.open("wb") as log_err:
             subprocess.run(

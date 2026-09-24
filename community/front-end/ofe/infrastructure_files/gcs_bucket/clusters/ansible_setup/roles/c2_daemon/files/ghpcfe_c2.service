@@ -4,6 +4,11 @@ After=network.target
 
 [Service]
 Type=simple
+# The daemon holds live gRPC threads (Pub/Sub streaming pull) and forks+execs
+# CLI tools (sbatch, squeue, gcloud). Newer grpcio enables pthread_atfork
+# handlers by default, which abort the forked child before it execs. The child
+# never re-enters gRPC, so the handlers add no value here; disable them.
+Environment=GRPC_ENABLE_FORK_SUPPORT=false
 PIDFile=/run/ghpcefe.pid
 ExecStart=/usr/local/sbin/ghpcfe_c2daemon.py
 ExecStop=/bin/kill -s INT $MAINPID
