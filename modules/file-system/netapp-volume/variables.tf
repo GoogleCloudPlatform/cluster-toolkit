@@ -126,7 +126,7 @@ variable "large_capacity_config" {
   })
   default = null
   validation {
-    condition     = var.large_capacity_config == null || var.large_capacity_config.constituent_count >= 2
+    condition     = var.large_capacity_config == null ? true : var.large_capacity_config.constituent_count >= 2
     error_message = "constituent_count must be at least 2 for Flex Unified large capacity volumes."
   }
 }

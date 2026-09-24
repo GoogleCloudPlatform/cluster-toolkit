@@ -804,7 +804,7 @@ resource "terraform_data" "validate_ml_diagnostics_version" {
 
 resource "google_service_account_iam_member" "mtc_node_workload_identity" {
   count              = var.enable_multi_tier_checkpointing ? 1 : 0
-  service_account_id = "projects/${var.project_id}/serviceAccounts/${local.sa_email}"
+  service_account_id = local.sa_email
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${replace(var.project_id, ":", "/")}.svc.id.goog[gke-managed-checkpointing/gke-checkpointing-multitier-node]"
   depends_on = [

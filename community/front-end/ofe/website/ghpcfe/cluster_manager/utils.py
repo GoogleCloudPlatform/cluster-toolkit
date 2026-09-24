@@ -227,7 +227,7 @@ def run_terraform(target_dir, command, arguments=None, extra_env=None):
         new_env["CLOUDSDK_CONFIG"] = str(gcloud_config_dir)
         try:
             project_id = json.loads(Path(creds_file).read_text()).get("project_id")
-        except (OSError, ValueError):
+        except (OSError, ValueError, AttributeError):
             project_id = None
         activate_cmd = [
             "gcloud", "--quiet", "auth", "activate-service-account",

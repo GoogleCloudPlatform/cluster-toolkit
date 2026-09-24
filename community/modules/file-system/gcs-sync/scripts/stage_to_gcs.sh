@@ -56,7 +56,7 @@ fetch_git_source() {
 			git -C "$CLONE_SUBDIR" fetch --filter=blob:none origin >&2
 		fi
 	fi
-	git -C "$CLONE_SUBDIR" sparse-checkout add --skip-checks "$SRC_PATH" >&2
+	git -C "$CLONE_SUBDIR" sparse-checkout add "$SRC_PATH" >&2
 	git -C "$CLONE_SUBDIR" checkout "$REPO_REF" >/dev/null 2>&1 || git -C "$CLONE_SUBDIR" checkout FETCH_HEAD >&2
 	printf '%s' "${CLONE_SUBDIR}/${SRC_PATH}"
 }

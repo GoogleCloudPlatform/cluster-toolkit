@@ -1269,7 +1269,7 @@ def test_unobservable_operation_requeues_so_suspend_reclaims(
   mock_wait.side_effect = RuntimeError("controller lost the operation")
 
   with unittest.mock.patch("resume.ensure_execute", return_value={"selfLink": "op/1"}):
-    resume.resume_mig_nodes(["c-n-0", "c-n-1"], None, lkp, None)
+    resume.resume_mig_nodes(["c-n-0", "c-n-1"], None, lkp)
 
   # No inline deletion of possibly-healthy VMs.
   mock_suspend.assert_not_called()

@@ -485,7 +485,7 @@ def _get_gcp_subnet_egress_info(credentials, region, subnet_name):
                 ):
                     info["cloud_nat"] = True
                     break
-                for nat_subnet in nat.get("subnetworks", []):
+                for nat_subnet in nat.get("subnetworks") or []:
                     name = nat_subnet.get("name", "")
                     if name == subnet_name or name.endswith("/" + subnet_name):
                         info["cloud_nat"] = True

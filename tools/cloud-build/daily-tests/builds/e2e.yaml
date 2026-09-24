@@ -94,7 +94,7 @@ steps:
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/*/$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
@@ -102,7 +102,7 @@ steps:
 
               region="us-central1"
               zone="us-central1-a"
-              vars="project_id=\$$PROJECT_ID,deployment_name=\$$DEPLOYMENT_NAME,region=\$$region,zone=\$$zone"
+              vars="project_id=\$$PROJECT_ID,deployment_name=$$DEPLOYMENT_NAME,region=\$$region,zone=\$$zone"
 
               bash tools/get_binary.sh "" "true"
               BLUEPRINT="tools/cloud-build/daily-tests/blueprints/e2e.yaml"
@@ -117,7 +117,7 @@ steps:
               ANSIBLE_PID=\$$!
               wait \$$ANSIBLE_PID
 
-              ./gcluster destroy "\$$DEPLOYMENT_NAME" --auto-approve --robust &
+              ./gcluster destroy "$$DEPLOYMENT_NAME" --auto-approve --robust &
               ANSIBLE_PID=\$$!
               wait \$$ANSIBLE_PID
 
