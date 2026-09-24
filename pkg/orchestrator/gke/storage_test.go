@@ -41,6 +41,7 @@ func TestParseSingleVolume(t *testing.T) {
 		wantRO      bool
 		wantOpts    string
 		wantProfile string
+		wantSubPath string
 		wantAttrs   map[string]string
 		wantErr     bool
 		wantErrSub  string
@@ -220,10 +221,19 @@ func TestParseSingleVolume(t *testing.T) {
 		{
 			name:        "profile alias checkpointing rw",
 			input:       "gs://my-bucket/run1;/checkpoints;rw;profile=checkpointing",
-			wantSrc:     "gs://my-bucket/run1",
+			wantSrc:     "gs://my-bucket",
 			wantDest:    "/checkpoints",
 			wantRO:      false,
 			wantProfile: "gcsfusecsi-checkpointing",
+			wantSubPath: "run1",
+		},
+		{
+			name:        "inline gcs subpath is split from bucket",
+			input:       "gs://my-bucket/datasets/imagenet;/data",
+			wantSrc:     "gs://my-bucket",
+			wantDest:    "/data",
+			wantRO:      true,
+			wantSubPath: "datasets/imagenet",
 		},
 		{
 			name:        "profile canonical storage class name",
@@ -465,6 +475,7 @@ func TestParseSingleVolume(t *testing.T) {
 				ReadOnly:   tc.wantRO,
 				Options:    tc.wantOpts,
 				Profile:    tc.wantProfile,
+				SubPath:    tc.wantSubPath,
 				Attributes: tc.wantAttrs,
 			}
 			if !reflect.DeepEqual(pm, want) {
@@ -1973,6 +1984,20 @@ func TestGCSFuseProfile_SameBucketTwoProfilesPassesValidation(t *testing.T) {
 	}
 
 	if err := sm.ValidateMounts([]string{
+		"gs://shared/train;/train;ro",
+		"gs://shared/eval;/eval;ro",
+	}); err != nil {
+		t.Errorf("distinct subpaths on the same inline bucket must be allowed, got: %v", err)
+	}
+
+	if err := sm.ValidateMounts([]string{
+		"gs://shared/train;/train;ro;profile=training",
+		"gs://shared/eval;/eval;ro;profile=training",
+	}); err != nil {
+		t.Errorf("distinct subpaths on the same profile bucket must be allowed, got: %v", err)
+	}
+
+	if err := sm.ValidateMounts([]string{
 		"gs://shared;/a;ro;profile=training",
 		"gs://shared;/b;ro;profile=training",
 	}); err == nil {
@@ -1988,16 +2013,15 @@ func TestGCSFuseProfile_InvalidSourceFailsPreflight(t *testing.T) {
 	sm := &StorageManager{}
 	for _, mount := range []string{
 		"gs://MyBucket;/data;profile=training",
+		"gs://MyBucket;/data",
 		"gs://;/data;profile=training",
+		"gs://;/data",
 		"gs:///;/data;profile=training",
+		"gs:///;/data",
 	} {
 		if err := sm.ValidateMounts([]string{mount}); err == nil {
 			t.Errorf("ValidateMounts(%q) = nil, want an error before the image build", mount)
 		}
-	}
-
-	if err := sm.ValidateMounts([]string{"gs://MyBucket;/data"}); err != nil {
-		t.Errorf("profile-less gs:// validation changed behaviour: %v", err)
 	}
 }
 
@@ -2015,11 +2039,12 @@ func TestGCSFuseProfile_BackwardCompatibility(t *testing.T) {
 	got := infos[0]
 	want := MountInfo{
 		Name:      "vol-0",
-		Source:    "gs://logs/run1",
+		Source:    "gs://logs",
 		MountPath: "/logs",
 		Type:      "gcsfuse",
 		ReadOnly:  false,
 		Options:   "implicit-dirs",
+		SubPath:   "run1",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("MountInfo = %+v, want %+v", got, want)
@@ -2032,6 +2057,12 @@ func TestGCSFuseProfile_BackwardCompatibility(t *testing.T) {
 	}
 	if !strings.Contains(opts.VolumesYAML, "gcsfuse.csi.storage.gke.io") {
 		t.Errorf("expected inline CSI volume spec, got:\n%s", opts.VolumesYAML)
+	}
+	if !strings.Contains(opts.VolumesYAML, "bucketName: logs") {
+		t.Errorf("expected bare bucketName in inline CSI volumeAttributes, got:\n%s", opts.VolumesYAML)
+	}
+	if !strings.Contains(opts.VolumeMountsYAML, "subPath: run1") {
+		t.Errorf("expected subPath delegated to volumeMount, got:\n%s", opts.VolumeMountsYAML)
 	}
 	if strings.Contains(opts.VolumesYAML, "persistentVolumeClaim") {
 		t.Errorf("profile-less mount must not become a PVC:\n%s", opts.VolumesYAML)

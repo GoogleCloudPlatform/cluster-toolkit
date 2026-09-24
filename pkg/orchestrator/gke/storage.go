@@ -114,6 +114,7 @@ func buildPodLevelMount(pm parsedMount, idx int) MountInfo {
 		Type:      volType,
 		ReadOnly:  pm.ReadOnly,
 		Options:   pm.Options,
+		SubPath:   pm.SubPath,
 	}
 
 	// Warn here rather than in parseSingleVolume so ValidateMounts + ProcessMounts does not warn twice.
@@ -173,8 +174,11 @@ func (sm *StorageManager) ValidateMounts(mounts []string) error {
 		}
 
 		sourceKey := pm.Src
+		if pm.SubPath != "" {
+			sourceKey += "/" + pm.SubPath
+		}
 		if pm.Profile != "" {
-			sourceKey = pm.Src + ";profile=" + pm.Profile
+			sourceKey += ";profile=" + pm.Profile
 		}
 
 		if seenSources[sourceKey] {
@@ -429,15 +433,21 @@ func (sm *StorageManager) parseSingleVolume(vStr string) (parsedMount, error) {
 		return parsedMount{}, err
 	}
 
+	if strings.HasPrefix(pm.Src, "gs://") {
+		bucket, subPath, err := splitGCSSource(pm.Src)
+		if err != nil {
+			return parsedMount{}, err
+		}
+		pm.Src = "gs://" + bucket
+		pm.SubPath = subPath
+	}
+
 	if segments.ProfileSet {
 		sc, err := normalizeProfileName(segments.RawProfile)
 		if err != nil {
 			return parsedMount{}, err
 		}
 		pm.Profile = sc
-		if _, _, err := splitGCSSource(pm.Src); err != nil {
-			return parsedMount{}, err
-		}
 	}
 
 	if err := validateSrcScheme(pm.Src, vStr); err != nil {
@@ -661,10 +671,8 @@ func splitMountOptions(options string) []string {
 
 // generateGCSFuseProfileResources renders the PV/PVC gateway backing a storage-profile mount.
 func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx int, job orchestrator.JobDefinition, state *mountBuildState) (MountInfo, string, error) {
-	bucket, subPath, err := splitGCSSource(pm.Src)
-	if err != nil {
-		return MountInfo{}, "", err
-	}
+	bucket := strings.TrimPrefix(pm.Src, "gs://")
+	subPath := pm.SubPath
 
 	profileShortName := strings.TrimPrefix(pm.Profile, "gcsfusecsi-")
 	pvcName := gcsFuseGatewayPVCName(bucket, profileShortName, pm.Options, pm.Attributes)

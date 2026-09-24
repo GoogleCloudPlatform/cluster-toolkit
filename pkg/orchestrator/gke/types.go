@@ -229,6 +229,7 @@ type parsedMount struct {
 	Dest       string
 	Options    string
 	Profile    string
+	SubPath    string
 	Attributes map[string]string
 	ReadOnly   bool
 }
