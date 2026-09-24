@@ -2530,34 +2530,43 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 		return &StorageManager{orchestrator: &GKEOrchestrator{executor: exec, namespace: "default"}}
 	}
 
-	if _, _, err := newSM(shell.CommandResult{Stdout: ""}).ProcessMounts(
-		[]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{},
-	); err != nil {
-		t.Errorf("absent PV must succeed, got: %v", err)
+	forbidden := shell.CommandResult{ExitCode: 1, Stderr: `persistentvolumes "x" is forbidden: User cannot get resource "persistentvolumes"`}
+	tests := []struct {
+		name    string
+		res     shell.CommandResult
+		dryRun  bool
+		wantErr []string // substrings; nil means success
+	}{
+		{name: "absent PV", res: shell.CommandResult{Stdout: ""}},
+		{name: "matching Bound PV", res: shell.CommandResult{Stdout: matchingPVJSON}},
+		{name: "mismatched PV", res: shell.CommandResult{Stdout: mismatchedPVJSON}, wantErr: []string{"already exists with different settings", "kubectl delete pv " + pvName}},
+		{name: "Released PV", res: shell.CommandResult{Stdout: releasedPVJSON}, wantErr: []string{"already exists in Released state", "kubectl delete pv " + pvName}},
+		{name: "dry-run skips cluster check", res: shell.CommandResult{Stdout: mismatchedPVJSON}, dryRun: true},
+		{name: "kubectl failure fails fast", res: forbidden, wantErr: []string{"failed to inspect existing gateway PV", "is forbidden"}},
+		{name: "unparsable PV fails fast", res: shell.CommandResult{Stdout: "{not json"}, wantErr: []string{"failed to parse existing gateway PV"}},
 	}
-
-	if _, _, err := newSM(shell.CommandResult{Stdout: matchingPVJSON}).ProcessMounts(
-		[]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{},
-	); err != nil {
-		t.Errorf("matching Bound PV must succeed, got: %v", err)
-	}
-
-	if _, _, err := newSM(shell.CommandResult{Stdout: mismatchedPVJSON}).ProcessMounts(
-		[]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{},
-	); err == nil || !strings.Contains(err.Error(), "already exists with different settings") || !strings.Contains(err.Error(), "kubectl delete pv "+pvName) {
-		t.Errorf("mismatched PV error = %v, want different-settings error with kubectl delete hint", err)
-	}
-
-	if _, _, err := newSM(shell.CommandResult{Stdout: releasedPVJSON}).ProcessMounts(
-		[]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{},
-	); err == nil || !strings.Contains(err.Error(), "already exists in Released state") || !strings.Contains(err.Error(), "kubectl delete pv "+pvName) {
-		t.Errorf("Released PV error = %v, want Released-state error with kubectl delete hint", err)
-	}
-
-	if _, _, err := newSM(shell.CommandResult{Stdout: mismatchedPVJSON}).ProcessMounts(
-		[]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{DryRunManifest: "out.yaml"},
-	); err != nil {
-		t.Errorf("dry-run must skip existing-PV cluster check, got: %v", err)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			job := orchestrator.JobDefinition{}
+			if tc.dryRun {
+				job.DryRunManifest = "out.yaml"
+			}
+			_, _, err := newSM(tc.res).ProcessMounts([]string{"gs://bkt;/data;profile=training"}, job)
+			if tc.wantErr == nil {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tc.wantErr)
+			}
+			for _, want := range tc.wantErr {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q missing %q", err, want)
+				}
+			}
+		})
 	}
 }
 

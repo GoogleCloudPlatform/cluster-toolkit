@@ -757,13 +757,20 @@ func (sm *StorageManager) checkExistingGatewayPV(pvName, renderedYAML string, dr
 	}
 
 	res := sm.orchestrator.executor.ExecuteCommand("kubectl", "get", "pv", pvName, "--ignore-not-found", "-o", "json")
-	if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) == "" {
+	if res.ExitCode != 0 {
+		return fmt.Errorf("failed to inspect existing gateway PV %q (needs cluster-scoped `get pv`): %s",
+			pvName, strings.TrimSpace(res.Stderr))
+	}
+	if strings.TrimSpace(res.Stdout) == "" {
 		return nil
 	}
 
 	var existing, rendered existingGatewayPV
-	if yaml.Unmarshal([]byte(res.Stdout), &existing) != nil || yaml.Unmarshal([]byte(renderedYAML), &rendered) != nil {
-		return nil
+	if err := yaml.Unmarshal([]byte(res.Stdout), &existing); err != nil {
+		return fmt.Errorf("failed to parse existing gateway PV %q: %w", pvName, err)
+	}
+	if err := yaml.Unmarshal([]byte(renderedYAML), &rendered); err != nil {
+		return fmt.Errorf("failed to parse rendered gateway PV %q: %w", pvName, err)
 	}
 
 	if existing.Status.Phase == "Released" || existing.Status.Phase == "Failed" {
