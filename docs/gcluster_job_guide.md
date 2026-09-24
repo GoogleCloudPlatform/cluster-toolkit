@@ -277,6 +277,22 @@ Behaviour worth knowing:
   (a short hash is appended to the name) so it cannot clash with the immutable
   spec of an already existing shared gateway.
 
+##### Managing gateways
+
+Gateways outlive the jobs that created them. To list them:
+
+```bash
+kubectl get pv,pvc -A -l gcluster.google.com/managed-by=cluster-toolkit,gcluster.google.com/storage-type=gcsfuse
+```
+
+To delete one that no job is using, delete the claim first, then the volume.
+Bucket contents are not affected.
+
+```bash
+kubectl delete pvc <claim> -n <namespace>
+kubectl delete pv <claim>-<namespace>
+```
+
 ### 4.5 Example: Submit Job with Custom Environment Variables
 
 You can pass custom environment variables to the container using the `--env` flag:
