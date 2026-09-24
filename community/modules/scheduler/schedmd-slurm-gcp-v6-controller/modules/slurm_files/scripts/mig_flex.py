@@ -325,6 +325,9 @@ def get_instance_template_copy(nodeset: NSDict, lkp: util.Lookup) -> str:
     if lkp.is_tpu_nodeset(nodeset.nodeset_name):
         if isinstance(properties.get("advancedMachineFeatures"), dict):
             properties["advancedMachineFeatures"].pop("threadsPerCore", None)
+        scheduling = properties.get("scheduling") or {}
+        if scheduling.get("provisioningModel") == "SPOT" or scheduling.get("preemptible"):
+            scheduling["instanceTerminationAction"] = "DELETE"
     req = lkp.compute.instanceTemplates().insert(
         project=lkp.project,
         body=dict(
@@ -369,7 +372,8 @@ def get_mig_for_node(node: str, lkp: util.Lookup) -> tuple[Optional[str], List[s
         desc = mig_item.get("description") or ""
         peers = util.to_hostnames(desc.split(":", 1)[1]) if desc.startswith("slurm_nodes:") else []
         if (mig_link and util.trim_self_link(mig_item.get("selfLink", "")) == util.trim_self_link(mig_link)) or (node in peers):
-            is_creating = (mig_item.get("currentActions") or {}).get("creating", 0) > 0
+            actions = mig_item.get("currentActions") or {}
+            is_creating = (actions.get("creating", 0) + actions.get("creatingWithoutRetries", 0)) > 0
             return mig_item.get("selfLink") or mig_link, peers, is_creating
     return (mig_link, [node], False) if mig_link else (None, [], False)
 
@@ -443,7 +447,10 @@ def _resume_single_tpu_node(
     if lkp.is_static_node(first_node):
         existing_mig, existing_peers, is_creating = get_mig_for_node(first_node, lkp)
         if existing_mig:
-            if all(lkp.instance(n) is None for n in (existing_peers or chunk)) and not is_creating:
+            if not is_creating and any(
+                (inst := lkp.instance(n)) is None or inst.status == "TERMINATED"
+                for n in (existing_peers or chunk)
+            ):
                 log.warning(
                     "Deleting dead static TPU MIG %s (no VMs and not creating) before re-provisioning.",
                     existing_mig,
@@ -679,3 +686,5 @@ def _delete_tpu_mig(mig_self_link: str, nodes: List[str], lkp: util.Lookup) -> N
             log.info("TPU MIG %s is currently not in ready state.", mig_name)
         else:
             raise
+    if hasattr(lkp.get_mig_list, "cache_clear"):
+        lkp.get_mig_list.cache_clear()

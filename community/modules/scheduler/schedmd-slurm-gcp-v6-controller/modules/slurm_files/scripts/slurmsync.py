@@ -357,6 +357,10 @@ def get_node_action(nodename: str) -> NodeAction:
         and "POWERING_DOWN" not in state.flags
         and inst.status == "TERMINATED"
     ):
+        if lkp.is_tpu_node(nodename):
+            if state.base != "DOWN":
+                return NodeActionDown(reason="Instance terminated")
+            return NodeActionPowerDown()
         if inst.scheduling.preemptible:
             return NodeActionPrempt()
         if state.base != "DOWN":
