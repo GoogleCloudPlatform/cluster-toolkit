@@ -36,7 +36,7 @@ var (
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
 	isVmInstanceModulePatterns = []string{"vm-instance"}
-	testProjects               = []string{"hpc-toolkit-dev"}
+	testProjects               = []string{"hpc-toolkit-dev", "hpc-toolkit-dev-2"}
 )
 
 // NewCollector creates and initializes a new Telemetry Collector.
