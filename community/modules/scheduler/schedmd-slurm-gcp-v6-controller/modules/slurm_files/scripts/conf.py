@@ -246,8 +246,7 @@ class SlurmConfigGenerator:
             nodeset = self.lkp.cfg.nodeset.get(nodeset_name)
             if not nodeset:
                 return MIN_MEM_PER_CPU
-            template = nodeset.instance_template
-            machine = self.lkp.template_machine_conf(template)
+            machine = self.lkp.nodeset_machine_conf(nodeset)
             mem_spec_limit = int(nodeset.node_conf.get("MemSpecLimit", 0))
             return max(MIN_MEM_PER_CPU, (machine.memory - mem_spec_limit) // machine.cpus)
 
@@ -362,7 +361,7 @@ def conflines(lkp: util.Lookup) -> str:
 
 def nodeset_lines(nodeset, lkp: util.Lookup) -> str:
     template_info = lkp.template_info(nodeset.instance_template)
-    machine_conf = lkp.template_machine_conf(nodeset.instance_template)
+    machine_conf = lkp.nodeset_machine_conf(nodeset)
 
     # follow https://slurm.schedmd.com/slurm.conf.html#OPT_Boards
     # by setting Boards, SocketsPerBoard, CoresPerSocket, and ThreadsPerCore

@@ -168,6 +168,10 @@ locals {
     for k, mig in local.nodeset_migs : k => lower(trimspace(mig.nodeset.accelerator_topology))
     if mig.nodeset.accelerator_topology != null && trimspace(mig.nodeset.accelerator_topology) != ""
   }
+
+  nodeset_mig_target_shape = {
+    for k, mig in local.nodeset_migs : k => coalesce(mig.nodeset.zone_target_shape, "ANY_SINGLE_ZONE")
+  }
 }
 
 data "google_compute_zones" "available" {
@@ -243,7 +247,7 @@ resource "google_compute_region_instance_group_manager" "nodeset_mig" {
   )
   # Scoped per MIG: slices of one nodeset can land in different zones unless zone_policy_allow
   # pins one. NVLink is intact within a slice; cross-slice jobs may pay cross-zone latency.
-  distribution_policy_target_shape = "ANY_SINGLE_ZONE"
+  distribution_policy_target_shape = local.nodeset_mig_target_shape[each.key]
 
   # Proactive Lockout Guardrail: Compute NodeSet MIGs must never use PROACTIVE
   # update policies to prevent uncoordinated restarts of active batch jobs.
@@ -260,8 +264,35 @@ resource "google_compute_region_instance_group_manager" "nodeset_mig" {
     )
   }
 
+  dynamic "instance_flexibility_policy" {
+    for_each = length(try(each.value.nodeset.instance_flexibility_policy.instance_selections, [])) > 0 ? [each.value.nodeset.instance_flexibility_policy] : []
+    content {
+      dynamic "instance_selections" {
+        for_each = instance_flexibility_policy.value.instance_selections
+        content {
+          name = (
+            instance_selections.value.name != null && trimspace(instance_selections.value.name) != ""
+          ) ? trimspace(instance_selections.value.name) : "selection-${instance_selections.key + 1}"
+          rank          = instance_selections.value.rank
+          machine_types = instance_selections.value.machine_types
+        }
+      }
+    }
+  }
+
   instance_lifecycle_policy {
     default_action_on_failure = "REPAIR"
+    force_update_on_repair = (
+      length(try(each.value.nodeset.instance_flexibility_policy.instance_selections, [])) > 0 ||
+      local.nodeset_mig_target_shape[each.key] != "ANY_SINGLE_ZONE"
+    ) ? "YES" : null
+
+    dynamic "on_repair" {
+      for_each = local.nodeset_mig_target_shape[each.key] != "ANY_SINGLE_ZONE" ? [1] : []
+      content {
+        allow_changing_zone = "YES"
+      }
+    }
   }
 
   lifecycle {
@@ -291,12 +322,13 @@ locals {
     enable_placement                 = ns.enable_placement
     placement_max_distance           = ns.placement_max_distance
     network_storage                  = ns.network_storage
-    zone_target_shape                = ns.zone_target_shape
+    zone_target_shape                = coalesce(ns.zone_target_shape, "ANY_SINGLE_ZONE")
     zone_policy_allow                = ns.zone_policy_allow
     zone_policy_deny                 = ns.zone_policy_deny
     enable_maintenance_reservation   = ns.enable_maintenance_reservation
     enable_opportunistic_maintenance = ns.enable_opportunistic_maintenance
     accelerator_topology             = ns.accelerator_topology
+    instance_flexibility_policy      = try(ns.instance_flexibility_policy, null)
     # Static MIG nodesets only: resume.py prefers slice_size over the live machine type, so
     # emitting it elsewhere would move the source of truth. The !dws_flex term must match the
     # gates on nodeset_migs and mig_name above -- Flex resolves to "MIG" but gets no slice MIG.

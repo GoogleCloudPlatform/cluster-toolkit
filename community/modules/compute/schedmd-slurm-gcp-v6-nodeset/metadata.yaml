@@ -47,6 +47,15 @@ ghpc:
       - BULK_INSERT
       allow_null: false
     error_message: "Allowed values for provisioning_engine are 'AUTO', 'MIG', or 'BULK_INSERT'."
+  - validator: allowed_enum
+    inputs:
+      vars: [zone_target_shape]
+      allowed:
+      - ANY
+      - ANY_SINGLE_ZONE
+      - BALANCED
+      allow_null: true
+    error_message: "Allowed values for zone_target_shape are 'ANY', 'ANY_SINGLE_ZONE', or 'BALANCED'."
   - validator: conditional
     inputs:
       trigger: provisioning_engine
@@ -125,3 +134,42 @@ ghpc:
       dependent: node_count_dynamic_max
       dependent_value: 0
     error_message: "When 'accelerator_topology' is specified with 'provisioning_engine: MIG', 'node_count_dynamic_max' must be explicitly set to 0."
+  - validator: exclusive
+    inputs:
+      vars: [instance_flexibility_policy, accelerator_topology]
+    error_message: "instance_flexibility_policy cannot be combined with accelerator_topology."
+  - validator: exclusive
+    inputs:
+      vars: [instance_flexibility_policy, dws_flex.enabled]
+    error_message: "instance_flexibility_policy is not supported with DWS Flex."
+  - validator: exclusive
+    inputs:
+      vars: [instance_flexibility_policy, reservation_name]
+    error_message: "instance_flexibility_policy cannot be combined with a reservation; a specific reservation pins a single machine type."
+  - validator: exclusive
+    inputs:
+      vars: [instance_flexibility_policy, future_reservation]
+    error_message: "instance_flexibility_policy cannot be combined with a future reservation; a specific reservation pins a single machine type."
+  - validator: conditional
+    inputs:
+      triggers:
+        instance_flexibility_policy: null
+      dependent: provisioning_engine
+      dependent_value: MIG
+    error_message: "instance_flexibility_policy requires 'provisioning_engine' to be explicitly set to 'MIG'."
+  - validator: conditional_regex
+    inputs:
+      triggers:
+        instance_flexibility_policy: null
+      dependent: machine_type
+      pattern: "^(a3-ultragpu|a4|a4x)-"
+      match_expected: false
+    error_message: "instance_flexibility_policy is not supported on a3-ultragpu, a4, or a4x machine types."
+  - validator: conditional_regex
+    inputs:
+      triggers:
+        dws_flex.enabled: true
+        dws_flex.use_bulk_insert: false
+      dependent: zone_target_shape
+      pattern: "^(ANY_SINGLE_ZONE|ANY)$"
+    error_message: "DWS Flex (FLEX_START) Regional MIGs only support zone_target_shape of 'ANY_SINGLE_ZONE' or 'ANY'; 'BALANCED' is rejected by Compute Engine."
