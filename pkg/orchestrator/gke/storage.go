@@ -507,6 +507,7 @@ func truncatePVCName(name string, maxLen int) string {
 }
 
 func (sm *StorageManager) resolveNamespace(job orchestrator.JobDefinition) (string, error) {
+	// Test-only scaffolding: all production callers populate sm.orchestrator.
 	if sm.orchestrator == nil {
 		return "default", nil
 	}
