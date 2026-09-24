@@ -59,18 +59,14 @@ This section guides you through the cluster creation process, ensuring that your
    * `machine_type`: the machine type of the TPU (e.g., `ct5p-hightpu-4t`).
    * `tpu_topology`: the TPU placement topology for the pod slice node pool (e.g., `2x2x2`).
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine running Terraform.
-   * `reservation`: the name of the Compute Engine reservation of TPU v5p nodes (if any).
+   * `reservation_affinity`: the reservation settings (by default, specify the reservation name under Option 1, or uncomment an alternative consumption model such as DWS Flex Start, DWS Flex Start + Queued Provisioning, Spot, or On-Demand).
    * `user_namespace`: The Kubernetes service account namespace where your TPU workloads will run (defaults to `default`).
 
     > **Note:** The `static_node_count` is automatically calculated from `machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`.
 
    To modify advanced settings, edit `examples/gke-tpu-v5p/gke-tpu-v5p.yaml`.
 
-1. To use on-demand capacity, you can remove the reservation usage by making the following changes.
-   1. Remove the `reservation` variable from the `gke-tpu-v5p-deployment.yaml`.
-   1. Remove the `reservation_affinity` block from the nodepool module.
-
-1. To utilize spot instances, remove the reservation variable from `gke-tpu-v5p-deployment.yaml` and add `spot: true`. In `gke-tpu-v5p.yaml`, replace the reservation_affinity block under `gke-tpu-v5p-pool` module with `spot: $(vars.spot)`.
+    > **Note:** Queued provisioning (Option 3) is only supported on multi-host TPU slices. For more information, see [About flex-start provisioning mode](https://cloud.google.com/kubernetes-engine/docs/concepts/dws).
 
 1. Generate [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp) to provide access to Terraform.
 
