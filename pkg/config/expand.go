@@ -672,7 +672,7 @@ func expandWorkloadPolicy(bp Blueprint, m *Module) {
 	}
 
 	wpMap := wpVal.AsValueMap()
-	if modeVal, ok := wpMap["accelerator_topology_mode"]; wpMap == nil || (ok && !modeVal.IsNull()) {
+	if modeVal, ok := wpMap["accelerator_topology_mode"]; ok && !modeVal.IsNull() {
 		return
 	}
 
