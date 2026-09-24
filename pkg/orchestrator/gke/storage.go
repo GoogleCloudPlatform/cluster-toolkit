@@ -180,6 +180,9 @@ func (sm *StorageManager) ValidateMounts(mounts []string) error {
 		if pm.Profile != "" {
 			sourceKey += ";profile=" + pm.Profile
 		}
+		if hash := customGatewayOptionsHash(pm.Options, pm.Attributes); hash != "" {
+			sourceKey += ";" + hash
+		}
 
 		if seenSources[sourceKey] {
 			return fmt.Errorf("duplicate volume source: %s", pm.Src)

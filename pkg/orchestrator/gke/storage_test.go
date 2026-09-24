@@ -1998,6 +1998,20 @@ func TestGCSFuseProfile_SameBucketTwoProfilesPassesValidation(t *testing.T) {
 	}
 
 	if err := sm.ValidateMounts([]string{
+		"gs://bkt;/a;profile=training;options=implicit-dirs",
+		"gs://bkt;/c;profile=training;options=file-cache:max-size-mb:2000",
+	}); err != nil {
+		t.Errorf("same bucket+profile with distinct options= must be allowed, got: %v", err)
+	}
+
+	if err := sm.ValidateMounts([]string{
+		"gs://bkt;/a;profile=training;options=implicit-dirs",
+		"gs://bkt;/c;profile=training;options=implicit-dirs",
+	}); err == nil {
+		t.Error("expected a duplicate-source error for identical bucket+profile+options")
+	}
+
+	if err := sm.ValidateMounts([]string{
 		"gs://shared;/a;ro;profile=training",
 		"gs://shared;/b;ro;profile=training",
 	}); err == nil {
