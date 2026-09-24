@@ -413,6 +413,11 @@ router.register(
     DiskAvailabilityViewSet,
     basename="api-disktype",
 )  # Specify pk=ClusterID, zone, region
+router.register(
+    r"api/kms_keys",
+    KmsKeyViewSet,
+    basename="api-kmskeys",
+)  # Specify credential=CredentialID, region
 router.register(r"api/vpcs", VPCViewSet, basename="api-vpcs")
 router.register(r"api/subnets", VirtualSubnetViewSet, basename="api-subnets")
 

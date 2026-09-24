@@ -92,7 +92,7 @@ resource "google_secret_manager_secret" "repo_password_secret" {
           content {
             location = replicas.value.location
             dynamic "customer_managed_encryption" {
-              for_each = replicas.value.kms_key_name != null ? [1] : []
+              for_each = replicas.value.kms_key_name != null ? [replicas.value.kms_key_name] : []
               content {
                 kms_key_name = customer_managed_encryption.value
               }
@@ -132,6 +132,7 @@ resource "google_artifact_registry_repository" "artifact_registry" {
   description   = var.deployment_name
   labels        = local.labels
   repository_id = local.repository_name
+  kms_key_name  = var.repository_kms_key_name
 
   # Only create remote_repository_config if REMOTE_REPOSITORY
   dynamic "remote_repository_config" {

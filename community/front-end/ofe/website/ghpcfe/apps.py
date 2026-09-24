@@ -14,6 +14,8 @@
 
 """Top level Django app definitions"""
 
+import sys
+
 from django.apps import AppConfig
 from .cluster_manager import c2
 
@@ -24,6 +26,19 @@ class GHPCFEConfig(AppConfig):
     def ready(self):
         # Has side effect of registering various receiver callbacks
         import ghpcfe.signals # pylint:disable=unused-import,import-outside-toplevel
+
+        # C2 startup reads the server configuration file and connects to
+        # Pub/Sub, neither of which exists when running unit tests from a
+        # source checkout.
+        #
+        # settings.TESTING is the reliable signal: it survives pytest,
+        # coverage and any other runner that does not put "test" in argv.
+        # The argv check is kept as a fallback for `manage.py test` run
+        # without --settings=website.test_settings, which would otherwise
+        # fail here on a missing configuration.yaml instead of skipping.
+        from django.conf import settings  # pylint:disable=import-outside-toplevel
+        if getattr(settings, "TESTING", False) or sys.argv[1:2] == ["test"]:
+            return
 
         c2.startup()
         c2.start_cloud_build_log_subscriber()
