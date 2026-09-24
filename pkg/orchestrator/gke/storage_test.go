@@ -2522,10 +2522,21 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 		},
 		"status": {"phase": "Released"}
 	}`
+	managedReleasedPVJSON := `{
+		"metadata": {"labels": {"gcluster.google.com/managed-by": "cluster-toolkit"}},
+		"spec": {
+			"storageClassName": "gcsfusecsi-training",
+			"capacity": {"storage": "10Gi"},
+			"csi": {"volumeHandle": "bkt"}
+		},
+		"status": {"phase": "Released"}
+	}`
 
-	newSM := func(res shell.CommandResult) *StorageManager {
+	// The mock fails any command it has no response for, so a missing del response makes a delete attempt an error.
+	newSM := func(res shell.CommandResult, del []shell.CommandResult) *StorageManager {
 		exec := NewMockExecutor(map[string][]shell.CommandResult{
 			"kubectl get pv " + pvName: {res},
+			"kubectl delete pv " + pvName + " --ignore-not-found --wait=true --timeout=60s": del,
 		})
 		return &StorageManager{orchestrator: &GKEOrchestrator{executor: exec, namespace: "default"}}
 	}
@@ -2534,13 +2545,16 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 	tests := []struct {
 		name    string
 		res     shell.CommandResult
+		del     []shell.CommandResult
 		dryRun  bool
 		wantErr []string // substrings; nil means success
 	}{
 		{name: "absent PV", res: shell.CommandResult{Stdout: ""}},
 		{name: "matching Bound PV", res: shell.CommandResult{Stdout: matchingPVJSON}},
 		{name: "mismatched PV", res: shell.CommandResult{Stdout: mismatchedPVJSON}, wantErr: []string{"already exists with different settings", "kubectl delete pv " + pvName}},
-		{name: "Released PV", res: shell.CommandResult{Stdout: releasedPVJSON}, wantErr: []string{"already exists in Released state", "kubectl delete pv " + pvName}},
+		{name: "unmanaged Released PV is left to the user", res: shell.CommandResult{Stdout: releasedPVJSON}, wantErr: []string{"already exists in Released state", "will not delete it", "kubectl delete pv " + pvName}},
+		{name: "managed Released PV is deleted and recreated", res: shell.CommandResult{Stdout: managedReleasedPVJSON}, del: []shell.CommandResult{{}}},
+		{name: "managed Released PV delete failure", res: shell.CommandResult{Stdout: managedReleasedPVJSON}, del: []shell.CommandResult{{ExitCode: 1, Stderr: "forbidden"}}, wantErr: []string{"failed to delete stale gateway PV", "forbidden"}},
 		{name: "dry-run skips cluster check", res: shell.CommandResult{Stdout: mismatchedPVJSON}, dryRun: true},
 		{name: "kubectl failure fails fast", res: forbidden, wantErr: []string{"failed to inspect existing gateway PV", "is forbidden"}},
 		{name: "unparsable PV fails fast", res: shell.CommandResult{Stdout: "{not json"}, wantErr: []string{"failed to parse existing gateway PV"}},
@@ -2551,7 +2565,7 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 			if tc.dryRun {
 				job.DryRunManifest = "out.yaml"
 			}
-			_, _, err := newSM(tc.res).ProcessMounts([]string{"gs://bkt;/data;profile=training"}, job)
+			_, _, err := newSM(tc.res, tc.del).ProcessMounts([]string{"gs://bkt;/data;profile=training"}, job)
 			if tc.wantErr == nil {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)

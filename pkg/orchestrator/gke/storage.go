@@ -774,10 +774,7 @@ func (sm *StorageManager) checkExistingGatewayPV(pvName, renderedYAML string, dr
 	}
 
 	if existing.Status.Phase == "Released" || existing.Status.Phase == "Failed" {
-		return fmt.Errorf(
-			"gateway PV %q already exists in %s state (left behind after its PVC was deleted) and cannot rebind. "+
-				"Delete it with `kubectl delete pv %s` and resubmit",
-			pvName, existing.Status.Phase, pvName)
+		return sm.recreateStaleGatewayPV(pvName, existing)
 	}
 
 	if !reflect.DeepEqual(existing.Spec, rendered.Spec) {
@@ -785,6 +782,27 @@ func (sm *StorageManager) checkExistingGatewayPV(pvName, renderedYAML string, dr
 			"gateway PV %q already exists with different settings (created by an older gcluster "+
 				"version or a custom template). Delete it with `kubectl delete pv %s` and resubmit",
 			pvName, pvName)
+	}
+	return nil
+}
+
+// recreateStaleGatewayPV deletes a Released/Failed gateway PV so the apply can recreate it. A Released PV has no
+// bound claim, so no pod uses it, and with reclaimPolicy Retain deleting it never touches bucket data. PVs without
+// the managed-by label were not created by gcluster and are left for the user to delete.
+func (sm *StorageManager) recreateStaleGatewayPV(pvName string, existing existingGatewayPV) error {
+	phase := existing.Status.Phase
+	if existing.Metadata.Labels[managedByLabel] != managedByValue {
+		return fmt.Errorf(
+			"gateway PV %q already exists in %s state (left behind after its PVC was deleted) and cannot rebind. "+
+				"It is not labelled %s=%s, so gcluster will not delete it. Delete it with `kubectl delete pv %s` and resubmit",
+			pvName, phase, managedByLabel, managedByValue, pvName)
+	}
+
+	logging.Info("Recreating stale gateway PV %q (%s)", pvName, phase)
+	res := sm.orchestrator.executor.ExecuteCommand("kubectl", "delete", "pv", pvName,
+		"--ignore-not-found", "--wait=true", "--timeout=60s")
+	if res.ExitCode != 0 {
+		return fmt.Errorf("failed to delete stale gateway PV %q: %s", pvName, strings.TrimSpace(res.Stderr))
 	}
 	return nil
 }
