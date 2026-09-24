@@ -45,7 +45,7 @@ const (
 	// the joining '-'.
 	maxGeneratedPVCNameLength = 189
 
-	gcsFuseGatewayPrefix   = "gcluster-gcsfuse"
+	gcsFuseGatewayPrefix   = "gcluster-gcsfuse-v1"
 	gcsFuseGatewayCapacity = "5Gi" // Ignored by GCSFuse CSI driver, required by Kubernetes.
 
 	gatewayNameDigestLength = 10

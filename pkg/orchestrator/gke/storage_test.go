@@ -1603,7 +1603,7 @@ func TestGCSFuseProfile_ManifestRendering(t *testing.T) {
 		t.Fatalf("expected 1 manifest and 1 mount info, got %d manifests and %d infos", len(manifests), len(infos))
 	}
 
-	wantPVC := "gcluster-gcsfuse-imagenet-dataset-training"
+	wantPVC := "gcluster-gcsfuse-v1-imagenet-dataset-training"
 	wantPV := wantPVC + "-default"
 	wantInfo := MountInfo{
 		Name:                "vol-0",
@@ -1644,8 +1644,8 @@ func TestGCSFuseProfile_TemplateQuotesInjectedValues(t *testing.T) {
 	// text/template applies no escaping, so every injection point must be %q-quoted.
 	hostileNS := "evil\n    name: hijacked-pvc\n  # "
 	manifest := renderGCSFuseGateway(t, GCSFusePVPVCTemplateParams{
-		PVName:           "gcluster-gcsfuse-b-training-default",
-		PVCName:          "gcluster-gcsfuse-b-training",
+		PVName:           "gcluster-gcsfuse-v1-b-training-default",
+		PVCName:          "gcluster-gcsfuse-v1-b-training",
 		Namespace:        hostileNS,
 		StorageClassName: "gcsfusecsi-training",
 		Capacity:         "1Gi",
@@ -1662,7 +1662,7 @@ func TestGCSFuseProfile_TemplateQuotesInjectedValues(t *testing.T) {
 	if !ok {
 		t.Fatalf("claimRef is not a map:\n%s", manifest)
 	}
-	wantClaimRef := map[string]interface{}{"namespace": hostileNS, "name": "gcluster-gcsfuse-b-training"}
+	wantClaimRef := map[string]interface{}{"namespace": hostileNS, "name": "gcluster-gcsfuse-v1-b-training"}
 	if !reflect.DeepEqual(claimRef, wantClaimRef) {
 		t.Errorf("claimRef = %#v, want %#v; an injected key means a value escaped its scalar", claimRef, wantClaimRef)
 	}
@@ -1717,7 +1717,7 @@ spec:
 			t.Error("embedded default was rendered instead of the override")
 		}
 		// Params the override omits must still be supplied, not error.
-		if got := nestedString(t, pv, "spec", "claimRef", "name"); got != "gcluster-gcsfuse-imagenet-dataset-training" {
+		if got := nestedString(t, pv, "spec", "claimRef", "name"); got != "gcluster-gcsfuse-v1-imagenet-dataset-training" {
 			t.Errorf("claimRef.name = %q", got)
 		}
 	})
@@ -1762,7 +1762,7 @@ func TestGCSFuseProfile_SubPathIsDelegatedToPod(t *testing.T) {
 	if infos[0].ReadOnly {
 		t.Error("expected rw mount to not be read-only")
 	}
-	if infos[0].Source != "gcluster-gcsfuse-model-checkpoints-checkpointing" {
+	if infos[0].Source != "gcluster-gcsfuse-v1-model-checkpoints-checkpointing" {
 		t.Errorf("gateway PVC name = %q", infos[0].Source)
 	}
 
@@ -1803,10 +1803,10 @@ func TestGCSFuseProfile_OptionsAndAttributes(t *testing.T) {
 	}
 
 	name := nestedString(t, pv, "metadata", "name")
-	if !strings.HasPrefix(name, "gcluster-gcsfuse-weights-serving-") {
+	if !strings.HasPrefix(name, "gcluster-gcsfuse-v1-weights-serving-") {
 		t.Errorf("PV name = %q, want a hash-suffixed canonical prefix", name)
 	}
-	if name == "gcluster-gcsfuse-weights-serving-default" {
+	if name == "gcluster-gcsfuse-v1-weights-serving-default" {
 		t.Error("custom options must not collide with the canonical gateway name")
 	}
 }
@@ -1863,7 +1863,7 @@ func TestGCSFuseProfile_OnlyDirStacksWithSubPath(t *testing.T) {
 
 func TestGCSFuseGatewayNaming_Determinism(t *testing.T) {
 	base := gcsFuseGatewayPVCName("b", "training", "", nil)
-	if base != "gcluster-gcsfuse-b-training" {
+	if base != "gcluster-gcsfuse-v1-b-training" {
 		t.Fatalf("canonical name = %q", base)
 	}
 	if again := gcsFuseGatewayPVCName("b", "training", "", nil); again != base {
@@ -1948,14 +1948,14 @@ func TestGCSFuseGatewayNaming_LossySanitizationIsCollisionFree(t *testing.T) {
 		t.Errorf("buckets my.bucket and my_bucket collapsed onto %q", dotted)
 	}
 
-	if hyphen != "gcluster-gcsfuse-my-bucket-training" {
+	if hyphen != "gcluster-gcsfuse-v1-my-bucket-training" {
 		t.Errorf("a losslessly sanitized bucket must not gain a digest, got %q", hyphen)
 	}
 
 	if again := gcsFuseGatewayPVCName("my.bucket", "training", "", nil); again != dotted {
 		t.Errorf("lossy name is not deterministic: %q vs %q", again, dotted)
 	}
-	if !strings.HasPrefix(dotted, "gcluster-gcsfuse-my-bucket-") {
+	if !strings.HasPrefix(dotted, "gcluster-gcsfuse-v1-my-bucket-") {
 		t.Errorf("lossy name %q lost its readable prefix", dotted)
 	}
 
@@ -2110,7 +2110,7 @@ func TestGCSFuseProfile_MixedMounts(t *testing.T) {
 			t.Errorf("mount %d type = %q, want %q", i, infos[i].Type, want)
 		}
 	}
-	if infos[0].Source != "gcluster-gcsfuse-training-data-training" {
+	if infos[0].Source != "gcluster-gcsfuse-v1-training-data-training" {
 		t.Errorf("profile gateway PVC = %q", infos[0].Source)
 	}
 	if infos[3].Source != "my-existing-pvc" {
@@ -2485,7 +2485,7 @@ func TestBuildVolumeSpec_AttributesOnlyApplyToInlineGCSFuse(t *testing.T) {
 	}
 
 	pvcSpec := buildVolumeSpec(MountInfo{
-		Name: "vol-1", Source: "gcluster-gcsfuse-my-bucket-training", Type: "pvc", Attributes: attrs,
+		Name: "vol-1", Source: "gcluster-gcsfuse-v1-my-bucket-training", Type: "pvc", Attributes: attrs,
 	})
 	if _, leaked := pvcSpec["csi"]; leaked {
 		t.Errorf("attributes leaked onto a PVC volume: %#v", pvcSpec)
@@ -2496,7 +2496,7 @@ func TestBuildVolumeSpec_AttributesOnlyApplyToInlineGCSFuse(t *testing.T) {
 }
 
 func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
-	pvName := "gcluster-gcsfuse-bkt-training-default"
+	pvName := "gcluster-gcsfuse-v1-bkt-training-default"
 
 	matchingPVJSON := `{
 		"spec": {
@@ -2541,7 +2541,7 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 		},
 		"status": {"phase": "Bound"}
 	}`
-	pvcName := "gcluster-gcsfuse-bkt-training"
+	pvcName := "gcluster-gcsfuse-v1-bkt-training"
 
 	// The mock fails any command it has no response for, so a missing del response makes a delete attempt an error.
 	newSM := func(res shell.CommandResult, del []shell.CommandResult) *StorageManager {
@@ -2597,7 +2597,7 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 }
 
 func TestUnmanagedGatewayWarning(t *testing.T) {
-	const pvName = "gcluster-gcsfuse-bkt-training-default"
+	const pvName = "gcluster-gcsfuse-v1-bkt-training-default"
 	tests := []struct {
 		name     string
 		manifest string
@@ -2657,4 +2657,29 @@ metadata:
 			}
 		}
 	})
+}
+
+// TestGCSFuseGatewayPVCName_PinnedNames pins exact gateway names: a change here renames every existing
+// gateway on upgrade, so it must be deliberate (bump the version segment in gcsFuseGatewayPrefix).
+func TestGCSFuseGatewayPVCName_PinnedNames(t *testing.T) {
+	tests := []struct {
+		name    string
+		bucket  string
+		profile string
+		options string
+		attrs   map[string]string
+		want    string
+	}{
+		{"canonical", "imagenet-dataset", "training", "", nil, "gcluster-gcsfuse-v1-imagenet-dataset-training"},
+		{"options", "imagenet-dataset", "training", "implicit-dirs,file-cache:max-size-mb:-1", nil, "gcluster-gcsfuse-v1-imagenet-dataset-training-5933c5"},
+		{"attributes", "imagenet-dataset", "training", "", map[string]string{"fileCacheCapacity": "50Gi"}, "gcluster-gcsfuse-v1-imagenet-dataset-training-7b0f7f"},
+		{"dotted bucket", "my.dotted.bucket", "serving", "", nil, "gcluster-gcsfuse-v1-my-dotted-bucket-0561d95913-serving"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := gcsFuseGatewayPVCName(tc.bucket, tc.profile, tc.options, tc.attrs); got != tc.want {
+				t.Errorf("gcsFuseGatewayPVCName(%q, %q, %q, %v) = %q, want %q", tc.bucket, tc.profile, tc.options, tc.attrs, got, tc.want)
+			}
+		})
+	}
 }

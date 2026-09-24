@@ -269,8 +269,8 @@ To choose the appropriate profile for your workload, see [Select performance pro
 
 Behaviour worth knowing:
 
-* The generated claim is named `gcluster-gcsfuse-<bucket>-<profile>` and the
-  PersistentVolume `gcluster-gcsfuse-<bucket>-<profile>-<namespace>`. The names
+* The generated claim is named `gcluster-gcsfuse-v1-<bucket>-<profile>` and the
+  PersistentVolume `gcluster-gcsfuse-v1-<bucket>-<profile>-<namespace>`. The names
   are deterministic, so several jobs that use the same bucket and profile in the
   same namespace **share one gateway** rather than each creating their own.
 * Supplying custom `options=` or `attributes=` gives that mount its own gateway
