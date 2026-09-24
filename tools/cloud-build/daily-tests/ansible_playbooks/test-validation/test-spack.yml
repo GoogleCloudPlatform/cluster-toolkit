@@ -14,10 +14,34 @@
 
 ---
 
+# On Rocky 9, Spack compiles from source (~3.5 to 4.5 hours) because pre-built
+# binaries are not available. We extend the OS-Login SSH key to 8 hours upfront
+# so it remains valid during the long wait, verification tests, and teardown
+# log collection (even if the build fails or times out).
+- name: Extend OS-Login SSH Key TTL for long build
+  delegate_to: localhost
+  run_once: true
+  register: key_extended
+  changed_when: key_extended.rc == 0
+  ansible.builtin.command:
+    argv:
+    - gcloud
+    - compute
+    - os-login
+    - ssh-keys
+    - add
+    - --ttl
+    - 8h
+    - "--key-file=/builder/home/.ssh/id_rsa.pub"
+  retries: 5
+  delay: 10
+  until: key_extended.rc == 0
+
 - name: Include wait for startup script
   ansible.builtin.include_tasks: "tasks/wait-for-startup-script.yml"
   vars:
-    timeout_seconds: 10800  # 3 hrs
+    timeout_seconds: 21600  # 6 hrs
+
 - name: Ensure spack is installed
   ansible.builtin.command: spack --version
   changed_when: False

@@ -60,7 +60,6 @@ deployment_groups:
     settings:
       install_dir: /sw/spack
       spack_ref: v0.20.0
-      configure_for_google: true
 
   - id: spack-execute
     source: community/modules/scripts/spack-execute
