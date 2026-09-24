@@ -129,6 +129,8 @@ Modules that are still in development and less stable are labeled with the
   configures an NFS server that can be mounted by other VM.
 * **[weka-client]** ![community-badge] ![experimental-badge] : Installs client
   and mounts [WEKA](https://www.weka.io/) filesystems.
+* **[gcs-objects]** ![community-badge] ![experimental-badge] : Declaratively creates
+  and manages objects in a Google Cloud Storage (GCS) bucket from inline content, local files, or directories.
 * **[gcs-sync]** ![community-badge] ![experimental-badge] : Synchronizes files
   and directories from remote Git repositories into Cloud Storage buckets at apply time.
 
@@ -141,6 +143,7 @@ Modules that are still in development and less stable are labeled with the
 [cloud-storage-bucket]: file-system/cloud-storage-bucket/README.md
 [gke-persistent-volume]: file-system/gke-persistent-volume/README.md
 [weka-client]: ../community/modules/file-system/weka-client/README.md
+[gcs-objects]: ../community/modules/file-system/gcs-objects/README.md
 [gcs-sync]: ../community/modules/file-system/gcs-sync/README.md
 
 ### IAM
