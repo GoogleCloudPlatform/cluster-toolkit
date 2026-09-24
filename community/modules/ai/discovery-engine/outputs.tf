@@ -14,26 +14,12 @@
  * limitations under the License.
  */
 
-output "engine_id" {
-  description = "The ID of the created Discovery Engine."
-  value       = var.engine_id
-  depends_on  = [terraform_data.engine]
-}
-
-output "assistant_id" {
-  description = "The ID of the created Assistant."
-  value       = var.assistant_id
-  depends_on  = [terraform_data.assistant]
-}
-
 output "engine_name" {
   description = "The full resource name of the Discovery Engine."
-  value       = "projects/${var.project_id}/locations/${var.location}/collections/${var.collection}/engines/${var.engine_id}"
-  depends_on  = [terraform_data.engine]
+  value       = google_discovery_engine_search_engine.engine.name
 }
 
 output "assistant_name" {
   description = "The full resource name of the Assistant."
-  value       = "projects/${var.project_id}/locations/${var.location}/collections/${var.collection}/engines/${var.engine_id}/assistants/${var.assistant_id}"
-  depends_on  = [terraform_data.assistant]
+  value       = google_discovery_engine_assistant.assistant.name
 }

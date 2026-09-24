@@ -17,29 +17,15 @@
 variable "project_id" {
   description = "GCP project ID."
   type        = string
-  validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.project_id))
-    error_message = "Project ID must be 6 to 30 characters long, start with a lowercase letter, end with a letter or digit, and contain only lowercase letters, digits, and hyphens."
-  }
 }
 
 variable "location" {
-  description = "Discovery Engine location (e.g., 'global')."
+  description = "Discovery Engine location (e.g., 'global', 'us', 'eu', or an allowlisted in-country location). See [Gemini Enterprise locations](https://cloud.google.com/gemini/enterprise/docs/locations) and [Agent Search locations](https://cloud.google.com/generative-ai-app-builder/docs/locations)."
   type        = string
   default     = "global"
   validation {
-    condition     = can(regex("^[a-z0-9-]+$", var.location))
-    error_message = "Location must be a valid GCP location identifier (e.g. 'global', 'us', 'eu', 'us-central1')."
-  }
-}
-
-variable "base_url" {
-  description = "Base URL for the Discovery Engine API."
-  type        = string
-  default     = "discoveryengine.googleapis.com"
-  validation {
-    condition     = can(regex("^[a-zA-Z0-9.-]+$", var.base_url))
-    error_message = "Base URL must be a valid URL."
+    condition     = contains(["global", "us", "eu", "ca", "in", "sg", "asia-northeast1", "europe-west2"], var.location)
+    error_message = "location must be a supported Discovery Engine location (global, us, eu, ca, in, sg, asia-northeast1, europe-west2). See https://cloud.google.com/gemini/enterprise/docs/locations for details."
   }
 }
 
@@ -69,11 +55,4 @@ variable "assistant_id" {
     condition     = can(regex("^[a-z0-9]([a-z0-9-_]{0,61}[a-z0-9])?$", var.assistant_id))
     error_message = "Assistant ID must conform to (1-63 characters, lowercase letters, numbers, and hyphens, underscores starting and ending with an alphanumeric character)."
   }
-}
-
-# tflint-ignore: terraform_unused_declarations
-variable "module_instance_id" {
-  description = "Unique ID of this module instance (automatically populated by gcluster)."
-  type        = string
-  default     = "discovery-engine-assistant"
 }
