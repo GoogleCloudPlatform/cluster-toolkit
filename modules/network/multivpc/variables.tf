@@ -116,11 +116,14 @@ variable "min_ports_per_vm" {
 
   validation {
     condition = (
-      !var.enable_dynamic_port_allocation ||
       var.min_ports_per_vm == null ||
-      contains([32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768], var.min_ports_per_vm)
+      (
+        var.enable_dynamic_port_allocation ?
+        contains([32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768], var.min_ports_per_vm) :
+        contains([2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768], var.min_ports_per_vm)
+      )
     )
-    error_message = "When enable_dynamic_port_allocation is true, min_ports_per_vm must be a power of 2 between 32 and 32768."
+    error_message = "min_ports_per_vm must be a power of 2 between 32 and 32768 when enable_dynamic_port_allocation is true, or between 2 and 32768 when false."
   }
 }
 
@@ -132,13 +135,16 @@ variable "max_ports_per_vm" {
   validation {
     condition = (
       !var.enable_dynamic_port_allocation ||
-      var.max_ports_per_vm == null ||
       (
-        contains([64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536], var.max_ports_per_vm) &&
-        var.max_ports_per_vm > coalesce(var.min_ports_per_vm, 32)
+        var.max_ports_per_vm == null ?
+        coalesce(var.min_ports_per_vm, 32) <= 1024 :
+        (
+          contains([64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536], var.max_ports_per_vm) &&
+          var.max_ports_per_vm > coalesce(var.min_ports_per_vm, 32)
+        )
       )
     )
-    error_message = "When enable_dynamic_port_allocation is true, max_ports_per_vm must be a power of 2 between 64 and 65536 and greater than min_ports_per_vm."
+    error_message = "When enable_dynamic_port_allocation is true, max_ports_per_vm must be a power of 2 between 64 and 65536 and greater than min_ports_per_vm. If max_ports_per_vm is null, min_ports_per_vm cannot exceed the default maximum of 1024."
   }
 }
 
