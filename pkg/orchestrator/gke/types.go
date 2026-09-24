@@ -275,7 +275,8 @@ type GCSFusePVPVCTemplateParams struct {
 
 type existingGatewayPV struct {
 	Metadata struct {
-		Labels map[string]string `yaml:"labels"`
+		Labels            map[string]string `yaml:"labels"`
+		DeletionTimestamp string            `yaml:"deletionTimestamp"`
 	} `yaml:"metadata"`
 	Spec struct {
 		StorageClassName string   `yaml:"storageClassName"`

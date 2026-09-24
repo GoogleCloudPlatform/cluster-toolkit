@@ -2532,6 +2532,17 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 		"status": {"phase": "Released"}
 	}`
 
+	terminatingPVJSON := `{
+		"metadata": {"deletionTimestamp": "2026-09-24T18:00:00Z", "labels": {"gcluster.google.com/managed-by": "cluster-toolkit"}},
+		"spec": {
+			"storageClassName": "gcsfusecsi-training",
+			"capacity": {"storage": "10Gi"},
+			"csi": {"volumeHandle": "bkt"}
+		},
+		"status": {"phase": "Bound"}
+	}`
+	pvcName := "gcluster-gcsfuse-bkt-training"
+
 	// The mock fails any command it has no response for, so a missing del response makes a delete attempt an error.
 	newSM := func(res shell.CommandResult, del []shell.CommandResult) *StorageManager {
 		exec := NewMockExecutor(map[string][]shell.CommandResult{
@@ -2551,7 +2562,8 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 	}{
 		{name: "absent PV", res: shell.CommandResult{Stdout: ""}},
 		{name: "matching Bound PV", res: shell.CommandResult{Stdout: matchingPVJSON}},
-		{name: "mismatched PV", res: shell.CommandResult{Stdout: mismatchedPVJSON}, wantErr: []string{"already exists with different settings", "kubectl delete pv " + pvName}},
+		{name: "mismatched PV", res: shell.CommandResult{Stdout: mismatchedPVJSON}, wantErr: []string{"already exists with different settings", `namespace "default"`, "kubectl describe pvc " + pvcName + " -n default", "kubectl delete pvc " + pvcName + " -n default && kubectl delete pv " + pvName, "Bucket data is not affected"}},
+		{name: "Terminating PV explains pending deletion", res: shell.CommandResult{Stdout: terminatingPVJSON}, wantErr: []string{"is being deleted", "PVC default/" + pvcName, "kubectl delete pvc " + pvcName + " -n default"}},
 		{name: "unmanaged Released PV is left to the user", res: shell.CommandResult{Stdout: releasedPVJSON}, wantErr: []string{"already exists in Released state", "will not delete it", "kubectl delete pv " + pvName}},
 		{name: "managed Released PV is deleted and recreated", res: shell.CommandResult{Stdout: managedReleasedPVJSON}, del: []shell.CommandResult{{}}},
 		{name: "managed Released PV delete failure", res: shell.CommandResult{Stdout: managedReleasedPVJSON}, del: []shell.CommandResult{{ExitCode: 1, Stderr: "forbidden"}}, wantErr: []string{"failed to delete stale gateway PV", "forbidden"}},

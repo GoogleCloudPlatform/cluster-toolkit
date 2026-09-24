@@ -744,14 +744,14 @@ func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx in
 		logging.Warn("%s", msg)
 	}
 
-	if err := sm.checkExistingGatewayPV(pvName, buf.String(), job.DryRunManifest != ""); err != nil {
+	if err := sm.checkExistingGatewayPV(pvName, pvcName, ns, buf.String(), job.DryRunManifest != ""); err != nil {
 		return MountInfo{}, "", err
 	}
 
 	return info, buf.String(), nil
 }
 
-func (sm *StorageManager) checkExistingGatewayPV(pvName, renderedYAML string, dryRun bool) error {
+func (sm *StorageManager) checkExistingGatewayPV(pvName, pvcName, ns, renderedYAML string, dryRun bool) error {
 	if dryRun || sm.orchestrator == nil || sm.orchestrator.executor == nil {
 		return nil
 	}
@@ -773,22 +773,30 @@ func (sm *StorageManager) checkExistingGatewayPV(pvName, renderedYAML string, dr
 		return fmt.Errorf("failed to parse rendered gateway PV %q: %w", pvName, err)
 	}
 
+	if existing.Metadata.DeletionTimestamp != "" {
+		return fmt.Errorf(
+			"gateway PV %q is being deleted and is waiting for PVC %s/%s to be released. "+
+				"Cancel the jobs that mount it (`kubectl describe pvc %s -n %s` lists them under Used By), "+
+				"then run `kubectl delete pvc %s -n %s` and resubmit",
+			pvName, ns, pvcName, pvcName, ns, pvcName, ns)
+	}
+
 	if existing.Status.Phase == "Released" || existing.Status.Phase == "Failed" {
 		return sm.recreateStaleGatewayPV(pvName, existing)
 	}
 
 	if !reflect.DeepEqual(existing.Spec, rendered.Spec) {
 		return fmt.Errorf(
-			"gateway PV %q already exists with different settings (created by an older gcluster "+
-				"version or a custom template). Delete it with `kubectl delete pv %s` and resubmit",
-			pvName, pvName)
+			"gateway PV %q already exists with different settings (created by an older gcluster version or a custom template). "+
+				"It is shared by every job in namespace %q that mounts this bucket/profile. To replace it: cancel those jobs "+
+				"(`kubectl describe pvc %s -n %s` lists them under Used By), then run "+
+				"`kubectl delete pvc %s -n %s && kubectl delete pv %s`, and resubmit. "+
+				"Bucket data is not affected (reclaimPolicy: Retain)",
+			pvName, ns, pvcName, ns, pvcName, ns, pvName)
 	}
 	return nil
 }
 
-// recreateStaleGatewayPV deletes a Released/Failed gateway PV so the apply can recreate it. A Released PV has no
-// bound claim, so no pod uses it, and with reclaimPolicy Retain deleting it never touches bucket data. PVs without
-// the managed-by label were not created by gcluster and are left for the user to delete.
 func (sm *StorageManager) recreateStaleGatewayPV(pvName string, existing existingGatewayPV) error {
 	phase := existing.Status.Phase
 	if existing.Metadata.Labels[managedByLabel] != managedByValue {
