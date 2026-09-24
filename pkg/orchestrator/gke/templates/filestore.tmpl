@@ -3,8 +3,8 @@ kind: PersistentVolume
 metadata:
   name: {{.PVName}}
   labels:
-    gcluster.google.com/managed-by: cluster-toolkit
-    gcluster.google.com/storage-type: filestore
+    {{.ManagedByLabel}}: {{.ManagedByValue}}
+    {{.StorageTypeLabel}}: {{.StorageType}}
 spec:
   capacity:
     storage: {{.Capacity}}
@@ -19,8 +19,8 @@ kind: PersistentVolumeClaim
 metadata:
   name: {{.PVCName}}
   labels:
-    gcluster.google.com/managed-by: cluster-toolkit
-    gcluster.google.com/storage-type: filestore
+    {{.ManagedByLabel}}: {{.ManagedByValue}}
+    {{.StorageTypeLabel}}: {{.StorageType}}
 spec:
   accessModes:
   - ReadWriteMany

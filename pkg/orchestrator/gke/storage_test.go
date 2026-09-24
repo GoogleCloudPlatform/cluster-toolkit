@@ -2560,3 +2560,66 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 		t.Errorf("dry-run must skip existing-PV cluster check, got: %v", err)
 	}
 }
+
+func TestUnmanagedGatewayWarning(t *testing.T) {
+	const pvName = "gcluster-gcsfuse-bkt-training-default"
+	tests := []struct {
+		name     string
+		manifest string
+		wantWarn bool
+	}{
+		{"labelled PV", `{"metadata":{"labels":{"gcluster.google.com/managed-by":"cluster-toolkit"}}}`, false},
+		{"no labels", `{"metadata":{"name":"x"}}`, true},
+		{"wrong value", `{"metadata":{"labels":{"gcluster.google.com/managed-by":"someone-else"}}}`, true},
+		{"unparsable manifest", "{{not yaml", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			msg := unmanagedGatewayWarning(pvName, tc.manifest)
+			if gotWarn := msg != ""; gotWarn != tc.wantWarn {
+				t.Fatalf("warning = %q, wantWarn %v", msg, tc.wantWarn)
+			}
+			if tc.wantWarn && (!strings.Contains(msg, pvName) || !strings.Contains(msg, managedByLabel+"="+managedByValue)) {
+				t.Errorf("warning %q must name the PV and the missing label", msg)
+			}
+		})
+	}
+}
+
+func TestGatewayTemplates_ReceiveLabelParams(t *testing.T) {
+	t.Run("gcsfuse override can use label params", func(t *testing.T) {
+		dir := t.TempDir()
+		writeCustomGatewayTemplate(t, dir, `apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ printf "%q" .PVName }}
+  labels:
+    {{ printf "%q" .ManagedByLabel }}: {{ printf "%q" .ManagedByValue }}
+    {{ printf "%q" .StorageTypeLabel }}: {{ printf "%q" .StorageType }}
+`)
+		_, manifests, err := profileStorageManager(dir).ProcessMounts([]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		pv := findDoc(t, splitManifestDocs(t, manifests[0]), "PersistentVolume")
+		if got := nestedString(t, pv, "metadata", "labels", managedByLabel); got != managedByValue {
+			t.Errorf("%s = %q, want %q", managedByLabel, got, managedByValue)
+		}
+		if got := nestedString(t, pv, "metadata", "labels", storageTypeLabel); got != storageTypeGCSFuse {
+			t.Errorf("%s = %q, want %q", storageTypeLabel, got, storageTypeGCSFuse)
+		}
+	})
+
+	t.Run("embedded templates render labels on PV and PVC", func(t *testing.T) {
+		_, manifests, err := profileStorageManager(t.TempDir()).ProcessMounts([]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		docs := splitManifestDocs(t, manifests[0])
+		for _, kind := range []string{"PersistentVolume", "PersistentVolumeClaim"} {
+			if got := nestedString(t, findDoc(t, docs, kind), "metadata", "labels", managedByLabel); got != managedByValue {
+				t.Errorf("embedded %s %s = %q, want %q", kind, managedByLabel, got, managedByValue)
+			}
+		}
+	})
+}

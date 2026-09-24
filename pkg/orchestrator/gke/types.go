@@ -267,9 +267,16 @@ type GCSFusePVPVCTemplateParams struct {
 	VolumeHandle     string
 	MountOptions     []string
 	VolumeAttributes map[string]string
+	ManagedByLabel   string
+	ManagedByValue   string
+	StorageTypeLabel string
+	StorageType      string
 }
 
 type existingGatewayPV struct {
+	Metadata struct {
+		Labels map[string]string `yaml:"labels"`
+	} `yaml:"metadata"`
 	Spec struct {
 		StorageClassName string   `yaml:"storageClassName"`
 		MountOptions     []string `yaml:"mountOptions"`

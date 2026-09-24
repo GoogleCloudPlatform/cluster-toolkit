@@ -3,8 +3,8 @@ kind: PersistentVolume
 metadata:
   name: {{ printf "%q" .PVName }}
   labels:
-    gcluster.google.com/managed-by: cluster-toolkit
-    gcluster.google.com/storage-type: gcsfuse
+    {{ printf "%q" .ManagedByLabel }}: {{ printf "%q" .ManagedByValue }}
+    {{ printf "%q" .StorageTypeLabel }}: {{ printf "%q" .StorageType }}
 spec:
   storageClassName: {{ printf "%q" .StorageClassName }}
   capacity:
@@ -37,8 +37,8 @@ metadata:
   name: {{ printf "%q" .PVCName }}
   namespace: {{ printf "%q" .Namespace }}
   labels:
-    gcluster.google.com/managed-by: cluster-toolkit
-    gcluster.google.com/storage-type: gcsfuse
+    {{ printf "%q" .ManagedByLabel }}: {{ printf "%q" .ManagedByValue }}
+    {{ printf "%q" .StorageTypeLabel }}: {{ printf "%q" .StorageType }}
 spec:
   storageClassName: {{ printf "%q" .StorageClassName }}
   volumeName: {{ printf "%q" .PVName }}

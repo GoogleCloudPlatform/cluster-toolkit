@@ -49,6 +49,13 @@ const (
 	gcsFuseGatewayCapacity = "5Gi" // Ignored by GCSFuse CSI driver, required by Kubernetes.
 
 	gatewayNameDigestLength = 10
+
+	// Gateway cleanup selects on these labels; templates receive them as params.
+	managedByLabel       = "gcluster.google.com/managed-by"
+	managedByValue       = "cluster-toolkit"
+	storageTypeLabel     = "gcluster.google.com/storage-type"
+	storageTypeGCSFuse   = "gcsfuse"
+	storageTypeFilestore = "filestore"
 )
 
 func newMountBuildState() *mountBuildState {
@@ -575,16 +582,23 @@ func (sm *StorageManager) generateFilestoreResources(pm parsedMount, idx int, jo
 
 	var buf bytes.Buffer
 	err = filestoreTmpl.Execute(&buf, map[string]string{
-		"PVName":   pvName,
-		"PVCName":  pvcName,
-		"Share":    share,
-		"IP":       ip,
-		"Capacity": capacityStr,
+		"PVName":           pvName,
+		"PVCName":          pvcName,
+		"Share":            share,
+		"IP":               ip,
+		"Capacity":         capacityStr,
+		"ManagedByLabel":   managedByLabel,
+		"ManagedByValue":   managedByValue,
+		"StorageTypeLabel": storageTypeLabel,
+		"StorageType":      storageTypeFilestore,
 	})
 	if err != nil {
 		return MountInfo{}, "", fmt.Errorf("failed to execute filestore template: %w", err)
 	}
 	pvYAML := buf.String()
+	if msg := unmanagedGatewayWarning(pvName, pvYAML); msg != "" {
+		logging.Warn("%s", msg)
+	}
 
 	return info, pvYAML, nil
 }
@@ -716,11 +730,18 @@ func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx in
 		VolumeHandle:     bucket,
 		MountOptions:     splitMountOptions(pm.Options),
 		VolumeAttributes: pm.Attributes,
+		ManagedByLabel:   managedByLabel,
+		ManagedByValue:   managedByValue,
+		StorageTypeLabel: storageTypeLabel,
+		StorageType:      storageTypeGCSFuse,
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, params); err != nil {
 		return MountInfo{}, "", fmt.Errorf("failed to execute GCSFuse PV/PVC template: %w", err)
+	}
+	if msg := unmanagedGatewayWarning(pvName, buf.String()); msg != "" {
+		logging.Warn("%s", msg)
 	}
 
 	if err := sm.checkExistingGatewayPV(pvName, buf.String(), job.DryRunManifest != ""); err != nil {
@@ -759,6 +780,18 @@ func (sm *StorageManager) checkExistingGatewayPV(pvName, renderedYAML string, dr
 			pvName, pvName)
 	}
 	return nil
+}
+
+func unmanagedGatewayWarning(pvName, manifest string) string {
+	var pv existingGatewayPV
+	if yaml.Unmarshal([]byte(manifest), &pv) != nil || pv.Metadata.Labels[managedByLabel] == managedByValue {
+		return ""
+	}
+	return fmt.Sprintf(
+		"gateway PV %q is missing label %s=%s, so gcluster cannot identify it for storage cleanup. "+
+			"If you override gateway templates with --gke-custom-templates-path, add the labels to the PV and PVC via "+
+			"{{ .ManagedByLabel }}: {{ .ManagedByValue }}",
+		pvName, managedByLabel, managedByValue)
 }
 
 func sanitizePVCName(name string) string {
