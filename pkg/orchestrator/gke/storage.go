@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net"
 	"path"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -551,7 +552,7 @@ func (sm *StorageManager) generateFilestoreResources(pm parsedMount, idx int, jo
 	if err != nil {
 		return MountInfo{}, "", err
 	}
-	pvName := sanitizePVCName(fmt.Sprintf("%s-%s", pvcName, ns))
+	pvName := sanitizePVCName(pvcName + "-" + ns)
 
 	info := MountInfo{
 		Source:    pvcName,
@@ -721,7 +722,42 @@ func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx in
 		return MountInfo{}, "", fmt.Errorf("failed to execute GCSFuse PV/PVC template: %w", err)
 	}
 
+	if err := sm.checkExistingGatewayPV(pvName, buf.String(), job.DryRunManifest != ""); err != nil {
+		return MountInfo{}, "", err
+	}
+
 	return info, buf.String(), nil
+}
+
+func (sm *StorageManager) checkExistingGatewayPV(pvName, renderedYAML string, dryRun bool) error {
+	if dryRun || sm.orchestrator == nil || sm.orchestrator.executor == nil {
+		return nil
+	}
+
+	res := sm.orchestrator.executor.ExecuteCommand("kubectl", "get", "pv", pvName, "--ignore-not-found", "-o", "json")
+	if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) == "" {
+		return nil
+	}
+
+	var existing, rendered existingGatewayPV
+	if yaml.Unmarshal([]byte(res.Stdout), &existing) != nil || yaml.Unmarshal([]byte(renderedYAML), &rendered) != nil {
+		return nil
+	}
+
+	if existing.Status.Phase == "Released" || existing.Status.Phase == "Failed" {
+		return fmt.Errorf(
+			"gateway PV %q already exists in %s state (left behind after its PVC was deleted) and cannot rebind. "+
+				"Delete it with `kubectl delete pv %s` and resubmit",
+			pvName, existing.Status.Phase, pvName)
+	}
+
+	if !reflect.DeepEqual(existing.Spec, rendered.Spec) {
+		return fmt.Errorf(
+			"gateway PV %q already exists with different settings (created by an older gcluster "+
+				"version or a custom template). Delete it with `kubectl delete pv %s` and resubmit",
+			pvName, pvName)
+	}
+	return nil
 }
 
 func sanitizePVCName(name string) string {

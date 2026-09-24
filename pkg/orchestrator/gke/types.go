@@ -269,6 +269,23 @@ type GCSFusePVPVCTemplateParams struct {
 	VolumeAttributes map[string]string
 }
 
+type existingGatewayPV struct {
+	Spec struct {
+		StorageClassName string   `yaml:"storageClassName"`
+		MountOptions     []string `yaml:"mountOptions"`
+		Capacity         struct {
+			Storage string `yaml:"storage"`
+		} `yaml:"capacity"`
+		CSI *struct {
+			VolumeHandle     string            `yaml:"volumeHandle"`
+			VolumeAttributes map[string]string `yaml:"volumeAttributes"`
+		} `yaml:"csi"`
+	} `yaml:"spec"`
+	Status struct {
+		Phase string `yaml:"phase"`
+	} `yaml:"status"`
+}
+
 type FlavorCapacity struct {
 	CPUs       int
 	MemoryGi   int

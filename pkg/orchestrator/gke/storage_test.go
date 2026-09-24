@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
 	k8syaml "sigs.k8s.io/yaml"
@@ -2455,5 +2456,71 @@ func TestBuildVolumeSpec_AttributesOnlyApplyToInlineGCSFuse(t *testing.T) {
 	}
 	if _, ok := pvcSpec["persistentVolumeClaim"]; !ok {
 		t.Errorf("expected persistentVolumeClaim, got %#v", pvcSpec)
+	}
+}
+
+func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
+	pvName := "gcluster-gcsfuse-bkt-training-default"
+
+	matchingPVJSON := `{
+		"spec": {
+			"storageClassName": "gcsfusecsi-training",
+			"capacity": {"storage": "5Gi"},
+			"csi": {"volumeHandle": "bkt"}
+		},
+		"status": {"phase": "Bound"}
+	}`
+	mismatchedPVJSON := `{
+		"spec": {
+			"storageClassName": "gcsfusecsi-training",
+			"capacity": {"storage": "10Gi"},
+			"csi": {"volumeHandle": "bkt"}
+		},
+		"status": {"phase": "Bound"}
+	}`
+	releasedPVJSON := `{
+		"spec": {
+			"storageClassName": "gcsfusecsi-training",
+			"capacity": {"storage": "5Gi"},
+			"csi": {"volumeHandle": "bkt"}
+		},
+		"status": {"phase": "Released"}
+	}`
+
+	newSM := func(res shell.CommandResult) *StorageManager {
+		exec := NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get pv " + pvName: {res},
+		})
+		return &StorageManager{orchestrator: &GKEOrchestrator{executor: exec, namespace: "default"}}
+	}
+
+	if _, _, err := newSM(shell.CommandResult{Stdout: ""}).ProcessMounts(
+		[]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{},
+	); err != nil {
+		t.Errorf("absent PV must succeed, got: %v", err)
+	}
+
+	if _, _, err := newSM(shell.CommandResult{Stdout: matchingPVJSON}).ProcessMounts(
+		[]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{},
+	); err != nil {
+		t.Errorf("matching Bound PV must succeed, got: %v", err)
+	}
+
+	if _, _, err := newSM(shell.CommandResult{Stdout: mismatchedPVJSON}).ProcessMounts(
+		[]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{},
+	); err == nil || !strings.Contains(err.Error(), "already exists with different settings") || !strings.Contains(err.Error(), "kubectl delete pv "+pvName) {
+		t.Errorf("mismatched PV error = %v, want different-settings error with kubectl delete hint", err)
+	}
+
+	if _, _, err := newSM(shell.CommandResult{Stdout: releasedPVJSON}).ProcessMounts(
+		[]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{},
+	); err == nil || !strings.Contains(err.Error(), "already exists in Released state") || !strings.Contains(err.Error(), "kubectl delete pv "+pvName) {
+		t.Errorf("Released PV error = %v, want Released-state error with kubectl delete hint", err)
+	}
+
+	if _, _, err := newSM(shell.CommandResult{Stdout: mismatchedPVJSON}).ProcessMounts(
+		[]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{DryRunManifest: "out.yaml"},
+	); err != nil {
+		t.Errorf("dry-run must skip existing-PV cluster check, got: %v", err)
 	}
 }
