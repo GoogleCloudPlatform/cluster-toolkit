@@ -662,7 +662,7 @@ func isResourcePolicy(m *Module) bool {
 // on modules/compute/resource-policy when GKE TPU dynamic slicing is configured in the blueprint
 // and accelerator_topology_mode is not explicitly set by the user.
 func expandWorkloadPolicy(bp Blueprint, m *Module) {
-	if !isResourcePolicy(m) || !m.Settings.Has("workload_policy") {
+	if !isResourcePolicy(m) || !m.Settings.Has("workload_policy") || !bp.Vars.Has("enable_dynamic_slicing_for_tpus") {
 		return
 	}
 
@@ -675,38 +675,21 @@ func expandWorkloadPolicy(bp Blueprint, m *Module) {
 	if modeVal, ok := wpMap["accelerator_topology_mode"]; ok && !modeVal.IsNull() {
 		return
 	}
-
-	if targetModeVal := resolveDefaultTopologyMode(bp); targetModeVal != cty.NilVal {
-		wpMap["accelerator_topology_mode"] = targetModeVal
-		m.Settings = m.Settings.With("workload_policy", cty.ObjectVal(wpMap))
+	if !isTPUTopologyWorkloadPolicy(bp, wpMap) {
+		return
 	}
+
+	wpMap["accelerator_topology_mode"] = MustParseExpression(`(var.enable_dynamic_slicing_for_tpus) ? "PROVISION_ONLY" : null`).AsValue()
+	m.Settings = m.Settings.With("workload_policy", cty.ObjectVal(wpMap))
 }
 
-func resolveDefaultTopologyMode(bp Blueprint) cty.Value {
-	var targetModeVal cty.Value
-	bp.WalkModulesSafe(func(_ ModulePath, mod *Module) {
-		if targetModeVal == cty.NilVal && mod.Settings.Has("enable_slice_controller") {
-			targetModeVal = topologyModeFromSliceController(bp, mod.Settings.Get("enable_slice_controller"))
-		}
-	})
-
-	if targetModeVal == cty.NilVal && bp.Vars.Has("enable_dynamic_slicing_for_tpus") {
-		return MustParseExpression(`(var.enable_dynamic_slicing_for_tpus) ? "PROVISION_ONLY" : "AUTO_ONLY"`).AsValue()
+func isTPUTopologyWorkloadPolicy(bp Blueprint, wpMap map[string]cty.Value) bool {
+	topVal, hasTopology := wpMap["accelerator_topology"]
+	if !hasTopology || topVal.IsNull() {
+		return false
 	}
-	return targetModeVal
-}
-
-func topologyModeFromSliceController(bp Blueprint, scVal cty.Value) cty.Value {
-	if exp, ok := IsExpressionValue(scVal); ok {
-		exprStr := fmt.Sprintf(`(%s) ? "PROVISION_ONLY" : "AUTO_ONLY"`, strings.TrimSpace(string(exp.Tokenize().Bytes())))
-		return MustParseExpression(exprStr).AsValue()
+	if ev, err := bp.Eval(topVal); err == nil && ev.IsKnown() && !ev.IsNull() && ev.Type() == cty.String {
+		return strings.Count(ev.AsString(), "x") == 2
 	}
-	ev, err := bp.Eval(scVal)
-	if err != nil || !ev.IsKnown() || ev.IsNull() || ev.Type() != cty.Bool {
-		return cty.NilVal
-	}
-	if ev.True() {
-		return cty.StringVal("PROVISION_ONLY")
-	}
-	return cty.StringVal("AUTO_ONLY")
+	return true
 }

@@ -743,18 +743,11 @@ func (s *zeroSuite) TestDeduplicateDranetTemplates(c *C) {
 }
 
 func (s *zeroSuite) TestExpandWorkloadPolicy(c *C) {
-	// Case 1: Expression enable_slice_controller injects conditional expression into workload_policy
+	// Case 1: Injects conditional expression into TPU workload_policy when enable_dynamic_slicing_for_tpus is in Vars
 	{
 		bp := Blueprint{
 			Vars: NewDict(map[string]cty.Value{
 				"enable_dynamic_slicing_for_tpus": cty.BoolVal(false),
-			}),
-		}
-		clusterMod := Module{
-			ID:     "gke-tpu-7x-cluster",
-			Source: "modules/scheduler/gke-cluster",
-			Settings: NewDict(map[string]cty.Value{
-				"enable_slice_controller": GlobalRef("enable_dynamic_slicing_for_tpus").AsValue(),
 			}),
 		}
 		wpMod := Module{
@@ -767,23 +760,23 @@ func (s *zeroSuite) TestExpandWorkloadPolicy(c *C) {
 				}),
 			}),
 		}
-		bp.Groups = []Group{{Modules: []Module{clusterMod, wpMod}}}
+		bp.Groups = []Group{{Modules: []Module{wpMod}}}
 
-		expandWorkloadPolicy(bp, &bp.Groups[0].Modules[1])
+		expandWorkloadPolicy(bp, &bp.Groups[0].Modules[0])
 
-		wpVal := bp.Groups[0].Modules[1].Settings.Get("workload_policy")
+		wpVal := bp.Groups[0].Modules[0].Settings.Get("workload_policy")
 		wpMap := wpVal.AsValueMap()
 		modeVal, ok := wpMap["accelerator_topology_mode"]
 		c.Assert(ok, Equals, true)
 		exp, isExp := IsExpressionValue(modeVal)
 		c.Assert(isExp, Equals, true)
-		c.Check(string(exp.Tokenize().Bytes()), Equals, `(var.enable_dynamic_slicing_for_tpus)?"PROVISION_ONLY":"AUTO_ONLY"`)
-		c.Check(strings.Contains(string(TokensForValue(wpVal).Bytes()), `accelerator_topology_mode = (var.enable_dynamic_slicing_for_tpus) ? "PROVISION_ONLY" : "AUTO_ONLY"`), Equals, true)
+		c.Check(string(exp.Tokenize().Bytes()), Equals, `(var.enable_dynamic_slicing_for_tpus)?"PROVISION_ONLY":null`)
+		c.Check(strings.Contains(string(TokensForValue(wpVal).Bytes()), `accelerator_topology_mode = (var.enable_dynamic_slicing_for_tpus) ? "PROVISION_ONLY" : null`), Equals, true)
 
-		// Evaluates to AUTO_ONLY when enable_dynamic_slicing_for_tpus is false
+		// Evaluates to null when enable_dynamic_slicing_for_tpus is false
 		evalVal, err := bp.Eval(wpVal)
 		c.Assert(err, IsNil)
-		c.Check(evalVal.AsValueMap()["accelerator_topology_mode"], DeepEquals, cty.StringVal("AUTO_ONLY"))
+		c.Check(evalVal.AsValueMap()["accelerator_topology_mode"].IsNull(), Equals, true)
 
 		// Evaluates to PROVISION_ONLY when enable_dynamic_slicing_for_tpus is true
 		bp.Vars = bp.Vars.With("enable_dynamic_slicing_for_tpus", cty.BoolVal(true))
@@ -792,42 +785,11 @@ func (s *zeroSuite) TestExpandWorkloadPolicy(c *C) {
 		c.Check(evalValTrue.AsValueMap()["accelerator_topology_mode"], DeepEquals, cty.StringVal("PROVISION_ONLY"))
 	}
 
-	// Case 2: Literal enable_slice_controller: true injects "PROVISION_ONLY"
+	// Case 2: Explicit accelerator_topology_mode set by user is preserved
 	{
-		bp := Blueprint{}
-		clusterMod := Module{
-			ID:     "gke-tpu-7x-cluster",
-			Source: "modules/scheduler/gke-cluster",
-			Settings: NewDict(map[string]cty.Value{
-				"enable_slice_controller": cty.BoolVal(true),
-			}),
-		}
-		wpMod := Module{
-			ID:     "workload_policy",
-			Source: "modules/compute/resource-policy",
-			Settings: NewDict(map[string]cty.Value{
-				"workload_policy": cty.ObjectVal(map[string]cty.Value{
-					"accelerator_topology": cty.StringVal("2x2x2"),
-					"type":                 cty.StringVal("HIGH_THROUGHPUT"),
-				}),
-			}),
-		}
-		bp.Groups = []Group{{Modules: []Module{clusterMod, wpMod}}}
-
-		expandWorkloadPolicy(bp, &bp.Groups[0].Modules[1])
-
-		wpMap := bp.Groups[0].Modules[1].Settings.Get("workload_policy").AsValueMap()
-		c.Check(wpMap["accelerator_topology_mode"], DeepEquals, cty.StringVal("PROVISION_ONLY"))
-	}
-
-	// Case 3: Explicit accelerator_topology_mode set by user is preserved
-	{
-		bp := Blueprint{}
-		clusterMod := Module{
-			ID:     "gke-tpu-7x-cluster",
-			Source: "modules/scheduler/gke-cluster",
-			Settings: NewDict(map[string]cty.Value{
-				"enable_slice_controller": cty.BoolVal(true),
+		bp := Blueprint{
+			Vars: NewDict(map[string]cty.Value{
+				"enable_dynamic_slicing_for_tpus": cty.BoolVal(true),
 			}),
 		}
 		wpMod := Module{
@@ -837,19 +799,57 @@ func (s *zeroSuite) TestExpandWorkloadPolicy(c *C) {
 				"workload_policy": cty.ObjectVal(map[string]cty.Value{
 					"accelerator_topology":      cty.StringVal("2x2x2"),
 					"type":                      cty.StringVal("HIGH_THROUGHPUT"),
-					"accelerator_topology_mode": cty.StringVal("AUTO_ONLY"),
+					"accelerator_topology_mode": cty.StringVal("AUTO_CONNECT"),
 				}),
 			}),
 		}
-		bp.Groups = []Group{{Modules: []Module{clusterMod, wpMod}}}
+		bp.Groups = []Group{{Modules: []Module{wpMod}}}
 
-		expandWorkloadPolicy(bp, &bp.Groups[0].Modules[1])
+		expandWorkloadPolicy(bp, &bp.Groups[0].Modules[0])
 
-		wpMap := bp.Groups[0].Modules[1].Settings.Get("workload_policy").AsValueMap()
-		c.Check(wpMap["accelerator_topology_mode"], DeepEquals, cty.StringVal("AUTO_ONLY"))
+		wpMap := bp.Groups[0].Modules[0].Settings.Get("workload_policy").AsValueMap()
+		c.Check(wpMap["accelerator_topology_mode"], DeepEquals, cty.StringVal("AUTO_CONNECT"))
 	}
 
-	// Case 4: Blueprint without dynamic slicing leaves workload_policy untouched
+	// Case 3: Workload policy without accelerator_topology or with 2D GPU topology (e.g., 1x72) is untouched
+	{
+		bp := Blueprint{
+			Vars: NewDict(map[string]cty.Value{
+				"enable_dynamic_slicing_for_tpus": cty.BoolVal(true),
+			}),
+		}
+		noTopoMod := Module{
+			ID:     "gpu_distance_policy",
+			Source: "modules/compute/resource-policy",
+			Settings: NewDict(map[string]cty.Value{
+				"workload_policy": cty.ObjectVal(map[string]cty.Value{
+					"max_topology_distance": cty.StringVal("SUBBLOCK"),
+					"type":                  cty.StringVal("HIGH_THROUGHPUT"),
+				}),
+			}),
+		}
+		gpuTopoMod := Module{
+			ID:     "a4x_workload_policy",
+			Source: "modules/compute/resource-policy",
+			Settings: NewDict(map[string]cty.Value{
+				"workload_policy": cty.ObjectVal(map[string]cty.Value{
+					"accelerator_topology": cty.StringVal("1x72"),
+					"type":                 cty.StringVal("HIGH_THROUGHPUT"),
+				}),
+			}),
+		}
+		bp.Groups = []Group{{Modules: []Module{noTopoMod, gpuTopoMod}}}
+
+		expandWorkloadPolicy(bp, &bp.Groups[0].Modules[0])
+		expandWorkloadPolicy(bp, &bp.Groups[0].Modules[1])
+
+		_, existsNoTopo := bp.Groups[0].Modules[0].Settings.Get("workload_policy").AsValueMap()["accelerator_topology_mode"]
+		c.Check(existsNoTopo, Equals, false)
+		_, existsGpuTopo := bp.Groups[0].Modules[1].Settings.Get("workload_policy").AsValueMap()["accelerator_topology_mode"]
+		c.Check(existsGpuTopo, Equals, false)
+	}
+
+	// Case 4: Blueprint without enable_dynamic_slicing_for_tpus leaves workload_policy untouched
 	{
 		bp := Blueprint{}
 		wpMod := Module{
@@ -857,7 +857,7 @@ func (s *zeroSuite) TestExpandWorkloadPolicy(c *C) {
 			Source: "modules/compute/resource-policy",
 			Settings: NewDict(map[string]cty.Value{
 				"workload_policy": cty.ObjectVal(map[string]cty.Value{
-					"accelerator_topology": cty.StringVal("1x72"),
+					"accelerator_topology": cty.StringVal("2x2x2"),
 					"type":                 cty.StringVal("HIGH_THROUGHPUT"),
 				}),
 			}),
