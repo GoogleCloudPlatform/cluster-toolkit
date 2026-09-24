@@ -17,5 +17,3 @@ spec:
   requirements:
     services:
     - discoveryengine.googleapis.com
-ghpc:
-  inject_module_id: module_instance_id

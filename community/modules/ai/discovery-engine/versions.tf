@@ -17,6 +17,13 @@
 terraform {
   required_version = ">= 1.12.2"
 
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = ">= 6.0.0"
+    }
+  }
+
   provider_meta "google" {
     module_name = "blueprints/terraform/hpc-toolkit:discovery-engine/v1.104.0"
   }

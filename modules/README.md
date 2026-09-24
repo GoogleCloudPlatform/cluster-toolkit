@@ -31,6 +31,11 @@ Modules that are still in development and less stable are labeled with the
 [stable-badge]: https://img.shields.io/badge/-stable-lightgrey?style=plastic
 [experimental-badge]: https://img.shields.io/badge/-experimental-%23febfa2?style=plastic
 [deprecated-badge]: https://img.shields.io/badge/-deprecated-%23fea2a2?style=plastic
+### AI
+
+* **[discovery-engine]** ![community-badge] ![experimental-badge] : Provisions Discovery Engine generative chat engine and assistant endpoints.
+
+[discovery-engine]: ../community/modules/ai/discovery-engine/README.md
 
 ### Compute
 
@@ -134,13 +139,11 @@ Modules that are still in development and less stable are labeled with the
 * **[kubernetes-namespace]** ![core-badge] : Creates a Kubernetes namespace.
 * **[direct-helm-install]** ![community-badge] ![experimental-badge] : Provides a standardized way to deploy Helm charts directly to a GKE cluster.
 * **[helm-upgrade]** ![community-badge] ![experimental-badge] : Manages Helm chart deployment lifecycles inside a GKE cluster.
-* **[discovery-engine]** ![community-badge] ![experimental-badge] : Provisions Discovery Engine generative chat engine and assistant endpoints.
 
 [kubectl-apply]: management/kubectl-apply/README.md
 [kubernetes-namespace]: management/kubernetes-namespace/README.md
 [direct-helm-install]: ../community/modules/management/direct-helm-install/README.md
 [helm-upgrade]: ../community/modules/management/helm-upgrade/README.md
-[discovery-engine]: ../community/modules/discovery-engine/README.md
 
 ### Monitoring
 
