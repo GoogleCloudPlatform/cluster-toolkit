@@ -2146,8 +2146,8 @@ func TestGCSFuseProfile_SidecarAnnotationForProfileOnlyJob(t *testing.T) {
 func TestGCSFuseProfile_SharedGatewayDeduplication(t *testing.T) {
 	sm := &StorageManager{}
 	mounts := []string{
-		"gs://shared/datasets;/data;ro;profile=training",
-		"gs://shared/eval;/eval;ro;profile=training",
+		"gs://shared/datasets;/data;ro;profile=training;attributes=a=1,b=2",
+		"gs://shared/eval;/eval;rw;profile=training;attributes=b=2,a=1",
 	}
 
 	infos, manifests, err := sm.ProcessMounts(mounts, orchestrator.JobDefinition{})
@@ -2163,6 +2163,9 @@ func TestGCSFuseProfile_SharedGatewayDeduplication(t *testing.T) {
 	if infos[0].Source != infos[1].Source {
 		t.Errorf("expected both mounts to share PVC %q, got %q", infos[0].Source, infos[1].Source)
 	}
+	if !infos[0].ReadOnly || infos[1].ReadOnly {
+		t.Errorf("ReadOnly = %v / %v, want true / false on shared gateway", infos[0].ReadOnly, infos[1].ReadOnly)
+	}
 	if infos[0].SubPath != "datasets" || infos[1].SubPath != "eval" {
 		t.Errorf("subPaths = %q / %q, want datasets / eval", infos[0].SubPath, infos[1].SubPath)
 	}
@@ -2174,6 +2177,39 @@ func TestGCSFuseProfile_SharedGatewayDeduplication(t *testing.T) {
 	}
 	if n := strings.Count(opts.VolumeMountsYAML, "mountPath:"); n != 2 {
 		t.Errorf("expected 2 volumeMounts, got %d:\n%s", n, opts.VolumeMountsYAML)
+	}
+	if n := strings.Count(opts.VolumeMountsYAML, "readOnly: true"); n != 1 {
+		t.Errorf("expected readOnly: true only on the ro volumeMount, got %d:\n%s", n, opts.VolumeMountsYAML)
+	}
+}
+
+func TestGCSFuseProfile_DivergentOptionsCreateSeparateGateways(t *testing.T) {
+	sm := &StorageManager{}
+	infos, manifests, err := sm.ProcessMounts([]string{
+		"gs://shared/datasets;/data;ro;profile=training;options=implicit-dirs",
+		"gs://shared/eval;/eval;ro;profile=training;options=only-dir=eval",
+	}, orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(manifests) != 2 || infos[0].Name == infos[1].Name || infos[0].Source == infos[1].Source {
+		t.Errorf("divergent options= must not deduplicate: got %d manifests, volumes %q / %q", len(manifests), infos[0].Name, infos[1].Name)
+	}
+}
+
+func TestGCSFuseProfile_ResolveNamespaceErrors(t *testing.T) {
+	errSM := &StorageManager{
+		orchestrator: &GKEOrchestrator{kubeClient: &MockKubeClient{Err: fmt.Errorf("kubeconfig broken")}},
+	}
+	if _, _, err := errSM.ProcessMounts([]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{}); err == nil || !strings.Contains(err.Error(), "failed to resolve namespace for storage gateway") {
+		t.Errorf("expected failed to resolve namespace error, got: %v", err)
+	}
+
+	emptySM := &StorageManager{
+		orchestrator: &GKEOrchestrator{kubeClient: &MockKubeClient{ExplicitEmpty: true}},
+	}
+	if _, _, err := emptySM.ProcessMounts([]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{}); err == nil || !strings.Contains(err.Error(), "Specify one explicitly with --gke-namespace") {
+		t.Errorf("expected empty-namespace --gke-namespace error, got: %v", err)
 	}
 }
 
