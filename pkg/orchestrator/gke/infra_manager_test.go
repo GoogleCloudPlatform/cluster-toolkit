@@ -16,6 +16,7 @@ package gke
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -26,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 )
 
 func TestCleanAndProcessManifests(t *testing.T) {
@@ -66,18 +68,21 @@ func TestValidateClusterState_TargetNamespaceValidation(t *testing.T) {
 		},
 	}
 
+	var validated []string
 	mockDyn := &mockDynamicClient{
 		getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+			validated = append(validated, name)
 			return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "namespaces"}, name)
 		},
 	}
 
+	// The kubeconfig namespace deliberately differs from --gke-namespace so the
+	// test proves the seeded namespace (not the kubeconfig one) is validated.
+	kube := &countingKubeClient{MockKubeClient: MockKubeClient{Namespace: "kube-ctx-ns"}}
 	orc := &GKEOrchestrator{
-		executor:  mockExec,
-		dynClient: mockDyn,
-		kubeClient: &MockKubeClient{
-			Namespace: "nonexistent-ns",
-		},
+		executor:   mockExec,
+		dynClient:  mockDyn,
+		kubeClient: kube,
 	}
 
 	job := &orchestrator.JobDefinition{
@@ -86,15 +91,22 @@ func TestValidateClusterState_TargetNamespaceValidation(t *testing.T) {
 		ProjectID:       "test-project",
 		GKENamespace:    "nonexistent-ns",
 	}
+	orc.namespace = job.GKENamespace // as done at the top of SubmitJob
 
 	err := orc.ValidateClusterState(job)
 	if err == nil {
 		t.Fatal("expected ValidateClusterState to fail when namespace validation fails, got nil")
 	}
 
-	expectedErr := `target namespace "nonexistent-ns" does not exist`
+	expectedErr := `target namespace "nonexistent-ns" does not exist on GKE cluster "test-cluster"`
 	if !strings.Contains(err.Error(), expectedErr) {
 		t.Errorf("expected error to contain %q, got: %v", expectedErr, err)
+	}
+	if len(validated) != 1 || validated[0] != "nonexistent-ns" {
+		t.Errorf("validated namespaces = %v, want [nonexistent-ns]", validated)
+	}
+	if kube.calls != 0 {
+		t.Errorf("kubeconfig namespace lookup should be skipped when --gke-namespace is set, got %d calls", kube.calls)
 	}
 }
 
@@ -343,5 +355,205 @@ func TestInitialize_LocationFallback(t *testing.T) {
 
 	if job.ClusterLocation != "us-central1" {
 		t.Errorf("Expected job.ClusterLocation to fall back to 'us-central1', got %q", job.ClusterLocation)
+	}
+}
+
+// countingKubeClient wraps MockKubeClient to count GetCurrentNamespace calls.
+type countingKubeClient struct {
+	MockKubeClient
+	calls int
+}
+
+func (c *countingKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
+	c.calls++
+	return c.MockKubeClient.GetCurrentNamespace(clusterName, location, projectID)
+}
+
+func TestGetCurrentNamespace(t *testing.T) {
+	tests := []struct {
+		name          string
+		cached        string
+		kubeClient    *countingKubeClient
+		want          string
+		wantErr       bool
+		wantKubeCalls int
+		wantCached    string
+	}{
+		{
+			name:          "cached namespace (from --gke-namespace) short-circuits kubeconfig lookup",
+			cached:        "explicit-ns",
+			kubeClient:    &countingKubeClient{MockKubeClient: MockKubeClient{Namespace: "kube-ns"}},
+			want:          "explicit-ns",
+			wantKubeCalls: 0,
+			wantCached:    "explicit-ns",
+		},
+		{
+			name:          "falls back to kubeconfig namespace and caches it",
+			kubeClient:    &countingKubeClient{MockKubeClient: MockKubeClient{Namespace: "current-ns"}},
+			want:          "current-ns",
+			wantKubeCalls: 1,
+			wantCached:    "current-ns",
+		},
+		{
+			name:          "kubeconfig lookup failure is propagated and not cached",
+			kubeClient:    &countingKubeClient{MockKubeClient: MockKubeClient{Err: fmt.Errorf("kubeclient error")}},
+			wantErr:       true,
+			wantKubeCalls: 1,
+			wantCached:    "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := &GKEOrchestrator{kubeClient: tt.kubeClient, namespace: tt.cached}
+			got, err := g.getCurrentNamespace("cluster", "us-central1", "project")
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("getCurrentNamespace() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("getCurrentNamespace() = %q, want %q", got, tt.want)
+			}
+			if tt.kubeClient.calls != tt.wantKubeCalls {
+				t.Errorf("GetCurrentNamespace calls = %d, want %d", tt.kubeClient.calls, tt.wantKubeCalls)
+			}
+			if g.namespace != tt.wantCached {
+				t.Errorf("cached g.namespace = %q, want %q", g.namespace, tt.wantCached)
+			}
+
+			// A second call must be served from cache without another lookup.
+			if !tt.wantErr {
+				if _, err := g.getCurrentNamespace("cluster", "us-central1", "project"); err != nil {
+					t.Fatalf("second getCurrentNamespace() error = %v", err)
+				}
+				if tt.kubeClient.calls != tt.wantKubeCalls {
+					t.Errorf("second call triggered kubeconfig lookup: calls = %d, want %d", tt.kubeClient.calls, tt.wantKubeCalls)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateNamespaceExists(t *testing.T) {
+	tests := []struct {
+		name          string
+		namespace     string
+		kubeClient    KubeClient
+		dynClient     dynamic.Interface
+		wantErr       bool
+		wantErrSubstr string
+	}{
+		{
+			name:          "kubeconfig namespace lookup failure is propagated",
+			namespace:     "",
+			kubeClient:    &MockKubeClient{Err: fmt.Errorf("failed to initialize Kubernetes client")},
+			dynClient:     nil,
+			wantErr:       true,
+			wantErrSubstr: "failed to initialize Kubernetes client",
+		},
+		{
+			name:       "namespace exists",
+			namespace:  "exists",
+			kubeClient: &MockKubeClient{Namespace: "exists"},
+			dynClient: &mockDynamicClient{
+				getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+					return &unstructured.Unstructured{Object: map[string]interface{}{"kind": "Namespace"}}, nil
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:       "explicit --gke-namespace override wins over kubeconfig namespace",
+			namespace:  "custom-job-ns",
+			kubeClient: &MockKubeClient{Namespace: "default-kube-ns"},
+			dynClient: &mockDynamicClient{
+				getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+					if name != "custom-job-ns" {
+						return nil, fmt.Errorf("expected Get for custom-job-ns, got %s", name)
+					}
+					return &unstructured.Unstructured{Object: map[string]interface{}{"kind": "Namespace"}}, nil
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:       "falls back to kubeconfig namespace when --gke-namespace unset",
+			namespace:  "",
+			kubeClient: &MockKubeClient{Namespace: "kube-ctx-ns"},
+			dynClient: &mockDynamicClient{
+				getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+					if name != "kube-ctx-ns" {
+						return nil, fmt.Errorf("expected Get for kube-ctx-ns, got %s", name)
+					}
+					return &unstructured.Unstructured{Object: map[string]interface{}{"kind": "Namespace"}}, nil
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:       "namespace does not exist",
+			namespace:  "nonexistent",
+			kubeClient: &MockKubeClient{Namespace: "nonexistent"},
+			dynClient: &mockDynamicClient{
+				getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+					return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "namespaces"}, name)
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: `target namespace "nonexistent" does not exist on GKE cluster "test-cluster"`,
+		},
+		{
+			name:          "empty namespace",
+			namespace:     "",
+			kubeClient:    &MockKubeClient{ExplicitEmpty: true},
+			dynClient:     &mockDynamicClient{},
+			wantErr:       true,
+			wantErrSubstr: `target namespace cannot be empty for GKE cluster "test-cluster". Please pass --gke-namespace, or set a default namespace in your kubeconfig context`,
+		},
+		{
+			name:       "403 forbidden (RBAC restricted user proceeds with warning)",
+			namespace:  "restricted-ns",
+			kubeClient: &MockKubeClient{Namespace: "restricted-ns"},
+			dynClient: &mockDynamicClient{
+				getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+					return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "namespaces"}, name, fmt.Errorf("user cannot get resource"))
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:       "other API error is wrapped",
+			namespace:  "some-ns",
+			kubeClient: &MockKubeClient{Namespace: "some-ns"},
+			dynClient: &mockDynamicClient{
+				getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+					return nil, fmt.Errorf("connection refused")
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: `failed to verify existence of namespace "some-ns" on cluster "test-cluster": connection refused`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Mirrors SubmitJob, which seeds g.namespace from job.GKENamespace.
+			orch := &GKEOrchestrator{
+				kubeClient: tt.kubeClient,
+				dynClient:  tt.dynClient,
+				namespace:  tt.namespace,
+			}
+
+			err := orch.validateTargetNamespaceExists("test-cluster", "us-central1-a", "test-project")
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected an error, but got nil")
+				} else if !strings.Contains(err.Error(), tt.wantErrSubstr) {
+					t.Errorf("expected error to contain %q, but got: %v", tt.wantErrSubstr, err)
+				}
+			} else if err != nil {
+				t.Errorf("expected no error, but got: %v", err)
+			}
+		})
 	}
 }
