@@ -15,28 +15,37 @@
 package gke
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
+	k8syaml "sigs.k8s.io/yaml"
 )
 
 func TestParseSingleVolume(t *testing.T) {
 	sm := &StorageManager{}
 
 	tests := []struct {
-		name       string
-		input      string
-		wantSrc    string
-		wantDest   string
-		wantRO     bool
-		wantOpts   string
-		wantErr    bool
-		wantErrSub string
+		name        string
+		input       string
+		wantSrc     string
+		wantDest    string
+		wantRO      bool
+		wantOpts    string
+		wantProfile string
+		wantSubPath string
+		wantAttrs   map[string]string
+		wantErr     bool
+		wantErrSub  string
 	}{
 		{
 			name:     "valid hostPath",
@@ -186,7 +195,13 @@ func TestParseSingleVolume(t *testing.T) {
 			name:       "options not supported for non-gcs",
 			input:      "my-pvc;/data;options=abc",
 			wantErr:    true,
-			wantErrSub: "options= is currently only supported for GCS",
+			wantErrSub: "options= can only be used with GCS",
+		},
+		{
+			name:       "every unsupported segment is reported in one error",
+			input:      "filestore://my-instance/share;/data;options=abc;profile=training;attributes=x=1",
+			wantErr:    true,
+			wantErrSub: "options=, profile=, attributes= can only be used with GCS",
 		},
 		{
 			name:     "valid gcsfuse with multiple comma-separated options",
@@ -196,33 +211,276 @@ func TestParseSingleVolume(t *testing.T) {
 			wantRO:   true,
 			wantOpts: "logging:severity:info,enable-atomic-rename-object:true",
 		},
+		{
+			name:        "profile alias training",
+			input:       "gs://my-bucket;/data;profile=training",
+			wantSrc:     "gs://my-bucket",
+			wantDest:    "/data",
+			wantRO:      true,
+			wantProfile: "gcsfusecsi-training",
+		},
+		{
+			name:        "profile alias checkpointing rw",
+			input:       "gs://my-bucket/run1;/checkpoints;rw;profile=checkpointing",
+			wantSrc:     "gs://my-bucket",
+			wantDest:    "/checkpoints",
+			wantRO:      false,
+			wantProfile: "gcsfusecsi-checkpointing",
+			wantSubPath: "run1",
+		},
+		{
+			name:        "inline gcs subpath is split from bucket",
+			input:       "gs://my-bucket/datasets/imagenet;/data",
+			wantSrc:     "gs://my-bucket",
+			wantDest:    "/data",
+			wantRO:      true,
+			wantSubPath: "datasets/imagenet",
+		},
+		{
+			name:        "profile canonical storage class name",
+			input:       "gs://my-bucket;/data;profile=gcsfusecsi-serving",
+			wantSrc:     "gs://my-bucket",
+			wantDest:    "/data",
+			wantRO:      true,
+			wantProfile: "gcsfusecsi-serving",
+		},
+		{
+			name:        "profile is case insensitive",
+			input:       "gs://my-bucket;/data;profile=Training",
+			wantSrc:     "gs://my-bucket",
+			wantDest:    "/data",
+			wantRO:      true,
+			wantProfile: "gcsfusecsi-training",
+		},
+		{
+			name:        "profile with options and attributes",
+			input:       "gs://my-bucket;/models;ro;profile=serving;options=implicit-dirs;attributes=anywhereCacheZones=us-central1-a",
+			wantSrc:     "gs://my-bucket",
+			wantDest:    "/models",
+			wantRO:      true,
+			wantOpts:    "implicit-dirs",
+			wantProfile: "gcsfusecsi-serving",
+			wantAttrs:   map[string]string{"anywhereCacheZones": "us-central1-a"},
+		},
+		{
+			name:        "multiple attributes",
+			input:       "gs://my-bucket;/models;profile=serving;attributes=a=1,b=2",
+			wantSrc:     "gs://my-bucket",
+			wantDest:    "/models",
+			wantRO:      true,
+			wantProfile: "gcsfusecsi-serving",
+			wantAttrs:   map[string]string{"a": "1", "b": "2"},
+		},
+		{
+			name:       "unknown profile is rejected",
+			input:      "gs://my-bucket;/data;profile=bogus",
+			wantErr:    true,
+			wantErrSub: "unsupported storage profile",
+		},
+		{
+			name:       "empty profile is rejected",
+			input:      "gs://my-bucket;/data;profile=",
+			wantErr:    true,
+			wantErrSub: "unsupported storage profile",
+		},
+		{
+			name:       "profile not supported for filestore",
+			input:      "filestore://my-instance/share;/data;profile=training",
+			wantErr:    true,
+			wantErrSub: "profile= can only be used with GCS fuse volumes",
+		},
+		{
+			name:       "profile not supported for pvc",
+			input:      "my-pvc;/data;profile=training",
+			wantErr:    true,
+			wantErrSub: "profile= can only be used with GCS fuse volumes",
+		},
+		{
+			// volumeAttributes is one CSI field that exists on an inline
+			// ephemeral volume as well as on a PersistentVolume, so attributes=
+			// must not be gated behind profile=.
+			name:      "attributes are accepted without a profile",
+			input:     "gs://my-bucket;/data;attributes=fileCacheCapacity=100Gi",
+			wantSrc:   "gs://my-bucket",
+			wantDest:  "/data",
+			wantRO:    true,
+			wantAttrs: map[string]string{"fileCacheCapacity": "100Gi"},
+		},
+		{
+			// Profile-only keys are warned about at build time, not rejected:
+			// a hard allowlist would also block attributes added by a newer
+			// driver release.
+			name:      "storage-profile-only attributes are not rejected without a profile",
+			input:     "gs://my-bucket;/data;attributes=anywhereCacheZones=us-central1-a",
+			wantSrc:   "gs://my-bucket",
+			wantDest:  "/data",
+			wantRO:    true,
+			wantAttrs: map[string]string{"anywhereCacheZones": "us-central1-a"},
+		},
+		{
+			// options= already feeds this field on both paths.
+			name:       "mountOptions is rejected as an attribute",
+			input:      "gs://my-bucket;/data;attributes=mountOptions=implicit-dirs",
+			wantErr:    true,
+			wantErrSub: "use options=",
+		},
+		{
+			// Whitespace is trimmed on both sides of the '=', so a naturally
+			// typed ", " separator does not smuggle a leading space into the
+			// value that the CSI driver would then see.
+			name:        "whitespace around attribute keys and values is trimmed",
+			input:       "gs://my-bucket;/data;profile=training;attributes= a =1, b = 2 ",
+			wantSrc:     "gs://my-bucket",
+			wantDest:    "/data",
+			wantRO:      true,
+			wantProfile: "gcsfusecsi-training",
+			wantAttrs:   map[string]string{"a": "1", "b": "2"},
+		},
+		{
+			// SplitN(kv, "=", 2): only the first '=' separates, so a value may
+			// contain as many more as it likes.
+			name:        "an attribute value may contain further '=' characters",
+			input:       "gs://my-bucket;/data;profile=training;attributes=url=https://example.com/a=b",
+			wantSrc:     "gs://my-bucket",
+			wantDest:    "/data",
+			wantRO:      true,
+			wantProfile: "gcsfusecsi-training",
+			wantAttrs:   map[string]string{"url": "https://example.com/a=b"},
+		},
+		{
+			name:       "attributes without value are rejected",
+			input:      "gs://my-bucket;/data;profile=training;attributes=novalue",
+			wantErr:    true,
+			wantErrSub: "invalid volume attribute",
+		},
+		{
+			name:       "empty attributes are rejected",
+			input:      "gs://my-bucket;/data;profile=training;attributes=",
+			wantErr:    true,
+			wantErrSub: "no key=value pairs",
+		},
+		{
+			name:       "attribute key with illegal characters is rejected",
+			input:      "gs://my-bucket;/data;profile=training;attributes=bad key=1",
+			wantErr:    true,
+			wantErrSub: "invalid volume attribute key",
+		},
+		{
+			name:       "duplicate attribute key is rejected",
+			input:      "gs://my-bucket;/data;profile=training;attributes=a=1,a=2",
+			wantErr:    true,
+			wantErrSub: "duplicate volume attribute key",
+		},
+		{
+			// The Rapid Cache example in docs/gcluster_job_guide.md. The value
+			// is only dangerous once it reaches YAML, where a bare '*' would be
+			// an alias node; the template quotes it.
+			name:        "anywhereCacheZones wildcard is accepted",
+			input:       "gs://my-bucket;/data;profile=training;attributes=anywhereCacheZones=*",
+			wantSrc:     "gs://my-bucket",
+			wantDest:    "/data",
+			wantRO:      true,
+			wantProfile: "gcsfusecsi-training",
+			wantAttrs:   map[string]string{"anywhereCacheZones": "*"},
+		},
+		{
+			// Previously rejected: attributes= split on every ',', so the
+			// second zone was read as a key. A ',' now only separates when a
+			// '<key>=' follows it, which "us-central1-b" does not.
+			name:        "anywhereCacheZones multi-zone list is accepted",
+			input:       "gs://my-bucket;/data;profile=training;attributes=anywhereCacheZones=us-central1-a,us-central1-b",
+			wantSrc:     "gs://my-bucket",
+			wantDest:    "/data",
+			wantRO:      true,
+			wantProfile: "gcsfusecsi-training",
+			wantAttrs:   map[string]string{"anywhereCacheZones": "us-central1-a,us-central1-b"},
+		},
+		{
+			// The other documented GKE parameter whose value is a comma
+			// separated list. ':' is not a legal key character, so none of the
+			// internal commas look like the start of a new pair.
+			name:        "fuseFileCacheMediumPriority list is accepted",
+			input:       "gs://my-bucket;/data;profile=training;attributes=fuseFileCacheMediumPriority=gpu:ram|lssd,tpu:ram,general_purpose:ram|lssd",
+			wantSrc:     "gs://my-bucket",
+			wantDest:    "/data",
+			wantRO:      true,
+			wantProfile: "gcsfusecsi-training",
+			wantAttrs: map[string]string{
+				"fuseFileCacheMediumPriority": "gpu:ram|lssd,tpu:ram,general_purpose:ram|lssd",
+			},
+		},
+		{
+			// A list value followed by a genuine second pair: the ',' before
+			// 'bucketScanTimeout=' separates, the ones inside the zone list do
+			// not.
+			name:        "list value and a following pair are both parsed",
+			input:       "gs://my-bucket;/data;profile=training;attributes=anywhereCacheZones=us-central1-a,us-central1-b,bucketScanTimeout=5m",
+			wantSrc:     "gs://my-bucket",
+			wantDest:    "/data",
+			wantRO:      true,
+			wantProfile: "gcsfusecsi-training",
+			wantAttrs: map[string]string{
+				"anywhereCacheZones": "us-central1-a,us-central1-b",
+				"bucketScanTimeout":  "5m",
+			},
+		},
+		{
+			// A trailing ',' terminated a (skipped) empty segment before the
+			// change and must keep doing so, rather than becoming part of the
+			// preceding value.
+			name:        "trailing comma is still a separator",
+			input:       "gs://my-bucket;/data;profile=training;attributes=bucketScanTimeout=5m,",
+			wantSrc:     "gs://my-bucket",
+			wantDest:    "/data",
+			wantRO:      true,
+			wantProfile: "gcsfusecsi-training",
+			wantAttrs:   map[string]string{"bucketScanTimeout": "5m"},
+		},
+		{
+			name:       "repeated attributes= is rejected",
+			input:      "gs://my-bucket;/data;profile=training;attributes=a=1;attributes=b=2",
+			wantErr:    true,
+			wantErrSub: "attributes= may only be specified once per --mount",
+		},
+		{
+			name:       "repeated options= is rejected",
+			input:      "gs://my-bucket;/data;options=implicit-dirs;options=only-dir=x",
+			wantErr:    true,
+			wantErrSub: "options= may only be specified once per --mount",
+		},
+		{
+			name:       "repeated profile= is rejected",
+			input:      "gs://my-bucket;/data;profile=training;profile=serving",
+			wantErr:    true,
+			wantErrSub: "profile= may only be specified once per --mount",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			src, dest, options, readOnly, err := sm.parseSingleVolume(tc.input)
+			pm, err := sm.parseSingleVolume(tc.input)
 
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("parseSingleVolume() error = %v, wantErr %v", err, tc.wantErr)
 			}
 			if tc.wantErr {
-				if tc.wantErrSub != "" && err != nil && !strings.Contains(err.Error(), tc.wantErrSub) {
+				if tc.wantErrSub != "" && !strings.Contains(err.Error(), tc.wantErrSub) {
 					t.Errorf("error message = %q, want sub %q", err.Error(), tc.wantErrSub)
 				}
 				return
 			}
 
-			if src != tc.wantSrc {
-				t.Errorf("parseSingleVolume() src = %v, want %v", src, tc.wantSrc)
+			want := parsedMount{
+				Src:        tc.wantSrc,
+				Dest:       tc.wantDest,
+				ReadOnly:   tc.wantRO,
+				Options:    tc.wantOpts,
+				Profile:    tc.wantProfile,
+				SubPath:    tc.wantSubPath,
+				Attributes: tc.wantAttrs,
 			}
-			if dest != tc.wantDest {
-				t.Errorf("parseSingleVolume() dest = %v, want %v", dest, tc.wantDest)
-			}
-			if readOnly != tc.wantRO {
-				t.Errorf("parseSingleVolume() readOnly = %v, want %v", readOnly, tc.wantRO)
-			}
-			if options != tc.wantOpts {
-				t.Errorf("parseSingleVolume() options = %v, want %v", options, tc.wantOpts)
+			if !reflect.DeepEqual(pm, want) {
+				t.Errorf("parseSingleVolume() = %+v, want %+v", pm, want)
 			}
 		})
 	}
@@ -562,7 +820,10 @@ func TestProcessMounts_Filestore_TrailingSlash(t *testing.T) {
 	}
 	job := orchestrator.JobDefinition{}
 
-	// Test trailing slash handling in Filestore mount URI (single and multiple)
+	// Test trailing slash handling in Filestore mount URI (single and multiple).
+	// Both spellings resolve to the same instance and share, so they collapse
+	// onto one PVC/PV: the manifest is emitted once and the Pod declares one
+	// volume, while each mount keeps its own mount path.
 	mountsSlash := []string{
 		"filestore://10.0.0.2/share/;/data",
 		"filestore://10.0.0.2/share///;/data2",
@@ -577,12 +838,19 @@ func TestProcessMounts_Filestore_TrailingSlash(t *testing.T) {
 	if infosSlash[0].Source != "gcluster-filestore-10-0-0-2-share" {
 		t.Errorf("expected source gcluster-filestore-10-0-0-2-share, got %s", infosSlash[0].Source)
 	}
-	verifyFilestoreManifest(t, manifestsSlash[0], "gcluster-filestore-10-0-0-2-share", "10.0.0.2", "/share", "1024Gi")
-
 	if infosSlash[1].Source != "gcluster-filestore-10-0-0-2-share" {
 		t.Errorf("expected source gcluster-filestore-10-0-0-2-share, got %s", infosSlash[1].Source)
 	}
-	verifyFilestoreManifest(t, manifestsSlash[1], "gcluster-filestore-10-0-0-2-share", "10.0.0.2", "/share", "1024Gi")
+	if infosSlash[0].MountPath != "/data" || infosSlash[1].MountPath != "/data2" {
+		t.Errorf("expected mount paths /data and /data2, got %q and %q", infosSlash[0].MountPath, infosSlash[1].MountPath)
+	}
+	if infosSlash[0].Name != infosSlash[1].Name {
+		t.Errorf("expected both mounts to reuse one Pod volume, got %q and %q", infosSlash[0].Name, infosSlash[1].Name)
+	}
+	if len(manifestsSlash) != 1 {
+		t.Fatalf("expected the shared PVC/PV manifest to be emitted once, got %d manifests", len(manifestsSlash))
+	}
+	verifyFilestoreManifest(t, manifestsSlash[0], "gcluster-filestore-10-0-0-2-share", "10.0.0.2", "/share", "1024Gi")
 }
 
 func verifyFilestoreManifest(t *testing.T, manifest, name, server, path, capacity string) {
@@ -611,6 +879,90 @@ func verifyFilestoreManifest(t *testing.T, manifest, name, server, path, capacit
 	}
 	if !strings.Contains(manifest, "storage: "+capacity) {
 		t.Errorf("manifest missing expected capacity %s, got:\n%s", capacity, manifest)
+	}
+}
+
+func TestProcessMounts_Filestore_SingleMountGolden(t *testing.T) {
+	sm := &StorageManager{
+		getFilestoreIP: func(ctx context.Context, projectID, location, nameOrIP string, isIP bool) (string, string, int64, error) {
+			return "10.0.0.2", "myinstance", 2048, nil
+		},
+	}
+
+	infos, manifests, err := sm.ProcessMounts([]string{"filestore://myinstance/share;/data"}, orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	wantInfo := MountInfo{
+		Name:      "vol-0",
+		Source:    "gcluster-filestore-myinstance-share",
+		MountPath: "/data",
+		Type:      "pvc",
+		ReadOnly:  true,
+	}
+	if len(infos) != 1 || !reflect.DeepEqual(infos[0], wantInfo) {
+		t.Fatalf("MountInfo = %#v, want exactly one %#v", infos, wantInfo)
+	}
+
+	if len(manifests) != 1 {
+		t.Fatalf("expected exactly 1 manifest, got %d", len(manifests))
+	}
+	const wantManifest = `apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gcluster-filestore-myinstance-share-default
+  labels:
+    gcluster.google.com/managed-by: cluster-toolkit
+    gcluster.google.com/storage-type: filestore
+spec:
+  capacity:
+    storage: 2048Gi
+  accessModes:
+  - ReadWriteMany
+  nfs:
+    path: /share
+    server: 10.0.0.2
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gcluster-filestore-myinstance-share
+  labels:
+    gcluster.google.com/managed-by: cluster-toolkit
+    gcluster.google.com/storage-type: filestore
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: ""
+  volumeName: gcluster-filestore-myinstance-share-default
+  resources:
+    requests:
+      storage: 2048Gi
+`
+	if manifests[0] != wantManifest {
+		t.Errorf("rendered Filestore manifest changed.\n--- got ---\n%s\n--- want ---\n%s", manifests[0], wantManifest)
+	}
+
+	opts := &ManifestOptions{}
+	sm.AddVolumeOptions(opts, infos)
+
+	const wantVolumes = `              - name: vol-0
+                persistentVolumeClaim:
+                  claimName: gcluster-filestore-myinstance-share`
+	if opts.VolumesYAML != wantVolumes {
+		t.Errorf("Pod volumes changed.\n--- got ---\n%s\n--- want ---\n%s", opts.VolumesYAML, wantVolumes)
+	}
+
+	const wantMounts = `                - mountPath: /data
+                  name: vol-0
+                  readOnly: true`
+	if opts.VolumeMountsYAML != wantMounts {
+		t.Errorf("Pod volumeMounts changed.\n--- got ---\n%s\n--- want ---\n%s", opts.VolumeMountsYAML, wantMounts)
+	}
+
+	if opts.GCSFuseEnabled {
+		t.Error("GCSFuseEnabled must stay false for a Filestore-only job")
 	}
 }
 
@@ -1135,5 +1487,1202 @@ func TestProcessMounts_Filestore_IPv6(t *testing.T) {
 	_, _, err = smResolved.ProcessMounts(invalidMounts, job)
 	if err == nil {
 		t.Errorf("expected error for invalid IPv6 format, got nil")
+	}
+}
+
+func splitManifestDocs(t *testing.T, manifest string) []map[string]interface{} {
+	t.Helper()
+	var docs []map[string]interface{}
+	for _, raw := range strings.Split(manifest, "\n---\n") {
+		if strings.TrimSpace(raw) == "" {
+			continue
+		}
+		var doc map[string]interface{}
+		if err := k8syaml.Unmarshal([]byte(raw), &doc); err != nil {
+			t.Fatalf("generated manifest is not valid YAML: %v\n---\n%s", err, raw)
+		}
+		docs = append(docs, doc)
+	}
+	return docs
+}
+
+func findDoc(t *testing.T, docs []map[string]interface{}, kind string) map[string]interface{} {
+	t.Helper()
+	for _, d := range docs {
+		if k, _ := d["kind"].(string); k == kind {
+			return d
+		}
+	}
+	t.Fatalf("no %s document found in manifest", kind)
+	return nil
+}
+
+func nested(t *testing.T, doc map[string]interface{}, path ...string) interface{} {
+	t.Helper()
+	var cur interface{} = doc
+	for _, p := range path {
+		m, ok := cur.(map[string]interface{})
+		if !ok {
+			t.Fatalf("path %v: %q is not a map", path, p)
+		}
+		cur, ok = m[p]
+		if !ok {
+			t.Fatalf("path %v: key %q not found", path, p)
+		}
+	}
+	return cur
+}
+
+func nestedString(t *testing.T, doc map[string]interface{}, path ...string) string {
+	t.Helper()
+	v := nested(t, doc, path...)
+	s, ok := v.(string)
+	if !ok {
+		t.Fatalf("path %v is %T, want string", path, v)
+	}
+	return s
+}
+
+func assertProfilePVSpec(t *testing.T, pv map[string]interface{}, wantPV, wantPVC string) {
+	t.Helper()
+	if got := nestedString(t, pv, "metadata", "name"); got != wantPV {
+		t.Errorf("PV name = %q, want %q", got, wantPV)
+	}
+	if got := nestedString(t, pv, "spec", "storageClassName"); got != "gcsfusecsi-training" {
+		t.Errorf("PV storageClassName = %q, want gcsfusecsi-training", got)
+	}
+	if got := nestedString(t, pv, "spec", "persistentVolumeReclaimPolicy"); got != "Retain" {
+		t.Errorf("PV reclaim policy = %q, want Retain", got)
+	}
+	if got := nestedString(t, pv, "spec", "csi", "driver"); got != "gcsfuse.csi.storage.gke.io" {
+		t.Errorf("PV csi driver = %q", got)
+	}
+	if got := nestedString(t, pv, "spec", "csi", "volumeHandle"); got != "imagenet-dataset" {
+		t.Errorf("PV volumeHandle = %q, want imagenet-dataset", got)
+	}
+	if got := nestedString(t, pv, "spec", "claimRef", "name"); got != wantPVC {
+		t.Errorf("PV claimRef.name = %q, want %q", got, wantPVC)
+	}
+	if got := nestedString(t, pv, "spec", "claimRef", "namespace"); got != "default" {
+		t.Errorf("PV claimRef.namespace = %q, want default", got)
+	}
+	accessModes, ok := nested(t, pv, "spec", "accessModes").([]interface{})
+	if !ok || len(accessModes) != 1 || accessModes[0] != "ReadWriteMany" {
+		t.Errorf("PV accessModes = %v, want [ReadWriteMany]", accessModes)
+	}
+	if _, present := pv["spec"].(map[string]interface{})["mountOptions"]; present {
+		t.Error("PV must not declare mountOptions when the user supplied none")
+	}
+}
+
+func assertProfilePVCSpec(t *testing.T, pvc map[string]interface{}, wantPV, wantPVC string) {
+	t.Helper()
+	if got := nestedString(t, pvc, "metadata", "name"); got != wantPVC {
+		t.Errorf("PVC name = %q, want %q", got, wantPVC)
+	}
+	if got := nestedString(t, pvc, "metadata", "namespace"); got != "default" {
+		t.Errorf("PVC namespace = %q, want default", got)
+	}
+	if got := nestedString(t, pvc, "spec", "volumeName"); got != wantPV {
+		t.Errorf("PVC volumeName = %q, want %q", got, wantPV)
+	}
+	if got := nestedString(t, pvc, "spec", "storageClassName"); got != "gcsfusecsi-training" {
+		t.Errorf("PVC storageClassName = %q", got)
+	}
+}
+
+func TestGCSFuseProfile_ManifestRendering(t *testing.T) {
+	sm := &StorageManager{}
+	job := orchestrator.JobDefinition{}
+
+	infos, manifests, err := sm.ProcessMounts([]string{"gs://imagenet-dataset;/data;ro;profile=training"}, job)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(manifests) != 1 || len(infos) != 1 {
+		t.Fatalf("expected 1 manifest and 1 mount info, got %d manifests and %d infos", len(manifests), len(infos))
+	}
+
+	wantPVC := "gcluster-gcsfuse-imagenet-dataset-training-c8a67a"
+	wantPV := wantPVC + "-default"
+	wantInfo := MountInfo{
+		Name:                "vol-0",
+		Type:                "pvc",
+		Source:              wantPVC,
+		MountPath:           "/data",
+		ReadOnly:            true,
+		NeedsGCSFuseSidecar: true,
+	}
+	if !reflect.DeepEqual(infos[0], wantInfo) {
+		t.Errorf("MountInfo = %+v, want %+v", infos[0], wantInfo)
+	}
+
+	docs := splitManifestDocs(t, manifests[0])
+	if len(docs) != 2 {
+		t.Fatalf("expected 2 documents (PV + PVC), got %d", len(docs))
+	}
+
+	assertProfilePVSpec(t, findDoc(t, docs, "PersistentVolume"), wantPV, wantPVC)
+	assertProfilePVCSpec(t, findDoc(t, docs, "PersistentVolumeClaim"), wantPV, wantPVC)
+}
+
+func renderGCSFuseGateway(t *testing.T, params GCSFusePVPVCTemplateParams) string {
+	t.Helper()
+	var g *GKEOrchestrator
+	tmpl, err := g.parseGKETextTemplate("gcs_fuse_pv_pvc.tmpl")
+	if err != nil {
+		t.Fatalf("failed to parse template: %v", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, params); err != nil {
+		t.Fatalf("failed to execute template: %v", err)
+	}
+	return buf.String()
+}
+
+func TestGCSFuseProfile_TemplateQuotesInjectedValues(t *testing.T) {
+	// text/template applies no escaping, so every injection point must be %q-quoted.
+	hostileNS := "evil\n    name: hijacked-pvc\n  # "
+	manifest := renderGCSFuseGateway(t, GCSFusePVPVCTemplateParams{
+		PVName:           "gcluster-gcsfuse-b-training-default",
+		PVCName:          "gcluster-gcsfuse-b-training",
+		Namespace:        hostileNS,
+		StorageClassName: "gcsfusecsi-training",
+		Capacity:         "1Gi",
+		VolumeHandle:     "b",
+		VolumeAttributes: map[string]string{"fileCacheCapacity": "100Gi"},
+	})
+
+	docs := splitManifestDocs(t, manifest)
+	if len(docs) != 2 {
+		t.Fatalf("expected 2 documents (PV + PVC), got %d:\n%s", len(docs), manifest)
+	}
+
+	claimRef, ok := nested(t, findDoc(t, docs, "PersistentVolume"), "spec", "claimRef").(map[string]interface{})
+	if !ok {
+		t.Fatalf("claimRef is not a map:\n%s", manifest)
+	}
+	wantClaimRef := map[string]interface{}{"namespace": hostileNS, "name": "gcluster-gcsfuse-b-training"}
+	if !reflect.DeepEqual(claimRef, wantClaimRef) {
+		t.Errorf("claimRef = %#v, want %#v; an injected key means a value escaped its scalar", claimRef, wantClaimRef)
+	}
+
+	if got := nestedString(t, findDoc(t, docs, "PersistentVolumeClaim"), "metadata", "namespace"); got != hostileNS {
+		t.Errorf("PVC namespace = %q, want the hostile value preserved verbatim as one scalar", got)
+	}
+}
+
+// profileStorageManager returns a StorageManager whose namespace is preset so no cluster call is made.
+func profileStorageManager(customTemplatesPath string) *StorageManager {
+	return &StorageManager{orchestrator: &GKEOrchestrator{
+		gkeCustomTemplatesPath: customTemplatesPath,
+		namespace:              "default",
+	}}
+}
+
+func writeCustomGatewayTemplate(t *testing.T, dir, body string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "gcs_fuse_pv_pvc.tmpl"), []byte(body), 0644); err != nil {
+		t.Fatalf("failed to write custom template: %v", err)
+	}
+}
+
+func TestGCSFuseProfile_HonorsCustomTemplateOverride(t *testing.T) {
+	const mount = "gs://imagenet-dataset;/data;ro;profile=training"
+
+	t.Run("override is used", func(t *testing.T) {
+		dir := t.TempDir()
+		writeCustomGatewayTemplate(t, dir, `apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ printf "%q" .PVName }}
+  annotations:
+    example.com/rendered-by: custom-template
+spec:
+  storageClassName: {{ printf "%q" .StorageClassName }}
+  claimRef:
+    namespace: {{ printf "%q" .Namespace }}
+    name: {{ printf "%q" .PVCName }}
+`)
+
+		_, manifests, err := profileStorageManager(dir).ProcessMounts([]string{mount}, orchestrator.JobDefinition{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		pv := findDoc(t, splitManifestDocs(t, manifests[0]), "PersistentVolume")
+		if got := nestedString(t, pv, "metadata", "annotations", "example.com/rendered-by"); got != "custom-template" {
+			t.Errorf("annotation = %q, want the override to have been rendered", got)
+		}
+		if _, embedded := pv["metadata"].(map[string]interface{})["labels"]; embedded {
+			t.Error("embedded default was rendered instead of the override")
+		}
+		// Params the override omits must still be supplied, not error.
+		if got := nestedString(t, pv, "spec", "claimRef", "name"); got != "gcluster-gcsfuse-imagenet-dataset-training-61350c" {
+			t.Errorf("claimRef.name = %q", got)
+		}
+	})
+
+	t.Run("falls back to embedded when absent", func(t *testing.T) {
+		_, manifests, err := profileStorageManager(t.TempDir()).ProcessMounts([]string{mount}, orchestrator.JobDefinition{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		pv := findDoc(t, splitManifestDocs(t, manifests[0]), "PersistentVolume")
+		if got := nestedString(t, pv, "metadata", "labels", "gcluster.google.com/managed-by"); got != "cluster-toolkit" {
+			t.Errorf("managed-by label = %q, want the embedded default to have been used", got)
+		}
+	})
+
+	t.Run("unknown field in override is reported", func(t *testing.T) {
+		dir := t.TempDir()
+		writeCustomGatewayTemplate(t, dir, "name: {{ .NoSuchField }}\n")
+
+		_, _, err := profileStorageManager(dir).ProcessMounts([]string{mount}, orchestrator.JobDefinition{})
+		if err == nil {
+			t.Fatal("expected an error when the override references an unknown field")
+		}
+		if !strings.Contains(err.Error(), "GCSFuse PV/PVC template") {
+			t.Errorf("error = %v, want it to name the offending template", err)
+		}
+	})
+}
+
+func TestGCSFuseProfile_SubPathIsDelegatedToPod(t *testing.T) {
+	sm := &StorageManager{}
+	infos, manifests, err := sm.ProcessMounts(
+		[]string{"gs://model-checkpoints/run1/shard2;/checkpoints;rw;profile=checkpointing"},
+		orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if infos[0].SubPath != "run1/shard2" {
+		t.Errorf("subPath = %q, want run1/shard2", infos[0].SubPath)
+	}
+	if infos[0].ReadOnly {
+		t.Error("expected rw mount to not be read-only")
+	}
+	if infos[0].Source != "gcluster-gcsfuse-model-checkpoints-checkpointing-c75dd3" {
+		t.Errorf("gateway PVC name = %q", infos[0].Source)
+	}
+
+	pv := findDoc(t, splitManifestDocs(t, manifests[0]), "PersistentVolume")
+	if got := nestedString(t, pv, "spec", "csi", "volumeHandle"); got != "model-checkpoints" {
+		t.Errorf("PV volumeHandle = %q, want the bare bucket name", got)
+	}
+	if _, present := pv["spec"].(map[string]interface{})["mountOptions"]; present {
+		t.Error("PV must not receive only-dir/read-only mountOptions derived from the sub path")
+	}
+
+	opts := &ManifestOptions{}
+	sm.AddVolumeOptions(opts, infos)
+	if !strings.Contains(opts.VolumeMountsYAML, "subPath: run1/shard2") {
+		t.Errorf("volumeMounts YAML missing subPath:\n%s", opts.VolumeMountsYAML)
+	}
+}
+
+func TestGCSFuseProfile_OptionsAndAttributes(t *testing.T) {
+	sm := &StorageManager{}
+	_, manifests, err := sm.ProcessMounts(
+		[]string{"gs://weights;/models;profile=serving;options=implicit-dirs,file-cache:max-size-mb:2000;attributes=anywhereCacheZones=us-central1-a"},
+		orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	pv := findDoc(t, splitManifestDocs(t, manifests[0]), "PersistentVolume")
+	mountOptions, ok := nested(t, pv, "spec", "mountOptions").([]interface{})
+	if !ok || len(mountOptions) != 2 {
+		t.Fatalf("PV mountOptions = %v, want 2 entries", mountOptions)
+	}
+	if mountOptions[0] != "implicit-dirs" || mountOptions[1] != "file-cache:max-size-mb:2000" {
+		t.Errorf("PV mountOptions = %v", mountOptions)
+	}
+	if got := nestedString(t, pv, "spec", "csi", "volumeAttributes", "anywhereCacheZones"); got != "us-central1-a" {
+		t.Errorf("volumeAttributes.anywhereCacheZones = %q", got)
+	}
+
+	name := nestedString(t, pv, "metadata", "name")
+	if !strings.HasPrefix(name, "gcluster-gcsfuse-weights-serving-") {
+		t.Errorf("PV name = %q, want a hash-suffixed canonical prefix", name)
+	}
+	if name == "gcluster-gcsfuse-weights-serving-default" {
+		t.Error("custom options must not collide with the canonical gateway name")
+	}
+}
+
+func TestGCSFuseProfile_RapidCacheWildcardRendersValidYAML(t *testing.T) {
+	sm := &StorageManager{}
+	_, manifests, err := sm.ProcessMounts(
+		[]string{"gs://dataset/imagenet;/data;ro;profile=training;attributes=anywhereCacheZones=*"},
+		orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(manifests[0], `"anywhereCacheZones": "*"`) {
+		t.Errorf("expected a quoted wildcard in the rendered PV, got:\n%s", manifests[0])
+	}
+	pv := findDoc(t, splitManifestDocs(t, manifests[0]), "PersistentVolume")
+	if got := nestedString(t, pv, "spec", "csi", "volumeAttributes", "anywhereCacheZones"); got != "*" {
+		t.Errorf("volumeAttributes.anywhereCacheZones = %q, want \"*\"", got)
+	}
+}
+
+func TestGCSFuseProfile_OnlyDirStacksWithSubPath(t *testing.T) {
+	sm := &StorageManager{}
+
+	infos, manifests, err := sm.ProcessMounts(
+		[]string{"gs://dataset;/data;ro;profile=training;options=only-dir=imagenet"},
+		orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	pv := findDoc(t, splitManifestDocs(t, manifests[0]), "PersistentVolume")
+	mountOptions, ok := nested(t, pv, "spec", "mountOptions").([]interface{})
+	if !ok || len(mountOptions) != 1 || mountOptions[0] != "only-dir=imagenet" {
+		t.Fatalf("PV mountOptions = %v, want [only-dir=imagenet]", mountOptions)
+	}
+	if infos[0].SubPath != "" {
+		t.Errorf("SubPath = %q, want empty: a bare bucket must not add a second scoping level", infos[0].SubPath)
+	}
+
+	infos, _, err = sm.ProcessMounts(
+		[]string{"gs://dataset/imagenet;/data;ro;profile=training;options=only-dir=imagenet"},
+		orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if infos[0].SubPath != "imagenet" {
+		t.Fatalf("SubPath = %q, want %q", infos[0].SubPath, "imagenet")
+	}
+	mount := buildVolumeMountSpec(infos[0])
+	if mount["subPath"] != "imagenet" {
+		t.Errorf("volumeMount subPath = %v, want imagenet (stacked on top of only-dir)", mount["subPath"])
+	}
+}
+
+func gatewayNameFor(t *testing.T, sm *StorageManager, mount string) string {
+	t.Helper()
+	infos, _, err := sm.ProcessMounts([]string{mount}, orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("ProcessMounts(%q): %v", mount, err)
+	}
+	return infos[0].Source
+}
+
+func TestGCSFuseGatewayNaming_FollowsPVSpec(t *testing.T) {
+	sm := profileStorageManager(t.TempDir())
+	base := gatewayNameFor(t, sm, "gs://b;/data;profile=training")
+	if again := gatewayNameFor(t, sm, "gs://b;/data;profile=training"); again != base {
+		t.Errorf("name is not deterministic: %q vs %q", again, base)
+	}
+	if opts := gatewayNameFor(t, sm, "gs://b;/data;profile=training;options=implicit-dirs"); opts == base {
+		t.Error("custom options must change the gateway name")
+	}
+	a := gatewayNameFor(t, sm, "gs://b;/data;profile=training;attributes=x=1,y=2")
+	if b := gatewayNameFor(t, sm, "gs://b;/data;profile=training;attributes=y=2,x=1"); a != b {
+		t.Errorf("attribute ordering changed the name: %q vs %q", a, b)
+	}
+	if diff := gatewayNameFor(t, sm, "gs://b;/data;profile=training;attributes=x=2"); diff == a {
+		t.Error("divergent attributes must produce different gateway names")
+	}
+
+	// A template or default change (e.g. a release raising capacity) must yield a new gateway, not a spec clash.
+	const tmpl = "kind: PersistentVolume\nspec:\n  storageClassName: {{ printf \"%%q\" .StorageClassName }}\n  capacity:\n    storage: %s\n"
+	small, large := t.TempDir(), t.TempDir()
+	writeCustomGatewayTemplate(t, small, fmt.Sprintf(tmpl, "5Gi"))
+	writeCustomGatewayTemplate(t, large, fmt.Sprintf(tmpl, "10Gi"))
+	if gatewayNameFor(t, profileStorageManager(small), "gs://b;/data;profile=training") ==
+		gatewayNameFor(t, profileStorageManager(large), "gs://b;/data;profile=training") {
+		t.Error("a PV spec change must produce a different gateway name")
+	}
+
+	long := gcsFuseGatewayPVCName(strings.Repeat("a", 300), "training", "abc123")
+	if len(long) > maxGeneratedPVCNameLength {
+		t.Errorf("name length = %d, want <= %d", len(long), maxGeneratedPVCNameLength)
+	}
+	if strings.HasSuffix(long, "-") {
+		t.Errorf("truncated name %q must not end with '-'", long)
+	}
+}
+
+func TestGCSFuseGatewayNaming_TruncationIsCollisionFree(t *testing.T) {
+	longBucket := strings.Repeat("a", 230)
+
+	train := gcsFuseGatewayPVCName(longBucket, "training", "abc123")
+	ckpt := gcsFuseGatewayPVCName(longBucket, "checkpointing", "abc123")
+	if train == ckpt {
+		t.Errorf("different profiles on a long bucket collapsed onto %q", train)
+	}
+	if !strings.HasSuffix(train, "-training-abc123") || !strings.HasSuffix(ckpt, "-checkpointing-abc123") {
+		t.Errorf("profile suffix was truncated away: %q / %q", train, ckpt)
+	}
+
+	one := gcsFuseGatewayPVCName(strings.Repeat("a", 220)+"-one", "training", "abc123")
+	two := gcsFuseGatewayPVCName(strings.Repeat("a", 220)+"-two", "training", "abc123")
+	if one == two {
+		t.Errorf("different long buckets collapsed onto %q", one)
+	}
+
+	withOpts := gcsFuseGatewayPVCName(longBucket, "training", "def456")
+	if withOpts == train {
+		t.Error("a different spec hash must still change the name after truncation")
+	}
+
+	for _, name := range []string{train, ckpt, one, two, withOpts} {
+		if len(name) > maxGeneratedPVCNameLength {
+			t.Errorf("name %q is %d chars, want <= %d", name, len(name), maxGeneratedPVCNameLength)
+		}
+		if strings.HasPrefix(name, "-") || strings.HasSuffix(name, "-") || strings.Contains(name, "--") {
+			t.Errorf("name %q is not a valid DNS-1123 style object name", name)
+		}
+	}
+}
+
+func TestGCSFuseGatewayNaming_LossySanitizationIsCollisionFree(t *testing.T) {
+	dotted := gcsFuseGatewayPVCName("my.bucket", "training", "abc123")
+	hyphen := gcsFuseGatewayPVCName("my-bucket", "training", "abc123")
+	under := gcsFuseGatewayPVCName("my_bucket", "training", "abc123")
+
+	if dotted == hyphen {
+		t.Errorf("buckets my.bucket and my-bucket collapsed onto %q", dotted)
+	}
+	if under == hyphen {
+		t.Errorf("buckets my_bucket and my-bucket collapsed onto %q", under)
+	}
+	if dotted == under {
+		t.Errorf("buckets my.bucket and my_bucket collapsed onto %q", dotted)
+	}
+
+	if hyphen != "gcluster-gcsfuse-my-bucket-training-abc123" {
+		t.Errorf("a losslessly sanitized bucket must not gain a digest, got %q", hyphen)
+	}
+
+	if again := gcsFuseGatewayPVCName("my.bucket", "training", "abc123"); again != dotted {
+		t.Errorf("lossy name is not deterministic: %q vs %q", again, dotted)
+	}
+	if !strings.HasPrefix(dotted, "gcluster-gcsfuse-my-bucket-") {
+		t.Errorf("lossy name %q lost its readable prefix", dotted)
+	}
+
+	domain := gcsFuseGatewayPVCName("example.com.datasets", "training", "abc123")
+	flat := gcsFuseGatewayPVCName("example-com-datasets", "training", "abc123")
+	if domain == flat {
+		t.Errorf("domain-scoped bucket collapsed onto the flattened name %q", domain)
+	}
+
+	for _, name := range []string{dotted, hyphen, under, domain, flat} {
+		if len(name) > maxGeneratedPVCNameLength {
+			t.Errorf("name %q is %d chars, want <= %d", name, len(name), maxGeneratedPVCNameLength)
+		}
+		if strings.HasPrefix(name, "-") || strings.HasSuffix(name, "-") || strings.Contains(name, "--") {
+			t.Errorf("name %q is not a valid DNS-1123 style object name", name)
+		}
+	}
+}
+
+func TestGCSFuseProfile_SameBucketTwoProfilesPassesValidation(t *testing.T) {
+	sm := &StorageManager{}
+	if err := sm.ValidateMounts([]string{
+		"gs://shared;/train;ro;profile=training",
+		"gs://shared;/ckpt;rw;profile=checkpointing",
+	}); err != nil {
+		t.Errorf("same bucket under two profiles must be allowed, got: %v", err)
+	}
+
+	if err := sm.ValidateMounts([]string{
+		"gs://shared/train;/train;ro",
+		"gs://shared/eval;/eval;ro",
+	}); err != nil {
+		t.Errorf("distinct subpaths on the same inline bucket must be allowed, got: %v", err)
+	}
+
+	if err := sm.ValidateMounts([]string{
+		"gs://shared/train;/train;ro;profile=training",
+		"gs://shared/eval;/eval;ro;profile=training",
+	}); err != nil {
+		t.Errorf("distinct subpaths on the same profile bucket must be allowed, got: %v", err)
+	}
+
+	if err := sm.ValidateMounts([]string{
+		"gs://bkt;/a;profile=training;options=implicit-dirs",
+		"gs://bkt;/c;profile=training;options=file-cache:max-size-mb:2000",
+	}); err != nil {
+		t.Errorf("same bucket+profile with distinct options= must be allowed, got: %v", err)
+	}
+
+	if err := sm.ValidateMounts([]string{
+		"gs://bkt;/a;profile=training;options=implicit-dirs",
+		"gs://bkt;/c;profile=training;options=implicit-dirs",
+	}); err == nil {
+		t.Error("expected a duplicate-source error for identical bucket+profile+options")
+	}
+
+	if err := sm.ValidateMounts([]string{
+		"gs://shared;/a;ro;profile=training",
+		"gs://shared;/b;ro;profile=training",
+	}); err == nil {
+		t.Error("expected a duplicate-source error for identical source+profile")
+	}
+
+	if err := sm.ValidateMounts([]string{"gs://shared;/a", "gs://shared;/b"}); err == nil {
+		t.Error("expected a duplicate-source error for repeated profile-less sources")
+	}
+}
+
+func TestGCSFuseProfile_InvalidSourceFailsPreflight(t *testing.T) {
+	sm := &StorageManager{}
+	for _, mount := range []string{
+		"gs://MyBucket;/data;profile=training",
+		"gs://MyBucket;/data",
+		"gs://;/data;profile=training",
+		"gs://;/data",
+		"gs:///;/data;profile=training",
+		"gs:///;/data",
+	} {
+		if err := sm.ValidateMounts([]string{mount}); err == nil {
+			t.Errorf("ValidateMounts(%q) = nil, want an error before the image build", mount)
+		}
+	}
+}
+
+func TestGCSFuseProfile_BackwardCompatibility(t *testing.T) {
+	sm := &StorageManager{}
+	infos, manifests, err := sm.ProcessMounts(
+		[]string{"gs://logs/run1;/logs;rw;options=implicit-dirs"},
+		orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(manifests) != 0 {
+		t.Fatalf("profile-less gs:// mount must not generate manifests, got %d", len(manifests))
+	}
+	got := infos[0]
+	want := MountInfo{
+		Name:      "vol-0",
+		Source:    "gs://logs",
+		MountPath: "/logs",
+		Type:      "gcsfuse",
+		ReadOnly:  false,
+		Options:   "implicit-dirs",
+		SubPath:   "run1",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("MountInfo = %+v, want %+v", got, want)
+	}
+
+	opts := &ManifestOptions{}
+	sm.AddVolumeOptions(opts, infos)
+	if !opts.GCSFuseEnabled {
+		t.Error("expected GCSFuseEnabled for an inline gs:// mount")
+	}
+	if !strings.Contains(opts.VolumesYAML, "gcsfuse.csi.storage.gke.io") {
+		t.Errorf("expected inline CSI volume spec, got:\n%s", opts.VolumesYAML)
+	}
+	if !strings.Contains(opts.VolumesYAML, "bucketName: logs") {
+		t.Errorf("expected bare bucketName in inline CSI volumeAttributes, got:\n%s", opts.VolumesYAML)
+	}
+	if !strings.Contains(opts.VolumeMountsYAML, "subPath: run1") {
+		t.Errorf("expected subPath delegated to volumeMount, got:\n%s", opts.VolumeMountsYAML)
+	}
+	if strings.Contains(opts.VolumesYAML, "persistentVolumeClaim") {
+		t.Errorf("profile-less mount must not become a PVC:\n%s", opts.VolumesYAML)
+	}
+}
+
+func TestGCSFuseProfile_MixedMounts(t *testing.T) {
+	sm := &StorageManager{}
+	mounts := []string{
+		"gs://training-data/train;/data;ro;profile=training",
+		"gs://experiment-logs/run1;/logs;rw",
+		"/host/scratch;/scratch;rw",
+		"my-existing-pvc;/shared",
+	}
+
+	infos, manifests, err := sm.ProcessMounts(mounts, orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(infos) != 4 {
+		t.Fatalf("expected 4 mount infos, got %d", len(infos))
+	}
+	if len(manifests) != 1 {
+		t.Fatalf("expected exactly 1 generated manifest (the profile gateway), got %d", len(manifests))
+	}
+
+	wantTypes := []string{"pvc", "gcsfuse", "hostPath", "pvc"}
+	for i, want := range wantTypes {
+		if infos[i].Type != want {
+			t.Errorf("mount %d type = %q, want %q", i, infos[i].Type, want)
+		}
+	}
+	if infos[0].Source != "gcluster-gcsfuse-training-data-training-490464" {
+		t.Errorf("profile gateway PVC = %q", infos[0].Source)
+	}
+	if infos[3].Source != "my-existing-pvc" {
+		t.Errorf("user PVC must pass through untouched, got %q", infos[3].Source)
+	}
+	if infos[3].NeedsGCSFuseSidecar {
+		t.Error("a user-provided PVC must not request the GCSFuse sidecar")
+	}
+
+	opts := &ManifestOptions{}
+	sm.AddVolumeOptions(opts, infos)
+	if !opts.GCSFuseEnabled {
+		t.Error("expected GCSFuseEnabled when the job has GCSFuse volumes")
+	}
+	if n := strings.Count(opts.VolumesYAML, "name: vol-"); n != 4 {
+		t.Errorf("expected 4 distinct pod volumes, got %d:\n%s", n, opts.VolumesYAML)
+	}
+}
+
+func TestGCSFuseProfile_SidecarAnnotationForProfileOnlyJob(t *testing.T) {
+	sm := &StorageManager{}
+	infos, _, err := sm.ProcessMounts([]string{"gs://b;/data;profile=training"}, orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	opts := &ManifestOptions{}
+	sm.AddVolumeOptions(opts, infos)
+	if !opts.GCSFuseEnabled {
+		t.Error("GCSFuseEnabled must be true for profile-backed PVC mounts")
+	}
+}
+
+func TestGCSFuseProfile_SharedGatewayDeduplication(t *testing.T) {
+	sm := &StorageManager{}
+	mounts := []string{
+		"gs://shared/datasets;/data;ro;profile=training;attributes=a=1,b=2",
+		"gs://shared/eval;/eval;rw;profile=training;attributes=b=2,a=1",
+	}
+
+	infos, manifests, err := sm.ProcessMounts(mounts, orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(manifests) != 1 {
+		t.Fatalf("expected the shared gateway manifest to be emitted once, got %d", len(manifests))
+	}
+	if infos[0].Name != infos[1].Name {
+		t.Errorf("expected both mounts to share pod volume %q, got %q", infos[0].Name, infos[1].Name)
+	}
+	if infos[0].Source != infos[1].Source {
+		t.Errorf("expected both mounts to share PVC %q, got %q", infos[0].Source, infos[1].Source)
+	}
+	if !infos[0].ReadOnly || infos[1].ReadOnly {
+		t.Errorf("ReadOnly = %v / %v, want true / false on shared gateway", infos[0].ReadOnly, infos[1].ReadOnly)
+	}
+	if infos[0].SubPath != "datasets" || infos[1].SubPath != "eval" {
+		t.Errorf("subPaths = %q / %q, want datasets / eval", infos[0].SubPath, infos[1].SubPath)
+	}
+
+	opts := &ManifestOptions{}
+	sm.AddVolumeOptions(opts, infos)
+	if n := strings.Count(opts.VolumesYAML, "name: vol-"); n != 1 {
+		t.Errorf("expected 1 pod volume for the shared gateway, got %d:\n%s", n, opts.VolumesYAML)
+	}
+	if n := strings.Count(opts.VolumeMountsYAML, "mountPath:"); n != 2 {
+		t.Errorf("expected 2 volumeMounts, got %d:\n%s", n, opts.VolumeMountsYAML)
+	}
+	if n := strings.Count(opts.VolumeMountsYAML, "readOnly: true"); n != 1 {
+		t.Errorf("expected readOnly: true only on the ro volumeMount, got %d:\n%s", n, opts.VolumeMountsYAML)
+	}
+}
+
+func TestGCSFuseProfile_DivergentOptionsCreateSeparateGateways(t *testing.T) {
+	sm := &StorageManager{}
+	infos, manifests, err := sm.ProcessMounts([]string{
+		"gs://shared/datasets;/data;ro;profile=training;options=implicit-dirs",
+		"gs://shared/eval;/eval;ro;profile=training;options=only-dir=eval",
+	}, orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(manifests) != 2 || infos[0].Name == infos[1].Name || infos[0].Source == infos[1].Source {
+		t.Errorf("divergent options= must not deduplicate: got %d manifests, volumes %q / %q", len(manifests), infos[0].Name, infos[1].Name)
+	}
+}
+
+func TestGCSFuseProfile_ResolveNamespaceErrors(t *testing.T) {
+	errSM := &StorageManager{
+		orchestrator: &GKEOrchestrator{kubeClient: &MockKubeClient{Err: fmt.Errorf("kubeconfig broken")}},
+	}
+	if _, _, err := errSM.ProcessMounts([]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{}); err == nil || !strings.Contains(err.Error(), "failed to resolve namespace for storage gateway") {
+		t.Errorf("expected failed to resolve namespace error, got: %v", err)
+	}
+
+	emptySM := &StorageManager{
+		orchestrator: &GKEOrchestrator{kubeClient: &MockKubeClient{ExplicitEmpty: true}},
+	}
+	if _, _, err := emptySM.ProcessMounts([]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{}); err == nil || !strings.Contains(err.Error(), "Specify one explicitly with --gke-namespace") {
+		t.Errorf("expected empty-namespace --gke-namespace error, got: %v", err)
+	}
+}
+
+func TestGCSFuseProfile_DifferentProfilesSameBucket(t *testing.T) {
+	sm := &StorageManager{}
+	mounts := []string{
+		"gs://shared/a;/train;ro;profile=training",
+		"gs://shared/b;/ckpt;rw;profile=checkpointing",
+	}
+	infos, manifests, err := sm.ProcessMounts(mounts, orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(manifests) != 2 {
+		t.Fatalf("expected 2 gateway manifests, got %d", len(manifests))
+	}
+	if infos[0].Source == infos[1].Source {
+		t.Errorf("different profiles must not share a gateway (%q)", infos[0].Source)
+	}
+}
+
+func TestGCSFuseProfile_InvalidBucket(t *testing.T) {
+	sm := &StorageManager{}
+	cases := []struct {
+		name   string
+		mount  string
+		errSub string
+	}{
+		{"empty bucket", "gs://;/data;profile=training", "bucket name is missing"},
+		{"uppercase bucket", "gs://MyBucket;/data;profile=training", "invalid GCS bucket name"},
+		{"bucket with slash only", "gs:///;/data;profile=training", "bucket name is missing"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := sm.ProcessMounts([]string{tc.mount}, orchestrator.JobDefinition{})
+			if err == nil || !strings.Contains(err.Error(), tc.errSub) {
+				t.Errorf("error = %v, want substring %q", err, tc.errSub)
+			}
+		})
+	}
+}
+
+func TestSplitGCSSource(t *testing.T) {
+	cases := []struct {
+		src         string
+		wantBucket  string
+		wantSubPath string
+		wantErr     bool
+	}{
+		{src: "gs://bucket", wantBucket: "bucket"},
+		{src: "gs://bucket/", wantBucket: "bucket"},
+		{src: "gs://bucket/a", wantBucket: "bucket", wantSubPath: "a"},
+		{src: "gs://bucket/a/b/", wantBucket: "bucket", wantSubPath: "a/b"},
+		{src: "gs://my-bucket_1.x/a", wantBucket: "my-bucket_1.x", wantSubPath: "a"},
+		{src: "gs://", wantErr: true},
+		{src: "gs://-bad", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.src, func(t *testing.T) {
+			bucket, subPath, err := splitGCSSource(tc.src)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
+			}
+			if tc.wantErr {
+				return
+			}
+			if bucket != tc.wantBucket || subPath != tc.wantSubPath {
+				t.Errorf("= (%q, %q), want (%q, %q)", bucket, subPath, tc.wantBucket, tc.wantSubPath)
+			}
+		})
+	}
+}
+
+func TestNormalizeProfileName(t *testing.T) {
+	for alias, want := range map[string]string{
+		"training":            "gcsfusecsi-training",
+		"checkpointing":       "gcsfusecsi-checkpointing",
+		"serving":             "gcsfusecsi-serving",
+		"gcsfusecsi-training": "gcsfusecsi-training",
+		" Serving ":           "gcsfusecsi-serving",
+	} {
+		got, err := normalizeProfileName(alias)
+		if err != nil {
+			t.Errorf("normalizeProfileName(%q) unexpected error: %v", alias, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("normalizeProfileName(%q) = %q, want %q", alias, got, want)
+		}
+	}
+
+	if _, err := normalizeProfileName("gcsfusecsi-unknown"); err == nil {
+		t.Error("expected an error for an unknown profile")
+	}
+}
+
+func assertFilestoreSharedVolumes(t *testing.T, opts *ManifestOptions, wantClaim string) {
+	t.Helper()
+	if got := strings.Count(opts.VolumesYAML, "- name:"); got != 1 {
+		t.Errorf("expected 1 Pod volume, got %d:\n%s", got, opts.VolumesYAML)
+	}
+	if got := strings.Count(opts.VolumeMountsYAML, "mountPath:"); got != 3 {
+		t.Errorf("expected 3 Pod volumeMounts, got %d:\n%s", got, opts.VolumeMountsYAML)
+	}
+	if got := strings.Count(opts.VolumesYAML, "claimName: "+wantClaim); got != 1 {
+		t.Errorf("expected the claim to be referenced by exactly 1 Pod volume, got %d:\n%s", got, opts.VolumesYAML)
+	}
+	if strings.Contains(opts.VolumesYAML, "readOnly") {
+		t.Errorf("a PVC-backed Pod volume must not carry readOnly; it would apply to every mount of it:\n%s", opts.VolumesYAML)
+	}
+	const wantSharedMounts = `                - mountPath: /data
+                  name: vol-0
+                  readOnly: true
+                - mountPath: /data2
+                  name: vol-0
+                - mountPath: /data3
+                  name: vol-0
+                  readOnly: true`
+	if opts.VolumeMountsYAML != wantSharedMounts {
+		t.Errorf("shared-volume volumeMounts changed.\n--- got ---\n%s\n--- want ---\n%s", opts.VolumeMountsYAML, wantSharedMounts)
+	}
+}
+
+func TestProcessMounts_Filestore_SameInstanceTwoSpellings(t *testing.T) {
+	sm := &StorageManager{
+		getFilestoreIP: func(ctx context.Context, projectID, location, nameOrIP string, isIP bool) (string, string, int64, error) {
+			if nameOrIP == "10.0.0.2" || nameOrIP == "myinstance" {
+				return "10.0.0.2", "myinstance", 2048, nil
+			}
+			return "", "", 0, fmt.Errorf("unexpected query %q", nameOrIP)
+		},
+	}
+	job := orchestrator.JobDefinition{}
+
+	mounts := []string{
+		"filestore://10.0.0.2/share;/data",
+		"filestore://myinstance/share;/data2;rw",
+		"filestore://myinstance/share//;/data3",
+	}
+
+	if err := sm.ValidateMounts(mounts); err != nil {
+		t.Fatalf("unexpected validation error: %v", err)
+	}
+
+	infos, manifests, err := sm.ProcessMounts(mounts, job)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	const wantClaim = "gcluster-filestore-myinstance-share"
+	wantInfos := []MountInfo{
+		{Name: "vol-0", Type: "pvc", Source: wantClaim, MountPath: "/data", ReadOnly: true},
+		{Name: "vol-0", Type: "pvc", Source: wantClaim, MountPath: "/data2", ReadOnly: false},
+		{Name: "vol-0", Type: "pvc", Source: wantClaim, MountPath: "/data3", ReadOnly: true},
+	}
+	if !reflect.DeepEqual(infos, wantInfos) {
+		t.Fatalf("infos = %+v, want %+v", infos, wantInfos)
+	}
+
+	if len(manifests) != 1 {
+		t.Fatalf("expected the PVC/PV manifest to be emitted exactly once, got %d manifests:\n%s", len(manifests), strings.Join(manifests, "\n---\n"))
+	}
+	verifyFilestoreManifest(t, manifests[0], wantClaim, "10.0.0.2", "/share", "2048Gi")
+
+	opts := &ManifestOptions{}
+	sm.AddVolumeOptions(opts, infos)
+	assertFilestoreSharedVolumes(t, opts, wantClaim)
+}
+
+func TestInlineAttributes_AcceptedWithoutProfile(t *testing.T) {
+	sm := &StorageManager{}
+
+	pm, err := sm.parseSingleVolume("gs://my-bucket;/data;attributes=fileCacheCapacity=100Gi,gcsfuseLoggingSeverity=debug")
+	if err != nil {
+		t.Fatalf("attributes= without profile= must be accepted, got error: %v", err)
+	}
+	if pm.Profile != "" {
+		t.Errorf("Profile = %q, want empty", pm.Profile)
+	}
+	want := map[string]string{"fileCacheCapacity": "100Gi", "gcsfuseLoggingSeverity": "debug"}
+	if !reflect.DeepEqual(pm.Attributes, want) {
+		t.Errorf("Attributes = %#v, want %#v", pm.Attributes, want)
+	}
+}
+
+func TestInlineAttributes_RenderedIntoInlineCSIVolume(t *testing.T) {
+	sm := &StorageManager{}
+
+	infos, manifests, err := sm.ProcessMounts(
+		[]string{"gs://my-bucket;/data;attributes=fileCacheCapacity=100Gi"},
+		orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(manifests) != 0 {
+		t.Fatalf("expected no additional manifests for an inline mount, got %d:\n%s", len(manifests), strings.Join(manifests, "\n"))
+	}
+	if got := infos[0].Attributes["fileCacheCapacity"]; got != "100Gi" {
+		t.Fatalf("MountInfo.Attributes[fileCacheCapacity] = %q, want 100Gi", got)
+	}
+
+	opts := &ManifestOptions{}
+	sm.AddVolumeOptions(opts, infos)
+	if !strings.Contains(opts.VolumesYAML, "fileCacheCapacity: 100Gi") {
+		t.Errorf("expected fileCacheCapacity in the inline volume, got:\n%s", opts.VolumesYAML)
+	}
+	if !strings.Contains(opts.VolumesYAML, "bucketName: my-bucket") {
+		t.Errorf("expected bucketName to survive alongside user attributes, got:\n%s", opts.VolumesYAML)
+	}
+}
+
+func TestInlineAttributes_ProfileOnlyKeyIsWarnedNotRejected(t *testing.T) {
+	sm := &StorageManager{}
+
+	infos, manifests, err := sm.ProcessMounts(
+		[]string{"gs://my-bucket;/data;attributes=anywhereCacheZones=us-central1-a,us-central1-b"},
+		orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("a storage-profile-only attribute must not be rejected, got: %v", err)
+	}
+	if len(manifests) != 0 {
+		t.Fatalf("expected no additional manifests, got %d", len(manifests))
+	}
+	if got := infos[0].Attributes["anywhereCacheZones"]; got != "us-central1-a,us-central1-b" {
+		t.Errorf("multi-zone value was mangled: %q", got)
+	}
+}
+
+// Every reserved key must be refused on both the inline and the storage-profile
+// path, since each renders volumeAttributes through a different code path.
+func TestVolumeAttributes_ReservedKeysRejected(t *testing.T) {
+	sm := &StorageManager{}
+
+	for key, hint := range reservedVolumeAttributes {
+		for _, mount := range []string{
+			fmt.Sprintf("gs://my-bucket;/data;attributes=%s=some-value", key),
+			fmt.Sprintf("gs://my-bucket;/data;profile=training;attributes=%s=some-value", key),
+		} {
+			_, err := sm.parseSingleVolume(mount)
+			if err == nil {
+				t.Errorf("%s: expected reserved attribute %q to be rejected", mount, key)
+				continue
+			}
+			if !strings.Contains(err.Error(), hint) {
+				t.Errorf("%s: error should carry the %q hint, got: %v", mount, key, err)
+			}
+		}
+	}
+}
+
+func TestBuildVolumeSpec_AttributesOnlyApplyToInlineGCSFuse(t *testing.T) {
+	attrs := map[string]string{"fileCacheCapacity": "100Gi"}
+
+	spec := buildVolumeSpec(MountInfo{
+		Name: "vol-0", Source: "gs://my-bucket", Type: "gcsfuse",
+		ReadOnly: true, Options: "implicit-dirs", Attributes: attrs,
+	})
+	csi, ok := spec["csi"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected a csi volume, got %#v", spec)
+	}
+	got, ok := csi["volumeAttributes"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected volumeAttributes, got %#v", csi)
+	}
+	want := map[string]interface{}{
+		"bucketName":        "my-bucket",
+		"mountOptions":      "implicit-dirs",
+		"fileCacheCapacity": "100Gi",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("volumeAttributes = %#v, want %#v", got, want)
+	}
+
+	pvcSpec := buildVolumeSpec(MountInfo{
+		Name: "vol-1", Source: "gcluster-gcsfuse-my-bucket-training", Type: "pvc", Attributes: attrs,
+	})
+	if _, leaked := pvcSpec["csi"]; leaked {
+		t.Errorf("attributes leaked onto a PVC volume: %#v", pvcSpec)
+	}
+	if _, ok := pvcSpec["persistentVolumeClaim"]; !ok {
+		t.Errorf("expected persistentVolumeClaim, got %#v", pvcSpec)
+	}
+}
+
+func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
+	pvcName := gatewayNameFor(t, profileStorageManager(t.TempDir()), "gs://bkt;/data;profile=training")
+	pvName := pvcName + "-default"
+
+	matchingPVJSON := `{
+		"spec": {
+			"storageClassName": "gcsfusecsi-training",
+			"capacity": {"storage": "5Gi"},
+			"csi": {"volumeHandle": "bkt"}
+		},
+		"status": {"phase": "Bound"}
+	}`
+	mismatchedPVJSON := `{
+		"spec": {
+			"storageClassName": "gcsfusecsi-training",
+			"capacity": {"storage": "10Gi"},
+			"csi": {"volumeHandle": "bkt"}
+		},
+		"status": {"phase": "Bound"}
+	}`
+	releasedPVJSON := `{
+		"spec": {
+			"storageClassName": "gcsfusecsi-training",
+			"capacity": {"storage": "5Gi"},
+			"csi": {"volumeHandle": "bkt"}
+		},
+		"status": {"phase": "Released"}
+	}`
+	managedReleasedPVJSON := `{
+		"metadata": {"labels": {"gcluster.google.com/managed-by": "cluster-toolkit"}},
+		"spec": {
+			"storageClassName": "gcsfusecsi-training",
+			"capacity": {"storage": "10Gi"},
+			"csi": {"volumeHandle": "bkt"}
+		},
+		"status": {"phase": "Released"}
+	}`
+
+	terminatingPVJSON := `{
+		"metadata": {"deletionTimestamp": "2026-09-24T18:00:00Z", "labels": {"gcluster.google.com/managed-by": "cluster-toolkit"}},
+		"spec": {
+			"storageClassName": "gcsfusecsi-training",
+			"capacity": {"storage": "10Gi"},
+			"csi": {"volumeHandle": "bkt"}
+		},
+		"status": {"phase": "Bound"}
+	}`
+
+	// The mock fails any command it has no response for, so a missing del response makes a delete attempt an error.
+	newSM := func(res shell.CommandResult, del []shell.CommandResult) *StorageManager {
+		exec := NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get pv " + pvName: {res},
+			"kubectl delete pv " + pvName + " --ignore-not-found --wait=true --timeout=60s": del,
+		})
+		return &StorageManager{orchestrator: &GKEOrchestrator{executor: exec, namespace: "default"}}
+	}
+
+	forbidden := shell.CommandResult{ExitCode: 1, Stderr: `persistentvolumes "x" is forbidden: User cannot get resource "persistentvolumes"`}
+	tests := []struct {
+		name    string
+		res     shell.CommandResult
+		del     []shell.CommandResult
+		dryRun  bool
+		wantErr []string // substrings; nil means success
+	}{
+		{name: "absent PV", res: shell.CommandResult{Stdout: ""}},
+		{name: "matching Bound PV", res: shell.CommandResult{Stdout: matchingPVJSON}},
+		{name: "mismatched PV", res: shell.CommandResult{Stdout: mismatchedPVJSON}, wantErr: []string{"already exists with different settings", `namespace "default"`, "kubectl describe pvc " + pvcName + " -n default", "kubectl delete pvc " + pvcName + " -n default && kubectl delete pv " + pvName, "Bucket data is not affected"}},
+		{name: "Terminating PV explains pending deletion", res: shell.CommandResult{Stdout: terminatingPVJSON}, wantErr: []string{"is being deleted", "PVC default/" + pvcName, "kubectl delete pvc " + pvcName + " -n default"}},
+		{name: "unmanaged Released PV is left to the user", res: shell.CommandResult{Stdout: releasedPVJSON}, wantErr: []string{"already exists in Released state", "will not delete it", "kubectl delete pv " + pvName}},
+		{name: "managed Released PV is deleted and recreated", res: shell.CommandResult{Stdout: managedReleasedPVJSON}, del: []shell.CommandResult{{}}},
+		{name: "managed Released PV delete failure", res: shell.CommandResult{Stdout: managedReleasedPVJSON}, del: []shell.CommandResult{{ExitCode: 1, Stderr: "forbidden"}}, wantErr: []string{"failed to delete stale gateway PV", "forbidden"}},
+		{name: "dry-run skips cluster check", res: shell.CommandResult{Stdout: mismatchedPVJSON}, dryRun: true},
+		{name: "kubectl failure fails fast", res: forbidden, wantErr: []string{"failed to inspect existing gateway PV", "is forbidden"}},
+		{name: "unparsable PV fails fast", res: shell.CommandResult{Stdout: "{not json"}, wantErr: []string{"failed to parse existing gateway PV"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			job := orchestrator.JobDefinition{}
+			if tc.dryRun {
+				job.DryRunManifest = "out.yaml"
+			}
+			_, _, err := newSM(tc.res, tc.del).ProcessMounts([]string{"gs://bkt;/data;profile=training"}, job)
+			if tc.wantErr == nil {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tc.wantErr)
+			}
+			for _, want := range tc.wantErr {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q missing %q", err, want)
+				}
+			}
+		})
+	}
+}
+
+func TestUnmanagedGatewayWarning(t *testing.T) {
+	const pvName = "gcluster-gcsfuse-bkt-training-default"
+	tests := []struct {
+		name     string
+		manifest string
+		wantWarn bool
+	}{
+		{"labelled PV", `{"metadata":{"labels":{"gcluster.google.com/managed-by":"cluster-toolkit"}}}`, false},
+		{"no labels", `{"metadata":{"name":"x"}}`, true},
+		{"wrong value", `{"metadata":{"labels":{"gcluster.google.com/managed-by":"someone-else"}}}`, true},
+		{"unparsable manifest", "{{not yaml", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			msg := unmanagedGatewayWarning(pvName, tc.manifest)
+			if gotWarn := msg != ""; gotWarn != tc.wantWarn {
+				t.Fatalf("warning = %q, wantWarn %v", msg, tc.wantWarn)
+			}
+			if tc.wantWarn && (!strings.Contains(msg, pvName) || !strings.Contains(msg, managedByLabel+"="+managedByValue)) {
+				t.Errorf("warning %q must name the PV and the missing label", msg)
+			}
+		})
+	}
+}
+
+func TestGatewayTemplates_ReceiveLabelParams(t *testing.T) {
+	t.Run("gcsfuse override can use label params", func(t *testing.T) {
+		dir := t.TempDir()
+		writeCustomGatewayTemplate(t, dir, `apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ printf "%q" .PVName }}
+  labels:
+    {{ printf "%q" .ManagedByLabel }}: {{ printf "%q" .ManagedByValue }}
+    {{ printf "%q" .StorageTypeLabel }}: {{ printf "%q" .StorageType }}
+`)
+		_, manifests, err := profileStorageManager(dir).ProcessMounts([]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		pv := findDoc(t, splitManifestDocs(t, manifests[0]), "PersistentVolume")
+		if got := nestedString(t, pv, "metadata", "labels", managedByLabel); got != managedByValue {
+			t.Errorf("%s = %q, want %q", managedByLabel, got, managedByValue)
+		}
+		if got := nestedString(t, pv, "metadata", "labels", storageTypeLabel); got != storageTypeGCSFuse {
+			t.Errorf("%s = %q, want %q", storageTypeLabel, got, storageTypeGCSFuse)
+		}
+	})
+
+	t.Run("embedded templates render labels on PV and PVC", func(t *testing.T) {
+		_, manifests, err := profileStorageManager(t.TempDir()).ProcessMounts([]string{"gs://bkt;/data;profile=training"}, orchestrator.JobDefinition{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		docs := splitManifestDocs(t, manifests[0])
+		for _, kind := range []string{"PersistentVolume", "PersistentVolumeClaim"} {
+			if got := nestedString(t, findDoc(t, docs, kind), "metadata", "labels", managedByLabel); got != managedByValue {
+				t.Errorf("embedded %s %s = %q, want %q", kind, managedByLabel, got, managedByValue)
+			}
+		}
+	})
+}
+
+// TestGCSFuseGatewayPVCName_PinnedNames pins exact gateway names for the embedded template: a change here renames
+// every existing gateway on upgrade, so it must be deliberate.
+func TestGCSFuseGatewayPVCName_PinnedNames(t *testing.T) {
+	tests := []struct {
+		name  string
+		mount string
+		want  string
+	}{
+		{"canonical", "gs://imagenet-dataset;/data;profile=training", "gcluster-gcsfuse-imagenet-dataset-training-c8a67a"},
+		{"options", "gs://imagenet-dataset;/data;profile=training;options=implicit-dirs,file-cache:max-size-mb:-1", "gcluster-gcsfuse-imagenet-dataset-training-bf793e"},
+		{"attributes", "gs://imagenet-dataset;/data;profile=training;attributes=fileCacheCapacity=50Gi", "gcluster-gcsfuse-imagenet-dataset-training-38b020"},
+		{"dotted bucket", "gs://my.dotted.bucket;/data;profile=serving", "gcluster-gcsfuse-my-dotted-bucket-0561d95913-serving-d7aead"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := gatewayNameFor(t, profileStorageManager(t.TempDir()), tc.mount); got != tc.want {
+				t.Errorf("gateway name for %q = %q, want %q", tc.mount, got, tc.want)
+			}
+		})
 	}
 }
