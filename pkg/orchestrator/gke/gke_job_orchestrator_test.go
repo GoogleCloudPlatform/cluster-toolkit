@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -129,6 +130,35 @@ type MockKubeClient struct {
 	WorkloadCallCount  int
 	Err                error
 	ExplicitEmpty      bool
+
+	DeleteJobSetErr error
+
+	// Fixtures keyed by gvr.Resource.
+	Objects    map[string][]unstructured.Unstructured
+	ListErrs   map[string]error
+	GetErr     error
+	DeleteErrs map[string]error
+	Deleted    map[string][]string
+}
+
+func managedStorageObject(kind, name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]interface{}{
+		"kind": kind,
+		"metadata": map[string]interface{}{
+			"name": name,
+			"labels": map[string]interface{}{
+				managedByLabel:                     managedByValue,
+				"gcluster.google.com/storage-type": "gcsfuse",
+			},
+		},
+	}}
+}
+
+func unmanagedStorageObject(kind, name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]interface{}{
+		"kind":     kind,
+		"metadata": map[string]interface{}{"name": name},
+	}}
 }
 
 func (m *MockKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
@@ -144,11 +174,43 @@ func (m *MockKubeClient) ListWorkloads(namespace string, workloadName string) ([
 }
 
 func (m *MockKubeClient) DeleteJobSet(namespace string, name string) error {
+	if m.DeleteJobSetErr != nil {
+		return m.DeleteJobSetErr
+	}
 	return m.Err
 }
 
 func (m *MockKubeClient) ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error) {
 	return []orchestrator.JobStatus{}, m.Err
+}
+
+func (m *MockKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error) {
+	return m.Objects[gvr.Resource], m.ListErrs[gvr.Resource]
+}
+
+func (m *MockKubeClient) GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
+	if m.GetErr != nil {
+		return nil, m.GetErr
+	}
+	if !slices.Contains(m.Deleted[gvr.Resource], name) {
+		for i := range m.Objects[gvr.Resource] {
+			if obj := &m.Objects[gvr.Resource][i]; obj.GetName() == name {
+				return obj.DeepCopy(), nil
+			}
+		}
+	}
+	return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+}
+
+func (m *MockKubeClient) DeleteResource(gvr schema.GroupVersionResource, namespace, name string) error {
+	if err := m.DeleteErrs[gvr.Resource]; err != nil {
+		return err
+	}
+	if m.Deleted == nil {
+		m.Deleted = map[string][]string{}
+	}
+	m.Deleted[gvr.Resource] = append(m.Deleted[gvr.Resource], name)
+	return nil
 }
 
 func (m *MockKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {

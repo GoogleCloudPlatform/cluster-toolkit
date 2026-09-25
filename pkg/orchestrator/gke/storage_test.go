@@ -18,9 +18,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -28,6 +32,10 @@ import (
 	"hpc-toolkit/pkg/shell"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
+	crm "google.golang.org/api/cloudresourcemanager/v1"
+	iamapi "google.golang.org/api/iam/v1"
+	"google.golang.org/api/option"
+	gcs "google.golang.org/api/storage/v1"
 	k8syaml "sigs.k8s.io/yaml"
 )
 
@@ -2685,4 +2693,1045 @@ func TestGCSFuseGatewayPVCName_PinnedNames(t *testing.T) {
 			}
 		})
 	}
+}
+
+type fakePreflightClient struct {
+	number             int64
+	numberErr          error
+	projectBindings    []iamBinding
+	projectBindingsErr error
+	bindings           map[string][]iamBinding
+	bindingsErr        map[string]error
+	locations          map[string]bucketLocation
+	locationErr        map[string]error
+	roles              map[string][]string
+	roleErr            map[string]error
+	roleRequests       []string
+	bindingRequests    []string
+	locationRequests   []string
+	projectIAMRequests []string
+}
+
+func (f *fakePreflightClient) projectNumber(_ context.Context, _ string) (int64, error) {
+	if f.numberErr != nil {
+		return 0, f.numberErr
+	}
+	return f.number, nil
+}
+
+func (f *fakePreflightClient) projectIAMBindings(_ context.Context, projectID string) ([]iamBinding, error) {
+	f.projectIAMRequests = append(f.projectIAMRequests, projectID)
+	if f.projectBindingsErr != nil {
+		return nil, f.projectBindingsErr
+	}
+	return f.projectBindings, nil
+}
+
+func (f *fakePreflightClient) bucketIAMBindings(_ context.Context, bucket string) ([]iamBinding, error) {
+	f.bindingRequests = append(f.bindingRequests, bucket)
+	if err, ok := f.bindingsErr[bucket]; ok {
+		return nil, err
+	}
+	return f.bindings[bucket], nil
+}
+
+func (f *fakePreflightClient) bucketLocation(_ context.Context, bucket string) (bucketLocation, error) {
+	f.locationRequests = append(f.locationRequests, bucket)
+	if err, ok := f.locationErr[bucket]; ok {
+		return bucketLocation{}, err
+	}
+	return f.locations[bucket], nil
+}
+
+func (f *fakePreflightClient) rolePermissions(_ context.Context, role string) ([]string, error) {
+	f.roleRequests = append(f.roleRequests, role)
+	if err, ok := f.roleErr[role]; ok {
+		return nil, err
+	}
+	return f.roles[role], nil
+}
+
+func newPreflightStorageManager(executor Executor, client storagePreflightClient) *StorageManager {
+	return &StorageManager{orchestrator: newTestGKEOrchestrator(executor), preflightClient: client}
+}
+
+func scResponses(results ...shell.CommandResult) map[string][]shell.CommandResult {
+	return map[string][]shell.CommandResult{"kubectl get storageclass": results}
+}
+
+func TestCollectProfileMounts(t *testing.T) {
+	tests := []struct {
+		name   string
+		mounts []string
+		want   []profileMount
+	}{
+		{
+			name:   "no profile mounts",
+			mounts: []string{"gs://bkt;/data", "/host;/local"},
+		},
+		{
+			name:   "training profile",
+			mounts: []string{"gs://bkt/sub;/data;ro;profile=training"},
+			want: []profileMount{
+				{Bucket: "bkt", Profile: "gcsfusecsi-training"},
+			},
+		},
+		{
+			name:   "serving profile implies anywhere cache",
+			mounts: []string{"gs://bkt;/data;ro;profile=serving"},
+			want: []profileMount{
+				{Bucket: "bkt", Profile: "gcsfusecsi-serving", UsesAnywhereCache: true},
+			},
+		},
+		{
+			name:   "anywhere cache attribute on training profile",
+			mounts: []string{"gs://bkt;/data;ro;profile=training;attributes=anywhereCacheZones=us-central1-a,us-central1-b"},
+			want: []profileMount{
+				{
+					Bucket:             "bkt",
+					Profile:            "gcsfusecsi-training",
+					AnywhereCacheZones: []string{"us-central1-a", "us-central1-b"},
+					UsesAnywhereCache:  true,
+				},
+			},
+		},
+		{
+			name: "duplicate bucket and profile collapsed",
+			mounts: []string{
+				"gs://bkt/a;/data1;ro;profile=training",
+				"gs://bkt/b;/data2;ro;profile=training",
+			},
+			want: []profileMount{
+				{Bucket: "bkt", Profile: "gcsfusecsi-training"},
+			},
+		},
+		{
+			name: "same bucket different profiles kept",
+			mounts: []string{
+				"gs://bkt;/data1;ro;profile=training",
+				"gs://bkt;/data2;ro;profile=checkpointing",
+			},
+			want: []profileMount{
+				{Bucket: "bkt", Profile: "gcsfusecsi-training"},
+				{Bucket: "bkt", Profile: "gcsfusecsi-checkpointing"},
+			},
+		},
+		{
+			name:   "all-zones sentinel names no zone",
+			mounts: []string{"gs://bkt;/data;ro;profile=training;attributes=anywhereCacheZones=*"},
+			want: []profileMount{
+				{Bucket: "bkt", Profile: "gcsfusecsi-training", UsesAnywhereCache: true},
+			},
+		},
+		{
+			name:   "none sentinel disables the cache on serving",
+			mounts: []string{"gs://bkt;/data;ro;profile=serving;attributes=anywhereCacheZones=none"},
+			want: []profileMount{
+				{Bucket: "bkt", Profile: "gcsfusecsi-serving"},
+			},
+		},
+		{
+			name: "plain mount does not mask a cache-enabled mount on the same bucket and profile",
+			mounts: []string{
+				"gs://bkt;/data1;ro;profile=training",
+				"gs://bkt;/data2;ro;profile=training;attributes=anywhereCacheTTL=1h",
+			},
+			want: []profileMount{
+				{Bucket: "bkt", Profile: "gcsfusecsi-training"},
+				{Bucket: "bkt", Profile: "gcsfusecsi-training", UsesAnywhereCache: true},
+			},
+		},
+	}
+
+	sm := &StorageManager{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := sm.collectProfileMounts(tt.mounts)
+			if err != nil {
+				t.Fatalf("collectProfileMounts() unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("collectProfileMounts() = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCollectProfileMountsInvalidMount(t *testing.T) {
+	sm := &StorageManager{}
+	if _, err := sm.collectProfileMounts([]string{"gs://bkt;/data;profile=bogus"}); err == nil {
+		t.Fatal("collectProfileMounts() expected an error for an unsupported profile")
+	}
+}
+
+func TestValidateStorageClassExists(t *testing.T) {
+	tests := []struct {
+		name    string
+		result  shell.CommandResult
+		dryRun  bool
+		wantErr bool
+	}{
+		{
+			name:   "storage class present",
+			result: shell.CommandResult{ExitCode: 0, Stdout: "storageclass.storage.k8s.io/gcsfusecsi-training\n"},
+		},
+		{
+			name:    "storage class absent",
+			result:  shell.CommandResult{ExitCode: 0, Stdout: "\n"},
+			wantErr: true,
+		},
+		{
+			name:   "storage class absent on a dry run does not block",
+			result: shell.CommandResult{ExitCode: 0, Stdout: "\n"},
+			dryRun: true,
+		},
+		{
+			name:   "lookup failed fails open",
+			result: shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden)"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sm := newPreflightStorageManager(NewMockExecutor(scResponses(tt.result)), &fakePreflightClient{})
+			err := sm.validateStorageClassExists("gcsfusecsi-training", tt.dryRun)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("validateStorageClassExists() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && !strings.Contains(err.Error(), minGCSFuseProfileGKEVersion) {
+				t.Errorf("validateStorageClassExists() error %q should mention the minimum GKE version", err)
+			}
+		})
+	}
+}
+
+func TestRunStorageProfilePreflightDryRunDoesNotBlock(t *testing.T) {
+	executor := NewMockExecutor(scResponses(shell.CommandResult{ExitCode: 0, Stdout: ""}))
+	sm := newPreflightStorageManager(executor, &fakePreflightClient{number: 1234})
+
+	job := orchestrator.JobDefinition{
+		ProjectID:       "proj",
+		ClusterLocation: "us-central1",
+		DryRunManifest:  "manifest.yaml",
+		RawMounts:       []string{"gs://bkt;/data;ro;profile=training"},
+	}
+
+	if err := sm.RunStorageProfilePreflight(job); err != nil {
+		t.Fatalf("RunStorageProfilePreflight() must not block a dry run, got: %v", err)
+	}
+}
+
+func TestRunStorageProfilePreflightBlocksOnMissingStorageClass(t *testing.T) {
+	executor := NewMockExecutor(scResponses(shell.CommandResult{ExitCode: 0, Stdout: ""}))
+	sm := newPreflightStorageManager(executor, &fakePreflightClient{number: 1234})
+
+	job := orchestrator.JobDefinition{
+		ProjectID:       "proj",
+		ClusterLocation: "us-central1",
+		RawMounts:       []string{"gs://bkt;/data;ro;profile=training"},
+	}
+
+	err := sm.RunStorageProfilePreflight(job)
+	if err == nil {
+		t.Fatal("RunStorageProfilePreflight() expected an error when the StorageClass is missing")
+	}
+	if !strings.Contains(err.Error(), gcsFuseProfileSelector) {
+		t.Errorf("error %q should point at the StorageClass discovery selector", err)
+	}
+}
+
+func TestRunStorageProfilePreflightChecksEachBucketOnce(t *testing.T) {
+	executor := NewMockExecutor(scResponses(
+		shell.CommandResult{ExitCode: 0, Stdout: "storageclass.storage.k8s.io/gcsfusecsi-training\n"},
+		shell.CommandResult{ExitCode: 0, Stdout: "storageclass.storage.k8s.io/gcsfusecsi-checkpointing\n"},
+	))
+	client := &fakePreflightClient{number: 42}
+	sm := newPreflightStorageManager(executor, client)
+
+	job := orchestrator.JobDefinition{
+		ProjectID:       "proj",
+		ClusterLocation: "us-central1",
+		RawMounts: []string{
+			"gs://bkt;/data1;ro;profile=training",
+			"gs://bkt;/data2;ro;profile=checkpointing",
+		},
+	}
+
+	if err := sm.RunStorageProfilePreflight(job); err != nil {
+		t.Fatalf("RunStorageProfilePreflight() unexpected error: %v", err)
+	}
+	if !reflect.DeepEqual(client.bindingRequests, []string{"bkt"}) {
+		t.Errorf("bucketIAMBindings calls = %v, want exactly one call for \"bkt\"", client.bindingRequests)
+	}
+	if !reflect.DeepEqual(client.locationRequests, []string{"bkt"}) {
+		t.Errorf("bucketLocation calls = %v, want exactly one call for \"bkt\"", client.locationRequests)
+	}
+}
+
+func TestRunStorageProfilePreflightNoProfileMountsSkipsCluster(t *testing.T) {
+	executor := NewMockExecutor(map[string][]shell.CommandResult{})
+	sm := newPreflightStorageManager(executor, &fakePreflightClient{numberErr: fmt.Errorf("should not be called")})
+
+	job := orchestrator.JobDefinition{
+		ProjectID: "proj",
+		RawMounts: []string{"gs://bkt;/data", "/host;/local"},
+	}
+
+	if err := sm.RunStorageProfilePreflight(job); err != nil {
+		t.Fatalf("RunStorageProfilePreflight() unexpected error: %v", err)
+	}
+}
+
+func TestRunStorageProfilePreflightFailsOpenOnIAMErrors(t *testing.T) {
+	executor := NewMockExecutor(scResponses(shell.CommandResult{
+		ExitCode: 0,
+		Stdout:   "storageclass.storage.k8s.io/gcsfusecsi-serving\n",
+	}))
+	client := &fakePreflightClient{
+		numberErr:   fmt.Errorf("permission denied"),
+		locationErr: map[string]error{"bkt": fmt.Errorf("permission denied")},
+	}
+	sm := newPreflightStorageManager(executor, client)
+
+	job := orchestrator.JobDefinition{
+		ProjectID:       "proj",
+		ClusterLocation: "us-central1-a",
+		RawMounts:       []string{"gs://bkt;/data;ro;profile=serving"},
+	}
+
+	if err := sm.RunStorageProfilePreflight(job); err != nil {
+		t.Fatalf("RunStorageProfilePreflight() must never block on IAM failures, got: %v", err)
+	}
+}
+
+func TestRunStorageProfilePreflightBucketRegionMismatch(t *testing.T) {
+	tests := []struct {
+		name      string
+		mount     string
+		dryRun    bool
+		wantBlock bool
+	}{
+		{name: "serving profile blocks", mount: "gs://bkt;/data;ro;profile=serving", wantBlock: true},
+		{name: "serving profile with Rapid Cache off still blocks", mount: "gs://bkt;/data;ro;profile=serving;attributes=anywhereCacheZones=none", wantBlock: true},
+		{name: "rapid cache on another profile blocks", mount: "gs://bkt;/data;ro;profile=training;attributes=anywhereCacheZones=us-central1-a", wantBlock: true},
+		{name: "serving profile only warns on a dry run", mount: "gs://bkt;/data;ro;profile=serving", dryRun: true},
+		{name: "training without Rapid Cache only warns", mount: "gs://bkt;/data;ro;profile=training"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			executor := NewMockExecutor(scResponses(shell.CommandResult{ExitCode: 0, Stdout: "storageclass.storage.k8s.io/sc\n"}))
+			client := &fakePreflightClient{
+				number:    42,
+				locations: map[string]bucketLocation{"bkt": {Location: "US-EAST1", LocationType: "region"}},
+			}
+			job := orchestrator.JobDefinition{ProjectID: "proj", ClusterLocation: "us-central1-a", RawMounts: []string{tc.mount}}
+			if tc.dryRun {
+				job.DryRunManifest = "manifest.yaml"
+			}
+			err := newPreflightStorageManager(executor, client).RunStorageProfilePreflight(job)
+			if tc.wantBlock && (err == nil || !strings.Contains(err.Error(), "same region")) {
+				t.Fatalf("RunStorageProfilePreflight() = %v, want a blocking co-location error", err)
+			}
+			if !tc.wantBlock && err != nil {
+				t.Fatalf("RunStorageProfilePreflight() = %v, want only a warning", err)
+			}
+		})
+	}
+}
+
+func TestCollectProfileMountsSplitsSubPath(t *testing.T) {
+	sm := profileStorageManager(t.TempDir())
+	got, err := sm.collectProfileMounts([]string{"gs://bkt/sub/dir;/data;ro;profile=serving", "gs://bkt;/other;ro;profile=serving"})
+	if err != nil {
+		t.Fatalf("collectProfileMounts() unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0].Bucket != "bkt" {
+		t.Errorf("collectProfileMounts() = %+v, want one mount on bucket %q (the subpath is not part of the bucket)", got, "bkt")
+	}
+}
+
+func TestGrantedAgentPermissions(t *testing.T) {
+	const agent = "service-42@container-engine-robot.iam.gserviceaccount.com"
+	customRole := "projects/proj/roles/gke.gcsfuse.profileUser"
+
+	tests := []struct {
+		name         string
+		bindings     []iamBinding
+		roles        map[string][]string
+		roleErr      map[string]error
+		want         []string
+		wantRequests []string
+	}{
+		{
+			name:     "storage admin grants everything",
+			bindings: []iamBinding{{Role: "roles/storage.admin", Members: []string{"serviceAccount:" + agent}}},
+			want:     append(append([]string{}, gcsFuseProfileBasePermissions...), gcsFuseAnywhereCachePermissions...),
+		},
+		{
+			name:     "binding for a different member ignored",
+			bindings: []iamBinding{{Role: "roles/storage.admin", Members: []string{"user:someone@example.com"}}},
+		},
+		{
+			name:         "custom role permissions are expanded",
+			bindings:     []iamBinding{{Role: customRole, Members: []string{"serviceAccount:" + agent}}},
+			roles:        map[string][]string{customRole: {"storage.buckets.get", "storage.objects.list"}},
+			want:         []string{"storage.buckets.get", "storage.objects.list"},
+			wantRequests: []string{customRole},
+		},
+		{
+			name:         "unreadable custom role contributes nothing",
+			bindings:     []iamBinding{{Role: customRole, Members: []string{"serviceAccount:" + agent}}},
+			roleErr:      map[string]error{customRole: fmt.Errorf("permission denied")},
+			wantRequests: []string{customRole},
+		},
+		{
+			name:     "legacy bucket reader grants the base permissions without an API call",
+			bindings: []iamBinding{{Role: "roles/storage.legacyBucketReader", Members: []string{"serviceAccount:" + agent}}},
+			want:     gcsFuseProfileBasePermissions,
+		},
+		{
+			name:         "object viewer is credited only with what it grants",
+			bindings:     []iamBinding{{Role: "roles/storage.objectViewer", Members: []string{"serviceAccount:" + agent}}},
+			roles:        map[string][]string{"roles/storage.objectViewer": {"storage.objects.get", "storage.objects.list"}},
+			want:         []string{"storage.objects.get", "storage.objects.list"},
+			wantRequests: []string{"roles/storage.objectViewer"},
+		},
+		{
+			name: "permissions from several roles are unioned",
+			bindings: []iamBinding{
+				{Role: "roles/storage.objectViewer", Members: []string{"serviceAccount:" + agent}},
+				{Role: "roles/storage.legacyBucketReader", Members: []string{"serviceAccount:" + agent}},
+			},
+			roles:        map[string][]string{"roles/storage.objectViewer": {"storage.objects.get", "storage.objects.list"}},
+			want:         []string{"storage.objects.get", "storage.objects.list", "storage.buckets.get"},
+			wantRequests: []string{"roles/storage.objectViewer"},
+		},
+		{
+			name: "a role bound twice is resolved once",
+			bindings: []iamBinding{
+				{Role: customRole, Members: []string{"serviceAccount:" + agent}},
+				{Role: customRole, Members: []string{"serviceAccount:" + agent}},
+			},
+			roles:        map[string][]string{customRole: {"storage.buckets.get"}},
+			want:         []string{"storage.buckets.get"},
+			wantRequests: []string{customRole},
+		},
+		{
+			name:     "member match is case insensitive",
+			bindings: []iamBinding{{Role: "roles/owner", Members: []string{"serviceaccount:SERVICE-42@container-engine-robot.iam.gserviceaccount.com"}}},
+			want:     append(append([]string{}, gcsFuseProfileBasePermissions...), gcsFuseAnywhereCachePermissions...),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &fakePreflightClient{roles: tt.roles, roleErr: tt.roleErr}
+			got := grantedAgentPermissions(context.Background(), newRoleResolver(client), tt.bindings, agent)
+			if len(got) != len(tt.want) {
+				t.Fatalf("grantedAgentPermissions() = %v, want %v", got, tt.want)
+			}
+			for _, p := range tt.want {
+				if !got[p] {
+					t.Errorf("grantedAgentPermissions() missing %q, got %v", p, got)
+				}
+			}
+			if !reflect.DeepEqual(client.roleRequests, tt.wantRequests) {
+				t.Errorf("rolePermissions calls = %v, want %v", client.roleRequests, tt.wantRequests)
+			}
+		})
+	}
+}
+
+func TestRequiredProfilePermissions(t *testing.T) {
+	base := requiredProfilePermissions(false)
+	if len(base) != len(gcsFuseProfileBasePermissions) {
+		t.Errorf("requiredProfilePermissions(false) = %v, want only the base permissions", base)
+	}
+	withCache := requiredProfilePermissions(true)
+	if len(withCache) != len(gcsFuseProfileBasePermissions)+len(gcsFuseAnywhereCachePermissions) {
+		t.Errorf("requiredProfilePermissions(true) = %v, want base plus Anywhere Cache permissions", withCache)
+	}
+	for i := 1; i < len(withCache); i++ {
+		if withCache[i-1] > withCache[i] {
+			t.Fatalf("requiredProfilePermissions(true) = %v, want sorted output", withCache)
+		}
+	}
+}
+
+func TestMissingPermissions(t *testing.T) {
+	granted := map[string]bool{"storage.buckets.get": true}
+	got := missingPermissions([]string{"storage.buckets.get", "storage.objects.list"}, granted)
+	if !reflect.DeepEqual(got, []string{"storage.objects.list"}) {
+		t.Errorf("missingPermissions() = %v, want [storage.objects.list]", got)
+	}
+	if got := missingPermissions([]string{"storage.buckets.get"}, granted); got != nil {
+		t.Errorf("missingPermissions() = %v, want nil", got)
+	}
+}
+
+func TestNormalizeToRegion(t *testing.T) {
+	tests := map[string]string{
+		"us-central1-a":               "us-central1",
+		"us-central1":                 "us-central1",
+		"US-CENTRAL1-A":               "us-central1",
+		"northamerica-northeast1-b":   "northamerica-northeast1",
+		"northamerica-northeast1":     "northamerica-northeast1",
+		"europe-west4-a":              "europe-west4",
+		"":                            "",
+		"not-a-zone-or-region-at-all": "not-a-zone-or-region-at-all",
+	}
+	for in, want := range tests {
+		if got := normalizeToRegion(in); got != want {
+			t.Errorf("normalizeToRegion(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestCacheRegions(t *testing.T) {
+	tests := []struct {
+		name            string
+		clusterLocation string
+		zones           []string
+		want            []string
+	}{
+		{name: "falls back to cluster region", clusterLocation: "us-central1-a", want: []string{"us-central1"}},
+		{name: "regional cluster location", clusterLocation: "us-central1", want: []string{"us-central1"}},
+		{name: "empty cluster location", clusterLocation: ""},
+		{
+			name:            "zones override the cluster region and are de-duplicated",
+			clusterLocation: "us-central1",
+			zones:           []string{"europe-west4-a", "europe-west4-b", "asia-east1-a"},
+			want:            []string{"europe-west4", "asia-east1"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cacheRegions(tt.clusterLocation, tt.zones); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("cacheRegions() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRegionWithinBucketLocation(t *testing.T) {
+	tests := []struct {
+		name   string
+		region string
+		loc    bucketLocation
+		want   bool
+	}{
+		{name: "regional match", region: "us-central1", loc: bucketLocation{Location: "US-CENTRAL1", LocationType: "region"}, want: true},
+		{name: "regional mismatch", region: "us-east1", loc: bucketLocation{Location: "US-CENTRAL1", LocationType: "region"}},
+		{name: "US multi-region accepts us region", region: "us-central1", loc: bucketLocation{Location: "US", LocationType: "multi-region"}, want: true},
+		{name: "US multi-region rejects northamerica region", region: "northamerica-northeast1", loc: bucketLocation{Location: "US", LocationType: "multi-region"}},
+		{name: "US multi-region rejects europe region", region: "europe-west4", loc: bucketLocation{Location: "US", LocationType: "multi-region"}},
+		{name: "EU multi-region accepts europe region", region: "europe-west4", loc: bucketLocation{Location: "EU", LocationType: "multi-region"}, want: true},
+		{name: "EU multi-region rejects us region", region: "us-central1", loc: bucketLocation{Location: "EU", LocationType: "multi-region"}},
+		{name: "ASIA multi-region accepts asia region", region: "asia-east1", loc: bucketLocation{Location: "ASIA", LocationType: "multi-region"}, want: true},
+		{
+			name:   "custom dual-region accepts member region",
+			region: "us-east1",
+			loc:    bucketLocation{Location: "US-CENTRAL1+US-EAST1", LocationType: "dual-region", DataLocations: []string{"US-CENTRAL1", "US-EAST1"}},
+			want:   true,
+		},
+		{
+			name:   "custom dual-region rejects outside region",
+			region: "europe-west4",
+			loc:    bucketLocation{Location: "US-CENTRAL1+US-EAST1", LocationType: "dual-region", DataLocations: []string{"US-CENTRAL1", "US-EAST1"}},
+		},
+		{name: "predefined dual-region is not evaluated", region: "europe-west4", loc: bucketLocation{Location: "NAM4", LocationType: "dual-region"}, want: true},
+		{name: "unknown multi-region is not evaluated", region: "us-central1", loc: bucketLocation{Location: "EUR", LocationType: "multi-region"}, want: true},
+		{name: "unknown location is not evaluated", region: "us-central1", loc: bucketLocation{Location: "SOMETHING-NEW"}, want: true},
+		{name: "empty bucket location is not evaluated", region: "us-central1", want: true},
+		{name: "empty region is not evaluated", loc: bucketLocation{Location: "US-CENTRAL1"}, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := regionWithinBucketLocation(tt.region, tt.loc); got != tt.want {
+				t.Errorf("regionWithinBucketLocation(%q, %+v) = %v, want %v", tt.region, tt.loc, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUsesAnywhereCache(t *testing.T) {
+	tests := []struct {
+		name string
+		pm   parsedMount
+		want bool
+	}{
+		{name: "training without attributes", pm: parsedMount{Profile: "gcsfusecsi-training"}},
+		{name: "serving", pm: parsedMount{Profile: "gcsfusecsi-serving"}, want: true},
+		{
+			name: "training with anywhere cache ttl",
+			pm:   parsedMount{Profile: "gcsfusecsi-training", Attributes: map[string]string{"anywhereCacheTTL": "86400s"}},
+			want: true,
+		},
+		{
+			name: "training with unrelated attribute",
+			pm:   parsedMount{Profile: "gcsfusecsi-training", Attributes: map[string]string{"bucketScanTimeout": "10s"}},
+		},
+		{
+			name: "serving with zones disabled",
+			pm:   parsedMount{Profile: "gcsfusecsi-serving", Attributes: map[string]string{"anywhereCacheZones": "none"}},
+		},
+		{
+			name: "serving with zones disabled case insensitively",
+			pm:   parsedMount{Profile: "gcsfusecsi-serving", Attributes: map[string]string{"anywhereCacheZones": " None "}},
+		},
+		{
+			name: "serving with all zones",
+			pm:   parsedMount{Profile: "gcsfusecsi-serving", Attributes: map[string]string{"anywhereCacheZones": "*"}},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := usesAnywhereCache(tt.pm); got != tt.want {
+				t.Errorf("usesAnywhereCache() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSplitAnywhereCacheZones(t *testing.T) {
+	tests := []struct {
+		in   string
+		want []string
+	}{
+		{in: ""},
+		{in: "us-central1-a", want: []string{"us-central1-a"}},
+		{in: " us-central1-a , US-CENTRAL1-B ", want: []string{"us-central1-a", "us-central1-b"}},
+		{in: ",,"},
+		{in: "*"},
+		{in: "none"},
+		{in: "NONE"},
+		{in: "*,us-central1-a", want: []string{"us-central1-a"}},
+	}
+	for _, tt := range tests {
+		if got := splitAnywhereCacheZones(tt.in); !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("splitAnywhereCacheZones(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestGKEServiceAgentEmail(t *testing.T) {
+	got, err := gkeServiceAgentEmail(context.Background(), &fakePreflightClient{number: 123456789}, "proj")
+	if err != nil {
+		t.Fatalf("gkeServiceAgentEmail() unexpected error: %v", err)
+	}
+	want := "service-123456789@container-engine-robot.iam.gserviceaccount.com"
+	if got != want {
+		t.Errorf("gkeServiceAgentEmail() = %q, want %q", got, want)
+	}
+
+	if _, err := gkeServiceAgentEmail(context.Background(), &fakePreflightClient{numberErr: fmt.Errorf("denied")}, "proj"); err == nil {
+		t.Error("gkeServiceAgentEmail() expected an error when the project number cannot be read")
+	}
+}
+
+func TestWarnOnMissingBucketIAMQueriesCustomRoleOnce(t *testing.T) {
+	const agent = "service-42@container-engine-robot.iam.gserviceaccount.com"
+	customRole := "projects/proj/roles/gke.gcsfuse.profileUser"
+
+	client := &fakePreflightClient{
+		bindings: map[string][]iamBinding{
+			"bkt": {{Role: customRole, Members: []string{"serviceAccount:" + agent}}},
+		},
+		roles: map[string][]string{customRole: append(append([]string{}, gcsFuseProfileBasePermissions...), gcsFuseAnywhereCachePermissions...)},
+	}
+
+	resolve := newRoleResolver(client)
+	if msg := bucketIAMWarning(context.Background(), client, resolve, agent, "bkt", requiredProfilePermissions(true), lazyProjectGrants(context.Background(), client, resolve, "proj", agent)); msg != "" {
+		t.Errorf("unexpected warning: %s", msg)
+	}
+
+	if !reflect.DeepEqual(client.roleRequests, []string{customRole}) {
+		t.Errorf("rolePermissions calls = %v, want exactly one call for %q", client.roleRequests, customRole)
+	}
+	if len(client.projectIAMRequests) != 0 {
+		t.Errorf("projectIAMBindings calls = %v, want none when the bucket policy already grants everything", client.projectIAMRequests)
+	}
+}
+
+func TestDocumentedIAMSetups(t *testing.T) {
+	const agent = "service-42@container-engine-robot.iam.gserviceaccount.com"
+	const customRole = "projects/proj/roles/gke.gcsfuse.profileUser"
+	customRolePermissions := map[string][]string{customRole: gcsFuseProfileAllPermissions}
+
+	tests := []struct {
+		name            string
+		bucketBindings  []iamBinding
+		projectBindings []iamBinding
+		roles           map[string][]string
+		usesCache       bool
+		wantMissing     []string
+	}{
+		{
+			name:           "option A custom role bound on the bucket",
+			bucketBindings: []iamBinding{{Role: customRole, Members: []string{"serviceAccount:" + agent}}},
+			roles:          customRolePermissions,
+			usesCache:      true,
+		},
+		{
+			name:            "option A custom role bound on the project",
+			projectBindings: []iamBinding{{Role: customRole, Members: []string{"serviceAccount:" + agent}}},
+			roles:           customRolePermissions,
+			usesCache:       true,
+		},
+		{
+			name:           "option B legacy bucket reader on a training mount",
+			bucketBindings: []iamBinding{{Role: "roles/storage.legacyBucketReader", Members: []string{"serviceAccount:" + agent}}},
+		},
+		{
+			name:           "option B legacy bucket reader on a serving mount",
+			bucketBindings: []iamBinding{{Role: "roles/storage.legacyBucketReader", Members: []string{"serviceAccount:" + agent}}},
+			usesCache:      true,
+			wantMissing:    gcsFuseAnywhereCachePermissions,
+		},
+		{
+			name:           "object viewer alone leaves the bucket permission missing",
+			bucketBindings: []iamBinding{{Role: "roles/storage.objectViewer", Members: []string{"serviceAccount:" + agent}}},
+			roles:          map[string][]string{"roles/storage.objectViewer": {"storage.objects.get", "storage.objects.list"}},
+			wantMissing:    []string{"storage.buckets.get"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &fakePreflightClient{
+				number:          42,
+				bindings:        map[string][]iamBinding{"bkt": tt.bucketBindings},
+				projectBindings: tt.projectBindings,
+				roles:           tt.roles,
+			}
+			required := requiredProfilePermissions(tt.usesCache)
+			resolve := newRoleResolver(client)
+			got, err := bucketIAMShortfall(context.Background(), client, resolve, agent, "bkt", required,
+				lazyProjectGrants(context.Background(), client, resolve, "proj", agent))
+			if err != nil {
+				t.Fatalf("bucketIAMShortfall() unexpected error: %v", err)
+			}
+			assertSamePermissions(t, "bucketIAMShortfall()", got, tt.wantMissing)
+
+			warnResolve := newRoleResolver(client)
+			msg := bucketIAMWarning(context.Background(), client, warnResolve, agent, "bkt", required,
+				lazyProjectGrants(context.Background(), client, warnResolve, "proj", agent))
+			if len(tt.wantMissing) == 0 {
+				if msg != "" {
+					t.Fatalf("bucketIAMWarning() = %q, want the pre-flight to stay silent", msg)
+				}
+				return
+			}
+			if msg == "" {
+				t.Fatalf("bucketIAMWarning() stayed silent, want a warning naming %v", tt.wantMissing)
+			}
+			for _, p := range tt.wantMissing {
+				if !strings.Contains(msg, p) {
+					t.Errorf("bucketIAMWarning() = %q, want it to name the missing permission %q", msg, p)
+				}
+			}
+			for _, p := range required {
+				if !slices.Contains(tt.wantMissing, p) && strings.Contains(msg, p) {
+					t.Errorf("bucketIAMWarning() = %q, must not name %q, which the agent holds", msg, p)
+				}
+			}
+		})
+	}
+}
+
+func assertSamePermissions(t *testing.T, label string, got, want []string) {
+	t.Helper()
+	gotSorted := append([]string{}, got...)
+	wantSorted := append([]string{}, want...)
+	sort.Strings(gotSorted)
+	sort.Strings(wantSorted)
+	if !reflect.DeepEqual(gotSorted, wantSorted) {
+		t.Fatalf("%s = %v, want %v", label, gotSorted, wantSorted)
+	}
+}
+
+func TestUnreadableRoleStaysSilentOnASatisfiedBucket(t *testing.T) {
+	const agent = "service-42@container-engine-robot.iam.gserviceaccount.com"
+	client := &fakePreflightClient{
+		number: 42,
+		bindings: map[string][]iamBinding{"bkt": {
+			{Role: "roles/storage.admin", Members: []string{"serviceAccount:" + agent}},
+			{Role: "roles/pubsub.publisher", Members: []string{"serviceAccount:" + agent}},
+		}},
+		roleErr: map[string]error{"roles/pubsub.publisher": fmt.Errorf("permission denied")},
+	}
+
+	resolve := newRoleResolver(client)
+	msg := bucketIAMWarning(context.Background(), client, resolve, agent, "bkt", requiredProfilePermissions(true),
+		lazyProjectGrants(context.Background(), client, resolve, "proj", agent))
+	if msg != "" {
+		t.Fatalf("bucketIAMWarning() = %q, want silence on a bucket that grants everything", msg)
+	}
+	if got := resolve.unreadableRoles(); !reflect.DeepEqual(got, []string{"roles/pubsub.publisher"}) {
+		t.Errorf("unreadableRoles() = %v, want the failure to be recorded for later reporting", got)
+	}
+}
+
+func TestUnreadableRoleIsReportedWhenTheBucketFallsShort(t *testing.T) {
+	const agent = "service-42@container-engine-robot.iam.gserviceaccount.com"
+	customRole := "projects/proj/roles/gke.gcsfuse.profileUser"
+	client := &fakePreflightClient{
+		number:   42,
+		bindings: map[string][]iamBinding{"bkt": {{Role: customRole, Members: []string{"serviceAccount:" + agent}}}},
+		roleErr:  map[string]error{customRole: fmt.Errorf("permission denied")},
+	}
+
+	resolve := newRoleResolver(client)
+	msg := bucketIAMWarning(context.Background(), client, resolve, agent, "bkt", requiredProfilePermissions(false),
+		lazyProjectGrants(context.Background(), client, resolve, "proj", agent))
+	if !strings.Contains(msg, customRole) {
+		t.Errorf("bucketIAMWarning() = %q, want it to name the role it could not read", msg)
+	}
+}
+
+func TestProjectLevelGrantSatisfiesBucketCheck(t *testing.T) {
+	const agent = "service-42@container-engine-robot.iam.gserviceaccount.com"
+	customRole := "projects/proj/roles/gke.gcsfuse.profileUser"
+
+	client := &fakePreflightClient{
+		number:          42,
+		projectBindings: []iamBinding{{Role: customRole, Members: []string{"serviceAccount:" + agent}}},
+		roles:           map[string][]string{customRole: append(append([]string{}, gcsFuseProfileBasePermissions...), gcsFuseAnywhereCachePermissions...)},
+		bindings:        map[string][]iamBinding{"bkt": nil},
+	}
+
+	grants := lazyProjectGrants(context.Background(), client, newRoleResolver(client), "proj", agent)
+	if missing := missingPermissions(requiredProfilePermissions(true), grants()); len(missing) != 0 {
+		t.Errorf("lazyProjectGrants() left %v missing, want none", missing)
+	}
+	grants()
+	if !reflect.DeepEqual(client.projectIAMRequests, []string{"proj"}) {
+		t.Errorf("projectIAMBindings calls = %v, want exactly one memoized call for \"proj\"", client.projectIAMRequests)
+	}
+}
+
+func TestProjectLevelGrantsFailOpen(t *testing.T) {
+	client := &fakePreflightClient{projectBindingsErr: fmt.Errorf("permission denied")}
+	grants := lazyProjectGrants(context.Background(), client, newRoleResolver(client), "proj", "agent@example.com")
+	if got := grants(); len(got) != 0 {
+		t.Errorf("lazyProjectGrants() = %v, want an empty set when the policy cannot be read", got)
+	}
+}
+
+func TestWarnOnMissingIAMQueriesEachBucketOnce(t *testing.T) {
+	const agent = "service-42@container-engine-robot.iam.gserviceaccount.com"
+	client := &fakePreflightClient{
+		number:   42,
+		bindings: map[string][]iamBinding{"bkt": {{Role: "roles/storage.admin", Members: []string{"serviceAccount:" + agent}}}},
+	}
+
+	warnOnMissingIAM(context.Background(), client, "proj", agent, []profileMount{
+		{Bucket: "bkt", Profile: "gcsfusecsi-training"},
+		{Bucket: "bkt", Profile: "gcsfusecsi-serving", UsesAnywhereCache: true},
+	})
+
+	if !reflect.DeepEqual(client.bindingRequests, []string{"bkt"}) {
+		t.Errorf("bucketIAMBindings calls = %v, want exactly one call for \"bkt\"", client.bindingRequests)
+	}
+}
+
+func TestWarnOnMissingIAMFallsBackToProjectPolicy(t *testing.T) {
+	const agent = "service-42@container-engine-robot.iam.gserviceaccount.com"
+	client := &fakePreflightClient{
+		number:          42,
+		projectBindings: []iamBinding{{Role: "roles/storage.admin", Members: []string{"serviceAccount:" + agent}}},
+		bindings:        map[string][]iamBinding{"b1": nil, "b2": nil},
+	}
+
+	warnOnMissingIAM(context.Background(), client, "proj", agent, []profileMount{
+		{Bucket: "b1", Profile: "gcsfusecsi-training"},
+		{Bucket: "b2", Profile: "gcsfusecsi-serving", UsesAnywhereCache: true},
+	})
+
+	if !reflect.DeepEqual(client.projectIAMRequests, []string{"proj"}) {
+		t.Errorf("projectIAMBindings calls = %v, want exactly one memoized call for \"proj\"", client.projectIAMRequests)
+	}
+}
+
+func TestBucketCacheUse(t *testing.T) {
+	order, needsCache := bucketCacheUse([]profileMount{
+		{Bucket: "b1", Profile: "gcsfusecsi-training"},
+		{Bucket: "b2", Profile: "gcsfusecsi-serving", UsesAnywhereCache: true},
+		{Bucket: "b1", Profile: "gcsfusecsi-serving", UsesAnywhereCache: true},
+	})
+	if !reflect.DeepEqual(order, []string{"b1", "b2"}) {
+		t.Errorf("bucketCacheUse() order = %v, want [b1 b2]", order)
+	}
+	if !needsCache["b1"] || !needsCache["b2"] {
+		t.Errorf("bucketCacheUse() needsCache = %v, want both buckets flagged", needsCache)
+	}
+}
+
+func newFakeGCPPreflightClient(t *testing.T, handler http.HandlerFunc) (*gcpPreflightClient, func() []string) {
+	t.Helper()
+
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.RequestURI())
+		w.Header().Set("Content-Type", "application/json")
+		handler(w, r)
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx := context.Background()
+	clientOpts := []option.ClientOption{
+		option.WithoutAuthentication(),
+		option.WithHTTPClient(srv.Client()),
+	}
+	storageSvc, err := gcs.NewService(ctx, append(clientOpts, option.WithEndpoint(srv.URL+"/storage/v1/"))...)
+	if err != nil {
+		t.Fatalf("failed to build Cloud Storage test client: %v", err)
+	}
+	iamSvc, err := iamapi.NewService(ctx, append(clientOpts, option.WithEndpoint(srv.URL+"/"))...)
+	if err != nil {
+		t.Fatalf("failed to build IAM test client: %v", err)
+	}
+	crmSvc, err := crm.NewService(ctx, append(clientOpts, option.WithEndpoint(srv.URL+"/"))...)
+	if err != nil {
+		t.Fatalf("failed to build Resource Manager test client: %v", err)
+	}
+
+	return &gcpPreflightClient{storage: storageSvc, iam: iamSvc, crm: crmSvc}, func() []string { return paths }
+}
+
+func preflightAPIHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/b/bkt/iam"):
+			_, _ = fmt.Fprint(w, `{"bindings":[{"role":"roles/storage.admin","members":["serviceAccount:service-42@container-engine-robot.iam.gserviceaccount.com"]}]}`)
+		case strings.Contains(r.URL.Path, "/b/bkt"):
+			_, _ = fmt.Fprint(w, `{"location":"US-CENTRAL1+US-EAST1","locationType":"dual-region","customPlacementConfig":{"dataLocations":["US-CENTRAL1","US-EAST1"]}}`)
+		case strings.Contains(r.URL.Path, "/roles/"):
+			_, _ = fmt.Fprint(w, `{"includedPermissions":["storage.buckets.get","storage.objects.list"]}`)
+		case strings.HasSuffix(r.URL.Path, ":getIamPolicy"):
+			_, _ = fmt.Fprint(w, `{"bindings":[{"role":"projects/proj/roles/gke.gcsfuse.profileUser","members":["serviceAccount:service-42@container-engine-robot.iam.gserviceaccount.com"]}]}`)
+		case strings.Contains(r.URL.Path, "/projects/"):
+			_, _ = fmt.Fprint(w, `{"projectNumber":"42"}`)
+		default:
+			http.Error(w, `{"error":{"code":404,"message":"unexpected path"}}`, http.StatusNotFound)
+		}
+	}
+}
+
+func TestGCPPreflightClientReadsBucketMetadata(t *testing.T) {
+	client, requestedPaths := newFakeGCPPreflightClient(t, preflightAPIHandler())
+	ctx := context.Background()
+
+	bindings, err := client.bucketIAMBindings(ctx, "bkt")
+	if err != nil {
+		t.Fatalf("bucketIAMBindings() unexpected error: %v", err)
+	}
+	wantBindings := []iamBinding{{
+		Role:    "roles/storage.admin",
+		Members: []string{"serviceAccount:service-42@container-engine-robot.iam.gserviceaccount.com"},
+	}}
+	if !reflect.DeepEqual(bindings, wantBindings) {
+		t.Errorf("bucketIAMBindings() = %+v, want %+v", bindings, wantBindings)
+	}
+
+	loc, err := client.bucketLocation(ctx, "bkt")
+	if err != nil {
+		t.Fatalf("bucketLocation() unexpected error: %v", err)
+	}
+	wantLoc := bucketLocation{
+		Location:      "US-CENTRAL1+US-EAST1",
+		LocationType:  "dual-region",
+		DataLocations: []string{"US-CENTRAL1", "US-EAST1"},
+	}
+	if !reflect.DeepEqual(loc, wantLoc) {
+		t.Errorf("bucketLocation() = %+v, want %+v", loc, wantLoc)
+	}
+
+	paths := requestedPaths()
+	assertRequested(t, paths, "/storage/v1/b/bkt/iam", "optionsRequestedPolicyVersion=3")
+	assertRequested(t, paths, "/storage/v1/b/bkt?")
+}
+
+func TestGCPPreflightClientReadsProjectAndRole(t *testing.T) {
+	client, requestedPaths := newFakeGCPPreflightClient(t, preflightAPIHandler())
+	ctx := context.Background()
+
+	number, err := client.projectNumber(ctx, "proj")
+	if err != nil || number != 42 {
+		t.Fatalf("projectNumber() = %d, %v, want 42, nil", number, err)
+	}
+
+	perms, err := client.rolePermissions(ctx, "projects/proj/roles/gke.gcsfuse.profileUser")
+	if err != nil {
+		t.Fatalf("rolePermissions() unexpected error: %v", err)
+	}
+	if !reflect.DeepEqual(perms, []string{"storage.buckets.get", "storage.objects.list"}) {
+		t.Errorf("rolePermissions() = %v, want the two included permissions", perms)
+	}
+
+	predefined, err := client.rolePermissions(ctx, "roles/storage.legacyBucketReader")
+	if err != nil {
+		t.Fatalf("rolePermissions() unexpected error for a predefined role: %v", err)
+	}
+	if !reflect.DeepEqual(predefined, []string{"storage.buckets.get", "storage.objects.list"}) {
+		t.Errorf("rolePermissions() = %v, want the two included permissions", predefined)
+	}
+
+	if _, err := client.rolePermissions(ctx, "storage.admin"); err == nil {
+		t.Error("rolePermissions() expected an error for a role name with no recognized scheme")
+	}
+
+	bindings, err := client.projectIAMBindings(ctx, "proj")
+	if err != nil {
+		t.Fatalf("projectIAMBindings() unexpected error: %v", err)
+	}
+	wantBindings := []iamBinding{{
+		Role:    "projects/proj/roles/gke.gcsfuse.profileUser",
+		Members: []string{"serviceAccount:service-42@container-engine-robot.iam.gserviceaccount.com"},
+	}}
+	if !reflect.DeepEqual(bindings, wantBindings) {
+		t.Errorf("projectIAMBindings() = %+v, want %+v", bindings, wantBindings)
+	}
+
+	paths := requestedPaths()
+	assertRequested(t, paths, "/v1/projects/proj?")
+	assertRequested(t, paths, "/v1/projects/proj/roles/gke.gcsfuse.profileUser?")
+	assertRequested(t, paths, "/v1/projects/proj:getIamPolicy")
+	assertRequested(t, paths, "/v1/roles/storage.legacyBucketReader?")
+}
+
+func TestGCPPreflightClientSurfacesAPIErrors(t *testing.T) {
+	client, _ := newFakeGCPPreflightClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, `{"error":{"code":403,"message":"permission denied"}}`, http.StatusForbidden)
+	})
+
+	ctx := context.Background()
+	if _, err := client.bucketIAMBindings(ctx, "bkt"); err == nil {
+		t.Error("bucketIAMBindings() expected an error on a 403 response")
+	}
+	if _, err := client.bucketLocation(ctx, "bkt"); err == nil {
+		t.Error("bucketLocation() expected an error on a 403 response")
+	}
+	if _, err := client.projectNumber(ctx, "proj"); err == nil {
+		t.Error("projectNumber() expected an error on a 403 response")
+	}
+}
+
+func assertRequested(t *testing.T, paths []string, wantParts ...string) {
+	t.Helper()
+	for _, p := range paths {
+		matched := true
+		for _, part := range wantParts {
+			if !strings.Contains(p, part) {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return
+		}
+	}
+	t.Errorf("requested paths %v, want one containing %v", paths, wantParts)
 }
