@@ -257,9 +257,98 @@ When submitting training workloads via `gcluster job submit`, add the `--gke-mtc
 
 ---
 
+## 5. Cloud Storage FUSE storage profiles
+
+[GKE Cloud Storage FUSE storage profiles](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles) tune GCSFuse automatically for AI/ML access patterns. Adding `profile=` to a `gs://` mount in `gcluster job submit` generates the PersistentVolume and PersistentVolumeClaim ("gateway") the profile needs, instead of an inline CSI volume. The `--mount` format itself is described in the [gcluster job guide](gcluster_job_guide.md#44-example-submit-job-with-persistent-storage).
+
+### 5.1 Cluster prerequisites
+
+* **GKE version**: GKE `1.35.1-gke.1616000` or later with the Cloud Storage FUSE CSI driver enabled (`enable_gcsfuse_csi: true` on the `gke-cluster` module). Verify with `kubectl get sc -l gke-gcsfuse/profile=true`, which lists the three StorageClasses.
+* **GKE Service Agent IAM**: the GKE Service Agent (`service-<PROJECT_NUMBER>@container-engine-robot.iam.gserviceaccount.com`) needs bucket permissions to scan the bucket and, for Rapid Cache, to manage caches (see [Configure IAM permissions](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#configure_permissions)). Buckets provisioned through the [`gke-persistent-volume`](../modules/file-system/gke-persistent-volume/README.md) module get this binding automatically.
+
+> [!IMPORTANT]
+> **`profile=serving` requires the bucket and the cluster to be in the same
+> region.** GKE documents this co-location as *mandatory* for the
+> `gcsfusecsi-serving` profile, and equally mandatory whenever Rapid Cache
+> (`anywhereCacheZones`) is enabled - on any profile.
+>
+> Confirm the bucket's location before submitting:
+>
+> ```bash
+> gcloud storage buckets describe gs://<YOUR_BUCKET_NAME> --format="value(location)"
+> ```
+>
+> `training` and `checkpointing` without Rapid Cache do not carry this hard
+> requirement, though same-region buckets remain the better choice for
+> throughput and egress cost.
+
+### 5.2 Job submission (`gcluster job submit --mount "...;profile=<profile>"`)
+
+Accepted profiles are `training`, `checkpointing`, and `serving` (canonical `gcsfusecsi-<name>` names are also accepted). To choose one, see [Select performance profile](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#select-performance-profile).
+
+```shell
+./gcluster job submit \
+  --name my-serving-job \
+  --command "python serve.py" \
+  --compute-type n2-standard-32 \
+  --image us-docker.pkg.dev/my-project/my-repo/my-image:latest \
+  --mount "gs://<YOUR_MODEL_BUCKET>/llama;/models;ro;profile=serving"
+```
+
+Before applying anything, `gcluster` checks each profile mount:
+
+* A StorageClass missing from the cluster fails the submission.
+* A bucket outside the cluster's region fails the submission where GKE requires co-location (`serving`, or any profile with Rapid Cache enabled), and only warns otherwise.
+* A GKE Service Agent that appears to lack the bucket permissions produces a warning; submission continues.
+
+A dry run (`--dry-run-out`) turns the blocking checks into warnings.
+
+#### Volume attributes
+
+`attributes=<k=v,...>` overrides the [storage profile StorageClass parameters](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#storageclass_configuration_reference) on the generated volume (without `profile=`, it sets [GCSFuse CSI volume attributes](https://docs.cloud.google.com/kubernetes-engine/docs/reference/cloud-storage-fuse-csi-driver/volume-attr) on the inline mount). `gcluster` derives some attributes from the rest of the `--mount` spec, and supplying one of them through `attributes=` fails validation, so the two cannot silently overwrite each other. Use `options=<opt1>,<opt2>` instead of `attributes=mountOptions=...` for gcsfuse mount flags, and `src=gs://<bucket>` instead of `attributes=bucketName=...` for the bucket.
+
+#### Gateway sharing and naming
+
+* The generated claim is named `gcluster-gcsfuse-<bucket>-<profile>-<hash>` and the
+  PersistentVolume `gcluster-gcsfuse-<bucket>-<profile>-<hash>-<namespace>`, where
+  `<hash>` is a short digest of the volume's settings. The names are
+  deterministic, so several jobs that use the same bucket, profile, and settings
+  in the same namespace **share one gateway** rather than each creating their own.
+  A bucket subpath is applied on the pod's mount, so it does not create a new gateway.
+* Any change to the settings gives the mount its own gateway, so
+  it never clashes with the immutable spec of an existing one. Running jobs keep
+  using the old gateway.
+
+#### Managing gateways
+
+`gcluster job cancel` cleans up gateways automatically: after deleting the job, it
+deletes every gateway claim in the namespace that no other workload still uses,
+along with the PersistentVolume bound to it. Gateways created in the last two
+minutes are kept, so a job being submitted at the same time does not lose its
+volume. Bucket contents are never affected.
+
+Cleanup runs only on `gcluster job cancel`. A gateway is left behind if its job
+finished on its own or was deleted with `kubectl`. Running `gcluster job cancel`
+for any job in that namespace later removes it. To list gateways:
+
+```bash
+kubectl get pv,pvc -A -l gcluster.google.com/managed-by=cluster-toolkit,gcluster.google.com/storage-type=gcsfuse
+```
+
+To delete one by hand, delete the claim first, then the volume bound to it:
+
+```bash
+kubectl get pvc <claim> -n <namespace> -o jsonpath='{.spec.volumeName}'
+kubectl delete pvc <claim> -n <namespace>
+kubectl delete pv <volume>
+```
+
+---
+
 ## What's next
 
 * [TPU Dynamic Slicing on GKE Concepts](https://cloud.google.com/kubernetes-engine/docs/concepts/tpu-dynamic-slicing)
 * [Scheduling Dynamic Slices with Kueue and TAS on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/kueue-tpu-dynamic-slicing)
 * [GKE Node Auto-Provisioning Documentation](https://cloud.google.com/kubernetes-engine/docs/concepts/node-auto-provisioning)
 * [Multi-Tier Checkpointing on GKE Overview](https://cloud.google.com/kubernetes-engine/docs/concepts/multi-tier-checkpointing)
+* [Cloud Storage FUSE storage profiles on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles)

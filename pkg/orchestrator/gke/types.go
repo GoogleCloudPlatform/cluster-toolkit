@@ -26,7 +26,11 @@ import (
 	"sync"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
+	crm "google.golang.org/api/cloudresourcemanager/v1"
 	compute "google.golang.org/api/compute/v1"
+	iamapi "google.golang.org/api/iam/v1"
+	gcs "google.golang.org/api/storage/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 )
@@ -61,6 +65,13 @@ var serviceAccountGVR = schema.GroupVersionResource{
 	Resource: "serviceaccounts",
 }
 
+// jobSetGVR defines the GroupVersionResource for JobSet resources.
+var jobSetGVR = schema.GroupVersionResource{
+	Group:    "jobset.x-k8s.io",
+	Version:  "v1alpha2",
+	Resource: "jobsets",
+}
+
 // podGVR defines the GroupVersionResource for core Kubernetes Pod resources.
 var podGVR = schema.GroupVersionResource{
 	Group:    "",
@@ -73,6 +84,42 @@ var daemonsetGVR = schema.GroupVersionResource{
 	Group:    "apps",
 	Version:  "v1",
 	Resource: "daemonsets",
+}
+
+var jobGVR = schema.GroupVersionResource{
+	Group:    "batch",
+	Version:  "v1",
+	Resource: "jobs",
+}
+
+var cronJobGVR = schema.GroupVersionResource{
+	Group:    "batch",
+	Version:  "v1",
+	Resource: "cronjobs",
+}
+
+var deploymentGVR = schema.GroupVersionResource{
+	Group:    "apps",
+	Version:  "v1",
+	Resource: "deployments",
+}
+
+var statefulSetGVR = schema.GroupVersionResource{
+	Group:    "apps",
+	Version:  "v1",
+	Resource: "statefulsets",
+}
+
+var pvcGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "persistentvolumeclaims",
+}
+
+var pvGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "persistentvolumes",
 }
 
 // HTTPClient abstracts HTTP GET calls for testability and thread safety.
@@ -91,6 +138,10 @@ type KubeClient interface {
 	DeleteJobSet(namespace string, name string) error
 	ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error)
 	GetCurrentNamespace(clusterName, location, projectID string) (string, error)
+	// An empty namespace means cluster-scoped.
+	ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error)
+	GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error)
+	DeleteResource(gvr schema.GroupVersionResource, namespace, name string) error
 }
 
 type MachineTypeClient interface {
@@ -243,6 +294,46 @@ type StorageManager struct {
 	getFilestoreIP  func(ctx context.Context, projectID, location, nameOrIP string, isIP bool) (string, string, int64, error)
 	filestoreClient filestoreClient
 	instancesCache  []*filestorepb.Instance
+	preflightClient storagePreflightClient
+}
+
+type storagePreflightClient interface {
+	projectNumber(ctx context.Context, projectID string) (int64, error)
+	projectIAMBindings(ctx context.Context, projectID string) ([]iamBinding, error)
+	bucketIAMBindings(ctx context.Context, bucket string) ([]iamBinding, error)
+	bucketLocation(ctx context.Context, bucket string) (bucketLocation, error)
+	rolePermissions(ctx context.Context, role string) ([]string, error)
+}
+
+type gcpPreflightClient struct {
+	storage *gcs.Service
+	iam     *iamapi.Service
+	crm     *crm.Service
+}
+
+type iamBinding struct {
+	Role    string
+	Members []string
+}
+
+// DataLocations is set only for custom dual-region buckets.
+type bucketLocation struct {
+	Location      string
+	LocationType  string
+	DataLocations []string
+}
+
+type profileMount struct {
+	Bucket             string
+	Profile            string
+	AnywhereCacheZones []string
+	UsesAnywhereCache  bool
+}
+
+type roleResolver struct {
+	client     storagePreflightClient
+	cache      map[string][]string
+	unreadable map[string]bool
 }
 
 // parsedMount is the normalized form of a single --mount string.
