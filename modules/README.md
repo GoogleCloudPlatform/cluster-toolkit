@@ -31,11 +31,6 @@ Modules that are still in development and less stable are labeled with the
 [stable-badge]: https://img.shields.io/badge/-stable-lightgrey?style=plastic
 [experimental-badge]: https://img.shields.io/badge/-experimental-%23febfa2?style=plastic
 [deprecated-badge]: https://img.shields.io/badge/-deprecated-%23fea2a2?style=plastic
-### AI
-
-* **[discovery-engine]** ![community-badge] ![experimental-badge] : Provisions Discovery Engine generative chat engine and assistant endpoints.
-
-[discovery-engine]: ../community/modules/ai/discovery-engine/README.md
 
 ### Compute
 
