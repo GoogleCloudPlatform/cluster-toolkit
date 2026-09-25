@@ -73,17 +73,17 @@ class WatchDeleteVmOp_Message:
             raise ValueError(
                 f"Expected dict for message payload, got {type(data).__name__}"
             )
-        op_name = data.get("op_name")
-        zone = data.get("zone")
-        node = data.get("node")
-        if not op_name or not node:
+        leaf_op_name = util.to_leaf_name(str(data.get("op_name") or ""))
+        leaf_zone = util.to_leaf_name(str(data.get("zone") or ""))
+        clean_node = str(data.get("node") or "").strip()
+        if not leaf_op_name or not leaf_zone or not clean_node:
             raise ValueError(
-                f"Missing required fields ('op_name', 'node') in message payload: {data}"
+                f"Missing or invalid required fields ('op_name', 'zone', 'node') in message payload: {data}"
             )
         return cls(
-            op_name=util.to_leaf_name(str(op_name)),
-            zone=util.to_leaf_name(str(zone or "")),
-            node=str(node).strip(),
+            op_name=leaf_op_name,
+            zone=leaf_zone,
+            node=clean_node,
         )
 
 
@@ -198,23 +198,27 @@ def _watch_op(lkp: util.Lookup, m: WatchDeleteVmOp_Message) -> bool:
 
     try:
         req = util.get_operation_req(lkp, m.op_name, zone=m.zone)
-        op = util.ensure_execute(req)
+        op = req.execute()
     except HttpError as e:
         status = _extract_http_status(e)
-        if status in PERMANENT_HTTP_ERRORS or (
-            status is not None and 400 <= status < 500 and status not in TRANSIENT_HTTP_ERRORS
+        if (
+            util.retry_exception(e)
+            or status in TRANSIENT_HTTP_ERRORS
+            or (status is not None and status >= 500)
+        ):
+            log.warning(
+                f"Transient HTTP {status} error querying operation {m.op_name} "
+                f"for node {m.node}: {e}. Will retry in subsequent cycle."
+            )
+            return False  # nack
+        elif status in PERMANENT_HTTP_ERRORS or (
+            status is not None and 400 <= status < 500
         ):
             log.warning(
                 f"Permanent HTTP {status} error querying operation {m.op_name} "
                 f"for node {m.node}: {e}. Acknowledging message to prevent queue starvation."
             )
             return True  # ack
-        elif status in TRANSIENT_HTTP_ERRORS or (status is not None and status >= 500):
-            log.warning(
-                f"Transient HTTP {status} error querying operation {m.op_name} "
-                f"for node {m.node}: {e}. Will retry in subsequent cycle."
-            )
-            return False  # nack
         else:
             log.warning(
                 f"Unclassified HttpError ({status}) querying operation {m.op_name} "

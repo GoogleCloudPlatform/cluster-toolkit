@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import socket
+import ssl
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -149,12 +150,28 @@ def test_watch_delete_vm_op_message_from_dict():
         WatchDeleteVmOp_Message.from_dict("invalid-json")
 
     # Missing node
-    with pytest.raises(ValueError, match="Missing required fields"):
+    with pytest.raises(ValueError, match="Missing or invalid required fields"):
         WatchDeleteVmOp_Message.from_dict({"op_name": "op-1", "zone": "z1"})
 
     # Missing op_name
-    with pytest.raises(ValueError, match="Missing required fields"):
+    with pytest.raises(ValueError, match="Missing or invalid required fields"):
         WatchDeleteVmOp_Message.from_dict({"node": "node-1", "zone": "z1"})
+
+    # Missing zone
+    with pytest.raises(ValueError, match="Missing or invalid required fields"):
+        WatchDeleteVmOp_Message.from_dict({"node": "node-1", "op_name": "op-1"})
+
+    # Corrupted op_name sanitizing to empty string
+    with pytest.raises(ValueError, match="Missing or invalid required fields"):
+        WatchDeleteVmOp_Message.from_dict({"op_name": "///", "zone": "z1", "node": "node-1"})
+
+    # Corrupted zone sanitizing to empty string
+    with pytest.raises(ValueError, match="Missing or invalid required fields"):
+        WatchDeleteVmOp_Message.from_dict({"op_name": "op-1", "zone": "   ///   ", "node": "node-1"})
+
+    # Empty/whitespace node
+    with pytest.raises(ValueError, match="Missing or invalid required fields"):
+        WatchDeleteVmOp_Message.from_dict({"op_name": "op-1", "zone": "z1", "node": "   "})
 
 
 # ==============================================================================
@@ -196,7 +213,9 @@ def test_watch_op_success_done():
     lkp.instance.return_value = MagicMock(status="RUNNING")
     msg = WatchDeleteVmOp_Message("op1", "us-central1-a", "node-1")
 
-    with patch("util.ensure_execute", return_value={"status": "DONE"}):
+    mock_req = MagicMock()
+    mock_req.execute.return_value = {"status": "DONE"}
+    with patch("util.get_operation_req", return_value=mock_req):
         assert _watch_op(lkp, msg) is True
 
 
@@ -205,7 +224,12 @@ def test_watch_op_done_with_error():
     lkp.instance.return_value = MagicMock(status="RUNNING")
     msg = WatchDeleteVmOp_Message("op1", "us-central1-a", "node-1")
 
-    with patch("util.ensure_execute", return_value={"status": "DONE", "error": {"code": "GCE_ERROR"}}):
+    mock_req = MagicMock()
+    mock_req.execute.return_value = {
+        "status": "DONE",
+        "error": {"code": "GCE_ERROR"},
+    }
+    with patch("util.get_operation_req", return_value=mock_req):
         assert _watch_op(lkp, msg) is True
 
 
@@ -214,7 +238,9 @@ def test_watch_op_in_progress():
     lkp.instance.return_value = MagicMock(status="RUNNING")
     msg = WatchDeleteVmOp_Message("op1", "us-central1-a", "node-1")
 
-    with patch("util.ensure_execute", return_value={"status": "RUNNING"}):
+    mock_req = MagicMock()
+    mock_req.execute.return_value = {"status": "RUNNING"}
+    with patch("util.get_operation_req", return_value=mock_req):
         assert _watch_op(lkp, msg) is False
 
 
@@ -224,7 +250,9 @@ def test_watch_op_permanent_http_errors(status_code):
     lkp.instance.return_value = MagicMock(status="RUNNING")
     msg = WatchDeleteVmOp_Message("op1", "us-central1-a", "node-1")
 
-    with patch("util.ensure_execute", side_effect=make_http_error(status_code)):
+    mock_req = MagicMock()
+    mock_req.execute.side_effect = make_http_error(status_code, "Permanent Error")
+    with patch("util.get_operation_req", return_value=mock_req):
         # Permanent error -> ACK (True)
         assert _watch_op(lkp, msg) is True
 
@@ -235,8 +263,83 @@ def test_watch_op_transient_http_errors(status_code):
     lkp.instance.return_value = MagicMock(status="RUNNING")
     msg = WatchDeleteVmOp_Message("op1", "us-central1-a", "node-1")
 
-    with patch("util.ensure_execute", side_effect=make_http_error(status_code)):
+    mock_req = MagicMock()
+    mock_req.execute.side_effect = make_http_error(status_code)
+    with patch("util.get_operation_req", return_value=mock_req):
         # Transient error -> NACK (False)
+        assert _watch_op(lkp, msg) is False
+
+
+def test_watch_op_http_403_rate_limit_exceeded():
+    """Verify HTTP 403 with Rate Limit Exceeded returns False (NACK)."""
+    lkp = MagicMock()
+    lkp.instance.return_value = MagicMock(status="RUNNING")
+    msg = WatchDeleteVmOp_Message("op1", "us-central1-a", "node-1")
+
+    mock_req = MagicMock()
+    mock_req.execute.side_effect = make_http_error(403, "Rate Limit Exceeded")
+    with patch("util.get_operation_req", return_value=mock_req):
+        assert _watch_op(lkp, msg) is False
+
+
+@pytest.mark.parametrize("reason", ["Quota Exceeded", "Quota exceeded"])
+def test_watch_op_http_403_quota_exceeded(reason):
+    """Verify HTTP 403 with Quota Exceeded returns False (NACK)."""
+    lkp = MagicMock()
+    lkp.instance.return_value = MagicMock(status="RUNNING")
+    msg = WatchDeleteVmOp_Message("op1", "us-central1-a", "node-1")
+
+    mock_req = MagicMock()
+    mock_req.execute.side_effect = make_http_error(403, reason)
+    with patch("util.get_operation_req", return_value=mock_req):
+        assert _watch_op(lkp, msg) is False
+
+
+def test_watch_op_http_403_permission_denied():
+    """Verify HTTP 403 with Permission Denied returns True (ACK)."""
+    lkp = MagicMock()
+    lkp.instance.return_value = MagicMock(status="RUNNING")
+    msg = WatchDeleteVmOp_Message("op1", "us-central1-a", "node-1")
+
+    mock_req = MagicMock()
+    mock_req.execute.side_effect = make_http_error(403, "Permission Denied")
+    with patch("util.get_operation_req", return_value=mock_req):
+        assert _watch_op(lkp, msg) is True
+
+
+def test_watch_op_does_not_call_ensure_execute():
+    """Confirm util.ensure_execute is NOT called by _watch_op."""
+    lkp = MagicMock()
+    lkp.instance.return_value = MagicMock(status="RUNNING")
+    msg = WatchDeleteVmOp_Message("op1", "us-central1-a", "node-1")
+
+    mock_req = MagicMock()
+    mock_req.execute.return_value = {"status": "DONE"}
+    with patch("util.get_operation_req", return_value=mock_req):
+        with patch("util.ensure_execute") as mock_ensure:
+            res = _watch_op(lkp, msg)
+            assert res is True
+            mock_ensure.assert_not_called()
+            mock_req.execute.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        socket.timeout("timed out"),
+        ConnectionError("connection reset"),
+        ssl.SSLError("SSL handshake error"),
+    ],
+)
+def test_watch_op_network_exceptions_from_execute(exc):
+    """Confirm network exceptions from req.execute() return False (NACK)."""
+    lkp = MagicMock()
+    lkp.instance.return_value = MagicMock(status="RUNNING")
+    msg = WatchDeleteVmOp_Message("op1", "us-central1-a", "node-1")
+
+    mock_req = MagicMock()
+    mock_req.execute.side_effect = exc
+    with patch("util.get_operation_req", return_value=mock_req):
         assert _watch_op(lkp, msg) is False
 
 
@@ -246,7 +349,9 @@ def test_watch_op_network_timeouts():
     msg = WatchDeleteVmOp_Message("op1", "us-central1-a", "node-1")
 
     for exc in [socket.timeout("timed out"), ConnectionResetError(), TimeoutError()]:
-        with patch("util.ensure_execute", side_effect=exc):
+        mock_req = MagicMock()
+        mock_req.execute.side_effect = exc
+        with patch("util.get_operation_req", return_value=mock_req):
             assert _watch_op(lkp, msg) is False
 
 
@@ -260,18 +365,22 @@ def test_watch_op_httplib2_errors():
         httplib2.ServerNotFoundError("Unable to find server"),
         httplib2.HttpLib2Error("Connection reset"),
     ]:
-        with patch("util.ensure_execute", side_effect=exc):
+        mock_req = MagicMock()
+        mock_req.execute.side_effect = exc
+        with patch("util.get_operation_req", return_value=mock_req):
             assert _watch_op(lkp, msg) is False
 
 
 def test_watch_op_non_dict_or_none_response():
-    """Verify non-dict or None op response from ensure_execute does not crash and returns False."""
+    """Verify non-dict or None op response from req.execute does not crash and returns False."""
     lkp = MagicMock()
     lkp.instance.return_value = MagicMock(status="RUNNING")
     msg = WatchDeleteVmOp_Message("op1", "us-central1-a", "node-1")
 
     for invalid_op in [None, "", "error-string", 123]:
-        with patch("util.ensure_execute", return_value=invalid_op):
+        mock_req = MagicMock()
+        mock_req.execute.return_value = invalid_op
+        with patch("util.get_operation_req", return_value=mock_req):
             assert _watch_op(lkp, msg) is False
 
 
@@ -280,7 +389,9 @@ def test_watch_op_unhandled_exception():
     lkp.instance.return_value = MagicMock(status="RUNNING")
     msg = WatchDeleteVmOp_Message("op1", "us-central1-a", "node-1")
 
-    with patch("util.ensure_execute", side_effect=RuntimeError("unexpected bug")):
+    mock_req = MagicMock()
+    mock_req.execute.side_effect = RuntimeError("unexpected bug")
+    with patch("util.get_operation_req", return_value=mock_req):
         # Defensive fallback -> ACK (True) to prevent poison queue
         assert _watch_op(lkp, msg) is True
 
@@ -309,8 +420,10 @@ def test_watch_vm_delete_ops_ttl_pruning(tmp_path):
     lkp = MagicMock()
     lkp.instance.return_value = MagicMock(status="RUNNING")
 
+    mock_req = MagicMock()
+    mock_req.execute.return_value = {"status": "RUNNING"}
     with patch("local_pubsub.subscription", return_value=sub):
-        with patch("util.ensure_execute", return_value={"status": "RUNNING"}):
+        with patch("util.get_operation_req", return_value=mock_req):
             watch_vm_delete_ops(lkp)
 
     # Expired message must be ACKed (deleted from disk)
@@ -341,10 +454,13 @@ def test_watch_vm_delete_ops_legacy_full_urls(tmp_path):
     lkp.project = "my-proj"
     lkp.instance.return_value = MagicMock(status="RUNNING")
 
+    mock_req = MagicMock()
+    mock_req.execute.return_value = {"status": "DONE"}
+    lkp.compute.zoneOperations().get.return_value = mock_req
+
     with patch("local_pubsub.subscription", return_value=sub):
-        with patch("util.ensure_execute", return_value={"status": "DONE"}) as mock_exec:
-            watch_vm_delete_ops(lkp)
-            assert mock_exec.call_count == 1
+        watch_vm_delete_ops(lkp)
+        assert mock_req.execute.call_count == 1
 
     # Verify zone was normalized to leaf name
     lkp.compute.zoneOperations().get.assert_called_with(
@@ -380,22 +496,18 @@ def test_watch_vm_delete_ops_concurrency_and_batching(tmp_path):
 
     lkp.instance.side_effect = fake_instance
 
-    def fake_ensure_execute(req):
-        op_name = req._op_name
-        idx = int(op_name.split("-")[1])
-        if idx < 10:
-            return {"status": "DONE"}
-        return {"status": "RUNNING"}
-
     def fake_get_operation_req(lkp, name, zone=None):
         req = MagicMock()
-        req._op_name = name
+        idx = int(name.split("-")[1])
+        if idx < 10:
+            req.execute.return_value = {"status": "DONE"}
+        else:
+            req.execute.return_value = {"status": "RUNNING"}
         return req
 
     with patch("local_pubsub.subscription", return_value=sub):
         with patch("util.get_operation_req", side_effect=fake_get_operation_req):
-            with patch("util.ensure_execute", side_effect=fake_ensure_execute):
-                watch_vm_delete_ops(lkp)
+            watch_vm_delete_ops(lkp)
 
     # 10 even nodes + 5 odd nodes (< 10) = 15 ACKed (deleted)
     # 5 odd nodes (>= 10) = 5 NACKed (still on disk)

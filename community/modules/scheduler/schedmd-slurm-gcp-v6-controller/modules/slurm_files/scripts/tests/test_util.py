@@ -1118,6 +1118,7 @@ def test_slurmsync_mig_auto_repair(mock_lookup, mock_compute_prop, mock_inst):
                 assert isinstance(action_recovered_fqdn, slurmsync.NodeActionIdle)
                 mock_get_reason.assert_called_with("testcl-ns-2")
 
+
 def test_is_target_controller_up_hostname_containing_role():
     line = "Slurmctld(backup) at primary-cluster-controller-1 is UP"
     assert util._is_target_controller_up(line, "primary") is False
@@ -1566,6 +1567,7 @@ def _mk_tpu_tpl(machine_name: str):
         ("n1-standard-4", None, None, 1),
     ],
 )
+
 def test_node_tpu_info_and_chunk_size(
     machine_type, topology, expected_type, expected_chunk_size
 ):
@@ -1579,17 +1581,16 @@ def test_node_tpu_info_and_chunk_size(
     lkp.template_info = Mock(return_value=_mk_tpu_tpl(machine_type))
     if expected_type is ValueError:
         with pytest.raises(ValueError, match="Unsupported TPU machine type"):
-            lkp.node_tpu_info(ns)  # type: ignore[arg-type]
+            lkp.node_tpu_info(ns) # type: ignore[arg-type]
     elif expected_type is None:
-        assert lkp.node_tpu_info(ns) is None  # type: ignore[arg-type]
-        assert lkp.get_tpu_chunk_size(ns) == expected_chunk_size  # type: ignore[arg-type]
+        assert lkp.node_tpu_info(ns) is None # type: ignore[arg-type]
+        assert lkp.get_tpu_chunk_size(ns) == expected_chunk_size # type: ignore[arg-type]
     else:
-        info = lkp.node_tpu_info(ns)  # type: ignore[arg-type]
+        info = lkp.node_tpu_info(ns) # type: ignore[arg-type]
         assert info is not None
         assert info.type == expected_type
         assert info.tpus_per_node == 4
-        assert lkp.get_tpu_chunk_size(ns) == expected_chunk_size  # type: ignore[arg-type]
-
+        assert lkp.get_tpu_chunk_size(ns) == expected_chunk_size # type: ignore[arg-type]
 
 def test_tpu_lookup_and_device_constrain():
     from common import TstPartition
@@ -1644,9 +1645,9 @@ def test_tpu_lookup_and_device_constrain():
     assert lkp.is_tpu_dynamic_nodeset("tpu7xd") is True
 
     assert lkp.is_tpu_nodeset("cpu") is False
-    assert lkp.is_tpu_static_partition(cfg.partitions["p_static"]) is True  # type: ignore[arg-type]
-    assert lkp.is_tpu_dynamic_partition(cfg.partitions["p_dyn"]) is True  # type: ignore[arg-type]
-    assert lkp.is_tpu_partition(cfg.partitions["p_cpu"]) is False  # type: ignore[arg-type]
+    assert lkp.is_tpu_static_partition(cfg.partitions["p_static"]) is True # type: ignore[arg-type]
+    assert lkp.is_tpu_dynamic_partition(cfg.partitions["p_dyn"]) is True # type: ignore[arg-type]
+    assert lkp.is_tpu_partition(cfg.partitions["p_cpu"]) is False # type: ignore[arg-type]
 
     assert lkp.remove_device_constrain_nodeset("v6es") is False
     assert lkp.remove_device_constrain_nodeset("tpu7xd") is True
