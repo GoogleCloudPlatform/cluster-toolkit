@@ -277,10 +277,10 @@ func TestEnsureGCloudSDKInstalled_Failure(t *testing.T) {
 }
 
 func TestEnsureGCloudAuthenticated_Success(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := executeCmdWithTimeoutFunc
+	defer func() { executeCmdWithTimeoutFunc = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	executeCmdWithTimeoutFunc = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		if name == "gcloud" && len(args) > 1 && args[0] == "auth" {
 			return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
 		}
@@ -294,10 +294,10 @@ func TestEnsureGCloudAuthenticated_Success(t *testing.T) {
 }
 
 func TestEnsureGCloudAuthenticated_Failure(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := executeCmdWithTimeoutFunc
+	defer func() { executeCmdWithTimeoutFunc = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	executeCmdWithTimeoutFunc = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		if name == "gcloud" && len(args) > 1 && args[0] == "auth" {
 			return shell.CommandResult{ExitCode: 0, Stdout: ""}
 		}
@@ -434,6 +434,13 @@ func TestEnsurePrerequisites_DockerCreds(t *testing.T) {
 		return shell.CommandResult{ExitCode: 0}
 	}
 
+	//Mock the timeout wrapper
+	origExecuteCmd := executeCmdWithTimeoutFunc
+	defer func() { executeCmdWithTimeoutFunc = origExecuteCmd }()
+	executeCmdWithTimeoutFunc = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		return shell.ExecuteCommand(name, args...)
+	}
+
 	origGetADCSetupCommand := getADCSetupCommandFunc
 	defer func() { getADCSetupCommandFunc = origGetADCSetupCommand }()
 	getADCSetupCommandFunc = func() string { return "" }
@@ -494,6 +501,13 @@ func TestEnsureBasicPrerequisites_InvalidProject(t *testing.T) {
 		}
 	}
 
+	//Mock the timeout wrapper
+	origExecuteCmd := executeCmdWithTimeoutFunc
+	defer func() { executeCmdWithTimeoutFunc = origExecuteCmd }()
+	executeCmdWithTimeoutFunc = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		return shell.ExecuteCommand(name, args...)
+	}
+
 	origStore := store
 	defer func() { store = origStore }()
 	store = &mockPrereqStore{}
@@ -525,6 +539,13 @@ func TestEnsureBasicPrerequisites_SaveState(t *testing.T) {
 	defer func() { shell.ExecuteCommand = origExecuteCommand }()
 
 	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+		return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
+	}
+
+	//Mock the timeout wrapper
+	origExecuteCmd := executeCmdWithTimeoutFunc
+	defer func() { executeCmdWithTimeoutFunc = origExecuteCmd }()
+	executeCmdWithTimeoutFunc = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
 	}
 
@@ -586,6 +607,13 @@ func TestEnsureBasicPrerequisites_RestrictedPermissions_Proceeds(t *testing.T) {
 		}
 	}
 
+	//Mock the timeout wrapper
+	origExecuteCmd := executeCmdWithTimeoutFunc
+	defer func() { executeCmdWithTimeoutFunc = origExecuteCmd }()
+	executeCmdWithTimeoutFunc = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		return shell.ExecuteCommand(name, args...)
+	}
+
 	origStore := store
 	defer func() { store = origStore }()
 	store = &mockPrereqStore{}
@@ -620,6 +648,13 @@ func TestEnsureBasicPrerequisites_ProjectNameContainsPermission_Fails(t *testing
 		default:
 			return shell.CommandResult{ExitCode: 0}
 		}
+	}
+
+	//Mock the timeout wrapper
+	origExecuteCmd := executeCmdWithTimeoutFunc
+	defer func() { executeCmdWithTimeoutFunc = origExecuteCmd }()
+	executeCmdWithTimeoutFunc = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		return shell.ExecuteCommand(name, args...)
 	}
 
 	origStore := store

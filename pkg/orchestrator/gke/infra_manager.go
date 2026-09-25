@@ -16,7 +16,9 @@ package gke
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"io"
@@ -400,11 +402,23 @@ func (g *GKEOrchestrator) checkClusterConnectivity() error {
 func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
 	g.projectID = projectID
 
+	timeoutDuration := 30 * time.Second
+
 	logging.Info("Fetching GKE cluster metadata for '%s'...", clusterName)
-	res := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", clusterName,
+	res := g.executor.ExecuteCommandWithTimeout(timeoutDuration, "gcloud", "container", "clusters", "describe", clusterName,
 		"--location", location,
 		"--project", g.projectID,
 		"--format=json")
+
+	if res.Err != nil {
+		if errors.Is(res.Err, context.DeadlineExceeded) {
+			return "", fmt.Errorf("timed out after %v while trying to reach GKE cluster '%s' in '%s'. Please check your network connection", timeoutDuration, clusterName, location)
+		}
+		if res.ExitCode == -1 {
+			return "", fmt.Errorf("failed to execute gcloud: %w", res.Err)
+		}
+	}
+
 	if res.ExitCode != 0 {
 		if strings.Contains(res.Stderr, "403") || strings.Contains(strings.ToLower(res.Stderr), "permission denied") {
 			return "", fmt.Errorf("your account lacks the required permission to access cluster '%s' in project '%s'. Please ask your project administrator to grant you the Kubernetes Engine Viewer role (roles/container.viewer)", clusterName, g.projectID)
@@ -413,10 +427,20 @@ func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (s
 		if len(strings.Split(location, "-")) == 3 {
 			region := shell.ExtractRegion(location)
 			logging.Info("Failed to find cluster in zone %s. Trying fallback to region %s...", location, region)
-			fallbackRes := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", clusterName,
+			fallbackRes := g.executor.ExecuteCommandWithTimeout(timeoutDuration, "gcloud", "container", "clusters", "describe", clusterName,
 				"--location", region,
 				"--project", g.projectID,
 				"--format=json")
+
+			if fallbackRes.Err != nil {
+				if errors.Is(fallbackRes.Err, context.DeadlineExceeded) {
+					return "", fmt.Errorf("failed to describe GKE cluster %s in %s: %w", clusterName, location, res.Err)
+				}
+				if fallbackRes.ExitCode == -1 {
+					return "", fmt.Errorf("failed to describe GKE cluster %s in %s: %w", clusterName, location, res.Err)
+				}
+			}
+
 			if fallbackRes.ExitCode == 0 {
 				logging.Warn("Cluster '%s' is a regional cluster in '%s'. Found it by falling back from zone '%s'. "+
 					"Note: This does NOT restrict your job to '%s'. To run specifically in '%s', "+

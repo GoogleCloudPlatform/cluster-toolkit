@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
 	compute "google.golang.org/api/compute/v1"
@@ -82,6 +83,7 @@ type HTTPClient interface {
 
 type Executor interface {
 	ExecuteCommand(name string, args ...string) shell.CommandResult
+	ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...string) shell.CommandResult
 	ExecuteCommandStream(name string, args ...string) error
 }
 
