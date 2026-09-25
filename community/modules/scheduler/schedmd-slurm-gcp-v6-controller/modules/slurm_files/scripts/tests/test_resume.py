@@ -1276,3 +1276,94 @@ def test_unobservable_operation_requeues_so_suspend_reclaims(
   # ...but the nodes are requeued, which is what actually triggers power_down -> suspend.
   mock_handle_failure.assert_called_once()
   assert mock_handle_failure.call_args.args[3] == error_handler.Action.REQUEUE
+
+def test_mig_flex_tpu_resume(mocker):
+    import mig_flex
+    from util import MachineType
+
+    ns_dyn = TstNodeset(
+        "tpudyn",
+        node_count_static=0,
+        node_count_dynamic_max=4,
+        accelerator_topology=None,
+        enable_placement=False,
+        zone_policy_allow=["us-central1-a"],
+        instance_template="https://www.googleapis.com/compute/v1/projects/p/global/instanceTemplates/tpl-1",
+    )
+    ns_static = TstNodeset(
+        "tpustatic",
+        node_count_static=4,
+        node_count_dynamic_max=0,
+        accelerator_topology="2x4",
+        zone_policy_allow=["us-central1-a"],
+        instance_template="https://www.googleapis.com/compute/v1/projects/p/global/instanceTemplates/tpl-2",
+    )
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={"tpudyn": ns_dyn, "tpustatic": ns_static},
+        partitions={
+            "tpudyn": TstPartition(
+                partition_name="tpudyn",
+                partition_nodeset=["tpudyn"],
+                enable_job_exclusive=True,
+            )
+        },
+    )
+    lkp = util.Lookup(cfg)
+    lkp.template_info = unittest.mock.Mock(
+        return_value=unittest.mock.Mock(
+            machine_type=MachineType(
+                name="ct6e-standard-4t", guest_cpus=0, memory_mb=0, accelerators=[]
+            ),
+            gpu=None,
+        )
+    )
+
+    mock_run = mocker.patch("mig_flex.util.run")
+    mock_resume_single = mocker.patch("mig_flex._resume_single_tpu_node")
+
+    # 1. Partial static TPU slice (vmcount=2, only 1 node passed) -> aborts and powers down slice
+    mig_flex.resume_tpu_chunk(["c-tpustatic-0"], job_id=10, lkp=lkp, topology=None)
+    mock_resume_single.assert_not_called()
+    mock_run.assert_called_once()
+    assert "state=POWER_DOWN_FORCE" in mock_run.call_args[0][0]
+    assert "nodename=c-tpustatic-[0-1]" in mock_run.call_args[0][0]
+
+    # 2. Dynamic TPU slice with job topology="2x4" -> calls _resume_single_tpu_node with full slice and topology="2x4"
+    mock_run.reset_mock()
+    mig_flex.resume_tpu_chunk(
+        ["c-tpudyn-0", "c-tpudyn-1"], job_id=11, lkp=lkp, topology="2x4"
+    )
+    mock_resume_single.assert_called_once_with(
+        ["c-tpudyn-0", "c-tpudyn-1"], 11, lkp, topology="2x4"
+    )
+
+    # 3. When resume_tpu_chunk raises INVALID_FIELD_VALUE (e.g. 1x2x4 on tpu7x-standard-4t),
+    # resume_nodes clears POWERING_UP state via handle_resume_failure and cancels the bad job.
+    mocker.patch("resume.lookup", return_value=lkp)
+    mocker.patch(
+        "resume.create_placements",
+        side_effect=lambda nodes, *a, **kw: [PlacementAndNodes(None, nodes)] if nodes else [],
+    )
+    mock_handle_failure = mocker.patch("resume.handle_resume_failure")
+    mock_resume_run = mocker.patch("resume.run")
+    mocker.patch(
+        "mig_flex.resume_tpu_chunk",
+        side_effect=RuntimeError("INVALID_FIELD_VALUE: Accelerator topology: 1x2x4 is not compatible"),
+    )
+    resume_data = ResumeData(
+        jobs=[
+            ResumeJobData(
+                job_id=19,
+                partition="tpudyn",
+                nodes_alloc=["c-tpudyn-0", "c-tpudyn-1"],
+                accelerator_topology="1x2x4",
+            )
+        ]
+    )
+    resume.resume_nodes(["c-tpudyn-0", "c-tpudyn-1"], resume_data)
+    mock_handle_failure.assert_called_once()
+    assert mock_handle_failure.call_args[0][0] == ["c-tpudyn-0", "c-tpudyn-1"]
+    assert mock_handle_failure.call_args[0][3] == error_handler.Action.REQUEUE
+    assert any("notify 19" in call.args[0] for call in mock_resume_run.call_args_list)
+    assert any("scancel 19" in call.args[0] for call in mock_resume_run.call_args_list)

@@ -33,7 +33,7 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || var.enable_placement
+    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || var.enable_placement || local.is_tpu
     error_message = "accelerator_topology requires enable_placement to be set to true."
   }
 
@@ -42,30 +42,33 @@ output "nodeset" {
     error_message = "MIG provisioning engine only supports enable_placement when accelerator_topology is specified (e.g. '1x72')."
   }
 
+  # GPU topologies are 2D (<dim1>x<dim2>); TPU topologies are 2D or 3D (e.g. "2x4", "2x4x4").
   precondition {
-    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || can(regex("^[1-9][0-9]*[xX][1-9][0-9]*$", trimspace(var.accelerator_topology)))
-    error_message = "accelerator_topology must be formatted as '<dim1>x<dim2>' with positive integers (e.g. '1x72')."
+    condition = var.accelerator_topology == null || var.accelerator_topology == "" || (
+      local.is_tpu ? local.tpu_topo_valid : can(regex("^[1-9][0-9]*[xX][1-9][0-9]*$", trimspace(var.accelerator_topology)))
+    )
+    error_message = "accelerator_topology must be formatted as '<dim1>x<dim2>' or '<dim1>x<dim2>x<dim3>' with positive integers (e.g. '1x72', '2x4x4')."
   }
 
   precondition {
-    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || length(local.guest_accelerator) > 0 || can(regex("^(a[2-4]x?|g2)", var.machine_type))
+    condition     = var.accelerator_topology == null || var.accelerator_topology == "" || local.is_tpu || length(local.guest_accelerator) > 0 || can(regex("^(a[2-4]x?|g2)", var.machine_type))
     error_message = "accelerator_topology can only be configured on machine types with attached GPUs or accelerators."
   }
 
-  # GCE accepts acceleratorTopology in a HIGH_THROUGHPUT workload policy only on A4X / A4X Max;
+  # GCE accepts acceleratorTopology in a HIGH_THROUGHPUT workload policy only on A4X, A4X Max, and TPU;
   # Bulk Insert binds it via runtime placement policies instead, hence the MIG-only gate.
   precondition {
-    condition     = !(var.provisioning_engine == "MIG" && !var.dws_flex.enabled && var.accelerator_topology != null && var.accelerator_topology != "") || can(regex("^a4x-", var.machine_type))
-    error_message = "accelerator_topology with provisioning_engine = 'MIG' requires a machine type that supports HIGH_THROUGHPUT workload policies with an accelerator topology (A4X, A4X Max). Use provisioning_engine = 'BULK_INSERT' for other machine types."
+    condition     = !(var.provisioning_engine == "MIG" && !var.dws_flex.enabled && var.accelerator_topology != null && var.accelerator_topology != "") || local.is_tpu || can(regex("^a4x-", var.machine_type))
+    error_message = "accelerator_topology with provisioning_engine = 'MIG' requires a machine type that supports HIGH_THROUGHPUT workload policies with an accelerator topology (A4X, A4X Max, TPU). Use provisioning_engine = 'BULK_INSERT' for other machine types."
   }
 
   precondition {
-    condition     = (var.accelerator_topology == null || var.accelerator_topology == "") || try(tonumber(split("x", lower(trimspace(var.accelerator_topology)))[1]) % local.gpu_count == 0, false)
+    condition     = (var.accelerator_topology == null || var.accelerator_topology == "") || local.is_tpu || try(tonumber(split("x", lower(trimspace(var.accelerator_topology)))[1]) % local.gpu_count == 0, false)
     error_message = "The second dimension (<dim2>) of accelerator_topology must be divisible by the number of GPUs per machine."
   }
 
   precondition {
-    condition = (var.accelerator_topology == null || var.accelerator_topology == "" || var.provisioning_engine != "MIG" || var.dws_flex.enabled) || (
+    condition = (var.accelerator_topology == null || var.accelerator_topology == "" || var.provisioning_engine != "MIG" || var.dws_flex.enabled || local.is_tpu) || (
       var.node_count_static > 0 && try(
         var.node_count_static % (
           (tonumber(split("x", lower(trimspace(var.accelerator_topology)))[0]) * tonumber(split("x", lower(trimspace(var.accelerator_topology)))[1])) / local.gpu_count
@@ -149,5 +152,20 @@ output "nodeset" {
       var.node_count_dynamic_max > 0 && var.provisioning_engine == "MIG" && !var.dws_flex.enabled
     )
     error_message = "Dynamic compute NodeSets with provisioning_engine = 'MIG' are currently not supported. Please explicitly set node_count_dynamic_max = 0."
+  }
+
+  precondition {
+    condition     = !local.is_tpu || endswith(var.machine_type, "-4t")
+    error_message = "TPU nodesets currently only support 4-chip machine types ending in '-4t' (e.g. ct6e-standard-4t, tpu7x-standard-4t, ct5p-hightpu-4t)."
+  }
+
+  precondition {
+    condition     = !local.is_tpu || var.node_count_static == 0 || (local.tpu_slice_vms >= 1 && floor(local.tpu_slice_vms) == local.tpu_slice_vms && var.node_count_static % local.tpu_slice_vms == 0)
+    error_message = "Static TPU nodesets (node_count_static > 0) require a valid accelerator_topology (e.g. 2x2x4), and node_count_static must be a multiple of the slice VM count (total_chips / 4)."
+  }
+
+  precondition {
+    condition     = !local.is_tpu || !(var.node_count_static > 0 && var.node_count_dynamic_max > 0)
+    error_message = "TPU nodesets cannot mix static and dynamic nodes. For static TPU nodesets (node_count_static > 0), please explicitly set node_count_dynamic_max = 0."
   }
 }

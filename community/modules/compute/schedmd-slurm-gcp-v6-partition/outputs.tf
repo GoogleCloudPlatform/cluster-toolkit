@@ -32,6 +32,11 @@ output "partitions" {
     condition     = sum([for b in [local.has_node, local.has_dyn, local.has_tpu] : b ? 1 : 0]) == 1
     error_message = "Partition must contain exactly one type of nodeset."
   }
+
+  precondition {
+    condition     = !(local.has_tpu_static && local.has_tpu_dynamic)
+    error_message = "TPU partitions cannot mix static and dynamic TPU nodesets in the same partition."
+  }
 }
 
 output "nodeset" {

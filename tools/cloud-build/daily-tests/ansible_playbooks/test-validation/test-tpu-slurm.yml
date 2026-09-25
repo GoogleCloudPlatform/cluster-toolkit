@@ -1,0 +1,158 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Assert TPU Slurm test variables are defined
+  ansible.builtin.assert:
+    that:
+    - custom_vars.tpu_partition is defined
+    - custom_vars.tpu_dyn_partition is defined
+    - custom_vars.tpu_type is defined
+    - custom_vars.tpu_topology is defined
+    - custom_vars.expected_tpu_chips is defined
+    - custom_vars.expected_tpu_cores is defined
+
+- name: Verify Slurm TPU plugins and GRES in scontrol show config
+  ansible.builtin.shell: |
+    set -e
+    scontrol show config | grep -E "GresTypes\s*=.*tpu"
+    scontrol show config | grep -E "JobSubmitPlugins\s*=.*tpu"
+    scontrol show config | grep -E "CliFilterPlugins\s*=.*tpu"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Verify Static TPU partition (tpu-block-topo, PowerDownOnIdle=NO)
+  ansible.builtin.shell: |
+    set -e
+    scontrol show partition {{ custom_vars.tpu_partition }} | grep -E "Exclusive=NODE|OverSubscribe=EXCLUSIVE"
+    scontrol show partition {{ custom_vars.tpu_partition }} | grep -E "Topology=tpu-block-topo"
+    scontrol show partition {{ custom_vars.tpu_partition }} | grep -E "PowerDownOnIdle=NO"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Verify Dynamic TPU partition (topology/tree, PowerDownOnIdle=YES)
+  ansible.builtin.shell: |
+    set -e
+    scontrol show partition {{ custom_vars.tpu_dyn_partition }} | grep -E "Exclusive=NODE|OverSubscribe=EXCLUSIVE"
+    scontrol show partition {{ custom_vars.tpu_dyn_partition }} | grep -E "PowerDownOnIdle=YES"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Verify Static and Dynamic TPU node GRES and Features in scontrol show node
+  ansible.builtin.shell: |
+    set -e
+    scontrol show node | grep -E "Gres=tpu:{{ custom_vars.tpu_type }}:{{ custom_vars.expected_tpu_chips }}"
+    scontrol show node | grep -E "AvailableFeatures=.*{{ custom_vars.tpu_type }}_{{ custom_vars.tpu_topology }}"
+    scontrol show node | grep -E "AvailableFeatures=.*tpu_dynamic"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Verify srun on Static TPU partition (mounts, cgroup ConstrainDevices=no, and VFIO devices)
+  ansible.builtin.command: >
+    srun -N {{ custom_vars.num_slurm_nodes | default(1) }}
+    -p {{ custom_vars.tpu_partition }}
+    --layout={{ custom_vars.tpu_type }}={{ custom_vars.tpu_topology }}
+    bash -c '
+    set -e
+    mount | grep -q "on /home "
+    grep -q "^ConstrainDevices=no" /usr/local/etc/slurm/cgroup.conf
+    VFIO_COUNT=$(ls -1 /dev/vfio/devices/vfio* | wc -l)
+    echo "Static partition $(hostname): Found ${VFIO_COUNT} VFIO TPU devices"
+    test "${VFIO_COUNT}" -eq {{ custom_vars.expected_tpu_cores }}
+    '
+  register: srun_static_result
+  failed_when: srun_static_result.rc != 0
+
+# Commenting dynamic node provisioning tests for now due to low spot capacity.
+# - name: Verify srun on Dynamic TPU partition (on-demand MIG creation via RESUME_FILE --layout)
+#   ansible.builtin.command: >
+#     srun -N {{ custom_vars.num_slurm_nodes | default(1) }}
+#     -p {{ custom_vars.tpu_dyn_partition }}
+#     --layout={{ custom_vars.tpu_type }}={{ custom_vars.tpu_topology }}
+#     bash -c '
+#     set -e
+#     VFIO_COUNT=$(ls -1 /dev/vfio/devices/vfio* | wc -l)
+#     echo "Dynamic partition $(hostname): Found ${VFIO_COUNT} VFIO TPU devices"
+#     test "${VFIO_COUNT}" -eq {{ custom_vars.expected_tpu_cores }}
+#     '
+#   register: srun_dyn_result
+#   failed_when: srun_dyn_result.rc != 0
+
+# - name: Verify Dynamic TPU partition node powers down (PowerDownOnIdle=YES) after job completes
+#   ansible.builtin.shell: |
+#     sinfo -p {{ custom_vars.tpu_dyn_partition }} -h -o "%T" | grep -E "idle~|pow_dn|power_down"
+#   register: dyn_powerdown_check
+#   until: dyn_powerdown_check.rc == 0
+#   retries: 12
+#   delay: 10
+#   changed_when: false
+
+- name: Install shared JAX TPU virtualenv on /home
+  ansible.builtin.shell: |
+    set -e
+    python3 -m venv ~/jax-env
+    ~/jax-env/bin/pip install -q -U pip "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+  args:
+    executable: /bin/bash
+
+- name: Create sbatch test script for TPU batch job verification
+  ansible.builtin.copy:
+    dest: /tmp/test_tpu_sbatch.sh
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      #SBATCH --job-name=tpu7x-sbatch-test
+      #SBATCH --partition={{ custom_vars.tpu_partition }}
+      #SBATCH --nodes={{ custom_vars.num_slurm_nodes | default(1) }}
+      #SBATCH --layout={{ custom_vars.tpu_type }}={{ custom_vars.tpu_topology }}
+      #SBATCH --output=%x_%j.out
+      #SBATCH --error=%x_%j.err
+      set -e
+
+      echo "Running on node: $(hostname), Job ID: ${SLURM_JOB_ID}"
+      ~/jax-env/bin/python3 -c "
+      import jax
+
+      want_cores = {{ custom_vars.expected_tpu_cores }}
+      got_cores = jax.device_count('tpu')
+      local_cores = jax.local_device_count('tpu')
+      print(f'global TPU cores: {got_cores}, local TPU cores: {local_cores}')
+      assert got_cores == want_cores, f'Expected {want_cores} TPU cores, got {got_cores}'
+
+      xs = jax.numpy.ones(local_cores)
+      r = jax.pmap(lambda x: jax.lax.psum(x, 'i'), axis_name='i')(xs)
+      print('pmap psum result:', r)
+      assert jax.numpy.allclose(r, jax.numpy.full(local_cores, float(got_cores)))
+      "
+      echo "TPU_SBATCH_SUCCESS"
+
+- name: Submit and wait for sbatch TPU job to complete
+  ansible.builtin.command: sbatch --parsable --wait /tmp/test_tpu_sbatch.sh
+  register: sbatch_job
+  failed_when: sbatch_job.rc != 0
+  retries: 2
+  delay: 30
+
+- name: Verify sbatch job output on shared /home filesystem
+  ansible.builtin.command: "cat tpu7x-sbatch-test_{{ sbatch_job.stdout | trim }}.out"
+  register: sbatch_output
+  failed_when: "'TPU_SBATCH_SUCCESS' not in sbatch_output.stdout"
+
+- name: Print sbatch JAX TPU output
+  ansible.builtin.debug:
+    msg: "{{ sbatch_output.stdout_lines }}"
