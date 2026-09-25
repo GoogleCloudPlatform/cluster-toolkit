@@ -36,7 +36,7 @@ vars:
 
   instance_image_custom: true
   image_build_machine_type: n2d-standard-4
-  build_slurm_from_git_ref: tpu-2605
+  build_slurm_from_git_ref: 7ae87188aae8dae28d27671c28ff789ce33c9551 # tpu-2605
   disk_size_gb: 100
   filestore_ip_range: 192.168.0.0/29
 
