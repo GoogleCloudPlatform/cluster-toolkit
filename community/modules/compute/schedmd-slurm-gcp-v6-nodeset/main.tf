@@ -33,7 +33,63 @@ module "gpu" {
 }
 
 locals {
+  has_flex_policy = var.instance_flexibility_policy != null && length(try(var.instance_flexibility_policy.instance_selections, [])) > 0
+
+  flex_machine_types = !local.has_flex_policy ? toset([]) : toset(flatten([
+    for s in var.instance_flexibility_policy.instance_selections : tolist(s.machine_types)
+  ]))
+
+  instance_flexibility_policy = !local.has_flex_policy ? null : {
+    instance_selections = concat(
+      contains(local.flex_machine_types, var.machine_type) ? [] : [{
+        name          = "primary-default"
+        rank          = 0
+        machine_types = toset([var.machine_type])
+      }],
+      [
+        for idx, s in var.instance_flexibility_policy.instance_selections : {
+          name          = (s.name != null && trimspace(s.name) != "") ? trimspace(s.name) : "selection-${idx + 1}"
+          rank          = s.rank
+          machine_types = s.machine_types
+        }
+      ]
+    )
+  }
+}
+
+module "fallback_instance_validation" {
+  source   = "../../../../modules/internal/instance_validations"
+  for_each = local.flex_machine_types
+
+  machine_type = each.value
+  disk_type    = var.disk_type
+}
+
+module "fallback_gpu" {
+  source   = "../../../../modules/internal/gpu-definition"
+  for_each = local.flex_machine_types
+
+  machine_type      = each.value
+  guest_accelerator = startswith(each.value, "n1-") ? var.guest_accelerator : []
+  machine_configs   = var.machine_configs
+}
+
+locals {
   guest_accelerator = module.gpu.guest_accelerator
+  inferred_gpu_signature = {
+    for mt in setunion([var.machine_type], local.flex_machine_types) : mt => (
+      mt == var.machine_type && length(local.guest_accelerator) > 0 ? "${replace(local.guest_accelerator[0].type, "/^.*\\//", "")}:${local.guest_accelerator[0].count}" :
+      contains(keys(module.fallback_gpu), mt) && length(module.fallback_gpu[mt].guest_accelerator) > 0 ? "${replace(module.fallback_gpu[mt].guest_accelerator[0].type, "/^.*\\//", "")}:${module.fallback_gpu[mt].guest_accelerator[0].count}" :
+      can(regex("^a2-(highgpu|megagpu)-", mt)) ? "nvidia-tesla-a100:${try(tonumber(regex("-([0-9]+)g$", mt)[0]), 1)}" :
+      can(regex("^a2-ultragpu-", mt)) ? "nvidia-a100-80gb:${try(tonumber(regex("-([0-9]+)g$", mt)[0]), 1)}" :
+      can(regex("^a3-(highgpu|edgegpu)-", mt)) ? "nvidia-h100-80gb:${try(tonumber(regex("-([0-9]+)g$", mt)[0]), 1)}" :
+      can(regex("^a3-megagpu-", mt)) ? "nvidia-h100-mega-80gb:${try(tonumber(regex("-([0-9]+)g$", mt)[0]), 1)}" :
+      can(regex("^(a3-ultragpu|a4|a4x)-", mt)) ? "${join("-", slice(split("-", mt), 0, 2))}:${try(tonumber(regex("-([0-9]+)g$", mt)[0]), 1)}" :
+      can(regex("^g2-standard-", mt)) ? "nvidia-l4:${lookup({ "24" = 2, "48" = 4, "96" = 8 }, split("-", mt)[2], 1)}" :
+      can(regex("^g4-standard-", mt)) ? "nvidia-rtx-pro-6000:${lookup({ "96" = 2, "192" = 4, "384" = 8 }, split("-", mt)[2], 1)}" :
+      "none:0"
+    )
+  }
   # GPUs per VM: attached accelerators, else the "-Ng" suffix in the machine type name.
   # The literal fallback never sizes a slice MIG; outputs.tf requires a determinable count there.
   gpu_count = coalesce(
@@ -141,9 +197,11 @@ locals {
     maintenance_interval     = var.maintenance_interval
     instance_properties_json = jsonencode(var.instance_properties)
 
-    zone_target_shape = var.zone_target_shape
-    zone_policy_allow = local.zones
+    zone_target_shape = local.zone_target_shape
+    zone_policy_allow = local.zones_allow
     zone_policy_deny  = local.zones_deny
+
+    instance_flexibility_policy = local.instance_flexibility_policy
 
     startup_script  = local.ghpc_startup_script
     network_storage = var.network_storage
@@ -154,8 +212,21 @@ locals {
 }
 
 locals {
-  zones      = setunion(var.zones, [var.zone])
-  zones_deny = setsubtract(data.google_compute_zones.available.names, local.zones)
+  zones             = setunion(var.zones, [var.zone])
+  zone_target_shape = coalesce(var.zone_target_shape, "ANY_SINGLE_ZONE")
+  mig_provisioned   = var.dws_flex.enabled ? !var.dws_flex.use_bulk_insert : var.provisioning_engine == "MIG"
+
+  # Expand to all regional zones when a multi-zone target shape is set on a MIG without explicit zones or zonal reservations.
+  expand_zones = (
+    length(var.zones) == 0 &&
+    local.zone_target_shape != "ANY_SINGLE_ZONE" &&
+    local.mig_provisioned &&
+    var.reservation_name == "" &&
+    var.future_reservation == ""
+  )
+
+  zones_allow = local.expand_zones ? toset(data.google_compute_zones.available.names) : local.zones
+  zones_deny  = setsubtract(data.google_compute_zones.available.names, local.zones_allow)
 }
 
 data "google_compute_zones" "available" {

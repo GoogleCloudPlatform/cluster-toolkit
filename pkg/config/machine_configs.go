@@ -154,6 +154,53 @@ func GetMachineType(project, zone, machineType string) (*compute.MachineType, er
 	return res, nil
 }
 
+func getKnownObjectAttr(val cty.Value, attr string) (cty.Value, bool) {
+	if val.IsNull() || !val.IsKnown() || !val.Type().IsObjectType() || !val.Type().HasAttribute(attr) {
+		return cty.NilVal, false
+	}
+	res := val.GetAttr(attr)
+	if res.IsNull() || !res.IsKnown() {
+		return cty.NilVal, false
+	}
+	return res, true
+}
+
+func extractStringElements(coll cty.Value) []string {
+	if !coll.Type().IsTupleType() && !coll.Type().IsListType() && !coll.Type().IsSetType() {
+		return nil
+	}
+	var out []string
+	for it := coll.ElementIterator(); it.Next(); {
+		_, v := it.Element()
+		if v.Type() == cty.String && !v.IsNull() && v.IsKnown() {
+			out = append(out, v.AsString())
+		}
+	}
+	return out
+}
+
+func extractFallbackMachineTypes(m *Module, bp Blueprint) []string {
+	if !m.Settings.Has("instance_flexibility_policy") {
+		return nil
+	}
+	pol, ok := attemptEvalModuleInput(m.Settings.Get("instance_flexibility_policy"), bp)
+	if !ok {
+		return nil
+	}
+	sels, ok := getKnownObjectAttr(pol, "instance_selections")
+	if !ok || !sels.CanIterateElements() {
+		return nil
+	}
+	var out []string
+	for it := sels.ElementIterator(); it.Next(); {
+		_, sel := it.Element()
+		if mts, hasMts := getKnownObjectAttr(sel, "machine_types"); hasMts {
+			out = append(out, extractStringElements(mts)...)
+		}
+	}
+	return out
+}
+
 // GetOutputConfig returns the machine configuration as a struct.
 func GetOutputConfig(m *Module, bp Blueprint) (*OutputConfig, error) {
 	if mockData := os.Getenv("GHPC_MOCK_MACHINE_CONFIG"); mockData != "" {
@@ -180,6 +227,21 @@ func GetOutputConfig(m *Module, bp Blueprint) (*OutputConfig, error) {
 	}
 
 	result := buildOutputConfigStruct(machineType, mt)
+	for _, fbMt := range extractFallbackMachineTypes(m, bp) {
+		if fbMt == "" || fbMt == machineType {
+			continue
+		}
+		if _, exists := result.CPUs[fbMt]; exists {
+			continue
+		}
+		fbInfo, err := GetMachineType(project, zone, fbMt)
+		if err != nil {
+			// A fallback machine type in a multi-zone Regional MIG may only exist in other
+			// zones of the region; skip rather than aborting expansion and let Terraform validate.
+			continue
+		}
+		addMachineTypeToOutputConfig(&result, fbMt, fbInfo)
+	}
 	return &result, nil
 }
 
@@ -218,13 +280,7 @@ type OutputConfig struct {
 	CPUs map[string]CPUConfig `json:"cpus"`
 }
 
-func buildOutputConfigStruct(machineType string, mt *compute.MachineType) OutputConfig {
-	result := OutputConfig{
-		GPUs: make(map[string]GPUConfig),
-		TPUs: make(map[string]TPUConfig),
-		CPUs: make(map[string]CPUConfig),
-	}
-
+func addMachineTypeToOutputConfig(result *OutputConfig, machineType string, mt *compute.MachineType) {
 	result.CPUs[machineType] = CPUConfig{Count: int(mt.GuestCpus), MemoryMb: int(mt.MemoryMb)}
 
 	count, accelType, isTPU := ResolveAcceleratorInfo(mt, machineType)
@@ -238,7 +294,15 @@ func buildOutputConfigStruct(machineType string, mt *compute.MachineType) Output
 			}
 		}
 	}
+}
 
+func buildOutputConfigStruct(machineType string, mt *compute.MachineType) OutputConfig {
+	result := OutputConfig{
+		GPUs: make(map[string]GPUConfig),
+		TPUs: make(map[string]TPUConfig),
+		CPUs: make(map[string]CPUConfig),
+	}
+	addMachineTypeToOutputConfig(&result, machineType, mt)
 	return result
 }
 

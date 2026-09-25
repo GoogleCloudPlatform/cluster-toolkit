@@ -17,6 +17,7 @@
 from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Union, Set
 import argparse
 import base64
+import copy
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime, timezone
 import hashlib
@@ -211,7 +212,7 @@ class MachineType:
     @property
     def supports_smt(self) -> bool:
         # https://cloud.google.com/compute/docs/cpu-platforms
-        if self.family in  ("t2a", "t2d", "h3", "c4a", "h4d",):
+        if self.family in ("t2a", "t2d", "h3", "c4a", "n4a", "a4x", "h4d"):
             return False
         if self.guest_cpus == 1:
             return False
@@ -1888,8 +1889,7 @@ class Lookup:
         nodeset_name = self.node_nodeset_name(node_name)
         idx = self.node_index(node_name)
         slice_size = self.nodeset_slice_size(nodeset_name)
-        mig_idx = idx // slice_size
-        return self.mig_name(nodeset_name, index=mig_idx)
+        return self.mig_name(nodeset_name, index=idx // slice_size)
 
     def node_is_fr(self, node_name:str) -> bool:
         return bool(self.node_nodeset(node_name).future_reservation)
@@ -2272,20 +2272,15 @@ class Lookup:
             next(iter(per_zone.values())) # pick the first/any zone
         )
 
-    def template_machine_conf(self, template_link):
-        template = self.template_info(template_link)
-        machine = template.machine_type
-
+    def _machine_conf(self, machine: MachineType, threads_per_core: int, visible_cores) -> NSDict:
         machine_conf = NSDict()
         machine_conf.boards = 1  # No information, assume 1
         machine_conf.sockets = machine.sockets
         # the value below for SocketsPerBoard must be type int
         machine_conf.sockets_per_board = machine_conf.sockets // machine_conf.boards
-        threads_per_core = getThreadsPerCore(template)
         machine_conf.threads_per_core = threads_per_core
         _div = 2 if threads_per_core == 1 else 1
         # Check if visibleCoreCount is specified in the instance template
-        visible_cores = template.advancedMachineFeatures.visibleCoreCount
         if visible_cores:
             machine_conf.cpus = int(visible_cores) * threads_per_core
         else:
@@ -2301,6 +2296,74 @@ class Lookup:
         gb = machine.memory_mb // 1024
         machine_conf.memory = machine.memory_mb - (400 + (30 * gb))
         return machine_conf
+
+    def template_machine_conf(self, template_link):
+        template = self.template_info(template_link)
+        return self._machine_conf(
+            template.machine_type,
+            getThreadsPerCore(template),
+            template.advancedMachineFeatures.visibleCoreCount
+            if template.advancedMachineFeatures
+            else None,
+        )
+
+    def nodeset_machine_conf(self, nodeset) -> NSDict:
+        """Return machine_conf floored to the smallest shape across instance_flexibility_policy."""
+        base = self.template_machine_conf(nodeset.instance_template)
+
+        policy = nodeset.get("instance_flexibility_policy") if isinstance(nodeset, dict) else getattr(nodeset, "instance_flexibility_policy", None)
+        selections = (policy.get("instance_selections") if isinstance(policy, dict) else getattr(policy, "instance_selections", None)) if policy else None
+        if not selections:
+            return NSDict(base) if isinstance(base, dict) else copy.copy(base)
+
+        template = self.template_info(nodeset.instance_template)
+        amf_tpc = (
+            template.advancedMachineFeatures.threadsPerCore
+            if template.advancedMachineFeatures
+            else None
+        )
+        visible_cores = (
+            template.advancedMachineFeatures.visibleCoreCount
+            if template.advancedMachineFeatures
+            else None
+        )
+        primary_mt = template.machineType or getattr(template.machine_type, "name", None)
+
+        sel_iter = selections.values() if isinstance(selections, dict) else selections
+        confs = [base]
+        for name in sorted({mt for sel in sel_iter for mt in ((sel.get("machine_types") if isinstance(sel, dict) else getattr(sel, "machine_types", None)) or [])}):
+            try:
+                mt = self.machine_type(name)
+                mt_tpc = 1 if not mt.supports_smt else (int(amf_tpc) if amf_tpc else 2)
+                confs.append(
+                    self._machine_conf(
+                        mt,
+                        mt_tpc,
+                        visible_cores if name == primary_mt else None,
+                    )
+                )
+            except Exception as e:
+                log.warning(f"Ignoring machine type {name} of {nodeset.nodeset_name} in node sizing: {e}")
+
+        min_cpu_conf = min(
+            confs,
+            key=lambda c: (
+                c.cpus,
+                c.boards * c.sockets_per_board * c.cores_per_socket,
+                c.sockets,
+                c.threads_per_core,
+            ),
+        )
+        smallest = NSDict(min_cpu_conf) if isinstance(min_cpu_conf, dict) else copy.copy(min_cpu_conf)
+        min_sockets = min(c.sockets for c in confs)
+        min_total_cores = min(c.boards * c.sockets_per_board * c.cores_per_socket for c in confs)
+        if smallest.sockets > min_sockets or (smallest.boards * smallest.sockets_per_board * smallest.cores_per_socket) > min_total_cores:
+            smallest.sockets = min_sockets
+            smallest.sockets_per_board = max(1, min_sockets // smallest.boards)
+            smallest.cores_per_socket = max(1, min_total_cores // (smallest.boards * smallest.sockets_per_board))
+            smallest.cpus = smallest.boards * smallest.sockets_per_board * smallest.cores_per_socket * smallest.threads_per_core
+        smallest.memory = min(c.memory for c in confs)
+        return smallest
 
     @lru_cache(maxsize=None)
     def template_info(self, template_link):

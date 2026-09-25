@@ -80,6 +80,14 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup,
   else:
     mig_name = f"{lkp.cfg.slurm_cluster_name}-{nodeset.nodeset_name}-{uid}"
 
+  target_shape = (nodeset.get("zone_target_shape") if isinstance(nodeset, dict) else getattr(nodeset, "zone_target_shape", None)) or "ANY_SINGLE_ZONE"
+  if target_shape == "BALANCED":
+    log.warning(
+      f"Nodeset {nodeset.nodeset_name} specifies zone_target_shape='BALANCED', which is "
+      f"unsupported on DWS Flex Regional MIGs; clamping to 'ANY'"
+    )
+    target_shape = "ANY"
+
   # Create MIG
   body = dict(
     name=mig_name,
@@ -89,7 +97,7 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup,
       zones=[
          dict(zone=f"zones/{z}") for z in nodeset.zone_policy_allow
       ],
-      targetShape="ANY_SINGLE_ZONE" ),
+      targetShape=target_shape ),
     updatePolicy = dict(instanceRedistributionType = "NONE" ),
     instanceLifecyclePolicy=dict(defaultActionOnFailure= "DO_NOTHING" ), # TODO(FLEX): Not supported yet, migrate once supported
   )

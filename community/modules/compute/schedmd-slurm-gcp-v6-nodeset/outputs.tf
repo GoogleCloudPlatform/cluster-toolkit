@@ -17,12 +17,39 @@ output "nodeset" {
   value       = local.nodeset
 
   precondition {
-    condition = !contains([
-      "c3-:pd-standard",
-      "h3-:pd-standard",
-      "h3-:pd-ssd",
-    ], "${substr(var.machine_type, 0, 3)}:${var.disk_type}")
-    error_message = "A disk_type=${var.disk_type} cannot be used with machine_type=${var.machine_type}."
+    condition = alltrue([
+      for mt in setunion([var.machine_type], local.flex_machine_types) : !contains([
+        "c2:hyperdisk-balanced",
+        "c2:hyperdisk-extreme",
+        "c2:hyperdisk-throughput",
+        "c3:pd-standard",
+        "c3d:pd-standard",
+        "c4:pd-standard",
+        "c4:pd-balanced",
+        "c4:pd-ssd",
+        "c4a:pd-standard",
+        "c4a:pd-balanced",
+        "c4a:pd-ssd",
+        "c4d:pd-standard",
+        "c4d:pd-balanced",
+        "c4d:pd-ssd",
+        "h3:pd-standard",
+        "h3:pd-ssd",
+        "h4d:pd-standard",
+        "h4d:pd-balanced",
+        "h4d:pd-ssd",
+        "n4:pd-standard",
+        "n4:pd-balanced",
+        "n4:pd-ssd",
+        "n4a:pd-standard",
+        "n4a:pd-balanced",
+        "n4a:pd-ssd",
+        "n4d:pd-standard",
+        "n4d:pd-balanced",
+        "n4d:pd-ssd",
+      ], "${split("-", mt)[0]}:${var.disk_type}")
+    ])
+    error_message = "A disk_type=${var.disk_type} cannot be used with machine_type=${var.machine_type} or one of its instance_flexibility_policy fallback machine types."
   }
 
   precondition {
@@ -149,5 +176,71 @@ output "nodeset" {
       var.node_count_dynamic_max > 0 && var.provisioning_engine == "MIG" && !var.dws_flex.enabled
     )
     error_message = "Dynamic compute NodeSets with provisioning_engine = 'MIG' are currently not supported. Please explicitly set node_count_dynamic_max = 0."
+  }
+
+  precondition {
+    condition = local.zone_target_shape == "ANY_SINGLE_ZONE" || !(
+      local.mig_provisioned &&
+      (var.enable_placement || (var.accelerator_topology != null && var.accelerator_topology != ""))
+    )
+    error_message = "zone_target_shape must be 'ANY_SINGLE_ZONE' on MIG NodeSets using enable_placement or accelerator_topology; those policies are zonal."
+  }
+
+  precondition {
+    condition     = !(var.dws_flex.enabled && !var.dws_flex.use_bulk_insert) || contains(["ANY_SINGLE_ZONE", "ANY"], local.zone_target_shape)
+    error_message = "DWS Flex (FLEX_START) Regional MIGs only support zone_target_shape of 'ANY_SINGLE_ZONE' or 'ANY'; 'BALANCED' is rejected by Compute Engine."
+  }
+
+  precondition {
+    condition     = !local.has_flex_policy || (var.provisioning_engine == "MIG" && !var.dws_flex.enabled)
+    error_message = "instance_flexibility_policy requires provisioning_engine = 'MIG' and is not supported with DWS Flex."
+  }
+
+  precondition {
+    condition     = !local.has_flex_policy || var.accelerator_topology == null || var.accelerator_topology == ""
+    error_message = "instance_flexibility_policy cannot be combined with accelerator_topology."
+  }
+
+  precondition {
+    condition     = !local.has_flex_policy || (var.reservation_name == "" && var.future_reservation == "")
+    error_message = "instance_flexibility_policy cannot be combined with a reservation or future reservation; a specific reservation pins a single machine type."
+  }
+
+  precondition {
+    condition = !local.has_flex_policy || alltrue([
+      for mt in setunion([var.machine_type], local.flex_machine_types) :
+      !can(regex("^(a3-ultragpu|a4|a4x)-", mt))
+    ])
+    error_message = "instance_flexibility_policy is not supported on a3-ultragpu, a4, or a4x machine types."
+  }
+
+  precondition {
+    condition = !local.has_flex_policy || (
+      alltrue([
+        for mt in local.flex_machine_types :
+        local.inferred_gpu_signature[mt] == local.inferred_gpu_signature[var.machine_type]
+        ]) && (
+        length(var.guest_accelerator) == 0 || alltrue([
+          for mt in local.flex_machine_types : startswith(mt, "n1-")
+        ])
+      )
+    )
+    error_message = "Every instance_flexibility_policy machine type must have the same attached GPU model and count as machine_type=${var.machine_type} (and must be an n1-* shape when guest_accelerator is explicitly set)."
+  }
+
+  precondition {
+    condition = !local.has_flex_policy || alltrue([
+      for mt in local.flex_machine_types :
+      can(regex("^(t2a|c4a|n4a)-", mt)) == can(regex("^(t2a|c4a|n4a)-", var.machine_type))
+    ])
+    error_message = "All instance_flexibility_policy machine types must have the same CPU architecture (x86_64 or Arm64) as machine_type=${var.machine_type}."
+  }
+
+  precondition {
+    condition = !local.has_flex_policy || (
+      length(setunion([var.machine_type], local.flex_machine_types)) <= 10 &&
+      length(distinct([for s in local.instance_flexibility_policy.instance_selections : s.name])) == length(local.instance_flexibility_policy.instance_selections)
+    )
+    error_message = "instance_flexibility_policy may reference at most 10 distinct machine types in total (including machine_type=${var.machine_type}) and all selection names must be unique."
   }
 }
