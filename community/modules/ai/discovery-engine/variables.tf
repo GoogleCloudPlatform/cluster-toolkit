@@ -43,8 +43,8 @@ variable "engine_id" {
   description = "Unique ID for the Discovery Engine chat assistant engine."
   type        = string
   validation {
-    condition     = can(regex("^[a-z0-9]([a-z0-9-_]{0,61}[a-z0-9])?$", var.engine_id))
-    error_message = "Engine ID must conform to (1-63 characters, lowercase letters, numbers, and hyphens, underscores, starting and ending with an alphanumeric character)."
+    condition     = can(regex("^[a-z0-9]([a-z0-9-_]{0,58}[a-z0-9])?$", var.engine_id))
+    error_message = "Engine ID must conform to (1-60 characters, lowercase letters, numbers, and hyphens, underscores, starting and ending with an alphanumeric character)."
   }
 }
 
