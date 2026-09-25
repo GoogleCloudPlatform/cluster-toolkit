@@ -230,6 +230,11 @@ resource "terraform_data" "cloud_nat_validation" {
   }
 }
 
+locals {
+  use_auto_nat = var.nat_ip_allocate_option == "AUTO_ONLY"
+  create_nat   = var.enable_cloud_nat && (var.ips_per_nat > 0 || local.use_auto_nat)
+}
+
 # This use of the module may appear odd when var.ips_per_nat = 0. The module
 # will be called for all regions with subnetworks but names will be set to the
 # empty list. This is a perfectly valid value (the default!). In this scenario,
@@ -251,7 +256,7 @@ module "nat_ip_addresses" {
   address_type = "EXTERNAL"
   global       = false
   labels       = local.labels
-  names        = [for idx in range(var.ips_per_nat) : "${local.network_name}-nat-ips-${each.value}-${idx}"]
+  names        = local.use_auto_nat ? [] : [for idx in range(var.ips_per_nat) : "${local.network_name}-nat-ips-${each.value}-${idx}"]
 }
 
 module "cloud_router" {
@@ -266,12 +271,15 @@ module "cloud_router" {
   name    = "${local.network_name}-router"
   region  = each.value
   network = module.vpc.network_name
-  # in scenario with no NAT IPs, no NAT is created even if router is created
-  # https://github.com/terraform-google-modules/terraform-google-cloud-router/blob/v2.0.0/nat.tf#L18-L20
-  nats = length(module.nat_ip_addresses[each.value].self_links) == 0 ? [] : [
+  # Create Cloud NAT when enabled and either ips_per_nat > 0 or nat_ip_allocate_option is AUTO_ONLY
+  nats = !local.create_nat ? [] : [
     {
-      name : "cloud-nat-${each.value}",
-      nat_ips : module.nat_ip_addresses[each.value].self_links
+      name                           = "cloud-nat-${each.value}"
+      nat_ip_allocate_option         = coalesce(var.nat_ip_allocate_option, "MANUAL_ONLY")
+      nat_ips                        = local.use_auto_nat ? [] : try(module.nat_ip_addresses[each.value].self_links, [])
+      enable_dynamic_port_allocation = var.enable_dynamic_port_allocation
+      min_ports_per_vm               = var.min_ports_per_vm
+      max_ports_per_vm               = var.enable_dynamic_port_allocation ? var.max_ports_per_vm : null
     },
   ]
 }

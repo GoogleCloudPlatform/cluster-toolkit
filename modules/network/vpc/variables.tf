@@ -208,8 +208,64 @@ variable "network_description" {
 
 variable "ips_per_nat" {
   type        = number
-  description = "The number of IP addresses to allocate for each regional Cloud NAT (set to 0 to disable NAT). The number of NAT IPs depend on the port reservation allocated for each node and the number of ports that a single NAT IP can serve. Refer this documentation for more details: https://cloud.google.com/nat/docs/ports-and-addresses#port-reservation-examples"
+  description = "The number of static IP addresses to allocate for each regional Cloud NAT when nat_ip_allocate_option is MANUAL_ONLY (set to 0 to disable NAT unless nat_ip_allocate_option is AUTO_ONLY). Refer this documentation for more details: https://cloud.google.com/nat/docs/ports-and-addresses#port-reservation-examples"
   default     = 2
+}
+
+variable "nat_ip_allocate_option" {
+  type        = string
+  description = "How external IPs should be allocated for Cloud NAT (\"MANUAL_ONLY\" or \"AUTO_ONLY\"). Defaults to \"MANUAL_ONLY\" using ips_per_nat static IPs when null."
+  default     = null
+
+  validation {
+    condition     = var.nat_ip_allocate_option == null || contains(["MANUAL_ONLY", "AUTO_ONLY"], var.nat_ip_allocate_option)
+    error_message = "var.nat_ip_allocate_option must be null, \"MANUAL_ONLY\", or \"AUTO_ONLY\"."
+  }
+}
+
+variable "enable_dynamic_port_allocation" {
+  type        = bool
+  description = "Enable Dynamic Port Allocation on Cloud NAT so VMs dynamically allocate between min_ports_per_vm and max_ports_per_vm."
+  default     = true
+}
+
+variable "min_ports_per_vm" {
+  type        = number
+  description = "Minimum number of ports allocated to a VM from Cloud NAT. When enable_dynamic_port_allocation is true, must be a power of 2 between 32 and 32768."
+  default     = 32
+
+  validation {
+    condition = (
+      var.min_ports_per_vm == null ||
+      (
+        var.enable_dynamic_port_allocation ?
+        contains([32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768], var.min_ports_per_vm) :
+        contains([2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768], var.min_ports_per_vm)
+      )
+    )
+    error_message = "min_ports_per_vm must be a power of 2 between 32 and 32768 when enable_dynamic_port_allocation is true, or between 2 and 32768 when false."
+  }
+}
+
+variable "max_ports_per_vm" {
+  type        = number
+  description = "Maximum number of ports allocated to a VM from Cloud NAT when enable_dynamic_port_allocation is true. Must be a power of 2 between 64 and 65536 and greater than min_ports_per_vm."
+  default     = 1024
+
+  validation {
+    condition = (
+      !var.enable_dynamic_port_allocation ||
+      (
+        var.max_ports_per_vm == null ?
+        coalesce(var.min_ports_per_vm, 32) <= 1024 :
+        (
+          contains([64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536], var.max_ports_per_vm) &&
+          var.max_ports_per_vm > coalesce(var.min_ports_per_vm, 32)
+        )
+      )
+    )
+    error_message = "When enable_dynamic_port_allocation is true, max_ports_per_vm must be a power of 2 between 64 and 65536 and greater than min_ports_per_vm. If max_ports_per_vm is null, min_ports_per_vm cannot exceed the default maximum of 1024."
+  }
 }
 
 variable "shared_vpc_host" {
