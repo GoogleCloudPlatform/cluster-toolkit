@@ -157,3 +157,70 @@ func (s *MySuite) TestRemoveKubernetesResourcesFromState(c *C) {
 	}
 	c.Assert(mockTf.removed, DeepEquals, expectedRemoved)
 }
+
+func (s *MySuite) TestTerraformParallelism(c *C) {
+	origParallelism := getGlobalParallelism()
+	origEnv, envSet := os.LookupEnv("GCLUSTER_TERRAFORM_PARALLELISM")
+	defer func() {
+		SetTerraformParallelism(origParallelism)
+		if envSet {
+			os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", origEnv)
+		} else {
+			os.Unsetenv("GCLUSTER_TERRAFORM_PARALLELISM")
+		}
+	}()
+
+	reset := func() {
+		SetTerraformParallelism(0)
+		os.Unsetenv("GCLUSTER_TERRAFORM_PARALLELISM")
+	}
+
+	// 1. Zero/default behavior returns 0.
+	reset()
+	c.Assert(GetTerraformParallelism(), Equals, 0)
+
+	// 2. Setting via SetTerraformParallelism(80) returns 80.
+	reset()
+	SetTerraformParallelism(80)
+	c.Assert(GetTerraformParallelism(), Equals, 80)
+
+	// 3. Setting negative SetTerraformParallelism(-5) returns 0 (or fallback to env var if valid).
+	reset()
+	SetTerraformParallelism(-5)
+	c.Assert(GetTerraformParallelism(), Equals, 0)
+	os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", "20")
+	c.Assert(GetTerraformParallelism(), Equals, 20)
+
+	// 4. Serial execution SetTerraformParallelism(1) returns 1.
+	reset()
+	SetTerraformParallelism(1)
+	c.Assert(GetTerraformParallelism(), Equals, 1)
+
+	// 5. Environment variable GCLUSTER_TERRAFORM_PARALLELISM="50" returns 50.
+	reset()
+	os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", "50")
+	c.Assert(GetTerraformParallelism(), Equals, 50)
+
+	// 6. SetTerraformParallelism takes precedence over env var.
+	reset()
+	os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", "50")
+	SetTerraformParallelism(80)
+	c.Assert(GetTerraformParallelism(), Equals, 80)
+
+	// 7. Malformed env vars ("invalid", "0", "-10", " 80 ") - note trimmed whitespace returns 80, invalid strings ignored and return 0.
+	reset()
+	os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", "invalid")
+	c.Assert(GetTerraformParallelism(), Equals, 0)
+
+	reset()
+	os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", "0")
+	c.Assert(GetTerraformParallelism(), Equals, 0)
+
+	reset()
+	os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", "-10")
+	c.Assert(GetTerraformParallelism(), Equals, 0)
+
+	reset()
+	os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", " 80 ")
+	c.Assert(GetTerraformParallelism(), Equals, 80)
+}

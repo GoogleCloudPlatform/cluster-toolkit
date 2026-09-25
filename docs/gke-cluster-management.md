@@ -78,6 +78,28 @@ Run `gcluster deploy` to create the cluster. Sample command:
 
 **Note**: For many machine types, deploy command would also have the deployment config file as well. Refer the respective READMEs of machine types in the toolkit for exact deployment commands.
 
+> [!TIP]
+> **Large-Scale Multi-Node-Pool Deployments (Terraform Concurrency)**:
+>
+> By default, [Terraform executes operations with an internal concurrency limit of 10](https://developer.hashicorp.com/terraform/internals/graph#walking-the-graph) (`-parallelism=10`). In large-scale GKE clusters containing many independent node pools (e.g. 50+ to 100+ node pools), this default forces node pool creation and deletion into sequential waves of 10, significantly increasing provisioning and teardown times.
+>
+> You can tune Terraform's concurrency level using either the CLI flag or an environment variable:
+>
+> - **CLI Flag:** Pass `--parallelism <N>` to `gcluster deploy` or `gcluster destroy`:
+>   ```shell
+>   ./gcluster deploy <path-to-blueprint.yaml> --parallelism 80
+>   ./gcluster destroy <deployment-directory> --parallelism 80
+>   ```
+> - **Environment Variable:** Set `GCLUSTER_TERRAFORM_PARALLELISM` in your shell or automated CI/CD pipeline:
+>   ```shell
+>   export GCLUSTER_TERRAFORM_PARALLELISM=80
+>   ./gcluster deploy <path-to-blueprint.yaml>
+>   ```
+>
+> The `--parallelism` CLI flag takes precedence over the environment variable. When omitted or set to `0`, the toolkit preserves Terraform's default baseline of 10. Only positive integers (> 0) are accepted.
+>
+> *Caution on API Quotas:* Setting parallelism higher than your GCP project's GKE concurrent operations quota can trigger `NO_CONCURRENT_OPERATION_QUOTA` errors. Ensure your project has sufficient concurrent operation quota when specifying high parallelism values.
+
 ### 2.2 Upgrading an Existing Cluster
 
 To upgrade an existing cluster, you can perform a version upgrade to a specific target version or change the cluster's release channel to align with a different stability track. This section covers procedures for upgrading both the master control plane and individual node pools using **Cluster Toolkit blueprints**, the **`gcloud` CLI**, or the **Google Cloud Console (UI)**.
