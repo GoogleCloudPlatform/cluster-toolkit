@@ -173,6 +173,7 @@ func (s *MySuite) TestTerraformParallelism(c *C) {
 	reset := func() {
 		SetTerraformParallelism(0)
 		os.Unsetenv("GCLUSTER_TERRAFORM_PARALLELISM")
+		resetWarnOnce()
 	}
 
 	// 1. Zero/default behavior returns 0.

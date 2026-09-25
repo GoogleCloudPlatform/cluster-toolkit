@@ -85,18 +85,21 @@ Run `gcluster deploy` to create the cluster. Sample command:
 >
 > You can tune Terraform's concurrency level using either the CLI flag or an environment variable:
 >
-> - **CLI Flag:** Pass `--parallelism <N>` to `gcluster deploy` or `gcluster destroy`:
+> * **CLI Flag:** Pass `--parallelism <N>` to `gcluster deploy` or `gcluster destroy`:
+>
 >   ```shell
 >   ./gcluster deploy <path-to-blueprint.yaml> --parallelism 80
 >   ./gcluster destroy <deployment-directory> --parallelism 80
 >   ```
-> - **Environment Variable:** Set `GCLUSTER_TERRAFORM_PARALLELISM` in your shell or automated CI/CD pipeline:
+>
+> * **Environment Variable:** Set `GCLUSTER_TERRAFORM_PARALLELISM` in your shell or automated CI/CD pipeline:
+>
 >   ```shell
 >   export GCLUSTER_TERRAFORM_PARALLELISM=80
 >   ./gcluster deploy <path-to-blueprint.yaml>
 >   ```
 >
-> The `--parallelism` CLI flag takes precedence over the environment variable. When omitted or set to `0`, the toolkit preserves Terraform's default baseline of 10. Only positive integers (> 0) are accepted.
+> The `--parallelism` CLI flag takes precedence over the environment variable. When omitted or set to `0`, the toolkit preserves Terraform's default baseline of 10. Only non-negative integers (>= 0) are accepted.
 >
 > *Caution on API Quotas:* Setting parallelism higher than your GCP project's GKE concurrent operations quota can trigger `NO_CONCURRENT_OPERATION_QUOTA` errors. Ensure your project has sufficient concurrent operation quota when specifying high parallelism values.
 

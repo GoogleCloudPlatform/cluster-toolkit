@@ -64,7 +64,7 @@ func addParallelismFlag(c *cobra.Command) *cobra.Command {
 
 func validateParallelismFlag() error {
 	if flagParallelism < 0 {
-		return fmt.Errorf("--parallelism must be a positive integer (got %d)", flagParallelism)
+		return fmt.Errorf("--parallelism must be a non-negative integer (got %d)", flagParallelism)
 	}
 	return nil
 }

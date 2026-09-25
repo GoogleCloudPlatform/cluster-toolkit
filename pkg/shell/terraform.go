@@ -64,6 +64,7 @@ const (
 var (
 	parallelismMu        sync.RWMutex
 	terraformParallelism int
+	warnOnce             sync.Once
 )
 
 // SetTerraformParallelism sets the global parallelism factor for Terraform operations
@@ -71,6 +72,13 @@ func SetTerraformParallelism(p int) {
 	parallelismMu.Lock()
 	defer parallelismMu.Unlock()
 	terraformParallelism = p
+	warnOnce = sync.Once{}
+}
+
+func resetWarnOnce() {
+	parallelismMu.Lock()
+	defer parallelismMu.Unlock()
+	warnOnce = sync.Once{}
 }
 
 func getGlobalParallelism() int {
@@ -91,7 +99,9 @@ func GetTerraformParallelism() int {
 	if val := os.Getenv(env); val != "" {
 		n, err := strconv.Atoi(strings.TrimSpace(val))
 		if err != nil || n <= 0 {
-			logging.Warn("Ignoring invalid %s value %q: must be a positive integer", env, val)
+			warnOnce.Do(func() {
+				logging.Warn("Ignoring invalid %s value %q: must be a positive integer", env, val)
+			})
 			return 0
 		}
 		return n
