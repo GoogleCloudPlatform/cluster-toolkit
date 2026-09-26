@@ -200,4 +200,5 @@ deployment_groups:
       jobset:
         install: true
       apply_manifests:
-      - source: $(vars.nccl_installer_path)
+      - name: nccl-installer
+        source: $(vars.nccl_installer_path)

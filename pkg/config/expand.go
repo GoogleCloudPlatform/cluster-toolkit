@@ -33,7 +33,7 @@ import (
 const (
 	blueprintLabel        = "ghpc_blueprint"
 	deploymentLabel       = "ghpc_deployment"
-	GoogleProviderVersion = ">= 6.9.0, <= 8.2.0"
+	GoogleProviderVersion = ">= 6.9.0, <= 8.3.0"
 )
 
 var validLabelValueRegex = regexp.MustCompile("[^a-z0-9_-]")
@@ -174,6 +174,7 @@ func (bp Blueprint) expandModule(mp ModulePath, m *Module) error {
 	if err := expandHardwareSettings(bp, m); err != nil {
 		return err
 	}
+	expandWorkloadPolicy(bp, m)
 
 	// Inject machine_configs if supported by the module
 	for _, input := range m.InfoOrDie().Inputs {
@@ -650,4 +651,45 @@ func (bp *Blueprint) deduplicateDranetTemplates() {
 			m.Settings = m.Settings.With("install_dranet_template", cty.BoolVal(true))
 		}
 	})
+}
+
+func isResourcePolicy(m *Module) bool {
+	path := strings.Split(m.Source, "?")[0]
+	return strings.HasSuffix(path, "modules/compute/resource-policy")
+}
+
+// expandWorkloadPolicy automatically configures workload_policy.accelerator_topology_mode
+// on modules/compute/resource-policy when GKE TPU dynamic slicing is configured in the blueprint
+// and accelerator_topology_mode is not explicitly set by the user.
+func expandWorkloadPolicy(bp Blueprint, m *Module) {
+	if !isResourcePolicy(m) || !m.Settings.Has("workload_policy") || !bp.Vars.Has("enable_dynamic_slicing_for_tpus") {
+		return
+	}
+
+	wpVal := m.Settings.Get("workload_policy")
+	if !wpVal.IsKnown() || wpVal.IsNull() || !wpVal.Type().IsObjectType() {
+		return
+	}
+
+	wpMap := wpVal.AsValueMap()
+	if modeVal, ok := wpMap["accelerator_topology_mode"]; ok && !modeVal.IsNull() {
+		return
+	}
+	if !isTPUTopologyWorkloadPolicy(bp, wpMap) {
+		return
+	}
+
+	wpMap["accelerator_topology_mode"] = MustParseExpression(`(var.enable_dynamic_slicing_for_tpus) ? "PROVISION_ONLY" : null`).AsValue()
+	m.Settings = m.Settings.With("workload_policy", cty.ObjectVal(wpMap))
+}
+
+func isTPUTopologyWorkloadPolicy(bp Blueprint, wpMap map[string]cty.Value) bool {
+	topVal, hasTopology := wpMap["accelerator_topology"]
+	if !hasTopology || topVal.IsNull() {
+		return false
+	}
+	if ev, err := bp.Eval(topVal); err == nil && ev.IsKnown() && !ev.IsNull() && ev.Type() == cty.String {
+		return strings.Count(ev.AsString(), "x") == 2
+	}
+	return true
 }

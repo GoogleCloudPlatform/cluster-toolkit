@@ -75,7 +75,7 @@ func GetMetadata(source string) (Metadata, error) {
 
 	switch {
 	case sourcereader.IsEmbeddedPath(source):
-		data, err = sourcereader.ModuleFS.ReadFile(filePath)
+		data, err = sourcereader.ModuleFS.ReadFile(sourcereader.ToSlash(filePath))
 	case sourcereader.IsLocalPath(source):
 		var absPath string
 		if absPath, err = filepath.Abs(filePath); err == nil {

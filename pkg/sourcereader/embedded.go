@@ -63,14 +63,15 @@ func LocalModuleIsEmbedded(source string) bool {
 		return false
 	}
 
-	pathBits := strings.SplitN(filepath.Clean(source), string(os.PathSeparator), 5)
+	cleanSource := ToSlash(filepath.Clean(source))
+	pathBits := strings.Split(cleanSource, "/")
 	lengthPath := len(pathBits)
 	if lengthPath < 3 {
 		return false
 	}
 
 	for i := 3; i <= lengthPath; i++ {
-		lastBits := filepath.Join(pathBits[lengthPath-i:]...)
+		lastBits := path.Join(pathBits[lengthPath-i:]...)
 		_, err := ModuleFS.ReadDir(lastBits)
 		if err == nil {
 			return true
@@ -119,6 +120,7 @@ func copyFSToTempDir(bfs BaseFS, modulePath string) (string, error) {
 
 // GetModule copies the embedded source to a provided destination (the deployment directory)
 func (r EmbeddedSourceReader) GetModule(modPath string, copyPath string) error {
+	modPath = ToSlash(modPath)
 	if !IsEmbeddedPath(modPath) {
 		return fmt.Errorf("source is not valid: %s", modPath)
 	}
@@ -139,5 +141,5 @@ func (r EmbeddedSourceReader) CopyDir(src string, dst string) error {
 	if ModuleFS == nil {
 		return fmt.Errorf("embedded file system is not initialized")
 	}
-	return copyDir(ModuleFS, src, dst)
+	return copyDir(ModuleFS, ToSlash(src), dst)
 }

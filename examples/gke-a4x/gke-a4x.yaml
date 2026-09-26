@@ -260,7 +260,6 @@ deployment_groups:
       target_architecture: "arm64"
       kueue:
         install: true
-        version: "0.17.1"
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a4x-pool.static_gpu_count)
@@ -289,7 +288,8 @@ deployment_groups:
                   values:
                   - arm64
       apply_manifests:
-      - source: $(vars.nvidia_dra_driver_path)
+      - name: nvidia-dra-driver
+        source: $(vars.nvidia_dra_driver_path)
 
   - id: job-template
     source: modules/compute/gke-job-template
