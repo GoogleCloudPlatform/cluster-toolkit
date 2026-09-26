@@ -57,6 +57,8 @@ Modules that are still in development and less stable are labeled with the
   Notebook. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
 * **[gke-nodeset]** ![community-badge] ![experimental-badge] : Create a slinky nodeset to be used by the [gke-partition] module.
 * **[gke-partition]** ![community-badge] ![experimental-badge] : Creates a slinky partition to be used by a [slurm-controller][schedmd-slurm-gcp-v6-controller].
+* **[colab]** ![community-badge] ![experimental-badge] : Creates a Vertex AI
+  Colab Enterprise runtime template and runtime instance.
 
 [vm-instance]: compute/vm-instance/README.md
 [cloud-run]: compute/cloud-run/README.md
@@ -72,6 +74,7 @@ Modules that are still in development and less stable are labeled with the
 [notebook]: ../community/modules/compute/notebook/README.md
 [gke-nodeset]: ../community/modules/compute/gke-nodeset/README.md
 [gke-partition]: ../community/modules/compute/gke-partition/README.md
+[colab]: ../community/modules/compute/colab/README.md
 [fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
 
 ### Container
@@ -125,19 +128,23 @@ Modules that are still in development and less stable are labeled with the
 * **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates
   persistent volumes and persistent volume claims for shared storage.
 * **[gke-storage]** ![core-badge] ![experimental-badge] : Creates a Kubernetes
-  Storage Class and Persistent Volume Claims that dynamically provision Google
-  Cloud storage (e.g. Hyperdisk Balanced/Throughput/Extreme) for GKE workloads.
+  storage class and persistent volume claims to dynamically provision Google
+  Cloud storage such as Hyperdisk for GKE workloads.
 * **[netapp-storage-pool]** ![core-badge] : Creates a
   [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes/docs/discover/overview)
-  storage pool, from which [netapp-volume] volumes allocate capacity and performance.
+  storage pool for [netapp-volume] file systems.
 * **[nfs-server]** ![community-badge] ![experimental-badge] : Creates a VM and
   configures an NFS server that can be mounted by other VM.
 * **[weka-client]** ![community-badge] ![experimental-badge] : Installs client
   and mounts [WEKA](https://www.weka.io/) filesystems.
-* **[sycomp-scale]** ![community-badge] ![experimental-badge] : Documentation
-  for deploying a [Sycomp Intelligent Data Storage Platform](https://sycomp.com/solution/hpc/storage/)
-  (IBM Storage Scale) cluster. There is no Toolkit wrapper module; blueprints
-  source the Terraform modules directly from Sycomp's GitLab.
+* **[gcs-objects]** ![community-badge] ![experimental-badge] : Declaratively creates
+  and manages objects in a Google Cloud Storage (GCS) bucket from inline content, local files, or directories.
+* **[gcs-sync]** ![community-badge] ![experimental-badge] : Synchronizes files
+  and directories from remote Git repositories into Cloud Storage buckets at apply time.
+* **[sycomp-scale]** ![community-badge] ![experimental-badge] : Documents how
+  to deploy an IBM Storage Scale cluster using the
+  [Sycomp Intelligent Data Storage Platform](https://sycomp.com/solution/hpc/storage/)
+  Terraform modules.
 * **[DDN-EXAScaler]** ![community-badge] ![deprecated-badge] : No longer
   supported. Use [managed-lustre] instead.
 * **[Intel-DAOS]** ![community-badge] ![deprecated-badge] : No longer
@@ -154,6 +161,8 @@ Modules that are still in development and less stable are labeled with the
 [weka-client]: ../community/modules/file-system/weka-client/README.md
 [gke-storage]: file-system/gke-storage/README.md
 [netapp-storage-pool]: file-system/netapp-storage-pool/README.md
+[gcs-objects]: ../community/modules/file-system/gcs-objects/README.md
+[gcs-sync]: ../community/modules/file-system/gcs-sync/README.md
 [sycomp-scale]: ../community/modules/file-system/sycomp-scale/README.md
 [DDN-EXAScaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
 [Intel-DAOS]: ../community/modules/file-system/Intel-DAOS/README.md
@@ -171,8 +180,8 @@ Modules that are still in development and less stable are labeled with the
 * **[direct-helm-install]** ![community-badge] ![experimental-badge] : Provides a standardized way to deploy Helm charts directly to a GKE cluster.
 * **[helm-upgrade]** ![community-badge] ![experimental-badge] : Manages Helm chart deployment lifecycles inside a GKE cluster.
 * **[dependencies-installer]** ![community-badge] ![experimental-badge] :
-  Optionally installs common GKE workload dependencies via Helm: Kueue, JobSet,
-  the NVIDIA GPU Operator, and the NVIDIA DRA driver. Each component is opt-in.
+  Installs common GKE workload dependencies via Helm, including Kueue, JobSet,
+  the NVIDIA GPU Operator, and the NVIDIA DRA driver.
 
 [kubectl-apply]: management/kubectl-apply/README.md
 [kubernetes-namespace]: management/kubernetes-namespace/README.md
@@ -210,10 +219,10 @@ Modules that are still in development and less stable are labeled with the
 * **[private-service-access]** ![core-badge] :
   Configures Private Services Access for a VPC network (commonly used with [filestore] and [slurm-cloudsql-federation]).
 * **[pre-existing-subnetwork]** ![core-badge] : Used to connect newly built
-  components to a subnetwork that already exists in Google Cloud.
-* **[gpu-rdma-vpc]** ![core-badge] : Creates a VPC network with multiple
-  subnetworks intended for RDMA traffic between GPU nodes, outputting network
-  interfaces compatible with both the Slurm/vm-instance and GKE modules.
+  components to a pre-existing subnetwork.
+* **[gpu-rdma-vpc]** ![core-badge] : Creates a VPC network and subnetworks for
+  RDMA traffic between GPU nodes, with outputs for [vm-instance], Slurm, and
+  GKE modules.
 
 [vpc]: network/vpc/README.md
 [dns-managed-zone]: network/dns-managed-zone/README.md
@@ -240,14 +249,25 @@ Modules that are still in development and less stable are labeled with the
 * **[workload_identity_binding]** ![core-badge] : Creates a Workload Identity binding between a Google Service Account (GSA) and a Kubernetes Service Account (KSA).
 * **[service-enablement]** ![community-badge] ![experimental-badge] : Allows enabling
   various APIs for a Google Cloud Project.
-* **[new-project]** ![community-badge] ![deprecated-badge] : No longer shipped
-  with the Toolkit. Use the upstream
+* **[project-metadata]** ![community-badge] ![experimental-badge] : Sets project compute
+  metadata items for a Google Cloud project.
+* **[service-agent]** ![community-badge] ![experimental-badge] : Creates the
+  service agent for a Google Cloud API and exposes its email and IAM member
+  string as outputs.
+* **[pre-existing-project]** ![community-badge] ![experimental-badge] : Retrieves
+  information about an existing GCP project (name, number) and exposes it as
+  outputs.
+* **[new-project]** ![community-badge] ![deprecated-badge] : No longer
+  supported. Use the upstream
   [terraform-google-project-factory](https://github.com/terraform-google-modules/terraform-google-project-factory)
-  module to create and manage Google Cloud projects.
+  module instead.
 
 [service-account]: ../modules/project/service-account/README.md
 [workload_identity_binding]: project/workload_identity_binding/README.md
 [service-enablement]: ../community/modules/project/service-enablement/README.md
+[project-metadata]: ../community/modules/project/project-metadata/README.md
+[service-agent]: ../community/modules/project/service-agent/README.md
+[pre-existing-project]: ../community/modules/project/pre-existing-project/README.md
 [new-project]: ../community/modules/project/new-project/README.md
 
 ### Pub/Sub
@@ -289,14 +309,13 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
   a regional instance group managing a highly available HTCondor access point
   (login node).
 * **[htcondor-central-manager]** ![community-badge] ![experimental-badge] :
-  Provisions a highly available HTCondor central manager using a Managed
-  Instance Group with auto-healing.
+  Creates a Managed Instance Group running a highly available HTCondor central
+  manager.
 * **[htcondor-service-accounts]** ![community-badge] ![experimental-badge] :
-  Creates the service accounts, with appropriate default roles, used by the
-  central managers, access points and execute points of an HTCondor pool.
+  Creates the default service accounts and IAM roles for an HTCondor pool.
 * **[slinky]** ![community-badge] ![experimental-badge] : Installs the
-  [Slinky](https://slinky.ai) Slurm operator and, by default, a Slurm cluster
-  with a login node, all running as workloads on a GKE cluster.
+  [Slinky](https://slinky.ai) Slurm operator and deploys a Slurm cluster with a
+  login node on GKE.
 
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md

@@ -1,0 +1,54 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+test_name: tpu7x-onspot-slurm
+deployment_name: "tpu7x-slurm-{{ build }}"
+slurm_cluster_name: "t7xsp{{ build[0:5] }}"
+workspace: /workspace
+blueprint_yaml: "{{ workspace }}/examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml"
+login_node: "{{ slurm_cluster_name }}-slurm-login-*"
+controller_node: "{{ slurm_cluster_name }}-controller"
+network: "{{ deployment_name }}-net-1"
+scheduler: "slurm"
+instance_type: "tpu7x"
+post_deploy_tests:
+- test-validation/test-mounts.yml
+- test-validation/test-default-partition.yml
+- test-validation/test-tpu-slurm.yml
+post_destroy_tasks:
+- post-destroy-tasks/delete-image.yml
+custom_vars:
+  gpu_partition: tpu
+  tpu_partition: tpu
+  tpu_dyn_partition: tpu-dyn
+  tpu_type: tpu7x
+  tpu_topology: 2x2x1
+  num_slurm_nodes: 1
+  expected_tpu_chips: 4
+  expected_tpu_cores: 8
+  partitions:
+  - tpu
+  mounts:
+  - /home
+  instance_labels:
+    tpu7x_onspot: true
+  enable_spot: true
+cli_deployment_vars:
+  region: "{{ region }}"
+  zone: "{{ zone }}"
+  slurm_cluster_name: "{{ slurm_cluster_name }}"
+  tpu_static_nodes: 1
+  tpu_dynamic_max_nodes: 1
+  tpu_accelerator_topology: 2x2x1
+  tpu_enable_spot_vm: true

@@ -41,6 +41,16 @@ vars:
   # The following line must be updated for this example to work.
   authorized_cidr:
 
+  # Consumption model variables
+  spot: false
+  reservation_affinity: {consume_reservation_type: "NO_RESERVATION", specific_reservations: []}
+  enable_flex_start: false
+  auto_repair: true
+  enable_queued_provisioning: false
+  autoscaling_total_min_nodes: 0
+  placement_policy: {type: null, name: null}
+  kueue_configuration_path: $(null)
+
   system_node_pool_disk_size_gb: 100
   version_prefix: "1.35."
 
@@ -146,12 +156,19 @@ deployment_groups:
       auto_upgrade: true
       zones: [$(vars.zone)]
       static_node_count: $(vars.static_node_count)
+      spot: $(vars.spot)
+      reservation_affinity: $(vars.reservation_affinity)
+      enable_flex_start: $(vars.enable_flex_start)
+      auto_repair: "$(vars.enable_flex_start ? false : vars.auto_repair)"
+      enable_queued_provisioning: $(vars.enable_queued_provisioning)
+      autoscaling_total_min_nodes: $(vars.autoscaling_total_min_nodes)
       enable_numa_aware_scheduling: true
       guest_accelerator:
       - type: nvidia-rtx-pro-6000
         count: $(vars.num_gpus)
         gpu_driver_installation_config:
           gpu_driver_version: LATEST # TODO: Move to a fixed GPU driver version.
+      placement_policy: $(vars.placement_policy)
       additional_networks: $(gke-g4-net-1.instance_additional_networks)
     outputs: [instructions]
 
@@ -163,6 +180,9 @@ deployment_groups:
       kueue:
         install: true
         wait: true
+        config_path: $(vars.kueue_configuration_path)
+        config_template_vars:
+          num_gpus: $(g4-pool.static_gpu_count)
       jobset:
         install: true
 
@@ -173,7 +193,7 @@ deployment_groups:
       image: nvidia/cuda:13.0.0-base-ubuntu24.04
       command:
       - nvidia-smi
-      node_count: $(vars.static_node_count)
+      node_count: "$(vars.static_node_count != null ? vars.static_node_count : 2)"
       name: run-nvidia-smi
       k8s_service_account_name: workload-identity-k8s-sa
     outputs: [instructions]

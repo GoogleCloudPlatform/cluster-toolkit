@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
 from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Union, Set
 import argparse
 import base64
@@ -1627,6 +1628,12 @@ class ReservationDetails:
         return self.reservation_mode == "CALENDAR"
 
 @dataclass(frozen=True)
+class TpuInfo:
+    """Represents information about a TPU generation and chip count per node."""
+    type: str
+    tpus_per_node: int
+
+@dataclass(frozen=True)
 class FutureReservation:
     project: str
     zone: str
@@ -1816,14 +1823,18 @@ class Lookup:
         nodeset = self.cfg.nodeset.get(nodeset_name)
         if not nodeset:
             return False
-        if getattr(nodeset, "dws_flex", None) and getattr(nodeset.dws_flex, "enabled", False):
-            return False
-        engine = getattr(nodeset, "provisioning_engine", None)
+        dws_flex = nodeset.get("dws_flex") if isinstance(nodeset, dict) else getattr(nodeset, "dws_flex", None)
+        if dws_flex:
+            enabled = dws_flex.get("enabled", False) if isinstance(dws_flex, dict) else getattr(dws_flex, "enabled", False)
+            if enabled:
+                return False
+        engine = nodeset.get("provisioning_engine") if isinstance(nodeset, dict) else getattr(nodeset, "provisioning_engine", None)
         if engine == "BULK_INSERT":
             return False
         if engine == "MIG":
             return True
-        if getattr(nodeset, "mig_name", None) is not None:
+        mig_name = nodeset.get("mig_name") if isinstance(nodeset, dict) else getattr(nodeset, "mig_name", None)
+        if mig_name and not isinstance(mig_name, dict):
             return True
         return False
 
@@ -1836,11 +1847,55 @@ class Lookup:
         """Returns target MIG name for a given NodeSet, indexed from 0 for consistent scale expansion."""
         return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-mig-{index}"
 
+    def nodeset_slice_size(self, nodeset_name: str) -> int:
+        """Returns the slice size (hosts per slice) for a given NodeSet.
+        
+        For accelerator topologies (e.g. A4X with 1x72), computes hosts per slice
+        or reads slice_size from config. Defaults to 1000 for standard MIGs.
+        """
+        nodeset = self.cfg.nodeset.get(nodeset_name)
+        if not nodeset:
+            return 1000
+        slice_val = nodeset.get("slice_size") if isinstance(nodeset, dict) else getattr(nodeset, "slice_size", None)
+        if slice_val:
+            try:
+                return max(1, int(slice_val))
+            except (ValueError, TypeError):
+                pass
+        topo = nodeset.get("accelerator_topology") if isinstance(nodeset, dict) else getattr(nodeset, "accelerator_topology", None)
+        if topo:
+            log.debug(f"slice_size not present in config for {nodeset_name}; computing from accelerator_topology {topo}")
+            try:
+                dims = [int(x) for x in topo.lower().strip().split("x")]
+                if len(dims) == 2 and dims[0] > 0 and dims[1] > 0:
+                    total_gpus = dims[0] * dims[1]
+                    gpus_per_vm = 4
+                    gpu_cnt = nodeset.get("gpu_count") if isinstance(nodeset, dict) else getattr(nodeset, "gpu_count", None)
+                    if not gpu_cnt:
+                        gpu_attr = nodeset.get("gpu") if isinstance(nodeset, dict) else getattr(nodeset, "gpu", None)
+                        gpu_cnt = gpu_attr.get("count") if isinstance(gpu_attr, dict) else getattr(gpu_attr, "count", None)
+                    if gpu_cnt:
+                        gpus_per_vm = int(gpu_cnt)
+                    else:
+                        template_link = nodeset.get("instance_template") if isinstance(nodeset, dict) else getattr(nodeset, "instance_template", None)
+                        if template_link:
+                            try:
+                                t_info = self.template_info(template_link)
+                                if t_info and t_info.machine_type and t_info.machine_type.accelerators:
+                                    gpus_per_vm = t_info.machine_type.accelerators[0].count
+                            except Exception:
+                                pass
+                    return max(1, total_gpus // max(1, gpus_per_vm))
+            except Exception as e:
+                log.warning(f"Failed to calculate slice size from topology {topo} for {nodeset_name}: {e}")
+        return 1000
+
     def node_mig_name(self, node_name: str) -> str:
         """Returns the specific MIG name for a given node."""
         nodeset_name = self.node_nodeset_name(node_name)
         idx = self.node_index(node_name)
-        mig_idx = idx // 1000
+        slice_size = self.nodeset_slice_size(nodeset_name)
+        mig_idx = idx // slice_size
         return self.mig_name(nodeset_name, index=mig_idx)
 
     def node_is_fr(self, node_name:str) -> bool:
@@ -2083,9 +2138,14 @@ class Lookup:
         return repairing
 
     @lru_cache()
-    def get_mig_list(self, project: str, region: str) -> Any:
+    def get_mig_list(
+        self, project: str, region: Optional[str] = None, zone: Optional[str] = None
+    ) -> Any:
         """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
-        req = self.compute.regionInstanceGroupManagers().list(project=project, region=region)
+        if zone:
+            req = self.compute.instanceGroupManagers().list(project=project, zone=zone)
+        else:
+            req = self.compute.regionInstanceGroupManagers().list(project=project, region=region)
         return ensure_execute(req)
 
     @lru_cache()
@@ -2407,8 +2467,152 @@ class Lookup:
                 mount_options="defaults,hard,intr,_netdev",
             )
 
+    def is_tpu_nodeset(self, nodeset_name: str) -> bool:
+        """Checks if the nodeset uses a TPU machine type."""
+        try:
+            nodeset = self.cfg.nodeset.get(nodeset_name)
+            if not nodeset or not isinstance(getattr(nodeset, "instance_template", None), str):
+                return False
+            template = self.template_info(nodeset.instance_template)
+            family = template.machine_type.family.lower()
+            return family.startswith("ct") or family.startswith("tpu")
+        except Exception:
+            log.exception("Failed to check if nodeset uses TPU")
+            return False
+
+    def is_tpu_partition(self, partition: NSDict) -> bool:
+        """Checks if the partition contains a nodeset with a TPU machine type."""
+        return any(self.is_tpu_nodeset(ns) for ns in partition.partition_nodeset)
+
+    def is_tpu_node(self, nodename: str) -> bool:
+        """Checks if the node machine type uses a TPU machine type."""
+        try:
+            return self.is_tpu_nodeset(self.node_nodeset_name(nodename))
+        except Exception:
+            return False
+
+    def has_tpu_nodesets(self) -> bool:
+        """Checks if any nodeset uses a TPU machine type."""
+        return any(
+            self.is_tpu_nodeset(n.nodeset_name)
+            for n in self.cfg.nodeset.values()
+        )
+
+    def is_tpu_static_nodeset(self, nodeset_name: str) -> bool:
+        if not self.is_tpu_nodeset(nodeset_name):
+            return False
+        nodeset = self.cfg.nodeset.get(nodeset_name)
+        return bool(nodeset and self.static_dynamic_sizes(nodeset)[0] > 0)
+
+    def is_tpu_static_partition(self, partition: NSDict) -> bool:
+        return bool(partition.partition_nodeset) and all(
+            self.is_tpu_static_nodeset(ns) for ns in partition.partition_nodeset
+        )
+
+    def is_tpu_dynamic_nodeset(self, nodeset_name: str) -> bool:
+        """Checks if the nodeset is a dynamic TPU nodeset."""
+        if not self.is_tpu_nodeset(nodeset_name):
+            return False
+        nodeset = self.cfg.nodeset.get(nodeset_name)
+        return bool(nodeset and self.static_dynamic_sizes(nodeset)[1] > 0)
+
+    def is_tpu_dynamic_partition(self, partition: NSDict) -> bool:
+        """Checks if the partition is a dynamic TPU partition (all dynamic nodesets)."""
+        return bool(partition.partition_nodeset) and all(
+            self.is_tpu_dynamic_nodeset(ns) for ns in partition.partition_nodeset
+        )
+
+    def node_tpu_info(self, nodeset: NSDict) -> Optional[TpuInfo]:
+        """
+        Returns TPU mapping from instance template machine family to TPU
+        generation and tpus per chip.
+        """
+        if not self.is_tpu_nodeset(nodeset.nodeset_name):
+            return None
+        machine_type = self.template_info(nodeset.instance_template).machine_type
+        family = machine_type.family.lower()
+        name = machine_type.name.lower()
+        # Initial support is limited to TPU *-4t machine types
+        if not name.endswith("-4t"):
+            raise ValueError(
+                f"Unsupported TPU machine type family: {name}"
+            )
+        if family.startswith(("ct5l", "ct5lp")):
+            return TpuInfo(
+                type="v5e",
+                tpus_per_node=4,
+            )
+        elif family.startswith("ct5p"):
+            return TpuInfo(
+                type="v5p",
+                tpus_per_node=4,
+            )
+        elif family.startswith("ct6e"):
+            return TpuInfo(
+                type="v6e",
+                tpus_per_node=4,
+            )
+        elif family.startswith("tpu7x"):
+            return TpuInfo(
+                type="tpu7x",
+                tpus_per_node=4,
+            )
+        elif family.startswith("tpu7"):
+            return TpuInfo(
+                type="7",
+                tpus_per_node=4,
+            )
+        else:
+            raise ValueError(
+                f"Unsupported TPU machine type family: {family}"
+            )
+
+    def get_tpu_chunk_size(self, ns: NSDict) -> int:
+        """Calculates chunk size (number of nodes per block) for a TPU nodeset."""
+        tpu_info = self.node_tpu_info(ns)
+        chips_per_slice = (
+            math.prod(int(p) for p in ns.accelerator_topology.lower().split("x"))
+            if getattr(ns, "accelerator_topology", None)
+            else 1
+        )
+        return max(1, chips_per_slice // (tpu_info.tpus_per_node if tpu_info else 1))
+
+    def group_tpu_nodes_by_chunk_idx(
+        self, nodes: Iterable[str], chunk_size: int
+    ) -> Dict[int, List[str]]:
+        """Groups TPU nodes safely into chunk dictionaries based on node index."""
+        chunks_dict = defaultdict(list)
+        for node in nodes:
+            try:
+                chunk_idx = self.node_index(node) // chunk_size
+                chunks_dict[chunk_idx].append(node)
+            except Exception:
+                log.warning(f"Could not parse node index for {node}. Skipping.")
+        return chunks_dict
+
+    def remove_device_constrain_nodeset(self, nodeset_name: str) -> bool:
+        """Checks if the nodeset uses a machine type requiring device constrain removal."""
+        try:
+            nodeset = self.cfg.nodeset.get(nodeset_name)
+            if not nodeset or not isinstance(getattr(nodeset, "instance_template", None), str):
+                return False
+            template = self.template_info(nodeset.instance_template)
+            return template.machine_type.family.lower().startswith(("tpu7x", "ct5p"))
+        except Exception:
+            log.exception("Failed to check if nodeset requires device constrain removal")
+            return False
+
+    def remove_device_constrain(self) -> bool:
+        """Checks if any nodeset requires device constrain removal."""
+        return any(
+            self.remove_device_constrain_nodeset(n.nodeset_name)
+            for n in self.cfg.nodeset.values()
+        )
+
     def is_flex_node(self, node: str) -> bool:
         try:
+            if self.is_tpu_node(node):
+                return False
             nodeset = self.node_nodeset(node)
             if nodeset.dws_flex.use_bulk_insert:
                 return False #For legacy flex support

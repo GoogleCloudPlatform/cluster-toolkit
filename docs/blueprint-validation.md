@@ -274,11 +274,9 @@ ghpc:
 ```
 
 ### Conditional Regex Validator
-The `conditional_regex` validator enforces that a dependent variable matches a specific regular expression only when a trigger variable condition is met. This validator supports an optional `match_expected` flag (defaults to `true`), which if set to `false` ensures the dependent variable does not match the pattern.
+The `conditional_regex` validator ensures that a `dependent` string variable matches a regular expression `pattern` when a trigger condition is met. Set `match_expected: false` to require that the variable does not match the pattern.
 
-A `pattern` must be provided, which is the regular expression to match against. Trigger condition can be specified with `trigger` and `trigger_value`, or multiple triggers using `triggers` (a map of variable names to their expected values).
-
-If the dependent variable is unset, empty, or cannot be resolved at create time, the check is skipped. Pair this with the `conditional` validator if the variable must also be present.
+Specify the condition with `trigger` and `trigger_value`, or use `triggers` to pass a map of variable names or dot-separated nested paths (such as `dws_flex.enabled`) to expected values. Unset or empty dependent variables are skipped unless `required: true` is set.
 
 **Example definition in `metadata.yaml`:**
 
@@ -293,6 +291,21 @@ ghpc:
         pattern: "^[a-z0-9.-]+\\.[a-z]{2,}$"
         match_expected: true
       error_message: "custom_domain_name must be a valid domain when enable_custom_domain is true."
+```
+
+### CIDR Validator
+The `cidr` validator ensures that input variables are valid IP CIDR blocks. It validates strings, lists of strings, or specific fields within objects and maps when `object_key` is set. Supports optional `allow_null` (defaults to `false`) and `optional` (defaults to `true`) flags.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: cidr
+    inputs:
+      vars: [master_authorized_networks]
+      object_key: cidr_block
+    error_message: "All values in 'master_authorized_networks.cidr_block' must be in CIDR format (e.g. 1.2.3.4/32)."
 ```
 
 Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.

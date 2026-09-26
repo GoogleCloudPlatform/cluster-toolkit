@@ -47,6 +47,17 @@ Create a standard Docker repository.
     format: DOCKER
 ```
 
+Create a standard Docker repository with a custom name.
+
+```yaml
+- id: custom_registry
+  source: community/modules/container/artifact-registry
+  settings:
+    repository_name: my-custom-repo
+    repo_mode: STANDARD_REPOSITORY
+    format: DOCKER
+```
+
 Mirror of public Docker Hub repository.
 
 ```yaml
@@ -98,6 +109,87 @@ Alternatively, proceed with running SLURM's [NVIDIA/pyxis](https://github.com/NV
 
 Note: only Docker registries have been tested so far. Placeholders do exist for other registry types which may or may not work.
 
+### Breaking Change & Migration Guide: Upgrading Existing Deployments
+
+In [PR #6303](https://github.com/GoogleCloudPlatform/cluster-toolkit/pull/6303), the default repository naming convention changed from the legacy format (`<format>-<mode>-nohost-<suffix>`) to `ar-<deployment_name>-<suffix>`.
+
+Because Google Cloud Artifact Registry repository IDs and Secret Manager secret IDs are immutable, changing this default forces Terraform to plan a resource replacement (`-/+`). **Applying this replacement will permanently delete your existing Artifact Registry repository, all stored container images, and any upstream mirror secrets.**
+
+Existing deployments can upgrade with **zero downtime and zero image deletion** by pinning `repository_name` to their current repository ID.
+
+#### Step 1: Retrieve Your Existing Repository ID
+From your deployment directory, inspect your Terraform state:
+
+```bash
+# Navigate to your deployment group folder (default: primary)
+cd <deployment-folder>/primary
+
+# Extract repository IDs mapped to their module addresses
+terraform show -json | jq -r '.. | objects | select(.type? == "google_artifact_registry_repository") | "\(.address): \(.values.repository_id)"'
+```
+
+*(Alternative via `gcloud` CLI):*
+
+```bash
+gcloud artifacts repositories list \
+  --project="<PROJECT_ID>" \
+  --location="<REGION>" \
+  --filter='description="<DEPLOYMENT_NAME>"' \
+  --format='value(name.basename())'
+```
+
+*Example output:* `docker-standard-repository-nohost-4b1a`
+
+#### Step 2: Pin `repository_name` in Your Blueprint YAML
+Update your Cluster Toolkit blueprint YAML by explicitly setting `repository_name` to your existing repository ID under the module's `settings`:
+
+```yaml
+  - id: registry
+    source: community/modules/container/artifact-registry
+    settings:
+      repository_name: "docker-standard-repository-nohost-4b1a" # Paste exact ID from Step 1
+      repo_mode: STANDARD_REPOSITORY
+      format: DOCKER
+```
+
+> **Note:** If your blueprint defines multiple repository modules (e.g. an internal repository and a public mirror), repeat this step for each module using its corresponding address from Step 1.
+
+#### Step 3: Regenerate Deployment Files
+Regenerate your deployment configuration using `./gcluster create` with the `--overwrite-deployment` (`-w`) flag:
+
+```bash
+./gcluster create <your-blueprint.yaml> -o <deployment-folder> -w
+```
+
+#### Step 4: Verify Plan (DO NOT Skip)
+Navigate to your deployment group folder, initialize modules, and generate a plan:
+
+```bash
+cd <deployment-folder>/primary
+terraform init
+terraform plan
+```
+
+Inspect the plan output carefully:
+
+- **Safe to proceed:**
+  - `google_artifact_registry_repository.artifact_registry` reports `No changes` or `in-place update (~)` for labels/outputs.
+  - Downstream modules referencing `registry_url` or `repo_url` may show in-place updates (`~`) as the URL output is updated to reflect the real repository name.
+- **STOP / DO NOT APPLY:** If you see replacement requested:
+  `# module.registry.google_artifact_registry_repository.artifact_registry must be replaced (-/+)`
+  Verify that `repository_name` in your YAML matches your state's `repository_id` character-for-character with no leading/trailing spaces.
+
+#### Step 5: Safely Apply
+Once verified that no destructive replacement is planned:
+
+```bash
+# Using Terraform directly:
+terraform apply
+
+# OR using the Cluster Toolkit orchestrator:
+./gcluster deploy <deployment-folder>
+```
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
@@ -145,6 +237,7 @@ No modules.
 | <a name="input_repo_public_repository"></a> [repo\_public\_repository](#input\_repo\_public\_repository) | For REMOTE\_REPOSITORY, name of a known public repo as per the Terraform module<br/>(e.g., DOCKER\_HUB) or null for custom repo. | `string` | `null` | no |
 | <a name="input_repo_username"></a> [repo\_username](#input\_repo\_username) | Username for external repository. | `string` | `null` | no |
 | <a name="input_repository_base"></a> [repository\_base](#input\_repository\_base) | For APT/YUM public repos, repository\_base (e.g., 'DEBIAN', 'UBUNTU'). | `string` | `null` | no |
+| <a name="input_repository_name"></a> [repository\_name](#input\_repository\_name) | The repository name (ID) for the Artifact Registry repository. If null, a default value will be created using the deployment\_name and a random suffix. | `string` | `null` | no |
 | <a name="input_repository_path"></a> [repository\_path](#input\_repository\_path) | For APT/YUM public repos, repository\_path (e.g., 'debian/dists/buster'). | `string` | `null` | no |
 | <a name="input_use_upstream_credentials"></a> [use\_upstream\_credentials](#input\_use\_upstream\_credentials) | Configure Service Account to use upstream credentials for REMOTE\_REPOSITORY:<br/>If true, a username/password is used for the REMOTE\_REPOSITORY mirror.<br/>If false (or if repo\_password == null), no password is created at all.<br/>Note: Blueprint credentials will be stored in Secrets Manager. | `bool` | `false` | no |
 | <a name="input_user_managed_replication"></a> [user\_managed\_replication](#input\_user\_managed\_replication) | (Optional) A list of objects to enable user-managed replication.<br/>Each object can have:<br/>  location        = string<br/>  kms\_key\_name    = optional(string)<br/>If empty, auto replication is used. | <pre>list(object({<br/>    location     = string<br/>    kms_key_name = optional(string)<br/>  }))</pre> | `[]` | no |
@@ -153,5 +246,9 @@ No modules.
 
 | Name | Description |
 | ---- | ----------- |
-| <a name="output_registry_url"></a> [registry\_url](#output\_registry\_url) | The URL of the created artifact registry. |
+| <a name="output_registry_url"></a> [registry\_url](#output\_registry\_url) | The URL of the artifact registry repo. (Deprecated: Use 'repo\_url' instead) |
+| <a name="output_repo_url"></a> [repo\_url](#output\_repo\_url) | The URL of the artifact registry repo. |
+| <a name="output_repository_id"></a> [repository\_id](#output\_repository\_id) | The ID of the created artifact registry repository. |
+| <a name="output_repository_name"></a> [repository\_name](#output\_repository\_name) | The name (ID) of the created artifact registry repository. |
+| <a name="output_repository_resource_name"></a> [repository\_resource\_name](#output\_repository\_resource\_name) | The full resource name of the repository. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

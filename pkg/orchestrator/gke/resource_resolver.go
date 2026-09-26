@@ -271,6 +271,18 @@ func (g *GKEOrchestrator) checkNodePoolsDynamicSlicing(requestedMachineName stri
 	return false, nil
 }
 
+func (g *GKEOrchestrator) checkDynamicSlicingViaGKE() bool {
+	for _, np := range g.clusterDesc.NodePools {
+		if np.PlacementPolicy != nil {
+			mode := np.PlacementPolicy.AcceleratorTopologyMode
+			if strings.EqualFold(mode, "PROVISION_ONLY") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ErrResourcePolicyPermissionDenied indicates the caller lacks GCP IAM permissions to read the compute resource policy.
 var ErrResourcePolicyPermissionDenied = errors.New("permission denied querying compute resource policy")
 

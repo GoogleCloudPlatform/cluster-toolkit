@@ -83,6 +83,11 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
   * [hpc-slurm-google-cloud-dedicated.yaml](#hpc-slurm-google-cloud-dedicatedyaml-) ![community-badge]
+  * [hpc-slurm-scale.yaml](#hpc-slurm-scaleyaml-) ![community-badge]
+  * [hpc-slurm-multiregion-scale.yaml](#hpc-slurm-multiregion-scaleyaml-) ![community-badge]
+  * [hybrid-slurm-cluster (GCD)](#hybrid-slurm-cluster-gcd-) ![community-badge]
+  * [primary-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml)
+  * [burst-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml)
   * [slurm-gke.yaml](#slurm-gkeyaml--) ![community-badge] ![experimental-badge]
   * [sycomp](#sycomp--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
@@ -1881,17 +1886,50 @@ The deployment instructions can be found in the [README](../community/examples/h
 
 [hpc-slurm-google-cloud-dedicated.yaml]: ../community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml
 
+### [hpc-slurm-scale.yaml] ![community-badge]
+
+Creates a high-performance, single-region auto-scaling Slurm cluster scaled up to 800 dynamic Spot or On-Demand compute nodes (102,400 vCPUs) across 4 zones with multi-zonal dynamic failover and Cloud NAT.
+
+The deployment instructions can be found in the [README](../community/examples/slurm-high-throughput/README.md).
+
+[hpc-slurm-scale.yaml]: ../community/examples/slurm-high-throughput/hpc-slurm-scale.yaml
+
+### [hpc-slurm-multiregion-scale.yaml] ![community-badge]
+
+Creates a massive-scale, multi-region Slurm cluster provisioning up to 1,500 dynamic compute nodes (96,000 to 192,000 vCPUs) aggregated under a unified partition across 3 Google Cloud regions and 10 zones.
+
+The deployment instructions can be found in the [README](../community/examples/slurm-high-throughput/README.md).
+
+[hpc-slurm-multiregion-scale.yaml]: ../community/examples/slurm-high-throughput/hpc-slurm-multiregion-scale.yaml
+### [hybrid-slurm-cluster (GCD)] ![community-badge]
+
+Deploys a Multi-Cluster Slurm environment with Elastic Cloud Bursting across two autonomous projects in Google Cloud Dedicated (GCD) and sovereign cloud environments. Includes cross-cluster SAuth discovery, automatic compute nodes autoscaling on Burst Cluster, standalone NFS server, custom Rocky Linux Slurm image, and shared `/home` filesystem mounting over VPC peering.
+
+This directory includes the following blueprints:
+* [`primary-cluster.yaml`](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml): Primary cluster on GCD with standalone NFS server and custom-built Rocky Linux Slurm image.
+* [`burst-cluster.yaml`](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml): Cloud burst target cluster on GCD with dynamic autoscaling compute nodes.
+
+The deployment instructions can be found in the [README](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/README.md).
+
+[hybrid-slurm-cluster (GCD)]: ../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/README.md
+
 ### [slurm-gke.yaml] ![community-badge] ![experimental-badge]
 
-Deploys a hybrid Slurm cluster in which compute nodes run either as GCE VMs or as Kubernetes pods on GKE, using the [Slinky](https://github.com/SlinkyProject) Slurm operator. The blueprint creates a VPC, a Filestore instance mounted at `/home`, a GKE cluster with a base and a compute node pool, and a GCE Slurm controller and login node. Jobs can be submitted to a GCE-backed `debug` partition or to a GKE-backed partition whose `slurmd` nodes run as pods from a pre-built container image. Scripts for building and running NCCL tests are included under `nccl-tests/` for validating multi-node GPU communication.
+Deploys a hybrid Slurm cluster with a GCE-based controller, login node, and `debug` partition alongside a GKE-backed compute partition managed by the [Slinky](https://github.com/SlinkyProject) Slurm operator. The blueprint also creates a VPC, a Filestore instance mounted at `/home`, and a GKE cluster where `slurmd` compute nodes run as pods. Helper scripts for building and running multi-node GPU NCCL tests are included under [`nccl-tests/`](../community/examples/slurm-gke/nccl-tests/README.md).
 
-For a Slurm cluster that runs entirely on Kubernetes (controller included), see [hpc-slinky.yaml](#hpc-slinkyyaml--).
+For a Slurm cluster that runs entirely on Kubernetes, see [hpc-slinky.yaml](#hpc-slinkyyaml--).
 
 [slurm-gke.yaml]: ../community/examples/slurm-gke/slurm-gke.yaml
 
 ### [sycomp] ![community-badge] ![experimental-badge]
 
-A set of blueprints for deploying and expanding a [Sycomp Intelligent Data Storage Platform](https://www.sycomp.com/) cluster (IBM Storage Scale based) and exposing it to compute clients over NFS. The folder contains `sycomp-storage.yaml` (3 storage servers), `sycomp-storage-expansion.yaml` (expand to 4 servers), `sycomp-storage-ece.yaml` (7 servers using Erasure Code Edition software RAID), and `sycomp-storage-slurm.yaml` (a Slurm cluster that mounts the Sycomp storage).
+Deploys and expands an IBM Storage Scale cluster using the [Sycomp Intelligent Data Storage Platform](https://sycomp.com/solution/hpc/storage/) and exposes it to compute clients over NFS.
+
+This directory includes the following blueprints:
+* [`sycomp-storage.yaml`](../community/examples/sycomp/sycomp-storage.yaml): Deploys a 3-node Sycomp Storage cluster.
+* [`sycomp-storage-expansion.yaml`](../community/examples/sycomp/sycomp-storage-expansion.yaml): Expands the cluster from 3 to 4 storage nodes.
+* [`sycomp-storage-ece.yaml`](../community/examples/sycomp/sycomp-storage-ece.yaml): Deploys a 7-node cluster using Erasure Code Edition (ECE) software RAID.
+* [`sycomp-storage-slurm.yaml`](../community/examples/sycomp/sycomp-storage-slurm.yaml): Deploys a Slurm cluster that mounts the Sycomp storage over NFS.
 
 The deployment instructions can be found in the [README](../community/examples/sycomp/README.md).
 

@@ -255,6 +255,7 @@ spec:
     - test-locks/batch
     - test-locks/a4x-max
     - test-locks/gke-a4x-max-bm
+    - test-locks/ml-tpu7x-onspot-slurm
     flavors:
     - name: test-lock-flavor-2
       resources:
@@ -291,6 +292,8 @@ spec:
       - name: test-locks/a4x-max
         nominalQuota: 1
       - name: test-locks/gke-a4x-max-bm
+        nominalQuota: 1
+      - name: test-locks/ml-tpu7x-onspot-slurm
         nominalQuota: 1
 ---
 apiVersion: kueue.x-k8s.io/v1beta1

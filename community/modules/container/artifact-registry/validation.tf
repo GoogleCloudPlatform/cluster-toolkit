@@ -45,5 +45,10 @@ resource "terraform_data" "input_validation" {
       )
       error_message = "APT/YUM formats require repository_base and repository_path."
     }
+
+    precondition {
+      condition     = can(regex("^[a-z][-a-z0-9]{0,61}[a-z0-9]$", local.repository_name))
+      error_message = "The resolved repository_name '${local.repository_name}' is invalid for GCP Artifact Registry (must be 2-63 chars, start with a lowercase letter, end with a letter/number, and contain only lowercase alphanumeric and hyphens)."
+    }
   }
 }
