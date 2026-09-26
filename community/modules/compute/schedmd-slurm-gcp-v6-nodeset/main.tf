@@ -214,7 +214,8 @@ locals {
 locals {
   zones             = setunion(var.zones, [var.zone])
   zone_target_shape = coalesce(var.zone_target_shape, "ANY_SINGLE_ZONE")
-  mig_provisioned   = var.dws_flex.enabled ? !var.dws_flex.use_bulk_insert : var.provisioning_engine == "MIG"
+  # Static MIG only: DWS Flex MIGs are created by mig_flex.py with ANY_SINGLE_ZONE.
+  mig_provisioned = !var.dws_flex.enabled && var.provisioning_engine == "MIG"
 
   # Expand to all regional zones when a multi-zone target shape is set on a MIG without explicit zones or zonal reservations.
   expand_zones = (

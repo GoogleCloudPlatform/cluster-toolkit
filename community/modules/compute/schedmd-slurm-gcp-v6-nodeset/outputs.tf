@@ -119,13 +119,6 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = length(var.zones) == 0 || !var.dws_flex.enabled
-    error_message = <<-EOD
-      If a DWS Flex is enabled, `var.zones` should be empty.
-    EOD
-  }
-
-  precondition {
     condition     = var.on_host_maintenance == "TERMINATE" || !var.dws_flex.enabled
     error_message = "If DWS Flex is used, `on_host_maintenance` should be set to 'TERMINATE'"
   }
@@ -187,8 +180,8 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = !(var.dws_flex.enabled && !var.dws_flex.use_bulk_insert) || contains(["ANY_SINGLE_ZONE", "ANY"], local.zone_target_shape)
-    error_message = "DWS Flex (FLEX_START) Regional MIGs only support zone_target_shape of 'ANY_SINGLE_ZONE' or 'ANY'; 'BALANCED' is rejected by Compute Engine."
+    condition     = !(var.dws_flex.enabled && !var.dws_flex.use_bulk_insert) || local.zone_target_shape == "ANY_SINGLE_ZONE"
+    error_message = "DWS Flex (FLEX_START) Regional MIGs use resize requests, which only support zone_target_shape = 'ANY_SINGLE_ZONE'."
   }
 
   precondition {

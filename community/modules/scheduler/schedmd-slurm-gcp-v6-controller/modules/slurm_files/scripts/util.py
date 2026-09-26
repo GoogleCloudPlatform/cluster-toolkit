@@ -2299,12 +2299,11 @@ class Lookup:
 
     def template_machine_conf(self, template_link):
         template = self.template_info(template_link)
+        amf = template.get("advancedMachineFeatures")
         return self._machine_conf(
             template.machine_type,
             getThreadsPerCore(template),
-            template.advancedMachineFeatures.visibleCoreCount
-            if template.advancedMachineFeatures
-            else None,
+            amf.get("visibleCoreCount") if amf else None,
         )
 
     def nodeset_machine_conf(self, nodeset) -> NSDict:
@@ -2317,17 +2316,10 @@ class Lookup:
             return NSDict(base) if isinstance(base, dict) else copy.copy(base)
 
         template = self.template_info(nodeset.instance_template)
-        amf_tpc = (
-            template.advancedMachineFeatures.threadsPerCore
-            if template.advancedMachineFeatures
-            else None
-        )
-        visible_cores = (
-            template.advancedMachineFeatures.visibleCoreCount
-            if template.advancedMachineFeatures
-            else None
-        )
-        primary_mt = template.machineType or getattr(template.machine_type, "name", None)
+        amf = template.get("advancedMachineFeatures")
+        amf_tpc = amf.get("threadsPerCore") if amf else None
+        visible_cores = amf.get("visibleCoreCount") if amf else None
+        primary_mt = template.get("machineType") or getattr(template.get("machine_type"), "name", None)
 
         sel_iter = selections.values() if isinstance(selections, dict) else selections
         confs = [base]
@@ -2343,7 +2335,10 @@ class Lookup:
                     )
                 )
             except Exception as e:
-                log.warning(f"Ignoring machine type {name} of {nodeset.nodeset_name} in node sizing: {e}")
+                raise RuntimeError(
+                    f"Cannot size nodeset {nodeset.nodeset_name}: failed to resolve fallback machine type {name}; "
+                    "emitting the primary shape would DRAIN smaller fallback VMs"
+                ) from e
 
         min_cpu_conf = min(
             confs,

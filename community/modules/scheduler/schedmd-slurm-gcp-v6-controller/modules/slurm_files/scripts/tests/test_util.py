@@ -1119,6 +1119,42 @@ def test_slurmsync_mig_auto_repair(mock_lookup, mock_compute_prop, mock_inst):
                 mock_get_reason.assert_called_with("testcl-ns-2")
 
 
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+@unittest.mock.patch("slurmsync.lookup")
+def test_slurmsync_mig_preempted_spot_waits_for_auto_healing(mock_lookup, mock_compute_prop):
+    import slurmsync
+
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "ns": TstNodeset(nodeset_name="ns", region="us-central1", provisioning_engine="MIG", node_count_static=2, node_count_dynamic_max=0),
+            "bulk": TstNodeset(nodeset_name="bulk", region="us-central1", provisioning_engine="BULK_INSERT", node_count_static=2, node_count_dynamic_max=0),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    # Window before MIG reports RECREATING: VM is TERMINATED, currentAction NONE.
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+        "managedInstances": [{"name": "testcl-ns-0", "currentAction": "NONE"}]
+    }
+    mock_lookup.return_value = lkp
+    preempted = unittest.mock.MagicMock(status="TERMINATED")
+    preempted.scheduling.preemptible = True
+
+    with unittest.mock.patch.object(util.Lookup, "instance", return_value=preempted):
+        with unittest.mock.patch.object(util.Lookup, "node_state", return_value=slurmsync.NodeState(base="ALLOCATED", flags=frozenset())):
+            action = slurmsync.get_node_action("testcl-ns-0")
+            assert isinstance(action, slurmsync.NodeActionDown)
+            assert "MIG Auto-Healing" in action.reason
+            # Non-MIG nodeset keeps the existing restart behaviour.
+            assert isinstance(slurmsync.get_node_action("testcl-bulk-0"), slurmsync.NodeActionPrempt)
+
+        with unittest.mock.patch.object(util.Lookup, "node_state", return_value=slurmsync.NodeState(base="DOWN", flags=frozenset())):
+            assert isinstance(slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionUnchanged)
+
+
 def test_is_target_controller_up_hostname_containing_role():
     line = "Slurmctld(backup) at primary-cluster-controller-1 is UP"
     assert util._is_target_controller_up(line, "primary") is False
@@ -1600,13 +1636,14 @@ def test_nodeset_machine_conf_mixes_min_cpu_and_min_memory():
     assert got.memory == lkp._machine_conf(FLEX_MACHINES["n2-standard-8"], 2, None).memory
 
 
-def test_nodeset_machine_conf_ignores_unresolvable_machine_type():
+def test_nodeset_machine_conf_raises_on_unresolvable_machine_type():
     machines = dict(FLEX_MACHINES)
     lkp, nodeset = _flex_lkp(machines, [
         {"name": "fb", "rank": 2, "machine_types": ["nonexistent-machine-type"]},
     ])
-    # Degrades to the primary template's conf instead of taking down config generation.
-    assert lkp.nodeset_machine_conf(nodeset) == lkp.template_machine_conf("tpl")
+    # Falling back to the primary shape would oversize the node and DRAIN smaller fallback VMs.
+    with pytest.raises(RuntimeError, match="nonexistent-machine-type"):
+        lkp.nodeset_machine_conf(nodeset)
 
 
 def test_nodeset_machine_conf_does_not_mutate_base_conf():
@@ -1628,6 +1665,29 @@ def test_nodeset_machine_conf_does_not_mutate_base_conf():
     assert got.cpus == 16
     assert got.memory < orig_mem
     assert cached_base.memory == orig_mem
+
+
+def test_machine_conf_does_not_autovivify_cached_template():
+    # Non-SMT family so getThreadsPerCore short-circuits and never touches advancedMachineFeatures.
+    machines = {
+        "c4a-standard-16": util.MachineType(name="c4a-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
+        "c4a-standard-8": util.MachineType(name="c4a-standard-8", guest_cpus=8, memory_mb=32768, accelerators=[]),
+    }
+    lkp = util.Lookup(TstCfg())
+    template = NSDict({"machine_type": machines["c4a-standard-16"], "machineType": "c4a-standard-16"})
+    lkp.template_info = Mock(return_value=template)  # type: ignore[method-assign]
+    lkp.machine_type = Mock(side_effect=lambda n: machines[n])  # type: ignore[method-assign]
+    nodeset = NSDict({
+        "nodeset_name": "flex",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": NSDict({"instance_selections": [NSDict({"machine_types": ["c4a-standard-8"]})]}),
+    })
+
+    lkp.template_machine_conf("tpl")
+    got = lkp.nodeset_machine_conf(nodeset)
+
+    assert got.cpus == 8
+    assert "advancedMachineFeatures" not in template
 
 
 def test_nodeset_machine_conf_visible_core_count_not_applied_to_smaller_fallback():

@@ -47,9 +47,15 @@ fi
 tmpfile=$(mktemp) # have to use a temp file, since `< <(gcloud ...)` doesn't work nicely with `head`
 trap 'rm -f "$tmpfile"' EXIT
 
+# Static MIGs "<cluster>-<nodeset>-mig-<N>" (and their member VMs) are owned and deleted by
+# Terraform (nodeset_mig in partition.tf). Deleting them here races that delete and fails
+# `terraform destroy` with resourceNotReady. Runtime MIGs (e.g. DWS Flex) never match this.
+tf_mig_regex="^${cluster_name}-${nodeset_name}-mig-[0-9]+$"
+
 echo "Deleting managed instance groups"
 mig_filter="name:${cluster_name}-${nodeset_name}-*"
-gcloud compute instance-groups managed list --format="value(self_link)" --filter="${mig_filter}" >"$tmpfile"
+gcloud compute instance-groups managed list --format="value(self_link)" --filter="${mig_filter}" |
+	awk -F/ -v re="${tf_mig_regex}" '$NF !~ re' >"$tmpfile"
 while batch="$(head -n 5)" && [[ ${#batch} -gt 0 ]]; do
 	groups=$(echo "$batch" | paste -sd " " -) # concat into a single space-separated line
 	# The lack of quotes around ${groups} is intentional and causes each new space-separated "word" to
@@ -71,7 +77,8 @@ node_filter="name:${cluster_name}-${nodeset_name}-* labels.slurm_cluster_name=${
 
 running_nodes_filter="${node_filter} AND status!=STOPPING"
 # List all currently running instances and attempt to delete them
-gcloud compute instances list --format="value(selfLink)" --filter="${running_nodes_filter}" >"$tmpfile"
+gcloud compute instances list --format="value(selfLink,metadata.items.created-by.basename())" --filter="${running_nodes_filter}" |
+	awk -F'\t' -v re="${tf_mig_regex}" '$2 !~ re {print $1}' >"$tmpfile"
 # Do 500 instances at a time
 while batch="$(head -n 500)" && [[ ${#batch} -gt 0 ]]; do
 	nodes=$(echo "$batch" | paste -sd " " -) # concat into a single space-separated line

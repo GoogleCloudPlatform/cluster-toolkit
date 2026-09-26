@@ -351,6 +351,13 @@ def get_node_action(nodename: str) -> NodeAction:
         and "POWERING_DOWN" not in state.flags
         and inst.status == "TERMINATED"
     ):
+        if lkp.is_node_mig(nodename):
+            # MIG auto-healing (default_action_on_failure=REPAIR) recreates the VM
+            # (delete + insert). Do not start it; wait for RUNNING, then resume via
+            # the auto-healing branch above.
+            if state.base != "DOWN":
+                return NodeActionDown(reason="MIG Auto-Healing instance repair in progress")
+            return NodeActionUnchanged()
         if inst.scheduling.preemptible:
             return NodeActionPrempt()
         if state.base != "DOWN":
