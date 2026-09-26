@@ -273,6 +273,41 @@ ghpc:
       error_message: "slurm_control_host is required when enable_hybrid is true."
 ```
 
+### Conditional Regex Validator
+The `conditional_regex` validator ensures that a `dependent` string variable matches a regular expression `pattern` when a trigger condition is met. Set `match_expected: false` to require that the variable does not match the pattern.
+
+Specify the condition with `trigger` and `trigger_value`, or use `triggers` to pass a map of variable names or dot-separated nested paths (such as `dws_flex.enabled`) to expected values. Unset or empty dependent variables are skipped unless `required: true` is set.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+    - validator: conditional_regex
+      inputs:
+        trigger: enable_custom_domain
+        trigger_value: true
+        dependent: custom_domain_name
+        pattern: "^[a-z0-9.-]+\\.[a-z]{2,}$"
+        match_expected: true
+      error_message: "custom_domain_name must be a valid domain when enable_custom_domain is true."
+```
+
+### CIDR Validator
+The `cidr` validator ensures that input variables are valid IP CIDR blocks. It validates strings, lists of strings, or specific fields within objects and maps when `object_key` is set. Supports optional `allow_null` (defaults to `false`) and `optional` (defaults to `true`) flags.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: cidr
+    inputs:
+      vars: [master_authorized_networks]
+      object_key: cidr_block
+    error_message: "All values in 'master_authorized_networks.cidr_block' must be in CIDR format (e.g. 1.2.3.4/32)."
+```
+
 Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.
 
 ## Skipping or Disabling Validators

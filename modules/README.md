@@ -72,6 +72,8 @@ Modules that are still in development and less stable are labeled with the
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
 [mig]: ../community/modules/compute/mig/README.md
 [notebook]: ../community/modules/compute/notebook/README.md
+[gke-nodeset]: ../community/modules/compute/gke-nodeset/README.md
+[gke-partition]: ../community/modules/compute/gke-partition/README.md
 [colab]: ../community/modules/compute/colab/README.md
 [fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
 
@@ -125,6 +127,12 @@ Modules that are still in development and less stable are labeled with the
 * **[cloud-storage-bucket]** ![core-badge] : Creates a Google Cloud Storage (GCS) bucket.
 * **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates
   persistent volumes and persistent volume claims for shared storage.
+* **[gke-storage]** ![core-badge] ![experimental-badge] : Creates a Kubernetes
+  storage class and persistent volume claims to dynamically provision Google
+  Cloud storage such as Hyperdisk for GKE workloads.
+* **[netapp-storage-pool]** ![core-badge] : Creates a
+  [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes/docs/discover/overview)
+  storage pool for [netapp-volume] file systems.
 * **[nfs-server]** ![community-badge] ![experimental-badge] : Creates a VM and
   configures an NFS server that can be mounted by other VM.
 * **[weka-client]** ![community-badge] ![experimental-badge] : Installs client
@@ -133,6 +141,14 @@ Modules that are still in development and less stable are labeled with the
   and manages objects in a Google Cloud Storage (GCS) bucket from inline content, local files, or directories.
 * **[gcs-sync]** ![community-badge] ![experimental-badge] : Synchronizes files
   and directories from remote Git repositories into Cloud Storage buckets at apply time.
+* **[sycomp-scale]** ![community-badge] ![experimental-badge] : Documents how
+  to deploy an IBM Storage Scale cluster using the
+  [Sycomp Intelligent Data Storage Platform](https://sycomp.com/solution/hpc/storage/)
+  Terraform modules.
+* **[DDN-EXAScaler]** ![community-badge] ![deprecated-badge] : No longer
+  supported. Use [managed-lustre] instead.
+* **[Intel-DAOS]** ![community-badge] ![deprecated-badge] : No longer
+  supported. Use [managed-lustre] instead.
 
 [filestore]: file-system/filestore/README.md
 [netapp-volume]: file-system/netapp-volume/README.md
@@ -143,8 +159,13 @@ Modules that are still in development and less stable are labeled with the
 [cloud-storage-bucket]: file-system/cloud-storage-bucket/README.md
 [gke-persistent-volume]: file-system/gke-persistent-volume/README.md
 [weka-client]: ../community/modules/file-system/weka-client/README.md
+[gke-storage]: file-system/gke-storage/README.md
+[netapp-storage-pool]: file-system/netapp-storage-pool/README.md
 [gcs-objects]: ../community/modules/file-system/gcs-objects/README.md
 [gcs-sync]: ../community/modules/file-system/gcs-sync/README.md
+[sycomp-scale]: ../community/modules/file-system/sycomp-scale/README.md
+[DDN-EXAScaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
+[Intel-DAOS]: ../community/modules/file-system/Intel-DAOS/README.md
 
 ### IAM
 
@@ -158,11 +179,15 @@ Modules that are still in development and less stable are labeled with the
 * **[kubernetes-namespace]** ![core-badge] : Creates a Kubernetes namespace.
 * **[direct-helm-install]** ![community-badge] ![experimental-badge] : Provides a standardized way to deploy Helm charts directly to a GKE cluster.
 * **[helm-upgrade]** ![community-badge] ![experimental-badge] : Manages Helm chart deployment lifecycles inside a GKE cluster.
+* **[dependencies-installer]** ![community-badge] ![experimental-badge] :
+  Installs common GKE workload dependencies via Helm, including Kueue, JobSet,
+  the NVIDIA GPU Operator, and the NVIDIA DRA driver.
 
 [kubectl-apply]: management/kubectl-apply/README.md
 [kubernetes-namespace]: management/kubernetes-namespace/README.md
 [direct-helm-install]: ../community/modules/management/direct-helm-install/README.md
 [helm-upgrade]: ../community/modules/management/helm-upgrade/README.md
+[dependencies-installer]: ../community/modules/management/dependencies-installer/README.md
 
 ### Monitoring
 
@@ -193,6 +218,11 @@ Modules that are still in development and less stable are labeled with the
   rules to existing networks (commonly used with [pre-existing-vpc]).
 * **[private-service-access]** ![core-badge] :
   Configures Private Services Access for a VPC network (commonly used with [filestore] and [slurm-cloudsql-federation]).
+* **[pre-existing-subnetwork]** ![core-badge] : Used to connect newly built
+  components to a pre-existing subnetwork.
+* **[gpu-rdma-vpc]** ![core-badge] : Creates a VPC network and subnetworks for
+  RDMA traffic between GPU nodes, with outputs for [vm-instance], Slurm, and
+  GKE modules.
 
 [vpc]: network/vpc/README.md
 [dns-managed-zone]: network/dns-managed-zone/README.md
@@ -201,6 +231,8 @@ Modules that are still in development and less stable are labeled with the
 [pre-existing-vpc]: network/pre-existing-vpc/README.md
 [firewall-rules]: network/firewall-rules/README.md
 [private-service-access]: network/private-service-access/README.md
+[pre-existing-subnetwork]: network/pre-existing-subnetwork/README.md
+[gpu-rdma-vpc]: network/gpu-rdma-vpc/README.md
 
 ### Packer
 
@@ -225,6 +257,10 @@ Modules that are still in development and less stable are labeled with the
 * **[pre-existing-project]** ![community-badge] ![experimental-badge] : Retrieves
   information about an existing GCP project (name, number) and exposes it as
   outputs.
+* **[new-project]** ![community-badge] ![deprecated-badge] : No longer
+  supported. Use the upstream
+  [terraform-google-project-factory](https://github.com/terraform-google-modules/terraform-google-project-factory)
+  module instead.
 
 [service-account]: ../modules/project/service-account/README.md
 [workload_identity_binding]: project/workload_identity_binding/README.md
@@ -232,6 +268,7 @@ Modules that are still in development and less stable are labeled with the
 [project-metadata]: ../community/modules/project/project-metadata/README.md
 [service-agent]: ../community/modules/project/service-agent/README.md
 [pre-existing-project]: ../community/modules/project/pre-existing-project/README.md
+[new-project]: ../community/modules/project/new-project/README.md
 
 ### Pub/Sub
 
@@ -271,6 +308,14 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 * **[htcondor-access-point]** ![community-badge] ![experimental-badge] : Creates
   a regional instance group managing a highly available HTCondor access point
   (login node).
+* **[htcondor-central-manager]** ![community-badge] ![experimental-badge] :
+  Creates a Managed Instance Group running a highly available HTCondor central
+  manager.
+* **[htcondor-service-accounts]** ![community-badge] ![experimental-badge] :
+  Creates the default service accounts and IAM roles for an HTCondor pool.
+* **[slinky]** ![community-badge] ![experimental-badge] : Installs the
+  [Slinky](https://slinky.ai) Slurm operator and deploys a Slurm cluster with a
+  login node on GKE.
 
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
@@ -281,6 +326,9 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md
 [schedmd-slurm-gcp-v6-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
 [schedmd-slurm-gcp-v6-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
+[htcondor-central-manager]: ../community/modules/scheduler/htcondor-central-manager/README.md
+[htcondor-service-accounts]: ../community/modules/scheduler/htcondor-service-accounts/README.md
+[slinky]: ../community/modules/scheduler/slinky/README.md
 
 ### Scripts
 
