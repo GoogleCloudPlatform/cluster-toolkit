@@ -83,9 +83,11 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
   * [hpc-slurm-google-cloud-dedicated.yaml](#hpc-slurm-google-cloud-dedicatedyaml-) ![community-badge]
+  * [hpc-slurm-scale.yaml](#hpc-slurm-scaleyaml-) ![community-badge]
+  * [hpc-slurm-multiregion-scale.yaml](#hpc-slurm-multiregion-scaleyaml-) ![community-badge]
   * [hybrid-slurm-cluster (GCD)](#hybrid-slurm-cluster-gcd-) ![community-badge]
-    * [primary-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml)
-    * [burst-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml)
+  * [primary-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml)
+  * [burst-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml)
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1882,6 +1884,21 @@ The deployment instructions can be found in the [README](../community/examples/h
 
 [hpc-slurm-google-cloud-dedicated.yaml]: ../community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml
 
+### [hpc-slurm-scale.yaml] ![community-badge]
+
+Creates a high-performance, single-region auto-scaling Slurm cluster scaled up to 800 dynamic Spot or On-Demand compute nodes (102,400 vCPUs) across 4 zones with multi-zonal dynamic failover and Cloud NAT.
+
+The deployment instructions can be found in the [README](../community/examples/slurm-high-throughput/README.md).
+
+[hpc-slurm-scale.yaml]: ../community/examples/slurm-high-throughput/hpc-slurm-scale.yaml
+
+### [hpc-slurm-multiregion-scale.yaml] ![community-badge]
+
+Creates a massive-scale, multi-region Slurm cluster provisioning up to 1,500 dynamic compute nodes (96,000 to 192,000 vCPUs) aggregated under a unified partition across 3 Google Cloud regions and 10 zones.
+
+The deployment instructions can be found in the [README](../community/examples/slurm-high-throughput/README.md).
+
+[hpc-slurm-multiregion-scale.yaml]: ../community/examples/slurm-high-throughput/hpc-slurm-multiregion-scale.yaml
 ### [hybrid-slurm-cluster (GCD)] ![community-badge]
 
 Deploys a Multi-Cluster Slurm environment with Elastic Cloud Bursting across two autonomous projects in Google Cloud Dedicated (GCD) and sovereign cloud environments. Includes cross-cluster SAuth discovery, automatic compute nodes autoscaling on Burst Cluster, standalone NFS server, custom Rocky Linux Slurm image, and shared `/home` filesystem mounting over VPC peering.
