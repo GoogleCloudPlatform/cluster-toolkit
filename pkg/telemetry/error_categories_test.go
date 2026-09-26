@@ -20,20 +20,6 @@ import (
 	"testing"
 )
 
-// knownShadowed lists patterns that are currently unreachable because an
-// earlier, broader entry in the table matches first. Correcting these changes
-// the label on telemetry that is already being collected, so they are handled
-// separately from this test.
-//
-// This map must not grow. If a new entry is needed, the pattern being added is
-// almost certainly redundant with one already in the table.
-var knownShadowed = map[string]string{
-	// pattern (as stored, lowercased) -> category actually returned today
-	"net/http: request canceled (client.timeout exceeded while awaiting headers)": "API_POST_HEADERS_TIMEOUT",
-	"not resumed by resumetimeout":                                            "unknown_STARTUP_TIMEOUT_TPU",
-	"does not currently have sufficient capacity for the requested resources": "Stockout",
-}
-
 // TestNoOverEscapedPatterns guards against patterns being copied from the CI
 // notebook's Python *source* (which contains \" and \n escapes) instead of the
 // string's *value*.
@@ -71,16 +57,12 @@ func TestNoOverEscapedPatterns(t *testing.T) {
 // in here is lowercase. Regexes are matched against the original-case message
 // and nearly all of them contain capitals, so the regex table does not fire
 // during this test. Shadowing of a substring pattern by an earlier regex is
-// therefore NOT covered, and knownShadowed below is a lower bound rather than
-// a complete list.
+// therefore NOT covered.
 func TestEverySubstringPatternIsReachable(t *testing.T) {
 	for _, m := range extraSubstringErrMatchers {
 		got := getErrorType(errors.New(m.substring))
 		if got == m.category {
 			continue
-		}
-		if want, ok := knownShadowed[m.substring]; ok && want == got {
-			continue // documented above, tracked separately
 		}
 		t.Errorf("unreachable pattern %q\n  want category %s\n  got  category %s",
 			m.substring, m.category, got)
@@ -93,9 +75,6 @@ func TestEveryMultiSubstringPatternIsReachable(t *testing.T) {
 	for _, m := range extraMultiSubstringErrMatchers {
 		got := getErrorType(errors.New(strings.Join(m.substrings, " ")))
 		if got == m.category {
-			continue
-		}
-		if want, ok := knownShadowed[strings.Join(m.substrings, " ")]; ok && want == got {
 			continue
 		}
 		t.Errorf("unreachable multi-pattern %v\n  want category %s\n  got  category %s",

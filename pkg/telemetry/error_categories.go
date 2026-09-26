@@ -235,7 +235,6 @@ const (
 	ErrTypeNotEnoughResources                        = "NOT_ENOUGH_RESOURCES"
 	ErrTypeNoCandidate                               = "NO_CANDIDATE"
 	ErrTypeNoResourcesInDefaultNamespace             = "NO_RESOURCES_IN_DEFAULT_NAMESPACE"
-	ErrTypeNoZoneHaveEnoughResources                 = "NO_ZONE_HAVE_ENOUGH_RESOURCES"
 	ErrTypeNullArgument                              = "NULL_ARGUMENT"
 	ErrTypeNullValueNotIterable                      = "NULL_VALUE_NOT_ITERABLE"
 	ErrTypeNvidiaDriverBuildFailure                  = "NVIDIA_DRIVER_BUILD_FAILURE"
@@ -286,7 +285,6 @@ const (
 	ErrTypeResourceUnavailable                       = "RESOURCE_UNAVAILABLE"
 	ErrTypeRouternatResourceNotFound                 = "ROUTERNAT_RESOURCE_NOT_FOUND"
 	ErrTypeRouterQuota                               = "ROUTER_QUOTA"
-	ErrTypeRtConfigHeaderTimeout                     = "RT_CONFIG_HEADER_TIMEOUT"
 	ErrTypeSdkHttp503                                = "SDK_HTTP_503"
 	ErrTypeSensitiveVar                              = "SENSITIVE_VAR"
 	ErrTypeSerialOutputInternalError                 = "SERIAL_OUTPUT_INTERNAL_ERROR"
@@ -370,7 +368,6 @@ const (
 	ErrTypeUnknownNodeFailure                        = "unknown_NODE_FAILURE"
 	ErrTypeUnknownSlurmComputeBoot                   = "unknown_SLURM_COMPUTE_BOOT"
 	ErrTypeUnknownSlurmResumeTimeout                 = "unknown_SLURM_RESUME_TIMEOUT"
-	ErrTypeUnknownStartupTimeoutTpu                  = "unknown_STARTUP_TIMEOUT_TPU"
 )
 
 var extraSubstringErrMatchers = []struct {
@@ -409,7 +406,6 @@ var extraSubstringErrMatchers = []struct {
 	{"does not currently have sufficient capacity for the requested resources", ErrTypeStockout},
 	{"nvidia-tesla-t4-vws accelerator(s) is currently unavailable in the", ErrTypeStockout},
 	{"try in another zone where Cloud TPU Nodes are offered", ErrTypeStockoutTpu},
-	{"not resumed by ResumeTimeout", ErrTypeUnknownStartupTimeoutTpu},
 	{"No resources found in default namespace.", ErrTypeNoResourcesInDefaultNamespace},
 	{"Error waiting for Creating Instance: Error code 8, message: System limit for internal resources has been reached.", ErrTypeFilestoreVpcLimit},
 	{"Error waiting for Creating Instance: Error code 13, message: an internal error has occurred", ErrTypeFilestoreInternalError},
@@ -462,7 +458,6 @@ var extraSubstringErrMatchers = []struct {
 	{"Error code 9, message: Cannot modify allocated ranges in CreateConnection", ErrTypePeeringUpdateFailure},
 	{"Found more than 1 matching running builds", ErrTypeMatchingBuildFailure},
 	{"Could not retrieve the list of available versions for provider", ErrTypeProviderDownloadFailure},
-	{"net/http: request canceled (Client.Timeout exceeded while awaiting headers)", ErrTypeRtConfigHeaderTimeout},
 	{"failed to fetch resource from kubernetes: client rate limiter Wait returned an error:", ErrTypeNodepoolCreationError},
 	{" NodePool a3-ultragpu-8g-a3-ultragpu-pool was created in the error state \"ERROR\"", ErrTypeGkeNodepoolStateError},
 	{"Disabling automatic updates is not supported with the selected VM image", ErrTypeDisableAutoUpdatesNotSupported},
@@ -578,7 +573,6 @@ var extraSubstringErrMatchers = []struct {
 	{" timed out waiting for the condition on jobs/my-job-04b6", ErrTypeTimeOutWaitingForCondition},
 	{"Error waiting for instance to create: timeout while waiting for state to become 'DONE'", ErrTypeInstanceTemplateCreationTimeout},
 	{"Error: error creating NodePool: googleapi: Error 400: Reservation name format path is invalid", ErrTypeReservationPathInvalid},
-	{"Does not currently have sufficient capacity for the requested resources", ErrTypeNoZoneHaveEnoughResources},
 	{"Please use a version with COS", ErrTypeGkeNodeVersionNotSupported},
 	{"Unable to locate package terraform. E: Package 'packer' has no installation candidate", ErrTypeHashicorpUnavailability},
 	{" Lustre read/write test pod failed to complete. Final phase: Pending Check debug output above.", ErrTypePodFailed},
