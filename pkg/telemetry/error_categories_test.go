@@ -29,39 +29,35 @@ import (
 // almost certainly redundant with one already in the table.
 var knownShadowed = map[string]string{
 	// pattern (as stored, lowercased) -> category actually returned today
-	"startup-script timed out after":                                                         "OMNIA_TIMEOUT",
-	"net/http: request canceled (client.timeout exceeded while awaiting headers)":            "API_POST_HEADERS_TIMEOUT",
-	"not resumed by resumetimeout":                                                           "unknown_STARTUP_TIMEOUT_TPU",
-	"does not currently have sufficient capacity for the requested resources":                "Stockout",
-	"error 403: permission 'iam.serviceaccounts.get' denied on resource or it may not exist": "IAM_PERMISSION_DENIED",
+	"net/http: request canceled (client.timeout exceeded while awaiting headers)": "API_POST_HEADERS_TIMEOUT",
+	"not resumed by resumetimeout":                                            "unknown_STARTUP_TIMEOUT_TPU",
+	"does not currently have sufficient capacity for the requested resources": "Stockout",
 }
 
 // TestNoOverEscapedPatterns guards against patterns being copied from the CI
-// notebook's Python *source* (which contains \" escapes) instead of the
-// string's *value*. Such a pattern contains a literal backslash before each
-// quote and can never match a real error message.
-//
-// The two table kinds need different checks. In a substring pattern, `\"` in
-// the value is already wrong. In a regex, `\"` is a legitimate (if redundant)
-// way to write a quote -- regexp/syntax treats an escaped punctuation
-// character as itself -- so only a literal backslash followed by a quote
-// indicates the copy-paste bug.
+// notebook's Python *source* (which contains \" and \n escapes) instead of the
+// string's *value*.
 func TestNoOverEscapedPatterns(t *testing.T) {
+	for _, m := range substringErrMatchers {
+		if strings.Contains(m.substring, `\`) {
+			t.Errorf("base substring pattern contains a literal backslash: %q", m.substring)
+		}
+	}
 	for _, m := range extraSubstringErrMatchers {
-		if strings.Contains(m.substring, `\"`) {
-			t.Errorf("substring pattern is over-escaped and can never match: %q", m.substring)
+		if strings.Contains(m.substring, `\`) {
+			t.Errorf("substring pattern contains a literal backslash and can never match: %q", m.substring)
 		}
 	}
 	for _, m := range extraMultiSubstringErrMatchers {
 		for _, s := range m.substrings {
-			if strings.Contains(s, `\"`) {
-				t.Errorf("multi-substring pattern is over-escaped and can never match: %q", s)
+			if strings.Contains(s, `\`) {
+				t.Errorf("multi-substring pattern contains a literal backslash and can never match: %q", s)
 			}
 		}
 	}
 	for _, m := range extraRegexErrMatchers {
-		if strings.Contains(m.pattern.String(), `\\"`) {
-			t.Errorf("regex requires a literal backslash before a quote, which real logs do not contain: %q", m.pattern)
+		if strings.Contains(m.pattern.String(), `\"`) {
+			t.Errorf("regex pattern has redundant backslash before a quote: %q", m.pattern)
 		}
 	}
 }
@@ -104,5 +100,41 @@ func TestEveryMultiSubstringPatternIsReachable(t *testing.T) {
 		}
 		t.Errorf("unreachable multi-pattern %v\n  want category %s\n  got  category %s",
 			m.substrings, m.category, got)
+	}
+}
+
+func TestUpdatedRegexAndLocalExecOrdering(t *testing.T) {
+	tests := []struct {
+		name string
+		msg  string
+		want string
+	}{
+		{
+			name: "unnamed GKE NodePool error",
+			msg:  "Error: NodePool was created in the error state",
+			want: ErrTypeGkeNodepoolError,
+		},
+		{
+			name: "named GKE NodePool error",
+			msg:  "Error: NodePool default-pool was created in the error state",
+			want: ErrTypeGkeNodepoolError,
+		},
+		{
+			name: "serial port output in progress inside local-exec provisioner",
+			msg:  "Error: local-exec provisioner error\nCould not fetch serial port output: Cannot retrieve serial port output",
+			want: ErrTypeSerialPortOutputInProgress,
+		},
+		{
+			name: "kueue webhook unavailable inside local-exec provisioner",
+			msg:  "Error: local-exec provisioner error\nInternal error occurred: no endpoints available for service \"kueue-webhook-service\"",
+			want: ErrTypeKueueWebhookServiceUnavailable,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := getErrorType(errors.New(tc.msg)); got != tc.want {
+				t.Errorf("getErrorType(%q) = %s, want %s", tc.msg, got, tc.want)
+			}
+		})
 	}
 }
