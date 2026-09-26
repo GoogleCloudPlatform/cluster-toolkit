@@ -85,10 +85,6 @@ ghpc:
     error_message: "Cannot use both Flex-Start and Spot VMs for provisioning."
   - validator: exclusive
     inputs:
-      vars: [zones, dws_flex.enabled]
-    error_message: "If a DWS Flex is enabled, `zones` should be empty."
-  - validator: exclusive
-    inputs:
       vars: [reservation_name, dws_flex.enabled]
     error_message: "Cannot use reservations with DWS Flex."
   - validator: exclusive
@@ -171,5 +167,14 @@ ghpc:
         dws_flex.enabled: true
         dws_flex.use_bulk_insert: false
       dependent: zone_target_shape
-      pattern: "^(ANY_SINGLE_ZONE|ANY)$"
-    error_message: "DWS Flex (FLEX_START) Regional MIGs only support zone_target_shape of 'ANY_SINGLE_ZONE' or 'ANY'; 'BALANCED' is rejected by Compute Engine."
+      pattern: "^ANY_SINGLE_ZONE$"
+    error_message: "DWS Flex (FLEX_START) Regional MIGs use resize requests, which only support zone_target_shape = 'ANY_SINGLE_ZONE'."
+  - validator: conditional_regex
+    inputs:
+      triggers:
+        provisioning_engine: "MIG"
+        enable_placement: true
+        dws_flex.enabled: false
+      dependent: zone_target_shape
+      pattern: "^ANY_SINGLE_ZONE$"
+    error_message: "zone_target_shape must be 'ANY_SINGLE_ZONE' on MIG NodeSets using enable_placement or accelerator_topology; those policies are zonal."

@@ -17,20 +17,30 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
 
 	"github.com/zclconf/go-cty/cty"
 	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
 )
 
 var (
 	machineTypeCache sync.Map // map[string]*compute.MachineType
 	computeService   *compute.Service
 	computeOnce      sync.Once
+	// getMachineType is overridden in tests.
+	getMachineType = GetMachineType
 )
+
+func isNotFound(err error) bool {
+	var gerr *googleapi.Error
+	return errors.As(err, &gerr) && gerr.Code == http.StatusNotFound
+}
 
 func extractStringSetting(m *Module, bp Blueprint, key string) string {
 	if m.Settings.Has(key) {
@@ -221,7 +231,7 @@ func GetOutputConfig(m *Module, bp Blueprint) (*OutputConfig, error) {
 		}, nil
 	}
 
-	mt, err := GetMachineType(project, zone, machineType)
+	mt, err := getMachineType(project, zone, machineType)
 	if err != nil {
 		return nil, err
 	}
@@ -234,11 +244,14 @@ func GetOutputConfig(m *Module, bp Blueprint) (*OutputConfig, error) {
 		if _, exists := result.CPUs[fbMt]; exists {
 			continue
 		}
-		fbInfo, err := GetMachineType(project, zone, fbMt)
+		fbInfo, err := getMachineType(project, zone, fbMt)
 		if err != nil {
 			// A fallback machine type in a multi-zone Regional MIG may only exist in other
 			// zones of the region; skip rather than aborting expansion and let Terraform validate.
-			continue
+			if isNotFound(err) {
+				continue
+			}
+			return nil, err
 		}
 		addMachineTypeToOutputConfig(&result, fbMt, fbInfo)
 	}
