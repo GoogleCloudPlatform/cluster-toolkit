@@ -16,6 +16,7 @@ package gke
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/logging"
@@ -30,6 +31,8 @@ import (
 	"hpc-toolkit/pkg/shell"
 
 	"gopkg.in/yaml.v2"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const defaultJobSetVersion = "v0.10.1"
@@ -363,7 +366,9 @@ func (g *GKEOrchestrator) removeDescriptionFields(data map[interface{}]interface
 func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) error {
 	validators := []func() error{
 		g.checkClusterConnectivity,
-		func() error { return g.validateTargetNamespaceExists(job) },
+		func() error {
+			return g.validateTargetNamespaceExists(job.ClusterName, job.ClusterLocation, job.ProjectID)
+		},
 		func() error { return g.CheckAndInstallKueue("", job.ClusterName, job.ClusterLocation) },
 		g.checkAndInstallJobSetCRD,
 	}
@@ -381,6 +386,60 @@ func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) 
 		}
 	}
 	return nil
+}
+
+func (g *GKEOrchestrator) getKubeClient() KubeClient {
+	g.syncKubeClient()
+	return g.kubeClient
+}
+
+// getCurrentNamespace is the single source of truth for the target namespace.
+// It returns the cached namespace (seeded from --gke-namespace at every
+// orchestrator entry point) or, if unset, resolves and caches the kubeconfig
+// context namespace.
+func (g *GKEOrchestrator) getCurrentNamespace(clusterName, location, projectID string) (string, error) {
+	if g.namespace != "" {
+		return g.namespace, nil
+	}
+
+	ns, err := g.getKubeClient().GetCurrentNamespace(clusterName, location, projectID)
+	if err != nil {
+		return "", err
+	}
+	g.namespace = ns
+	return ns, nil
+}
+
+func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, projectID string) error {
+	ns, err := g.getCurrentNamespace(clusterName, location, projectID)
+	if err != nil {
+		return err
+	}
+
+	if ns == "" {
+		return fmt.Errorf("target namespace cannot be empty for GKE cluster %q. Please pass --gke-namespace, or set a default namespace in your kubeconfig context (e.g., 'kubectl config set-context --current --namespace=<namespace>')", clusterName)
+	}
+
+	client, err := g.getDynamicClient()
+	if err != nil {
+		return fmt.Errorf("failed to initialize Kubernetes client for namespace validation: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err = client.Resource(namespaceGVR).Get(ctx, ns, metav1.GetOptions{})
+	switch {
+	case err == nil:
+		return nil
+	case apierrors.IsNotFound(err):
+		return fmt.Errorf("target namespace %q does not exist on GKE cluster %q. Please create the namespace first (e.g., 'kubectl create namespace %s')", ns, clusterName, ns)
+	case apierrors.IsForbidden(err):
+		logging.Warn("Insufficient RBAC permissions to verify existence of namespace %q on cluster %q (403 Forbidden). Proceeding with job submission...", ns, clusterName)
+		return nil
+	default:
+		return fmt.Errorf("failed to verify existence of namespace %q on cluster %q: %w", ns, clusterName, err)
+	}
 }
 
 // checkClusterConnectivity verifies that we can connect to the cluster.
