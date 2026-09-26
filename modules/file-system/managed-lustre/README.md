@@ -347,6 +347,7 @@ No modules.
 
 | Name | Type |
 | ---- | ---- |
+| [google_compute_firewall.lnet_callback_ingress](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_firewall) | resource |
 | [google_lustre_instance.lustre_instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/lustre_instance) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [google_compute_network_peering.private_peering](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_network_peering) | data source |
@@ -365,6 +366,7 @@ No modules.
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the Managed Lustre instance. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Local mount point for the Managed Lustre instance. | `string` | `"/shared"` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Mounting options for the file system. | `string` | `"defaults,_netdev"` | no |
+| <a name="input_multinic"></a> [multinic](#input\_multinic) | Multi-NIC (LNet Multi-Rail) client configuration.<br/><br/>Requires a second NIC on the clients in the SAME VPC as nic0. The client<br/>rails are discovered at boot by VPC membership, so GPU/RDMA NICs in other<br/>VPCs are ignored automatically. | <pre>object({<br/>    enabled = optional(bool, false)<br/>    # Keep peer discovery disabled (lnet_peer_discovery_disabled=1). Having<br/>    # peer discovery enabled creates issues with multi-nic server + numa to nic<br/>    # settings, that is, it creates cross numa traffic on serverside.<br/>    # numa_range=1000000: hides CPU socket distance from LNet so peers spread<br/>    # over both rails instead of all picking the nearest NIC.<br/>    lnet_options = optional(string, "lnet_numa_range=1000000 lnet_peer_discovery_disabled=1")<br/>    table_base   = optional(number, 101)<br/>    rp_filter    = optional(number, 2)<br/>    # LNet servers open callback connections back to the client on tcp:988<br/>    # and tcp:1021-1023. Scope the ingress rule to the PSA tenant range and<br/>    # target the clients' network tag.<br/>    create_firewall = optional(bool, true)<br/>    psa_ip_ranges   = optional(list(string), [])<br/>    client_tags     = optional(list(string), [])<br/>    # Extra cloud-config keys merged into the emitted yaml. Needed where a<br/>    # blueprint already uses metadata.user-data<br/>    extra_cloud_config = optional(any, {})<br/>  })</pre> | `{}` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name of the Lustre instance | `string` | n/a | yes |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is connected given in the format:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | Network self-link this instance will be on, required for checking private service access | `string` | n/a | yes |
@@ -381,6 +383,7 @@ No modules.
 | ---- | ----------- |
 | <a name="output_capacity_gib"></a> [capacity\_gib](#output\_capacity\_gib) | File share capacity in GiB. |
 | <a name="output_install_managed_lustre_client"></a> [install\_managed\_lustre\_client](#output\_install\_managed\_lustre\_client) | Script for installing Managed Lustre client |
+| <a name="output_lnet_multinic_metadata"></a> [lnet\_multinic\_metadata](#output\_lnet\_multinic\_metadata) | Instance metadata to merge into compute nodesets for LNet Multi-Rail<br/>configuration (empty when multinic is disabled). If multiple managed-lustre<br/>instances exist in a blueprint, wire this output once per nodeset. |
 | <a name="output_lustre_id"></a> [lustre\_id](#output\_lustre\_id) | An identifier for the resource with format `projects/{{project}}/locations/{{location}}/instances/{{name}}` |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a Managed Lustre instance. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

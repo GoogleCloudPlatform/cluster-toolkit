@@ -26,8 +26,9 @@ vars:
     family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-amd64
   # Image settings
   # Cluster env settings
-  net0_range: 192.168.0.0/19
-  net1_range: 192.168.64.0/18
+  network_address_range: 172.16.0.0/16
+  primary_subnet: 172.16.0.0/20
+  secondary_subnet: 172.16.16.0/20
   rdma_net_range: 192.168.128.0/18
   # Cluster Settings
   local_ssd_mountpoint: /mnt/localssd
@@ -38,6 +39,10 @@ vars:
   a3u_reservation_name: "" # supply reservation name
   a3u_dws_flex_enabled: false
   a3u_enable_spot_vm: false
+
+  # Multi-NIC configuration
+  enable_multinic: true
+  multinic_client_tag: $(vars.deployment_name)-multinic-client
 
   # Managed Lustre is only supported in specific regions and zones
   # Please refer https://cloud.google.com/managed-lustre/docs/locations
@@ -66,28 +71,13 @@ deployment_groups:
       subnetworks:
       - subnet_name: $(vars.base_network_name)-sub-0
         subnet_region: $(vars.region)
-        subnet_ip: $(vars.net0_range)
-      firewall_rules:
-      - name: $(vars.base_network_name)-internal-0
-        ranges: [$(vars.net0_range)]
-        allow:
-        - protocol: tcp
-        - protocol: udp
-        - protocol: icmp
-
-  - id: a3ultra-slurm-net-1
-    source: modules/network/vpc
-    settings:
-      network_name: $(vars.base_network_name)-net-1
-      mtu: 8896
-      enable_internal_traffic: false # Setting firewall below instead
-      subnetworks:
+        subnet_ip: $(vars.primary_subnet)
       - subnet_name: $(vars.base_network_name)-sub-1
         subnet_region: $(vars.region)
-        subnet_ip: $(vars.net1_range)
+        subnet_ip: $(vars.secondary_subnet)
       firewall_rules:
-      - name: $(vars.base_network_name)-internal-1
-        ranges: [$(vars.net1_range)]
+      - name: $(vars.base_network_name)-internal
+        ranges: [$(vars.network_address_range)]
         allow:
         - protocol: tcp
         - protocol: udp
@@ -119,6 +109,10 @@ deployment_groups:
       name: $(vars.lustre_instance_id)
       local_mount: /home
       remote_mount: lustrefs
+      multinic:
+        enabled: $(vars.enable_multinic)
+        psa_ip_ranges: [$(private_service_access.cidr_range)]
+        client_tags: [$(vars.multinic_client_tag)]
       per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
     outputs:
     - network_storage
@@ -355,9 +349,10 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [a3ultra-slurm-net-0, a3ultra_startup]
     settings:
+      metadata: $(homefs.lnet_multinic_metadata)
       bandwidth_tier: gvnic_enabled
       machine_type: a3-ultragpu-8g
-
+      tags: [$(vars.multinic_client_tag)]
       enable_public_ips: true
       node_count_static: $(vars.a3u_cluster_size)
       node_count_dynamic_max: 0
@@ -381,7 +376,7 @@ deployment_groups:
         $(concat(
           [{
             network=null,
-            subnetwork=a3ultra-slurm-net-1.subnetwork_self_link,
+            subnetwork="projects/${vars.project_id}/regions/${vars.region}/subnetworks/${vars.base_network_name}-sub-1",
             subnetwork_project=vars.project_id,
             nic_type="GVNIC",
             queue_count=null,
