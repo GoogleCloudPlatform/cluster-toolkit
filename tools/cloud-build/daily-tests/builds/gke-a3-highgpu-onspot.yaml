@@ -26,7 +26,7 @@ substitutions:
   _PROVISIONING_MODEL: ""
   _TEST_PREFIX: "" # Default to no prefix
   _ZONE: "" # Optional zone override for manual debugging
-  _EXCLUDE_ZONES: "europe-west2-c"
+  _EXCLUDE_ZONES: "europe-west2-b europe-west2-c"
 
 timeout: 86400s
 queueTtl: 86400s  # 24hr

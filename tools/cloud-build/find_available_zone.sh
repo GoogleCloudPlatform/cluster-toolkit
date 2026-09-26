@@ -316,7 +316,7 @@ check_lustre_quota() {
 		return 1
 	fi
 }
-declare -A CPU_QUOTA_CACHE=()
+declare -A CPU_QUOTA_CACHE
 check_cpu_quota() {
 	local region=$1
 	local required_cpus=${REQUIRED_CPU_QUOTA:-0}
@@ -351,9 +351,9 @@ check_cpu_quota() {
 
 	local limit usage
 	limit=$(echo "${quota_json}" | jq -r --arg m "${metric}" \
-		'[.quotas[]? | select(.metric == $m) | .limit] | first // empty' 2>/dev/null || true)
+		'[.quotas[]? | select(.metric == $m) | .limit] | first // empty | if type == "number" then (if . < 0 or . >= 1e15 then -1 else floor end) else "invalid" end' 2>/dev/null || true)
 	usage=$(echo "${quota_json}" | jq -r --arg m "${metric}" \
-		'[.quotas[]? | select(.metric == $m) | .usage] | first // empty' 2>/dev/null || true)
+		'[.quotas[]? | select(.metric == $m) | .usage] | first // 0 | if type == "number" and . >= 0 and . < 1e15 then floor else 0 end' 2>/dev/null || true)
 
 	if [[ -z "${limit}" || "${limit}" == "null" ]]; then
 		echo "WARN: ${metric} quota not reported for ${region}. Failing-open and assuming capacity exists."
@@ -361,13 +361,12 @@ check_cpu_quota() {
 		return 0
 	fi
 
-	if ! limit=$(printf "%.0f" "${limit}" 2>/dev/null); then
+	if [[ ! "${limit}" =~ ^-?[0-9]+$ ]]; then
 		echo "WARN: Invalid ${metric} limit format for ${region}. Failing-open."
 		CPU_QUOTA_CACHE[$cache_key]=0
 		return 0
 	fi
 
-	if ! usage=$(printf "%.0f" "${usage:-0}" 2>/dev/null); then usage=0; fi
 	if [[ ! "${usage}" =~ ^[0-9]+$ ]]; then usage=0; fi
 
 	if [[ "${limit}" -lt 0 ]]; then
