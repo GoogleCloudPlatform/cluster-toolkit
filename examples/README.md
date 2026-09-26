@@ -16,6 +16,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
+  * [Multi-provider agentgateway on GKE](#multi-provider-agentgateway-on-gke--) ![community-badge] ![experimental-badge]
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-slurm-ha.yaml](#hpc-slurm-hayaml-) ![community-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
@@ -185,6 +186,13 @@ Toolkit team, partners, etc.) and are labeled with the community badge
 
 Blueprints that are still in development and less stable are also labeled with
 the experimental badge (![experimental-badge]).
+
+### Multi-provider agentgateway on GKE ![community-badge] ![experimental-badge]
+
+The [agentgateway community blueprint](../community/examples/agentgateway-gke/README.md)
+deploys a CPU-only regional GKE cluster with internal application load balancing,
+Workload Identity authentication to Gemini Enterprise Agent Platform, and optional
+OpenAI/Anthropic secret references.
 
 ### [hpc-slurm.yaml] ![core-badge]
 
