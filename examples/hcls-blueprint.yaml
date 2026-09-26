@@ -145,7 +145,7 @@ deployment_groups:
                 - spec: slurm@21-08-8-2
                   prefix: /usr/local
               buildable: False
-      - destination: /share/spack/gromacs_env.yaml
+      - destination: /apps/spack/gromacs_env.yaml
         content: |
           spack:
             definitions:
@@ -184,7 +184,7 @@ deployment_groups:
         spack compiler find --scope site
 
         if ! spack env list | grep -q gromacs; then
-          spack env create gromacs /share/spack/gromacs_env.yaml
+          spack env create gromacs /apps/spack/gromacs_env.yaml
           spack env activate gromacs
           spack concretize
           spack install
@@ -314,11 +314,15 @@ deployment_groups:
       name_prefix: chrome-remote-desktop
       install_nvidia_driver: true
       startup_script: |
-        find /user_provided_software -name vmd-1.9.*.bin.LINUXAMD64*.tar.gz -exec tar xvzf '{}' -C . \;
-        cd vmd-1.9.*/
-        ./configure
-        cd src/
-        sudo make install
+        if ls /user_provided_software/vmd-1.9.*.bin.LINUXAMD64*.tar.gz 1> /dev/null 2>&1; then
+          find /user_provided_software -name vmd-1.9.*.bin.LINUXAMD64*.tar.gz -exec tar xvzf '{}' -C . \;
+          cd vmd-1.9.*/
+          ./configure
+          cd src/
+          sudo make install
+        else
+          echo "VMD software package not found in bucket. Skipping installation."
+        fi
 
   ### Slurm Cluster ###
 
