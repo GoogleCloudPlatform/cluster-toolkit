@@ -68,12 +68,12 @@
     -p {{ custom_vars.tpu_partition }}
     --layout={{ custom_vars.tpu_type }}={{ custom_vars.tpu_topology }}
     bash -c '
-    set -e
-    mount | grep -q "on /home "
-    grep -q "^ConstrainDevices=no" /usr/local/etc/slurm/cgroup.conf
-    VFIO_COUNT=$(ls -1 /dev/vfio/devices/vfio* | wc -l)
-    echo "Static partition $(hostname): Found ${VFIO_COUNT} VFIO TPU devices"
-    test "${VFIO_COUNT}" -eq {{ custom_vars.expected_tpu_cores }}
+    set -e;
+    mount | grep -q "on /home ";
+    grep -q "^ConstrainDevices=no" /var/spool/slurmd/conf-cache/cgroup.conf /usr/local/etc/slurm/cgroup.conf 2>/dev/null;
+    VFIO_COUNT=$(ls -1 /dev/vfio/devices/vfio* | wc -l);
+    echo "Static partition $(hostname): Found ${VFIO_COUNT} VFIO TPU devices";
+    test "${VFIO_COUNT}" -eq {{ custom_vars.expected_tpu_cores }};
     '
   register: srun_static_result
   failed_when: srun_static_result.rc != 0
@@ -85,10 +85,10 @@
 #     -p {{ custom_vars.tpu_dyn_partition }}
 #     --layout={{ custom_vars.tpu_type }}={{ custom_vars.tpu_topology }}
 #     bash -c '
-#     set -e
-#     VFIO_COUNT=$(ls -1 /dev/vfio/devices/vfio* | wc -l)
-#     echo "Dynamic partition $(hostname): Found ${VFIO_COUNT} VFIO TPU devices"
-#     test "${VFIO_COUNT}" -eq {{ custom_vars.expected_tpu_cores }}
+#     set -e;
+#     VFIO_COUNT=$(ls -1 /dev/vfio/devices/vfio* | wc -l);
+#     echo "Dynamic partition $(hostname): Found ${VFIO_COUNT} VFIO TPU devices";
+#     test "${VFIO_COUNT}" -eq {{ custom_vars.expected_tpu_cores }};
 #     '
 #   register: srun_dyn_result
 #   failed_when: srun_dyn_result.rc != 0
@@ -102,6 +102,13 @@
 #   delay: 10
 #   changed_when: false
 
+- name: Ensure user home directory exists on shared /home filesystem
+  become: true
+  ansible.builtin.shell: |
+    mkdir -p "{{ ansible_facts['user_dir'] }}"
+    chown "{{ ansible_facts['user_id'] }}:{{ ansible_facts['user_gid'] }}" "{{ ansible_facts['user_dir'] }}"
+    chmod 755 "{{ ansible_facts['user_dir'] }}"
+
 - name: Install shared JAX TPU virtualenv on /home
   ansible.builtin.shell: |
     set -e
@@ -109,6 +116,7 @@
     ~/jax-env/bin/pip install -q -U pip "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
   args:
     executable: /bin/bash
+    chdir: "{{ ansible_facts['user_dir'] }}"
 
 - name: Create sbatch test script for TPU batch job verification
   ansible.builtin.copy:
@@ -143,13 +151,15 @@
 
 - name: Submit and wait for sbatch TPU job to complete
   ansible.builtin.command: sbatch --parsable --wait /tmp/test_tpu_sbatch.sh
+  args:
+    chdir: "{{ ansible_facts['user_dir'] }}"
   register: sbatch_job
   failed_when: sbatch_job.rc != 0
   retries: 2
   delay: 30
 
 - name: Verify sbatch job output on shared /home filesystem
-  ansible.builtin.command: "cat tpu7x-sbatch-test_{{ sbatch_job.stdout | trim }}.out"
+  ansible.builtin.command: "cat {{ ansible_facts['user_dir'] }}/tpu7x-sbatch-test_{{ sbatch_job.stdout | trim }}.out"
   register: sbatch_output
   failed_when: "'TPU_SBATCH_SUCCESS' not in sbatch_output.stdout"
 
