@@ -181,7 +181,6 @@ const (
 	ErrTypeHtcondorPacker                            = "HTCONDOR_PACKER"
 	ErrTypeHttpBadGateway                            = "HTTP_BAD_GATEWAY"
 	ErrTypeIamBindingsExceeded                       = "IAM_BINDINGS_EXCEEDED"
-	ErrTypeIamDeniedError                            = "IAM_DENIED_ERROR"
 	ErrTypeIamPermissionDenied                       = "IAM_PERMISSION_DENIED"
 	ErrTypeIamUnsupportedRole                        = "IAM_UNSUPPORTED_ROLE"
 	ErrTypeImageNotFound                             = "IMAGE_NOT_FOUND"
@@ -221,7 +220,6 @@ const (
 	ErrTypeMountHomeTimeout                          = "MOUNT_HOME_TIMEOUT"
 	ErrTypeMpiJobTimeout                             = "MPI_JOB_TIMEOUT"
 	ErrTypeMungeAuthFailure                          = "MUNGE_AUTH_FAILURE"
-	ErrTypeMungeTimeoutTypes                         = "MUNGE_TIMEOUT_TYPES"
 	ErrTypeN2QuotaExceeded                           = "N2_QUOTA_EXCEEDED"
 	ErrTypeN4MachineIssue                            = "N4_MACHINE_ISSUE"
 	ErrTypeNameRegexpError                           = "NAME_REGEXP_ERROR"
@@ -266,7 +264,6 @@ const (
 	ErrTypeProviderDownloadFailure                   = "PROVIDER_DOWNLOAD_FAILURE"
 	ErrTypePsCreationTimeout                         = "PS_CREATION_TIMEOUT"
 	ErrTypePsInstanceCreationFailure                 = "PS_INSTANCE_CREATION_FAILURE"
-	ErrTypePsSlurmMungeTimeout                       = "PS_SLURM_MUNGE_TIMEOUT"
 	ErrTypePvcInternalError13                        = "PVC_INTERNAL_ERROR_13"
 	ErrTypePythonModuleImportError                   = "PYTHON_MODULE_IMPORT_ERROR"
 	ErrTypeQuotaExceededForQuotaMetric               = "QUOTA_EXCEEDED_FOR_QUOTA_METRIC"
@@ -293,7 +290,6 @@ const (
 	ErrTypeShouldHaveHadReservation                  = "SHOULD_HAVE_HAD_RESERVATION"
 	ErrTypeSinfoControllerFailure                    = "SINFO_CONTROLLER_FAILURE"
 	ErrTypeSlurmstepdError                           = "SLURMSTEPD_ERROR"
-	ErrTypeSlurmArtifactsCreateFailed                = "SLURM_ARTIFACTS_CREATE_FAILED"
 	ErrTypeSlurmDestroyFailureSubnetSelfLink         = "SLURM_DESTROY_FAILURE_SUBNET_SELF_LINK"
 	ErrTypeSlurmDownloadModule                       = "SLURM_DOWNLOAD_MODULE"
 	ErrTypeSlurmFailedToPowerDown                    = "SLURM_FAILED_TO_POWER_DOWN"
@@ -305,7 +301,6 @@ const (
 	ErrTypeSlurmV5LustreRepoFailure                  = "SLURM_V5_LUSTRE_REPO_FAILURE"
 	ErrTypeSlurmV5MungeTimeout                       = "SLURM_V5_MUNGE_TIMEOUT"
 	ErrTypeSlurmV5OperationCanceledByUser            = "SLURM_V5_OPERATION_CANCELED_BY_USER"
-	ErrTypeSlurmV6MungeTimeout                       = "SLURM_V6_MUNGE_TIMEOUT"
 	ErrTypeSpackGromacsFailure                       = "SPACK_GROMACS_FAILURE"
 	ErrTypeSpackNotFound                             = "SPACK_NOT_FOUND"
 	ErrTypeSpackRambleTimeoutLock                    = "SPACK_RAMBLE_TIMEOUT_LOCK"
@@ -584,7 +579,6 @@ var extraSubstringErrMatchers = []struct {
 	{"Please use formats like projects/{project}/reservations/{reservation}", ErrTypeReservationPathInvalid},
 	{"Cluster is running incompatible operation", ErrTypeClusterAlreadyHasOperation},
 	{"Could not fetch resource", ErrTypeLoginInstanceNotFound},
-	{"Error 403: Permission 'iam.serviceAccounts.get' denied on resource or it may not exist", ErrTypeIamDeniedError},
 	{"Error 403: Permission 'iam.serviceAccounts.get' denied on resource", ErrTypeIamPermissionDenied},
 	{"Action failed: Integration tests failed", ErrTypeIntegrationTestFailure},
 	{"/bin/bash: line 28: GCLUSTER_GCS_PATH: unbound variable", ErrTypeMissingEnvironmentVariable},
