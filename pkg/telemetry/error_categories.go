@@ -102,6 +102,7 @@ const (
 	ErrTypeBatchResourcePoolExhausted                = "BATCH_RESOURCE_POOL_EXHAUSTED"
 	ErrTypeBatchTimeout                              = "BATCH_TIMEOUT"
 	ErrTypeBrokenCrdDebPackage                       = "BROKEN_CRD_DEB_PACKAGE"
+	ErrTypeCallToFuncFormat                          = "CALL_TO_FUNC_FORMAT_FAILED"
 	ErrTypeCapacityNotFoundInZone                    = "CAPACITY_NOT_FOUND_IN_ZONE"
 	ErrTypeCentos7Eol                                = "CENTOS7_EOL"
 	ErrTypeCheckBucketNameNotFound                   = "CHECK_BUCKET_NAME_NOT_FOUND"
@@ -178,8 +179,8 @@ const (
 	ErrTypeHelmInstallApplyFailure                   = "HELM_INSTALL_APPLY_FAILURE"
 	ErrTypeHtcondorComError                          = "HTCONDOR_COM_ERROR"
 	ErrTypeHtcondorPacker                            = "HTCONDOR_PACKER"
+	ErrTypeHttpBadGateway                            = "HTTP_BAD_GATEWAY"
 	ErrTypeIamBindingsExceeded                       = "IAM_BINDINGS_EXCEEDED"
-	ErrTypeIamDeniedError                            = "IAM_DENIED_ERROR"
 	ErrTypeIamPermissionDenied                       = "IAM_PERMISSION_DENIED"
 	ErrTypeIamUnsupportedRole                        = "IAM_UNSUPPORTED_ROLE"
 	ErrTypeImageNotFound                             = "IMAGE_NOT_FOUND"
@@ -190,6 +191,7 @@ const (
 	ErrTypeInstanceTemplateCreationTimeout           = "INSTANCE_TEMPLATE_CREATION_TIMEOUT"
 	ErrTypeInstanceTempNotFoundOnDestroy             = "INSTANCE_TEMP_NOT_FOUND_ON_DESTROY"
 	ErrTypeIntegrationTestFailure                    = "INTEGRATION_TEST_FAILURE"
+	ErrTypeInternalError                             = "INTERNAL_ERROR"
 	ErrTypeInvalidArgument                           = "INVALID_ARGUMENT"
 	ErrTypeInvalidCidrMasterAuthorizedNetworksConfig = "INVALID_CIDR_MASTER_AUTHORIZED_NETWORKS_CONFIG"
 	ErrTypeInvalidCloudUrl                           = "INVALID_CLOUD_URL"
@@ -204,6 +206,7 @@ const (
 	ErrTypeKueueWebhookServiceNotFound               = "KUEUE_WEBHOOK_SERVICE_NOT_FOUND"
 	ErrTypeKueueWebhookServiceUnavailable            = "KUEUE_WEBHOOK_SERVICE_UNAVAILABLE"
 	ErrTypeLocalExecProvisionerError                 = "LOCAL_EXEC_PROVISIONER_ERROR"
+	ErrTypeLocationsPermissionDenied                 = "LOCATIONS_PERMISSION_DENIED"
 	ErrTypeLoginInstanceNotFound                     = "LOGIN_INSTANCE_NOT_FOUND"
 	ErrTypeLustreInstanceCreateFailed                = "LUSTRE_INSTANCE_CREATE_FAILED"
 	ErrTypeLustreNetworkInitialisation               = "LUSTRE_NETWORK_INITIALISATION"
@@ -217,7 +220,6 @@ const (
 	ErrTypeMountHomeTimeout                          = "MOUNT_HOME_TIMEOUT"
 	ErrTypeMpiJobTimeout                             = "MPI_JOB_TIMEOUT"
 	ErrTypeMungeAuthFailure                          = "MUNGE_AUTH_FAILURE"
-	ErrTypeMungeTimeoutTypes                         = "MUNGE_TIMEOUT_TYPES"
 	ErrTypeN2QuotaExceeded                           = "N2_QUOTA_EXCEEDED"
 	ErrTypeN4MachineIssue                            = "N4_MACHINE_ISSUE"
 	ErrTypeNameRegexpError                           = "NAME_REGEXP_ERROR"
@@ -229,8 +231,8 @@ const (
 	ErrTypeNodesetNotFoundOnCleanup                  = "NODESET_NOT_FOUND_ON_CLEANUP"
 	ErrTypeNodeTaintFailure                          = "NODE_TAINT_FAILURE"
 	ErrTypeNotEnoughResources                        = "NOT_ENOUGH_RESOURCES"
+	ErrTypeNoCandidate                               = "NO_CANDIDATE"
 	ErrTypeNoResourcesInDefaultNamespace             = "NO_RESOURCES_IN_DEFAULT_NAMESPACE"
-	ErrTypeNoZoneHaveEnoughResources                 = "NO_ZONE_HAVE_ENOUGH_RESOURCES"
 	ErrTypeNullArgument                              = "NULL_ARGUMENT"
 	ErrTypeNullValueNotIterable                      = "NULL_VALUE_NOT_ITERABLE"
 	ErrTypeNvidiaDriverBuildFailure                  = "NVIDIA_DRIVER_BUILD_FAILURE"
@@ -262,7 +264,6 @@ const (
 	ErrTypeProviderDownloadFailure                   = "PROVIDER_DOWNLOAD_FAILURE"
 	ErrTypePsCreationTimeout                         = "PS_CREATION_TIMEOUT"
 	ErrTypePsInstanceCreationFailure                 = "PS_INSTANCE_CREATION_FAILURE"
-	ErrTypePsSlurmMungeTimeout                       = "PS_SLURM_MUNGE_TIMEOUT"
 	ErrTypePvcInternalError13                        = "PVC_INTERNAL_ERROR_13"
 	ErrTypePythonModuleImportError                   = "PYTHON_MODULE_IMPORT_ERROR"
 	ErrTypeQuotaExceededForQuotaMetric               = "QUOTA_EXCEEDED_FOR_QUOTA_METRIC"
@@ -281,15 +282,14 @@ const (
 	ErrTypeResourceUnavailable                       = "RESOURCE_UNAVAILABLE"
 	ErrTypeRouternatResourceNotFound                 = "ROUTERNAT_RESOURCE_NOT_FOUND"
 	ErrTypeRouterQuota                               = "ROUTER_QUOTA"
-	ErrTypeRtConfigHeaderTimeout                     = "RT_CONFIG_HEADER_TIMEOUT"
 	ErrTypeSdkHttp503                                = "SDK_HTTP_503"
 	ErrTypeSensitiveVar                              = "SENSITIVE_VAR"
 	ErrTypeSerialOutputInternalError                 = "SERIAL_OUTPUT_INTERNAL_ERROR"
+	ErrTypeSerialPortOutputInProgress                = "SERIAL_PORT_OUTPUT_IN_PROGRESS"
 	ErrTypeServerError                               = "SERVER_ERROR"
 	ErrTypeShouldHaveHadReservation                  = "SHOULD_HAVE_HAD_RESERVATION"
 	ErrTypeSinfoControllerFailure                    = "SINFO_CONTROLLER_FAILURE"
 	ErrTypeSlurmstepdError                           = "SLURMSTEPD_ERROR"
-	ErrTypeSlurmArtifactsCreateFailed                = "SLURM_ARTIFACTS_CREATE_FAILED"
 	ErrTypeSlurmDestroyFailureSubnetSelfLink         = "SLURM_DESTROY_FAILURE_SUBNET_SELF_LINK"
 	ErrTypeSlurmDownloadModule                       = "SLURM_DOWNLOAD_MODULE"
 	ErrTypeSlurmFailedToPowerDown                    = "SLURM_FAILED_TO_POWER_DOWN"
@@ -301,7 +301,6 @@ const (
 	ErrTypeSlurmV5LustreRepoFailure                  = "SLURM_V5_LUSTRE_REPO_FAILURE"
 	ErrTypeSlurmV5MungeTimeout                       = "SLURM_V5_MUNGE_TIMEOUT"
 	ErrTypeSlurmV5OperationCanceledByUser            = "SLURM_V5_OPERATION_CANCELED_BY_USER"
-	ErrTypeSlurmV6MungeTimeout                       = "SLURM_V6_MUNGE_TIMEOUT"
 	ErrTypeSpackGromacsFailure                       = "SPACK_GROMACS_FAILURE"
 	ErrTypeSpackNotFound                             = "SPACK_NOT_FOUND"
 	ErrTypeSpackRambleTimeoutLock                    = "SPACK_RAMBLE_TIMEOUT_LOCK"
@@ -349,7 +348,6 @@ const (
 	ErrTypeUnavailableCapactiy                       = "UNAVAILABLE_CAPACTIY"
 	ErrTypeUnboundVariable                           = "UNBOUND_VARIABLE"
 	ErrTypeUnknownGcsTrainingModule                  = "UNKNOWN_GCS_TRAINING_MODULE"
-	ErrTypeValidationError                           = "VALIDATION_ERROR"
 	ErrTypeValidatorFailed                           = "VALIDATOR_FAILED"
 	ErrTypeValidatorIssue                            = "VALIDATOR_ISSUE"
 	ErrTypeValidatorReservationNotFound              = "VALIDATOR_RESERVATION_NOT_FOUND"
@@ -365,7 +363,6 @@ const (
 	ErrTypeUnknownNodeFailure                        = "unknown_NODE_FAILURE"
 	ErrTypeUnknownSlurmComputeBoot                   = "unknown_SLURM_COMPUTE_BOOT"
 	ErrTypeUnknownSlurmResumeTimeout                 = "unknown_SLURM_RESUME_TIMEOUT"
-	ErrTypeUnknownStartupTimeoutTpu                  = "unknown_STARTUP_TIMEOUT_TPU"
 )
 
 var extraSubstringErrMatchers = []struct {
@@ -392,6 +389,7 @@ var extraSubstringErrMatchers = []struct {
 	{"Error: Failed to download metadata for repo 'lustre'", ErrTypeSlurmV5LustreRepoFailure},
 	{"Timeout when waiting for file /var/run/munge/munge", ErrTypeSlurmV5MungeTimeout},
 	{"Timeout when waiting for file /var/run/munge/munge.socket.2", ErrTypeSlurmV5MungeTimeout},
+	{"startup-script timed out after", ErrTypeBatchTimeout},
 	{"startup-script timed out", ErrTypeOmniaTimeout},
 	{"Yum repo downloading error", ErrTypeOmniaYumFailure},
 	{"Could not fetch serial port output: Authentication backend internal server error", ErrTypeOmniaInternalServerError},
@@ -403,9 +401,7 @@ var extraSubstringErrMatchers = []struct {
 	{"does not currently have sufficient capacity for the requested resources", ErrTypeStockout},
 	{"nvidia-tesla-t4-vws accelerator(s) is currently unavailable in the", ErrTypeStockout},
 	{"try in another zone where Cloud TPU Nodes are offered", ErrTypeStockoutTpu},
-	{"not resumed by ResumeTimeout", ErrTypeUnknownStartupTimeoutTpu},
 	{"No resources found in default namespace.", ErrTypeNoResourcesInDefaultNamespace},
-	{"This object does not have an attribute named\\n\\\"gpu_driver_installation_config\\\".", ErrTypeGkeGpuDriverConfigNoAttribute},
 	{"Error waiting for Creating Instance: Error code 8, message: System limit for internal resources has been reached.", ErrTypeFilestoreVpcLimit},
 	{"Error waiting for Creating Instance: Error code 13, message: an internal error has occurred", ErrTypeFilestoreInternalError},
 	{"Error: Cloud Filestore API service is disabled", ErrTypeFilestoreApiDisabled},
@@ -420,7 +416,7 @@ var extraSubstringErrMatchers = []struct {
 	{"ERROR: failed to update topology", ErrTypeSlurmTopologySyncFailure},
 	{"One of the configured repositories failed (lustre)", ErrTypeYumFailsToInstallLustre},
 	{"not found (required by ./ghpc)", ErrTypeGhpcDepNotFound},
-	{"\\\"cmd\\\": \\\"spack --version\\", ErrTypeSpackNotFound},
+	{"\"cmd\": \"spack --version\"", ErrTypeSpackNotFound},
 	{"Failed to upload state to gs", ErrTypeStateUploadFail},
 	{"ZONE_RESOURCE_POOL_EXHAUSTED", ErrTypeBatchResourcePoolExhausted},
 	{"googlecompute.toolkit_image: Error waiting for startup script to finish: Startup script exited with error.", ErrTypeHtcondorPacker},
@@ -430,7 +426,6 @@ var extraSubstringErrMatchers = []struct {
 	{"InvalidPermissionsError: Attempting to set suid with group writable", ErrTypeSpackSetuid},
 	{"srun: error: Node failure on slurm-lustre-new-vpc", ErrTypeLustreNetworkInitialisation},
 	{"description - The subnetwork resource 'default' is in 'regions/", ErrTypeBatchRegionMismatch},
-	{"startup-script timed out after", ErrTypeBatchTimeout},
 	{"Can't access attributes on a primitive-typed value", ErrTypePrimitiveTypedValue},
 	{"googlecompute.toolkit_image' errored after", ErrTypePackerBuildFailure},
 	{"pbsnodes: command not found", ErrTypePbsnodesUnknownCommand},
@@ -458,7 +453,6 @@ var extraSubstringErrMatchers = []struct {
 	{"Error code 9, message: Cannot modify allocated ranges in CreateConnection", ErrTypePeeringUpdateFailure},
 	{"Found more than 1 matching running builds", ErrTypeMatchingBuildFailure},
 	{"Could not retrieve the list of available versions for provider", ErrTypeProviderDownloadFailure},
-	{"net/http: request canceled (Client.Timeout exceeded while awaiting headers)", ErrTypeRtConfigHeaderTimeout},
 	{"failed to fetch resource from kubernetes: client rate limiter Wait returned an error:", ErrTypeNodepoolCreationError},
 	{" NodePool a3-ultragpu-8g-a3-ultragpu-pool was created in the error state \"ERROR\"", ErrTypeGkeNodepoolStateError},
 	{"Disabling automatic updates is not supported with the selected VM image", ErrTypeDisableAutoUpdatesNotSupported},
@@ -500,21 +494,21 @@ var extraSubstringErrMatchers = []struct {
 	{"Could not resolve host: mirrorlist.centos.org; Name or service not known", ErrTypeCentos7Eol},
 	{"Error 404: The resource 'projects/centos-cloud/global/images/family/centos-7' was not found", ErrTypeCentos7Eol},
 	{"[Errno 14] HTTPS Error 502 - Bad Gateway", ErrTypeYumBadGateway},
-	{"attribute \\\"inline\\\": list of string required.", ErrTypePackerOnetimeWoops},
+	{"attribute \"inline\": list of string required.", ErrTypePackerOnetimeWoops},
 	{"unrecognized arguments", ErrTypeGg},
 	{"var.initial_node_count is null", ErrTypeNullArgument},
 	{"SSLERROR", ErrTypeSslerror},
 	{"gcloud crashed", ErrTypeGcloudCrashed},
-	{"Invalid value for \\\"value\\\" parameter: argument must not be null.", ErrTypeValidationError},
+	{"Invalid value for \"value\" parameter: argument must not be null.", ErrTypeValidation},
 	{"Wait for job to run (1 retries left)", ErrTypeMpiJobTimeout},
 	{"context deadline exceeded (Client.Timeout exceeded while awaiting headers", ErrTypePostHeaderTimeOut},
-	{"validator \\\"test_zone_exists\\\" failed", ErrTypeTestZoneValidatorFailed},
-	{"Error: variable \\\"checkpoint_bucket_name\\\" not found", ErrTypeCheckBucketNameNotFound},
-	{"Error: unknown module id: \\\"gcs-training\\\"", ErrTypeUnknownGcsTrainingModule},
+	{"validator \"test_zone_exists\" failed", ErrTypeTestZoneValidatorFailed},
+	{"Error: variable \"checkpoint_bucket_name\" not found", ErrTypeCheckBucketNameNotFound},
+	{"Error: unknown module id: \"gcs-training\"", ErrTypeUnknownGcsTrainingModule},
 	{"Error: expected master_authorized_networks_config.0.cidr_blocks.0.cidr_block to contain a valid Value", ErrTypeInvalidCidrMasterAuthorizedNetworksConfig},
 	{"does not match expected topology depth", ErrTypeTopologyAssertionError},
 	{"Error waiting for instance to create: Quota 'CPUS_PER_VM_FAMILY' exceeded", ErrTypeCpusPerVmFamilyQuotaExceeded},
-	{"strconv.ParseInt: parsing \\\"9-o\\\": invalid syntax", ErrTypeA2HighKueueInvalidArgument},
+	{"strconv.ParseInt: parsing \"9-o\": invalid syntax", ErrTypeA2HighKueueInvalidArgument},
 	{"No RDMA interfaces found", ErrTypeRdmaNotFound},
 	{"Assertion failed", ErrTypeAssertError},
 	{"IndexError: list index out of range", ErrTypeIndexError},
@@ -532,8 +526,8 @@ var extraSubstringErrMatchers = []struct {
 	{"Error: timeout while waiting for state to become 'success' (timeout: 1m0s)", ErrTypeGkeInternalError},
 	{"The number of members in the policy", ErrTypeIamBindingsExceeded},
 	{"Test NCCL failure common.cu:961 'internal error", ErrTypeNcclFailedRun},
-	{"on modules/embedded/modules/management/kubectl-apply/helm_install/main.tf line 15, in resource \\\"helm_release\\\" \\\"apply_chart\\\"", ErrTypeHelmInstallApplyFailure},
-	{"Error waiting for Creating Volume: Error code 3, message: bad request error: \\\"Error when creating - Error networks.CreateNetworkV1  - VPC's exhausted for account", ErrTypeNetappVpcExhausted},
+	{"on modules/embedded/modules/management/kubectl-apply/helm_install/main.tf line 15, in resource \"helm_release\" \"apply_chart\"", ErrTypeHelmInstallApplyFailure},
+	{"Error waiting for Creating Volume: Error code 3, message: bad request error: \"Error when creating - Error networks.CreateNetworkV1  - VPC's exhausted for account", ErrTypeNetappVpcExhausted},
 	{"Unable to fetch some archives, maybe run apt-get update or try with --fix-missing", ErrTypeAptGetFailure},
 	{"Failed to fetch http://deb.debian.org/debian/pool/main/p/pycurl", ErrTypeAptPycurlFailure},
 	{"WARNING: cannot create user data directory: cannot create snap home dir", ErrTypeFailedHomeDirCreate},
@@ -551,7 +545,6 @@ var extraSubstringErrMatchers = []struct {
 	{"The Job failed to complete within the expected time or failed verification", ErrTypeResourcesNotFound},
 	{"Unable to change directory before execution: [Errno 2] No such file or directory", ErrTypeDirNotFound},
 	{"Error: Error waiting to create Instance: Error waiting for Creating Instance: Error code 8, message: resource exhausted: system limit for internal resources has been reached", ErrTypeLustreInstanceCreateFailed},
-	{"Error: local-exec provisioner error", ErrTypeLocalExecProvisionerError},
 	{"pods \"fio\" not found in namespace \"default\"", ErrTypePodsFioNotFound},
 	{"Error: Iteration over null value", ErrTypeNullValueNotIterable},
 	{"error: timed out waiting for the condition on pods/fio", ErrTypeTimeOutError},
@@ -571,11 +564,10 @@ var extraSubstringErrMatchers = []struct {
 	{"accelerator_topology must be divisible by number of gpus in machine", ErrTypeA4XTopologyIssue},
 	{"gcloud.compute.instances.update) HTTPError 404: The resource", ErrTypeGkeSpotInstanceNotFound},
 	{"spack-gromacs.yml", ErrTypeSpackGromacsFailure},
-	{"Error: googleapi: Error 400: Master version must be one of \\\"RAPID\\\" channel supported versions", ErrTypeIncompatibleGkeVersion},
+	{"Error: googleapi: Error 400: Master version must be one of \"RAPID\" channel supported versions", ErrTypeIncompatibleGkeVersion},
 	{" timed out waiting for the condition on jobs/my-job-04b6", ErrTypeTimeOutWaitingForCondition},
 	{"Error waiting for instance to create: timeout while waiting for state to become 'DONE'", ErrTypeInstanceTemplateCreationTimeout},
 	{"Error: error creating NodePool: googleapi: Error 400: Reservation name format path is invalid", ErrTypeReservationPathInvalid},
-	{"Does not currently have sufficient capacity for the requested resources", ErrTypeNoZoneHaveEnoughResources},
 	{"Please use a version with COS", ErrTypeGkeNodeVersionNotSupported},
 	{"Unable to locate package terraform. E: Package 'packer' has no installation candidate", ErrTypeHashicorpUnavailability},
 	{" Lustre read/write test pod failed to complete. Final phase: Pending Check debug output above.", ErrTypePodFailed},
@@ -601,8 +593,16 @@ var extraSubstringErrMatchers = []struct {
 	{"unexpected EOF while looking for matching", ErrTypeSyntaxError},
 	{"The command '/bin/sh -c wget -q ", ErrTypeOverwriteConflict},
 	{" sbatch: error: fetch_config: DNS SRV lookup failed", ErrTypeDnsSrvLookupFailed},
-	{"Error 403: Permission 'iam.serviceAccounts.get' denied on resource or it may not exist", ErrTypeIamDeniedError},
 	{"subprocess.CalledProcessError: Command 'gcloud compute instances describe a23901topo-nodeset-0 --zone=us-central1-a --project=hpc-toolkit-dev --format='value(resourceStatus.physicalHost)'' returned non-zero exit status 1.", ErrTypeTopologyCommandFailure},
+	{"Job failed to find zone capacity after", ErrTypeStockout},
+	{"INTERNAL_ERROR; received from peer", ErrTypeInternalError},
+	{"does not have permission to access projects", ErrTypeLocationsPermissionDenied},
+	{"Call to function \"format\" failed: unsupported value for", ErrTypeCallToFuncFormat},
+	{"received unexpected HTTP status: 502 Bad Gateway", ErrTypeHttpBadGateway},
+	{"no endpoints available for service \"kueue-webhook-service\"", ErrTypeKueueWebhookServiceUnavailable},
+	{"has no installation candidate", ErrTypeNoCandidate},
+	{"Could not fetch serial port output: Cannot retrieve serial port output", ErrTypeSerialPortOutputInProgress},
+	{"Error: local-exec provisioner error", ErrTypeLocalExecProvisionerError},
 }
 
 var extraRegexErrMatchers = []struct {
@@ -610,9 +610,9 @@ var extraRegexErrMatchers = []struct {
 	category string
 }{
 	{regexp.MustCompile("Creating Instance: Error code 14, message: The zone '.+' does not have enough resources available to fulfill the request"), ErrTypeFilestoreZoneCapacity},
-	{regexp.MustCompile("Error: NodePool .* was created in the error state"), ErrTypeGkeNodepoolError},
-	{regexp.MustCompile("jobset-system/.* failed to run apply: namespaces \\\"jobset-system\\\" not found"), ErrTypeJobsetSystemInitialized},
-	{regexp.MustCompile("kueue-system/.* failed to run apply: namespaces \\\"kueue-system\\\" not found"), ErrTypeKueueNotInitialized},
+	{regexp.MustCompile("Error: NodePool .*was created in the error state"), ErrTypeGkeNodepoolError},
+	{regexp.MustCompile("jobset-system/.* failed to run apply: namespaces \"jobset-system\" not found"), ErrTypeJobsetSystemInitialized},
+	{regexp.MustCompile("kueue-system/.* failed to run apply: namespaces \"kueue-system\" not found"), ErrTypeKueueNotInitialized},
 	{regexp.MustCompile("INVALID_ARGUMENT: reserved IP range \\d+.\\d+.\\d+.\\d+\\/\\d+ overlaps with the existing allocated IP range \\d+.\\d+.\\d+.\\d+\\/\\d+ in network .*"), ErrTypeIpRangeOverlap},
 	{regexp.MustCompile("\"account_id\" \\(.*\\) must be between 6 and 30 characters long"), ErrTypeAccountIdLength},
 	{regexp.MustCompile("error: the path \"/workspace/(?:ml-)?gke(?:-a3(?:mega|high|ultra))?-[^/]+/primary/[^\"]+\" does not exist"), ErrTypeKubectlPathNotExist},
@@ -657,7 +657,7 @@ var extraMultiSubstringErrMatchers = []struct {
 	{[]string{"Check for host topologyAssignment in workloads (1 retries left).", "fatal"}, ErrTypeTopologyassignmentCheckFail},
 	{[]string{"failed to destroy group", "Error waiting for Deleting Instance Template"}, ErrTypeFailedToDestroyBlockingMig},
 	{[]string{"waiting for instance to create: Internal error", "on modules/embedded/modules/compute/vm-instance/main.tf line 176"}, ErrTypeResourceCreationFailure},
-	{[]string{"Error: \\\"name\\\"", "doesn't match regexp"}, ErrTypeNameRegexpError},
+	{[]string{"Error: \"name\"", "doesn't match regexp"}, ErrTypeNameRegexpError},
 	{[]string{"Error: Invalid value for variable", "var.instance_image is null"}, ErrTypeVarInstanceImageNull},
 	{[]string{"Error: Error waiting for instance to create: Internal error. Please try again or contact Google Support.", "resource \"google_compute_instance\" \"compute_vm\""}, ErrTypeH4DVmCreateFailed},
 	{[]string{"Error: kube-system/nccl-rdma-installer failed to run apply: error when creating", "DaemonSet.apps \"nccl-rdma-installer\" is invalid: spec.template.spec.containers: Required value"}, ErrTypeA4NcclInstallerFailed},
@@ -677,6 +677,7 @@ var extraMultiSubstringErrMatchers = []struct {
 	{[]string{"mkdir: cannot create directory", "/run/enroot", "Permission denied"}, ErrTypeEnrootPermissionDenied},
 	{[]string{"Required 'compute.images.get' permission", "forbidden"}, ErrTypeComputeImagesGetForbidden},
 	{[]string{"validator \"test_reservation_exists\" failed", "was not found in any zone of project"}, ErrTypeValidatorReservationNotFound},
+	{[]string{"does not have an attribute named", "gpu_driver_installation_config"}, ErrTypeGkeGpuDriverConfigNoAttribute},
 }
 
 func init() {
