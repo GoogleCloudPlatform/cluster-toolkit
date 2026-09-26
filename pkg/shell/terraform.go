@@ -29,7 +29,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
@@ -58,6 +60,54 @@ const (
 	AutomaticApply
 	PromptBeforeApply
 )
+
+var (
+	parallelismMu        sync.RWMutex
+	terraformParallelism int
+	warnOnce             sync.Once
+)
+
+// SetTerraformParallelism sets the global parallelism factor for Terraform operations
+func SetTerraformParallelism(p int) {
+	parallelismMu.Lock()
+	defer parallelismMu.Unlock()
+	terraformParallelism = p
+	warnOnce = sync.Once{}
+}
+
+func resetWarnOnce() {
+	parallelismMu.Lock()
+	defer parallelismMu.Unlock()
+	warnOnce = sync.Once{}
+}
+
+func getGlobalParallelism() int {
+	parallelismMu.RLock()
+	defer parallelismMu.RUnlock()
+	return terraformParallelism
+}
+
+// GetTerraformParallelism returns the parallelism factor to use.
+// If set via SetTerraformParallelism (> 0), it returns that value.
+// Otherwise, it checks GCLUSTER_TERRAFORM_PARALLELISM.
+// If unset or invalid, it returns 0 (which defaults to Terraform's built-in default of 10).
+func GetTerraformParallelism() int {
+	if p := getGlobalParallelism(); p > 0 {
+		return p
+	}
+	const env = "GCLUSTER_TERRAFORM_PARALLELISM"
+	if val := os.Getenv(env); val != "" {
+		n, err := strconv.Atoi(strings.TrimSpace(val))
+		if err != nil || n <= 0 {
+			warnOnce.Do(func() {
+				logging.Warn("Ignoring invalid %s value %q: must be a positive integer", env, val)
+			})
+			return 0
+		}
+		return n
+	}
+	return 0
+}
 
 type outputValue struct {
 	Name      string
@@ -193,13 +243,21 @@ func helpOnPlanError(msgs []JsonMessage) string {
 func planModule(tf *tfexec.Terraform, path string, destroy bool) (bool, error) {
 	outOpt := tfexec.Out(path)
 	var jsonOut strings.Builder
-	wantsChange, err := tf.PlanJSON(context.Background(), &jsonOut, outOpt, tfexec.Destroy(destroy))
+	planOpts := []tfexec.PlanOption{outOpt, tfexec.Destroy(destroy)}
+	if p := GetTerraformParallelism(); p > 0 {
+		planOpts = append(planOpts, tfexec.Parallelism(p))
+	}
+	wantsChange, err := tf.PlanJSON(context.Background(), &jsonOut, planOpts...)
 	if err != nil {
 		// Invoke `Plan` to get human-readable error.
 		// TODO: implement rendering to avoid double-call.
 		// Note planned deprecration of Plan in favor of JSON-only format
 		// https://github.com/hashicorp/terraform-exec/blob/1b7714111a94813e92936051fb3014fec81218d5/tfexec/plan.go#L128-L129
-		_, plainError := tf.Plan(context.Background(), tfexec.Destroy(destroy))
+		fallbackOpts := []tfexec.PlanOption{tfexec.Destroy(destroy)}
+		if p := GetTerraformParallelism(); p > 0 {
+			fallbackOpts = append(fallbackOpts, tfexec.Parallelism(p))
+		}
+		_, plainError := tf.Plan(context.Background(), fallbackOpts...)
 		if plainError == nil { // shouldn't happen
 			plainError = err // fallback to original error (simple `exit status 1`)
 		}
@@ -260,7 +318,11 @@ func applyPlanJsonOutput(tf *tfexec.Terraform, path string) error {
 		defer jsonFile.Close()
 		tf.SetStdout(newTimestampWriter(os.Stdout))
 		tf.SetStderr(newTimestampWriter(os.Stderr))
-		if err := tf.ApplyJSON(context.Background(), jsonFile, planFileOpt); err != nil {
+		applyOpts := []tfexec.ApplyOption{planFileOpt}
+		if p := GetTerraformParallelism(); p > 0 {
+			applyOpts = append(applyOpts, tfexec.Parallelism(p))
+		}
+		if err := tf.ApplyJSON(context.Background(), jsonFile, applyOpts...); err != nil {
 			return err
 		}
 		tf.SetStdout(nil)
@@ -274,7 +336,11 @@ func applyPlanConsoleOutput(tf *tfexec.Terraform, path string) error {
 	logging.Info("Running terraform apply on deployment group %s", tf.WorkingDir())
 	tf.SetStdout(newTimestampWriter(os.Stdout))
 	tf.SetStderr(newTimestampWriter(os.Stderr))
-	if err := tf.Apply(context.Background(), planFileOpt); err != nil {
+	applyOpts := []tfexec.ApplyOption{planFileOpt}
+	if p := GetTerraformParallelism(); p > 0 {
+		applyOpts = append(applyOpts, tfexec.Parallelism(p))
+	}
+	if err := tf.Apply(context.Background(), applyOpts...); err != nil {
 		return err
 	}
 	tf.SetStdout(nil)
