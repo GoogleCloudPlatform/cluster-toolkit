@@ -135,7 +135,7 @@ steps:
               DEPLOYMENT_NAME="tpu7x-slurm-$$BUILD_ID_SHORT"
 
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/tpu7x-onspot-slurm/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
@@ -157,6 +157,9 @@ steps:
               sed -i 's/^  tpu_dynamic_max_nodes:.*/  tpu_dynamic_max_nodes: 1/' \$$BLUEPRINT
               sed -i 's/^  tpu_accelerator_topology:.*/  tpu_accelerator_topology: 2x2x1/' \$$BLUEPRINT
               sed -i "s/built_image_family: slurm-tpu-v7x-ubuntu2404/built_image_family: slurm-tpu-v7x-$$BUILD_ID_SHORT/" \$$BLUEPRINT
+              sed -i 's/image_build_machine_type:.*/image_build_machine_type: c2-standard-4/' \$$BLUEPRINT
+              sed -i 's/machine_type: n2d-standard-4/machine_type: c2-standard-4/g' \$$BLUEPRINT
+
 
               ENABLE_SPOT="true"
               SLURM_VARS_FILE="tools/cloud-build/daily-tests/tests/ml-tpu7x-onspot-slurm.yml"
