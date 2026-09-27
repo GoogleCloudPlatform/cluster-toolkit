@@ -213,7 +213,7 @@ class MachineType:
     @property
     def supports_smt(self) -> bool:
         # https://cloud.google.com/compute/docs/cpu-platforms
-        if self.family in ("t2a", "t2d", "h3", "c4a", "n4a", "a4x", "h4d"):
+        if self.family in ("t2a", "t2d", "h3", "c4a", "n4a", "h4d"):
             return False
         if self.guest_cpus == 1:
             return False
