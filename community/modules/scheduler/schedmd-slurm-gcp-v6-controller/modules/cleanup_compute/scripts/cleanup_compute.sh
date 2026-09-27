@@ -56,7 +56,7 @@ echo "Deleting managed instance groups"
 mig_filter="name:${cluster_name}-${nodeset_name}-*"
 for _ in $(seq 1 $MAX_ATTEMPTS); do
 	gcloud compute instance-groups managed list --format="value(self_link)" --filter="${mig_filter}" |
-	awk -F/ -v re="${tf_mig_regex}" '$NF !~ re' >"$tmpfile"
+		awk -F/ -v re="${tf_mig_regex}" '$NF !~ re' >"$tmpfile"
 	[[ ! -s "$tmpfile" ]] && break
 	while batch="$(head -n 5)" && [[ ${#batch} -gt 0 ]]; do
 		groups=$(echo "$batch" | paste -sd " " -) # concat into a single space-separated line

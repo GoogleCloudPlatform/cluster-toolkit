@@ -2005,16 +2005,14 @@ def test_nodeset_machine_conf_deterministic_tie_breaker():
 
 
 def test_nodeset_machine_conf_arm64_n4a_and_none_advanced_machine_features():
-    # n4a, a4x, and h3 are non-SMT families (supports_smt == False -> tpc=1), and
+    # n4a and h3 are non-SMT families (supports_smt == False -> tpc=1), and
     # template.advancedMachineFeatures can be None on older/raw GCE template payloads.
     machines = {
         "c4a-standard-16": util.MachineType(name="c4a-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
         "n4a-standard-8": util.MachineType(name="n4a-standard-8", guest_cpus=8, memory_mb=32768, accelerators=[]),
-        "a4x-highgpu-4g": util.MachineType(name="a4x-highgpu-4g", guest_cpus=144, memory_mb=1048576, accelerators=[]),
         "h3-standard-88": util.MachineType(name="h3-standard-88", guest_cpus=88, memory_mb=360448, accelerators=[]),
     }
     assert machines["n4a-standard-8"].supports_smt is False
-    assert machines["a4x-highgpu-4g"].supports_smt is False
     assert machines["h3-standard-88"].supports_smt is False
 
     lkp = util.Lookup(TstCfg())

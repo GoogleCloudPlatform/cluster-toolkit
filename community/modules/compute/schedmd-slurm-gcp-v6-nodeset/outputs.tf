@@ -17,7 +17,16 @@ output "nodeset" {
   value       = local.nodeset
 
   precondition {
-    condition = alltrue([
+    condition = !contains([
+      "c3-:pd-standard",
+      "h3-:pd-standard",
+      "h3-:pd-ssd",
+    ], "${substr(var.machine_type, 0, 3)}:${var.disk_type}")
+    error_message = "A disk_type=${var.disk_type} cannot be used with machine_type=${var.machine_type}."
+  }
+
+  precondition {
+    condition = !local.has_flex_policy || alltrue([
       for mt in setunion([var.machine_type], local.flex_machine_types) : !contains([
         "c2:hyperdisk-balanced",
         "c2:hyperdisk-extreme",
