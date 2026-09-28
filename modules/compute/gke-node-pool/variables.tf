@@ -120,6 +120,15 @@ variable "guest_accelerator" {
     condition     = alltrue([for ga in var.guest_accelerator : ga.gpu_driver_installation_config != null])
     error_message = "var.guest_accelerator[*].gpu_driver_installation_config must not be null; leave unset to enable GKE to select default GPU driver installation"
   }
+
+  validation {
+    condition = alltrue([
+      for ga in var.guest_accelerator :
+      contains(["DEFAULT", "LATEST", "INSTALLATION_DISABLED", "GPU_DRIVER_VERSION_UNSPECIFIED"], ga.gpu_driver_installation_config.gpu_driver_version)
+      if ga.gpu_driver_installation_config != null
+    ])
+    error_message = "var.guest_accelerator[*].gpu_driver_installation_config.gpu_driver_version must be one of \"DEFAULT\", \"LATEST\", \"INSTALLATION_DISABLED\", or \"GPU_DRIVER_VERSION_UNSPECIFIED\"."
+  }
 }
 
 variable "image_type" {
