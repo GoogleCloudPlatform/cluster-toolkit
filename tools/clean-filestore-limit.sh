@@ -42,6 +42,11 @@ fi
 CLEANUP_AGE_SECONDS=$((24 * 60 * 60))
 CURRENT_TIME=$(date +%s)
 KEPT_ACTIVE_INSTANCE=false
+ACTIVE_BUILDS=$(gcloud builds list \
+	--project "${PROJECT_ID}" \
+	--filter="tags=m.filestore" \
+	--format="value(id)" \
+	--ongoing 2>/dev/null || true)
 
 echo "Starting Filestore & Peering Cleanup for project: ${PROJECT_ID} (DRY_RUN=${DRY_RUN})"
 if [ "$DRY_RUN" = "true" ]; then
@@ -79,14 +84,8 @@ if [[ -n "$FILESTORE_INSTANCES" ]]; then
 		else
 			echo "Instance ${instance} is less than 24 hours old. Checking for active Filestore Cloud Builds..."
 
-			active_builds=$(gcloud builds list \
-				--project "${PROJECT_ID}" \
-				--filter="tags=m.filestore" \
-				--format="value(id)" \
-				--ongoing 2>/dev/null || true)
-
-			if [[ -n "$active_builds" ]]; then
-				echo "Active Filestore Cloud Build found (${active_builds}). Keeping ${instance}."
+			if [[ -n "$ACTIVE_BUILDS" ]]; then
+				echo "Active Filestore Cloud Build found (${ACTIVE_BUILDS}). Keeping ${instance}."
 				KEPT_ACTIVE_INSTANCE=true
 				continue
 			else
@@ -126,13 +125,7 @@ fi
 # Toggling file.googleapis.com off and back on clears stuck producer quota and peering state.
 echo "Checking if Filestore API internal limits can be reset..."
 
-active_builds=$(gcloud builds list \
-	--project "${PROJECT_ID}" \
-	--filter="tags=m.filestore" \
-	--format="value(id)" \
-	--ongoing 2>/dev/null || true)
-
-if [[ -n "$active_builds" ]] || [ "$KEPT_ACTIVE_INSTANCE" = true ]; then
+if [[ -n "$ACTIVE_BUILDS" ]] || [ "$KEPT_ACTIVE_INSTANCE" = true ]; then
 	echo "Active Filestore test or instance detected. Skipping API reset to protect active tests."
 elif [ "$DRY_RUN" = "true" ]; then
 	echo "[DRY-RUN] Would disable file.googleapis.com, sleep 120s, and re-enable it on EXIT."
@@ -170,6 +163,7 @@ if [[ -n "$peerings" ]]; then
 			creation_time=$(gcloud logging read \
 				"protoPayload.methodName=~\"compute.networks.addPeering\" AND protoPayload.request.networkPeering.name=\"${peering}\"" \
 				--project="${PROJECT_ID}" \
+				--freshness="14d" \
 				--format="value(timestamp)" \
 				--limit=1 2>/dev/null || true)
 
@@ -207,13 +201,7 @@ if [[ -n "$peerings" ]]; then
 			else
 				echo "Peering ${peering} is less than 24 hours old (or unknown age). Checking for active Filestore Cloud Builds..."
 
-				active_builds=$(gcloud builds list \
-					--project "${PROJECT_ID}" \
-					--filter="tags=m.filestore" \
-					--format="value(id)" \
-					--ongoing 2>/dev/null || true)
-
-				if [[ -n "$active_builds" ]] || [ "$KEPT_ACTIVE_INSTANCE" = true ]; then
+				if [[ -n "$ACTIVE_BUILDS" ]] || [ "$KEPT_ACTIVE_INSTANCE" = true ]; then
 					echo "Active Filestore Cloud Build or instance found. Keeping peering ${peering}."
 					continue
 				else
