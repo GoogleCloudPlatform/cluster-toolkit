@@ -23,8 +23,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"time"
 	"runtime"
+	"time"
 
 	. "gopkg.in/check.v1"
 )

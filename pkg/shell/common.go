@@ -30,7 +30,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
 )
 
 // ProposedChanges provides summary and full description of proposed changes
