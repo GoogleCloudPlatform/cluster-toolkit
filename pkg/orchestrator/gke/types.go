@@ -30,6 +30,7 @@ import (
 	compute "google.golang.org/api/compute/v1"
 	iamapi "google.golang.org/api/iam/v1"
 	gcs "google.golang.org/api/storage/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -141,7 +142,8 @@ type KubeClient interface {
 	// An empty namespace means cluster-scoped.
 	ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error)
 	GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error)
-	DeleteResource(gvr schema.GroupVersionResource, namespace, name string) error
+	// A nil pre deletes unconditionally.
+	DeleteResource(gvr schema.GroupVersionResource, namespace, name string, pre *metav1.Preconditions) error
 }
 
 type MachineTypeClient interface {
@@ -384,6 +386,11 @@ type GCSFusePVPVCTemplateParams struct {
 	ManagedByValue   string
 	StorageTypeLabel string
 	StorageType      string
+
+	LastClaimedAtAnnotation string
+	LastClaimedAt           string
+	LastClaimedByAnnotation string
+	LastClaimedBy           string
 }
 
 type existingGatewayPV struct {

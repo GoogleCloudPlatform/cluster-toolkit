@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
@@ -36,6 +37,8 @@ import (
 	iamapi "google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
 	gcs "google.golang.org/api/storage/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8syaml "sigs.k8s.io/yaml"
 )
 
@@ -890,14 +893,23 @@ func verifyFilestoreManifest(t *testing.T, manifest, name, server, path, capacit
 	}
 }
 
+// fixGatewayClock pins the last-claimed-at stamp so rendered gateways are stable.
+func fixGatewayClock(t *testing.T) {
+	t.Helper()
+	orig := gatewayNow
+	gatewayNow = func() time.Time { return time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC) }
+	t.Cleanup(func() { gatewayNow = orig })
+}
+
 func TestProcessMounts_Filestore_SingleMountGolden(t *testing.T) {
+	fixGatewayClock(t)
 	sm := &StorageManager{
 		getFilestoreIP: func(ctx context.Context, projectID, location, nameOrIP string, isIP bool) (string, string, int64, error) {
 			return "10.0.0.2", "myinstance", 2048, nil
 		},
 	}
 
-	infos, manifests, err := sm.ProcessMounts([]string{"filestore://myinstance/share;/data"}, orchestrator.JobDefinition{})
+	infos, manifests, err := sm.ProcessMounts([]string{"filestore://myinstance/share;/data"}, orchestrator.JobDefinition{WorkloadName: "job-a"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -939,6 +951,9 @@ metadata:
   labels:
     gcluster.google.com/managed-by: cluster-toolkit
     gcluster.google.com/storage-type: filestore
+  annotations:
+    gcluster.google.com/last-claimed-at: "2026-09-28T12:00:00Z"
+    gcluster.google.com/last-claimed-by: "job-a"
 spec:
   accessModes:
   - ReadWriteMany
@@ -2558,10 +2573,12 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 	}`
 
 	// The mock fails any command it has no response for, so a missing del response makes a delete attempt an error.
-	newSM := func(res shell.CommandResult, del []shell.CommandResult) *StorageManager {
+	newSM := func(res shell.CommandResult, del, wait, gone []shell.CommandResult) *StorageManager {
 		exec := NewMockExecutor(map[string][]shell.CommandResult{
 			"kubectl get pv " + pvName: {res},
 			"kubectl delete pv " + pvName + " --ignore-not-found --wait=true --timeout=60s": del,
+			"kubectl wait --for=delete pv/" + pvName:                                        wait,
+			"kubectl get pv " + pvName + " --ignore-not-found -o name":                      gone,
 		})
 		return &StorageManager{orchestrator: &GKEOrchestrator{executor: exec, namespace: "default"}}
 	}
@@ -2571,13 +2588,17 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 		name    string
 		res     shell.CommandResult
 		del     []shell.CommandResult
+		wait    []shell.CommandResult
+		gone    []shell.CommandResult
 		dryRun  bool
 		wantErr []string // substrings; nil means success
 	}{
 		{name: "absent PV", res: shell.CommandResult{Stdout: ""}},
 		{name: "matching Bound PV", res: shell.CommandResult{Stdout: matchingPVJSON}},
 		{name: "mismatched PV", res: shell.CommandResult{Stdout: mismatchedPVJSON}, wantErr: []string{"already exists with different settings", `namespace "default"`, "kubectl describe pvc " + pvcName + " -n default", "kubectl delete pvc " + pvcName + " -n default && kubectl delete pv " + pvName, "Bucket data is not affected"}},
-		{name: "Terminating PV explains pending deletion", res: shell.CommandResult{Stdout: terminatingPVJSON}, wantErr: []string{"is being deleted", "PVC default/" + pvcName, "kubectl delete pvc " + pvcName + " -n default"}},
+		{name: "Terminating PV is waited out, then recreated", res: shell.CommandResult{Stdout: terminatingPVJSON}, wait: []shell.CommandResult{{}}},
+		{name: "Terminating PV that outlives the wait explains pending deletion", res: shell.CommandResult{Stdout: terminatingPVJSON}, wait: []shell.CommandResult{{ExitCode: 1, Stderr: "timed out"}}, wantErr: []string{"is being deleted", "PVC default/" + pvcName, "kubectl delete pvc " + pvcName + " -n default"}},
+		{name: "Terminating PV already gone when the wait fails", res: shell.CommandResult{Stdout: terminatingPVJSON}, wait: []shell.CommandResult{{ExitCode: 1, Stderr: "not found"}}, gone: []shell.CommandResult{{}}},
 		{name: "unmanaged Released PV is left to the user", res: shell.CommandResult{Stdout: releasedPVJSON}, wantErr: []string{"already exists in Released state", "will not delete it", "kubectl delete pv " + pvName}},
 		{name: "managed Released PV is deleted and recreated", res: shell.CommandResult{Stdout: managedReleasedPVJSON}, del: []shell.CommandResult{{}}},
 		{name: "managed Released PV delete failure", res: shell.CommandResult{Stdout: managedReleasedPVJSON}, del: []shell.CommandResult{{ExitCode: 1, Stderr: "forbidden"}}, wantErr: []string{"failed to delete stale gateway PV", "forbidden"}},
@@ -2591,7 +2612,7 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 			if tc.dryRun {
 				job.DryRunManifest = "out.yaml"
 			}
-			_, _, err := newSM(tc.res, tc.del).ProcessMounts([]string{"gs://bkt;/data;profile=training"}, job)
+			_, _, err := newSM(tc.res, tc.del, tc.wait, tc.gone).ProcessMounts([]string{"gs://bkt;/data;profile=training"}, job)
 			if tc.wantErr == nil {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
@@ -3734,4 +3755,93 @@ func assertRequested(t *testing.T, paths []string, wantParts ...string) {
 		}
 	}
 	t.Errorf("requested paths %v, want one containing %v", paths, wantParts)
+}
+
+const verifyClaim = "gcluster-gcsfuse-new-training-aaaaaa"
+
+var verifyManifest = `apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ` + verifyClaim + `
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-own-pvc
+---
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: job-new
+`
+
+func TestManifestGatewayClaims(t *testing.T) {
+	if got := manifestGatewayClaims(verifyManifest); !reflect.DeepEqual(got, []string{verifyClaim}) {
+		t.Errorf("manifestGatewayClaims() = %v, want [%s]", got, verifyClaim)
+	}
+	if got := manifestGatewayClaims("kind: JobSet\nmetadata:\n  name: x\n"); len(got) != 0 {
+		t.Errorf("manifestGatewayClaims() without gateways = %v, want none", got)
+	}
+}
+
+func TestVerifyStorageGateways(t *testing.T) {
+	freshPVC := func() unstructured.Unstructured { return gatewayPVC(verifyClaim, verifyClaim+"-default", time.Second) }
+	terminating := freshPVC()
+	terminating.SetDeletionTimestamp(&metav1.Time{Time: time.Now()})
+	tests := []struct {
+		name         string
+		pvc          *unstructured.Unstructured
+		pvClaimUID   string
+		rollbackErr  error
+		wantErr      []string
+		wantRollback bool
+	}{
+		{name: "healthy gateway keeps the job and leaves other gateways alone", pvc: func() *unstructured.Unstructured { p := freshPVC(); return &p }()},
+		{name: "gateway deleted by a concurrent cleanup rolls back", wantErr: []string{`job "job-new" was not started`, "concurrent cleanup"}, wantRollback: true},
+		{name: "terminating gateway rolls back", pvc: &terminating, wantErr: []string{"was not started"}, wantRollback: true},
+		{name: "gateway PV deleted by a concurrent cleanup rolls back", pvc: func() *unstructured.Unstructured {
+			p := gatewayPVC(verifyClaim, "gone-pv", time.Second)
+			return &p
+		}(), wantErr: []string{"was not started"}, wantRollback: true},
+		{name: "PV still bound to a deleted claim rolls back", pvc: func() *unstructured.Unstructured { p := freshPVC(); return &p }(), pvClaimUID: "old-uid", wantErr: []string{"was not started", "kubectl delete pvc " + verifyClaim + " -n default"}, wantRollback: true},
+		{name: "PV bound to this claim keeps the job", pvc: func() *unstructured.Unstructured { p := freshPVC(); return &p }(), pvClaimUID: "new-uid"},
+		{name: "failed rollback tells the user how to clean up", rollbackErr: fmt.Errorf("forbidden"), wantErr: []string{"kubectl delete jobset job-new -n default", "forbidden"}, wantRollback: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := gatewayMock(nil)
+			mock.DeleteJobSetErr = tc.rollbackErr
+			if tc.pvc != nil {
+				tc.pvc.SetUID("new-uid")
+				mock.Objects["persistentvolumeclaims"] = append(mock.Objects["persistentvolumeclaims"], *tc.pvc)
+			}
+			pv := managedStorageObject("PersistentVolume", verifyClaim+"-default")
+			if tc.pvClaimUID != "" {
+				pv.Object["spec"] = map[string]interface{}{"claimRef": map[string]interface{}{"uid": tc.pvClaimUID}}
+			}
+			mock.Objects["persistentvolumes"] = append(mock.Objects["persistentvolumes"], *pv)
+			g := &GKEOrchestrator{kubeClient: mock, namespace: "default", dynClient: nopDynamicClient{}}
+			err := g.verifyStorageGateways(verifyManifest, "job-new")
+			if tc.wantErr == nil && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			for _, want := range tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), want) {
+					t.Errorf("error %v missing %q", err, want)
+				}
+			}
+			if got := slices.Contains(mock.DeletedJobSets, "job-new"); got != tc.wantRollback {
+				t.Errorf("rolled back = %v, want %v", got, tc.wantRollback)
+			}
+			assertDeleted(t, mock, nil, nil)
+		})
+	}
+}
+
+func TestVerifyStorageGateways_NoGatewaysIsANoOp(t *testing.T) {
+	mock := gatewayMock(nil)
+	if err := (&GKEOrchestrator{kubeClient: mock}).verifyStorageGateways("kind: JobSet\nmetadata:\n  name: x\n", "x"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertDeleted(t, mock, nil, nil)
 }

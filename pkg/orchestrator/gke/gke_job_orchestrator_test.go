@@ -132,6 +132,7 @@ type MockKubeClient struct {
 	ExplicitEmpty      bool
 
 	DeleteJobSetErr error
+	DeletedJobSets  []string
 
 	// Fixtures keyed by gvr.Resource.
 	Objects    map[string][]unstructured.Unstructured
@@ -139,6 +140,7 @@ type MockKubeClient struct {
 	GetErr     error
 	DeleteErrs map[string]error
 	Deleted    map[string][]string
+	DeletePre  map[string]*metav1.Preconditions
 }
 
 func managedStorageObject(kind, name string) *unstructured.Unstructured {
@@ -174,6 +176,7 @@ func (m *MockKubeClient) ListWorkloads(namespace string, workloadName string) ([
 }
 
 func (m *MockKubeClient) DeleteJobSet(namespace string, name string) error {
+	m.DeletedJobSets = append(m.DeletedJobSets, name)
 	if m.DeleteJobSetErr != nil {
 		return m.DeleteJobSetErr
 	}
@@ -202,13 +205,17 @@ func (m *MockKubeClient) GetResource(gvr schema.GroupVersionResource, namespace,
 	return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
 }
 
-func (m *MockKubeClient) DeleteResource(gvr schema.GroupVersionResource, namespace, name string) error {
+func (m *MockKubeClient) DeleteResource(gvr schema.GroupVersionResource, namespace, name string, pre *metav1.Preconditions) error {
 	if err := m.DeleteErrs[gvr.Resource]; err != nil {
 		return err
 	}
 	if m.Deleted == nil {
 		m.Deleted = map[string][]string{}
 	}
+	if m.DeletePre == nil {
+		m.DeletePre = map[string]*metav1.Preconditions{}
+	}
+	m.DeletePre[name] = pre
 	m.Deleted[gvr.Resource] = append(m.Deleted[gvr.Resource], name)
 	return nil
 }

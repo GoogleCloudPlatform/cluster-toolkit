@@ -24,6 +24,7 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -109,75 +110,110 @@ func (g *GKEOrchestrator) reclaimStorageGateways(namespace, cancelledJobSet stri
 		return
 	}
 	pvcs = slices.DeleteFunc(pvcs, func(pvc unstructured.Unstructured) bool {
-		name := pvc.GetName()
-		return !isToolkitGatewayClaimName(name) ||
-			(!slices.Contains(ownClaims, name) && time.Since(pvc.GetCreationTimestamp().Time) < gatewayGracePeriod)
+		return !isToolkitGatewayClaimName(pvc.GetName()) || withinGracePeriod(&pvc, cancelledJobSet, ownClaims)
 	})
 	if len(pvcs) == 0 {
 		return
 	}
 
+	// No re-check needed: the PVC delete is conditional on the resourceVersion listed above, and every submit
+	// bumps it by re-stamping last-claimed-at, so a gateway claimed after this scan fails the delete.
 	consumers, err := g.namespaceClaimConsumers(namespace, cancelledJobSet)
 	if err != nil {
 		logging.Warn("Skipping storage cleanup in namespace '%s': failed to determine active storage consumers: %v", namespace, err)
 		return
 	}
-	pvcs = slices.DeleteFunc(pvcs, func(pvc unstructured.Unstructured) bool {
-		user, used := consumers[pvc.GetName()]
-		if used {
-			logging.Info("Storage gateway '%s' is still used by %s in namespace '%s'. Preserving gateway.", pvc.GetName(), user, namespace)
-		}
-		return used
-	})
-	if len(pvcs) == 0 {
-		return
-	}
-
-	// Re-check right before deleting to narrow the race with a concurrent submit.
-	consumers, err = g.namespaceClaimConsumers(namespace, cancelledJobSet)
-	if err != nil {
-		logging.Warn("Skipping storage cleanup in namespace '%s': failed to re-verify active storage consumers: %v", namespace, err)
-		return
-	}
 	for i := range pvcs {
 		if user, used := consumers[pvcs[i].GetName()]; used {
-			logging.Info("Storage gateway '%s' was claimed by %s in namespace '%s' while cleaning up. Preserving gateway.", pvcs[i].GetName(), user, namespace)
+			logging.Info("Storage gateway '%s' is still used by %s in namespace '%s'. Preserving gateway.", pvcs[i].GetName(), user, namespace)
 			continue
 		}
 		g.deleteStorageGateway(namespace, &pvcs[i])
 	}
 }
 
-func (g *GKEOrchestrator) deleteStorageGateway(namespace string, pvc *unstructured.Unstructured) {
+// withinGracePeriod reports whether a submit may still be creating the job that claimed pvc. The cancelled job's own
+// claim is exempt, identified by last-claimed-by, or by ownClaims for PVCs rendered without the annotations.
+func withinGracePeriod(pvc *unstructured.Unstructured, cancelledJobSet string, ownClaims []string) bool {
+	annotations := pvc.GetAnnotations()
+	claimedBy, stamped := annotations[lastClaimedByAnnotation]
+	if stamped && claimedBy == cancelledJobSet {
+		return false
+	}
+	if !stamped && slices.Contains(ownClaims, pvc.GetName()) {
+		return false
+	}
+	claimed := pvc.GetCreationTimestamp().Time
+	if at, err := time.Parse(time.RFC3339Nano, annotations[lastClaimedAtAnnotation]); err == nil && at.After(claimed) {
+		claimed = at
+	}
+	return time.Since(claimed) < gatewayGracePeriod
+}
+
+// preconditionsFor pins a delete to the exact object version that was inspected.
+func preconditionsFor(obj *unstructured.Unstructured, withVersion bool) *metav1.Preconditions {
+	pre := &metav1.Preconditions{}
+	if uid := obj.GetUID(); uid != "" {
+		pre.UID = &uid
+	}
+	if rv := obj.GetResourceVersion(); withVersion && rv != "" {
+		pre.ResourceVersion = &rv
+	}
+	return pre
+}
+
+// gatewayPV returns the PV bound to pvc (nil if none) and whether cleanup may proceed.
+func (g *GKEOrchestrator) gatewayPV(namespace string, pvc *unstructured.Unstructured) (*unstructured.Unstructured, bool) {
 	claim := pvc.GetName()
 	pvName, _, _ := unstructured.NestedString(pvc.Object, "spec", "volumeName")
-	if pvName != "" {
-		pv, err := g.kubeClient.GetResource(pvGVR, "", pvName)
-		switch {
-		case apierrors.IsNotFound(err):
-			pvName = ""
-		case err != nil:
-			logging.Warn("Skipping cleanup of storage gateway '%s' in namespace '%s': could not read PersistentVolume '%s' to verify ownership: %v", claim, namespace, pvName, err)
-			return
-		case !isToolkitManaged(pv):
-			logging.Warn("PersistentVolume '%s' bound to gateway '%s' does not carry the '%s: %s' label. Refusing to delete storage gcluster does not own.", pvName, claim, managedByLabel, managedByValue)
-			return
-		}
+	if pvName == "" {
+		return nil, true
+	}
+	pv, err := g.kubeClient.GetResource(pvGVR, "", pvName)
+	switch {
+	case apierrors.IsNotFound(err):
+		return nil, true
+	case err != nil:
+		logging.Warn("Skipping cleanup of storage gateway '%s' in namespace '%s': could not read PersistentVolume '%s' to verify ownership: %v", claim, namespace, pvName, err)
+		return nil, false
+	case !isToolkitManaged(pv):
+		logging.Warn("PersistentVolume '%s' bound to gateway '%s' does not carry the '%s: %s' label. Refusing to delete storage gcluster does not own.", pvName, claim, managedByLabel, managedByValue)
+		return nil, false
+	}
+	return pv, true
+}
+
+func (g *GKEOrchestrator) deleteStorageGateway(namespace string, pvc *unstructured.Unstructured) {
+	claim := pvc.GetName()
+	pv, ok := g.gatewayPV(namespace, pvc)
+	if !ok {
+		return
 	}
 
-	if err := g.kubeClient.DeleteResource(pvcGVR, namespace, claim); err != nil && !apierrors.IsNotFound(err) {
+	err := g.kubeClient.DeleteResource(pvcGVR, namespace, claim, preconditionsFor(pvc, true))
+	switch {
+	case apierrors.IsConflict(err):
+		logging.Info("Storage gateway '%s' was claimed by another job during cleanup. Preserving gateway.", claim)
+		return
+	case err != nil && !apierrors.IsNotFound(err):
 		logging.Warn("Failed to delete PersistentVolumeClaim '%s' in namespace '%s': %v", claim, namespace, err)
 		return
 	}
-	if pvName == "" {
+	if pv == nil {
 		logging.Info("Reclaimed storage gateway PVC '%s'. Bucket and share data are unaffected.", claim)
 		return
 	}
-	if err := g.kubeClient.DeleteResource(pvGVR, "", pvName); err != nil && !apierrors.IsNotFound(err) {
+	pvName := pv.GetName()
+	// Only remove the PV that was bound to this exact claim; a recreated PV belongs to a newer gateway.
+	if uid, _, _ := unstructured.NestedString(pv.Object, "spec", "claimRef", "uid"); uid != "" && uid != string(pvc.GetUID()) {
+		logging.Info("Reclaimed storage gateway PVC '%s'; PersistentVolume '%s' is bound to a newer claim and was kept.", claim, pvName)
+		return
+	}
+	if err := g.kubeClient.DeleteResource(pvGVR, "", pvName, preconditionsFor(pv, false)); err != nil && !apierrors.IsNotFound(err) && !apierrors.IsConflict(err) {
 		logging.Error("Failed to delete PersistentVolume '%s': %v\n"+
 			"  The PersistentVolumeClaim was removed, so this volume is now stuck in phase Released with a stale claimRef.\n"+
-			"  A future 'gcluster job submit' using the same storage in namespace '%s' will not be able to bind to it and its Pods will stay Pending.\n"+
-			"  Remove it manually with:\n"+
+			"  The next 'gcluster job submit' using the same storage in namespace '%s' recreates it automatically.\n"+
+			"  To remove it now, run:\n"+
 			"    kubectl delete pv %s",
 			pvName, err, namespace, pvName)
 		return

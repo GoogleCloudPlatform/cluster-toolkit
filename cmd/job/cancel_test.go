@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -86,7 +87,7 @@ func (m *mockKubeClient) GetResource(gvr schema.GroupVersionResource, namespace,
 	return nil, m.err
 }
 
-func (m *mockKubeClient) DeleteResource(gvr schema.GroupVersionResource, namespace, name string) error {
+func (m *mockKubeClient) DeleteResource(gvr schema.GroupVersionResource, namespace, name string, pre *metav1.Preconditions) error {
 	return m.err
 }
 

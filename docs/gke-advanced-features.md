@@ -321,15 +321,17 @@ A dry run (`--dry-run-out`) turns the blocking checks into warnings.
 
 #### Managing gateways
 
-`gcluster job cancel` cleans up gateways automatically: after deleting the job, it
-deletes every gateway claim in the namespace that no other workload still uses,
-along with the PersistentVolume bound to it. Gateways created in the last two
-minutes are kept, so a job being submitted at the same time does not lose its
-volume. Bucket contents are never affected.
+`gcluster job cancel` deletes the job, then every unused gateway (claim and volume)
+in the namespace:
 
-Cleanup runs only on `gcluster job cancel`. A gateway is left behind if its job
-finished on its own or was deleted with `kubectl`. Running `gcluster job cancel`
-for any job in that namespace later removes it. To list gateways:
+* Gateways used by other running jobs, or claimed by a submit in the last two minutes, are kept.
+* Gateways left by jobs that ended on their own or were deleted with `kubectl` are
+  reused by new jobs until the next cancel removes them.
+* A submit right after a cancel waits for the old gateway to go, then recreates it.
+  If a cancel removes a gateway mid-submit, the job is not started; resubmit.
+* Only gateways labelled by gcluster are touched. Bucket data is never affected.
+
+To list gateways:
 
 ```bash
 kubectl get pv,pvc -A -l gcluster.google.com/managed-by=cluster-toolkit,gcluster.google.com/storage-type=gcsfuse

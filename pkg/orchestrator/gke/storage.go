@@ -43,6 +43,9 @@ import (
 	gcs "google.golang.org/api/storage/v1"
 
 	"gopkg.in/yaml.v2"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8syaml "sigs.k8s.io/yaml"
 )
 
 const (
@@ -64,6 +67,12 @@ const (
 	storageTypeLabel     = "gcluster.google.com/storage-type"
 	storageTypeGCSFuse   = "gcsfuse"
 	storageTypeFilestore = "filestore"
+
+	// Submit stamps these on gateway PVCs so cleanup can tell a gateway was just reused.
+	lastClaimedAtAnnotation = "gcluster.google.com/last-claimed-at"
+	lastClaimedByAnnotation = "gcluster.google.com/last-claimed-by"
+	// gatewayReleaseTimeout bounds how long submit waits for a gateway that is still being deleted.
+	gatewayReleaseTimeout = 2 * time.Minute
 
 	servingProfileStorageClass = "gcsfusecsi-serving"
 
@@ -621,6 +630,11 @@ func (sm *StorageManager) generateFilestoreResources(pm parsedMount, idx int, jo
 		"ManagedByValue":   managedByValue,
 		"StorageTypeLabel": storageTypeLabel,
 		"StorageType":      storageTypeFilestore,
+
+		"LastClaimedAtAnnotation": lastClaimedAtAnnotation,
+		"LastClaimedAt":           gatewayNow().UTC().Format(time.RFC3339Nano),
+		"LastClaimedByAnnotation": lastClaimedByAnnotation,
+		"LastClaimedBy":           job.WorkloadName,
 	})
 	if err != nil {
 		return MountInfo{}, "", fmt.Errorf("failed to execute filestore template: %w", err)
@@ -733,6 +747,11 @@ func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx in
 		ManagedByValue:   managedByValue,
 		StorageTypeLabel: storageTypeLabel,
 		StorageType:      storageTypeGCSFuse,
+
+		LastClaimedAtAnnotation: lastClaimedAtAnnotation,
+		LastClaimedAt:           gatewayNow().UTC().Format(time.RFC3339Nano),
+		LastClaimedByAnnotation: lastClaimedByAnnotation,
+		LastClaimedBy:           job.WorkloadName,
 	}
 
 	// Render once without names to derive the spec hash the names are built from.
@@ -801,11 +820,7 @@ func (sm *StorageManager) checkExistingGatewayPV(pvName, pvcName, ns, renderedYA
 	}
 
 	if existing.Metadata.DeletionTimestamp != "" {
-		return fmt.Errorf(
-			"gateway PV %q is being deleted and is waiting for PVC %s/%s to be released. "+
-				"Cancel the jobs that mount it (`kubectl describe pvc %s -n %s` lists them under Used By), "+
-				"then run `kubectl delete pvc %s -n %s` and resubmit",
-			pvName, ns, pvcName, pvcName, ns, pvcName, ns)
+		return sm.waitForGatewayRelease(pvName, pvcName, ns)
 	}
 
 	if existing.Status.Phase == "Released" || existing.Status.Phase == "Failed" {
@@ -840,6 +855,27 @@ func (sm *StorageManager) recreateStaleGatewayPV(pvName string, existing existin
 		return fmt.Errorf("failed to delete stale gateway PV %q: %s", pvName, strings.TrimSpace(res.Stderr))
 	}
 	return nil
+}
+
+// gatewayNow stamps last-claimed-at; tests override it.
+var gatewayNow = time.Now
+
+// waitForGatewayRelease waits out a gateway deleted by a recent cleanup, so an immediate resubmit recreates it.
+func (sm *StorageManager) waitForGatewayRelease(pvName, pvcName, ns string) error {
+	logging.Info("Waiting up to %s for storage gateway PV %q from a previous job to finish deleting...", gatewayReleaseTimeout, pvName)
+	res := sm.orchestrator.executor.ExecuteCommand("kubectl", "wait", "--for=delete", "pv/"+pvName,
+		"--timeout="+gatewayReleaseTimeout.String())
+	if res.ExitCode == 0 {
+		return nil
+	}
+	if gone := sm.orchestrator.executor.ExecuteCommand("kubectl", "get", "pv", pvName, "--ignore-not-found", "-o", "name"); gone.ExitCode == 0 && strings.TrimSpace(gone.Stdout) == "" {
+		return nil
+	}
+	return fmt.Errorf(
+		"gateway PV %q is being deleted and is waiting for PVC %s/%s to be released. "+
+			"Cancel the jobs that mount it (`kubectl describe pvc %s -n %s` lists them under Used By), "+
+			"then run `kubectl delete pvc %s -n %s` and resubmit",
+		pvName, ns, pvcName, pvcName, ns, pvcName, ns)
 }
 
 func unmanagedGatewayWarning(pvName, manifest string) string {
@@ -1654,4 +1690,86 @@ func (c *gcpPreflightClient) rolePermissions(ctx context.Context, role string) (
 		return r.IncludedPermissions, nil
 	}
 	return nil, fmt.Errorf("unsupported role name %q", role)
+}
+
+// verifyStorageGateways runs after a successful apply and rolls the job back if a concurrent cleanup removed one of
+// its gateways.
+func (g *GKEOrchestrator) verifyStorageGateways(manifest, jobSetName string) error {
+	claims := manifestGatewayClaims(manifest)
+	if len(claims) == 0 {
+		return nil
+	}
+	if _, err := g.getDynamicClient(); err != nil {
+		logging.Warn("Could not verify storage gateways: %v", err)
+		return nil
+	}
+	ns, err := g.getCurrentNamespace("", "", "")
+	if err != nil {
+		logging.Warn("Could not verify storage gateways: %v", err)
+		return nil
+	}
+	for _, claim := range claims {
+		removed, err := g.gatewayRemoved(ns, claim)
+		if err != nil {
+			logging.Warn("Could not verify storage gateway '%s': %v", claim, err)
+			continue
+		}
+		if removed {
+			return g.rollBackJob(ns, jobSetName, fmt.Errorf("storage gateway %q was removed by a concurrent cleanup; resubmit to recreate it "+
+				"(if it fails again, run `kubectl delete pvc %s -n %s` and delete its PV)", claim, claim, ns))
+		}
+	}
+	return nil
+}
+
+// gatewayRemoved reports whether the gateway PVC or its PV is gone, being deleted, or still bound to a deleted PVC.
+func (g *GKEOrchestrator) gatewayRemoved(ns, claim string) (bool, error) {
+	pvc, err := g.kubeClient.GetResource(pvcGVR, ns, claim)
+	if apierrors.IsNotFound(err) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	pvName, _, _ := unstructured.NestedString(pvc.Object, "spec", "volumeName")
+	if pvc.GetDeletionTimestamp() != nil || pvName == "" {
+		return pvc.GetDeletionTimestamp() != nil, nil
+	}
+	pv, err := g.kubeClient.GetResource(pvGVR, "", pvName)
+	if apierrors.IsNotFound(err) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	boundUID, _, _ := unstructured.NestedString(pv.Object, "spec", "claimRef", "uid")
+	return pv.GetDeletionTimestamp() != nil || (boundUID != "" && boundUID != string(pvc.GetUID())), nil
+}
+
+func (g *GKEOrchestrator) rollBackJob(ns, jobSetName string, cause error) error {
+	if err := g.kubeClient.DeleteJobSet(ns, jobSetName); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("%w; rolling back job %q also failed, delete it with `kubectl delete jobset %s -n %s`: %v", cause, jobSetName, jobSetName, ns, err)
+	}
+	return fmt.Errorf("job %q was not started: %w", jobSetName, cause)
+}
+
+// manifestGatewayClaims returns the toolkit gateway PVCs declared in manifest.
+func manifestGatewayClaims(manifest string) []string {
+	docs, err := splitYAMLDocuments(manifest)
+	if err != nil {
+		return nil
+	}
+	var claims []string
+	for _, doc := range docs {
+		var obj struct {
+			Kind     string `json:"kind"`
+			Metadata struct {
+				Name string `json:"name"`
+			} `json:"metadata"`
+		}
+		if k8syaml.Unmarshal([]byte(doc), &obj) == nil && obj.Kind == "PersistentVolumeClaim" && isToolkitGatewayClaimName(obj.Metadata.Name) {
+			claims = append(claims, obj.Metadata.Name)
+		}
+	}
+	return claims
 }

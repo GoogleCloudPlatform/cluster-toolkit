@@ -351,34 +351,80 @@ func TestReclaimStorageGateways_DeleteErrors(t *testing.T) {
 	assertDeleted(t, failed, nil, nil)
 }
 
-func TestReclaimStorageGateways_RechecksConsumersBeforeDeleting(t *testing.T) {
-	racing := &racingKubeClient{
-		MockKubeClient: *gatewayMock(nil),
-		lateConsumers:  []unstructured.Unstructured{podWithClaims("job-b-0", "Pending", "job-b", testClaim)},
-	}
-	(&GKEOrchestrator{kubeClient: racing}).reclaimStorageGateways("default", "job-a", nil)
-
-	assertDeleted(t, &racing.MockKubeClient, nil, nil)
-	if racing.listPodCalls < 2 {
-		t.Errorf("consumers were listed %d time(s); the pre-delete re-check is missing", racing.listPodCalls)
-	}
+// A submit that claimed the gateway after the scan bumps its resourceVersion, so the conditional delete conflicts.
+func TestReclaimStorageGateways_ConflictPreservesGateway(t *testing.T) {
+	mock := gatewayMock(nil)
+	mock.DeleteErrs = map[string]error{"persistentvolumeclaims": apierrors.NewConflict(pvcGVR.GroupResource(), testClaim, fmt.Errorf("rv changed"))}
+	(&GKEOrchestrator{kubeClient: mock}).reclaimStorageGateways("default", "job-a", nil)
+	assertDeleted(t, mock, nil, nil)
 }
 
-type racingKubeClient struct {
-	MockKubeClient
-	lateConsumers []unstructured.Unstructured
-	listPodCalls  int
+func TestDeleteStorageGateway_Preconditions(t *testing.T) {
+	pvc := gatewayPVC(testClaim, testPV, time.Hour)
+	pvc.SetUID("pvc-uid")
+	pvc.SetResourceVersion("42")
+	boundPV := func(claimUID string) unstructured.Unstructured {
+		pv := *managedStorageObject("PersistentVolume", testPV)
+		pv.SetUID("pv-uid")
+		pv.Object["spec"] = map[string]interface{}{"claimRef": map[string]interface{}{"uid": claimUID}}
+		return pv
+	}
+
+	t.Run("PVC delete pins uid and resourceVersion, PV delete pins uid", func(t *testing.T) {
+		mock := &MockKubeClient{Objects: map[string][]unstructured.Unstructured{"persistentvolumes": {boundPV("pvc-uid")}}}
+		(&GKEOrchestrator{kubeClient: mock}).deleteStorageGateway("default", pvc.DeepCopy())
+		assertDeleted(t, mock, []string{testClaim}, []string{testPV})
+		if pre := mock.DeletePre[testClaim]; pre == nil || *pre.UID != "pvc-uid" || *pre.ResourceVersion != "42" {
+			t.Errorf("PVC preconditions = %+v, want uid pvc-uid and resourceVersion 42", pre)
+		}
+		if pre := mock.DeletePre[testPV]; pre == nil || *pre.UID != "pv-uid" || pre.ResourceVersion != nil {
+			t.Errorf("PV preconditions = %+v, want uid pv-uid only", pre)
+		}
+	})
+
+	t.Run("PV bound to a newer claim is kept", func(t *testing.T) {
+		mock := &MockKubeClient{Objects: map[string][]unstructured.Unstructured{"persistentvolumes": {boundPV("newer-uid")}}}
+		(&GKEOrchestrator{kubeClient: mock}).deleteStorageGateway("default", pvc.DeepCopy())
+		assertDeleted(t, mock, []string{testClaim}, nil)
+	})
 }
 
-func (m *racingKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error) {
-	if gvr != podGVR {
-		return m.MockKubeClient.ListResources(gvr, namespace, labelSelector)
+func stampedPVC(age time.Duration, claimedAgo time.Duration, claimedBy string) unstructured.Unstructured {
+	pvc := gatewayPVC(testClaim, testPV, age)
+	pvc.SetAnnotations(map[string]string{
+		lastClaimedAtAnnotation: time.Now().Add(-claimedAgo).UTC().Format(time.RFC3339Nano),
+		lastClaimedByAnnotation: claimedBy,
+	})
+	return pvc
+}
+
+func TestWithinGracePeriod(t *testing.T) {
+	tests := []struct {
+		name      string
+		pvc       unstructured.Unstructured
+		cancelled string
+		ownClaims []string
+		want      bool
+	}{
+		{name: "old gateway reused seconds ago by another job", pvc: stampedPVC(time.Hour, time.Second, "job-b"), cancelled: "job-a", want: true},
+		{name: "old gateway last claimed long ago", pvc: stampedPVC(time.Hour, time.Hour, "job-b"), cancelled: "job-a"},
+		{name: "cancelled job's own fresh claim is exempt", pvc: stampedPVC(time.Second, time.Second, "job-a"), cancelled: "job-a"},
+		{name: "own claim overwritten by another job is protected", pvc: stampedPVC(time.Hour, time.Second, "job-b"), cancelled: "job-a", ownClaims: []string{testClaim}, want: true},
+		{name: "unstamped fresh gateway of another job", pvc: gatewayPVC(testClaim, testPV, time.Second), cancelled: "job-a", want: true},
+		{name: "unstamped fresh own gateway is exempt", pvc: gatewayPVC(testClaim, testPV, time.Second), cancelled: "job-a", ownClaims: []string{testClaim}},
+		{name: "unparsable stamp falls back to creation time", pvc: func() unstructured.Unstructured {
+			p := gatewayPVC(testClaim, testPV, time.Hour)
+			p.SetAnnotations(map[string]string{lastClaimedAtAnnotation: "yesterday", lastClaimedByAnnotation: "job-b"})
+			return p
+		}(), cancelled: "job-a"},
 	}
-	m.listPodCalls++
-	if m.listPodCalls == 1 {
-		return nil, nil
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := withinGracePeriod(&tc.pvc, tc.cancelled, tc.ownClaims); got != tc.want {
+				t.Errorf("withinGracePeriod() = %v, want %v", got, tc.want)
+			}
+		})
 	}
-	return m.lateConsumers, nil
 }
 
 func TestToolkitGatewayClaimPrefixMatchesGenerator(t *testing.T) {

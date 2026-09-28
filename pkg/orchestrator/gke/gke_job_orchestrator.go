@@ -495,6 +495,9 @@ func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, wor
 		if err != nil {
 			return fmt.Errorf("failed to apply GKE manifest: %w", err)
 		}
+		if err := g.verifyStorageGateways(manifestContent, workloadName); err != nil {
+			return err
+		}
 		logging.Info("GKE workload deployed successfully.")
 	}
 	return nil
@@ -2170,13 +2173,13 @@ func (d *DefaultKubeClient) GetResource(gvr schema.GroupVersionResource, namespa
 	return r.Get(context.TODO(), name, metav1.GetOptions{})
 }
 
-// DeleteResource deletes the object of gvr named name.
-func (d *DefaultKubeClient) DeleteResource(gvr schema.GroupVersionResource, namespace, name string) error {
+// DeleteResource deletes the object of gvr named name, only if it still matches pre.
+func (d *DefaultKubeClient) DeleteResource(gvr schema.GroupVersionResource, namespace, name string, pre *metav1.Preconditions) error {
 	r, err := d.resource(gvr, namespace)
 	if err != nil {
 		return err
 	}
-	return r.Delete(context.TODO(), name, metav1.DeleteOptions{})
+	return r.Delete(context.TODO(), name, metav1.DeleteOptions{Preconditions: pre})
 }
 
 // ListWorkloads lists matching Kueue workloads in the specified namespace.
