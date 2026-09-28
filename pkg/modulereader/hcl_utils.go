@@ -31,12 +31,34 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
+// slashWrapFS intercepts calls from tfconfig and ensures all paths passed to
+// the underlying io/fs.FS use forward slashes, as required by the io/fs.FS
+// specification (which embed.FS strictly enforces). On Windows, tfconfig joins
+// directory and filenames with filepath.Join, producing backslashes that cause
+// embed.FS lookups to fail.
+type slashWrapFS struct {
+	tfconfig.FS
+}
+
+func (s slashWrapFS) Open(name string) (tfconfig.File, error) {
+	return s.FS.Open(sourcereader.ToSlash(name))
+}
+
+func (s slashWrapFS) ReadFile(name string) ([]byte, error) {
+	return s.FS.ReadFile(sourcereader.ToSlash(name))
+}
+
+func (s slashWrapFS) ReadDir(dirname string) ([]os.FileInfo, error) {
+	return s.FS.ReadDir(sourcereader.ToSlash(dirname))
+}
+
 // getHCLInfo is wrapped by SourceReader interface which supports multiple
 // sources and stores remote modules locally, so the given source parameter to
 // getHCLInfo is only a local path.
 func loadTFConfigModule(source string) (*tfconfig.Module, error) {
 	if sourcereader.IsEmbeddedPath(source) {
-		wrapFS := tfconfig.WrapFS(sourcereader.ModuleFS)
+		source = sourcereader.ToSlash(source)
+		wrapFS := slashWrapFS{tfconfig.WrapFS(sourcereader.ModuleFS)}
 		if !tfconfig.IsModuleDirOnFilesystem(wrapFS, source) {
 			return nil, nil
 		}
@@ -200,7 +222,7 @@ func GetLocalDependencies(source string) ([]string, error) {
 					return nil, fmt.Errorf("module %s escapes embedded directory: %s", source, resolvedPath)
 				}
 			} else {
-				resolvedPath = filepath.ToSlash(filepath.Join(source, call.Source))
+				resolvedPath = filepath.Clean(filepath.Join(source, call.Source))
 			}
 			dependencies = append(dependencies, resolvedPath)
 		}
