@@ -15,10 +15,20 @@
 package gke
 
 import (
+	"bytes"
+	"context"
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"syscall"
+	"testing"
+	"time"
+
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
-	"strings"
-	"testing"
 
 	k8syaml "sigs.k8s.io/yaml"
 )
@@ -1127,6 +1137,321 @@ func TestSplitYAMLDocuments(t *testing.T) {
 			if len(docs) != tc.wantDocs {
 				t.Errorf("splitYAMLDocuments() got %d docs, want %d", len(docs), tc.wantDocs)
 			}
+		})
+	}
+}
+
+func TestWorkloadContainerCommand_PassesUserCommandVerbatim(t *testing.T) {
+	userCommand := `python -c "print('hi')" && echo "$HOME" | tee out.log; exit ${PIPESTATUS[0]}`
+	argv := workloadContainerCommand(userCommand)
+	if len(argv) != 5 || argv[0] != "/bin/bash" || argv[1] != "-c" || argv[3] != "gcluster" {
+		t.Fatalf("unexpected command structure: %q", argv)
+	}
+	if got := argv[4]; got != userCommand {
+		t.Errorf("user command must be passed as its own argument, unmodified.\ngot:  %q\nwant: %q", got, userCommand)
+	}
+}
+
+func runWorkloadCommand(t *testing.T, ctx context.Context, userCommand string) (*exec.Cmd, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not available")
+	}
+	argv := workloadContainerCommand(userCommand)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Cancel = func() error { return cmd.Process.Kill() }
+	cmd.WaitDelay = 2 * time.Second
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("failed to start workload command: %v", err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+	return cmd, &stdout, &stderr
+}
+
+func exitCode(t *testing.T, err error) int {
+	t.Helper()
+	if err == nil {
+		return 0
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("unexpected wait error: %v", err)
+	}
+	return exitErr.ExitCode()
+}
+
+func waitForFile(t *testing.T, path string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", path)
+}
+
+func TestWorkloadContainerCommand_PreservesExitCodeAndOutput(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	cmd, stdout, stderr := runWorkloadCommand(t, ctx, `set -e; echo "hello from $0"; exit 7`)
+	if got := exitCode(t, cmd.Wait()); got != 7 {
+		t.Errorf("exit code = %d, want 7", got)
+	}
+	if !strings.Contains(stdout.String(), "hello from") {
+		t.Errorf("stdout = %q, want it to contain the workload output", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "GCluster Start:") {
+		t.Errorf("stderr = %q, want it to contain GCluster Start banner", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "GCluster End:") {
+		t.Errorf("stderr = %q, want it to contain GCluster End banner", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Exit code: 7") {
+		t.Errorf("stderr = %q, want it to contain Exit code banner", stderr.String())
+	}
+}
+
+func TestWorkloadContainerCommand_PreservesExitCode0(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	cmd, stdout, stderr := runWorkloadCommand(t, ctx, `echo "success output"; exit 0`)
+	if got := exitCode(t, cmd.Wait()); got != 0 {
+		t.Errorf("exit code = %d, want 0", got)
+	}
+	if !strings.Contains(stdout.String(), "success output") {
+		t.Errorf("stdout = %q, want it to contain workload output", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Exit code: 0") {
+		t.Errorf("stderr = %q, want Exit code: 0 banner", stderr.String())
+	}
+}
+
+func TestWorkloadContainerCommand_ClearsPositionalParameters(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	cmd, stdout, _ := runWorkloadCommand(t, ctx, `echo "argc: $#; arg1: ${1:-empty}"`)
+	if got := exitCode(t, cmd.Wait()); got != 0 {
+		t.Errorf("exit code = %d, want 0", got)
+	}
+	if !strings.Contains(stdout.String(), "argc: 0; arg1: empty") {
+		t.Errorf("stdout = %q, want positional parameters to be cleared", stdout.String())
+	}
+}
+
+func TestWorkloadContainerCommand_SIGTERMRunsCleanup(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	dir := t.TempDir()
+	ready := filepath.Join(dir, "ready")
+	marker := filepath.Join(dir, "cleanup")
+	userCommand := `set -e && set -o pipefail && set +e; ` +
+		`(touch '` + ready + `'; exec sleep 300) | cat; ` +
+		`BENCHMARK_EXIT_CODE=${PIPESTATUS[0]}; ` +
+		`echo "cleanup ran exit=${BENCHMARK_EXIT_CODE}" > '` + marker + `'; ` +
+		`exit ${BENCHMARK_EXIT_CODE}`
+
+	cmd, _, stderr := runWorkloadCommand(t, ctx, userCommand)
+	waitForFile(t, ready, 10*time.Second)
+	time.Sleep(300 * time.Millisecond)
+
+	start := time.Now()
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("failed to send SIGTERM: %v", err)
+	}
+	code := exitCode(t, cmd.Wait())
+	elapsed := time.Since(start)
+
+	if ctx.Err() != nil {
+		t.Fatalf("workload did not exit after SIGTERM; stderr: %s", stderr.String())
+	}
+	if elapsed > 10*time.Second {
+		t.Errorf("workload took %v to exit after SIGTERM, want prompt reaction", elapsed)
+	}
+	if code != 143 {
+		t.Errorf("exit code = %d, want 143, got %d", code, code)
+	}
+	got, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("cleanup commands after benchmark did not run: %v; stderr: %s", err, stderr.String())
+	}
+	if want := "cleanup ran exit=143\n"; string(got) != want {
+		t.Errorf("cleanup marker = %q, want %q", got, want)
+	}
+	if !strings.Contains(stderr.String(), "gcluster: SIGTERM received, running cleanup") {
+		t.Errorf("stderr = %q, want SIGTERM notification", stderr.String())
+	}
+}
+
+func TestWorkloadContainerCommand_SIGINTForwarding(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	dir := t.TempDir()
+	ready := filepath.Join(dir, "ready")
+	marker := filepath.Join(dir, "sigint_cleanup")
+	userCommand := `set -e && set +e; ` +
+		`(touch '` + ready + `'; exec sleep 300); ` +
+		`echo "sigint cleanup ran exit=${PIPESTATUS[0]}" > '` + marker + `'; ` +
+		`exit 130`
+
+	cmd, _, stderr := runWorkloadCommand(t, ctx, userCommand)
+	waitForFile(t, ready, 10*time.Second)
+	time.Sleep(300 * time.Millisecond)
+
+	if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
+		t.Fatalf("failed to send SIGINT: %v", err)
+	}
+	_ = exitCode(t, cmd.Wait())
+
+	if !strings.Contains(stderr.String(), "gcluster: SIGTERM received, running cleanup") {
+		t.Errorf("stderr = %q, want SIGTERM notification forwarded on SIGINT", stderr.String())
+	}
+}
+
+func TestWorkloadContainerCommand_SIGTERMWithoutCleanup(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	dir := t.TempDir()
+	ready := filepath.Join(dir, "ready")
+	userCommand := `touch '` + ready + `'; exec sleep 300`
+
+	cmd, _, stderr := runWorkloadCommand(t, ctx, userCommand)
+	waitForFile(t, ready, 10*time.Second)
+	time.Sleep(300 * time.Millisecond)
+
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("failed to send SIGTERM: %v", err)
+	}
+	code := exitCode(t, cmd.Wait())
+
+	if code != 143 {
+		t.Errorf("exit code = %d, want 143 for default SIGTERM termination", code)
+	}
+	if !strings.Contains(stderr.String(), "Exit code: 143") {
+		t.Errorf("stderr = %q, want Exit code: 143 banner", stderr.String())
+	}
+}
+
+func containerCommands(t *testing.T, manifest string) [][]string {
+	t.Helper()
+	var out [][]string
+	var walk func(v interface{})
+	walk = func(v interface{}) {
+		switch n := v.(type) {
+		case map[string]interface{}:
+			for k, child := range n {
+				if list, ok := child.([]interface{}); ok && k == "command" {
+					var argv []string
+					for _, a := range list {
+						s, _ := a.(string)
+						argv = append(argv, s)
+					}
+					out = append(out, argv)
+					continue
+				}
+				walk(child)
+			}
+		case []interface{}:
+			for _, child := range n {
+				walk(child)
+			}
+		}
+	}
+	for _, doc := range strings.Split(manifest, "\n---\n") {
+		var parsed interface{}
+		if err := k8syaml.Unmarshal([]byte(doc), &parsed); err != nil {
+			t.Fatalf("manifest is not valid YAML: %v\n%s", err, doc)
+		}
+		walk(parsed)
+	}
+	return out
+}
+
+func assertRendersWorkloadCommand(t *testing.T, manifest, userCommand string) {
+	t.Helper()
+	want := workloadContainerCommand(userCommand)
+	for _, argv := range containerCommands(t, manifest) {
+		if reflect.DeepEqual(argv, want) {
+			return
+		}
+	}
+	t.Errorf("no container runs workloadContainerCommand(%q).\ncommands found: %q\nmanifest:\n%s", userCommand, containerCommands(t, manifest), manifest)
+}
+
+func TestGenerateGKEManifest_UsesWorkloadContainerCommand(t *testing.T) {
+	setupMockMachineConfig(t)
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe nvidia-l4 --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{{Config: gkeNodePoolConfig{MachineType: "nvidia-l4"}}}
+
+	userCommand := "set -e\npython3 -u run.py | tee benchmark.log\necho \"done: ${PIPESTATUS[0]}\""
+	manifest, err := orc.GenerateGKEManifest(ManifestOptions{
+		WorkloadName:    "test-workload",
+		FullImageName:   "test-image:latest",
+		CommandToRun:    userCommand,
+		ComputeType:     "nvidia-l4",
+		MachineType:     "nvidia-l4",
+		ClusterLocation: "us-central1-a",
+	}, JobProfile{})
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+	assertRendersWorkloadCommand(t, manifest, userCommand)
+}
+
+func TestGeneratePathwaysManifest_UsesWorkloadContainerCommand(t *testing.T) {
+	for name, userCommand := range map[string]string{
+		"single line with quotes": `pip install pathwaysutils && python -c 'import jax; print("JAX Device count:", jax.device_count())'`,
+		"multi-line":              "set -e\npython3 -u train.py | tee train.log\necho \"exit: ${PIPESTATUS[0]}\"",
+	} {
+		t.Run(name, func(t *testing.T) {
+			setupMockMachineConfig(t)
+			job := orchestrator.JobDefinition{
+				WorkloadName:    "pathways-test",
+				CommandToRun:    userCommand,
+				NumSlices:       1,
+				ClusterLocation: "us-central1",
+				ComputeType:     "n2-standard-2",
+				Pathways: orchestrator.PathwaysJobDefinition{
+					ProxyServerImage: "proxy:latest",
+					ServerImage:      "server:latest",
+					WorkerImage:      "worker:latest",
+					GCSLocation:      "gs://my-bucket",
+					HeadNodePool:     "pathways-np",
+				},
+			}
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+			})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.projectID = "mock-project"
+			orc.clusterZones = []string{"us-central1-a"}
+			orc.clusterDesc.NodePools = []gkeJobNodePool{
+				{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+			}
+			profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+			if err != nil {
+				t.Fatalf("resolveHardwareRequirements failed: %v", err)
+			}
+			manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+			if err != nil {
+				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+			}
+			assertRendersWorkloadCommand(t, manifest, userCommand)
 		})
 	}
 }
