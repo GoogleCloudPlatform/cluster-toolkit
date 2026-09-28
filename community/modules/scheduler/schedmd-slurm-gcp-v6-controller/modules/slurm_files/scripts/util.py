@@ -2370,7 +2370,6 @@ class Lookup:
         amf = template.get("advancedMachineFeatures")
         amf_tpc = amf.get("threadsPerCore") if amf else None
         visible_cores = amf.get("visibleCoreCount") if amf else None
-        primary_mt = template.get("machineType") or getattr(template.get("machine_type"), "name", None)
 
         sel_iter = selections.values() if isinstance(selections, dict) else selections
         confs = [base]
@@ -2378,11 +2377,13 @@ class Lookup:
             try:
                 mt = self.machine_type(name)
                 mt_tpc = 1 if not mt.supports_smt else (int(amf_tpc) if amf_tpc else 2)
+                mt_phys_cores = max(1, mt.guest_cpus // 2) if mt.supports_smt else mt.guest_cpus
+                mt_visible_cores = min(int(visible_cores), mt_phys_cores) if visible_cores else None
                 confs.append(
                     self._machine_conf(
                         mt,
                         mt_tpc,
-                        visible_cores if name == primary_mt else None,
+                        mt_visible_cores,
                     )
                 )
             except Exception as e:
@@ -2403,10 +2404,16 @@ class Lookup:
         smallest = NSDict(min_cpu_conf) if isinstance(min_cpu_conf, dict) else copy.copy(min_cpu_conf)
         min_sockets = min(c.sockets for c in confs)
         min_total_cores = min(c.boards * c.sockets_per_board * c.cores_per_socket for c in confs)
-        if smallest.sockets > min_sockets or (smallest.boards * smallest.sockets_per_board * smallest.cores_per_socket) > min_total_cores:
+        min_tpc = min(c.threads_per_core for c in confs)
+        if (
+            smallest.sockets > min_sockets
+            or (smallest.boards * smallest.sockets_per_board * smallest.cores_per_socket) > min_total_cores
+            or smallest.threads_per_core > min_tpc
+        ):
             smallest.sockets = min_sockets
             smallest.sockets_per_board = max(1, min_sockets // smallest.boards)
             smallest.cores_per_socket = max(1, min_total_cores // (smallest.boards * smallest.sockets_per_board))
+            smallest.threads_per_core = min_tpc
             smallest.cpus = smallest.boards * smallest.sockets_per_board * smallest.cores_per_socket * smallest.threads_per_core
         smallest.memory = min(c.memory for c in confs)
         return smallest

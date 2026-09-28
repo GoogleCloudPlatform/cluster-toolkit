@@ -84,7 +84,6 @@ locals {
       can(regex("^a2-ultragpu-", mt)) ? "nvidia-a100-80gb:${try(tonumber(regex("-([0-9]+)g$", mt)[0]), 1)}" :
       can(regex("^a3-(highgpu|edgegpu)-", mt)) ? "nvidia-h100-80gb:${try(tonumber(regex("-([0-9]+)g$", mt)[0]), 1)}" :
       can(regex("^a3-megagpu-", mt)) ? "nvidia-h100-mega-80gb:${try(tonumber(regex("-([0-9]+)g$", mt)[0]), 1)}" :
-      can(regex("^(a3-ultragpu|a4|a4x)-", mt)) ? "${join("-", slice(split("-", mt), 0, 2))}:${try(tonumber(regex("-([0-9]+)g$", mt)[0]), 1)}" :
       can(regex("^g2-standard-", mt)) ? "nvidia-l4:${lookup({ "24" = 2, "48" = 4, "96" = 8 }, split("-", mt)[2], 1)}" :
       can(regex("^g4-standard-", mt)) ? "nvidia-rtx-pro-6000:${lookup({ "96" = 2, "192" = 4, "384" = 8 }, split("-", mt)[2], 1)}" :
       "none:0"

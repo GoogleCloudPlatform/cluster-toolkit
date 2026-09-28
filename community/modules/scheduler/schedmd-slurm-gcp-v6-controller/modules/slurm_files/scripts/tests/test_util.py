@@ -1912,15 +1912,31 @@ def test_nodeset_machine_conf_visible_core_count_not_applied_to_smaller_fallback
 
     got = lkp.nodeset_machine_conf(nodeset)
     # Primary with visibleCoreCount=6 has 12 vCPUs (6 * 2 threads/core), whereas fallback
-    # n2-standard-8 has 8 vCPUs. Passing visibleCoreCount to the fallback would have inflated
-    # the fallback to 12 vCPUs and failed to floor to 8.
+    # n2-standard-8 has 4 physical cores (8 vCPUs). Clamping visibleCoreCount to each shape's
+    # physical core count yields min(6, 4) = 4 cores (8 vCPUs) rather than inflating to 12.
     assert got.cpus == 8
+    assert got.cores_per_socket == 4
+
+    # Conversely, when fallback has more physical cores than visibleCoreCount (e.g. t2d-standard-16
+    # with 16 physical cores, tpc=1), it still inherits visibleCoreCount=6 from the template and
+    # boots with 6 CPUs (6 cores * 1 thread/core).
+    machines = dict(FLEX_MACHINES)
+    machines["t2d-standard-16"] = util.MachineType(name="t2d-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[])
+    lkp2, nodeset2 = _flex_lkp(machines, [
+        {"name": "fb", "rank": 2, "machine_types": ["t2d-standard-16"]},
+    ])
+    lkp2.template_info.return_value["machineType"] = "n2-standard-16"  # type: ignore[attr-defined]
+    lkp2.template_info.return_value["advancedMachineFeatures"]["visibleCoreCount"] = 6  # type: ignore[attr-defined]
+    got2 = lkp2.nodeset_machine_conf(nodeset2)
+    assert got2.cpus == 6
+    assert got2.cores_per_socket == 6
+    assert got2.threads_per_core == 1
 
 
 def test_nodeset_machine_conf_mixed_smt_and_non_smt_shapes():
-    # Case A: Non-SMT primary (t2d-standard-16: 16 vCPUs, supports_smt=False -> tpc=1) with
-    # SMT fallback (n2d-standard-16: 16 vCPUs, supports_smt=True -> tpc=2). The SMT fallback
-    # must NOT have its vCPU count halved to 8 by the primary's tpc=1.
+    # Case A: Non-SMT primary (t2d-standard-16: 16 cores, supports_smt=False -> tpc=1) with
+    # SMT fallback (n2d-standard-16: 8 cores, supports_smt=True -> tpc=2). Flooring across both
+    # shapes must cap cores_per_socket to 8 (for n2d) and threads_per_core to 1 (for t2d).
     machines = {
         "t2d-standard-16": util.MachineType(name="t2d-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
         "n2d-standard-16": util.MachineType(name="n2d-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
@@ -1943,9 +1959,9 @@ def test_nodeset_machine_conf_mixed_smt_and_non_smt_shapes():
         }),
     })
     got = lkp.nodeset_machine_conf(nodeset)
-    assert got.cpus == 16
+    assert got.cpus == 8
     assert got.cores_per_socket == 8
-    assert got.threads_per_core == 2
+    assert got.threads_per_core == 1
 
     # Case B: SMT primary (n2d-standard-16) with smaller non-SMT fallback (t2d-standard-8:
     # 8 physical cores, tpc=1). Fallback must have tpc=1 and cores_per_socket=8, not tpc=2.

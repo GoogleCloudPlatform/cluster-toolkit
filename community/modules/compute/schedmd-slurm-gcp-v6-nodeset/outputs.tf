@@ -27,36 +27,12 @@ output "nodeset" {
 
   precondition {
     condition = !local.has_flex_policy || alltrue([
-      for mt in setunion([var.machine_type], local.flex_machine_types) : !contains([
-        "c2:hyperdisk-balanced",
-        "c2:hyperdisk-extreme",
-        "c2:hyperdisk-throughput",
-        "c3:pd-standard",
-        "c3d:pd-standard",
-        "c4:pd-standard",
-        "c4:pd-balanced",
-        "c4:pd-ssd",
-        "c4a:pd-standard",
-        "c4a:pd-balanced",
-        "c4a:pd-ssd",
-        "c4d:pd-standard",
-        "c4d:pd-balanced",
-        "c4d:pd-ssd",
-        "h3:pd-standard",
-        "h3:pd-ssd",
-        "h4d:pd-standard",
-        "h4d:pd-balanced",
-        "h4d:pd-ssd",
-        "n4:pd-standard",
-        "n4:pd-balanced",
-        "n4:pd-ssd",
-        "n4a:pd-standard",
-        "n4a:pd-balanced",
-        "n4a:pd-ssd",
-        "n4d:pd-standard",
-        "n4d:pd-balanced",
-        "n4d:pd-ssd",
-      ], "${split("-", mt)[0]}:${var.disk_type}")
+      for mt in setunion([var.machine_type], local.flex_machine_types) : !(
+        (can(regex("^c2-", mt)) && startswith(var.disk_type, "hyperdisk-")) ||
+        (can(regex("^(c3|c3d)-", mt)) && var.disk_type == "pd-standard") ||
+        (can(regex("^h3-", mt)) && contains(["pd-standard", "pd-ssd"], var.disk_type)) ||
+        (can(regex("^(c4|c4a|c4d|h4d|n4|n4a|n4d)-", mt)) && startswith(var.disk_type, "pd-"))
+      )
     ])
     error_message = "A disk_type=${var.disk_type} cannot be used with machine_type=${var.machine_type} or one of its instance_flexibility_policy fallback machine types."
   }
@@ -257,10 +233,19 @@ output "nodeset" {
   }
 
   precondition {
+    condition = !local.has_flex_policy || try(var.advanced_machine_features.threads_per_core, null) == 1 || alltrue([
+      for mt in local.flex_machine_types :
+      can(regex("^(t2a|t2d|h3|c4a|n4a|h4d)-", mt)) == can(regex("^(t2a|t2d|h3|c4a|n4a|h4d)-", var.machine_type))
+    ])
+    error_message = "When threads_per_core is not 1, instance_flexibility_policy cannot mix non-SMT machine families (t2a, t2d, h3, c4a, n4a, h4d) with SMT-capable machine families."
+  }
+
+  precondition {
     condition = !local.has_flex_policy || (
       length(setunion([var.machine_type], local.flex_machine_types)) <= 10 &&
-      length(distinct([for s in local.instance_flexibility_policy.instance_selections : s.name])) == length(local.instance_flexibility_policy.instance_selections)
+      length(distinct([for s in local.instance_flexibility_policy.instance_selections : s.name])) == length(local.instance_flexibility_policy.instance_selections) &&
+      (contains(local.flex_machine_types, var.machine_type) || alltrue([for s in var.instance_flexibility_policy.instance_selections : s.rank > 0]))
     )
-    error_message = "instance_flexibility_policy may reference at most 10 distinct machine types in total (including machine_type=${var.machine_type}) and all selection names must be unique."
+    error_message = "instance_flexibility_policy may reference at most 10 distinct machine types in total (including machine_type=${var.machine_type}), all selection names must be unique, and fallback selections must use rank >= 1 when machine_type=${var.machine_type} is not explicitly included in instance_selections."
   }
 }
