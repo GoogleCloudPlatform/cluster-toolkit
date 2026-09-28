@@ -1792,8 +1792,6 @@ def test_get_operation_req_empty_name():
 
     with pytest.raises(ValueError, match="Invalid operation name"):
         util.get_operation_req(lkp, "   ///   ")
-
-
 def _flex_lkp(machines: dict, selections):
     """Lookup whose primary template is n2-standard-16 plus the given fallback selections."""
     lkp = util.Lookup(TstCfg())
