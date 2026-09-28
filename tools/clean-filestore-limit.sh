@@ -38,42 +38,14 @@ if [ -z "$PROJECT_ID" ]; then
 	exit 1
 fi
 
-<<<<<<< Updated upstream
-=======
-<<<<<<< Updated upstream
-ACTIVE_FILESTORE=$(gcloud filestore instances list --project "${PROJECT_ID}" | tail -n +2 2>/dev/null)
-if [[ -n "$ACTIVE_FILESTORE" ]]; then
-	echo "Deleting filestore instances"
-	while read -r row; do
-		# get first two columns: INSTANCE_NAME and LOCATION
-		read -ra cols <<<"$row"
-		echo "Disabling deletion protection for ${cols[0]} at ${cols[1]}"
-		gcloud --project "${PROJECT_ID}" filestore instances update "${cols[0]}" --location="${cols[1]}" --no-deletion-protection --quiet || true
-		echo "Deleting ${cols[0]} at ${cols[1]}"
-		gcloud --project "${PROJECT_ID}" filestore instances delete --force --quiet --location="${cols[1]}" "${cols[0]}"
-	done <<<"$ACTIVE_FILESTORE"
-=======
->>>>>>> Stashed changes
 # Resources older than 24 hours are considered orphaned and deleted unconditionally.
 CLEANUP_AGE_SECONDS=$((24 * 60 * 60))
 CURRENT_TIME=$(date +%s)
 KEPT_ACTIVE_INSTANCE=false
-<<<<<<< Updated upstream
-=======
-ACTIVE_BUILDS=$(gcloud builds list \
-	--project "${PROJECT_ID}" \
-	--filter="tags=m.filestore" \
-	--format="value(id)" \
-	--ongoing 2>/dev/null || true)
->>>>>>> Stashed changes
 
 echo "Starting Filestore & Peering Cleanup for project: ${PROJECT_ID} (DRY_RUN=${DRY_RUN})"
 if [ "$DRY_RUN" = "true" ]; then
 	echo "SIMULATION ONLY: No resources will actually be deleted."
-<<<<<<< Updated upstream
-=======
->>>>>>> Stashed changes
->>>>>>> Stashed changes
 fi
 
 # Step 1: Clean up Filestore instances.
@@ -87,15 +59,6 @@ if [[ -n "$FILESTORE_INSTANCES" ]]; then
 	while read -r instance location create_time; do
 		[[ -z "$instance" ]] && continue
 
-<<<<<<< Updated upstream
-=======
-<<<<<<< Updated upstream
-	for peer in "${peers[@]}"; do
-		if [[ "$peer" =~ ^filestore-peer-[0-9]+$ ]]; then
-			echo "Deleting $peer from $network"
-			gcloud --project "${PROJECT_ID}" compute networks peerings delete --network "$network" "$peer"
-=======
->>>>>>> Stashed changes
 		create_time_seconds=$(date -d "$create_time" +%s 2>/dev/null || echo 0)
 		age_seconds=$((CURRENT_TIME - create_time_seconds))
 		age_hours=$((age_seconds / 3600))
@@ -116,7 +79,6 @@ if [[ -n "$FILESTORE_INSTANCES" ]]; then
 		else
 			echo "Instance ${instance} is less than 24 hours old. Checking for active Filestore Cloud Builds..."
 
-<<<<<<< Updated upstream
 			active_builds=$(gcloud builds list \
 				--project "${PROJECT_ID}" \
 				--filter="tags=m.filestore" \
@@ -124,9 +86,6 @@ if [[ -n "$FILESTORE_INSTANCES" ]]; then
 				--ongoing 2>/dev/null || true)
 
 			if [[ -n "$active_builds" ]]; then
-=======
-			if [[ -n "$ACTIVE_BUILDS" ]]; then
->>>>>>> Stashed changes
 				echo "Active Filestore Cloud Build found (${active_builds}). Keeping ${instance}."
 				KEPT_ACTIVE_INSTANCE=true
 				continue
@@ -139,17 +98,8 @@ if [[ -n "$FILESTORE_INSTANCES" ]]; then
 					echo "Deleting leaked Filestore instance ${instance}..."
 				fi
 			fi
-<<<<<<< Updated upstream
-=======
->>>>>>> Stashed changes
->>>>>>> Stashed changes
 		fi
 
-<<<<<<< Updated upstream
-=======
-<<<<<<< Updated upstream
-=======
->>>>>>> Stashed changes
 		# Disable deletion protection before deleting the instance.
 		echo "Disabling deletion protection for ${instance} at ${location}..."
 		gcloud --project "${PROJECT_ID}" \
@@ -176,7 +126,6 @@ fi
 # Toggling file.googleapis.com off and back on clears stuck producer quota and peering state.
 echo "Checking if Filestore API internal limits can be reset..."
 
-<<<<<<< Updated upstream
 active_builds=$(gcloud builds list \
 	--project "${PROJECT_ID}" \
 	--filter="tags=m.filestore" \
@@ -184,10 +133,6 @@ active_builds=$(gcloud builds list \
 	--ongoing 2>/dev/null || true)
 
 if [[ -n "$active_builds" ]] || [ "$KEPT_ACTIVE_INSTANCE" = true ]; then
-=======
-
-if [[ -n "$ACTIVE_BUILDS" ]] || [ "$KEPT_ACTIVE_INSTANCE" = true ]; then
->>>>>>> Stashed changes
 	echo "Active Filestore test or instance detected. Skipping API reset to protect active tests."
 elif [ "$DRY_RUN" = "true" ]; then
 	echo "[DRY-RUN] Would disable file.googleapis.com, sleep 120s, and re-enable it on EXIT."
@@ -223,11 +168,7 @@ if [[ -n "$peerings" ]]; then
 
 			# Look up when the peering was created from Cloud Audit Logs.
 			creation_time=$(gcloud logging read \
-<<<<<<< Updated upstream
 				"protoPayload.methodName=~\"compute.networks.addPeering\" AND protoPayload.request.networkPeering.name=\"${peering}\"" \
-=======
-				"protoPayload.methodName=~\"compute.networks.addPeering\" AND protoPayload.request.networkPeering.name=\"${peering}\" AND timestamp >= \"-P7D\""\
->>>>>>> Stashed changes
 				--project="${PROJECT_ID}" \
 				--format="value(timestamp)" \
 				--limit=1 2>/dev/null || true)
@@ -266,7 +207,6 @@ if [[ -n "$peerings" ]]; then
 			else
 				echo "Peering ${peering} is less than 24 hours old (or unknown age). Checking for active Filestore Cloud Builds..."
 
-<<<<<<< Updated upstream
 				active_builds=$(gcloud builds list \
 					--project "${PROJECT_ID}" \
 					--filter="tags=m.filestore" \
@@ -274,9 +214,6 @@ if [[ -n "$peerings" ]]; then
 					--ongoing 2>/dev/null || true)
 
 				if [[ -n "$active_builds" ]] || [ "$KEPT_ACTIVE_INSTANCE" = true ]; then
-=======
-				if [[ -n "$ACTIVE_BUILDS" ]] || [ "$KEPT_ACTIVE_INSTANCE" = true ]; then
->>>>>>> Stashed changes
 					echo "Active Filestore Cloud Build or instance found. Keeping peering ${peering}."
 					continue
 				else
@@ -306,8 +243,4 @@ if [ "$found_filestore_peerings" = false ]; then
 fi
 
 echo "Filestore & Peering cleanup completed successfully."
-<<<<<<< Updated upstream
-=======
->>>>>>> Stashed changes
->>>>>>> Stashed changes
 exit 0
