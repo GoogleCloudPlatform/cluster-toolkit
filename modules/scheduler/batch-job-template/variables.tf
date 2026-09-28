@@ -68,6 +68,16 @@ variable "task_count_per_node" {
   default     = null
 }
 
+variable "parallelism" {
+  description = "Max number of tasks that can run in parallel across the job. If null, defaults to min(task_count, 1000) for standard jobs, or task_count if mpi_mode is true. When mpi_mode is true, Batch requires parallelism == task_count."
+  type        = number
+  default     = null
+  validation {
+    condition     = var.parallelism == null ? true : (var.parallelism > 0 && floor(var.parallelism) == var.parallelism)
+    error_message = "The parallelism value must be an integer greater than 0."
+  }
+}
+
 variable "mpi_mode" {
   description = "Sets up barriers before and after each runnable. In addition, sets `permissiveSsh=true`, `requireHostsFile=true`, and `taskCountPerNode=1`. `taskCountPerNode` can be overridden by `task_count_per_node`."
   type        = bool

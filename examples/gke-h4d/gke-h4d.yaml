@@ -36,15 +36,18 @@ vars:
   # The following line must be updated for this example to work.
   authorized_cidr:
 
-  # The name of the compute engine reservation in the form of
-  # <reservation-name>
-  # To target a BLOCK_NAME, the name of the extended reservation
-  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
-  reservation:
+  # Consumption model variables
+  spot: false
+  reservation_affinity: {consume_reservation_type: "NO_RESERVATION", specific_reservations: []}
+  enable_flex_start: false
+  auto_repair: true
+  enable_queued_provisioning: false
+  autoscaling_total_min_nodes: 0
+  placement_policy: {type: null, name: null}
+  kueue_configuration_path: $(null)
 
   system_node_pool_disk_size_gb: 100
   h4d_node_pool_disk_size_gb: 100
-
 
 deployment_groups:
 - group: primary
@@ -147,10 +150,12 @@ deployment_groups:
       zones: [$(vars.zone)]
       disk_size_gb: $(vars.h4d_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
-      reservation_affinity:
-        consume_reservation_type: SPECIFIC_RESERVATION
-        specific_reservations:
-        - name: $(vars.reservation)
+      spot: $(vars.spot)
+      reservation_affinity: $(vars.reservation_affinity)
+      enable_flex_start: $(vars.enable_flex_start)
+      auto_repair: "$(vars.enable_flex_start ? false : vars.auto_repair)"
+      enable_queued_provisioning: $(vars.enable_queued_provisioning)
+      autoscaling_total_min_nodes: $(vars.autoscaling_total_min_nodes)
       taints:
       # (Optional, but suggested)
       # In order prevent scheduling of generic workloads onto the H4D nodepool,
@@ -166,8 +171,7 @@ deployment_groups:
       - key: node-type
         value: h4d
         effect: NO_SCHEDULE
-      placement_policy:
-        type: COMPACT
+      placement_policy: $(vars.placement_policy)
     outputs: [instructions]
 
   # Install Kueue and Jobset
@@ -177,10 +181,12 @@ deployment_groups:
     settings:
       kueue:
         install: true
+        config_path: $(vars.kueue_configuration_path)
       jobset:
         install: true
       apply_manifests:
-      - source: "https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.8.2/deploy/v2beta1/mpi-operator.yaml"
+      - name: mpi-operator
+        source: "https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.8.2/deploy/v2beta1/mpi-operator.yaml"
 
   # Filestore
   - id: filestore

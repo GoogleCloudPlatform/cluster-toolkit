@@ -59,7 +59,7 @@ vars:
   # Datapipeline Partition Presets
   datapipeline_c3dhm_partition:
     name: datac3d
-    machine_type: c3d-highmem-180    # minimal sku to hold databases in in memory file system
+    machine_type: c3d-highmem-180    # minimal sku to hold databases in an in-memory file system
     memory: 60
     cpu_count: 8
     node_count_static: 0             # number of datapipeline nodes; 1 node can run multiple concurrent datapipeline jobs

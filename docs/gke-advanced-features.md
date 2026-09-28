@@ -24,8 +24,10 @@ vars:
 Configuring dynamic slicing requires the following settings:
 
 * **Hardware and accelerator type:** Specify a TPU v7x machine type (`tpu7x-standard-4t`) and set `accelerator_type: tpu7x`.
-* **Enable dynamic slicing flag:** Set `enable_dynamic_slicing_for_tpus: true` in the `vars` block. This setting deploys the GKE TPU Slice Controller and configures dynamic partition-level topology definitions.
-* **Kueue dynamic slicing configuration:** When you set `enable_dynamic_slicing_for_tpus: true`, Cluster Toolkit automatically uses the default dynamic slicing Kueue configuration template (the `modules/management/kubectl-apply/kueue/kueue-configuration-dynamic-slicing.yaml.tftpl` file), which registers the `tpu-v7x-slice` ResourceFlavor and enables Topology-Aware Scheduling (TAS). You can optionally override this setting by passing a custom template path using the `kueue_configuration_path` variable.
+* **Enable dynamic slicing:** Set `enable_dynamic_slicing_for_tpus: true` in the `vars` block. This setting deploys the GKE TPU Slice Controller, automatically configures the `workload_policy` module's `accelerator_topology_mode` to `PROVISION_ONLY` (or `null` when disabled, unless explicitly overridden in `workload_policy`), and configures dynamic partition-level topology definitions.
+* **Kueue dynamic slicing configuration:** When you set `enable_dynamic_slicing_for_tpus: true`, Cluster Toolkit automatically uses the default dynamic slicing Kueue configuration template (the `modules/management/kubectl-apply/kueue/kueue-configuration-dynamic-slicing.yaml.tftpl` file, or `kueue-configuration-dynamic-slicing-pathways.yaml.tftpl` when Pathways is also enabled), which registers the `tpu-flavor` (or `flavor-tpu7x`) `ResourceFlavor` targeting `cloud.google.com/gke-tpu-accelerator: tpu7x` and enables Topology-Aware Scheduling (TAS). You can optionally override this setting by passing a custom template path using `kueue.config_path` in the `kubectl-apply` module settings.
+
+> **Note:** Switching an existing cluster between static slicing and dynamic slicing (`enable_dynamic_slicing_for_tpus`) changes `workload_policy.accelerator_topology_mode`, which is an immutable field on the Compute Engine resource policy (`ForceNew`). Because Compute Engine prevents replacing a resource policy while it is attached to an active node pool, toggling this setting on a running cluster requires recreating the TPU node pool and resource policy.
 
 ### 1.2 Capabilities and workload scheduling (`gcluster job submit`)
 
@@ -34,7 +36,7 @@ Workload scheduling with dynamic slicing provides the following capabilities:
 * **Dynamic superslicing:** Aggregate multiple physical TPU v7x cubes together into a larger logical slice (such as combining multiple `4x4x4` cubes into `4x4x8` or `4x4x16` topologies) dynamically for large-scale distributed training.
 * **Dynamic subslicing:** Partition a single physical TPU cube into smaller fractional topologies (such as slicing a `4x4x4` cube into `2x2x4` or `2x4x4` sub-slices) dynamically, enabling efficient bin-packing and co-tenancy for smaller workloads.
 * **Latency optimization:** Kueue Topology-Aware Scheduling (TAS) places TPU pods with minimal network hop latency across the physical TPU interconnect mesh.
-* **Automated scheduling annotations:** When you submit a job with `--compute-type tpu-v7x-slice` and `--topology TOPOLOGY`, Cluster Toolkit automatically translates the request into partition-level requirements (`cloud.google.com/gke-tpu-partition-TOPOLOGY-id`) and dynamically switches between single-slice (`kueue.x-k8s.io/podset-required-topology`) and multi-slice (`kueue.x-k8s.io/podset-slice-required-topology`) admission annotation keys based on `--num-slices`.
+* **Automated scheduling annotations:** When you submit a job with `--compute-type tpu7x` and `--topology TOPOLOGY`, Cluster Toolkit automatically injects the `cloud.google.com/gke-tpu-slice-topology` Pod annotation, translates the request into partition-level requirements (`cloud.google.com/gke-tpu-partition-TOPOLOGY-id`), and dynamically switches between single-slice (`kueue.x-k8s.io/podset-required-topology`) and multi-slice (`kueue.x-k8s.io/podset-slice-required-topology` along with `kueue.x-k8s.io/podset-slice-size`) admission annotation keys based on `--num-slices`.
 
 #### Example CLI command
 
@@ -44,7 +46,7 @@ Submit a dynamic slicing workload that requests a `4x4x4` TPU v7x topology:
 ./gcluster job submit \
   --name my-dynamic-slice-job \
   --command "python train.py" \
-  --compute-type tpu-v7x-slice \
+  --compute-type tpu7x \
   --topology 4x4x4
 ```
 
@@ -72,9 +74,9 @@ vars:
 
 Pathways cluster configuration requires the following components:
 
-* **Dedicated CPU coordinator node pool:** Pathways relies on CPU-based Resource Manager (`pathways-rm`) and Proxy (`pathways-proxy`) services to coordinate multi-slice TPU execution. Ensure that your blueprint includes a system or CPU compute node pool (for example, `n2-standard-32`) so that coordinator pods are scheduled on CPU nodes rather than consuming TPU chips.
+* **Dedicated CPU coordinator node pool:** Pathways relies on CPU-based Resource Manager (`pathways-rm`) and Proxy (`pathways-proxy`) services to coordinate multi-slice TPU execution. When you set `enable_pathways_for_tpus: true` on the `gke-cluster` module, Cluster Toolkit automatically creates an autoscaled CPU node pool named `cpu-np` (`n4-standard-64`) so that coordinator pods are scheduled on CPU nodes rather than consuming TPU chips (you can also target a custom CPU node pool at job submission time using `--pathways-head-np`).
 * **Enable Pathways flag:** Set `enable_pathways_for_tpus: true` in the `vars` block. This setting configures Kueue ClusterQueues and LocalQueues with multi-slice resource quotas tailored for Pathways.
-* **Kueue Pathways configuration:** When you set `enable_pathways_for_tpus: true`, Cluster Toolkit automatically uses the default Pathways Kueue configuration template (the `modules/management/kubectl-apply/kueue/kueue-configuration-pathways.yaml.tftpl` file, or the `kueue-configuration-dynamic-slicing-pathways.yaml.tftpl` file if dynamic slicing is also enabled). You can optionally override this setting by passing a custom template path using the `kueue_configuration_path` variable.
+* **Kueue Pathways configuration:** When you set `enable_pathways_for_tpus: true`, Cluster Toolkit automatically uses the default Pathways Kueue configuration template (the `modules/management/kubectl-apply/kueue/kueue-configuration-pathways.yaml.tftpl` file, or the `kueue-configuration-dynamic-slicing-pathways.yaml.tftpl` file if dynamic slicing is also enabled). You can optionally override this setting by passing a custom template path using `kueue.config_path` in the `kubectl-apply` module settings.
 * **Unified Kueue resource groups and quotas:** When Pathways is active, Cluster Toolkit programmatically unifies Kueue ClusterQueue resource groups (`["google.com/tpu", "cpu", "memory"]`) into a single unified resource group. This setting prevents scheduling conflicts and node selector merging issues on TPU worker pods that request both TPU and CPU or memory resources. ClusterQueue nominal quotas (`tpu_flavor_cpu_quota`, `tpu_flavor_memory_quota`, `tpu_quota`) automatically scale to the physical hardware capacity of your cluster, defaulting to high limits to prevent bottlenecks while supporting custom overrides by using the `config_template_vars` variable.
 * **IAM and Workload Identity permissions:** If you use state persistence (`export ENABLE_PATHWAYS_PERSISTENCE='1'`), ensure that the Google Cloud Service Account (GSA) associated with your workload (typically suffixed with `gke-wl-sa`) is granted the `storage.admin` or `storage.objectAdmin` role on your Cloud Storage bucket.
 
@@ -144,24 +146,22 @@ deployment_groups:
     settings:
       cluster_autoscaling:
         enabled: true
-        autoscaling_profile: OPTIMIZE_UTILIZATION # or BALANCED
-        resource_limits:
-          - resource_type: cpu
-            minimum: 1
-            maximum: 1000
-          - resource_type: memory
-            minimum: 1
-            maximum: 4000
-          - resource_type: nvidia-l4
-            minimum: 0
-            maximum: 64
+        autoprovisioning_disk_size_gb: 100
+        autoprovisioning_disk_type: pd-balanced
+        autoprovisioning_cpu_max: 1000
+        autoprovisioning_memory_max: 4000
+        limits:
+          - autoprovisioning_machine_type: g2-standard-48
+            autoprovisioning_max_count: 64
+          - autoprovisioning_machine_type: ct6e-standard-4t
+            autoprovisioning_max_count: 16
 ```
 
 #### Key cluster configuration requirements
 
 NAP cluster configuration requires the following settings:
 
-* **Resource limits:** Specify `minimum` and `maximum` bounds for CPU, memory, and accelerator types. NAP only creates node pools whose aggregate consumption stays within these defined bounds.
+* **Resource limits:** Specify `autoprovisioning_cpu_max`, `autoprovisioning_memory_max`, and `limits` (`autoprovisioning_machine_type` and `autoprovisioning_max_count`). NAP only creates node pools whose aggregate consumption stays within these defined bounds.
 * **Kueue resource quota alignment:** When integrating with Kueue for job queuing, ensure that Kueue ClusterQueue nominal capacities correspond to your GKE NAP maximum resource bounds so that Kueue can admit workloads smoothly ahead of NAP node pool creation.
 
 ### 3.2 Job submission and workload scheduling (`gcluster job submit`)
@@ -231,7 +231,8 @@ deployment_groups:
     use: [gke_cluster]
     settings:
       apply_manifests:
-      - source: $(ghpc_stage("../modules/management/kubectl-apply/manifests/checkpoint-configuration.yaml.tftpl"))
+      - name: checkpoint-configuration
+        source: $(ghpc_stage("../modules/management/kubectl-apply/manifests/checkpoint-configuration.yaml.tftpl"))
         template_vars:
           namespace: "default"
           inMemoryVolumeSize: "50Gi"
