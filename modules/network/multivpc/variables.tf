@@ -107,12 +107,13 @@ variable "enable_dynamic_port_allocation" {
   type        = bool
   description = "Enable Dynamic Port Allocation on Cloud NAT so VMs dynamically allocate between min_ports_per_vm and max_ports_per_vm."
   default     = true
+  nullable    = false
 }
 
 variable "min_ports_per_vm" {
   type        = number
-  description = "Minimum number of ports allocated to a VM from Cloud NAT. When enable_dynamic_port_allocation is true, must be a power of 2 between 32 and 32768."
-  default     = 32
+  description = "Minimum number of ports allocated to a VM from Cloud NAT. If null, defaults to 32 when enable_dynamic_port_allocation is true, and 64 when false."
+  default     = null
 
   validation {
     condition = (

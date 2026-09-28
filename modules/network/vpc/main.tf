@@ -278,7 +278,7 @@ module "cloud_router" {
       nat_ip_allocate_option         = coalesce(var.nat_ip_allocate_option, "MANUAL_ONLY")
       nat_ips                        = local.use_auto_nat ? [] : try(module.nat_ip_addresses[each.value].self_links, [])
       enable_dynamic_port_allocation = var.enable_dynamic_port_allocation
-      min_ports_per_vm               = var.min_ports_per_vm
+      min_ports_per_vm               = coalesce(var.min_ports_per_vm, var.enable_dynamic_port_allocation ? 32 : 64)
       max_ports_per_vm               = var.enable_dynamic_port_allocation ? var.max_ports_per_vm : null
     },
   ]
