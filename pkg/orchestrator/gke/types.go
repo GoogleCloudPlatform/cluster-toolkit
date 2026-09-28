@@ -245,14 +245,75 @@ type StorageManager struct {
 	instancesCache  []*filestorepb.Instance
 }
 
+// parsedMount is the normalized form of a single --mount string.
+type parsedMount struct {
+	Src        string
+	Dest       string
+	Options    string
+	Profile    string
+	SubPath    string
+	Attributes map[string]string
+	ReadOnly   bool
+}
+
+// mountSegments holds the optional segments parsed off a --mount string.
+type mountSegments struct {
+	RawProfile string
+	ProfileSet bool
+}
+
+// mountBuildState maps generated PV name -> Pod volume name to de-duplicate gateways within a job.
+type mountBuildState struct {
+	gatewayVolumeNames map[string]string
+}
+
 // MountInfo represents parsed volume mount options
 type MountInfo struct {
-	Name      string
-	Source    string
-	MountPath string
-	Type      string
-	ReadOnly  bool
-	Options   string
+	Name                string
+	Source              string
+	MountPath           string
+	Type                string
+	ReadOnly            bool
+	Options             string
+	SubPath             string
+	NeedsGCSFuseSidecar bool
+	Attributes          map[string]string
+}
+
+type GCSFusePVPVCTemplateParams struct {
+	PVName           string
+	PVCName          string
+	Namespace        string
+	StorageClassName string
+	Capacity         string
+	VolumeHandle     string
+	MountOptions     []string
+	VolumeAttributes map[string]string
+	ManagedByLabel   string
+	ManagedByValue   string
+	StorageTypeLabel string
+	StorageType      string
+}
+
+type existingGatewayPV struct {
+	Metadata struct {
+		Labels            map[string]string `yaml:"labels"`
+		DeletionTimestamp string            `yaml:"deletionTimestamp"`
+	} `yaml:"metadata"`
+	Spec struct {
+		StorageClassName string   `yaml:"storageClassName"`
+		MountOptions     []string `yaml:"mountOptions"`
+		Capacity         struct {
+			Storage string `yaml:"storage"`
+		} `yaml:"capacity"`
+		CSI *struct {
+			VolumeHandle     string            `yaml:"volumeHandle"`
+			VolumeAttributes map[string]string `yaml:"volumeAttributes"`
+		} `yaml:"csi"`
+	} `yaml:"spec"`
+	Status struct {
+		Phase string `yaml:"phase"`
+	} `yaml:"status"`
 }
 
 type FlavorCapacity struct {

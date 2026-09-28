@@ -15,12 +15,13 @@
 from typing import Optional, Type
 
 import pytest
-from mock import Mock
+from mock import Mock, PropertyMock, call
 from datetime import datetime, timezone, timedelta
 import unittest
 
-from common import TstNodeset, TstCfg # needed to import util
+from common import TstNodeset, TstCfg, TstPartition # needed to import util
 import util
+from setup import check_slurmdbd_ready, check_sackd_ready
 from util import NodeState, MachineType, AcceleratorInfo, UpcomingMaintenance, InstanceResourceStatus, FutureReservation, ReservationDetails
 from google.api_core.client_options import ClientOptions  # noqa: E402
 from googleapiclient.errors import HttpError # type: ignore
@@ -970,6 +971,8 @@ def test_is_nodeset_mig():
             "flex_ns": TstNodeset(nodeset_name="flex_ns", provisioning_engine="MIG", dws_flex=types.SimpleNamespace(enabled=True)),
             "bulk_ns": TstNodeset(nodeset_name="bulk_ns", provisioning_engine="BULK_INSERT"),
             "bulk_override_ns": TstNodeset(nodeset_name="bulk_override_ns", provisioning_engine="BULK_INSERT", mig_name="testcl-bulk_override_ns-mig-0"),
+            "topo_auto_ns": TstNodeset(nodeset_name="topo_auto_ns", provisioning_engine="AUTO", accelerator_topology="1x72"),
+            "topo_default_ns": TstNodeset(nodeset_name="topo_default_ns", accelerator_topology="1x72"),
         },
     )
     lkp = util.Lookup(cfg)
@@ -977,6 +980,8 @@ def test_is_nodeset_mig():
     assert lkp.is_nodeset_mig("flex_ns") is False
     assert lkp.is_nodeset_mig("bulk_ns") is False
     assert lkp.is_nodeset_mig("bulk_override_ns") is False
+    assert lkp.is_nodeset_mig("topo_auto_ns") is False
+    assert lkp.is_nodeset_mig("topo_default_ns") is False
 
 
 def test_mig_name_multi_mig():
@@ -1112,3 +1117,545 @@ def test_slurmsync_mig_auto_repair(mock_lookup, mock_compute_prop, mock_inst):
                 action_recovered_fqdn = slurmsync.get_node_action("testcl-ns-2.c.testproj.internal")
                 assert isinstance(action_recovered_fqdn, slurmsync.NodeActionIdle)
                 mock_get_reason.assert_called_with("testcl-ns-2")
+
+
+def test_is_target_controller_up_hostname_containing_role():
+    line = "Slurmctld(backup) at primary-cluster-controller-1 is UP"
+    assert util._is_target_controller_up(line, "primary") is False
+    assert util._is_target_controller_up(line, "backup") is True
+
+def test_wait_slurmctld_up_timeout(mocker):
+    mocker.patch("socket.gethostname", return_value="slurmctld-0")
+    mocker.patch("util.run", return_value=Mock(returncode=1, stdout="", stderr="DOWN"))
+    mocker.patch("util.sleep")
+    lkp = util.Lookup(TstCfg())
+    with pytest.raises(TimeoutError, match=r"slurmctld \(primary\) is not fully up"):
+        util.wait_slurmctld_up(lkp, timeout=2)
+
+def test_is_target_controller_up():
+    # Single controller ping format ('Slurmctld (primary)...')
+    output_single_up = "Slurmctld (primary) at controller is UP"
+    output_single_down = "Slurmctld (primary) at controller is DOWN"
+    assert util._is_target_controller_up(output_single_up, "primary") is True
+    assert util._is_target_controller_up(output_single_down, "primary") is False
+
+    # HA primary
+    output_ha_restarting_primary = (
+        "Slurmctld(primary) at slurmctld-0 is DOWN\n"
+        "Slurmctld(backup) at slurmctld-1 is UP"
+    )
+    assert util._is_target_controller_up(output_ha_restarting_primary, "primary") is False
+
+    # HA backup
+    assert util._is_target_controller_up(output_ha_restarting_primary, "backup") is True
+
+    output_ha_both_up = (
+        "Slurmctld(primary) at slurmctld-0 is UP\n"
+        "Slurmctld(backup) at slurmctld-1 is UP"
+    )
+    assert util._is_target_controller_up(output_ha_both_up, "primary") is True
+    assert util._is_target_controller_up(output_ha_both_up, "backup") is True
+
+    # Overlapping hostname checks: ensure 'primary' or 'backup' in hostname does not produce false positives
+    output_ha_hostname_primary = (
+        "Slurmctld(primary) at primary-cluster-controller-0 is DOWN\n"
+        "Slurmctld(backup) at primary-cluster-controller-1 is UP"
+    )
+    assert util._is_target_controller_up(output_ha_hostname_primary, "primary") is False
+    assert util._is_target_controller_up(output_ha_hostname_primary, "backup") is True
+
+    output_ha_hostname_backup = (
+        "Slurmctld(primary) at backup-cluster-controller-0 is UP\n"
+        "Slurmctld(backup) at backup-cluster-controller-1 is DOWN"
+    )
+    assert util._is_target_controller_up(output_ha_hostname_backup, "primary") is True
+    assert util._is_target_controller_up(output_ha_hostname_backup, "backup") is False
+
+
+def test_is_active_controller(mocker):
+    mocker.patch.object(util.Lookup, "is_controller", PropertyMock(return_value=True))
+    mocker.patch.object(util.Lookup, "scontrol", PropertyMock(return_value="scontrol"))
+
+    cfg = TstCfg(slurm_backup_controller_name="slurmctld-1")
+    lkp = util.Lookup(cfg)
+
+    # Primary active: Primary node (-0), primary UP
+    mocker.patch("socket.gethostname", return_value="slurmctld-0")
+    mocker.patch(
+        "util.run",
+        return_value=Mock(
+            returncode=0,
+            stdout="Slurmctld(primary) at slurmctld-0 is UP\nSlurmctld(backup) at slurmctld-1 is UP",
+            stderr="",
+        ),
+    )
+    assert util.is_active_controller(lkp) is True
+
+    # Backup takeover: Backup node (-1), primary DOWN, backup UP
+    mocker.patch("socket.gethostname", return_value="slurmctld-1")
+    mocker.patch(
+        "util.run",
+        return_value=Mock(
+            returncode=0,
+            stdout="Slurmctld(primary) at slurmctld-0 is DOWN\nSlurmctld(backup) at slurmctld-1 is UP",
+            stderr="",
+        ),
+    )
+    assert util.is_active_controller(lkp) is True
+
+    # Backup takeover with hostname containing 'primary': Backup node (-1), primary DOWN, backup UP
+    mocker.patch("socket.gethostname", return_value="primary-cluster-controller-1")
+    lkp_primary_cluster = util.Lookup(TstCfg(slurm_backup_controller_name="primary-cluster-controller-1"))
+    mocker.patch(
+        "util.run",
+        return_value=Mock(
+            returncode=0,
+            stdout="Slurmctld(primary) at primary-cluster-controller-0 is DOWN\nSlurmctld(backup) at primary-cluster-controller-1 is UP",
+            stderr="",
+        ),
+    )
+    assert util.is_active_controller(lkp_primary_cluster) is True
+
+    # Backup standby: Backup node (-1), primary UP
+    mocker.patch("socket.gethostname", return_value="slurmctld-1")
+    mocker.patch(
+        "util.run",
+        return_value=Mock(
+            returncode=0,
+            stdout="Slurmctld(primary) at slurmctld-0 is UP\nSlurmctld(backup) at slurmctld-1 is UP",
+            stderr="",
+        ),
+    )
+    assert util.is_active_controller(lkp) is False
+
+    # Non-HA: No backup controller configured
+    mock_run = mocker.patch("util.run")
+    lkp_non_ha = util.Lookup(TstCfg(slurm_backup_controller_name=None))
+    assert util.is_active_controller(lkp_non_ha) is True
+    mock_run.assert_not_called()
+
+
+def test_check_slurmdbd_ready_fast_success(mocker):
+    """Verify check_slurmdbd_ready returns immediately on first try when ready without sleeping."""
+    mock_run = mocker.patch("setup.run", return_value=Mock(returncode=0))
+    mock_sleep = mocker.patch("setup.time.sleep")
+
+    check_slurmdbd_ready(maxtries=30, max_interval=15.0)
+
+    mock_run.assert_called_once_with(
+        f"{util.slurmdirs.prefix}/bin/sacctmgr -n -i show cluster",
+        check=False,
+        timeout=10,
+    )
+    mock_sleep.assert_not_called()
+
+
+def test_check_slurmdbd_ready_retry_and_timeout(mocker):
+    """Verify check_slurmdbd_ready retries on failure and raises RuntimeError on timeout."""
+    mock_run = mocker.patch("setup.run", return_value=Mock(returncode=1))
+    mock_sleep = mocker.patch("setup.time.sleep")
+
+    with pytest.raises(RuntimeError, match="Slurmdbd is not ready"):
+        check_slurmdbd_ready(maxtries=4, max_interval=15.0)
+
+    assert mock_run.call_count == 4
+    assert mock_sleep.call_count == 3
+    mock_sleep.assert_has_calls([call(10.0), call(15.0), call(15.0)])
+
+
+def test_check_sackd_ready_fast_success(mocker):
+    """Verify check_sackd_ready enables and starts sackd without sleeping when healthy."""
+    mock_run = mocker.patch("setup.run", return_value=Mock(returncode=0))
+    mock_sleep = mocker.patch("setup.time.sleep")
+
+    check_sackd_ready(maxtries=40, max_interval=15.0)
+
+    assert mock_run.call_args_list == [
+        call("systemctl enable sackd", timeout=30),
+        call("systemctl restart sackd", timeout=60, check=False),
+        call("systemctl is-active sackd", timeout=15, check=False),
+    ]
+    mock_sleep.assert_not_called()
+
+
+def test_check_sackd_ready_retry_and_exhaustion(mocker):
+    """Verify check_sackd_ready retries with backoff and calls status upon exhaustion."""
+    mock_run = mocker.patch(
+        "setup.run",
+        side_effect=[
+            Mock(returncode=0),  # enable sackd
+            Mock(returncode=1),  # try 1 restart fails
+            Mock(returncode=1),  # try 2 restart fails
+            Mock(returncode=3),  # status sackd
+        ],
+    )
+    mock_sleep = mocker.patch("setup.time.sleep")
+
+    check_sackd_ready(maxtries=2, max_interval=15.0)
+
+    assert mock_run.call_count == 4
+    mock_run.assert_called_with("systemctl status sackd", timeout=30, check=False)
+    assert mock_sleep.call_count == 1
+    mock_sleep.assert_has_calls([call(10.0)])
+
+
+def test_nodeset_slice_size():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "std_ns": TstNodeset(nodeset_name="std_ns"),
+            "explicit_slice_ns": TstNodeset(nodeset_name="explicit_slice_ns", slice_size=18),
+            "a4x_ns": TstNodeset(nodeset_name="a4x_ns", accelerator_topology="1x72", gpu={"count": 4}),
+            "a4x_2slice_ns": TstNodeset(nodeset_name="a4x_2slice_ns", accelerator_topology="2x72", gpu={"count": 4}),
+            "a3_topo_ns": TstNodeset(nodeset_name="a3_topo_ns", accelerator_topology="1x16", gpu={"count": 8}),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    assert lkp.nodeset_slice_size("std_ns") == 1000
+    assert lkp.nodeset_slice_size("explicit_slice_ns") == 18
+    assert lkp.nodeset_slice_size("a4x_ns") == 18
+    assert lkp.nodeset_slice_size("a4x_2slice_ns") == 36
+    assert lkp.nodeset_slice_size("a3_topo_ns") == 2
+    assert lkp.nodeset_slice_size("non_existent_ns") == 1000
+
+
+def test_nodeset_slice_size_no_attrdict_autovivification():
+    raw_dict = util.AttrDict({"nodeset_name": "cpu_ns"})
+    cfg = TstCfg(slurm_cluster_name="testcl")
+    setattr(cfg, "nodeset", {"cpu_ns": raw_dict})
+    lkp = util.Lookup(cfg)
+    assert lkp.nodeset_slice_size("cpu_ns") == 1000
+    assert lkp.is_nodeset_mig("cpu_ns") is False
+    # Confirm keys were not auto-vivified into raw_dict
+    assert "slice_size" not in raw_dict
+    assert "accelerator_topology" not in raw_dict
+    assert "provisioning_engine" not in raw_dict
+    assert "mig_name" not in raw_dict
+
+
+def test_node_mig_name_gpu_topology_slices():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                node_count_static=36,
+                accelerator_topology="1x72",
+                gpu={"count": 4},
+                slice_size=18,
+                provisioning_engine="MIG",
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    # Slice 0 (nodes 0-17) -> mig-0
+    assert lkp.node_mig_name("testcl-a4x-0") == "testcl-a4x-mig-0"
+    assert lkp.node_mig_name("testcl-a4x-17") == "testcl-a4x-mig-0"
+
+    # Slice 1 (nodes 18-35) -> mig-1
+    assert lkp.node_mig_name("testcl-a4x-18") == "testcl-a4x-mig-1"
+    assert lkp.node_mig_name("testcl-a4x-35") == "testcl-a4x-mig-1"
+
+
+@unittest.mock.patch("util.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_suspend_mig_nodes_gpu_topology_slices(mock_compute_prop, mock_execute):
+    import suspend
+
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                region="us-central1",
+                node_count_static=36,
+                accelerator_topology="1x72",
+                gpu={"count": 4},
+                slice_size=18,
+                provisioning_engine="MIG",
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    mock_execute.side_effect = lambda req: req.execute()
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+        "managedInstances": [
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-a4x-0"},
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-a4x-18"},
+        ]
+    }
+
+    # Suspend nodes across both slices
+    suspend.suspend_mig_nodes(["testcl-a4x-0", "testcl-a4x-18"], lkp=lkp)
+
+    delete_calls = mock_compute.regionInstanceGroupManagers().deleteInstances.call_args_list
+    assert len(delete_calls) == 2
+    del_migs = {call.kwargs["instanceGroupManager"] for call in delete_calls}
+    assert del_migs == {"testcl-a4x-mig-0", "testcl-a4x-mig-1"}
+
+
+def test_nodeset_slice_size_attrdict_no_autovivification():
+    gpu_attr = util.AttrDict(type="nvidia-gb200")
+    nodeset = TstNodeset(
+        nodeset_name="a4x",
+        node_count_static=36,
+        accelerator_topology="1x72",
+        gpu=gpu_attr,
+        instance_template="projects/testproj/global/instanceTemplates/a4x-tmpl",
+    )
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={"a4x": nodeset},
+    )
+    lkp = util.Lookup(cfg)
+
+    mock_tmpl = unittest.mock.MagicMock()
+    mock_accel = unittest.mock.MagicMock()
+    mock_accel.count = 8
+    mock_tmpl.machine_type.accelerators = [mock_accel]
+    lkp.template_info = unittest.mock.MagicMock(return_value=mock_tmpl)
+
+    slice_size = lkp.nodeset_slice_size("a4x")
+
+    assert "count" not in gpu_attr
+    lkp.template_info.assert_called_once_with("projects/testproj/global/instanceTemplates/a4x-tmpl")
+    assert slice_size == 9
+
+
+def test_is_nodeset_mig_strict_opt_in():
+    """Verify is_nodeset_mig honors strict opt-in: accelerator_topology with AUTO or BULK_INSERT returns False."""
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "a4x_auto": TstNodeset(
+                nodeset_name="a4x_auto",
+                accelerator_topology="1x72",
+                provisioning_engine="AUTO",
+            ),
+            "a4x_bi": TstNodeset(
+                nodeset_name="a4x_bi",
+                accelerator_topology="1x72",
+                provisioning_engine="BULK_INSERT",
+            ),
+            "a4x_mig": TstNodeset(
+                nodeset_name="a4x_mig",
+                accelerator_topology="1x72",
+                provisioning_engine="MIG",
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    assert lkp.is_nodeset_mig("a4x_auto") is False
+    assert lkp.is_nodeset_mig("a4x_bi") is False
+    assert lkp.is_nodeset_mig("a4x_mig") is True
+
+
+
+def test_has_block_topology_requires_exact_lowercase_topology():
+    """Pins the contract that forces the nodeset module to normalize accelerator_topology.
+
+    has_block_topology() compares against the literal "1x72". The nodeset module's
+    outputs accept "1X72" and " 1x72 " (the validation regex is case-insensitive and
+    trims), and every Terraform consumer normalizes with lower(trimspace(...)). If the
+    value written into config.yaml were NOT normalized at source, such a nodeset would
+    build correct slice MIGs with correct workload policies and then silently drop from
+    topology/block to topology/tree, straddling NVLink domains with no error raised.
+
+    If this test starts failing, do not relax it -- check that
+    community/modules/compute/schedmd-slurm-gcp-v6-nodeset/main.tf still emits
+    lower(trimspace(var.accelerator_topology)).
+    """
+    def _cfg(topo):
+        return TstCfg(
+            slurm_cluster_name="c",
+            nodeset={
+                "a4x": TstNodeset(
+                    nodeset_name="a4x",
+                    accelerator_topology=topo,
+                    reservation_name="a4x-res",
+                ),
+            },
+            partitions={"p": TstPartition(partition_name="p", partition_nodeset=["a4x"])},
+        )
+
+    part = NSDict(partition_name="p", partition_nodeset=["a4x"])
+
+    # Normalized value: block topology is enabled.
+    assert util.Lookup(_cfg("1x72")).has_block_topology(part) is True
+
+    # Un-normalized variants must NOT silently enable block topology. These are exactly
+    # the strings the nodeset module is responsible for folding into "1x72".
+    for bad in ("1X72", "1x72 ", " 1x72"):
+        assert util.Lookup(_cfg(bad)).has_block_topology(part) is False, (
+            f"has_block_topology matched {bad!r}; the exact-match contract changed"
+        )
+
+    # A reservation is still required (pre-existing behavior, unchanged).
+    no_res = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={"a4x": TstNodeset(nodeset_name="a4x", accelerator_topology="1x72", reservation_name="")},
+    )
+    assert util.Lookup(no_res).has_block_topology(part) is False
+
+
+def test_nodeset_slice_size_absent_for_non_mig_nodesets():
+    """Zero-regression guard: Terraform must only hand slice_size/gpu_count to static MIG
+    nodesets. partition.tf gates both on
+    (nodeset_resolved_engine == "MIG" && !dws_flex.enabled).
+
+    DWS Flex resolves to engine "MIG" but gets no slice MIGs, so it must be excluded too --
+    it keeps using the runtime placement path, which derives hosts-per-slice from the live
+    GCE machine type.
+    """
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={
+            # AUTO/BULK_INSERT and DWS Flex: Terraform emits null for both fields.
+            "a4x_auto": TstNodeset(nodeset_name="a4x_auto", accelerator_topology="1x72",
+                                   provisioning_engine="BULK_INSERT"),
+            "a4x_flex": TstNodeset(nodeset_name="a4x_flex", accelerator_topology="1x72",
+                                   provisioning_engine="MIG",
+                                   dws_flex=util.NSDict(enabled=True, use_bulk_insert=False)),
+            # Static MIG: Terraform supplies the authoritative slice size.
+            "a4x_mig": TstNodeset(nodeset_name="a4x_mig", accelerator_topology="1x72",
+                                  provisioning_engine="MIG", slice_size=18, gpu_count=4),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    for ns in ("a4x_auto", "a4x_flex"):
+        # TstNodeset is a dataclass, not an NSDict, so use getattr here. Production config
+        # is an NSDict and takes the .get() branch in util/resume; both are covered.
+        assert getattr(lkp.cfg.nodeset[ns], "slice_size", None) is None, f"{ns}: slice_size leaked"
+        assert getattr(lkp.cfg.nodeset[ns], "gpu_count", None) is None, f"{ns}: gpu_count leaked"
+
+    # Neither is a MIG nodeset at runtime, so node_mig_name is never reached for them.
+    assert lkp.is_nodeset_mig("a4x_auto") is False
+    assert lkp.is_nodeset_mig("a4x_flex") is False
+    assert lkp.is_nodeset_mig("a4x_mig") is True
+
+    # The static MIG nodeset shards on 18; a MIG nodeset without a topology keeps 1000.
+    assert lkp.nodeset_slice_size("a4x_mig") == 18
+    assert lkp.node_mig_name("c-a4x_mig-17") == "c-a4x_mig-mig-0"
+    assert lkp.node_mig_name("c-a4x_mig-18") == "c-a4x_mig-mig-1"
+
+def _mk_tpu_tpl(machine_name: str):
+    return Mock(
+        machine_type=MachineType(
+            name=machine_name, guest_cpus=0, memory_mb=0, accelerators=[]
+        ),
+        gpu=None,
+    )
+
+
+@pytest.mark.parametrize(
+    "machine_type,topology,expected_type,expected_chunk_size",
+    [
+        ("ct5lp-hightpu-4t", "2x4", "v5e", 2),
+        ("ct5l-hightpu-4t", "2x4", "v5e", 2),
+        ("ct5p-hightpu-4t", "2x2x2", "v5p", 2),
+        ("ct6e-standard-4t", "2x4", "v6e", 2),
+        ("tpu7x-standard-4t", "2x2x2", "tpu7x", 2),
+        ("tpu7-standard-4t", "2x2x2", "7", 2),
+        ("ct6e-standard-8t", "2x4", ValueError, None),
+        ("ct6e-standard-1t", "2x4", ValueError, None),
+        ("n1-standard-4", None, None, 1),
+    ],
+)
+
+def test_node_tpu_info_and_chunk_size(
+    machine_type, topology, expected_type, expected_chunk_size
+):
+    ns = TstNodeset(
+        "tpuns",
+        instance_template="tpl-tpuns",
+        accelerator_topology=topology,
+    )
+    cfg = TstCfg(slurm_cluster_name="c", nodeset={"tpuns": ns})
+    lkp = util.Lookup(cfg)
+    lkp.template_info = Mock(return_value=_mk_tpu_tpl(machine_type))
+    if expected_type is ValueError:
+        with pytest.raises(ValueError, match="Unsupported TPU machine type"):
+            lkp.node_tpu_info(ns) # type: ignore[arg-type]
+    elif expected_type is None:
+        assert lkp.node_tpu_info(ns) is None # type: ignore[arg-type]
+        assert lkp.get_tpu_chunk_size(ns) == expected_chunk_size # type: ignore[arg-type]
+    else:
+        info = lkp.node_tpu_info(ns) # type: ignore[arg-type]
+        assert info is not None
+        assert info.type == expected_type
+        assert info.tpus_per_node == 4
+        assert lkp.get_tpu_chunk_size(ns) == expected_chunk_size # type: ignore[arg-type]
+
+def test_tpu_lookup_and_device_constrain():
+    from common import TstPartition
+
+    ns_v6e_static = TstNodeset(
+        "v6es",
+        instance_template="tpl-v6e",
+        node_count_static=4,
+        node_count_dynamic_max=0,
+        accelerator_topology="2x4",
+    )
+    ns_7x_dyn = TstNodeset(
+        "tpu7xd",
+        instance_template="tpl-7x",
+        node_count_static=0,
+        node_count_dynamic_max=4,
+        accelerator_topology=None,
+    )
+    ns_cpu = TstNodeset(
+        "cpu",
+        instance_template="tpl-cpu",
+        node_count_static=2,
+        node_count_dynamic_max=0,
+    )
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={"v6es": ns_v6e_static, "tpu7xd": ns_7x_dyn, "cpu": ns_cpu},
+        partitions={
+            "p_static": TstPartition("p_static", partition_nodeset=["v6es"]),
+            "p_dyn": TstPartition("p_dyn", partition_nodeset=["tpu7xd"]),
+            "p_cpu": TstPartition("p_cpu", partition_nodeset=["cpu"]),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    def fake_template_info(tpl_link):
+        if tpl_link == "tpl-v6e":
+            return _mk_tpu_tpl("ct6e-standard-4t")
+        if tpl_link == "tpl-7x":
+            return _mk_tpu_tpl("tpu7x-standard-4t")
+        return _mk_tpu_tpl("c2-standard-60")
+
+    lkp.template_info = Mock(side_effect=fake_template_info)
+
+    assert lkp.has_tpu_nodesets() is True
+    assert lkp.is_tpu_nodeset("v6es") is True
+    assert lkp.is_tpu_static_nodeset("v6es") is True
+    assert lkp.is_tpu_dynamic_nodeset("v6es") is False
+
+    assert lkp.is_tpu_nodeset("tpu7xd") is True
+    assert lkp.is_tpu_static_nodeset("tpu7xd") is False
+    assert lkp.is_tpu_dynamic_nodeset("tpu7xd") is True
+
+    assert lkp.is_tpu_nodeset("cpu") is False
+    assert lkp.is_tpu_static_partition(cfg.partitions["p_static"]) is True # type: ignore[arg-type]
+    assert lkp.is_tpu_dynamic_partition(cfg.partitions["p_dyn"]) is True # type: ignore[arg-type]
+    assert lkp.is_tpu_partition(cfg.partitions["p_cpu"]) is False # type: ignore[arg-type]
+
+    assert lkp.remove_device_constrain_nodeset("v6es") is False
+    assert lkp.remove_device_constrain_nodeset("tpu7xd") is True
+    assert lkp.remove_device_constrain_nodeset("cpu") is False
+
+    assert lkp.group_tpu_nodes_by_chunk_idx(
+        ["c-v6es-0", "c-v6es-1", "c-v6es-2", "c-v6es-3"], chunk_size=2
+    ) == {
+        0: ["c-v6es-0", "c-v6es-1"],
+        1: ["c-v6es-2", "c-v6es-3"],
+    }

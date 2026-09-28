@@ -19,7 +19,9 @@ package shell
 import (
 	"hpc-toolkit/pkg/config"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 
 	. "gopkg.in/check.v1"
 )
@@ -62,17 +64,75 @@ func (s *MySuite) TestCheckWritableDir(c *C) {
 	}
 	c.Assert(CheckWritableDir(dir), IsNil)
 
-	// This test reliably fails in Cloud Build although it works in Linux
-	// and in MacOS. TODO: investigate why
-	// err = os.Chmod(dir, 0600)
-	// if err != nil {
-	//      c.Error(err)
-	// }
-	// err = CheckWritableDir(dir)
-	// c.Assert(err, NotNil)
+	func() {
+		cleanup := makeDirReadOnly(c, dir)
+		defer cleanup()
+		if runtime.GOOS == "windows" || os.Geteuid() != 0 {
+			c.Assert(CheckWritableDir(dir), NotNil)
+		}
+	}()
 
 	os.RemoveAll(dir)
 	c.Assert(CheckWritableDir(dir), NotNil)
+}
+
+func makeDirReadOnly(c *C, dir string) func() {
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("icacls", dir, "/deny", "*S-1-1-0:(W)")
+		if err := cmd.Run(); err != nil {
+			c.Fatal(err)
+		}
+		return func() {
+			_ = exec.Command("icacls", dir, "/remove:d", "*S-1-1-0").Run()
+		}
+	}
+
+	if os.Geteuid() != 0 {
+		if err := os.Chmod(dir, 0555); err != nil {
+			c.Fatal(err)
+		}
+		return func() {
+			_ = os.Chmod(dir, 0700)
+		}
+	}
+
+	return func() {}
+}
+
+func (s *MySuite) TestDirInfo(c *C) {
+	isDir, isWritable := DirInfo("")
+	c.Assert(isDir, Equals, false)
+	c.Assert(isWritable, Equals, false)
+
+	dir := c.MkDir()
+	isDir, isWritable = DirInfo(dir)
+	c.Assert(isDir, Equals, true)
+	c.Assert(isWritable, Equals, true)
+
+	// read-only directory
+	func() {
+		readOnlyDir := c.MkDir()
+		cleanupRO := makeDirReadOnly(c, readOnlyDir)
+		defer cleanupRO()
+		if runtime.GOOS == "windows" || os.Geteuid() != 0 {
+			isDir, isWritable = DirInfo(readOnlyDir)
+			c.Assert(isDir, Equals, true)
+			c.Assert(isWritable, Equals, false)
+		}
+	}()
+
+	// regular file should report isDir=false, isWritable=false
+	filePath := filepath.Join(dir, "testfile")
+	err := os.WriteFile(filePath, []byte("content"), 0644)
+	c.Assert(err, IsNil)
+	isDir, isWritable = DirInfo(filePath)
+	c.Assert(isDir, Equals, false)
+	c.Assert(isWritable, Equals, false)
+
+	// non-existent path
+	isDir, isWritable = DirInfo(filepath.Join(dir, "nonexistent"))
+	c.Assert(isDir, Equals, false)
+	c.Assert(isWritable, Equals, false)
 }
 
 func (s *MySuite) TestMergeMapsWithoutLoss(c *C) {

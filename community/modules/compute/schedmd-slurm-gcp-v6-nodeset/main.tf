@@ -34,6 +34,25 @@ module "gpu" {
 
 locals {
   guest_accelerator = module.gpu.guest_accelerator
+  # GPUs per VM: attached accelerators, else the "-Ng" suffix in the machine type name.
+  # The literal fallback never sizes a slice MIG; outputs.tf requires a determinable count there.
+  gpu_count = coalesce(
+    try(local.guest_accelerator[0].count, null),
+    try(tonumber(regex("-([0-9]+)g", var.machine_type)[0]), null),
+    4
+  )
+
+  is_tpu = startswith(var.machine_type, "ct") || startswith(var.machine_type, "tpu")
+  tpu_topo_valid = var.accelerator_topology != null && var.accelerator_topology != "" && can(
+    regex("^[1-9][0-9]*[xX][1-9][0-9]*([xX][1-9][0-9]*)?$", trimspace(var.accelerator_topology))
+  )
+  tpu_slice_vms = local.is_tpu && local.tpu_topo_valid ? (
+    (
+      tonumber(split("x", lower(trimspace(var.accelerator_topology)))[0]) *
+      tonumber(split("x", lower(trimspace(var.accelerator_topology)))[1]) *
+      coalesce(try(tonumber(split("x", lower(trimspace(var.accelerator_topology)))[2]), null), 1)
+    ) / 4
+  ) : 0
 
   disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
 
@@ -104,7 +123,9 @@ locals {
     enable_oslogin             = var.enable_oslogin
     enable_shielded_vm         = var.enable_shielded_vm
     gpu                        = one(local.guest_accelerator)
-    accelerator_topology       = var.accelerator_topology
+    gpu_count                  = local.gpu_count
+    # Normalize once: util.py has_block_topology() compares against "1x72" exactly.
+    accelerator_topology = var.accelerator_topology == null ? null : lower(trimspace(var.accelerator_topology))
 
     labels                    = local.labels
     machine_type              = var.machine_type

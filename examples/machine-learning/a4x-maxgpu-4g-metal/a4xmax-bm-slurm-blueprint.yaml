@@ -599,44 +599,71 @@ deployment_groups:
             "data-root": "$(vars.local_ssd_mountpoint)/docker"
           }
       runners:
+      # Configures LNet on eth0 for Managed Lustre. Reads the blueprint's storage
+      # type and exits without doing anything when that is not "lustre", so it is
+      # safe to keep in place when using Filestore/NFS.
       - type: shell
         destination: configure_lnet_early.sh
         content: |
           #!/bin/bash
-          set -e -x
+          set -x
           export PATH=$PATH:/usr/sbin:/sbin
-          echo "Configuring LNet for eth0 early..."
-          # Wait for eth0 to have an IP address
-          for i in {1..30}; do
-              IP=\$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
-              if [ -n "\$IP" ]; then
-                  echo "eth0 has IP: \$IP"
+
+          # Mirror to syslog: setup.log is only read by someone already looking.
+          log() { echo "configure_lnet: $*"; logger -t configure_lnet "$*" 2>/dev/null || true; }
+
+          # Both managed-lustre and filestore export network_storage.fs_type,
+          # so switching storage backends needs no edits to this runner.
+          BLUEPRINT_FS_TYPE="$(homefs.network_storage.fs_type)"
+
+          if [ "$BLUEPRINT_FS_TYPE" != "lustre" ]; then
+              log "Storage type is '$BLUEPRINT_FS_TYPE', not lustre; skipping LNet configuration."
+              exit 0
+          fi
+          log "Lustre in use. Configuring LNet on eth0."
+
+          if [ ! -e /dev/lnet ]; then
+              log "/dev/lnet absent; loading lnet module."
+              sudo modprobe lnet || {
+                  log "ERROR: 'modprobe lnet' failed; skipping LNet configuration."
+                  exit 0
+              }
+          fi
+
+          if ! command -v lnetctl >/dev/null 2>&1; then
+              log "ERROR: lnetctl not found; skipping LNet configuration."
+              exit 0
+          fi
+
+          IP=""
+          for _ in {1..30}; do
+              IP=\$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1)
+              if [ -n "$IP" ]; then
+                  log "eth0 has IP: $IP"
                   break
               fi
-              echo "Waiting for eth0 to get an IP..."
+              log "Waiting for eth0 to get an IP..."
               sleep 1
           done
-          if [ -z "\$IP" ]; then
-              echo "ERROR: eth0 did not get an IP in 30 seconds"
+          if [ -z "$IP" ]; then
+              log "ERROR: eth0 did not get an IP in 30s; skipping LNet configuration."
               ip addr
-              exit 1
+              exit 0
           fi
-          if command -v lnetctl >/dev/null 2>&1; then
-              # Unconfigure if already configured
-              if sudo lnetctl net show 2>/dev/null | grep -q "tcp"; then
-                  echo "LNet already configured. Unconfiguring..."
-                  sudo lnetctl lnet unconfigure || echo "Unconfigure failed (might be busy)"
-              fi
-              sudo lnetctl lnet configure
-              if ! sudo lnetctl net show 2>/dev/null | grep -q "eth0"; then
-                  sudo lnetctl net add --net tcp --if eth0
-              else
-                  echo "LNet already configured on eth0"
-              fi
-              sudo lnetctl net show
+
+          if sudo lnetctl net show 2>/dev/null | grep -qw "tcp"; then
+              log "LNet already configured; attempting unconfigure before reconfigure."
+              sudo lnetctl lnet unconfigure || log "Unconfigure failed (LNet likely busy); continuing."
+          fi
+          sudo lnetctl lnet configure || log "'lnetctl lnet configure' returned non-zero; continuing."
+          if ! sudo lnetctl net show 2>/dev/null | grep -qw "eth0"; then
+              sudo lnetctl net add --net tcp --if eth0 || log "ERROR: 'lnetctl net add' failed."
           else
-              echo "lnetctl not found, skipping LNet configuration"
+              log "LNet already configured on eth0."
           fi
+          sudo lnetctl net show || true
+          log "Done."
+          exit 0
       - $(gcs_checkpoints.client_install_runner)
       - $(gcs_checkpoints.mount_runner)
       - $(gcs_training_data.client_install_runner)

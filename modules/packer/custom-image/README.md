@@ -260,6 +260,7 @@ No resources.
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_accelerator_count"></a> [accelerator\_count](#input\_accelerator\_count) | Number of accelerator cards to attach to the VM; not necessary for families that always include GPUs (A2). | `number` | `null` | no |
 | <a name="input_accelerator_type"></a> [accelerator\_type](#input\_accelerator\_type) | Type of accelerator cards to attach to the VM; not necessary for families that always include GPUs (A2). | `string` | `null` | no |
+| <a name="input_address"></a> [address](#input\_address) | The name of a pre-allocated static external IP address. If specified, omit\_external\_ip must be set to false. | `string` | `null` | no |
 | <a name="input_ansible_playbooks"></a> [ansible\_playbooks](#input\_ansible\_playbooks) | A list of Ansible playbook configurations that will be uploaded to customize the VM image | <pre>list(object({<br/>    playbook_file   = string<br/>    galaxy_file     = string<br/>    extra_arguments = list(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_communicator"></a> [communicator](#input\_communicator) | Communicator to use for provisioners that require access to VM ("ssh" or "winrm") | `string` | `null` | no |
 | <a name="input_compute_endpoint_version"></a> [compute\_endpoint\_version](#input\_compute\_endpoint\_version) | Custom Google Compute API endpoint version. | `string` | `null` | no |
@@ -276,6 +277,7 @@ No resources.
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | VM machine type on which to build new image | `string` | `"n2-standard-4"` | no |
 | <a name="input_manifest_file"></a> [manifest\_file](#input\_manifest\_file) | File to which to write Packer build manifest | `string` | `"packer-manifest.json"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Instance metadata for the builder VM (use var.startup\_script or var.startup\_script\_file to set startup-script metadata) | `map(string)` | `{}` | no |
+| <a name="input_network_ip"></a> [network\_ip](#input\_network\_ip) | The network IP address reserved to use for the launched instance | `string` | `null` | no |
 | <a name="input_network_project_id"></a> [network\_project\_id](#input\_network\_project\_id) | Project ID of Shared VPC network | `string` | `null` | no |
 | <a name="input_omit_external_ip"></a> [omit\_external\_ip](#input\_omit\_external\_ip) | Provision the image building VM without a public IP address | `bool` | `true` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except the use of GPUs requires it to be `TERMINATE` | `string` | `null` | no |

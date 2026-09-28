@@ -21,9 +21,16 @@ spec:
     spec:
       nodeSelector:
         cloud.google.com/gke-flex-start: "true"
+      tolerations:
+      - key: cloud.google.com/gke-queued
+        operator: Exists
+        effect: NoSchedule
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
       containers:
       - name: gpu-container-1
-        image: gcr.io/k8s-staging-perf-tests/sleep:latest
+        image: gcr.io/k8s-staging-perf-tests/sleep:v0.0.3
         args: ["10s"] # Sleep for 10 seconds
         resources:
           requests:
@@ -41,9 +48,16 @@ spec:
     spec:
       nodeSelector:
         cloud.google.com/gke-flex-start: "true"
+      tolerations:
+      - key: cloud.google.com/gke-queued
+        operator: Exists
+        effect: NoSchedule
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
       containers:
       - name: gpu-container-2
-        image: gcr.io/k8s-staging-perf-tests/sleep:latest
+        image: gcr.io/k8s-staging-perf-tests/sleep:v0.0.3
         args: ["10s"] # Sleep for 10 seconds
         resources:
           requests:

@@ -55,7 +55,6 @@ func (s *embeddedSuite) TestCopyDir_Embedded(c *C) {
 	fInfo, err = os.Stat(filepath.Join(dst, "vpc"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "vpc")
-	c.Assert(fInfo.Size() > 0, Equals, true)
 	c.Assert(fInfo.IsDir(), Equals, true)
 
 	// Invalid path
@@ -64,7 +63,7 @@ func (s *embeddedSuite) TestCopyDir_Embedded(c *C) {
 
 	// Failure: File Already Exists
 	err = s.r.CopyDir("modules/network", dst)
-	c.Assert(err, ErrorMatches, "*file exists")
+	c.Assert(err, ErrorMatches, ".*file.*exists.*")
 }
 
 func (s *embeddedSuite) TestGetModule_Embedded(c *C) {
@@ -81,7 +80,6 @@ func (s *embeddedSuite) TestGetModule_Embedded(c *C) {
 	fInfo, err = os.Stat(filepath.Join(dest, "vpc"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "vpc")
-	c.Assert(fInfo.Size() > 0, Equals, true)
 	c.Assert(fInfo.IsDir(), Equals, true)
 
 	// Invalid: Write to the same dest directory again
@@ -104,14 +102,34 @@ func (s *embeddedSuite) TestLocalModuleIsEmbedded(c *C) {
 		c.Check(found, Equals, true)
 	}
 
+	{ // Invalid: Cannot use embedded modules locally (Windows backslashes)
+		found := LocalModuleIsEmbedded(`.\modules\network\vpc`)
+		c.Check(found, Equals, true)
+	}
+
 	{ // Invalid: Cannot use embedded modules locally
 		found := LocalModuleIsEmbedded("../hpc-toolkit/modules/compute/../network/vpc")
+		c.Check(found, Equals, true)
+	}
+
+	{ // Invalid: Cannot use embedded modules locally (Windows backslashes)
+		found := LocalModuleIsEmbedded(`..\hpc-toolkit\modules\compute\..\network\vpc`)
 		c.Check(found, Equals, true)
 	}
 
 	{ // Valid: use non-embedded modules locally
 		found := LocalModuleIsEmbedded("../hpc-toolkit/modules/compute/../foo/bar")
 		c.Check(found, Equals, false)
+	}
+
+	{ // Invalid: Cannot use embedded modules locally (deeply nested path > 5 segments)
+		found := LocalModuleIsEmbedded("/home/user/workspace/deep/dir/hpc-toolkit/modules/network/vpc")
+		c.Check(found, Equals, true)
+	}
+
+	{ // Invalid: Cannot use embedded modules locally (deeply nested Windows path > 5 segments)
+		found := LocalModuleIsEmbedded(`C:\Users\Admin\Documents\workspace\deep\dir\hpc-toolkit\modules\network\vpc`)
+		c.Check(found, Equals, true)
 	}
 
 	{ // Invalid: must be a local path

@@ -157,3 +157,191 @@ func TestIsJobSetCRDInstalled_Forbidden(t *testing.T) {
 		t.Errorf("isJobSetCRDInstalled on 403 Forbidden = false; want true")
 	}
 }
+
+func TestShouldUseDNSEndpoint(t *testing.T) {
+	tests := []struct {
+		name         string
+		clusterDesc  gkeCluster
+		wantEndpoint bool
+	}{
+		{
+			name:         "Nil ControlPlaneEndpointsConfig returns false",
+			clusterDesc:  gkeCluster{},
+			wantEndpoint: false,
+		},
+		{
+			name: "Nil DnsEndpointConfig returns false",
+			clusterDesc: gkeCluster{
+				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{},
+			},
+			wantEndpoint: false,
+		},
+		{
+			name: "DnsEndpointConfig external traffic disallowed returns false",
+			clusterDesc: gkeCluster{
+				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
+					DnsEndpointConfig: &dnsEndpointConfig{
+						AllowExternalTraffic: false,
+					},
+				},
+			},
+			wantEndpoint: false,
+		},
+		{
+			name: "DnsEndpointConfig external traffic allowed with nil IPEndpointsConfig returns true",
+			clusterDesc: gkeCluster{
+				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
+					DnsEndpointConfig: &dnsEndpointConfig{
+						AllowExternalTraffic: true,
+					},
+				},
+			},
+			wantEndpoint: true,
+		},
+		{
+			name: "Public IP endpoint enabled bypasses DNS endpoint to prevent HTTP 431 header issues",
+			clusterDesc: gkeCluster{
+				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
+					DnsEndpointConfig: &dnsEndpointConfig{
+						AllowExternalTraffic: true,
+					},
+					IPEndpointsConfig: &ipEndpointsConfig{
+						EnablePublicEndpoint: true,
+					},
+				},
+			},
+			wantEndpoint: false,
+		},
+		{
+			name: "Public IP endpoint disabled uses DNS endpoint for external connectivity",
+			clusterDesc: gkeCluster{
+				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
+					DnsEndpointConfig: &dnsEndpointConfig{
+						AllowExternalTraffic: true,
+					},
+					IPEndpointsConfig: &ipEndpointsConfig{
+						EnablePublicEndpoint: false,
+					},
+				},
+			},
+			wantEndpoint: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldUseDNSEndpoint(tt.clusterDesc.ControlPlaneEndpointsConfig)
+			if got != tt.wantEndpoint {
+				t.Errorf("shouldUseDNSEndpoint() = %v, want %v", got, tt.wantEndpoint)
+			}
+		})
+	}
+}
+
+func TestRefreshGKEAuth_DNSEndpoint(t *testing.T) {
+	tests := []struct {
+		name          string
+		clusterDesc   gkeCluster
+		mockResponses map[string][]shell.CommandResult
+		wantErr       bool
+	}{
+		{
+			name: "Appends --dns-endpoint when shouldUseDNSEndpoint is true",
+			clusterDesc: gkeCluster{
+				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
+					DnsEndpointConfig: &dnsEndpointConfig{
+						AllowExternalTraffic: true,
+					},
+					IPEndpointsConfig: &ipEndpointsConfig{
+						EnablePublicEndpoint: false,
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud container clusters get-credentials my-cluster --location us-central1-a --project my-project --dns-endpoint": {
+					{ExitCode: 0, Stdout: "kubeconfig entry generated"},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Omits --dns-endpoint when public IP endpoint is available",
+			clusterDesc: gkeCluster{
+				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
+					DnsEndpointConfig: &dnsEndpointConfig{
+						AllowExternalTraffic: true,
+					},
+					IPEndpointsConfig: &ipEndpointsConfig{
+						EnablePublicEndpoint: true,
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud container clusters get-credentials my-cluster --location us-central1-a --project my-project": {
+					{ExitCode: 0, Stdout: "kubeconfig entry generated"},
+				},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(tt.mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.clusterDesc = tt.clusterDesc
+
+			err := orc.refreshGKEAuth("my-cluster", "us-central1-a", "my-project")
+			if (err != nil) != tt.wantErr {
+				t.Errorf("refreshGKEAuth() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestInitialize_LocationFallback(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	mockDescribeOutput := `{
+		"locations": ["us-central1-a", "us-central1-b"],
+		"nodePools": [],
+		"autoscaling": {}
+	}`
+
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud container clusters describe my-cluster --location us-central1-a --project my-project --format=json": {
+			{
+				ExitCode: 1,
+				Stderr:   "Resource my-cluster was not found in us-central1-a",
+			},
+		},
+		"gcloud container clusters describe my-cluster --location us-central1 --project my-project --format=json": {
+			{
+				ExitCode: 0,
+				Stdout:   mockDescribeOutput,
+			},
+		},
+	}
+
+	orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+	job := &orchestrator.JobDefinition{
+		ProjectID:       "my-project",
+		ClusterName:     "my-cluster",
+		ClusterLocation: "us-central1-a",
+	}
+
+	loc, err := orc.Initialize(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+	job.ClusterLocation = loc
+
+	err = orc.populateClusterMetadata(job)
+	if err != nil {
+		t.Fatalf("populateClusterMetadata failed: %v", err)
+	}
+
+	if job.ClusterLocation != "us-central1" {
+		t.Errorf("Expected job.ClusterLocation to fall back to 'us-central1', got %q", job.ClusterLocation)
+	}
+}

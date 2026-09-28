@@ -33,6 +33,9 @@ cli_deployment_vars:
   authorized_cidr: "{{ build_ip.stdout }}/32"
   network_name: "{{ network }}"
   gcp_public_cidrs_access_enabled: true
+  spot: "{{ enable_spot | default(true) }}"
+  placement_policy:
+    type: COMPACT
 custom_vars:
   project: "{{ project }}"
   instance_labels:
