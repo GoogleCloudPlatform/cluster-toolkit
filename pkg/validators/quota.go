@@ -644,16 +644,20 @@ func addDiskQuota(bp config.Blueprint, settings config.Dict, projectID, region s
 func addDetailedDiskMetrics(bp config.Blueprint, settings config.Dict, diskType string, sizeGB, count float64, projectID, region string, totals map[string]float64) {
 	if strings.Contains(diskType, "hyperdisk-balanced") {
 		addTotal(totals, projectID, region, "HYPERDISK_BALANCED_TOTAL_GB", sizeGB*count)
-		if settings.Has("provisioned_iops") {
-			v, err := evalToFloat64(bp, settings.Get("provisioned_iops"))
-			if err == nil {
-				addTotal(totals, projectID, region, "HYPERDISK_BALANCED_IOPS", v*count)
+		for _, k := range []string{"provisioned_iops", "disk_provisioned_iops"} {
+			if settings.Has(k) {
+				v, err := evalToFloat64(bp, settings.Get(k))
+				if err == nil {
+					addTotal(totals, projectID, region, "HYPERDISK_BALANCED_IOPS", v*count)
+				}
 			}
 		}
-		if settings.Has("provisioned_throughput") {
-			v, err := evalToFloat64(bp, settings.Get("provisioned_throughput"))
-			if err == nil {
-				addTotal(totals, projectID, region, "HYPERDISK_BALANCED_THROUGHPUT", v*count)
+		for _, k := range []string{"provisioned_throughput", "disk_provisioned_throughput"} {
+			if settings.Has(k) {
+				v, err := evalToFloat64(bp, settings.Get(k))
+				if err == nil {
+					addTotal(totals, projectID, region, "HYPERDISK_BALANCED_THROUGHPUT", v*count)
+				}
 			}
 		}
 		return
@@ -661,10 +665,12 @@ func addDetailedDiskMetrics(bp config.Blueprint, settings config.Dict, diskType 
 
 	if strings.Contains(diskType, "pd-extreme") {
 		addTotal(totals, projectID, region, "EXTREME_TOTAL_GB", sizeGB*count)
-		if settings.Has("provisioned_iops") {
-			v, err := evalToFloat64(bp, settings.Get("provisioned_iops"))
-			if err == nil {
-				addTotal(totals, projectID, region, "PD_EXTREME_TOTAL_PROVISIONED_IOPS", v*count)
+		for _, k := range []string{"provisioned_iops", "disk_provisioned_iops"} {
+			if settings.Has(k) {
+				v, err := evalToFloat64(bp, settings.Get(k))
+				if err == nil {
+					addTotal(totals, projectID, region, "PD_EXTREME_TOTAL_PROVISIONED_IOPS", v*count)
+				}
 			}
 		}
 		return

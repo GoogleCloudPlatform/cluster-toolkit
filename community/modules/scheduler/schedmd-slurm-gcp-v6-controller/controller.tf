@@ -26,6 +26,8 @@ locals {
       device_name                         = ad.device_name
       disk_type                           = ad.disk_type
       disk_storage_pool                   = ad.disk_storage_pool
+      disk_provisioned_iops               = ad.disk_provisioned_iops
+      disk_provisioned_throughput         = ad.disk_provisioned_throughput
       disk_size_gb                        = ad.disk_size_gb
       disk_labels                         = merge(ad.disk_labels, local.labels)
       auto_delete                         = ad.auto_delete
@@ -41,6 +43,8 @@ locals {
     device_name                         = google_compute_disk.controller_disk[0].name
     disk_labels                         = null
     disk_storage_pool                   = null
+    disk_provisioned_iops               = null
+    disk_provisioned_throughput         = null
     auto_delete                         = false
     boot                                = false
     disk_encryption_key                 = var.disk_encryption_key
@@ -109,13 +113,15 @@ module "slurm_controller_template" {
   slurm_cluster_name  = local.slurm_cluster_name
   labels              = local.labels
 
-  disk_auto_delete           = var.disk_auto_delete
-  disk_labels                = merge(var.disk_labels, local.labels)
-  disk_size_gb               = var.disk_size_gb
-  disk_type                  = var.disk_type
-  disk_storage_pool          = var.disk_storage_pool
-  disk_resource_manager_tags = var.disk_resource_manager_tags
-  additional_disks           = concat(local.additional_disks, local.state_disk)
+  disk_auto_delete            = var.disk_auto_delete
+  disk_labels                 = merge(var.disk_labels, local.labels)
+  disk_size_gb                = var.disk_size_gb
+  disk_type                   = var.disk_type
+  disk_storage_pool           = var.disk_storage_pool
+  disk_provisioned_iops       = var.disk_provisioned_iops
+  disk_provisioned_throughput = var.disk_provisioned_throughput
+  disk_resource_manager_tags  = var.disk_resource_manager_tags
+  additional_disks            = concat(local.additional_disks, local.state_disk)
 
   disk_encryption_key                 = var.disk_encryption_key
   disk_encryption_key_service_account = var.disk_encryption_key_service_account

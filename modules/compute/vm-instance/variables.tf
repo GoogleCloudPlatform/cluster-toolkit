@@ -68,6 +68,18 @@ variable "disk_storage_pool" {
   default     = null
 }
 
+variable "disk_provisioned_iops" {
+  description = "Indicates how many IOPS to provision for the boot disk. This sets the number of I/O operations per second that the disk can handle."
+  type        = number
+  default     = null
+}
+
+variable "disk_provisioned_throughput" {
+  description = "Indicates how much throughput to provision for the boot disk, in MB/s. This sets the amount of data that can be read or written from the disk per second."
+  type        = number
+  default     = null
+}
+
 variable "local_ssd_count" {
   description = "The number of local SSDs to attach to each VM. See https://cloud.google.com/compute/docs/disks/local-ssd."
   type        = number
@@ -83,10 +95,12 @@ variable "local_ssd_interface" {
 variable "additional_persistent_disks" {
   description = "Configurations of additional disks to be included on the partition nodes. Note that storage_pool is only supported with Hyperdisk types (balanced or throughput). You must provide an existing storage pool, as this module does not create new ones."
   type = object({
-    count        = optional(number, 0)
-    type         = optional(string, "pd-balanced")
-    size         = optional(number, 200)
-    storage_pool = optional(string)
+    count                  = optional(number, 0)
+    type                   = optional(string, "pd-balanced")
+    size                   = optional(number, 200)
+    storage_pool           = optional(string)
+    provisioned_iops       = optional(number)
+    provisioned_throughput = optional(number)
   })
   default  = {}
   nullable = false
