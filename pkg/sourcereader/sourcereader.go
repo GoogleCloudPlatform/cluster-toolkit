@@ -16,6 +16,7 @@ package sourcereader
 
 import (
 	"hpc-toolkit/pkg/deploymentio"
+	"path/filepath"
 	"strings"
 )
 
@@ -25,16 +26,34 @@ type SourceReader interface {
 	GetModule(modPath string, copyPath string) error
 }
 
+func isWindowsDrivePath(p string) bool {
+	if len(p) >= 2 && p[1] == ':' {
+		c := p[0]
+		return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+	}
+	return false
+}
+
+// ToSlash normalizes all directory separators (including Windows backslashes) to forward slashes.
+// Unlike filepath.ToSlash, this replaces backslashes unconditionally on all platforms.
+func ToSlash(p string) string {
+	return strings.ReplaceAll(p, "\\", "/")
+}
+
 // IsLocalPath checks if a source path is a local FS path
 func IsLocalPath(source string) bool {
-	return strings.HasPrefix(source, "./") ||
-		strings.HasPrefix(source, "../") ||
-		strings.HasPrefix(source, "/")
+	cleanSource := ToSlash(source)
+	return strings.HasPrefix(cleanSource, "./") ||
+		strings.HasPrefix(cleanSource, "../") ||
+		strings.HasPrefix(cleanSource, "/") ||
+		isWindowsDrivePath(source) ||
+		filepath.IsAbs(source)
 }
 
 // IsEmbeddedPath checks if a source path points to an embedded modules
 func IsEmbeddedPath(source string) bool {
-	return strings.HasPrefix(source, "modules/") || strings.HasPrefix(source, "community/modules/")
+	cleanSource := ToSlash(source)
+	return strings.HasPrefix(cleanSource, "modules/") || strings.HasPrefix(cleanSource, "community/modules/")
 }
 
 // IsRemotePath checks if path neither Local nor Embedded

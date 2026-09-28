@@ -42,8 +42,15 @@ func (s *zeroSuite) TestIsEmbeddedPath(c *C) {
 	ret := IsEmbeddedPath("modules/anything/else")
 	c.Assert(ret, Equals, true)
 
+	// True: Windows backslash path
+	ret = IsEmbeddedPath(`modules\anything\else`)
+	c.Assert(ret, Equals, true)
+
 	// False: Local path
 	ret = IsEmbeddedPath("./modules/else")
+	c.Assert(ret, Equals, false)
+
+	ret = IsEmbeddedPath(`.\modules\else`)
 	c.Assert(ret, Equals, false)
 
 	ret = IsEmbeddedPath("./modules")
@@ -62,14 +69,36 @@ func (s *zeroSuite) TestIsLocalPath(c *C) {
 	ret := IsLocalPath("modules/anything/else")
 	c.Assert(ret, Equals, false)
 
+	ret = IsLocalPath(`modules\anything\else`)
+	c.Assert(ret, Equals, false)
+
 	// True: Local path
 	ret = IsLocalPath("./anything/else")
+	c.Assert(ret, Equals, true)
+
+	ret = IsLocalPath(`.\anything\else`)
 	c.Assert(ret, Equals, true)
 
 	ret = IsLocalPath("./modules")
 	c.Assert(ret, Equals, true)
 
 	ret = IsLocalPath("../modules/")
+	c.Assert(ret, Equals, true)
+
+	ret = IsLocalPath(`..\modules\`)
+	c.Assert(ret, Equals, true)
+
+	// True: Windows drive paths (absolute and volume-relative)
+	ret = IsLocalPath(`C:\modules\network\vpc`)
+	c.Assert(ret, Equals, true)
+
+	ret = IsLocalPath(`C:/modules/network/vpc`)
+	c.Assert(ret, Equals, true)
+
+	ret = IsLocalPath(`C:modules\network\vpc`)
+	c.Assert(ret, Equals, true)
+
+	ret = IsLocalPath(`d:modules/network/vpc`)
 	c.Assert(ret, Equals, true)
 
 	// False, other

@@ -1543,3 +1543,119 @@ def test_nodeset_slice_size_absent_for_non_mig_nodesets():
     assert lkp.nodeset_slice_size("a4x_mig") == 18
     assert lkp.node_mig_name("c-a4x_mig-17") == "c-a4x_mig-mig-0"
     assert lkp.node_mig_name("c-a4x_mig-18") == "c-a4x_mig-mig-1"
+
+def _mk_tpu_tpl(machine_name: str):
+    return Mock(
+        machine_type=MachineType(
+            name=machine_name, guest_cpus=0, memory_mb=0, accelerators=[]
+        ),
+        gpu=None,
+    )
+
+
+@pytest.mark.parametrize(
+    "machine_type,topology,expected_type,expected_chunk_size",
+    [
+        ("ct5lp-hightpu-4t", "2x4", "v5e", 2),
+        ("ct5l-hightpu-4t", "2x4", "v5e", 2),
+        ("ct5p-hightpu-4t", "2x2x2", "v5p", 2),
+        ("ct6e-standard-4t", "2x4", "v6e", 2),
+        ("tpu7x-standard-4t", "2x2x2", "tpu7x", 2),
+        ("tpu7-standard-4t", "2x2x2", "7", 2),
+        ("ct6e-standard-8t", "2x4", ValueError, None),
+        ("ct6e-standard-1t", "2x4", ValueError, None),
+        ("n1-standard-4", None, None, 1),
+    ],
+)
+
+def test_node_tpu_info_and_chunk_size(
+    machine_type, topology, expected_type, expected_chunk_size
+):
+    ns = TstNodeset(
+        "tpuns",
+        instance_template="tpl-tpuns",
+        accelerator_topology=topology,
+    )
+    cfg = TstCfg(slurm_cluster_name="c", nodeset={"tpuns": ns})
+    lkp = util.Lookup(cfg)
+    lkp.template_info = Mock(return_value=_mk_tpu_tpl(machine_type))
+    if expected_type is ValueError:
+        with pytest.raises(ValueError, match="Unsupported TPU machine type"):
+            lkp.node_tpu_info(ns) # type: ignore[arg-type]
+    elif expected_type is None:
+        assert lkp.node_tpu_info(ns) is None # type: ignore[arg-type]
+        assert lkp.get_tpu_chunk_size(ns) == expected_chunk_size # type: ignore[arg-type]
+    else:
+        info = lkp.node_tpu_info(ns) # type: ignore[arg-type]
+        assert info is not None
+        assert info.type == expected_type
+        assert info.tpus_per_node == 4
+        assert lkp.get_tpu_chunk_size(ns) == expected_chunk_size # type: ignore[arg-type]
+
+def test_tpu_lookup_and_device_constrain():
+    from common import TstPartition
+
+    ns_v6e_static = TstNodeset(
+        "v6es",
+        instance_template="tpl-v6e",
+        node_count_static=4,
+        node_count_dynamic_max=0,
+        accelerator_topology="2x4",
+    )
+    ns_7x_dyn = TstNodeset(
+        "tpu7xd",
+        instance_template="tpl-7x",
+        node_count_static=0,
+        node_count_dynamic_max=4,
+        accelerator_topology=None,
+    )
+    ns_cpu = TstNodeset(
+        "cpu",
+        instance_template="tpl-cpu",
+        node_count_static=2,
+        node_count_dynamic_max=0,
+    )
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={"v6es": ns_v6e_static, "tpu7xd": ns_7x_dyn, "cpu": ns_cpu},
+        partitions={
+            "p_static": TstPartition("p_static", partition_nodeset=["v6es"]),
+            "p_dyn": TstPartition("p_dyn", partition_nodeset=["tpu7xd"]),
+            "p_cpu": TstPartition("p_cpu", partition_nodeset=["cpu"]),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    def fake_template_info(tpl_link):
+        if tpl_link == "tpl-v6e":
+            return _mk_tpu_tpl("ct6e-standard-4t")
+        if tpl_link == "tpl-7x":
+            return _mk_tpu_tpl("tpu7x-standard-4t")
+        return _mk_tpu_tpl("c2-standard-60")
+
+    lkp.template_info = Mock(side_effect=fake_template_info)
+
+    assert lkp.has_tpu_nodesets() is True
+    assert lkp.is_tpu_nodeset("v6es") is True
+    assert lkp.is_tpu_static_nodeset("v6es") is True
+    assert lkp.is_tpu_dynamic_nodeset("v6es") is False
+
+    assert lkp.is_tpu_nodeset("tpu7xd") is True
+    assert lkp.is_tpu_static_nodeset("tpu7xd") is False
+    assert lkp.is_tpu_dynamic_nodeset("tpu7xd") is True
+
+    assert lkp.is_tpu_nodeset("cpu") is False
+    assert lkp.is_tpu_static_partition(cfg.partitions["p_static"]) is True # type: ignore[arg-type]
+    assert lkp.is_tpu_dynamic_partition(cfg.partitions["p_dyn"]) is True # type: ignore[arg-type]
+    assert lkp.is_tpu_partition(cfg.partitions["p_cpu"]) is False # type: ignore[arg-type]
+
+    assert lkp.remove_device_constrain_nodeset("v6es") is False
+    assert lkp.remove_device_constrain_nodeset("tpu7xd") is True
+    assert lkp.remove_device_constrain_nodeset("cpu") is False
+
+    assert lkp.group_tpu_nodes_by_chunk_idx(
+        ["c-v6es-0", "c-v6es-1", "c-v6es-2", "c-v6es-3"], chunk_size=2
+    ) == {
+        0: ["c-v6es-0", "c-v6es-1"],
+        1: ["c-v6es-2", "c-v6es-3"],
+    }
