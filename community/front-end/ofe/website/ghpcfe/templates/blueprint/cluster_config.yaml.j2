@@ -81,8 +81,8 @@ deployment_groups:
     settings:
       enable_slurm_auth: {{ cluster.enable_slurm_auth | lower }}
       instance_image:
-        family: slurm-gcp-6-12-hpc-rocky-linux-9
-        project: schedmd-slurm-public
+        family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+        project: advanced-compute-images
       cloud_parameters:
         resume_rate: 0
         resume_timeout: 500
@@ -119,8 +119,8 @@ deployment_groups:
     id: slurm_login
     settings:
       instance_image:
-        family: slurm-gcp-6-12-hpc-rocky-linux-9
-        project: schedmd-slurm-public
+        family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+        project: advanced-compute-images
       num_instances: {{ cluster.num_login_nodes }}
       subnetwork_self_link: "projects/{{ cluster.project_id }}/regions/{{ cluster.cloud_region }}/subnetworks/{{ cluster.subnet.cloud_id }}"
       machine_type: {{ cluster.login_node_instance_type }}

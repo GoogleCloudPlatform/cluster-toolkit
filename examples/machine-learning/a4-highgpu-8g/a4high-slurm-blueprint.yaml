@@ -30,7 +30,7 @@ vars:
   local_ssd_mountpoint: /mnt/localssd
   instance_image:
     project: advanced-compute-images
-    family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-amd64
+    family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-amd64
   disk_size_gb: 300
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
   base_network_name: $(vars.deployment_name)
@@ -210,7 +210,7 @@ deployment_groups:
   - id: a4high_startup
     source: modules/scripts/startup-script
     settings:
-      install_ansible: true
+      install_ansible: false
       local_ssd_filesystem:
         mountpoint: $(vars.local_ssd_mountpoint)
         permissions: "1777" # must quote numeric filesystem permissions!
@@ -257,8 +257,8 @@ deployment_groups:
             hosts: all
             become: true
             vars:
-              cuda_installer_url: "https://developer.download.nvidia.com/compute/cuda/13.0.0/local_installers/cuda_13.0.0_580.65.06_linux.run"
-              cuda_installer_file: "/tmp/cuda_13.0.0_580.65.06_linux.run"
+              cuda_installer_url: "https://developer.download.nvidia.com/compute/cuda/13.2.2/local_installers/cuda_13.2.2_595.71.05_linux.run"
+              cuda_installer_file: "/tmp/cuda_13.2.2_595.71.05_linux.run"
               nvidia_packages:
                 - datacenter-gpu-manager-4-core=1:4.6.1-1
                 - datacenter-gpu-manager-4-dev=1:4.6.1-1
