@@ -1,4 +1,4 @@
-// Copyright 2026 "Google LLC"
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,6 +35,10 @@ const (
 	ErrTypeAPIDisabled      = "APIDisabled"
 	ErrTypeResourceExists   = "ResourceAlreadyExists"
 	ErrTypeUnknown          = "Unknown"
+
+	// New error types mapped from daily builds
+	ErrTypeHttpBadGateway = "HttpBadGateway"
+	ErrTypePodTimeOut     = "PodTimeOut"
 )
 
 var exactErrMatchers = []struct {
@@ -384,7 +388,6 @@ var extraSubstringErrMatchers = []struct {
 	{"site-packages/conda/exceptions.py", ErrTypeCondaExc},
 	{"CondaHTTPError: HTTP 502 BAD GATEWAY for url", ErrTypeConda502},
 	{"\u2502 Error: Failed to download module", ErrTypeModuleDownloadFailure},
-	{"connect: connection refused", ErrTypeKubernetesServiceAccountFailure},
 	{"module.wait.null_resource.wait_for_startup (local-exec): startup-script timed out after 2400 seconds", ErrTypeBatchMpiTimeout},
 	{"dpkg-deb: error: archive '/tmp/chrome-remote-desktop_current_amd64.deb' uses unknown compression for member", ErrTypeBrokenCrdDebPackage},
 	{"Startup script timed out", ErrTypeMonitoringStartupTimeout},
@@ -522,7 +525,7 @@ var extraSubstringErrMatchers = []struct {
 	{"Quota exceeded for quota metric 'Requests per project in the US multi-region' and limit 'Requests per project in the US multi-region per minute' of service 'artifactregistry.googleapis.com'", ErrTypeQuotaExceededForQuotaMetric},
 	{"There was a failure in the startup script", ErrTypeStartupScriptFailed},
 	{"Found more than 1 matching running build(s)", ErrTypeTestCollision},
-	{"Error: Error waiting for creating GKE cluster: Failed to create cluster", ErrTypeFailedToCreateCluster},
+	{"Error: Error creating for creating GKE cluster: Failed to create cluster", ErrTypeFailedToCreateCluster},
 	{"Error waiting for Creating Address: Quota 'STATIC_ADDRESSES' exceeded.  Limit: 175.0 in region us-west4", ErrTypeStaticAddressesQuotaExceeded},
 	{"Google Compute Engine: Invalid value for field 'resource.IPAddress", ErrTypeIpaddressNotExist},
 	{"Error waiting to create Instance: Error waiting for Creating Instance: Error code 3, message: cloud-cont", ErrTypeCidrRangeInUse},
@@ -677,6 +680,11 @@ var extraMultiSubstringErrMatchers = []struct {
 	{[]string{"mkdir: cannot create directory", "/run/enroot", "Permission denied"}, ErrTypeEnrootPermissionDenied},
 	{[]string{"Required 'compute.images.get' permission", "forbidden"}, ErrTypeComputeImagesGetForbidden},
 	{[]string{"validator \"test_reservation_exists\" failed", "was not found in any zone of project"}, ErrTypeValidatorReservationNotFound},
+	{[]string{"received unexpected HTTP status: 502 Bad Gateway"}, ErrTypeHttpBadGateway},
+	{[]string{"Error: Pod initialization timed out after 20 minutes"}, ErrTypePodTimeOut},
+	{[]string{"Cloud Filestore API has not been used in project"}, ErrTypeAPIDisabled},
+	{[]string{"Error: NodePool was created in the error state"}, ErrTypeGkeNodepoolStateError},
+	{[]string{"does not have permission to access projects"}, ErrTypeIamPermissionDenied},
 }
 
 func init() {
