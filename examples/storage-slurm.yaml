@@ -43,10 +43,6 @@ deployment_groups:
       storage_class: RAPID
       placement_zones: ["$(vars.zone)"]
       enable_hierarchical_namespace: true
-      # Refer https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache for parameter details
-      anywhere_cache:
-        zones: ["$(vars.zone)"]
-        admission_policy: "admit-on-first-miss"
     outputs: [gcs_bucket_name]
 
 - group: slurm-cluster
