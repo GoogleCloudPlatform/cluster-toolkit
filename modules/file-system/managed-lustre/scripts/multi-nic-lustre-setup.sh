@@ -54,7 +54,7 @@ md_gw_for_nic() {
 [[ -r /etc/google/multinic-lustre.env ]] && . /etc/google/multinic-lustre.env
 
 LNET_OPTIONS="${MULTINIC_LNET_OPTIONS:-$(md_get "${MD}/attributes/multinic-lustre-lnet-options")}"
-LNET_OPTIONS="${LNET_OPTIONS:-lnet_numa_range=1000000 lnet_peer_discovery_disabled=1}"
+LNET_OPTIONS="${LNET_OPTIONS:-lnet_numa_range=1000000}"
 TABLE_ID="${MULTINIC_TABLE_BASE:-101}"
 RPF="${MULTINIC_RP_FILTER:-2}"
 

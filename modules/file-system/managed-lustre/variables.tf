@@ -157,12 +157,9 @@ variable "multinic" {
   EOT
   type = object({
     enabled = optional(bool, false)
-    # Keep peer discovery disabled (lnet_peer_discovery_disabled=1). Having
-    # peer discovery enabled creates issues with multi-nic server + numa to nic
-    # settings, that is, it creates cross numa traffic on serverside.
     # numa_range=1000000: hides CPU socket distance from LNet so peers spread
     # over both rails instead of all picking the nearest NIC.
-    lnet_options = optional(string, "lnet_numa_range=1000000 lnet_peer_discovery_disabled=1")
+    lnet_options = optional(string, "lnet_numa_range=1000000")
     table_base   = optional(number, 101)
     rp_filter    = optional(number, 2)
     # LNet servers open callback connections back to the client on tcp:988
