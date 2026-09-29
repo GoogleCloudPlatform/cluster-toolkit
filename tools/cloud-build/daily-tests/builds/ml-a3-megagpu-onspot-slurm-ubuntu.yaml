@@ -99,6 +99,8 @@ steps:
               value: "true"
             - name: REQUIRED_LUSTRE_GB
               value: "36000"
+            - name: EXCLUDE_ZONES
+              value: "europe-west2-c us-west1-b us-west1-c us-west1-a"
             - name: ANSIBLE_HOST_KEY_CHECKING
               value: "false"
             - name: ANSIBLE_CONFIG
@@ -144,7 +146,7 @@ steps:
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gsutil rm "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh

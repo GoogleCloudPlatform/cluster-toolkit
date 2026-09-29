@@ -91,7 +91,7 @@ For a complete example, run:
 sbatch run-nccl-tests-rdma.sh
 ```
 
-The output will appear in in a `slurm-<job#>.log` file. If the name of your a3-ultragpu
+The output will appear in a `slurm-<job#>.log` file. If the name of your a3-ultragpu
 partition is different than "gke", you will need to modify the `build-nccl-tests.sh`
 and `run-nccl-tests-*.sh` scripts  `#SBATCH --partition` setting. Alternatively, you
 can run `sbatch -p <your partition> <script>`.

@@ -29,7 +29,7 @@ vars:
   image_build_machine_type: n2-standard-4
   image_disk_size_gb: 50
   built_image_family: slurm-vgpu-ubuntu2404
-  build_slurm_from_git_ref: 6.13.1
+  build_slurm_from_git_ref: 6.12.3
 
   # Cluster env settings
   net0_range: 192.168.0.0/24
@@ -184,7 +184,7 @@ deployment_groups:
           sudo apt-get update
           # Copy driver from GCS bucket and install
           TMP_DIR=\$(mktemp -d)
-          gsutil cp gs://gce-nvidia-vgpu-drivers/G4_VGPU/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run "${TMP_DIR}/"
+          gcloud storage cp gs://gce-nvidia-vgpu-drivers/G4_VGPU/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run "${TMP_DIR}/"
           chmod +x "${TMP_DIR}/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run"
           echo "Installing driver..."
           sudo sh "${TMP_DIR}/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run" --silent

@@ -48,7 +48,9 @@ deployment_groups:
           image_name: \((cat /dog))
           labels: |-
             ((merge(var.labels, {
-              brown = "$(fox)"
+              brown              = "$(fox)"
+              escaped_braced_var = "\\$${HOME}"
+              escaped_var        = "\\$IP"
             })))
           project_id: ((var.project_id))
           subnetwork_name: \$(purple
