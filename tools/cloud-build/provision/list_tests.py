@@ -73,7 +73,8 @@ TEMPORAL_CONSTRAINTS = [
     ), 1*60),
     ((
         "ml-a3-highgpu-onspot-slurm",
-        "gke-a3-highgpu-onspot"
+        "gke-a3-highgpu-onspot",
+        "gke-a3-highgpu-tcpxo-onspot"
     ), 1*60),
 ]
 # TODO:

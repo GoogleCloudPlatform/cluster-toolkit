@@ -12,6 +12,13 @@ a3-highgpu-8g compute nodes running NVIDIA H100 GPUs.
 > performance of workloads that span multiple
 > a3-highgpu-8g VMs.
 
+<!-- -->
+
+> [!NOTE]
+> **TCPXO Availability:** The next-generation TCPXO (FasTrak) networking stack is now available for `a3-highgpu-8g`.
+> TCPXO offers improved routing but can currently only be used with Spot VMs or On-Demand instances (it is **not supported with reservations**).
+> For Spot and On-Demand provisioning with TCPXO, you can skip the credential request above and simply deploy the cluster using the dedicated blueprint: `a3high-slurm-tcpxo-blueprint.yaml`.
+
 ## Upgrading from the "legacy" solution
 There is no direct path for upgrading the a3-highgpu-8g legacy solution.
 The recommended path requires temporarily bringing down your cluster and
@@ -184,15 +191,31 @@ size using `a3_static_cluster_size` variable. Recall that there are 8 NVIDIA H10
 
 Provision the cluster blueprint (approximately 40 minutes):
 
+For TCPX:
+
 ```shell
 ./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml --auto-approve
+```
+
+For TCPXO:
+
+```shell
+./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-tcpxo-blueprint.yaml --auto-approve
 ```
 
 Building the image is time-consuming due to the installation of linux kernel, nvidia drivers, cuda toolkit, and slurm.
 To significantly reduce deployment time when recreating the cluster, use the `--skip image` flag:
 
+For TCPX:
+
 ```shell
 ./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml --auto-approve --skip image
+```
+
+For TCPXO:
+
+```shell
+./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-tcpxo-blueprint.yaml --auto-approve --skip image
 ```
 
 Important Restrictions:
@@ -203,8 +226,16 @@ Selective deployment and teardown for this blueprint are documented centrally. S
 
 Example (deploy only the primary group for this blueprint):
 
+For TCPX:
+
 ```bash
 ./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml --only primary
+```
+
+For TCPXO:
+
+```bash
+./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-tcpxo-blueprint.yaml --only primary
 ```
 
 ## Receive Data Path Manager (RxDM)
@@ -237,6 +268,15 @@ The Epilog will
 - Stop the RxDM service
 - Prune any stopped containers (freeing up disk space)
 - Remove the directory at `${UDS_PATH}`
+
+## Jobs using TCPXO (FasTrak)
+
+Jobs that are running across multiple a3-highgpu-8g VMs with TCPXO will benefit from the NCCL plugin. An example containerized job is located at `/opt/apps/scripts/run-nccl-tests-tcpxo.sh`. In addition to setting standard NCCL configuration values, a job must:
+
+- Set `LD_LIBRARY_PATH` to include `/var/lib/tcpxo/lib64` and `/usr/local/nvidia/lib64`
+
+If job is containerized:
+- Mount `/var/lib/tcpxo/lib64` to `/var/lib/tcpxo/lib64` in the container (to make the NCCL plugin available)
 
 ## Jobs using the RxDM / TCPx
 
@@ -279,14 +319,30 @@ bash import_pytorch_container.sh
 
 ### Build NCCL
 
+For TCPX:
+
 ```shell
 sbatch build-nccl-tests.sh
 ```
 
+For TCPXO:
+
+```shell
+sbatch build-nccl-tests-tcpxo.sh
+```
+
 ### Run NCCL tests
+
+For TCPX:
 
 ```shell
 sbatch run-nccl-tests.sh
+```
+
+For TCPXO:
+
+```shell
+sbatch run-nccl-tests-tcpxo.sh
 ```
 
 ## Destroy the VMs

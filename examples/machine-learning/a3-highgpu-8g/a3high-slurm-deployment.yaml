@@ -23,6 +23,8 @@ vars:
   project_id: # supply existing project id
   region: # supply region with a3-highgpu-8g capacity in reservation
   zone: # supply zone with a3-highgpu-8g capacity in reservation
+  # Provide credentials below for TCPX. If enabling TCPXO, comment out these 3 lines.
+  # Note: TCPXO is supported with Spot and On-Demand instances only.
   tcpx_kernel_login: # use value supplied by Google Cloud staff
   tcpx_kernel_password: # use value supplied by Google Cloud staff
   keyserver_ubuntu_key: # use value supplied by Google Cloud staff
