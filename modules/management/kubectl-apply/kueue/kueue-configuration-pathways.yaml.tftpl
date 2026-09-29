@@ -1,4 +1,4 @@
-apiVersion: kueue.x-k8s.io/v1beta2
+3apiVersion: kueue.x-k8s.io/v1beta2
 kind: ResourceFlavor
 metadata:
   name: "flavor-${accelerator_type}"
@@ -31,14 +31,6 @@ spec:
   resourceGroups:
   - coveredResources: ["google.com/tpu", "cpu", "memory"]
     flavors:
-    - name: "flavor-${accelerator_type}"
-      resources:
-      - name: "google.com/tpu"
-        nominalQuota: ${tpu_quota}
-      - name: "cpu"
-        nominalQuota: ${tpu_flavor_cpu_quota} # High default to avoid limiting TPU pods by CPU
-      - name: "memory"
-        nominalQuota: ${tpu_flavor_memory_quota} # High default to avoid limiting TPU pods by Memory
     - name: pathways-flavor
       resources:
       - name: "google.com/tpu"
@@ -47,6 +39,14 @@ spec:
         nominalQuota: ${pathways_cpu_quota}
       - name: memory
         nominalQuota: ${pathways_memory_quota}
+    - name: "flavor-${accelerator_type}"
+      resources:
+      - name: "google.com/tpu"
+        nominalQuota: ${tpu_quota}
+      - name: "cpu"
+        nominalQuota: ${tpu_flavor_cpu_quota} # High default to avoid limiting TPU pods by CPU
+      - name: "memory"
+        nominalQuota: ${tpu_flavor_memory_quota} # High default to avoid limiting TPU pods by Memory
 ---
 apiVersion: kueue.x-k8s.io/v1beta2
 kind: LocalQueue
