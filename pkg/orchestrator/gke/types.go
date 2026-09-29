@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
 	crm "google.golang.org/api/cloudresourcemanager/v1"
@@ -297,6 +298,7 @@ type StorageManager struct {
 	filestoreClient filestoreClient
 	instancesCache  []*filestorepb.Instance
 	preflightClient storagePreflightClient
+	now             func() time.Time // stamps last-claimed-at; nil means time.Now
 }
 
 type storagePreflightClient interface {

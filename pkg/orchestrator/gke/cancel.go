@@ -92,13 +92,6 @@ func isToolkitGatewayClaimName(claim string) bool {
 		strings.HasPrefix(claim, filestoreGatewayPrefix+"-")
 }
 
-func isToolkitManaged(obj *unstructured.Unstructured) bool {
-	if obj == nil {
-		return false
-	}
-	return obj.GetLabels()[managedByLabel] == managedByValue
-}
-
 // reclaimStorageGateways deletes unused toolkit gateways in the namespace. Failures only warn.
 func (g *GKEOrchestrator) reclaimStorageGateways(namespace, cancelledJobSet string, ownClaims []string) {
 	if g.kubeClient == nil {
@@ -176,7 +169,7 @@ func (g *GKEOrchestrator) gatewayPV(namespace string, pvc *unstructured.Unstruct
 	case err != nil:
 		logging.Warn("Skipping cleanup of storage gateway '%s' in namespace '%s': could not read PersistentVolume '%s' to verify ownership: %v", claim, namespace, pvName, err)
 		return nil, false
-	case !isToolkitManaged(pv):
+	case pv.GetLabels()[managedByLabel] != managedByValue:
 		logging.Warn("PersistentVolume '%s' bound to gateway '%s' does not carry the '%s: %s' label. Refusing to delete storage gcluster does not own.", pvName, claim, managedByLabel, managedByValue)
 		return nil, false
 	}

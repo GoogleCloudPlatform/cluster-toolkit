@@ -893,17 +893,9 @@ func verifyFilestoreManifest(t *testing.T, manifest, name, server, path, capacit
 	}
 }
 
-// fixGatewayClock pins the last-claimed-at stamp so rendered gateways are stable.
-func fixGatewayClock(t *testing.T) {
-	t.Helper()
-	orig := gatewayNow
-	gatewayNow = func() time.Time { return time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC) }
-	t.Cleanup(func() { gatewayNow = orig })
-}
-
 func TestProcessMounts_Filestore_SingleMountGolden(t *testing.T) {
-	fixGatewayClock(t)
 	sm := &StorageManager{
+		now: func() time.Time { return time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC) },
 		getFilestoreIP: func(ctx context.Context, projectID, location, nameOrIP string, isIP bool) (string, string, int64, error) {
 			return "10.0.0.2", "myinstance", 2048, nil
 		},
@@ -2937,7 +2929,7 @@ func TestRunStorageProfilePreflightDryRunDoesNotBlock(t *testing.T) {
 		RawMounts:       []string{"gs://bkt;/data;ro;profile=training"},
 	}
 
-	if err := sm.RunStorageProfilePreflight(job); err != nil {
+	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
 		t.Fatalf("RunStorageProfilePreflight() must not block a dry run, got: %v", err)
 	}
 }
@@ -2952,7 +2944,7 @@ func TestRunStorageProfilePreflightBlocksOnMissingStorageClass(t *testing.T) {
 		RawMounts:       []string{"gs://bkt;/data;ro;profile=training"},
 	}
 
-	err := sm.RunStorageProfilePreflight(job)
+	err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != "")
 	if err == nil {
 		t.Fatal("RunStorageProfilePreflight() expected an error when the StorageClass is missing")
 	}
@@ -2978,7 +2970,7 @@ func TestRunStorageProfilePreflightChecksEachBucketOnce(t *testing.T) {
 		},
 	}
 
-	if err := sm.RunStorageProfilePreflight(job); err != nil {
+	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
 		t.Fatalf("RunStorageProfilePreflight() unexpected error: %v", err)
 	}
 	if !reflect.DeepEqual(client.bindingRequests, []string{"bkt"}) {
@@ -2998,7 +2990,7 @@ func TestRunStorageProfilePreflightNoProfileMountsSkipsCluster(t *testing.T) {
 		RawMounts: []string{"gs://bkt;/data", "/host;/local"},
 	}
 
-	if err := sm.RunStorageProfilePreflight(job); err != nil {
+	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
 		t.Fatalf("RunStorageProfilePreflight() unexpected error: %v", err)
 	}
 }
@@ -3020,7 +3012,7 @@ func TestRunStorageProfilePreflightFailsOpenOnIAMErrors(t *testing.T) {
 		RawMounts:       []string{"gs://bkt;/data;ro;profile=serving"},
 	}
 
-	if err := sm.RunStorageProfilePreflight(job); err != nil {
+	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
 		t.Fatalf("RunStorageProfilePreflight() must never block on IAM failures, got: %v", err)
 	}
 }
@@ -3049,7 +3041,7 @@ func TestRunStorageProfilePreflightBucketRegionMismatch(t *testing.T) {
 			if tc.dryRun {
 				job.DryRunManifest = "manifest.yaml"
 			}
-			err := newPreflightStorageManager(executor, client).RunStorageProfilePreflight(job)
+			err := newPreflightStorageManager(executor, client).RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != "")
 			if tc.wantBlock && (err == nil || !strings.Contains(err.Error(), "same region")) {
 				t.Fatalf("RunStorageProfilePreflight() = %v, want a blocking co-location error", err)
 			}

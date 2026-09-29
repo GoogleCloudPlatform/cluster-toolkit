@@ -632,7 +632,7 @@ func (sm *StorageManager) generateFilestoreResources(pm parsedMount, idx int, jo
 		"StorageType":      storageTypeFilestore,
 
 		"LastClaimedAtAnnotation": lastClaimedAtAnnotation,
-		"LastClaimedAt":           gatewayNow().UTC().Format(time.RFC3339Nano),
+		"LastClaimedAt":           sm.claimedAt(),
 		"LastClaimedByAnnotation": lastClaimedByAnnotation,
 		"LastClaimedBy":           job.WorkloadName,
 	})
@@ -749,7 +749,7 @@ func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx in
 		StorageType:      storageTypeGCSFuse,
 
 		LastClaimedAtAnnotation: lastClaimedAtAnnotation,
-		LastClaimedAt:           gatewayNow().UTC().Format(time.RFC3339Nano),
+		LastClaimedAt:           sm.claimedAt(),
 		LastClaimedByAnnotation: lastClaimedByAnnotation,
 		LastClaimedBy:           job.WorkloadName,
 	}
@@ -857,8 +857,13 @@ func (sm *StorageManager) recreateStaleGatewayPV(pvName string, existing existin
 	return nil
 }
 
-// gatewayNow stamps last-claimed-at; tests override it.
-var gatewayNow = time.Now
+func (sm *StorageManager) claimedAt() string {
+	now := time.Now
+	if sm.now != nil {
+		now = sm.now
+	}
+	return now().UTC().Format(time.RFC3339Nano)
+}
 
 // waitForGatewayRelease waits out a gateway deleted by a recent cleanup, so an immediate resubmit recreates it.
 func (sm *StorageManager) waitForGatewayRelease(pvName, pvcName, ns string) error {
@@ -1219,17 +1224,17 @@ var (
 )
 
 // RunStorageProfilePreflight checks that profile= mounts can be satisfied by the cluster and bucket.
-func (sm *StorageManager) RunStorageProfilePreflight(job orchestrator.JobDefinition) error {
-	mounts, err := sm.collectProfileMounts(job.RawMounts)
+func (sm *StorageManager) RunStorageProfilePreflight(rawMounts []string, projectID, clusterLocation string, dryRun bool) error {
+	mounts, err := sm.collectProfileMounts(rawMounts)
 	if err != nil || len(mounts) == 0 {
 		return err
 	}
 
-	if err := sm.validateStorageClassesExist(mounts, job.DryRunManifest != ""); err != nil {
+	if err := sm.validateStorageClassesExist(mounts, dryRun); err != nil {
 		return err
 	}
 
-	return sm.checkProfileMisconfiguration(job, mounts)
+	return sm.checkProfileMisconfiguration(projectID, clusterLocation, mounts, dryRun)
 }
 
 func (sm *StorageManager) collectProfileMounts(rawMounts []string) ([]profileMount, error) {
@@ -1334,7 +1339,7 @@ func (sm *StorageManager) validateStorageClassExists(storageClass string, dryRun
 	return err
 }
 
-func (sm *StorageManager) checkProfileMisconfiguration(job orchestrator.JobDefinition, mounts []profileMount) error {
+func (sm *StorageManager) checkProfileMisconfiguration(projectID, clusterLocation string, mounts []profileMount, dryRun bool) error {
 	client, err := sm.getPreflightClient(context.Background())
 	if err != nil {
 		logging.Warn("Skipping Cloud Storage pre-flight checks for storage profile mounts: %v. Proceeding with job submission.", err)
@@ -1343,14 +1348,14 @@ func (sm *StorageManager) checkProfileMisconfiguration(job orchestrator.JobDefin
 	ctx, cancel := context.WithTimeout(context.Background(), storageAPITimeout)
 	defer cancel()
 
-	if agent, err := gkeServiceAgentEmail(ctx, client, job.ProjectID); err != nil {
+	if agent, err := gkeServiceAgentEmail(ctx, client, projectID); err != nil {
 		logging.Warn("Skipping the GKE Service Agent IAM pre-flight check: could not resolve the project number for %q: %v. "+
 			"Verify manually that the GKE Service Agent holds the required permissions on the target bucket(s). See %s",
-			job.ProjectID, err, gcsFuseProfileIAMURL)
+			projectID, err, gcsFuseProfileIAMURL)
 	} else {
-		warnOnMissingIAM(ctx, client, job.ProjectID, agent, mounts)
+		warnOnMissingIAM(ctx, client, projectID, agent, mounts)
 	}
-	return checkBucketLocations(ctx, client, job.ClusterLocation, mounts, job.DryRunManifest != "")
+	return checkBucketLocations(ctx, client, clusterLocation, mounts, dryRun)
 }
 
 func warnOnMissingIAM(ctx context.Context, client storagePreflightClient, projectID, agent string, mounts []profileMount) {

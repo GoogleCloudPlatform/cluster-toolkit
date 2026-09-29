@@ -340,9 +340,9 @@ kubectl get pv,pvc -A -l gcluster.google.com/managed-by=cluster-toolkit,gcluster
 To delete one by hand, delete the claim first, then the volume bound to it:
 
 ```bash
-kubectl get pvc <claim> -n <namespace> -o jsonpath='{.spec.volumeName}'
-kubectl delete pvc <claim> -n <namespace>
-kubectl delete pv <volume>
+VOLUME=$(kubectl get pvc <claim> -n <namespace> -o jsonpath='{.spec.volumeName}') && \
+kubectl delete pvc <claim> -n <namespace> && \
+kubectl delete pv "$VOLUME"
 ```
 
 ---

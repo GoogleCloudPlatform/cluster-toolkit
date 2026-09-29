@@ -434,28 +434,6 @@ func TestToolkitGatewayClaimPrefixMatchesGenerator(t *testing.T) {
 	}
 }
 
-func TestIsToolkitManaged(t *testing.T) {
-	if isToolkitManaged(nil) {
-		t.Error("a nil object must never be treated as managed")
-	}
-	if isToolkitManaged(unmanagedStorageObject("PersistentVolume", "pv")) {
-		t.Error("an unlabelled object must not be treated as managed")
-	}
-	if !isToolkitManaged(managedStorageObject("PersistentVolume", "pv")) {
-		t.Error("a labelled object must be treated as managed")
-	}
-
-	wrongValue := &unstructured.Unstructured{Object: map[string]interface{}{
-		"metadata": map[string]interface{}{
-			"name":   "pv",
-			"labels": map[string]interface{}{managedByLabel: "something-else"},
-		},
-	}}
-	if isToolkitManaged(wrongValue) {
-		t.Error("a different managed-by value must not be treated as managed")
-	}
-}
-
 func TestIsFinished(t *testing.T) {
 	tests := map[string]struct {
 		obj  unstructured.Unstructured
