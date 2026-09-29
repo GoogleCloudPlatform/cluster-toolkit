@@ -1,3 +1,4 @@
+@@ -1,4 +1,4 @@
 // Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -525,7 +526,7 @@ var extraSubstringErrMatchers = []struct {
 	{"Quota exceeded for quota metric 'Requests per project in the US multi-region' and limit 'Requests per project in the US multi-region per minute' of service 'artifactregistry.googleapis.com'", ErrTypeQuotaExceededForQuotaMetric},
 	{"There was a failure in the startup script", ErrTypeStartupScriptFailed},
 	{"Found more than 1 matching running build(s)", ErrTypeTestCollision},
-	{"Error: Error creating for creating GKE cluster: Failed to create cluster", ErrTypeFailedToCreateCluster},
+	{"Error: Error waiting for creating GKE cluster: Failed to create cluster", ErrTypeFailedToCreateCluster},
 	{"Error waiting for Creating Address: Quota 'STATIC_ADDRESSES' exceeded.  Limit: 175.0 in region us-west4", ErrTypeStaticAddressesQuotaExceeded},
 	{"Google Compute Engine: Invalid value for field 'resource.IPAddress", ErrTypeIpaddressNotExist},
 	{"Error waiting to create Instance: Error waiting for Creating Instance: Error code 3, message: cloud-cont", ErrTypeCidrRangeInUse},
