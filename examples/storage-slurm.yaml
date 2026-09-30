@@ -45,6 +45,19 @@ deployment_groups:
       enable_hierarchical_namespace: true
     outputs: [gcs_bucket_name]
 
+  - id: regional-gcs-bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /data_regional
+      random_suffix: true
+      force_destroy: true
+      # Refer https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache for parameter details
+      anywhere_cache:
+        zones: ["$(vars.zone)"]
+        ttl: "86400s"
+        admission_policy: "admit-on-first-miss"
+    outputs: [gcs_bucket_name]
+
 - group: slurm-cluster
   modules:
   - id: slurm-nodeset
@@ -105,6 +118,7 @@ deployment_groups:
     - network
     - rapid_partition
     - zonal-gcs-bucket
+    - regional-gcs-bucket
     - slurm_login
     settings:
       machine_type: c3d-standard-4
