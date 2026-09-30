@@ -26,6 +26,24 @@ repos:
     - --hook-config=--retry-once-with-cleanup=true
 - repo: local
   hooks:
+  - id: validate-kueue-tests
+    name: validate-kueue-tests
+    entry: python3 tools/cloud-build/daily-tests/validate_kueue_tests.py
+    language: python
+    language_version: python3
+    additional_dependencies: ['ruamel.yaml']
+    files: 'tools/cloud-build/daily-tests/builds/.*\.yaml'
+    pass_filenames: false
+    require_serial: true
+  - id: generate-kueue-locks
+    name: generate-kueue-locks
+    entry: python3 tools/cloud-build/provision/generate_kueue_locks.py
+    language: python
+    language_version: python3
+    additional_dependencies: ['ruamel.yaml']
+    files: 'tools/cloud-build/daily-tests/builds/.*\.yaml'
+    pass_filenames: false
+    require_serial: true
   - id: terraform-readme
     name: terraform-readme
     entry: tools/autodoc/terraform_docs.sh
@@ -72,6 +90,15 @@ repos:
     language_version: python3
     additional_dependencies: ['pyyaml']
     files: 'tools/cloud-build/daily-tests/builds/.*\.yaml'
+    pass_filenames: false
+    require_serial: true
+  - id: skills-lint
+    name: skills-lint
+    entry: python3 tools/run_eval.py --lint-only --all
+    language: python
+    language_version: python3
+    additional_dependencies: ['pyyaml>=6.0.1']
+    files: '^(skills/.*|tools/run_eval\.py|tools/tests/test_run_eval\.py)$'
     pass_filenames: false
     require_serial: true
   - id: pytest-check
@@ -176,7 +203,7 @@ repos:
     # MD041 - First line in file should be a top level header
     # MD046 - Code block style
     # MD024 - Multiple headings cannot contain the same content.
-    exclude: GEMINI.md
+    exclude: (GEMINI\.md|skills\/.*)
     args: [--disable-rules, "MD013,MD022,MD033,MD034,MD041,MD046,MD024", scan]
 - repo: https://github.com/jumanjihouse/pre-commit-hooks
   rev: "3.0.0"

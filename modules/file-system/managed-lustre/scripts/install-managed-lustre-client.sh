@@ -61,7 +61,13 @@ if [[ ${DIST} == "Ubuntu" ]]; then
 
 	# Install modules
 	apt update
-	apt install -y "lustre-client-modules-$(uname -r)" lustre-client-utils || (echo "Error finding Lustre module packages, Lustre package may not exist for this kernel version" && exit 1)
+	if ! apt install -y "lustre-client-modules-$(uname -r)" lustre-client-utils; then
+		echo "Pre-compiled package lustre-client-modules-$(uname -r) not found. Attempting install via lustre-client-modules-dkms..."
+		if ! apt install -y dkms "linux-headers-$(uname -r)" lustre-client-modules-dkms lustre-client-utils; then
+			echo "Error finding Lustre module packages, Lustre package may not exist for this kernel version" >&2
+			exit 1
+		fi
+	fi
 elif [[ ${DIST} == "Rocky" ]]; then
 	# Set up yum repo
 	touch /etc/yum.repos.d/artifact-registry.repo

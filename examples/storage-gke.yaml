@@ -79,6 +79,8 @@ deployment_groups:
       configure_workload_identity_sa: true  # needed when using GCS
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
+      system_node_pool_machine_type: n2d-standard-4
+      system_node_pool_zones: [$(vars.zone)]
       master_authorized_networks:
       - display_name: deployment-machine
         cidr_block: $(vars.authorized_cidr)
@@ -126,7 +128,8 @@ deployment_groups:
     use: [gke_cluster]
     settings:
       apply_manifests:
-      - source: $(ghpc_stage("../modules/management/kubectl-apply/manifests/checkpoint-configuration.yaml.tftpl"))
+      - name: checkpoint-configuration
+        source: $(ghpc_stage("../modules/management/kubectl-apply/manifests/checkpoint-configuration.yaml.tftpl"))
         template_vars:
           inMemoryVolumeSize: "50Gi"
           cloudStorageBucketName: $(data-bucket.gcs_bucket_name)

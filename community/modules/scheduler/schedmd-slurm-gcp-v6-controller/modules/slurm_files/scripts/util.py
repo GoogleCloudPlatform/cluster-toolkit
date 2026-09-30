@@ -14,9 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Union
+from __future__ import annotations
+from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Union, Set
 import argparse
 import base64
+import copy
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime, timezone
 import hashlib
@@ -211,7 +213,7 @@ class MachineType:
     @property
     def supports_smt(self) -> bool:
         # https://cloud.google.com/compute/docs/cpu-platforms
-        if self.family in  ("t2a", "t2d", "h3", "c4a", "h4d",):
+        if self.family in ("t2a", "t2d", "h3", "c4a", "n4a", "h4d"):
             return False
         if self.guest_cpus == 1:
             return False
@@ -312,7 +314,7 @@ class Instance:
       resource_status=InstanceResourceStatus.from_json(jo.get("resourceStatus")),
       scheduling=NSDict(jo.get("scheduling")),
       role = jo.get("labels", {}).get("slurm_instance_role"),
-      metadata = {k["key"]: k["value"] for k in jo.get("metadata", {}).get("items", [])}
+      metadata = {k["key"]: k["value"] for k in jo.get("metadata", {}).get("items", [])},
     )
 
 
@@ -479,15 +481,36 @@ def get_template_gpu(template):
     return gpu
 
 
-def trim_self_link(link: str):
-    """get resource name from self link url, eg.
+def to_leaf_name(val: Optional[str]) -> str:
+    """Extract leaf resource name from a self-link, URL path, or bare name.
+
+    Strips leading/trailing whitespace, trailing slashes, and extracts the
+    rightmost path segment. Idempotent on already-trimmed names. Safe on empty
+    or None inputs.
+
+    Examples:
+        'https://.../zones/us-central1-a' -> 'us-central1-a'
+        'https://.../zones/us-central1-a/' -> 'us-central1-a'
+        'us-central1-a' -> 'us-central1-a'
+        '  us-central1-a/  ' -> 'us-central1-a'
+        '///' -> ''
+        '' -> ''
+        None -> ''
+    """
+    if not val:
+        return ""
+    cleaned = str(val).strip().rstrip("/").strip()
+    if not cleaned:
+        return ""
+    return cleaned.rsplit("/", 1)[-1].strip()
+
+
+def trim_self_link(link: str) -> str:
+    """get resource name from self link url or bare name, eg.
     https://.../v1/projects/<project>/regions/<region>
     -> <region>
     """
-    try:
-        return link[link.rindex("/") + 1 :]
-    except ValueError:
-        raise Exception(f"'/' not found, not a self link: '{link}' ")
+    return to_leaf_name(link)
 
 
 def get_self_link_component(link: str, component_name: str):
@@ -1529,12 +1552,30 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
     return done, failed
 
 
-def get_operation_req(lkp: "Lookup", name: str, region: Optional[str]=None, zone: Optional[str]=None) -> Any:
-  if zone:
-    return lkp.compute.zoneOperations().get(project=lkp.project, zone=zone, operation=name)
-  elif region:
-    return lkp.compute.regionOperations().get(project=lkp.project, region=region, operation=name)
-  return lkp.compute.globalOperations().get(project=lkp.project, operation=name)
+def get_operation_req(
+    lkp: "Lookup",
+    name: str,
+    region: Optional[str] = None,
+    zone: Optional[str] = None,
+) -> Any:
+    """Constructs a Compute Engine Operation get request with sanitized resource names."""
+    op_name = to_leaf_name(name)
+    if not op_name:
+        raise ValueError(f"Invalid operation name: '{name}'")
+    zone_leaf = to_leaf_name(zone)
+    region_leaf = to_leaf_name(region)
+
+    if zone_leaf:
+        return lkp.compute.zoneOperations().get(
+            project=lkp.project, zone=zone_leaf, operation=op_name
+        )
+    elif region_leaf:
+        return lkp.compute.regionOperations().get(
+            project=lkp.project, region=region_leaf, operation=op_name
+        )
+    return lkp.compute.globalOperations().get(
+        project=lkp.project, operation=op_name
+    )
 
 def wait_request(operation, project: str):
     """makes the appropriate wait request for a given operation"""
@@ -1625,6 +1666,12 @@ class ReservationDetails:
     @property
     def calendar(self) -> bool:
         return self.reservation_mode == "CALENDAR"
+
+@dataclass(frozen=True)
+class TpuInfo:
+    """Represents information about a TPU generation and chip count per node."""
+    type: str
+    tpus_per_node: int
 
 @dataclass(frozen=True)
 class FutureReservation:
@@ -1810,6 +1857,85 @@ class Lookup:
 
     def nodeset_is_tpu(self, nodeset_name=None) -> bool:
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
+
+    def is_nodeset_mig(self, nodeset_name: str) -> bool:
+        """Returns True if a specific NodeSet is configured with or resolved to MIG."""
+        nodeset = self.cfg.nodeset.get(nodeset_name)
+        if not nodeset:
+            return False
+        dws_flex = nodeset.get("dws_flex") if isinstance(nodeset, dict) else getattr(nodeset, "dws_flex", None)
+        if dws_flex:
+            enabled = dws_flex.get("enabled", False) if isinstance(dws_flex, dict) else getattr(dws_flex, "enabled", False)
+            if enabled:
+                return False
+        engine = nodeset.get("provisioning_engine") if isinstance(nodeset, dict) else getattr(nodeset, "provisioning_engine", None)
+        if engine == "BULK_INSERT":
+            return False
+        if engine == "MIG":
+            return True
+        mig_name = nodeset.get("mig_name") if isinstance(nodeset, dict) else getattr(nodeset, "mig_name", None)
+        if mig_name and not isinstance(mig_name, dict):
+            return True
+        return False
+
+    def is_node_mig(self, node_name: str) -> bool:
+        """Returns True if the node belongs to a MIG-backed NodeSet."""
+        nodeset_name = self.node_nodeset_name(node_name)
+        return self.is_nodeset_mig(nodeset_name)
+
+    def mig_name(self, nodeset_name: str, index: int = 0) -> str:
+        """Returns target MIG name for a given NodeSet, indexed from 0 for consistent scale expansion."""
+        return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-mig-{index}"
+
+    def nodeset_slice_size(self, nodeset_name: str) -> int:
+        """Returns the slice size (hosts per slice) for a given NodeSet.
+        
+        For accelerator topologies (e.g. A4X with 1x72), computes hosts per slice
+        or reads slice_size from config. Defaults to 1000 for standard MIGs.
+        """
+        nodeset = self.cfg.nodeset.get(nodeset_name)
+        if not nodeset:
+            return 1000
+        slice_val = nodeset.get("slice_size") if isinstance(nodeset, dict) else getattr(nodeset, "slice_size", None)
+        if slice_val:
+            try:
+                return max(1, int(slice_val))
+            except (ValueError, TypeError):
+                pass
+        topo = nodeset.get("accelerator_topology") if isinstance(nodeset, dict) else getattr(nodeset, "accelerator_topology", None)
+        if topo:
+            log.debug(f"slice_size not present in config for {nodeset_name}; computing from accelerator_topology {topo}")
+            try:
+                dims = [int(x) for x in topo.lower().strip().split("x")]
+                if len(dims) == 2 and dims[0] > 0 and dims[1] > 0:
+                    total_gpus = dims[0] * dims[1]
+                    gpus_per_vm = 4
+                    gpu_cnt = nodeset.get("gpu_count") if isinstance(nodeset, dict) else getattr(nodeset, "gpu_count", None)
+                    if not gpu_cnt:
+                        gpu_attr = nodeset.get("gpu") if isinstance(nodeset, dict) else getattr(nodeset, "gpu", None)
+                        gpu_cnt = gpu_attr.get("count") if isinstance(gpu_attr, dict) else getattr(gpu_attr, "count", None)
+                    if gpu_cnt:
+                        gpus_per_vm = int(gpu_cnt)
+                    else:
+                        template_link = nodeset.get("instance_template") if isinstance(nodeset, dict) else getattr(nodeset, "instance_template", None)
+                        if template_link:
+                            try:
+                                t_info = self.template_info(template_link)
+                                if t_info and t_info.machine_type and t_info.machine_type.accelerators:
+                                    gpus_per_vm = t_info.machine_type.accelerators[0].count
+                            except Exception:
+                                pass
+                    return max(1, total_gpus // max(1, gpus_per_vm))
+            except Exception as e:
+                log.warning(f"Failed to calculate slice size from topology {topo} for {nodeset_name}: {e}")
+        return 1000
+
+    def node_mig_name(self, node_name: str) -> str:
+        """Returns the specific MIG name for a given node."""
+        nodeset_name = self.node_nodeset_name(node_name)
+        idx = self.node_index(node_name)
+        slice_size = self.nodeset_slice_size(nodeset_name)
+        return self.mig_name(nodeset_name, index=idx // slice_size)
 
     def node_is_fr(self, node_name:str) -> bool:
         return bool(self.node_nodeset(node_name).future_reservation)
@@ -2011,18 +2137,55 @@ class Lookup:
             project=project, zone=zone, reservation=name).execute()
 
     @lru_cache()
-    def get_mig(self, project: str, region: str, self_link:str) -> Any:
+    def get_mig(self, project: str, region: str, self_link: str) -> Any:
         """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
-        return self.compute.regionInstanceGroupManagers().get(project=project, region=region, instanceGroupManager=self_link).execute()
-
-    @lru_cache
-    def get_mig_instances(self, project: str, region: str, self_link:str) -> Any:
-        return self.compute.regionInstanceGroupManagers().listManagedInstances(project=project, region=region, instanceGroupManager=self_link).execute() 
+        req = self.compute.regionInstanceGroupManagers().get(project=project, region=region, instanceGroupManager=self_link)
+        return ensure_execute(req)
 
     @lru_cache()
-    def get_mig_list(self, project: str, region: str) -> Any:
+    def get_mig_instances(self, project: str, region: str, self_link: str) -> Any:
+        """Returns all managed instances for a given MIG, handling pagination."""
+        all_instances = []
+        page_token = None
+        while True:
+            req = (
+                self.compute.regionInstanceGroupManagers()
+                .listManagedInstances(
+                    project=project,
+                    region=region,
+                    instanceGroupManager=self_link,
+                    pageToken=page_token,
+                )
+            )
+            res = ensure_execute(req)
+            all_instances.extend(res.get("managedInstances", []) if isinstance(res, dict) else [])
+            page_token = res.get("nextPageToken") if isinstance(res, dict) else None
+            if not page_token:
+                break
+        return {"managedInstances": all_instances}
+
+    @lru_cache()
+    def get_mig_repairing_instances(self, project: str, region: str, self_link: str) -> Set[str]:
+        """Returns the set of instance names currently in REPAIRING state in a given MIG."""
+        mig_insts = self.get_mig_instances(project, region, self_link)
+        repairing: Set[str] = set()
+        for m_inst in mig_insts.get("managedInstances", []):
+            if m_inst.get("currentAction") in ("REPAIRING", "RESTARTING", "RECREATING"):
+                name = m_inst.get("name") or (m_inst.get("instance") or "").split("/")[-1]
+                if name:
+                    repairing.add(name)
+        return repairing
+
+    @lru_cache()
+    def get_mig_list(
+        self, project: str, region: Optional[str] = None, zone: Optional[str] = None
+    ) -> Any:
         """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
-        return self.compute.regionInstanceGroupManagers().list(project=project, region=region).execute()
+        if zone:
+            req = self.compute.instanceGroupManagers().list(project=project, zone=zone)
+        else:
+            req = self.compute.regionInstanceGroupManagers().list(project=project, region=region)
+        return ensure_execute(req)
 
     @lru_cache()
     def _get_future_reservation(self, project:str, zone:str, name: str) -> Any:
@@ -2160,20 +2323,15 @@ class Lookup:
             next(iter(per_zone.values())) # pick the first/any zone
         )
 
-    def template_machine_conf(self, template_link):
-        template = self.template_info(template_link)
-        machine = template.machine_type
-
+    def _machine_conf(self, machine: MachineType, threads_per_core: int, visible_cores) -> NSDict:
         machine_conf = NSDict()
         machine_conf.boards = 1  # No information, assume 1
         machine_conf.sockets = machine.sockets
         # the value below for SocketsPerBoard must be type int
         machine_conf.sockets_per_board = machine_conf.sockets // machine_conf.boards
-        threads_per_core = getThreadsPerCore(template)
         machine_conf.threads_per_core = threads_per_core
         _div = 2 if threads_per_core == 1 else 1
         # Check if visibleCoreCount is specified in the instance template
-        visible_cores = template.advancedMachineFeatures.visibleCoreCount
         if visible_cores:
             machine_conf.cpus = int(visible_cores) * threads_per_core
         else:
@@ -2189,6 +2347,76 @@ class Lookup:
         gb = machine.memory_mb // 1024
         machine_conf.memory = machine.memory_mb - (400 + (30 * gb))
         return machine_conf
+
+    def template_machine_conf(self, template_link):
+        template = self.template_info(template_link)
+        amf = template.get("advancedMachineFeatures")
+        return self._machine_conf(
+            template.machine_type,
+            getThreadsPerCore(template),
+            amf.get("visibleCoreCount") if amf else None,
+        )
+
+    def nodeset_machine_conf(self, nodeset) -> NSDict:
+        """Return machine_conf floored to the smallest shape across instance_flexibility_policy."""
+        base = self.template_machine_conf(nodeset.instance_template)
+
+        policy = nodeset.get("instance_flexibility_policy") if isinstance(nodeset, dict) else getattr(nodeset, "instance_flexibility_policy", None)
+        selections = (policy.get("instance_selections") if isinstance(policy, dict) else getattr(policy, "instance_selections", None)) if policy else None
+        if not selections:
+            return NSDict(base) if isinstance(base, dict) else copy.copy(base)
+
+        template = self.template_info(nodeset.instance_template)
+        amf = template.get("advancedMachineFeatures")
+        amf_tpc = amf.get("threadsPerCore") if amf else None
+        visible_cores = amf.get("visibleCoreCount") if amf else None
+
+        sel_iter = selections.values() if isinstance(selections, dict) else selections
+        confs = [base]
+        for name in sorted({mt for sel in sel_iter for mt in ((sel.get("machine_types") if isinstance(sel, dict) else getattr(sel, "machine_types", None)) or [])}):
+            try:
+                mt = self.machine_type(name)
+                mt_tpc = 1 if not mt.supports_smt else (int(amf_tpc) if amf_tpc else 2)
+                mt_phys_cores = max(1, mt.guest_cpus // 2) if mt.supports_smt else mt.guest_cpus
+                mt_visible_cores = min(int(visible_cores), mt_phys_cores) if visible_cores else None
+                confs.append(
+                    self._machine_conf(
+                        mt,
+                        mt_tpc,
+                        mt_visible_cores,
+                    )
+                )
+            except Exception as e:
+                raise RuntimeError(
+                    f"Cannot size nodeset {nodeset.nodeset_name}: failed to resolve fallback machine type {name}; "
+                    "emitting the primary shape would DRAIN smaller fallback VMs"
+                ) from e
+
+        min_cpu_conf = min(
+            confs,
+            key=lambda c: (
+                c.cpus,
+                c.boards * c.sockets_per_board * c.cores_per_socket,
+                c.sockets,
+                c.threads_per_core,
+            ),
+        )
+        smallest = NSDict(min_cpu_conf) if isinstance(min_cpu_conf, dict) else copy.copy(min_cpu_conf)
+        min_sockets = min(c.sockets for c in confs)
+        min_total_cores = min(c.boards * c.sockets_per_board * c.cores_per_socket for c in confs)
+        min_tpc = min(c.threads_per_core for c in confs)
+        if (
+            smallest.sockets > min_sockets
+            or (smallest.boards * smallest.sockets_per_board * smallest.cores_per_socket) > min_total_cores
+            or smallest.threads_per_core > min_tpc
+        ):
+            smallest.sockets = min_sockets
+            smallest.sockets_per_board = max(1, min_sockets // smallest.boards)
+            smallest.cores_per_socket = max(1, min_total_cores // (smallest.boards * smallest.sockets_per_board))
+            smallest.threads_per_core = min_tpc
+            smallest.cpus = smallest.boards * smallest.sockets_per_board * smallest.cores_per_socket * smallest.threads_per_core
+        smallest.memory = min(c.memory for c in confs)
+        return smallest
 
     @lru_cache(maxsize=None)
     def template_info(self, template_link):
@@ -2343,8 +2571,152 @@ class Lookup:
                 mount_options="defaults,hard,intr,_netdev",
             )
 
+    def is_tpu_nodeset(self, nodeset_name: str) -> bool:
+        """Checks if the nodeset uses a TPU machine type."""
+        try:
+            nodeset = self.cfg.nodeset.get(nodeset_name)
+            if not nodeset or not isinstance(getattr(nodeset, "instance_template", None), str):
+                return False
+            template = self.template_info(nodeset.instance_template)
+            family = template.machine_type.family.lower()
+            return family.startswith("ct") or family.startswith("tpu")
+        except Exception:
+            log.exception("Failed to check if nodeset uses TPU")
+            return False
+
+    def is_tpu_partition(self, partition: NSDict) -> bool:
+        """Checks if the partition contains a nodeset with a TPU machine type."""
+        return any(self.is_tpu_nodeset(ns) for ns in partition.partition_nodeset)
+
+    def is_tpu_node(self, nodename: str) -> bool:
+        """Checks if the node machine type uses a TPU machine type."""
+        try:
+            return self.is_tpu_nodeset(self.node_nodeset_name(nodename))
+        except Exception:
+            return False
+
+    def has_tpu_nodesets(self) -> bool:
+        """Checks if any nodeset uses a TPU machine type."""
+        return any(
+            self.is_tpu_nodeset(n.nodeset_name)
+            for n in self.cfg.nodeset.values()
+        )
+
+    def is_tpu_static_nodeset(self, nodeset_name: str) -> bool:
+        if not self.is_tpu_nodeset(nodeset_name):
+            return False
+        nodeset = self.cfg.nodeset.get(nodeset_name)
+        return bool(nodeset and self.static_dynamic_sizes(nodeset)[0] > 0)
+
+    def is_tpu_static_partition(self, partition: NSDict) -> bool:
+        return bool(partition.partition_nodeset) and all(
+            self.is_tpu_static_nodeset(ns) for ns in partition.partition_nodeset
+        )
+
+    def is_tpu_dynamic_nodeset(self, nodeset_name: str) -> bool:
+        """Checks if the nodeset is a dynamic TPU nodeset."""
+        if not self.is_tpu_nodeset(nodeset_name):
+            return False
+        nodeset = self.cfg.nodeset.get(nodeset_name)
+        return bool(nodeset and self.static_dynamic_sizes(nodeset)[1] > 0)
+
+    def is_tpu_dynamic_partition(self, partition: NSDict) -> bool:
+        """Checks if the partition is a dynamic TPU partition (all dynamic nodesets)."""
+        return bool(partition.partition_nodeset) and all(
+            self.is_tpu_dynamic_nodeset(ns) for ns in partition.partition_nodeset
+        )
+
+    def node_tpu_info(self, nodeset: NSDict) -> Optional[TpuInfo]:
+        """
+        Returns TPU mapping from instance template machine family to TPU
+        generation and tpus per chip.
+        """
+        if not self.is_tpu_nodeset(nodeset.nodeset_name):
+            return None
+        machine_type = self.template_info(nodeset.instance_template).machine_type
+        family = machine_type.family.lower()
+        name = machine_type.name.lower()
+        # Initial support is limited to TPU *-4t machine types
+        if not name.endswith("-4t"):
+            raise ValueError(
+                f"Unsupported TPU machine type family: {name}"
+            )
+        if family.startswith(("ct5l", "ct5lp")):
+            return TpuInfo(
+                type="v5e",
+                tpus_per_node=4,
+            )
+        elif family.startswith("ct5p"):
+            return TpuInfo(
+                type="v5p",
+                tpus_per_node=4,
+            )
+        elif family.startswith("ct6e"):
+            return TpuInfo(
+                type="v6e",
+                tpus_per_node=4,
+            )
+        elif family.startswith("tpu7x"):
+            return TpuInfo(
+                type="tpu7x",
+                tpus_per_node=4,
+            )
+        elif family.startswith("tpu7"):
+            return TpuInfo(
+                type="7",
+                tpus_per_node=4,
+            )
+        else:
+            raise ValueError(
+                f"Unsupported TPU machine type family: {family}"
+            )
+
+    def get_tpu_chunk_size(self, ns: NSDict) -> int:
+        """Calculates chunk size (number of nodes per block) for a TPU nodeset."""
+        tpu_info = self.node_tpu_info(ns)
+        chips_per_slice = (
+            math.prod(int(p) for p in ns.accelerator_topology.lower().split("x"))
+            if getattr(ns, "accelerator_topology", None)
+            else 1
+        )
+        return max(1, chips_per_slice // (tpu_info.tpus_per_node if tpu_info else 1))
+
+    def group_tpu_nodes_by_chunk_idx(
+        self, nodes: Iterable[str], chunk_size: int
+    ) -> Dict[int, List[str]]:
+        """Groups TPU nodes safely into chunk dictionaries based on node index."""
+        chunks_dict = defaultdict(list)
+        for node in nodes:
+            try:
+                chunk_idx = self.node_index(node) // chunk_size
+                chunks_dict[chunk_idx].append(node)
+            except Exception:
+                log.warning(f"Could not parse node index for {node}. Skipping.")
+        return chunks_dict
+
+    def remove_device_constrain_nodeset(self, nodeset_name: str) -> bool:
+        """Checks if the nodeset uses a machine type requiring device constrain removal."""
+        try:
+            nodeset = self.cfg.nodeset.get(nodeset_name)
+            if not nodeset or not isinstance(getattr(nodeset, "instance_template", None), str):
+                return False
+            template = self.template_info(nodeset.instance_template)
+            return template.machine_type.family.lower().startswith(("tpu7x", "ct5p"))
+        except Exception:
+            log.exception("Failed to check if nodeset requires device constrain removal")
+            return False
+
+    def remove_device_constrain(self) -> bool:
+        """Checks if any nodeset requires device constrain removal."""
+        return any(
+            self.remove_device_constrain_nodeset(n.nodeset_name)
+            for n in self.cfg.nodeset.values()
+        )
+
     def is_flex_node(self, node: str) -> bool:
         try:
+            if self.is_tpu_node(node):
+                return False
             nodeset = self.node_nodeset(node)
             if nodeset.dws_flex.use_bulk_insert:
                 return False #For legacy flex support
@@ -2355,13 +2727,14 @@ class Lookup:
     def is_provisioning_flex_node(self, node:str) -> bool:
         if not self.is_flex_node(node):
             return False
-        if self.instance(node) is not None:
+        short_name = node.split(".")[0]
+        if self.instance(short_name) is not None:
             return True
 
-        nodeset = self.node_nodeset(node)
+        nodeset = self.node_nodeset(short_name)
         zones = nodeset.zone_policy_allow
         assert len(zones) > 0
-        region = self.node_region(node)
+        region = self.node_region(short_name)
 
         potential_migs=[]
         mig_list=self.get_mig_list(self.project, region)
@@ -2370,17 +2743,24 @@ class Lookup:
             return False
 
         for mig in mig_list["items"]:
-            if not mig.get("instanceTemplate"): #possibly an old MIG
-                return False
-            if mig["instanceTemplate"] == self.node_template(node) and mig["currentActions"]["creating"] > 0:
+            template = mig.get("instanceTemplate") or (mig.get("versions", [{}])[0].get("instanceTemplate") if mig.get("versions") else None)
+            if not template:
+                continue
+            creating_count = mig.get("currentActions", {}).get("creating", 0) if mig.get("currentActions") else 0
+            if trim_self_link(template) == trim_self_link(self.node_template(short_name)) and creating_count > 0:
                 potential_migs.append(self.get_mig_instances(self.project, region, trim_self_link(mig["selfLink"])))
 
         if not potential_migs:
             return False
 
-        for instance_collection in potential_migs[0]["managedInstances"]:
-            if node in instance_collection["name"] and instance_collection["currentAction"]=="CREATING":
-                return True
+        for inst_group in potential_migs:
+            for instance_collection in inst_group.get("managedInstances", []):
+                inst_name = (
+                    instance_collection.get("name")
+                    or (instance_collection.get("instance") or "").split("/")[-1]
+                )
+                if short_name == inst_name and instance_collection.get("currentAction") == "CREATING":
+                    return True
         return False
     
     def cluster_regions(self) -> list[str]:
@@ -2416,11 +2796,84 @@ def update_config(cfg: NSDict) -> None:
     global _lkp
     _lkp = Lookup(cfg)
 
+def _is_target_controller_up(output: str, target_role: str) -> bool:
+    """Check if a specific controller role ('primary' or 'backup') is UP in scontrol ping output."""
+    role = target_role.lower()
+    for line in output.splitlines():
+        line_lower = line.lower()
+        if f"({role}" in line_lower or f"{role} controller" in line_lower:
+            is_up = any(s in line_lower for s in ("is up", ": up", "(up)"))
+            is_down = any(s in line_lower for s in ("is down", ": down", "(down)"))
+            if is_up and not is_down:
+                return True
+    return False
+
+
+def wait_slurmctld_up(lkp: Lookup, timeout: float = 60) -> None:
+    """Wait for local slurmctld daemon to respond to scontrol ping and report UP status.
+    This ensures scontrol reconfigure does not fail due to slurmctld not being ready
+    after a service restart.
+    """
+    log.info("Waiting for slurmctld to be fully up...")
+    hostname = socket.gethostname().split(".")[0]
+    backup_name = lkp.cfg.get("slurm_backup_controller_name")
+    backup_short = backup_name.split(".")[0] if backup_name else ""
+    is_backup = bool(backup_short) and (hostname == backup_short or hostname.endswith("-1"))
+    target_role = "backup" if is_backup else "primary"
+
+    for wait in backoff_delay(0.5, timeout=timeout):
+        try:
+            res = run(f"{lkp.scontrol} ping", check=False, timeout=5)
+            output = (res.stdout + res.stderr).lower()
+            if _is_target_controller_up(output, target_role):
+                log.info(f"slurmctld ({target_role}) is fully up.")
+                return
+        except Exception as e:
+            log.debug(f"scontrol ping check failed: {e}")
+        if wait > 0:
+            sleep(wait)
+    raise TimeoutError(f"slurmctld ({target_role}) is not fully up after {timeout} seconds")
+
+
 def scontrol_reconfigure(lkp: Lookup) -> None:
     log.info("Running systemctl restart slurmctld.service")
     run("sudo systemctl restart slurmctld.service", timeout=30)
+    wait_slurmctld_up(lkp)
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure")
+
+
+def is_active_controller(lkp: Lookup) -> bool:
+    """Returns True if the local node is the currently active Slurm controller.
+    In non-HA setups, always returns True for the controller.
+    In HA setups, queries scontrol ping to check if local node is active primary or active takeover backup.
+    """
+    if not lkp.is_controller:
+        return False
+
+    backup_name = lkp.cfg.get("slurm_backup_controller_name")
+    if not backup_name:
+        return True
+
+    hostname = socket.gethostname().split(".")[0]
+    backup_short = backup_name.split(".")[0] if backup_name else ""
+    is_backup_instance = (backup_short and hostname == backup_short) or hostname.endswith("-1")
+
+    try:
+        res = run(f"{lkp.scontrol} ping", check=False, timeout=5)
+        output = (res.stdout + res.stderr).lower()
+
+        primary_up = _is_target_controller_up(output, "primary")
+        backup_up = _is_target_controller_up(output, "backup")
+
+        if not is_backup_instance:
+            return primary_up
+        else:
+            return (not primary_up) and backup_up
+    except Exception as e:
+        log.warning(f"Failed to query scontrol ping for HA active check: {e}")
+        return not is_backup_instance
+
 
 def slurm_version_gte(v1: str, v2: str) -> bool:
     """Returns true if v1 >= v2, expects YY.MM format"""

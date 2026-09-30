@@ -15,6 +15,7 @@
 package job
 
 import (
+	"context"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"os"
@@ -104,7 +105,7 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			return fmt.Errorf("required flag \"command\" not set")
 		}
 
-		if err := validateImageFlags(); err != nil {
+		if err := validateImageFlags(cmd.Context(), projectID, location); err != nil {
 			return err
 		}
 
@@ -127,6 +128,10 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			}
 		}
 
+		if err := validateRestartOnExitCodes(restartOnExitCodes); err != nil {
+			return err
+		}
+
 		priority = strings.ToLower(priority)
 
 		return nil
@@ -143,7 +148,7 @@ func init() {
 	SubmitCmd.Flags().StringVarP(&dryRunManifest, "dry-run-out", "o", "", "Path to output the generated Kubernetes manifest instead of applying it.")
 	SubmitCmd.Flags().StringVarP(&platform, "platform", "f", "linux/amd64", "Target platform for the image build (e.g., 'linux/amd64', 'linux/arm64'). Used with --base-image.")
 
-	SubmitCmd.Flags().StringArrayVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>;<dest>[;<mode>][;options=<options>], mode can be 'ro' or 'rw', default 'ro').")
+	SubmitCmd.Flags().StringArrayVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>], mode can be 'ro' or 'rw', default 'ro'). profile= selects a GKE GCSFuse storage profile (training, checkpointing or serving) for gs:// sources and provisions a shared PV/PVC gateway instead of an inline CSI volume.")
 	SubmitCmd.Flags().StringArrayVar(&envVars, "env", []string{}, "Custom environment variables to pass to the workload container in KEY=VALUE format. Can be specified multiple times.")
 
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
@@ -338,14 +343,14 @@ func validatePathwaysFlags() error {
 	return nil
 }
 
-func validateImageFlags() error {
+func validateImageFlags(ctx context.Context, projectID, location string) error {
 	if pathways.Headless {
 		return nil
 	}
 	if err := validateImageSources(); err != nil {
 		return err
 	}
-	return validateBuildContext()
+	return validateBuildContext(ctx, projectID, location)
 }
 
 func validateImageSources() error {
@@ -361,12 +366,39 @@ func validateImageSources() error {
 	return nil
 }
 
-func validateBuildContext() error {
+func validateBuildContext(ctx context.Context, projectID, location string) error {
 	if buildContext == "" {
 		return nil
 	}
 	if os.Getenv("GCLUSTER_IMAGE_REPO") == "" {
-		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo)")
+		suggestions, hasMore := lookupArtifactRegistryRepos(ctx, projectID, location)
+
+		region := shell.ExtractRegion(location)
+
+		projPrint := projectID
+		if projPrint == "" {
+			projPrint = "<PROJECT_ID>"
+		}
+		regPrint := region
+		if regPrint == "" {
+			regPrint = "<REGION>"
+		}
+
+		if len(suggestions) > 0 {
+			reposStr := "'" + strings.Join(suggestions, "', '") + "'"
+			if hasMore {
+				reposStr += " (and more)"
+			}
+			return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context.\n\n"+
+				"Available Docker repositories in project '%s' and region '%s' are: %s.\n\n"+
+				"To view all repositories, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --filter=\"format=DOCKER\" --format=\"value(name.basename())\"\n\n"+
+				"Please set your environment variable to one of these (e.g., export GCLUSTER_IMAGE_REPO=%s)",
+				projPrint, regPrint, reposStr, projPrint, regPrint, suggestions[0])
+		}
+		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. "+
+			"Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo).\n\n"+
+			"To see available repositories manually, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --filter=\"format=DOCKER\" --format=\"value(name.basename())\"",
+			projPrint, regPrint)
 	}
 	if os.Getenv("USER") == "" && os.Getenv("USERNAME") == "" {
 		return fmt.Errorf("failed to determine user identity from environment (tried USER and USERNAME). This is required to ensure unique image tagging when using --build-context")
@@ -415,6 +447,15 @@ func ensureDryRunDir(path string) error {
 			return fmt.Errorf("directory %q does not exist. Please check your path for typos or create the directory manually", dir)
 		}
 		return fmt.Errorf("failed to check directory %s: %w", dir, err)
+	}
+	return nil
+}
+
+func validateRestartOnExitCodes(codes []int) error {
+	for _, code := range codes {
+		if code <= 0 || code > 255 {
+			return fmt.Errorf("invalid exit code %d in --restart-on-exit-codes: exit codes must be between 1 and 255", code)
+		}
 	}
 	return nil
 }

@@ -1,0 +1,138 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kueue-reaper-role
+  namespace: default
+rules:
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["get", "list", "watch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kueue-reaper-rolebinding
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: kueue-reaper-ksa
+  namespace: default
+roleRef:
+  kind: Role
+  name: kueue-reaper-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kueue-reaper-script
+  namespace: default
+data:
+  reaper.sh: |
+    #!/bin/bash
+    echo "Starting Centralized K8s Reaper Pod..."
+    echo "This pod monitors active jobs and cancels them if their Cloud Build is CANCELLED."
+
+    # Explicitly configure the project to prevent silent gcloud failures
+    PROJECT_ID=$(curl -s -m 5 -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/project/project-id)
+    if [ -n "$PROJECT_ID" ]; then
+      gcloud config set project "$PROJECT_ID" 2>/dev/null
+    fi
+
+    while true; do
+      # Fetch all jobs, checking their Complete and Failed conditions
+      jobs_data=$(kubectl get jobs -l build-id -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.metadata.labels.build-id}{"|"}{.status.conditions[?(@.type=="Complete")].status}{"|"}{.status.conditions[?(@.type=="Failed")].status}{"\n"}{end}')
+
+      if [ -n "$jobs_data" ]; then
+        active_jobs=()
+        filter_parts=()
+        while IFS='|' read -r job_name build_id complete failed; do
+          if [ -z "$build_id" ] || [ "$complete" == "True" ] || [ "$failed" == "True" ]; then
+            continue
+          fi
+          active_jobs+=("$job_name|$build_id")
+          filter_parts+=("id=$build_id")
+        done <<< "$jobs_data"
+
+        if [ ${#active_jobs[@]} -gt 0 ]; then
+          # Construct the filter string for batch query
+          filter_str=""
+          for part in "${filter_parts[@]}"; do
+            if [ -z "$filter_str" ]; then
+              filter_str="$part"
+            else
+              filter_str="$filter_str OR $part"
+            fi
+          done
+
+          # Query all statuses in a single batch call
+          unset build_statuses
+          declare -A build_statuses
+          while read -r bid bstatus; do
+            if [ -n "$bid" ]; then
+              build_statuses["$bid"]="$bstatus"
+            fi
+          done < <(gcloud builds list --filter="$filter_str" --format="value(id,status)")
+
+          # Check and delete jobs for cancelled/failed builds
+          for item in "${active_jobs[@]}"; do
+            IFS='|' read -r job_name build_id <<< "$item"
+            status="${build_statuses[$build_id]}"
+
+            if [ "$status" == "CANCELLED" ] || [ "$status" == "FAILURE" ] || [ "$status" == "TIMEOUT" ]; then
+              echo "WARNING: Cloud Build $build_id is $status!"
+              echo "Deleting suspended/active Kubernetes Job $job_name to trigger graceful cleanup or remove it from Kueue..."
+              kubectl delete job "$job_name" 2>/dev/null || true
+            fi
+          done
+        fi
+      fi
+
+      # Poll every 30 seconds
+      sleep 30
+    done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kueue-reaper
+  namespace: default
+  labels:
+    app: kueue-reaper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kueue-reaper
+  template:
+    metadata:
+      labels:
+        app: kueue-reaper
+    spec:
+      serviceAccountName: kueue-reaper-ksa
+      containers:
+      - name: reaper
+        image: us-central1-docker.pkg.dev/hpc-toolkit-dev/hpc-toolkit-repo/test-runner:latest
+        command: ["/bin/bash", "/scripts/reaper.sh"]
+        volumeMounts:
+        - name: script-volume
+          mountPath: /scripts
+      volumes:
+      - name: script-volume
+        configMap:
+          name: kueue-reaper-script
+          defaultMode: 0777

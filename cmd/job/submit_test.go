@@ -16,6 +16,7 @@ package job
 
 import (
 	"bytes"
+	"context"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 	"os"
@@ -423,9 +424,7 @@ func TestParseDurationToSeconds(t *testing.T) {
 func TestSubmitCmd_MissingRepoEnvVar(t *testing.T) {
 	setupSubmitTestEnv(t)
 
-	origRepo := os.Getenv("GCLUSTER_IMAGE_REPO")
-	os.Setenv("GCLUSTER_IMAGE_REPO", "")
-	defer os.Setenv("GCLUSTER_IMAGE_REPO", origRepo)
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
 
 	oldStore := store
 	defer func() { store = oldStore }()
@@ -455,6 +454,49 @@ func TestSubmitCmd_MissingRepoEnvVar(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "GCLUSTER_IMAGE_REPO environment variable is required") {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestSubmitCmd_MissingRepoEnvVar_DynamicSuggestions(t *testing.T) {
+	setupSubmitTestEnv(t)
+
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	oldLookup := lookupArtifactRegistryRepos
+	defer func() { lookupArtifactRegistryRepos = oldLookup }()
+	lookupArtifactRegistryRepos = func(ctx context.Context, projectID, location string) ([]string, bool) {
+		return []string{"repo1", "repo2", "repo3"}, false
+	}
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "fail-test",
+		"--base-image", "python:3.9-slim",
+		"--build-context", "job_details",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+	)
+
+	if err == nil {
+		t.Fatal("expected error for missing GCLUSTER_IMAGE_REPO, got nil")
+	}
+
+	expectedMsg := "GCLUSTER_IMAGE_REPO environment variable is required when using --build-context.\n\nAvailable Docker repositories in project 'test-project' and region 'us-central1' are: 'repo1', 'repo2', 'repo3'.\n\nTo view all repositories, you can run:\n\t> gcloud artifacts repositories list --project=test-project --location=us-central1 --filter=\"format=DOCKER\" --format=\"value(name.basename())\"\n\nPlease set your environment variable to one of these (e.g., export GCLUSTER_IMAGE_REPO=repo1)"
+	if !strings.Contains(err.Error(), expectedMsg) {
+		t.Errorf("unexpected error: %v\nexpected contained: %v", err, expectedMsg)
 	}
 }
 
@@ -1199,5 +1241,96 @@ func TestSubmitCmd_SkipPrereqsFalse_RunsChecks(t *testing.T) {
 	// which will fail either due to absence of gcloud or missing authentication in test env.
 	if err == nil {
 		t.Fatalf("expected an error (prerequisite check failure) since --skip-prereqs is false/omitted, but got nil")
+	}
+}
+
+func TestValidateRestartOnExitCodes(t *testing.T) {
+	tests := []struct {
+		name      string
+		codes     []int
+		expectErr bool
+	}{
+		{
+			name:      "nil slice",
+			codes:     nil,
+			expectErr: false,
+		},
+		{
+			name:      "empty slice",
+			codes:     []int{},
+			expectErr: false,
+		},
+		{
+			name:      "valid codes",
+			codes:     []int{137, 143},
+			expectErr: false,
+		},
+		{
+			name:      "contains zero",
+			codes:     []int{0},
+			expectErr: true,
+		},
+		{
+			name:      "contains negative",
+			codes:     []int{-1},
+			expectErr: true,
+		},
+		{
+			name:      "boundary valid min 1 and max 255",
+			codes:     []int{1, 255},
+			expectErr: false,
+		},
+		{
+			name:      "boundary invalid above 255 (256)",
+			codes:     []int{256},
+			expectErr: true,
+		},
+		{
+			name:      "contains above 255",
+			codes:     []int{300},
+			expectErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateRestartOnExitCodes(tc.codes)
+			if tc.expectErr && err == nil {
+				t.Fatalf("expected error for codes %v, got nil", tc.codes)
+			}
+			if !tc.expectErr && err != nil {
+				t.Fatalf("expected no error for codes %v, got: %v", tc.codes, err)
+			}
+		})
+	}
+}
+
+func TestSubmitCmd_InvalidRestartOnExitCodes(t *testing.T) {
+	setupSubmitTestEnv(t)
+	t.Cleanup(func() {
+		restartOnExitCodes = nil
+	})
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "test-invalid-exit-codes",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--skip-prereqs",
+		"--restart-on-exit-codes", "0",
+	)
+
+	if err == nil {
+		t.Fatalf("expected error for exit code 0, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid exit code 0") {
+		t.Errorf("expected error to contain 'invalid exit code 0', got: %v", err)
 	}
 }

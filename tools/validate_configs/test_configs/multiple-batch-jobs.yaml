@@ -69,6 +69,8 @@ deployment_groups:
       instance_image:
         family: rocky-linux-8-optimized-gcp
         project: rocky-linux-cloud
+      parallelism: 2
+      task_count: 4
 
   - id: batch-job-2
     source: modules/scheduler/batch-job-template

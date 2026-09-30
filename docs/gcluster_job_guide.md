@@ -173,9 +173,13 @@ If you want to run a job across multiple groups of GPU nodes (e.g., 2 groups of 
 
 You can mount Cloud Storage buckets, Filestore instances, existing PVCs (e.g., for Lustre), or host paths using the `--mount` flag.
 
-Mounts must use the format: `--mount "<src>;<dest>[;<mode>][;options=<options>]"`
+Mounts must use the format: `--mount "<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]"`
 * `mode` is optional and defaults to `ro` (read-only). To allow writes, append `;rw`.
 * `options` is optional and allows passing custom mount options (currently only supported for GCS fuse volumes).
+* `profile` is optional, GCS-only, and selects a [GKE Cloud Storage FUSE storage profile](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles) (see below).
+* `attributes` is optional, GCS-only and sets key-value pairs for CSI volume settings (`key=val,...`).
+  * **Without `profile=`**: Applies standard [GCSFuse CSI volume attributes](https://docs.cloud.google.com/kubernetes-engine/docs/reference/cloud-storage-fuse-csi-driver/volume-attr) directly to the inline mount.
+  * **With `profile=`**: Overrides default [storage profile StorageClass parameters](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#storageclass_configuration_reference) on the generated PVs.
 
 **Supported volume sources (`<src>`):**
 * **Cloud Storage**: `gs://<bucket-name>` (mounts via GCS Fused Driver)
@@ -200,8 +204,27 @@ Mounting a GCS bucket (read-write):
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
+  --service-account "workload-identity-k8s-sa" \
   --mount "gs://<YOUR_BUCKET_NAME>;/data;rw;options=logging:severity:info,enable-atomic-rename-object:true"
 ```
+
+*(Note: Replace `<YOUR_BUCKET_NAME>` with the name of your own bucket. Use `--service-account <KSA_NAME>` to specify the Kubernetes Service Account configured with Workload Identity access to read/write the bucket).*
+
+Mounting GCS buckets with storage profiles:
+
+```bash
+./gcluster job submit \
+  --name my-training-job \
+  --command "python app.py" \
+  --compute-type n2-standard-32 \
+  --base-image python:3.9-slim \
+  --build-context job_details \
+  --service-account "workload-identity-k8s-sa" \
+  --mount "gs://<YOUR_DATASET_BUCKET>/imagenet;/data;ro;profile=training" \
+  --mount "gs://<YOUR_CHECKPOINT_BUCKET>/run-42;/checkpoints;rw;profile=checkpointing"
+```
+
+*(Note: Replace `<YOUR_DATASET_BUCKET>` and `<YOUR_CHECKPOINT_BUCKET>` with the names of your own buckets).*
 
 Mounting an existing PVC named `lustre-pvc` (read-only):
 
@@ -214,6 +237,10 @@ Mounting an existing PVC named `lustre-pvc` (read-only):
   --build-context job_details \
   --mount "lustre-pvc;/data"
 ```
+
+#### GCS FUSE storage profiles (`profile=`)
+
+Adding `profile=` (`training`, `checkpointing`, or `serving`) to a `gs://` mount makes `gcluster` generate a [GKE Cloud Storage FUSE storage profile](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles) PersistentVolume and PersistentVolumeClaim alongside your JobSet. `gcluster job cancel` deletes them once no other workload uses them. For prerequisites, IAM and region requirements, the attributes reference, and how gateways are shared and cleaned up, see [Cloud Storage FUSE storage profiles](gke-advanced-features.md#5-cloud-storage-fuse-storage-profiles).
 
 ### 4.5 Example: Submit Job with Custom Environment Variables
 
@@ -468,7 +495,7 @@ Request a specific TPU slice topology using `--topology`.
   --base-image python:3.9-slim \
   --build-context job_details \
   --command "python app.py" \
-  --compute-type tpu-v6e-slice \
+  --compute-type v6e-16 \
   --topology 4x4
 ```
 
@@ -1012,7 +1039,7 @@ To submit a dynamic slicing workload targeting TPU v7x nodes, enter the followin
 ./gcluster job submit \
   --name my-dynamic-slice-job \
   --command "python train.py" \
-  --compute-type tpu-v7x-slice \
+  --compute-type tpu7x \
   --topology 4x4x4
 ```
 
@@ -1199,7 +1226,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--num-nodes` | `int` | Number of nodes to use per group/slice (Default: `1`). Auto-calculated for TPUs based on topology. |
 | `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. Supports pipe separator (`|`) for multiple values. |
 | `--restarts` | `int` | Maximum number of restarts allowed for the JobSet before marked as failed (Default: `1`). |
-| `--mount` | `stringArray` | Mount storage volumes, buckets, filestore instances, or PVCs using the `<src>;<dest>[;<mode>][;options=<options>]` format. Examples of `<src>`: `gs://my-bucket`, `filestore://my-instance/share`, `my-pvc` (for Lustre/etc), or `/host/path`. |
+| `--mount` | `stringArray` | Mount storage volumes, buckets, filestore instances, or PVCs using the `<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]` format. Examples of `<src>`: `gs://my-bucket`, `filestore://my-instance/share`, `my-pvc` (for Lustre/etc), or `/host/path`. `profile=` (`training`, `checkpointing`, `serving`) is GCS-only and provisions a shared GCS FUSE storage-profile PV/PVC gateway instead of an inline CSI volume. |
 | `--env` | `stringArray` | Custom environment variables to pass exclusively to the user's workload container in KEY=VALUE format (e.g. `--env KEY=VALUE`). Applies to both standard and Pathways workloads. Can be specified multiple times. |
 | `--await-job-completion` | `bool` | If true, the CLI waits for the job to complete before exiting. |
 | `--timeout` | `string` | Time to wait for job completion (e.g., `1h`, `10m`). Used with `--await-job-completion`. |
