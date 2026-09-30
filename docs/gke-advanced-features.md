@@ -305,7 +305,7 @@ A dry run (`--dry-run-out`) turns the blocking checks into warnings.
 
 #### Volume attributes
 
-`attributes=<k=v,...>` overrides the [storage profile StorageClass parameters](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#storageclass_configuration_reference) on the generated volume (without `profile=`, it sets [GCSFuse CSI volume attributes](https://docs.cloud.google.com/kubernetes-engine/docs/reference/cloud-storage-fuse-csi-driver/volume-attr) on the inline mount). `gcluster` derives some attributes from the rest of the `--mount` spec, and supplying one of them through `attributes=` fails validation, so the two cannot silently overwrite each other. Use `options=<opt1>,<opt2>` instead of `attributes=mountOptions=...` for gcsfuse mount flags, and `src=gs://<bucket>` instead of `attributes=bucketName=...` for the bucket.
+`attributes=<k=v,...>` overrides the [storage profile StorageClass parameters](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#storageclass_configuration_reference) on the generated volume (without `profile=`, it sets [GCSFuse CSI volume attributes](https://docs.cloud.google.com/kubernetes-engine/docs/reference/cloud-storage-fuse-csi-driver/volume-attr) on the inline mount). `gcluster` derives some attributes from the rest of the `--mount` spec, and supplying one of them through `attributes=` fails validation, so the two cannot silently overwrite each other. Use `options=<opt1>,<opt2>` instead of `attributes=mountOptions=...` for gcsfuse mount flags, and put the bucket in the `<src>` position of `--mount` (`gs://<bucket>[/<path>]`) instead of `attributes=bucketName=...`.
 
 #### Gateway sharing and naming
 
@@ -342,7 +342,7 @@ To delete one by hand, delete the claim first, then the volume bound to it:
 ```bash
 VOLUME=$(kubectl get pvc <claim> -n <namespace> -o jsonpath='{.spec.volumeName}') && \
 kubectl delete pvc <claim> -n <namespace> && \
-kubectl delete pv "$VOLUME"
+{ [ -z "$VOLUME" ] || kubectl delete pv "$VOLUME"; }
 ```
 
 ---

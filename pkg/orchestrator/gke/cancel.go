@@ -57,19 +57,19 @@ func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions
 	}
 	foundNamespace := ns
 
-	status, err := g.getJobSetStatus(name, foundNamespace)
-	actionVerb := "Cancel"
-	if err == nil && (status == "Completed" || status == "Failed") {
-		actionVerb = "Cleanup"
-		logging.Info("Cleaning up resources for the '%s' job '%s' in cluster '%s'...", status, name, opts.ClusterName)
-	} else {
-		logging.Info("Canceling job '%s' in cluster '%s'...", name, opts.ClusterName)
-	}
-
 	// Read before the delete so this job's gateways skip the grace period.
+	actionVerb := "Cancel"
 	var ownClaims []string
 	if js, err := g.kubeClient.GetResource(jobSetGVR, foundNamespace, name); err == nil && js != nil {
 		ownClaims = collectClaimNames(js.Object)
+		if isFinished(js) {
+			actionVerb = "Cleanup"
+		}
+	}
+	if actionVerb == "Cleanup" {
+		logging.Info("Cleaning up resources for finished job '%s' in cluster '%s'...", name, opts.ClusterName)
+	} else {
+		logging.Info("Canceling job '%s' in cluster '%s'...", name, opts.ClusterName)
 	}
 
 	// Sweep the whole namespace to also catch gateways of TTL-deleted jobs.

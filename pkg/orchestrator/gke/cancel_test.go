@@ -20,6 +20,7 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -205,6 +206,26 @@ func TestCancelJob_OtherDeleteErrorSkipsCleanup(t *testing.T) {
 		t.Fatal("CancelJob() expected an error")
 	}
 	assertDeleted(t, mock, nil, nil)
+}
+
+// TestCancelJob_FinishedJobUsesCleanupVerb checks the Cancel/Cleanup choice comes from the fetched JobSet.
+func TestCancelJob_FinishedJobUsesCleanupVerb(t *testing.T) {
+	for name, tc := range map[string]struct {
+		js   *unstructured.Unstructured
+		verb string
+	}{
+		"finished job": {js: completedJobSet("job-a"), verb: "cleanup operation failed"},
+		"running job":  {js: jobSetWithClaims("job-a", false), verb: "cancel operation failed"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			mock := gatewayMock(map[string][]unstructured.Unstructured{"jobsets": {*tc.js}})
+			mock.DeleteJobSetErr = fmt.Errorf("forbidden")
+			err := cancelTestOrchestrator(mock).CancelJob("job-a", cancelOpts)
+			if err == nil || !strings.Contains(err.Error(), tc.verb) {
+				t.Fatalf("CancelJob() = %v, want error containing %q", err, tc.verb)
+			}
+		})
+	}
 }
 
 // TestCancelJob_GracePeriodExemptsOwnGateways covers cancelling right after submit: the job's own fresh

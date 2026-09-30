@@ -3131,7 +3131,7 @@ func TestGrantedAgentPermissions(t *testing.T) {
 		},
 		{
 			name:     "member match is case insensitive",
-			bindings: []iamBinding{{Role: "roles/owner", Members: []string{"serviceaccount:SERVICE-42@container-engine-robot.iam.gserviceaccount.com"}}},
+			bindings: []iamBinding{{Role: "roles/storage.admin", Members: []string{"serviceaccount:SERVICE-42@container-engine-robot.iam.gserviceaccount.com"}}},
 			want:     append(append([]string{}, gcsFuseProfileBasePermissions...), gcsFuseAnywhereCachePermissions...),
 		},
 	}

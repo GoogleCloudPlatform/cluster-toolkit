@@ -335,7 +335,7 @@ func warnProfileOnlyAttributes(attrs map[string]string, src string) {
 // Matching is case sensitive, as the GCSFuse CSI driver treats attribute keys.
 var reservedVolumeAttributes = map[string]string{
 	"mountOptions": "use options=<opt1>,<opt2> instead, which gcluster renders into the correct field for both inline and storage-profile mounts",
-	"bucketName":   "the bucket is taken from the mount source, src=gs://<bucket>",
+	"bucketName":   "the bucket is taken from the mount source (the first --mount field, gs://<bucket>)",
 }
 
 // volumeAttributeSeparator splits on ',' only when followed by `<key>=`, allowing comma-separated attribute values.
@@ -1206,8 +1206,6 @@ var gcsFuseAnywhereCachePermissions = []string{
 var gcsFuseProfileAllPermissions = append(append([]string{}, gcsFuseProfileBasePermissions...), gcsFuseAnywhereCachePermissions...)
 
 var gcsFuseProfileKnownRoles = map[string][]string{
-	"roles/owner":                      gcsFuseProfileAllPermissions,
-	"roles/editor":                     gcsFuseProfileAllPermissions,
 	"roles/storage.admin":              gcsFuseProfileAllPermissions,
 	"roles/storage.legacyBucketReader": gcsFuseProfileBasePermissions,
 }
