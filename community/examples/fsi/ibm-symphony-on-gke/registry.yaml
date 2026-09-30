@@ -12,22 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-containers:
-- name: sym-compute
-  image: COMPUTE_IMAGE_PLACEHOLDER
-  securityContext:
-    privileged: true
-  stdin: true
-  tty: true
-  env:
-  - name: MASTER_HOST
-    value: MASTER_IP_PLACEHOLDER
-  - name: MASTER_ALIAS
-    value: MASTER_HOSTNAME_PLACEHOLDER
-    resources:
-      requests:
-        cpu: "4"
-        memory: "16384Mi"
-      limits:
-        cpu: "4"
-        memory: "16384Mi"
+---
+
+blueprint_name: artifact-registry-standalone
+
+vars:
+  project_id: af3-on-gke
+  deployment_name: registry-01
+  region: us-central1
+  zone: us-central1-c
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: registry
+    source: community/modules/container/artifact-registry
+    settings:
+      repo_mode: STANDARD_REPOSITORY
+      project_id: $(vars.project_id)
+      region: $(vars.region)
+      repository_base: $(vars.deployment_name)-repo
+      format: DOCKER
+    outputs: [registry_url]

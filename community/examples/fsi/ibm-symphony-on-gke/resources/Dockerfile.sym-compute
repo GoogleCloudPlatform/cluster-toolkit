@@ -47,10 +47,10 @@ RUN yum install -y \
 	&& yum clean all && rm -rf /var/cache/yum
 
 # setup system requirements
-RUN useradd -G wheel -m ${ego_admin} && echo ${ego_admin}:Admin | chpasswd && echo "${ego_admin} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/symphony-cluster-admins
+RUN useradd -G wheel -m ${ego_admin} && echo ${ego_admin}:Admin | chpasswd && echo "${ego_admin} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/symphony-cluster-admins && chmod 0440 /etc/sudoers.d/symphony-cluster-admins
 RUN touch /var/run/utmp && chmod 664 /var/run/utmp && chown root:utmp /var/run/utmp
 RUN echo LC_ALL=en_US.UTF-8 > /etc/locale.conf && \
-	LC_ALL=en_US.UTF-8 localedef -v -c -i en_US -f UTF-8 en_US.UTF-8 | true
+	LC_ALL=en_US.UTF-8 localedef -c -i en_US -f UTF-8 en_US.UTF-8 || true
 RUN echo "${ego_admin} soft nproc  65536" >> /etc/security/limits.conf && \
 	echo "${ego_admin} hard nproc  65536" >> /etc/security/limits.conf && \
 	echo "${ego_admin} soft nofile 65536" >> /etc/security/limits.conf && \
@@ -75,7 +75,7 @@ export sym_fixpack_name=$(basename $sym_fixpack .tar.gz)
 export sym_fixpack_dir=/opt/ibm/${sym_fixpack_name}
 
 mkdir -p ${sym_fixpack_dir}
-chmod 770 ${sym_fixpack_dir}
+chmod 775 ${sym_fixpack_dir}
 tar -xf ${sym_fixpack_path} -C ${sym_fixpack_dir}
 chmod u+r ${sym_fixpack_dir}/*
 chmod a+x ${sym_fixpack_dir}/*.sh
@@ -96,7 +96,8 @@ rm -f ${sym_fixpack_path}
 EOF
 
 # Fix BINARY_TYPE detection on Rocky Linux
-RUN sed -i 's|BINARY_TYPE="fail"|BINARY_TYPE="linux-x86_64"|g' ${sym_install}/kernel/conf/profile.ego && \
+RUN sed -i 's|grep Ubuntu|grep Ubuntu \|\| true|g' ${sym_install}/kernel/conf/profile.ego && \
+    sed -i 's|BINARY_TYPE="fail"|BINARY_TYPE="linux-x86_64"|g' ${sym_install}/kernel/conf/profile.ego && \
     sed -i 's|BINARY_TYPE="fail"|BINARY_TYPE="linux-x86_64"|g' ${sym_install}/jre/profile.jre && \
     sed -i 's|BINARY_TYPE="fail"|BINARY_TYPE="linux-x86_64"|g' ${sym_install}/soam/conf/profile.soam
 

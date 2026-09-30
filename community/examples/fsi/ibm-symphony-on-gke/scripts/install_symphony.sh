@@ -15,6 +15,7 @@
 # limitations under the License.
 set -o pipefail
 set -x
+set -e
 
 export sym_installer=$1
 export sym_fixpack=$2
@@ -66,7 +67,7 @@ echo "=== 3/7: Adding and configuring egoadmin user and limits ==="
 useradd -G wheel -m egoadmin && echo egoadmin:Admin | chpasswd && echo "egoadmin ALL=(ALL) NOPASSWD: ALL" >>/etc/sudoers.d/symphony-cluster-admins && chmod 0440 /etc/sudoers.d/symphony-cluster-admins
 touch /var/run/utmp && chmod 664 /var/run/utmp && chown root:utmp /var/run/utmp
 echo LC_ALL=en_US.UTF-8 >/etc/locale.conf &&
-	LC_ALL=en_US.UTF-8 localedef -v -c -i en_US -f UTF-8 en_US.UTF-8 | true
+	LC_ALL=en_US.UTF-8 localedef -c -i en_US -f UTF-8 en_US.UTF-8 || true
 echo "egoadmin soft nproc  65536" >>/etc/security/limits.conf &&
 	echo "egoadmin hard nproc  65536" >>/etc/security/limits.conf &&
 	echo "egoadmin soft nofile 65536" >>/etc/security/limits.conf &&
@@ -107,8 +108,10 @@ echo "Applying fixpack for egoadmin..."
 su -s /bin/bash "$CLUSTERADMIN" -c "source $EGO_TOP/profile.platform && ${SYM_FIXPACK_DIR}/sym-7.3.2.sh -c -i"
 
 echo "Applying fixpack RPM updates..."
+set +e +o pipefail
 # shellcheck source=/dev/null
 source "$EGO_TOP/profile.platform"
+set -e -o pipefail
 "${SYM_FIXPACK_DIR}/symrpm-7.3.2.sh" -c -i
 
 cd /tmp || exit 1
@@ -121,7 +124,8 @@ rm -f "${SYM_FIXPACK_PATH}"
 echo "=== 7/7: Updating Symphony configuration ==="
 cd "${EGO_TOP}" || exit 1
 
-sed -i "s|BINARY_TYPE=\"fail\"|BINARY_TYPE=\"linux-x86_64\"|g" kernel/conf/profile.ego &&
+sed -i "s|grep Ubuntu|grep Ubuntu \|\| true|g" kernel/conf/profile.ego &&
+	sed -i "s|BINARY_TYPE=\"fail\"|BINARY_TYPE=\"linux-x86_64\"|g" kernel/conf/profile.ego &&
 	sed -i "s|BINARY_TYPE=\"fail\"|BINARY_TYPE=\"linux-x86_64\"|g" jre/profile.jre &&
 	sed -i "s|BINARY_TYPE=\"fail\"|BINARY_TYPE=\"linux-x86_64\"|g" soam/conf/profile.soam &&
 	sed -i -e "s|AUTOMATIC|MANUAL|g" eservice/esc/conf/services/plc_service.xml &&

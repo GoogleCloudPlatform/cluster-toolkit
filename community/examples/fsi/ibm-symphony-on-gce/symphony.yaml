@@ -48,14 +48,14 @@ deployment_groups:
     source: modules/network/vpc
 
   - id: destination_pubsub
-    source: git::https://github.com/terraform-google-modules/terraform-google-log-export.git//modules/pubsub
+    source: git::https://github.com/terraform-google-modules/terraform-google-log-export.git//modules/pubsub?ref=v11.1.0
     settings:
       project_id: $(vars.project_id)
       topic_name: $(vars.pubsub_topic)
       log_sink_writer_identity: $(sink.writer_identity)
 
   - id: sink
-    source: git::https://github.com/terraform-google-modules/terraform-google-log-export.git
+    source: git::https://github.com/terraform-google-modules/terraform-google-log-export.git?ref=v11.1.0
     settings:
       parent_resource_id: $(vars.project_id)
       parent_resource_type: project
@@ -72,7 +72,7 @@ deployment_groups:
         )
 
   - id: pubsub
-    source: git::https://github.com/terraform-google-modules/terraform-google-pubsub.git
+    source: git::https://github.com/terraform-google-modules/terraform-google-pubsub.git?ref=v8.8.0
     settings:
       project_id: $(vars.project_id)
       create_topic: false
@@ -81,7 +81,7 @@ deployment_groups:
       - name: $(vars.pubsub_subscription)
 
   - id: sa_roles
-    source: git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/member_iam
+    source: git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/member_iam?ref=v8.3.0
     settings:
       service_account_address: $(vars.service_account_email)
       project_id: $(vars.project_id)
@@ -153,7 +153,7 @@ deployment_groups:
   - id: sym-mig-c2-30
     use:
     - sym-compute-script
-    source: git::https://github.com/terraform-google-modules/terraform-google-vm.git//modules/instance_template?ref=main
+    source: git::https://github.com/terraform-google-modules/terraform-google-vm.git//modules/instance_template?ref=v15.3.0
     settings:
       subnetwork: $(network.subnetwork_name)
       source_image_family: $(vars.new_image.family)
@@ -167,7 +167,7 @@ deployment_groups:
   - id: sym-mig-c2-4
     use:
     - sym-compute-script
-    source: git::https://github.com/terraform-google-modules/terraform-google-vm.git//modules/instance_template?ref=main
+    source: git::https://github.com/terraform-google-modules/terraform-google-vm.git//modules/instance_template?ref=v15.3.0
     settings:
       subnetwork: $(network.subnetwork_name)
       source_image_family: $(vars.new_image.family)

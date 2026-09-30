@@ -445,7 +445,7 @@ spec:
       serviceAccountName: gcp-symphony-operator-sa
       containers:
         - name: gcp-symphony-operator
-          image: ${region}-docker.pkg.dev/${project_id}/${deployment_name}-repo/gcp-symphony-operator:latest
+          image: ${repo_url}/gcp-symphony-operator:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

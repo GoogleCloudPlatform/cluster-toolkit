@@ -1,0 +1,46 @@
+[jrossthomson_google_com@sym-gke-01-master-0 ~]$ source /opt/ibm/spectrumcomputing/profile.platform
+[jrossthomson_google_com@sym-gke-01-master-0 ~]$ export HF_PROVIDER_CONFDIR=/opt/ibm/spectrumcomputing/hostfactory/conf/providers/gcpgkeinst
+[jrossthomson_google_com@sym-gke-01-master-0 ~]$ $HF_TOP/1.2/providerplugins/gcpgke/bin/hf-gke requestMachines \
+>   <<< '{"template": {"templateId": "sym-pod-c2-4", "machineCount": 1}}'
+google/auth/__init__.py:54: FutureWarning: You are using a Python version 3.9 past its end of life. Google will update google-auth with critical bug fixes on a best-effort basis, but not with any other fixes or features. Please upgrade your Python version, and then update google-auth.
+google/oauth2/__init__.py:40: FutureWarning: You are using a Python version 3.9 past its end of life. Google will update google-auth with critical bug fixes on a best-effort basis, but not with any other fixes or features. Please upgrade your Python version, and then update google-auth.
+2026-09-30 19:54:19,585 - DEBUG - Configuration loaded:
+2026-09-30 19:54:19,585 - DEBUG -   crd_group: accenture.com
+2026-09-30 19:54:19,585 - DEBUG -   crd_kind: GCPSymphonyResource
+2026-09-30 19:54:19,585 - DEBUG -   crd_label_name_text: symphony_gke_connector
+2026-09-30 19:54:19,585 - DEBUG -   crd_label_value_text: sym-gke-01-master-0
+2026-09-30 19:54:19,585 - DEBUG -   crd_namespace: gcp-symphony
+2026-09-30 19:54:19,585 - DEBUG -   crd_plural: gcp-symphony-resources
+2026-09-30 19:54:19,585 - DEBUG -   crd_return_request_kind: MachineReturnRequest
+2026-09-30 19:54:19,585 - DEBUG -   crd_return_request_plural: machine-return-requests
+2026-09-30 19:54:19,585 - DEBUG -   crd_return_request_singular: machine-return-request
+2026-09-30 19:54:19,585 - DEBUG -   crd_singular: gcp-symphony-resource
+2026-09-30 19:54:19,585 - DEBUG -   crd_version: v1
+2026-09-30 19:54:19,585 - DEBUG -   env_var_prefix: GCP_HF_
+2026-09-30 19:54:19,586 - DEBUG -   hf_provider_conf_dir: /opt/ibm/spectrumcomputing/hostfactory/conf/providers/gcpgkeinst
+2026-09-30 19:54:19,586 - DEBUG -   hf_provider_log_file: None
+2026-09-30 19:54:19,586 - DEBUG -   hf_provider_name: gcp-symphony
+2026-09-30 19:54:19,586 - DEBUG -   kube_config: /opt/ibm/spectrumcomputing/hostfactory/conf/providers/gcpgkeinst/kubeconfig
+2026-09-30 19:54:19,586 - DEBUG -   log_level: DEBUG
+2026-09-30 19:54:19,586 - DEBUG -   logger: <Logger gke_provider.config (DEBUG)>
+2026-09-30 19:54:19,586 - DEBUG -   polling_interval: 10
+2026-09-30 19:54:19,586 - DEBUG -   request_timeout: 300
+2026-09-30 19:54:19,588 - DEBUG - command is: requestMachines
+2026-09-30 19:54:19,588 - DEBUG - json payload file is: None
+2026-09-30 19:54:19,588 - INFO - DISPATCHING|command: requestMachines; payload: null
+2026-09-30 19:54:19,588 - ERROR - Exception in cmd_request_machines: Must specify a JSON template
+Traceback (most recent call last):
+  File "common/utils/profiling.py", line 18, in wrapper
+  File "__main__.py", line 83, in cmd_request_machines
+ValueError: Must specify a JSON template
+2026-09-30 19:54:19,588 - DEBUG - Function cmd_request_machines executed in 0.0002 seconds
+2026-09-30 19:54:19,588 - ERROR - Exception in dispatch_command: Must specify a JSON template
+Traceback (most recent call last):
+  File "common/utils/profiling.py", line 18, in wrapper
+  File "__main__.py", line 226, in dispatch_command
+  File "__main__.py", line 40, in <lambda>
+  File "common/utils/profiling.py", line 18, in wrapper
+  File "__main__.py", line 83, in cmd_request_machines
+ValueError: Must specify a JSON template
+2026-09-30 19:54:19,589 - DEBUG - Function dispatch_command executed in 0.0005 seconds
+Error: Must specify a JSON template

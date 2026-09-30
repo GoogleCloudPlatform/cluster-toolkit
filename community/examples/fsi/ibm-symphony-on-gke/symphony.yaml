@@ -82,25 +82,24 @@ deployment_groups:
     settings:
       name: master-sa
       project_roles:
+      - compute.instanceAdmin.v1
+      - storage.admin
       - logging.logWriter
       - monitoring.metricWriter
       - container.developer
-      - storage.admin
-      - storage.objectAdmin
       - cloudbuild.builds.editor
       - serviceusage.serviceUsageConsumer
       - iam.serviceAccountUser
       - artifactregistry.writer
-      - compute.instanceAdmin.v1
+      - storage.objectViewer
 
   - id: registry
-    source: git::https://github.com/GoogleCloudPlatform/terraform-google-artifact-registry.git
+    source: community/modules/container/artifact-registry
     settings:
+      repo_mode: STANDARD_REPOSITORY
       project_id: $(vars.project_id)
-      location: $(vars.region)
-      repository_id: $(vars.deployment_name)-repo
+      region: $(vars.region)
       format: DOCKER
-      description: "Docker repository for Symphony compute container images"
 
   - id: packer-script
     source: modules/scripts/startup-script
@@ -132,7 +131,7 @@ deployment_groups:
       - type: shell
         destination: build_compute_image.sh
         source: $(ghpc_stage("scripts/build_compute_image.sh"))
-        args: $(vars.region)-docker.pkg.dev/$(vars.project_id)/$(vars.deployment_name)-repo "sym-compute" $(vars.sym_source_bucket) $(vars.sym_installer) $(vars.sym_fixpack)
+        args: $(registry.repo_url) "sym-compute" $(vars.sym_source_bucket) $(vars.sym_installer) $(vars.sym_fixpack)
 
 - group: packer
   modules:
@@ -171,6 +170,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [network, gke_node_pool_sa]
     settings:
+      system_node_pool_machine_type: c2-standard-4
       enable_private_endpoint: false
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr)
@@ -195,9 +195,7 @@ deployment_groups:
       - source: $(ghpc_stage("resources/manifests/symphony-operator.yaml.tftpl"))
         wait_for_rollout: true
         template_vars:
-          project_id: $(vars.project_id)
-          region: $(vars.region)
-          deployment_name: $(vars.deployment_name)
+          repo_url: $(registry.repo_url)
 
 - group: deploy-vms
   modules:
@@ -224,7 +222,7 @@ deployment_groups:
       - type: shell
         destination: gcpgkeinstprov_templates_json.sh
         source: $(ghpc_stage("scripts/gcpgkeinstprov_templates_json.sh"))
-        args: $(vars.symphony_install_dir) "sym-pod-c2-4" 100 4 16384 "pod-specs/pod-spec.yaml" $(vars.region)-docker.pkg.dev/$(vars.project_id)/$(vars.deployment_name)-repo/sym-compute:latest
+        args: $(vars.symphony_install_dir) "sym-pod-c2-4" 100 4 16384 "pod-specs/pod-spec.yaml" $(registry.repo_url)/sym-compute:latest
       - type: shell
         destination: setup_kubeconfig.sh
         source: $(ghpc_stage("scripts/setup_kubeconfig.sh"))

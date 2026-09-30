@@ -18,7 +18,7 @@ set -x
 
 export EGO_TOP=$1
 
-git clone https://github.com/google/symphony-gcp.git
+git clone --branch v1.0.4 --depth 1 https://github.com/google/symphony-gcp.git
 cd symphony-gcp/hf-provider || exit 1
 
 curl -LsSf https://astral.sh/uv/0.11.26/install.sh | sh
@@ -39,8 +39,10 @@ cd resources/gke_cli || exit 1
 tar czf hf-gke.tgz ./*
 
 # Get Symphony Environment
+set +e +o pipefail
 # shellcheck source=/dev/null
 source "${EGO_TOP}/profile.platform"
+set -e -o pipefail
 
 # Untar in Hostfactory
 tar -xzf hf-gke.tgz -C "$HF_TOP"

@@ -14,14 +14,17 @@
 # limitations under the License.
 set -o pipefail
 set -x
+set -e
 
 export EGO_TOP=$1
 export PROJECT_ID=$2
 export REGION=$3
 export CLUSTER_NAME=$4
 
+set +e +o pipefail
 # shellcheck source=/dev/null
 source "$EGO_TOP/profile.platform"
+set -e -o pipefail
 
 mkdir -p "$HF_TOP/conf/providers/gcpgkeinst"
 
