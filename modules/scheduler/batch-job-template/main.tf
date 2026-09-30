@@ -55,7 +55,7 @@ locals {
     {
       project       = var.project_id
       location      = var.region
-      config        = local_file.job_template.filename
+      config        = local.job_filename
       submit_job_id = local.submit_job_id
     }
   )
