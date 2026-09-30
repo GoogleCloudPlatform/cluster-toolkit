@@ -321,66 +321,40 @@ check_cpu_quota() {
 	local region=$1
 	local required_cpus=${REQUIRED_CPU_QUOTA:-0}
 	local metric=${CPU_QUOTA_METRIC:-"N2D_CPUS"}
-
-	if [[ ! "${required_cpus}" =~ ^[0-9]+$ ]]; then
-		required_cpus=0
-	fi
-
 	if [[ "${required_cpus}" -le 0 ]]; then
 		return 0
 	fi
 
-	local cache_key="${region}/${metric}/${required_cpus}"
-	if [[ -n "${CPU_QUOTA_CACHE[$cache_key]:-}" ]]; then
-		return "${CPU_QUOTA_CACHE[$cache_key]}"
+	if [[ -n "${CPU_QUOTA_CACHE[$region]:-}" ]]; then
+		return "${CPU_QUOTA_CACHE[$region]}"
 	fi
 
-	local quota_json
-	if ! quota_json=$(gcloud compute regions describe "${region}" \
-		--project="${PROJECT_ID}" --format="json" 2>/dev/null); then
-		echo "WARN: Could not describe region ${region} to read ${metric} quota. Failing-open."
-		CPU_QUOTA_CACHE[$cache_key]=0
-		return 0
-	fi
-
-	if ! echo "${quota_json}" | jq -e . >/dev/null 2>&1; then
-		echo "WARN: Unparsable quota payload for ${region}. Failing-open."
-		CPU_QUOTA_CACHE[$cache_key]=0
-		return 0
-	fi
-
-	local limit usage
-	limit=$(echo "${quota_json}" | jq -r --arg m "${metric}" \
-		'[.quotas[]? | select(.metric == $m) | .limit] | first // empty | if type == "number" then (if . < 0 or . >= 1e15 then -1 else floor end) else "invalid" end' 2>/dev/null || true)
-	usage=$(echo "${quota_json}" | jq -r --arg m "${metric}" \
-		'[.quotas[]? | select(.metric == $m) | .usage] | first // 0 | if type == "number" and . >= 0 and . < 1e15 then floor else 0 end' 2>/dev/null || true)
-
-	if [[ -z "${limit}" || "${limit}" == "null" ]]; then
-		echo "WARN: ${metric} quota not reported for ${region}. Failing-open and assuming capacity exists."
-		CPU_QUOTA_CACHE[$cache_key]=0
-		return 0
-	fi
+	local quota_info limit usage
+	quota_info=$(gcloud compute regions describe "${region}" \
+		--project="${PROJECT_ID}" --format="json(quotas)" 2>/dev/null |
+		jq -r --arg m "${metric}" '.quotas[]? | select(.metric == $m) | "\(.limit | if . >= 1e15 then -1 else floor end) \((.usage // 0) | floor)"' 2>/dev/null || true)
+	read -r limit usage <<<"${quota_info}"
 
 	if [[ ! "${limit}" =~ ^-?[0-9]+$ ]]; then
-		echo "WARN: Invalid ${metric} limit format for ${region}. Failing-open."
-		CPU_QUOTA_CACHE[$cache_key]=0
+		echo "WARN: Could not fetch ${metric} quota for ${region}. Failing-open and assuming capacity exists."
+		CPU_QUOTA_CACHE[$region]=0
+		return 0
+	fi
+
+	if [[ "${limit}" -lt 0 ]]; then
+		CPU_QUOTA_CACHE[$region]=0
 		return 0
 	fi
 
 	if [[ ! "${usage}" =~ ^[0-9]+$ ]]; then usage=0; fi
 
-	if [[ "${limit}" -lt 0 ]]; then
-		CPU_QUOTA_CACHE[$cache_key]=0
-		return 0
-	fi
-
 	local remaining=$((limit - usage))
 	if [[ "${remaining}" -ge "${required_cpus}" ]]; then
-		CPU_QUOTA_CACHE[$cache_key]=0
+		CPU_QUOTA_CACHE[$region]=0
 		return 0
 	else
 		echo "INFO: Insufficient ${metric} quota in ${region} (Limit: ${limit}, Usage: ${usage}, Required: ${required_cpus})."
-		CPU_QUOTA_CACHE[$cache_key]=1
+		CPU_QUOTA_CACHE[$region]=1
 		return 1
 	fi
 }
@@ -441,12 +415,6 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 			fi
 		fi
 
-		# Check region for support VMs.
-		if ! check_cpu_quota "${REGION}"; then
-			echo "INFO: Skipping ${ZONE} - CPU quota check failed in region ${REGION}."
-			continue
-		fi
-
 		if [[ "${CHECK_FILESTORE:-false}" == "true" ]]; then
 			if ! echo "${FILESTORE_ZONES}" | grep -x -E -q "${ZONE}|${REGION}"; then
 				echo "INFO: Skipping ${ZONE} - Filestore not available in this zone or region."
@@ -474,6 +442,12 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 				echo "INFO: Skipping ${ZONE} - Lustre quota check failed in zone ${ZONE}."
 				continue
 			fi
+		fi
+
+		# Check region for support VMs.
+		if ! check_cpu_quota "${REGION}"; then
+			echo "INFO: Skipping ${ZONE} - CPU quota check failed in region ${REGION}."
+			continue
 		fi
 
 		if [[ "${MACHINE_TYPE}" == "tpu" ]]; then
