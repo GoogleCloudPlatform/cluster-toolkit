@@ -179,7 +179,8 @@ deployment_groups:
         template_vars:
           accelerator_type: $(vars.accelerator_type)
           version: $(vars.nccl_tcpx_version)
-      # - source: $(vars.nccl_tcpxo_installer_path)
+      # - name: nccl-tcpxo-installer
+      #   source: $(vars.nccl_tcpxo_installer_path)
       #   template_vars:
       #     accelerator_type: $(vars.accelerator_type)
       #     version: $(vars.nccl_tcpxo_version)

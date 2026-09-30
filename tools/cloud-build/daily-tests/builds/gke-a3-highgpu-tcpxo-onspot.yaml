@@ -157,6 +157,8 @@ steps:
               echo '      machine_type: e2-standard-2'             >> \$$EXAMPLE_BP
               echo '      name_prefix: remote-node'                >> \$$EXAMPLE_BP
               echo '      add_deployment_name_before_prefix: true' >> \$$EXAMPLE_BP
+              echo '      spot: $(null)'                           >> \$$EXAMPLE_BP
+              echo '      placement_policy: $(null)'               >> \$$EXAMPLE_BP
               echo ''
               echo '  - id: job_template_hostname'                       >> \$$EXAMPLE_BP
               echo '    source: modules/compute/gke-job-template'        >> \$$EXAMPLE_BP
@@ -189,19 +191,12 @@ steps:
               sed -i 's/^  nccl_tcpx_version/  # nccl_tcpx_version/' \$$EXAMPLE_BP
 
               # Comment out TCPX from apply_manifests
-              sed -i '/- source: \$(vars.nccl_config_path)/ s/^/      # /' \$$EXAMPLE_BP
-              sed -i '/- source: \$(vars.nccl_tcpx_installer_path)/,+3 s/^      /      # /' \$$EXAMPLE_BP
+              sed -i '/- name: nccl-config/,+1 s/^      /      # /' \$$EXAMPLE_BP
+              sed -i '/- name: nccl-tcpx-installer/,+4 s/^      /      # /' \$$EXAMPLE_BP
 
               # Uncomment TCPXO in apply_manifests
-              sed -i '/- source: \$(vars.nccl_tcpxo_installer_path)/,+3 s/^      # /      /' \$$EXAMPLE_BP
+              sed -i '/- name: nccl-tcpxo-installer/,+4 s/^      # /      /' \$$EXAMPLE_BP
 
-              # Temporary fix for GKE API error: MaintenancePolicy.maintenanceExclusions must have end time after start time
-              sed -i '/maintenance_exclusions:/,+3d' \$$EXAMPLE_BP
-
-              # Replace the existing reservation block in the blueprint with a compact placement policy and the dynamic spot variable.
-              sed -i -e '/reservation_affinity:/,+3c\      placement_policy:\n        type: COMPACT\n      spot: '"\$$ENABLE_SPOT"'' \$$EXAMPLE_BP
-              # Remove the empty reservation variable to pass ghpc validation, since reservations are not used.
-              sed -i '/^  reservation:/d' \$$EXAMPLE_BP
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
                   --user="$$OSLOGIN_USER" \
                   --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
