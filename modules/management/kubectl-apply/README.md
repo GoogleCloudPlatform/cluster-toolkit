@@ -93,7 +93,7 @@ If you want to enforce strict capacity sharing on the TPU pool, you can override
           tpu_flavor_memory_quota: "4096G"
 ```
 
-You can specify a particular kueue version that you would like to use using the `version` flag. By default, we recommend customers to [use v0.17.1](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L126). You can find the list of supported kueue versions [here](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L24).
+You can specify a particular kueue version that you would like to use using the `version` flag. By default, we recommend customers to [use v0.19.6](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L126). You can find the list of supported kueue versions [here](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L24).
 
 ```yaml
   - id: workload_component_install
@@ -102,7 +102,7 @@ You can specify a particular kueue version that you would like to use using the 
     settings:
       kueue:
         install: true
-        version: 0.17.1
+        version: 0.19.6
         config_path: $(ghpc_stage("manifests/user-provided-kueue-config.yaml.tftpl"))
         config_template_vars: {name: "dev-config", public: "false"}
       jobset:
