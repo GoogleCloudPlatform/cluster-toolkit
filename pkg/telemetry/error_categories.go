@@ -1,4 +1,4 @@
-// Copyright 2026 Google LLC
+// Copyright 2026 "Google LLC"
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,10 +35,6 @@ const (
 	ErrTypeAPIDisabled      = "APIDisabled"
 	ErrTypeResourceExists   = "ResourceAlreadyExists"
 	ErrTypeUnknown          = "Unknown"
-
-	// New error types mapped from daily builds
-	ErrTypeHttpBadGateway = "HttpBadGateway"
-	ErrTypePodTimeOut     = "PodTimeOut"
 )
 
 var exactErrMatchers = []struct {
@@ -88,6 +84,8 @@ var substringErrMatchers = []struct {
 
 const (
 	ErrTypeA2HighKueueInvalidArgument                = "A2HIGH_KUEUE_INVALID_ARGUMENT"
+	ErrTypeHttpBadGateway                            = "HTTP_BAD_GATEWAY"
+	ErrTypePodTimeout                                = "POD_TIMEOUT"
 	ErrTypeA4XTopologyIssue                          = "A4X_TOPOLOGY_ISSUE"
 	ErrTypeA4NcclInstallerFailed                     = "A4_NCCL_INSTALLER_FAILED"
 	ErrTypeAccountIdLength                           = "ACCOUNT_ID_LENGTH"
@@ -388,6 +386,7 @@ var extraSubstringErrMatchers = []struct {
 	{"site-packages/conda/exceptions.py", ErrTypeCondaExc},
 	{"CondaHTTPError: HTTP 502 BAD GATEWAY for url", ErrTypeConda502},
 	{"\u2502 Error: Failed to download module", ErrTypeModuleDownloadFailure},
+	{"connect: connection refused", ErrTypeKubernetesServiceAccountFailure},
 	{"module.wait.null_resource.wait_for_startup (local-exec): startup-script timed out after 2400 seconds", ErrTypeBatchMpiTimeout},
 	{"dpkg-deb: error: archive '/tmp/chrome-remote-desktop_current_amd64.deb' uses unknown compression for member", ErrTypeBrokenCrdDebPackage},
 	{"Startup script timed out", ErrTypeMonitoringStartupTimeout},
@@ -606,6 +605,9 @@ var extraSubstringErrMatchers = []struct {
 	{" sbatch: error: fetch_config: DNS SRV lookup failed", ErrTypeDnsSrvLookupFailed},
 	{"Error 403: Permission 'iam.serviceAccounts.get' denied on resource or it may not exist", ErrTypeIamDeniedError},
 	{"subprocess.CalledProcessError: Command 'gcloud compute instances describe a23901topo-nodeset-0 --zone=us-central1-a --project=hpc-toolkit-dev --format='value(resourceStatus.physicalHost)'' returned non-zero exit status 1.", ErrTypeTopologyCommandFailure},
+	{"received unexpected HTTP status: 502 Bad Gateway", ErrTypeHttpBadGateway},
+	{"Error: Pod initialization timed out after 20 minutes", ErrTypePodTimeout},
+	{"does not have permission to access projects", ErrTypeIamPermissionDenied},
 }
 
 var extraRegexErrMatchers = []struct {
@@ -680,11 +682,6 @@ var extraMultiSubstringErrMatchers = []struct {
 	{[]string{"mkdir: cannot create directory", "/run/enroot", "Permission denied"}, ErrTypeEnrootPermissionDenied},
 	{[]string{"Required 'compute.images.get' permission", "forbidden"}, ErrTypeComputeImagesGetForbidden},
 	{[]string{"validator \"test_reservation_exists\" failed", "was not found in any zone of project"}, ErrTypeValidatorReservationNotFound},
-	{[]string{"received unexpected HTTP status: 502 Bad Gateway"}, ErrTypeHttpBadGateway},
-	{[]string{"Error: Pod initialization timed out after 20 minutes"}, ErrTypePodTimeOut},
-	{[]string{"Cloud Filestore API has not been used in project"}, ErrTypeAPIDisabled},
-	{[]string{"Error: NodePool was created in the error state"}, ErrTypeGkeNodepoolStateError},
-	{[]string{"does not have permission to access projects"}, ErrTypeIamPermissionDenied},
 }
 
 func init() {
