@@ -332,6 +332,13 @@ Requirements:
   `psa_ip_ranges`; `tcp:6988` instead of 988 with `gke_support_enabled`)
   targets no instance.
 
+Not supported on A3 High (`a3-highgpu-*`) and A3 Mega (`a3-megagpu-*`). These
+machines have only one host NIC. `gcluster create` fails if the blueprint var `enable_multinic` is
+`true` for these machine types.
+
+To disable, set `enable_multinic = false`.
+Existing nodes keep their configuration until they are recreated.
+
 ```yaml
 - id: homefs
   source: modules/file-system/managed-lustre
