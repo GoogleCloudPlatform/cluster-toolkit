@@ -59,13 +59,21 @@ func TestNoOverEscapedPatterns(t *testing.T) {
 // during this test. Shadowing of a substring pattern by an earlier regex is
 // therefore NOT covered.
 func TestEverySubstringPatternIsReachable(t *testing.T) {
+	for _, m := range substringErrMatchers {
+		t.Run(m.category, func(t *testing.T) {
+			if got := getErrorType(errors.New(m.substring)); got != m.category {
+				t.Errorf("unreachable base pattern %q\n  want category %s\n  got  category %s",
+					m.substring, m.category, got)
+			}
+		})
+	}
 	for _, m := range extraSubstringErrMatchers {
-		got := getErrorType(errors.New(m.substring))
-		if got == m.category {
-			continue
-		}
-		t.Errorf("unreachable pattern %q\n  want category %s\n  got  category %s",
-			m.substring, m.category, got)
+		t.Run(m.category, func(t *testing.T) {
+			if got := getErrorType(errors.New(m.substring)); got != m.category {
+				t.Errorf("unreachable pattern %q\n  want category %s\n  got  category %s",
+					m.substring, m.category, got)
+			}
+		})
 	}
 }
 
@@ -73,12 +81,12 @@ func TestEverySubstringPatternIsReachable(t *testing.T) {
 // table, joining the required substrings into a single synthetic message.
 func TestEveryMultiSubstringPatternIsReachable(t *testing.T) {
 	for _, m := range extraMultiSubstringErrMatchers {
-		got := getErrorType(errors.New(strings.Join(m.substrings, " ")))
-		if got == m.category {
-			continue
-		}
-		t.Errorf("unreachable multi-pattern %v\n  want category %s\n  got  category %s",
-			m.substrings, m.category, got)
+		t.Run(m.category, func(t *testing.T) {
+			if got := getErrorType(errors.New(strings.Join(m.substrings, " "))); got != m.category {
+				t.Errorf("unreachable multi-pattern %v\n  want category %s\n  got  category %s",
+					m.substrings, m.category, got)
+			}
+		})
 	}
 }
 

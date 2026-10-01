@@ -345,7 +345,7 @@ const (
 	ErrTypeTopologyAssertionError                    = "TOPOLOGY_ASSERTION_ERROR"
 	ErrTypeTopologyCommandFailure                    = "TOPOLOGY_COMMAND_FAILURE"
 	ErrTypeTopologyGcloudCmdFailure                  = "TOPOLOGY_GCLOUD_CMD_FAILURE"
-	ErrTypeUnavailableCapactiy                       = "UNAVAILABLE_CAPACTIY"
+	ErrTypeUnavailableCapacity                       = "UNAVAILABLE_CAPACITY"
 	ErrTypeUnboundVariable                           = "UNBOUND_VARIABLE"
 	ErrTypeUnknownGcsTrainingModule                  = "UNKNOWN_GCS_TRAINING_MODULE"
 	ErrTypeValidatorFailed                           = "VALIDATOR_FAILED"
@@ -584,7 +584,7 @@ var extraSubstringErrMatchers = []struct {
 	{"/bin/bash: line 28: GCLUSTER_GCS_PATH: unbound variable", ErrTypeMissingEnvironmentVariable},
 	{"/bin/bash: line 29: GCLUSTER_GCS_PATH: unbound variable", ErrTypeMissingEnvironmentVariable},
 	{" Error: deployment variable reservation was not set", ErrTypeDeploymentReservationFailure},
-	{"Error: Error waiting for instance to create: The zone 'projects/hpc-toolkit-dev/zones/us-west4-c' does not have enough resources available ", ErrTypeUnavailableCapactiy},
+	{"Error: Error waiting for instance to create: The zone 'projects/hpc-toolkit-dev/zones/us-west4-c' does not have enough resources available ", ErrTypeUnavailableCapacity},
 	{" Validators can be silenced or treated as warnings or errors", ErrTypeValidatorIssue},
 	{"provided hosts list is empty, only localhost is available. Note that the implicit localhost does not match 'all'", ErrTypeReservation},
 	{"subprocess.CalledProcessError: Command 'gcloud compute instances describe f2da0topol-nodeset-0 --zone=us-central1-a --project=hpc-toolkit-dev --format='value(resourceStatus.physicalHost)'' returned non-zero exit status 1.", ErrTypeCommandFailure},
