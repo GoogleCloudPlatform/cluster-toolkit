@@ -84,7 +84,7 @@ func (c *Command) Execute() CommandResult {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			result.ExitCode = exitError.ExitCode()
 		} else {
-			result.ExitCode = 1
+			result.ExitCode = -1
 		}
 	} else {
 		result.ExitCode = 0
@@ -232,7 +232,7 @@ func ExtractRegion(location string) string {
 
 // ExecuteCommandWithTimeout executes a shell command but forcibly kills the
 // process if it does not complete within the provided timeout duration.
-func ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...string) CommandResult {
+var ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) CommandResult {
 	// Create a context that automatically cancels after the timeout
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -268,4 +268,17 @@ func ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...strin
 	}
 
 	return result
+}
+
+// HandleExecError checks if a CommandResult failed due to a timeout or failed to start.
+func HandleExecError(result CommandResult, cmdName string, timeoutMsg string) error {
+	if result.Err != nil {
+		if errors.Is(result.Err, context.DeadlineExceeded) {
+			return errors.New(timeoutMsg)
+		}
+		if result.ExitCode == -1 {
+			return fmt.Errorf("failed to execute %s: %w", cmdName, result.Err)
+		}
+	}
+	return nil
 }
