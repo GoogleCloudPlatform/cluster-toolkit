@@ -107,7 +107,7 @@ module "nodeset_cleanup" {
 }
 
 locals {
-  # NodeSet-level engine resolution: DWS Flex automatically resolves to MIG; standard compute nodes default to BULK_INSERT (MIG is opt-in)
+  # NodeSet-level engine resolution: DWS Flex automatically resolves to MIG; standard compute nodes default to BULK_INSERT (MIG is strictly opt-in)
   nodeset_resolved_engine = {
     for name, ns in local.nodeset_map : name => (
       ns.dws_flex.enabled && !ns.dws_flex.use_bulk_insert ? "MIG" : (
@@ -117,10 +117,28 @@ locals {
     )
   }
 
-  # Multiple instance groups when node count exceeds 1000
+  # GPU count resolution: uses ns.gpu_count, falls back to ns.gpu.count, then 4
+  nodeset_gpu_count = {
+    for name, ns in local.nodeset_map : name => coalesce(try(ns.gpu_count, null), try(ns.gpu.count, null), 4)
+  }
+
+  # Slicing size for MIG NodeSets: for accelerator topologies (e.g. A4X with 1x72),
+  # slice size is (dim1 * dim2) / gpus_per_vm. Kept null when no topology is configured.
+  nodeset_slice_size = {
+    for name, ns in local.nodeset_map : name => (
+      ns.accelerator_topology != null && ns.accelerator_topology != "" ? (
+        max(1, floor(
+          (tonumber(split("x", lower(trimspace(ns.accelerator_topology)))[0]) * tonumber(split("x", lower(trimspace(ns.accelerator_topology)))[1])) /
+          max(1, local.nodeset_gpu_count[name])
+        ))
+      ) : null
+    )
+  }
+
+  # Multiple instance groups when node count exceeds slice size (1000 for standard MIGs, or hosts_per_slice for GPU topologies)
   nodeset_migs = merge([
     for name, ns in local.nodeset_map : {
-      for idx in range(ceil(max(ns.node_count_static + ns.node_count_dynamic_max, 1) / 1000.0)) : (
+      for idx in range(ceil(max(ns.node_count_static + ns.node_count_dynamic_max, 1) / (coalesce(local.nodeset_slice_size[name], 1000) * 1.0))) : (
         "${name}-mig-${idx}"
         ) => {
         nodeset_name       = name
@@ -143,12 +161,57 @@ locals {
       for z in(mig.zone_policy_allow != null ? mig.zone_policy_allow : []) : z if z != null && z != ""
     ]
   }
+
+  # Shards that get a workload policy, keyed by shard, value = normalized topology.
+  # Normalized again here because var.nodeset can be supplied by a hand-written object.
+  nodeset_mig_topo = {
+    for k, mig in local.nodeset_migs : k => lower(trimspace(mig.nodeset.accelerator_topology))
+    if mig.nodeset.accelerator_topology != null && trimspace(mig.nodeset.accelerator_topology) != ""
+  }
 }
 
 data "google_compute_zones" "available" {
   for_each = toset([for mig in local.nodeset_migs : mig.region])
   project  = var.project_id
   region   = each.value
+}
+
+resource "google_compute_resource_policy" "nodeset_workload_policy" {
+  for_each = local.nodeset_mig_topo
+
+  # Topology is in the name so a topology change yields a new policy; create_before_destroy
+  # then avoids a 409 on the replacement. This does NOT spare the MIG: the provider's
+  # ForceNewIfChange on resource_policies.0.workload_policy reads the unknown new self_link as
+  # a removal, so the RIGM is replaced too. Changing accelerator_topology destroys running VMs.
+  # Name is capped at 63 chars (RFC 1035); the md5 digest keeps truncated names unique.
+  name = (
+    length("${local.nodeset_migs[each.key].mig_name}-${each.value}-wp") <= 63 ?
+    "${local.nodeset_migs[each.key].mig_name}-${each.value}-wp" :
+    format("%s-%s-mig-%d-%s-wp",
+      replace(substr(
+        "${local.slurm_cluster_name}-${local.nodeset_migs[each.key].nodeset_name}",
+        0,
+        min(
+          length("${local.slurm_cluster_name}-${local.nodeset_migs[each.key].nodeset_name}"),
+          max(1, 63 - 9 - length("-mig-${local.nodeset_migs[each.key].index}-${each.value}-wp"))
+        )
+      ), "/-+$/", ""),
+      substr(md5(each.key), 0, 8),
+      local.nodeset_migs[each.key].index,
+      each.value
+    )
+  )
+  region  = local.nodeset_migs[each.key].region
+  project = var.project_id
+
+  workload_policy {
+    type                 = "HIGH_THROUGHPUT"
+    accelerator_topology = each.value
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "google_compute_region_instance_group_manager" "nodeset_mig" {
@@ -163,9 +226,23 @@ resource "google_compute_region_instance_group_manager" "nodeset_mig" {
     instance_template = each.value.template_link
   }
 
+  dynamic "resource_policies" {
+    # Index the map that created the policies rather than re-deriving the condition.
+    for_each = (
+      contains(keys(local.nodeset_mig_topo), each.key)
+      ? [google_compute_resource_policy.nodeset_workload_policy[each.key].self_link]
+      : []
+    )
+    content {
+      workload_policy = resource_policies.value
+    }
+  }
+
   distribution_policy_zones = length(local.nodeset_mig_zones[each.key]) > 0 ? local.nodeset_mig_zones[each.key] : (
     var.zone != null && contains(data.google_compute_zones.available[each.value.region].names, var.zone) ? [var.zone] : null
   )
+  # Scoped per MIG: slices of one nodeset can land in different zones unless zone_policy_allow
+  # pins one. NVLink is intact within a slice; cross-slice jobs may pay cross-zone latency.
   distribution_policy_target_shape = "ANY_SINGLE_ZONE"
 
   # Proactive Lockout Guardrail: Compute NodeSet MIGs must never use PROACTIVE
@@ -220,6 +297,11 @@ locals {
     enable_maintenance_reservation   = ns.enable_maintenance_reservation
     enable_opportunistic_maintenance = ns.enable_opportunistic_maintenance
     accelerator_topology             = ns.accelerator_topology
+    # Static MIG nodesets only: resume.py prefers slice_size over the live machine type, so
+    # emitting it elsewhere would move the source of truth. The !dws_flex term must match the
+    # gates on nodeset_migs and mig_name above -- Flex resolves to "MIG" but gets no slice MIG.
+    slice_size = (local.nodeset_resolved_engine[ns.nodeset_name] == "MIG" && !ns.dws_flex.enabled) ? local.nodeset_slice_size[ns.nodeset_name] : null
+    gpu_count  = (local.nodeset_resolved_engine[ns.nodeset_name] == "MIG" && !ns.dws_flex.enabled) ? local.nodeset_gpu_count[ns.nodeset_name] : null
   }]
 }
 
