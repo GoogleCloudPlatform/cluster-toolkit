@@ -162,7 +162,9 @@ variable "multinic" {
     enabled = optional(bool, false)
     # numa_range=1000000: hides CPU socket distance from LNet so peers spread
     # over both rails instead of all picking the nearest NIC.
-    lnet_options = optional(string, "lnet_numa_range=1000000")
+    # lnet_peer_discovery_disabled=1: disables LNet dynamic peer discovery as
+    # required by Managed Lustre for multi-NIC client striping.
+    lnet_options = optional(string, "lnet_numa_range=1000000 lnet_peer_discovery_disabled=1")
     table_base   = optional(number, 101)
     rp_filter    = optional(number, 2)
     # LNet servers open callback connections back to the client on tcp:988

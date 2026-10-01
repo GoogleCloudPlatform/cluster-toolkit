@@ -34,7 +34,7 @@ md_get() {
 
 # shellcheck source=/dev/null
 [[ -r /etc/google/multinic-lustre.env ]] && . /etc/google/multinic-lustre.env
-LNET_OPTIONS="${MULTINIC_LNET_OPTIONS:-lnet_numa_range=1000000}"
+LNET_OPTIONS="${MULTINIC_LNET_OPTIONS:-lnet_numa_range=1000000 lnet_peer_discovery_disabled=1}"
 TABLE_ID="${MULTINIC_TABLE_BASE:-101}"
 RPF="${MULTINIC_RP_FILTER:-2}"
 
