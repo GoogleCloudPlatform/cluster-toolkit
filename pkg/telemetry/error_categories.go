@@ -84,6 +84,8 @@ var substringErrMatchers = []struct {
 
 const (
 	ErrTypeA2HighKueueInvalidArgument                = "A2HIGH_KUEUE_INVALID_ARGUMENT"
+	ErrTypeHttpBadGateway                            = "HTTP_BAD_GATEWAY"
+	ErrTypePodTimeout                                = "POD_TIMEOUT"
 	ErrTypeA4XTopologyIssue                          = "A4X_TOPOLOGY_ISSUE"
 	ErrTypeA4NcclInstallerFailed                     = "A4_NCCL_INSTALLER_FAILED"
 	ErrTypeAccountIdLength                           = "ACCOUNT_ID_LENGTH"
@@ -603,6 +605,9 @@ var extraSubstringErrMatchers = []struct {
 	{" sbatch: error: fetch_config: DNS SRV lookup failed", ErrTypeDnsSrvLookupFailed},
 	{"Error 403: Permission 'iam.serviceAccounts.get' denied on resource or it may not exist", ErrTypeIamDeniedError},
 	{"subprocess.CalledProcessError: Command 'gcloud compute instances describe a23901topo-nodeset-0 --zone=us-central1-a --project=hpc-toolkit-dev --format='value(resourceStatus.physicalHost)'' returned non-zero exit status 1.", ErrTypeTopologyCommandFailure},
+	{"received unexpected HTTP status: 502 Bad Gateway", ErrTypeHttpBadGateway},
+	{"Error: Pod initialization timed out after 20 minutes", ErrTypePodTimeout},
+	{"does not have permission to access projects", ErrTypeIamPermissionDenied},
 }
 
 var extraRegexErrMatchers = []struct {
