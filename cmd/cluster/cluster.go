@@ -15,8 +15,6 @@
 package cluster
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator/gke"
@@ -32,8 +30,6 @@ var (
 	location    string
 	projectID   string
 )
-
-var executeCmdWithTimeoutFunc = shell.ExecuteCommandWithTimeout
 
 var gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
 	return gke.NewGKEOrchestrator()
@@ -53,15 +49,10 @@ var ClusterCmd = &cobra.Command{
 
 			timeoutDuration := 30 * time.Second
 
-			result := executeCmdWithTimeoutFunc(timeoutDuration, "gcloud", "config", "get-value", "project")
+			result := shell.ExecuteCommandWithTimeout(timeoutDuration, "gcloud", "config", "get-value", "project")
 
-			if result.Err != nil {
-				if errors.Is(result.Err, context.DeadlineExceeded) {
-					return fmt.Errorf("gcloud config get-value project timed out after %v. Please verify your local gcloud installation is responsive", timeoutDuration)
-				}
-				if result.ExitCode == -1 {
-					return fmt.Errorf("failed to execute gcloud: %w", result.Err)
-				}
+			if err := shell.HandleExecError(result, "gcloud", fmt.Sprintf("gcloud config get-value project timed out after %v. Please verify your local gcloud installation is responsive", timeoutDuration)); err != nil {
+				return err
 			}
 
 			ambientProject := strings.TrimSpace(result.Stdout)

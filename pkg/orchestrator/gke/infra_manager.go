@@ -452,17 +452,15 @@ func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, p
 func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
 	g.projectID = projectID
 
-	timeoutDuration := 30 * time.Second
-
 	logging.Info("Fetching GKE cluster metadata for '%s'...", clusterName)
-	res := g.executor.ExecuteCommandWithTimeout(timeoutDuration, "gcloud", "container", "clusters", "describe", clusterName,
+	res := g.executor.ExecuteCommandWithTimeout(gcloudCmdTimeout, "gcloud", "container", "clusters", "describe", clusterName,
 		"--location", location,
 		"--project", g.projectID,
 		"--format=json")
 
 	if res.Err != nil {
 		if errors.Is(res.Err, context.DeadlineExceeded) {
-			return "", fmt.Errorf("timed out after %v while trying to reach GKE cluster '%s' in '%s'. Please check your network connection", timeoutDuration, clusterName, location)
+			return "", fmt.Errorf("timed out after %v while trying to reach GKE cluster '%s' in '%s'. Please check your network connection", gcloudCmdTimeout, clusterName, location)
 		}
 		if res.ExitCode == -1 {
 			return "", fmt.Errorf("failed to execute gcloud: %w", res.Err)
@@ -477,7 +475,7 @@ func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (s
 		if len(strings.Split(location, "-")) == 3 {
 			region := shell.ExtractRegion(location)
 			logging.Info("Failed to find cluster in zone %s. Trying fallback to region %s...", location, region)
-			fallbackRes := g.executor.ExecuteCommandWithTimeout(timeoutDuration, "gcloud", "container", "clusters", "describe", clusterName,
+			fallbackRes := g.executor.ExecuteCommandWithTimeout(gcloudCmdTimeout, "gcloud", "container", "clusters", "describe", clusterName,
 				"--location", region,
 				"--project", g.projectID,
 				"--format=json")
