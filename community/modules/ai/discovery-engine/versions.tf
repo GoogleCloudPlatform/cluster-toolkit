@@ -25,6 +25,6 @@ terraform {
   }
 
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:discovery-engine/v1.105.0"
+    module_name = "blueprints/terraform/hpc-toolkit:discovery-engine/v1.106.0"
   }
 }
