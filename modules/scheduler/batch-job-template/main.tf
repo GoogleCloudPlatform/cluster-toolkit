@@ -23,6 +23,7 @@ locals {
   instance_template = coalesce(var.instance_template, module.instance_template.self_link)
 
   tasks_per_node = var.task_count_per_node != null ? var.task_count_per_node : (var.mpi_mode ? 1 : null)
+  parallelism    = var.parallelism != null ? var.parallelism : (var.mpi_mode ? var.task_count : null)
 
   one_line_runnable = coalesce(var.runnable, "## Add your workload here ##")
   runnables         = coalesce(var.runnables, [{ script = local.one_line_runnable }])
@@ -33,6 +34,7 @@ locals {
       synchronized       = var.mpi_mode
       runnables          = local.runnables
       task_count         = var.task_count
+      parallelism        = local.parallelism
       tasks_per_node     = local.tasks_per_node
       require_hosts_file = var.mpi_mode
       permissive_ssh     = var.mpi_mode
@@ -117,6 +119,11 @@ resource "local_file" "job_template" {
     precondition {
       condition     = var.runnable == null || var.runnables == null
       error_message = "var.runnable and var.runnables (plural) cannot both be set."
+    }
+
+    precondition {
+      condition     = !var.mpi_mode || var.parallelism == null || var.parallelism == var.task_count
+      error_message = "When mpi_mode is true, Batch requires parallelism == task_count (barriers require task_count = parallelism)."
     }
   }
 }

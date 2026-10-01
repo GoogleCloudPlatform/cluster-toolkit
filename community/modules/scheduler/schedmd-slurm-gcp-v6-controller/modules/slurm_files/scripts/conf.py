@@ -343,6 +343,16 @@ class SlurmConfigGenerator:
 
 def get_generator(lkp: util.Lookup) -> SlurmConfigGenerator:
     """Factory function to return the correct Slurm config generator version."""
+    if util.slurm_version_gte(lkp.slurm_version, "26.05"):
+        from conf_v2605 import SlurmConfigGeneratorV2605
+        return SlurmConfigGeneratorV2605(lkp)
+
+    if lkp.has_tpu_nodesets():
+        log.warning(
+            f"GCE TPU nodesets are configured, but native TPU support "
+            f"is not supported on Slurm {lkp.slurm_version} (requires >= 26.05)."
+        )
+
     if util.slurm_version_gte(lkp.slurm_version, "25.11"):
         from conf_v2511 import SlurmConfigGeneratorV2511
         return SlurmConfigGeneratorV2511(lkp)

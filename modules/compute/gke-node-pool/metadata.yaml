@@ -56,3 +56,10 @@ ghpc:
       dependent: autoscaling_total_min_nodes
       dependent_value: 0
     error_message: "autoscaling_total_min_nodes should be 0 when enable_queued_provisioning is true."
+  - validator: conditional
+    inputs:
+      trigger: enable_queued_provisioning
+      trigger_value: true
+      dependent: enable_flex_start
+      dependent_value: true
+    error_message: "enable_queued_provisioning requires enable_flex_start to be set to true."
