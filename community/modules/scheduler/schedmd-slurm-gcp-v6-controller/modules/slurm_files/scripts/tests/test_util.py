@@ -1119,6 +1119,42 @@ def test_slurmsync_mig_auto_repair(mock_lookup, mock_compute_prop, mock_inst):
                 mock_get_reason.assert_called_with("testcl-ns-2")
 
 
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+@unittest.mock.patch("slurmsync.lookup")
+def test_slurmsync_mig_preempted_spot_waits_for_auto_healing(mock_lookup, mock_compute_prop):
+    import slurmsync
+
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "ns": TstNodeset(nodeset_name="ns", region="us-central1", provisioning_engine="MIG", node_count_static=2, node_count_dynamic_max=0),
+            "bulk": TstNodeset(nodeset_name="bulk", region="us-central1", provisioning_engine="BULK_INSERT", node_count_static=2, node_count_dynamic_max=0),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    # Window before MIG reports RECREATING: VM is TERMINATED, currentAction NONE.
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+        "managedInstances": [{"name": "testcl-ns-0", "currentAction": "NONE"}]
+    }
+    mock_lookup.return_value = lkp
+    preempted = unittest.mock.MagicMock(status="TERMINATED")
+    preempted.scheduling.preemptible = True
+
+    with unittest.mock.patch.object(util.Lookup, "instance", return_value=preempted):
+        with unittest.mock.patch.object(util.Lookup, "node_state", return_value=slurmsync.NodeState(base="ALLOCATED", flags=frozenset())):
+            action = slurmsync.get_node_action("testcl-ns-0")
+            assert isinstance(action, slurmsync.NodeActionDown)
+            assert "MIG Auto-Healing" in action.reason
+            # Non-MIG nodeset keeps the existing restart behaviour.
+            assert isinstance(slurmsync.get_node_action("testcl-bulk-0"), slurmsync.NodeActionPrempt)
+
+        with unittest.mock.patch.object(util.Lookup, "node_state", return_value=slurmsync.NodeState(base="DOWN", flags=frozenset())):
+            assert isinstance(slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionUnchanged)
+
+
 def test_is_target_controller_up_hostname_containing_role():
     line = "Slurmctld(backup) at primary-cluster-controller-1 is UP"
     assert util._is_target_controller_up(line, "primary") is False
@@ -1659,3 +1695,412 @@ def test_tpu_lookup_and_device_constrain():
         0: ["c-v6es-0", "c-v6es-1"],
         1: ["c-v6es-2", "c-v6es-3"],
     }
+
+
+# ==============================================================================
+# Tests for to_leaf_name, trim_self_link, and get_operation_req
+# ==============================================================================
+
+
+@pytest.mark.parametrize(
+    "val,expected",
+    [
+        ("https://www.googleapis.com/compute/v1/projects/p/zones/us-central1-a", "us-central1-a"),
+        ("https://www.googleapis.com/compute/v1/projects/p/zones/us-central1-a/", "us-central1-a"),
+        ("https://www.googleapis.com/compute/v1/projects/p/zones/us-central1-a///", "us-central1-a"),
+        ("projects/p/regions/us-central1", "us-central1"),
+        ("us-central1-a", "us-central1-a"),
+        ("  us-central1-a/  ", "us-central1-a"),
+        ("  https://compute.googleapis.com/compute/v1/projects/p/zones/us-central1-a /  ", "us-central1-a"),
+        ("a", "a"),
+        ("//", ""),
+        (" / ", ""),
+        ("   ", ""),
+        ("", ""),
+        (None, ""),
+        ("///", ""),
+    ],
+)
+def test_to_leaf_name(val, expected):
+    assert util.to_leaf_name(val) == expected
+
+
+@pytest.mark.parametrize(
+    "link,expected",
+    [
+        ("https://www.googleapis.com/compute/v1/projects/p/regions/us-central1", "us-central1"),
+        ("https://www.googleapis.com/compute/v1/projects/p/regions/us-central1/", "us-central1"),
+        ("us-central1", "us-central1"),  # Previously raised Exception!
+        ("bare-resource-name", "bare-resource-name"),
+        ("", ""),
+    ],
+)
+def test_trim_self_link_idempotent(link, expected):
+    """Verify trim_self_link is non-throwing and idempotent on bare names."""
+    assert util.trim_self_link(link) == expected
+
+
+def test_get_operation_req_zonal():
+    lkp = unittest.mock.MagicMock()
+    lkp.project = "test-project"
+
+    # Full selfLink with trailing slash
+    util.get_operation_req(
+        lkp,
+        "https://compute.googleapis.com/compute/v1/projects/p/zones/us-central1-a/operations/op-123/",
+        zone="https://compute.googleapis.com/compute/v1/projects/p/zones/us-central1-a/",
+    )
+    lkp.compute.zoneOperations().get.assert_called_with(
+        project="test-project", zone="us-central1-a", operation="op-123"
+    )
+
+    # Bare zone name
+    util.get_operation_req(lkp, "op-456", zone="us-east1-b")
+    lkp.compute.zoneOperations().get.assert_called_with(
+        project="test-project", zone="us-east1-b", operation="op-456"
+    )
+
+
+def test_get_operation_req_regional():
+    lkp = unittest.mock.MagicMock()
+    lkp.project = "test-project"
+
+    util.get_operation_req(
+        lkp, "op-789", region="https://.../regions/europe-west4/"
+    )
+    lkp.compute.regionOperations().get.assert_called_with(
+        project="test-project", region="europe-west4", operation="op-789"
+    )
+
+
+def test_get_operation_req_global():
+    lkp = unittest.mock.MagicMock()
+    lkp.project = "test-project"
+
+    util.get_operation_req(lkp, "op-global")
+    lkp.compute.globalOperations().get.assert_called_with(
+        project="test-project", operation="op-global"
+    )
+
+
+def test_get_operation_req_empty_name():
+    lkp = unittest.mock.MagicMock()
+    lkp.project = "test-project"
+
+    with pytest.raises(ValueError, match="Invalid operation name"):
+        util.get_operation_req(lkp, "")
+
+    with pytest.raises(ValueError, match="Invalid operation name"):
+        util.get_operation_req(lkp, "   ///   ")
+def _flex_lkp(machines: dict, selections):
+    """Lookup whose primary template is n2-standard-16 plus the given fallback selections."""
+    lkp = util.Lookup(TstCfg())
+    lkp.template_info = Mock(return_value=NSDict({  # type: ignore[method-assign]
+        "machine_type": machines["n2-standard-16"],
+        "advancedMachineFeatures": NSDict({"threadsPerCore": None, "visibleCoreCount": None}),
+    }))
+    lkp.machine_type = Mock(side_effect=lambda n: machines[n])  # type: ignore[method-assign]
+
+    nodeset = NSDict({
+        "nodeset_name": "flex",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": None if selections is None else NSDict(
+            {"instance_selections": [NSDict(s) for s in selections]}
+        ),
+    })
+    return lkp, nodeset
+
+
+FLEX_MACHINES = {
+    "n2-standard-16": util.MachineType(name="n2-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
+    "n2-standard-8": util.MachineType(name="n2-standard-8", guest_cpus=8, memory_mb=32768, accelerators=[]),
+    "n2-highmem-8": util.MachineType(name="n2-highmem-8", guest_cpus=8, memory_mb=65536, accelerators=[]),
+}
+
+
+def test_nodeset_machine_conf_no_policy_matches_template():
+    lkp, nodeset = _flex_lkp(FLEX_MACHINES, None)
+    assert lkp.nodeset_machine_conf(nodeset) == lkp.template_machine_conf("tpl")
+
+
+def test_nodeset_machine_conf_floors_to_smallest_shape():
+    lkp, nodeset = _flex_lkp(FLEX_MACHINES, [
+        {"name": "fb", "rank": 2, "machine_types": ["n2-standard-8"]},
+    ])
+    got = lkp.nodeset_machine_conf(nodeset)
+    primary = lkp.template_machine_conf("tpl")
+
+    assert primary.cpus == 16 and got.cpus == 8
+    assert got.memory < primary.memory
+    # slurmctld rejects a node line whose geometry does not multiply out to CPUs.
+    assert got.sockets * got.cores_per_socket * got.threads_per_core == got.cpus
+
+
+def test_nodeset_machine_conf_mixes_min_cpu_and_min_memory():
+    # n2-highmem-8 has the same memory as the 16-vCPU primary but half the CPUs.
+    lkp, nodeset = _flex_lkp(FLEX_MACHINES, [
+        {"name": "a", "rank": 1, "machine_types": ["n2-highmem-8"]},
+        {"name": "b", "rank": 2, "machine_types": ["n2-standard-8"]},
+    ])
+    got = lkp.nodeset_machine_conf(nodeset)
+    assert got.cpus == 8
+    assert got.memory == lkp._machine_conf(FLEX_MACHINES["n2-standard-8"], 2, None).memory
+
+
+def test_nodeset_machine_conf_raises_on_unresolvable_machine_type():
+    machines = dict(FLEX_MACHINES)
+    lkp, nodeset = _flex_lkp(machines, [
+        {"name": "fb", "rank": 2, "machine_types": ["nonexistent-machine-type"]},
+    ])
+    # Falling back to the primary shape would oversize the node and DRAIN smaller fallback VMs.
+    with pytest.raises(RuntimeError, match="nonexistent-machine-type"):
+        lkp.nodeset_machine_conf(nodeset)
+
+
+def test_nodeset_machine_conf_does_not_mutate_base_conf():
+    # When the primary template has the fewest CPUs (e.g. n2-standard-8 primary with n2-standard-16
+    # fallback that has less memory in a custom shape), nodeset_machine_conf must not mutate the
+    # object returned by template_machine_conf in place.
+    machines = {
+        "n2-standard-16": util.MachineType(name="n2-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
+        "n2-custom-32-32768": util.MachineType(name="n2-custom-32-32768", guest_cpus=32, memory_mb=32768, accelerators=[]),
+    }
+    lkp, nodeset = _flex_lkp(machines, [
+        {"name": "fb", "rank": 2, "machine_types": ["n2-custom-32-32768"]},
+    ])
+    cached_base = lkp.template_machine_conf("tpl")
+    orig_mem = cached_base.memory
+    lkp.template_machine_conf = Mock(return_value=cached_base)  # type: ignore[method-assign]
+
+    got = lkp.nodeset_machine_conf(nodeset)
+    assert got.cpus == 16
+    assert got.memory < orig_mem
+    assert cached_base.memory == orig_mem
+
+
+def test_machine_conf_does_not_autovivify_cached_template():
+    # Non-SMT family so getThreadsPerCore short-circuits and never touches advancedMachineFeatures.
+    machines = {
+        "c4a-standard-16": util.MachineType(name="c4a-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
+        "c4a-standard-8": util.MachineType(name="c4a-standard-8", guest_cpus=8, memory_mb=32768, accelerators=[]),
+    }
+    lkp = util.Lookup(TstCfg())
+    template = NSDict({"machine_type": machines["c4a-standard-16"], "machineType": "c4a-standard-16"})
+    lkp.template_info = Mock(return_value=template)  # type: ignore[method-assign]
+    lkp.machine_type = Mock(side_effect=lambda n: machines[n])  # type: ignore[method-assign]
+    nodeset = NSDict({
+        "nodeset_name": "flex",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": NSDict({"instance_selections": [NSDict({"machine_types": ["c4a-standard-8"]})]}),
+    })
+
+    lkp.template_machine_conf("tpl")
+    got = lkp.nodeset_machine_conf(nodeset)
+
+    assert got.cpus == 8
+    assert "advancedMachineFeatures" not in template
+
+
+def test_nodeset_machine_conf_visible_core_count_not_applied_to_smaller_fallback():
+    lkp, nodeset = _flex_lkp(FLEX_MACHINES, [
+        {"name": "fb", "rank": 2, "machine_types": ["n2-standard-8"]},
+    ])
+    lkp.template_info.return_value["machineType"] = "n2-standard-16"  # type: ignore[attr-defined]
+    lkp.template_info.return_value["advancedMachineFeatures"]["visibleCoreCount"] = 6  # type: ignore[attr-defined]
+
+    got = lkp.nodeset_machine_conf(nodeset)
+    # Primary with visibleCoreCount=6 has 12 vCPUs (6 * 2 threads/core), whereas fallback
+    # n2-standard-8 has 4 physical cores (8 vCPUs). Clamping visibleCoreCount to each shape's
+    # physical core count yields min(6, 4) = 4 cores (8 vCPUs) rather than inflating to 12.
+    assert got.cpus == 8
+    assert got.cores_per_socket == 4
+
+    # Conversely, when fallback has more physical cores than visibleCoreCount (e.g. t2d-standard-16
+    # with 16 physical cores, tpc=1), it still inherits visibleCoreCount=6 from the template and
+    # boots with 6 CPUs (6 cores * 1 thread/core).
+    machines = dict(FLEX_MACHINES)
+    machines["t2d-standard-16"] = util.MachineType(name="t2d-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[])
+    lkp2, nodeset2 = _flex_lkp(machines, [
+        {"name": "fb", "rank": 2, "machine_types": ["t2d-standard-16"]},
+    ])
+    lkp2.template_info.return_value["machineType"] = "n2-standard-16"  # type: ignore[attr-defined]
+    lkp2.template_info.return_value["advancedMachineFeatures"]["visibleCoreCount"] = 6  # type: ignore[attr-defined]
+    got2 = lkp2.nodeset_machine_conf(nodeset2)
+    assert got2.cpus == 6
+    assert got2.cores_per_socket == 6
+    assert got2.threads_per_core == 1
+
+
+def test_nodeset_machine_conf_mixed_smt_and_non_smt_shapes():
+    # Case A: Non-SMT primary (t2d-standard-16: 16 cores, supports_smt=False -> tpc=1) with
+    # SMT fallback (n2d-standard-16: 8 cores, supports_smt=True -> tpc=2). Flooring across both
+    # shapes must cap cores_per_socket to 8 (for n2d) and threads_per_core to 1 (for t2d).
+    machines = {
+        "t2d-standard-16": util.MachineType(name="t2d-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
+        "n2d-standard-16": util.MachineType(name="n2d-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
+    }
+    lkp = util.Lookup(TstCfg())
+    lkp.template_info = Mock(return_value=NSDict({  # type: ignore[method-assign]
+        "machineType": "t2d-standard-16",
+        "machine_type": machines["t2d-standard-16"],
+        "advancedMachineFeatures": NSDict({"threadsPerCore": None, "visibleCoreCount": None}),
+    }))
+    lkp.machine_type = Mock(side_effect=lambda n: machines[n])  # type: ignore[method-assign]
+    nodeset = NSDict({
+        "nodeset_name": "flex_smt",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": NSDict({
+            "instance_selections": [
+                NSDict({"name": "primary", "rank": 1, "machine_types": ["t2d-standard-16"]}),
+                NSDict({"name": "fallback", "rank": 2, "machine_types": ["n2d-standard-16"]}),
+            ]
+        }),
+    })
+    got = lkp.nodeset_machine_conf(nodeset)
+    assert got.cpus == 8
+    assert got.cores_per_socket == 8
+    assert got.threads_per_core == 1
+
+    # Case B: SMT primary (n2d-standard-16) with smaller non-SMT fallback (t2d-standard-8:
+    # 8 physical cores, tpc=1). Fallback must have tpc=1 and cores_per_socket=8, not tpc=2.
+    machines["t2d-standard-8"] = util.MachineType(name="t2d-standard-8", guest_cpus=8, memory_mb=32768, accelerators=[])
+    lkp.template_info.return_value["machineType"] = "n2d-standard-16"  # type: ignore[attr-defined]
+    lkp.template_info.return_value["machine_type"] = machines["n2d-standard-16"]  # type: ignore[attr-defined]
+    nodeset.instance_flexibility_policy.instance_selections = [
+        NSDict({"name": "fb", "rank": 2, "machine_types": ["t2d-standard-8"]}),
+    ]
+    got_b = lkp.nodeset_machine_conf(nodeset)
+    assert got_b.cpus == 8
+    assert got_b.cores_per_socket == 8
+    assert got_b.threads_per_core == 1
+
+
+def test_nodeset_machine_conf_deterministic_tie_breaker():
+    # n2-standard-32 (Sockets=2, CoresPerSocket=8, TPC=2) and c2d-standard-32
+    # (Sockets=1, CoresPerSocket=16, TPC=2) both have 32 vCPUs and 16 physical cores.
+    # Selection must be deterministic regardless of selection order.
+    machines = {
+        "n2-standard-64": util.MachineType(name="n2-standard-64", guest_cpus=64, memory_mb=262144, accelerators=[]),
+        "n2-standard-32": util.MachineType(name="n2-standard-32", guest_cpus=32, memory_mb=131072, accelerators=[]),
+        "c2d-standard-32": util.MachineType(name="c2d-standard-32", guest_cpus=32, memory_mb=131072, accelerators=[]),
+    }
+    lkp1 = util.Lookup(TstCfg())
+    lkp1.template_info = Mock(return_value=NSDict({  # type: ignore[method-assign]
+        "machineType": "n2-standard-64",
+        "machine_type": machines["n2-standard-64"],
+        "advancedMachineFeatures": NSDict({"threadsPerCore": None, "visibleCoreCount": None}),
+    }))
+    lkp1.machine_type = Mock(side_effect=lambda n: machines[n])  # type: ignore[method-assign]
+
+    ns1 = NSDict({
+        "nodeset_name": "flex_tie",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": NSDict({
+            "instance_selections": [
+                NSDict({"name": "s1", "rank": 1, "machine_types": ["n2-standard-32", "c2d-standard-32"]}),
+            ]
+        }),
+    })
+    ns2 = NSDict({
+        "nodeset_name": "flex_tie",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": NSDict({
+            "instance_selections": [
+                NSDict({"name": "s1", "rank": 1, "machine_types": ["c2d-standard-32", "n2-standard-32"]}),
+            ]
+        }),
+    })
+    got1 = lkp1.nodeset_machine_conf(ns1)
+    got2 = lkp1.nodeset_machine_conf(ns2)
+    assert got1 == got2
+    assert got1.cpus == 32
+    assert got1.sockets == 1
+    assert got1.cores_per_socket == 16
+
+
+def test_nodeset_machine_conf_arm64_n4a_and_none_advanced_machine_features():
+    # n4a and h3 are non-SMT families (supports_smt == False -> tpc=1), and
+    # template.advancedMachineFeatures can be None on older/raw GCE template payloads.
+    machines = {
+        "c4a-standard-16": util.MachineType(name="c4a-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
+        "n4a-standard-8": util.MachineType(name="n4a-standard-8", guest_cpus=8, memory_mb=32768, accelerators=[]),
+        "h3-standard-88": util.MachineType(name="h3-standard-88", guest_cpus=88, memory_mb=360448, accelerators=[]),
+    }
+    assert machines["n4a-standard-8"].supports_smt is False
+    assert machines["h3-standard-88"].supports_smt is False
+
+    lkp = util.Lookup(TstCfg())
+    lkp.template_info = Mock(return_value=NSDict({  # type: ignore[method-assign]
+        "machineType": "c4a-standard-16",
+        "machine_type": machines["c4a-standard-16"],
+        "advancedMachineFeatures": None,
+    }))
+    lkp.machine_type = Mock(side_effect=lambda n: machines[n])  # type: ignore[method-assign]
+    nodeset = NSDict({
+        "nodeset_name": "flex_arm",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": NSDict({
+            "instance_selections": [
+                NSDict({"name": "fb", "rank": 2, "machine_types": ["n4a-standard-8"]}),
+            ]
+        }),
+    })
+    got = lkp.nodeset_machine_conf(nodeset)
+    assert got.cpus == 8
+    assert got.cores_per_socket == 8
+    assert got.threads_per_core == 1
+
+
+def test_nodeset_machine_conf_physical_core_and_socket_inversion():
+    # Physical-core inversion: n2-standard-24 (24 vCPUs, 12 cores, tpc=2) + t2d-standard-16 (16 vCPUs, 16 cores, tpc=1)
+    # Must clamp cores_per_socket to min_total_cores=12 so n2-standard-24 does not DRAIN under CR_Core_Memory.
+    machines = {
+        "n2-standard-24": util.MachineType(name="n2-standard-24", guest_cpus=24, memory_mb=98304, accelerators=[]),
+        "t2d-standard-16": util.MachineType(name="t2d-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
+        "c3-standard-44": util.MachineType(name="c3-standard-44", guest_cpus=44, memory_mb=180224, accelerators=[]),
+        "n2-standard-32": util.MachineType(name="n2-standard-32", guest_cpus=32, memory_mb=131072, accelerators=[]),
+    }
+    lkp = util.Lookup(TstCfg())
+    lkp.template_info = Mock(return_value=NSDict({  # type: ignore[method-assign]
+        "machineType": "n2-standard-24",
+        "machine_type": machines["n2-standard-24"],
+        "advancedMachineFeatures": NSDict({"threadsPerCore": None, "visibleCoreCount": None}),
+    }))
+    lkp.machine_type = Mock(side_effect=lambda n: machines[n])  # type: ignore[method-assign]
+
+    # Also verify dict-formatted instance_selections
+    nodeset = NSDict({
+        "nodeset_name": "flex_core_inv",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": NSDict({
+            "instance_selections": {
+                "selection-1": NSDict({"rank": 1, "machine_types": ["n2-standard-24", "t2d-standard-16"]}),
+            }
+        }),
+    })
+    got = lkp.nodeset_machine_conf(nodeset)
+    assert got.sockets == 1
+    assert got.cores_per_socket == 12
+    assert got.threads_per_core == 1
+    assert got.cpus == 12
+
+    # Socket-count inversion: c3-standard-44 (1 socket, 22 cores) + n2-standard-32 (2 sockets, 8 cores/socket = 16 cores)
+    lkp.template_info = Mock(return_value=NSDict({  # type: ignore[method-assign]
+        "machineType": "c3-standard-44",
+        "machine_type": machines["c3-standard-44"],
+        "advancedMachineFeatures": NSDict({"threadsPerCore": None, "visibleCoreCount": None}),
+    }))
+    nodeset_sock = NSDict({
+        "nodeset_name": "flex_sock_inv",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": NSDict({
+            "instance_selections": [
+                NSDict({"rank": 1, "machine_types": ["c3-standard-44", "n2-standard-32"]}),
+            ]
+        }),
+    })
+    got_sock = lkp.nodeset_machine_conf(nodeset_sock)
+    assert got_sock.sockets == 1
+    assert got_sock.sockets_per_board == 1
+    assert got_sock.cores_per_socket == 16
+    assert got_sock.cpus == 32

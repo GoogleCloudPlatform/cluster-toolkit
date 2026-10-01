@@ -181,8 +181,6 @@ Mounts must use the format: `--mount "<src>;<dest>[;<mode>][;profile=<profile>][
   * **Without `profile=`**: Applies standard [GCSFuse CSI volume attributes](https://docs.cloud.google.com/kubernetes-engine/docs/reference/cloud-storage-fuse-csi-driver/volume-attr) directly to the inline mount.
   * **With `profile=`**: Overrides default [storage profile StorageClass parameters](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#storageclass_configuration_reference) on the generated PVs.
 
-  NOTE: `gcluster` derives some CSI volume attributes from the rest of the `--mount` spec, and supplying one of them through `attributes=` fails validation with an error, so the two cannot silently overwrite each other. Use `options=<opt1>,<opt2>` instead of `attributes=mountOptions=...` for gcsfuse mount flags, and `src=gs://<bucket>` instead of `attributes=bucketName=...` for the bucket.
-
 **Supported volume sources (`<src>`):**
 * **Cloud Storage**: `gs://<bucket-name>` (mounts via GCS Fused Driver)
 * **Filestore**: `filestore://<instance-name-or-ip>/<share-name>` (auto-provisions PV and PVC)
@@ -242,57 +240,7 @@ Mounting an existing PVC named `lustre-pvc` (read-only):
 
 #### GCS FUSE storage profiles (`profile=`)
 
-`gcluster` supports [GKE Cloud Storage FUSE storage profiles](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles) for automated performance tuning on AI/ML workloads. Adding `profile=` to a `gs://` mount automatically generates and applies the required PersistentVolume and PersistentVolumeClaim alongside your JobSet.
-
-To choose the appropriate profile for your workload, see [Select performance profile](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#select-performance-profile). Accepted values are `training`, `checkpointing`, and `serving` (canonical `gcsfusecsi-<name>` names are also accepted).
-
-##### Prerequisites and IAM permissions
-
-* **GKE Version**: Requires GKE `1.35.1-gke.1616000` or later with the Cloud Storage FUSE CSI driver enabled (`enable_gcsfuse_csi` on Cluster Toolkit deployed clusters). Verify with `kubectl get sc -l gke-gcsfuse/profile=true`, which lists the three StorageClasses.
-* **GKE Service Agent Role**: The GKE Service Agent requires bucket permissions to inspect bucket metadata and tune settings (see [Configure IAM permissions](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#configure_permissions)). For clusters provisioned using the Cluster Toolkit, this IAM binding is automated when provisioning buckets via the [`gke-persistent-volume`](../modules/file-system/gke-persistent-volume/README.md) module.
-
-> [!IMPORTANT]
-> **`profile=serving` requires the bucket and the cluster to be in the same
-> region.** GKE documents this co-location as *mandatory* for the
-> `gcsfusecsi-serving` profile, and equally mandatory whenever Rapid Cache
-> (`anywhereCacheZones`, see below) is enabled - on any profile.
->
-> Confirm the bucket's location before submitting:
->
-> ```bash
-> gcloud storage buckets describe gs://<YOUR_BUCKET_NAME> --format="value(location)"
-> ```
->
-> `training` and `checkpointing` without Rapid Cache do not carry this hard
-> requirement, though same-region buckets remain the better choice for
-> throughput and egress cost.
-
-Behaviour worth knowing:
-
-* The generated claim is named `gcluster-gcsfuse-<bucket>-<profile>-<hash>` and the
-  PersistentVolume `gcluster-gcsfuse-<bucket>-<profile>-<hash>-<namespace>`, where
-  `<hash>` is a short digest of the volume's settings. The names are
-  deterministic, so several jobs that use the same bucket, profile, and settings
-  in the same namespace **share one gateway** rather than each creating their own.
-* Any change to the settings gives the mount its own gateway, so
-  it never clashes with the immutable spec of an existing one. Running jobs keep
-  using the old gateway.
-
-##### Managing gateways
-
-Gateways outlive the jobs that created them. To list them:
-
-```bash
-kubectl get pv,pvc -A -l gcluster.google.com/managed-by=cluster-toolkit,gcluster.google.com/storage-type=gcsfuse
-```
-
-To delete one that no job is using, delete the claim first, then the volume.
-Bucket contents are not affected.
-
-```bash
-kubectl delete pvc <claim> -n <namespace>
-kubectl delete pv <claim>-<namespace>
-```
+Adding `profile=` (`training`, `checkpointing`, or `serving`) to a `gs://` mount makes `gcluster` generate a [GKE Cloud Storage FUSE storage profile](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles) PersistentVolume and PersistentVolumeClaim alongside your JobSet. `gcluster job cancel` deletes them once no other workload uses them. For prerequisites, IAM and region requirements, the attributes reference, and how gateways are shared and cleaned up, see [Cloud Storage FUSE storage profiles](gke-advanced-features.md#5-cloud-storage-fuse-storage-profiles).
 
 ### 4.5 Example: Submit Job with Custom Environment Variables
 
