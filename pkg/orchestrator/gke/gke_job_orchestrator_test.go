@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -129,6 +130,37 @@ type MockKubeClient struct {
 	WorkloadCallCount  int
 	Err                error
 	ExplicitEmpty      bool
+
+	DeleteJobSetErr error
+	DeletedJobSets  []string
+
+	// Fixtures keyed by gvr.Resource.
+	Objects    map[string][]unstructured.Unstructured
+	ListErrs   map[string]error
+	GetErr     error
+	DeleteErrs map[string]error
+	Deleted    map[string][]string
+	DeletePre  map[string]*metav1.Preconditions
+}
+
+func managedStorageObject(kind, name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]interface{}{
+		"kind": kind,
+		"metadata": map[string]interface{}{
+			"name": name,
+			"labels": map[string]interface{}{
+				managedByLabel:                     managedByValue,
+				"gcluster.google.com/storage-type": "gcsfuse",
+			},
+		},
+	}}
+}
+
+func unmanagedStorageObject(kind, name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]interface{}{
+		"kind":     kind,
+		"metadata": map[string]interface{}{"name": name},
+	}}
 }
 
 func (m *MockKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
@@ -144,11 +176,48 @@ func (m *MockKubeClient) ListWorkloads(namespace string, workloadName string) ([
 }
 
 func (m *MockKubeClient) DeleteJobSet(namespace string, name string) error {
+	m.DeletedJobSets = append(m.DeletedJobSets, name)
+	if m.DeleteJobSetErr != nil {
+		return m.DeleteJobSetErr
+	}
 	return m.Err
 }
 
 func (m *MockKubeClient) ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error) {
 	return []orchestrator.JobStatus{}, m.Err
+}
+
+func (m *MockKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error) {
+	return m.Objects[gvr.Resource], m.ListErrs[gvr.Resource]
+}
+
+func (m *MockKubeClient) GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
+	if m.GetErr != nil {
+		return nil, m.GetErr
+	}
+	if !slices.Contains(m.Deleted[gvr.Resource], name) {
+		for i := range m.Objects[gvr.Resource] {
+			if obj := &m.Objects[gvr.Resource][i]; obj.GetName() == name {
+				return obj.DeepCopy(), nil
+			}
+		}
+	}
+	return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+}
+
+func (m *MockKubeClient) DeleteResource(gvr schema.GroupVersionResource, namespace, name string, pre *metav1.Preconditions) error {
+	if err := m.DeleteErrs[gvr.Resource]; err != nil {
+		return err
+	}
+	if m.Deleted == nil {
+		m.Deleted = map[string][]string{}
+	}
+	if m.DeletePre == nil {
+		m.DeletePre = map[string]*metav1.Preconditions{}
+	}
+	m.DeletePre[name] = pre
+	m.Deleted[gvr.Resource] = append(m.Deleted[gvr.Resource], name)
+	return nil
 }
 
 func (m *MockKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
@@ -1268,349 +1337,6 @@ func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 	}
 }
 
-func TestVerifyDynamicSlicingActive(t *testing.T) {
-	tests := []struct {
-		name          string
-		opts          ManifestOptions
-		nodePools     []gkeJobNodePool
-		mockResponses map[string][]shell.CommandResult
-		wantResult    bool
-		wantErr       bool
-	}{
-		{
-			name: "Success - TPU7x Dynamic-slicing active via PROVISION_ONLY",
-			opts: ManifestOptions{
-				ClusterName:     "test-cluster",
-				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu7x-standard-4t",
-				Topology:        "4x4x4",
-			},
-			nodePools: []gkeJobNodePool{
-				{
-					Name: "test-pool",
-					Config: gkeNodePoolConfig{
-						MachineType: "tpu7x-standard-4t",
-					},
-					PlacementPolicy: &gkePlacementPolicy{
-						AcceleratorTopologyMode: "PROVISION_ONLY",
-					},
-				},
-			},
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get admissioncheck -o json": {
-					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
-				},
-			},
-			wantResult: true,
-		},
-		{
-			name: "Failure - Dynamic-slicing inactive for non-TPU7x via topology subset",
-			opts: ManifestOptions{
-				ClusterName:     "test-cluster",
-				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu-v6e-slice",
-				Topology:        "2x4",
-			},
-			nodePools: []gkeJobNodePool{
-				{
-					Name: "test-pool",
-					Config: gkeNodePoolConfig{
-						MachineType: "tpu-v6e-slice",
-						Labels: map[string]string{
-							"cloud.google.com/gke-tpu-topology": "4x4",
-						},
-					},
-				},
-			},
-			mockResponses: nil,
-			wantResult:    false,
-		},
-		{
-			name: "Success - TPU7x Dynamic-slicing active via topology subset (static reservation)",
-			opts: ManifestOptions{
-				ClusterName:     "test-cluster",
-				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu7x-standard-4t",
-				Topology:        "4x4x4",
-			},
-			nodePools: []gkeJobNodePool{
-				{
-					Name: "test-pool",
-					Config: gkeNodePoolConfig{
-						MachineType: "tpu7x-standard-4t",
-						Labels: map[string]string{
-							"cloud.google.com/gke-tpu-topology": "8x8x8",
-						},
-					},
-				},
-			},
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get admissioncheck -o json": {
-					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
-				},
-			},
-			wantResult: false,
-		},
-		{
-			name: "Success - TPU7x Dynamic-slicing requested subslice topology (2x2x1)",
-			opts: ManifestOptions{
-				ClusterName:     "test-cluster",
-				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu7x-standard-4t",
-				Topology:        "2x2x1",
-			},
-			nodePools: []gkeJobNodePool{
-				{
-					Name: "test-pool",
-					Config: gkeNodePoolConfig{
-						MachineType: "tpu7x-standard-4t",
-					},
-					PlacementPolicy: &gkePlacementPolicy{
-						AcceleratorTopologyMode: "PROVISION_ONLY",
-					},
-				},
-			},
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get admissioncheck -o json": {
-					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
-				},
-			},
-			wantResult: true,
-			wantErr:    false,
-		},
-		{
-			name: "Failure - TPU7x Dynamic-slicing requested topology 2x4x8 (product 64 but a < 4)",
-			opts: ManifestOptions{
-				ClusterName:     "test-cluster",
-				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu7x-standard-4t",
-				Topology:        "2x4x8",
-			},
-			nodePools: []gkeJobNodePool{
-				{
-					Name: "test-pool",
-					Config: gkeNodePoolConfig{
-						MachineType: "tpu7x-standard-4t",
-					},
-					PlacementPolicy: &gkePlacementPolicy{
-						AcceleratorTopologyMode: "PROVISION_ONLY",
-					},
-				},
-			},
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get admissioncheck -o json": {
-					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
-				},
-			},
-			wantResult: true,
-			wantErr:    true,
-		},
-		{
-			name: "Failure - TPU7x Dynamic-slicing requested topology empty",
-			opts: ManifestOptions{
-				ClusterName:     "test-cluster",
-				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu7x-standard-4t",
-				Topology:        "",
-			},
-			nodePools: []gkeJobNodePool{
-				{
-					Name: "test-pool",
-					Config: gkeNodePoolConfig{
-						MachineType: "tpu7x-standard-4t",
-					},
-					PlacementPolicy: &gkePlacementPolicy{
-						AcceleratorTopologyMode: "PROVISION_ONLY",
-					},
-				},
-			},
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get admissioncheck -o json": {
-					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
-				},
-			},
-			wantResult: true,
-			wantErr:    true,
-		},
-		{
-			name: "Failure - TPU7x Dynamic-slicing requested topology 2D (4x4)",
-			opts: ManifestOptions{
-				ClusterName:     "test-cluster",
-				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu7x-standard-4t",
-				Topology:        "4x4",
-			},
-			nodePools: []gkeJobNodePool{
-				{
-					Name: "test-pool",
-					Config: gkeNodePoolConfig{
-						MachineType: "tpu7x-standard-4t",
-					},
-					PlacementPolicy: &gkePlacementPolicy{
-						AcceleratorTopologyMode: "PROVISION_ONLY",
-					},
-				},
-			},
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get admissioncheck -o json": {
-					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
-				},
-			},
-			wantResult: true,
-			wantErr:    true,
-		},
-		{
-			name: "Failure - Requested topology matches physical topology (not dynamic topology subset)",
-			opts: ManifestOptions{
-				ClusterName:     "test-cluster",
-				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu-v6e-slice",
-				Topology:        "4x4",
-			},
-			nodePools: []gkeJobNodePool{
-				{
-					Name: "test-pool",
-					Config: gkeNodePoolConfig{
-						MachineType: "tpu-v6e-slice",
-						Labels: map[string]string{
-							"cloud.google.com/gke-tpu-topology": "4x4",
-						},
-					},
-				},
-			},
-			mockResponses: nil,
-			wantResult:    false,
-		},
-		{
-			name: "Failure - No TPU",
-			opts: ManifestOptions{
-				ClusterName:     "test-cluster",
-				ClusterLocation: "us-central1-a",
-				ComputeType:     "nvidia-l4",
-			},
-			nodePools:     nil,
-			mockResponses: nil,
-			wantResult:    false,
-		},
-		{
-			name: "Failure - No matching node pool",
-			opts: ManifestOptions{
-				ClusterName:     "test-cluster",
-				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu-v6e-slice",
-			},
-			nodePools: []gkeJobNodePool{
-				{
-					Name: "other-pool",
-					Config: gkeNodePoolConfig{
-						MachineType: "other-machine",
-					},
-				},
-			},
-			mockResponses: nil,
-			wantResult:    false,
-			wantErr:       true,
-		},
-		{
-			name: "Failure - CRD not found",
-			opts: ManifestOptions{
-				ClusterName:     "test-cluster",
-				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu7x-standard-4t",
-			},
-			nodePools: []gkeJobNodePool{
-				{
-					Name: "test-pool",
-					Config: gkeNodePoolConfig{
-						MachineType: "tpu7x-standard-4t",
-					},
-				},
-			},
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get topologies.kueue.x-k8s.io -o json": {
-					{ExitCode: 1},
-				},
-			},
-			wantResult: false,
-		},
-		{
-			name: "Failure - AdmissionCheck missing",
-			opts: ManifestOptions{
-				ClusterName:     "test-cluster",
-				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu7x-standard-4t",
-			},
-			nodePools: []gkeJobNodePool{
-				{
-					Name: "test-pool",
-					Config: gkeNodePoolConfig{
-						MachineType: "tpu7x-standard-4t",
-					},
-					PlacementPolicy: &gkePlacementPolicy{
-						AcceleratorTopologyMode: "PROVISION_ONLY",
-					},
-				},
-			},
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get admissioncheck -o json": {
-					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"other-controller"}}]}`},
-				},
-			},
-			wantResult: false,
-		},
-		{
-			name: "Failure - AdmissionCheck command fails",
-			opts: ManifestOptions{
-				ClusterName:     "test-cluster",
-				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu7x-standard-4t",
-			},
-			nodePools: []gkeJobNodePool{
-				{
-					Name: "test-pool",
-					Config: gkeNodePoolConfig{
-						MachineType: "tpu7x-standard-4t",
-					},
-					PlacementPolicy: &gkePlacementPolicy{
-						AcceleratorTopologyMode: "PROVISION_ONLY",
-					},
-				},
-			},
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get admissioncheck -o json": {
-					{ExitCode: 1, Stderr: "error"},
-				},
-			},
-			wantResult: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.mockResponses != nil {
-				if _, ok := tt.mockResponses["kubectl get topologies.kueue.x-k8s.io -o json"]; !ok {
-					tt.mockResponses["kubectl get topologies.kueue.x-k8s.io -o json"] = []shell.CommandResult{
-						{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-2x2-id"}]}}]}`},
-					}
-				}
-			}
-			mockExecutor := NewMockExecutor(tt.mockResponses)
-			orc := newTestGKEOrchestrator(mockExecutor)
-			orc.clusterDesc.NodePools = tt.nodePools
-
-			got, err := orc.verifyDynamicSlicingActive(tt.opts)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("verifyDynamicSlicingActive() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !tt.wantErr && got != tt.wantResult {
-				t.Errorf("Expected %t, got %t", tt.wantResult, got)
-			}
-		})
-	}
-}
-
 func TestGenerateGKEManifest_Verbose_GPU(t *testing.T) {
 	setupMockMachineConfig(t)
 
@@ -2494,53 +2220,6 @@ func TestPopulateClusterMetadata_NAPLimitsLoopOrder(t *testing.T) {
 	expectedGPULimit := int64(16)
 	if limit := orc.napLimits["nvidia.com/gpu"]; limit != expectedGPULimit {
 		t.Errorf("expected napLimits[nvidia.com/gpu] to be %d, got %d", expectedGPULimit, limit)
-	}
-}
-
-func TestPopulateClusterMetadata_LocationFallback(t *testing.T) {
-	setupMockMachineConfig(t)
-
-	mockDescribeOutput := `{
-		"locations": ["us-central1-a", "us-central1-b"],
-		"nodePools": [],
-		"autoscaling": {}
-	}`
-
-	mockResponses := map[string][]shell.CommandResult{
-		"gcloud container clusters describe my-cluster --location us-central1-a --project my-project --format=json": {
-			{
-				ExitCode: 1,
-				Stderr:   "Resource my-cluster was not found in us-central1-a",
-			},
-		},
-		"gcloud container clusters describe my-cluster --location us-central1 --project my-project --format=json": {
-			{
-				ExitCode: 0,
-				Stdout:   mockDescribeOutput,
-			},
-		},
-	}
-
-	orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
-	job := &orchestrator.JobDefinition{
-		ProjectID:       "my-project",
-		ClusterName:     "my-cluster",
-		ClusterLocation: "us-central1-a",
-	}
-
-	loc, err := orc.Initialize(job.ClusterName, job.ClusterLocation, job.ProjectID)
-	if err != nil {
-		t.Fatalf("Initialize failed: %v", err)
-	}
-	job.ClusterLocation = loc
-
-	err = orc.populateClusterMetadata(job)
-	if err != nil {
-		t.Fatalf("populateClusterMetadata failed: %v", err)
-	}
-
-	if job.ClusterLocation != "us-central1" {
-		t.Errorf("Expected job.ClusterLocation to fall back to 'us-central1', got %q", job.ClusterLocation)
 	}
 }
 
@@ -3732,59 +3411,6 @@ func TestValidateMTCConfig(t *testing.T) {
 	}
 }
 
-func TestGetTargetNamespace(t *testing.T) {
-	tests := []struct {
-		name       string
-		job        *orchestrator.JobDefinition
-		kubeClient KubeClient
-		want       string
-		wantErr    bool
-	}{
-		{
-			name:    "nil job",
-			job:     nil,
-			wantErr: true,
-		},
-		{
-			name: "explicit namespace",
-			job: &orchestrator.JobDefinition{
-				GKENamespace: "explicit-ns",
-			},
-			want: "explicit-ns",
-		},
-		{
-			name: "fallback to current namespace success",
-			job: &orchestrator.JobDefinition{
-				ClusterName: "cluster",
-			},
-			kubeClient: &MockKubeClient{Namespace: "current-ns"},
-			want:       "current-ns",
-		},
-		{
-			name: "fallback to current namespace failure",
-			job: &orchestrator.JobDefinition{
-				ClusterName: "cluster",
-			},
-			kubeClient: &MockKubeClient{Err: fmt.Errorf("kubeclient error")},
-			wantErr:    true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := &GKEOrchestrator{kubeClient: tt.kubeClient}
-			got, err := g.getTargetNamespace(tt.job)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("getTargetNamespace() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("getTargetNamespace() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 type mockNamespaceableResource struct {
 	dynamic.NamespaceableResourceInterface
 	getFunc    func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
@@ -4559,117 +4185,6 @@ func TestVerifyCheckpointConfigurationCR(t *testing.T) {
 	}
 }
 
-func TestValidateNamespaceExists(t *testing.T) {
-	tests := []struct {
-		name          string
-		namespace     string
-		nilJob        bool
-		kubeClient    KubeClient
-		dynClient     dynamic.Interface
-		wantErr       bool
-		wantErrSubstr string
-	}{
-		{
-			name:          "nil job definition",
-			nilJob:        true,
-			wantErr:       true,
-			wantErrSubstr: "job definition cannot be nil",
-		},
-		{
-			name:          "unconfigured client",
-			namespace:     "",
-			kubeClient:    &MockKubeClient{Err: fmt.Errorf("failed to initialize Kubernetes client")},
-			dynClient:     nil,
-			wantErr:       true,
-			wantErrSubstr: "failed to initialize Kubernetes client",
-		},
-		{
-			name:       "namespace exists",
-			namespace:  "exists",
-			kubeClient: &MockKubeClient{Namespace: "exists"},
-			dynClient: &mockDynamicClient{
-				getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-					return &unstructured.Unstructured{Object: map[string]interface{}{"kind": "Namespace"}}, nil
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name:       "explicit job.GKENamespace override",
-			namespace:  "custom-job-ns",
-			kubeClient: &MockKubeClient{Namespace: "default-kube-ns"},
-			dynClient: &mockDynamicClient{
-				getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-					if name != "custom-job-ns" {
-						return nil, fmt.Errorf("expected Get for custom-job-ns, got %s", name)
-					}
-					return &unstructured.Unstructured{Object: map[string]interface{}{"kind": "Namespace"}}, nil
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name:       "namespace does not exist",
-			namespace:  "nonexistent",
-			kubeClient: &MockKubeClient{Namespace: "nonexistent"},
-			dynClient: &mockDynamicClient{
-				getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-					return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "namespaces"}, name)
-				},
-			},
-			wantErr:       true,
-			wantErrSubstr: `target namespace "nonexistent" does not exist`,
-		},
-		{
-			name:          "empty namespace",
-			namespace:     "",
-			kubeClient:    &MockKubeClient{ExplicitEmpty: true},
-			dynClient:     &mockDynamicClient{},
-			wantErr:       true,
-			wantErrSubstr: "target namespace cannot be empty",
-		},
-		{
-			name:       "403 forbidden (RBAC restricted user proceeds with warning)",
-			namespace:  "restricted-ns",
-			kubeClient: &MockKubeClient{Namespace: "restricted-ns"},
-			dynClient: &mockDynamicClient{
-				getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-					return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "namespaces"}, name, fmt.Errorf("user cannot get resource"))
-				},
-			},
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			orch := &GKEOrchestrator{
-				kubeClient: tt.kubeClient,
-				dynClient:  tt.dynClient,
-			}
-
-			var job *orchestrator.JobDefinition
-			if !tt.nilJob {
-				job = &orchestrator.JobDefinition{
-					GKENamespace: tt.namespace,
-				}
-			}
-
-			err := orch.validateTargetNamespaceExists(job)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("expected an error, but got nil")
-				} else if !strings.Contains(err.Error(), tt.wantErrSubstr) {
-					t.Errorf("expected error to contain %q, but got: %v", tt.wantErrSubstr, err)
-				}
-			} else if err != nil {
-				t.Errorf("expected no error, but got: %v", err)
-			}
-		})
-	}
-}
-
 func TestGetMTCDaemonSet(t *testing.T) {
 	t.Run("Static name multitier-driver", func(t *testing.T) {
 		dynClient := &mockDynamicClient{
@@ -5113,147 +4628,6 @@ func TestCalculateClusterCapacity_MultipleCPUPools(t *testing.T) {
 	// Verify flavor-default has NO cloud.google.com/gke-nodepool label!
 	if npLabel, ok := defaultFlavor.NodeLabels["cloud.google.com/gke-nodepool"]; ok {
 		t.Errorf("expected flavor-default not to have cloud.google.com/gke-nodepool label, but got %q", npLabel)
-	}
-}
-
-func TestShouldUseDNSEndpoint(t *testing.T) {
-	tests := []struct {
-		name         string
-		clusterDesc  gkeCluster
-		wantEndpoint bool
-	}{
-		{
-			name:         "Nil ControlPlaneEndpointsConfig returns false",
-			clusterDesc:  gkeCluster{},
-			wantEndpoint: false,
-		},
-		{
-			name: "Nil DnsEndpointConfig returns false",
-			clusterDesc: gkeCluster{
-				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{},
-			},
-			wantEndpoint: false,
-		},
-		{
-			name: "DnsEndpointConfig external traffic disallowed returns false",
-			clusterDesc: gkeCluster{
-				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
-					DnsEndpointConfig: &dnsEndpointConfig{
-						AllowExternalTraffic: false,
-					},
-				},
-			},
-			wantEndpoint: false,
-		},
-		{
-			name: "DnsEndpointConfig external traffic allowed with nil IPEndpointsConfig returns true",
-			clusterDesc: gkeCluster{
-				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
-					DnsEndpointConfig: &dnsEndpointConfig{
-						AllowExternalTraffic: true,
-					},
-				},
-			},
-			wantEndpoint: true,
-		},
-		{
-			name: "Public IP endpoint enabled bypasses DNS endpoint to prevent HTTP 431 header issues",
-			clusterDesc: gkeCluster{
-				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
-					DnsEndpointConfig: &dnsEndpointConfig{
-						AllowExternalTraffic: true,
-					},
-					IPEndpointsConfig: &ipEndpointsConfig{
-						EnablePublicEndpoint: true,
-					},
-				},
-			},
-			wantEndpoint: false,
-		},
-		{
-			name: "Public IP endpoint disabled uses DNS endpoint for external connectivity",
-			clusterDesc: gkeCluster{
-				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
-					DnsEndpointConfig: &dnsEndpointConfig{
-						AllowExternalTraffic: true,
-					},
-					IPEndpointsConfig: &ipEndpointsConfig{
-						EnablePublicEndpoint: false,
-					},
-				},
-			},
-			wantEndpoint: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := shouldUseDNSEndpoint(tt.clusterDesc.ControlPlaneEndpointsConfig)
-			if got != tt.wantEndpoint {
-				t.Errorf("shouldUseDNSEndpoint() = %v, want %v", got, tt.wantEndpoint)
-			}
-		})
-	}
-}
-
-func TestRefreshGKEAuth_DNSEndpoint(t *testing.T) {
-	tests := []struct {
-		name          string
-		clusterDesc   gkeCluster
-		mockResponses map[string][]shell.CommandResult
-		wantErr       bool
-	}{
-		{
-			name: "Appends --dns-endpoint when shouldUseDNSEndpoint is true",
-			clusterDesc: gkeCluster{
-				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
-					DnsEndpointConfig: &dnsEndpointConfig{
-						AllowExternalTraffic: true,
-					},
-					IPEndpointsConfig: &ipEndpointsConfig{
-						EnablePublicEndpoint: false,
-					},
-				},
-			},
-			mockResponses: map[string][]shell.CommandResult{
-				"gcloud container clusters get-credentials my-cluster --location us-central1-a --project my-project --dns-endpoint": {
-					{ExitCode: 0, Stdout: "kubeconfig entry generated"},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "Omits --dns-endpoint when public IP endpoint is available",
-			clusterDesc: gkeCluster{
-				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
-					DnsEndpointConfig: &dnsEndpointConfig{
-						AllowExternalTraffic: true,
-					},
-					IPEndpointsConfig: &ipEndpointsConfig{
-						EnablePublicEndpoint: true,
-					},
-				},
-			},
-			mockResponses: map[string][]shell.CommandResult{
-				"gcloud container clusters get-credentials my-cluster --location us-central1-a --project my-project": {
-					{ExitCode: 0, Stdout: "kubeconfig entry generated"},
-				},
-			},
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockExec := NewMockExecutor(tt.mockResponses)
-			orc := newTestGKEOrchestrator(mockExec)
-			orc.clusterDesc = tt.clusterDesc
-
-			err := orc.refreshGKEAuth("my-cluster", "us-central1-a", "my-project")
-			if (err != nil) != tt.wantErr {
-				t.Errorf("refreshGKEAuth() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
 	}
 }
 

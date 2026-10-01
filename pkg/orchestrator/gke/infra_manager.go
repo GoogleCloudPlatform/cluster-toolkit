@@ -16,6 +16,7 @@ package gke
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/logging"
@@ -27,8 +28,11 @@ import (
 	"time"
 
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
 
 	"gopkg.in/yaml.v2"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const defaultJobSetVersion = "v0.10.1"
@@ -362,7 +366,9 @@ func (g *GKEOrchestrator) removeDescriptionFields(data map[interface{}]interface
 func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) error {
 	validators := []func() error{
 		g.checkClusterConnectivity,
-		func() error { return g.validateTargetNamespaceExists(job) },
+		func() error {
+			return g.validateTargetNamespaceExists(job.ClusterName, job.ClusterLocation, job.ProjectID)
+		},
 		func() error { return g.CheckAndInstallKueue("", job.ClusterName, job.ClusterLocation) },
 		g.checkAndInstallJobSetCRD,
 	}
@@ -382,6 +388,60 @@ func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) 
 	return nil
 }
 
+func (g *GKEOrchestrator) getKubeClient() KubeClient {
+	g.syncKubeClient()
+	return g.kubeClient
+}
+
+// getCurrentNamespace is the single source of truth for the target namespace.
+// It returns the cached namespace (seeded from --gke-namespace at every
+// orchestrator entry point) or, if unset, resolves and caches the kubeconfig
+// context namespace.
+func (g *GKEOrchestrator) getCurrentNamespace(clusterName, location, projectID string) (string, error) {
+	if g.namespace != "" {
+		return g.namespace, nil
+	}
+
+	ns, err := g.getKubeClient().GetCurrentNamespace(clusterName, location, projectID)
+	if err != nil {
+		return "", err
+	}
+	g.namespace = ns
+	return ns, nil
+}
+
+func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, projectID string) error {
+	ns, err := g.getCurrentNamespace(clusterName, location, projectID)
+	if err != nil {
+		return err
+	}
+
+	if ns == "" {
+		return fmt.Errorf("target namespace cannot be empty for GKE cluster %q. Please pass --gke-namespace, or set a default namespace in your kubeconfig context (e.g., 'kubectl config set-context --current --namespace=<namespace>')", clusterName)
+	}
+
+	client, err := g.getDynamicClient()
+	if err != nil {
+		return fmt.Errorf("failed to initialize Kubernetes client for namespace validation: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err = client.Resource(namespaceGVR).Get(ctx, ns, metav1.GetOptions{})
+	switch {
+	case err == nil:
+		return nil
+	case apierrors.IsNotFound(err):
+		return fmt.Errorf("target namespace %q does not exist on GKE cluster %q. Please create the namespace first (e.g., 'kubectl create namespace %s')", ns, clusterName, ns)
+	case apierrors.IsForbidden(err):
+		logging.Warn("Insufficient RBAC permissions to verify existence of namespace %q on cluster %q (403 Forbidden). Proceeding with job submission...", ns, clusterName)
+		return nil
+	default:
+		return fmt.Errorf("failed to verify existence of namespace %q on cluster %q: %w", ns, clusterName, err)
+	}
+}
+
 // checkClusterConnectivity verifies that we can connect to the cluster.
 // It uses a short timeout to fail fast if IP is blocked by authorized networks.
 func (g *GKEOrchestrator) checkClusterConnectivity() error {
@@ -394,14 +454,161 @@ func (g *GKEOrchestrator) checkClusterConnectivity() error {
 	return nil
 }
 
-func (g *GKEOrchestrator) checkDynamicSlicingViaGKE() bool {
-	for _, np := range g.clusterDesc.NodePools {
-		if np.PlacementPolicy != nil {
-			mode := np.PlacementPolicy.AcceleratorTopologyMode
-			if mode == "PROVISION_ONLY" {
-				return true
+// Initialize fetches GKE cluster metadata and resolves the cluster location,
+// handling regional fallback if necessary.
+func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
+	g.projectID = projectID
+
+	logging.Info("Fetching GKE cluster metadata for '%s'...", clusterName)
+	res := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", clusterName,
+		"--location", location,
+		"--project", g.projectID,
+		"--format=json")
+	if res.ExitCode != 0 {
+		if strings.Contains(res.Stderr, "403") || strings.Contains(strings.ToLower(res.Stderr), "permission denied") {
+			return "", fmt.Errorf("your account lacks the required permission to access cluster '%s' in project '%s'. Please ask your project administrator to grant you the Kubernetes Engine Viewer role (roles/container.viewer)", clusterName, g.projectID)
+		}
+		// If the user specified a zone (location with 3 components, e.g. us-central1-a), try to fallback to the region
+		if len(strings.Split(location, "-")) == 3 {
+			region := shell.ExtractRegion(location)
+			logging.Info("Failed to find cluster in zone %s. Trying fallback to region %s...", location, region)
+			fallbackRes := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", clusterName,
+				"--location", region,
+				"--project", g.projectID,
+				"--format=json")
+			if fallbackRes.ExitCode == 0 {
+				logging.Warn("Cluster '%s' is a regional cluster in '%s'. Found it by falling back from zone '%s'. "+
+					"Note: This does NOT restrict your job to '%s'. To run specifically in '%s', "+
+					"please use the '--node-constraint topology.kubernetes.io/zone=%s' flag.",
+					clusterName, region, location, location, location, location)
+				location = region
+				res = fallbackRes
+			} else {
+				return "", fmt.Errorf("failed to describe GKE cluster %s in zone %s and fallback region %s: %s", clusterName, location, region, res.Stderr)
+			}
+		} else {
+			return "", fmt.Errorf("failed to describe GKE cluster %s: %s", clusterName, res.Stderr)
+		}
+	}
+
+	var clusterDesc gkeCluster
+	if err := json.Unmarshal([]byte(res.Stdout), &clusterDesc); err != nil {
+		return "", fmt.Errorf("failed to parse GKE cluster description: %w", err)
+	}
+
+	g.clusterZones = clusterDesc.Locations
+	g.clusterDesc = clusterDesc
+
+	g.napEnabled = clusterDesc.Autoscaling.EnableNodeAutoprovisioning
+	g.napLimits = parseNAPLimits(clusterDesc.Autoscaling)
+
+	return location, nil
+}
+
+func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefinition) error {
+	ns, err := g.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	if err != nil {
+		return err
+	}
+
+	localQueue, err := g.resolveKueueQueue(job.KueueQueueName, ns)
+	if err != nil {
+		if job.DryRunManifest == "" {
+			return err
+		}
+		logging.Info("Warning: Failed to auto-discover Kueue Queue Name: %v. Falling back to %s for dry-run.", err, defaultLocalQueue)
+		localQueue = defaultLocalQueue
+	}
+	job.KueueQueueName = localQueue
+
+	if job.DryRunManifest == "" {
+		exists, err := g.checkLocalQueueExists(localQueue, ns)
+		if err != nil {
+			return fmt.Errorf("failed to check if LocalQueue exists: %w", err)
+		}
+		if !exists {
+			availableQueues := g.listLocalQueues(ns)
+			availableStr := ""
+			if len(availableQueues) > 0 {
+				availableStr = fmt.Sprintf(" Available LocalQueues in namespace '%s': %s.", ns, strings.Join(availableQueues, ", "))
+			}
+			promptMsg := fmt.Sprintf("LocalQueue '%s' does not exist in namespace '%s'.%s Do you want gcluster to create default Kueue resources (ClusterQueue and LocalQueue) with calculated cluster capacity?", localQueue, ns, availableStr)
+			if shell.PromptYesNo(promptMsg) {
+				if err := g.createDefaultQueues(localQueue, ns); err != nil {
+					return err
+				}
+			} else {
+				return fmt.Errorf("LocalQueue '%s' does not exist in namespace '%s' and user declined to create default queues.%s Please create one manually or specify an existing queue using --queue flag", localQueue, ns, availableStr)
+			}
+		}
+
+		if job.IsPathwaysJob {
+			if err := g.ensureClusterQueueCoverage(localQueue, ns); err != nil {
+				return err
 			}
 		}
 	}
-	return false
+
+	return nil
+}
+
+func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
+	// 1. Capture current namespace context before gcloud resets it on best effort to preserve current namespace.
+	// If we can't read it, using 'default' allows gcloud setup to proceed,
+	originalNamespace, err := g.getCurrentNamespace(clusterName, clusterLocation, projectID)
+	if err != nil {
+		logging.Warn("Could not read current namespace before gcloud (defaulting to 'default'): %v. If you want to target a specific namespace please use the --gke-namespace flag", err)
+		originalNamespace = "default"
+	}
+
+	// 2. Refresh credentials via gcloud (this resets namespace to 'default')
+	if err := g.refreshGKEAuth(clusterName, clusterLocation, projectID); err != nil {
+		return err
+	}
+
+	// 3. Restore the original namespace context
+	return g.restoreNamespaceContext(originalNamespace)
+}
+
+// shouldUseDNSEndpoint determines whether to pass --dns-endpoint to gcloud container clusters get-credentials.
+// When a public IP endpoint is enabled, we prefer the IP endpoint to avoid HTTP 431 request header overflow issues on enterprise networks.
+// When only external DNS access is permitted without a public IP endpoint, we use the DNS endpoint.
+func shouldUseDNSEndpoint(cfg *controlPlaneEndpointsConfig) bool {
+	if cfg == nil || cfg.DnsEndpointConfig == nil || !cfg.DnsEndpointConfig.AllowExternalTraffic {
+		return false
+	}
+	return cfg.IPEndpointsConfig == nil || !cfg.IPEndpointsConfig.EnablePublicEndpoint
+}
+
+// refreshGKEAuth handles the gcloud container clusters get-credentials call.
+func (g *GKEOrchestrator) refreshGKEAuth(clusterName, clusterLocation, projectID string) error {
+	args := []string{"container", "clusters", "get-credentials", clusterName, "--location", clusterLocation, "--project", projectID}
+
+	if shouldUseDNSEndpoint(g.clusterDesc.ControlPlaneEndpointsConfig) {
+		args = append(args, "--dns-endpoint")
+	}
+
+	credsRes := g.executor.ExecuteCommand("gcloud", args...)
+	if credsRes.ExitCode != 0 {
+		if strings.Contains(strings.ToLower(credsRes.Stderr), "multiple") || strings.Contains(strings.ToLower(credsRes.Stderr), "ambiguous") {
+			return fmt.Errorf("found multiple GKE clusters named %s. Please specify the exact Zone using --location to disambiguate", clusterName)
+		}
+		return fmt.Errorf("failed to get GKE cluster credentials: %s\n%s", credsRes.Stderr, credsRes.Stdout)
+	}
+	return nil
+}
+
+// restoreNamespaceContext sets the current namespace back to its original value if needed.
+func (g *GKEOrchestrator) restoreNamespaceContext(namespace string) error {
+	// If it was default, gcloud already set it to default, so we can skip.
+	if namespace == "" || namespace == "default" {
+		return nil
+	}
+
+	logging.Info("Restoring namespace context to '%s'...", namespace)
+	restoreRes := g.executor.ExecuteCommand("kubectl", "config", "set-context", "--current", "--namespace="+namespace)
+	if restoreRes.ExitCode != 0 {
+		return fmt.Errorf("failed to restore namespace context to %s: %s", namespace, restoreRes.Stderr)
+	}
+	return nil
 }

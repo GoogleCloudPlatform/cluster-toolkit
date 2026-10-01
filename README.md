@@ -57,7 +57,7 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 | **Linux (amd64 / arm64)** | ✅ | Pre-compiled on Debian Bullseye. |
 | **Google Cloud Shell** | ✅ | Native support via the Linux amd64 binary. |
 | **macOS (amd64 / arm64)** | ✅ | Native support via the Mac binary. |
-| **Windows** | ❎ | Please [Build from source](#building-from-source). |
+| **Windows** | ⚠️ | Pre-built bundle not provided; please [Build from source](#building-from-source) (`go build -o gcluster.exe .`). WSL2 is recommended for blueprints using shell-based `local-exec` provisioners. |
 
 1. Download and extract the bundle:
 
@@ -93,7 +93,7 @@ make
 ```
 
 > [!NOTE]
-> You must [install dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies) (such as Go and Terraform) before building, otherwise the `make` command fails.
+> You must [install dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies) (such as Go and Terraform) before building, otherwise the `make` command fails. On Windows (PowerShell / Command Prompt), build directly using `go build -o gcluster.exe .`.
 
 ## Prerequisites
 

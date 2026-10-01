@@ -206,7 +206,6 @@ const (
 	ErrTypeKueueWebhookServiceNotFound               = "KUEUE_WEBHOOK_SERVICE_NOT_FOUND"
 	ErrTypeKueueWebhookServiceUnavailable            = "KUEUE_WEBHOOK_SERVICE_UNAVAILABLE"
 	ErrTypeLocalExecProvisionerError                 = "LOCAL_EXEC_PROVISIONER_ERROR"
-	ErrTypeLocationsPermissionDenied                 = "LOCATIONS_PERMISSION_DENIED"
 	ErrTypeLoginInstanceNotFound                     = "LOGIN_INSTANCE_NOT_FOUND"
 	ErrTypeLustreInstanceCreateFailed                = "LUSTRE_INSTANCE_CREATE_FAILED"
 	ErrTypeLustreNetworkInitialisation               = "LUSTRE_NETWORK_INITIALISATION"
@@ -257,6 +256,7 @@ const (
 	ErrTypePluginGettingFailed                       = "PLUGIN_GETTING_FAILED"
 	ErrTypePodsFioNotFound                           = "PODS_FIO_NOT_FOUND"
 	ErrTypePodFailed                                 = "POD_FAILED"
+	ErrTypePodTimeout                                = "POD_TIMEOUT"
 	ErrTypePostHeaderTimeOut                         = "POST_HEADER_TIME_OUT"
 	ErrTypePrimitiveTypedValue                       = "PRIMITIVE_TYPED_VALUE"
 	ErrTypePrivateServiceAccessIpExhausted           = "PRIVATE_SERVICE_ACCESS_IP_EXHAUSTED"
@@ -596,9 +596,10 @@ var extraSubstringErrMatchers = []struct {
 	{"subprocess.CalledProcessError: Command 'gcloud compute instances describe a23901topo-nodeset-0 --zone=us-central1-a --project=hpc-toolkit-dev --format='value(resourceStatus.physicalHost)'' returned non-zero exit status 1.", ErrTypeTopologyCommandFailure},
 	{"Job failed to find zone capacity after", ErrTypeStockout},
 	{"INTERNAL_ERROR; received from peer", ErrTypeInternalError},
-	{"does not have permission to access projects", ErrTypeLocationsPermissionDenied},
+	{"does not have permission to access projects", ErrTypeIamPermissionDenied},
 	{"Call to function \"format\" failed: unsupported value for", ErrTypeCallToFuncFormat},
 	{"received unexpected HTTP status: 502 Bad Gateway", ErrTypeHttpBadGateway},
+	{"Error: Pod initialization timed out after 20 minutes", ErrTypePodTimeout},
 	{"no endpoints available for service \"kueue-webhook-service\"", ErrTypeKueueWebhookServiceUnavailable},
 	{"has no installation candidate", ErrTypeNoCandidate},
 	{"Could not fetch serial port output: Cannot retrieve serial port output", ErrTypeSerialPortOutputInProgress},

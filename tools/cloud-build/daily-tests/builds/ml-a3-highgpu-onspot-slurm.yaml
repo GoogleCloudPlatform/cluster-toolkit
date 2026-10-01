@@ -97,6 +97,8 @@ steps:
               value: "true"
             - name: REQUIRED_LUSTRE_GB
               value: "36000"
+            - name: EXCLUDE_ZONES
+              value: "europe-west2-c us-west1-b us-west1-c us-west1-a"
             - name: ANSIBLE_HOST_KEY_CHECKING
               value: "false"
             - name: ANSIBLE_CONFIG
