@@ -376,7 +376,7 @@ deployment_groups:
         $(concat(
           [{
             network=null,
-            subnetwork="projects/${vars.project_id}/regions/${vars.region}/subnetworks/${vars.base_network_name}-sub-1",
+            subnetwork=a4high-slurm-net-0.subnetworks["${vars.region}/${vars.base_network_name}-sub-1"].self_link,
             subnetwork_project=vars.project_id,
             nic_type="GVNIC",
             queue_count=null,

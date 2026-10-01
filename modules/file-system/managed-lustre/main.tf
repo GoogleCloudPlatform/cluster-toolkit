@@ -43,7 +43,7 @@ locals {
   # systemd service, and environment configuration on client nodes at boot.
   # Built as a map and yamlencode'd to ensure `#cloud-config` stays on line 1.
   multinic_cloud_config = merge({ create_hostname_file = true }, var.multinic.extra_cloud_config, {
-    write_files = [
+    write_files = concat(lookup(var.multinic.extra_cloud_config, "write_files", []), [
       {
         path        = "/usr/local/sbin/multi-nic-lustre-setup.sh"
         permissions = "0755"
@@ -64,11 +64,11 @@ locals {
           "",
         ])
       },
-    ]
-    runcmd = [
+    ])
+    runcmd = concat(lookup(var.multinic.extra_cloud_config, "runcmd", []), [
       "systemctl daemon-reload",
       "systemctl enable --now multi-nic-lustre.service",
-    ]
+    ])
   })
 
   multinic_user_data = "#cloud-config\n${yamlencode(local.multinic_cloud_config)}"
@@ -169,7 +169,8 @@ resource "google_compute_firewall" "lnet_callback_ingress" {
 
   allow {
     protocol = "tcp"
-    ports    = ["988", "1021-1023"]
+    # GKE-compatible instances use LNet port 6988 instead of 988.
+    ports = [var.gke_support_enabled ? "6988" : "988", "1021-1023"]
   }
 
   target_tags = var.multinic.client_tags

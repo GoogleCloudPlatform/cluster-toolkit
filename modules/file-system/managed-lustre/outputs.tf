@@ -47,6 +47,8 @@ output "lnet_multinic_metadata" {
     Instance metadata to merge into compute nodesets for LNet Multi-Rail
     configuration (empty when multinic is disabled). If multiple managed-lustre
     instances exist in a blueprint, wire this output once per nodeset.
+    Delivered as cloud-init user-data: it has no effect on images that do not
+    run cloud-init.
   EOT
   value       = var.multinic.enabled ? { user-data = local.multinic_user_data } : {}
 }

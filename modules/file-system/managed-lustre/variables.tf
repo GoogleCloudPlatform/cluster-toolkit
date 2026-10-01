@@ -151,9 +151,12 @@ variable "multinic" {
   description = <<-EOT
     Multi-NIC (LNet Multi-Rail) client configuration.
 
-    Requires a second NIC on the clients in the SAME VPC as nic0. The client
-    rails are discovered at boot by VPC membership, so GPU/RDMA NICs in other
-    VPCs are ignored automatically.
+    Requires a second NIC on the clients in the same VPC as nic0. At boot,
+    every NIC in the same VPC as nic0 is used as a Lustre rail; NICs in other
+    VPCs (such as GPU RDMA NICs) are ignored.
+
+    Requires an image that runs cloud-init; otherwise clients stay single-rail.
+    client_tags must match the client nodesets' tags.
   EOT
   type = object({
     enabled = optional(bool, false)
@@ -163,8 +166,9 @@ variable "multinic" {
     table_base   = optional(number, 101)
     rp_filter    = optional(number, 2)
     # LNet servers open callback connections back to the client on tcp:988
-    # and tcp:1021-1023. Scope the ingress rule to the PSA tenant range and
-    # target the clients' network tag.
+    # and tcp:1021-1023 (tcp:6988 instead of 988 with gke_support_enabled).
+    # Scope the ingress rule to the PSA tenant range and target the clients'
+    # network tag.
     create_firewall = optional(bool, true)
     psa_ip_ranges   = optional(list(string), [])
     client_tags     = optional(list(string), [])
