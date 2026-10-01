@@ -457,24 +457,20 @@ func TestRenderClusterQueue_Pathways(t *testing.T) {
 
 	output := string(bytes)
 
-	if !strings.Contains(output, "nominalQuota: \"999999\"") {
-		t.Errorf("expected nominalQuota: \"999999\" for TPU flavor CPU, got %s", output)
+	expectedSubstrings := []string{
+		"nominalQuota: \"999999\"",
+		"nominalQuota: 999999T",
+		"nominalQuota: 8",
+		"nominalQuota: 480",
+		"nominalQuota: 2000Gi",
+		"nominalQuota: 0",
+		"name: flavor-tpu",
+		"name: pathways-flavor",
 	}
-	if !strings.Contains(output, "nominalQuota: 999999T") {
-		t.Errorf("expected nominalQuota: 999999T for TPU flavor Memory, got %s", output)
-	}
-	if !strings.Contains(output, "nominalQuota: 8") {
-		t.Errorf("expected nominalQuota: 8 for TPU flavor TPUs, got %s", output)
-	}
-
-	if !strings.Contains(output, "nominalQuota: 480") {
-		t.Errorf("expected nominalQuota: 480 for Pathways flavor CPU, got %s", output)
-	}
-	if !strings.Contains(output, "nominalQuota: 2000Gi") {
-		t.Errorf("expected nominalQuota: 2000Gi for Pathways flavor Memory, got %s", output)
-	}
-	if !strings.Contains(output, "nominalQuota: 0") {
-		t.Errorf("expected nominalQuota: 0 for Pathways flavor TPUs, got %s", output)
+	for _, want := range expectedSubstrings {
+		if !strings.Contains(output, want) {
+			t.Errorf("expected %q in output, got %s", want, output)
+		}
 	}
 
 	count := strings.Count(output, "coveredResources:")
@@ -482,11 +478,8 @@ func TestRenderClusterQueue_Pathways(t *testing.T) {
 		t.Errorf("expected 1 coveredResources block for Pathways case (unified), got %d. Output: %s", count, output)
 	}
 
-	if !strings.Contains(output, "name: flavor-tpu") {
-		t.Errorf("expected flavor-tpu in output, got %s", output)
-	}
-	if !strings.Contains(output, "name: pathways-flavor") {
-		t.Errorf("expected pathways-flavor in output, got %s", output)
+	if strings.Index(output, "name: pathways-flavor") > strings.Index(output, "name: flavor-tpu") {
+		t.Errorf("expected pathways-flavor before flavor-tpu in ClusterQueue flavors, got:\n%s", output)
 	}
 }
 

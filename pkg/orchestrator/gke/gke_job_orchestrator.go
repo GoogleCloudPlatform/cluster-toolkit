@@ -103,6 +103,10 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 
+	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
+		return err
+	}
+
 	if err := g.fetchClusterState(&job); err != nil {
 		return err
 	}
@@ -176,41 +180,6 @@ func (g *GKEOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrato
 	}
 
 	return filteredJobs, nil
-}
-
-// CancelJob deletes a job from the GKE cluster by name.
-// Jobs are filtered via cluster name and location provided through CancelOptions.
-func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions) error {
-	g.namespace = opts.GKENamespace
-	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
-		return err
-	}
-
-	if _, err := g.getDynamicClient(); err != nil {
-		return fmt.Errorf("failed to initialize k8s client: %w", err)
-	}
-
-	ns, err := g.getCurrentNamespace(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
-	if err != nil {
-		return err
-	}
-	foundNamespace := ns
-
-	status, err := g.getJobSetStatus(name, foundNamespace)
-	actionVerb := "Cancel"
-	if err == nil && (status == "Completed" || status == "Failed") {
-		actionVerb = "Cleanup"
-		logging.Info("Cleaning up resources for the '%s' job '%s' in cluster '%s'...", status, name, opts.ClusterName)
-	} else {
-		logging.Info("Canceling job '%s' in cluster '%s'...", name, opts.ClusterName)
-	}
-
-	err = g.kubeClient.DeleteJobSet(foundNamespace, name)
-	if err != nil {
-		return fmt.Errorf("%s operation failed for %s in namespace %s: %w", strings.ToLower(actionVerb), name, foundNamespace, err)
-	}
-	logging.Info("%s operation on Job '%s' completed successfully.", actionVerb, name)
-	return nil
 }
 
 // GetJobLogs fetches the logs for a specific job in the GKE cluster.
@@ -526,6 +495,9 @@ func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, wor
 		if err != nil {
 			return fmt.Errorf("failed to apply GKE manifest: %w", err)
 		}
+		if err := g.verifyStorageGateways(manifestContent, workloadName); err != nil {
+			return err
+		}
 		logging.Info("GKE workload deployed successfully.")
 	}
 	return nil
@@ -572,18 +544,6 @@ func (g *GKEOrchestrator) isSystemPool(np gkeJobNodePool) bool {
 		}
 	}
 	return false
-}
-
-func (g *GKEOrchestrator) getTargetNamespace(job *orchestrator.JobDefinition) (string, error) {
-	if job == nil {
-		return "", fmt.Errorf("job definition cannot be nil")
-	}
-
-	if job.GKENamespace != "" {
-		return job.GKENamespace, nil
-	}
-
-	return g.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
 }
 
 // isForbiddenError returns true if the error indicates a 403 Forbidden RBAC permission error.
@@ -1595,7 +1555,7 @@ func parseConditions(conditions []interface{}, statusStr *string, completionTime
 		condStatus, _ := cond["status"].(string)
 		if condStatus == "True" {
 			switch condType {
-			case "Completed", "JobSetCompleted", "Succeeded":
+			case "Completed", "JobSetCompleted", "Succeeded", "Complete":
 				*statusStr = "Succeeded"
 				if *completionTime == "" {
 					if transitionTime, ok := cond["lastTransitionTime"].(string); ok {
@@ -1614,56 +1574,6 @@ func parseConditions(conditions []interface{}, statusStr *string, completionTime
 			}
 		}
 	}
-}
-
-func (g *GKEOrchestrator) validateTargetNamespaceExists(job *orchestrator.JobDefinition) error {
-	ns, err := g.getTargetNamespace(job)
-	if err != nil {
-		return err
-	}
-
-	if ns == "" {
-		return fmt.Errorf("target namespace cannot be empty")
-	}
-
-	client, err := g.getDynamicClient()
-	if err != nil {
-		return fmt.Errorf("failed to initialize Kubernetes client for namespace validation: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	_, err = client.Resource(namespaceGVR).Get(ctx, ns, metav1.GetOptions{})
-	switch {
-	case err == nil:
-		return nil
-	case apierrors.IsNotFound(err):
-		return fmt.Errorf("target namespace %q does not exist on GKE cluster %q. Please create the namespace first (e.g., 'kubectl create namespace %s')", ns, job.ClusterName, ns)
-	case apierrors.IsForbidden(err):
-		logging.Warn("Insufficient RBAC permissions to verify existence of namespace %q on cluster %q (403 Forbidden). Proceeding with job submission...", ns, job.ClusterName)
-		return nil
-	default:
-		return fmt.Errorf("failed to verify existence of namespace %q on cluster %q: %w", ns, job.ClusterName, err)
-	}
-}
-
-func (g *GKEOrchestrator) getKubeClient() KubeClient {
-	g.syncKubeClient()
-	return g.kubeClient
-}
-
-func (g *GKEOrchestrator) getCurrentNamespace(clusterName, location, projectID string) (string, error) {
-	if g.namespace != "" {
-		return g.namespace, nil
-	}
-
-	ns, err := g.getKubeClient().GetCurrentNamespace(clusterName, location, projectID)
-	if err != nil {
-		return "", err
-	}
-	g.namespace = ns
-	return ns, nil
 }
 
 func (g *GKEOrchestrator) getKueueWorkloadStatus(client dynamic.Interface, ns string, uid string) (string, error) {
@@ -2228,8 +2138,48 @@ func (d *DefaultKubeClient) DeleteJobSet(namespace string, name string) error {
 	if d.dynClient == nil {
 		return fmt.Errorf("kubernetes dynamic client is not initialized")
 	}
-	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
-	return d.dynClient.Resource(gvr).Namespace(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	return d.dynClient.Resource(jobSetGVR).Namespace(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
+}
+
+func (d *DefaultKubeClient) resource(gvr schema.GroupVersionResource, namespace string) (dynamic.ResourceInterface, error) {
+	if d.dynClient == nil {
+		return nil, fmt.Errorf("kubernetes dynamic client is not initialized")
+	}
+	if namespace == "" {
+		return d.dynClient.Resource(gvr), nil
+	}
+	return d.dynClient.Resource(gvr).Namespace(namespace), nil
+}
+
+// ListResources returns the raw objects of gvr in namespace matching labelSelector.
+func (d *DefaultKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error) {
+	r, err := d.resource(gvr, namespace)
+	if err != nil {
+		return nil, err
+	}
+	list, err := r.List(context.TODO(), metav1.ListOptions{LabelSelector: labelSelector})
+	if err != nil {
+		return nil, err
+	}
+	return list.Items, nil
+}
+
+// GetResource returns the raw object of gvr named name.
+func (d *DefaultKubeClient) GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
+	r, err := d.resource(gvr, namespace)
+	if err != nil {
+		return nil, err
+	}
+	return r.Get(context.TODO(), name, metav1.GetOptions{})
+}
+
+// DeleteResource deletes the object of gvr named name, only if it still matches pre.
+func (d *DefaultKubeClient) DeleteResource(gvr schema.GroupVersionResource, namespace, name string, pre *metav1.Preconditions) error {
+	r, err := d.resource(gvr, namespace)
+	if err != nil {
+		return err
+	}
+	return r.Delete(context.TODO(), name, metav1.DeleteOptions{Preconditions: pre})
 }
 
 // ListWorkloads lists matching Kueue workloads in the specified namespace.

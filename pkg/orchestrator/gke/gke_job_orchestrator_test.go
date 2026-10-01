@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -133,6 +134,37 @@ type MockKubeClient struct {
 	WorkloadCallCount  int
 	Err                error
 	ExplicitEmpty      bool
+
+	DeleteJobSetErr error
+	DeletedJobSets  []string
+
+	// Fixtures keyed by gvr.Resource.
+	Objects    map[string][]unstructured.Unstructured
+	ListErrs   map[string]error
+	GetErr     error
+	DeleteErrs map[string]error
+	Deleted    map[string][]string
+	DeletePre  map[string]*metav1.Preconditions
+}
+
+func managedStorageObject(kind, name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]interface{}{
+		"kind": kind,
+		"metadata": map[string]interface{}{
+			"name": name,
+			"labels": map[string]interface{}{
+				managedByLabel:                     managedByValue,
+				"gcluster.google.com/storage-type": "gcsfuse",
+			},
+		},
+	}}
+}
+
+func unmanagedStorageObject(kind, name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]interface{}{
+		"kind":     kind,
+		"metadata": map[string]interface{}{"name": name},
+	}}
 }
 
 func (m *MockKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
@@ -148,11 +180,48 @@ func (m *MockKubeClient) ListWorkloads(namespace string, workloadName string) ([
 }
 
 func (m *MockKubeClient) DeleteJobSet(namespace string, name string) error {
+	m.DeletedJobSets = append(m.DeletedJobSets, name)
+	if m.DeleteJobSetErr != nil {
+		return m.DeleteJobSetErr
+	}
 	return m.Err
 }
 
 func (m *MockKubeClient) ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error) {
 	return []orchestrator.JobStatus{}, m.Err
+}
+
+func (m *MockKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error) {
+	return m.Objects[gvr.Resource], m.ListErrs[gvr.Resource]
+}
+
+func (m *MockKubeClient) GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
+	if m.GetErr != nil {
+		return nil, m.GetErr
+	}
+	if !slices.Contains(m.Deleted[gvr.Resource], name) {
+		for i := range m.Objects[gvr.Resource] {
+			if obj := &m.Objects[gvr.Resource][i]; obj.GetName() == name {
+				return obj.DeepCopy(), nil
+			}
+		}
+	}
+	return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+}
+
+func (m *MockKubeClient) DeleteResource(gvr schema.GroupVersionResource, namespace, name string, pre *metav1.Preconditions) error {
+	if err := m.DeleteErrs[gvr.Resource]; err != nil {
+		return err
+	}
+	if m.Deleted == nil {
+		m.Deleted = map[string][]string{}
+	}
+	if m.DeletePre == nil {
+		m.DeletePre = map[string]*metav1.Preconditions{}
+	}
+	m.DeletePre[name] = pre
+	m.Deleted[gvr.Resource] = append(m.Deleted[gvr.Resource], name)
+	return nil
 }
 
 func (m *MockKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
@@ -3346,59 +3415,6 @@ func TestValidateMTCConfig(t *testing.T) {
 	}
 }
 
-func TestGetTargetNamespace(t *testing.T) {
-	tests := []struct {
-		name       string
-		job        *orchestrator.JobDefinition
-		kubeClient KubeClient
-		want       string
-		wantErr    bool
-	}{
-		{
-			name:    "nil job",
-			job:     nil,
-			wantErr: true,
-		},
-		{
-			name: "explicit namespace",
-			job: &orchestrator.JobDefinition{
-				GKENamespace: "explicit-ns",
-			},
-			want: "explicit-ns",
-		},
-		{
-			name: "fallback to current namespace success",
-			job: &orchestrator.JobDefinition{
-				ClusterName: "cluster",
-			},
-			kubeClient: &MockKubeClient{Namespace: "current-ns"},
-			want:       "current-ns",
-		},
-		{
-			name: "fallback to current namespace failure",
-			job: &orchestrator.JobDefinition{
-				ClusterName: "cluster",
-			},
-			kubeClient: &MockKubeClient{Err: fmt.Errorf("kubeclient error")},
-			wantErr:    true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := &GKEOrchestrator{kubeClient: tt.kubeClient}
-			got, err := g.getTargetNamespace(tt.job)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("getTargetNamespace() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("getTargetNamespace() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 type mockNamespaceableResource struct {
 	dynamic.NamespaceableResourceInterface
 	getFunc    func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
@@ -4160,117 +4176,6 @@ func TestVerifyCheckpointConfigurationCR(t *testing.T) {
 				dynClient: tt.dynClient,
 			}
 			err := orc.verifyCheckpointConfigurationCR(&orchestrator.JobDefinition{GKEMTCEnabled: true}, docRemediation)
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("expected an error, but got nil")
-				} else if !strings.Contains(err.Error(), tt.wantErrSubstr) {
-					t.Errorf("expected error to contain %q, but got: %v", tt.wantErrSubstr, err)
-				}
-			} else if err != nil {
-				t.Errorf("expected no error, but got: %v", err)
-			}
-		})
-	}
-}
-
-func TestValidateNamespaceExists(t *testing.T) {
-	tests := []struct {
-		name          string
-		namespace     string
-		nilJob        bool
-		kubeClient    KubeClient
-		dynClient     dynamic.Interface
-		wantErr       bool
-		wantErrSubstr string
-	}{
-		{
-			name:          "nil job definition",
-			nilJob:        true,
-			wantErr:       true,
-			wantErrSubstr: "job definition cannot be nil",
-		},
-		{
-			name:          "unconfigured client",
-			namespace:     "",
-			kubeClient:    &MockKubeClient{Err: fmt.Errorf("failed to initialize Kubernetes client")},
-			dynClient:     nil,
-			wantErr:       true,
-			wantErrSubstr: "failed to initialize Kubernetes client",
-		},
-		{
-			name:       "namespace exists",
-			namespace:  "exists",
-			kubeClient: &MockKubeClient{Namespace: "exists"},
-			dynClient: &mockDynamicClient{
-				getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-					return &unstructured.Unstructured{Object: map[string]interface{}{"kind": "Namespace"}}, nil
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name:       "explicit job.GKENamespace override",
-			namespace:  "custom-job-ns",
-			kubeClient: &MockKubeClient{Namespace: "default-kube-ns"},
-			dynClient: &mockDynamicClient{
-				getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-					if name != "custom-job-ns" {
-						return nil, fmt.Errorf("expected Get for custom-job-ns, got %s", name)
-					}
-					return &unstructured.Unstructured{Object: map[string]interface{}{"kind": "Namespace"}}, nil
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name:       "namespace does not exist",
-			namespace:  "nonexistent",
-			kubeClient: &MockKubeClient{Namespace: "nonexistent"},
-			dynClient: &mockDynamicClient{
-				getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-					return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "namespaces"}, name)
-				},
-			},
-			wantErr:       true,
-			wantErrSubstr: `target namespace "nonexistent" does not exist`,
-		},
-		{
-			name:          "empty namespace",
-			namespace:     "",
-			kubeClient:    &MockKubeClient{ExplicitEmpty: true},
-			dynClient:     &mockDynamicClient{},
-			wantErr:       true,
-			wantErrSubstr: "target namespace cannot be empty",
-		},
-		{
-			name:       "403 forbidden (RBAC restricted user proceeds with warning)",
-			namespace:  "restricted-ns",
-			kubeClient: &MockKubeClient{Namespace: "restricted-ns"},
-			dynClient: &mockDynamicClient{
-				getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-					return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "namespaces"}, name, fmt.Errorf("user cannot get resource"))
-				},
-			},
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			orch := &GKEOrchestrator{
-				kubeClient: tt.kubeClient,
-				dynClient:  tt.dynClient,
-			}
-
-			var job *orchestrator.JobDefinition
-			if !tt.nilJob {
-				job = &orchestrator.JobDefinition{
-					GKENamespace: tt.namespace,
-				}
-			}
-
-			err := orch.validateTargetNamespaceExists(job)
-
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("expected an error, but got nil")

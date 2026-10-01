@@ -16,7 +16,6 @@ package sourcereader
 
 import (
 	"hpc-toolkit/pkg/deploymentio"
-	"path/filepath"
 	"strings"
 )
 
@@ -26,12 +25,34 @@ type SourceReader interface {
 	GetModule(modPath string, copyPath string) error
 }
 
-func isWindowsDrivePath(p string) bool {
-	if len(p) >= 2 && p[1] == ':' {
-		c := p[0]
-		return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+// isWindowsDrivePath checks if a path begins with a Windows drive letter (e.g., C:\, C:/, C:relative).
+// It accepts cleanSource which has already been normalized via ToSlash(source) in IsLocalPath.
+//
+// Architectural design tradeoffs:
+//   - Single-character URL schemes with authorities (s://...) and forced protocol prefixes (s::...) are excluded.
+//   - Unnormalized multi-slash local paths (e.g. C://foo, C:\\foo) are intentionally classified as remote
+//     to avoid collision with RFC 3986 hierarchical URIs.
+//   - Single-character opaque URIs without slashes (e.g. s:manifest.json) are classified as drive-relative
+//     local paths due to structural ambiguity with C:foo.
+func isWindowsDrivePath(cleanSource string) bool {
+	if len(cleanSource) < 2 || cleanSource[1] != ':' {
+		return false
 	}
-	return false
+	c := cleanSource[0]
+	if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+		return false
+	}
+	if len(cleanSource) > 2 {
+		// Reject go-getter forced protocol syntax (e.g., s::https://...)
+		if cleanSource[2] == ':' {
+			return false
+		}
+		// Reject URI schemes (e.g., s://...)
+		if strings.HasPrefix(cleanSource[2:], "//") {
+			return false
+		}
+	}
+	return true
 }
 
 // ToSlash normalizes all directory separators (including Windows backslashes) to forward slashes.
@@ -46,8 +67,7 @@ func IsLocalPath(source string) bool {
 	return strings.HasPrefix(cleanSource, "./") ||
 		strings.HasPrefix(cleanSource, "../") ||
 		strings.HasPrefix(cleanSource, "/") ||
-		isWindowsDrivePath(source) ||
-		filepath.IsAbs(source)
+		isWindowsDrivePath(cleanSource)
 }
 
 // IsEmbeddedPath checks if a source path points to an embedded modules
