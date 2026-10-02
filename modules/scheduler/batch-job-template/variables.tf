@@ -133,10 +133,17 @@ variable "enable_public_ips" {
 }
 
 variable "service_account" {
-  description = "Service account to attach to the Google Cloud Batch compute node. Ignored if `instance_template` is provided."
+  description = "Service account to attach to the Google Cloud Batch compute node and Batch job allocationPolicy (`scopes` is ignored if `instance_template` is provided)."
   type = object({
-    email  = string,
-    scopes = set(string)
+    email = string,
+    scopes = optional(set(string), [
+      "https://www.googleapis.com/auth/devstorage.read_only",
+      "https://www.googleapis.com/auth/logging.write",
+      "https://www.googleapis.com/auth/monitoring.write",
+      "https://www.googleapis.com/auth/servicecontrol",
+      "https://www.googleapis.com/auth/service.management.readonly",
+      "https://www.googleapis.com/auth/trace.append"
+    ])
   })
   default = {
     email = null

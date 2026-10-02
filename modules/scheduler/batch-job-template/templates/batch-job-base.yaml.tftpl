@@ -34,10 +34,16 @@ taskGroups:
       %{~ endif ~}
       requireHostsFile: ${require_hosts_file}
       permissiveSsh: ${permissive_ssh}
-%{~ if instance_template != null }
+%{~ if instance_template != null || service_account_email != null }
 allocationPolicy:
+    %{~ if instance_template != null ~}
     instances:
     - instanceTemplate: "${instance_template}"
+    %{~ endif ~}
+    %{~ if service_account_email != null ~}
+    serviceAccount:
+        email: "${service_account_email}"
+    %{~ endif ~}
 %{~ endif }
 %{~ if log_policy == "CLOUD_LOGGING" }
 logsPolicy:
