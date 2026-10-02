@@ -9,6 +9,8 @@ The blueprint automatically configures the following components to enable optima
 - **NRI Device Injector**: Automatically injects required networking and GPU configurations into your ML containers.
 - **Kueue and JobSet**: Kubernetes-native tools for managing large-scale, multi-node training jobs with Topology Aware Scheduling (TAS).
 
+> **Note on TCPXO Support:** `a3-highgpu-8g` supports TCPXO as an alternative to TCPX for optimized GPU communication. However, TCPXO is only supported for Spot and On-Demand VMs. Please ensure you do not use GCE reservations when enabling TCPXO.
+
 ## Prerequisites
 
 1. **Cluster Toolkit:** Ensure you have installed all the dependencies required in cluster toolkit and followed the setup instructions.

@@ -37,6 +37,11 @@ vars:
 
   gcp_public_cidrs_access_enabled: false
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+  # TCPXO is enabled for spot and on-demand instances, but not for reservations.
+  # To use TCPXO, uncomment the TCPXO paths and comment out the nccl_config_path
+  # and nccl_tcpx_installer_path below.
+  # nccl_tcpxo_installer_path: $(ghpc_stage("./nccl-tcpxo-installer.yaml.tftpl"))
+
   nccl_tcpx_installer_path: $(ghpc_stage("./nccl-tcpx-installer.yaml.tftpl"))
   nccl_config_path: $(ghpc_stage("./nccl-config.yaml"))
   nri_device_injector_path: $(ghpc_stage("./nri-device-injector.yaml"))
@@ -58,6 +63,7 @@ vars:
   accelerator_type: nvidia-h100-80gb
   version_prefix: "1.35."
   nccl_tcpx_version: v3.1.9
+  # nccl_tcpxo_version: v1.0.15
 
 deployment_groups:
 - group: primary
@@ -162,6 +168,8 @@ deployment_groups:
     use: [gke_cluster]
     settings:
       apply_manifests:
+      # If using TCPXO, comment out the nccl_config_path and nccl_tcpx_installer_path blocks below,
+      # and uncomment the nccl_tcpxo_installer_path block.
       - name: nccl-config
         source: $(vars.nccl_config_path)
       - name: nri-device-injector
@@ -171,6 +179,11 @@ deployment_groups:
         template_vars:
           accelerator_type: $(vars.accelerator_type)
           version: $(vars.nccl_tcpx_version)
+      # - name: nccl-tcpxo-installer
+      #   source: $(vars.nccl_tcpxo_installer_path)
+      #   template_vars:
+      #     accelerator_type: $(vars.accelerator_type)
+      #     version: $(vars.nccl_tcpxo_version)
       kueue:
         install: true
         wait: true
