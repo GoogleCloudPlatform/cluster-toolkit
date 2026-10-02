@@ -303,15 +303,33 @@ variable "kubernetes_labels" {
 }
 
 variable "timeout_create" {
-  description = "Timeout for creating a node pool"
+  description = "Timeout for creating a node pool (e.g., '30m', '60m', '2h', '1h30m'). Must be a positive duration string with 's', 'm', or 'h' units. If null, defaults to the Terraform provider timeout (2h)."
   type        = string
   default     = null
+  validation {
+    condition     = var.timeout_create == null || (can(regex("^([0-9]+(s|m|h))+$", var.timeout_create)) && !can(regex("^(0+(s|m|h))+$", var.timeout_create)))
+    error_message = "timeout_create must be a positive duration string using 's', 'm', or 'h' units (e.g., '30m', '60m', '1h30m', '2h'), or null."
+  }
 }
 
 variable "timeout_update" {
-  description = "Timeout for updating a node pool"
+  description = "Timeout for updating a node pool (e.g., '30m', '60m', '2h', '1h30m'). Must be a positive duration string with 's', 'm', or 'h' units. If null, defaults to the Terraform provider timeout (2h)."
   type        = string
   default     = null
+  validation {
+    condition     = var.timeout_update == null || (can(regex("^([0-9]+(s|m|h))+$", var.timeout_update)) && !can(regex("^(0+(s|m|h))+$", var.timeout_update)))
+    error_message = "timeout_update must be a positive duration string using 's', 'm', or 'h' units (e.g., '30m', '60m', '1h30m', '2h'), or null."
+  }
+}
+
+variable "timeout_delete" {
+  description = "Timeout for deleting a node pool (e.g., '30m', '60m', '2h', '1h30m'). Must be a positive duration string with 's', 'm', or 'h' units. If null, defaults to the Terraform provider timeout (2h)."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.timeout_delete == null || (can(regex("^([0-9]+(s|m|h))+$", var.timeout_delete)) && !can(regex("^(0+(s|m|h))+$", var.timeout_delete)))
+    error_message = "timeout_delete must be a positive duration string using 's', 'm', or 'h' units (e.g., '30m', '60m', '1h30m', '2h'), or null."
+  }
 }
 
 # Deprecated
