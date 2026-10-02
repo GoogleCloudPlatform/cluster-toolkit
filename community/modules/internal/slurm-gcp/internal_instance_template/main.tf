@@ -34,6 +34,8 @@ locals {
       disk_size_gb                        = var.disk_size_gb
       disk_type                           = var.disk_type
       disk_storage_pool                   = var.disk_storage_pool
+      disk_provisioned_iops               = var.disk_provisioned_iops
+      disk_provisioned_throughput         = var.disk_provisioned_throughput
       disk_labels                         = var.disk_labels
       auto_delete                         = var.auto_delete
       disk_resource_manager_tags          = var.disk_resource_manager_tags
@@ -100,20 +102,22 @@ resource "google_compute_instance_template" "tpl" {
   dynamic "disk" {
     for_each = local.all_disks
     content {
-      auto_delete           = lookup(disk.value, "auto_delete", null)
-      boot                  = lookup(disk.value, "boot", null)
-      device_name           = lookup(disk.value, "device_name", null)
-      disk_name             = lookup(disk.value, "disk_name", null)
-      disk_size_gb          = lookup(disk.value, "disk_size_gb", lookup(disk.value, "disk_type", null) == "local-ssd" ? "375" : null)
-      disk_type             = lookup(disk.value, "disk_type", null)
-      storage_pool          = try(disk.value.disk_storage_pool, null) == "" ? null : try(disk.value.disk_storage_pool, null)
-      interface             = lookup(disk.value, "interface", lookup(disk.value, "disk_type", null) == "local-ssd" ? "NVME" : null)
-      mode                  = lookup(disk.value, "mode", null)
-      source                = lookup(disk.value, "source", null)
-      source_image          = lookup(disk.value, "source_image", null)
-      type                  = lookup(disk.value, "disk_type", null) == "local-ssd" ? "SCRATCH" : "PERSISTENT"
-      labels                = (lookup(disk.value, "source", null) != null || lookup(disk.value, "disk_type", null) == "local-ssd") ? null : lookup(disk.value, "disk_labels", null)
-      resource_manager_tags = lookup(disk.value, "disk_resource_manager_tags", {})
+      auto_delete            = lookup(disk.value, "auto_delete", null)
+      boot                   = lookup(disk.value, "boot", null)
+      device_name            = lookup(disk.value, "device_name", null)
+      disk_name              = lookup(disk.value, "disk_name", null)
+      disk_size_gb           = lookup(disk.value, "disk_size_gb", lookup(disk.value, "disk_type", null) == "local-ssd" ? "375" : null)
+      disk_type              = lookup(disk.value, "disk_type", null)
+      storage_pool           = try(disk.value.disk_storage_pool, null) == "" ? null : try(disk.value.disk_storage_pool, null)
+      provisioned_iops       = lookup(disk.value, "disk_provisioned_iops", null)
+      provisioned_throughput = lookup(disk.value, "disk_provisioned_throughput", null)
+      interface              = lookup(disk.value, "interface", lookup(disk.value, "disk_type", null) == "local-ssd" ? "NVME" : null)
+      mode                   = lookup(disk.value, "mode", null)
+      source                 = lookup(disk.value, "source", null)
+      source_image           = lookup(disk.value, "source_image", null)
+      type                   = lookup(disk.value, "disk_type", null) == "local-ssd" ? "SCRATCH" : "PERSISTENT"
+      labels                 = (lookup(disk.value, "source", null) != null || lookup(disk.value, "disk_type", null) == "local-ssd") ? null : lookup(disk.value, "disk_labels", null)
+      resource_manager_tags  = lookup(disk.value, "disk_resource_manager_tags", {})
 
       dynamic "disk_encryption_key" {
         for_each = lookup(disk.value, "disk_encryption_key", null) != null ? [lookup(disk.value, "disk_encryption_key", null)] : (var.disk_encryption_key != null ? [var.disk_encryption_key] : [])
@@ -226,6 +230,26 @@ resource "google_compute_instance_template" "tpl" {
     precondition {
       condition     = length(var.additional_disks) == 0 || alltrue([for disk in var.additional_disks : disk.disk_storage_pool == null || disk.disk_storage_pool == "" || contains(["hyperdisk-balanced", "hyperdisk-throughput"], lower(try(disk.disk_type, "")))])
       error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
+    }
+
+    precondition {
+      condition     = var.disk_provisioned_iops == null || can(regex("^(hyperdisk-|pd-extreme$)", lower(coalesce(var.disk_type, ""))))
+      error_message = "disk_provisioned_iops is only supported with Hyperdisk or pd-extreme disk types."
+    }
+
+    precondition {
+      condition     = var.disk_provisioned_throughput == null || can(regex("^hyperdisk-", lower(coalesce(var.disk_type, ""))))
+      error_message = "disk_provisioned_throughput is only supported with Hyperdisk disk types."
+    }
+
+    precondition {
+      condition     = length(var.additional_disks) == 0 || alltrue([for disk in var.additional_disks : try(disk.disk_provisioned_iops, null) == null || contains(["hyperdisk-balanced", "hyperdisk-extreme", "pd-extreme"], lower(try(disk.disk_type, "")))])
+      error_message = "disk_provisioned_iops in additional_disks is only supported with hyperdisk-balanced, hyperdisk-extreme, or pd-extreme disk types."
+    }
+
+    precondition {
+      condition     = length(var.additional_disks) == 0 || alltrue([for disk in var.additional_disks : try(disk.disk_provisioned_throughput, null) == null || contains(["hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-ml"], lower(try(disk.disk_type, "")))])
+      error_message = "disk_provisioned_throughput in additional_disks is only supported with hyperdisk-balanced, hyperdisk-throughput, or hyperdisk-ml disk types."
     }
   }
 
