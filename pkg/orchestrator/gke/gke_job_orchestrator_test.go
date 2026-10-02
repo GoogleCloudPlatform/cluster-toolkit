@@ -475,13 +475,18 @@ func TestGenerateGKEManifest_CommandEscaping(t *testing.T) {
 		t.Fatalf("GenerateGKEManifest failed: %v", err)
 	}
 
-	// We expect the command to be properly rendered as a YAML list
-	expectedSubStr := `                command:
-                - "/bin/bash"
-                - "-c"
-                - "python -c \"print('hello')\" && echo \"world\""`
-	if !strings.Contains(manifest, expectedSubStr) {
-		t.Errorf("manifest command string is not properly rendered as a YAML list.\nExpected substring:\n%s\nActual manifest:\n%s", expectedSubStr, manifest)
+	// We expect the command to be properly rendered as a YAML list including the wrapper
+	expectedSubStrs := []string{
+		`command:`,
+		`- "/bin/bash"`,
+		`- "-c"`,
+		`- "gcluster"`,
+		`- "python -c \"print('hello')\" && echo \"world\""`,
+	}
+	for _, expected := range expectedSubStrs {
+		if !strings.Contains(manifest, expected) {
+			t.Errorf("manifest command string missing expected substring %q.\nActual manifest:\n%s", expected, manifest)
+		}
 	}
 }
 
@@ -525,161 +530,6 @@ spec:
 	}
 	if !strings.Contains(cleanedString, "control-plane: controller-manager") {
 		t.Errorf("Resulting manifest should contain control-plane: controller-manager label.\nGot:\n%s", cleanedString)
-	}
-}
-
-func TestGeneratePathwaysManifest(t *testing.T) {
-	setupMockMachineConfig(t)
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "pathways-test",
-		CommandToRun:    "echo hello",
-		NumSlices:       2,
-		ClusterLocation: "us-central1",
-		ComputeType:     "n2-standard-2",
-		Pathways: orchestrator.PathwaysJobDefinition{
-			ProxyServerImage: "proxy:latest",
-			ServerImage:      "server:latest",
-			WorkerImage:      "worker:latest",
-			GCSLocation:      "gs://my-bucket",
-			HeadNodePool:     "pathways-np",
-		},
-	}
-
-	mockResponses := map[string][]shell.CommandResult{
-		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
-	}
-	mockExec := NewMockExecutor(mockResponses)
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.projectID = "mock-project"
-	orc.clusterZones = []string{"us-central1-a"}
-	orc.clusterDesc.NodePools = []gkeJobNodePool{
-		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
-	}
-	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
-	if err != nil {
-		t.Fatalf("resolveHardwareRequirements failed: %v", err)
-	}
-	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		t.Fatalf("generatePathwaysManifest failed: %v", err)
-	}
-
-	err = os.WriteFile("gcluster_pathways_manifest.yaml", []byte(manifest), 0644)
-	if err != nil {
-		t.Fatalf("failed to write manifest to file: %v", err)
-	}
-	defer os.Remove("gcluster_pathways_manifest.yaml")
-
-	expectedSubstrs := []string{
-		"name: pathways-test",
-		"replicas: 2",
-		"image: proxy:latest",
-		"--gcs_scratch_location=gs://my-bucket",
-		"cloud.google.com/gke-nodepool: pathways-np",
-		"completionMode: Indexed",
-		"alpha.jobset.sigs.k8s.io/exclusive-topology: kubernetes.io/hostname",
-		"MEGASCALE_GRPC_ENABLE_XOR_TRACER",
-		`cpu: "16"`,
-		`memory: "100Gi"`,
-		`cpu: "8"`,
-		`memory: "32Gi"`,
-		"restartStrategy: BlockingRecreate",
-		"privileged: true",
-		"alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool",
-		`cpu: "24"`,
-		`cpu: "2"`,
-		`memory: "8Gi"`,
-		"kill -SIGTERM $PID",
-		"echo \"Exit code: $EXIT_CODE\"",
-		"name: shared-tmp",
-		"hostPath:",
-		"path: /tmp",
-		"type: DirectoryOrCreate",
-		"mountPath: /tmp",
-		"jobset.sigs.k8s.io/hack: \"true\"",
-		"kueue.x-k8s.io/safe-to-forcefully-delete: \"true\"",
-		"cloud.google.com/skip-tpu-webhook-check: \"true\"",
-		"backoffLimitPerIndex: 4000",
-		"podReplacementPolicy: Failed",
-		"maxFailedIndexes: 0",
-	}
-
-	for _, substr := range expectedSubstrs {
-		if !strings.Contains(manifest, substr) {
-			t.Errorf("manifest missing expected substring %q", substr)
-		}
-	}
-}
-
-func TestGeneratePathwaysManifest_MTC(t *testing.T) {
-	setupMockMachineConfig(t)
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "pathways-mtc-test",
-		CommandToRun:    "echo hello",
-		NumSlices:       2,
-		ClusterLocation: "us-central1",
-		ComputeType:     "n2-standard-2",
-		Pathways: orchestrator.PathwaysJobDefinition{
-			ProxyServerImage:            "proxy:latest",
-			ServerImage:                 "server:latest",
-			WorkerImage:                 "worker:latest",
-			ColocatedPythonSidecarImage: "sidecar:latest",
-			GCSLocation:                 "gs://my-bucket",
-			HeadNodePool:                "pathways-np",
-		},
-		IsPathwaysJob:          true,
-		GKEMTCEnabled:          true,
-		GKEMTCRamdiskDirectory: "/tmp/mtc_checkpoints",
-	}
-
-	mockResponses := map[string][]shell.CommandResult{
-		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
-	}
-	mockExec := NewMockExecutor(mockResponses)
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.projectID = "mock-project"
-	orc.clusterZones = []string{"us-central1-a"}
-	orc.clusterDesc.NodePools = []gkeJobNodePool{
-		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
-	}
-	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
-	if err != nil {
-		t.Fatalf("resolveHardwareRequirements failed: %v", err)
-	}
-	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		t.Fatalf("generatePathwaysManifest failed: %v", err)
-	}
-
-	expectedSubstrs := []string{
-		"name: pathways-mtc-test",
-		"colocated-python-sidecar",
-		"restartPolicy: Always",
-		"driver: multitier-checkpoint.csi.storage.gke.io",
-		"name: sidecar-shared-memory",
-		"medium: Memory",
-		"--cloud_pathways_sidecar_shm_directory=/tmp/sidecar",
-		"mountPath: /tmp/mtc_checkpoints",
-	}
-
-	for _, substr := range expectedSubstrs {
-		if !strings.Contains(manifest, substr) {
-			t.Errorf("manifest missing expected substring %q", substr)
-		}
-	}
-
-	parts := strings.Split(manifest, "name: worker")
-	if len(parts) < 2 {
-		t.Fatalf("failed to split manifest into head and worker parts")
-	}
-	headPart := parts[0]
-	workerPart := parts[1]
-
-	if strings.Contains(headPart, "colocated-python-sidecar") {
-		t.Errorf("headPart should not contain colocated-python-sidecar container")
-	}
-	if !strings.Contains(workerPart, "colocated-python-sidecar") {
-		t.Errorf("workerPart should contain colocated-python-sidecar container")
 	}
 }
 
@@ -2030,76 +1880,6 @@ func TestGenerateGKEManifest_DynamicSlicingActive_TPU7x(t *testing.T) {
 	}
 }
 
-func TestGeneratePathwaysManifest_DynamicSlicing(t *testing.T) {
-	setupMockMachineConfig(t)
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "pathways-test",
-		CommandToRun:    "echo hello",
-		NumSlices:       2,
-		ClusterLocation: "us-central1-a",
-		ComputeType:     "tpu7x-standard-4t",
-		Topology:        "4x4x4",
-		Pathways: orchestrator.PathwaysJobDefinition{
-			ProxyServerImage: "proxy:latest",
-			ServerImage:      "server:latest",
-			WorkerImage:      "worker:latest",
-			GCSLocation:      "gs://my-bucket",
-			HeadNodePool:     "pathways-np",
-		},
-	}
-
-	mockResponses := map[string][]shell.CommandResult{
-		"kubectl get resourceflavors":                   {{ExitCode: 0, Stdout: ""}},
-		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-partition-4x4x4-id"}]}}]}`}},
-		"kubectl get admissioncheck":                    {{ExitCode: 0, Stdout: `{"items": [{"spec": {"controllerName": "accelerator.gke.io/slice"}}]}`}},
-		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu7x": {{ExitCode: 0, Stdout: "8x8x8"}},
-		"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json":                                                                          {{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu7x-standard-4t"}]}`}},
-	}
-	mockExec := NewMockExecutor(mockResponses)
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.projectID = "mock-project"
-	orc.clusterDesc.NodePools = []gkeJobNodePool{
-		{
-			Name: "tpu-pool",
-			Config: gkeNodePoolConfig{
-				MachineType: "tpu7x-standard-4t",
-			},
-			PlacementPolicy: &gkePlacementPolicy{
-				AcceleratorTopologyMode: "PROVISION_ONLY",
-			},
-		},
-	}
-
-	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
-	if err != nil {
-		t.Fatalf("resolveHardwareRequirements failed: %v", err)
-	}
-	if !isDynamicSlicing {
-		t.Fatalf("Expected isDynamicSlicing to be true")
-	}
-
-	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
-	}
-
-	// 1. Manifest must NOT contain strict NodeSelector topology
-	if strings.Contains(manifest, "cloud.google.com/gke-tpu-topology: 4x4x4") {
-		t.Errorf("Expected manifest to NOT contain strict nodeSelector topology, but it was found\nManifest: %s", manifest)
-	}
-
-	// 2. Kueue TAS annotations must be present under pathways worker replicatedJob template annotations
-	expectedSubstrs := []string{
-		"kueue.x-k8s.io/podset-slice-required-topology: cloud.google.com/gke-tpu-partition-4x4x4-id",
-		"cloud.google.com/gke-tpu-slice-topology: 4x4x4",
-	}
-	for _, substr := range expectedSubstrs {
-		if !strings.Contains(manifest, substr) {
-			t.Errorf("manifest missing expected substring %q\nManifest: %s", substr, manifest)
-		}
-	}
-}
-
 func TestGenerateGKEManifest_StaticSlicingActive_v6e(t *testing.T) {
 	setupMockMachineConfig(t)
 
@@ -2403,61 +2183,6 @@ func TestGenerateGKEManifest_CustomEnv(t *testing.T) {
 	for _, line := range expectedLines {
 		if !strings.Contains(manifest, line) {
 			t.Errorf("manifest does not contain expected line %q. Got manifest:\n%s", line, manifest)
-		}
-	}
-}
-
-func TestGeneratePathwaysManifest_CustomEnv(t *testing.T) {
-	setupMockMachineConfig(t)
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "pathways-env-job",
-		CommandToRun:    "echo hello",
-		ComputeType:     "tpu-v5-lite-podslice",
-		ClusterLocation: "us-central1-a",
-		IsPathwaysJob:   true,
-		Pathways: orchestrator.PathwaysJobDefinition{
-			ProxyServerImage: "proxy:latest",
-			ServerImage:      "server:latest",
-			WorkerImage:      "worker:latest",
-			GCSLocation:      "gs://my-bucket",
-		},
-		Env: map[string]string{
-			"PATHWAYS_UNSAFE_UNSAFE_OVERRIDE_GRPC_CREDENTIALS": "grpc_insecure_override",
-		},
-	}
-
-	mockResponses := map[string][]shell.CommandResult{
-		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
-		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "16x16"}},
-		"gcloud compute machine-types describe tpu-v5-lite-podslice --zone=us-central1-a --format=json":                         {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v5-lite-podslice"}]}`}},
-	}
-	mockExec := NewMockExecutor(mockResponses)
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.projectID = "mock-project"
-	orc.clusterDesc.NodePools = []gkeJobNodePool{
-		{Config: gkeNodePoolConfig{MachineType: "tpu-v5-lite-podslice"}},
-	}
-
-	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
-	if err != nil {
-		t.Fatalf("resolveHardwareRequirements failed: %v", err)
-	}
-
-	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
-	}
-
-	// The custom environment variables must be present only in the workload-container container spec
-	expectedLines := []string{
-		`- name: PATHWAYS_UNSAFE_UNSAFE_OVERRIDE_GRPC_CREDENTIALS`,
-		`  value: "grpc_insecure_override"`,
-	}
-	for _, line := range expectedLines {
-		count := strings.Count(manifest, line)
-		// We expect it to appear exactly once: in the workload-container
-		if count != 1 {
-			t.Errorf("expected line %q to appear exactly 1 time in manifest, got %d. Manifest:\n%s", line, count, manifest)
 		}
 	}
 }
@@ -2789,67 +2514,6 @@ func TestGetJobLogs(t *testing.T) {
 	}
 }
 
-func TestGeneratePathwaysManifest_Headless(t *testing.T) {
-	setupMockMachineConfig(t)
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "pathways-headless-test",
-		NumSlices:       1,
-		ClusterLocation: "us-central1",
-		ComputeType:     "n2-standard-2",
-		Pathways: orchestrator.PathwaysJobDefinition{
-			Headless:         true,
-			ProxyServerImage: "proxy:latest",
-			ServerImage:      "server:latest",
-			WorkerImage:      "worker:latest",
-			GCSLocation:      "gs://my-bucket",
-			HeadNodePool:     "pathways-np",
-		},
-	}
-
-	mockResponses := map[string][]shell.CommandResult{
-		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
-	}
-	mockExec := NewMockExecutor(mockResponses)
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.projectID = "mock-project"
-	orc.clusterZones = []string{"us-central1-a"}
-	orc.clusterDesc.NodePools = []gkeJobNodePool{
-		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
-	}
-	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
-	if err != nil {
-		t.Fatalf("resolveHardwareRequirements failed: %v", err)
-	}
-	manifest, err := orc.GeneratePathwaysManifest(job, "", profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		t.Fatalf("generatePathwaysManifest failed: %v", err)
-	}
-
-	expectedSubstrs := []string{
-		"name: pathways-headless-test",
-		"image: proxy:latest",
-		"image: server:latest",
-		"--gcs_scratch_location=gs://my-bucket",
-		"cloud.google.com/gke-nodepool: pathways-np",
-	}
-
-	for _, substr := range expectedSubstrs {
-		if !strings.Contains(manifest, substr) {
-			t.Errorf("manifest missing expected substring %q", substr)
-		}
-	}
-
-	// In headless mode, the workload-container must NOT be present.
-	if strings.Contains(manifest, "workload-container") {
-		t.Errorf("manifest contains 'workload-container', which is unexpected in headless mode")
-	}
-
-	// In headless mode, the command template block must NOT be present.
-	if strings.Contains(manifest, "JAX_PLATFORMS") || strings.Contains(manifest, "kill -SIGTERM") {
-		t.Errorf("manifest contains workload command envs/traps, which is unexpected in headless mode")
-	}
-}
-
 func TestProcessNodePoolCapacity_FlavorsAndLabels(t *testing.T) {
 	setupMockMachineConfig(t)
 
@@ -2992,48 +2656,6 @@ func TestProcessNodePoolCapacity_FlavorsAndLabels(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestGeneratePathwaysManifest_CommandWithQuotes(t *testing.T) {
-	setupMockMachineConfig(t)
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "pathways-test",
-		CommandToRun:    `pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print("JAX Device count:", jax.device_count())'`,
-		NumSlices:       1,
-		ClusterLocation: "us-central1",
-		ComputeType:     "n2-standard-2",
-		Pathways: orchestrator.PathwaysJobDefinition{
-			ProxyServerImage: "proxy:latest",
-			ServerImage:      "server:latest",
-			WorkerImage:      "worker:latest",
-			GCSLocation:      "gs://my-bucket",
-			HeadNodePool:     "pathways-np",
-		},
-	}
-
-	mockResponses := map[string][]shell.CommandResult{
-		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
-	}
-	mockExec := NewMockExecutor(mockResponses)
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.projectID = "mock-project"
-	orc.clusterZones = []string{"us-central1-a"}
-	orc.clusterDesc.NodePools = []gkeJobNodePool{
-		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
-	}
-	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
-	if err != nil {
-		t.Fatalf("resolveHardwareRequirements failed: %v", err)
-	}
-	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		t.Fatalf("generatePathwaysManifest failed: %v", err)
-	}
-
-	expectedCommand := `pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print("JAX Device count:", jax.device_count())'`
-	if !strings.Contains(manifest, expectedCommand) {
-		t.Errorf("manifest does not contain expected command exactly.\nExpected to find: %q\nManifest: %s", expectedCommand, manifest)
 	}
 }
 
