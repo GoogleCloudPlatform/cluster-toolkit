@@ -17,26 +17,30 @@
 variable "project_id" {
   description = "GCP project ID where Cloud Build executes."
   type        = string
-  validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.project_id))
-    error_message = "Project ID must be 6 to 30 characters long, start with a lowercase letter, end with a letter or digit, and contain only lowercase letters, digits, and hyphens."
-  }
 }
 
 variable "region" {
   description = "GCP region where Artifact Registry and Cloud Build execute."
   type        = string
   default     = "us-central1"
-  validation {
-    condition     = can(regex("^[a-z0-9-]+$", var.region))
-    error_message = "Region must be a valid GCP region identifier (e.g. 'us-central1', 'europe-west1')."
-  }
 }
 
 variable "cloud_build_dir" {
   description = "Directory containing source code for Cloud Build. When repo_url is set, this is the relative subfolder in the remote repository (e.g. 'src'). When repo_url is omitted, this is the local directory uploaded to Cloud Build."
   type        = string
   default     = "."
+}
+
+variable "target_dir" {
+  description = "Optional path to a target or overlay directory (either inside the remote Git repository or on the local machine, controlled by is_target_dir_local). Automatically exposed as _TARGET_DIR in template_vars."
+  type        = string
+  default     = null
+}
+
+variable "is_target_dir_local" {
+  description = "Whether target_dir resides on the local machine. When true, target_dir is staged from the local filesystem and uploaded to Cloud Build. When false, target_dir is assumed to reside inside the remote Git repository."
+  type        = bool
+  default     = false
 }
 
 variable "cloud_build_template_path" {
@@ -77,18 +81,18 @@ variable "gcs_staging_dir" {
   }
 }
 
-variable "service_account" {
+variable "service_account_email" {
   description = "Optional service account email to execute Cloud Build."
   type        = string
   default     = null
   validation {
-    condition     = var.service_account == null || var.service_account == "" || can(regex("^[^@]+@[^@]+\\.[^@]+$", var.service_account)) || can(regex("^[a-zA-Z0-9_-]+$", var.service_account))
-    error_message = "service_account must be null, empty, a full service account email, or a service account name."
+    condition     = var.service_account_email == null || var.service_account_email == "" || can(regex("^[^@]+@[^@]+\\.[^@]+$", var.service_account_email))
+    error_message = "service_account_email must be null, empty, or a full service account email address."
   }
 }
 
 variable "repo_url" {
-  description = "Optional Git repository URL (e.g. https://github.com/GoogleCloudPlatform/scientific-computing-examples.git). When specified, Cloud Build runs with --no-source and the repository is cloned directly within the Cloud Build pipeline."
+  description = "Optional Git repository URL (e.g. https://github.com/my-org/my-repo.git). When specified, Cloud Build runs with --no-source (unless target_dir is provided with is_target_dir_local = true) and the repository is cloned directly within the Cloud Build pipeline."
   type        = string
   default     = null
 }
@@ -106,7 +110,7 @@ variable "triggers" {
 }
 
 variable "skip_if_exists" {
-  description = "List of container image URLs to check in Artifact Registry before building. If all images exist, the build is skipped. Note that his feature only checks if the image/tag exists in Artifact Registry, it does not detect content changes. Only use with immutable or versioned/content-hashed tags (e.g., :v1.0.0 or :sha256-...), and never with mutable tags like :latest."
+  description = "List of container image URLs to check in Artifact Registry before building. If all images exist, the build is skipped. Note that this feature only checks if the image/tag exists in Artifact Registry, it does not detect content changes. Only use with immutable or versioned/content-hashed tags (e.g., :v1.0.0 or :sha256-...), and never with mutable tags like :latest."
   type        = list(string)
   default     = []
 }

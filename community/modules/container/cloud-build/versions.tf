@@ -15,11 +15,14 @@
  */
 
 terraform {
-  required_version = ">= 1.4.0"
+  required_version = ">= 1.12.2"
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 3.83"
+      version = ">= 7.10.0"
     }
+  }
+  provider_meta "google" {
+    module_name = "blueprints/terraform/hpc-toolkit:cloud-build/v1.105.0"
   }
 }

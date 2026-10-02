@@ -18,13 +18,3 @@ output "id" {
   description = "The unique execution ID of the container build."
   value       = terraform_data.build.id
 }
-
-output "project_id" {
-  description = "GCP project ID where Cloud Build executed."
-  value       = var.project_id
-}
-
-output "region" {
-  description = "GCP region where Cloud Build executed."
-  value       = var.region
-}
