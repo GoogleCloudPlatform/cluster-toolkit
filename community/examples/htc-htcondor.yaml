@@ -19,7 +19,7 @@ vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: htcondor-pool
   region: us-central1
-  zone: us-central1-c
+  zone: us-central1-a
   zones:
   - $(vars.zone)
   - us-central1-f
