@@ -475,13 +475,18 @@ func TestGenerateGKEManifest_CommandEscaping(t *testing.T) {
 		t.Fatalf("GenerateGKEManifest failed: %v", err)
 	}
 
-	// We expect the command to be properly rendered as a YAML list
-	expectedSubStr := `                command:
-                - "/bin/bash"
-                - "-c"
-                - "python -c \"print('hello')\" && echo \"world\""`
-	if !strings.Contains(manifest, expectedSubStr) {
-		t.Errorf("manifest command string is not properly rendered as a YAML list.\nExpected substring:\n%s\nActual manifest:\n%s", expectedSubStr, manifest)
+	// We expect the command to be properly rendered as a YAML list including the wrapper
+	expectedSubStrs := []string{
+		`command:`,
+		`- "/bin/bash"`,
+		`- "-c"`,
+		`- "gcluster"`,
+		`- "python -c \"print('hello')\" && echo \"world\""`,
+	}
+	for _, expected := range expectedSubStrs {
+		if !strings.Contains(manifest, expected) {
+			t.Errorf("manifest command string missing expected substring %q.\nActual manifest:\n%s", expected, manifest)
+		}
 	}
 }
 
@@ -589,8 +594,8 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		`cpu: "24"`,
 		`cpu: "2"`,
 		`memory: "8Gi"`,
-		"kill -SIGTERM $PID",
-		"echo \"Exit code: $EXIT_CODE\"",
+		`kill -TERM -- \"-$child\"`,
+		`echo \"Exit code: $rc\"`,
 		"name: shared-tmp",
 		"hostPath:",
 		"path: /tmp",
@@ -3031,7 +3036,7 @@ func TestGeneratePathwaysManifest_CommandWithQuotes(t *testing.T) {
 		t.Fatalf("generatePathwaysManifest failed: %v", err)
 	}
 
-	expectedCommand := `pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print("JAX Device count:", jax.device_count())'`
+	expectedCommand := `pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print(\"JAX Device count:\", jax.device_count())'`
 	if !strings.Contains(manifest, expectedCommand) {
 		t.Errorf("manifest does not contain expected command exactly.\nExpected to find: %q\nManifest: %s", expectedCommand, manifest)
 	}

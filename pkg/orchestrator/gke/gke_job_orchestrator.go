@@ -459,7 +459,7 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		logging.Warn("Warning: failed to calculate resource limits for Pathways job: %v", err)
 	}
 
-	cmdSlice := []string{"/bin/bash", "-c", opts.CommandToRun}
+	cmdSlice := workloadContainerCommand(opts.CommandToRun)
 	isTPU := tpuLimit != ""
 	isGPU := gpuLimit != ""
 	data := g.prepareJobSetTemplateData(opts, cmdSlice, resStr, isTPU, isGPU)
