@@ -25,6 +25,7 @@
   delegate_to: localhost
   ansible.builtin.set_fact:
     bucket_name: "{{ (outputs.stdout | from_json)['gcs_bucket_name_zonal-gcs-bucket']['value'] }}"
+    regional_bucket_name: "{{ (outputs.stdout | from_json)['gcs_bucket_name_regional-gcs-bucket']['value'] }}"
     cache_zone: "{{ (lookup('file', blueprint_yaml) | from_yaml)['vars']['zone'] }}"
     gcs_bucket_local_mount: "{{ (lookup('file', blueprint_yaml) | from_yaml)['vars']['gcs_bucket_local_mount'] }}"
 
@@ -49,7 +50,7 @@
 - name: Wait for Anywhere Cache creation
   delegate_to: localhost
   ansible.builtin.shell: |
-    gcloud alpha storage operations list gs://{{ bucket_name }} --format=json | jq -e '.[] | select(.metadata.commonMetadata.type == "create-anywhere-cache" and .done == true and (has("error") | not))'
+    gcloud alpha storage operations list gs://{{ regional_bucket_name }} --format=json | jq -e '.[] | select(.metadata.commonMetadata.type == "create-anywhere-cache" and .done == true and (has("error") | not))'
   register: cache_operation
   until: cache_operation.rc == 0
   retries: 6
