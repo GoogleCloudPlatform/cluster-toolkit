@@ -409,8 +409,10 @@ Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (
 ./gcluster job submit \
   ... \
   --name my-robust-job \
-  --restart-on-exit-codes 1,137
+  --restart-on-exit-codes 1,137,143
 ```
+
+*(Note: Exit code `143` corresponds to `SIGTERM` ($128 + 15$). Workload pods interrupted by Spot or Kueue preemption receive SIGTERM and exit with code 143; adding 143 ensures preempted pods are restarted rather than failing the job).*
 
 **Example 6: Private Registry & Service Account**
 Use `--image-pull-secret` and `--service-account` for secure jobs.
@@ -473,13 +475,19 @@ By default, finished jobs are kept for 1 hour. You can change this using `--gke-
 ./gcluster job submit ... --gke-ttl-after-finished 2h  # Keep for 2 hours
 ```
 
-### 6.4 Graceful Termination (Grace Period)
+### 6.4 Graceful Termination & Signal Handling
 
 You can give your workloads a buffer period to save checkpoints or perform cleanups before they are forcefully killed using `--grace-period`.
 
 ```bash
 ./gcluster job submit ... --grace-period 2m # Allow 2 minutes for cleanup
 ```
+
+#### Signal Forwarding & Cleanup
+When a workload pod is evicted, cancelled, or preempted (e.g. on Spot VMs or Kueue preemption), GKE sends `SIGTERM` to the container:
+* `gcluster` runs workload commands in their own process group and forwards `SIGTERM` to child processes so active operations terminate promptly.
+* Post-command cleanup commands in the user script (such as checkpoint flushes or artifact uploads to Cloud Storage) continue to run before the pod grace period expires.
+* If a workload is interrupted by `SIGTERM`, `gcluster` ensures it exits with code `143` even if cleanup commands exit `0`, preventing evicted pods from falsely reporting success.
 
 ### 6.5 Topology & Scheduler
 

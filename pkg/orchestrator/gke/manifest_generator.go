@@ -31,11 +31,22 @@ import (
 )
 
 const workloadWrapperScript = `echo "GCluster Start: $(date 2>/dev/null || true)" >&2
+
+# Run workload in a separate process group
 set -m
-bash -c 'trap : TERM; cmd="$1"; shift; eval "$cmd"' gcluster "$1" &
+/bin/bash -c 'trap : TERM; cmd="$1"; shift; eval "$cmd"' gcluster "$1" &
 child=$!
-_fwd() { echo "gcluster: SIGTERM received, running cleanup" >&2; kill -TERM -- "-$child" 2>/dev/null; }
+
+# Forward signals to the workload process group
+got_sigterm=0
+_fwd() {
+  got_sigterm=1
+  echo "gcluster: SIGTERM received, running cleanup" >&2
+  kill -TERM -- "-$child" 2>/dev/null
+}
 trap _fwd TERM INT
+
+# Wait for workload to exit
 while :; do
   wait "$child"; rc=$?
   is_job=0
@@ -44,6 +55,12 @@ while :; do
   done
   [ "$is_job" -eq 1 ] || break
 done
+
+# Interrupted workloads should not exit 0 even if cleanup succeeded
+if [ "$got_sigterm" -ne 0 ] && [ "$rc" -eq 0 ]; then
+  rc=143
+fi
+
 echo "GCluster End: $(date 2>/dev/null || true)" >&2
 echo "Exit code: $rc" >&2
 exit "$rc"

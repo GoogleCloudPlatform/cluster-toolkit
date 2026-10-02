@@ -1341,6 +1341,42 @@ func TestWorkloadContainerCommand_SIGTERMWithoutCleanup(t *testing.T) {
 	}
 }
 
+func TestWorkloadContainerCommand_SIGTERMCleanupExitsZeroOverriddenTo143(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	dir := t.TempDir()
+	ready := filepath.Join(dir, "ready")
+	marker := filepath.Join(dir, "cleanup")
+	userCommand := `set -e && set +e; ` +
+		`(touch '` + ready + `'; exec sleep 300); ` +
+		`echo "cleanup succeeded" > '` + marker + `'; ` +
+		`exit 0`
+
+	cmd, _, stderr := runWorkloadCommand(t, ctx, userCommand)
+	waitForFile(t, ready, 10*time.Second)
+	time.Sleep(300 * time.Millisecond)
+
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("failed to send SIGTERM: %v", err)
+	}
+	code := exitCode(t, cmd.Wait())
+
+	if code != 143 {
+		t.Errorf("exit code = %d, want 143 (overridden from 0 on SIGTERM), got %d", code, code)
+	}
+	got, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("cleanup commands did not run: %v; stderr: %s", err, stderr.String())
+	}
+	if want := "cleanup succeeded\n"; string(got) != want {
+		t.Errorf("cleanup marker = %q, want %q", got, want)
+	}
+	if !strings.Contains(stderr.String(), "Exit code: 143") {
+		t.Errorf("stderr = %q, want Exit code: 143 banner", stderr.String())
+	}
+}
+
 func containerCommands(t *testing.T, manifest string) [][]string {
 	t.Helper()
 	var out [][]string
