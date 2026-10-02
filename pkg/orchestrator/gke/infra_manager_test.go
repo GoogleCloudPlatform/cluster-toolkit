@@ -523,6 +523,17 @@ func TestValidateNamespaceExists(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:       "403 forbidden string error (RBAC restricted user proceeds with warning)",
+			namespace:  "restricted-string-ns",
+			kubeClient: &MockKubeClient{Namespace: "restricted-string-ns"},
+			dynClient: &mockDynamicClient{
+				getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+					return nil, fmt.Errorf("Error from server (Forbidden): namespaces %q is forbidden", name)
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name:       "other API error is wrapped",
 			namespace:  "some-ns",
 			kubeClient: &MockKubeClient{Namespace: "some-ns"},
