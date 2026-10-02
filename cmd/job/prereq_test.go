@@ -245,59 +245,40 @@ func TestSavePrereqState_WriteError(t *testing.T) {
 	store.Save(state)
 }
 
-func TestEnsureGCloudSDKInstalled_Success(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
-
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
-		if name == "gcloud" && len(args) > 0 && args[0] == "version" {
-			return shell.CommandResult{ExitCode: 0, Stdout: "Google Cloud SDK 123.0.0"}
-		}
-		return shell.CommandResult{ExitCode: 1}
-	}
-
-	err := ensureGCloudSDKInstalled()
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
-	}
-}
-
 func TestEnsureGCloudSDKInstalled_Failure(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		return shell.CommandResult{ExitCode: 1, Stderr: "command not found"}
 	}
-
 	err := ensureGCloudSDKInstalled()
 	if err == nil {
 		t.Error("expected error, got nil")
 	}
 }
 
-func TestEnsureGCloudAuthenticated_Success(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+func TestEnsureGCloudSDKInstalled_Success(t *testing.T) {
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
-		if name == "gcloud" && len(args) > 1 && args[0] == "auth" {
-			return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		if name == "gcloud" && len(args) > 0 && args[0] == "version" {
+			return shell.CommandResult{ExitCode: 0, Stdout: "Google Cloud SDK 123.0.0"}
 		}
-		return shell.CommandResult{ExitCode: 0}
+		return shell.CommandResult{ExitCode: 1}
 	}
-
-	err := ensureGCloudAuthenticated()
+	err := ensureGCloudSDKInstalled()
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
 }
 
 func TestEnsureGCloudAuthenticated_Failure(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		if name == "gcloud" && len(args) > 1 && args[0] == "auth" {
 			return shell.CommandResult{ExitCode: 0, Stdout: ""}
 		}
@@ -421,10 +402,10 @@ func TestEnsurePrerequisites_DockerCreds(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		if name == "gcloud" && len(args) > 1 && args[0] == "auth" && args[1] == "list" {
 			return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
 		}
@@ -479,10 +460,10 @@ func TestEnsureBasicPrerequisites_InvalidProject(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		cmdStr := name + " " + strings.Join(args, " ")
 		switch {
 		case strings.HasPrefix(cmdStr, "gcloud auth list"):
@@ -521,10 +502,10 @@ func TestEnsureBasicPrerequisites_SaveState(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
 	}
 
@@ -571,10 +552,10 @@ func TestEnsureBasicPrerequisites_RestrictedPermissions_Proceeds(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		cmdStr := name + " " + strings.Join(args, " ")
 		switch {
 		case strings.HasPrefix(cmdStr, "gcloud auth list"):
@@ -607,10 +588,10 @@ func TestEnsureBasicPrerequisites_ProjectNameContainsPermission_Fails(t *testing
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		cmdStr := name + " " + strings.Join(args, " ")
 		switch {
 		case strings.HasPrefix(cmdStr, "gcloud auth list"):

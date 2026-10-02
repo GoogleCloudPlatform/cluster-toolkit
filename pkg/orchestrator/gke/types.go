@@ -37,6 +37,8 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
+const gcloudCmdTimeout = 30 * time.Second
+
 const (
 	// tpuTopologyLabel is the GKE label for TPU topology.
 	tpuTopologyLabel = "cloud.google.com/gke-tpu-topology"
@@ -131,6 +133,7 @@ type HTTPClient interface {
 
 type Executor interface {
 	ExecuteCommand(name string, args ...string) shell.CommandResult
+	ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...string) shell.CommandResult
 	ExecuteCommandStream(name string, args ...string) error
 }
 

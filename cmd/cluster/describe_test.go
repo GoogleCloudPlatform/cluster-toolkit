@@ -20,6 +20,7 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -112,6 +113,10 @@ func (m *mockClusterExecutor) ExecuteCommand(name string, args ...string) shell.
 		}
 	}
 	return shell.CommandResult{ExitCode: 0, Stdout: "{}"} // Default to empty object JSON
+}
+
+func (m *mockClusterExecutor) ExecuteCommandWithTimeout(_ time.Duration, name string, args ...string) shell.CommandResult {
+	return m.ExecuteCommand(name, args...)
 }
 
 func (m *mockClusterExecutor) ExecuteCommandStream(name string, args ...string) error {
