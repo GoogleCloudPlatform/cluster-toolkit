@@ -28,6 +28,21 @@ echo "This is the startup script for the login nodes on cluster ${CLUSTER_ID}"
 set -x
 set -e
 if [[ $(type -P yum) ]]; then
+	# Some Slurm images ship an rpmdb built against a mismatched Berkeley DB
+	# environment, so the first yum write transaction fails until it is
+	# rebuilt. The __db.* environment files only exist for that backend, so
+	# this is a no-op on images (e.g. Rocky 9) whose rpmdb uses sqlite.
+	if compgen -G "/var/lib/rpm/__db.*" >/dev/null; then
+		rm -f /var/lib/rpm/__db.*
+		rpm --rebuilddb
+	fi
+	# A single unreachable repo preconfigured in the image (e.g. a CUDA repo) would
+	# otherwise fail every dnf transaction, even for unrelated packages. Let dnf skip
+	# any repo whose metadata cannot be fetched instead of aborting the whole node.
+	for repo_file in /etc/yum.repos.d/*.repo; do
+		grep -q '^skip_if_unavailable=1$' "${repo_file}" 2>/dev/null ||
+			sed -i '/^\[.*\]$/a skip_if_unavailable=1' "${repo_file}" 2>/dev/null || true
+	done
 	yum install -y ansible
 else
 	apt install -y ansible
