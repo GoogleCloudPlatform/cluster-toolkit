@@ -25,6 +25,7 @@ import (
 )
 
 func init() {
+	addParallelismFlag(exportCmd)
 	rootCmd.AddCommand(exportCmd)
 }
 
@@ -35,8 +36,11 @@ var (
 		Long:              "Export output values from deployment group to other deployment groups that depend upon them.",
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkDir),
 		ValidArgsFunction: matchDirs,
-		Run:               runExportCmd,
-		SilenceUsage:      true,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return validateParallelismFlag()
+		},
+		Run:          runExportCmd,
+		SilenceUsage: true,
 	})
 )
 
@@ -47,6 +51,7 @@ func parseExportImportArgs(args []string) (string, string) {
 }
 
 func runExportCmd(cmd *cobra.Command, args []string) {
+	shell.SetTerraformParallelism(flagParallelism)
 	deplRoot, groupDir := parseExportImportArgs(args)
 
 	artifactsDir := getArtifactsDir(deplRoot)
