@@ -44,6 +44,9 @@ limitations under the License.
     node_count_static: {{ part.static_node_count }}
     disk_size_gb: {{ part.boot_disk_size }}
     disk_type: {{ part.boot_disk_type }}
+    {% if cmek %}
+    disk_encryption_key: {{ cmek.disk_key }}
+    {% endif %}
     instance_image:
     {% if part.image %}
       family: {% if part.image.source_image_family == "Imported" %}{{ part.image.family }}{% else %}image-{{ part.image.family }}{% endif %}
@@ -62,6 +65,9 @@ limitations under the License.
         disk_labels: {}
         auto_delete: {{ part.additional_disk_auto_delete }}
         boot: false
+        {% if cmek %}
+        disk_encryption_key: {{ cmek.disk_key }}
+        {% endif %}
       {% endfor %}
     {% endif %}
     {% if part.GPU_per_node > 0 %}

@@ -20,6 +20,12 @@ limitations under the License.
   settings:
     repo_mode: {{ repo_mode }}
     format: {{ format }}
+    {% if cmek %}
+    repository_kms_key_name: {{ cmek.artifact_registry_key }}
+    user_managed_replication:
+    - location: {{ cluster.cloud_region }}
+      kms_key_name: {{ cmek.secret_key }}
+    {% endif %}
     {% if repo_mode == "REMOTE_REPOSITORY" %}
     use_upstream_credentials: {{ use_upstream_credentials }}
     {% if use_public_repository == True %}repo_public_repository: DOCKER_HUB{% else %}repo_mirror_url: {{ repo_mirror_url }}{% endif %}

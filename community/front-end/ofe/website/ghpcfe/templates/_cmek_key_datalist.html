@@ -1,0 +1,73 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% comment %}
+ Suggestions for the CMEK key field, shared by every form that offers one.
+
+ The field stays a free-text input. A datalist only suggests: the key may
+ live in a project these credentials cannot list, and a CryptoKey resource
+ name is long enough that typing it unaided is error-prone. A <select>
+ would forbid the cross-project case that pre-existing-kms-key exists to
+ support.
+
+ Include this once inside a form that renders form.cmek_key, whose widget
+ carries list="cmek-key-options" (see ghpcfe/forms.py).
+{% endcomment %}
+
+<datalist id="cmek-key-options"></datalist>
+
+<script>
+$(document).ready(function () {
+  var $keyField = $("#id_cmek_key");
+  if ($keyField.length === 0) { return; }
+
+  function currentRegion() {
+    // Cluster and image forms carry a region field; workbench and
+    // filestore forms only carry a zone, whose region is the zone minus
+    // its trailing letter (us-central1-a -> us-central1).
+    var region = $("#id_cloud_region").val();
+    if (region) { return region; }
+    var zone = $("#id_cloud_zone").val();
+    return zone ? zone.replace(/-[a-z]$/, "") : "";
+  }
+
+  function refreshKeys() {
+    var credential = $("#id_cloud_credential").val();
+    if (!credential) { return; }
+    $.ajax({
+      url: "{% url 'api-kmskeys-list' %}"
+           + "?credential=" + encodeURIComponent(credential)
+           + "&region=" + encodeURIComponent(currentRegion()),
+    }).done(function (data) {
+      var $list = $("#cmek-key-options").empty();
+      (data.keys || []).forEach(function (key) {
+        // The full resource name is the value every CMEK field expects,
+        // so it is the option value rather than a friendlier short name.
+        $list.append($("<option>").attr("value", key.name));
+      });
+    }).fail(function () {
+      // Suggestions are a convenience; the field still accepts any key
+      // that Cloud KMS will accept, so a failed lookup must not block
+      // the form.
+      $("#cmek-key-options").empty();
+    });
+  }
+
+  $("#id_cloud_credential, #id_cloud_region, #id_cloud_zone").on(
+    "change", refreshKeys);
+  refreshKeys();
+});
+</script>

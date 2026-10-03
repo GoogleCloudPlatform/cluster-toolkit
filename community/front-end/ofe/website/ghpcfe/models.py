@@ -188,9 +188,9 @@ class User(AbstractUser):
         # extract
         if SocialAccount.objects.filter(user=self.id).exists():
             extra_data = SocialAccount.objects.get(user=self.id).extra_data
-            json_data = json.dumps(extra_data)
-            data = json.loads(json_data)
-            url = data["picture"]
+            # extra_data is already a dict; the json round-trip that used
+            # to be here changed nothing.
+            url = extra_data.get("picture", url)
         return url
 
     def has_viewer_role(self):
@@ -272,6 +272,32 @@ class Credential(models.Model):
         return self.name
 
 
+class CmekProtected(models.Model):
+    """Mixin for resources that can be encrypted with a customer-managed key.
+
+    Not on CloudResource: networks, subnets and the ComputeInstance
+    records are not encrypted resources, and would only gain a column
+    that is always empty.
+    """
+
+    cmek_key = models.CharField(
+        max_length=1024,
+        blank=True,
+        default="",
+        verbose_name="CMEK key",
+        help_text=(
+            "Full Cloud KMS CryptoKey resource name "
+            "(projects/P/locations/L/keyRings/R/cryptoKeys/K) used to "
+            "encrypt this resource. The key must be in the same region as "
+            "the resource, or global. Leave blank for Google-managed "
+            "encryption."
+        ),
+    )
+
+    class Meta:
+        abstract = True
+
+
 class CloudResource(models.Model):
     """The base class of all cloud resource"""
 
@@ -301,6 +327,16 @@ class CloudResource(models.Model):
         help_text="The zone of this cloud resource",
         blank=True,
         null=True,
+    )
+    # a human-readable reason for the current (usually failed) state,
+    # surfaced on the resource's detail page. Populated when a
+    # create/start step fails with an actionable cause, so the user sees
+    # why instead of only an empty terraform log.
+    status_message = models.TextField(
+        blank=True,
+        default="",
+        help_text="Human-readable detail about the current state (e.g. why "
+                  "the last operation failed).",
     )
 
     @property
@@ -405,7 +441,7 @@ class FilesystemImpl(models.IntegerChoices):
     IMPORTED = 2, "Imported Filesystem"
 
 
-class Filesystem(CloudResource):
+class Filesystem(CloudResource, CmekProtected):
     """Model representing a file system in the cloud"""
 
     name = models.CharField(
@@ -586,7 +622,7 @@ class StartupScript(models.Model):
         help_text="Select other users authorised to use this startup script",
     )
         
-class Image(CloudResource):
+class Image(CloudResource, CmekProtected):
     """Model representing a custom node image."""
 
     name = models.CharField(
@@ -660,7 +696,7 @@ class Image(CloudResource):
     def __str__(self):
         return self.name
 
-class Cluster(CloudResource):
+class Cluster(CloudResource, CmekProtected):
     """Model representing a cluster"""
 
     name = models.CharField(
@@ -822,7 +858,7 @@ class Cluster(CloudResource):
         default=False,
         help_text=(
             "Enable containers for this cluster? Artifact Registry can be configured to store your containers."
-        ),        
+        ),
     )
     enable_slurm_auth = models.BooleanField(
         default=True,
@@ -1801,7 +1837,12 @@ class GCPFilestoreFilesystem(Filesystem):
     )
     capacity = models.PositiveIntegerField(
         validators=[MinValueValidator(1024)],
-        help_text="Capacity (in GB) of the filesystem (min of 2660)",
+        help_text=(
+            "Capacity (in GiB) of the filesystem. Minimum and increment "
+            "depend on the performance tier: ENTERPRISE/HIGH_SCALE_SSD min "
+            "1024 GiB in 256 GiB steps, BASIC_HDD min 1024 GiB, BASIC_SSD "
+            "min 2560 GiB."
+        ),
         default=1024,
     )
 
@@ -1932,9 +1973,12 @@ class Workbench(CloudResource):
         help_text="Type of storage to be required for notebook boot disk",
     )
     boot_disk_capacity = models.PositiveIntegerField(
-        validators=[MinValueValidator(120)],
-        help_text="Capacity (in GB) of the filesystem (min of 1024)",
-        default=120,
+        validators=[MinValueValidator(150)],
+        help_text=(
+            "Capacity (in GB) of the boot disk. The Vertex AI Workbench "
+            "Instances image does not fit in less than 150 GB."
+        ),
+        default=150,
     )
     proxy_uri = models.CharField(max_length=150, blank=True, null=True)
     trusted_user = models.ForeignKey(
