@@ -421,7 +421,7 @@ variable "initial_node_count" {
 }
 
 variable "gke_version" {
-  description = "GKE version"
+  description = "GKE version at creation time. Ignored on existing node pools to prevent unexpected rolling updates."
   type        = string
 }
 
