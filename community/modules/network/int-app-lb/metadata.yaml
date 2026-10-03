@@ -12,20 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-test_name: batch
-deployment_name: batch-{{ build }}
-zone: us-central1-a
-workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/batch.yaml"
-network: "default"
-remote_node: "{{ deployment_name }}-batch-login"
-post_deploy_tests:
-- test-validation/test-batch-submission.yml
-- test-validation/test-mounts.yml
-custom_vars:
-  project: "{{ project }}"
-  mounts: [/sw]
-  batch_job_id: batch-job  # batch-job-template ID
-cli_deployment_vars:
-  region: us-central1
-  zone: "{{ zone }}"
+spec:
+  requirements:
+    services:
+    - compute.googleapis.com
+ghpc:
+  has_to_be_used: false

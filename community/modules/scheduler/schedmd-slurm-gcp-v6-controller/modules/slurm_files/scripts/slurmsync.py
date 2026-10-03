@@ -361,6 +361,13 @@ def get_node_action(nodename: str) -> NodeAction:
             if state.base != "DOWN":
                 return NodeActionDown(reason="Instance terminated")
             return NodeActionPowerDown()
+        if lkp.is_node_mig(nodename):
+            # MIG auto-healing (default_action_on_failure=REPAIR) recreates the VM
+            # (delete + insert). Do not start it; wait for RUNNING, then resume via
+            # the auto-healing branch above.
+            if state.base != "DOWN":
+                return NodeActionDown(reason="MIG Auto-Healing instance repair in progress")
+            return NodeActionUnchanged()
         if inst.scheduling.preemptible:
             return NodeActionPrempt()
         if state.base != "DOWN":
@@ -775,7 +782,11 @@ def main():
                 reasons.append("topology changed")
             try:
                 log.info(f"Reconfiguring Slurm ({', '.join(reasons)}).")
-                util.scontrol_reconfigure(lkp)
+                # Restart slurmctld only for a config change. A topology-only
+                # change is picked up by `scontrol reconfigure` alone, and
+                # update_topology runs on every node power-up, so restarting
+                # there would flap nodes registering during the restart window.
+                util.scontrol_reconfigure(lkp, restart=config_changed)
                 # Only dump summary after successful reconfigure so it reflects Slurm's view
                 if topology_changed and topology_summary is not None:
                     topology_summary.dump(lkp)

@@ -21,6 +21,10 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"strings"
 	"testing"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func TestCancelCmd_Success(t *testing.T) {
@@ -72,6 +76,18 @@ func (m *mockKubeClient) ListWorkloads(namespace string, workloadName string) ([
 }
 
 func (m *mockKubeClient) DeleteJobSet(namespace string, name string) error {
+	return m.err
+}
+
+func (m *mockKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error) {
+	return nil, m.err
+}
+
+func (m *mockKubeClient) GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
+	return nil, m.err
+}
+
+func (m *mockKubeClient) DeleteResource(gvr schema.GroupVersionResource, namespace, name string, pre *metav1.Preconditions) error {
 	return m.err
 }
 
