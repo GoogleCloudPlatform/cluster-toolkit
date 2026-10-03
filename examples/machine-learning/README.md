@@ -9,6 +9,7 @@ the latest VM families from Google Cloud
 - [A4](a4-highgpu-8g)
 - [A4X](a4x-highgpu-4g)
 - [A4X Max](a4x-maxgpu-4g-metal)
+- [TPU7x](tpu7x-standard-4t)
 
 Further documentation for A3 High, A3 Mega, A3 Ultra, A4 and A4X solutions are available at
 [Create an AI-optimized Slurm cluster][aihc-slurm].

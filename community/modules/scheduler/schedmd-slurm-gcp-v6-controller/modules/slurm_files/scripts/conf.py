@@ -246,8 +246,7 @@ class SlurmConfigGenerator:
             nodeset = self.lkp.cfg.nodeset.get(nodeset_name)
             if not nodeset:
                 return MIN_MEM_PER_CPU
-            template = nodeset.instance_template
-            machine = self.lkp.template_machine_conf(template)
+            machine = self.lkp.nodeset_machine_conf(nodeset)
             mem_spec_limit = int(nodeset.node_conf.get("MemSpecLimit", 0))
             return max(MIN_MEM_PER_CPU, (machine.memory - mem_spec_limit) // machine.cpus)
 
@@ -343,6 +342,16 @@ class SlurmConfigGenerator:
 
 def get_generator(lkp: util.Lookup) -> SlurmConfigGenerator:
     """Factory function to return the correct Slurm config generator version."""
+    if util.slurm_version_gte(lkp.slurm_version, "26.05"):
+        from conf_v2605 import SlurmConfigGeneratorV2605
+        return SlurmConfigGeneratorV2605(lkp)
+
+    if lkp.has_tpu_nodesets():
+        log.warning(
+            f"GCE TPU nodesets are configured, but native TPU support "
+            f"is not supported on Slurm {lkp.slurm_version} (requires >= 26.05)."
+        )
+
     if util.slurm_version_gte(lkp.slurm_version, "25.11"):
         from conf_v2511 import SlurmConfigGeneratorV2511
         return SlurmConfigGeneratorV2511(lkp)
@@ -362,7 +371,7 @@ def conflines(lkp: util.Lookup) -> str:
 
 def nodeset_lines(nodeset, lkp: util.Lookup) -> str:
     template_info = lkp.template_info(nodeset.instance_template)
-    machine_conf = lkp.template_machine_conf(nodeset.instance_template)
+    machine_conf = lkp.nodeset_machine_conf(nodeset)
 
     # follow https://slurm.schedmd.com/slurm.conf.html#OPT_Boards
     # by setting Boards, SocketsPerBoard, CoresPerSocket, and ThreadsPerCore

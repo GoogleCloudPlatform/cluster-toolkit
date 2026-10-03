@@ -21,10 +21,12 @@ image_family = "$(zebra/to(ad"
 image_name = "((cat /dog))"
 
 labels = {
-  brown           = "$(fox)"
-  ghpc_blueprint  = "text_escape"
-  ghpc_deployment = "golden_copy_deployment"
-  ñred            = "ñblue"
+  brown              = "$(fox)"
+  escaped_braced_var = "\\$${HOME}"
+  escaped_var        = "\\$IP"
+  ghpc_blueprint     = "text_escape"
+  ghpc_deployment    = "golden_copy_deployment"
+  ñred               = "ñblue"
 }
 
 project_id = "invalid-project"
