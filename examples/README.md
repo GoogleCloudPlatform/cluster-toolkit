@@ -88,6 +88,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hybrid-slurm-cluster (GCD)](#hybrid-slurm-cluster-gcd-) ![community-badge]
   * [primary-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml)
   * [burst-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml)
+  * [slurm-gke.yaml](#slurm-gkeyaml--) ![community-badge] ![experimental-badge]
+  * [sycomp](#sycomp--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1818,7 +1820,7 @@ To destroy all resources associated with creating the GKE cluster, run the follo
 ./gcluster destroy netapp-volumes
 ```
 
-[netapp-storage-pool]: ../netapp-storage-pool/README.md
+[netapp-storage-pool]: ../modules/file-system/netapp-storage-pool/README.md
 [service-levels]: https://cloud.google.com/netapp/volumes/docs/discover/service-levels
 [auto-tiering]: https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/manage-auto-tiering
 [netapp-volumes.yaml]: ../examples/netapp-volumes.yaml
@@ -1910,6 +1912,28 @@ This directory includes the following blueprints:
 The deployment instructions can be found in the [README](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/README.md).
 
 [hybrid-slurm-cluster (GCD)]: ../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/README.md
+
+### [slurm-gke.yaml] ![community-badge] ![experimental-badge]
+
+Deploys a hybrid Slurm cluster with a GCE-based controller, login node, and `debug` partition alongside a GKE-backed compute partition managed by the [Slinky](https://github.com/SlinkyProject) Slurm operator. The blueprint also creates a VPC, a Filestore instance mounted at `/home`, and a GKE cluster where `slurmd` compute nodes run as pods. Helper scripts for building and running multi-node GPU NCCL tests are included under [`nccl-tests/`](../community/examples/slurm-gke/nccl-tests/README.md).
+
+For a Slurm cluster that runs entirely on Kubernetes, see [hpc-slinky.yaml](#hpc-slinkyyaml--).
+
+[slurm-gke.yaml]: ../community/examples/slurm-gke/slurm-gke.yaml
+
+### [sycomp] ![community-badge] ![experimental-badge]
+
+Deploys and expands an IBM Storage Scale cluster using the [Sycomp Intelligent Data Storage Platform](https://sycomp.com/solution/hpc/storage/) and exposes it to compute clients over NFS.
+
+This directory includes the following blueprints:
+* [`sycomp-storage.yaml`](../community/examples/sycomp/sycomp-storage.yaml): Deploys a 3-node Sycomp Storage cluster.
+* [`sycomp-storage-expansion.yaml`](../community/examples/sycomp/sycomp-storage-expansion.yaml): Expands the cluster from 3 to 4 storage nodes.
+* [`sycomp-storage-ece.yaml`](../community/examples/sycomp/sycomp-storage-ece.yaml): Deploys a 7-node cluster using Erasure Code Edition (ECE) software RAID.
+* [`sycomp-storage-slurm.yaml`](../community/examples/sycomp/sycomp-storage-slurm.yaml): Deploys a Slurm cluster that mounts the Sycomp storage over NFS.
+
+The deployment instructions can be found in the [README](../community/examples/sycomp/README.md).
+
+[sycomp]: ../community/examples/sycomp
 
 ## Blueprint Schema
 
