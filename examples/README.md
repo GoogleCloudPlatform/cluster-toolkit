@@ -82,6 +82,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
   * [hpc-slurm-google-cloud-dedicated.yaml](#hpc-slurm-google-cloud-dedicatedyaml-) ![community-badge]
+  * [cloud-build-remote.yaml](#cloud-build-remoteyaml--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1856,6 +1857,14 @@ Creates a Slurm cluster on C3 machine types for Google Cloud Dedicated (GCD) and
 The deployment instructions can be found in the [README](../community/examples/hpc-slurm-google-cloud-dedicated/README.md).
 
 [hpc-slurm-google-cloud-dedicated.yaml]: ../community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml
+
+### [cloud-build-remote.yaml] ![community-badge] ![experimental-badge]
+
+Demonstrates how to use the `artifact-registry` and `cloud-build` community modules to create a Docker repository in Artifact Registry and build a container image (AlphaFold 3) directly from a remote GitHub repository using Cloud Build.
+
+The deployment instructions can be found in the [README](../community/examples/cloud-build/README.md).
+
+[cloud-build-remote.yaml]: ../community/examples/cloud-build/cloud-build-remote.yaml
 
 ## Blueprint Schema
 
