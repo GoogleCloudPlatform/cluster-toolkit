@@ -29,14 +29,12 @@ echo "This is the startup script for the compute nodes on cluster ${CLUSTER_ID}"
 set -x
 set -e
 if [[ $(type -P yum) ]]; then
-	# Some Slurm images ship an rpmdb built against a mismatched Berkeley DB
-	# environment, so the first yum write transaction fails until it is
-	# rebuilt. The __db.* environment files only exist for that backend, so
-	# this is a no-op on images (e.g. Rocky 9) whose rpmdb uses sqlite.
-	if compgen -G "/var/lib/rpm/__db.*" >/dev/null; then
-		rm -f /var/lib/rpm/__db.*
-		rpm --rebuilddb
-	fi
+	# dnf-automatic upgrades packages on first boot, and a yum left waiting on its
+	# lock then fails with DB_VERSION_MISMATCH. Stop the timer; let any run finish.
+	systemctl stop dnf-automatic.timer 2>/dev/null || true
+	while [[ $(systemctl is-active dnf-automatic.service 2>/dev/null) =~ ^(activating|active|deactivating)$ ]]; do
+		sleep 5
+	done
 	# A single unreachable repo preconfigured in the image (e.g. a CUDA repo) would
 	# otherwise fail every dnf transaction, even for unrelated packages. Let dnf skip
 	# any repo whose metadata cannot be fetched instead of aborting the whole node.
