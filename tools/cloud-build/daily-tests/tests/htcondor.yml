@@ -16,7 +16,7 @@
 
 test_name: htc-htcondor
 deployment_name: "htcondor-{{ build }}"
-zone: us-central1-c
+zone: us-central1-a #changed zone from us-central1-c to us-central1-a
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/htc-htcondor.yaml"
 network: "{{ deployment_name }}-net"
