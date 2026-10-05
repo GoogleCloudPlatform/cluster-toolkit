@@ -568,44 +568,45 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             )
             return self.form_invalid(form)
 
-        # Get the existing MountPoint objects associated with the cluster
-        existing_mount_points = MountPoint.objects.filter(cluster=self.object)
-
-        # Iterate through the existing mount points and check if they are in the updated formset
-        for mount_point in existing_mount_points:
-            if not any(mount_point_form.instance == mount_point for mount_point_form in mountpoints.forms):
-                # The mount point is not in the updated formset, so delete it
-                mount_point_path = mount_point.mount_path
-                mount_point_id = mount_point.pk
-                logger.info(f"Deleting mount point: {mount_point_path}, ID: {mount_point_id}")
-                mount_point.delete()
-
-       # Get the existing ClusterPartition objects associated with the cluster
-        existing_partitions = ClusterPartition.objects.filter(cluster=self.object)
-
-        logger.info(f"Processing total {len(partitions.forms)} partition forms.")
-        logger.info(f"Existing number of partitions is {len(partitions.forms)}.")
-
-        for partition in existing_partitions:
-            #logger.info(f"Checking existing partition: {partition.name}")
-            found = False
-            for partition_form in partitions.forms:
-                #logger.info(f"Checking form for partition: {partition_form.instance.name}")
-                if partition_form.instance == partition:
-                    found = True
-                    delete_status = partition_form.cleaned_data.get('DELETE', False)
-                    if delete_status:
-                        # Log the intent to delete then delete the partition
-                        logger.info(f"Partition: {partition.name} (ID: {partition.pk}) marked for deletion.")
-                        partition.delete()
-                    else:
-                        logger.info(f"No deletion requested for existing partition: {partition.name}.")
-            if not found:
-                # Log if no corresponding form was found for the partition
-                logger.info(f"No form found for Partition: {partition.name}.")
-
         try:
             with transaction.atomic():
+                # Deletes run in the transaction so a validation error undoes them.
+                # Get the existing MountPoint objects associated with the cluster
+                existing_mount_points = MountPoint.objects.filter(cluster=self.object)
+
+                # Iterate through the existing mount points and check if they are in the updated formset
+                for mount_point in existing_mount_points:
+                    if not any(mount_point_form.instance == mount_point for mount_point_form in mountpoints.forms):
+                        # The mount point is not in the updated formset, so delete it
+                        mount_point_path = mount_point.mount_path
+                        mount_point_id = mount_point.pk
+                        logger.info(f"Deleting mount point: {mount_point_path}, ID: {mount_point_id}")
+                        mount_point.delete()
+
+                # Get the existing ClusterPartition objects associated with the cluster
+                existing_partitions = ClusterPartition.objects.filter(cluster=self.object)
+
+                logger.info(f"Processing total {len(partitions.forms)} partition forms.")
+                logger.info(f"Existing number of partitions is {len(partitions.forms)}.")
+
+                for partition in existing_partitions:
+                    #logger.info(f"Checking existing partition: {partition.name}")
+                    found = False
+                    for partition_form in partitions.forms:
+                        #logger.info(f"Checking form for partition: {partition_form.instance.name}")
+                        if partition_form.instance == partition:
+                            found = True
+                            delete_status = partition_form.cleaned_data.get('DELETE', False)
+                            if delete_status:
+                                # Log the intent to delete then delete the partition
+                                logger.info(f"Partition: {partition.name} (ID: {partition.pk}) marked for deletion.")
+                                partition.delete()
+                            else:
+                                logger.info(f"No deletion requested for existing partition: {partition.name}.")
+                    if not found:
+                        # Log if no corresponding form was found for the partition
+                        logger.info(f"No form found for Partition: {partition.name}.")
+
                 self.object = form.save()
 
                 mountpoints.instance = self.object
