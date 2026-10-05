@@ -22,6 +22,7 @@ module "template" {
   name_prefix         = local.name
 
   additional_disks                    = var.login_nodes.additional_disks
+  additional_networks                 = var.login_nodes.additional_networks
   bandwidth_tier                      = var.login_nodes.bandwidth_tier
   can_ip_forward                      = var.login_nodes.can_ip_forward
   disk_encryption_key                 = var.login_nodes.disk_encryption_key

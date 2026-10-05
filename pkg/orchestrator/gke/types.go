@@ -24,9 +24,15 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
+	crm "google.golang.org/api/cloudresourcemanager/v1"
 	compute "google.golang.org/api/compute/v1"
+	iamapi "google.golang.org/api/iam/v1"
+	gcs "google.golang.org/api/storage/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 )
@@ -61,6 +67,13 @@ var serviceAccountGVR = schema.GroupVersionResource{
 	Resource: "serviceaccounts",
 }
 
+// jobSetGVR defines the GroupVersionResource for JobSet resources.
+var jobSetGVR = schema.GroupVersionResource{
+	Group:    "jobset.x-k8s.io",
+	Version:  "v1alpha2",
+	Resource: "jobsets",
+}
+
 // podGVR defines the GroupVersionResource for core Kubernetes Pod resources.
 var podGVR = schema.GroupVersionResource{
 	Group:    "",
@@ -73,6 +86,42 @@ var daemonsetGVR = schema.GroupVersionResource{
 	Group:    "apps",
 	Version:  "v1",
 	Resource: "daemonsets",
+}
+
+var jobGVR = schema.GroupVersionResource{
+	Group:    "batch",
+	Version:  "v1",
+	Resource: "jobs",
+}
+
+var cronJobGVR = schema.GroupVersionResource{
+	Group:    "batch",
+	Version:  "v1",
+	Resource: "cronjobs",
+}
+
+var deploymentGVR = schema.GroupVersionResource{
+	Group:    "apps",
+	Version:  "v1",
+	Resource: "deployments",
+}
+
+var statefulSetGVR = schema.GroupVersionResource{
+	Group:    "apps",
+	Version:  "v1",
+	Resource: "statefulsets",
+}
+
+var pvcGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "persistentvolumeclaims",
+}
+
+var pvGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "persistentvolumes",
 }
 
 // HTTPClient abstracts HTTP GET calls for testability and thread safety.
@@ -91,6 +140,11 @@ type KubeClient interface {
 	DeleteJobSet(namespace string, name string) error
 	ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error)
 	GetCurrentNamespace(clusterName, location, projectID string) (string, error)
+	// An empty namespace means cluster-scoped.
+	ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error)
+	GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error)
+	// A nil pre deletes unconditionally.
+	DeleteResource(gvr schema.GroupVersionResource, namespace, name string, pre *metav1.Preconditions) error
 }
 
 type MachineTypeClient interface {
@@ -243,16 +297,123 @@ type StorageManager struct {
 	getFilestoreIP  func(ctx context.Context, projectID, location, nameOrIP string, isIP bool) (string, string, int64, error)
 	filestoreClient filestoreClient
 	instancesCache  []*filestorepb.Instance
+	preflightClient storagePreflightClient
+	now             func() time.Time // stamps last-claimed-at; nil means time.Now
+}
+
+type storagePreflightClient interface {
+	projectNumber(ctx context.Context, projectID string) (int64, error)
+	projectIAMBindings(ctx context.Context, projectID string) ([]iamBinding, error)
+	bucketIAMBindings(ctx context.Context, bucket string) ([]iamBinding, error)
+	bucketLocation(ctx context.Context, bucket string) (bucketLocation, error)
+	rolePermissions(ctx context.Context, role string) ([]string, error)
+}
+
+type gcpPreflightClient struct {
+	storage *gcs.Service
+	iam     *iamapi.Service
+	crm     *crm.Service
+}
+
+type iamBinding struct {
+	Role    string
+	Members []string
+}
+
+// DataLocations is set only for custom dual-region buckets.
+type bucketLocation struct {
+	Location      string
+	LocationType  string
+	DataLocations []string
+}
+
+type profileMount struct {
+	Bucket             string
+	Profile            string
+	AnywhereCacheZones []string
+	UsesAnywhereCache  bool
+}
+
+type roleResolver struct {
+	client     storagePreflightClient
+	cache      map[string][]string
+	unreadable map[string]bool
+}
+
+// parsedMount is the normalized form of a single --mount string.
+type parsedMount struct {
+	Src        string
+	Dest       string
+	Options    string
+	Profile    string
+	SubPath    string
+	Attributes map[string]string
+	ReadOnly   bool
+}
+
+// mountSegments holds the optional segments parsed off a --mount string.
+type mountSegments struct {
+	RawProfile string
+	ProfileSet bool
+}
+
+// mountBuildState maps generated PV name -> Pod volume name to de-duplicate gateways within a job.
+type mountBuildState struct {
+	gatewayVolumeNames map[string]string
 }
 
 // MountInfo represents parsed volume mount options
 type MountInfo struct {
-	Name      string
-	Source    string
-	MountPath string
-	Type      string
-	ReadOnly  bool
-	Options   string
+	Name                string
+	Source              string
+	MountPath           string
+	Type                string
+	ReadOnly            bool
+	Options             string
+	SubPath             string
+	NeedsGCSFuseSidecar bool
+	Attributes          map[string]string
+}
+
+type GCSFusePVPVCTemplateParams struct {
+	PVName           string
+	PVCName          string
+	Namespace        string
+	StorageClassName string
+	Capacity         string
+	VolumeHandle     string
+	MountOptions     []string
+	VolumeAttributes map[string]string
+	ManagedByLabel   string
+	ManagedByValue   string
+	StorageTypeLabel string
+	StorageType      string
+
+	LastClaimedAtAnnotation string
+	LastClaimedAt           string
+	LastClaimedByAnnotation string
+	LastClaimedBy           string
+}
+
+type existingGatewayPV struct {
+	Metadata struct {
+		Labels            map[string]string `yaml:"labels"`
+		DeletionTimestamp string            `yaml:"deletionTimestamp"`
+	} `yaml:"metadata"`
+	Spec struct {
+		StorageClassName string   `yaml:"storageClassName"`
+		MountOptions     []string `yaml:"mountOptions"`
+		Capacity         struct {
+			Storage string `yaml:"storage"`
+		} `yaml:"capacity"`
+		CSI *struct {
+			VolumeHandle     string            `yaml:"volumeHandle"`
+			VolumeAttributes map[string]string `yaml:"volumeAttributes"`
+		} `yaml:"csi"`
+	} `yaml:"spec"`
+	Status struct {
+		Phase string `yaml:"phase"`
+	} `yaml:"status"`
 }
 
 type FlavorCapacity struct {

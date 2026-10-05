@@ -29,6 +29,7 @@ cli_deployment_vars:
   machine_type: "{{ machine_type }}"
   tpu_topology: "{{ tpu_topology }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
+  spot: "{{ enable_spot | default(true) }}"
 custom_vars:
   project: "{{ project }}"
   expected_tpu_count: 4

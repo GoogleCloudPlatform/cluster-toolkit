@@ -27,8 +27,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"golang.org/x/sys/unix"
 )
 
 // ProposedChanges provides summary and full description of proposed changes
@@ -144,13 +142,13 @@ func mergeMapsWithoutLoss[K comparable, V any](to map[K]V, from map[K]V) error {
 
 // DirInfo reports if path is a directory and new files can be written in it
 func DirInfo(path string) (isDir bool, isWritable bool) {
-	p, err := os.Lstat(path)
+	p, err := os.Stat(path)
 	if err != nil {
 		return false, false
 	}
 
 	isDir = p.Mode().IsDir()
-	isWritable = unix.Access(path, unix.W_OK|unix.R_OK|unix.X_OK) == nil
+	isWritable = isDir && isDirWritable(path)
 
 	return isDir, isWritable
 }

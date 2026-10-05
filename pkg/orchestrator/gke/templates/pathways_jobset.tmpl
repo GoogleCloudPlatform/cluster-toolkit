@@ -185,26 +185,9 @@ spec:
                 value: {{ printf "%q" .Value }}
               {{- end }}
               command:
-              - "/bin/bash"
-              - "-c"
-              - |
-                echo "GCluster Start: $(date)"
-                _sigterm() {
-                  if [ -n "$PID" ]; then
-                    kill -SIGTERM $PID 2>/dev/null
-                    wait $PID
-                  fi
-                  exit 143
-                }
-                trap _sigterm SIGTERM
-                (
-                  {{.CommandToRun}}
-                ) & PID=$!
-                wait $PID
-                EXIT_CODE=$?
-                echo "GCluster End: $(date)"
-                echo "Exit code: $EXIT_CODE"
-                exit $EXIT_CODE
+              {{- range $.Command }}
+              - {{ printf "%q" . }}
+              {{- end }}
               volumeMounts:
                 - name: shared-tmp
                   mountPath: /tmp
@@ -234,10 +217,6 @@ spec:
         backoffLimitPerIndex: 4000
         podReplacementPolicy: Failed
         maxFailedIndexes: 0
-{{- if .PodFailurePolicy }}
-        podFailurePolicy:
-{{(StructuralData .PodFailurePolicy)}}
-{{- end }}
         template:
           metadata:
             labels:

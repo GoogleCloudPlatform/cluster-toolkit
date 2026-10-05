@@ -128,6 +128,10 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			}
 		}
 
+		if err := validateRestartOnExitCodes(restartOnExitCodes); err != nil {
+			return err
+		}
+
 		priority = strings.ToLower(priority)
 
 		return nil
@@ -144,7 +148,7 @@ func init() {
 	SubmitCmd.Flags().StringVarP(&dryRunManifest, "dry-run-out", "o", "", "Path to output the generated Kubernetes manifest instead of applying it.")
 	SubmitCmd.Flags().StringVarP(&platform, "platform", "f", "linux/amd64", "Target platform for the image build (e.g., 'linux/amd64', 'linux/arm64'). Used with --base-image.")
 
-	SubmitCmd.Flags().StringArrayVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>;<dest>[;<mode>][;options=<options>], mode can be 'ro' or 'rw', default 'ro').")
+	SubmitCmd.Flags().StringArrayVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>], mode can be 'ro' or 'rw', default 'ro'). profile= selects a GKE GCSFuse storage profile (training, checkpointing or serving) for gs:// sources and provisions a shared PV/PVC gateway instead of an inline CSI volume.")
 	SubmitCmd.Flags().StringArrayVar(&envVars, "env", []string{}, "Custom environment variables to pass to the workload container in KEY=VALUE format. Can be specified multiple times.")
 
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
@@ -443,6 +447,15 @@ func ensureDryRunDir(path string) error {
 			return fmt.Errorf("directory %q does not exist. Please check your path for typos or create the directory manually", dir)
 		}
 		return fmt.Errorf("failed to check directory %s: %w", dir, err)
+	}
+	return nil
+}
+
+func validateRestartOnExitCodes(codes []int) error {
+	for _, code := range codes {
+		if code <= 0 || code > 255 {
+			return fmt.Errorf("invalid exit code %d in --restart-on-exit-codes: exit codes must be between 1 and 255", code)
+		}
 	}
 	return nil
 }

@@ -1035,11 +1035,26 @@ func (g *GKEOrchestrator) getNominalQuota(resName string, fc FlavorCapacity, fna
 	return getStaticNominalQuota(resName, fc)
 }
 
+func compareKueueFlavors(a, b string) int {
+	if a == b {
+		return 0
+	}
+	if a == "pathways-flavor" {
+		return -1
+	}
+	if b == "pathways-flavor" {
+		return 1
+	}
+	return strings.Compare(a, b)
+}
+
 func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
 	coveredResourcesMap := g.calculateCoveredResources()
 
 	var mainFlavors []map[string]interface{}
-	fnames := slices.Sorted(maps.Keys(g.capacity.Flavors))
+	// Order pathways-flavor before accelerator flavors so CPU-only Pathways head pods
+	// match pathways-flavor first instead of TPU flavors with unconstrained CPU/Memory quotas.
+	fnames := slices.SortedFunc(maps.Keys(g.capacity.Flavors), compareKueueFlavors)
 
 	for _, fname := range fnames {
 		fc := g.capacity.Flavors[fname]

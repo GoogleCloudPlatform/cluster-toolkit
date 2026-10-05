@@ -112,6 +112,12 @@ steps:
               value: "gs://$$OPTIONS_BUCKET/a4hoptions.txt"
             - name: ENABLE_SPOT_FALLBACK
               value: "true"
+            # Peak startup N2D vCPUs: GKE regional default-pool (3 zones x n2d-standard-4 = 12)
+            # + remote-node (n2d-standard-2 = 2) = 14 vCPUs before default-pool is removed.
+            - name: REQUIRED_CPU_QUOTA
+              value: "14"
+            - name: CPU_QUOTA_METRIC
+              value: "N2D_CPUS"
             - name: GCLUSTER_GCS_PATH
               value: "$$GCLUSTER_GCS_PATH"
             - name: TRIAGE_GCS_BUCKET
@@ -135,7 +141,7 @@ steps:
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gsutil rm "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
