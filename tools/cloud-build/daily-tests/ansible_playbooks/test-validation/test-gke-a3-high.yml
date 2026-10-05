@@ -33,14 +33,14 @@
   ansible.builtin.debug:
     msg: "GKE Cluster Version: {{ gke_version_info.stdout }}"
 
-- name: Verify TCPX and NRI DaemonSets are fully deployed
+- name: Verify TCPXO and NRI DaemonSets are fully deployed
   delegate_to: localhost
   ansible.builtin.shell: |
-    echo "Waiting for nccl-tcpx-installer daemonset..."
-    kubectl rollout status daemonset nccl-tcpx-installer -n kube-system --timeout=1200s
+    echo "Waiting for nccl-tcpxo-installer daemonset..."
+    kubectl rollout status daemonset nccl-tcpxo-installer -n kube-system --timeout=1200s
     echo "Waiting for device-injector daemonset..."
     kubectl rollout status daemonset device-injector -n kube-system --timeout=1200s
-    kubectl get daemonsets -n kube-system nccl-tcpx-installer device-injector
+    kubectl get daemonsets -n kube-system nccl-tcpxo-installer device-injector
   register: daemonset_status
 
 - name: Print DaemonSet status
@@ -62,7 +62,7 @@
 - name: Deploy NCCL test Pods
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl apply -f {{ workspace }}/examples/gke-a3-highgpu/nccl-test.yaml -v=9
+    kubectl apply -f {{ workspace }}/examples/gke-a3-highgpu/nccl-test.yaml
 
 - name: Wait for NCCL test Pods to be ready
   delegate_to: localhost
@@ -72,8 +72,8 @@
 - name: Run allgather benchmark on host 1 and fetch logs
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl exec nccl-test-host-1 -c nccl-test -- /bin/bash -c "cp /configs/allgather.sh /scripts/allgather.sh"
-    kubectl exec nccl-test-host-1 -c nccl-test -- /scripts/allgather.sh nccl-host-1 nccl-host-2 > pod_logs.txt
+    set -e
+    kubectl exec nccl-test-host-1 -c nccl-test -- /scripts/allgather.sh nccl-host-1 nccl-host-2 > pod_logs.txt 2>&1
     cat pod_logs.txt
   register: nccl_test_logs
 
@@ -86,7 +86,7 @@
   ansible.builtin.shell: |
     grep -o '# Avg bus bandwidth    : [0-9\.]*' pod_logs.txt | cut -d ':' -f 2 | awk '{$1=$1;print}'
   register: avg_bus_bandwidth
-  failed_when: avg_bus_bandwidth.stdout | float < 25
+  failed_when: (avg_bus_bandwidth.stdout | default('0', true) | float) < 25
 
 - name: Clean up
   delegate_to: localhost

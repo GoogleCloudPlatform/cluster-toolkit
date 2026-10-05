@@ -26,14 +26,16 @@ vars:
 
   # Maximum throughput of the lustre instance in MBps per TiB
   per_unit_storage_throughput: 500
-  source_image_project_id: ubuntu-os-cloud
-  source_image_family: ubuntu-2204-lts
+  base_image:
+    project: ubuntu-os-accelerator-images
+    image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260522
   local_mount_homefs: /home
   instance_image:
     project: $(vars.project_id)
-    family: $(vars.deployment_name)-tcpx-image
+    family: $(vars.deployment_name)-tcpxo-image
   localssd_mountpoint: /mnt/localssd
   enable_nvidia_dcgm: true
+  enable_nvidia_persistenced: true
   disk_size_gb: 200
   build_slurm_from_git_ref: 6.12.3
   #Provisioning models (set to true or fill in reservation name, pick only one)
@@ -101,170 +103,105 @@ deployment_groups:
       - $(vars.slurm_cluster_name)*
       runners:
       - type: ansible-local
-        destination: install_tcpx_kernel.yml
+        destination: gpudirect_tcpxo.yml
         content: |
           ---
-          - name: Install TCPx-patched kernel
+          - name: Setup GPUDirect-TCPXO dependencies
             hosts: all
             become: true
             tasks:
-            - name: setup apt authentication
-              ansible.builtin.copy:
-                dest: /etc/apt/auth.conf
-                owner: root
-                group: root
-                mode: 0o600
-                content: |
-                  machine https://private-ppa.launchpadcontent.net/canonical-kernel-gcp-tcpx/release/ubuntu
-                  login $(vars.tcpx_kernel_login)
-                  password $(vars.tcpx_kernel_password)
-            - name: Add Ubuntu tcpx apt GPG key
-              ansible.builtin.apt_key:
-                keyserver: keyserver.ubuntu.com
-                id: $(vars.keyserver_ubuntu_key)
-            - name: Setup tcpx kernel apt repository
+            - name: Setup apt-transport-artifact-registry repository
               ansible.builtin.apt_repository:
-                repo: deb https://private-ppa.launchpadcontent.net/canonical-kernel-gcp-tcpx/release/ubuntu {{ ansible_distribution_release }} main
+                repo: deb [trusted=yes] http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main
                 state: present
-            - name: Setup tcpx kernel apt source repository
-              ansible.builtin.apt_repository:
-                repo: deb-src https://private-ppa.launchpadcontent.net/canonical-kernel-gcp-tcpx/release/ubuntu {{ ansible_distribution_release }} main
-                state: present
-            - name: Install dkms package
-              ansible.builtin.package:
-                name: dkms
-                state: present
-            - name: Install tcpx kernel
-              ansible.builtin.package:
-                name: linux-gcp-tcpx
-                state: present
-              notify: Update GRUB
-            - name: Find the tcpx kernel menu entry string
-              ansible.builtin.shell:
-                cmd: "grep '^menuentry.*gcp-tcpx' /boot/grub/grub.cfg | head -n 1 | cut -d\\' -f2"
-              register: tcpx_menu_entry
-              changed_when: false
-            - name: Set GRUB default to the tcpx kernel by name
-              ansible.builtin.lineinfile:
-                path: /etc/default/grub
-                regexp: '^GRUB_DEFAULT='
-                line: 'GRUB_DEFAULT="{{ tcpx_menu_entry.stdout }}"'
-              notify: Update GRUB
-            - name: Freeze tpcx kernel
-              ansible.builtin.dpkg_selections:
-                name: "{{ item }}"
-                selection: hold
-              loop:
-              - linux-image-gcp-tcpx
-              - linux-headers-gcp-tcpx
-            handlers:
-              - name: Update GRUB
-                ansible.builtin.command: update-grub
-
-      - type: ansible-local
-        destination: install_gcc_12.yml
-        content: |
-          ---
-          - name: Install GCC + GCC++ v12
-            hosts: all
-            become: true
-            tasks:
-            - name: Install GCC and G++ version 12
+                filename: artifact-registry
+            - name: Install driver dependencies
               ansible.builtin.apt:
                 name:
-                - gcc-12
-                - g++-12
+                - dkms
+                - apt-transport-artifact-registry
+                - linux-headers-{{ ansible_kernel }}
+            - name: Setup gpudirect-tcpxo apt repository
+              ansible.builtin.apt_repository:
+                repo: deb [arch=all trusted=yes ] ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-tcpxo-apt main
                 state: present
-                update_cache: yes
-
-            - name: Set GCC and G++ version 12 as default
-              community.general.alternatives:
-                name: gcc
-                path: /usr/bin/gcc-12
-                link: /usr/bin/gcc
-                priority: 120
-                slaves:
-                  - name: g++
-                    link: /usr/bin/g++
-                    path: /usr/bin/g++-12
-                  - name: gcov
-                    link: /usr/bin/gcov
-                    path: /usr/bin/gcov-12
-
+            - name: Check if dmabuf-import-helper DKMS module is already installed
+              ansible.builtin.command:
+                cmd: dkms status -m dmabuf-import-helper -v 1.1
+              register: dkms_status
+              failed_when: false
+              changed_when: false
+            - name: Install and patch dmabuf-import-helper
+              block:
+                - name: Create temp directory for dmabuf package
+                  ansible.builtin.tempfile:
+                    state: directory
+                    suffix: dmabuf
+                  register: tempdir
+                - name: Download dmabuf-import-helper package
+                  ansible.builtin.command:
+                    cmd: apt-get download dmabuf-import-helper=1.1
+                    chdir: "{{ tempdir.path }}"
+                  register: download_res
+                  changed_when: download_res.rc == 0
+                - name: Extract dmabuf-import-helper deb package
+                  ansible.builtin.shell:
+                    cmd: dpkg-deb -x *.deb .
+                    chdir: "{{ tempdir.path }}"
+                  register: extract_res
+                  changed_when: extract_res.rc == 0
+                - name: Clean existing dmabuf source in /usr/src
+                  ansible.builtin.file:
+                    path: /usr/src/dmabuf-import-helper-1.1
+                    state: absent
+                - name: Move dmabuf-import-helper source to /usr/src
+                  ansible.builtin.command:
+                    cmd: mv "{{ tempdir.path }}/usr/src/dmabuf-import-helper-1.1" /usr/src/
+                  register: move_res
+                  changed_when: move_res.rc == 0
+                - name: Patch import-helper.c for kernel 6.17 compatibility
+                  ansible.builtin.replace:
+                    path: /usr/src/dmabuf-import-helper-1.1/import-helper.c
+                    regexp: 'MODULE_IMPORT_NS\(DMA_BUF\)'
+                    replace: 'MODULE_IMPORT_NS("DMA_BUF")'
+                - name: Add dmabuf-import-helper to DKMS
+                  ansible.builtin.command:
+                    cmd: dkms add -m dmabuf-import-helper -v 1.1
+                  when: "'added' not in dkms_status.stdout"
+                - name: Build dmabuf-import-helper via DKMS
+                  ansible.builtin.command:
+                    cmd: dkms build -m dmabuf-import-helper -v 1.1
+                - name: Install dmabuf-import-helper via DKMS
+                  ansible.builtin.command:
+                    cmd: dkms install -m dmabuf-import-helper -v 1.1
+                - name: Clean up temp directory
+                  ansible.builtin.file:
+                    path: "{{ tempdir.path }}"
+                    state: absent
+              when: "'installed' not in dkms_status.stdout"
       - type: ansible-local
-        destination: configure_gpu_packages.yml
+        destination: aperture_devices.yml
         content: |
           ---
-          - name: Install NVIDIA Packages and Configure Ops Agent
+          - name: Setup GPUDirect-TCPXO aperture devices
             hosts: all
             become: true
-            vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
-              package_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
-              package_filename: /tmp/{{ package_url | basename }}
-              nvidia_packages:
-              - cuda-toolkit-12-8
-              - nvidia-dkms-580-server-open
-              - nvidia-driver-580-server-open
-              - datacenter-gpu-manager-4-core=1:4.6.1-1
-              - datacenter-gpu-manager-4-dev=1:4.6.1-1
-              - datacenter-gpu-manager-4-cuda13=1:4.6.1-1
-              - libnvidia-nscq-580
-              - nvidia-container-toolkit
             tasks:
-            - name: Download NVIDIA repository package
-              ansible.builtin.get_url:
-                url: "{{ package_url }}"
-                dest: "{{ package_filename }}"
-            - name: Install NVIDIA repository package
-              ansible.builtin.apt:
-                deb: "{{ package_filename }}"
-                state: present
-            - name: Install NVIDIA Packages
-              ansible.builtin.apt:
-                name: "{{ nvidia_packages }}"
-                update_cache: yes
-                allow_downgrade: yes
-
-            - name: Freeze NVIDIA drivers and CUDA
-              ansible.builtin.dpkg_selections:
-                name: "{{ item.split('=')[0] }}"
-                selection: hold
-              loop: "{{ nvidia_packages }}"
-            - name: Create nvidia-persistenced override directory
-              ansible.builtin.file:
-                path: /etc/systemd/system/nvidia-persistenced.service.d
-                state: directory
-                owner: root
-                group: root
-                mode: 0o755
-            - name: Configure nvidia-persistenced override
+            - name: Mount aperture devices to /dev and make writable
               ansible.builtin.copy:
-                dest: /etc/systemd/system/nvidia-persistenced.service.d/persistence_mode.conf
+                dest: /etc/udev/rules.d/00-a3-megagpu.rules
                 owner: root
                 group: root
                 mode: 0o644
                 content: |
-                  [Service]
-                  ExecStart=
-                  ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --verbose
-              notify: Reload SystemD
+                  ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x1ae0", ATTR{device}=="0x0084", TAG+="systemd", \
+                      RUN+="/usr/bin/mkdir --mode=0755 -p /dev/aperture_devices", \
+                      RUN+="/usr/bin/systemd-mount --type=none --options=bind --collect %S/%p /dev/aperture_devices/%k", \
+                      RUN+="/usr/bin/bash -c '/usr/bin/chmod 0666 /dev/aperture_devices/%k/resource*'"
+              notify: Update initramfs
             handlers:
-            - name: Reload SystemD
-              ansible.builtin.systemd:
-                daemon_reload: true
-            post_tasks:
-            - name: Disable NVIDIA DCGM by default (enable during boot on GPU nodes)
-              ansible.builtin.service:
-                name: nvidia-dcgm.service
-                state: stopped
-                enabled: false
-            - name: Force DKMS to run on kernel that isn't running
-              ansible.builtin.shell: |
-                # Install dkms module for tcpx kernel
-                ls /usr/src/linux-headers-*tcpx* -d | sed -e 's/.*linux-headers-//' | \
-                sort -V | tac | xargs -n1 /usr/lib/dkms/dkms_autoinstaller start
-              changed_when: false
+            - name: Update initramfs
+              ansible.builtin.command: /usr/sbin/update-initramfs -u -k all
 
       - type: data
         destination: /etc/systemd/system/delay-a3.service
@@ -277,7 +214,7 @@ deployment_groups:
 
           [Service]
           ExecCondition=/bin/bash -c '/usr/bin/curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/machine-type | grep -q "/a3-highgpu-8g$"'
-          ExecStart=/usr/lib/systemd/systemd-networkd-wait-online -i enp6s0 -i enp12s0 -i enp134s0 -i enp140s0 -o routable --timeout=120
+          ExecStart=/usr/lib/systemd/systemd-networkd-wait-online -i enp6s0f0 -i enp12s0f0 -i enp134s0f0 -i enp140s0f0 -o routable --timeout=120
           ExecStartPost=/bin/sleep 10
 
           [Install]
@@ -288,8 +225,8 @@ deployment_groups:
         content: |
           #!/bin/bash
           set -e -o pipefail
-          # workaround b/309016676 (systemd-resolved restarts 4 times causing DNS
-          # resolution failures during google-startup-scripts.service)
+          # workaround b/309016676 systemd-resolved restarts 4 times causing DNS
+          # resolution failures during google-startup-scripts.service
           systemctl daemon-reload
           systemctl enable delay-a3.service
 
@@ -313,11 +250,12 @@ deployment_groups:
             "install_cuda": false,
             "install_gcsfuse": true,
             "install_lustre": false,
+            "install_managed_lustre": true,
             "install_ompi": true,
             "monitoring_agent": "cloud-ops",
             "nvidia_version": "latest",
-            "allow_kernel_upgrades": true, # tcpx kernel is held and gcp kernel is removed as the last task
-            "install_nvidia_repo": false
+            "allow_kernel_upgrades": true,
+            "install_nvidia_repo": true
           }
 
       - type: shell
@@ -332,29 +270,89 @@ deployment_groups:
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
 
+      - type: ansible-local
+        destination: install_cuda_and_dcgm.yml
+        content: |
+          ---
+          - name: Install and Configure CUDA 13 / DCGM
+            hosts: all
+            become: true
+            vars:
+              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
+              cuda_repo_url: "https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb"
+              nvidia_packages:
+                - cuda-toolkit-13-0
+                - nvidia-container-toolkit
+                - datacenter-gpu-manager-4-cuda13=1:4.6.0-1
+                - datacenter-gpu-manager-4-dev=1:4.6.0-1
+                - datacenter-gpu-manager-4-core=1:4.6.0-1
+
+            tasks:
+              - name: Install NVIDIA repository keyring
+                ansible.builtin.apt:
+                  deb: "{{ cuda_repo_url }}"
+                  state: present
+
+              - name: Update apt cache
+                ansible.builtin.apt:
+                  update_cache: yes
+
+              - name: Install NVIDIA packages
+                ansible.builtin.apt:
+                  name: "{{ nvidia_packages }}"
+                  state: present
+                  allow_downgrade: yes
+
+              - name: Hold DCGM packages
+                ansible.builtin.command:
+                  argv:
+                    - apt-mark
+                    - hold
+                    - "{{ item }}"
+                loop:
+                  - datacenter-gpu-manager-4-cuda13
+                  - datacenter-gpu-manager-4-dev
+                  - datacenter-gpu-manager-4-core
+
+              - name: Create nvidia-persistenced override directory
+                ansible.builtin.file:
+                  path: /etc/systemd/system/nvidia-persistenced.service.d
+                  state: directory
+                  owner: root
+                  group: root
+                  mode: 0o755
+
+              - name: Configure nvidia-persistenced override
+                ansible.builtin.copy:
+                  dest: /etc/systemd/system/nvidia-persistenced.service.d/persistence_mode.conf
+                  owner: root
+                  group: root
+                  mode: 0o644
+                  content: |
+                    [Service]
+                    ExecStart=
+                    ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --verbose
+                notify: Reload SystemD
+
+              - name: Disable nvidia-persistenced SystemD unit (enable during boot on GPU nodes)
+                ansible.builtin.service:
+                  name: nvidia-persistenced.service
+                  state: stopped
+                  enabled: false
+
+            handlers:
+              - name: Reload SystemD
+                ansible.builtin.systemd:
+                  daemon_reload: true
       - type: shell
-        destination: install_tcpx_lustre.sh
+        destination: fix_enroot_env.sh
         content: |
           #!/bin/bash
-          set -e -o pipefail
-          export DEBIAN_FRONTEND=noninteractive
-          curl -fsSL https://us-apt.pkg.dev/doc/repo-signing-key.gpg | gpg --yes --dearmor -o /usr/share/keyrings/lustre-client.gpg
-          echo "deb [signed-by=/usr/share/keyrings/lustre-client.gpg] https://us-apt.pkg.dev/projects/lustre-client-binaries lustre-client-ubuntu-jammy main" > /etc/apt/sources.list.d/artifact-registry.list
-          apt-get update
-          TCPX_KERNEL_VERSION=`(ls -d /lib/modules/*tcpx* 2>/dev/null || true) | sort -V | tail -n 1 | xargs -r basename`
-          if [ -n "${TCPX_KERNEL_VERSION}" ]; then
-            echo "Installing Lustre client modules for kernel ${TCPX_KERNEL_VERSION}..."
-            if ! apt-get install -y lustre-client-modules-${TCPX_KERNEL_VERSION}; then
-              echo "Pre-compiled package lustre-client-modules-${TCPX_KERNEL_VERSION} not found. Installing via DKMS for ${TCPX_KERNEL_VERSION}..."
-              apt-get install -y dkms linux-headers-${TCPX_KERNEL_VERSION} lustre-client-modules-dkms lustre-client-utils
-              echo "Building DKMS modules specifically for ${TCPX_KERNEL_VERSION}..."
-              dkms autoinstall -k "${TCPX_KERNEL_VERSION}"
-            fi
-          else
-            echo "ERROR: No tcpx kernel modules directory found under /lib/modules/." >&2
-            exit 1
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            echo "kernel.apparmor_restrict_unprivileged_userns = 0" > /etc/sysctl.d/90-enroot-namespaces.conf
           fi
-
+          if [ ! -f /etc/hostname ]; then hostname > /etc/hostname; fi
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf
         content: |
@@ -373,9 +371,30 @@ deployment_groups:
           ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
           ENROOT_TEMP_PATH       /mnt/localssd/${UID}/enroot
       # Add gpu_rxq configs
-      - type: data
-        destination: /opt/tcpdirect_benchmark/gpu_rxq_configuration.textproto
+      - type: shell
+        destination: generate_gpu_rxq_config.sh
         content: |
+          #!/bin/bash
+          get_ifname() {
+            local bdf=$1
+            if [ -d "/sys/bus/pci/devices/$bdf/net" ]; then
+              ls "/sys/bus/pci/devices/$bdf/net" | head -n 1
+            else
+              case "$bdf" in
+                "0000:06:00.0") echo "enp6s0f0" ;;
+                "0000:0c:00.0") echo "enp12s0f0" ;;
+                "0000:86:00.0") echo "enp134s0f0" ;;
+                "0000:8c:00.0") echo "enp140s0f0" ;;
+                *) echo "unknown" ;;
+              esac
+            fi
+          }
+          ifname_06=`get_ifname "0000:06:00.0"`
+          ifname_0c=`get_ifname "0000:0c:00.0"`
+          ifname_86=`get_ifname "0000:86:00.0"`
+          ifname_8c=`get_ifname "0000:8c:00.0"`
+          mkdir -p /opt/tcpdirect_benchmark
+          cat << EOF > /opt/tcpdirect_benchmark/gpu_rxq_configuration.textproto
           gpu_rxq_configs {
             gpu_infos {
               gpu_pci_addr: "0000:04:00.0"
@@ -392,7 +411,7 @@ deployment_groups:
               queue_ids: 15
             }
             nic_pci_addr: "0000:06:00.0"
-            ifname: "enp6s0"
+            ifname: "$ifname_06"
           }
           gpu_rxq_configs {
             gpu_infos {
@@ -410,7 +429,7 @@ deployment_groups:
               queue_ids: 15
             }
             nic_pci_addr: "0000:0c:00.0"
-            ifname: "enp12s0"
+            ifname: "$ifname_0c"
           }
           gpu_rxq_configs {
             gpu_infos {
@@ -428,7 +447,7 @@ deployment_groups:
               queue_ids: 15
             }
             nic_pci_addr: "0000:86:00.0"
-            ifname: "enp134s0"
+            ifname: "$ifname_86"
           }
           gpu_rxq_configs {
             gpu_infos {
@@ -446,36 +465,21 @@ deployment_groups:
               queue_ids: 15
             }
             nic_pci_addr: "0000:8c:00.0"
-            ifname: "enp140s0"
+            ifname: "$ifname_8c"
           }
           rss_set_size: 8
           tcpd_queue_size: 8
           max_rx_rules: 100000
-      - type: ansible-local
-        destination: cleanup_kernels.yml
+          EOF
+      - type: shell
+        destination: fix_hostname.sh
         content: |
-          ---
-          - name: Cleanup linux-gcp kernel
-            hosts: all
-            become: true
-            tasks:
-            - name: Find all standard GCP kernel packages
-              ansible.builtin.shell:
-                cmd: |
-                  dpkg -l | grep -E 'linux-(image|headers)-[0-9].*-gcp' | grep -v tcpx | awk '{print $2}'
-              register: gcp_kernel_packages
-              changed_when: false
-              check_mode: no # Always run this check, even in check mode
-            - name: Remove all standard GCP kernel packages
-              ansible.builtin.package:
-                name: "{{ ['linux-gcp', 'linux-image-gcp', 'linux-headers-gcp'] + gcp_kernel_packages.stdout_lines }}"
-                state: absent
-                autoremove: yes
-              when: gcp_kernel_packages.stdout_lines | length > 0
-              notify: Update GRUB
-            handlers:
-              - name: Update GRUB
-                ansible.builtin.command: update-grub
+          #!/bin/bash
+          ## Manually signal Packer that the startup script is done because Packer's wrapper script
+          ## fails when it tries to use the FQDN to add the metadata.
+          SHORT_NAME=`curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/name"`
+          ZONE=`curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/zone" | awk -F/ '{print $4}'`
+          gcloud compute instances add-metadata $SHORT_NAME --metadata startup-script-status=done --zone $ZONE
 
 - group: image
   modules:
@@ -489,8 +493,8 @@ deployment_groups:
       # building this image does not require a GPU-enabled VM but must *not* be
       # run on a N-series VM otherwise, the "open" drivers will not install
       machine_type: c2d-standard-32
-      source_image_project_id: [$(vars.source_image_project_id)]
-      source_image_family: $(vars.source_image_family)
+      source_image_project_id: [$(vars.base_image.project)]
+      source_image: $(vars.base_image.image)
       image_family: $(vars.instance_image.family)
       disk_size: $(vars.disk_size_gb)
       omit_external_ip: false
@@ -526,7 +530,7 @@ deployment_groups:
       - storage.objectAdmin
 
   - id: a3_startup
-    source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/scripts/startup-script?ref=v1.51.1&depth=1
+    source: modules/scripts/startup-script
     settings:
       # When shutting down a VM with local SSD disks, we strongly recommend the
       # automatic migration of data following these instructions:
@@ -546,8 +550,23 @@ deployment_groups:
             "data-root": "$(vars.localssd_mountpoint)/docker"
           }
       runners:
+      - type: shell
+        destination: fix_enroot_env.sh
+        content: |
+          #!/bin/bash
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            echo "kernel.apparmor_restrict_unprivileged_userns = 0" > /etc/sysctl.d/90-enroot-namespaces.conf
+          fi
+          if [ ! -f /etc/hostname ]; then hostname > /etc/hostname; fi
+      - type: data
+        destination: /etc/apt/preferences.d/block-broken-nvidia-container
+        content: |
+          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
+          Pin: version 1.17.7-1
+          Pin-Priority: 100
       - type: ansible-local
-        destination: enable_nvidia_dcgm.yml
+        destination: enable_dcgm.yml
         content: |
           ---
           - name: Enable NVIDIA DCGM on GPU nodes
@@ -556,6 +575,7 @@ deployment_groups:
             vars:
               enable_ops_agent: true
               enable_nvidia_dcgm: $(vars.enable_nvidia_dcgm)
+              enable_nvidia_persistenced: $(vars.enable_nvidia_persistenced)
             tasks:
             - name: Update Ops Agent configuration
               ansible.builtin.blockinfile:
@@ -576,13 +596,13 @@ deployment_groups:
             handlers:
             - name: Restart Google Cloud Ops Agent
               ansible.builtin.service:
-                name: google-cloud-ops-agent
+                name: google-cloud-ops-agent.service
                 state: "{{ 'restarted' if enable_ops_agent else 'stopped' }}"
                 enabled: "{{ enable_ops_agent }}"
             post_tasks:
             - name: Enable Google Cloud Ops Agent
               ansible.builtin.service:
-                name: google-cloud-ops-agent
+                name: google-cloud-ops-agent.service
                 state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
                 enabled: "{{ enable_ops_agent }}"
             - name: Enable NVIDIA DCGM
@@ -590,6 +610,52 @@ deployment_groups:
                 name: nvidia-dcgm.service
                 state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
                 enabled: "{{ enable_nvidia_dcgm }}"
+            - name: Enable NVIDIA Persistence Daemon
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
+                state: "{{ 'started' if enable_nvidia_persistenced else 'stopped' }}"
+                enabled: "{{ enable_nvidia_persistenced }}"
+
+      - type: ansible-local
+        destination: slurm_aperture.yml
+        content: |
+          ---
+          - name: Setup GPUDirect-TCPXO aperture devices
+            hosts: all
+            become: true
+            tasks:
+            - name: Add a drop-in override for slurmd to wait for aperture devices
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/slurmd.service.d/10-aperture.conf
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  [Unit]
+                  ConditionPathExists=/dev/aperture_devices
+              notify: Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
+          - name: Setup RXDM
+            hosts: all
+            become: true
+            tasks:
+            - name: Override slurmd so it has RXDM capabilities
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/slurmd.service.d/override.conf
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  [Service]
+                  AmbientCapabilities=CAP_SYS_ADMIN CAP_SYS_PTRACE CAP_SYS_NICE CAP_IPC_LOCK
+              notify: Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
 
   - id: a3_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
@@ -622,19 +688,21 @@ deployment_groups:
     - a3_nodeset
     settings:
       partition_name: $(vars.a3_partition_name)
+      resume_timeout: 3600
       exclusive: false
       is_default: true
       partition_conf:
         OverSubscribe: EXCLUSIVE
 
   - id: controller_startup
-    source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/scripts/startup-script?ref=v1.51.1&depth=1
+    source: modules/scripts/startup-script
     settings:
       runners:
       - type: shell
         destination: stage_scripts.sh
         content: |
           #!/bin/bash
+          set -e -o pipefail
           SLURM_ROOT=/opt/apps/adm/slurm
           mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
           mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
@@ -644,16 +712,21 @@ deployment_groups:
           # enable the use of password-free sudo within Slurm jobs on all compute nodes
           # feature is restricted to users with OS Admin Login IAM role
           # https://cloud.google.com/iam/docs/understanding-roles#compute.osAdminLogin
-          curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
+          curl -s -f -L -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
               https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
           chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
           ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
           ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
-          curl -s -o "${SLURM_ROOT}/scripts/receive-data-path-manager" \
-              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/receive-data-path-manager
+          curl -s -f -L -o "${SLURM_ROOT}/scripts/receive-data-path-manager" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/receive-data-path-manager-mega
           chmod 0755 "${SLURM_ROOT}/scripts/receive-data-path-manager"
+          sed -i -e 's/a3-megagpu-8g/a3-highgpu-8g/g' "${SLURM_ROOT}/scripts/receive-data-path-manager"
+          sed -i -e 's/ --num_nics=8 --uid= --alsologtostderr//g' "${SLURM_ROOT}/scripts/receive-data-path-manager"
+
+          # Link the downloaded path manager into slurm (applies to both TCPX and TCPXO)
           ln -s "${SLURM_ROOT}/scripts/receive-data-path-manager" "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-prolog_slurmd.d/start-rxdm.prolog_slurmd"
           ln -s "${SLURM_ROOT}/scripts/receive-data-path-manager" "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-epilog_slurmd.d/stop-rxdm.epilog_slurmd"
+
           # enable a GPU health check that runs at the completion of all jobs on A3high nodes
           ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-epilog_slurmd.d/gpu-test.epilog_slurmd"
       - type: shell
@@ -683,12 +756,13 @@ deployment_groups:
     settings:
       cloud_parameters:
         resume_rate: 0
-        resume_timeout: 900
+        resume_timeout: 3600
         suspend_rate: 0
         suspend_timeout: 600
         no_comma_params: false
         tree_width: $(vars.a3_static_cluster_size)
       machine_type: c2-standard-8
+      compute_startup_scripts_timeout: 10000
       disk_type: pd-balanced
       slurm_conf_tpl: ../_modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl
       enable_controller_public_ips: true
