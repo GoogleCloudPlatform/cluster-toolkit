@@ -35,13 +35,16 @@ if [[ $(type -P yum) ]]; then
 	while [[ $(systemctl is-active dnf-automatic.service 2>/dev/null) =~ ^(activating|active|deactivating)$ ]]; do
 		sleep 5
 	done
-	# A single unreachable repo preconfigured in the image (e.g. a CUDA repo) would
-	# otherwise fail every dnf transaction, even for unrelated packages. Let dnf skip
-	# any repo whose metadata cannot be fetched instead of aborting the whole node.
-	for repo_file in /etc/yum.repos.d/*.repo; do
-		grep -q '^skip_if_unavailable=1$' "${repo_file}" 2>/dev/null ||
-			sed -i '/^\[.*\]$/a skip_if_unavailable=1' "${repo_file}" 2>/dev/null || true
-	done
+	# Skip unreachable repos (e.g. an image's CUDA repo) instead of failing every
+	# dnf transaction: set it in [main] (Rocky ships False) and in each repo.
+	dnf_conf=/etc/dnf/dnf.conf
+	[[ -f ${dnf_conf} ]] || dnf_conf=/etc/yum.conf
+	if grep -q '^[[:space:]]*skip_if_unavailable[[:space:]]*=' "${dnf_conf}"; then
+		sed -i --follow-symlinks 's/^[[:space:]]*skip_if_unavailable[[:space:]]*=.*/skip_if_unavailable=True/' "${dnf_conf}"
+	else
+		sed -i --follow-symlinks '/^\[main\]/a skip_if_unavailable=True' "${dnf_conf}"
+	fi
+	sed -i 's/^[[:space:]]*skip_if_unavailable[[:space:]]*=.*/skip_if_unavailable=True/' /etc/yum.repos.d/*.repo 2>/dev/null || true
 	yum install -y ansible
 else
 	apt install -y ansible
