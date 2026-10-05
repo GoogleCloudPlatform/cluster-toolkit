@@ -492,6 +492,23 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                 form.add_error(None, f"Error in {formset_name} section")
                 return self.form_invalid(form)
 
+        # Check partition RAM before anything below is deleted; an unknown
+        # machine type is left to the partition checks in the transaction.
+        for part_form in partitions.forms:
+            part_data = part_form.cleaned_data
+            if not part_data or part_data.get("DELETE"):
+                continue
+            machine_type = part_data.get("machine_type")
+            node_memory = machine_info.get(machine_type, {}).get("memory")
+            if node_memory is not None and node_memory < min_ram_mb:
+                form.add_error(
+                    None,
+                    f"Partition {part_data.get('name')}: {machine_type} has "
+                    f"{node_memory} MB RAM; at least {min_ram_mb} MB is "
+                    "required for compute node setup.",
+                )
+                return self.form_invalid(form)
+
         # Spack must live on a shared filesystem so compute nodes can see it.
         # If no mount point covers the configured spack directory, the cluster
         # would deploy "ready" but every Spack operation would fail on the
@@ -611,16 +628,6 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                         part.vCPU_per_node = machine_info[part.machine_type]["vCPU"] // (1 if part.enable_hyperthreads else 2)
                         cpu_count = machine_info[part.machine_type]["vCPU"]
                         # logger.info(f"{part.machine_type} CPU Count: {cpu_count}")
-
-                        # Compute nodes run the same heavy bootstrap as the
-                        # controller; too little RAM OOMs setup so the node never
-                        # registers. Require at least 4 GB.
-                        if machine_info[part.machine_type]["memory"] < min_ram_mb:
-                            raise ValidationError(
-                                f"Machine type {part.machine_type} has "
-                                f"{machine_info[part.machine_type]['memory']} MB RAM; "
-                                f"at least {min_ram_mb} MB is required for compute node setup."
-                            )
 
                         # Tier1 networking validation
                         if part.enable_tier1_networking == True:
