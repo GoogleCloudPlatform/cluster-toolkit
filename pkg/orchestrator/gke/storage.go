@@ -21,12 +21,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"path"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"hpc-toolkit/pkg/logging"
@@ -34,9 +37,15 @@ import (
 
 	filestore "cloud.google.com/go/filestore/apiv1"
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
+	crm "google.golang.org/api/cloudresourcemanager/v1"
+	iamapi "google.golang.org/api/iam/v1"
 	"google.golang.org/api/iterator"
+	gcs "google.golang.org/api/storage/v1"
 
 	"gopkg.in/yaml.v2"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8syaml "sigs.k8s.io/yaml"
 )
 
 const (
@@ -47,6 +56,7 @@ const (
 	maxGeneratedPVCNameLength = 189
 
 	gcsFuseGatewayPrefix   = "gcluster-gcsfuse"
+	filestoreGatewayPrefix = "gcluster-filestore"
 	gcsFuseGatewayCapacity = "5Gi" // Ignored by GCSFuse CSI driver, required by Kubernetes.
 
 	gatewayNameDigestLength = 10
@@ -57,6 +67,35 @@ const (
 	storageTypeLabel     = "gcluster.google.com/storage-type"
 	storageTypeGCSFuse   = "gcsfuse"
 	storageTypeFilestore = "filestore"
+
+	// Submit stamps these on gateway PVCs so cleanup can tell a gateway was just reused.
+	lastClaimedAtAnnotation = "gcluster.google.com/last-claimed-at"
+	lastClaimedByAnnotation = "gcluster.google.com/last-claimed-by"
+	// gatewayReleaseTimeout bounds how long submit waits for a gateway that is still being deleted.
+	gatewayReleaseTimeout = 2 * time.Minute
+
+	servingProfileStorageClass = "gcsfusecsi-serving"
+
+	// minGCSFuseProfileGKEVersion is the first GKE version with storage profile StorageClasses.
+	minGCSFuseProfileGKEVersion = "1.35.1-gke.1616000"
+	gcsFuseProfileSelector      = "gke-gcsfuse/profile=true"
+
+	gcsFuseProfileDocsURL = "https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles"
+	gcsFuseProfileIAMURL  = gcsFuseProfileDocsURL + "#configure_permissions"
+	anywhereCacheDocsURL  = "https://cloud.google.com/storage/docs/anywhere-cache"
+
+	gkeServiceAgentTemplate = "service-%d@container-engine-robot.iam.gserviceaccount.com"
+
+	anywhereCacheAttributePrefix = "anywhereCache"
+	anywhereCacheZonesAttribute  = "anywhereCacheZones"
+	// "*" lets GKE pick cache zones; "none" disables Rapid Cache.
+	anywhereCacheAllZonesValue = "*"
+	anywhereCacheOffValue      = "none"
+
+	bucketRegionLocationType = "region"
+
+	// storageAPITimeout bounds the pre-flight Cloud API calls.
+	storageAPITimeout = 30 * time.Second
 )
 
 func newMountBuildState() *mountBuildState {
@@ -296,7 +335,7 @@ func warnProfileOnlyAttributes(attrs map[string]string, src string) {
 // Matching is case sensitive, as the GCSFuse CSI driver treats attribute keys.
 var reservedVolumeAttributes = map[string]string{
 	"mountOptions": "use options=<opt1>,<opt2> instead, which gcluster renders into the correct field for both inline and storage-profile mounts",
-	"bucketName":   "the bucket is taken from the mount source, src=gs://<bucket>",
+	"bucketName":   "the bucket is taken from the mount source (the first --mount field, gs://<bucket>)",
 }
 
 // volumeAttributeSeparator splits on ',' only when followed by `<key>=`, allowing comma-separated attribute values.
@@ -591,6 +630,11 @@ func (sm *StorageManager) generateFilestoreResources(pm parsedMount, idx int, jo
 		"ManagedByValue":   managedByValue,
 		"StorageTypeLabel": storageTypeLabel,
 		"StorageType":      storageTypeFilestore,
+
+		"LastClaimedAtAnnotation": lastClaimedAtAnnotation,
+		"LastClaimedAt":           sm.claimedAt(),
+		"LastClaimedByAnnotation": lastClaimedByAnnotation,
+		"LastClaimedBy":           job.WorkloadName,
 	})
 	if err != nil {
 		return MountInfo{}, "", fmt.Errorf("failed to execute filestore template: %w", err)
@@ -703,6 +747,11 @@ func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx in
 		ManagedByValue:   managedByValue,
 		StorageTypeLabel: storageTypeLabel,
 		StorageType:      storageTypeGCSFuse,
+
+		LastClaimedAtAnnotation: lastClaimedAtAnnotation,
+		LastClaimedAt:           sm.claimedAt(),
+		LastClaimedByAnnotation: lastClaimedByAnnotation,
+		LastClaimedBy:           job.WorkloadName,
 	}
 
 	// Render once without names to derive the spec hash the names are built from.
@@ -771,11 +820,7 @@ func (sm *StorageManager) checkExistingGatewayPV(pvName, pvcName, ns, renderedYA
 	}
 
 	if existing.Metadata.DeletionTimestamp != "" {
-		return fmt.Errorf(
-			"gateway PV %q is being deleted and is waiting for PVC %s/%s to be released. "+
-				"Cancel the jobs that mount it (`kubectl describe pvc %s -n %s` lists them under Used By), "+
-				"then run `kubectl delete pvc %s -n %s` and resubmit",
-			pvName, ns, pvcName, pvcName, ns, pvcName, ns)
+		return sm.waitForGatewayRelease(pvName, pvcName, ns)
 	}
 
 	if existing.Status.Phase == "Released" || existing.Status.Phase == "Failed" {
@@ -810,6 +855,32 @@ func (sm *StorageManager) recreateStaleGatewayPV(pvName string, existing existin
 		return fmt.Errorf("failed to delete stale gateway PV %q: %s", pvName, strings.TrimSpace(res.Stderr))
 	}
 	return nil
+}
+
+func (sm *StorageManager) claimedAt() string {
+	now := time.Now
+	if sm.now != nil {
+		now = sm.now
+	}
+	return now().UTC().Format(time.RFC3339Nano)
+}
+
+// waitForGatewayRelease waits out a gateway deleted by a recent cleanup, so an immediate resubmit recreates it.
+func (sm *StorageManager) waitForGatewayRelease(pvName, pvcName, ns string) error {
+	logging.Info("Waiting up to %s for storage gateway PV %q from a previous job to finish deleting...", gatewayReleaseTimeout, pvName)
+	res := sm.orchestrator.executor.ExecuteCommand("kubectl", "wait", "--for=delete", "pv/"+pvName,
+		"--timeout="+gatewayReleaseTimeout.String())
+	if res.ExitCode == 0 {
+		return nil
+	}
+	if gone := sm.orchestrator.executor.ExecuteCommand("kubectl", "get", "pv", pvName, "--ignore-not-found", "-o", "name"); gone.ExitCode == 0 && strings.TrimSpace(gone.Stdout) == "" {
+		return nil
+	}
+	return fmt.Errorf(
+		"gateway PV %q is being deleted and is waiting for PVC %s/%s to be released. "+
+			"Cancel the jobs that mount it (`kubectl describe pvc %s -n %s` lists them under Used By), "+
+			"then run `kubectl delete pvc %s -n %s` and resubmit",
+		pvName, ns, pvcName, pvcName, ns, pvcName, ns)
 }
 
 func unmanagedGatewayWarning(pvName, manifest string) string {
@@ -938,7 +1009,7 @@ func buildVolumeSpec(v MountInfo) map[string]interface{} {
 }
 
 func (sm *StorageManager) resolveFilestoreIP(projectID, location, nameOrIP string, isIP bool) (string, string, int64, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), storageAPITimeout)
 	defer cancel()
 
 	if sm.getFilestoreIP != nil {
@@ -1118,4 +1189,590 @@ func extractInstanceInfo(matches []*filestorepb.Instance, nameOrIP string, isIP 
 		return "", "", 0, err
 	}
 	return ip, resolvedName, capacity, nil
+}
+
+var gcsFuseProfileBasePermissions = []string{
+	"storage.buckets.get",
+	"storage.objects.list",
+}
+
+var gcsFuseAnywhereCachePermissions = []string{
+	"storage.anywhereCaches.create",
+	"storage.anywhereCaches.get",
+	"storage.anywhereCaches.list",
+	"storage.anywhereCaches.update",
+}
+
+var gcsFuseProfileAllPermissions = append(append([]string{}, gcsFuseProfileBasePermissions...), gcsFuseAnywhereCachePermissions...)
+
+var gcsFuseProfileKnownRoles = map[string][]string{
+	"roles/storage.admin":              gcsFuseProfileAllPermissions,
+	"roles/storage.legacyBucketReader": gcsFuseProfileBasePermissions,
+}
+
+var multiRegionRegionPrefixes = map[string][]string{
+	"US":   {"us-"},
+	"EU":   {"europe-"},
+	"ASIA": {"asia-"},
+}
+
+var (
+	gcpZonePattern   = regexp.MustCompile(`^[a-z]+-[a-z]+[0-9]+-[a-z]$`)
+	gcpRegionPattern = regexp.MustCompile(`^[a-z]+-[a-z]+[0-9]+$`)
+)
+
+// RunStorageProfilePreflight checks that profile= mounts can be satisfied by the cluster and bucket.
+func (sm *StorageManager) RunStorageProfilePreflight(rawMounts []string, projectID, clusterLocation string, dryRun bool) error {
+	mounts, err := sm.collectProfileMounts(rawMounts)
+	if err != nil || len(mounts) == 0 {
+		return err
+	}
+
+	if err := sm.validateStorageClassesExist(mounts, dryRun); err != nil {
+		return err
+	}
+
+	return sm.checkProfileMisconfiguration(projectID, clusterLocation, mounts, dryRun)
+}
+
+func (sm *StorageManager) collectProfileMounts(rawMounts []string) ([]profileMount, error) {
+	var out []profileMount
+	seen := map[string]bool{}
+
+	for _, vStr := range rawMounts {
+		pm, err := sm.parseSingleVolume(vStr)
+		if err != nil {
+			return nil, err
+		}
+		if pm.Profile == "" {
+			continue
+		}
+		bucket, _, err := splitGCSSource(pm.Src)
+		if err != nil {
+			return nil, err
+		}
+
+		zones := splitAnywhereCacheZones(pm.Attributes[anywhereCacheZonesAttribute])
+		cached := usesAnywhereCache(pm)
+		key := fmt.Sprintf("%s|%s|%s|%t", bucket, pm.Profile, strings.Join(zones, ","), cached)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		out = append(out, profileMount{
+			Bucket:             bucket,
+			Profile:            pm.Profile,
+			AnywhereCacheZones: zones,
+			UsesAnywhereCache:  cached,
+		})
+	}
+	return out, nil
+}
+
+func usesAnywhereCache(pm parsedMount) bool {
+	if strings.EqualFold(strings.TrimSpace(pm.Attributes[anywhereCacheZonesAttribute]), anywhereCacheOffValue) {
+		return false
+	}
+	if pm.Profile == servingProfileStorageClass {
+		return true
+	}
+	for key := range pm.Attributes {
+		if strings.HasPrefix(key, anywhereCacheAttributePrefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func splitAnywhereCacheZones(raw string) []string {
+	var zones []string
+	for _, z := range strings.Split(raw, ",") {
+		z = strings.ToLower(strings.TrimSpace(z))
+		if z == "" || z == anywhereCacheAllZonesValue || z == anywhereCacheOffValue {
+			continue
+		}
+		zones = append(zones, z)
+	}
+	return zones
+}
+
+func (sm *StorageManager) validateStorageClassesExist(mounts []profileMount, dryRun bool) error {
+	if sm.orchestrator == nil || sm.orchestrator.executor == nil {
+		return nil
+	}
+
+	checked := map[string]bool{}
+	for _, m := range mounts {
+		if checked[m.Profile] {
+			continue
+		}
+		checked[m.Profile] = true
+		if err := sm.validateStorageClassExists(m.Profile, dryRun); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (sm *StorageManager) validateStorageClassExists(storageClass string, dryRun bool) error {
+	res := sm.orchestrator.executor.ExecuteCommand("kubectl", "get", "storageclass", storageClass, "--ignore-not-found", "-o", "name")
+	if res.ExitCode != 0 {
+		logging.Warn("Could not verify that StorageClass %q exists on the cluster: %s. Proceeding with job submission.",
+			storageClass, strings.TrimSpace(res.Stderr))
+		return nil
+	}
+	if strings.TrimSpace(res.Stdout) != "" {
+		return nil
+	}
+
+	err := fmt.Errorf("StorageClass %q was not found on cluster, so the generated PersistentVolumeClaim would stay Pending forever. "+
+		"GCSFuse storage profiles require a GKE cluster running %s or later with the Cloud Storage FUSE CSI driver enabled. "+
+		"Run 'kubectl get storageclass -l %s' to list the profiles available on this cluster, or drop profile= to use an inline GCSFuse mount. See %s",
+		storageClass, minGCSFuseProfileGKEVersion, gcsFuseProfileSelector, gcsFuseProfileDocsURL)
+	if dryRun {
+		logging.Warn("%v. Writing the manifest anyway because this is a dry run.", err)
+		return nil
+	}
+	return err
+}
+
+func (sm *StorageManager) checkProfileMisconfiguration(projectID, clusterLocation string, mounts []profileMount, dryRun bool) error {
+	client, err := sm.getPreflightClient(context.Background())
+	if err != nil {
+		logging.Warn("Skipping Cloud Storage pre-flight checks for storage profile mounts: %v. Proceeding with job submission.", err)
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), storageAPITimeout)
+	defer cancel()
+
+	if agent, err := gkeServiceAgentEmail(ctx, client, projectID); err != nil {
+		logging.Warn("Skipping the GKE Service Agent IAM pre-flight check: could not resolve the project number for %q: %v. "+
+			"Verify manually that the GKE Service Agent holds the required permissions on the target bucket(s). See %s",
+			projectID, err, gcsFuseProfileIAMURL)
+	} else {
+		warnOnMissingIAM(ctx, client, projectID, agent, mounts)
+	}
+	return checkBucketLocations(ctx, client, clusterLocation, mounts, dryRun)
+}
+
+func warnOnMissingIAM(ctx context.Context, client storagePreflightClient, projectID, agent string, mounts []profileMount) {
+	resolve := newRoleResolver(client)
+	projectGranted := lazyProjectGrants(ctx, client, resolve, projectID, agent)
+
+	buckets, needsCache := bucketCacheUse(mounts)
+	for _, bucket := range buckets {
+		required := requiredProfilePermissions(needsCache[bucket])
+		if msg := bucketIAMWarning(ctx, client, resolve, agent, bucket, required, projectGranted); msg != "" {
+			logging.Warn("%s", msg)
+		}
+	}
+}
+
+func bucketCacheUse(mounts []profileMount) ([]string, map[string]bool) {
+	var order []string
+	needsCache := map[string]bool{}
+	for _, m := range mounts {
+		if _, seen := needsCache[m.Bucket]; !seen {
+			order = append(order, m.Bucket)
+		}
+		needsCache[m.Bucket] = needsCache[m.Bucket] || m.UsesAnywhereCache
+	}
+	return order, needsCache
+}
+
+func checkBucketLocations(ctx context.Context, client storagePreflightClient, clusterLocation string, mounts []profileMount, dryRun bool) error {
+	checked := map[string]bool{}
+	for _, m := range mounts {
+		key := fmt.Sprintf("%s|%s|%t|%t", m.Bucket, strings.Join(m.AnywhereCacheZones, ","), m.UsesAnywhereCache, colocationRequired(m))
+		if checked[key] {
+			continue
+		}
+		checked[key] = true
+		if err := checkBucketLocation(ctx, client, clusterLocation, m, dryRun); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func gkeServiceAgentEmail(ctx context.Context, client storagePreflightClient, projectID string) (string, error) {
+	number, err := client.projectNumber(ctx, projectID)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(gkeServiceAgentTemplate, number), nil
+}
+
+func requiredProfilePermissions(usesAnywhereCache bool) []string {
+	perms := append([]string{}, gcsFuseProfileBasePermissions...)
+	if usesAnywhereCache {
+		perms = append(perms, gcsFuseAnywhereCachePermissions...)
+	}
+	sort.Strings(perms)
+	return perms
+}
+
+// lazyProjectGrants reads project-level grants only when a bucket check needs them.
+func lazyProjectGrants(ctx context.Context, client storagePreflightClient, resolve *roleResolver, projectID, agent string) func() map[string]bool {
+	return sync.OnceValue(func() map[string]bool {
+		bindings, err := client.projectIAMBindings(ctx, projectID)
+		if err != nil {
+			return nil
+		}
+		return grantedAgentPermissions(ctx, resolve, bindings, agent)
+	})
+}
+
+func bucketIAMWarning(ctx context.Context, client storagePreflightClient, resolve *roleResolver, agent, bucket string, required []string, projectGranted func() map[string]bool) string {
+	missing, err := bucketIAMShortfall(ctx, client, resolve, agent, bucket, required, projectGranted)
+	if len(missing) == 0 {
+		return ""
+	}
+	if err != nil {
+		return fmt.Sprintf("Could not read the IAM policy of bucket gs://%s: %v. Verify manually that %s holds %s on the bucket. See %s",
+			bucket, err, agent, strings.Join(required, ", "), gcsFuseProfileIAMURL)
+	}
+
+	msg := fmt.Sprintf("Storage profile pre-flight: the GKE Service Agent %s does not appear to hold %s on bucket gs://%s. "+
+		"Mounting it through a GCSFuse storage profile may fail or its Anywhere Cache may not be provisioned. This check reads "+
+		"bucket-level and project-level bindings only, so it cannot see permissions inherited from a folder or organization, "+
+		"or granted through a group. Proceeding with job submission. To grant them explicitly see %s",
+		agent, strings.Join(missing, ", "), bucket, gcsFuseProfileIAMURL)
+	if unreadable := resolve.unreadableRoles(); len(unreadable) > 0 {
+		msg += fmt.Sprintf(" The definitions of these roles held by the agent could not be read, so any of the permissions above that they grant were not counted: %s.",
+			strings.Join(unreadable, ", "))
+	}
+	return msg
+}
+
+func bucketIAMShortfall(ctx context.Context, client storagePreflightClient, resolve *roleResolver, agent, bucket string, required []string, projectGranted func() map[string]bool) ([]string, error) {
+	bindings, err := client.bucketIAMBindings(ctx, bucket)
+	if err != nil {
+		return missingPermissions(required, projectGranted()), err
+	}
+
+	granted := grantedAgentPermissions(ctx, resolve, bindings, agent)
+	if len(missingPermissions(required, granted)) == 0 {
+		return nil, nil
+	}
+	maps.Copy(granted, projectGranted())
+	return missingPermissions(required, granted), nil
+}
+
+func newRoleResolver(client storagePreflightClient) *roleResolver {
+	return &roleResolver{client: client, cache: map[string][]string{}, unreadable: map[string]bool{}}
+}
+
+// permissions expands a role into its permissions, memoizing successes and failures.
+func (r *roleResolver) permissions(ctx context.Context, role string) []string {
+	if perms, ok := r.cache[role]; ok {
+		return perms
+	}
+	perms, known := gcsFuseProfileKnownRoles[role]
+	if !known {
+		var err error
+		if perms, err = r.client.rolePermissions(ctx, role); err != nil {
+			r.unreadable[role] = true
+			perms = nil
+		}
+	}
+	r.cache[role] = perms
+	return perms
+}
+
+func (r *roleResolver) unreadableRoles() []string {
+	return slices.Sorted(maps.Keys(r.unreadable))
+}
+
+func grantedAgentPermissions(ctx context.Context, resolve *roleResolver, bindings []iamBinding, agent string) map[string]bool {
+	granted := map[string]bool{}
+	member := "serviceaccount:" + strings.ToLower(agent)
+
+	for _, b := range bindings {
+		if !slices.ContainsFunc(b.Members, func(m string) bool { return strings.ToLower(strings.TrimSpace(m)) == member }) {
+			continue
+		}
+		for _, p := range resolve.permissions(ctx, b.Role) {
+			granted[p] = true
+		}
+	}
+	return granted
+}
+
+func missingPermissions(required []string, granted map[string]bool) []string {
+	var missing []string
+	for _, p := range required {
+		if !granted[p] {
+			missing = append(missing, p)
+		}
+	}
+	return missing
+}
+
+// colocationRequired: GKE mandates co-location for serving and whenever Rapid Cache is used.
+func colocationRequired(m profileMount) bool {
+	return m.Profile == servingProfileStorageClass || m.UsesAnywhereCache
+}
+
+// checkBucketLocation blocks on a mismatch when co-location is required (warns on dry run), else warns.
+func checkBucketLocation(ctx context.Context, client storagePreflightClient, clusterLocation string, m profileMount, dryRun bool) error {
+	loc, err := client.bucketLocation(ctx, m.Bucket)
+	if err != nil {
+		logging.Warn("Could not read the location of bucket gs://%s: %v. Verify manually that it is in the same region as the cluster. See %s",
+			m.Bucket, err, gcsFuseProfileDocsURL)
+		return nil
+	}
+	var zones []string
+	if m.UsesAnywhereCache {
+		zones = m.AnywhereCacheZones
+	}
+	for _, region := range cacheRegions(clusterLocation, zones) {
+		if regionWithinBucketLocation(region, loc) {
+			continue
+		}
+		if !colocationRequired(m) {
+			logging.Warn("Storage profile pre-flight: bucket gs://%s is located in %q but the cluster is in region %q. "+
+				"GKE recommends a bucket in the same region for throughput and egress cost. See %s",
+				m.Bucket, loc.Location, region, gcsFuseProfileDocsURL)
+			continue
+		}
+		err := fmt.Errorf("storage profile pre-flight: bucket gs://%s is located in %q but mount profile %q would be served from region %q. "+
+			"GKE requires the bucket and the cluster to be in the same region for the %s profile and whenever Rapid Cache is enabled. "+
+			"Use a bucket in %s, or for a non-serving profile pass attributes=%s=%s to disable Rapid Cache. See %s",
+			m.Bucket, loc.Location, m.Profile, region, servingProfileStorageClass, region, anywhereCacheZonesAttribute, anywhereCacheOffValue, gcsFuseProfileDocsURL)
+		if !dryRun {
+			return err
+		}
+		logging.Warn("%v. Writing the manifest anyway because this is a dry run.", err)
+	}
+	return nil
+}
+
+func cacheRegions(clusterLocation string, zones []string) []string {
+	if len(zones) == 0 {
+		if region := normalizeToRegion(clusterLocation); region != "" {
+			return []string{region}
+		}
+		return nil
+	}
+
+	var regions []string
+	seen := map[string]bool{}
+	for _, z := range zones {
+		region := normalizeToRegion(z)
+		if region == "" || seen[region] {
+			continue
+		}
+		seen[region] = true
+		regions = append(regions, region)
+	}
+	return regions
+}
+
+func normalizeToRegion(location string) string {
+	loc := strings.ToLower(strings.TrimSpace(location))
+	if gcpZonePattern.MatchString(loc) {
+		return loc[:strings.LastIndex(loc, "-")]
+	}
+	return loc
+}
+
+// regionWithinBucketLocation returns true when the relationship cannot be determined.
+func regionWithinBucketLocation(region string, loc bucketLocation) bool {
+	bucketLoc := strings.ToUpper(strings.TrimSpace(loc.Location))
+	if region == "" || bucketLoc == "" {
+		return true
+	}
+
+	if len(loc.DataLocations) > 0 {
+		return slices.ContainsFunc(loc.DataLocations, func(l string) bool { return strings.EqualFold(strings.TrimSpace(l), region) })
+	}
+
+	if prefixes, ok := multiRegionRegionPrefixes[bucketLoc]; ok {
+		return slices.ContainsFunc(prefixes, func(p string) bool { return strings.HasPrefix(region, p) })
+	}
+
+	isRegional := gcpRegionPattern.MatchString(strings.ToLower(bucketLoc))
+	if loc.LocationType != "" {
+		isRegional = strings.EqualFold(loc.LocationType, bucketRegionLocationType)
+	}
+	if isRegional {
+		return strings.EqualFold(bucketLoc, region)
+	}
+	return true
+}
+
+func (sm *StorageManager) getPreflightClient(ctx context.Context) (storagePreflightClient, error) {
+	if sm.preflightClient != nil {
+		return sm.preflightClient, nil
+	}
+	return newGCPPreflightClient(ctx)
+}
+
+func newGCPPreflightClient(ctx context.Context) (storagePreflightClient, error) {
+	storageSvc, err := gcs.NewService(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Cloud Storage client: %w", err)
+	}
+	iamSvc, err := iamapi.NewService(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create IAM client: %w", err)
+	}
+	crmSvc, err := crm.NewService(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Resource Manager client: %w", err)
+	}
+	return &gcpPreflightClient{storage: storageSvc, iam: iamSvc, crm: crmSvc}, nil
+}
+
+func (c *gcpPreflightClient) projectNumber(ctx context.Context, projectID string) (int64, error) {
+	project, err := c.crm.Projects.Get(projectID).Context(ctx).Do()
+	if err != nil {
+		return 0, err
+	}
+	return project.ProjectNumber, nil
+}
+
+func (c *gcpPreflightClient) projectIAMBindings(ctx context.Context, projectID string) ([]iamBinding, error) {
+	req := &crm.GetIamPolicyRequest{Options: &crm.GetPolicyOptions{RequestedPolicyVersion: 3}}
+	policy, err := c.crm.Projects.GetIamPolicy(projectID, req).Context(ctx).Do()
+	if err != nil {
+		return nil, err
+	}
+	bindings := make([]iamBinding, 0, len(policy.Bindings))
+	for _, b := range policy.Bindings {
+		bindings = append(bindings, iamBinding{Role: b.Role, Members: b.Members})
+	}
+	return bindings, nil
+}
+
+func (c *gcpPreflightClient) bucketIAMBindings(ctx context.Context, bucket string) ([]iamBinding, error) {
+	policy, err := c.storage.Buckets.GetIamPolicy(bucket).OptionsRequestedPolicyVersion(3).Context(ctx).Do()
+	if err != nil {
+		return nil, err
+	}
+	bindings := make([]iamBinding, 0, len(policy.Bindings))
+	for _, b := range policy.Bindings {
+		bindings = append(bindings, iamBinding{Role: b.Role, Members: b.Members})
+	}
+	return bindings, nil
+}
+
+func (c *gcpPreflightClient) bucketLocation(ctx context.Context, bucket string) (bucketLocation, error) {
+	b, err := c.storage.Buckets.Get(bucket).Context(ctx).Do()
+	if err != nil {
+		return bucketLocation{}, err
+	}
+	loc := bucketLocation{Location: b.Location, LocationType: b.LocationType}
+	if b.CustomPlacementConfig != nil {
+		loc.DataLocations = b.CustomPlacementConfig.DataLocations
+	}
+	return loc, nil
+}
+
+func (c *gcpPreflightClient) rolePermissions(ctx context.Context, role string) ([]string, error) {
+	switch {
+	case strings.HasPrefix(role, "projects/"):
+		r, err := c.iam.Projects.Roles.Get(role).Context(ctx).Do()
+		if err != nil {
+			return nil, err
+		}
+		return r.IncludedPermissions, nil
+	case strings.HasPrefix(role, "organizations/"):
+		r, err := c.iam.Organizations.Roles.Get(role).Context(ctx).Do()
+		if err != nil {
+			return nil, err
+		}
+		return r.IncludedPermissions, nil
+	case strings.HasPrefix(role, "roles/"):
+		r, err := c.iam.Roles.Get(role).Context(ctx).Do()
+		if err != nil {
+			return nil, err
+		}
+		return r.IncludedPermissions, nil
+	}
+	return nil, fmt.Errorf("unsupported role name %q", role)
+}
+
+// verifyStorageGateways runs after a successful apply and rolls the job back if a concurrent cleanup removed one of
+// its gateways.
+func (g *GKEOrchestrator) verifyStorageGateways(manifest, jobSetName string) error {
+	claims := manifestGatewayClaims(manifest)
+	if len(claims) == 0 {
+		return nil
+	}
+	if _, err := g.getDynamicClient(); err != nil {
+		logging.Warn("Could not verify storage gateways: %v", err)
+		return nil
+	}
+	ns, err := g.getCurrentNamespace("", "", "")
+	if err != nil {
+		logging.Warn("Could not verify storage gateways: %v", err)
+		return nil
+	}
+	for _, claim := range claims {
+		removed, err := g.gatewayRemoved(ns, claim)
+		if err != nil {
+			logging.Warn("Could not verify storage gateway '%s': %v", claim, err)
+			continue
+		}
+		if removed {
+			return g.rollBackJob(ns, jobSetName, fmt.Errorf("storage gateway %q was removed by a concurrent cleanup; resubmit to recreate it "+
+				"(if it fails again, run `kubectl delete pvc %s -n %s` and delete its PV)", claim, claim, ns))
+		}
+	}
+	return nil
+}
+
+// gatewayRemoved reports whether the gateway PVC or its PV is gone, being deleted, or still bound to a deleted PVC.
+func (g *GKEOrchestrator) gatewayRemoved(ns, claim string) (bool, error) {
+	pvc, err := g.kubeClient.GetResource(pvcGVR, ns, claim)
+	if apierrors.IsNotFound(err) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	pvName, _, _ := unstructured.NestedString(pvc.Object, "spec", "volumeName")
+	if pvc.GetDeletionTimestamp() != nil || pvName == "" {
+		return pvc.GetDeletionTimestamp() != nil, nil
+	}
+	pv, err := g.kubeClient.GetResource(pvGVR, "", pvName)
+	if apierrors.IsNotFound(err) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	boundUID, _, _ := unstructured.NestedString(pv.Object, "spec", "claimRef", "uid")
+	return pv.GetDeletionTimestamp() != nil || (boundUID != "" && boundUID != string(pvc.GetUID())), nil
+}
+
+func (g *GKEOrchestrator) rollBackJob(ns, jobSetName string, cause error) error {
+	if err := g.kubeClient.DeleteJobSet(ns, jobSetName); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("%w; rolling back job %q also failed, delete it with `kubectl delete jobset %s -n %s`: %v", cause, jobSetName, jobSetName, ns, err)
+	}
+	return fmt.Errorf("job %q was not started: %w", jobSetName, cause)
+}
+
+// manifestGatewayClaims returns the toolkit gateway PVCs declared in manifest.
+func manifestGatewayClaims(manifest string) []string {
+	docs, err := splitYAMLDocuments(manifest)
+	if err != nil {
+		return nil
+	}
+	var claims []string
+	for _, doc := range docs {
+		var obj struct {
+			Kind     string `json:"kind"`
+			Metadata struct {
+				Name string `json:"name"`
+			} `json:"metadata"`
+		}
+		if k8syaml.Unmarshal([]byte(doc), &obj) == nil && obj.Kind == "PersistentVolumeClaim" && isToolkitGatewayClaimName(obj.Metadata.Name) {
+			claims = append(claims, obj.Metadata.Name)
+		}
+	}
+	return claims
 }

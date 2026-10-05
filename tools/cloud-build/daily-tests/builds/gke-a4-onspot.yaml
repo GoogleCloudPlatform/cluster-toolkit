@@ -112,6 +112,12 @@ steps:
               value: "gs://$$OPTIONS_BUCKET/a4hoptions.txt"
             - name: ENABLE_SPOT_FALLBACK
               value: "true"
+            # Peak startup N2D vCPUs: GKE regional default-pool (3 zones x n2d-standard-4 = 12)
+            # + remote-node (n2d-standard-2 = 2) = 14 vCPUs before default-pool is removed.
+            - name: REQUIRED_CPU_QUOTA
+              value: "14"
+            - name: CPU_QUOTA_METRIC
+              value: "N2D_CPUS"
             - name: GCLUSTER_GCS_PATH
               value: "$$GCLUSTER_GCS_PATH"
             - name: TRIAGE_GCS_BUCKET
