@@ -41,7 +41,7 @@ Each command will have additional data in the Message Data, specific to that com
 * `SYNC` - Command to cluster to synchronize with the Frontend, including updating Log Files, and potentially other activities in the future (such as setting user permissions).
 * `SPACK_INSTALL` - Install a Spack package
 * `RUN_JOB` - Submit a job on behalf of a user to SLURM
-* `REGISTER_USER_GCS` - Begin the process to register a user's GCS credentials with `gsutil`.
+* `REGISTER_USER_GCS` - Begin the process to register a user's GCS credentials via an interactive `gcloud auth login` flow (credentials are shared with `gcloud storage`).
 
 ### Cluster C2 Daemon
 

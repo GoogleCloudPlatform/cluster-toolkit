@@ -343,7 +343,7 @@ variable "guest_accelerator" {
 
 variable "accelerator_topology" {
   type        = string
-  description = "Specifies the shape of the Accelerator (GPU/TPU) slice."
+  description = "Specifies the shape of the Accelerator (GPU/TPU) slice. Note: When set, 'enable_placement' must be set to true (and 'node_count_dynamic_max' must be explicitly set to 0 when using 'provisioning_engine = MIG'). Warning: on a deployed nodeset using 'provisioning_engine = MIG', ANY change to this value - including changing one topology for another, and removing it - forces replacement of the managed instance group and destroys its running VMs. Drain the nodeset before changing it."
   nullable    = true
   default     = null
 }
@@ -495,12 +495,13 @@ variable "subnetwork_self_link" {
 }
 
 variable "additional_networks" {
-  description = "Additional network interface details for GCE, if any."
+  description = "Additional network interface details for GCE, if any. For Private Service Connect interfaces, 'network_attachment' must be the full resource URI: projects/{project}/regions/{region}/networkAttachments/{name}."
   default     = []
   type = list(object({
     network            = optional(string)
-    subnetwork         = string
+    subnetwork         = optional(string)
     subnetwork_project = optional(string)
+    network_attachment = optional(string)
     network_ip         = optional(string, "")
     nic_type           = optional(string)
     stack_type         = optional(string)
@@ -517,6 +518,32 @@ variable "additional_networks" {
       subnetwork_range_name = string
     })), [])
   }))
+  validation {
+    condition = alltrue([
+      for nic in var.additional_networks : (
+        # Cannot specify network or subnetwork alongside network_attachment
+        !(((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "")) && (nic.network_attachment != null && nic.network_attachment != "")) &&
+        # Cannot specify subnetwork_project, access_config, ipv6_access_config, or alias_ip_range alongside network_attachment
+        (nic.network_attachment == null || nic.network_attachment == "" || (
+          (nic.subnetwork_project == null || nic.subnetwork_project == "") &&
+          length(try(nic.access_config, [])) == 0 &&
+          length(try(nic.ipv6_access_config, [])) == 0 &&
+          length(try(nic.alias_ip_range, [])) == 0
+        )) &&
+        # Must specify at least one of network, subnetwork, or network_attachment
+        ((nic.network != null && nic.network != "") || (nic.subnetwork != null && nic.subnetwork != "") || (nic.network_attachment != null && nic.network_attachment != ""))
+      )
+    ])
+    error_message = "In var.additional_networks, you must specify at least one of 'network', 'subnetwork', or 'network_attachment'. When 'network_attachment' is set, you cannot specify 'network', 'subnetwork', 'subnetwork_project', 'access_config', 'ipv6_access_config', or 'alias_ip_range'."
+  }
+  validation {
+    condition = alltrue([
+      for nic in var.additional_networks : (
+        nic.network_attachment == null || nic.network_attachment == "" || can(regex("^(?:https://www.googleapis.com/compute/[^/]+/)?projects/[^/]+/regions/[^/]+/networkAttachments/[^/]+$", nic.network_attachment))
+      )
+    ])
+    error_message = "In var.additional_networks, 'network_attachment' must be the full resource URI: projects/{project}/regions/{region}/networkAttachments/{name}."
+  }
 }
 
 variable "access_config" {
@@ -685,11 +712,83 @@ variable "machine_configs" {
 }
 
 variable "provisioning_engine" {
-  description = "Compute node provisioning engine: 'AUTO', 'MIG', or 'BULK_INSERT'. Note: When using 'MIG', 'node_count_dynamic_max' must be explicitly set to 0 and 'enable_placement' must be set to false."
+  description = "Compute node provisioning engine: 'AUTO', 'MIG', or 'BULK_INSERT'. Note: When using 'MIG', 'node_count_dynamic_max' must be explicitly set to 0, and 'enable_placement' is only supported when 'accelerator_topology' is specified. (Note: DWS Flex NodeSets should leave 'provisioning_engine' as 'AUTO')."
   type        = string
   default     = "AUTO"
   validation {
     condition     = contains(["AUTO", "MIG", "BULK_INSERT"], var.provisioning_engine)
     error_message = "Variable 'provisioning_engine' must be 'AUTO', 'MIG', or 'BULK_INSERT'."
+  }
+}
+
+variable "instance_flexibility_policy" {
+  description = <<-EOD
+    Opt-in machine-type fallback for MIG NodeSets. The MIG tries the lowest `rank` first and falls
+    back to the next rank when capacity is unavailable. Only honored by static MIG NodeSets
+    (`provisioning_engine = "MIG"`, `node_count_dynamic_max = 0`, no DWS Flex, no accelerator_topology).
+
+    Every fallback machine type must expose the same GPU model and count as `machine_type`, because
+    Slurm's node definition is generated once per NodeSet. Slurm sizes nodes to the smallest shape
+    across all selections, so mixing CPU/memory sizes wastes the capacity of the larger shapes.
+    EOD
+
+  type = object({
+    instance_selections = list(object({
+      name          = optional(string)
+      rank          = optional(number, 1)
+      machine_types = set(string)
+    }))
+  })
+  default = null
+
+  validation {
+    condition     = var.instance_flexibility_policy == null || length(try(var.instance_flexibility_policy.instance_selections, [])) > 0
+    error_message = "instance_flexibility_policy.instance_selections must contain at least one selection."
+  }
+
+  validation {
+    condition = var.instance_flexibility_policy == null || alltrue([
+      for s in var.instance_flexibility_policy.instance_selections : s.rank >= 0
+    ])
+    error_message = "Each instance_flexibility_policy.instance_selections[*].rank must be >= 0 (lower rank is tried first)."
+  }
+
+  validation {
+    condition = var.instance_flexibility_policy == null || alltrue([
+      for s in var.instance_flexibility_policy.instance_selections :
+      s.name == null || trimspace(s.name) == "" || can(regex("^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$", trimspace(s.name)))
+    ])
+    error_message = "Each instance_flexibility_policy.instance_selections[*].name must be an RFC 1035 label (lowercase letters, digits, hyphens, starting with a letter)."
+  }
+
+  validation {
+    condition = var.instance_flexibility_policy == null || length(distinct([
+      for idx, s in var.instance_flexibility_policy.instance_selections :
+      (s.name != null && trimspace(s.name) != "") ? trimspace(s.name) : "selection-${idx + 1}"
+    ])) == length(var.instance_flexibility_policy.instance_selections)
+    error_message = "Each instance_flexibility_policy.instance_selections[*].name must be unique."
+  }
+
+  validation {
+    condition = var.instance_flexibility_policy == null || alltrue([
+      for s in var.instance_flexibility_policy.instance_selections : length(s.machine_types) > 0
+    ])
+    error_message = "Each instance_flexibility_policy.instance_selections[*].machine_types must list at least one machine type."
+  }
+
+  validation {
+    condition = var.instance_flexibility_policy == null || length(flatten([
+      for s in var.instance_flexibility_policy.instance_selections : tolist(s.machine_types)
+    ])) <= 10
+    error_message = "instance_flexibility_policy may reference at most 10 machine types in total across all instance_selections."
+  }
+
+  validation {
+    condition = var.instance_flexibility_policy == null || length(distinct(flatten([
+      for s in var.instance_flexibility_policy.instance_selections : tolist(s.machine_types)
+      ]))) == length(flatten([
+      for s in var.instance_flexibility_policy.instance_selections : tolist(s.machine_types)
+    ]))
+    error_message = "A machine type may appear in only one instance_flexibility_policy.instance_selections entry."
   }
 }

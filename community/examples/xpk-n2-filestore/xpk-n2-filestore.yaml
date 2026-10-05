@@ -95,15 +95,22 @@ deployment_groups:
         install: true
         version: $(vars.jobset_version)
       apply_manifests:
-      - source: $(vars.config_map_path)
+      - name: xpk-config-map
+        source: $(vars.config_map_path)
         template_vars: {deployment_name: $(vars.deployment_name), machine_type: $(vars.machine_type), vms_per_slice: $(vars.slice_vm_count), xpk_version: $(vars.xpk_version)}
-      - source: $(vars.storage_crd_path)
+      - name: storage-crd
+        source: $(vars.storage_crd_path)
         # Server-side applies avoid last-applied-configuration and associated annotation length issues
-      - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_applicationprofiles.yaml
-      - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_jobtemplates.yaml
-      - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_rayclustertemplates.yaml
-      - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_rayjobtemplates.yaml
-      - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_volumebundles.yaml
+      - name: kjob-app-profiles-crd
+        source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_applicationprofiles.yaml
+      - name: kjob-job-templates-crd
+        source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_jobtemplates.yaml
+      - name: kjob-ray-cluster-templates-crd
+        source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_rayclustertemplates.yaml
+      - name: kjob-ray-job-templates-crd
+        source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_rayjobtemplates.yaml
+      - name: kjob-volume-bundles-crd
+        source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_volumebundles.yaml
 
   - id: homefs
     source: modules/file-system/filestore

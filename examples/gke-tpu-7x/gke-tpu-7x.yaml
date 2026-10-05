@@ -43,8 +43,16 @@ vars:
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
 
-  # The name of the compute engine reservation of TPU 7x nodes
-  reservation:
+  # Consumption model variables
+  spot: false
+  reservation_affinity: {consume_reservation_type: "NO_RESERVATION", specific_reservations: []}
+  enable_flex_start: false
+  auto_repair: true
+  enable_queued_provisioning: false
+  autoscaling_min_node_count: $(null)
+  autoscaling_max_node_count: $(null)
+  autoscaling_total_min_nodes: 0
+  kueue_configuration_path: $(null)
 
   # Enable Pathways for TPUs (provisions CPU node pool and configures Kueue quotas)
   enable_pathways_for_tpus: true
@@ -160,10 +168,14 @@ deployment_groups:
       auto_upgrade: true
       enable_dranet: true
       zones: [$(vars.zone)]
-      reservation_affinity:
-        consume_reservation_type: SPECIFIC_RESERVATION
-        specific_reservations:
-        - name: $(vars.reservation)
+      spot: $(vars.spot)
+      reservation_affinity: $(vars.reservation_affinity)
+      enable_flex_start: $(vars.enable_flex_start)
+      auto_repair: "$((vars.enable_flex_start) ? false : vars.auto_repair)"
+      enable_queued_provisioning: $(vars.enable_queued_provisioning)
+      autoscaling_min_node_count: $(vars.autoscaling_min_node_count)
+      autoscaling_max_node_count: $(vars.autoscaling_max_node_count)
+      autoscaling_total_min_nodes: $(vars.autoscaling_total_min_nodes)
     outputs: [instructions, machine_type, accelerator_topology_mode]
 
   - id: workload-manager-install
@@ -175,11 +187,11 @@ deployment_groups:
         enable_dynamic_slicing_for_tpus: $(vars.enable_dynamic_slicing_for_tpus)
         accelerator_topology_mode: $(gke-tpu-7x-pool.accelerator_topology_mode)
         machine_type: $(gke-tpu-7x-pool.machine_type)
-        ## Custom kueue config path
-        #config_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+        config_path: $(vars.kueue_configuration_path)
         config_template_vars:
-          tpu_quota: $(vars.num_slices * gke-tpu-7x-pool.node_count_static * gke-tpu-7x-pool.tpu_chips_per_node)
+          tpu_quota: '$(vars.num_slices * (vars.enable_flex_start ? vars.autoscaling_max_node_count : gke-tpu-7x-pool.node_count_static) * gke-tpu-7x-pool.tpu_chips_per_node)'
           accelerator_type: $(vars.accelerator_type)
+          tpu_topology: $(vars.tpu_topology)
           namespace: $(vars.user_namespace)
       jobset:
         install: true

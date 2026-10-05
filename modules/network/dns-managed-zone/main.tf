@@ -27,12 +27,39 @@ locals {
   labels = merge(var.labels, { ghpc_module = "dns-managed-zone", ghpc_role = "network" })
 }
 
+locals {
+  private_network_urls = distinct(compact(concat(
+    var.network_ids,
+    var.network_id != null ? [var.network_id] : [],
+  )))
+}
+
 resource "google_dns_managed_zone" "zone" {
   project     = google_project_service.dns_api.project
   name        = var.zone_name
   dns_name    = var.dns_name
   description = var.description
   labels      = local.labels
+  visibility  = var.visibility
+
+  dynamic "private_visibility_config" {
+    for_each = var.visibility == "private" ? [1] : []
+    content {
+      dynamic "networks" {
+        for_each = local.private_network_urls
+        content {
+          network_url = networks.value
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.visibility != "private" || length(local.private_network_urls) > 0
+      error_message = "Private zones require at least one network. Set network_id or network_ids."
+    }
+  }
 }
 
 resource "google_dns_record_set" "record" {
