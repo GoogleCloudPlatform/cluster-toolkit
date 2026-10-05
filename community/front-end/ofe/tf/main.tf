@@ -53,9 +53,8 @@ EOT
 
   # Content hash over everything staged into the control bucket. Clusters pull
   # their bootstrap/ansible files from the bucket at boot, so the staged copy
-  # must be re-uploaded whenever any source file changes. Local build
-  # artifacts (e.g. __pycache__, .DS_Store) are excluded so a developer's
-  # working tree does not trigger a spurious re-upload.
+  # must be re-uploaded whenever any source file changes. Local build artifacts
+  # (__pycache__, .DS_Store) are excluded here and from the upload below.
   gcs_bucket_root = "${path.module}/../infrastructure_files/gcs_bucket"
   gcs_bucket_files = [
     for f in fileset(local.gcs_bucket_root, "**") : f
@@ -105,7 +104,7 @@ resource "null_resource" "uploader" {
   }
   # Upload files
   provisioner "local-exec" {
-    command = "gcloud storage cp --recursive ../infrastructure_files/gcs_bucket/* ${module.control_bucket.bucket.url}/"
+    command = "gcloud storage rsync --recursive --exclude='(^|.*/)(__pycache__/.*|\\.DS_Store)$' ../infrastructure_files/gcs_bucket ${module.control_bucket.bucket.url}"
   }
 }
 
