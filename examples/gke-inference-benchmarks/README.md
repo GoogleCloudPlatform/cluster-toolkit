@@ -1,0 +1,138 @@
+# GKE Inference Benchmarks
+
+This directory is a catalog of self-contained, reproducible LLM inference
+benchmarks on GKE accelerators (GPUs and TPUs). Each benchmark is a single
+directory that contains everything needed to run it: a Cluster Toolkit
+blueprint, a deployment file and the Kubernetes manifests the blueprint applies.
+One `gcluster deploy` from a checkout of this repository (`develop` branch)
+provisions the cluster and accelerator node pool, serves the model and runs the
+benchmark. No other tooling is required.
+
+The serving flags and benchmark parameters of every entry are kept in sync with
+the equivalent recipe used by Google's internal inference benchmarking (uBench),
+so results obtained here are comparable with the numbers Google measures.
+
+## Catalog
+
+| Benchmark | Accelerator | Model | Serving stack | Workload | Reference result |
+| --- | --- | --- | --- | --- | --- |
+| [g4-diffusiongemma-26b-a4b](g4-diffusiongemma-26b-a4b/README.md) | 1x `g4-standard-48` (1x NVIDIA RTX PRO 6000), Spot | `google/diffusiongemma-26B-A4B-it` (BF16) | vLLM `v0.30.0` | random dataset, ISL 1024 / OSL 1024, 64 prompts, concurrency 8 | 323.9 output tok/s, median TTFT 6.5 s ([details](g4-diffusiongemma-26b-a4b/README.md#reference-results)) |
+
+TPU entries follow the same layout; see [Adding a benchmark](#adding-a-benchmark).
+
+## Directory layout
+
+```text
+examples/gke-inference-benchmarks/
+├── README.md                       # this catalog
+└── <accelerator>-<model>/          # one self-contained benchmark
+    ├── README.md                   # prerequisites, deploy, results, clean up
+    ├── blueprint.yaml              # network, cluster, node pool, kubectl-apply of manifests/
+    ├── deployment.yaml             # the values you fill in (project, bucket, zone, CIDR)
+    └── manifests/                  # Kubernetes manifests applied by the blueprint
+        ├── hf-secret.yaml.tftpl    # model-hub token Secret (templated, optional)
+        ├── <server>-serve.yaml     # model server (storage, Deployment, Service)
+        └── <server>-bench.yaml     # benchmark Job
+```
+
+`<accelerator>` is the GKE machine family (for example `g4`, `a4`) or, for
+TPUs, the TPU generation and slice topology (for example `tpu7x-2x2x1`,
+`v6e-8`). `<model>` is the lower-cased model name without the organization
+prefix. File names are identical across benchmarks, so the commands below work
+for every entry.
+
+## Running a benchmark
+
+1. Install the [Cluster Toolkit prerequisites](../../README.md#quickstart) and
+   build the binary:
+
+   ```shell
+   make
+   ```
+
+1. Make sure the project has quota for the accelerator in the zone you intend
+   to use. Benchmarks that default to `spot: true` need the *preemptible*
+   (Spot) quota of that accelerator. Gated models additionally require that
+   you accept the model license on Hugging Face and have an access token.
+
+1. Open `examples/gke-inference-benchmarks/<benchmark>/deployment.yaml` and
+   fill in `project_id`, the Terraform state `bucket`, `authorized_cidr` (the
+   public IP of the machine you deploy from, as `<ip>/32`) and, if needed,
+   `region`/`zone`. The remaining variables have working defaults. Do not put
+   secrets in this file.
+
+1. Deploy. The blueprint and deployment paths are the only parts of the
+   command that change between benchmarks:
+
+   ```shell
+   ./gcluster deploy -d examples/gke-inference-benchmarks/<benchmark>/deployment.yaml \
+     examples/gke-inference-benchmarks/<benchmark>/blueprint.yaml --vars hf_token=$HF_TOKEN
+   ```
+
+   Type `a` at the prompt to apply. `gcluster` returns once the cluster, node
+   pool and manifests are in place; the model server keeps loading weights in
+   the background and the benchmark Job starts as soon as the server is
+   healthy.
+
+1. Follow the benchmark's `README.md` to watch the rollout, read the results
+   (`kubectl logs job/<benchmark job>`) and change the workload parameters
+   (input/output length, number of prompts, concurrency).
+
+1. Clean up. The Terraform state bucket is not deleted:
+
+   ```shell
+   ./gcluster destroy <deployment_name> --auto-approve
+   ```
+
+## Adding a benchmark
+
+New entries are welcome. Keep them uniform so that users can run any benchmark
+with the same commands:
+
+* **Self-contained.** Put everything in
+  `examples/gke-inference-benchmarks/<accelerator>-<model>/` and reference
+  manifests from the blueprint with `$(ghpc_stage("manifests/<file>"))`.
+  `ghpc_stage` resolves paths relative to the blueprint, so the directory can
+  be copied or deployed from any working directory.
+* **Same file names.** `blueprint.yaml`, `deployment.yaml`, `manifests/`,
+  `README.md`.
+* **A deployment file that renders without edits.** Leave `project_id`,
+  `bucket` and `authorized_cidr` empty, but give every other variable a working
+  default (use the region/zone in which you measured the reference results).
+  The repository CI renders each `blueprint.yaml` + `deployment.yaml` pair with
+  `gcluster create` and `terraform validate`.
+* **Secrets through variables.** Accept tokens as a blueprint variable with an
+  empty default, render them with a `.tftpl` manifest guarded by an `enable:`
+  expression, and document the `kubectl create secret` alternative. Never
+  commit a token.
+* **Match the internal recipe.** Serving flags (image tag, parallelism,
+  attention backend, memory utilization, max sequences, max model length) and
+  benchmark parameters (dataset, ISL/OSL, number of prompts, concurrency) must
+  match the uBench recipe the entry mirrors; name that recipe in the README.
+* **Do not block `gcluster deploy` on model loading.** Use
+  `wait_for_rollout: false` for the server and make the benchmark Job wait for
+  the server's health endpoint itself.
+* **Spot by default where it makes sense.** Use a single-zone node pool, a
+  `spot` variable that defaults to `true`, tolerate the
+  `cloud.google.com/gke-spot=true:NoSchedule` taint in the manifests and cache
+  the weights on a PersistentVolumeClaim so that a preempted node recovers
+  quickly. Explain the preemption behaviour in the README.
+* **TPU entries.** Start from [`examples/gke-tpu-7x`](../gke-tpu-7x) or
+  [`examples/gke-tpu-v6e`](../gke-tpu-v6e): the node pool takes `machine_type`,
+  `num_slices`, `tpu_topology` and `spot`, and TPU 7x additionally needs the
+  `resource-policy` module. Workloads request `google.com/tpu` and select nodes
+  with `cloud.google.com/gke-tpu-accelerator` and
+  `cloud.google.com/gke-tpu-topology`. Use a TPU-capable serving image (for
+  example vLLM TPU or JetStream) and name the directory after the slice, for
+  example `tpu7x-2x2x1-<model>` or `v6e-8-<model>`.
+* **README sections.** Prerequisites, Deploy, Benchmark results (including how
+  to change the workload), Try the endpoint, What the benchmark does and why,
+  Spot behaviour (if applicable), Reference results (date, zone, consumption
+  model, number of runs) and Clean up.
+* **Wire it into CI and this catalog.** Add a `run_test` line for the new
+  `blueprint.yaml`/`deployment.yaml` pair to
+  [`tools/validate_configs/validate_configs.sh`](../../tools/validate_configs/validate_configs.sh)
+  (the directory itself is excluded from the generic blueprint scan because it
+  also contains Kubernetes manifests), add a row to the [Catalog](#catalog)
+  table above, and run `pre-commit run --all-files` before opening a pull
+  request.

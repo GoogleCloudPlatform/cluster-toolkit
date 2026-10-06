@@ -1,0 +1,153 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# vLLM server for google/diffusiongemma-26B-A4B-it on one Spot G4 node
+# (1x NVIDIA RTX PRO 6000). Requires the `hf-secret` Secret (key hf_api_token).
+#
+# DiffusionGemma is an encoder-decoder block-diffusion model: each step
+# denoises a 256-token canvas instead of decoding one token. The server flags
+# follow the constraints enforced by vLLM (DiffusionGemmaModelForBlockDiffusionConfig):
+#   * FlashInfer is rejected                 -> --attention-backend=TRITON_ATTN
+#   * Tensor parallelism > 1 is unsupported  -> --tensor-parallel-size=1 (BF16, ~52 GB)
+#   * Sampler materializes [num_seqs, canvas, vocab] in fp32 -> --max-num-seqs=8
+---
+# Hyperdisk Balanced is the only persistent disk type supported on G4.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: diffusiongemma-hyperdisk-balanced
+provisioner: pd.csi.storage.gke.io
+parameters:
+  type: hyperdisk-balanced
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+---
+# Hugging Face cache: weights survive Spot preemptions and pod restarts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: diffusiongemma-hf-cache
+spec:
+  storageClassName: diffusiongemma-hyperdisk-balanced
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 200Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diffusiongemma-vllm
+  labels:
+    app: diffusiongemma-vllm
+spec:
+  replicas: 1
+  # The PVC is ReadWriteOnce: the old pod must be gone before the new one starts.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: diffusiongemma-vllm
+  template:
+    metadata:
+      labels:
+        app: diffusiongemma-vllm
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-rtx-pro-6000
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      - key: cloud.google.com/gke-spot
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+      containers:
+      - name: vllm
+        image: vllm/vllm-openai:v0.30.0
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          exec vllm serve google/diffusiongemma-26B-A4B-it \
+            --host=0.0.0.0 --port=8000 --download-dir=/data \
+            --tensor-parallel-size=1 \
+            --attention-backend=TRITON_ATTN \
+            --max-model-len=4096 \
+            --max-num-seqs=8 \
+            --gpu-memory-utilization=0.85 \
+            --reasoning-parser=gemma4 \
+            --tool-call-parser=gemma4 \
+            --enable-auto-tool-choice
+        env:
+        - name: HF_HOME
+          value: /data
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-secret
+              key: hf_api_token
+        - name: VLLM_ENGINE_READY_TIMEOUT_S
+          value: "1800"
+        - name: PYTORCH_CUDA_ALLOC_CONF
+          value: "expandable_segments:True"
+        ports:
+        - containerPort: 8000
+          name: http
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "8"
+            memory: 64Gi
+        # First start downloads ~52 GB of weights and loads them: allow 40 min.
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 15
+          failureThreshold: 160
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 10
+        volumeMounts:
+        - name: hf-cache
+          mountPath: /data
+        - name: dshm
+          mountPath: /dev/shm
+      volumes:
+      - name: hf-cache
+        persistentVolumeClaim:
+          claimName: diffusiongemma-hf-cache
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 16Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: diffusiongemma-vllm
+spec:
+  type: ClusterIP
+  selector:
+    app: diffusiongemma-vllm
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000

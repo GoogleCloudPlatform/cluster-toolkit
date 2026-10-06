@@ -1,0 +1,198 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# GKE inference benchmark: DiffusionGemma 26B-A4B on a Spot G4 node pool.
+#
+# Provisions a GKE cluster with a single-zone Spot G4 node pool
+# (g4-standard-48, 1x NVIDIA RTX PRO 6000), serves
+# google/diffusiongemma-26B-A4B-it with vLLM and runs a `vllm bench serve`
+# benchmark Job, all as part of one `gcluster deploy`. The serving flags and
+# benchmark parameters mirror the single-GPU DiffusionGemma G4 recipe used in
+# Google's internal inference benchmarking (uBench), so results are comparable.
+#
+# Everything this benchmark needs is in this directory; see README.md.
+#
+#   ./gcluster deploy -d examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/deployment.yaml \
+#     examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml --vars hf_token=$HF_TOKEN
+
+blueprint_name: gke-inference-benchmark-g4-diffusiongemma
+
+vars:
+  # The following variables should be over-written in deployment.yaml.
+  # Your GCP Project ID
+  project_id:
+
+  # This should be unique across all of your Cluster Toolkit Deployments.
+  deployment_name: g4-diffusiongemma
+
+  # The GCP Region used for this deployment.
+  region:
+
+  # The GCP Zone used for this deployment. Spot capacity is zonal; pick a zone
+  # where G4 is available: https://cloud.google.com/compute/docs/gpus/gpu-regions-zones
+  zone:
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # The following line must be updated for this example to work.
+  authorized_cidr:
+
+  # The VM shape. g4-standard-48 = 1x NVIDIA RTX PRO 6000 (96 GB), enough for
+  # DiffusionGemma 26B-A4B in BF16 with tensor parallelism 1.
+  # See allowed values here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
+  machine_type: g4-standard-48
+
+  # Number of GPUs in the VM. Can be found here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
+  num_gpus: 1
+
+  # The number of Spot nodes to be created. One node is enough for this benchmark.
+  static_node_count: 1
+
+  # Consumption model: Spot VMs (preemptible). Set to false for on-demand.
+  spot: true
+  auto_repair: true
+
+  # Hugging Face token with access to the gated google/diffusiongemma-26B-A4B-it.
+  # Pass it with `--vars hf_token=$HF_TOKEN`, or leave it empty and create the
+  # `hf-secret` Secret yourself after deployment:
+  #   kubectl create secret generic hf-secret --from-literal=hf_api_token=$HF_TOKEN
+  hf_token: ""
+
+  # Set to false to only deploy the vLLM server (no benchmark Job).
+  run_benchmark: true
+
+  system_node_pool_disk_size_gb: 100
+  version_prefix: "1.35."
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: gke-g4-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-0
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.0.0/18
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-sub-0
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: node_pool_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
+  - id: g4-cluster
+    source: modules/scheduler/gke-cluster
+    use: [gke-g4-net-0, workload_service_account]
+    settings:
+      # A small, single-zone system node pool is enough for a single GPU node
+      # and avoids depending on capacity in the region's other zones.
+      system_node_pool_machine_type: "n2d-standard-8"
+      system_node_pool_zones: [$(vars.zone)]
+      system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
+      system_node_pool_taints: []
+      enable_dcgm_monitoring: true
+      enable_private_endpoint: false # Allows access from authorized public IPs
+      configure_workload_identity_sa: true
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command.
+        display_name: "kubectl-access-network"
+      # Cluster versions cannot be updated through the toolkit after creation
+      # Please manage cluster version from the Google Cloud Console directly
+      version_prefix: $(vars.version_prefix)
+      release_channel: REGULAR
+      maintenance_exclusions:
+      - name: no-minor-or-node-upgrades-indefinite
+        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
+        exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
+    outputs: [instructions]
+
+  # Single-zone Spot node pool. GKE labels Spot nodes with
+  # cloud.google.com/gke-spot=true; the workload manifests below also tolerate
+  # the optional cloud.google.com/gke-spot=true:NoSchedule taint.
+  - id: g4-spot-pool
+    source: modules/compute/gke-node-pool
+    use: [g4-cluster, node_pool_service_account]
+    settings:
+      machine_type: $(vars.machine_type)
+      auto_upgrade: true
+      zones: [$(vars.zone)]
+      static_node_count: $(vars.static_node_count)
+      spot: $(vars.spot)
+      auto_repair: $(vars.auto_repair)
+      guest_accelerator:
+      - type: nvidia-rtx-pro-6000
+        count: $(vars.num_gpus)
+    outputs: [instructions]
+
+  # Runs the DiffusionGemma vLLM benchmark as part of `gcluster deploy`:
+  #   1. hf-secret:                 Hugging Face token Secret (only if hf_token is set)
+  #   2. diffusiongemma-vllm-serve: StorageClass + PVC (HF cache) + Deployment + Service
+  #   3. diffusiongemma-vllm-bench: `vllm bench serve` Job (only if run_benchmark is true)
+  # JobSet is installed so that JobSet-based benchmarks can target this cluster too.
+  - id: diffusiongemma-vllm
+    source: modules/management/kubectl-apply
+    use: [g4-cluster]
+    settings:
+      jobset:
+        install: true
+      apply_manifests:
+      - name: hf-secret
+        enable: '$(vars.hf_token != null && vars.hf_token != "")'
+        source: $(ghpc_stage("manifests/hf-secret.yaml.tftpl"))
+        template_vars:
+          hf_token: '$(vars.hf_token != null ? vars.hf_token : "")'
+      - name: diffusiongemma-vllm-serve
+        source: $(ghpc_stage("manifests/vllm-serve.yaml"))
+        # Downloading (~52 GB) and loading the weights takes 15-25 minutes;
+        # do not block `gcluster deploy` on the rollout.
+        wait_for_rollout: false
+      - name: diffusiongemma-vllm-bench
+        enable: $(vars.run_benchmark)
+        source: $(ghpc_stage("manifests/vllm-bench.yaml"))
+        wait_for_rollout: false

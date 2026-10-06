@@ -1,0 +1,105 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Benchmark Job: waits for the vLLM server, then runs `vllm bench serve` with
+# the same workload as the uBench DiffusionGemma G4 recipe (random dataset,
+# ISL 1024 / OSL 1024, concurrency 8). Edit the env values and re-apply to
+# benchmark a different shape:
+#   kubectl delete job diffusiongemma-vllm-bench; kubectl apply -f vllm-bench.yaml
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: diffusiongemma-vllm-bench
+spec:
+  # Retried if the Spot node serving the model is preempted mid-run.
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: diffusiongemma-vllm-bench
+    spec:
+      restartPolicy: Never
+      # Run next to the server: the vLLM image is already present on the node.
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-rtx-pro-6000
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      - key: cloud.google.com/gke-spot
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+      containers:
+      - name: vllm-bench
+        image: vllm/vllm-openai:v0.30.0
+        env:
+        - name: SERVER_URL
+          value: "http://diffusiongemma-vllm:8000"
+        - name: MODEL
+          value: "google/diffusiongemma-26B-A4B-it"
+        - name: INPUT_LEN
+          value: "1024"
+        # Keep a multiple of the 256-token diffusion canvas.
+        - name: OUTPUT_LEN
+          value: "1024"
+        - name: NUM_PROMPTS
+          value: "64"
+        # Matches the server's --max-num-seqs=8 (sampler memory bound).
+        - name: MAX_CONCURRENCY
+          value: "8"
+        - name: NUM_WARMUPS
+          value: "3"
+        - name: HF_HOME
+          value: /tmp/hf
+        # Needed to download the tokenizer of the gated model.
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-secret
+              key: hf_api_token
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          set -euo pipefail
+          until python3 -c "import urllib.request; urllib.request.urlopen('${SERVER_URL}/v1/models', timeout=5)" 2>/dev/null; do
+            echo "Waiting for the vLLM server at ${SERVER_URL} ..."
+            sleep 15
+          done
+          echo "Server is up; benchmarking ${MODEL} (ISL=${INPUT_LEN}, OSL=${OUTPUT_LEN}, concurrency=${MAX_CONCURRENCY}, prompts=${NUM_PROMPTS})"
+          mkdir -p /tmp/results
+          vllm bench serve \
+            --backend vllm \
+            --base-url "${SERVER_URL}" \
+            --model "${MODEL}" \
+            --dataset-name random \
+            --random-input-len "${INPUT_LEN}" \
+            --random-output-len "${OUTPUT_LEN}" \
+            --num-prompts "${NUM_PROMPTS}" \
+            --num-warmups "${NUM_WARMUPS}" \
+            --max-concurrency "${MAX_CONCURRENCY}" \
+            --request-rate inf \
+            --ignore-eos \
+            --seed 0 \
+            --percentile-metrics ttft,tpot,itl,e2el \
+            --metric-percentiles 50,90,99 \
+            --save-result --result-dir /tmp/results
+          echo "===== RESULT JSON ====="
+          cat /tmp/results/*.json
+        resources:
+          requests:
+            cpu: "4"
+            memory: 8Gi

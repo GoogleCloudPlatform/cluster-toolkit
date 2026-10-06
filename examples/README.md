@@ -81,6 +81,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [netapp-volumes.yaml](#netapp-volumesyaml-) ![core-badge]
   * [netapp-volumes-slurm.yaml](#netapp-volumes-slurmyaml-) ![core-badge]
   * [gke-tpu-7x](#gke-tpu-7x-) ![core-badge]
+  * [gke-inference-benchmarks](#gke-inference-benchmarks--) ![community-badge] ![experimental-badge]
   * [gcloud-example.yaml](#gcloud-exampleyaml--) ![community-badge] ![experimental-badge]
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
@@ -1919,6 +1920,26 @@ After the cluster is deployed, SSH to the Slurm login node and confirm `/home` i
 This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/examples/gke-tpu-7x/README.md).
 
 [gke-tpu-7x]: ../examples/gke-tpu-7x
+
+### [gke-inference-benchmarks] ![community-badge] ![experimental-badge]
+
+A catalog of self-contained, reproducible LLM inference benchmarks on GKE
+accelerators (GPU and TPU). Each benchmark lives in its own directory
+(`examples/gke-inference-benchmarks/<accelerator>-<model>/`) with a blueprint, a
+deployment file and the Kubernetes manifests it applies, so a single
+`gcluster deploy` provisions the cluster and node pool, serves the model and runs
+the benchmark:
+
+```shell
+./gcluster deploy -d examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/deployment.yaml \
+  examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml --vars hf_token=$HF_TOKEN
+```
+
+The first entry serves `google/diffusiongemma-26B-A4B-it` with vLLM on a Spot
+G4 (NVIDIA RTX PRO 6000) node pool. The catalog, conventions and per-benchmark
+instructions are in the [README](/examples/gke-inference-benchmarks/README.md).
+
+[gke-inference-benchmarks]: ../examples/gke-inference-benchmarks
 
 ### [gcloud-example.yaml] ![community-badge] ![experimental-badge]
 
