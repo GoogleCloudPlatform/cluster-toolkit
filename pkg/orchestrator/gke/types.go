@@ -190,6 +190,9 @@ type GKEOrchestrator struct {
 	gkeCustomTemplatesPath      string
 	httpClient                  HTTPClient
 	httpOnce                    sync.Once
+	// kubeconfigLoader reads the merged kubeconfig. nil means the default
+	// client-go loading rules (KUBECONFIG env or ~/.kube/config).
+	kubeconfigLoader kubeconfigLoader
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -506,6 +509,20 @@ type gkeCluster struct {
 	Autoscaling                 gkeClusterAutoscaling        `json:"autoscaling"`
 	ControlPlaneEndpointsConfig *controlPlaneEndpointsConfig `json:"controlPlaneEndpointsConfig,omitempty"`
 	AddonsConfig                *gkeAddonsConfig             `json:"addonsConfig,omitempty"`
+	// Endpoint is the legacy top-level control-plane IP (public, or private for private clusters).
+	Endpoint             string                   `json:"endpoint,omitempty"`
+	MasterAuth           *gkeMasterAuth           `json:"masterAuth,omitempty"`
+	PrivateClusterConfig *gkePrivateClusterConfig `json:"privateClusterConfig,omitempty"`
+}
+
+type gkeMasterAuth struct {
+	// ClusterCaCertificate is the base64-encoded PEM CA bundle of the control plane.
+	ClusterCaCertificate string `json:"clusterCaCertificate,omitempty"`
+}
+
+type gkePrivateClusterConfig struct {
+	PublicEndpoint  string `json:"publicEndpoint,omitempty"`
+	PrivateEndpoint string `json:"privateEndpoint,omitempty"`
 }
 
 type gkeAddonsConfig struct {
@@ -522,11 +539,14 @@ type controlPlaneEndpointsConfig struct {
 }
 
 type ipEndpointsConfig struct {
-	EnablePublicEndpoint bool `json:"enablePublicEndpoint,omitempty"`
+	EnablePublicEndpoint bool   `json:"enablePublicEndpoint,omitempty"`
+	PublicEndpoint       string `json:"publicEndpoint,omitempty"`
+	PrivateEndpoint      string `json:"privateEndpoint,omitempty"`
 }
 
 type dnsEndpointConfig struct {
-	AllowExternalTraffic bool `json:"allowExternalTraffic,omitempty"`
+	AllowExternalTraffic bool   `json:"allowExternalTraffic,omitempty"`
+	Endpoint             string `json:"endpoint,omitempty"`
 }
 
 // Types for JobSet status unmarshaling
