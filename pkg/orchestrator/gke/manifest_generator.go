@@ -30,6 +30,52 @@ import (
 	k8syaml "sigs.k8s.io/yaml"
 )
 
+const workloadWrapperScript = `echo "GCluster Start: $(date 2>/dev/null || true)" >&2
+
+# Run workload in a separate process group
+set -m
+/bin/bash -c 'trap : TERM; cmd="$1"; shift; eval "$cmd"' gcluster "$1" &
+child=$!
+
+# Forward signals to the workload process group
+got_sigterm=0
+_fwd() {
+  got_sigterm=1
+  echo "gcluster: SIGTERM received, running cleanup" >&2
+  kill -TERM -- "-$child" 2>/dev/null
+}
+trap _fwd TERM INT
+
+# Wait for workload to exit
+while :; do
+  wait "$child"; rc=$?
+  is_job=0
+  for p in $(jobs -p); do
+    [ "$p" = "$child" ] && is_job=1
+  done
+  [ "$is_job" -eq 1 ] || break
+done
+
+# Interrupted workloads should not exit 0 even if cleanup succeeded
+if [ "$got_sigterm" -ne 0 ] && [ "$rc" -eq 0 ]; then
+  rc=143
+fi
+
+echo "GCluster End: $(date 2>/dev/null || true)" >&2
+echo "Exit code: $rc" >&2
+exit "$rc"
+`
+
+// workloadContainerCommand wraps the user's workload command with SIGTERM
+// forwarding and lifecycle logging. When the container receives SIGTERM (e.g. on
+// job cancellation or Kueue/spot preemption), the signal is forwarded to the
+// workload process group so that in-flight commands terminate and any subsequent
+// cleanup/upload commands in the user's script can run before the pod grace
+// period expires.
+func workloadContainerCommand(userCommand string) []string {
+	return []string{"/bin/bash", "-c", workloadWrapperScript, "gcluster", userCommand}
+}
+
 func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobProfile) (string, error) {
 	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(opts, profile)
 	if err != nil {
@@ -46,7 +92,7 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 		return "", err
 	}
 
-	cmdSlice := []string{"/bin/bash", "-c", opts.CommandToRun}
+	cmdSlice := workloadContainerCommand(opts.CommandToRun)
 
 	tmpl, err := g.parseGKETemplate("jobset.tmpl")
 	if err != nil {
