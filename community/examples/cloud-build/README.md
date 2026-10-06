@@ -3,6 +3,7 @@
 The [cloud-build-remote.yaml](cloud-build-remote.yaml) blueprint demonstrates how to use the [`artifact-registry`](../../modules/container/artifact-registry/README.md) and [`cloud-build`](../../modules/container/cloud-build/README.md) community modules to create a Docker repository in Google Cloud Artifact Registry and build a container image directly from a remote GitHub repository using Google Cloud Build.
 
 In this example, the blueprint:
+
 1. Provisions a standard Docker repository in Artifact Registry (`artifact-repository`).
 2. Clones the [AlphaFold 3](https://github.com/google-deepmind/alphafold3) GitHub repository at tag `v3.0.4` inside a Cloud Build worker (`E2_HIGHCPU_32`) using the [build-alphafold3.yaml.tfpl](build-alphafold3.yaml.tfpl) template.
 3. Builds and pushes the `alphafold3:v3.0.4` container image to the newly created Artifact Registry repository, skipping the build if that versioned tag already exists (`skip_if_exists`).
