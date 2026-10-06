@@ -29,7 +29,7 @@ locals {
     "Default"        = var.is_default ? "YES" : null
     "SuspendTime"    = var.suspend_time < 0 ? "INFINITE" : var.suspend_time
     "SuspendTimeout" = var.suspend_timeout != null ? var.suspend_timeout : (local.is_any_tpu ? 240 : 120)
-  }, var.partition_conf, { "ResumeTimeout" = local.has_flex ? 65535 : try(var.partition_conf["ResumeTimeout"], coalesce(var.resume_timeout, (local.is_any_tpu ? 600 : 300))) })
+  }, var.partition_conf, { "ResumeTimeout" = try(var.partition_conf["ResumeTimeout"], coalesce(var.resume_timeout, (local.has_flex ? 65535 : (local.is_any_tpu ? 600 : 300)))) })
 
   partition = {
     partition_name = var.partition_name

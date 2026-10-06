@@ -292,7 +292,9 @@ variable "nodeset_dyn" {
 variable "resume_timeout" {
   description = <<-EOD
     Maximum time permitted (in seconds) between when a node resume request is issued and when the node is actually available for use.
-    If null is given, then a smart default will be chosen depending on nodesets in partition.
+    If null is given, then a smart default will be chosen depending on nodesets in partition
+    (65535 for partitions with DWS Flex-start nodesets, 600 for TPU, otherwise 300).
+    An explicit value here or in partition_conf is always honored, including for Flex-start.
     This sets 'ResumeTimeout' in partition_conf.
     See https://slurm.schedmd.com/slurm.conf.html#OPT_ResumeTimeout_1 for details.
   EOD
