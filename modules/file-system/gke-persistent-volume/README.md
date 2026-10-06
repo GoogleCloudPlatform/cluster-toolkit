@@ -153,6 +153,22 @@ gcloud iam roles create gke.gcsfuse.profileUser \
       gcsfuse_service_agent_role: "projects/<YOUR_PROJECT_ID>/roles/gke.gcsfuse.profileUser"
 ```
 
+#### Disabling Automatic IAM Grants (Shared / Pre-Configured Buckets)
+
+If your deployment targets a pre-existing or shared Cloud Storage bucket managed by another team, your deploying identity may not have permissions to modify bucket IAM policies (`storage.buckets.setIamPolicy`).
+
+To prevent Terraform from attempting the IAM grant, set `grant_gcsfuse_service_agent_role: false` and ensure a bucket administrator binds the required role (`roles/storage.admin` or custom role) out-of-band:
+
+```yaml
+  - id: shared-data-bucket-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [gke_cluster]
+    settings:
+      gcs_bucket_name: pre-existing-shared-bucket
+      gcsfuse_storage_class_name: gcsfusecsi-training
+      grant_gcsfuse_service_agent_role: false
+```
+
 ### Connecting Via Use
 
 The diagram below shows the valid `use` relationships for the GKE Cluster Toolkit

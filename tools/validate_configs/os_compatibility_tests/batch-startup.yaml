@@ -31,7 +31,7 @@ vars:
     family: rocky-linux-8
     project: rocky-linux-cloud
   # instance_image:
-  #   family: debian-11
+  #   family: debian-12
   #   project: debian-cloud
 
 deployment_groups:

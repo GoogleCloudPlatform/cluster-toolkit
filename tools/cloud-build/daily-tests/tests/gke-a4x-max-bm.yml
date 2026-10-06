@@ -25,6 +25,8 @@ extended_reservation: PLACEHOLDER_RESERVATION_ID # Input actual reservation id o
 static_node_count: 2
 num_node_pools: 1
 instance_type: a4x-max
+scheduler: "gke"
+chs_nodepools: "a4x-maxgpu-4g-metal-a4x-max-pool"
 accelerator_type: nvidia-gb300
 num_gpus: 8
 k8s_service_account_name: workload-identity-k8s-sa
@@ -44,3 +46,4 @@ post_deploy_tests:
 - test-validation/test-gke-job.yml
 - test-validation/test-gke-a4x-max-bm.yml
 - test-validation/test-gke-a4x-max-bm-kueue-config.yml
+- test-validation/test-chs.yml

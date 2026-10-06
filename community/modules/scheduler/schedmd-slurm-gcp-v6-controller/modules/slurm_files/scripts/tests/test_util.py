@@ -15,12 +15,13 @@
 from typing import Optional, Type
 
 import pytest
-from mock import Mock
+from mock import Mock, PropertyMock, call
 from datetime import datetime, timezone, timedelta
 import unittest
 
-from common import TstNodeset, TstCfg # needed to import util
+from common import TstNodeset, TstCfg, TstPartition # needed to import util
 import util
+from setup import check_slurmdbd_ready, check_sackd_ready
 from util import NodeState, MachineType, AcceleratorInfo, UpcomingMaintenance, InstanceResourceStatus, FutureReservation, ReservationDetails
 from google.api_core.client_options import ClientOptions  # noqa: E402
 from googleapiclient.errors import HttpError # type: ignore
@@ -839,3 +840,1329 @@ def test_compute_service_custom_universe_domain(mocker):
     assert kwargs.get("static_discovery") is True
     assert kwargs.get("client_options").api_endpoint == "https://compute.apis-sovereign.goog/compute/beta/"
     assert kwargs.get("client_options").universe_domain == "apis-sovereign.goog"
+
+
+def test_mig_name():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "ns1": TstNodeset(nodeset_name="ns1", node_count_dynamic_max=100),
+            "ns2": TstNodeset(nodeset_name="ns2", node_count_dynamic_max=1200),
+        }
+    )
+    lkp = util.Lookup(cfg)
+    assert lkp.mig_name("ns1") == "testcl-ns1-mig-0"
+    assert lkp.mig_name("ns2", index=0) == "testcl-ns2-mig-0"
+
+
+def test_is_node_mig():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "ns_mig": TstNodeset(nodeset_name="ns_mig", mig_name="testcl-ns_mig-mig-0", provisioning_engine="MIG"),
+            "ns_bulk": TstNodeset(nodeset_name="ns_bulk", provisioning_engine="BULK_INSERT"),
+        }
+    )
+    lkp = util.Lookup(cfg)
+    assert lkp.is_nodeset_mig("ns_mig")
+    assert not lkp.is_nodeset_mig("ns_bulk")
+    assert lkp.is_node_mig("testcl-ns_mig-0")
+    assert not lkp.is_node_mig("testcl-ns_bulk-0")
+
+    # Cross-NodeSet Isolation: Legacy NodeSet without provisioning_engine in a hybrid cluster
+    cfg_hybrid = TstCfg(
+        slurm_cluster_name="testcl",
+        provisioning_engine="AUTO",
+        nodeset={
+            "ns_mig": TstNodeset(nodeset_name="ns_mig", mig_name="testcl-ns_mig-mig-0", provisioning_engine="MIG"),
+            "ns_legacy": TstNodeset(nodeset_name="ns_legacy"),  # No provisioning_engine field
+        }
+    )
+    lkp_hybrid = util.Lookup(cfg_hybrid)
+    assert lkp_hybrid.is_nodeset_mig("ns_mig")
+    assert not lkp_hybrid.is_nodeset_mig("ns_legacy")
+    assert lkp_hybrid.is_node_mig("testcl-ns_mig-0")
+    assert not lkp_hybrid.is_node_mig("testcl-ns_legacy-0")
+
+
+def test_get_mig_repairing_instances_empty_filter():
+    cfg = TstCfg(slurm_cluster_name="testcl")
+    lkp = util.Lookup(cfg)
+    lkp.get_mig_instances = unittest.mock.MagicMock(return_value={
+        "managedInstances": [
+            {"currentAction": "REPAIRING", "name": "node-1"},
+            {"currentAction": "RECREATING", "instance": "https://.../instances/node-2"},
+            {"currentAction": "RESTARTING", "name": "node-4"},
+            {"currentAction": "REPAIRING", "name": None, "instance": None},  # Ephemeral unassigned
+            {"currentAction": "NONE", "name": "node-3"},
+        ]
+    })
+    res = lkp.get_mig_repairing_instances("p", "r", "mig-0")
+    assert res == {"node-1", "node-2", "node-4"}
+    assert "" not in res
+
+
+def test_is_provisioning_flex_node(monkeypatch):
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "flex_ns": TstNodeset(
+                nodeset_name="flex_ns",
+                region="us-central1",
+                zone_policy_allow=["us-central1-a"],
+                instance_template="projects/testproj/global/instanceTemplates/flex-tpl",
+                dws_flex=NSDict(enabled=True, use_bulk_insert=False),
+            ),
+            "non_flex_ns": TstNodeset(
+                nodeset_name="non_flex_ns",
+                region="us-central1",
+                dws_flex=NSDict(enabled=False),
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    # Non-flex node returns False immediately
+    assert not lkp.is_provisioning_flex_node("testcl-non_flex_ns-0")
+
+    # Mock instances call returning None (node not created yet)
+    monkeypatch.setattr(lkp, "instance", lambda node: None)
+
+    # Mock get_mig_list returning MIGs with versioned template
+    fake_migs = {
+        "items": [
+            {
+                "selfLink": "https://www.googleapis.com/compute/v1/projects/testproj/regions/us-central1/instanceGroupManagers/unrelated-mig",
+                "versions": [{"instanceTemplate": "projects/testproj/global/instanceTemplates/other-tpl"}],
+                "currentActions": {"creating": 1},
+            },
+            {
+                "selfLink": "https://www.googleapis.com/compute/v1/projects/testproj/regions/us-central1/instanceGroupManagers/job-mig",
+                "versions": [{"instanceTemplate": "projects/testproj/global/instanceTemplates/flex-tpl"}],
+                "currentActions": {"creating": 1},
+            },
+        ]
+    }
+    monkeypatch.setattr(lkp, "get_mig_list", lambda proj, reg: fake_migs)
+
+    def mock_get_mig_instances(proj, reg, mig_name):
+        if mig_name == "job-mig":
+            return {
+                "managedInstances": [
+                    {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-flex_ns-0", "currentAction": "CREATING"}
+                ]
+            }
+        return {"managedInstances": []}
+
+    monkeypatch.setattr(lkp, "get_mig_instances", mock_get_mig_instances)
+
+    assert lkp.is_provisioning_flex_node("testcl-flex_ns-0")
+    assert lkp.is_provisioning_flex_node("testcl-flex_ns-0.c.testproj.internal")
+    assert not lkp.is_provisioning_flex_node("testcl-flex_ns-1")
+
+
+def test_is_nodeset_mig():
+    import types
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "static_mig_ns": TstNodeset(nodeset_name="static_mig_ns", provisioning_engine="MIG", mig_name="testcl-static_mig_ns-mig-0"),
+            "flex_ns": TstNodeset(nodeset_name="flex_ns", provisioning_engine="MIG", dws_flex=types.SimpleNamespace(enabled=True)),
+            "bulk_ns": TstNodeset(nodeset_name="bulk_ns", provisioning_engine="BULK_INSERT"),
+            "bulk_override_ns": TstNodeset(nodeset_name="bulk_override_ns", provisioning_engine="BULK_INSERT", mig_name="testcl-bulk_override_ns-mig-0"),
+            "topo_auto_ns": TstNodeset(nodeset_name="topo_auto_ns", provisioning_engine="AUTO", accelerator_topology="1x72"),
+            "topo_default_ns": TstNodeset(nodeset_name="topo_default_ns", accelerator_topology="1x72"),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    assert lkp.is_nodeset_mig("static_mig_ns") is True
+    assert lkp.is_nodeset_mig("flex_ns") is False
+    assert lkp.is_nodeset_mig("bulk_ns") is False
+    assert lkp.is_nodeset_mig("bulk_override_ns") is False
+    assert lkp.is_nodeset_mig("topo_auto_ns") is False
+    assert lkp.is_nodeset_mig("topo_default_ns") is False
+
+
+def test_mig_name_multi_mig():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "small_ns": TstNodeset(nodeset_name="small_ns", node_count_static=50, node_count_dynamic_max=0),
+            "large_static_ns": TstNodeset(nodeset_name="large_static_ns", node_count_static=2500, node_count_dynamic_max=0),
+            "large_dynamic_ns": TstNodeset(nodeset_name="large_dynamic_ns", node_count_static=0, node_count_dynamic_max=1500),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    # <= 1000 nodes -> indexed MIG name starting at 0
+    assert lkp.mig_name("small_ns") == "testcl-small_ns-mig-0"
+    assert lkp.node_mig_name("testcl-small_ns-0") == "testcl-small_ns-mig-0"
+    assert lkp.node_mig_name("testcl-small_ns-49") == "testcl-small_ns-mig-0"
+
+    # > 1000 static nodes -> indexed MIG names
+    assert lkp.mig_name("large_static_ns", index=0) == "testcl-large_static_ns-mig-0"
+    assert lkp.mig_name("large_static_ns", index=1) == "testcl-large_static_ns-mig-1"
+    assert lkp.mig_name("large_static_ns", index=2) == "testcl-large_static_ns-mig-2"
+    assert lkp.node_mig_name("testcl-large_static_ns-0") == "testcl-large_static_ns-mig-0"
+    assert lkp.node_mig_name("testcl-large_static_ns-999") == "testcl-large_static_ns-mig-0"
+    assert lkp.node_mig_name("testcl-large_static_ns-1000") == "testcl-large_static_ns-mig-1"
+    assert lkp.node_mig_name("testcl-large_static_ns-1999") == "testcl-large_static_ns-mig-1"
+    assert lkp.node_mig_name("testcl-large_static_ns-2000") == "testcl-large_static_ns-mig-2"
+
+    # > 1000 dynamic nodes -> indexed MIG names
+    assert lkp.node_mig_name("testcl-large_dynamic_ns-500") == "testcl-large_dynamic_ns-mig-0"
+    assert lkp.node_mig_name("testcl-large_dynamic_ns-1200") == "testcl-large_dynamic_ns-mig-1"
+
+
+@unittest.mock.patch("util.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_suspend_mig_nodes_multi_mig(mock_compute_prop, mock_execute):
+    import suspend
+
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "large_ns": TstNodeset(nodeset_name="large_ns", region="us-central1", node_count_static=2500, node_count_dynamic_max=0),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    mock_execute.side_effect = lambda req: req.execute()
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+        "managedInstances": [
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-large_ns-0"},
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-large_ns-1005"},
+        ]
+    }
+
+    # Pass duplicate entries ("testcl-large_ns-0" twice) and absent node "testcl-large_ns-999"; duplicates and absent nodes must be safely handled
+    suspend.suspend_mig_nodes(["testcl-large_ns-0.c.testproj.internal", "testcl-large_ns-0", "testcl-large_ns-999", "testcl-large_ns-1005"], lkp=lkp)
+
+    delete_calls = mock_compute.regionInstanceGroupManagers().deleteInstances.call_args_list
+    assert len(delete_calls) == 2
+    # Group 0 for node index 0 (FQDN normalized to short name, node 999 is skipped from body)
+    assert delete_calls[0].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-0"
+    assert delete_calls[0].kwargs["body"]["instances"] == ["projects/testproj/zones/us-central1-a/instances/testcl-large_ns-0"]
+    assert delete_calls[0].kwargs["body"]["skipInstancesOnValidationError"] is True
+    # Group 1 for node index 1005
+    assert delete_calls[1].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-1"
+    assert delete_calls[1].kwargs["body"]["instances"] == ["projects/testproj/zones/us-central1-a/instances/testcl-large_ns-1005"]
+    assert delete_calls[1].kwargs["body"]["skipInstancesOnValidationError"] is True
+
+    pic_del_calls = mock_compute.regionInstanceGroupManagers().deletePerInstanceConfigs.call_args_list
+    assert len(pic_del_calls) == 2
+    assert pic_del_calls[0].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-0"
+    assert set(pic_del_calls[0].kwargs["body"]["names"]) == {"testcl-large_ns-0", "testcl-large_ns-999"}
+    assert pic_del_calls[1].kwargs["instanceGroupManager"] == "testcl-large_ns-mig-1"
+    assert set(pic_del_calls[1].kwargs["body"]["names"]) == {"testcl-large_ns-1005"}
+
+
+@unittest.mock.patch.object(util.Lookup, "instance", return_value=None)
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+@unittest.mock.patch("slurmsync.lookup")
+def test_slurmsync_mig_auto_repair(mock_lookup, mock_compute_prop, mock_inst):
+    import slurmsync
+
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        provisioning_engine="MIG",
+        nodeset={
+            "ns": TstNodeset(nodeset_name="ns", region="us-central1", provisioning_engine="MIG", node_count_static=10, node_count_dynamic_max=0),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+        "managedInstances": [
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-ns-0", "currentAction": "REPAIRING"},
+            {"name": "testcl-ns-1", "currentAction": "REPAIRING"},
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-ns-2", "currentAction": "NONE"},
+        ]
+    }
+    mock_lookup.return_value = lkp
+
+    # Verify set cache
+    assert lkp.get_mig_repairing_instances("testproj", "us-central1", "testcl-ns-mig-0") == {"testcl-ns-0", "testcl-ns-1"}
+
+    # When node exists in Slurm and is IDLE (not DOWN) -> NodeActionDown
+    with unittest.mock.patch.object(util.Lookup, "node_state", return_value=slurmsync.NodeState(base="IDLE", flags=frozenset())):
+        action0 = slurmsync.get_node_action("testcl-ns-0")
+        assert isinstance(action0, slurmsync.NodeActionDown)
+        assert "MIG Auto-Healing" in action0.reason
+
+        # Test resolution when API returns 'name' field
+        action1 = slurmsync.get_node_action("testcl-ns-1.c.testproj.internal")
+        assert isinstance(action1, slurmsync.NodeActionDown)
+        assert "MIG Auto-Healing" in action1.reason
+
+    # When node does not exist in Slurm (node_state returns None) -> NodeActionUnchanged (don't run scontrol on invalid node)
+    with unittest.mock.patch.object(util.Lookup, "node_state", return_value=None):
+        action_none = slurmsync.get_node_action("testcl-ns-0")
+        assert isinstance(action_none, slurmsync.NodeActionUnchanged)
+
+    # When node was marked DOWN due to auto-healing and instance is now RUNNING -> NodeActionIdle
+    with unittest.mock.patch.object(util.Lookup, "instance", return_value=unittest.mock.MagicMock(status="RUNNING")):
+        with unittest.mock.patch.object(util.Lookup, "node_state", return_value=slurmsync.NodeState(base="DOWN", flags=frozenset())):
+            with unittest.mock.patch("slurmsync.get_node_reason", return_value="MIG Auto-Healing instance repair in progress") as mock_get_reason:
+                action_recovered = slurmsync.get_node_action("testcl-ns-2")
+                assert isinstance(action_recovered, slurmsync.NodeActionIdle)
+                mock_get_reason.assert_called_with("testcl-ns-2")
+
+                # Verify FQDN is normalized to short name when calling get_node_reason
+                action_recovered_fqdn = slurmsync.get_node_action("testcl-ns-2.c.testproj.internal")
+                assert isinstance(action_recovered_fqdn, slurmsync.NodeActionIdle)
+                mock_get_reason.assert_called_with("testcl-ns-2")
+
+
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+@unittest.mock.patch("slurmsync.lookup")
+def test_slurmsync_mig_preempted_spot_waits_for_auto_healing(mock_lookup, mock_compute_prop):
+    import slurmsync
+
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "ns": TstNodeset(nodeset_name="ns", region="us-central1", provisioning_engine="MIG", node_count_static=2, node_count_dynamic_max=0),
+            "bulk": TstNodeset(nodeset_name="bulk", region="us-central1", provisioning_engine="BULK_INSERT", node_count_static=2, node_count_dynamic_max=0),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    # Window before MIG reports RECREATING: VM is TERMINATED, currentAction NONE.
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+        "managedInstances": [{"name": "testcl-ns-0", "currentAction": "NONE"}]
+    }
+    mock_lookup.return_value = lkp
+    preempted = unittest.mock.MagicMock(status="TERMINATED")
+    preempted.scheduling.preemptible = True
+
+    with unittest.mock.patch.object(util.Lookup, "instance", return_value=preempted):
+        with unittest.mock.patch.object(util.Lookup, "node_state", return_value=slurmsync.NodeState(base="ALLOCATED", flags=frozenset())):
+            action = slurmsync.get_node_action("testcl-ns-0")
+            assert isinstance(action, slurmsync.NodeActionDown)
+            assert "MIG Auto-Healing" in action.reason
+            # Non-MIG nodeset keeps the existing restart behaviour.
+            assert isinstance(slurmsync.get_node_action("testcl-bulk-0"), slurmsync.NodeActionPrempt)
+
+        with unittest.mock.patch.object(util.Lookup, "node_state", return_value=slurmsync.NodeState(base="DOWN", flags=frozenset())):
+            assert isinstance(slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionUnchanged)
+
+
+def test_is_target_controller_up_hostname_containing_role():
+    line = "Slurmctld(backup) at primary-cluster-controller-1 is UP"
+    assert util._is_target_controller_up(line, "primary") is False
+    assert util._is_target_controller_up(line, "backup") is True
+
+def test_wait_slurmctld_up_timeout(mocker):
+    mocker.patch("socket.gethostname", return_value="slurmctld-0")
+    mocker.patch("util.run", return_value=Mock(returncode=1, stdout="", stderr="DOWN"))
+    mocker.patch("util.sleep")
+    lkp = util.Lookup(TstCfg())
+    with pytest.raises(TimeoutError, match=r"slurmctld \(primary\) is not fully up"):
+        util.wait_slurmctld_up(lkp, timeout=2)
+
+def test_is_target_controller_up():
+    # Single controller ping format ('Slurmctld (primary)...')
+    output_single_up = "Slurmctld (primary) at controller is UP"
+    output_single_down = "Slurmctld (primary) at controller is DOWN"
+    assert util._is_target_controller_up(output_single_up, "primary") is True
+    assert util._is_target_controller_up(output_single_down, "primary") is False
+
+    # HA primary
+    output_ha_restarting_primary = (
+        "Slurmctld(primary) at slurmctld-0 is DOWN\n"
+        "Slurmctld(backup) at slurmctld-1 is UP"
+    )
+    assert util._is_target_controller_up(output_ha_restarting_primary, "primary") is False
+
+    # HA backup
+    assert util._is_target_controller_up(output_ha_restarting_primary, "backup") is True
+
+    output_ha_both_up = (
+        "Slurmctld(primary) at slurmctld-0 is UP\n"
+        "Slurmctld(backup) at slurmctld-1 is UP"
+    )
+    assert util._is_target_controller_up(output_ha_both_up, "primary") is True
+    assert util._is_target_controller_up(output_ha_both_up, "backup") is True
+
+    # Overlapping hostname checks: ensure 'primary' or 'backup' in hostname does not produce false positives
+    output_ha_hostname_primary = (
+        "Slurmctld(primary) at primary-cluster-controller-0 is DOWN\n"
+        "Slurmctld(backup) at primary-cluster-controller-1 is UP"
+    )
+    assert util._is_target_controller_up(output_ha_hostname_primary, "primary") is False
+    assert util._is_target_controller_up(output_ha_hostname_primary, "backup") is True
+
+    output_ha_hostname_backup = (
+        "Slurmctld(primary) at backup-cluster-controller-0 is UP\n"
+        "Slurmctld(backup) at backup-cluster-controller-1 is DOWN"
+    )
+    assert util._is_target_controller_up(output_ha_hostname_backup, "primary") is True
+    assert util._is_target_controller_up(output_ha_hostname_backup, "backup") is False
+
+
+def test_is_active_controller(mocker):
+    mocker.patch.object(util.Lookup, "is_controller", PropertyMock(return_value=True))
+    mocker.patch.object(util.Lookup, "scontrol", PropertyMock(return_value="scontrol"))
+
+    cfg = TstCfg(slurm_backup_controller_name="slurmctld-1")
+    lkp = util.Lookup(cfg)
+
+    # Primary active: Primary node (-0), primary UP
+    mocker.patch("socket.gethostname", return_value="slurmctld-0")
+    mocker.patch(
+        "util.run",
+        return_value=Mock(
+            returncode=0,
+            stdout="Slurmctld(primary) at slurmctld-0 is UP\nSlurmctld(backup) at slurmctld-1 is UP",
+            stderr="",
+        ),
+    )
+    assert util.is_active_controller(lkp) is True
+
+    # Backup takeover: Backup node (-1), primary DOWN, backup UP
+    mocker.patch("socket.gethostname", return_value="slurmctld-1")
+    mocker.patch(
+        "util.run",
+        return_value=Mock(
+            returncode=0,
+            stdout="Slurmctld(primary) at slurmctld-0 is DOWN\nSlurmctld(backup) at slurmctld-1 is UP",
+            stderr="",
+        ),
+    )
+    assert util.is_active_controller(lkp) is True
+
+    # Backup takeover with hostname containing 'primary': Backup node (-1), primary DOWN, backup UP
+    mocker.patch("socket.gethostname", return_value="primary-cluster-controller-1")
+    lkp_primary_cluster = util.Lookup(TstCfg(slurm_backup_controller_name="primary-cluster-controller-1"))
+    mocker.patch(
+        "util.run",
+        return_value=Mock(
+            returncode=0,
+            stdout="Slurmctld(primary) at primary-cluster-controller-0 is DOWN\nSlurmctld(backup) at primary-cluster-controller-1 is UP",
+            stderr="",
+        ),
+    )
+    assert util.is_active_controller(lkp_primary_cluster) is True
+
+    # Backup standby: Backup node (-1), primary UP
+    mocker.patch("socket.gethostname", return_value="slurmctld-1")
+    mocker.patch(
+        "util.run",
+        return_value=Mock(
+            returncode=0,
+            stdout="Slurmctld(primary) at slurmctld-0 is UP\nSlurmctld(backup) at slurmctld-1 is UP",
+            stderr="",
+        ),
+    )
+    assert util.is_active_controller(lkp) is False
+
+    # Non-HA: No backup controller configured
+    mock_run = mocker.patch("util.run")
+    lkp_non_ha = util.Lookup(TstCfg(slurm_backup_controller_name=None))
+    assert util.is_active_controller(lkp_non_ha) is True
+    mock_run.assert_not_called()
+
+
+def test_check_slurmdbd_ready_fast_success(mocker):
+    """Verify check_slurmdbd_ready returns immediately on first try when ready without sleeping."""
+    mock_run = mocker.patch("setup.run", return_value=Mock(returncode=0))
+    mock_sleep = mocker.patch("setup.time.sleep")
+
+    check_slurmdbd_ready(maxtries=30, max_interval=15.0)
+
+    mock_run.assert_called_once_with(
+        f"{util.slurmdirs.prefix}/bin/sacctmgr -n -i show cluster",
+        check=False,
+        timeout=10,
+    )
+    mock_sleep.assert_not_called()
+
+
+def test_check_slurmdbd_ready_retry_and_timeout(mocker):
+    """Verify check_slurmdbd_ready retries on failure and raises RuntimeError on timeout."""
+    mock_run = mocker.patch("setup.run", return_value=Mock(returncode=1))
+    mock_sleep = mocker.patch("setup.time.sleep")
+
+    with pytest.raises(RuntimeError, match="Slurmdbd is not ready"):
+        check_slurmdbd_ready(maxtries=4, max_interval=15.0)
+
+    assert mock_run.call_count == 4
+    assert mock_sleep.call_count == 3
+    mock_sleep.assert_has_calls([call(10.0), call(15.0), call(15.0)])
+
+
+def test_check_sackd_ready_fast_success(mocker):
+    """Verify check_sackd_ready enables and starts sackd without sleeping when healthy."""
+    mock_run = mocker.patch("setup.run", return_value=Mock(returncode=0))
+    mock_sleep = mocker.patch("setup.time.sleep")
+
+    check_sackd_ready(maxtries=40, max_interval=15.0)
+
+    assert mock_run.call_args_list == [
+        call("systemctl enable sackd", timeout=30),
+        call("systemctl restart sackd", timeout=60, check=False),
+        call("systemctl is-active sackd", timeout=15, check=False),
+    ]
+    mock_sleep.assert_not_called()
+
+
+def test_check_sackd_ready_retry_and_exhaustion(mocker):
+    """Verify check_sackd_ready retries with backoff and calls status upon exhaustion."""
+    mock_run = mocker.patch(
+        "setup.run",
+        side_effect=[
+            Mock(returncode=0),  # enable sackd
+            Mock(returncode=1),  # try 1 restart fails
+            Mock(returncode=1),  # try 2 restart fails
+            Mock(returncode=3),  # status sackd
+        ],
+    )
+    mock_sleep = mocker.patch("setup.time.sleep")
+
+    check_sackd_ready(maxtries=2, max_interval=15.0)
+
+    assert mock_run.call_count == 4
+    mock_run.assert_called_with("systemctl status sackd", timeout=30, check=False)
+    assert mock_sleep.call_count == 1
+    mock_sleep.assert_has_calls([call(10.0)])
+
+
+@pytest.mark.parametrize(
+    "restart,expect_restart",
+    [
+        (True, True),
+        (False, False),
+    ],
+)
+def test_scontrol_reconfigure(restart, expect_restart, mocker):
+    """`scontrol reconfigure` always runs; the slurmctld restart is opt-out.
+
+    `update_topology` runs on every node power-up, so restarting slurmctld there
+    put a controller restart on the autoscaling hot path.
+    """
+    mock_run = mocker.patch("util.run")
+    mock_wait = mocker.patch("util.wait_slurmctld_up")
+    lkp = mocker.Mock(scontrol="scontrol")
+
+    util.scontrol_reconfigure(lkp, restart=restart)
+
+    commands = [c.args[0] for c in mock_run.call_args_list]
+    assert "scontrol reconfigure" in commands
+    assert ("sudo systemctl restart slurmctld.service" in commands) == expect_restart
+    assert mock_wait.called == expect_restart
+
+
+@pytest.mark.parametrize(
+    "config_changed,topology_changed,expect_restart",
+    [
+        (True, False, True),
+        (True, True, True),
+        (False, True, False),
+    ],
+)
+def test_slurmsync_deferred_reconfigure_restart(
+    config_changed, topology_changed, expect_restart, mocker
+):
+    """slurmsync restarts slurmctld for a config change, but not for topology alone."""
+    import slurmsync
+
+    mocker.patch("slurmsync.lookup", return_value=Mock(is_controller=True))
+    mocker.patch("slurmsync.reconfigure_slurm", return_value=config_changed)
+    mocker.patch("slurmsync.update_topology", return_value=(topology_changed, Mock()))
+    mocker.patch("util.should_mount_slurm_bucket", return_value=False)
+    mocker.patch("util.is_active_controller", return_value=True)
+    mocker.patch("util.run")
+    for name in (
+        "process_messages",
+        "sync_instances",
+        "sync_flex_migs",
+        "sync_placement_groups",
+        "sync_maintenance_reservation",
+        "sync_opportunistic_maintenance",
+        "install_custom_scripts",
+        "repair.poll_operations",
+    ):
+        mocker.patch(f"slurmsync.{name}")
+    mock_reconfigure = mocker.patch("util.scontrol_reconfigure")
+
+    slurmsync.main()
+
+    mock_reconfigure.assert_called_once()
+    assert mock_reconfigure.call_args.kwargs["restart"] is expect_restart
+def test_nodeset_slice_size():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "std_ns": TstNodeset(nodeset_name="std_ns"),
+            "explicit_slice_ns": TstNodeset(nodeset_name="explicit_slice_ns", slice_size=18),
+            "a4x_ns": TstNodeset(nodeset_name="a4x_ns", accelerator_topology="1x72", gpu={"count": 4}),
+            "a4x_2slice_ns": TstNodeset(nodeset_name="a4x_2slice_ns", accelerator_topology="2x72", gpu={"count": 4}),
+            "a3_topo_ns": TstNodeset(nodeset_name="a3_topo_ns", accelerator_topology="1x16", gpu={"count": 8}),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    assert lkp.nodeset_slice_size("std_ns") == 1000
+    assert lkp.nodeset_slice_size("explicit_slice_ns") == 18
+    assert lkp.nodeset_slice_size("a4x_ns") == 18
+    assert lkp.nodeset_slice_size("a4x_2slice_ns") == 36
+    assert lkp.nodeset_slice_size("a3_topo_ns") == 2
+    assert lkp.nodeset_slice_size("non_existent_ns") == 1000
+
+
+def test_nodeset_slice_size_no_attrdict_autovivification():
+    raw_dict = util.AttrDict({"nodeset_name": "cpu_ns"})
+    cfg = TstCfg(slurm_cluster_name="testcl")
+    setattr(cfg, "nodeset", {"cpu_ns": raw_dict})
+    lkp = util.Lookup(cfg)
+    assert lkp.nodeset_slice_size("cpu_ns") == 1000
+    assert lkp.is_nodeset_mig("cpu_ns") is False
+    # Confirm keys were not auto-vivified into raw_dict
+    assert "slice_size" not in raw_dict
+    assert "accelerator_topology" not in raw_dict
+    assert "provisioning_engine" not in raw_dict
+    assert "mig_name" not in raw_dict
+
+
+def test_node_mig_name_gpu_topology_slices():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                node_count_static=36,
+                accelerator_topology="1x72",
+                gpu={"count": 4},
+                slice_size=18,
+                provisioning_engine="MIG",
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    # Slice 0 (nodes 0-17) -> mig-0
+    assert lkp.node_mig_name("testcl-a4x-0") == "testcl-a4x-mig-0"
+    assert lkp.node_mig_name("testcl-a4x-17") == "testcl-a4x-mig-0"
+
+    # Slice 1 (nodes 18-35) -> mig-1
+    assert lkp.node_mig_name("testcl-a4x-18") == "testcl-a4x-mig-1"
+    assert lkp.node_mig_name("testcl-a4x-35") == "testcl-a4x-mig-1"
+
+
+@unittest.mock.patch("util.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_suspend_mig_nodes_gpu_topology_slices(mock_compute_prop, mock_execute):
+    import suspend
+
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                region="us-central1",
+                node_count_static=36,
+                accelerator_topology="1x72",
+                gpu={"count": 4},
+                slice_size=18,
+                provisioning_engine="MIG",
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    mock_execute.side_effect = lambda req: req.execute()
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+        "managedInstances": [
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-a4x-0"},
+            {"instance": "projects/testproj/zones/us-central1-a/instances/testcl-a4x-18"},
+        ]
+    }
+
+    # Suspend nodes across both slices
+    suspend.suspend_mig_nodes(["testcl-a4x-0", "testcl-a4x-18"], lkp=lkp)
+
+    delete_calls = mock_compute.regionInstanceGroupManagers().deleteInstances.call_args_list
+    assert len(delete_calls) == 2
+    del_migs = {call.kwargs["instanceGroupManager"] for call in delete_calls}
+    assert del_migs == {"testcl-a4x-mig-0", "testcl-a4x-mig-1"}
+
+
+def test_nodeset_slice_size_attrdict_no_autovivification():
+    gpu_attr = util.AttrDict(type="nvidia-gb200")
+    nodeset = TstNodeset(
+        nodeset_name="a4x",
+        node_count_static=36,
+        accelerator_topology="1x72",
+        gpu=gpu_attr,
+        instance_template="projects/testproj/global/instanceTemplates/a4x-tmpl",
+    )
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={"a4x": nodeset},
+    )
+    lkp = util.Lookup(cfg)
+
+    mock_tmpl = unittest.mock.MagicMock()
+    mock_accel = unittest.mock.MagicMock()
+    mock_accel.count = 8
+    mock_tmpl.machine_type.accelerators = [mock_accel]
+    lkp.template_info = unittest.mock.MagicMock(return_value=mock_tmpl)
+
+    slice_size = lkp.nodeset_slice_size("a4x")
+
+    assert "count" not in gpu_attr
+    lkp.template_info.assert_called_once_with("projects/testproj/global/instanceTemplates/a4x-tmpl")
+    assert slice_size == 9
+
+
+def test_is_nodeset_mig_strict_opt_in():
+    """Verify is_nodeset_mig honors strict opt-in: accelerator_topology with AUTO or BULK_INSERT returns False."""
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        nodeset={
+            "a4x_auto": TstNodeset(
+                nodeset_name="a4x_auto",
+                accelerator_topology="1x72",
+                provisioning_engine="AUTO",
+            ),
+            "a4x_bi": TstNodeset(
+                nodeset_name="a4x_bi",
+                accelerator_topology="1x72",
+                provisioning_engine="BULK_INSERT",
+            ),
+            "a4x_mig": TstNodeset(
+                nodeset_name="a4x_mig",
+                accelerator_topology="1x72",
+                provisioning_engine="MIG",
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    assert lkp.is_nodeset_mig("a4x_auto") is False
+    assert lkp.is_nodeset_mig("a4x_bi") is False
+    assert lkp.is_nodeset_mig("a4x_mig") is True
+
+
+
+def test_has_block_topology_requires_exact_lowercase_topology():
+    """Pins the contract that forces the nodeset module to normalize accelerator_topology.
+
+    has_block_topology() compares against the literal "1x72". The nodeset module's
+    outputs accept "1X72" and " 1x72 " (the validation regex is case-insensitive and
+    trims), and every Terraform consumer normalizes with lower(trimspace(...)). If the
+    value written into config.yaml were NOT normalized at source, such a nodeset would
+    build correct slice MIGs with correct workload policies and then silently drop from
+    topology/block to topology/tree, straddling NVLink domains with no error raised.
+
+    If this test starts failing, do not relax it -- check that
+    community/modules/compute/schedmd-slurm-gcp-v6-nodeset/main.tf still emits
+    lower(trimspace(var.accelerator_topology)).
+    """
+    def _cfg(topo):
+        return TstCfg(
+            slurm_cluster_name="c",
+            nodeset={
+                "a4x": TstNodeset(
+                    nodeset_name="a4x",
+                    accelerator_topology=topo,
+                    reservation_name="a4x-res",
+                ),
+            },
+            partitions={"p": TstPartition(partition_name="p", partition_nodeset=["a4x"])},
+        )
+
+    part = NSDict(partition_name="p", partition_nodeset=["a4x"])
+
+    # Normalized value: block topology is enabled.
+    assert util.Lookup(_cfg("1x72")).has_block_topology(part) is True
+
+    # Un-normalized variants must NOT silently enable block topology. These are exactly
+    # the strings the nodeset module is responsible for folding into "1x72".
+    for bad in ("1X72", "1x72 ", " 1x72"):
+        assert util.Lookup(_cfg(bad)).has_block_topology(part) is False, (
+            f"has_block_topology matched {bad!r}; the exact-match contract changed"
+        )
+
+    # A reservation is still required (pre-existing behavior, unchanged).
+    no_res = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={"a4x": TstNodeset(nodeset_name="a4x", accelerator_topology="1x72", reservation_name="")},
+    )
+    assert util.Lookup(no_res).has_block_topology(part) is False
+
+
+def test_nodeset_slice_size_absent_for_non_mig_nodesets():
+    """Zero-regression guard: Terraform must only hand slice_size/gpu_count to static MIG
+    nodesets. partition.tf gates both on
+    (nodeset_resolved_engine == "MIG" && !dws_flex.enabled).
+
+    DWS Flex resolves to engine "MIG" but gets no slice MIGs, so it must be excluded too --
+    it keeps using the runtime placement path, which derives hosts-per-slice from the live
+    GCE machine type.
+    """
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={
+            # AUTO/BULK_INSERT and DWS Flex: Terraform emits null for both fields.
+            "a4x_auto": TstNodeset(nodeset_name="a4x_auto", accelerator_topology="1x72",
+                                   provisioning_engine="BULK_INSERT"),
+            "a4x_flex": TstNodeset(nodeset_name="a4x_flex", accelerator_topology="1x72",
+                                   provisioning_engine="MIG",
+                                   dws_flex=util.NSDict(enabled=True, use_bulk_insert=False)),
+            # Static MIG: Terraform supplies the authoritative slice size.
+            "a4x_mig": TstNodeset(nodeset_name="a4x_mig", accelerator_topology="1x72",
+                                  provisioning_engine="MIG", slice_size=18, gpu_count=4),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    for ns in ("a4x_auto", "a4x_flex"):
+        # TstNodeset is a dataclass, not an NSDict, so use getattr here. Production config
+        # is an NSDict and takes the .get() branch in util/resume; both are covered.
+        assert getattr(lkp.cfg.nodeset[ns], "slice_size", None) is None, f"{ns}: slice_size leaked"
+        assert getattr(lkp.cfg.nodeset[ns], "gpu_count", None) is None, f"{ns}: gpu_count leaked"
+
+    # Neither is a MIG nodeset at runtime, so node_mig_name is never reached for them.
+    assert lkp.is_nodeset_mig("a4x_auto") is False
+    assert lkp.is_nodeset_mig("a4x_flex") is False
+    assert lkp.is_nodeset_mig("a4x_mig") is True
+
+    # The static MIG nodeset shards on 18; a MIG nodeset without a topology keeps 1000.
+    assert lkp.nodeset_slice_size("a4x_mig") == 18
+    assert lkp.node_mig_name("c-a4x_mig-17") == "c-a4x_mig-mig-0"
+    assert lkp.node_mig_name("c-a4x_mig-18") == "c-a4x_mig-mig-1"
+
+def _mk_tpu_tpl(machine_name: str):
+    return Mock(
+        machine_type=MachineType(
+            name=machine_name, guest_cpus=0, memory_mb=0, accelerators=[]
+        ),
+        gpu=None,
+    )
+
+
+@pytest.mark.parametrize(
+    "machine_type,topology,expected_type,expected_chunk_size",
+    [
+        ("ct5lp-hightpu-4t", "2x4", "v5e", 2),
+        ("ct5l-hightpu-4t", "2x4", "v5e", 2),
+        ("ct5p-hightpu-4t", "2x2x2", "v5p", 2),
+        ("ct6e-standard-4t", "2x4", "v6e", 2),
+        ("tpu7x-standard-4t", "2x2x2", "tpu7x", 2),
+        ("tpu7-standard-4t", "2x2x2", "7", 2),
+        ("ct6e-standard-8t", "2x4", ValueError, None),
+        ("ct6e-standard-1t", "2x4", ValueError, None),
+        ("n1-standard-4", None, None, 1),
+    ],
+)
+
+def test_node_tpu_info_and_chunk_size(
+    machine_type, topology, expected_type, expected_chunk_size
+):
+    ns = TstNodeset(
+        "tpuns",
+        instance_template="tpl-tpuns",
+        accelerator_topology=topology,
+    )
+    cfg = TstCfg(slurm_cluster_name="c", nodeset={"tpuns": ns})
+    lkp = util.Lookup(cfg)
+    lkp.template_info = Mock(return_value=_mk_tpu_tpl(machine_type))
+    if expected_type is ValueError:
+        with pytest.raises(ValueError, match="Unsupported TPU machine type"):
+            lkp.node_tpu_info(ns) # type: ignore[arg-type]
+    elif expected_type is None:
+        assert lkp.node_tpu_info(ns) is None # type: ignore[arg-type]
+        assert lkp.get_tpu_chunk_size(ns) == expected_chunk_size # type: ignore[arg-type]
+    else:
+        info = lkp.node_tpu_info(ns) # type: ignore[arg-type]
+        assert info is not None
+        assert info.type == expected_type
+        assert info.tpus_per_node == 4
+        assert lkp.get_tpu_chunk_size(ns) == expected_chunk_size # type: ignore[arg-type]
+
+def test_tpu_lookup_and_device_constrain():
+    from common import TstPartition
+
+    ns_v6e_static = TstNodeset(
+        "v6es",
+        instance_template="tpl-v6e",
+        node_count_static=4,
+        node_count_dynamic_max=0,
+        accelerator_topology="2x4",
+    )
+    ns_7x_dyn = TstNodeset(
+        "tpu7xd",
+        instance_template="tpl-7x",
+        node_count_static=0,
+        node_count_dynamic_max=4,
+        accelerator_topology=None,
+    )
+    ns_cpu = TstNodeset(
+        "cpu",
+        instance_template="tpl-cpu",
+        node_count_static=2,
+        node_count_dynamic_max=0,
+    )
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={"v6es": ns_v6e_static, "tpu7xd": ns_7x_dyn, "cpu": ns_cpu},
+        partitions={
+            "p_static": TstPartition("p_static", partition_nodeset=["v6es"]),
+            "p_dyn": TstPartition("p_dyn", partition_nodeset=["tpu7xd"]),
+            "p_cpu": TstPartition("p_cpu", partition_nodeset=["cpu"]),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    def fake_template_info(tpl_link):
+        if tpl_link == "tpl-v6e":
+            return _mk_tpu_tpl("ct6e-standard-4t")
+        if tpl_link == "tpl-7x":
+            return _mk_tpu_tpl("tpu7x-standard-4t")
+        return _mk_tpu_tpl("c2-standard-60")
+
+    lkp.template_info = Mock(side_effect=fake_template_info)
+
+    assert lkp.has_tpu_nodesets() is True
+    assert lkp.is_tpu_nodeset("v6es") is True
+    assert lkp.is_tpu_static_nodeset("v6es") is True
+    assert lkp.is_tpu_dynamic_nodeset("v6es") is False
+
+    assert lkp.is_tpu_nodeset("tpu7xd") is True
+    assert lkp.is_tpu_static_nodeset("tpu7xd") is False
+    assert lkp.is_tpu_dynamic_nodeset("tpu7xd") is True
+
+    assert lkp.is_tpu_nodeset("cpu") is False
+    assert lkp.is_tpu_static_partition(cfg.partitions["p_static"]) is True # type: ignore[arg-type]
+    assert lkp.is_tpu_dynamic_partition(cfg.partitions["p_dyn"]) is True # type: ignore[arg-type]
+    assert lkp.is_tpu_partition(cfg.partitions["p_cpu"]) is False # type: ignore[arg-type]
+
+    assert lkp.remove_device_constrain_nodeset("v6es") is False
+    assert lkp.remove_device_constrain_nodeset("tpu7xd") is True
+    assert lkp.remove_device_constrain_nodeset("cpu") is False
+
+    assert lkp.group_tpu_nodes_by_chunk_idx(
+        ["c-v6es-0", "c-v6es-1", "c-v6es-2", "c-v6es-3"], chunk_size=2
+    ) == {
+        0: ["c-v6es-0", "c-v6es-1"],
+        1: ["c-v6es-2", "c-v6es-3"],
+    }
+
+
+# ==============================================================================
+# Tests for to_leaf_name, trim_self_link, and get_operation_req
+# ==============================================================================
+
+
+@pytest.mark.parametrize(
+    "val,expected",
+    [
+        ("https://www.googleapis.com/compute/v1/projects/p/zones/us-central1-a", "us-central1-a"),
+        ("https://www.googleapis.com/compute/v1/projects/p/zones/us-central1-a/", "us-central1-a"),
+        ("https://www.googleapis.com/compute/v1/projects/p/zones/us-central1-a///", "us-central1-a"),
+        ("projects/p/regions/us-central1", "us-central1"),
+        ("us-central1-a", "us-central1-a"),
+        ("  us-central1-a/  ", "us-central1-a"),
+        ("  https://compute.googleapis.com/compute/v1/projects/p/zones/us-central1-a /  ", "us-central1-a"),
+        ("a", "a"),
+        ("//", ""),
+        (" / ", ""),
+        ("   ", ""),
+        ("", ""),
+        (None, ""),
+        ("///", ""),
+    ],
+)
+def test_to_leaf_name(val, expected):
+    assert util.to_leaf_name(val) == expected
+
+
+@pytest.mark.parametrize(
+    "link,expected",
+    [
+        ("https://www.googleapis.com/compute/v1/projects/p/regions/us-central1", "us-central1"),
+        ("https://www.googleapis.com/compute/v1/projects/p/regions/us-central1/", "us-central1"),
+        ("us-central1", "us-central1"),  # Previously raised Exception!
+        ("bare-resource-name", "bare-resource-name"),
+        ("", ""),
+    ],
+)
+def test_trim_self_link_idempotent(link, expected):
+    """Verify trim_self_link is non-throwing and idempotent on bare names."""
+    assert util.trim_self_link(link) == expected
+
+
+def test_get_operation_req_zonal():
+    lkp = unittest.mock.MagicMock()
+    lkp.project = "test-project"
+
+    # Full selfLink with trailing slash
+    util.get_operation_req(
+        lkp,
+        "https://compute.googleapis.com/compute/v1/projects/p/zones/us-central1-a/operations/op-123/",
+        zone="https://compute.googleapis.com/compute/v1/projects/p/zones/us-central1-a/",
+    )
+    lkp.compute.zoneOperations().get.assert_called_with(
+        project="test-project", zone="us-central1-a", operation="op-123"
+    )
+
+    # Bare zone name
+    util.get_operation_req(lkp, "op-456", zone="us-east1-b")
+    lkp.compute.zoneOperations().get.assert_called_with(
+        project="test-project", zone="us-east1-b", operation="op-456"
+    )
+
+
+def test_get_operation_req_regional():
+    lkp = unittest.mock.MagicMock()
+    lkp.project = "test-project"
+
+    util.get_operation_req(
+        lkp, "op-789", region="https://.../regions/europe-west4/"
+    )
+    lkp.compute.regionOperations().get.assert_called_with(
+        project="test-project", region="europe-west4", operation="op-789"
+    )
+
+
+def test_get_operation_req_global():
+    lkp = unittest.mock.MagicMock()
+    lkp.project = "test-project"
+
+    util.get_operation_req(lkp, "op-global")
+    lkp.compute.globalOperations().get.assert_called_with(
+        project="test-project", operation="op-global"
+    )
+
+
+def test_get_operation_req_empty_name():
+    lkp = unittest.mock.MagicMock()
+    lkp.project = "test-project"
+
+    with pytest.raises(ValueError, match="Invalid operation name"):
+        util.get_operation_req(lkp, "")
+
+    with pytest.raises(ValueError, match="Invalid operation name"):
+        util.get_operation_req(lkp, "   ///   ")
+def _flex_lkp(machines: dict, selections):
+    """Lookup whose primary template is n2-standard-16 plus the given fallback selections."""
+    lkp = util.Lookup(TstCfg())
+    lkp.template_info = Mock(return_value=NSDict({  # type: ignore[method-assign]
+        "machine_type": machines["n2-standard-16"],
+        "advancedMachineFeatures": NSDict({"threadsPerCore": None, "visibleCoreCount": None}),
+    }))
+    lkp.machine_type = Mock(side_effect=lambda n: machines[n])  # type: ignore[method-assign]
+
+    nodeset = NSDict({
+        "nodeset_name": "flex",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": None if selections is None else NSDict(
+            {"instance_selections": [NSDict(s) for s in selections]}
+        ),
+    })
+    return lkp, nodeset
+
+
+FLEX_MACHINES = {
+    "n2-standard-16": util.MachineType(name="n2-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
+    "n2-standard-8": util.MachineType(name="n2-standard-8", guest_cpus=8, memory_mb=32768, accelerators=[]),
+    "n2-highmem-8": util.MachineType(name="n2-highmem-8", guest_cpus=8, memory_mb=65536, accelerators=[]),
+}
+
+
+def test_nodeset_machine_conf_no_policy_matches_template():
+    lkp, nodeset = _flex_lkp(FLEX_MACHINES, None)
+    assert lkp.nodeset_machine_conf(nodeset) == lkp.template_machine_conf("tpl")
+
+
+def test_nodeset_machine_conf_floors_to_smallest_shape():
+    lkp, nodeset = _flex_lkp(FLEX_MACHINES, [
+        {"name": "fb", "rank": 2, "machine_types": ["n2-standard-8"]},
+    ])
+    got = lkp.nodeset_machine_conf(nodeset)
+    primary = lkp.template_machine_conf("tpl")
+
+    assert primary.cpus == 16 and got.cpus == 8
+    assert got.memory < primary.memory
+    # slurmctld rejects a node line whose geometry does not multiply out to CPUs.
+    assert got.sockets * got.cores_per_socket * got.threads_per_core == got.cpus
+
+
+def test_nodeset_machine_conf_mixes_min_cpu_and_min_memory():
+    # n2-highmem-8 has the same memory as the 16-vCPU primary but half the CPUs.
+    lkp, nodeset = _flex_lkp(FLEX_MACHINES, [
+        {"name": "a", "rank": 1, "machine_types": ["n2-highmem-8"]},
+        {"name": "b", "rank": 2, "machine_types": ["n2-standard-8"]},
+    ])
+    got = lkp.nodeset_machine_conf(nodeset)
+    assert got.cpus == 8
+    assert got.memory == lkp._machine_conf(FLEX_MACHINES["n2-standard-8"], 2, None).memory
+
+
+def test_nodeset_machine_conf_raises_on_unresolvable_machine_type():
+    machines = dict(FLEX_MACHINES)
+    lkp, nodeset = _flex_lkp(machines, [
+        {"name": "fb", "rank": 2, "machine_types": ["nonexistent-machine-type"]},
+    ])
+    # Falling back to the primary shape would oversize the node and DRAIN smaller fallback VMs.
+    with pytest.raises(RuntimeError, match="nonexistent-machine-type"):
+        lkp.nodeset_machine_conf(nodeset)
+
+
+def test_nodeset_machine_conf_does_not_mutate_base_conf():
+    # When the primary template has the fewest CPUs (e.g. n2-standard-8 primary with n2-standard-16
+    # fallback that has less memory in a custom shape), nodeset_machine_conf must not mutate the
+    # object returned by template_machine_conf in place.
+    machines = {
+        "n2-standard-16": util.MachineType(name="n2-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
+        "n2-custom-32-32768": util.MachineType(name="n2-custom-32-32768", guest_cpus=32, memory_mb=32768, accelerators=[]),
+    }
+    lkp, nodeset = _flex_lkp(machines, [
+        {"name": "fb", "rank": 2, "machine_types": ["n2-custom-32-32768"]},
+    ])
+    cached_base = lkp.template_machine_conf("tpl")
+    orig_mem = cached_base.memory
+    lkp.template_machine_conf = Mock(return_value=cached_base)  # type: ignore[method-assign]
+
+    got = lkp.nodeset_machine_conf(nodeset)
+    assert got.cpus == 16
+    assert got.memory < orig_mem
+    assert cached_base.memory == orig_mem
+
+
+def test_machine_conf_does_not_autovivify_cached_template():
+    # Non-SMT family so getThreadsPerCore short-circuits and never touches advancedMachineFeatures.
+    machines = {
+        "c4a-standard-16": util.MachineType(name="c4a-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
+        "c4a-standard-8": util.MachineType(name="c4a-standard-8", guest_cpus=8, memory_mb=32768, accelerators=[]),
+    }
+    lkp = util.Lookup(TstCfg())
+    template = NSDict({"machine_type": machines["c4a-standard-16"], "machineType": "c4a-standard-16"})
+    lkp.template_info = Mock(return_value=template)  # type: ignore[method-assign]
+    lkp.machine_type = Mock(side_effect=lambda n: machines[n])  # type: ignore[method-assign]
+    nodeset = NSDict({
+        "nodeset_name": "flex",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": NSDict({"instance_selections": [NSDict({"machine_types": ["c4a-standard-8"]})]}),
+    })
+
+    lkp.template_machine_conf("tpl")
+    got = lkp.nodeset_machine_conf(nodeset)
+
+    assert got.cpus == 8
+    assert "advancedMachineFeatures" not in template
+
+
+def test_nodeset_machine_conf_visible_core_count_not_applied_to_smaller_fallback():
+    lkp, nodeset = _flex_lkp(FLEX_MACHINES, [
+        {"name": "fb", "rank": 2, "machine_types": ["n2-standard-8"]},
+    ])
+    lkp.template_info.return_value["machineType"] = "n2-standard-16"  # type: ignore[attr-defined]
+    lkp.template_info.return_value["advancedMachineFeatures"]["visibleCoreCount"] = 6  # type: ignore[attr-defined]
+
+    got = lkp.nodeset_machine_conf(nodeset)
+    # Primary with visibleCoreCount=6 has 12 vCPUs (6 * 2 threads/core), whereas fallback
+    # n2-standard-8 has 4 physical cores (8 vCPUs). Clamping visibleCoreCount to each shape's
+    # physical core count yields min(6, 4) = 4 cores (8 vCPUs) rather than inflating to 12.
+    assert got.cpus == 8
+    assert got.cores_per_socket == 4
+
+    # Conversely, when fallback has more physical cores than visibleCoreCount (e.g. t2d-standard-16
+    # with 16 physical cores, tpc=1), it still inherits visibleCoreCount=6 from the template and
+    # boots with 6 CPUs (6 cores * 1 thread/core).
+    machines = dict(FLEX_MACHINES)
+    machines["t2d-standard-16"] = util.MachineType(name="t2d-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[])
+    lkp2, nodeset2 = _flex_lkp(machines, [
+        {"name": "fb", "rank": 2, "machine_types": ["t2d-standard-16"]},
+    ])
+    lkp2.template_info.return_value["machineType"] = "n2-standard-16"  # type: ignore[attr-defined]
+    lkp2.template_info.return_value["advancedMachineFeatures"]["visibleCoreCount"] = 6  # type: ignore[attr-defined]
+    got2 = lkp2.nodeset_machine_conf(nodeset2)
+    assert got2.cpus == 6
+    assert got2.cores_per_socket == 6
+    assert got2.threads_per_core == 1
+
+
+def test_nodeset_machine_conf_mixed_smt_and_non_smt_shapes():
+    # Case A: Non-SMT primary (t2d-standard-16: 16 cores, supports_smt=False -> tpc=1) with
+    # SMT fallback (n2d-standard-16: 8 cores, supports_smt=True -> tpc=2). Flooring across both
+    # shapes must cap cores_per_socket to 8 (for n2d) and threads_per_core to 1 (for t2d).
+    machines = {
+        "t2d-standard-16": util.MachineType(name="t2d-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
+        "n2d-standard-16": util.MachineType(name="n2d-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
+    }
+    lkp = util.Lookup(TstCfg())
+    lkp.template_info = Mock(return_value=NSDict({  # type: ignore[method-assign]
+        "machineType": "t2d-standard-16",
+        "machine_type": machines["t2d-standard-16"],
+        "advancedMachineFeatures": NSDict({"threadsPerCore": None, "visibleCoreCount": None}),
+    }))
+    lkp.machine_type = Mock(side_effect=lambda n: machines[n])  # type: ignore[method-assign]
+    nodeset = NSDict({
+        "nodeset_name": "flex_smt",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": NSDict({
+            "instance_selections": [
+                NSDict({"name": "primary", "rank": 1, "machine_types": ["t2d-standard-16"]}),
+                NSDict({"name": "fallback", "rank": 2, "machine_types": ["n2d-standard-16"]}),
+            ]
+        }),
+    })
+    got = lkp.nodeset_machine_conf(nodeset)
+    assert got.cpus == 8
+    assert got.cores_per_socket == 8
+    assert got.threads_per_core == 1
+
+    # Case B: SMT primary (n2d-standard-16) with smaller non-SMT fallback (t2d-standard-8:
+    # 8 physical cores, tpc=1). Fallback must have tpc=1 and cores_per_socket=8, not tpc=2.
+    machines["t2d-standard-8"] = util.MachineType(name="t2d-standard-8", guest_cpus=8, memory_mb=32768, accelerators=[])
+    lkp.template_info.return_value["machineType"] = "n2d-standard-16"  # type: ignore[attr-defined]
+    lkp.template_info.return_value["machine_type"] = machines["n2d-standard-16"]  # type: ignore[attr-defined]
+    nodeset.instance_flexibility_policy.instance_selections = [
+        NSDict({"name": "fb", "rank": 2, "machine_types": ["t2d-standard-8"]}),
+    ]
+    got_b = lkp.nodeset_machine_conf(nodeset)
+    assert got_b.cpus == 8
+    assert got_b.cores_per_socket == 8
+    assert got_b.threads_per_core == 1
+
+
+def test_nodeset_machine_conf_deterministic_tie_breaker():
+    # n2-standard-32 (Sockets=2, CoresPerSocket=8, TPC=2) and c2d-standard-32
+    # (Sockets=1, CoresPerSocket=16, TPC=2) both have 32 vCPUs and 16 physical cores.
+    # Selection must be deterministic regardless of selection order.
+    machines = {
+        "n2-standard-64": util.MachineType(name="n2-standard-64", guest_cpus=64, memory_mb=262144, accelerators=[]),
+        "n2-standard-32": util.MachineType(name="n2-standard-32", guest_cpus=32, memory_mb=131072, accelerators=[]),
+        "c2d-standard-32": util.MachineType(name="c2d-standard-32", guest_cpus=32, memory_mb=131072, accelerators=[]),
+    }
+    lkp1 = util.Lookup(TstCfg())
+    lkp1.template_info = Mock(return_value=NSDict({  # type: ignore[method-assign]
+        "machineType": "n2-standard-64",
+        "machine_type": machines["n2-standard-64"],
+        "advancedMachineFeatures": NSDict({"threadsPerCore": None, "visibleCoreCount": None}),
+    }))
+    lkp1.machine_type = Mock(side_effect=lambda n: machines[n])  # type: ignore[method-assign]
+
+    ns1 = NSDict({
+        "nodeset_name": "flex_tie",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": NSDict({
+            "instance_selections": [
+                NSDict({"name": "s1", "rank": 1, "machine_types": ["n2-standard-32", "c2d-standard-32"]}),
+            ]
+        }),
+    })
+    ns2 = NSDict({
+        "nodeset_name": "flex_tie",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": NSDict({
+            "instance_selections": [
+                NSDict({"name": "s1", "rank": 1, "machine_types": ["c2d-standard-32", "n2-standard-32"]}),
+            ]
+        }),
+    })
+    got1 = lkp1.nodeset_machine_conf(ns1)
+    got2 = lkp1.nodeset_machine_conf(ns2)
+    assert got1 == got2
+    assert got1.cpus == 32
+    assert got1.sockets == 1
+    assert got1.cores_per_socket == 16
+
+
+def test_nodeset_machine_conf_arm64_n4a_and_none_advanced_machine_features():
+    # n4a and h3 are non-SMT families (supports_smt == False -> tpc=1), and
+    # template.advancedMachineFeatures can be None on older/raw GCE template payloads.
+    machines = {
+        "c4a-standard-16": util.MachineType(name="c4a-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
+        "n4a-standard-8": util.MachineType(name="n4a-standard-8", guest_cpus=8, memory_mb=32768, accelerators=[]),
+        "h3-standard-88": util.MachineType(name="h3-standard-88", guest_cpus=88, memory_mb=360448, accelerators=[]),
+    }
+    assert machines["n4a-standard-8"].supports_smt is False
+    assert machines["h3-standard-88"].supports_smt is False
+
+    lkp = util.Lookup(TstCfg())
+    lkp.template_info = Mock(return_value=NSDict({  # type: ignore[method-assign]
+        "machineType": "c4a-standard-16",
+        "machine_type": machines["c4a-standard-16"],
+        "advancedMachineFeatures": None,
+    }))
+    lkp.machine_type = Mock(side_effect=lambda n: machines[n])  # type: ignore[method-assign]
+    nodeset = NSDict({
+        "nodeset_name": "flex_arm",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": NSDict({
+            "instance_selections": [
+                NSDict({"name": "fb", "rank": 2, "machine_types": ["n4a-standard-8"]}),
+            ]
+        }),
+    })
+    got = lkp.nodeset_machine_conf(nodeset)
+    assert got.cpus == 8
+    assert got.cores_per_socket == 8
+    assert got.threads_per_core == 1
+
+
+def test_nodeset_machine_conf_physical_core_and_socket_inversion():
+    # Physical-core inversion: n2-standard-24 (24 vCPUs, 12 cores, tpc=2) + t2d-standard-16 (16 vCPUs, 16 cores, tpc=1)
+    # Must clamp cores_per_socket to min_total_cores=12 so n2-standard-24 does not DRAIN under CR_Core_Memory.
+    machines = {
+        "n2-standard-24": util.MachineType(name="n2-standard-24", guest_cpus=24, memory_mb=98304, accelerators=[]),
+        "t2d-standard-16": util.MachineType(name="t2d-standard-16", guest_cpus=16, memory_mb=65536, accelerators=[]),
+        "c3-standard-44": util.MachineType(name="c3-standard-44", guest_cpus=44, memory_mb=180224, accelerators=[]),
+        "n2-standard-32": util.MachineType(name="n2-standard-32", guest_cpus=32, memory_mb=131072, accelerators=[]),
+    }
+    lkp = util.Lookup(TstCfg())
+    lkp.template_info = Mock(return_value=NSDict({  # type: ignore[method-assign]
+        "machineType": "n2-standard-24",
+        "machine_type": machines["n2-standard-24"],
+        "advancedMachineFeatures": NSDict({"threadsPerCore": None, "visibleCoreCount": None}),
+    }))
+    lkp.machine_type = Mock(side_effect=lambda n: machines[n])  # type: ignore[method-assign]
+
+    # Also verify dict-formatted instance_selections
+    nodeset = NSDict({
+        "nodeset_name": "flex_core_inv",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": NSDict({
+            "instance_selections": {
+                "selection-1": NSDict({"rank": 1, "machine_types": ["n2-standard-24", "t2d-standard-16"]}),
+            }
+        }),
+    })
+    got = lkp.nodeset_machine_conf(nodeset)
+    assert got.sockets == 1
+    assert got.cores_per_socket == 12
+    assert got.threads_per_core == 1
+    assert got.cpus == 12
+
+    # Socket-count inversion: c3-standard-44 (1 socket, 22 cores) + n2-standard-32 (2 sockets, 8 cores/socket = 16 cores)
+    lkp.template_info = Mock(return_value=NSDict({  # type: ignore[method-assign]
+        "machineType": "c3-standard-44",
+        "machine_type": machines["c3-standard-44"],
+        "advancedMachineFeatures": NSDict({"threadsPerCore": None, "visibleCoreCount": None}),
+    }))
+    nodeset_sock = NSDict({
+        "nodeset_name": "flex_sock_inv",
+        "instance_template": "tpl",
+        "instance_flexibility_policy": NSDict({
+            "instance_selections": [
+                NSDict({"rank": 1, "machine_types": ["c3-standard-44", "n2-standard-32"]}),
+            ]
+        }),
+    })
+    got_sock = lkp.nodeset_machine_conf(nodeset_sock)
+    assert got_sock.sockets == 1
+    assert got_sock.sockets_per_board == 1
+    assert got_sock.cores_per_socket == 16
+    assert got_sock.cpus == 32

@@ -240,7 +240,29 @@ class _C2State:
                 self.setup_service_account(sub_id, service_account)
 
         except AlreadyExists:
-            logger.info("PubSub Subscription %s already exists", sub_path)
+            # A subscription with this name already exists. After an OFE
+            # teardown/redeploy under the same deployment name the old
+            # subscription survives but is still bound to the now-deleted topic
+            # (its topic reads as "_deleted-topic_"), so it silently drops every
+            # message published to the new topic. Recreate it against the
+            # current topic when the binding no longer matches.
+            existing = self.sub_client.get_subscription(
+                request={"subscription": sub_path}
+            )
+            if existing.topic != self._topic_path:
+                logger.warning(
+                    "PubSub Subscription %s bound to stale topic %s "
+                    "(expected %s); recreating",
+                    sub_path, existing.topic, self._topic_path,
+                )
+                self.sub_client.delete_subscription(
+                    request={"subscription": sub_path}
+                )
+                self.sub_client.create_subscription(request=request)
+                if service_account:
+                    self.setup_service_account(sub_id, service_account)
+            else:
+                logger.info("PubSub Subscription %s already exists", sub_path)
 
         return sub_path
 

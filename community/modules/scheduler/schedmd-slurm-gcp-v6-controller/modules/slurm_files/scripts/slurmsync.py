@@ -44,7 +44,7 @@ from util import (
     dirs,
 )
 from util import lookup
-from suspend import delete_instances
+from suspend import suspend_nodes
 import tpu
 import conf
 import watch_delete_vm_op
@@ -54,6 +54,7 @@ log = logging.getLogger()
 
 TOT_REQ_CNT = 1000
 _MAINTENANCE_SBATCH_SCRIPT_PATH = dirs.custom_scripts / "perform_maintenance.sh"
+_UPDATE_MSG = "*** slurm configuration was updated ***"
 
 class NodeAction(Protocol):
     def apply(self, nodes:List[str]) -> None:
@@ -91,13 +92,19 @@ class NodeActionPowerDownForce():
         log.info(f"{len(nodes)} instances to power down ({hostlist})")
         run(f"{lookup().scontrol} update nodename={hostlist} state=power_down_force")
 
+@dataclass(frozen=True)
+class NodeActionDeleteMIG():
+    def apply(self, nodes: List[str]) -> None:
+        hostlist = util.to_hostlist(nodes)
+        log.info(f"{len(nodes)} mig-managed instances to delete ({hostlist})")
+        suspend_nodes(nodes)
 
 @dataclass(frozen=True)
 class NodeActionDelete():
     def apply(self, nodes:List[str]) -> None:
         hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} instances to delete ({hostlist})")
-        delete_instances(nodes)
+        suspend_nodes(nodes)
 
 @dataclass(frozen=True)
 class NodeActionPrempt():
@@ -292,7 +299,25 @@ def get_node_action(nodename: str) -> NodeAction:
         return _find_tpu_node_action(nodename, state)
 
     # split below is workaround for VMs whose hostname is FQDN
-    inst = lkp.instance(nodename.split(".")[0])
+    short_nodename = nodename.split(".")[0]
+    inst = lkp.instance(short_nodename)
+
+    # For MIG compute nodes, detect active GCE Auto-Healing repairs
+    if lkp.is_node_mig(nodename):
+        try:
+            mig_name = lkp.node_mig_name(nodename)
+            region = lkp.node_region(nodename)
+            if short_nodename in lkp.get_mig_repairing_instances(lkp.project, region, mig_name):
+                if state is not None and state.base != "DOWN":
+                    return NodeActionDown(reason="MIG Auto-Healing instance repair in progress")
+                return NodeActionUnchanged()
+            elif inst and inst.status == "RUNNING" and state is not None and state.base == "DOWN":
+                if "MIG Auto-Healing" in (get_node_reason(short_nodename) or ""):
+                    log.info(f"{short_nodename} recovered by MIG auto-healing; resuming node to idle")
+                    return NodeActionIdle()
+        except Exception as e:
+            log.debug(f"Failed to check managed instance repair status for {nodename}: {e}")
+
     power_flags = frozenset(
         ("POWER_DOWN", "POWERING_UP", "POWERING_DOWN", "POWERED_DOWN")
     ) & (state.flags if state is not None else set())
@@ -332,6 +357,17 @@ def get_node_action(nodename: str) -> NodeAction:
         and "POWERING_DOWN" not in state.flags
         and inst.status == "TERMINATED"
     ):
+        if lkp.is_tpu_node(nodename):
+            if state.base != "DOWN":
+                return NodeActionDown(reason="Instance terminated")
+            return NodeActionPowerDown()
+        if lkp.is_node_mig(nodename):
+            # MIG auto-healing (default_action_on_failure=REPAIR) recreates the VM
+            # (delete + insert). Do not start it; wait for RUNNING, then resume via
+            # the auto-healing branch above.
+            if state.base != "DOWN":
+                return NodeActionDown(reason="MIG Auto-Healing instance repair in progress")
+            return NodeActionUnchanged()
         if inst.scheduling.preemptible:
             return NodeActionPrempt()
         if state.base != "DOWN":
@@ -344,11 +380,19 @@ def get_node_action(nodename: str) -> NodeAction:
         if age < threshold:
             log.info(f"{nodename} not marked as orphan, it started less than {threshold.seconds}s ago ({age.seconds}s)")
             return NodeActionUnchanged()
+        if lkp.is_flex_node(nodename) or lkp.is_tpu_node(nodename):
+            return NodeActionDeleteMIG()
         return NodeActionDelete()
+    elif (
+        (state is None or "POWERED_DOWN" in state.flags)
+        and inst.status == "TERMINATED"
+        and lkp.is_tpu_node(nodename)
+    ):
+        return NodeActionDeleteMIG()
     elif state is None:
         # if state is None here, the instance exists but it's not in Slurm
         return NodeActionUnknown(slurm_state=state, instance_state=inst.status)
-    elif lkp.is_flex_node(nodename) and "POWERING_UP" in state.flags:
+    elif (lkp.is_flex_node(nodename) or lkp.is_tpu_node(nodename)) and "POWERING_UP" in state.flags:
         threshold = timedelta(seconds=int(lkp.cfg.compute_startup_scripts_timeout) * 2) #extra buffer for unexpectedly long startup scripts
         if util.now() - inst.creation_timestamp > threshold:
             log.info(f"{nodename} was unable to join the cluster after {threshold.seconds}s, potential failure on VM startup. Powering down...")
@@ -386,7 +430,7 @@ def _get_resource_policies_in_region(lkp: util.Lookup, region: str) -> list[Any]
     res = []
     act = lkp.compute.resourcePolicies()
     op = act.list(project=lkp.project, region=region)
-    prefix = f"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-"
+    prefix = f"{lkp.cfg.slurm_cluster_name}-slurmgcp-"
     while op is not None:
         result = ensure_execute(op)
         res.extend([p for p in result.get("items", []) if p.get("name", "").startswith(prefix)])
@@ -426,10 +470,20 @@ def sync_placement_groups():
     pg_regex = re.compile(
         rf"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-(?P<ns>[^\s\-]+)-(?P<job_id>\d+)-(?P<index>\d+)"
     )
-    
+    tpu_wp_regex = re.compile(
+        rf"{lkp.cfg.slurm_cluster_name}-slurmgcp-(?P<ns>.+?)-wp-\d+(?:-\d+)*$"
+    )
+
     for pg in _get_resource_policies(lkp):
         name = pg["name"]
-    
+
+        # Keep reusable TPU workload policies unless their nodeset was removed
+        if mtch := tpu_wp_regex.match(name):
+            ns_name = mtch.group("ns")
+            if ns_name not in lkp.cfg.nodeset:
+                log.info(f"Nodeset {ns_name} is not found, deleting its TPU workload policy {name}")
+                to_delete.append(pg["selfLink"])
+            continue
         if (mtch := pg_regex.match(name)) is None:
             log.warning(f"Unexpected resource policy {name=}")
             continue
@@ -451,55 +505,61 @@ def sync_instances():
         action.apply(list(nodes))
 
 
-def reconfigure_slurm():
-    update_msg = "*** slurm configuration was updated ***"
+def reconfigure_slurm() -> bool:
+    """Fetch new config and regenerate Slurm config files.
 
+    Returns True if config was updated and a scontrol reconfigure is needed.
+    On the controller, the reconfigure is deferred until after topology
+    regeneration to avoid issuing two sequential scontrol reconfigure calls
+    in the same sync cycle (which can cause a socket timeout).
+    """
     if lookup().cfg.hybrid:
         # terraform handles generating the config.yaml, don't do it here
-        return
+        return False
 
     upd, cfg_new = util.fetch_config()
     if not upd:
         log.debug("No changes in config detected.")
-        return
+        return False
     log.debug("Changes in config detected. Reconfiguring Slurm now.")
     util.update_config(cfg_new)
 
     if lookup().is_controller:
         conf.get_generator(lookup()).generate_configs()
 
-        log.info("Restarting slurmctld to make changes take effect.")
-        try:
-            # TODO: consider removing "restart" since "reconfigure" should restart slurmctld as well
-            run("sudo systemctl restart slurmctld.service", check=False)
-            util.scontrol_reconfigure(lookup())
-        except Exception:
-            log.exception("failed to reconfigure slurmctld")
-        util.run(f"wall '{update_msg}'", timeout=30)
+        # Defer slurmctld restart and scontrol reconfigure:
+        # Running them now would cause slurmctld to temporarily load new node defs with old topology.
+        # This causes slurmctld to hang/timeout when update_topology tries to reconfigure it subsequently.
+        log.info("Config files regenerated. Deferring scontrol reconfigure until after topology update.")
         log.debug("Done.")
+        return True
     elif lookup().instance_role_safe == "compute":
         log.info("Restarting slurmd to make changes take effect.")
         run("systemctl restart slurmd")
-        util.run(f"wall '{update_msg}'", timeout=30)
+        util.run(f"wall '{_UPDATE_MSG}'", timeout=30)
         log.debug("Done.")
     elif lookup().is_login_node:
         log.info("Restarting sackd to make changes take effect.")
         run("systemctl restart sackd")
-        util.run(f"wall '{update_msg}'", timeout=30)
+        util.run(f"wall '{_UPDATE_MSG}'", timeout=30)
         log.debug("Done.")
+    return False
 
 
 def _generate_topology(lkp: util.Lookup) -> Tuple[bool, Any]:
     return conf.get_generator(lkp).generate_topology_data()
 
-def update_topology(lkp: util.Lookup) -> None:
+def update_topology(lkp: util.Lookup) -> Tuple[bool, Any]:
+    """Regenerate topology files.
+
+    Returns (updated, summary) so the caller can decide when to
+    issue the scontrol reconfigure and persist the summary.
+    """
     updated, summary = _generate_topology(lkp) # type: ignore[attr-defined]
 
     if updated:
-        log.info("Topology configuration updated. Reconfiguring Slurm.")
-        util.scontrol_reconfigure(lkp)
-        # Safe summary only after Slurm got reconfigured, so summary reflects Slurm POV
-        summary.dump(lkp)
+        log.info("Topology configuration updated.")
+    return updated, summary
 
 
 def delete_reservation(lkp: util.Lookup, reservation_name: str) -> None:
@@ -662,10 +722,30 @@ def main():
     lkp = lookup()
     if util.should_mount_slurm_bucket() and not lkp.is_controller:
         return
+
+    # Track if reconfigure_slurm changed cloud.conf so we can trigger
+    # a deferred scontrol reconfigure inside update_topology
+    config_changed = False
     try:
-        reconfigure_slurm()
+        config_changed = reconfigure_slurm()
+        if config_changed:
+            lkp = lookup()
     except Exception:
         log.exception("failed to reconfigure slurm")
+
+    topology_changed = False
+    topology_summary = None
+    if lkp.is_controller:
+        try:
+            topology_changed, topology_summary = update_topology(lkp)
+        except Exception:
+            log.exception("failed to update topology")
+
+    if lkp.is_controller and not util.is_active_controller(lkp):
+        if topology_changed and topology_summary is not None:
+            topology_summary.dump(lkp)
+        log.info("Local controller is in STANDBY mode. Skipping slurmsync pass.")
+        return
     if lkp.is_controller:
         try:
             process_messages(lkp)
@@ -692,10 +772,27 @@ def main():
         except Exception:
             log.exception("failed to sync placement groups")
 
-        try:
-            update_topology(lkp)
-        except Exception:
-            log.exception("failed to update topology")
+        # Single deferred reconfigure for both config and topology changes.
+        # Placed here so it runs even if topology generation failed above.
+        if config_changed or topology_changed:
+            reasons = []
+            if config_changed:
+                reasons.append("config updated")
+            if topology_changed:
+                reasons.append("topology changed")
+            try:
+                log.info(f"Reconfiguring Slurm ({', '.join(reasons)}).")
+                # Restart slurmctld only for a config change. A topology-only
+                # change is picked up by `scontrol reconfigure` alone, and
+                # update_topology runs on every node power-up, so restarting
+                # there would flap nodes registering during the restart window.
+                util.scontrol_reconfigure(lkp, restart=config_changed)
+                # Only dump summary after successful reconfigure so it reflects Slurm's view
+                if topology_changed and topology_summary is not None:
+                    topology_summary.dump(lkp)
+                util.run(f"wall '{_UPDATE_MSG}'", timeout=30, check=False)
+            except Exception:
+                log.exception("failed to reconfigure slurmctld")
 
         try:
             sync_maintenance_reservation(lkp)

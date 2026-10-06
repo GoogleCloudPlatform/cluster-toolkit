@@ -596,8 +596,51 @@ TFVARS
 		#
 		set +e
 		terraform init
-		terraform apply -auto-approve | tee tfapply.log
-		if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+
+		# -- Adopt a pre-existing server service account so a redeploy with the
+		#    same deployment name does not fail trying to recreate it. terraform
+		#    destroy normally removes it, but an aborted/partial teardown can
+		#    leave it behind; importing lets apply reconcile the existing
+		#    identity instead of hitting an "already exists" error.
+		fe_sa_email="${deployment_name}-fe-sa@${project_id}.iam.gserviceaccount.com"
+		fe_sa_address='module.service_account.google_service_account.service_accounts["fe-sa"]'
+		if gcloud iam service-accounts describe "${fe_sa_email}" \
+			--project="${project_id}" >/dev/null 2>&1; then
+			if ! terraform state list 2>/dev/null | grep -qF "${fe_sa_address}"; then
+				echo "Found existing service account ${fe_sa_email}; importing into Terraform state."
+				terraform import -input=false "${fe_sa_address}" \
+					"projects/${project_id}/serviceAccounts/${fe_sa_email}" || true
+			fi
+		fi
+
+		# -- Merge stderr into the piped/logged stream: terraform writes its
+		#    "Error: ..." diagnostics to stderr, not stdout, so the retry
+		#    detection below would never see them if only stdout were teed.
+		terraform apply -auto-approve 2>&1 | tee tfapply.log
+		tf_rc=${PIPESTATUS[0]}
+
+		# -- The Google provider can return "Provider produced inconsistent
+		#    result after apply" on the service account when its create races
+		#    IAM's eventual consistency (e.g. reusing a recently-freed name).
+		#    The account is created regardless, so a single re-apply reconciles
+		#    state. Retry only for that specific service-account error.
+		if [[ ${tf_rc} -ne 0 ]] &&
+			grep -q "Provider produced inconsistent result after apply" tfapply.log &&
+			grep -q "service_account" tfapply.log; then
+			echo "Reconciling service account state and retrying terraform apply..."
+			# The failed apply actually created the account but, because of the
+			# inconsistent-result error, dropped it from state. A bare re-apply
+			# would then hit "409 already exists", so adopt the existing account
+			# back into state before retrying.
+			if ! terraform state list 2>/dev/null | grep -qF "${fe_sa_address}"; then
+				terraform import -input=false "${fe_sa_address}" \
+					"projects/${project_id}/serviceAccounts/${fe_sa_email}" || true
+			fi
+			terraform apply -auto-approve 2>&1 | tee tfapply.log
+			tf_rc=${PIPESTATUS[0]}
+		fi
+
+		if [[ ${tf_rc} -ne 0 ]]; then
 			error ""
 			error "Error:  Terraform failed."
 			error "        Please check parameters and/or seek assistance."
@@ -656,16 +699,16 @@ setup() {
 
 LINE
 
-	# -- Check for terraform and gsutil
+	# -- Check for terraform and the gcloud storage CLI
 	#
 	if ! command -v terraform &>/dev/null; then
 		error "Error:"
 		error "    Please ensure terraform (version 0.13 or higher) is in your \$PATH"
 		exit 1
 	fi
-	if ! command -v gsutil &>/dev/null; then
+	if ! command -v gcloud &>/dev/null || ! gcloud storage --help &>/dev/null; then
 		error "Error:"
-		error "    Please ensure gsutil (part of Google Cloud Tools)  is in your \$PATH"
+		error "    Please ensure the gcloud CLI (with the 'gcloud storage' command) is in your \$PATH"
 		exit 1
 	fi
 

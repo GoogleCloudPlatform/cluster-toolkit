@@ -316,6 +316,48 @@ check_lustre_quota() {
 		return 1
 	fi
 }
+declare -A CPU_QUOTA_CACHE
+check_cpu_quota() {
+	local region=$1
+	local required_cpus=${REQUIRED_CPU_QUOTA:-0}
+	local metric=${CPU_QUOTA_METRIC:-"N2D_CPUS"}
+	if [[ "${required_cpus}" -le 0 ]]; then
+		return 0
+	fi
+
+	if [[ -n "${CPU_QUOTA_CACHE[$region]:-}" ]]; then
+		return "${CPU_QUOTA_CACHE[$region]}"
+	fi
+
+	local quota_info limit usage
+	quota_info=$(gcloud compute regions describe "${region}" \
+		--project="${PROJECT_ID}" --format="json(quotas)" 2>/dev/null |
+		jq -r --arg m "${metric}" '.quotas[]? | select(.metric == $m) | "\(.limit | if . >= 1e15 then -1 else floor end) \((.usage // 0) | floor)"' 2>/dev/null || true)
+	read -r limit usage <<<"${quota_info}"
+
+	if [[ ! "${limit}" =~ ^-?[0-9]+$ ]]; then
+		echo "WARN: Could not fetch ${metric} quota for ${region}. Failing-open and assuming capacity exists."
+		CPU_QUOTA_CACHE[$region]=0
+		return 0
+	fi
+
+	if [[ "${limit}" -lt 0 ]]; then
+		CPU_QUOTA_CACHE[$region]=0
+		return 0
+	fi
+
+	if [[ ! "${usage}" =~ ^[0-9]+$ ]]; then usage=0; fi
+
+	local remaining=$((limit - usage))
+	if [[ "${remaining}" -ge "${required_cpus}" ]]; then
+		CPU_QUOTA_CACHE[$region]=0
+		return 0
+	else
+		echo "INFO: Insufficient ${metric} quota in ${region} (Limit: ${limit}, Usage: ${usage}, Required: ${required_cpus})."
+		CPU_QUOTA_CACHE[$region]=1
+		return 1
+	fi
+}
 
 if ! GCS_CONTENT=$(gcloud storage cat "${OPTIONS_GCS_PATH}"); then
 	echo "ERROR: Failed to read ${OPTIONS_GCS_PATH}." >&2
@@ -365,6 +407,14 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 	for ZONE in "${ZONES_ARRAY[@]}"; do
 		REGION=${ZONE%-*}
 
+		# Check for explicit zone exclusion (e.g. from retry harness or manual override)
+		if [[ -n "${EXCLUDE_ZONES:-}" ]]; then
+			if [[ " ${EXCLUDE_ZONES//,/ } " == *" ${ZONE} "* ]]; then
+				echo "INFO: Skipping ${ZONE} - Zone explicitly excluded via EXCLUDE_ZONES."
+				continue
+			fi
+		fi
+
 		if [[ "${CHECK_FILESTORE:-false}" == "true" ]]; then
 			if ! echo "${FILESTORE_ZONES}" | grep -x -E -q "${ZONE}|${REGION}"; then
 				echo "INFO: Skipping ${ZONE} - Filestore not available in this zone or region."
@@ -377,6 +427,13 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 		fi
 
 		if [[ "${CHECK_LUSTRE:-false}" == "true" ]]; then
+			if [[ -n "${LUSTRE_EXCLUDE_ZONES:-}" && "${LUSTRE_EXCLUDE_ZONES}" != "none" ]]; then
+				if [[ " ${LUSTRE_EXCLUDE_ZONES//,/ } " == *" ${ZONE} "* ]]; then
+					echo "INFO: Skipping ${ZONE} - Zone excluded due to known Managed Lustre capacity exhaustion."
+					continue
+				fi
+			fi
+
 			if ! echo "${LUSTRE_ZONES}" | grep -x -q "${ZONE}"; then
 				echo "INFO: Skipping ${ZONE} - Managed Lustre not available in this zone."
 				continue
@@ -385,6 +442,12 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 				echo "INFO: Skipping ${ZONE} - Lustre quota check failed in zone ${ZONE}."
 				continue
 			fi
+		fi
+
+		# Check region for support VMs.
+		if ! check_cpu_quota "${REGION}"; then
+			echo "INFO: Skipping ${ZONE} - CPU quota check failed in region ${REGION}."
+			continue
 		fi
 
 		if [[ "${MACHINE_TYPE}" == "tpu" ]]; then

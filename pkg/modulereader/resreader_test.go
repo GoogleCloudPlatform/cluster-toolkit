@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-getter"
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
 	"gopkg.in/yaml.v3"
@@ -211,7 +212,27 @@ func (s *MySuite) TestGetInfo_TFReder(c *C) {
 		Inputs:  []VarInfo{{Name: "test_variable", Type: cty.String, Description: "This is just a test", Required: true}},
 		Outputs: []OutputInfo{{Name: "test_output", Description: "This is just a test"}},
 	})
+}
 
+func (s *MySuite) TestGetInfo_EmbeddedWindowsBackslashes(c *C) {
+	reader := NewTFReader()
+	info, err := reader.GetInfo(`modules\test_role\test_module`)
+	c.Assert(err, IsNil)
+	c.Check(info, DeepEquals, ModuleInfo{
+		Inputs:  []VarInfo{{Name: "test_variable", Type: cty.String, Description: "This is just a test", Required: true}},
+		Outputs: []OutputInfo{{Name: "test_output", Description: "This is just a test"}},
+	})
+}
+
+func (s *MySuite) TestSlashWrapFS_Backslashes(c *C) {
+	wrapFS := slashWrapFS{tfconfig.WrapFS(sourcereader.ModuleFS)}
+	data, err := wrapFS.ReadFile(`modules\test_role\test_module\main.tf`)
+	c.Assert(err, IsNil)
+	c.Assert(len(data) > 0, Equals, true)
+
+	entries, err := wrapFS.ReadDir(`modules\test_role\test_module`)
+	c.Assert(err, IsNil)
+	c.Assert(len(entries) > 0, Equals, true)
 }
 
 func (s *MySuite) TestGetInfo_PackerReader(c *C) {

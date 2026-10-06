@@ -42,9 +42,10 @@ func TestLookupArtifactRegistryRepos(t *testing.T) {
 
 		switch pageToken {
 		case "":
-			// Page 1: 3 Docker repos + 1 Maven repo
+			// Page 1: 3 Docker repos + 1 Maven repo + 1 nil element
 			resp.Repositories = []*artifactregistry.Repository{
 				{Name: "projects/my-project/locations/us-central1/repositories/repo1", Format: "DOCKER"},
+				nil,
 				{Name: "projects/my-project/locations/us-central1/repositories/repo2", Format: "docker"},     // Case testing
 				{Name: "projects/my-project/locations/us-central1/repositories/repo-maven", Format: "MAVEN"}, // Should filter out
 				{Name: "projects/my-project/locations/us-central1/repositories/repo3", Format: "DOCKER"},
@@ -90,5 +91,29 @@ func TestLookupArtifactRegistryRepos(t *testing.T) {
 	}
 	if !hasMore {
 		t.Errorf("Expected hasMore to be true, got false")
+	}
+}
+
+func TestLookupArtifactRegistryRepos_NilResponse(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("null"))
+	}))
+	defer ts.Close()
+
+	origNewService := newArtifactRegistryService
+	defer func() { newArtifactRegistryService = origNewService }()
+
+	newArtifactRegistryService = func(ctx context.Context) (*artifactregistry.Service, error) {
+		return artifactregistry.NewService(ctx, option.WithEndpoint(ts.URL), option.WithoutAuthentication())
+	}
+
+	suggestions, hasMore := lookupArtifactRegistryRepos(context.Background(), "my-project", "us-central1-c")
+	if len(suggestions) != 0 {
+		t.Errorf("Expected 0 suggestions for nil response, got %v", suggestions)
+	}
+	if hasMore {
+		t.Errorf("Expected hasMore to be false, got true")
 	}
 }

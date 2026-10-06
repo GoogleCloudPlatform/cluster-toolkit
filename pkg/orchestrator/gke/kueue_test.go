@@ -152,6 +152,55 @@ func TestResolveKueueQueue(t *testing.T) {
 			wantErr:       false,
 		},
 		{
+			name:          "User requested name with resource path",
+			requestedName: "namespaces/default/localQueues/custom-q",
+			kubectlOutput: "",
+			wantName:      "custom-q",
+			wantErr:       false,
+		},
+		{
+			name:          "User requested invalid RFC 1123 name (uppercase)",
+			requestedName: "CustomQueue",
+			kubectlOutput: "",
+			wantName:      "",
+			wantErr:       true,
+		},
+		{
+			name:          "User requested invalid RFC 1123 name (underscore)",
+			requestedName: "custom_q",
+			kubectlOutput: "",
+			wantName:      "",
+			wantErr:       true,
+		},
+		{
+			name:          "User requested invalid RFC 1123 name (starts with hyphen)",
+			requestedName: "-custom-q",
+			kubectlOutput: "",
+			wantName:      "",
+			wantErr:       true,
+		},
+		{
+			name:          "User requested invalid RFC 1123 name (raw slash path)",
+			requestedName: "custom/invalid/queue",
+			kubectlOutput: "",
+			wantName:      "",
+			wantErr:       true,
+		},
+		{
+			name:          "User requested invalid RFC 1123 name (ends with hyphen)",
+			requestedName: "custom-q-",
+			kubectlOutput: "",
+			wantName:      "",
+			wantErr:       true,
+		},
+		{
+			name:          "User requested invalid RFC 1123 name (exceeds 253 characters)",
+			requestedName: strings.Repeat("a", 254),
+			kubectlOutput: "",
+			wantName:      "",
+			wantErr:       true,
+		},
+		{
 			name:          "No queues found, fallback to default",
 			requestedName: "",
 			kubectlOutput: "",
@@ -403,24 +452,20 @@ func TestRenderClusterQueue_Pathways(t *testing.T) {
 
 	output := string(bytes)
 
-	if !strings.Contains(output, "nominalQuota: \"999999\"") {
-		t.Errorf("expected nominalQuota: \"999999\" for TPU flavor CPU, got %s", output)
+	expectedSubstrings := []string{
+		"nominalQuota: \"999999\"",
+		"nominalQuota: 999999T",
+		"nominalQuota: 8",
+		"nominalQuota: 480",
+		"nominalQuota: 2000Gi",
+		"nominalQuota: 0",
+		"name: flavor-tpu",
+		"name: pathways-flavor",
 	}
-	if !strings.Contains(output, "nominalQuota: 999999T") {
-		t.Errorf("expected nominalQuota: 999999T for TPU flavor Memory, got %s", output)
-	}
-	if !strings.Contains(output, "nominalQuota: 8") {
-		t.Errorf("expected nominalQuota: 8 for TPU flavor TPUs, got %s", output)
-	}
-
-	if !strings.Contains(output, "nominalQuota: 480") {
-		t.Errorf("expected nominalQuota: 480 for Pathways flavor CPU, got %s", output)
-	}
-	if !strings.Contains(output, "nominalQuota: 2000Gi") {
-		t.Errorf("expected nominalQuota: 2000Gi for Pathways flavor Memory, got %s", output)
-	}
-	if !strings.Contains(output, "nominalQuota: 0") {
-		t.Errorf("expected nominalQuota: 0 for Pathways flavor TPUs, got %s", output)
+	for _, want := range expectedSubstrings {
+		if !strings.Contains(output, want) {
+			t.Errorf("expected %q in output, got %s", want, output)
+		}
 	}
 
 	count := strings.Count(output, "coveredResources:")
@@ -428,11 +473,8 @@ func TestRenderClusterQueue_Pathways(t *testing.T) {
 		t.Errorf("expected 1 coveredResources block for Pathways case (unified), got %d. Output: %s", count, output)
 	}
 
-	if !strings.Contains(output, "name: flavor-tpu") {
-		t.Errorf("expected flavor-tpu in output, got %s", output)
-	}
-	if !strings.Contains(output, "name: pathways-flavor") {
-		t.Errorf("expected pathways-flavor in output, got %s", output)
+	if strings.Index(output, "name: pathways-flavor") > strings.Index(output, "name: flavor-tpu") {
+		t.Errorf("expected pathways-flavor before flavor-tpu in ClusterQueue flavors, got:\n%s", output)
 	}
 }
 
@@ -1138,5 +1180,78 @@ func TestCheckKueueInstallPermissions_MissingPermission(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "missing required RBAC permissions: ['create namespaces', 'create clusterroles.rbac.authorization.k8s.io']") {
 		t.Errorf("checkKueueInstallPermissions error = %v; want aggregated missing permissions list", err)
+	}
+}
+
+func TestParseKueueQueueName(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantQueue string
+		wantErr   bool
+	}{
+		{
+			name:      "Valid simple name",
+			input:     "default",
+			wantQueue: "default",
+		},
+		{
+			name:      "Valid with hyphens and dots",
+			input:     "my-team.queue-1",
+			wantQueue: "my-team.queue-1",
+		},
+		{
+			name:      "Resource path parsed to bare name",
+			input:     "namespaces/team-a/localQueues/custom-q",
+			wantQueue: "custom-q",
+		},
+		{
+			name:    "Uppercase rejected",
+			input:   "DefaultQueue",
+			wantErr: true,
+		},
+		{
+			name:    "Underscore rejected",
+			input:   "default_queue",
+			wantErr: true,
+		},
+		{
+			name:    "Starts with hyphen rejected",
+			input:   "-default",
+			wantErr: true,
+		},
+		{
+			name:    "Ends with hyphen rejected",
+			input:   "custom-q-",
+			wantErr: true,
+		},
+		{
+			name:    "Name exceeding 253 characters rejected",
+			input:   strings.Repeat("a", 254),
+			wantErr: true,
+		},
+		{
+			name:      "Max length 253 characters valid RFC 1123 subdomain succeeds",
+			input:     strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 60),
+			wantQueue: strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 60),
+			wantErr:   false,
+		},
+		{
+			name:    "Empty name rejected",
+			input:   "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseKueueQueueName(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseKueueQueueName(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+			if got != tt.wantQueue {
+				t.Errorf("parseKueueQueueName(%q) = %q, want %q", tt.input, got, tt.wantQueue)
+			}
+		})
 	}
 }

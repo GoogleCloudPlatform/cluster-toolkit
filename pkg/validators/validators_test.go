@@ -166,6 +166,29 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
 			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists, machineTypeInZone, diskTypeInZone, myResExists})
 	}
+
+	{ // Blueprint with GCSFuse persistent volume
+		bp := config.Blueprint{
+			Vars: config.Dict{}.
+				With("project_id", cty.StringVal("f00b")),
+			Groups: []config.Group{
+				{
+					Modules: []config.Module{
+						{
+							ID:     "training-pv",
+							Source: "modules/file-system/gke-persistent-volume",
+							Settings: config.NewDict(map[string]cty.Value{
+								"gcsfuse_storage_class_name": cty.StringVal("gcsfusecsi-training"),
+							}),
+						},
+					},
+				},
+			},
+		}
+
+		c.Check(defaults(bp), DeepEquals, []config.Validator{
+			unusedMods, unusedVars, projectExists, apisEnabled})
+	}
 }
 
 // Helper to create a mock compute service for unit tests
