@@ -33,9 +33,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 
@@ -47,10 +45,12 @@ const (
 	// maxLogRequests is the maximum concurrent log streams allowed by the GKE logs CLI.
 	maxLogRequests = 10
 
-	workloadContainerPrefix      = "workload-container"
-	pathwaysContainerPrefix      = "pathways-"
-	jobSetContainerNamesJSONPath = "{.spec.replicatedJobs[0].template.spec.template.spec.containers[*].name}"
+	// jobSetFirstReplicatedJobJSONPath yields the name of the JobSet's first replicated job.
+	jobSetFirstReplicatedJobJSONPath = "{.spec.replicatedJobs[0].name}"
 )
+
+// logsRetryInterval is the wait between fetchLogsWithRetry attempts; tests shorten it.
+var logsRetryInterval = 5 * time.Second
 
 func NewGKEOrchestrator() *GKEOrchestrator {
 	return &GKEOrchestrator{
@@ -201,22 +201,15 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 		return "", fmt.Errorf("job '%s' has %d pods matching logs query, which exceeds the max fetch limit (%d). Please view logs directly in the Google Cloud Console:\n%s", name, podCountForNotice, maxLogRequests, consoleURL)
 	}
 
-	var containerName string
-	if mainOnly {
-		containerName = g.getFirstContainerName(foundNamespace, selector)
-		if containerName == "" {
-			logging.Info("Could not determine specific workload container from JobSet; streaming all containers...")
-		}
-	}
-
+	allContainers := !mainOnly
 	if opts.Follow {
 		logging.Info("Streaming logs for job '%s'...", name)
-		args := g.buildKubectlLogsArgs(foundNamespace, selector, containerName, true)
+		args := g.buildKubectlLogsArgs(foundNamespace, selector, allContainers, true)
 		err = g.executor.ExecuteCommandStream("kubectl", args...)
 		return "", err
 	}
 
-	res, err := g.fetchLogsWithRetry(foundNamespace, selector, containerName)
+	res, err := g.fetchLogsWithRetry(foundNamespace, name, selector, allContainers)
 	if err != nil {
 		return "", err
 	}
@@ -228,11 +221,11 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 	return res.Stdout, nil
 }
 
-func (g *GKEOrchestrator) buildKubectlLogsArgs(ns, selector, containerName string, follow bool) []string {
+// buildKubectlLogsArgs leaves the container to kubectl unless allContainers is set. kubectl (1.24+) then reads the
+// pod's kubectl.kubernetes.io/default-container, else spec.containers[0]; native sidecars are never picked.
+func (g *GKEOrchestrator) buildKubectlLogsArgs(ns, selector string, allContainers, follow bool) []string {
 	args := []string{"logs", "-n", ns, "-l", selector}
-	if containerName != "" {
-		args = append(args, "-c", containerName)
-	} else {
+	if allContainers {
 		args = append(args, "--all-containers")
 	}
 	if follow {
@@ -242,10 +235,10 @@ func (g *GKEOrchestrator) buildKubectlLogsArgs(ns, selector, containerName strin
 	return args
 }
 
-func (g *GKEOrchestrator) fetchLogsWithRetry(ns, selector, containerName string) (shell.CommandResult, error) {
+func (g *GKEOrchestrator) fetchLogsWithRetry(ns, jobsetName, selector string, allContainers bool) (shell.CommandResult, error) {
 	maxRetries := 12 // 12 * 5s = 1 minute timeout
 	var res shell.CommandResult
-	cmdArgs := g.buildKubectlLogsArgs(ns, selector, containerName, false)
+	cmdArgs := g.buildKubectlLogsArgs(ns, selector, allContainers, false)
 	for i := 0; i < maxRetries; i++ {
 		res = g.executor.ExecuteCommand("kubectl", cmdArgs...)
 		if res.ExitCode == 0 {
@@ -256,66 +249,28 @@ func (g *GKEOrchestrator) fetchLogsWithRetry(ns, selector, containerName string)
 			if i == 0 {
 				logging.Info("Job containers are waiting to start (likely pulling images). Waiting...")
 			}
-			time.Sleep(5 * time.Second)
+			time.Sleep(logsRetryInterval)
 			continue
 		}
 
 		return res, fmt.Errorf("failed to get logs: %s\n%s", res.Stderr, res.Stdout)
 	}
 
-	jobsetName := extractJobSetNameFromSelector(selector)
-	if jobsetName != "" {
-		warnEvents := g.checkJobSetWarningEvents(ns, jobsetName)
-		if warnEvents != "" {
-			return res, fmt.Errorf("timed out waiting for job to start; JobSet reported warning events:\n%s\nlatest error: %s\n%s", warnEvents, res.Stderr, res.Stdout)
-		}
+	if warnEvents := g.checkJobSetWarningEvents(ns, jobsetName); warnEvents != "" {
+		return res, fmt.Errorf("timed out waiting for job to start; JobSet reported warning events:\n%s\nlatest error: %s\n%s", warnEvents, res.Stderr, res.Stdout)
 	}
 	return res, fmt.Errorf("timed out waiting for job to start; latest error: %s\n%s", res.Stderr, res.Stdout)
 }
 
-func extractJobSetNameFromSelector(selector string) string {
-	sel, err := labels.Parse(selector)
-	if err != nil {
+// firstReplicatedJobName returns the name of the JobSet's first replicated job (main-job, or pathways-head for
+// Pathways), read from the live object so custom templates work too. Empty if the JobSet can't be read.
+func (g *GKEOrchestrator) firstReplicatedJobName(ns, jobsetName string) string {
+	res := g.executor.ExecuteCommand("kubectl", "get", "jobsets.jobset.x-k8s.io", jobsetName, "-n", ns, "-o", "jsonpath="+jobSetFirstReplicatedJobJSONPath)
+	if res.ExitCode != 0 {
+		logging.Warn("Failed to query JobSet '%s' for its first replicated job: %s", jobsetName, strings.TrimSpace(res.Stderr))
 		return ""
 	}
-	reqs, _ := sel.Requirements()
-	for _, req := range reqs {
-		if req.Key() == "jobset.sigs.k8s.io/jobset-name" && (req.Operator() == selection.Equals || req.Operator() == selection.DoubleEquals || req.Operator() == selection.In) {
-			if vals := req.Values().List(); len(vals) == 1 {
-				return vals[0]
-			}
-		}
-	}
-	return ""
-}
-
-func findWorkloadContainer(containers []string) string {
-	for _, c := range containers {
-		if strings.HasPrefix(c, workloadContainerPrefix) || strings.HasPrefix(c, pathwaysContainerPrefix) {
-			return c
-		}
-	}
-	if len(containers) > 0 {
-		return containers[0]
-	}
-	return ""
-}
-
-func (g *GKEOrchestrator) getFirstContainerName(ns, selector string) string {
-	jobsetName := extractJobSetNameFromSelector(selector)
-	if jobsetName != "" {
-		res := g.executor.ExecuteCommand("kubectl", "get", "jobsets.jobset.x-k8s.io", jobsetName, "-n", ns, "-o", "jsonpath="+jobSetContainerNamesJSONPath)
-		if res.ExitCode == 0 && strings.TrimSpace(res.Stdout) != "" {
-			if name := findWorkloadContainer(strings.Fields(res.Stdout)); name != "" {
-				return name
-			}
-		} else if res.ExitCode != 0 {
-			logging.Warn("Failed to query JobSet '%s' for container names: %s", jobsetName, strings.TrimSpace(res.Stderr))
-		} else {
-			logging.Warn("Could not determine a primary workload container for JobSet '%s' from output: %s", jobsetName, strings.TrimSpace(res.Stdout))
-		}
-	}
-	return ""
+	return strings.TrimSpace(res.Stdout)
 }
 
 func (g *GKEOrchestrator) getJobPodCount(ns, selector string) (int, error) {
@@ -330,6 +285,9 @@ func (g *GKEOrchestrator) getJobPodCount(ns, selector string) (int, error) {
 	return len(strings.Split(stdout, "\n")), nil
 }
 
+// resolveLogsSelector returns the pod selector, whether logs are main-only, and the JobSet's pod count (only counted
+// when deciding the main-only default). Main-only selects rank-0 of the first replicated job: job-index and
+// job-completion-index alone are per replicated job and would also match e.g. a Pathways worker-0-0.
 func (g *GKEOrchestrator) resolveLogsSelector(name, ns string, optsMainOnly *bool) (string, bool, int) {
 	mainOnly := false
 	podCount := 0
@@ -349,6 +307,11 @@ func (g *GKEOrchestrator) resolveLogsSelector(name, ns string, optsMainOnly *boo
 	}
 
 	if mainOnly {
+		if jobName := g.firstReplicatedJobName(ns, name); jobName != "" {
+			selector += ",jobset.sigs.k8s.io/replicatedjob-name=" + jobName
+		} else {
+			logging.Info("Falling back to the rank-0 pod of every replicated job in '%s'.", name)
+		}
 		selector = fmt.Sprintf("%s,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0", selector)
 	}
 
