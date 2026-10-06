@@ -804,6 +804,9 @@ func restartMTCDriverPods(ctx context.Context, client dynamic.Interface, namespa
 	waitForDaemonSetRollout(ctx, client, namespace, dsName)
 }
 
+// deleteMTCDriverPodsFallback deletes MTC driver pods to trigger recreation by the DaemonSet controller
+// when strategic merge patch is rejected by cluster admission webhooks. Per Pillar 33, it executes only
+// after DaemonSet existence is verified and handles 403 Forbidden defensively.
 func deleteMTCDriverPodsFallback(ctx context.Context, client dynamic.Interface, namespace string) {
 	listOpts := metav1.ListOptions{
 		LabelSelector: "k8s-app=high-scale-checkpointing",
