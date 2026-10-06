@@ -29,7 +29,7 @@ srun --container-mounts="$PWD:/nccl,/var/tmp:/var/tmp" \
 	--container-image=${CONTAINER_IMAGE} \
 	--container-name="nccl" \
 	bash -c "
-     export LD_LIBRARY_PATH=/var/lib/tcpx/lib64:$LD_LIBRARY_PATH &&
+     export LD_LIBRARY_PATH=/var/lib/tcpxo/lib64:\$LD_LIBRARY_PATH &&
        cd /nccl &&
        git clone https://github.com/NVIDIA/nccl-tests.git &&
        cd /nccl/nccl-tests/ &&
