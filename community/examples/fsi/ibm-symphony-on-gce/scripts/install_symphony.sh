@@ -49,6 +49,9 @@ yum install -y \
 	iproute \
 	procps \
 	jq \
+	git \
+	binutils \
+	python3.12 \
 	glibc-locale-source \
 	glibc-langpack-en &&
 	yum clean all && rm -rf /var/cache/yum
@@ -114,7 +117,9 @@ rm -f "${SYM_FIXPACK_PATH}"
 
 cd "${EGO_TOP}" || exit 1
 
-sed -i "s|BINARY_TYPE=\"fail\"|BINARY_TYPE=\"linux-x86_64\"|g" kernel/conf/profile.ego &&
+sed -i '1i set +e +o pipefail 2>/dev/null || set +e' profile.platform &&
+	sed -i 's|grep "Ubuntu"|grep "Ubuntu" \|\| true|g' kernel/conf/profile.ego &&
+	sed -i "s|BINARY_TYPE=\"fail\"|BINARY_TYPE=\"linux-x86_64\"|g" kernel/conf/profile.ego &&
 	sed -i "s|BINARY_TYPE=\"fail\"|BINARY_TYPE=\"linux-x86_64\"|g" jre/profile.jre &&
 	sed -i "s|BINARY_TYPE=\"fail\"|BINARY_TYPE=\"linux-x86_64\"|g" soam/conf/profile.soam &&
 	sed -i -e "s|AUTOMATIC|MANUAL|g" eservice/esc/conf/services/plc_service.xml &&

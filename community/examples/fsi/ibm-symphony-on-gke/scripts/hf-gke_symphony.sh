@@ -25,12 +25,13 @@ curl -LsSf https://astral.sh/uv/0.11.26/install.sh | sh
 
 # shellcheck source=/dev/null
 source /root/.local/bin/env
-uv venv
+sed -i 's/requires-python = "==3.9.\*"/requires-python = ">=3.9"/' pyproject.toml
+uv venv --python 3.12
 # shellcheck source=/dev/null
 source .venv/bin/activate
 uv pip install .
 uv pip install pyinstaller
-PYTHONPATH=src pyinstaller --onefile src/gke_provider/__main__.py --name hf-gke --paths .venv/lib/python*/site-packages
+PYTHONPATH=src pyinstaller --onefile --python-option "W ignore" src/gke_provider/__main__.py --name hf-gke --paths .venv/lib/python*/site-packages
 
 cp dist/hf-gke resources/gke_cli/1.2/providerplugins/gcpgke/bin/
 cd resources/gke_cli || exit 1

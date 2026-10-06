@@ -27,8 +27,10 @@ vars:
   zone: us-central1-c
   authorized_cidr: 0.0.0.0/0
   base_image:
-    family: hpc-rocky-linux-8
-    project: cloud-hpc-image-public
+    family: rocky-linux-9-optimized-gcp
+    project: rocky-linux-cloud
+    #family: hpc-rocky-linux-8
+    #project: cloud-hpc-image-public
   new_image:
     family: $(vars.deployment_name)
     project: $(vars.project_id)
@@ -40,7 +42,7 @@ vars:
   sym_fixpack: sym-7.3.2.0_x86_64_build601711.tar.gz
   sym_entitlement: sym_adv_entitlement.dat
   symphony_install_dir: /opt/ibm/spectrumcomputing
-  admin_password: admin
+  admin_password_secret: $(vars.deployment_name)-admin-password
   gke_node_machine_type: c2-standard-4
   gke_min_node_count: 3
   gke_max_node_count: 100
@@ -48,6 +50,15 @@ vars:
 deployment_groups:
 - group: primary
   modules:
+  - id: verify_admin_password_secret
+    source: community/modules/scripts/gcloud
+    settings:
+      commands:
+      - create: >-
+          gcloud secrets versions access latest --secret=$(vars.admin_password_secret) --project=$(vars.project_id) >/dev/null ||
+          (echo "ERROR: Secret '$(vars.admin_password_secret)' not found or has no versions in project '$(vars.project_id)'. Please create it before deploying." >&2 && exit 1)
+        delete: "true"
+
   - id: enable_apis
     source: community/modules/project/service-enablement
     settings:
@@ -92,6 +103,7 @@ deployment_groups:
       - iam.serviceAccountUser
       - artifactregistry.writer
       - storage.objectViewer
+      - secretmanager.secretAccessor
 
   - id: registry
     source: community/modules/container/artifact-registry
@@ -230,7 +242,7 @@ deployment_groups:
       - type: shell
         destination: sym_master.sh
         source: $(ghpc_stage("scripts/sym_master.sh"))
-        args: $(vars.deployment_name)-master-0 $(vars.symphony_install_dir) $(vars.admin_password)
+        args: $(vars.deployment_name)-master-0 $(vars.symphony_install_dir) $(vars.admin_password_secret)
 
   - id: sym-master-vm
     source: modules/compute/vm-instance

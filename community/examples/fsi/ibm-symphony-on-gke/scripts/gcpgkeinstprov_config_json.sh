@@ -16,8 +16,10 @@ set -o pipefail
 set -x
 
 export EGO_TOP=$1
+set +e +o pipefail
 # shellcheck source=/dev/null
 source "$EGO_TOP/profile.platform"
+set -e -o pipefail
 
 export KUBECONFIG_PATH=${2:-"$HF_TOP/conf/providers/gcpgkeinst/kubeconfig"}
 export CRD_NAMESPACE=${3:-"gcp-symphony"}

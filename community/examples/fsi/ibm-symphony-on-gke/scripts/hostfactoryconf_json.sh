@@ -13,10 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set -e
+set -o pipefail
+set -x
+
 export EGO_TOP=$1
 
+set +e +o pipefail
 # shellcheck source=/dev/null
 . "$EGO_TOP/profile.platform"
+set -e -o pipefail
 
 cat >"$HF_TOP/conf/hostfactoryconf.json" <<EOF
 {

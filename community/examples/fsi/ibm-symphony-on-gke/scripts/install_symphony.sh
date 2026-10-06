@@ -58,6 +58,9 @@ yum install -y \
 	iproute \
 	procps \
 	jq \
+	git \
+	binutils \
+	python3.12 \
 	glibc-locale-source \
 	glibc-langpack-en &&
 	(alternatives --set python /usr/bin/python3 2>/dev/null || ln -sf /usr/bin/python3 /usr/bin/python || true) &&
@@ -124,7 +127,8 @@ rm -f "${SYM_FIXPACK_PATH}"
 echo "=== 7/7: Updating Symphony configuration ==="
 cd "${EGO_TOP}" || exit 1
 
-sed -i "s|grep Ubuntu|grep Ubuntu \|\| true|g" kernel/conf/profile.ego &&
+sed -i '1i set +e +o pipefail 2>/dev/null || set +e' profile.platform &&
+	sed -i 's|grep "Ubuntu"|grep "Ubuntu" \|\| true|g' kernel/conf/profile.ego &&
 	sed -i "s|BINARY_TYPE=\"fail\"|BINARY_TYPE=\"linux-x86_64\"|g" kernel/conf/profile.ego &&
 	sed -i "s|BINARY_TYPE=\"fail\"|BINARY_TYPE=\"linux-x86_64\"|g" jre/profile.jre &&
 	sed -i "s|BINARY_TYPE=\"fail\"|BINARY_TYPE=\"linux-x86_64\"|g" soam/conf/profile.soam &&

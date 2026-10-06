@@ -23,8 +23,10 @@ export RAM=${5:-16384}
 export POD_SPEC=${6:-"pod-specs/pod-spec.yaml"}
 export FULL_IMAGE_NAME=$7
 
+set +e +o pipefail
 # shellcheck source=/dev/null
 source "$EGO_TOP/profile.platform"
+set -e -o pipefail
 
 # Get master IP and Hostname
 MASTER_IP=$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip)

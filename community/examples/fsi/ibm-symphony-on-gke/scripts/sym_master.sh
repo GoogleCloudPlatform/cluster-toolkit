@@ -17,7 +17,7 @@ set -x
 
 export SYM_MASTER=$1
 export EGO_TOP=$2
-export ADMIN_PASSWORD=$3
+export ADMIN_PASSWORD_SECRET=$3
 
 # Ensure required runtime packages are installed
 if [ ! -f /usr/lib64/libnsl.so.1 ] && [ ! -f /lib64/libnsl.so.1 ]; then
@@ -32,7 +32,18 @@ fi
 # Add symphony environment to global profile
 echo "source $EGO_TOP/profile.platform" >>/etc/profile
 
+set +e +o pipefail
 # shellcheck source=/dev/null
-source "$EGO_TOP/profile.platform" && egosetsudoers.sh -f
+source "$EGO_TOP/profile.platform"
+set -e -o pipefail
+egosetsudoers.sh -f
 
-su -s /bin/bash egoadmin -c "source $EGO_TOP/profile.platform && egoconfig join $SYM_MASTER -f && egoconfig setpassword -x $ADMIN_PASSWORD -f && egoconfig setentitlement ${EGO_TOP}/*.dat -f && egosh ego start"
+set +x
+if ! ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret="$ADMIN_PASSWORD_SECRET"); then
+	echo "ERROR: Failed to retrieve secret '$ADMIN_PASSWORD_SECRET' from Secret Manager." >&2
+	exit 1
+fi
+export ADMIN_PASSWORD
+su -s /bin/bash egoadmin -c "source $EGO_TOP/profile.platform && egoconfig join $SYM_MASTER -f && egoconfig setpassword -x \"\$ADMIN_PASSWORD\" -f && egoconfig setentitlement ${EGO_TOP}/*.dat -f && egosh ego start"
+unset ADMIN_PASSWORD
+set -x
