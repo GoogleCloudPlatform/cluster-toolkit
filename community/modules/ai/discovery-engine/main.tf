@@ -15,6 +15,9 @@
  */
 
 resource "random_id" "datastore_suffix" {
+  keepers = {
+    engine_id = var.engine_id
+  }
   byte_length = 4
 }
 
