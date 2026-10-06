@@ -21,12 +21,11 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"strings"
 	"testing"
-        "time"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
 )
 
 func TestCancelCmd_Success(t *testing.T) {

@@ -19,6 +19,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"hpc-toolkit/pkg/shell"
 
@@ -68,6 +69,10 @@ func (e *exactExecutor) ExecuteCommand(name string, args ...string) shell.Comman
 	}
 	e.callCount[key]++
 	return results[idx]
+}
+
+func (e *exactExecutor) ExecuteCommandWithTimeout(_ time.Duration, name string, args ...string) shell.CommandResult {
+	return e.ExecuteCommand(name, args...)
 }
 
 func (e *exactExecutor) ExecuteCommandStream(name string, args ...string) error { return nil }

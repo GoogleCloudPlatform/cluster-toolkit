@@ -577,7 +577,7 @@ func (g *GKEOrchestrator) verifyCheckpointConfigurationCR(docRemediationMsg stri
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return fmt.Errorf("the CheckpointConfiguration CustomResourceDefinition (CRD) is not registered on the cluster. %s: %w", docRemediationMsg, err)
-
+		}
 		if isForbiddenError(err) {
 			logging.Warn("Insufficient RBAC permissions to verify CheckpointConfiguration resources (403 Forbidden). Assuming CheckpointConfiguration is configured in shared cluster and proceeding with job submission.")
 			return nil

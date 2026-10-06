@@ -30,11 +30,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-<<<<<<< HEAD
-
-	"golang.org/x/sys/unix"
-=======
->>>>>>> ebc9bd6ff (pre-commit fix)
 )
 
 const (
