@@ -39,6 +39,11 @@ metadata:
   labels:
     {{ printf "%q" .ManagedByLabel }}: {{ printf "%q" .ManagedByValue }}
     {{ printf "%q" .StorageTypeLabel }}: {{ printf "%q" .StorageType }}
+{{- if .LastClaimedAt }}
+  annotations:
+    {{ printf "%q" .LastClaimedAtAnnotation }}: {{ printf "%q" .LastClaimedAt }}
+    {{ printf "%q" .LastClaimedByAnnotation }}: {{ printf "%q" .LastClaimedBy }}
+{{- end }}
 spec:
   storageClassName: {{ printf "%q" .StorageClassName }}
   volumeName: {{ printf "%q" .PVName }}
