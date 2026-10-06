@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 func setupMockMachineConfig(t *testing.T) {
@@ -96,6 +97,8 @@ func newTestGKEOrchestrator(executor Executor) *GKEOrchestrator {
 		dynamicSlicingCache:      make(map[string]bool),
 		staticSlicingCache:       make(map[string]bool),
 		resourcePolicyCache:      make(map[string]*GCEWorkloadPolicy),
+		// Never read the developer's real kubeconfig in unit tests.
+		kubeconfigLoader: func() (*clientcmdapi.Config, error) { return clientcmdapi.NewConfig(), nil },
 	}
 }
 

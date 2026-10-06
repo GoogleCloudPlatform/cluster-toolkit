@@ -13,6 +13,10 @@ If you use `--build-context` to build images on-the-fly, you must set:
 * `GCLUSTER_IMAGE_REPO`: The name of your Artifact Registry repository only (e.g., `gcluster-repo`). The tool will automatically construct the full path using the cluster's region and project ID.
 * `USER` or `USERNAME`: Used for unique image tagging (usually set automatically by your OS).
 
+### Optional Environment Variables
+
+* `GCLUSTER_REFRESH_CREDENTIALS`: Set to `1` to make every `gcluster job` command re-run `gcloud container clusters get-credentials` instead of reusing an existing, verified `kubeconfig` context for the cluster. See [Cluster connectivity and kubeconfig reuse](#101-cluster-connectivity-and-kubeconfig-reuse) for when this is useful.
+
 > [!NOTE]
 > ### Automated Prerequisite Checks Overview
 >
@@ -1312,7 +1316,44 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 > [!NOTE]
 > **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. You can override this to stream logs from all pods by explicitly passing `--main-only=false`.
 
-## 10. Troubleshooting: ImagePullBackOff
+## 10. Troubleshooting
+
+### 10.1 Cluster connectivity and kubeconfig reuse
+
+Every `gcluster job` command first makes `kubectl` target your cluster. A GKE control plane can be reached through two kinds of endpoints, and which one works depends on *where you run `gcluster` from*:
+
+| Endpoint | Typical failure when it is the wrong one for your network |
+| :--- | :--- |
+| **IP endpoint** (`https://<public-or-private-ip>`) — subject to [Master Authorized Networks](https://cloud.google.com/kubernetes-engine/docs/how-to/authorized-networks) | `dial tcp <ip>:443: i/o timeout` (your client IP is not allow-listed, or has no route to the control plane), or `502 Bad Gateway` / `504 Gateway Timeout` when a corporate forward proxy answers on the control plane's behalf |
+| **DNS endpoint** (`https://gke-<id>.<region>.gke.goog`) — IAM-gated, bypasses authorized networks | `431 Request Header Fields Too Large` (some corporate proxies inflate request headers) |
+
+`gcluster` handles this as follows:
+
+1. **Reuse first.** If your `kubeconfig` already contains a context for the cluster (`gke_<project>_<location>_<cluster>`) that *verifiably* belongs to it — its server is one of the cluster's endpoints, its pinned CA matches the cluster CA (IP endpoint only), and it authenticates through `gke-gcloud-auth-plugin` — `gcluster` runs a short (5s) connectivity probe against that context and, on success, **uses it as-is** without calling `gcloud container clusters get-credentials`. Your namespace and endpoint choice are preserved. You will see:
+
+   ```text
+   Reusing existing kubeconfig context 'gke_my-project_us-central1_my-cluster' (DNS endpoint).
+   ```
+
+2. **Otherwise fetch credentials and verify.** If there is no reusable context (or the probe shows the existing endpoint is unreachable from your machine), `gcluster` runs `get-credentials`, probes again, and if the probe fails with a *connectivity* error it automatically retries with the other endpoint when the cluster offers one:
+
+   ```text
+   WARNING: Cluster 'my-cluster' is unreachable via its IP endpoint (dial tcp 35.1.2.3:443: i/o timeout). Retrying with the DNS endpoint...
+   WARNING: Connected to cluster 'my-cluster' via its DNS endpoint after the IP endpoint was unreachable. kubeconfig context 'gke_my-project_us-central1_my-cluster' now points at the DNS endpoint.
+   ```
+
+   Authentication errors (`Unauthorized`, `gke-gcloud-auth-plugin` failures) are **not** retried against another endpoint because a different endpoint cannot fix credentials; `gcluster` fails immediately and tells you to run `gcloud auth application-default login`.
+
+> [!TIP]
+> **Forcing a credential refresh.** Set `GCLUSTER_REFRESH_CREDENTIALS=1` to skip step 1 and always re-run `get-credentials` (step 2 still applies). Use this if you suspect the reused context is wrong in a way the checks above cannot detect — for example, after deliberately editing the entry by hand, or when sharing a `kubeconfig` between tools that expect a specific endpoint:
+>
+> ```bash
+> GCLUSTER_REFRESH_CREDENTIALS=1 ./gcluster job submit ...
+> ```
+
+If **both** endpoints are unreachable, the error lists what was attempted for each. Typical fixes are adding your egress IP to the cluster's authorized networks, enabling external traffic on the DNS endpoint (`gcloud container clusters update <CLUSTER> --location=<LOCATION> --enable-dns-access`), or running `gcluster` from a network that can reach the control plane.
+
+### 10.2 ImagePullBackOff
 
 If your job status remains `Pending` and the underlying pods show `ImagePullBackOff` or `ErrImagePull`, the GKE node pool service account may lack permission to read from the Artifact Registry repository.
 

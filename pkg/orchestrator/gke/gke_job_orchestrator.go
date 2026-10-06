@@ -23,7 +23,6 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
-	"maps"
 	"net/url"
 	"os"
 	"os/exec"
@@ -1802,33 +1801,19 @@ func (d *DefaultExecutor) ExecuteCommandStream(name string, args ...string) erro
 
 // GetCurrentNamespace resolves the target Kubernetes namespace from kubeconfig for the specified cluster.
 func (d *DefaultKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
-	config, err := clientcmd.NewDefaultClientConfigLoadingRules().Load()
+	config, err := defaultKubeconfigLoader()
 	if err != nil {
 		return "", fmt.Errorf("failed to load kubeconfig: %w. You can explicitly specify the namespace using the --gke-namespace flag", err)
 	}
 
-	// Standard GKE context naming convention
-	expectedContext := fmt.Sprintf("gke_%s_%s_%s", projectID, location, clusterName)
-
-	if kubeCtx, ok := config.Contexts[expectedContext]; ok {
-		if kubeCtx.Namespace != "" {
-			return kubeCtx.Namespace, nil
-		}
-		return "default", nil
+	// Standard GKE context naming convention first, then the legacy fallback
+	// for contexts users renamed to the bare cluster name.
+	_, kubeCtx, ok := findKubeContext(config, clusterName, location, projectID)
+	if !ok {
+		return "", fmt.Errorf("no matching context found for cluster %s in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag", clusterName)
 	}
-
-	// Fallback/Legacy: Also check if there's a context with just the cluster name
-	// (sometimes users manually rename them)
-	contextNames := slices.Sorted(maps.Keys(config.Contexts))
-	for _, contextName := range contextNames {
-		kubeCtx := config.Contexts[contextName]
-		if contextName == clusterName || kubeCtx.Cluster == clusterName {
-			if kubeCtx.Namespace != "" {
-				return kubeCtx.Namespace, nil
-			}
-			return "default", nil
-		}
+	if kubeCtx.Namespace != "" {
+		return kubeCtx.Namespace, nil
 	}
-
-	return "", fmt.Errorf("no matching context found for cluster %s in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag", clusterName)
+	return "default", nil
 }
