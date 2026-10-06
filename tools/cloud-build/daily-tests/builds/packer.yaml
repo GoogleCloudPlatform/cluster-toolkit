@@ -74,6 +74,7 @@ steps:
     spec:
       suspend: true # Required for Kueue: the job must be created in suspended state for Kueue to manage it
       backoffLimit: 0
+      activeDeadlineSeconds: 14400
       template:
         metadata:
           annotations:
@@ -113,11 +114,12 @@ steps:
               cd /workspace
 
               DEPLOYMENT_NAME="pkrv6$$BUILD_ID_SHORT"
+              BP_NAME=$(grep -m1 '^blueprint_name:' "$$BLUEPRINT" 2>/dev/null | awk '{print $2}')
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
-
+              gcloud storage rm -r "gs://daily-tests-tf-state/$${BP_NAME:-*}/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+  
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
               trap cleanup_pod EXIT SIGTERM SIGINT
