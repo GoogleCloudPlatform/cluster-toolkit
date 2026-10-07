@@ -22,6 +22,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-apptainer.yaml](#hpc-slurm6-apptaineryaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm6-hybrid.yaml](#hpc-slurm6-hybridyaml--) ![community-badge] ![experimental-badge]
   * [apptainer-artifact-registry-openfoam.yaml](#apptainer-artifact-registry-openfoamyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [ml-slurm-g4.yaml](#ml-slurm-g4yaml-) ![core-badge]
@@ -358,6 +359,11 @@ This blueprint creates a custom [Apptainer](https://apptainer.org) enabled image
 
 [hpc-slurm6-apptainer.yaml]: ../community/examples/hpc-slurm6-apptainer.yaml
 
+### [hpc-slurm6-hybrid.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint extends an on-premise Slurm cluster with cloud nodes. It builds a compute image matching the on-premise Slurm installation and generates the configuration the on-premise controller needs to burst into GCP. See the [hybrid Slurm cluster guide](../docs/hybrid-slurm-cluster/README.md) for the full procedure.
+
+[hpc-slurm6-hybrid.yaml]: ../community/examples/hpc-slurm6-hybrid.yaml
 ### [apptainer-artifact-registry-openfoam.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates staging and running an [Apptainer](https://apptainer.org) SIF image through the `apptainer-runtime` and `apptainer-app` modules, backed by an [artifact-registry](../community/modules/container/artifact-registry/README.md) repository configured as a `REMOTE_REPOSITORY` pull-through cache mirroring Docker Hub. The example stages OpenFOAM from the public OpenCFD image.
