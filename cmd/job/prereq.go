@@ -30,11 +30,6 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-const (
-	gcloudCmdTimeout     = 30 * time.Second
-	gcloudVersionTimeout = 5 * time.Second
-)
-
 type PrereqStore interface {
 	Load() PrereqState
 	Save(PrereqState)
@@ -113,9 +108,9 @@ func isStateStale(state PrereqState, currentProjectID string) bool {
 // ensureGCloudSDKInstalled checks if gcloud SDK is installed and available in PATH.
 func ensureGCloudSDKInstalled() error {
 
-	result := shell.ExecuteCommandWithTimeout(gcloudVersionTimeout, "gcloud", "version")
+	result := shell.ExecuteCommandWithTimeout(shell.DefaultLocalCommandTimeout, "gcloud", "version")
 
-	timeoutMsg := fmt.Sprintf("gcloud version check timed out after %v. Please verify your local gcloud installation is responsive", gcloudVersionTimeout)
+	timeoutMsg := fmt.Sprintf("gcloud version check timed out after %v. Please verify your local gcloud installation is responsive", shell.DefaultLocalCommandTimeout)
 	if err := shell.HandleExecError(result, "gcloud", timeoutMsg); err != nil {
 		return fmt.Errorf("Google Cloud SDK (gcloud) is required to run prerequisite checks. Aborting job submission.\nPlease install it from https://cloud.google.com/sdk/docs/install and ensure it's in your PATH.\nAfter installation, please run 'gcloud auth login' to authenticate.\nError: %w", err)
 	}
@@ -128,9 +123,9 @@ func ensureGCloudSDKInstalled() error {
 // ensureGCloudAuthenticated checks if gcloud is authenticated.
 func ensureGCloudAuthenticated() error {
 
-	result := shell.ExecuteCommandWithTimeout(gcloudCmdTimeout, "gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
+	result := shell.ExecuteCommandWithTimeout(shell.DefaultLocalCommandTimeout, "gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
 
-	if err := shell.HandleExecError(result, "gcloud", fmt.Sprintf("gcloud authentication check timed out after %v. Please check your network connection", gcloudCmdTimeout)); err != nil {
+	if err := shell.HandleExecError(result, "gcloud", fmt.Sprintf("gcloud authentication check timed out after %v. Please verify your local gcloud installation is responsive", shell.DefaultLocalCommandTimeout)); err != nil {
 		return err
 	}
 
@@ -160,7 +155,7 @@ func getADCSetupCommand() string {
 
 // isGCloudComponentManagerEnabled checks if component manager is enabled for gcloud.
 func isGCloudComponentManagerEnabled() bool {
-	result := shell.ExecuteCommandWithTimeout(gcloudCmdTimeout, "gcloud", "components", "list", "--quiet")
+	result := shell.ExecuteCommandWithTimeout(shell.DefaultLocalCommandTimeout, "gcloud", "components", "list", "--quiet")
 	return !strings.Contains(result.Stderr, "component manager is disabled")
 }
 
@@ -182,7 +177,14 @@ func printMissingPrereqs(cmd *cobra.Command, missing []missingPrereq) {
 
 func checkK8sDependencies(state *PrereqState, missing *[]missingPrereq) {
 	// Check kubectl
-	if shell.ExecuteCommandWithTimeout(gcloudCmdTimeout, "kubectl", "version", "--client", "--output=json").ExitCode != 0 {
+	kubectlRes := shell.ExecuteCommandWithTimeout(shell.DefaultLocalCommandTimeout, "kubectl", "version", "--client", "--output=json")
+	if errors.Is(kubectlRes.Err, context.DeadlineExceeded) {
+		logging.Warn("Command timeout while checking kubectl version. Please verify your local kubectl binary is responsive.")
+		*missing = append(*missing, missingPrereq{
+			name:     fmt.Sprintf("kubectl (verification timed out after %v)", shell.DefaultLocalCommandTimeout),
+			commands: []string{"kubectl version --client"},
+		})
+	} else if kubectlRes.ExitCode != 0 {
 		var cmds []string
 		if isGCloudComponentManagerEnabled() {
 			cmds = []string{"gcloud components install kubectl --quiet"}
@@ -195,7 +197,14 @@ func checkK8sDependencies(state *PrereqState, missing *[]missingPrereq) {
 	}
 
 	// Check plugin
-	if shell.ExecuteCommandWithTimeout(gcloudCmdTimeout, "gke-gcloud-auth-plugin", "--version").ExitCode != 0 {
+	pluginRes := shell.ExecuteCommandWithTimeout(shell.DefaultLocalCommandTimeout, "gke-gcloud-auth-plugin", "--version")
+	if errors.Is(pluginRes.Err, context.DeadlineExceeded) {
+		logging.Warn("Command timeout while checking gke-gcloud-auth-plugin version. Please verify your local plugin binary is responsive.")
+		*missing = append(*missing, missingPrereq{
+			name:     fmt.Sprintf("gke-gcloud-auth-plugin (verification timed out after %v)", shell.DefaultLocalCommandTimeout),
+			commands: []string{"gke-gcloud-auth-plugin --version"},
+		})
+	} else if pluginRes.ExitCode != 0 {
 		var cmds []string
 		if isGCloudComponentManagerEnabled() {
 			cmds = []string{"gcloud components install gke-gcloud-auth-plugin --quiet"}
@@ -262,8 +271,8 @@ func isPermissionDeniedError(stderr string, projectID string) bool {
 // ensureProjectExists checks if the project exists and is accessible.
 func ensureProjectExists(projectID string) error {
 
-	result := shell.ExecuteCommandWithTimeout(gcloudCmdTimeout, "gcloud", "projects", "describe", projectID)
-	if err := shell.HandleExecError(result, "gcloud", fmt.Sprintf("gcloud project validation timed out after %v. Please check your network connection", gcloudCmdTimeout)); err != nil {
+	result := shell.ExecuteCommandWithTimeout(shell.DefaultCloudAPITimeout, "gcloud", "projects", "describe", projectID)
+	if err := shell.HandleExecError(result, "gcloud", fmt.Sprintf("gcloud project validation timed out after %v. Please check your network connection", shell.DefaultCloudAPITimeout)); err != nil {
 		return err
 	}
 
@@ -367,13 +376,13 @@ func checkArtifactRegistryAPI(projectID string, state *PrereqState, missing *[]m
 		return
 	}
 
-	apiResult := shell.ExecuteCommandWithTimeout(gcloudCmdTimeout, "gcloud", "services", "list", "--filter=NAME:artifactregistry.googleapis.com", "--format=value(STATE)", "--project", projectID)
+	apiResult := shell.ExecuteCommandWithTimeout(shell.DefaultCloudAPITimeout, "gcloud", "services", "list", "--filter=NAME:artifactregistry.googleapis.com", "--format=value(STATE)", "--project", projectID)
 
 	if errors.Is(apiResult.Err, context.DeadlineExceeded) {
 		logging.Warn("Network timeout while checking Artifact Registry API state. Assuming it needs verification.")
 
 		*missing = append(*missing, missingPrereq{
-			name:     fmt.Sprintf("Artifact Registry API (verification timed out after %v)", gcloudCmdTimeout),
+			name:     fmt.Sprintf("Artifact Registry API (verification timed out after %v)", shell.DefaultCloudAPITimeout),
 			commands: []string{fmt.Sprintf("gcloud services enable artifactregistry.googleapis.com --project %s --quiet", projectID)},
 		})
 		return

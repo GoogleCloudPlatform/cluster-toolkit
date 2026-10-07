@@ -254,3 +254,37 @@ func (s *MySuite) TestExecuteCommandWithTimeout_KillsHangingProcess(c *C) {
 
 	c.Assert(result.ExitCode, Equals, 124, Commentf("Expected ExitCode 124 for a timed-out process, got: %d", result.ExitCode))
 }
+
+func (s *MySuite) TestExecuteCommandWithTimeout_NonZeroExitCode(c *C) {
+	timeout := 2 * time.Second
+	result := ExecuteCommandWithTimeout(timeout, "sh", "-c", "exit 42")
+	c.Assert(result.Err, NotNil, Commentf("Expected error for non-zero exit code, got nil"))
+	c.Assert(result.ExitCode, Equals, 42, Commentf("Expected ExitCode 42, got: %d", result.ExitCode))
+}
+func (s *MySuite) TestExecuteCommandWithTimeout_BinaryNotFound(c *C) {
+	timeout := 2 * time.Second
+	result := ExecuteCommandWithTimeout(timeout, "nonexistent-binary-xyz-12345")
+	c.Assert(result.Err, NotNil, Commentf("Expected error for missing binary, got nil"))
+	c.Assert(result.ExitCode, Equals, -1, Commentf("Expected ExitCode -1 when binary fails to start, got: %d", result.ExitCode))
+}
+func (s *MySuite) TestHandleExecError(c *C) {
+	timeoutMsg := "command timed out after 30s"
+
+	okRes := CommandResult{ExitCode: 0, Stdout: "ok", Err: nil}
+	c.Assert(HandleExecError(okRes, "gcloud", timeoutMsg), IsNil)
+
+	timeoutRes := CommandResult{ExitCode: 124, Err: context.DeadlineExceeded}
+	err := HandleExecError(timeoutRes, "gcloud", timeoutMsg)
+	c.Assert(err, NotNil)
+	c.Assert(err.Error(), Equals, timeoutMsg)
+
+	startErr := errors.New("executable file not found in $PATH")
+	notFoundRes := CommandResult{ExitCode: -1, Err: startErr}
+	err = HandleExecError(notFoundRes, "gcloud", timeoutMsg)
+	c.Assert(err, NotNil)
+	c.Assert(err, ErrorMatches, "failed to execute gcloud: executable file not found in \\$PATH")
+	c.Assert(errors.Is(err, startErr), Equals, true)
+
+	exitErrRes := CommandResult{ExitCode: 42, Stderr: "some cli error", Err: errors.New("exit status 42")}
+	c.Assert(HandleExecError(exitErrRes, "gcloud", timeoutMsg), IsNil)
+}

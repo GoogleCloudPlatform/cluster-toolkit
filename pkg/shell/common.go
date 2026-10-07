@@ -37,6 +37,11 @@ import (
 >>>>>>> ebc9bd6ff (pre-commit fix)
 )
 
+const (
+	DefaultLocalCommandTimeout = 15 * time.Second // For local checks: gcloud version, config reads, kubectl --client
+	DefaultCloudAPITimeout     = 30 * time.Second // For remote GCP APIs: clusters describe, projects describe
+)
+
 // ProposedChanges provides summary and full description of proposed changes
 // to cloud infrastructure
 type ProposedChanges struct {

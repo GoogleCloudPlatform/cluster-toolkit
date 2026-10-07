@@ -20,7 +20,6 @@ import (
 	"hpc-toolkit/pkg/orchestrator/gke"
 	"hpc-toolkit/pkg/shell"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -47,11 +46,9 @@ var ClusterCmd = &cobra.Command{
 
 		if projectID == "" {
 
-			timeoutDuration := 30 * time.Second
+			result := shell.ExecuteCommandWithTimeout(shell.DefaultLocalCommandTimeout, "gcloud", "config", "get-value", "project")
 
-			result := shell.ExecuteCommandWithTimeout(timeoutDuration, "gcloud", "config", "get-value", "project")
-
-			if err := shell.HandleExecError(result, "gcloud", fmt.Sprintf("gcloud config get-value project timed out after %v. Please verify your local gcloud installation is responsive", timeoutDuration)); err != nil {
+			if err := shell.HandleExecError(result, "gcloud", fmt.Sprintf("gcloud config get-value project timed out after %v. Please verify your local gcloud installation is responsive", shell.DefaultLocalCommandTimeout)); err != nil {
 				return err
 			}
 

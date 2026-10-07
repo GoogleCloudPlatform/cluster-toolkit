@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"io"
@@ -453,18 +452,14 @@ func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (s
 	g.projectID = projectID
 
 	logging.Info("Fetching GKE cluster metadata for '%s'...", clusterName)
-	res := g.executor.ExecuteCommandWithTimeout(gcloudCmdTimeout, "gcloud", "container", "clusters", "describe", clusterName,
+	res := g.executor.ExecuteCommandWithTimeout(shell.DefaultCloudAPITimeout, "gcloud", "container", "clusters", "describe", clusterName,
 		"--location", location,
 		"--project", g.projectID,
 		"--format=json")
 
-	if res.Err != nil {
-		if errors.Is(res.Err, context.DeadlineExceeded) {
-			return "", fmt.Errorf("timed out after %v while trying to reach GKE cluster '%s' in '%s'. Please check your network connection", gcloudCmdTimeout, clusterName, location)
-		}
-		if res.ExitCode == -1 {
-			return "", fmt.Errorf("failed to execute gcloud: %w", res.Err)
-		}
+	timeoutMsg := fmt.Sprintf("timed out after %v while trying to reach GKE cluster '%s' in '%s'. Please check your network connection", shell.DefaultCloudAPITimeout, clusterName, location)
+	if err := shell.HandleExecError(res, "gcloud", timeoutMsg); err != nil {
+		return "", err
 	}
 
 	if res.ExitCode != 0 {
@@ -475,18 +470,14 @@ func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (s
 		if len(strings.Split(location, "-")) == 3 {
 			region := shell.ExtractRegion(location)
 			logging.Info("Failed to find cluster in zone %s. Trying fallback to region %s...", location, region)
-			fallbackRes := g.executor.ExecuteCommandWithTimeout(gcloudCmdTimeout, "gcloud", "container", "clusters", "describe", clusterName,
+			fallbackRes := g.executor.ExecuteCommandWithTimeout(shell.DefaultCloudAPITimeout, "gcloud", "container", "clusters", "describe", clusterName,
 				"--location", region,
 				"--project", g.projectID,
 				"--format=json")
 
-			if fallbackRes.Err != nil {
-				if errors.Is(fallbackRes.Err, context.DeadlineExceeded) {
-					return "", fmt.Errorf("failed to describe GKE cluster %s in %s: %w", clusterName, location, res.Err)
-				}
-				if fallbackRes.ExitCode == -1 {
-					return "", fmt.Errorf("failed to describe GKE cluster %s in %s: %w", clusterName, location, res.Err)
-				}
+			fallbackTimeoutMsg := fmt.Sprintf("timed out after %v while trying to reach GKE cluster '%s' in fallback region '%s'. Please check your network connection", shell.DefaultCloudAPITimeout, clusterName, region)
+			if err := shell.HandleExecError(fallbackRes, "gcloud", fallbackTimeoutMsg); err != nil {
+				return "", err
 			}
 
 			if fallbackRes.ExitCode == 0 {
@@ -586,7 +577,7 @@ func (g *GKEOrchestrator) verifyCheckpointConfigurationCR(docRemediationMsg stri
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return fmt.Errorf("the CheckpointConfiguration CustomResourceDefinition (CRD) is not registered on the cluster. %s: %w", docRemediationMsg, err)
-		}
+
 		if isForbiddenError(err) {
 			logging.Warn("Insufficient RBAC permissions to verify CheckpointConfiguration resources (403 Forbidden). Assuming CheckpointConfiguration is configured in shared cluster and proceeding with job submission.")
 			return nil

@@ -37,8 +37,6 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-const gcloudCmdTimeout = 30 * time.Second
-
 const (
 	// tpuTopologyLabel is the GKE label for TPU topology.
 	tpuTopologyLabel = "cloud.google.com/gke-tpu-topology"
