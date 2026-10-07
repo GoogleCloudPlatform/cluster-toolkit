@@ -37,8 +37,7 @@ vars:
 
   gcp_public_cidrs_access_enabled: false
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
-  nccl_tcpx_installer_path: $(ghpc_stage("./nccl-tcpx-installer.yaml.tftpl"))
-  nccl_config_path: $(ghpc_stage("./nccl-config.yaml"))
+  nccl_tcpxo_installer_path: $(ghpc_stage("./nccl-tcpxo-installer.yaml.tftpl"))
   nri_device_injector_path: $(ghpc_stage("./nri-device-injector.yaml"))
 
   network_name: $(vars.deployment_name)-net
@@ -57,7 +56,7 @@ vars:
 
   accelerator_type: nvidia-h100-80gb
   version_prefix: "1.35."
-  nccl_tcpx_version: v3.1.9
+  nccl_tcpxo_version: v1.0.15
 
 deployment_groups:
 - group: primary
@@ -162,19 +161,15 @@ deployment_groups:
     use: [gke_cluster]
     settings:
       apply_manifests:
-      - name: nccl-config
-        source: $(vars.nccl_config_path)
       - name: nri-device-injector
         source: $(vars.nri_device_injector_path)
-      - name: nccl-tcpx-installer
-        source: $(vars.nccl_tcpx_installer_path)
+      - name: nccl-tcpxo-installer
+        source: $(vars.nccl_tcpxo_installer_path)
         template_vars:
           accelerator_type: $(vars.accelerator_type)
-          version: $(vars.nccl_tcpx_version)
+          version: $(vars.nccl_tcpxo_version)
       kueue:
         install: true
-        wait: true
-        version: "0.17.1"
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a3_highgpu_pool.static_gpu_count)

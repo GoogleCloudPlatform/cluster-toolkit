@@ -369,7 +369,7 @@ func (g *GKEOrchestrator) removeDescriptionFields(data map[interface{}]interface
 // ValidateClusterState runs all cluster-specific validations to fail early on invalid state.
 func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) error {
 	validators := []func() error{
-		g.checkClusterConnectivity,
+		func() error { return g.checkClusterConnectivity(job.ClusterName) },
 		func() error {
 			return g.validateTargetNamespaceExists(job.ClusterName, job.ClusterLocation, job.ProjectID)
 		},
@@ -444,18 +444,6 @@ func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, p
 	default:
 		return fmt.Errorf("failed to verify existence of namespace %q on cluster %q: %w", ns, clusterName, err)
 	}
-}
-
-// checkClusterConnectivity verifies that we can connect to the cluster.
-// It uses a short timeout to fail fast if IP is blocked by authorized networks.
-func (g *GKEOrchestrator) checkClusterConnectivity() error {
-	logging.Info("Checking cluster connectivity...")
-	res := g.executor.ExecuteCommand("kubectl", "version", "--request-timeout=5s")
-	if res.ExitCode != 0 {
-		return fmt.Errorf("failed to connect to GKE cluster. Please verify your IP is allowed in the cluster's authorized networks or that you have correct network access. Error: %s", res.Stderr)
-	}
-	logging.Info("Cluster connectivity verified.")
-	return nil
 }
 
 // Initialize fetches GKE cluster metadata and resolves the cluster location,
@@ -553,67 +541,6 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 		}
 	}
 
-	return nil
-}
-
-func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
-	// 1. Capture current namespace context before gcloud resets it on best effort to preserve current namespace.
-	// If we can't read it, using 'default' allows gcloud setup to proceed,
-	originalNamespace, err := g.getCurrentNamespace(clusterName, clusterLocation, projectID)
-	if err != nil {
-		logging.Warn("Could not read current namespace before gcloud (defaulting to 'default'): %v. If you want to target a specific namespace please use the --gke-namespace flag", err)
-		originalNamespace = "default"
-	}
-
-	// 2. Refresh credentials via gcloud (this resets namespace to 'default')
-	if err := g.refreshGKEAuth(clusterName, clusterLocation, projectID); err != nil {
-		return err
-	}
-
-	// 3. Restore the original namespace context
-	return g.restoreNamespaceContext(originalNamespace)
-}
-
-// shouldUseDNSEndpoint determines whether to pass --dns-endpoint to gcloud container clusters get-credentials.
-// When a public IP endpoint is enabled, we prefer the IP endpoint to avoid HTTP 431 request header overflow issues on enterprise networks.
-// When only external DNS access is permitted without a public IP endpoint, we use the DNS endpoint.
-func shouldUseDNSEndpoint(cfg *controlPlaneEndpointsConfig) bool {
-	if cfg == nil || cfg.DnsEndpointConfig == nil || !cfg.DnsEndpointConfig.AllowExternalTraffic {
-		return false
-	}
-	return cfg.IPEndpointsConfig == nil || !cfg.IPEndpointsConfig.EnablePublicEndpoint
-}
-
-// refreshGKEAuth handles the gcloud container clusters get-credentials call.
-func (g *GKEOrchestrator) refreshGKEAuth(clusterName, clusterLocation, projectID string) error {
-	args := []string{"container", "clusters", "get-credentials", clusterName, "--location", clusterLocation, "--project", projectID}
-
-	if shouldUseDNSEndpoint(g.clusterDesc.ControlPlaneEndpointsConfig) {
-		args = append(args, "--dns-endpoint")
-	}
-
-	credsRes := g.executor.ExecuteCommand("gcloud", args...)
-	if credsRes.ExitCode != 0 {
-		if strings.Contains(strings.ToLower(credsRes.Stderr), "multiple") || strings.Contains(strings.ToLower(credsRes.Stderr), "ambiguous") {
-			return fmt.Errorf("found multiple GKE clusters named %s. Please specify the exact Zone using --location to disambiguate", clusterName)
-		}
-		return fmt.Errorf("failed to get GKE cluster credentials: %s\n%s", credsRes.Stderr, credsRes.Stdout)
-	}
-	return nil
-}
-
-// restoreNamespaceContext sets the current namespace back to its original value if needed.
-func (g *GKEOrchestrator) restoreNamespaceContext(namespace string) error {
-	// If it was default, gcloud already set it to default, so we can skip.
-	if namespace == "" || namespace == "default" {
-		return nil
-	}
-
-	logging.Info("Restoring namespace context to '%s'...", namespace)
-	restoreRes := g.executor.ExecuteCommand("kubectl", "config", "set-context", "--current", "--namespace="+namespace)
-	if restoreRes.ExitCode != 0 {
-		return fmt.Errorf("failed to restore namespace context to %s: %s", namespace, restoreRes.Stderr)
-	}
 	return nil
 }
 
@@ -804,6 +731,9 @@ func restartMTCDriverPods(ctx context.Context, client dynamic.Interface, namespa
 	waitForDaemonSetRollout(ctx, client, namespace, dsName)
 }
 
+// deleteMTCDriverPodsFallback deletes MTC driver pods to trigger recreation by the DaemonSet controller
+// when strategic merge patch is rejected by cluster admission webhooks. Per Pillar 33, it executes only
+// after DaemonSet existence is verified and handles 403 Forbidden defensively.
 func deleteMTCDriverPodsFallback(ctx context.Context, client dynamic.Interface, namespace string) {
 	listOpts := metav1.ListOptions{
 		LabelSelector: "k8s-app=high-scale-checkpointing",

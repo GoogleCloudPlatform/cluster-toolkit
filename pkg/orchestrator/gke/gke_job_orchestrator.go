@@ -15,7 +15,6 @@
 package gke
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,7 +23,6 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
-	"maps"
 	"net/url"
 	"os"
 	"os/exec"
@@ -46,9 +44,6 @@ import (
 )
 
 const (
-	defaultPathwaysProxyImage  = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
-	defaultPathwaysServerImage = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
-
 	// maxLogRequests is the maximum concurrent log streams allowed by the GKE logs CLI.
 	maxLogRequests = 10
 
@@ -421,59 +416,6 @@ func (g *GKEOrchestrator) validateJobConflicts(workloadName string, clusterName 
 		return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s --cluster %s --location %s --project %s' or resubmit this workload with a different name using '--name'", workloadName, status, workloadName, clusterName, clusterLocation, projectID)
 	}
 	return nil
-}
-
-func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) (string, error) {
-	// Set default values for Pathways-specific fields if not provided
-	if job.Pathways.ProxyServerImage == "" {
-		job.Pathways.ProxyServerImage = defaultPathwaysProxyImage
-	}
-	if job.Pathways.ServerImage == "" {
-		job.Pathways.ServerImage = defaultPathwaysServerImage
-	}
-	if job.Pathways.WorkerImage == "" {
-		// WorkerImage defaults to ServerImage if not explicitly set
-		job.Pathways.WorkerImage = job.Pathways.ServerImage
-	}
-
-	tmpl, err := g.parseGKETemplate("pathways_jobset.tmpl")
-	if err != nil {
-		return "", fmt.Errorf("failed to parse pathways jobset template: %w", err)
-	}
-
-	opts, err := g.PrepareManifestOptions(job, fullImageName, profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		return "", err
-	}
-
-	opts.Pathways = job.Pathways
-
-	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(opts, profile)
-	var resStr string
-	if err == nil {
-		resStr, err = g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit, 14)
-		if err != nil {
-			return "", err
-		}
-	} else {
-		logging.Warn("Warning: failed to calculate resource limits for Pathways job: %v", err)
-	}
-
-	cmdSlice := workloadContainerCommand(opts.CommandToRun)
-	isTPU := tpuLimit != ""
-	isGPU := gpuLimit != ""
-	data := g.prepareJobSetTemplateData(opts, cmdSlice, resStr, isTPU, isGPU)
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
-	}
-
-	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
-	if err := ValidateJobSetManifest(manifest); err != nil {
-		return "", err
-	}
-	return manifest, nil
 }
 
 func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, workloadName string) error {
@@ -1085,109 +1027,6 @@ func (g *GKEOrchestrator) GenerateGKENodeSelectorLabel(acceleratorType string) s
 	}
 
 	return acceleratorType
-}
-
-func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
-	exclusiveTopology := ""
-	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
-		exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
-	}
-
-	workerBackoffLimit := 2048000
-
-	var proxyArgsList []string
-	if opts.Pathways.ProxyArgs != "" {
-		proxyArgsList = strings.Fields(opts.Pathways.ProxyArgs)
-	}
-	var serverArgsList []string
-	if opts.Pathways.ServerArgs != "" {
-		serverArgsList = strings.Fields(opts.Pathways.ServerArgs)
-	}
-	var workerArgsList []string
-	if opts.Pathways.WorkerArgs != "" {
-		workerArgsList = strings.Fields(opts.Pathways.WorkerArgs)
-	}
-
-	var containers []ContainerData
-	if opts.ParallelContainers > 1 {
-		for i := 0; i < opts.ParallelContainers; i++ {
-			containers = append(containers, ContainerData{
-				Name:          fmt.Sprintf("workload-container-%d", i+1),
-				ResourcesYAML: resourcesYAML,
-			})
-		}
-	} else {
-		containers = append(containers, ContainerData{
-			Name:          "workload-container",
-			ResourcesYAML: resourcesYAML,
-		})
-	}
-
-	return jobSetTemplateData{
-		WorkloadName:                  opts.WorkloadName,
-		ClusterName:                   opts.ClusterName,
-		Containers:                    containers,
-		ProjectID:                     opts.ProjectID,
-		KueueQueueName:                opts.KueueQueueName,
-		TtlSecondsAfterFinished:       opts.TtlSecondsAfterFinished,
-		TerminationGracePeriodSeconds: opts.TerminationGracePeriodSeconds,
-		MaxRestarts:                   opts.MaxRestarts,
-		NumSlices:                     opts.NumSlices,
-		NodesPerSlice:                 opts.NodesPerSlice,
-		WorkerBackoffLimit:            workerBackoffLimit,
-		ProxyArgsList:                 proxyArgsList,
-		ServerArgsList:                serverArgsList,
-		WorkerArgsList:                workerArgsList,
-		PathwaysInstanceType:          opts.PathwaysInstanceType,
-		CommandToRun:                  opts.CommandToRun,
-		ResourcesString:               resourcesYAML,
-		FullImageName:                 opts.FullImageName,
-		Command:                       command,
-		ResourcesYAML:                 resourcesYAML,
-		AcceleratorTypeLabel:          g.GenerateGKENodeSelectorLabel(opts.ComputeType),
-		NodeSelector:                  opts.NodeSelector,
-		Affinity:                      opts.Affinity,
-		PodFailurePolicy:              opts.PodFailurePolicy,
-		ImagePullSecrets:              opts.ImagePullSecrets,
-		ServiceAccountName:            opts.ServiceAccountName,
-		TopologyAnnotation:            opts.TopologyAnnotation,
-		SchedulerName:                 opts.SchedulerName,
-		SchedulingGates:               opts.SchedulingGates,
-		Tolerations:                   opts.Tolerations,
-		PriorityClassName:             opts.PriorityClassName,
-		VolumesYAML:                   opts.VolumesYAML,
-		VolumeMountsYAML:              opts.VolumeMountsYAML,
-		GCSFuseEnabled:                opts.GCSFuseEnabled,
-		HostNetworkEnabled:            isTPU || isGPU,
-		Pathways:                      opts.Pathways,
-		ExclusiveTopologyAnnotation:   exclusiveTopology,
-		Verbose:                       opts.Verbose,
-		Env:                           sortedEnvVars(opts.Env),
-		PathwaysProxyEnv:              sortedEnvVars(opts.Pathways.ProxyEnv),
-		PathwaysServerEnv:             sortedEnvVars(opts.Pathways.ServerEnv),
-		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
-		IsTPU:                         isTPU,
-		IsGPU:                         isGPU,
-		MLDiagnosticsEnabled:          opts.MLDiagnosticsEnabled,
-		GKEMTCEnabled:                 opts.GKEMTCEnabled,
-		GKEMTCRamdiskDirectory:        opts.GKEMTCRamdiskDirectory,
-	}
-}
-
-func sortedEnvVars(envMap map[string]string) []EnvVar {
-	if len(envMap) == 0 {
-		return nil
-	}
-	envKeys := make([]string, 0, len(envMap))
-	for k := range envMap {
-		envKeys = append(envKeys, k)
-	}
-	slices.Sort(envKeys)
-	res := make([]EnvVar, len(envKeys))
-	for i, k := range envKeys {
-		res[i] = EnvVar{Name: k, Value: envMap[k]}
-	}
-	return res
 }
 
 func (g *GKEOrchestrator) determineIfCPUMachine(job *orchestrator.JobDefinition) (bool, int, error) {
@@ -1962,33 +1801,19 @@ func (d *DefaultExecutor) ExecuteCommandStream(name string, args ...string) erro
 
 // GetCurrentNamespace resolves the target Kubernetes namespace from kubeconfig for the specified cluster.
 func (d *DefaultKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
-	config, err := clientcmd.NewDefaultClientConfigLoadingRules().Load()
+	config, err := defaultKubeconfigLoader()
 	if err != nil {
 		return "", fmt.Errorf("failed to load kubeconfig: %w. You can explicitly specify the namespace using the --gke-namespace flag", err)
 	}
 
-	// Standard GKE context naming convention
-	expectedContext := fmt.Sprintf("gke_%s_%s_%s", projectID, location, clusterName)
-
-	if kubeCtx, ok := config.Contexts[expectedContext]; ok {
-		if kubeCtx.Namespace != "" {
-			return kubeCtx.Namespace, nil
-		}
-		return "default", nil
+	// Standard GKE context naming convention first, then the legacy fallback
+	// for contexts users renamed to the bare cluster name.
+	_, kubeCtx, ok := findKubeContext(config, clusterName, location, projectID)
+	if !ok {
+		return "", fmt.Errorf("no matching context found for cluster %s in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag", clusterName)
 	}
-
-	// Fallback/Legacy: Also check if there's a context with just the cluster name
-	// (sometimes users manually rename them)
-	contextNames := slices.Sorted(maps.Keys(config.Contexts))
-	for _, contextName := range contextNames {
-		kubeCtx := config.Contexts[contextName]
-		if contextName == clusterName || kubeCtx.Cluster == clusterName {
-			if kubeCtx.Namespace != "" {
-				return kubeCtx.Namespace, nil
-			}
-			return "default", nil
-		}
+	if kubeCtx.Namespace != "" {
+		return kubeCtx.Namespace, nil
 	}
-
-	return "", fmt.Errorf("no matching context found for cluster %s in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag", clusterName)
+	return "default", nil
 }

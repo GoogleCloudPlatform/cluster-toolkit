@@ -22,6 +22,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-apptainer.yaml](#hpc-slurm6-apptaineryaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm6-hybrid.yaml](#hpc-slurm6-hybridyaml--) ![community-badge] ![experimental-badge]
   * [apptainer-artifact-registry-openfoam.yaml](#apptainer-artifact-registry-openfoamyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [ml-slurm-g4.yaml](#ml-slurm-g4yaml-) ![core-badge]
@@ -64,6 +65,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-kms.yaml](#hpc-slurm-kmsyaml--) ![community-badge] ![experimental-badge]
+  * [kms-key.yaml](#kms-keyyaml--) ![community-badge] ![experimental-badge]
+  * [kms-key-per-service.yaml](#kms-key-per-serviceyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [gke-tpu-v4](#gke-tpu-v4-) ![core-badge]
   * [gke-tpu-v5e](#gke-tpu-v5e-) ![core-badge]
@@ -83,6 +86,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
   * [hpc-slurm-google-cloud-dedicated.yaml](#hpc-slurm-google-cloud-dedicatedyaml-) ![community-badge]
+  * [cloud-build-remote.yaml](#cloud-build-remoteyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-scale.yaml](#hpc-slurm-scaleyaml-) ![community-badge]
   * [hpc-slurm-multiregion-scale.yaml](#hpc-slurm-multiregion-scaleyaml-) ![community-badge]
   * [hybrid-slurm-cluster (GCD)](#hybrid-slurm-cluster-gcd-) ![community-badge]
@@ -355,6 +359,11 @@ This blueprint creates a custom [Apptainer](https://apptainer.org) enabled image
 
 [hpc-slurm6-apptainer.yaml]: ../community/examples/hpc-slurm6-apptainer.yaml
 
+### [hpc-slurm6-hybrid.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint extends an on-premise Slurm cluster with cloud nodes. It builds a compute image matching the on-premise Slurm installation and generates the configuration the on-premise controller needs to burst into GCP. See the [hybrid Slurm cluster guide](../docs/hybrid-slurm-cluster/README.md) for the full procedure.
+
+[hpc-slurm6-hybrid.yaml]: ../community/examples/hpc-slurm6-hybrid.yaml
 ### [apptainer-artifact-registry-openfoam.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates staging and running an [Apptainer](https://apptainer.org) SIF image through the `apptainer-runtime` and `apptainer-app` modules, backed by an [artifact-registry](../community/modules/container/artifact-registry/README.md) repository configured as a `REMOTE_REPOSITORY` pull-through cache mirroring Docker Hub. The example stages OpenFOAM from the public OpenCFD image.
@@ -1633,6 +1642,72 @@ Creates a Slurm cluster with Customer-Managed Encryption Keys (CMEK) enabled for
 
 [hpc-slurm-kms.yaml]: ../community/examples/hpc-slurm-kms.yaml
 
+### [kms-key.yaml] ![community-badge] ![experimental-badge]
+
+An end-to-end CMEK Slurm cluster. The [kms-key] module creates one Cloud KMS
+key ring and symmetric CryptoKey, [kms-key-iam] grants the service agents that
+encrypt with it, and every encrypted resource picks the key up through
+`use: [kms_key_iam]`: the Filestore `/home` instance, the controller, login and
+compute boot disks, and the Slurm configuration bucket. Nothing reconstructs a
+Cloud KMS resource name by hand. Consumers `use` the IAM module rather than
+the key module: kms-key's own outputs don't match any consumer's CMEK input
+name, so `use: [kms_key]` wires nothing, and wiring a resource straight to the
+key rather than the grant would be a race rather than a guarantee.
+
+Set `key_project_id` to hold the key in a dedicated key project instead of the
+workload project. The service agents stay in the workload project, and
+kms-key-iam grants them across the project boundary — its `project_id` is the
+project holding the encrypted resources, not the one holding the key. The
+service agents are provisioned on demand via `gcloud` (see the comments in the
+blueprint), not configured as blueprint settings; kms-key-iam derives each
+one's address from `project_id`, so no address is ever written by hand.
+
+Contrast with [hpc-slurm-kms.yaml], which points a Slurm cluster at a CryptoKey
+that already exists rather than creating one.
+
+Note the teardown behaviour. kms-key's `deletion_policy` is required and has
+no default, because the two outcomes are opposite and both irreversible; this
+blueprint sets `ABANDON`, so `terraform destroy` leaves the key version
+enabled and everything it encrypted stays decryptable. `DELETE` instead
+destroys the key version, making that data permanently unrecoverable. Either
+way Cloud KMS never frees the key ring or the CryptoKey name, so redeploying
+under the same `deployment_name` fails on the retained ring — use a fresh
+`deployment_name`, or set the module's `key_ring_id` to the retained ring
+together with a new `key_name`. See the [kms-key] README for details.
+
+The blueprint has two deployment groups. `setup` turns on
+`cloudkms.googleapis.com` with [service-enablement] and is applied to
+completion first; `primary` builds the cluster. The split is what orders API
+enablement before key-ring creation — service-enablement publishes no outputs,
+so within a single group there would be nothing for `use` to bind to and
+Terraform would create the key ring concurrently with the API being enabled.
+
+[kms-key.yaml]: ../community/examples/kms-key.yaml
+[kms-key]: ../community/modules/security/kms-key/README.md
+[kms-key-iam]: ../community/modules/security/kms-key-iam/README.md
+[service-enablement]: ../community/modules/project/service-enablement/README.md
+
+### [kms-key-per-service.yaml] ![community-badge] ![experimental-badge]
+
+The same CMEK Slurm cluster as [kms-key.yaml], but with one key per class of
+resource instead of one shared key, each granted only to the service agent that
+uses it: the Compute Engine agent can decrypt the disks and nothing else, the
+Cloud Storage agent the Slurm configuration bucket and nothing else.
+
+It also shows two things the single-key example does not. The Filestore key is
+created outside the blueprint and adopted with [pre-existing-kms-key], which is
+how a key owned by a security team or held in a dedicated key project is used —
+it is never in Terraform state, so `terraform destroy` cannot touch it. And one
+nodeset sets `disk_encryption_key_service_account`, encrypting as the cluster's
+own service account rather than the Compute Engine agent, which is why that key
+grants both.
+
+Requires an existing CryptoKey for Filestore; see the comments at the top of the
+blueprint for the `gcloud kms` commands that create one.
+
+[kms-key-per-service.yaml]: ../community/examples/kms-key-per-service.yaml
+[pre-existing-kms-key]: ../community/modules/security/pre-existing-kms-key/README.md
+
 ### [hpc-slurm-sharedvpc.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates the use of the Slurm and Filestore modules in
@@ -1886,6 +1961,13 @@ The deployment instructions can be found in the [README](../community/examples/h
 
 [hpc-slurm-google-cloud-dedicated.yaml]: ../community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml
 
+### [cloud-build-remote.yaml] ![community-badge] ![experimental-badge]
+
+Demonstrates how to use the `artifact-registry` and `cloud-build` community modules to create a Docker repository in Artifact Registry and build a container image (AlphaFold 3) directly from a remote GitHub repository using Cloud Build.
+
+The deployment instructions can be found in the [README](../community/examples/cloud-build/README.md).
+
+[cloud-build-remote.yaml]: ../community/examples/cloud-build/cloud-build-remote.yaml
 ### [hpc-slurm-scale.yaml] ![community-badge]
 
 Creates a high-performance, single-region auto-scaling Slurm cluster scaled up to 800 dynamic Spot or On-Demand compute nodes (102,400 vCPUs) across 4 zones with multi-zonal dynamic failover and Cloud NAT.

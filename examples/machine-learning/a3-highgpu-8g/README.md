@@ -5,12 +5,9 @@ a3-highgpu-8g compute nodes running NVIDIA H100 GPUs.
 
 ## Before starting
 
-> [!IMPORTANT]
-> Before beginning, submit a request to your Google Cloud representative for
-> access credentials to install the linux-gcp-tcpx kernel for a3-highgpu-8g.
-> This kernel contains patches that significantly enhance the network
-> performance of workloads that span multiple
-> a3-highgpu-8g VMs.
+> [!NOTE]
+> **TCPXO Availability:** The next-generation TCPXO (FasTrak) networking stack is now enabled by default for `a3-highgpu-8g` (`a3high-slurm-blueprint.yaml`).
+> TCPXO offers improved routing and can currently be used with Spot VMs or On-Demand instances (it is **not supported with reservations**).
 
 ## Upgrading from the "legacy" solution
 There is no direct path for upgrading the a3-highgpu-8g legacy solution.
@@ -237,6 +234,16 @@ The Epilog will
 - Stop the RxDM service
 - Prune any stopped containers (freeing up disk space)
 - Remove the directory at `${UDS_PATH}`
+
+## Jobs using TCPXO (FasTrak)
+
+Jobs that are running across multiple a3-highgpu-8g VMs with TCPXO will benefit from the NCCL plugin. An example containerized job is located at `nccl-tests/run-nccl-tests.sh`. In addition to setting standard NCCL configuration values, a job must:
+
+- Set `LD_LIBRARY_PATH` to include `/var/lib/tcpxo/lib64` and `/usr/local/nvidia/lib64`
+
+If job is containerized:
+- Mount `/var/lib/tcpxo/lib64` to `/var/lib/tcpxo/lib64` in the container (to make the NCCL plugin available)
+- Mount `/dev/aperture_devices` to `/dev/aperture_devices` in the container
 
 ## Jobs using the RxDM / TCPx
 
