@@ -14,17 +14,30 @@
 
 # Benchmark Job: waits for the vLLM server, then runs `vllm bench serve` with
 # the same workload as the uBench DiffusionGemma G4 recipe (random dataset,
-# ISL 1024 / OSL 1024, concurrency 8). Edit the env values and re-apply to
-# benchmark a different shape:
-#   kubectl delete job diffusiongemma-vllm-bench; kubectl apply -f vllm-bench.yaml
+# ISL 1024 / OSL 1024, concurrency 8). Terraform template rendered by the
+# kubectl-apply module; `hf_secret_name` is the Hugging Face token Secret
+# created by the blueprint's kubernetes-secret module and is the only template
+# expression in this file.
+#
+# The Job has no node selector or tolerations, so it lands on the on-demand
+# system node pool rather than on the Spot GPU node: a preemption of the GPU
+# node then interrupts in-flight requests but not the Job pod, whose wait loop
+# simply resumes once the server is back. A run with failed requests exits
+# non-zero so that the Job retries it instead of reporting partial numbers.
+#
+# Edit the env values and re-create the Job to benchmark a different shape;
+# see "Benchmark results" in README.md for the kubectl commands.
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: diffusiongemma-vllm-bench
 spec:
-  # Retried if the Spot node serving the model is preempted mid-run.
+  # Retried if the server is preempted mid-run (see the result check below).
   backoffLimit: 3
+  # Gives up on its own if the server never comes up or a run stalls:
+  # 40 min server startupProbe budget + a few runs + margin.
+  activeDeadlineSeconds: 5400
   ttlSecondsAfterFinished: 86400
   template:
     metadata:
@@ -32,17 +45,6 @@ spec:
         app: diffusiongemma-vllm-bench
     spec:
       restartPolicy: Never
-      # Run next to the server: the vLLM image is already present on the node.
-      nodeSelector:
-        cloud.google.com/gke-accelerator: nvidia-rtx-pro-6000
-      tolerations:
-      - key: nvidia.com/gpu
-        operator: Exists
-        effect: NoSchedule
-      - key: cloud.google.com/gke-spot
-        operator: Equal
-        value: "true"
-        effect: NoSchedule
       containers:
       - name: vllm-bench
         image: vllm/vllm-openai:v0.30.0
@@ -69,28 +71,28 @@ spec:
         - name: HUGGING_FACE_HUB_TOKEN
           valueFrom:
             secretKeyRef:
-              name: hf-secret
+              name: ${hf_secret_name}
               key: hf_api_token
         command: ["/bin/bash", "-c"]
         args:
         - |
           set -euo pipefail
-          until python3 -c "import urllib.request; urllib.request.urlopen('${SERVER_URL}/v1/models', timeout=5)" 2>/dev/null; do
-            echo "Waiting for the vLLM server at ${SERVER_URL} ..."
+          until python3 -c "import urllib.request; urllib.request.urlopen('$SERVER_URL/v1/models', timeout=5)" 2>/dev/null; do
+            echo "Waiting for the vLLM server at $SERVER_URL ..."
             sleep 15
           done
-          echo "Server is up; benchmarking ${MODEL} (ISL=${INPUT_LEN}, OSL=${OUTPUT_LEN}, concurrency=${MAX_CONCURRENCY}, prompts=${NUM_PROMPTS})"
+          echo "Server is up; benchmarking $MODEL (ISL=$INPUT_LEN, OSL=$OUTPUT_LEN, concurrency=$MAX_CONCURRENCY, prompts=$NUM_PROMPTS)"
           mkdir -p /tmp/results
           vllm bench serve \
             --backend vllm \
-            --base-url "${SERVER_URL}" \
-            --model "${MODEL}" \
+            --base-url "$SERVER_URL" \
+            --model "$MODEL" \
             --dataset-name random \
-            --random-input-len "${INPUT_LEN}" \
-            --random-output-len "${OUTPUT_LEN}" \
-            --num-prompts "${NUM_PROMPTS}" \
-            --num-warmups "${NUM_WARMUPS}" \
-            --max-concurrency "${MAX_CONCURRENCY}" \
+            --random-input-len "$INPUT_LEN" \
+            --random-output-len "$OUTPUT_LEN" \
+            --num-prompts "$NUM_PROMPTS" \
+            --num-warmups "$NUM_WARMUPS" \
+            --max-concurrency "$MAX_CONCURRENCY" \
             --request-rate inf \
             --ignore-eos \
             --seed 0 \
@@ -99,6 +101,18 @@ spec:
             --save-result --result-dir /tmp/results
           echo "===== RESULT JSON ====="
           cat /tmp/results/*.json
+          # Fail (and let the Job retry) unless every request succeeded, e.g.
+          # when the Spot node serving the model was preempted mid-run.
+          python3 - <<'EOF'
+          import glob, json, os, sys
+          result = json.load(open(sorted(glob.glob("/tmp/results/*.json"))[-1]))
+          expected = int(os.environ["NUM_PROMPTS"])
+          completed = int(result.get("completed", 0))
+          if completed != expected:
+              print(f"Only {completed} of {expected} requests completed; failing the run so it is retried.")
+              sys.exit(1)
+          print(f"All {completed} requests completed.")
+          EOF
         resources:
           requests:
             cpu: "4"

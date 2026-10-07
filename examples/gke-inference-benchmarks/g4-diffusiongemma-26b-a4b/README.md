@@ -23,11 +23,14 @@ Everything the benchmark needs is in this directory:
 
 | File | Purpose |
 | --- | --- |
-| [`blueprint.yaml`](blueprint.yaml) | VPC, service accounts, GKE cluster, Spot G4 node pool and the `kubectl-apply` step that installs the manifests. |
+| [`blueprint.yaml`](blueprint.yaml) | VPC, service accounts, GKE cluster, Spot G4 node pool, the `hf-secret` Kubernetes `Secret` (via the [`kubernetes-secret`](../../../modules/security/kubernetes-secret/README.md) module) and the `kubectl-apply` step that installs the manifests. |
 | [`deployment.yaml`](deployment.yaml) | The values you fill in: project, Terraform state bucket, region/zone, authorized CIDR. |
-| [`manifests/vllm-serve.yaml`](manifests/vllm-serve.yaml) | StorageClass + PersistentVolumeClaim (Hugging Face cache), vLLM `Deployment` and `Service`. |
-| [`manifests/vllm-bench.yaml`](manifests/vllm-bench.yaml) | `vllm bench serve` `Job` that waits for the server and prints the results. |
-| [`manifests/hf-secret.yaml.tftpl`](manifests/hf-secret.yaml.tftpl) | `hf-secret` `Secret`, rendered from the `hf_token` variable (optional). |
+| [`manifests/vllm-serve.yaml.tftpl`](manifests/vllm-serve.yaml.tftpl) | StorageClass + PersistentVolumeClaim (Hugging Face cache), vLLM `Deployment` and `Service`. |
+| [`manifests/vllm-bench.yaml.tftpl`](manifests/vllm-bench.yaml.tftpl) | `vllm bench serve` `Job` that waits for the server, prints the results and fails if any request failed. |
+
+The two manifests are Terraform templates whose only expression,
+`${hf_secret_name}`, is the name of the Secret created by the module; this
+makes Terraform create the Secret before the pods that mount it.
 
 ## Provenance
 
@@ -104,13 +107,26 @@ from the resulting human-supervised run.
      examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml --vars hf_token=$HF_TOKEN
    ```
 
-   Type `a` at the prompt to apply. If you prefer not to pass the token through
-   Terraform, omit `--vars hf_token=...` and create the Secret yourself once the
-   cluster exists:
+   Type `a` at the prompt to apply. The token is stored in the `hf-secret`
+   Kubernetes Secret by the blueprint's `kubernetes-secret` module, which
+   marks the value sensitive so that Terraform never prints it.
 
-   ```shell
-   kubectl create secret generic hf-secret --from-literal=hf_api_token=$HF_TOKEN
-   ```
+   > **Note:** a token passed with `--vars` is still written in plaintext to
+   > `terraform.tfvars` in the deployment folder and to the Terraform state in
+   > your state bucket. If that is not acceptable, omit `--vars hf_token=...`:
+   > the Secret is then created with an empty token, the server pod crash-loops
+   > (the gated download fails) and the benchmark Job keeps waiting for the
+   > server. Once the cluster exists, patch the Secret and restart both so that
+   > they pick up the token:
+   >
+   > ```shell
+   > kubectl patch secret hf-secret --type merge -p "{\"stringData\":{\"hf_api_token\":\"$HF_TOKEN\"}}"
+   > kubectl rollout restart deployment/diffusiongemma-vllm
+   > kubectl delete pod -l app=diffusiongemma-vllm-bench
+   > ```
+   >
+   > A later `gcluster deploy` of the same deployment resets the Secret to the
+   > `hf_token` value known to Terraform, so repeat the patch after it.
 
 1. Connect to the cluster and check that the Spot G4 node is ready (replace
    `g4-diffusiongemma` with your `deployment_name` if you changed it):
@@ -141,16 +157,23 @@ kubectl logs job/diffusiongemma-vllm-bench
 
 The log contains the usual `vllm bench serve` summary (request throughput,
 output and total token throughput, TTFT/TPOT/ITL/E2EL percentiles) followed by
-the raw result JSON.
+the raw result JSON. The Job runs on the on-demand system node pool, not on the
+Spot GPU node, so a preemption does not kill the client; a run in which not all
+requests completed exits non-zero and is retried (`backoffLimit: 3`), and the
+Job gives up after 90 minutes (`activeDeadlineSeconds: 5400`), which covers the
+server's 40-minute start-up budget plus several runs.
 
 To run a different workload, edit the `INPUT_LEN`, `OUTPUT_LEN`, `NUM_PROMPTS`
 and `MAX_CONCURRENCY` environment variables in
-[`manifests/vllm-bench.yaml`](manifests/vllm-bench.yaml), then re-create the
-Job:
+[`manifests/vllm-bench.yaml.tftpl`](manifests/vllm-bench.yaml.tftpl), then
+re-create the Job. The manifest is a template with a single expression, so
+`sed` is enough to render it (a changed Job cannot be re-applied through
+`gcluster deploy` because a Job's pod template is immutable):
 
 ```shell
 kubectl delete job diffusiongemma-vllm-bench
-kubectl apply -f examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/manifests/vllm-bench.yaml
+sed 's/\${hf_secret_name}/hf-secret/' \
+  examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/manifests/vllm-bench.yaml.tftpl | kubectl apply -f -
 ```
 
 Keep `OUTPUT_LEN` a multiple of 256 (the diffusion canvas) and
@@ -222,15 +245,19 @@ client never exceeds the server's sequence budget.
 ## Spot behaviour
 
 * Spot nodes are labelled `cloud.google.com/gke-spot=true` and may carry a
-  `cloud.google.com/gke-spot=true:NoSchedule` taint; both manifests tolerate it.
+  `cloud.google.com/gke-spot=true:NoSchedule` taint; the server manifest
+  tolerates it. The benchmark Job has no toleration or node selector on
+  purpose, so it runs on the on-demand system node pool and is not evicted
+  with the GPU node.
 * When the node is preempted, GKE recreates it (`auto_repair: true`) and the
   `Deployment` reschedules the server. The Hugging Face cache lives on a
   `PersistentVolumeClaim`, so the restart only reloads the weights from disk
   (138 s in the reference run) instead of downloading them again.
-* A benchmark run that is interrupted by a preemption fails and is retried by
-  the Job (`backoffLimit: 3`) once the server is healthy again; the retried run
-  waits for `/v1/models` just like the first one. Discard interrupted runs when
-  comparing numbers.
+* A benchmark run that is interrupted by a preemption ends with failed
+  requests; the Job detects this (`completed` < `NUM_PROMPTS` in the result
+  JSON), exits non-zero and is retried (`backoffLimit: 3`) once the server is
+  healthy again; the retried run waits for `/v1/models` just like the first
+  one. Discard interrupted runs when comparing numbers.
 * Spot capacity for G4 is zonal and not guaranteed. If the node pool stays at 0
   nodes, try another zone or set `spot: false`.
 

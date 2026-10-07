@@ -50,10 +50,15 @@ vars:
 
   # Hugging Face token with access to the gated google/diffusiongemma-26B-A4B-it
   # (accept the license at https://huggingface.co/google/diffusiongemma-26B-A4B-it).
-  # Do NOT commit this file with a real token; pass it on the command line instead:
+  # The blueprint stores it in the `hf-secret` Kubernetes Secret through the
+  # kubernetes-secret module. Do NOT commit this file with a real token; pass it
+  # on the command line instead:
   #   --vars hf_token=$HF_TOKEN
-  # Alternatively leave it empty and create the Secret yourself after deployment:
-  #   kubectl create secret generic hf-secret --from-literal=hf_api_token=$HF_TOKEN
+  # NOTE: a token passed this way is written in plaintext to the deployment
+  # folder's terraform.tfvars and to the Terraform state in the bucket above.
+  # If that is not acceptable, leave it empty and patch the (then empty) Secret
+  # yourself after deployment, see README.md:
+  #   kubectl patch secret hf-secret --type merge -p "{\"stringData\":{\"hf_api_token\":\"$HF_TOKEN\"}}"
   hf_token: ""
 
   # Set to false to only deploy the vLLM server (no benchmark Job).

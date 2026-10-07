@@ -13,7 +13,9 @@
 # limitations under the License.
 
 # vLLM server for google/diffusiongemma-26B-A4B-it on one Spot G4 node
-# (1x NVIDIA RTX PRO 6000). Requires the `hf-secret` Secret (key hf_api_token).
+# (1x NVIDIA RTX PRO 6000). Terraform template rendered by the kubectl-apply
+# module; `hf_secret_name` is the Hugging Face token Secret (key hf_api_token)
+# created by the blueprint's kubernetes-secret module.
 #
 # DiffusionGemma is an encoder-decoder block-diffusion model: each step
 # denoises a 256-token canvas instead of decoding one token. The server flags
@@ -97,7 +99,7 @@ spec:
         - name: HUGGING_FACE_HUB_TOKEN
           valueFrom:
             secretKeyRef:
-              name: hf-secret
+              name: ${hf_secret_name}
               key: hf_api_token
         - name: VLLM_ENGINE_READY_TIMEOUT_S
           value: "1800"

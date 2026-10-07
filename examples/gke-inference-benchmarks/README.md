@@ -24,15 +24,14 @@ TPU entries follow the same layout; see [Adding a benchmark](#adding-a-benchmark
 
 ```text
 examples/gke-inference-benchmarks/
-├── README.md                       # this catalog
-└── <accelerator>-<model>/          # one self-contained benchmark
-    ├── README.md                   # prerequisites, deploy, results, clean up
-    ├── blueprint.yaml              # network, cluster, node pool, kubectl-apply of manifests/
-    ├── deployment.yaml             # the values you fill in (project, bucket, zone, CIDR)
-    └── manifests/                  # Kubernetes manifests applied by the blueprint
-        ├── hf-secret.yaml.tftpl    # model-hub token Secret (templated, optional)
-        ├── <server>-serve.yaml     # model server (storage, Deployment, Service)
-        └── <server>-bench.yaml     # benchmark Job
+├── README.md                         # this catalog
+└── <accelerator>-<model>/            # one self-contained benchmark
+    ├── README.md                     # prerequisites, deploy, results, clean up
+    ├── blueprint.yaml                # network, cluster, node pool, token Secret, kubectl-apply of manifests/
+    ├── deployment.yaml               # the values you fill in (project, bucket, zone, CIDR)
+    └── manifests/                    # Kubernetes manifests applied by the blueprint
+        ├── <server>-serve.yaml.tftpl # model server (storage, Deployment, Service)
+        └── <server>-bench.yaml.tftpl # benchmark Job
 ```
 
 `<accelerator>` is the GKE machine family (for example `g4`, `a4`) or, for
@@ -72,7 +71,9 @@ for every entry.
    Type `a` at the prompt to apply. `gcluster` returns once the cluster, node
    pool and manifests are in place; the model server keeps loading weights in
    the background and the benchmark Job starts as soon as the server is
-   healthy.
+   healthy. A token passed with `--vars` ends up in plaintext in the deployment
+   folder's `terraform.tfvars` and in the Terraform state; each benchmark's
+   README explains how to supply it with `kubectl patch secret` instead.
 
 1. Follow the benchmark's `README.md` to watch the rollout, read the results
    (`kubectl logs job/<benchmark job>`) and change the workload parameters
@@ -101,10 +102,16 @@ with the same commands:
   default (use the region/zone in which you measured the reference results).
   The repository CI renders each `blueprint.yaml` + `deployment.yaml` pair with
   `gcluster create` and `terraform validate`.
-* **Secrets through variables.** Accept tokens as a blueprint variable with an
-  empty default, render them with a `.tftpl` manifest guarded by an `enable:`
-  expression, and document the `kubectl create secret` alternative. Never
-  commit a token.
+* **Secrets through the `kubernetes-secret` module.** Accept tokens as a
+  blueprint variable with an empty default and create the Secret with
+  [`modules/security/kubernetes-secret`](../../modules/security/kubernetes-secret/README.md),
+  which marks the value sensitive. Make the manifests `.tftpl` templates that
+  take the Secret name from the module output
+  (`template_vars: { hf_secret_name: $(hf-secret.secret_name) }`), so that
+  Terraform creates the Secret before the pods; never mark the `secretKeyRef`
+  optional. Document that a `--vars` token is stored in plaintext in
+  `terraform.tfvars` and the state bucket, and give the `kubectl patch secret`
+  alternative. Never commit a token.
 * **Match the internal recipe.** Serving flags (image tag, parallelism,
   attention backend, memory utilization, max sequences, max model length) and
   benchmark parameters (dataset, ISL/OSL, number of prompts, concurrency) must
@@ -112,11 +119,17 @@ with the same commands:
 * **Do not block `gcluster deploy` on model loading.** Use
   `wait_for_rollout: false` for the server and make the benchmark Job wait for
   the server's health endpoint itself.
+* **A benchmark Job that cannot hang or report partial numbers.** Give the Job
+  an `activeDeadlineSeconds` that covers the server's start-up budget plus a
+  few runs, check the result JSON (`completed` equals the number of prompts)
+  and exit non-zero otherwise so that `backoffLimit` retries the run. Run the
+  Job on the system node pool (no accelerator node selector or Spot
+  toleration), so that it survives a preemption of the accelerator node.
 * **Spot by default where it makes sense.** Use a single-zone node pool, a
   `spot` variable that defaults to `true`, tolerate the
-  `cloud.google.com/gke-spot=true:NoSchedule` taint in the manifests and cache
-  the weights on a PersistentVolumeClaim so that a preempted node recovers
-  quickly. Explain the preemption behaviour in the README.
+  `cloud.google.com/gke-spot=true:NoSchedule` taint in the server manifest and
+  cache the weights on a PersistentVolumeClaim so that a preempted node
+  recovers quickly. Explain the preemption behaviour in the README.
 * **TPU entries.** Start from [`examples/gke-tpu-7x`](../gke-tpu-7x) or
   [`examples/gke-tpu-v6e`](../gke-tpu-v6e): the node pool takes `machine_type`,
   `num_slices`, `tpu_topology` and `spot`, and TPU 7x additionally needs the

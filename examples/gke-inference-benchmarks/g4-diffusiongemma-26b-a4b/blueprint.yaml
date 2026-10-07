@@ -62,10 +62,15 @@ vars:
   spot: true
   auto_repair: true
 
-  # Hugging Face token with access to the gated google/diffusiongemma-26B-A4B-it.
-  # Pass it with `--vars hf_token=$HF_TOKEN`, or leave it empty and create the
-  # `hf-secret` Secret yourself after deployment:
-  #   kubectl create secret generic hf-secret --from-literal=hf_api_token=$HF_TOKEN
+  # Hugging Face token with access to the gated google/diffusiongemma-26B-A4B-it,
+  # stored in the `hf-secret` Kubernetes Secret (key hf_api_token) by the
+  # kubernetes-secret module below. Pass it with `--vars hf_token=$HF_TOKEN`.
+  # NOTE: a token passed this way is written in plaintext to the deployment
+  # folder's terraform.tfvars and to the Terraform state in the GCS bucket
+  # (Terraform marks it sensitive, so it is not printed). If that is not
+  # acceptable, leave it empty and put the token into the Secret yourself after
+  # deployment (see README.md):
+  #   kubectl patch secret hf-secret --type merge -p "{\"stringData\":{\"hf_api_token\":\"$HF_TOKEN\"}}"
   hf_token: ""
 
   # Set to false to only deploy the vLLM server (no benchmark Job).
@@ -170,11 +175,24 @@ deployment_groups:
         count: $(vars.num_gpus)
     outputs: [instructions]
 
+  # Hugging Face token Secret (`hf-secret`, key hf_api_token), managed by
+  # Terraform with the value marked sensitive. The module cannot be made
+  # conditional, so with an empty hf_token the Secret exists with an empty
+  # token until you patch it (see the hf_token comment above).
+  - id: hf-secret
+    source: modules/security/kubernetes-secret
+    use: [g4-cluster]
+    settings:
+      secret_name: hf-secret
+      data:
+        hf_api_token: '$(vars.hf_token != null ? vars.hf_token : "")'
+
   # Runs the DiffusionGemma vLLM benchmark as part of `gcluster deploy`:
-  #   1. hf-secret:                 Hugging Face token Secret (only if hf_token is set)
-  #   2. diffusiongemma-vllm-serve: StorageClass + PVC (HF cache) + Deployment + Service
-  #   3. diffusiongemma-vllm-bench: `vllm bench serve` Job (only if run_benchmark is true)
-  # JobSet is installed so that JobSet-based benchmarks can target this cluster too.
+  #   1. diffusiongemma-vllm-serve: StorageClass + PVC (HF cache) + Deployment + Service
+  #   2. diffusiongemma-vllm-bench: `vllm bench serve` Job (only if run_benchmark is true)
+  # Both reference the Secret by the module's output, which makes Terraform
+  # create the Secret before the pods. JobSet is installed so that
+  # JobSet-based benchmarks can target this cluster too.
   - id: diffusiongemma-vllm
     source: modules/management/kubectl-apply
     use: [g4-cluster]
@@ -182,17 +200,16 @@ deployment_groups:
       jobset:
         install: true
       apply_manifests:
-      - name: hf-secret
-        enable: '$(vars.hf_token != null && vars.hf_token != "")'
-        source: $(ghpc_stage("manifests/hf-secret.yaml.tftpl"))
-        template_vars:
-          hf_token: '$(vars.hf_token != null ? vars.hf_token : "")'
       - name: diffusiongemma-vllm-serve
-        source: $(ghpc_stage("manifests/vllm-serve.yaml"))
+        source: $(ghpc_stage("manifests/vllm-serve.yaml.tftpl"))
+        template_vars:
+          hf_secret_name: $(hf-secret.secret_name)
         # Downloading (~52 GB) and loading the weights takes 15-25 minutes;
         # do not block `gcluster deploy` on the rollout.
         wait_for_rollout: false
       - name: diffusiongemma-vllm-bench
         enable: $(vars.run_benchmark)
-        source: $(ghpc_stage("manifests/vllm-bench.yaml"))
+        source: $(ghpc_stage("manifests/vllm-bench.yaml.tftpl"))
+        template_vars:
+          hf_secret_name: $(hf-secret.secret_name)
         wait_for_rollout: false
