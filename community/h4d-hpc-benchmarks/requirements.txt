@@ -13,10 +13,7 @@ distro==1.9.0 \
 google-api-core==2.16.0 \
     --hash=sha256:0d5bfa7b86ceca9a3e20e8b2b733daef4654c86e09ff7b2b8eeb4a5e227a69bc \
     --hash=sha256:506ef259e0a0d923fa54e242cfa5fbc353fb509d3752e50cf6e355c7b398df98
-    # via
-    #   -r requirements.in
-    #   google-cloud-bigquery
-    #   google-cloud-storage
+    # via -r requirements.in
 google-cloud-bigquery==3.15.0 \
     --hash=sha256:338aa4d82b49dfd7a9b0c609c12df88bc1fcf989c75da059b58102660da54a7c \
     --hash=sha256:6e01aeb0cf0a7b45f09623e6022e3794f87a8b4172f3e8f6bf280598b96ec8c7
@@ -40,10 +37,7 @@ pandas==2.2.0 \
 protobuf==4.25.2 \
     --hash=sha256:70dc7b29e0619a86847055740445d45db6e1189312da1188358e6d97c369fc87 \
     --hash=sha256:7bc0dd399d8213693f41e5e54d3d8db4bc1097df9db23cf577c2299de24e3976
-    # via
-    #   -r requirements.in
-    #   google-api-core
-    #   google-cloud-bigquery
+    # via -r requirements.in
 scipy==1.12.0 \
     --hash=sha256:255fb3424d8b67b1cb7a77eb866d9b9fbefd2d26456fefcc9f2066f7f6f1636c \
     --hash=sha256:c22cc5967bf132ed88390b14ef971db48d506d4e84b8d70a3c20063266fbfa90

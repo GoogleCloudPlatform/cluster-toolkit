@@ -1,5 +1,5 @@
 google-cloud-storage # for gcs fetch test
-google-api-core # for gcs fetch error .execptions 
+google-api-core # for gcs fetch error .exceptions
 graphlib-backport;python_version<"3.9"
 urllib3==1.26.18;python_version<="3.6"
 protobuf;python_version>"3.6"
