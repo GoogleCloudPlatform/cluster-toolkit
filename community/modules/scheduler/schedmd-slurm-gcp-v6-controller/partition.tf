@@ -135,6 +135,10 @@ locals {
     )
   }
 
+  nodeset_explicit_zones = {
+    for name, ns in local.nodeset_map : name => [for z in(ns.zone_policy_allow != null ? ns.zone_policy_allow : []) : z if z != null && z != ""]
+  }
+
   # A null zone_policy_allow means every available zone of the nodeset's region.
   nodeset_zone_allow = {
     for name, ns in local.nodeset_map : name => (
@@ -190,11 +194,14 @@ data "google_compute_zones" "available" {
   lifecycle {
     postcondition {
       condition = alltrue([
-        for ns in local.nodeset_map :
-        length(setsubtract([for z in(ns.zone_policy_allow != null ? ns.zone_policy_allow : []) : z if z != null && z != ""], self.names)) == 0
+        for name, ns in local.nodeset_map :
+        length(setsubtract(local.nodeset_explicit_zones[name], self.names)) == 0
         if coalesce(ns.region, var.region) == each.value
       ])
-      error_message = "A nodeset zone is not an available zone of ${each.value}: ${jsonencode(self.names)}"
+      error_message = "Invalid nodeset zones for region ${each.value}: ${jsonencode({
+        for name, ns in local.nodeset_map : name => setsubtract(local.nodeset_explicit_zones[name], self.names)
+        if coalesce(ns.region, var.region) == each.value && length(setsubtract(local.nodeset_explicit_zones[name], self.names)) > 0
+      })}. Available zones: ${jsonencode(self.names)}"
     }
   }
 }
