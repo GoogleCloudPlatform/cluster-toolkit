@@ -1,0 +1,80 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Upstream source: https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/master/gpudirect-tcpx/nccl-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nccl-configmap
+data:
+  allgather.sh: |-
+    #!/bin/bash
+    for script in /configs/*; do
+      name=$(basename $script)
+      cp $script "/scripts/$name"
+      chmod +x "/scripts/$name"
+    done
+    /scripts/init_ssh.sh ${@};
+    pushd /scripts;
+    /scripts/gen_hostfiles.sh ${@};
+    popd;
+    /scripts/run-allgather.sh 8 eth1,eth2,eth3,eth4 1M 512M ${#};
+  run-nccl.sh: |-
+    #!/bin/bash
+    SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+    source "${SCRIPT_DIR}"/unix_client_prefix_selection.sh
+    benchmark=$1
+    ld_library_path_override=$2
+    gpu_per_node=$3
+    socket_ifnames=$4
+    data_b=$5
+    data_e=$6
+    nhosts=2
+    if ! [[ -z "$7" ]]; then nhosts=$7; fi
+    FIXED_LD_LIBRARY_PATH="/nccl-plugin-gpudirecttcpx/build:/third_party/nccl-netsupport/build/lib:${ld_library_path_override}"
+    LD_LIBRARY_PATH=${FIXED_LD_LIBRARY_PATH} \
+    mpirun --bind-to none --mca btl tcp,self --mca btl_tcp_if_include eth0 --allow-run-as-root \
+    --mca orte_base_help_aggregate 0 \
+    --mca pcompress_base_silence_warning 1 \
+    -np $(( gpu_per_node * "${nhosts}" )) \
+    --hostfile "${SCRIPT_DIR}/hostfiles${nhosts}/hostfile${gpu_per_node}" \
+    -x LD_LIBRARY_PATH="${FIXED_LD_LIBRARY_PATH}" \
+    -x NCCL_GPUDIRECTTCPX_FORCE_ACK=0 \
+    -x NCCL_GPUDIRECTTCPX_TX_COMPLETION_NANOSLEEP=1000 \
+    -x NCCL_SOCKET_IFNAME=eth0 \
+    -x NCCL_DYNAMIC_CHUNK_SIZE=524288 \
+    -x NCCL_P2P_NET_CHUNKSIZE=524288 \
+    -x NCCL_P2P_PCI_CHUNKSIZE=524288 \
+    -x NCCL_P2P_NVL_CHUNKSIZE=1048576 \
+    -x NCCL_GPUDIRECTTCPX_TX_BINDINGS="eth1:8-21,112-125;eth2:8-21,112-125;eth3:60-73,164-177;eth4:60-73,164-177" \
+    -x NCCL_GPUDIRECTTCPX_RX_BINDINGS="eth1:22-35,126-139;eth2:22-35,126-139;eth3:74-87,178-191;eth4:74-87,178-191" \
+    -x NCCL_NSOCKS_PERTHREAD=4 \
+    -x NCCL_SOCKET_NTHREADS=1 \
+    -x NCCL_MAX_NCHANNELS=8 \
+    -x NCCL_MIN_NCHANNELS=8 \
+    -x NCCL_BUFFSIZE=4194304 \
+    -x NCCL_DEBUG=INFO -x NCCL_DEBUG_SUBSYS=ENV \
+    -x NCCL_GPUDIRECTTCPX_SOCKET_IFNAME=eth1,eth2,eth3,eth4 \
+    -x NCCL_GPUDIRECTTCPX_CTRL_DEV=eth0 \
+    -x NCCL_GPUDIRECTTCPX_PROGRAM_FLOW_STEERING_WAIT_MICROS=500000 \
+    -x NCCL_CROSS_NIC=0 \
+    -x NCCL_ALGO=Ring \
+    -x NCCL_PROTO=Simple \
+    -x NCCL_NET_GDR_LEVEL=PIX \
+    -x NCCL_P2P_PXN_LEVEL=0 \
+    \
+    taskset -c 0-7,104-111,52-59,156-163 \
+    /third_party/nccl-tests-mpi/build/"${benchmark}" \
+    -b "${data_b}" -e "${data_e}" -f 2 -g 1 -w 5 --iters 100 -c 0 2>&1 \
+    | tee "a_${nhosts}_${gpu_per_node}_${socket_ifnames}.txt"

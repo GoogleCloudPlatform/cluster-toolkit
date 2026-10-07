@@ -145,6 +145,16 @@ locals {
 
   mldiagnostics_minimum_version            = "1.35.0-gke.3065000"
   high_scale_checkpointing_minimum_version = "1.32.4-gke.1415000"
+  # From this version GKE installs and manages the v1 InferencePool CRD (inference.networking.k8s.io) itself;
+  # applying it again via Helm fails with an ownership conflict. Only the alpha InferenceObjective CRD
+  # still needs to be applied on those versions.
+  inference_gateway_managed_crd_minimum_version = "1.34.0-gke.1626000"
+}
+
+module "inference_gateway_version_check" {
+  source          = "../../internal/semver_compare"
+  current_version = local.master_version
+  minimum_version = local.inference_gateway_managed_crd_minimum_version
 }
 
 
@@ -798,8 +808,11 @@ module "kubectl_apply" {
     ]),
     var.enable_inference_gateway ? [
       {
-        name          = "inference-gateway"
-        source        = "https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.0/manifests.yaml",
+        name = "inference-gateway"
+        source = (module.inference_gateway_version_check.is_greater_than_or_equal
+          ? "https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/v1.0.0/config/crd/bases/inference.networking.x-k8s.io_inferenceobjectives.yaml"
+          : "https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.0/manifests.yaml"
+        ),
         template_vars = {}
       }
     ] : []

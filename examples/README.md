@@ -54,6 +54,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-managed-hyperdisk.yaml](#gke-managed-hyperdiskyaml--) ![core-badge] ![experimental-badge]
   * [gke-a3-ultragpu.yaml](#gke-a3-ultragpuyaml-) ![core-badge]
   * [gke-a3-megagpu](#gke-a3-megagpuyaml-) ![core-badge]
+  * [gke-a3-edgegpu-inference.yaml](#gke-a3-edgegpu-inferenceyaml-) ![core-badge]
   * [gke-a3-highgpu](#gke-a3-highgpuyaml-) ![core-badge]
   * [gke-a3-highgpu-inference-gateway.yaml](#gke-a3-highgpu-inference-gatewayyaml-) ![core-badge]
   * [gke-consumption-options](#gke-consumption-options-) ![core-badge]
@@ -1501,6 +1502,10 @@ If you see an error saying: `local-exec provisioner error` or `This environment 
 
 [gke-a3-megagpu.yaml]: ../examples/gke-a3-megagpu
 
+### [gke-a3-edgegpu-inference.yaml] ![core-badge]
+
+This blueprint provisions a GKE cluster with A3 Edge nodes (`a3-edgegpu-8g`) configured for LLM inference: GKE Inference Gateway, Cloud Storage FUSE CSI, Local SSD for KV-cache offload, a CPU pool for the Endpoint Picker, GPUDirect-TCPX and Kueue. Refer to the [A3 Edge Inference Deployment Guide](./gke-a3-edgegpu/README.md) for detailed instructions.
+
 ### [gke-a3-highgpu.yaml] ![core-badge]
 
 This blueprint provisions a GKE cluster with A3 High nodes (`a3-highgpu-8g`). Refer to the [A3 High Deployment Guide](./gke-a3-highgpu/README.md) for detailed instructions.
@@ -1534,6 +1539,7 @@ python3 -m venv $VENV_DIR
 source $VENV_DIR/bin/activate
 ```
 
+[gke-a3-edgegpu-inference.yaml]: ./gke-a3-edgegpu/gke-a3-edgegpu-inference.yaml
 [gke-a3-highgpu.yaml]: ./gke-a3-highgpu/gke-a3-highgpu.yaml
 
 ### [gke-a3-highgpu-inference-gateway.yaml] ![core-badge]
