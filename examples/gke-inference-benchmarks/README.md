@@ -30,9 +30,10 @@ examples/gke-inference-benchmarks/
     ├── README.md                     # prerequisites, deploy, results, clean up
     ├── blueprint.yaml                # network, cluster, node pool, token Secret, kubectl-apply of manifests/
     ├── deployment.yaml               # the values you fill in (project, bucket, zone, CIDR, weights bucket)
-    └── manifests/                    # Kubernetes manifests applied by the blueprint
-        ├── <server>-serve.yaml.tftpl # model server (storage, weights staging, Deployment, Service)
-        └── <server>-bench.yaml.tftpl # benchmark Job
+    └── manifests/                    # Kubernetes manifests applied in three stages by the blueprint
+        ├── stage-weights.yaml.tftpl  # Stage 1: standalone Job to stage model weights to Cloud Storage
+        ├── <server>-serve.yaml.tftpl # Stage 2: model server (storage, wait-for-weights initContainer, Deployment, Service)
+        └── <server>-bench.yaml.tftpl # Stage 3: benchmark Job
 ```
 
 `<accelerator>` is the GKE machine family (for example `g4`, `a4`) or, for
@@ -117,17 +118,31 @@ with the same commands:
   optional. Document that a `--vars` token is stored in plaintext in
   `terraform.tfvars` and the state bucket, and give the `kubectl patch secret`
   alternative. Never commit a token.
-* **Weights from Cloud Storage.** Take `model_bucket` (empty default) and
-  `model_path` variables, pass them to the server manifest as template
-  variables, and when the bucket is set stream the weights with the
-  [Run:ai Model Streamer](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/run-ai-model-streamer)
-  (`vllm serve gs://<bucket>/<path> --load-format=runai_streamer`, plus
-  `--served-model-name`). An initContainer must first check the path and,
-  if the snapshot is missing, download it from the model hub and upload it,
-  so a bucket only ever has to be populated once. Run the pod as the
-  `workload-identity-k8s-sa` service account and give the workload service
-  account `storage.objectAdmin` and `storage.bucketViewer`. Keep a disk
-  fallback for an empty `model_bucket`.
+* **Weights from Cloud Storage (three-stage sequence).** Take `model_bucket`
+  (empty default) and `model_path` variables and pass them to the staging Job
+  and server manifests as template variables. When `model_bucket` is set:
+  1. **Stage 1 (`manifests/stage-weights.yaml.tftpl`):** A standalone
+     single-pod `Job` (`parallelism: 1`, `completions: 1`) checks
+     `gs://<bucket>/<path>` and, if the snapshot is missing, stages it from the
+     model hub using a rolling per-file download $\to$ concurrent multipart
+     upload $\to$ delete pipeline (`config.json` uploaded last). Running weight
+     staging in a single-pod Job rather than inside the server pod's
+     `initContainer` prevents multiple server pods in a distributed deployment
+     from concurrently downloading and overwriting the same Cloud Storage
+     objects, and bounds local scratch disk usage to ~15 GiB even for multi-TB
+     models.
+  2. **Stage 2 (`manifests/<server>-serve.yaml.tftpl`):** A lightweight
+     `wait-for-weights` `initContainer` waits until `config.json` and
+     `*.safetensors` exist in `gs://<bucket>/<path>`, then the server streams
+     the weights with the
+     [Run:ai Model Streamer](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/run-ai-model-streamer)
+     (`vllm serve gs://<bucket>/<path> --load-format=runai_streamer`, plus
+     `--served-model-name`).
+  3. **Stage 3 (`manifests/<server>-bench.yaml.tftpl`):** Waits for the server
+     health endpoint and runs the benchmark.
+  Run the staging Job and server pods as the `workload-identity-k8s-sa` service
+  account and give the workload service account `storage.objectAdmin` and
+  `storage.bucketViewer`. Keep a disk fallback for an empty `model_bucket`.
 * **Pin and explain every parameter.** Pin the serving image tag and spell out
   the serving flags (parallelism, attention backend, memory utilization, max
   sequences, max model length) and the benchmark parameters (dataset, ISL/OSL,

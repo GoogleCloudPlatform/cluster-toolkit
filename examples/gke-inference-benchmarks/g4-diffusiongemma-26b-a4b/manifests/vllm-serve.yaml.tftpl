@@ -18,11 +18,12 @@
 # (key hf_api_token) created by the blueprint's kubernetes-secret module, and
 # the blueprint vars `model_bucket` and `model_path` that select where the
 # model weights come from:
-#   * model_bucket set:   the `stage-weights` initContainer makes sure the
-#     Hugging Face snapshot exists under gs://<model_bucket>/<model_path>
-#     (downloading it from Hugging Face and uploading it once if it does not),
-#     then vLLM streams the safetensors straight from Cloud Storage into GPU
-#     memory with the Run:ai Model Streamer (--load-format=runai_streamer):
+#   * model_bucket set:   the `wait-for-weights` initContainer waits until the
+#     standalone `diffusiongemma-stage-weights` Job has finished uploading the
+#     Hugging Face snapshot (`config.json` + `*.safetensors`) under
+#     gs://<model_bucket>/<model_path>, then vLLM streams the safetensors
+#     straight from Cloud Storage into GPU memory with the Run:ai Model Streamer
+#     (--load-format=runai_streamer):
 #     https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/run-ai-model-streamer
 #   * model_bucket empty: vLLM downloads the weights from Hugging Face into the
 #     Hyperdisk volume (Hugging Face cache) and loads them from disk.
@@ -50,8 +51,8 @@ reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
 allowVolumeExpansion: true
 ---
-# Hugging Face cache when loading from disk, staging area for the one-time
-# upload to Cloud Storage when streaming. Survives Spot preemptions.
+# Hugging Face cache when loading from disk (model_bucket empty). Survives Spot
+# preemptions.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -96,19 +97,18 @@ spec:
         value: "true"
         effect: NoSchedule
       initContainers:
-      # Makes sure the model snapshot is in Cloud Storage before vLLM starts.
-      # Exits immediately when model_bucket is empty or the snapshot is already
-      # there (config.json + at least one *.safetensors under the prefix);
-      # otherwise downloads it from Hugging Face to the volume and uploads it,
-      # config.json last, so a partial upload is never mistaken for a complete
-      # one. The vLLM image already ships huggingface_hub and
-      # google-cloud-storage (a dependency of the Run:ai GCS backend).
-      - name: stage-weights
+      # Waits for the standalone `diffusiongemma-stage-weights` Job (Stage 1) to
+      # finish populating gs://<model_bucket>/<model_path> before starting vLLM
+      # (Stage 2). Keeping the download/upload in a single-pod Job rather than
+      # in the server pod's initContainer prevents multiple server pods in a
+      # distributed or multi-replica deployment from concurrently downloading
+      # and overwriting the same Cloud Storage objects.
+      - name: wait-for-weights
         image: vllm/vllm-openai:v0.30.0
         command: ["python3", "-u", "-c"]
         args:
         - |
-          import os, shutil, sys, time
+          import os, sys, time
 
           bucket_name = os.environ.get("MODEL_BUCKET", "").strip()
           if not bucket_name:
@@ -116,79 +116,37 @@ spec:
               sys.exit(0)
 
           from google.cloud import storage
-          from google.cloud.storage import transfer_manager
 
-          model_id = os.environ["MODEL_ID"]
           prefix = os.environ.get("MODEL_PATH", "").strip().strip("/")
           blob_prefix = prefix + "/" if prefix else ""
-          gcs_dir = "gs://" + bucket_name + "/" + prefix
+          gcs_dir = "gs://" + bucket_name + ("/" + prefix if prefix else "")
           client = storage.Client()
-          bucket = client.bucket(bucket_name)
-          existing = [b.name[len(blob_prefix):] for b in client.list_blobs(bucket_name, prefix=blob_prefix)]
-          if "config.json" in existing and any(n.endswith(".safetensors") for n in existing):
-              print("Found a complete snapshot (" + str(len(existing)) + " objects) under " + gcs_dir + "; nothing to stage.")
-              sys.exit(0)
 
-          from huggingface_hub import snapshot_download
-
-          print("No complete snapshot under " + gcs_dir + "; downloading " + model_id + " from Hugging Face ...")
-          staging_dir = os.path.join(os.environ.get("STAGING_DIR", "/data/staging"), model_id.replace("/", "--"))
-          started = time.time()
-          local_dir = snapshot_download(
-              model_id,
-              local_dir=staging_dir,
-              token=os.environ.get("HUGGING_FACE_HUB_TOKEN") or None,
-              ignore_patterns=["original/*", ".gitattributes"],
-          )
-          files = sorted(
-              os.path.relpath(os.path.join(root, name), local_dir)
-              for root, _, names in os.walk(local_dir)
-              for name in names
-          )
-          files = [f for f in files if not f.startswith(".cache/")]
-          files = [f for f in files if f != "config.json"] + [f for f in files if f == "config.json"]
-          size_gib = sum(os.path.getsize(os.path.join(local_dir, f)) for f in files) / 2**30
-          print("Downloaded " + str(len(files)) + " files (" + format(size_gib, ".1f") + " GiB) in " + format(time.time() - started, ".0f") + " s; uploading to " + gcs_dir + " ...")
-
-          started = time.time()
-          results = transfer_manager.upload_many_from_filenames(
-              bucket,
-              files,
-              source_directory=local_dir,
-              blob_name_prefix=blob_prefix,
-              max_workers=8,
-              worker_type=transfer_manager.THREAD,
-          )
-          failed = [(f, r) for f, r in zip(files, results) if isinstance(r, Exception)]
-          for f, r in failed:
-              print("Upload of " + f + " failed: " + repr(r))
-          if failed:
-              sys.exit(1)
-          print("Uploaded " + str(len(files)) + " files to " + gcs_dir + " in " + format(time.time() - started, ".0f") + " s.")
-          shutil.rmtree(local_dir, ignore_errors=True)
+          while True:
+              existing = [
+                  b.name[len(blob_prefix):]
+                  for b in client.list_blobs(bucket_name, prefix=blob_prefix)
+              ]
+              if "config.json" in existing and any(n.endswith(".safetensors") for n in existing):
+                  print(
+                      f"Verified complete snapshot ({len(existing)} objects) under {gcs_dir}; "
+                      "starting vLLM server."
+                  )
+                  sys.exit(0)
+              print(
+                  f"Waiting for job/diffusiongemma-stage-weights to finish staging weights "
+                  f"under {gcs_dir} ({len(existing)} objects present so far)..."
+              )
+              time.sleep(15)
         env:
-        - name: MODEL_ID
-          value: google/diffusiongemma-26B-A4B-it
         - name: MODEL_BUCKET
           value: "${model_bucket}"
         - name: MODEL_PATH
           value: "${model_path}"
-        - name: STAGING_DIR
-          value: /data/staging
-        - name: HF_HOME
-          value: /data
-        - name: HUGGING_FACE_HUB_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: ${hf_secret_name}
-              key: hf_api_token
         resources:
           requests:
-            cpu: "4"
-            memory: 8Gi
-        volumeMounts:
-        - name: hf-cache
-          mountPath: /data
+            cpu: "1"
+            memory: 2Gi
       containers:
       - name: vllm
         image: vllm/vllm-openai:v0.30.0

@@ -21,9 +21,11 @@
 # serving flags and benchmark parameters are pinned in the manifests so that
 # results are reproducible and comparable between runs.
 #
-# With model_bucket set, the weights are streamed from Cloud Storage with the
-# Run:ai Model Streamer (an initContainer copies them there from Hugging Face
-# the first time); otherwise they are downloaded to a Hyperdisk volume.
+# With model_bucket set, a standalone `diffusiongemma-stage-weights` Job
+# copies the Hugging Face snapshot to Cloud Storage the first time (if it is
+# not already there), and the vLLM pod streams the weights from Cloud Storage
+# with the Run:ai Model Streamer; otherwise they are downloaded to a Hyperdisk
+# volume.
 #
 # Everything this benchmark needs is in this directory; see README.md.
 #
@@ -78,14 +80,16 @@ vars:
   #   kubectl patch secret hf-secret --type merge -p "{\"stringData\":{\"hf_api_token\":\"$HF_TOKEN\"}}"
   hf_token: ""
 
-  # Cloud Storage location of the model weights. When model_bucket is set, the
-  # vLLM pod streams the safetensors straight from
-  # gs://<model_bucket>/<model_path> with the Run:ai Model Streamer, and an
-  # initContainer first copies the Hugging Face snapshot there if the path is
-  # empty (one-time download). The bucket must exist; buckets in this project
-  # are accessible through the workload service account below. Leave
-  # model_bucket empty to download the weights from Hugging Face into the
-  # Hyperdisk volume instead.
+  # Cloud Storage location of the model weights. When model_bucket is set, a
+  # standalone `diffusiongemma-stage-weights` Job copies the Hugging Face
+  # snapshot to gs://<model_bucket>/<model_path> if it does not exist yet
+  # (rolling per-file download -> upload -> delete so multi-TB models fit on
+  # standard boot disks and multiple server pods never race to upload), and the
+  # vLLM pod streams the safetensors straight from Cloud Storage with the
+  # Run:ai Model Streamer. The bucket must exist; buckets in this project are
+  # accessible through the workload service account below. Leave model_bucket
+  # empty to download the weights from Hugging Face into the Hyperdisk volume
+  # instead.
   model_bucket: ""
   model_path: models/diffusiongemma-26B-A4B-it
 
@@ -220,12 +224,15 @@ deployment_groups:
       data:
         hf_api_token: '$(vars.hf_token != null ? vars.hf_token : "")'
 
-  # Runs the DiffusionGemma vLLM benchmark as part of `gcluster deploy`:
-  #   1. diffusiongemma-vllm-serve: StorageClass + PVC + Deployment (weights
-  #                                 initContainer + vLLM) + Service, rendered
-  #                                 with model_bucket/model_path
-  #   2. diffusiongemma-vllm-bench: `vllm bench serve` Job (only if run_benchmark is true)
-  # Both reference the Secret by the module's output, which makes Terraform
+  # Runs the DiffusionGemma vLLM benchmark in three stages as part of `gcluster deploy`:
+  #   1. diffusiongemma-stage-weights: single-pod Job that stages the Hugging
+  #      Face snapshot to Cloud Storage if not already present (only when
+  #      model_bucket is set)
+  #   2. diffusiongemma-vllm-serve: StorageClass + PVC + Deployment
+  #      (wait-for-weights initContainer + vLLM) + Service, rendered with
+  #      model_bucket/model_path
+  #   3. diffusiongemma-vllm-bench: `vllm bench serve` Job (only if run_benchmark is true)
+  # All three reference the Secret by the module's output, which makes Terraform
   # create the Secret before the pods. JobSet is installed so that
   # JobSet-based benchmarks can target this cluster too.
   - id: diffusiongemma-vllm
@@ -235,6 +242,14 @@ deployment_groups:
       jobset:
         install: true
       apply_manifests:
+      - name: diffusiongemma-stage-weights
+        enable: '$(vars.model_bucket != null && vars.model_bucket != "")'
+        source: $(ghpc_stage("manifests/stage-weights.yaml.tftpl"))
+        template_vars:
+          hf_secret_name: $(hf-secret.secret_name)
+          model_bucket: '$(vars.model_bucket != null ? vars.model_bucket : "")'
+          model_path: '$(vars.model_path != null ? vars.model_path : "")'
+        wait_for_rollout: false
       - name: diffusiongemma-vllm-serve
         source: $(ghpc_stage("manifests/vllm-serve.yaml.tftpl"))
         template_vars:

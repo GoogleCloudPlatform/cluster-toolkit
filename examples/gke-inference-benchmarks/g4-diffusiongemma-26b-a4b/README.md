@@ -26,15 +26,16 @@ Everything the benchmark needs is in this directory:
 
 | File | Purpose |
 | --- | --- |
-| [`blueprint.yaml`](blueprint.yaml) | VPC, service accounts, GKE cluster (Dataplane V2; GCS FUSE, Filestore and Managed Lustre CSI drivers enabled), Spot G4 node pool, the `hf-secret` Kubernetes `Secret` (via the [`kubernetes-secret`](../../../modules/security/kubernetes-secret/README.md) module) and the `kubectl-apply` step that installs the manifests. |
+| [`blueprint.yaml`](blueprint.yaml) | VPC, service accounts, GKE cluster (Dataplane V2; GCS FUSE, Filestore and Managed Lustre CSI drivers enabled), Spot G4 node pool, the `hf-secret` Kubernetes `Secret` (via the [`kubernetes-secret`](../../../modules/security/kubernetes-secret/README.md) module) and the `kubectl-apply` step that installs the manifests in three stages. |
 | [`deployment.yaml`](deployment.yaml) | The values you fill in: project, Terraform state bucket, region/zone, authorized CIDR, model weights bucket. |
-| [`manifests/vllm-serve.yaml.tftpl`](manifests/vllm-serve.yaml.tftpl) | StorageClass + PersistentVolumeClaim, vLLM `Deployment` (weights-staging initContainer + server) and `Service`; rendered with `model_bucket`/`model_path`. |
-| [`manifests/vllm-bench.yaml.tftpl`](manifests/vllm-bench.yaml.tftpl) | `vllm bench serve` `Job` that waits for the server, prints the results and fails if any request failed. |
+| [`manifests/stage-weights.yaml.tftpl`](manifests/stage-weights.yaml.tftpl) | **Stage 1:** Standalone `diffusiongemma-stage-weights` `Job` (enabled when `model_bucket` is set) that checks `gs://<model_bucket>/<model_path>` and stages the Hugging Face snapshot using a rolling per-file download $\to$ concurrent multipart upload $\to$ delete pipeline. |
+| [`manifests/vllm-serve.yaml.tftpl`](manifests/vllm-serve.yaml.tftpl) | **Stage 2:** StorageClass + PersistentVolumeClaim, vLLM `Deployment` (`wait-for-weights` initContainer + server) and `Service`; rendered with `model_bucket`/`model_path`. |
+| [`manifests/vllm-bench.yaml.tftpl`](manifests/vllm-bench.yaml.tftpl) | **Stage 3:** `vllm bench serve` `Job` that waits for the server, prints the results and fails if any request failed. |
 
-The two manifests are Terraform templates. Their `${hf_secret_name}`
+The three manifests are Terraform templates. Their `${hf_secret_name}`
 expression is the name of the Secret created by the module, which makes
-Terraform create the Secret before the pods that mount it; the server manifest
-additionally takes `${model_bucket}` and `${model_path}`.
+Terraform create the Secret before the pods that mount it; the staging Job and
+server manifests additionally take `${model_bucket}` and `${model_path}`.
 
 ## Prerequisites
 
@@ -94,13 +95,14 @@ additionally takes `${model_bucket}` and `${model_path}`.
    > **Note:** a token passed with `--vars` is still written in plaintext to
    > `terraform.tfvars` in the deployment folder and to the Terraform state in
    > your state bucket. If that is not acceptable, omit `hf_token=...`: the
-   > Secret is then created with an empty token, the server pod crash-loops
-   > (the gated download fails) and the benchmark Job keeps waiting for the
-   > server. Once the cluster exists, patch the Secret and restart both so that
-   > they pick up the token:
+   > Secret is then created with an empty token, the staging Job (or server pod)
+   > fails the gated download, and the benchmark Job keeps waiting for the
+   > server. Once the cluster exists, patch the Secret and restart the Jobs/Deployment
+   > so that they pick up the token:
    >
    > ```shell
    > kubectl patch secret hf-secret --type merge -p "{\"stringData\":{\"hf_api_token\":\"$HF_TOKEN\"}}"
+   > kubectl delete pod -l app=diffusiongemma-stage-weights
    > kubectl rollout restart deployment/diffusiongemma-vllm
    > kubectl delete pod -l app=diffusiongemma-vllm-bench
    > ```
@@ -116,33 +118,50 @@ additionally takes `${model_bucket}` and `${model_path}`.
    kubectl get nodes -L cloud.google.com/gke-spot,cloud.google.com/gke-accelerator
    ```
 
-1. Wait for the vLLM server. The very first deployment against an empty
-   `model_path` downloads the snapshot from Hugging Face and uploads it to the
-   bucket in the `stage-weights` initContainer (10-20 minutes) before vLLM
-   starts and streams the weights (a few minutes); when the snapshot is
-   already in the bucket the pod goes straight to streaming. With
-   `model_bucket` empty, the first start downloads about 52 GB of weights to
-   the Hyperdisk volume and loads them, which takes 15-25 minutes:
+1. Follow the three-stage benchmark sequence:
+   - **Stage 1 (`job/diffusiongemma-stage-weights`):** When `model_bucket` is
+     set, a single-pod Job on the system node pool checks
+     `gs://<model_bucket>/<model_path>` and stages the Hugging Face snapshot if
+     not already present (~4–5 minutes on the first cold run; instant on
+     subsequent runs).
+   - **Stage 2 (`deployment/diffusiongemma-vllm`):** Its `wait-for-weights`
+     initContainer waits for Stage 1 to complete (`config.json` present in
+     Cloud Storage), then `vllm` streams the weights into GPU memory (~44 s).
+     With `model_bucket` empty, `vllm` downloads about 52 GB of weights to the
+     Hyperdisk volume and loads them (15–25 minutes on first start).
+   - **Stage 3 (`job/diffusiongemma-vllm-bench`):** Waits for `/v1/models` on
+     the server and runs `vllm bench serve`.
 
    ```shell
+   kubectl logs -f job/diffusiongemma-stage-weights
    kubectl rollout status deployment/diffusiongemma-vllm --timeout=40m
-   kubectl logs deployment/diffusiongemma-vllm -c stage-weights
+   kubectl logs deployment/diffusiongemma-vllm -c wait-for-weights
    kubectl logs deployment/diffusiongemma-vllm --tail=20
    ```
 
 ## Model weights: Cloud Storage and the Run:ai Model Streamer
 
-With `model_bucket` set, the vLLM pod follows the GKE guide
-[Accelerate model loading with Run:ai Model Streamer](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/run-ai-model-streamer):
+With `model_bucket` set, the deployment follows the GKE guide
+[Accelerate model loading with Run:ai Model Streamer](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/run-ai-model-streamer)
+using a three-stage workflow designed to scale cleanly to both multi-pod
+distributed deployments and multi-TB models:
 
-* The `stage-weights` initContainer lists `gs://<model_bucket>/<model_path>`.
-  If it finds `config.json` and at least one `*.safetensors` it exits at once.
-  Otherwise it downloads the Hugging Face snapshot (using `hf-secret`) to the
-  Hyperdisk volume and uploads it with the Cloud Storage transfer manager,
-  `config.json` last, so an interrupted upload is redone on the next start
-  instead of being mistaken for a complete snapshot. The staged copy is deleted
-  after the upload.
-* The server runs
+* **Stage 1 (`job/diffusiongemma-stage-weights`):** A single-pod `Job`
+  (`parallelism: 1`, `completions: 1`) on the on-demand system node pool lists
+  `gs://<model_bucket>/<model_path>`. If it finds `config.json` and at least one
+  `*.safetensors` it exits at once. Otherwise it stages the Hugging Face
+  snapshot using a rolling per-file pipeline (`hf_hub_download` $\to$
+  `transfer_manager.upload_chunks_concurrently` $\to$ immediate local delete,
+  with at most 3 files in flight). Extracting weight staging into a separate
+  single-pod Job instead of running it inside the server pod's `initContainer`
+  prevents multiple server pods in a distributed deployment (`JobSet`,
+  `LeaderWorkerSet`, or multi-replica `Deployment`) from concurrently
+  downloading and overwriting the same Cloud Storage objects, and keeps peak
+  local scratch usage under ~15 GiB even for multi-TB models. `config.json` is
+  uploaded last as an atomic completion marker.
+* **Stage 2 (`deployment/diffusiongemma-vllm`):** The server pod's lightweight
+  `wait-for-weights` initContainer polls `gs://<model_bucket>/<model_path>`
+  until `config.json` and `*.safetensors` are present, then the server runs
   `vllm serve gs://<model_bucket>/<model_path> --load-format=runai_streamer --model-loader-extra-config={"distributed":true}`
   (plus `--served-model-name google/diffusiongemma-26B-A4B-it`, so the
   benchmark Job and your clients keep using the Hugging Face model name). vLLM
@@ -150,7 +169,7 @@ With `model_bucket` set, the vLLM pod follows the GKE guide
   safetensors from Cloud Storage straight into GPU memory, in parallel; look
   for `Loading safetensors using Runai Model Streamer: 100% Completed` in the
   server log.
-* Authentication is Workload Identity Federation for GKE: the pod runs as the
+* Authentication is Workload Identity Federation for GKE: the pods run as the
   `workload-identity-k8s-sa` Kubernetes service account, which the blueprint
   binds to the `<deployment_name>-gke-wl-sa` Google service account with
   `roles/storage.objectAdmin` and `roles/storage.bucketViewer` on the project
