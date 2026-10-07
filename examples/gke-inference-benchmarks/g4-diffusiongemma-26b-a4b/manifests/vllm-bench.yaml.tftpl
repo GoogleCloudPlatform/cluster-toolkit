@@ -13,8 +13,8 @@
 # limitations under the License.
 
 # Benchmark Job: waits for the vLLM server, then runs `vllm bench serve` with
-# the same workload as the uBench DiffusionGemma G4 recipe (random dataset,
-# ISL 1024 / OSL 1024, concurrency 8). Terraform template rendered by the
+# the pinned DiffusionGemma G4 workload (random dataset, ISL 1024 / OSL 1024,
+# 64 prompts, concurrency 8). Terraform template rendered by the
 # kubectl-apply module; `hf_secret_name` is the Hugging Face token Secret
 # created by the blueprint's kubernetes-secret module and is the only template
 # expression in this file.

@@ -61,5 +61,16 @@ vars:
   #   kubectl patch secret hf-secret --type merge -p "{\"stringData\":{\"hf_api_token\":\"$HF_TOKEN\"}}"
   hf_token: ""
 
+  # Cloud Storage bucket (name only, no gs://) and object prefix for the model
+  # weights. Set model_bucket to an existing bucket, ideally in the same region
+  # as the cluster, to stream the weights from gs://<model_bucket>/<model_path>
+  # with the Run:ai Model Streamer; the first deployment copies them there from
+  # Hugging Face, later ones (and restarts after a Spot preemption) only stream.
+  # Buckets in this project work out of the box; see README.md for buckets in
+  # other projects. Leave model_bucket empty to download the weights from
+  # Hugging Face into a Hyperdisk volume instead.
+  model_bucket: ""
+  model_path: models/diffusiongemma-26B-A4B-it
+
   # Set to false to only deploy the vLLM server (no benchmark Job).
   run_benchmark: true

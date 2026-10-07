@@ -17,14 +17,19 @@
 # Provisions a GKE cluster with a single-zone Spot G4 node pool
 # (g4-standard-48, 1x NVIDIA RTX PRO 6000), serves
 # google/diffusiongemma-26B-A4B-it with vLLM and runs a `vllm bench serve`
-# benchmark Job, all as part of one `gcluster deploy`. The serving flags and
-# benchmark parameters mirror the single-GPU DiffusionGemma G4 recipe used in
-# Google's internal inference benchmarking (uBench), so results are comparable.
+# benchmark Job, all as part of one `gcluster deploy`. The vLLM image tag,
+# serving flags and benchmark parameters are pinned in the manifests so that
+# results are reproducible and comparable between runs.
+#
+# With model_bucket set, the weights are streamed from Cloud Storage with the
+# Run:ai Model Streamer (an initContainer copies them there from Hugging Face
+# the first time); otherwise they are downloaded to a Hyperdisk volume.
 #
 # Everything this benchmark needs is in this directory; see README.md.
 #
 #   ./gcluster deploy -d examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/deployment.yaml \
-#     examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml --vars hf_token=$HF_TOKEN
+#     examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml \
+#     --vars hf_token=$HF_TOKEN,model_bucket=$MODEL_BUCKET
 
 blueprint_name: gke-inference-benchmark-g4-diffusiongemma
 
@@ -73,6 +78,17 @@ vars:
   #   kubectl patch secret hf-secret --type merge -p "{\"stringData\":{\"hf_api_token\":\"$HF_TOKEN\"}}"
   hf_token: ""
 
+  # Cloud Storage location of the model weights. When model_bucket is set, the
+  # vLLM pod streams the safetensors straight from
+  # gs://<model_bucket>/<model_path> with the Run:ai Model Streamer, and an
+  # initContainer first copies the Hugging Face snapshot there if the path is
+  # empty (one-time download). The bucket must exist; buckets in this project
+  # are accessible through the workload service account below. Leave
+  # model_bucket empty to download the weights from Hugging Face into the
+  # Hyperdisk volume instead.
+  model_bucket: ""
+  model_path: models/diffusiongemma-26B-A4B-it
+
   # Set to false to only deploy the vLLM server (no benchmark Job).
   run_benchmark: true
 
@@ -119,6 +135,10 @@ deployment_groups:
       - storage.objectViewer
       - artifactregistry.reader
 
+  # Bound to the `workload-identity-k8s-sa` Kubernetes service account by the
+  # cluster module; the vLLM pod uses it to read and populate the model bucket
+  # (objectAdmin for objects, bucketViewer because the Run:ai GCS backend reads
+  # bucket metadata).
   - id: workload_service_account
     source: modules/project/service-account
     settings:
@@ -129,6 +149,7 @@ deployment_groups:
       - monitoring.viewer
       - stackdriver.resourceMetadata.writer
       - storage.objectAdmin
+      - storage.bucketViewer
       - artifactregistry.reader
 
   - id: g4-cluster
@@ -188,7 +209,9 @@ deployment_groups:
         hf_api_token: '$(vars.hf_token != null ? vars.hf_token : "")'
 
   # Runs the DiffusionGemma vLLM benchmark as part of `gcluster deploy`:
-  #   1. diffusiongemma-vllm-serve: StorageClass + PVC (HF cache) + Deployment + Service
+  #   1. diffusiongemma-vllm-serve: StorageClass + PVC + Deployment (weights
+  #                                 initContainer + vLLM) + Service, rendered
+  #                                 with model_bucket/model_path
   #   2. diffusiongemma-vllm-bench: `vllm bench serve` Job (only if run_benchmark is true)
   # Both reference the Secret by the module's output, which makes Terraform
   # create the Secret before the pods. JobSet is installed so that
@@ -204,8 +227,10 @@ deployment_groups:
         source: $(ghpc_stage("manifests/vllm-serve.yaml.tftpl"))
         template_vars:
           hf_secret_name: $(hf-secret.secret_name)
-        # Downloading (~52 GB) and loading the weights takes 15-25 minutes;
-        # do not block `gcluster deploy` on the rollout.
+          model_bucket: '$(vars.model_bucket != null ? vars.model_bucket : "")'
+          model_path: '$(vars.model_path != null ? vars.model_path : "")'
+        # Staging or downloading (~52 GB) and loading the weights takes 5-25
+        # minutes; do not block `gcluster deploy` on the rollout.
         wait_for_rollout: false
       - name: diffusiongemma-vllm-bench
         enable: $(vars.run_benchmark)

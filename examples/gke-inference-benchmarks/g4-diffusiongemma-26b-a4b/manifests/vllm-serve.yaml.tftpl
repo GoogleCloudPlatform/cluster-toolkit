@@ -14,8 +14,22 @@
 
 # vLLM server for google/diffusiongemma-26B-A4B-it on one Spot G4 node
 # (1x NVIDIA RTX PRO 6000). Terraform template rendered by the kubectl-apply
-# module; `hf_secret_name` is the Hugging Face token Secret (key hf_api_token)
-# created by the blueprint's kubernetes-secret module.
+# module with three variables: `hf_secret_name`, the Hugging Face token Secret
+# (key hf_api_token) created by the blueprint's kubernetes-secret module, and
+# the blueprint vars `model_bucket` and `model_path` that select where the
+# model weights come from:
+#   * model_bucket set:   the `stage-weights` initContainer makes sure the
+#     Hugging Face snapshot exists under gs://<model_bucket>/<model_path>
+#     (downloading it from Hugging Face and uploading it once if it does not),
+#     then vLLM streams the safetensors straight from Cloud Storage into GPU
+#     memory with the Run:ai Model Streamer (--load-format=runai_streamer):
+#     https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/run-ai-model-streamer
+#   * model_bucket empty: vLLM downloads the weights from Hugging Face into the
+#     Hyperdisk volume (Hugging Face cache) and loads them from disk.
+# Cloud Storage access comes from Workload Identity: the pod runs as the
+# `workload-identity-k8s-sa` Kubernetes service account that the gke-cluster
+# module binds to the workload Google service account of the blueprint
+# (roles/storage.objectAdmin + roles/storage.bucketViewer on the project).
 #
 # DiffusionGemma is an encoder-decoder block-diffusion model: each step
 # denoises a 256-token canvas instead of decoding one token. The server flags
@@ -36,7 +50,8 @@ reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
 allowVolumeExpansion: true
 ---
-# Hugging Face cache: weights survive Spot preemptions and pod restarts.
+# Hugging Face cache when loading from disk, staging area for the one-time
+# upload to Cloud Storage when streaming. Survives Spot preemptions.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -67,6 +82,9 @@ spec:
       labels:
         app: diffusiongemma-vllm
     spec:
+      # Created by the gke-cluster module (configure_workload_identity_sa: true);
+      # gives the containers the workload service account's Cloud Storage access.
+      serviceAccountName: workload-identity-k8s-sa
       nodeSelector:
         cloud.google.com/gke-accelerator: nvidia-rtx-pro-6000
       tolerations:
@@ -77,14 +95,119 @@ spec:
         operator: Equal
         value: "true"
         effect: NoSchedule
+      initContainers:
+      # Makes sure the model snapshot is in Cloud Storage before vLLM starts.
+      # Exits immediately when model_bucket is empty or the snapshot is already
+      # there (config.json + at least one *.safetensors under the prefix);
+      # otherwise downloads it from Hugging Face to the volume and uploads it,
+      # config.json last, so a partial upload is never mistaken for a complete
+      # one. The vLLM image already ships huggingface_hub and
+      # google-cloud-storage (a dependency of the Run:ai GCS backend).
+      - name: stage-weights
+        image: vllm/vllm-openai:v0.30.0
+        command: ["python3", "-u", "-c"]
+        args:
+        - |
+          import os, shutil, sys, time
+
+          bucket_name = os.environ.get("MODEL_BUCKET", "").strip()
+          if not bucket_name:
+              print("model_bucket is empty: vLLM downloads the weights from Hugging Face.")
+              sys.exit(0)
+
+          from google.cloud import storage
+          from google.cloud.storage import transfer_manager
+
+          model_id = os.environ["MODEL_ID"]
+          prefix = os.environ.get("MODEL_PATH", "").strip().strip("/")
+          blob_prefix = prefix + "/" if prefix else ""
+          gcs_dir = "gs://" + bucket_name + "/" + prefix
+          client = storage.Client()
+          bucket = client.bucket(bucket_name)
+          existing = [b.name[len(blob_prefix):] for b in client.list_blobs(bucket_name, prefix=blob_prefix)]
+          if "config.json" in existing and any(n.endswith(".safetensors") for n in existing):
+              print("Found a complete snapshot (" + str(len(existing)) + " objects) under " + gcs_dir + "; nothing to stage.")
+              sys.exit(0)
+
+          from huggingface_hub import snapshot_download
+
+          print("No complete snapshot under " + gcs_dir + "; downloading " + model_id + " from Hugging Face ...")
+          staging_dir = os.path.join(os.environ.get("STAGING_DIR", "/data/staging"), model_id.replace("/", "--"))
+          started = time.time()
+          local_dir = snapshot_download(
+              model_id,
+              local_dir=staging_dir,
+              token=os.environ.get("HUGGING_FACE_HUB_TOKEN") or None,
+              ignore_patterns=["original/*", ".gitattributes"],
+          )
+          files = sorted(
+              os.path.relpath(os.path.join(root, name), local_dir)
+              for root, _, names in os.walk(local_dir)
+              for name in names
+          )
+          files = [f for f in files if not f.startswith(".cache/")]
+          files = [f for f in files if f != "config.json"] + [f for f in files if f == "config.json"]
+          size_gib = sum(os.path.getsize(os.path.join(local_dir, f)) for f in files) / 2**30
+          print("Downloaded " + str(len(files)) + " files (" + format(size_gib, ".1f") + " GiB) in " + format(time.time() - started, ".0f") + " s; uploading to " + gcs_dir + " ...")
+
+          started = time.time()
+          results = transfer_manager.upload_many_from_filenames(
+              bucket,
+              files,
+              source_directory=local_dir,
+              blob_name_prefix=blob_prefix,
+              max_workers=8,
+              worker_type=transfer_manager.THREAD,
+          )
+          failed = [(f, r) for f, r in zip(files, results) if isinstance(r, Exception)]
+          for f, r in failed:
+              print("Upload of " + f + " failed: " + repr(r))
+          if failed:
+              sys.exit(1)
+          print("Uploaded " + str(len(files)) + " files to " + gcs_dir + " in " + format(time.time() - started, ".0f") + " s.")
+          shutil.rmtree(local_dir, ignore_errors=True)
+        env:
+        - name: MODEL_ID
+          value: google/diffusiongemma-26B-A4B-it
+        - name: MODEL_BUCKET
+          value: "${model_bucket}"
+        - name: MODEL_PATH
+          value: "${model_path}"
+        - name: STAGING_DIR
+          value: /data/staging
+        - name: HF_HOME
+          value: /data
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: ${hf_secret_name}
+              key: hf_api_token
+        resources:
+          requests:
+            cpu: "4"
+            memory: 8Gi
+        volumeMounts:
+        - name: hf-cache
+          mountPath: /data
       containers:
       - name: vllm
         image: vllm/vllm-openai:v0.30.0
         command: ["/bin/bash", "-c"]
         args:
         - |
-          exec vllm serve google/diffusiongemma-26B-A4B-it \
-            --host=0.0.0.0 --port=8000 --download-dir=/data \
+          set -euo pipefail
+          if [ -n "$MODEL_BUCKET" ]; then
+            MODEL="gs://$MODEL_BUCKET/$(echo "$MODEL_PATH" | sed 's#^/*##; s#/*$##')"
+            # distributed=true: recommended by GKE for object storage on CUDA.
+            LOAD_ARGS="--load-format=runai_streamer --model-loader-extra-config={\"distributed\":true}"
+            echo "Streaming weights from $MODEL with the Run:ai Model Streamer"
+          else
+            MODEL="$MODEL_ID"
+            LOAD_ARGS="--download-dir=/data"
+            echo "Loading $MODEL from Hugging Face (cache in /data)"
+          fi
+          exec vllm serve "$MODEL" --served-model-name "$MODEL_ID" $LOAD_ARGS \
+            --host=0.0.0.0 --port=8000 \
             --tensor-parallel-size=1 \
             --attention-backend=TRITON_ATTN \
             --max-model-len=4096 \
@@ -94,6 +217,12 @@ spec:
             --tool-call-parser=gemma4 \
             --enable-auto-tool-choice
         env:
+        - name: MODEL_ID
+          value: google/diffusiongemma-26B-A4B-it
+        - name: MODEL_BUCKET
+          value: "${model_bucket}"
+        - name: MODEL_PATH
+          value: "${model_path}"
         - name: HF_HOME
           value: /data
         - name: HUGGING_FACE_HUB_TOKEN
@@ -115,7 +244,8 @@ spec:
             nvidia.com/gpu: 1
             cpu: "8"
             memory: 64Gi
-        # First start downloads ~52 GB of weights and loads them: allow 40 min.
+        # Streaming or loading ~52 GB of weights plus CUDA graph capture; when
+        # loading from Hugging Face the first start also downloads them: 40 min.
         startupProbe:
           httpGet:
             path: /health

@@ -8,9 +8,10 @@ One `gcluster deploy` from a checkout of this repository (`develop` branch)
 provisions the cluster and accelerator node pool, serves the model and runs the
 benchmark. No other tooling is required.
 
-The serving flags and benchmark parameters of every entry are kept in sync with
-the equivalent recipe used by Google's internal inference benchmarking (uBench),
-so results obtained here are comparable with the numbers Google measures.
+Every entry pins its serving image tag, serving flags and benchmark workload
+(dataset, input/output lengths, number of prompts, concurrency), so results
+obtained from the same entry are directly comparable with each other and with
+the reference results recorded in its README.
 
 ## Catalog
 
@@ -28,9 +29,9 @@ examples/gke-inference-benchmarks/
 └── <accelerator>-<model>/            # one self-contained benchmark
     ├── README.md                     # prerequisites, deploy, results, clean up
     ├── blueprint.yaml                # network, cluster, node pool, token Secret, kubectl-apply of manifests/
-    ├── deployment.yaml               # the values you fill in (project, bucket, zone, CIDR)
+    ├── deployment.yaml               # the values you fill in (project, bucket, zone, CIDR, weights bucket)
     └── manifests/                    # Kubernetes manifests applied by the blueprint
-        ├── <server>-serve.yaml.tftpl # model server (storage, Deployment, Service)
+        ├── <server>-serve.yaml.tftpl # model server (storage, weights staging, Deployment, Service)
         └── <server>-bench.yaml.tftpl # benchmark Job
 ```
 
@@ -61,11 +62,13 @@ for every entry.
    secrets in this file.
 
 1. Deploy. The blueprint and deployment paths are the only parts of the
-   command that change between benchmarks:
+   command that change between benchmarks (`MODEL_BUCKET` is an existing
+   Cloud Storage bucket in which the model weights are kept, see below):
 
    ```shell
    ./gcluster deploy -d examples/gke-inference-benchmarks/<benchmark>/deployment.yaml \
-     examples/gke-inference-benchmarks/<benchmark>/blueprint.yaml --vars hf_token=$HF_TOKEN
+     examples/gke-inference-benchmarks/<benchmark>/blueprint.yaml \
+     --vars hf_token=$HF_TOKEN,model_bucket=$MODEL_BUCKET
    ```
 
    Type `a` at the prompt to apply. `gcluster` returns once the cluster, node
@@ -79,7 +82,8 @@ for every entry.
    (`kubectl logs job/<benchmark job>`) and change the workload parameters
    (input/output length, number of prompts, concurrency).
 
-1. Clean up. The Terraform state bucket is not deleted:
+1. Clean up. The Terraform state bucket and the weights bucket are not
+   deleted:
 
    ```shell
    ./gcluster destroy <deployment_name> --auto-approve
@@ -112,10 +116,23 @@ with the same commands:
   optional. Document that a `--vars` token is stored in plaintext in
   `terraform.tfvars` and the state bucket, and give the `kubectl patch secret`
   alternative. Never commit a token.
-* **Match the internal recipe.** Serving flags (image tag, parallelism,
-  attention backend, memory utilization, max sequences, max model length) and
-  benchmark parameters (dataset, ISL/OSL, number of prompts, concurrency) must
-  match the uBench recipe the entry mirrors; name that recipe in the README.
+* **Weights from Cloud Storage.** Take `model_bucket` (empty default) and
+  `model_path` variables, pass them to the server manifest as template
+  variables, and when the bucket is set stream the weights with the
+  [Run:ai Model Streamer](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/run-ai-model-streamer)
+  (`vllm serve gs://<bucket>/<path> --load-format=runai_streamer`, plus
+  `--served-model-name`). An initContainer must first check the path and,
+  if the snapshot is missing, download it from the model hub and upload it,
+  so a bucket only ever has to be populated once. Run the pod as the
+  `workload-identity-k8s-sa` service account and give the workload service
+  account `storage.objectAdmin` and `storage.bucketViewer`. Keep a disk
+  fallback for an empty `model_bucket`.
+* **Pin and explain every parameter.** Pin the serving image tag and spell out
+  the serving flags (parallelism, attention backend, memory utilization, max
+  sequences, max model length) and the benchmark parameters (dataset, ISL/OSL,
+  number of prompts, concurrency) in the manifests, and explain in the README
+  why each non-default value was chosen, so that others can reproduce the
+  numbers and compare like with like.
 * **Do not block `gcluster deploy` on model loading.** Use
   `wait_for_rollout: false` for the server and make the benchmark Job wait for
   the server's health endpoint itself.
@@ -128,8 +145,9 @@ with the same commands:
 * **Spot by default where it makes sense.** Use a single-zone node pool, a
   `spot` variable that defaults to `true`, tolerate the
   `cloud.google.com/gke-spot=true:NoSchedule` taint in the server manifest and
-  cache the weights on a PersistentVolumeClaim so that a preempted node
-  recovers quickly. Explain the preemption behaviour in the README.
+  keep the weights in Cloud Storage or on a PersistentVolumeClaim so that a
+  preempted node recovers quickly. Explain the preemption behaviour in the
+  README.
 * **TPU entries.** Start from [`examples/gke-tpu-7x`](../gke-tpu-7x) or
   [`examples/gke-tpu-v6e`](../gke-tpu-v6e): the node pool takes `machine_type`,
   `num_slices`, `tpu_topology` and `spot`, and TPU 7x additionally needs the
