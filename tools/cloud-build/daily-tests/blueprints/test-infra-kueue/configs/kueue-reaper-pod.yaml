@@ -93,7 +93,7 @@ data:
             IFS='|' read -r job_name build_id <<< "$item"
             status="${build_statuses[$build_id]}"
 
-            if [ "$status" == "CANCELLED" ] || [ "$status" == "FAILURE" ] || [ "$status" == "TIMEOUT" ]; then
+            if [ "$status" == "CANCELLED" ] || [ "$status" == "FAILURE" ] || [ "$status" == "TIMEOUT" ] || [ "$status" == "INTERNAL_ERROR" ] || [ "$status" == "EXPIRED" ]; then
               echo "WARNING: Cloud Build $build_id is $status!"
               echo "Deleting suspended/active Kubernetes Job $job_name to trigger graceful cleanup or remove it from Kueue..."
               kubectl delete job "$job_name" -n default --wait=false 2>/dev/null || true
