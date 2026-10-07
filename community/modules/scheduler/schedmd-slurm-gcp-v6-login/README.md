@@ -18,6 +18,9 @@ terraform modules. The login node is used in conjunction with the
   settings:
     group_name: login
     machine_type: n2-standard-4
+    # Optional: Metadata applied directly to login instances (updates in-place)
+    instance_metadata:
+      example_key: "example_value"
 
 - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
