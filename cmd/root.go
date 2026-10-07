@@ -83,6 +83,41 @@ func init() {
 	rootCmd.AddCommand(job.JobCmd)
 }
 
+func setupVersion() {
+	if len(GitCommitInfo) == 0 {
+		return
+	}
+
+	version := GitTagVersion
+	if len(version) == 0 {
+		version = config.GetToolkitVersion()
+		if GitIsOfficial != "true" {
+			version += " - not built from official release"
+		}
+	}
+
+	branch := GitBranch
+	if len(branch) == 0 {
+		branch = "detached HEAD"
+	}
+
+	rootCmd.Version = version
+	annotation["version"] = version
+	annotation["branch"] = branch
+	annotation["commitInfo"] = GitCommitInfo
+	tmpl := `gcluster version {{index .Annotations "version"}}
+Built from '{{index .Annotations "branch"}}' branch.
+Commit info: {{index .Annotations "commitInfo"}}
+`
+	tfVersion, _ := shell.TfVersion()
+	if tfVersion != "" {
+		annotation["tfVersion"] = tfVersion
+		tmpl += `Terraform version: {{index .Annotations "tfVersion"}}
+`
+	}
+	rootCmd.SetVersionTemplate(tmpl)
+}
+
 // Execute the root command
 func Execute() error {
 	mismatch, branch, hash, dir := checkGitHashMismatch()
@@ -91,33 +126,7 @@ func Execute() error {
 			GitBranch, GitCommitHash[0:7], dir, branch, hash[0:7])
 	}
 
-	if len(GitCommitInfo) > 0 {
-		if len(GitTagVersion) == 0 {
-			if GitIsOfficial == "true" {
-				GitTagVersion = "(official binary distribution)"
-			} else {
-				GitTagVersion = "- not built from official release"
-			}
-		}
-		if len(GitBranch) == 0 {
-			GitBranch = "detached HEAD"
-		}
-
-		annotation["version"] = GitTagVersion
-		annotation["branch"] = GitBranch
-		annotation["commitInfo"] = GitCommitInfo
-		tmpl := `gcluster version {{index .Annotations "version"}}
-Built from '{{index .Annotations "branch"}}' branch.
-Commit info: {{index .Annotations "commitInfo"}}
-`
-		tfVersion, _ := shell.TfVersion()
-		if tfVersion != "" {
-			annotation["tfVersion"] = tfVersion
-			tmpl += `Terraform version: {{index .Annotations "tfVersion"}}
-`
-		}
-		rootCmd.SetVersionTemplate(tmpl)
-	}
+	setupVersion()
 
 	for _, child := range rootCmd.Commands() {
 		wrapTelemetry(child)

@@ -438,3 +438,90 @@ func TestWrapTelemetryDynamic(t *testing.T) {
 		t.Errorf("Expected userConfigExists to be true")
 	}
 }
+
+func (s *MySuite) TestSetupVersion(c *C) {
+	origGitTagVersion := GitTagVersion
+	origGitCommitInfo := GitCommitInfo
+	origGitBranch := GitBranch
+	origGitIsOfficial := GitIsOfficial
+	origVersion := rootCmd.Version
+	origTemplate := rootCmd.VersionTemplate()
+	origAnnotation := make(map[string]string)
+	for k, v := range annotation {
+		origAnnotation[k] = v
+	}
+
+	defer func() {
+		GitTagVersion = origGitTagVersion
+		GitCommitInfo = origGitCommitInfo
+		GitBranch = origGitBranch
+		GitIsOfficial = origGitIsOfficial
+		rootCmd.Version = origVersion
+		rootCmd.SetVersionTemplate(origTemplate)
+		for k := range annotation {
+			delete(annotation, k)
+		}
+		for k, v := range origAnnotation {
+			annotation[k] = v
+		}
+	}()
+
+	testCases := []struct {
+		name            string
+		commitInfo      string
+		tagVersion      string
+		branch          string
+		isOfficial      string
+		expectedVersion string
+		expectedBranch  string
+	}{
+		{
+			name:            "explicit tag",
+			commitInfo:      "v1.95.0-0-g1234567",
+			tagVersion:      "v1.95.0",
+			branch:          "main",
+			isOfficial:      "true",
+			expectedVersion: "v1.95.0",
+			expectedBranch:  "main",
+		},
+		{
+			name:            "empty tag official release",
+			commitInfo:      "v1.105.0-0-g1234567",
+			tagVersion:      "",
+			branch:          "main",
+			isOfficial:      "true",
+			expectedVersion: config.GetToolkitVersion(),
+			expectedBranch:  "main",
+		},
+		{
+			name:            "empty tag unofficial release",
+			commitInfo:      "v1.105.0-0-g1234567",
+			tagVersion:      "",
+			branch:          "",
+			isOfficial:      "false",
+			expectedVersion: config.GetToolkitVersion() + " - not built from official release",
+			expectedBranch:  "detached HEAD",
+		},
+	}
+
+	for _, tc := range testCases {
+		GitCommitInfo = tc.commitInfo
+		GitTagVersion = tc.tagVersion
+		GitBranch = tc.branch
+		GitIsOfficial = tc.isOfficial
+
+		setupVersion()
+
+		c.Check(annotation["version"], Equals, tc.expectedVersion, Commentf("test: %s", tc.name))
+		c.Check(annotation["branch"], Equals, tc.expectedBranch, Commentf("test: %s", tc.name))
+		c.Check(rootCmd.Version, Equals, tc.expectedVersion, Commentf("test: %s", tc.name))
+	}
+
+	// Verify empty GitCommitInfo returns early without modifying annotations
+	for k := range annotation {
+		delete(annotation, k)
+	}
+	GitCommitInfo = ""
+	setupVersion()
+	c.Check(annotation["version"], Equals, "")
+}

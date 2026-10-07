@@ -63,13 +63,29 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         VERSION: ${{ steps.release.outputs.version }}
+        TARGET_SHA: ${{ github.event.pull_request.merge_commit_sha }}
       run: |
-        echo "Publishing draft release: $VERSION"
+        if [[ -z "$TARGET_SHA" ]]; then
+          echo "ERROR: merge_commit_sha is empty or missing in PR event." >&2
+          exit 1
+        fi
 
-        # Publish the draft, set as latest, and add to Announcements discussion
-        gh release edit "$VERSION" \
-          --draft=false \
-          --latest \
-          --discussion-category "Announcements"
+        echo "Publishing release: $VERSION (target: $TARGET_SHA)"
+
+        if gh release view "$VERSION" >/dev/null 2>&1; then
+          gh release edit "$VERSION" \
+            --target "$TARGET_SHA" \
+            --draft=false \
+            --latest \
+            --discussion-category "Announcements"
+        else
+          echo "Draft release not found; creating release directly at $TARGET_SHA"
+          gh release create "$VERSION" \
+            --title "$VERSION" \
+            --target "$TARGET_SHA" \
+            --generate-notes \
+            --latest \
+            --discussion-category "Announcements"
+        fi
 
         echo "Release published successfully."
