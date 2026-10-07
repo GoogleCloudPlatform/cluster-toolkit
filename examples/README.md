@@ -1607,7 +1607,6 @@ See the [full tutorial here](../community/examples/fsi/ibm-symphony-on-gce/READM
 
 This project provides a blueprint for deploying an [IBM Spectrum Symphony](https://www.ibm.com/products/spectrum-symphony) cluster on Google Cloud Platform using the [Google Cloud Cluster Toolkit](https://cloud.google.com/cluster-toolkit) and Google Kubernetes Engine (GKE). The blueprint automates infrastructure provisioning, custom base image creation via Packer, Artifact Registry repository creation, GKE cluster setup with the Google Symphony Kubernetes Operator, and Symphony Host Factory integration for elastic containerized compute bursting into GKE.
 
-
 See the [full tutorial here](../community/examples/fsi/ibm-symphony-on-gce/README.md).
 
 ### [tutorial-starccm-slurm.yaml] ![community-badge] ![experimental-badge]
