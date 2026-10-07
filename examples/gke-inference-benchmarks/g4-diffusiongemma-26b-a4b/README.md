@@ -26,7 +26,7 @@ Everything the benchmark needs is in this directory:
 
 | File | Purpose |
 | --- | --- |
-| [`blueprint.yaml`](blueprint.yaml) | VPC, service accounts, GKE cluster, Spot G4 node pool, the `hf-secret` Kubernetes `Secret` (via the [`kubernetes-secret`](../../../modules/security/kubernetes-secret/README.md) module) and the `kubectl-apply` step that installs the manifests. |
+| [`blueprint.yaml`](blueprint.yaml) | VPC, service accounts, GKE cluster (Dataplane V2; GCS FUSE, Filestore and Managed Lustre CSI drivers enabled), Spot G4 node pool, the `hf-secret` Kubernetes `Secret` (via the [`kubernetes-secret`](../../../modules/security/kubernetes-secret/README.md) module) and the `kubectl-apply` step that installs the manifests. |
 | [`deployment.yaml`](deployment.yaml) | The values you fill in: project, Terraform state bucket, region/zone, authorized CIDR, model weights bucket. |
 | [`manifests/vllm-serve.yaml.tftpl`](manifests/vllm-serve.yaml.tftpl) | StorageClass + PersistentVolumeClaim, vLLM `Deployment` (weights-staging initContainer + server) and `Service`; rendered with `model_bucket`/`model_path`. |
 | [`manifests/vllm-bench.yaml.tftpl`](manifests/vllm-bench.yaml.tftpl) | `vllm bench serve` `Job` that waits for the server, prints the results and fails if any request failed. |

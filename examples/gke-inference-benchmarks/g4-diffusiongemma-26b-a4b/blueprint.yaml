@@ -163,6 +163,13 @@ deployment_groups:
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
+      # Storage CSI drivers (GCS FUSE, Filestore, Managed Lustre) so that model
+      # weights or datasets on those systems can be mounted without recreating
+      # the cluster, and Dataplane V2 (immutable after cluster creation).
+      enable_gcsfuse_csi: true
+      enable_filestore_csi: true
+      enable_managed_lustre_csi: true # Enable Managed Lustre for the cluster
+      enable_dataplane_v2: true
       enable_private_endpoint: false # Allows access from authorized public IPs
       configure_workload_identity_sa: true
       master_authorized_networks:
