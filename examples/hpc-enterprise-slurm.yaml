@@ -64,35 +64,61 @@ deployment_groups:
     source: modules/network/private-service-access
     use: [network]
 
-  - id: controller_sa
+  # Least-privilege, single-purpose service accounts: a project-scoped custom
+  # IAM role per profile instead of broad predefined roles such as
+  # roles/compute.instanceAdmin.v1, and roles/iam.serviceAccountUser granted
+  # only on the compute account the controller actually attaches to the nodes
+  # it creates. See community/modules/iam/service-account-profiles/README.md.
+  - id: controller_account
     source: modules/project/service-account
     settings:
       name: controller
-      project_roles:
-      - bigquery.dataOwner # needed if enable_bigquery_load is enabled
-      - compute.instanceAdmin.v1
-      - iam.serviceAccountUser
-      - logging.logWriter
-      - monitoring.metricWriter
-      - storage.objectViewer
+      project_roles: []
 
-  - id: login_sa
+  - id: controller_sa
+    source: community/modules/iam/service-account-profiles
+    use: [controller_account]
+    settings:
+      name: controller
+      profile: slurm-controller
+      # The c2/c2d/c3/a208/a216 partitions below default to exclusive
+      # scheduling, which the Slurm controller module backs with a compact
+      # placement policy per job -- hence this flag.
+      enable_placement_policies: true
+      # Set enable_bigquery_load: true if this blueprint's slurm_controller
+      # settings turn on enable_bigquery_load.
+      #
+      # Only the compute identity: the controller attaches it to the nodes it
+      # creates at run time. Login VMs are created by Terraform under the
+      # deploying principal, so the controller never needs to act as login_sa.
+      act_as_service_accounts:
+      - $(compute_sa.service_account_email)
+
+  - id: login_account
     source: modules/project/service-account
     settings:
       name: login
-      project_roles:
-      - logging.logWriter
-      - monitoring.metricWriter
-      - storage.objectViewer
+      project_roles: []
 
-  - id: compute_sa
+  - id: login_sa
+    source: community/modules/iam/service-account-profiles
+    use: [login_account]
+    settings:
+      name: login
+      profile: slurm-login
+
+  - id: compute_account
     source: modules/project/service-account
     settings:
       name: compute
-      project_roles:
-      - logging.logWriter
-      - monitoring.metricWriter
-      - storage.objectUser
+      project_roles: []
+
+  - id: compute_sa
+    source: community/modules/iam/service-account-profiles
+    use: [compute_account]
+    settings:
+      name: compute
+      profile: slurm-compute
 
   - id: homefs
     source: modules/file-system/filestore

@@ -41,6 +41,10 @@ deployment_groups:
   - id: scripts_for_image
     source: modules/scripts/startup-script
     settings:
+      # The build VM downloads these runners from this module's staging bucket;
+      # grant the image builder read access to that bucket only.
+      bucket_viewers:
+      - serviceAccount:$(image_builder_sa.service_account_email)
       runners:
       - type: shell
         destination: generate_hello.sh
@@ -48,6 +52,23 @@ deployment_groups:
           #!/bin/sh
           hostname \$(hostname -s)
           echo "Hello World" > /usr/local/hello.txt
+
+  # A least-privilege identity for the temporary build VM; see
+  # community/modules/iam/service-account-profiles/README.md. Account IDs
+  # ("<deployment_name>-<name>") are limited to 30 characters, so names here
+  # and below are short.
+  - id: image_builder_account
+    source: modules/project/service-account
+    settings:
+      name: builder
+      project_roles: []
+
+  - id: image_builder_sa
+    source: community/modules/iam/service-account-profiles
+    use: [image_builder_account]
+    settings:
+      name: builder
+      profile: image-builder
 
 - group: packer
   modules:
@@ -57,6 +78,7 @@ deployment_groups:
     use:
     - network
     - scripts_for_image
+    - image_builder_sa
     settings:
       source_image_project_id: [schedmd-slurm-public]
       # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
@@ -71,9 +93,53 @@ deployment_groups:
 
 - group: cluster
   modules:
+  # The cluster's own identities.
+  - id: compute_account
+    source: modules/project/service-account
+    settings:
+      name: compute
+      project_roles: []
+
+  - id: compute_sa
+    source: community/modules/iam/service-account-profiles
+    use: [compute_account]
+    settings:
+      name: compute
+      profile: slurm-compute
+
+  - id: login_account
+    source: modules/project/service-account
+    settings:
+      name: login
+      project_roles: []
+
+  - id: login_sa
+    source: community/modules/iam/service-account-profiles
+    use: [login_account]
+    settings:
+      name: login
+      profile: slurm-login
+
+  - id: controller_account
+    source: modules/project/service-account
+    settings:
+      name: ctrl
+      project_roles: []
+
+  - id: controller_sa
+    source: community/modules/iam/service-account-profiles
+    use: [controller_account]
+    settings:
+      name: ctrl
+      profile: slurm-controller
+      # compute_nodeset keeps the nodeset default enable_placement: true.
+      enable_placement_policies: true
+      act_as_service_accounts:
+      - $(compute_sa.service_account_email)
+
   - id: compute_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+    use: [network, compute_sa]
     settings:
       node_count_dynamic_max: 20
       disk_size_gb: $(vars.disk_size)
@@ -90,7 +156,7 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
+    use: [network, login_sa]
     settings:
       enable_login_public_ips: true
       disk_size_gb: $(vars.disk_size)
@@ -100,6 +166,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
     - network
+    - controller_sa
     - compute_partition
     - slurm_login
     settings:
