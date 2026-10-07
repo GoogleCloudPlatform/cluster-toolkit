@@ -42,6 +42,8 @@ locals {
       instance_template  = local.instance_template
       nfs_volumes        = local.native_batch_network_storage
       labels             = local.labels
+      max_retry_count    = var.max_retry_count
+      lifecycle_policies = var.lifecycle_policies
     }
   )
 
