@@ -148,7 +148,8 @@ With `model_bucket` set, the vLLM pod follows the GKE guide
   benchmark Job and your clients keep using the Hugging Face model name). vLLM
   downloads only the small configuration and tokenizer files and streams the
   safetensors from Cloud Storage straight into GPU memory, in parallel; look
-  for `[RunAI Streamer] Overall time to stream ...` in the server log.
+  for `Loading safetensors using Runai Model Streamer: 100% Completed` in the
+  server log.
 * Authentication is Workload Identity Federation for GKE: the pod runs as the
   `workload-identity-k8s-sa` Kubernetes service account, which the blueprint
   binds to the `<deployment_name>-gke-wl-sa` Google service account with
@@ -219,32 +220,32 @@ To deploy only the server (no Job), set `run_benchmark: false` in
 
 ### Reference results
 
-Single run measured on 2026-10-06 in `us-central1-b` on a Spot
-`g4-standard-48` node with vLLM `v0.30.0` (ISL 1024 / OSL 1024, 64 prompts,
-concurrency 8), with the weights loaded from the Hyperdisk volume
-(`model_bucket` empty). Spot pricing and preemptions do not affect per-request
-performance; your numbers should be close to these on the same shape.
+Single runs measured in `us-central1-b` on a Spot `g4-standard-48` node with
+vLLM `v0.30.0` (ISL 1024 / OSL 1024, 64 prompts, concurrency 8), both with
+Cloud Storage + Run:ai Model Streamer (`model_bucket` set, 2026-10-07) and with
+the Hyperdisk volume fallback (`model_bucket` empty, 2026-10-06). Spot pricing
+and preemptions do not affect per-request performance; your numbers should be
+close to these on the same shape.
 
-| Metric | Value |
-| --- | --- |
-| Successful requests | 64 / 64 |
-| Benchmark duration | 202.4 s |
-| Output token throughput | 323.9 tok/s |
-| Total token throughput (input + output) | 647.7 tok/s |
-| Time to first token (TTFT) mean / median / P99 | 6941.7 / 6507.7 / 10119.4 ms |
-| Time per output token (TPOT) mean | 17.8 ms |
-| Inter-token latency (ITL) median | 6149.9 ms |
-| End-to-end latency (E2EL) median / P99 | 24938.5 / 28570.7 ms |
+| Metric | Cloud Storage + Run:ai Streamer (`model_bucket` set) | Hyperdisk volume (`model_bucket` empty) |
+| --- | --- | --- |
+| First-time weight staging (`stage-weights`) | 154 s HF download + 116 s GCS upload (48.1 GiB, 21 files) | — (downloaded by vLLM on first start) |
+| Server weight load time (48.5 GiB, 1,047 tensors) | **44.3 s** (39 s streaming at 26.3 tensors/s) | 138.2 s |
+| KV cache allocation | 30.17 GiB (143,281 tokens) | 30.19 GiB (143,374 tokens) |
+| Successful requests | 64 / 64 | 64 / 64 |
+| Benchmark duration | 201.7 s | 202.4 s |
+| Output token throughput | **324.9 tok/s** | 323.9 tok/s |
+| Total token throughput (input + output) | **649.9 tok/s** | 647.7 tok/s |
+| Time to first token (TTFT) mean / median / P99 | 6490.3 / 6501.8 / 6579.3 ms | 6941.7 / 6507.7 / 10119.4 ms |
+| Time per output token (TPOT) mean | 17.8 ms | 17.8 ms |
+| Inter-token latency (ITL) median | 6138.3 ms | 6149.9 ms |
+| End-to-end latency (E2EL) median / P99 | 24948.2 / 25976.8 ms | 24938.5 / 28570.7 ms |
 
-Server-side, the 48.5 GiB of weights loaded in 138 s from the cached volume
-and the KV cache was sized at 30.19 GiB (143,374 tokens). The large ITL median
-is expected: DiffusionGemma emits a whole 256-token canvas at once after
-roughly 48 denoising steps, so tokens arrive in bursts rather than one by one.
-
-The Cloud Storage / Run:ai Model Streamer path serves the model with the same
-flags and image, so it is expected to produce the same per-request numbers;
-its start-up time (staging and streaming) has not been measured for this
-README yet.
+The large ITL median is expected: DiffusionGemma emits a whole 256-token canvas
+at once after roughly 48 denoising steps (5.38 committed tokens per step), so
+tokens arrive in bursts rather than one by one. Streaming from Cloud Storage
+with the Run:ai Model Streamer cut the server's weight loading time by more
+than 3x (44.3 s vs. 138.2 s) while producing identical serving throughput.
 
 ## Try the endpoint
 

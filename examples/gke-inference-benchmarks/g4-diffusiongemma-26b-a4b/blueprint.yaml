@@ -211,6 +211,11 @@ deployment_groups:
     source: modules/security/kubernetes-secret
     use: [g4-cluster]
     settings:
+      # cluster_endpoint and cluster_ca_certificate come from g4-cluster via
+      # `use`, so the module's fallback data source is not needed; keeping
+      # cluster_id null lets Terraform evaluate the data source `count` at plan
+      # time before the cluster exists.
+      cluster_id: null
       secret_name: hf-secret
       data:
         hf_api_token: '$(vars.hf_token != null ? vars.hf_token : "")'

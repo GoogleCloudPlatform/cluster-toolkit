@@ -17,7 +17,7 @@ the reference results recorded in its README.
 
 | Benchmark | Accelerator | Model | Serving stack | Workload | Reference result |
 | --- | --- | --- | --- | --- | --- |
-| [g4-diffusiongemma-26b-a4b](g4-diffusiongemma-26b-a4b/README.md) | 1x `g4-standard-48` (1x NVIDIA RTX PRO 6000), Spot | `google/diffusiongemma-26B-A4B-it` (BF16) | vLLM `v0.30.0` | random dataset, ISL 1024 / OSL 1024, 64 prompts, concurrency 8 | 323.9 output tok/s, median TTFT 6.5 s ([details](g4-diffusiongemma-26b-a4b/README.md#reference-results)) |
+| [g4-diffusiongemma-26b-a4b](g4-diffusiongemma-26b-a4b/README.md) | 1x `g4-standard-48` (1x NVIDIA RTX PRO 6000), Spot | `google/diffusiongemma-26B-A4B-it` (BF16) | vLLM `v0.30.0` | random dataset, ISL 1024 / OSL 1024, 64 prompts, concurrency 8 | 324.9 output tok/s, median TTFT 6.5 s ([details](g4-diffusiongemma-26b-a4b/README.md#reference-results)) |
 
 TPU entries follow the same layout; see [Adding a benchmark](#adding-a-benchmark).
 
@@ -108,7 +108,8 @@ with the same commands:
   `gcluster create` and `terraform validate`.
 * **Secrets through the `kubernetes-secret` module.** Accept tokens as a
   blueprint variable with an empty default and create the Secret with
-  [`modules/security/kubernetes-secret`](../../modules/security/kubernetes-secret/README.md),
+  [`modules/security/kubernetes-secret`](../../modules/security/kubernetes-secret/README.md)
+  (`cluster_id: null` when in the same deployment group as `gke-cluster`),
   which marks the value sensitive. Make the manifests `.tftpl` templates that
   take the Secret name from the module output
   (`template_vars: { hf_secret_name: $(hf-secret.secret_name) }`), so that
