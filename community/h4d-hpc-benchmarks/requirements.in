@@ -1,4 +1,3 @@
-#requirements.in file
 google-cloud-storage # for gcs fetch test
 google-api-core # for gcs fetch error .execptions 
 graphlib-backport;python_version<"3.9"
