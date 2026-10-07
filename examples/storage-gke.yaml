@@ -139,6 +139,16 @@ deployment_groups:
     use: [gke_cluster, data-bucket]
     settings: {capacity_gib: 5000}
 
+  # GCS Fuse storage profile PV.
+  - id: data-bucket-training-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [gke_cluster, data-bucket]
+    settings:
+      capacity_gib: 5000
+      gcsfuse_storage_class_name: gcsfusecsi-training
+      pv_name: data-bucket-training-pv  # the default <bucket>-pv is taken by data-bucket-pv
+      pvc_name: data-bucket-training-pvc
+
   - id: data-bucket-zonal
     source: modules/file-system/cloud-storage-bucket
     settings:
@@ -258,7 +268,8 @@ deployment_groups:
     settings:
       name: hp-pool
       zones: [$(vars.zone)]
-      machine_type: c3d-standard-4
+      machine_type: c3d-standard-8
+      threads_per_core: 2
       disk_type: hyperdisk-balanced
       disk_storage_pool: $(vars.hyperdisk_balanced_storage_pool)
       static_node_count: 1
