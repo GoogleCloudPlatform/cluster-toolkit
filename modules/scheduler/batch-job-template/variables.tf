@@ -84,6 +84,39 @@ variable "mpi_mode" {
   default     = false
 }
 
+variable "max_retry_count" {
+  description = "Maximum number of automatic retries for each failed task (between 0 and 10). Defaults to null (Batch default is 0)."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.max_retry_count == null ? true : (var.max_retry_count >= 0 && var.max_retry_count <= 10 && floor(var.max_retry_count) == var.max_retry_count)
+    error_message = "max_retry_count must be an integer between 0 and 10."
+  }
+}
+
+variable "lifecycle_policies" {
+  description = "List of lifecycle policies defining task retry or fail actions for specific exit codes (e.g., 50001 for Spot preemption). Note: Cloud Batch currently supports at most 1 lifecycle policy."
+  type = list(object({
+    action     = string
+    exit_codes = list(number)
+  }))
+  default = []
+
+  validation {
+    condition     = length(var.lifecycle_policies) <= 1
+    error_message = "Cloud Batch currently supports at most 1 lifecycle policy."
+  }
+
+  validation {
+    condition = alltrue([
+      for p in var.lifecycle_policies :
+      contains(["RETRY_TASK", "FAIL_TASK"], p.action) && length(p.exit_codes) > 0
+    ])
+    error_message = "Each lifecycle_policies entry must specify action as 'RETRY_TASK' or 'FAIL_TASK' and a non-empty list of exit_codes."
+  }
+}
+
 variable "log_policy" {
   description = <<-EOT
   Create a block to define log policy.
