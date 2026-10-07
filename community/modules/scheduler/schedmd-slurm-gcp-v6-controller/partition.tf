@@ -135,6 +135,14 @@ locals {
     )
   }
 
+  # A null zone_policy_allow means every available zone of the nodeset's region.
+  nodeset_zone_allow = {
+    for name, ns in local.nodeset_map : name => (
+      ns.zone_policy_allow != null ? ns.zone_policy_allow :
+      toset(data.google_compute_zones.available[coalesce(ns.region, var.region)].names)
+    )
+  }
+
   # Multiple instance groups when node count exceeds slice size (1000 for standard MIGs, or hosts_per_slice for GPU topologies)
   nodeset_migs = merge([
     for name, ns in local.nodeset_map : {
@@ -147,7 +155,7 @@ locals {
         base_instance_name = "${local.slurm_cluster_name}-${name}"
         region             = coalesce(ns.region, var.region)
         target_size        = 0
-        zone_policy_allow  = ns.zone_policy_allow
+        zone_policy_allow  = local.nodeset_zone_allow[name]
         template_link      = module.slurm_nodeset_template[name].self_link
         nodeset            = ns
       }
@@ -175,9 +183,20 @@ locals {
 }
 
 data "google_compute_zones" "available" {
-  for_each = toset([for mig in local.nodeset_migs : mig.region])
+  for_each = toset([for ns in local.nodeset_map : coalesce(ns.region, var.region)])
   project  = var.project_id
   region   = each.value
+
+  lifecycle {
+    postcondition {
+      condition = alltrue([
+        for ns in local.nodeset_map :
+        length(setsubtract([for z in(ns.zone_policy_allow != null ? ns.zone_policy_allow : []) : z if z != null && z != ""], self.names)) == 0
+        if coalesce(ns.region, var.region) == each.value
+      ])
+      error_message = "A nodeset zone is not an available zone of ${each.value}: ${jsonencode(self.names)}"
+    }
+  }
 }
 
 resource "google_compute_resource_policy" "nodeset_workload_policy" {
@@ -323,8 +342,8 @@ locals {
     placement_max_distance           = ns.placement_max_distance
     network_storage                  = ns.network_storage
     zone_target_shape                = coalesce(ns.zone_target_shape, "ANY_SINGLE_ZONE")
-    zone_policy_allow                = ns.zone_policy_allow
-    zone_policy_deny                 = ns.zone_policy_deny
+    zone_policy_allow                = local.nodeset_zone_allow[name]
+    zone_policy_deny                 = setsubtract(data.google_compute_zones.available[coalesce(ns.region, var.region)].names, local.nodeset_zone_allow[name])
     enable_maintenance_reservation   = ns.enable_maintenance_reservation
     enable_opportunistic_maintenance = ns.enable_opportunistic_maintenance
     accelerator_topology             = ns.accelerator_topology
