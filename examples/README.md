@@ -85,6 +85,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
   * [hpc-slurm-google-cloud-dedicated.yaml](#hpc-slurm-google-cloud-dedicatedyaml-) ![community-badge]
+  * [cloud-build-remote.yaml](#cloud-build-remoteyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-scale.yaml](#hpc-slurm-scaleyaml-) ![community-badge]
   * [hpc-slurm-multiregion-scale.yaml](#hpc-slurm-multiregion-scaleyaml-) ![community-badge]
   * [hybrid-slurm-cluster (GCD)](#hybrid-slurm-cluster-gcd-) ![community-badge]
@@ -1954,6 +1955,13 @@ The deployment instructions can be found in the [README](../community/examples/h
 
 [hpc-slurm-google-cloud-dedicated.yaml]: ../community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml
 
+### [cloud-build-remote.yaml] ![community-badge] ![experimental-badge]
+
+Demonstrates how to use the `artifact-registry` and `cloud-build` community modules to create a Docker repository in Artifact Registry and build a container image (AlphaFold 3) directly from a remote GitHub repository using Cloud Build.
+
+The deployment instructions can be found in the [README](../community/examples/cloud-build/README.md).
+
+[cloud-build-remote.yaml]: ../community/examples/cloud-build/cloud-build-remote.yaml
 ### [hpc-slurm-scale.yaml] ![community-badge]
 
 Creates a high-performance, single-region auto-scaling Slurm cluster scaled up to 800 dynamic Spot or On-Demand compute nodes (102,400 vCPUs) across 4 zones with multi-zonal dynamic failover and Cloud NAT.
