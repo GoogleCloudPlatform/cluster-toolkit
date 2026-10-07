@@ -111,9 +111,9 @@ variable "lifecycle_policies" {
   validation {
     condition = alltrue([
       for p in var.lifecycle_policies :
-      contains(["RETRY_TASK", "FAIL_TASK"], p.action) && length(p.exit_codes) > 0
+      alltrue([for code in p.exit_codes : code >= 0 && floor(code) == code])
     ])
-    error_message = "Each lifecycle_policies entry must specify action as 'RETRY_TASK' or 'FAIL_TASK' and a non-empty list of exit_codes."
+    error_message = "All exit codes in lifecycle_policies must be non-negative integers."
   }
 }
 
