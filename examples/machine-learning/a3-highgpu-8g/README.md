@@ -43,9 +43,8 @@ The blueprint is split into 3 deployment groups:
 
 1. Group 1 provisions the system network, gpu network and 1 Managed Lustre instance for mounting `/home`
 across the cluster.
-2. Group 2 builds a custom image installing Slurm on an Ubuntu 22.04 image. The image
-runs a custom GCP TCPX kernel patched with performance enhancements for the a3-highgpu-8g VM.
-As part of this build, the Lustre client modules are explicitly compiled via DKMS against the TCPX kernel
+2. Group 2 builds a custom image installing Slurm on an Ubuntu 24.04 accelerator image. The image
+includes GPUDirect-TCPXO (`dmabuf-import-helper` via DKMS) and Managed Lustre client support
 so that the managed Lustre `/home` directory can mount successfully when the nodes boot.
 3. Group 3 provisions Slurm cluster and a3-highgpu-8g nodes using the custom image.
 
@@ -86,16 +85,6 @@ Set the values in a3high-slurm-deployment.yaml for your deployment
   project_id: customer-project
   region: customer-region
   zone: customer-zone
-```
-
-#### Set kernel-patched OS image
-
-Obtain values for `tcpx_kernel_login`, `tcpx_kernel_password` and `keyserver_ubuntu_key` from your Google Cloud representative. Set them at the deployment file.
-
-```yaml
-  tcpx_kernel_login: # use value supplied by Google Cloud staff
-  tcpx_kernel_password: # use value supplied by Google Cloud staff
-  keyserver_ubuntu_key: # use value supplied by Google Cloud staff
 ```
 
 #### Reservation created by Google
@@ -208,68 +197,42 @@ Example (deploy only the primary group for this blueprint):
 
 To achieve optimal application performance, an additional service called the
 "Receive Data Path Manager" (RxDM) must run with the same lifetime as the job.
-Additionally, a NCCL plugin must be installed into the execution environment of
-the workload. Both the RxDM and plugin are distributed by Docker container
-images.
+Additionally, the GPUDirect-TCPXO (FasTrak) NCCL plugin must be installed into
+the execution environment of the workload. Both the RxDM and plugin are
+distributed by Docker container images.
 
 This blueprint includes a Slurm "Prolog" and "Epilog" script that will run
 before and after every job running on more than 1 a3-highgpu-8g compute node.
 The Prolog will perform the following actions:
 
-- Install the NCCL plugin into /var/lib of the host
+- Ensure the `import-helper` (`dmabuf-import-helper`) kernel module is loaded
+- Install the NCCL and GPUDirect-TCPXO plugin into `/var/lib/tcpxo/lib64` of the host
 - Run the RxDM service
   - This is a long-lived service that runs alongside the job
-  - Mounts `/var/lib/nvidia/lib64` into `/usr/lib/nvidia/lib64` of the container
-  - Mount `/opt/tcpdirect_benchmark/` from the host into the container so that a
-  textproto file defining the mapping from GPU to NIC is available. This file
-  is present in the images that is used in this solution.
-  - Mount `/run/tcpx-${SLURM_JOB_ID}` from the container into the host. This is
-  set to the environment variables `${UDS_PATH}` in the script. This directory
-  contains Unix socket files that implement a TCPx interface available to the
-  user workload at `${UDS_PATH}`. The job must be configured to be aware of this
-  path using `NCCL_GPUDIRECTTCPX_UNIX_CLIENT_PREFIX` environment variable!
+  - Mounts `/var/lib/nvidia/lib64` into `/usr/local/nvidia/lib64` of the container
+  - Mounts `/dev/dmabuf_import_helper` into `/dev/dmabuf_import_helper` of the container
 
-The Epilog will
+The Epilog will:
 
 - Stop the RxDM service
 - Prune any stopped containers (freeing up disk space)
-- Remove the directory at `${UDS_PATH}`
 
 ## Jobs using TCPXO (FasTrak)
 
-Jobs that are running across multiple a3-highgpu-8g VMs with TCPXO will benefit from the NCCL plugin. An example containerized job is located at `nccl-tests/run-nccl-tests.sh`. In addition to setting standard NCCL configuration values, a job must:
+Jobs that are running across multiple a3-highgpu-8g VMs with TCPXO will benefit from the RxDM and the NCCL plugin. An example containerized job is located at `nccl-tests/run-nccl-tests.sh`. In addition to setting standard NCCL configuration values (or sourcing `/var/lib/tcpxo/lib64/nccl-env-profile.sh`), a job must:
 
 - Set `LD_LIBRARY_PATH` to include `/var/lib/tcpxo/lib64` and `/usr/local/nvidia/lib64`
+- Set `NCCL_FASTRAK_LLCM_DEVICE_DIRECTORY=/dev/aperture_devices`
 
 If job is containerized:
 - Mount `/var/lib/tcpxo/lib64` to `/var/lib/tcpxo/lib64` in the container (to make the NCCL plugin available)
 - Mount `/dev/aperture_devices` to `/dev/aperture_devices` in the container
 
-## Jobs using the RxDM / TCPx
-
-Jobs that are running across multiple a3-highgpu-8g VMs will benefit from using
-the RxDM and the NCCL plugin. An example containerized job is located at
-`/opt/apps/scripts/run-nccl-tests.sh`. In addition to setting standard NCCL
-configuration values, a job must:
-
-- Set `NCCL_GPUDIRECTTCPX_UNIX_CLIENT_PREFIX` to `${UDS_PATH}`
-- Set the `LD_LIBRARY_PATH` to include `/var/lib/tcpx/lib64` and `/usr/local/nvidia/lib64`
-
-If job is containerized
-
-- Mount `${UDS_PATH}` into the container at the same path
-- Mount `/var/lib/tcpx/lib64` to `/var/lib/tcpx/lib64` in the container (to make the
-  NCCL plugin available)
-- Paths can be modified if `LD_LIBRARY_PATH` is likewise modified
-
 ## Example workload (NCCL benchmark)
 
-The example workload below demonstrates the pattern recommended in Activating
-the Receive Data Path Manager during jobs while running the standard nccl-tests
-benchmark. It assumes the availability of a GPU/NIC topology file at
-`/opt/tcpdirect_benchmark/gpu_rxq_configuration.textproto`. This file is built
-into the image used by this solution, but may need to be provided if
-using an alternative image.
+The example workload below demonstrates the pattern recommended in activating
+the Receive Data Path Manager during multi-node jobs while running the standard
+`nccl-tests` benchmark over GPUDirect-TCPXO (FasTrak).
 
 ### Clone the Cluster Toolkit repository containing the NCCL benchmark
 

@@ -102,6 +102,12 @@ deployment_groups:
       - 10.3.0.*
       - $(vars.slurm_cluster_name)*
       runners:
+      - type: data
+        destination: /etc/apt/preferences.d/block-broken-nvidia-container
+        content: |
+          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
+          Pin: version 1.17.7-1
+          Pin-Priority: -1
       - type: ansible-local
         destination: gpudirect_tcpxo.yml
         content: |
@@ -112,7 +118,7 @@ deployment_groups:
             tasks:
             - name: Setup apt-transport-artifact-registry repository
               ansible.builtin.apt_repository:
-                repo: deb [trusted=yes] http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main
+                repo: deb [trusted=yes] https://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main
                 state: present
                 filename: artifact-registry
             - name: Install driver dependencies
@@ -189,7 +195,7 @@ deployment_groups:
             tasks:
             - name: Mount aperture devices to /dev and make writable
               ansible.builtin.copy:
-                dest: /etc/udev/rules.d/00-a3-megagpu.rules
+                dest: /etc/udev/rules.d/00-a3-highgpu.rules
                 owner: root
                 group: root
                 mode: 0o644
@@ -370,107 +376,6 @@ deployment_groups:
           ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
           ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
           ENROOT_TEMP_PATH       /mnt/localssd/${UID}/enroot
-      # Add gpu_rxq configs
-      - type: shell
-        destination: generate_gpu_rxq_config.sh
-        content: |
-          #!/bin/bash
-          get_ifname() {
-            local bdf=$1
-            if [ -d "/sys/bus/pci/devices/$bdf/net" ]; then
-              ls "/sys/bus/pci/devices/$bdf/net" | head -n 1
-            else
-              case "$bdf" in
-                "0000:06:00.0") echo "enp6s0f0" ;;
-                "0000:0c:00.0") echo "enp12s0f0" ;;
-                "0000:86:00.0") echo "enp134s0f0" ;;
-                "0000:8c:00.0") echo "enp140s0f0" ;;
-                *) echo "unknown" ;;
-              esac
-            fi
-          }
-          ifname_06=`get_ifname "0000:06:00.0"`
-          ifname_0c=`get_ifname "0000:0c:00.0"`
-          ifname_86=`get_ifname "0000:86:00.0"`
-          ifname_8c=`get_ifname "0000:8c:00.0"`
-          mkdir -p /opt/tcpdirect_benchmark
-          cat << EOF > /opt/tcpdirect_benchmark/gpu_rxq_configuration.textproto
-          gpu_rxq_configs {
-            gpu_infos {
-              gpu_pci_addr: "0000:04:00.0"
-              queue_ids: 8
-              queue_ids: 9
-              queue_ids: 10
-              queue_ids: 11
-            }
-            gpu_infos {
-              gpu_pci_addr: "0000:05:00.0"
-              queue_ids: 12
-              queue_ids: 13
-              queue_ids: 14
-              queue_ids: 15
-            }
-            nic_pci_addr: "0000:06:00.0"
-            ifname: "$ifname_06"
-          }
-          gpu_rxq_configs {
-            gpu_infos {
-              gpu_pci_addr: "0000:0a:00.0"
-              queue_ids: 8
-              queue_ids: 9
-              queue_ids: 10
-              queue_ids: 11
-            }
-            gpu_infos {
-              gpu_pci_addr: "0000:0b:00.0"
-              queue_ids: 12
-              queue_ids: 13
-              queue_ids: 14
-              queue_ids: 15
-            }
-            nic_pci_addr: "0000:0c:00.0"
-            ifname: "$ifname_0c"
-          }
-          gpu_rxq_configs {
-            gpu_infos {
-              gpu_pci_addr: "0000:84:00.0"
-              queue_ids: 8
-              queue_ids: 9
-              queue_ids: 10
-              queue_ids: 11
-            }
-            gpu_infos {
-              gpu_pci_addr: "0000:85:00.0"
-              queue_ids: 12
-              queue_ids: 13
-              queue_ids: 14
-              queue_ids: 15
-            }
-            nic_pci_addr: "0000:86:00.0"
-            ifname: "$ifname_86"
-          }
-          gpu_rxq_configs {
-            gpu_infos {
-              gpu_pci_addr: "0000:8a:00.0"
-              queue_ids: 8
-              queue_ids: 9
-              queue_ids: 10
-              queue_ids: 11
-            }
-            gpu_infos {
-              gpu_pci_addr: "0000:8b:00.0"
-              queue_ids: 12
-              queue_ids: 13
-              queue_ids: 14
-              queue_ids: 15
-            }
-            nic_pci_addr: "0000:8c:00.0"
-            ifname: "$ifname_8c"
-          }
-          rss_set_size: 8
-          tcpd_queue_size: 8
-          max_rx_rules: 100000
-          EOF
       - type: shell
         destination: fix_hostname.sh
         content: |
@@ -559,12 +464,6 @@ deployment_groups:
             echo "kernel.apparmor_restrict_unprivileged_userns = 0" > /etc/sysctl.d/90-enroot-namespaces.conf
           fi
           if [ ! -f /etc/hostname ]; then hostname > /etc/hostname; fi
-      - type: data
-        destination: /etc/apt/preferences.d/block-broken-nvidia-container
-        content: |
-          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
-          Pin: version 1.17.7-1
-          Pin-Priority: 100
       - type: ansible-local
         destination: enable_dcgm.yml
         content: |
