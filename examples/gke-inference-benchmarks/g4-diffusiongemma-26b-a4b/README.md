@@ -123,18 +123,18 @@ server manifests additionally take `${model_bucket}` and `${model_path}`.
    ```
 
 1. Follow the three-stage benchmark sequence:
-   - **Stage 1 (`job/diffusiongemma-stage-weights`):** When `model_bucket` is
+   * **Stage 1 (`job/diffusiongemma-stage-weights`):** When `model_bucket` is
      set, a single-pod Job on the system node pool checks
      `gs://<model_bucket>/<model_path>` and stages the Hugging Face snapshot if
      not already present (~4–5 minutes on the first cold run; instant on
      subsequent runs).
-   - **Stage 2 (`deployment/diffusiongemma-vllm`):** Its `wait-for-weights`
+   * **Stage 2 (`deployment/diffusiongemma-vllm`):** Its `wait-for-weights`
      initContainer waits (up to 60 minutes) for Stage 1 to complete
      (`config.json` present in Cloud Storage), then `vllm` streams the weights
      into GPU memory (~44 s). With `model_bucket` empty, `vllm` downloads about
      52 GB of weights to the Hyperdisk volume and loads them (15–25 minutes on
      first start).
-   - **Stage 3 (`job/diffusiongemma-vllm-bench`):** Waits for `/v1/models` on
+   * **Stage 3 (`job/diffusiongemma-vllm-bench`):** Waits for `/v1/models` on
      the server and runs `vllm bench serve`.
 
    ```shell
