@@ -28,6 +28,7 @@
     regional_bucket_name: "{{ (outputs.stdout | from_json)['gcs_bucket_name_regional-gcs-bucket']['value'] }}"
     cache_zone: "{{ (lookup('file', blueprint_yaml) | from_yaml)['vars']['zone'] }}"
     gcs_bucket_local_mount: "{{ (lookup('file', blueprint_yaml) | from_yaml)['vars']['gcs_bucket_local_mount'] }}"
+    regional_gcs_bucket_local_mount: "{{ (lookup('file', blueprint_yaml) | from_yaml)['vars']['regional_gcs_bucket_local_mount'] }}"
 
 - name: Get bucket metadata
   delegate_to: localhost
@@ -105,14 +106,14 @@
 
 - name: Run FIO test on regional bucket with Anywhere Cache
   ansible.builtin.shell: |
-    fio --name=randread_latency_test_regional --filename="/data_regional/fio" --filesize=1G --time_based=1 --ramp_time=10s --runtime=1m --ioengine=libaio --direct=1 --verify=0 --randrepeat=0 --bs=4K --iodepth=1 --rw=randread --disable_slat=1 --disable_clat=1 --lat_percentiles=1 --numjobs=1 --group_reporting --output-format=json > fio_output_regional.json
+    fio --name=randread_latency_test_regional --filename="{{ regional_gcs_bucket_local_mount }}/fio" --filesize=1G --time_based=1 --ramp_time=10s --runtime=1m --ioengine=libaio --direct=1 --verify=0 --randrepeat=0 --bs=4K --iodepth=1 --rw=randread --disable_slat=1 --disable_clat=1 --lat_percentiles=1 --numjobs=1 --group_reporting --output-format=json > fio_output_regional.json
   args:
-    chdir: /data_regional
+    chdir: "{{ regional_gcs_bucket_local_mount }}"
   become: true
 
 - name: Fetch regional FIO output
   ansible.builtin.fetch:
-    src: "/data_regional/fio_output_regional.json"
+    src: "{{ regional_gcs_bucket_local_mount }}/fio_output_regional.json"
     dest: "{{ workspace }}/fio_output_regional.json"
     flat: yes
   become: true
@@ -133,8 +134,8 @@
     that:
     - fio_regional_results.jobs[0].read.bw_mean > 20
     - fio_regional_results.jobs[0].read.iops_mean > 5
-    fail_msg: "Regional FIO read failed on /data_regional. Bandwidth: {{ fio_regional_results.jobs[0].read.bw_mean }} KB/s, IOPS: {{ fio_regional_results.jobs[0].read.iops_mean }}."
-    success_msg: "Regional FIO read succeeded on /data_regional. Bandwidth: {{ fio_regional_results.jobs[0].read.bw_mean }} KB/s, IOPS: {{ fio_regional_results.jobs[0].read.iops_mean }}."
+    fail_msg: "Regional FIO read failed on {{ regional_gcs_bucket_local_mount }}. Bandwidth: {{ fio_regional_results.jobs[0].read.bw_mean }} KB/s, IOPS: {{ fio_regional_results.jobs[0].read.iops_mean }}."
+    success_msg: "Regional FIO read succeeded on {{ regional_gcs_bucket_local_mount }}. Bandwidth: {{ fio_regional_results.jobs[0].read.bw_mean }} KB/s, IOPS: {{ fio_regional_results.jobs[0].read.iops_mean }}."
 
 - name: Verify Controller Instance Template Storage Pools
   delegate_to: localhost

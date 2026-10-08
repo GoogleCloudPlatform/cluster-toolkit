@@ -21,6 +21,7 @@ vars:
   region: us-central1
   zone: us-central1-b
   gcs_bucket_local_mount: /data
+  regional_gcs_bucket_local_mount: /data_regional
   # To use Storage Pools, they must be pre-created before deployment.
   # Replace 'your-pool-balanced' and 'your-pool-throughput' with your storage pool names.
   hyperdisk_balanced_storage_pool: "projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-balanced"
@@ -48,7 +49,7 @@ deployment_groups:
   - id: regional-gcs-bucket
     source: modules/file-system/cloud-storage-bucket
     settings:
-      local_mount: /data_regional
+      local_mount: $(vars.regional_gcs_bucket_local_mount)
       random_suffix: true
       force_destroy: true
       # Refer https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache for parameter details
@@ -81,6 +82,8 @@ deployment_groups:
       metadata:
         gcs-bucket-name: $(zonal-gcs-bucket.gcs_bucket_name)
         gcs-mount-path: $(vars.gcs_bucket_local_mount)
+        regional-gcs-bucket-name: $(regional-gcs-bucket.gcs_bucket_name)
+        regional-gcs-mount-path: $(vars.regional_gcs_bucket_local_mount)
 
   - id: rapid_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -111,6 +114,8 @@ deployment_groups:
       metadata:
         gcs-bucket-name: $(zonal-gcs-bucket.gcs_bucket_name)
         gcs-mount-path: $(vars.gcs_bucket_local_mount)
+        regional-gcs-bucket-name: $(regional-gcs-bucket.gcs_bucket_name)
+        regional-gcs-mount-path: $(vars.regional_gcs_bucket_local_mount)
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller

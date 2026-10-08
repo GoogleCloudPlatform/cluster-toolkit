@@ -37,6 +37,6 @@ custom_vars:
   output_dir: "{{ (lookup('file', blueprint_yaml) | from_yaml)['vars']['gcs_bucket_local_mount'] }}"
   mounts:
   - "{{ (lookup('file', blueprint_yaml) | from_yaml)['vars']['gcs_bucket_local_mount'] }}"
-  - /data_regional
+  - "{{ (lookup('file', blueprint_yaml) | from_yaml)['vars']['regional_gcs_bucket_local_mount'] }}"
   partitions:
   - rapid
