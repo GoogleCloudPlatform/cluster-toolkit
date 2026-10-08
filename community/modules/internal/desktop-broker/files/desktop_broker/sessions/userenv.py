@@ -28,13 +28,15 @@ LOG = logging.getLogger("ghpc-desktop-broker")
 class UserEnvironment:
     """Everything the broker does on behalf of, or to, a user's account."""
 
-    def __init__(self, runtime_dir, vnc_backend):
+    def __init__(self, runtime_dir, session_dir, vnc_backend):
         self.runtime_dir = runtime_dir
+        self.session_dir = session_dir
         self.vnc_backend = vnc_backend
 
-        self.runtime_dir.mkdir(parents=True, exist_ok=True)
-        # Traversable, so each user can reach their own 0700 subdirectory.
-        os.chmod(self.runtime_dir, 0o755)
+        for base in (self.runtime_dir, self.session_dir):
+            base.mkdir(parents=True, exist_ok=True)
+            # Traversable, so each user can reach their own 0700 subdirectory.
+            os.chmod(base, 0o755)
 
     def run_as(
         self,
@@ -119,8 +121,8 @@ class UserEnvironment:
                 502, f"Failed to prepare home directory {home_dir}: {err}"
             ) from err
 
-    def write_xstartup(self, username, home_dir, user_runtime_dir):
-        """Write the session's startup script into its node-local runtime dir.
+    def write_xstartup(self, username, home_dir, user_session_dir):
+        """Write the session's startup script into its node-local session dir.
 
         Not ~/.vnc/xstartup: home is normally shared across nodes, and the
         script is specific to this node's backend and GPU setup. A login node
@@ -128,10 +130,13 @@ class UserEnvironment:
         otherwise take turns truncating one another's copy. vncserver is told
         where to find it with -xstartup (see VNCBackend.start_command).
 
+        Not the runtime directory either, although that is node-local too:
+        /run is a noexec tmpfs on Debian, and vncserver execs this file.
+
         Written as the user rather than root, so a symlink planted in their
         own directory cannot redirect the write.
         """
-        xstartup = Path(user_runtime_dir) / "xstartup"
+        xstartup = Path(user_session_dir) / "xstartup"
         try:
             self.run_as(
                 username,
@@ -154,15 +159,26 @@ class UserEnvironment:
         node and would survive a reboot. On tmpfs it is node-local and gone when
         the host restarts.
         """
-        user_runtime_dir = self.runtime_dir / str(uid)
+        return self._ensure_user_dir(self.runtime_dir, uid, gid, "runtime")
+
+    def ensure_session_dir(self, uid, gid):
+        """Per-user node-local home for the startup script.
+
+        On the root filesystem rather than tmpfs, since it has to be
+        executable; see write_xstartup. Rewritten at every session start, so
+        surviving a reboot is harmless.
+        """
+        return self._ensure_user_dir(self.session_dir, uid, gid, "session")
+
+    def _ensure_user_dir(self, base, uid, gid, what):
+        user_dir = base / str(uid)
         try:
-            user_runtime_dir.mkdir(parents=True, exist_ok=True)
-            os.chown(user_runtime_dir, uid, gid)
-            os.chmod(user_runtime_dir, 0o700)
+            user_dir.mkdir(parents=True, exist_ok=True)
+            os.chown(user_dir, uid, gid)
+            os.chmod(user_dir, 0o700)
         except OSError as err:
             raise BrokerError(
                 502,
-                f"Failed to prepare desktop runtime directory "
-                f"{user_runtime_dir}: {err}",
+                f"Failed to prepare desktop {what} directory {user_dir}: {err}",
             ) from err
-        return user_runtime_dir
+        return user_dir

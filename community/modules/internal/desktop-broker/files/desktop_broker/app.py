@@ -60,7 +60,7 @@ class Broker:
         self.identity = identity.Resolver(config)
         self.store = SessionStore(config.state_dir, config.max_user_sessions)
         self.user_environment = UserEnvironment(
-            config.runtime_dir, self.vnc_backend
+            config.runtime_dir, config.session_dir, self.vnc_backend
         )
         self.sessions = SessionManager(
             config=config,

@@ -32,6 +32,7 @@ def base_config(tmp_path, **overrides):
         "state_dir": str(tmp_path / "state"),
         "log_dir": str(tmp_path / "log"),
         "runtime_dir": str(tmp_path / "run"),
+        "session_dir": str(tmp_path / "sessions"),
         "novnc_dir": str(tmp_path / "novnc"),
         "proxy_secret": "test-proxy-secret",
         "identity_mode": "trusted_proxy",

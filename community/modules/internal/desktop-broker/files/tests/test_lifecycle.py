@@ -50,8 +50,13 @@ class _UserEnvironment:
         path.mkdir(parents=True, exist_ok=True)
         return path
 
-    def write_xstartup(self, username, home_dir, user_runtime_dir):
-        return user_runtime_dir / "xstartup"
+    def ensure_session_dir(self, uid, gid):
+        path = self.runtime_dir.parent / "sessions" / str(uid)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def write_xstartup(self, username, home_dir, user_session_dir):
+        return user_session_dir / "xstartup"
 
     def run_as(self, username, home_dir, args, **kwargs):
         self.commands.append(list(args))
@@ -108,7 +113,7 @@ def session_for(manager, email="alice@example.com", age=0):
         "home_dir": "/home/alice",
         "display_number": 1,
         "vnc_socket": str(manager.user_environment.runtime_dir / "1001" / "vnc.sock"),
-        "xstartup": str(manager.user_environment.runtime_dir / "1001" / "xstartup"),
+        "xstartup": str(manager.user_environment.runtime_dir.parent / "sessions" / "1001" / "xstartup"),
         "last_accessed": int(time.time()) - age,
     }
     manager.store.save(record)
@@ -215,6 +220,6 @@ def test_stop_clears_x11_files_and_the_record(manager, x11_tmp):
 
 def test_session_records_its_node_local_xstartup(manager, x11_tmp):
     session = manager.ensure_sync({"email": "alice@example.com", "login_uid": "1"})
-    expected = manager.user_environment.runtime_dir / "1001" / "xstartup"
+    expected = manager.user_environment.runtime_dir.parent / "sessions" / "1001" / "xstartup"
     assert session["xstartup"] == str(expected)
     assert manager.store.load("alice@example.com")["xstartup"] == str(expected)

@@ -30,6 +30,9 @@ locals {
   broker_venv_dir     = "${local.install_root}/desktop-broker-venv"
   broker_python_path  = "${local.broker_venv_dir}/bin/python3"
   broker_pip_path     = "${local.broker_venv_dir}/bin/pip"
+  # Per-user startup scripts. Not under the runtime dir: /run is a noexec
+  # tmpfs on Debian, and vncserver has to exec the script.
+  broker_session_dir = "/var/lib/ghpc-remote-desktop-sessions"
 
   novnc_dir = "${local.install_root}/novnc"
 
@@ -216,6 +219,7 @@ locals {
     log_dir                      = local.broker_log_dir
     max_user_sessions            = var.max_user_sessions
     runtime_dir                  = local.broker_runtime_dir
+    session_dir                  = local.broker_session_dir
     session_idle_timeout_seconds = var.session_idle_timeout_seconds
     session_resolution           = var.session_resolution
     state_dir                    = local.broker_state_dir

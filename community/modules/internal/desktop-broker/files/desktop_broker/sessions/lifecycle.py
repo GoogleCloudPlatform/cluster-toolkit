@@ -202,8 +202,11 @@ class SessionManager:
         user_runtime_dir = self.user_environment.ensure_runtime_dir(
             passwd_entry.pw_uid, passwd_entry.pw_gid
         )
+        user_session_dir = self.user_environment.ensure_session_dir(
+            passwd_entry.pw_uid, passwd_entry.pw_gid
+        )
         xstartup = self.user_environment.write_xstartup(
-            passwd_entry.pw_name, home_dir, user_runtime_dir
+            passwd_entry.pw_name, home_dir, user_session_dir
         )
 
         # Reserve the slot and persist the record before starting anything, so

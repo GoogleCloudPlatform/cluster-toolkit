@@ -22,8 +22,9 @@ locals {
   # rules (see community/examples/remote-desktop) can target all of them.
   remote_desktop_tag = "ghpc-novnc-desktop"
   # Carried only by this module's VMs, so its own ingress rule reaches nothing
-  # else and two novnc-desktop modules in one deployment do not collide.
-  instance_remote_desktop_tag = "ghpc-novnc-${var.name_prefix}"
+  # else and two novnc-desktop modules in one deployment do not collide. The
+  # suffix keeps it distinct from the shared tag for the default name_prefix.
+  instance_remote_desktop_tag = "ghpc-novnc-${var.name_prefix}-ingress"
 }
 
 module "novnc_runtime" {

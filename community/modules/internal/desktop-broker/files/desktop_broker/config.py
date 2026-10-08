@@ -49,6 +49,7 @@ class Config:
         self.state_dir = Path(raw["state_dir"])
         self.log_dir = Path(raw["log_dir"])
         self.runtime_dir = Path(raw["runtime_dir"])
+        self.session_dir = Path(raw["session_dir"])
 
         self.proxy_secret = _require(raw.get("proxy_secret"), "proxy_secret")
 

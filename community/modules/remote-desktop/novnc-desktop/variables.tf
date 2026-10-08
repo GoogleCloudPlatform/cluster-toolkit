@@ -96,8 +96,8 @@ variable "name_prefix" {
   default     = "desktop"
 
   validation {
-    condition     = can(regex("^[a-z]([-a-z0-9]*[a-z0-9])?$", var.name_prefix)) && length(var.name_prefix) <= 52
-    error_message = "name_prefix must be 1-52 characters of lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen, as it forms part of a network tag and a firewall rule name."
+    condition     = can(regex("^[a-z]([-a-z0-9]*[a-z0-9])?$", var.name_prefix)) && length(var.name_prefix) <= 44
+    error_message = "name_prefix must be 1-44 characters of lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen, as it forms part of a network tag and a firewall rule name."
   }
 }
 

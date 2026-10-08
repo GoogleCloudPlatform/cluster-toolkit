@@ -32,7 +32,7 @@ class _Backend:
 
 @pytest.fixture
 def env(tmp_path):
-    return UserEnvironment(tmp_path / "run", _Backend())
+    return UserEnvironment(tmp_path / "run", tmp_path / "sessions", _Backend())
 
 
 @pytest.fixture
@@ -84,7 +84,7 @@ def test_xstartup_quotes_session_arguments(tmp_path):
         def session_environment(self):
             return {"K": "v; rm -rf /"}
 
-    contents = UserEnvironment(tmp_path / "run2", Awkward()).xstartup_contents()
+    contents = UserEnvironment(tmp_path / "run2", tmp_path / "sess2", Awkward()).xstartup_contents()
     # Neither the argv nor the environment may break out of its shell word.
     assert "'a b; rm -rf /'" in contents
     assert "export K='v; rm -rf /'" in contents
@@ -120,11 +120,19 @@ def recorded_run_as(env, monkeypatch):
     return calls
 
 
-def test_xstartup_is_written_to_the_node_local_runtime_dir(env, tmp_path, recorded_run_as):
-    user_dir = env.ensure_runtime_dir(os.getuid(), os.getgid())
+def test_per_user_session_dir_is_private_and_separate_from_runtime(env):
+    created = env.ensure_session_dir(os.getuid(), os.getgid())
+    assert stat.S_IMODE(os.stat(created).st_mode) == 0o700
+    assert created.parent == env.session_dir
+    # The runtime dir is a noexec tmpfs on Debian; the script cannot live there.
+    assert env.session_dir != env.runtime_dir
+
+
+def test_xstartup_is_written_to_the_node_local_session_dir(env, tmp_path, recorded_run_as):
+    user_dir = env.ensure_session_dir(os.getuid(), os.getgid())
     path = env.write_xstartup("alice", "/home/alice", user_dir)
     # Home is usually shared between nodes whose backends differ; the
-    # runtime directory is this node's alone.
+    # session directory is this node's alone.
     assert path == user_dir / "xstartup"
     (call,) = recorded_run_as
     assert call["input_text"] == env.xstartup_contents()
