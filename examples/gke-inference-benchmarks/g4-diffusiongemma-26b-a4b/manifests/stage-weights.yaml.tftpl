@@ -68,7 +68,6 @@ spec:
           from huggingface_hub import HfApi, RepoFile, hf_hub_download
 
           model_id = os.environ["MODEL_ID"]
-          token = os.environ.get("HUGGING_FACE_HUB_TOKEN") or None
           prefix = os.environ.get("MODEL_PATH", "").strip().strip("/")
           blob_prefix = prefix + "/" if prefix else ""
           gcs_dir = "gs://" + bucket_name + ("/" + prefix if prefix else "")
@@ -85,6 +84,28 @@ spec:
                   "nothing to stage."
               )
               sys.exit(0)
+
+          # Reading from the mounted Secret volume lets a user who deployed
+          # with an empty hf_token patch `hf-secret` after deploy without the
+          # Job burning through backoffLimit: 3 on 401 errors beforehand.
+          def read_token():
+              try:
+                  with open("/etc/hf-secret/hf_api_token", encoding="utf-8") as f:
+                      t = f.read().strip()
+                      if t:
+                          return t
+              except OSError:
+                  pass
+              return (os.environ.get("HUGGING_FACE_HUB_TOKEN") or "").strip() or None
+
+          token = read_token()
+          while not token:
+              print(
+                  "hf_api_token in Secret is empty; waiting for `kubectl patch secret` "
+                  "before downloading from Hugging Face..."
+              )
+              time.sleep(10)
+              token = read_token()
 
           ignore_patterns = ["original/*", ".gitattributes", ".cache/*"]
           api = HfApi(token=token)
@@ -174,7 +195,15 @@ spec:
             secretKeyRef:
               name: ${hf_secret_name}
               key: hf_api_token
+        volumeMounts:
+        - name: hf-secret
+          mountPath: /etc/hf-secret
+          readOnly: true
         resources:
           requests:
             cpu: "4"
             memory: 8Gi
+      volumes:
+      - name: hf-secret
+        secret:
+          secretName: ${hf_secret_name}

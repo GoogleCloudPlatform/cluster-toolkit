@@ -122,6 +122,8 @@ spec:
           gcs_dir = "gs://" + bucket_name + ("/" + prefix if prefix else "")
           client = storage.Client()
 
+          timeout_s = 3600
+          deadline = time.monotonic() + timeout_s
           while True:
               existing = [
                   b.name[len(blob_prefix):]
@@ -133,6 +135,12 @@ spec:
                       "starting vLLM server."
                   )
                   sys.exit(0)
+              if time.monotonic() >= deadline:
+                  print(
+                      f"Timed out after {timeout_s}s waiting for staged weights under {gcs_dir} "
+                      f"({len(existing)} objects present). Check job/diffusiongemma-stage-weights logs."
+                  )
+                  sys.exit(1)
               print(
                   f"Waiting for job/diffusiongemma-stage-weights to finish staging weights "
                   f"under {gcs_dir} ({len(existing)} objects present so far)..."

@@ -95,10 +95,14 @@ server manifests additionally take `${model_bucket}` and `${model_path}`.
    > **Note:** a token passed with `--vars` is still written in plaintext to
    > `terraform.tfvars` in the deployment folder and to the Terraform state in
    > your state bucket. If that is not acceptable, omit `hf_token=...`: the
-   > Secret is then created with an empty token, the staging Job (or server pod)
-   > fails the gated download, and the benchmark Job keeps waiting for the
-   > server. Once the cluster exists, patch the Secret and restart the Jobs/Deployment
-   > so that they pick up the token:
+   > Secret is then created with an empty token, the staging Job mounts
+   > `hf-secret` at `/etc/hf-secret` and waits for a non-empty `hf_api_token`
+   > before contacting Hugging Face (so it does not exhaust `backoffLimit: 3`
+   > while the token is empty; when `model_bucket` is empty the server pod
+   > fails the gated download instead), and the benchmark Job keeps waiting for
+   > the server. Once the cluster exists, patch the Secret (and optionally
+   > delete/restart the pods so they pick up the token right away instead of
+   > waiting for kubelet's Secret volume sync):
    >
    > ```shell
    > kubectl patch secret hf-secret --type merge -p "{\"stringData\":{\"hf_api_token\":\"$HF_TOKEN\"}}"
@@ -125,10 +129,11 @@ server manifests additionally take `${model_bucket}` and `${model_path}`.
      not already present (~4–5 minutes on the first cold run; instant on
      subsequent runs).
    - **Stage 2 (`deployment/diffusiongemma-vllm`):** Its `wait-for-weights`
-     initContainer waits for Stage 1 to complete (`config.json` present in
-     Cloud Storage), then `vllm` streams the weights into GPU memory (~44 s).
-     With `model_bucket` empty, `vllm` downloads about 52 GB of weights to the
-     Hyperdisk volume and loads them (15–25 minutes on first start).
+     initContainer waits (up to 60 minutes) for Stage 1 to complete
+     (`config.json` present in Cloud Storage), then `vllm` streams the weights
+     into GPU memory (~44 s). With `model_bucket` empty, `vllm` downloads about
+     52 GB of weights to the Hyperdisk volume and loads them (15–25 minutes on
+     first start).
    - **Stage 3 (`job/diffusiongemma-vllm-bench`):** Waits for `/v1/models` on
      the server and runs `vllm bench serve`.
 
@@ -149,19 +154,22 @@ distributed deployments and multi-TB models:
 * **Stage 1 (`job/diffusiongemma-stage-weights`):** A single-pod `Job`
   (`parallelism: 1`, `completions: 1`) on the on-demand system node pool lists
   `gs://<model_bucket>/<model_path>`. If it finds `config.json` and at least one
-  `*.safetensors` it exits at once. Otherwise it stages the Hugging Face
-  snapshot using a rolling per-file pipeline (`hf_hub_download` $\to$
-  `transfer_manager.upload_chunks_concurrently` $\to$ immediate local delete,
-  with at most 3 files in flight). Extracting weight staging into a separate
-  single-pod Job instead of running it inside the server pod's `initContainer`
-  prevents multiple server pods in a distributed deployment (`JobSet`,
-  `LeaderWorkerSet`, or multi-replica `Deployment`) from concurrently
-  downloading and overwriting the same Cloud Storage objects, and keeps peak
-  local scratch usage under ~15 GiB even for multi-TB models. `config.json` is
-  uploaded last as an atomic completion marker.
+  `*.safetensors` it exits at once. Otherwise it waits for a non-empty
+  `hf_api_token` in the mounted `hf-secret` volume (`/etc/hf-secret/hf_api_token`)
+  and stages the Hugging Face snapshot using a rolling per-file pipeline
+  (`hf_hub_download` $\to$ `transfer_manager.upload_chunks_concurrently` $\to$
+  immediate local delete, with at most 3 files in flight). Extracting weight
+  staging into a separate single-pod Job instead of running it inside the server
+  pod's `initContainer` prevents multiple server pods in a distributed
+  deployment (`JobSet`, `LeaderWorkerSet`, or multi-replica `Deployment`) from
+  concurrently downloading and overwriting the same Cloud Storage objects, and
+  keeps peak local scratch usage under ~15 GiB even for multi-TB models.
+  `config.json` is uploaded last as an atomic completion marker.
 * **Stage 2 (`deployment/diffusiongemma-vllm`):** The server pod's lightweight
-  `wait-for-weights` initContainer polls `gs://<model_bucket>/<model_path>`
-  until `config.json` and `*.safetensors` are present, then the server runs
+  `wait-for-weights` initContainer polls `gs://<model_bucket>/<model_path>` for
+  up to 60 minutes until `config.json` and `*.safetensors` are present (exiting
+  non-zero on timeout so permanent staging errors surface as
+  `Init:CrashLoopBackOff`), then the server runs
   `vllm serve gs://<model_bucket>/<model_path> --load-format=runai_streamer --model-loader-extra-config={"distributed":true}`
   (plus `--served-model-name google/diffusiongemma-26B-A4B-it`, so the
   benchmark Job and your clients keep using the Hugging Face model name). vLLM

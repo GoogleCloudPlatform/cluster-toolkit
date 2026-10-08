@@ -123,18 +123,21 @@ with the same commands:
   and server manifests as template variables. When `model_bucket` is set:
   1. **Stage 1 (`manifests/stage-weights.yaml.tftpl`):** A standalone
      single-pod `Job` (`parallelism: 1`, `completions: 1`) checks
-     `gs://<bucket>/<path>` and, if the snapshot is missing, stages it from the
-     model hub using a rolling per-file download $\to$ concurrent multipart
-     upload $\to$ delete pipeline (`config.json` uploaded last). Running weight
-     staging in a single-pod Job rather than inside the server pod's
-     `initContainer` prevents multiple server pods in a distributed deployment
-     from concurrently downloading and overwriting the same Cloud Storage
-     objects, and bounds local scratch disk usage to ~15 GiB even for multi-TB
-     models.
+     `gs://<bucket>/<path>` and, if the snapshot is missing, waits for a
+     non-empty token in the mounted `hf-secret` volume (so omitting `hf_token`
+     at deploy time does not exhaust `backoffLimit` before the Secret is
+     patched) and stages it from the model hub using a rolling per-file
+     download $\to$ concurrent multipart upload $\to$ delete pipeline
+     (`config.json` uploaded last). Running weight staging in a single-pod Job
+     rather than inside the server pod's `initContainer` prevents multiple
+     server pods in a distributed deployment from concurrently downloading and
+     overwriting the same Cloud Storage objects, and bounds local scratch disk
+     usage to ~15 GiB even for multi-TB models.
   2. **Stage 2 (`manifests/<server>-serve.yaml.tftpl`):** A lightweight
-     `wait-for-weights` `initContainer` waits until `config.json` and
-     `*.safetensors` exist in `gs://<bucket>/<path>`, then the server streams
-     the weights with the
+     `wait-for-weights` `initContainer` waits (with a 60-minute bound so
+     permanent staging errors surface as `Init:CrashLoopBackOff`) until
+     `config.json` and `*.safetensors` exist in `gs://<bucket>/<path>`, then the
+     server streams the weights with the
      [Run:ai Model Streamer](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/run-ai-model-streamer)
      (`vllm serve gs://<bucket>/<path> --load-format=runai_streamer`, plus
      `--served-model-name`).
