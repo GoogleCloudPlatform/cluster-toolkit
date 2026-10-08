@@ -4,12 +4,12 @@ This blueprint provisions a Google Kubernetes Engine (GKE) cluster with A3 High 
 
 The blueprint automatically configures the following components to enable optimal GPU performance and multi-networking:
 
-- **GPU-Direct TCPX**: Optimized networking stack for high-bandwidth, low-latency GPU communication.
+- **GPU-Direct TCPXO**: Optimized networking stack for high-bandwidth, low-latency GPU communication.
 - **Multi-networking**: Configures 4 secondary interfaces (VPC networks) for dedicated GPU-to-GPU traffic.
 - **NRI Device Injector**: Automatically injects required networking and GPU configurations into your ML containers.
 - **Kueue and JobSet**: Kubernetes-native tools for managing large-scale, multi-node training jobs with Topology Aware Scheduling (TAS).
 
-> **Note on TCPXO Support:** `a3-highgpu-8g` supports TCPXO as an alternative to TCPX for optimized GPU communication. However, TCPXO is only supported for Spot and On-Demand VMs. Please ensure you do not use GCE reservations when enabling TCPXO.
+> **Note on TCPXO Support:** `a3-highgpu-8g` uses GPU-Direct TCPXO for optimized GPU communication. However, TCPXO is only supported for Spot and On-Demand VMs. Please ensure you do not use GCE reservations when using TCPXO.
 
 ## Prerequisites
 

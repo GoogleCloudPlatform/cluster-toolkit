@@ -18,21 +18,21 @@ Replace the following variables:
 
 Verify that `kueue` components are deployed effectively if using local queues.
 
-## Step 1: Verify TCPX Components
+## Step 1: Verify TCPXO Components
 
-Verify that the GPUDirect TCPX driver installers and device injectors are running on all nodes.
+Verify that the GPUDirect TCPXO driver installers and device injectors are running on all nodes.
 
 ```bash
-# Verify TCPX DaemonSets are fully deployed to the cluster nodes
-kubectl get daemonsets -n kube-system nccl-tcpx-installer
+# Verify TCPXO DaemonSets are fully deployed to the cluster nodes
+kubectl get daemonsets -n kube-system nccl-tcpxo-installer
 kubectl get pods -n kube-system | grep device-injector
 ```
 
 *Example Output:*
 
 ```text
-NAME                  DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
-nccl-tcpx-installer   2         2         2       2            2           <none>          18h
+NAME                   DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+nccl-tcpxo-installer   2         2         2       2            2           <none>          18h
 device-injector-fhkn4                                      1/1     Running   0             15h
 device-injector-w5d4c                                      1/1     Running   0             15h
 ```
@@ -98,7 +98,6 @@ Once both pods are `Running`, you can execute the test suite (which includes `al
 1. **Execute the test through `nccl-test-host-1`:**
 
     ```bash
-    kubectl exec -t nccl-test-host-1 -c nccl-test -- /bin/bash -c "cp /configs/allgather.sh /scripts/allgather.sh"
     kubectl exec -t nccl-test-host-1 -c nccl-test -- /scripts/allgather.sh nccl-host-1 nccl-host-2
     ```
 
@@ -109,7 +108,7 @@ Once both pods are `Running`, you can execute the test suite (which includes `al
     The output will stream to your terminal as the MPI workers synchronize across the nodes.
 
 2. **Verify Results:**
-    Wait for the benchmark tables to print to your console. Look for the `busbw (GB/s)` column to ensure TCPX networking and the secondary NICs are successfully scaling multi-node traffic.
+    Wait for the benchmark tables to print to your console. Look for the `busbw (GB/s)` column to ensure TCPXO networking and the secondary NICs are successfully scaling multi-node traffic.
 
     *Example Output:*
 
@@ -133,7 +132,7 @@ Once both pods are `Running`, you can execute the test suite (which includes `al
     # Avg bus bandwidth    : 30.9622 
     ```
 
-For multi-node H100 NCCL workloads over TCPX, you should observe optimized GB/s scaling without hangs or segmentation faults.
+For multi-node H100 NCCL workloads over TCPXO, you should observe optimized GB/s scaling without hangs or segmentation faults.
 
 ## Step 5: Clean Up
 
