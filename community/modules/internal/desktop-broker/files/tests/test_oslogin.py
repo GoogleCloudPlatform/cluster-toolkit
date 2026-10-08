@@ -72,6 +72,23 @@ class FakeDirectory(oslogin.Directory):
         return self.payload
 
 
+class PagedDirectory(oslogin.Directory):
+    """Serves a scripted sequence of metadata pages."""
+
+    def __init__(self, pages):
+        super().__init__()
+        self.pages = list(pages)
+        self.requests = []
+
+    def _fetch_page(self, params):
+        self.requests.append(dict(params))
+        return self.pages.pop(0)
+
+
+def profile(subject, username):
+    return {"name": subject, "posixAccounts": [{"username": username}]}
+
+
 def test_profiles_index_by_subject_and_username():
     cache = FakeDirectory().load()
     assert "117253417745780664166" in cache["by_subject"]
@@ -142,3 +159,37 @@ def test_cache_expiry_forces_a_refetch():
     directory.resolve("117253417745780664166")
     directory.resolve("117253417745780664166")
     assert directory.fetches == 2
+
+
+def test_all_pages_are_followed():
+    directory = PagedDirectory([
+        {"loginProfiles": [profile("1", "first")], "nextPageToken": "p2"},
+        {"loginProfiles": [profile("2", "second")], "nextPageToken": "p3"},
+        # The metadata server marks the end with "0", not an absent token.
+        {"loginProfiles": [], "nextPageToken": "0"},
+    ])
+    cache = directory.load()
+    assert set(cache["by_username"]) == {"first", "second"}
+    assert [r.get("pagetoken") for r in directory.requests] == [None, "p2", "p3"]
+    assert all(r["pagesize"] == 1024 for r in directory.requests)
+
+
+def test_a_user_on_a_later_page_is_found():
+    directory = PagedDirectory([
+        {"loginProfiles": [profile("1", "first")], "nextPageToken": "p2"},
+        {"loginProfiles": [profile("2", "second")], "nextPageToken": "0"},
+    ])
+    assert directory.resolve("2")["username"] == "second"
+
+
+def test_a_missing_token_ends_paging():
+    directory = PagedDirectory([{"loginProfiles": [profile("1", "only")]}])
+    assert set(directory.load()["by_username"]) == {"only"}
+    assert len(directory.requests) == 1
+
+
+def test_a_repeated_token_cannot_loop_forever():
+    page = {"loginProfiles": [profile("1", "first")], "nextPageToken": "same"}
+    directory = PagedDirectory([page, dict(page), dict(page)])
+    directory.load()
+    assert len(directory.requests) == 2

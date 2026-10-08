@@ -23,7 +23,11 @@ import pytest
 
 from desktop_broker.backends import registry as backends
 
-SESSION = {"display_number": 1, "vnc_socket": "/run/x/1/vnc.sock"}
+SESSION = {
+    "display_number": 1,
+    "vnc_socket": "/run/x/1/vnc.sock",
+    "xstartup": "/run/x/1/xstartup",
+}
 
 
 def make(name):
@@ -102,3 +106,11 @@ def test_glx_disabled_when_no_render_node(monkeypatch):
 
 def test_session_command_is_the_xfce_desktop():
     assert make("tigervnc").session_command() == ["dbus-launch", "startxfce4"]
+
+
+@pytest.mark.parametrize("name", ["tigervnc", "turbovnc"])
+def test_session_uses_the_node_local_xstartup(name):
+    # Not ~/.vnc/xstartup, which is shared between nodes with different
+    # backends when home is on NFS.
+    command = make(name).start_command(SESSION)
+    assert command[command.index("-xstartup") + 1] == "/run/x/1/xstartup"

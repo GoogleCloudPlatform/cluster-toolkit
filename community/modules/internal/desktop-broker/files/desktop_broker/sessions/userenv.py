@@ -65,7 +65,7 @@ class UserEnvironment:
         )
 
     def xstartup_contents(self):
-        """The ~/.vnc/xstartup this broker writes.
+        """The xstartup this broker writes for each session.
 
         Sources /etc/profile before starting the desktop. On a Slurm login node
         that is what puts sbatch, environment modules and a non-default
@@ -102,32 +102,48 @@ class UserEnvironment:
         try:
             # Only the home directory is created as root, since its parent is
             # not user-writable. Everything below it is created by the user, so
-            # a symlinked .vnc or xstartup cannot redirect a root write or
-            # chown.
+            # a symlinked .vnc cannot redirect a root write or chown.
             if not home_path.exists():
                 home_path.mkdir(parents=True, exist_ok=True)
                 os.chown(home_path, uid, gid)
                 os.chmod(home_path, 0o700)
+            # vncserver keeps its pid and log files here.
             vnc_dir = home_path / ".vnc"
-            xstartup = vnc_dir / "xstartup"
             self.run_as(
                 username,
                 home_dir,
-                [
-                    "sh",
-                    "-c",
-                    'mkdir -p "$1" && chmod 0700 "$1" && cat >"$2" '
-                    '&& chmod 0755 "$2"',
-                    "sh",
-                    vnc_dir.as_posix(),
-                    xstartup.as_posix(),
-                ],
-                input_text=self.xstartup_contents(),
+                ["sh", "-c", 'mkdir -p "$1" && chmod 0700 "$1"', "sh", vnc_dir.as_posix()],
             )
         except (OSError, subprocess.CalledProcessError) as err:
             raise BrokerError(
                 502, f"Failed to prepare home directory {home_dir}: {err}"
             ) from err
+
+    def write_xstartup(self, username, home_dir, user_runtime_dir):
+        """Write the session's startup script into its node-local runtime dir.
+
+        Not ~/.vnc/xstartup: home is normally shared across nodes, and the
+        script is specific to this node's backend and GPU setup. A login node
+        on TigerVNC and a visualisation node on TurboVNC with VirtualGL would
+        otherwise take turns truncating one another's copy. vncserver is told
+        where to find it with -xstartup (see VNCBackend.start_command).
+
+        Written as the user rather than root, so a symlink planted in their
+        own directory cannot redirect the write.
+        """
+        xstartup = Path(user_runtime_dir) / "xstartup"
+        try:
+            self.run_as(
+                username,
+                home_dir,
+                ["sh", "-c", 'cat >"$1" && chmod 0755 "$1"', "sh", xstartup.as_posix()],
+                input_text=self.xstartup_contents(),
+            )
+        except (OSError, subprocess.CalledProcessError) as err:
+            raise BrokerError(
+                502, f"Failed to write desktop startup script {xstartup}: {err}"
+            ) from err
+        return xstartup
 
     def ensure_runtime_dir(self, uid, gid):
         """Per-user node-local scratch for sockets and password files.

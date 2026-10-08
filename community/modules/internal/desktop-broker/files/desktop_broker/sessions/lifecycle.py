@@ -26,6 +26,8 @@ LOG = logging.getLogger("ghpc-desktop-broker")
 
 START_TIMEOUT_SECONDS = 15
 CLEANUP_INTERVAL_SECONDS = 300
+# Where the X server leaves its per-display lock and socket.
+X11_TMP_DIR = Path("/tmp")
 
 
 class SessionManager:
@@ -52,6 +54,26 @@ class SessionManager:
         self.vnc_backend = vnc_backend
         self.passwd_lookup = passwd_lookup
         self._cleanup_task = None
+        # Live relays per user. A desktop with one is in use whatever its
+        # record says: the relay itself never touches the record.
+        self.active_connections = {}
+
+    # -- live connections --------------------------------------------------
+
+    def connection_opened(self, email):
+        key = self.store.key(email)
+        self.active_connections[key] = self.active_connections.get(key, 0) + 1
+
+    def connection_closed(self, email):
+        key = self.store.key(email)
+        remaining = self.active_connections.get(key, 0) - 1
+        if remaining > 0:
+            self.active_connections[key] = remaining
+        else:
+            self.active_connections.pop(key, None)
+
+    def has_connections(self, email):
+        return self.active_connections.get(self.store.key(email), 0) > 0
 
     # -- readiness ---------------------------------------------------------
 
@@ -92,8 +114,30 @@ class SessionManager:
             check=False,
         )
 
+    def _remove_stale_x11_files(self, display_number):
+        """Clear the lock and socket a dead Xvnc leaves in /tmp.
+
+        "vncserver -kill" runs as the session's user and /tmp is sticky, so
+        it cannot remove what a previous owner of this display left: after
+        an Xvnc crash, or once the slot has passed to another user. Xvnc then
+        refuses to start. The broker is root and can.
+        """
+        for stale_path in (
+            X11_TMP_DIR / f".X{display_number}-lock",
+            X11_TMP_DIR / ".X11-unix" / f"X{display_number}",
+        ):
+            try:
+                stale_path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as err:
+                raise BrokerError(
+                    502, f"Failed to clear stale X11 file {stale_path}: {err}"
+                ) from err
+
     def _start(self, session):
         self._kill(session)
+        self._remove_stale_x11_files(session["display_number"])
 
         # A crashed Xvnc leaves its socket behind and the next bind fails.
         try:
@@ -123,6 +167,11 @@ class SessionManager:
                 Path(socket_path).unlink()
             except OSError:
                 pass
+        try:
+            self._remove_stale_x11_files(session["display_number"])
+        except BrokerError as err:
+            # The record still has to go; _start clears these again anyway.
+            LOG.warning("%s", err.message)
         self.store.delete(session["email"])
 
     # -- ensure ------------------------------------------------------------
@@ -153,6 +202,9 @@ class SessionManager:
         user_runtime_dir = self.user_environment.ensure_runtime_dir(
             passwd_entry.pw_uid, passwd_entry.pw_gid
         )
+        xstartup = self.user_environment.write_xstartup(
+            passwd_entry.pw_name, home_dir, user_runtime_dir
+        )
 
         # Reserve the slot and persist the record before starting anything, so
         # two users arriving together cannot claim one display.
@@ -175,6 +227,7 @@ class SessionManager:
                 "last_accessed": int(time.time()),
             }
             session["vnc_socket"] = str(user_runtime_dir / "vnc.sock")
+            session["xstartup"] = str(xstartup)
             self.store.save(session)
 
         if not self._endpoint_ready(session):
@@ -208,18 +261,31 @@ class SessionManager:
             return
         while True:
             await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
-            now = int(time.time())
-            # Off the event loop: listing sessions globs the state directory
-            # and reads every file in it.
-            sessions = await run_blocking(self.store.list)
-            for session in sessions:
-                if now - int(session.get("last_accessed", 0)) < timeout:
-                    continue
-                try:
-                    async with self.store.user_lock(session["email"]):
-                        await run_blocking(self.stop, session)
-                except Exception:
-                    LOG.exception(
-                        "Failed to clean up idle desktop session for %s",
-                        session.get("email"),
-                    )
+            await self.reap_idle(run_blocking, timeout)
+
+    async def reap_idle(self, run_blocking, timeout):
+        now = int(time.time())
+        # Off the event loop: listing sessions globs the state directory
+        # and reads every file in it.
+        sessions = await run_blocking(self.store.list)
+        for session in sessions:
+            email = session.get("email")
+            if not email or self.has_connections(email):
+                continue
+            if now - int(session.get("last_accessed", 0)) < timeout:
+                continue
+            try:
+                async with self.store.user_lock(email):
+                    # That record was read before the lock was taken. The user
+                    # may have come back while this waited for it.
+                    current = await run_blocking(self.store.load, email)
+                    if not current or self.has_connections(email):
+                        continue
+                    idle = int(time.time()) - int(current.get("last_accessed", 0))
+                    if idle < timeout:
+                        continue
+                    await run_blocking(self.stop, current)
+            except Exception:
+                LOG.exception(
+                    "Failed to clean up idle desktop session for %s", email
+                )

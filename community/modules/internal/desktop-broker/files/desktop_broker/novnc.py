@@ -34,9 +34,25 @@ RELAY_CHUNK_BYTES = 65536
 class NoVncFrontend:
     name = "novnc"
     healthcheck_path = "/vnc.html?path=websockify"
+    # The documents a user lands on. Everything else served here is a script,
+    # stylesheet or icon that one of these then fetches.
+    entry_paths = frozenset({"/", "/vnc.html", "/index.html"})
 
     def __init__(self, config):
         self.novnc_dir = config.novnc_dir
+
+    @staticmethod
+    def is_websocket(request):
+        return request.headers.get("Upgrade", "").lower() == "websocket"
+
+    def needs_session(self, request):
+        """Whether serving this request means starting or touching a desktop.
+
+        Only the entry page and the relay do. The thirty-odd assets a page
+        load fetches in parallel must not each take the user's lock, rewrite
+        their record and open a probe connection to the display.
+        """
+        return self.is_websocket(request) or request.path in self.entry_paths
 
     def _resolve_static_file(self, path):
         candidate = (self.novnc_dir / path.lstrip("/")).resolve()
@@ -52,7 +68,7 @@ class NoVncFrontend:
         return candidate
 
     async def handle(self, request, session):
-        if request.headers.get("Upgrade", "").lower() == "websocket":
+        if self.is_websocket(request):
             return await self._bridge(request, session)
         path = request.match_info.get("path", "") or "vnc.html"
         return web.FileResponse(self._resolve_static_file(path))

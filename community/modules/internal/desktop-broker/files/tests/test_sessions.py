@@ -89,3 +89,25 @@ def test_capacity_is_enforced(store):
     with pytest.raises(BrokerError, match="user-session capacity") as excinfo:
         store.allocate_slot("one.too.many@example.com")
     assert excinfo.value.status == 503
+
+
+def test_user_lock_is_case_insensitive(store):
+    assert store.user_lock("User@Example.com") is store.user_lock("user@example.com")
+
+
+def test_slot_exclusion_is_case_insensitive(store):
+    store.save({"email": "User@Example.com", "slot": 2})
+    # The same user, differently capitalised, must not be counted as a
+    # neighbour holding slot 2 - nor be handed a second display.
+    assert store.allocate_slot("user@example.com") == 0
+
+
+def test_touch_refreshes_last_accessed(store):
+    store.save({"email": "a@b.com", "slot": 0, "last_accessed": 1})
+    store.touch("A@B.com")
+    assert store.load("a@b.com")["last_accessed"] > 1
+
+
+def test_touch_does_not_resurrect_a_deleted_record(store):
+    store.touch("gone@example.com")
+    assert store.load("gone@example.com") is None

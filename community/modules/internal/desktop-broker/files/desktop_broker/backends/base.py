@@ -134,6 +134,9 @@ class VNCBackend:
             f":{session['display_number']}",
             "-geometry",
             self.session_resolution,
+            # Node-local, not ~/.vnc/xstartup: see UserEnvironment.write_xstartup.
+            "-xstartup",
+            str(session["xstartup"]),
             *self.transport_args(session),
         ]
         render_node = gpu.first_render_node()

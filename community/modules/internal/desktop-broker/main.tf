@@ -285,9 +285,9 @@ locals {
 
         install -d -m 0755 "$endpoint_dir"
 
-        instance_name=$(curl -fsS -H "Metadata-Flavor: Google" \
+        instance_name=$(curl -fsS --retry 3 --retry-delay 2 -H "Metadata-Flavor: Google" \
           "http://metadata.google.internal/computeMetadata/v1/instance/name")
-        instance_ip=$(curl -fsS -H "Metadata-Flavor: Google" \
+        instance_ip=$(curl -fsS --retry 3 --retry-delay 2 -H "Metadata-Flavor: Google" \
           "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip")
 
         cat > "$${endpoint_dir}/$${endpoint_name}.env" <<EOF_ENDPOINT

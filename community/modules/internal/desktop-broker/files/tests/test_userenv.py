@@ -107,3 +107,35 @@ def test_run_as_builds_a_runuser_invocation(env, monkeypatch):
     assert "USER=alice" in command
     assert "X=1" in command
     assert command[-1] == "id"
+
+
+@pytest.fixture
+def recorded_run_as(env, monkeypatch):
+    calls = []
+
+    def fake_run_as(username, home_dir, args, **kwargs):
+        calls.append({"args": list(args), **kwargs})
+
+    monkeypatch.setattr(env, "run_as", fake_run_as)
+    return calls
+
+
+def test_xstartup_is_written_to_the_node_local_runtime_dir(env, tmp_path, recorded_run_as):
+    user_dir = env.ensure_runtime_dir(os.getuid(), os.getgid())
+    path = env.write_xstartup("alice", "/home/alice", user_dir)
+    # Home is usually shared between nodes whose backends differ; the
+    # runtime directory is this node's alone.
+    assert path == user_dir / "xstartup"
+    (call,) = recorded_run_as
+    assert call["input_text"] == env.xstartup_contents()
+    assert call["args"][-1] == path.as_posix()
+    assert "chmod 0755" in call["args"][2]
+
+
+def test_ensure_home_no_longer_writes_into_home(env, tmp_path, recorded_run_as):
+    home = tmp_path / "home" / "alice"
+    env.ensure_home("alice", str(home), os.getuid(), os.getgid())
+    (call,) = recorded_run_as
+    assert "input_text" not in call
+    assert call["args"][-1] == (home / ".vnc").as_posix()
+    assert not (home / ".vnc" / "xstartup").exists()

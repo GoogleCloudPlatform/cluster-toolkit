@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import threading
+import time
 
 from ..errors import BrokerError
 
@@ -46,8 +47,18 @@ class SessionStore:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         os.chmod(self.state_dir, 0o700)
 
+    @staticmethod
+    def key(email):
+        """One user however their address is capitalised.
+
+        Everything keyed on a user - the record file, the lock, the slot
+        exclusion - must agree on this, or two spellings of one address get
+        two displays and no mutual exclusion.
+        """
+        return (email or "").lower()
+
     def path_for(self, email):
-        digest = hashlib.sha256(email.lower().encode("utf-8")).hexdigest()
+        digest = hashlib.sha256(self.key(email).encode("utf-8")).hexdigest()
         return self.state_dir / f"{digest}.json"
 
     def load(self, email):
@@ -68,6 +79,14 @@ class SessionStore:
         os.chmod(temp_path, 0o600)
         temp_path.replace(path)
 
+    def touch(self, email):
+        """Mark the record as used now, if it still exists."""
+        session = self.load(email)
+        if session is None:
+            return
+        session["last_accessed"] = int(time.time())
+        self.save(session)
+
     def delete(self, email):
         try:
             self.path_for(email).unlink()
@@ -84,10 +103,11 @@ class SessionStore:
         return sessions
 
     def user_lock(self, email):
-        lock = self._user_locks.get(email)
+        key = self.key(email)
+        lock = self._user_locks.get(key)
         if lock is None:
             lock = asyncio.Lock()
-            self._user_locks[email] = lock
+            self._user_locks[key] = lock
         return lock
 
     @property
@@ -96,10 +116,12 @@ class SessionStore:
 
     def allocate_slot(self, email):
         """Lowest free display slot, ignoring this user's own existing one."""
+        own = self.key(email)
         used = {
             int(session["slot"])
             for session in self.list()
-            if session.get("email") != email and session.get("slot") is not None
+            if self.key(session.get("email")) != own
+            and session.get("slot") is not None
         }
         for slot in range(self.max_user_sessions):
             if slot not in used:

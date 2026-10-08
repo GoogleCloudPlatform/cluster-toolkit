@@ -106,6 +106,29 @@ class Broker:
         async with self.store.user_lock(resolved["email"]):
             return await run_blocking(self.sessions.ensure_sync, resolved)
 
+    async def touch_session(self, email):
+        async with self.store.user_lock(email):
+            await run_blocking(self.store.touch, email)
+
+    async def relay(self, request, session, email):
+        """Run the websocket relay, counted as a live connection throughout.
+
+        The relay never writes the session record, so without this the idle
+        reaper would see a desktop that has been in use for hours as untouched
+        since its page load. The count is kept here rather than in the front
+        end because frontend.handle only returns once the relay has ended,
+        which brackets the connection exactly.
+        """
+        self.sessions.connection_opened(email)
+        try:
+            return await self.frontend.handle(request, session)
+        finally:
+            self.sessions.connection_closed(email)
+            try:
+                await self.touch_session(email)
+            except Exception:
+                LOG.exception("Failed to record desktop use for %s", email)
+
     async def handle_health(self, request):
         # Deliberately unauthenticated and free of detail: a fronting proxy
         # needs to know the broker is up without holding the proxy secret.
@@ -114,7 +137,13 @@ class Broker:
     async def handle(self, request):
         try:
             resolved = await self.authenticate(request)
+            if not self.frontend.needs_session(request):
+                # Authenticated, but a static asset: no lock, no record write
+                # and no probe of the display.
+                return await self.frontend.handle(request, None)
             session = await self.ensure_session(resolved)
+            if self.frontend.is_websocket(request):
+                return await self.relay(request, session, resolved["email"])
             return await self.frontend.handle(request, session)
         except BrokerError as err:
             return web.Response(status=err.status, text=f"{err.message}\n")

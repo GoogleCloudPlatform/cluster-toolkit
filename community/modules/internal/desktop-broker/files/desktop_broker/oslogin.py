@@ -48,7 +48,37 @@ class Directory:
         self._cache = {"by_subject": {}, "by_username": {}, "expires_at": 0}
 
     def _fetch(self):
-        query = urllib.parse.urlencode({"pagesize": 1024})
+        """Every login profile, following the metadata server's paging.
+
+        The users endpoint pages on "pagetoken" and marks the last page with
+        a nextPageToken of the literal "0" (google-guest-oslogin's NSS cache
+        does the same). Stopping after the first page would turn every user
+        beyond it into "No OS Login profile was found".
+        """
+        profiles = []
+        seen_tokens = set()
+        page_token = None
+        while True:
+            params = {"pagesize": 1024}
+            if page_token:
+                params["pagetoken"] = page_token
+            payload = self._fetch_page(params)
+            profiles.extend(payload.get("loginProfiles") or [])
+            page_token = payload.get("nextPageToken")
+            if not page_token or page_token == "0":
+                return {"loginProfiles": profiles}
+            if page_token in seen_tokens:
+                LOG.warning(
+                    "OS Login metadata repeated page token %r; stopping with "
+                    "%d profiles.",
+                    page_token,
+                    len(profiles),
+                )
+                return {"loginProfiles": profiles}
+            seen_tokens.add(page_token)
+
+    def _fetch_page(self, params):
+        query = urllib.parse.urlencode(params)
         request = urllib.request.Request(
             f"{self.users_url}?{query}",
             headers={"Metadata-Flavor": "Google"},

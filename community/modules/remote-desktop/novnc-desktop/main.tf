@@ -18,7 +18,12 @@ locals {
 }
 
 locals {
+  # Carried by every noVNC desktop in a deployment, so blueprint-level firewall
+  # rules (see community/examples/remote-desktop) can target all of them.
   remote_desktop_tag = "ghpc-novnc-desktop"
+  # Carried only by this module's VMs, so its own ingress rule reaches nothing
+  # else and two novnc-desktop modules in one deployment do not collide.
+  instance_remote_desktop_tag = "ghpc-novnc-${var.name_prefix}"
 }
 
 module "novnc_runtime" {
@@ -76,7 +81,7 @@ module "instances" {
   subnetwork_self_link = var.subnetwork_self_link
   network_interfaces   = var.network_interfaces
   bandwidth_tier       = var.bandwidth_tier
-  tags                 = distinct(concat(var.tags, [local.remote_desktop_tag]))
+  tags                 = distinct(concat(var.tags, [local.remote_desktop_tag, local.instance_remote_desktop_tag]))
 
   threads_per_core    = var.threads_per_core
   guest_accelerator   = var.guest_accelerator
@@ -100,12 +105,12 @@ resource "google_compute_firewall" "novnc_ingress" {
   count = length(var.allowed_ingress_cidrs) > 0 && length(var.network_interfaces) == 0 ? 1 : 0
 
   project = var.project_id
-  name    = "${substr(var.deployment_name, 0, 40)}-novnc"
+  name    = "${substr("${var.deployment_name}-${var.name_prefix}", 0, 50)}-novnc"
   network = var.network_self_link
 
   direction     = "INGRESS"
   source_ranges = var.allowed_ingress_cidrs
-  target_tags   = [local.remote_desktop_tag]
+  target_tags   = [local.instance_remote_desktop_tag]
 
   allow {
     protocol = "tcp"

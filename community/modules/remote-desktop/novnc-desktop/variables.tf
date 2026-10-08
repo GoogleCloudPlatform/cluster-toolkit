@@ -87,9 +87,18 @@ variable "auto_delete_boot_disk" {
 }
 
 variable "name_prefix" {
-  description = "Optional name prefix for VM resources."
+  description = <<-EOT
+    Name prefix for VM resources. Also distinguishes this module's firewall
+    rule and network tag from those of other novnc-desktop modules in the same
+    deployment, so it must be unique among them.
+    EOT
   type        = string
   default     = "desktop"
+
+  validation {
+    condition     = can(regex("^[a-z]([-a-z0-9]*[a-z0-9])?$", var.name_prefix)) && length(var.name_prefix) <= 52
+    error_message = "name_prefix must be 1-52 characters of lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen, as it forms part of a network tag and a firewall rule name."
+  }
 }
 
 variable "add_deployment_name_before_prefix" {
