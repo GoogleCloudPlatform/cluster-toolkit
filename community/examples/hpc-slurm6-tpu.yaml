@@ -28,10 +28,57 @@ deployment_groups:
   - id: network
     source: modules/network/vpc
 
+  # Separate, single-purpose identities from community/modules/iam/service-account-profiles.
+  # enable_tpu adds the Cloud TPU API permissions. The TPU API also requires the
+  # caller to act as the TPU VM's service account, so the TPU VM gets its own
+  # tpu_sa and the controller gets actAs on it alone.
+  - id: controller_account
+    source: modules/project/service-account
+    settings:
+      name: controller
+      project_roles: []
+
+  - id: controller_sa
+    source: community/modules/iam/service-account-profiles
+    use: [controller_account]
+    settings:
+      name: controller
+      profile: slurm-controller
+      enable_tpu: true
+      act_as_service_accounts:
+      - $(tpu_sa.service_account_email)
+
+  - id: login_account
+    source: modules/project/service-account
+    settings:
+      name: login
+      project_roles: []
+
+  - id: login_sa
+    source: community/modules/iam/service-account-profiles
+    use: [login_account]
+    settings:
+      name: login
+      profile: slurm-login
+
+  - id: tpu_account
+    source: modules/project/service-account
+    settings:
+      name: tpu
+      project_roles: []
+
+  - id: tpu_sa
+    source: community/modules/iam/service-account-profiles
+    use: [tpu_account]
+    settings:
+      name: tpu
+      profile: slurm-compute
+
   - id: tpu_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     use: [network]
     settings:
+      service_account_email: $(tpu_sa.service_account_email)
       node_type: v3-8
       tf_version: 2.14.0
       # Preemptible TPUs cost much less than non-preemptible TPUs.
@@ -53,7 +100,7 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
+    use: [network, login_sa]
     settings:
       machine_type: n2-standard-4
       enable_login_public_ips: true
@@ -64,5 +111,6 @@ deployment_groups:
     - tpu_partition
     - slurm_login
     - network
+    - controller_sa
     settings:
       enable_controller_public_ips: true

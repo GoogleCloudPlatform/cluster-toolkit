@@ -1094,7 +1094,7 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
             "placement policies already exist: {}".format(",".join(redundant.keys()))
         )
     if failed:
-        reqs = [f"{e}" for _, e in failed.values()]
+        reqs = [f"{e}" for e in failed.values()]
         log.fatal("failed to create placement policies: {}".format("; ".join(reqs)))
     operations = {group: wait_for_operation(op) for group, op in submitted.items()}
     for group, op in operations.items():
