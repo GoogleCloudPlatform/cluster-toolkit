@@ -26,8 +26,6 @@ post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-default-partition.yml
 - test-validation/test-tpu-slurm.yml
-post_destroy_tasks:
-- post-destroy-tasks/delete-image.yml
 custom_vars:
   gpu_partition: tpu
   tpu_partition: tpu
@@ -45,6 +43,7 @@ custom_vars:
     tpu7x_onspot: true
   enable_spot: true
 cli_deployment_vars:
+  test_name: "{{ test_name }}"
   region: "{{ region }}"
   zone: "{{ zone }}"
   slurm_cluster_name: "{{ slurm_cluster_name }}"
@@ -52,3 +51,4 @@ cli_deployment_vars:
   tpu_dynamic_max_nodes: 1
   tpu_accelerator_topology: 2x2x1
   tpu_enable_spot_vm: true
+  lustre_size_gib: 18000

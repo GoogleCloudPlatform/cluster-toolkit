@@ -76,6 +76,9 @@
     test "${VFIO_COUNT}" -eq {{ custom_vars.expected_tpu_cores }};
     '
   register: srun_static_result
+  until: srun_static_result.rc == 0
+  retries: 3
+  delay: 15
   failed_when: srun_static_result.rc != 0
 
 # Commenting dynamic node provisioning tests for now due to low spot capacity.

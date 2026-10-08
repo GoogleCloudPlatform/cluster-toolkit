@@ -14,13 +14,12 @@
 
 ---
 tags:
-- m.custom-image
-- m.filestore
+- m.managed-lustre
+- m.private-service-access
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
 - m.schedmd-slurm-gcp-v6-nodeset
 - m.schedmd-slurm-gcp-v6-partition
-- m.startup-script
 - m.vpc
 - slurm6
 - tpu
@@ -156,8 +155,7 @@ steps:
               sed -i 's/^  tpu_static_nodes:.*/  tpu_static_nodes: 1/' \$$BLUEPRINT
               sed -i 's/^  tpu_dynamic_max_nodes:.*/  tpu_dynamic_max_nodes: 1/' \$$BLUEPRINT
               sed -i 's/^  tpu_accelerator_topology:.*/  tpu_accelerator_topology: 2x2x1/' \$$BLUEPRINT
-              sed -i "s/built_image_family: slurm-tpu-v7x-ubuntu2404/built_image_family: slurm-tpu-v7x-$$BUILD_ID_SHORT/" \$$BLUEPRINT
-              sed -i 's/image_build_machine_type:.*/image_build_machine_type: c2-standard-4/' \$$BLUEPRINT
+              sed -i 's/^  lustre_size_gib:.*/  lustre_size_gib: 18000/' \$$BLUEPRINT
               sed -i 's/machine_type: n2d-standard-4/machine_type: c2-standard-4/g' \$$BLUEPRINT
 
 
@@ -176,8 +174,10 @@ steps:
               fi
 
               bash tools/add_ttl_label.sh \$$BLUEPRINT
+              python3 tools/fix_vpc_name.py \$$BLUEPRINT "${_TEST_PREFIX}"
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+                --extra-vars="test_prefix=${_TEST_PREFIX}" --extra-vars="use_fixed_vpc=true" \
                 --user="$$OSLOGIN_USER" \
                 --extra-vars="project=\$$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID chs_repo=\$$CHS_REPO" \
                 --extra-vars="region=\$$REGION zone=\$$ZONE" \
