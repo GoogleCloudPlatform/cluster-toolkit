@@ -130,6 +130,10 @@ resource "google_storage_bucket" "bucket" {
       ]) : true
       error_message = "The zone for the Anywhere Cache must be within the bucket's region."
     }
+    precondition {
+      condition     = var.anywhere_cache == null || var.storage_class != "RAPID"
+      error_message = "Anywhere Cache is not supported on zonal (RAPID) buckets. Use a regional, dual-region, or multi-region bucket."
+    }
   }
 }
 
