@@ -57,6 +57,10 @@ jobs:
           exit 1
         fi
 
+        # Ensure consistent 'v' prefix
+        VERSION="${VERSION#v}"
+        VERSION="v${VERSION}"
+
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
     - name: Publish Existing Draft Release
