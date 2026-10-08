@@ -155,7 +155,6 @@ steps:
               sed -i 's/^  tpu_static_nodes:.*/  tpu_static_nodes: 1/' \$$BLUEPRINT
               sed -i 's/^  tpu_dynamic_max_nodes:.*/  tpu_dynamic_max_nodes: 1/' \$$BLUEPRINT
               sed -i 's/^  tpu_accelerator_topology:.*/  tpu_accelerator_topology: 2x2x1/' \$$BLUEPRINT
-              sed -i 's/^  lustre_size_gib:.*/  lustre_size_gib: 18000/' \$$BLUEPRINT
               sed -i 's/machine_type: n2d-standard-4/machine_type: c2-standard-4/g' \$$BLUEPRINT
 
 

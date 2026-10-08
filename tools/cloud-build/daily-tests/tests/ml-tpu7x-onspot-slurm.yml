@@ -51,4 +51,3 @@ cli_deployment_vars:
   tpu_dynamic_max_nodes: 1
   tpu_accelerator_topology: 2x2x1
   tpu_enable_spot_vm: true
-  lustre_size_gib: 18000
