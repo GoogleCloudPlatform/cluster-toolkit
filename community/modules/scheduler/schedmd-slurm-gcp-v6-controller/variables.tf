@@ -547,8 +547,11 @@ variable "controller_state_disk" {
   NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
   EOD
   type = object({
-    type = string
-    size = number
+    type                   = string
+    size                   = number
+    storage_pool           = optional(string)
+    provisioned_iops       = optional(number)
+    provisioned_throughput = optional(number)
   })
 
   default = {

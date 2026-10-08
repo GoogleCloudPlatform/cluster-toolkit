@@ -47,6 +47,24 @@ variable "boot_disk_type" {
   default     = null
 }
 
+variable "boot_disk_storage_pool" {
+  description = "Storage pool to use for the boot disk. Note that storage pools are only supported with Hyperdisk types. For boot disks, only hyperdisk-balanced is supported. You must provide an existing storage pool, as this module does not create new ones."
+  type        = string
+  default     = null
+}
+
+variable "boot_disk_provisioned_iops" {
+  description = "Indicates how many IOPS to provision for the boot disk. This sets the number of I/O operations per second that the disk can handle."
+  type        = number
+  default     = null
+}
+
+variable "boot_disk_provisioned_throughput" {
+  description = "Indicates how much throughput to provision for the boot disk, in MB/s. This sets the amount of data that can be read or written from the disk per second."
+  type        = number
+  default     = null
+}
+
 variable "create_boot_snapshot_before_destroy" {
   description = "Whether to create a snapshot before destroying the boot disk"
   type        = bool
@@ -63,6 +81,12 @@ variable "type" {
   description = "Storage type for the NFS data disk"
   type        = string
   default     = "pd-ssd"
+}
+
+variable "storage_pool" {
+  description = "Storage pool to use for the NFS data disk. Note that storage pools are only supported with Hyperdisk types. You must provide an existing storage pool, as this module does not create new ones."
+  type        = string
+  default     = null
 }
 
 variable "create_snapshot_before_destroy" {
