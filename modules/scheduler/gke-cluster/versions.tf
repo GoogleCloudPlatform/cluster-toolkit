@@ -35,10 +35,10 @@ terraform {
 
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-cluster/v1.105.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-cluster/v1.105.1"
   }
 
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-cluster/v1.105.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-cluster/v1.105.1"
   }
 }

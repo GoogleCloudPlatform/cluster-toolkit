@@ -23,6 +23,6 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gcs-objects/v1.105.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gcs-objects/v1.105.1"
   }
 }
