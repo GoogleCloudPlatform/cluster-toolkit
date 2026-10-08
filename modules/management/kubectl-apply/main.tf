@@ -31,6 +31,7 @@ locals {
 
   kueue_config_template_vars = merge(
     {
+      namespace               = "default"
       pathways_cpu_quota      = 480
       pathways_memory_quota   = "2000G"
       tpu_flavor_cpu_quota    = "999999" # High default to avoid limiting TPU pods by CPU
@@ -133,7 +134,7 @@ locals {
         contains(keys(local.directory_manifests), index) ? (
           join("\n---\n", [
             # Use union() to combine the results of fileset (which are sets)
-            for f in union(
+            for f in setunion(
               fileset(manifest.source, "*.yaml"),
               fileset(manifest.source, "*.yml"),
               fileset(manifest.source, "*.tftpl")

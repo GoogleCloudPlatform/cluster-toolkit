@@ -25,16 +25,55 @@ type SourceReader interface {
 	GetModule(modPath string, copyPath string) error
 }
 
+// isWindowsDrivePath checks if a path begins with a Windows drive letter (e.g., C:\, C:/, C:relative).
+// It accepts cleanSource which has already been normalized via ToSlash(source) in IsLocalPath.
+//
+// Architectural design tradeoffs:
+//   - Single-character URL schemes with authorities (s://...) and forced protocol prefixes (s::...) are excluded.
+//   - Unnormalized multi-slash local paths (e.g. C://foo, C:\\foo) are intentionally classified as remote
+//     to avoid collision with RFC 3986 hierarchical URIs.
+//   - Single-character opaque URIs without slashes (e.g. s:manifest.json) are classified as drive-relative
+//     local paths due to structural ambiguity with C:foo.
+func isWindowsDrivePath(cleanSource string) bool {
+	if len(cleanSource) < 2 || cleanSource[1] != ':' {
+		return false
+	}
+	c := cleanSource[0]
+	if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+		return false
+	}
+	if len(cleanSource) > 2 {
+		// Reject go-getter forced protocol syntax (e.g., s::https://...)
+		if cleanSource[2] == ':' {
+			return false
+		}
+		// Reject URI schemes (e.g., s://...)
+		if strings.HasPrefix(cleanSource[2:], "//") {
+			return false
+		}
+	}
+	return true
+}
+
+// ToSlash normalizes all directory separators (including Windows backslashes) to forward slashes.
+// Unlike filepath.ToSlash, this replaces backslashes unconditionally on all platforms.
+func ToSlash(p string) string {
+	return strings.ReplaceAll(p, "\\", "/")
+}
+
 // IsLocalPath checks if a source path is a local FS path
 func IsLocalPath(source string) bool {
-	return strings.HasPrefix(source, "./") ||
-		strings.HasPrefix(source, "../") ||
-		strings.HasPrefix(source, "/")
+	cleanSource := ToSlash(source)
+	return strings.HasPrefix(cleanSource, "./") ||
+		strings.HasPrefix(cleanSource, "../") ||
+		strings.HasPrefix(cleanSource, "/") ||
+		isWindowsDrivePath(cleanSource)
 }
 
 // IsEmbeddedPath checks if a source path points to an embedded modules
 func IsEmbeddedPath(source string) bool {
-	return strings.HasPrefix(source, "modules/") || strings.HasPrefix(source, "community/modules/")
+	cleanSource := ToSlash(source)
+	return strings.HasPrefix(cleanSource, "modules/") || strings.HasPrefix(cleanSource, "community/modules/")
 }
 
 // IsRemotePath checks if path neither Local nor Embedded

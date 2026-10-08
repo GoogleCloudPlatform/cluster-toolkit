@@ -47,6 +47,7 @@ gcluster deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
 * `--only <strings>`: Only apply to groups with the given names (comma-separated).
 * `--skip <strings>`: Skip groups with the given names (comma-separated).
 * `--auto-approve`: Automatically approve proposed changes without prompting.
+* `--parallelism <int>`: Limit the number of concurrent operations in Terraform (default: 10, or `GCLUSTER_TERRAFORM_PARALLELISM`).
 
 Refer to the [Selective Deployment and Exclusion Guide](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/machine-learning/README.md#selective-deployment-and-destruction-using---only-and---skip-flags) for more information on managing or skipping specific group deployments.
 
@@ -136,5 +137,6 @@ gcluster destroy DEPLOYMENT_DIRECTORY [flags]
 * `--only <strings>`: Only destroy groups with the given names (comma-separated).
 * `--skip <strings>`: Skip destroying groups with the given names (comma-separated).
 * `--robust`: Perform a robust destroy, including firewall rule cleanup.
+* `--parallelism <int>`: Limit the number of concurrent operations in Terraform (default: 10, or `GCLUSTER_TERRAFORM_PARALLELISM`).
 
 Refer to the [Selective Deployment and Exclusion Guide](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/machine-learning/README.md#selective-deployment-and-destruction-using---only-and---skip-flags) for more information on managing or skipping specific group destruction.

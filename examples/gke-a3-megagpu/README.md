@@ -8,6 +8,7 @@ The blueprint automatically configures the following components to enable optima
 - **Multi-networking**: Configures 8 secondary interfaces (VPC networks) for dedicated GPU-to-GPU traffic.
 - **NRI Device Injector**: Automatically injects required networking and GPU configurations into your ML containers.
 - **Kueue and JobSet**: Kubernetes-native tools for managing large-scale, multi-node training jobs with Topology Aware Scheduling (TAS).
+- **Consumption Options**: Supports On-Demand, GCE Reservations, Spot VMs, Dynamic Workload Scheduler (DWS) Flex Start, and DWS Flex Start with Queued Provisioning.
 
 ## Prerequisites
 
@@ -27,9 +28,11 @@ Before deploying, fill out the `gke-a3-megagpu-deployment.yaml` file with your p
 | `deployment_name` | A unique name for this Cluster Toolkit deployment. |
 | `region` / `zone` | The GCP region and zone (e.g., `us-east5`, `us-east5-a`). |
 | `authorized_cidr` | Your public IP address in CIDR notation (e.g., `1.2.3.4/32`). |
-| `static_node_count` | Number of A3 Mega nodes to provision. |
-| `reservation` | (Optional) The name of a GCE reservation to use. |
 | `bucket` | Name of the GCS bucket to store Terraform state. |
+
+### Consumption Options
+
+Option 1 (Specific Reservation) is uncommented by default in `gke-a3-megagpu-deployment.yaml`. To use another consumption model, comment out Option 1 and uncomment the desired option.
 
 ## Deploy the Cluster
 
@@ -154,6 +157,88 @@ After deployment, you can verify the GPU and networking performance using the in
     kubectl delete -f examples/gke-a3-megagpu/nccl-test-latest.yaml
     ```
 
+## DWS Flex Start
+
+### Submit a job using DWS Flex Start
+
+1. Submit the DWS Flex Start job:
+
+    ```bash
+    kubectl apply -f examples/dws-sample-workloads/sample-job-flex.yaml
+    ```
+
+2. Consider using `kubectl get jobs` and `kubectl describe job <job-name>` to get information about the jobs.\
+    You can also use `kubectl get pods` and `kubectl describe pod <pod-name>` to get pod information.
+
+3. Clean up the job:
+
+    ```bash
+    kubectl delete -f examples/dws-sample-workloads/sample-job-flex.yaml
+    ```
+
+*Note: DWS Flex Start workloads require `nodeSelector: cloud.google.com/gke-flex-start: "true"`.*
+
+### Deploy the NCCL test JobSet for DWS Flex Start
+
+1. Deploy the NCCL test JobSet:
+
+    ```bash
+    kubectl create -f examples/gke-a3-megagpu/nccl-jobset-flex.yaml
+    ```
+
+2. Monitor pods (`kubectl get pods`) and check results in the primary pod logs:
+
+    ```bash
+    kubectl logs <jobset-pod-name>
+    ```
+
+3. Clean up test resources:
+
+    ```bash
+    kubectl delete -f examples/gke-a3-megagpu/nccl-jobset-flex.yaml
+    ```
+
+## DWS Flex Start + Queued Provisioning
+
+### Submit a job using Queued Provisioning
+
+1. Submit the Queued Provisioning job:
+
+    ```bash
+    kubectl apply -f examples/dws-sample-workloads/sample-job-flex-queue.yaml
+    ```
+
+2. Consider using `kubectl get jobs` and `kubectl describe job <job-name>` to get information about the jobs.\
+    You can also use `kubectl get pods` and `kubectl describe pod <pod-name>` to get pod information.
+
+3. Clean up the job:
+
+    ```bash
+    kubectl delete -f examples/dws-sample-workloads/sample-job-flex-queue.yaml
+    ```
+
+*Note: Queued Provisioning workloads require the label `kueue.x-k8s.io/queue-name: dws-local-queue` and annotation `provreq.kueue.x-k8s.io/maxRunDurationSeconds`.*
+
+### Deploy the NCCL test JobSet for DWS Flex Start with Queued Provisioning
+
+1. Deploy the NCCL test JobSet:
+
+    ```bash
+    kubectl create -f examples/gke-a3-megagpu/nccl-jobset-flex-queue.yaml
+    ```
+
+2. Monitor pods (`kubectl get pods`) and check results in the primary pod logs:
+
+    ```bash
+    kubectl logs <jobset-pod-name>
+    ```
+
+3. Clean up test resources:
+
+    ```bash
+    kubectl delete -f examples/gke-a3-megagpu/nccl-jobset-flex-queue.yaml
+    ```
+
 ## Clean Up
 
 To avoid incurring charges for the resources created, destroy the deployment:
@@ -169,7 +254,3 @@ To avoid incurring charges for the resources created, destroy the deployment:
 Refer to [Deploy an A3 Mega GKE cluster for ML training](https://cloud.google.com/cluster-toolkit/docs/deploy/deploy-a3-mega-gke-cluster) for more instructions on creating the GKE-A3M cluster.
 
 Refer to [Deploy and run NCCL test with Topology Aware Scheduling (TAS)](https://docs.cloud.google.com/ai-hypercomputer/docs/nccl/test-gke#a3-mega) for more instructions on running a NCCL test on the GKE-A3M cluster.
-
-### Additional Consumption Options
-The Cluster Toolkit supports alternative consumption options such as Spot VMs or Dynamic Workload Scheduler (DWS) Flex-start.
-Refer to step 5 of [Create a cluster using Cluster Toolkit](https://docs.cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#use-cluster-toolkit) for general instructions on other consumption options. Similar configuration settings can be used for GKE-A3M cluster as well.

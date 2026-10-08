@@ -21,3 +21,4 @@ steps:
   automapSubstitutions: true
 images:
 - 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:latest'
+logsBucket: "gs://$PROJECT_NUMBER.cloudbuild-logs.googleusercontent.com"

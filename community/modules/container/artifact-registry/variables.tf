@@ -27,6 +27,17 @@ variable "deployment_name" {
   type        = string
 }
 
+variable "repository_name" {
+  description = "The repository name (ID) for the Artifact Registry repository. If null, a default value will be created using the deployment_name and a random suffix."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.repository_name == null ? true : can(regex("^[a-z][-a-z0-9]{0,61}[a-z0-9]$", var.repository_name))
+    error_message = "The repository_name must be between 2 and 63 characters, start with a lowercase letter, end with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens."
+  }
+}
+
 variable "labels" {
   description = "Labels to add to the artifact registry. Key-value pairs."
   type        = map(string)
@@ -35,6 +46,21 @@ variable "labels" {
 
 variable "repo_password" {
   description = "Optional password/API key. If null, one will be randomly generated."
+  type        = string
+  default     = null
+}
+
+variable "repository_kms_key_name" {
+  description = <<-DOC
+    The full resource name of a Cloud KMS CryptoKey used to encrypt the
+    Artifact Registry repository contents (CMEK). The Artifact Registry
+    service agent must hold roles/cloudkms.cryptoKeyEncrypterDecrypter on
+    the key before repository creation, and the key location must match
+    the repository location. Encryption mode is fixed at creation.
+    This is distinct from user_managed_replication[].kms_key_name, which
+    encrypts only the Secret Manager secret created for remote-repository
+    credentials.
+  DOC
   type        = string
   default     = null
 }

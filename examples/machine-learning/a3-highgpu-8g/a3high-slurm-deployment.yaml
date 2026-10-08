@@ -23,9 +23,6 @@ vars:
   project_id: # supply existing project id
   region: # supply region with a3-highgpu-8g capacity in reservation
   zone: # supply zone with a3-highgpu-8g capacity in reservation
-  tcpx_kernel_login: # use value supplied by Google Cloud staff
-  tcpx_kernel_password: # use value supplied by Google Cloud staff
-  keyserver_ubuntu_key: # use value supplied by Google Cloud staff
   a3_reservation_name: # supply a3-highgpu-8g reservation name
   slurm_cluster_name: # supply name for slurm cluster (lowercase letters, numbers, and hyphens, max 20 characters, must start with a letter)
   a3_static_cluster_size: # supply a3-highgpu-8g reservation size

@@ -55,8 +55,18 @@ locals {
     "WORKLOADS"
   ]
 
-  # Choose the default based on confidential mode
-  default_system_node_pool_machine_type = var.enable_confidential_nodes ? "n2d-standard-4" : "e2-standard-4"
+  # Check if n4-standard-4 is present across all target system node pool zones
+  n4_available_in_catalog = length(local.target_system_node_pool_zones) > 0 && alltrue([
+    for z in local.target_system_node_pool_zones : length(data.google_compute_machine_types.available_system_machines[z].machine_types) > 0
+  ])
+
+  # Choose the default based on confidential mode and N4 catalog availability:
+  # 1. If confidential nodes are enabled, default to n2d-standard-4 (Confidential VM support).
+  # 2. Otherwise, if n4-standard-4 is in the catalog, default to n4-standard-4 (Gen 4 primary).
+  # 3. If n4-standard-4 is not in the catalog, fall back to n2d-standard-4 (E2-less fallback).
+  default_system_node_pool_machine_type = var.enable_confidential_nodes ? "n2d-standard-4" : (
+    local.n4_available_in_catalog ? "n4-standard-4" : "n2d-standard-4"
+  )
   # Fallback to the default if the user left it null
   system_node_pool_machine_type = coalesce(var.system_node_pool_machine_type, local.default_system_node_pool_machine_type)
   # Choose default disk type based on confidential storage mode.
@@ -98,6 +108,26 @@ locals {
 
 data "google_project" "project" {
   project_id = var.project_id
+}
+
+data "google_compute_zones" "available" {
+  project = var.project_id
+  region  = var.region
+}
+
+locals {
+  target_system_node_pool_zones = var.system_node_pool_machine_type != null ? [] : toset(
+    var.system_node_pool_zones != null ? var.system_node_pool_zones : (
+      var.cluster_availability_type == "ZONAL" ? (var.zone != null ? [var.zone] : []) : data.google_compute_zones.available.names
+    )
+  )
+}
+
+data "google_compute_machine_types" "available_system_machines" {
+  for_each = local.target_system_node_pool_zones
+  project  = var.project_id
+  zone     = each.value
+  filter   = "name = \"n4-standard-4\""
 }
 
 data "google_container_engine_versions" "version_prefix_filter" {
@@ -187,7 +217,7 @@ resource "google_container_cluster" "gke_cluster" {
     gcp_public_cidrs_access_enabled = var.gcp_public_cidrs_access_enabled
   }
 
-  private_ipv6_google_access = var.enable_private_ipv6_google_access ? "PRIVATE_IPV6_GOOGLE_ACCESS_TO_GOOGLE" : null
+  private_ipv6_google_access = var.enable_private_ipv6_google_access ? "PRIVATE_IPV6_GOOGLE_ACCESS_TO_GOOGLE" : "PRIVATE_IPV6_GOOGLE_ACCESS_DISABLED"
   default_max_pods_per_node  = var.default_max_pods_per_node
   master_auth {
     client_certificate_config {
@@ -372,15 +402,22 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
-  confidential_nodes {
-    enabled                    = var.enable_confidential_nodes
-    confidential_instance_type = var.confidential_instance_type
+  # Emit the block only when enabled. The provider marks confidential_nodes
+  # ForceNew, so sending `enabled = false` to a cluster created without the
+  # block plans a full cluster replacement on every pre-existing cluster.
+  dynamic "confidential_nodes" {
+    for_each = var.enable_confidential_nodes ? [1] : []
+    content {
+      enabled                    = true
+      confidential_instance_type = var.confidential_instance_type
+    }
   }
 
 
   timeouts {
     create = var.timeout_create
     update = var.timeout_update
+    delete = var.timeout_delete
   }
 
 
@@ -556,6 +593,12 @@ resource "google_container_node_pool" "system_node_pools" {
     }
   }
 
+  timeouts {
+    create = var.timeout_create
+    update = var.timeout_update
+    delete = var.timeout_delete
+  }
+
   lifecycle {
     ignore_changes = [
       node_config[0].labels,
@@ -642,6 +685,12 @@ resource "google_container_node_pool" "cpu_np" {
     metadata = {
       "disable-legacy-endpoints" = "true"
     }
+  }
+
+  timeouts {
+    create = var.timeout_create
+    update = var.timeout_update
+    delete = var.timeout_delete
   }
 
   lifecycle {
@@ -731,6 +780,7 @@ module "kubectl_apply" {
   apply_manifests = concat(flatten([
     for idx, network_info in local.all_networks : [
       {
+        name   = length(network_info.name) <= 35 ? "netparam-${network_info.name}" : "netparam-${substr(network_info.name, 0, 29)}-${substr(sha1(network_info.name), 0, 5)}"
         source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
         template_vars = {
           name            = network_info.name,
@@ -740,6 +790,7 @@ module "kubectl_apply" {
         }
       },
       {
+        name          = length(network_info.name) <= 37 ? "netobj-${network_info.name}" : "netobj-${substr(network_info.name, 0, 31)}-${substr(sha1(network_info.name), 0, 5)}"
         source        = "${path.module}/templates/network-object.yaml.tftpl",
         template_vars = { name = network_info.name }
       }
@@ -747,6 +798,7 @@ module "kubectl_apply" {
     ]),
     var.enable_inference_gateway ? [
       {
+        name          = "inference-gateway"
         source        = "https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.0/manifests.yaml",
         template_vars = {}
       }
@@ -768,4 +820,7 @@ resource "google_service_account_iam_member" "mtc_node_workload_identity" {
   service_account_id = "projects/${var.project_id}/serviceAccounts/${local.sa_email}"
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${replace(var.project_id, ":", "/")}.svc.id.goog[gke-managed-checkpointing/gke-checkpointing-multitier-node]"
+  depends_on = [
+    google_container_cluster.gke_cluster
+  ]
 }

@@ -31,6 +31,10 @@ deployment_groups:
     settings:
       labels:
         brown: \$(fox)
+        # A backslash escapes only "$(". Before a plain variable, it is not
+        # consumed: "\$IP" is emitted as "\$IP", not as "$IP".
+        escaped_var: \$IP
+        escaped_braced_var: \${HOME}
       image_name: \((cat /dog))
       image_family: \$(zebra/to(ad
       subnetwork_name: \$(purple

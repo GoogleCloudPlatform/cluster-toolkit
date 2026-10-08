@@ -160,6 +160,7 @@ deployment_groups:
       system_node_pool_taints: []
       enable_private_endpoint: false # Allows access from authorized public IPs
       enable_pathways_for_tpus: $(vars.enable_pathways_for_tpus)
+      enable_private_ipv6_google_access: false
       configure_workload_identity_sa: true
       enable_gcsfuse_csi: true
       master_authorized_networks:
@@ -240,10 +241,8 @@ deployment_groups:
       jobset:
         install: true
 
-  # When utilizing GCS Fuse Storage Profiles, you must ensure the GKE Service Agent
-  # possesses the 'gke.gcsfuse.profileUser' custom IAM role assigned out-of-band.
-  # Please refer to 'modules/file-system/gke-persistent-volume/README.md' for instructions.
-  # Persistent Volume for training data using GCS Fuse Storage Profile
+  # Persistent Volume for training data using GCS Fuse Storage Profile.
+  # For shared buckets or custom IAM roles, see modules/file-system/gke-persistent-volume/README.md
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
     use: [training_bucket, gke-tpu-v6e-cluster]

@@ -71,6 +71,10 @@ module "vpcs" {
   extra_iap_ports                        = var.extra_iap_ports
   firewall_rules                         = var.firewall_rules
   ips_per_nat                            = var.ips_per_nat
+  nat_ip_allocate_option                 = var.nat_ip_allocate_option
+  enable_dynamic_port_allocation         = var.enable_dynamic_port_allocation
+  min_ports_per_vm                       = var.min_ports_per_vm
+  max_ports_per_vm                       = var.max_ports_per_vm
   mtu                                    = var.mtu
   network_description                    = var.network_description
   network_routing_mode                   = var.network_routing_mode

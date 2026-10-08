@@ -287,12 +287,12 @@ variable "system_node_pool_node_count" {
   })
   default = {
     total_min_nodes = 2
-    total_max_nodes = 10
+    total_max_nodes = 150
   }
 }
 
 variable "system_node_pool_machine_type" {
-  description = "Machine type for the system node pool. Defaults to n2d-standard-4 if confidential nodes are enabled, otherwise e2-standard-4."
+  description = "Machine type for the system node pool. Defaults to 'n2d-standard-4' if confidential nodes are enabled. Otherwise, it defaults to 'n4-standard-4' if available in the target region/zones, falling back to 'n2d-standard-4'."
   type        = string
   default     = null
 }
@@ -401,7 +401,7 @@ variable "service_account_email" {
 }
 
 variable "service_account_scopes" {
-  description = "Scopes to to use with the system node pool."
+  description = "Scopes to use with the system node pool."
   type        = set(string)
   default     = ["https://www.googleapis.com/auth/cloud-platform"]
 }
@@ -448,15 +448,33 @@ variable "labels" {
 }
 
 variable "timeout_create" {
-  description = "Timeout for creating a node pool"
+  description = "Timeout for creating a cluster and its node pools (e.g., '30m', '60m', '2h', '1h30m'). Must be a positive duration string with 's', 'm', or 'h' units. If null, defaults to the Terraform provider timeout (90m for cluster, 2h for node pools)."
   type        = string
   default     = null
+  validation {
+    condition     = var.timeout_create == null || (can(regex("^([0-9]+(s|m|h))+$", var.timeout_create)) && !can(regex("^(0+(s|m|h))+$", var.timeout_create)))
+    error_message = "timeout_create must be a positive duration string using 's', 'm', or 'h' units (e.g., '30m', '60m', '1h30m', '2h'), or null."
+  }
 }
 
 variable "timeout_update" {
-  description = "Timeout for updating a node pool"
+  description = "Timeout for updating a cluster and its node pools (e.g., '30m', '60m', '2h', '1h30m'). Must be a positive duration string with 's', 'm', or 'h' units. If null, defaults to the Terraform provider timeout (90m for cluster, 2h for node pools)."
   type        = string
   default     = null
+  validation {
+    condition     = var.timeout_update == null || (can(regex("^([0-9]+(s|m|h))+$", var.timeout_update)) && !can(regex("^(0+(s|m|h))+$", var.timeout_update)))
+    error_message = "timeout_update must be a positive duration string using 's', 'm', or 'h' units (e.g., '30m', '60m', '1h30m', '2h'), or null."
+  }
+}
+
+variable "timeout_delete" {
+  description = "Timeout for deleting a cluster and its node pools (e.g., '30m', '60m', '2h', '1h30m'). Must be a positive duration string with 's', 'm', or 'h' units. If null, defaults to the Terraform provider timeout (90m for cluster, 2h for node pools)."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.timeout_delete == null || (can(regex("^([0-9]+(s|m|h))+$", var.timeout_delete)) && !can(regex("^(0+(s|m|h))+$", var.timeout_delete)))
+    error_message = "timeout_delete must be a positive duration string using 's', 'm', or 'h' units (e.g., '30m', '60m', '1h30m', '2h'), or null."
+  }
 }
 
 # Deprecated

@@ -29,6 +29,7 @@ cli_deployment_vars:
   zone: "{{ zone }}"
   static_node_count: "{{ static_node_count }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
+  spot: "{{ enable_spot | default(true) }}"
 custom_vars:
   project: "{{ project }}"
   instance_labels:

@@ -503,7 +503,6 @@ func WriteGcsDestroyInstructions(w io.Writer, buckets []string) {
 func GetUniqueGcsBuckets(bp config.Blueprint) ([]string, error) {
 	seenBuckets := make(map[string]bool)
 	var buckets []string
-	var retErr error
 
 	for _, g := range bp.Groups {
 		if g.TerraformBackend.Type != "gcs" || !g.TerraformBackend.Configuration.Has("bucket") {
@@ -511,17 +510,15 @@ func GetUniqueGcsBuckets(bp config.Blueprint) ([]string, error) {
 		}
 		evaluatedConfig, err := bp.EvalDict(g.TerraformBackend.Configuration)
 		if err != nil {
-			return buckets, fmt.Errorf("failed to evaluate terraform backend configuration: %w", err)
+			return nil, fmt.Errorf("failed to evaluate terraform backend configuration for group %q: %w", g.Name, err)
 		}
 		bucketVal := evaluatedConfig.Get("bucket")
 		if bucketVal.IsNull() || !bucketVal.IsKnown() || bucketVal.Type() != cty.String {
-			retErr = fmt.Errorf("GCS backend bucket name cannot be empty or unknown")
-			continue
+			return nil, fmt.Errorf("GCS backend bucket name for group %q cannot be empty or unknown", g.Name)
 		}
 		bucketName := bucketVal.AsString()
 		if bucketName == "" {
-			retErr = fmt.Errorf("GCS backend bucket name cannot be empty")
-			continue
+			return nil, fmt.Errorf("GCS backend bucket name for group %q cannot be empty", g.Name)
 		}
 		if seenBuckets[bucketName] {
 			continue
@@ -530,5 +527,5 @@ func GetUniqueGcsBuckets(bp config.Blueprint) ([]string, error) {
 		buckets = append(buckets, bucketName)
 	}
 
-	return buckets, retErr
+	return buckets, nil
 }

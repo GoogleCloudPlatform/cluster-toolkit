@@ -60,7 +60,7 @@ vars:
   a4x_node_pool_disk_size_gb: 100
   k8s_service_account_name: workload-identity-k8s-sa
   compute_nodepool_machine_type: a4x-highgpu-4g
-  system_nodepool_machine_type: e2-standard-16
+  system_nodepool_machine_type: n2d-standard-16
 
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
@@ -260,7 +260,6 @@ deployment_groups:
       target_architecture: "arm64"
       kueue:
         install: true
-        version: "0.17.1"
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a4x-pool.static_gpu_count)
@@ -289,7 +288,8 @@ deployment_groups:
                   values:
                   - arm64
       apply_manifests:
-      - source: $(vars.nvidia_dra_driver_path)
+      - name: nvidia-dra-driver
+        source: $(vars.nvidia_dra_driver_path)
 
   - id: job-template
     source: modules/compute/gke-job-template
@@ -308,10 +308,8 @@ deployment_groups:
         effect: NoSchedule
     outputs: [instructions]
 
-  # When utilizing GCS Fuse Storage Profiles, you must ensure the GKE Service Agent
-  # possesses the 'gke.gcsfuse.profileUser' custom IAM role assigned out-of-band.
-  # Please refer to 'modules/file-system/gke-persistent-volume/README.md' for instructions.
-  # Persistent Volume for training data using GCS Fuse Storage Profile
+  # Persistent Volume for training data using GCS Fuse Storage Profile.
+  # For shared buckets or custom IAM roles, see modules/file-system/gke-persistent-volume/README.md
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
     use: [training_bucket, a4x-cluster]

@@ -4,10 +4,12 @@ This blueprint provisions a Google Kubernetes Engine (GKE) cluster with A3 High 
 
 The blueprint automatically configures the following components to enable optimal GPU performance and multi-networking:
 
-- **GPU-Direct TCPX**: Optimized networking stack for high-bandwidth, low-latency GPU communication.
+- **GPU-Direct TCPXO**: Optimized networking stack for high-bandwidth, low-latency GPU communication.
 - **Multi-networking**: Configures 4 secondary interfaces (VPC networks) for dedicated GPU-to-GPU traffic.
 - **NRI Device Injector**: Automatically injects required networking and GPU configurations into your ML containers.
 - **Kueue and JobSet**: Kubernetes-native tools for managing large-scale, multi-node training jobs with Topology Aware Scheduling (TAS).
+
+> **Note on TCPXO Support:** `a3-highgpu-8g` uses GPU-Direct TCPXO for optimized GPU communication. However, TCPXO is only supported for Spot and On-Demand VMs. Please ensure you do not use GCE reservations when using TCPXO.
 
 ## Prerequisites
 
@@ -27,9 +29,11 @@ Before deploying, fill out the `gke-a3-highgpu-deployment.yaml` file with your p
 | `deployment_name` | A unique name for this Cluster Toolkit deployment. |
 | `region` / `zone` | The GCP region and zone (e.g., `us-central1`, `us-central1-c`). |
 | `authorized_cidr` | Your public IP address in CIDR notation (e.g., `1.2.3.4/32`). |
-| `static_node_count` | Number of A3 High nodes to provision. |
-| `reservation` | (Optional) The name of a GCE reservation to use. |
 | `bucket` | Name of the GCS bucket to store Terraform state. |
+
+### Consumption Options
+
+Option 1 (Specific Reservation) is uncommented by default in `gke-a3-highgpu-deployment.yaml`. To use another consumption model, comment out Option 1 and uncomment the desired option.
 
 ## Deploy the Cluster
 
@@ -58,6 +62,88 @@ Before deploying, fill out the `gke-a3-highgpu-deployment.yaml` file with your p
 Refer the following guide to verify GPU and networking performance using NVIDIA `nccl-tests`:
 
 - **Multi-Node (16+ GPUs)**: [Multi-Node Test Plan](multi-node-test-plan.md)
+
+## DWS Flex Start
+
+### Submit a job using DWS Flex Start
+
+1. Submit the DWS Flex Start job:
+
+    ```bash
+    kubectl apply -f examples/dws-sample-workloads/sample-job-flex.yaml
+    ```
+
+2. Consider using `kubectl get jobs` and `kubectl describe job <job-name>` to get information about the jobs.\
+    You can also use `kubectl get pods` and `kubectl describe pod <pod-name>` to get pod information.
+
+3. Clean up the job:
+
+    ```bash
+    kubectl delete -f examples/dws-sample-workloads/sample-job-flex.yaml
+    ```
+
+*Note: DWS Flex Start workloads require `nodeSelector: cloud.google.com/gke-flex-start: "true"`.*
+
+### Deploy the NCCL test JobSet for DWS Flex Start
+
+1. Deploy the NCCL test JobSet:
+
+    ```bash
+    kubectl create -f examples/gke-a3-highgpu/nccl-jobset-flex.yaml
+    ```
+
+2. Monitor pods (`kubectl get pods`) and check results in the primary pod logs:
+
+    ```bash
+    kubectl logs <jobset-pod-name>
+    ```
+
+3. Clean up test resources:
+
+    ```bash
+    kubectl delete -f examples/gke-a3-highgpu/nccl-jobset-flex.yaml
+    ```
+
+## DWS Flex Start + Queued Provisioning
+
+### Submit a job using Queued Provisioning
+
+1. Submit the Queued Provisioning job:
+
+    ```bash
+    kubectl apply -f examples/dws-sample-workloads/sample-job-flex-queue.yaml
+    ```
+
+2. Consider using `kubectl get jobs` and `kubectl describe job <job-name>` to get information about the jobs.\
+    You can also use `kubectl get pods` and `kubectl describe pod <pod-name>` to get pod information.
+
+3. Clean up the job:
+
+    ```bash
+    kubectl delete -f examples/dws-sample-workloads/sample-job-flex-queue.yaml
+    ```
+
+*Note: Queued Provisioning workloads require the label `kueue.x-k8s.io/queue-name: dws-local-queue` and annotation `provreq.kueue.x-k8s.io/maxRunDurationSeconds`.*
+
+### Deploy the NCCL test JobSet for DWS Flex Start with Queued Provisioning
+
+1. Deploy the NCCL test JobSet:
+
+    ```bash
+    kubectl create -f examples/gke-a3-highgpu/nccl-jobset-flex-queue.yaml
+    ```
+
+2. Monitor pods (`kubectl get pods`) and check results in the primary pod logs:
+
+    ```bash
+    kubectl logs <jobset-pod-name>
+    ```
+
+3. Clean up test resources:
+
+    ```bash
+    kubectl delete -f examples/gke-a3-highgpu/nccl-jobset-flex-queue.yaml
+    ```
 
 ## Clean Up
 

@@ -15,30 +15,250 @@
 package job
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
+	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 )
 
-func TestConfigSetCmd_NoGlobalFlagsRequired(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "config-test-home")
+func TestConfigSetCmd(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		expectedCtx Context
+		expectErr   string
+	}{
+		{
+			name:      "empty value fails",
+			args:      []string{"project", ""},
+			expectErr: "configuration values cannot be empty",
+		},
+		{
+			name:      "single argument fails",
+			args:      []string{"project"},
+			expectErr: "requires both a key and a value",
+		},
+		{
+			name:      "invalid key fails",
+			args:      []string{"invalidkey", "value"},
+			expectErr: "unknown configuration key",
+		},
+		{
+			name: "valid project sets successfully",
+			args: []string{"project", "my-super-project"},
+			expectedCtx: Context{
+				ProjectID: "my-super-project",
+			},
+		},
+		{
+			name: "valid cluster sets successfully",
+			args: []string{"cluster", "my-super-cluster"},
+			expectedCtx: Context{
+				ClusterName: "my-super-cluster",
+			},
+		},
+		{
+			name: "valid location sets successfully",
+			args: []string{"location", "us-west1-a"},
+			expectedCtx: Context{
+				Location: "us-west1-a",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempHome := t.TempDir()
+			t.Setenv("HOME", tempHome)
+
+			cmd := configSetCmd
+			err := cmd.RunE(cmd, tc.args)
+
+			if tc.expectErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.expectErr) {
+					t.Fatalf("expected error containing %q, got %v", tc.expectErr, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				ctx, err := loadContext()
+				if err != nil {
+					t.Fatalf("failed to load context: %v", err)
+				}
+				if ctx != tc.expectedCtx {
+					t.Errorf("expected context %+v, got %+v", tc.expectedCtx, ctx)
+				}
+			}
+		})
+	}
+}
+
+func TestConfigShowCmd(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+
+	file := filepath.Join(tempHome, ".gcluster", "context.json")
+	if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(file, []byte("{\"project\": \"test-show-project\", \"cluster\": \"show-cluster\", \"location\": \"us-west\"}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := configShowCmd
+	b := bytes.NewBufferString("")
+	cmd.SetOut(b)
+
+	err := cmd.RunE(cmd, []string{})
+	if err != nil {
+		t.Fatalf("unexpected error running show: %v", err)
+	}
+
+	out := b.String()
+	if !strings.Contains(out, "test-show-project") || !strings.Contains(out, "show-cluster") {
+		t.Fatalf("expected formatted output containing test-show-project, got: %s", out)
+	}
+}
+
+func TestParseEditorArgs(t *testing.T) {
+	tests := []struct {
+		name      string
+		editor    string
+		expected  []string
+		expectErr string
+	}{
+		{
+			name:     "editor with flags",
+			editor:   "code --wait",
+			expected: []string{"code", "--wait"},
+		},
+		{
+			name:     "quoted executable path with spaces",
+			editor:   `"/Applications/Sublime Text.app/subl" -w`,
+			expected: []string{"/Applications/Sublime Text.app/subl", "-w"},
+		},
+		{
+			name:     "empty quoted flag is preserved",
+			editor:   `emacsclient -c -a ""`,
+			expected: []string{"emacsclient", "-c", "-a", ""},
+		},
+		{
+			name:      "empty editor returns error",
+			editor:    "",
+			expectErr: "editor command is empty",
+		},
+		{
+			name:      "unclosed quote returns error",
+			editor:    `vim "unclosed`,
+			expectErr: "unclosed quote in editor command",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseEditorArgs(tc.editor)
+			if tc.expectErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.expectErr) {
+					t.Fatalf("expected error containing %q, got: %v", tc.expectErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !slices.Equal(got, tc.expected) {
+				t.Errorf("expected %q, got %q", tc.expected, got)
+			}
+		})
+	}
+}
+
+func assertSavedConfig(t *testing.T, targetFile, expectedTarget string, expectedCtx *Context) {
+	t.Helper()
+	data, err := os.ReadFile(targetFile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(tempDir)
+	if expectedTarget != "" && string(data) != expectedTarget {
+		t.Errorf("expected target file %q, got %q", expectedTarget, string(data))
+	}
+	if expectedCtx != nil {
+		var ctx Context
+		if err := json.Unmarshal(data, &ctx); err != nil {
+			t.Fatalf("failed to unmarshal target file: %v", err)
+		}
+		if ctx != *expectedCtx {
+			t.Errorf("expected context %+v, got %+v", *expectedCtx, ctx)
+		}
+	}
+}
 
-	t.Setenv("HOME", tempDir)
-
-	// We do NOT set cluster, location, or project flags here.
-	// The command should still succeed because we overrode PersistentPreRunE for ConfigCmd.
-	output, err := executeCommand(JobCmd, "config", "set", "cluster", "my-new-cluster")
-
-	if err != nil {
-		t.Fatalf("config set failed unexpectedly: %v, output: %s", err, output)
+func TestValidateAndApplyConfig(t *testing.T) {
+	tests := []struct {
+		name           string
+		tempContent    string
+		initialTarget  string
+		expectedTarget string
+		expectedCtx    *Context
+		expectErr      string
+	}{
+		{
+			name:           "empty content sets empty json object",
+			tempContent:    "",
+			expectedTarget: "{}",
+		},
+		{
+			name:           "valid json applied successfully",
+			tempContent:    `{"project": "proj-1", "cluster": "clus-1", "location": "us-central1"}`,
+			expectedTarget: `{"project": "proj-1", "cluster": "clus-1", "location": "us-central1"}`,
+			expectedCtx:    &Context{ProjectID: "proj-1", ClusterName: "clus-1", Location: "us-central1"},
+		},
+		{
+			name:          "invalid json returns error and preserves target",
+			tempContent:   `{not-valid-json`,
+			initialTarget: `{"project": "original"}`,
+			expectErr:     "config file contains structural errors or invalid JSON",
+		},
+		{
+			name:        "unknown fields in json returns error",
+			tempContent: `{"project": "proj", "extra": "invalid"}`,
+			expectErr:   "config file contains structural errors or invalid JSON",
+		},
 	}
 
-	// Verify that the context was saved correctly
-	ctx := loadContext()
-	if ctx.ClusterName != "my-new-cluster" {
-		t.Errorf("expected cluster name to be 'my-new-cluster', got '%s'", ctx.ClusterName)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			tempFile := filepath.Join(tempDir, "temp.json")
+			targetFile := filepath.Join(tempDir, "target.json")
+
+			if err := os.WriteFile(tempFile, []byte(tc.tempContent), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(targetFile, []byte(tc.initialTarget), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			err := validateAndApplyConfig(tempFile, targetFile)
+
+			if tc.expectErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.expectErr) {
+					t.Fatalf("expected error containing %q, got: %v", tc.expectErr, err)
+				}
+				assertSavedConfig(t, targetFile, tc.initialTarget, nil)
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			assertSavedConfig(t, targetFile, tc.expectedTarget, tc.expectedCtx)
+		})
 	}
 }

@@ -18,7 +18,8 @@
 # Expects variables: RUN_CLEANUP, DEPLOYMENT_NAME, ANSIBLE_PID
 cleanup_pod() {
 	local exit_code=$?
-	trap - EXIT SIGTERM SIGINT ERR
+	trap '' SIGTERM SIGINT
+	trap - EXIT ERR
 	set +e
 
 	if [ "${RUN_CLEANUP:-false}" = "false" ]; then

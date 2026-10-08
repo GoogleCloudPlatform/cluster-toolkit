@@ -34,7 +34,7 @@ log() {
 
 check_dependencies() {
 	log "INFO" "Checking for required command-line tools..."
-	local dependencies=("gcloud" "awk" "grep" "sort" "date" "sed" "basename")
+	local dependencies=("gcloud" "awk" "grep" "sort" "date" "sed" "basename" "python3")
 	local missing_deps=()
 
 	for cmd in "${dependencies[@]}"; do
@@ -86,6 +86,31 @@ load_exclusions() {
 	fi
 }
 
+populate_active_build_exclusions() {
+	log "INFO" "Fetching active Cloud Build builds to protect their service accounts..."
+
+	# --- Protect service accounts tied to ongoing Cloud Build builds ---
+	local ongoing_builds
+	local build_id
+	local prefix
+
+	if ! ongoing_builds=$(gcloud builds list --project="$PROJECT_ID" --filter="status=(QUEUED,WORKING)" --format="value(id)" 2>/dev/null); then
+		log "WARNING" "Failed to list ongoing Cloud Build builds. Service accounts for in-flight builds may not be protected."
+	elif [[ -z "$ongoing_builds" ]]; then
+		log "INFO" "No ongoing Cloud Build builds found."
+	else
+		while IFS= read -r build_id; do
+			[[ -z "$build_id" ]] && continue
+			prefix="${build_id:0:6}"
+			if [[ -n "$prefix" && -z "${EXCLUSION_MAP[${prefix}]:-}" ]]; then
+				log "INFO" "Protecting service accounts matching active Cloud Build prefix: ${prefix} (build ${build_id})"
+				EXCLUSION_MAP["${prefix}"]=1
+			fi
+		done <<<"$ongoing_builds"
+	fi
+
+	log "INFO" "Finished fetching active build prefixes."
+}
 # Checks if a resource should be excluded from deletion.
 # Returns 0 if EXCLUDED (DO NOT delete)
 # Returns 1 if NOT excluded (OK to delete)
@@ -750,7 +775,7 @@ process_iam_deleted_members() {
 	log "INFO" "--- Processing: IAM Role Bindings for Deleted Service Accounts (Bulk) ---"
 
 	# Run the python bulk script inline
-	if ! python3 - "$PROJECT_ID" "$DRY_RUN" <<'EOF'; then
+	if ! python3 - "$PROJECT_ID" "$DRY_RUN" <<'EOF'
 import json, os, subprocess, sys, tempfile
 
 project_id = sys.argv[1]
@@ -824,6 +849,7 @@ except Exception as e:
     print(f"ERROR: An unexpected error occurred: {e}")
     sys.exit(1)
 EOF
+	then
 		log "ERROR" "Bulk IAM cleanup failed."
 		((ERROR_COUNT++)) || true
 	else
@@ -1298,6 +1324,7 @@ main() {
 
 	# --- Phase 5: IAM Cleanup ---
 	log "INFO" "--- PHASE 5: Cleaning up IAM Policy Bindings ---"
+	populate_active_build_exclusions
 	process_service_accounts
 	process_iam_deleted_members
 

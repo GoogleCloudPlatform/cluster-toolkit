@@ -23,7 +23,7 @@ RUN git clone https://github.com/GoogleCloudPlatform/hpc-toolkit.git &&\
  /go/bin/go-licenses check "./..." &&\
  /go/bin/go-licenses save "./..." --save_path="THIRD_PARTY_NOTICES"
 
-FROM debian:bullseye-slim
+FROM debian:trixie-slim
 COPY --from=build /ghpc-build/hpc-toolkit/ghpc /usr/bin/ghpc
 COPY --from=build /ghpc-build/hpc-toolkit/THIRD_PARTY_NOTICES /THIRD_PARTY_NOTICES
 

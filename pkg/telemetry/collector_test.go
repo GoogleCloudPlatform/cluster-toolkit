@@ -456,6 +456,11 @@ func TestGetIsTestData(t *testing.T) {
 			want:      "true",
 		},
 		{
+			name:      "dev-2 project",
+			projectID: "hpc-toolkit-dev-2",
+			want:      "true",
+		},
+		{
 			name:      "prod project",
 			projectID: "some-other-project",
 			want:      "false",
@@ -1120,14 +1125,14 @@ func TestGetMachineType(t *testing.T) {
 							{
 								ID: config.ModuleID("gke_cluster"),
 								Settings: config.NewDict(map[string]cty.Value{
-									"system_node_pool_machine_type": cty.StringVal("e2-standard-16"),
+									"system_node_pool_machine_type": cty.StringVal("n2d-standard-16"),
 								}),
 							},
 						},
 					},
 				},
 			},
-			want: "e2-standard-16",
+			want: "n2d-standard-16",
 		},
 		{
 			name: "Extracts default machine_type when omitted from blueprint",
@@ -2387,6 +2392,21 @@ func TestGetErrorType(t *testing.T) {
 			name:     "Network Timeout with Substrings",
 			err:      errors.New("RouterNat: googleapi: Error 404: The resource was not found"),
 			expected: ErrTypeRouternatResourceNotFound,
+		},
+		{
+			name:     "HTTP Bad Gateway",
+			err:      errors.New("Error response from daemon: received unexpected HTTP status: 502 Bad Gateway"),
+			expected: ErrTypeHttpBadGateway,
+		},
+		{
+			name:     "Pod Initialization Timeout",
+			err:      errors.New("Error: Pod initialization timed out after 20 minutes."),
+			expected: ErrTypePodTimeout,
+		},
+		{
+			name:     "IAM Project Access Denied",
+			err:      errors.New("User [sa@example.iam.gserviceaccount.com] does not have permission to access projects instance [my-project] (or it may not exist)"),
+			expected: ErrTypeIamPermissionDenied,
 		},
 	}
 

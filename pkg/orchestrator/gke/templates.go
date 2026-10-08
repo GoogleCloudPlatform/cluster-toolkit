@@ -15,6 +15,7 @@
 package gke
 
 import (
+	"embed"
 	"fmt"
 	"io/fs"
 	"os"
@@ -25,6 +26,9 @@ import (
 
 	"github.com/google/safetext/yamltemplate"
 )
+
+//go:embed templates/*
+var templatesFS embed.FS
 
 func (g *GKEOrchestrator) getTemplatePath() (string, error) {
 	if g != nil && g.gkeCustomTemplatesPath != "" {

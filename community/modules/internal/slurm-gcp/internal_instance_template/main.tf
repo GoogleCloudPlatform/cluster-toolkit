@@ -157,12 +157,14 @@ resource "google_compute_instance_template" "tpl" {
   dynamic "network_interface" {
     for_each = var.additional_networks
     content {
-      network            = network_interface.value.network
-      subnetwork         = network_interface.value.subnetwork
-      subnetwork_project = network_interface.value.subnetwork_project
+      network            = try(coalesce(network_interface.value.network), null)
+      subnetwork         = try(coalesce(network_interface.value.subnetwork), null)
+      subnetwork_project = try(coalesce(network_interface.value.subnetwork_project), null)
       network_ip         = try(coalesce(network_interface.value.network_ip), null)
       nic_type           = try(coalesce(network_interface.value.nic_type), null)
       stack_type         = try(coalesce(network_interface.value.stack_type), null)
+      network_attachment = try(coalesce(network_interface.value.network_attachment), null)
+      queue_count        = network_interface.value.queue_count
       dynamic "access_config" {
         for_each = network_interface.value.access_config
         content {
@@ -246,6 +248,13 @@ resource "google_compute_instance_template" "tpl" {
     for_each = var.reservation_affinity != null ? [var.reservation_affinity] : []
     content {
       type = reservation_affinity.value.type
+      dynamic "specific_reservation" {
+        for_each = try(reservation_affinity.value.specific_reservation, null) != null ? [reservation_affinity.value.specific_reservation] : []
+        content {
+          key    = specific_reservation.value.key
+          values = specific_reservation.value.values
+        }
+      }
     }
   }
 

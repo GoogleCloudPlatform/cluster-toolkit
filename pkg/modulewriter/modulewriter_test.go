@@ -684,24 +684,6 @@ func (s *zeroSuite) TestWriteGcsDestroyInstructions(c *C) {
 					}),
 				},
 			},
-			{
-				Name: "group_empty_bucket",
-				TerraformBackend: config.TerraformBackend{
-					Type: "gcs",
-					Configuration: config.NewDict(map[string]cty.Value{
-						"bucket": cty.StringVal(""),
-					}),
-				},
-			},
-			{
-				Name: "group_null_bucket",
-				TerraformBackend: config.TerraformBackend{
-					Type: "gcs",
-					Configuration: config.NewDict(map[string]cty.Value{
-						"bucket": cty.NullVal(cty.String),
-					}),
-				},
-			},
 		},
 	}
 
@@ -710,4 +692,31 @@ func (s *zeroSuite) TestWriteGcsDestroyInstructions(c *C) {
 	out := buf.String()
 
 	c.Check(strings.Contains(out, "my-bucket-name"), Equals, true)
+}
+
+func (s *zeroSuite) TestGetUniqueGcsBuckets_Errors(c *C) {
+	bp := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "group_empty",
+				TerraformBackend: config.TerraformBackend{
+					Type: "gcs",
+					Configuration: config.NewDict(map[string]cty.Value{
+						"bucket": cty.StringVal(""),
+					}),
+				},
+			},
+		},
+	}
+	_, err := GetUniqueGcsBuckets(bp)
+	c.Assert(err, NotNil)
+	c.Check(err.Error(), Equals, "GCS backend bucket name for group \"group_empty\" cannot be empty")
+
+	bp.Groups[0].Name = "group_null"
+	bp.Groups[0].TerraformBackend.Configuration = config.NewDict(map[string]cty.Value{
+		"bucket": cty.NullVal(cty.String),
+	})
+	_, err = GetUniqueGcsBuckets(bp)
+	c.Assert(err, NotNil)
+	c.Check(err.Error(), Equals, "GCS backend bucket name for group \"group_null\" cannot be empty or unknown")
 }

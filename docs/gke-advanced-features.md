@@ -24,8 +24,10 @@ vars:
 Configuring dynamic slicing requires the following settings:
 
 * **Hardware and accelerator type:** Specify a TPU v7x machine type (`tpu7x-standard-4t`) and set `accelerator_type: tpu7x`.
-* **Enable dynamic slicing flag:** Set `enable_dynamic_slicing_for_tpus: true` in the `vars` block. This setting deploys the GKE TPU Slice Controller and configures dynamic partition-level topology definitions.
-* **Kueue dynamic slicing configuration:** When you set `enable_dynamic_slicing_for_tpus: true`, Cluster Toolkit automatically uses the default dynamic slicing Kueue configuration template (the `modules/management/kubectl-apply/kueue/kueue-configuration-dynamic-slicing.yaml.tftpl` file), which registers the `tpu-v7x-slice` ResourceFlavor and enables Topology-Aware Scheduling (TAS). You can optionally override this setting by passing a custom template path using the `kueue_configuration_path` variable.
+* **Enable dynamic slicing:** Set `enable_dynamic_slicing_for_tpus: true` in the `vars` block. This setting deploys the GKE TPU Slice Controller, automatically configures the `workload_policy` module's `accelerator_topology_mode` to `PROVISION_ONLY` (or `null` when disabled, unless explicitly overridden in `workload_policy`), and configures dynamic partition-level topology definitions.
+* **Kueue dynamic slicing configuration:** When you set `enable_dynamic_slicing_for_tpus: true`, Cluster Toolkit automatically uses the default dynamic slicing Kueue configuration template (the `modules/management/kubectl-apply/kueue/kueue-configuration-dynamic-slicing.yaml.tftpl` file, or `kueue-configuration-dynamic-slicing-pathways.yaml.tftpl` when Pathways is also enabled), which registers the `tpu-flavor` (or `flavor-tpu7x`) `ResourceFlavor` targeting `cloud.google.com/gke-tpu-accelerator: tpu7x` and enables Topology-Aware Scheduling (TAS). You can optionally override this setting by passing a custom template path using `kueue.config_path` in the `kubectl-apply` module settings.
+
+> **Note:** Switching an existing cluster between static slicing and dynamic slicing (`enable_dynamic_slicing_for_tpus`) changes `workload_policy.accelerator_topology_mode`, which is an immutable field on the Compute Engine resource policy (`ForceNew`). Because Compute Engine prevents replacing a resource policy while it is attached to an active node pool, toggling this setting on a running cluster requires recreating the TPU node pool and resource policy.
 
 ### 1.2 Capabilities and workload scheduling (`gcluster job submit`)
 
@@ -34,7 +36,7 @@ Workload scheduling with dynamic slicing provides the following capabilities:
 * **Dynamic superslicing:** Aggregate multiple physical TPU v7x cubes together into a larger logical slice (such as combining multiple `4x4x4` cubes into `4x4x8` or `4x4x16` topologies) dynamically for large-scale distributed training.
 * **Dynamic subslicing:** Partition a single physical TPU cube into smaller fractional topologies (such as slicing a `4x4x4` cube into `2x2x4` or `2x4x4` sub-slices) dynamically, enabling efficient bin-packing and co-tenancy for smaller workloads.
 * **Latency optimization:** Kueue Topology-Aware Scheduling (TAS) places TPU pods with minimal network hop latency across the physical TPU interconnect mesh.
-* **Automated scheduling annotations:** When you submit a job with `--compute-type tpu-v7x-slice` and `--topology TOPOLOGY`, Cluster Toolkit automatically translates the request into partition-level requirements (`cloud.google.com/gke-tpu-partition-TOPOLOGY-id`) and dynamically switches between single-slice (`kueue.x-k8s.io/podset-required-topology`) and multi-slice (`kueue.x-k8s.io/podset-slice-required-topology`) admission annotation keys based on `--num-slices`.
+* **Automated scheduling annotations:** When you submit a job with `--compute-type tpu7x` and `--topology TOPOLOGY`, Cluster Toolkit automatically injects the `cloud.google.com/gke-tpu-slice-topology` Pod annotation, translates the request into partition-level requirements (`cloud.google.com/gke-tpu-partition-TOPOLOGY-id`), and dynamically switches between single-slice (`kueue.x-k8s.io/podset-required-topology`) and multi-slice (`kueue.x-k8s.io/podset-slice-required-topology` along with `kueue.x-k8s.io/podset-slice-size`) admission annotation keys based on `--num-slices`.
 
 #### Example CLI command
 
@@ -44,7 +46,7 @@ Submit a dynamic slicing workload that requests a `4x4x4` TPU v7x topology:
 ./gcluster job submit \
   --name my-dynamic-slice-job \
   --command "python train.py" \
-  --compute-type tpu-v7x-slice \
+  --compute-type tpu7x \
   --topology 4x4x4
 ```
 
@@ -72,9 +74,9 @@ vars:
 
 Pathways cluster configuration requires the following components:
 
-* **Dedicated CPU coordinator node pool:** Pathways relies on CPU-based Resource Manager (`pathways-rm`) and Proxy (`pathways-proxy`) services to coordinate multi-slice TPU execution. Ensure that your blueprint includes a system or CPU compute node pool (for example, `n2-standard-32`) so that coordinator pods are scheduled on CPU nodes rather than consuming TPU chips.
+* **Dedicated CPU coordinator node pool:** Pathways relies on CPU-based Resource Manager (`pathways-rm`) and Proxy (`pathways-proxy`) services to coordinate multi-slice TPU execution. When you set `enable_pathways_for_tpus: true` on the `gke-cluster` module, Cluster Toolkit automatically creates an autoscaled CPU node pool named `cpu-np` (`n4-standard-64`) so that coordinator pods are scheduled on CPU nodes rather than consuming TPU chips (you can also target a custom CPU node pool at job submission time using `--pathways-head-np`).
 * **Enable Pathways flag:** Set `enable_pathways_for_tpus: true` in the `vars` block. This setting configures Kueue ClusterQueues and LocalQueues with multi-slice resource quotas tailored for Pathways.
-* **Kueue Pathways configuration:** When you set `enable_pathways_for_tpus: true`, Cluster Toolkit automatically uses the default Pathways Kueue configuration template (the `modules/management/kubectl-apply/kueue/kueue-configuration-pathways.yaml.tftpl` file, or the `kueue-configuration-dynamic-slicing-pathways.yaml.tftpl` file if dynamic slicing is also enabled). You can optionally override this setting by passing a custom template path using the `kueue_configuration_path` variable.
+* **Kueue Pathways configuration:** When you set `enable_pathways_for_tpus: true`, Cluster Toolkit automatically uses the default Pathways Kueue configuration template (the `modules/management/kubectl-apply/kueue/kueue-configuration-pathways.yaml.tftpl` file, or the `kueue-configuration-dynamic-slicing-pathways.yaml.tftpl` file if dynamic slicing is also enabled). You can optionally override this setting by passing a custom template path using `kueue.config_path` in the `kubectl-apply` module settings.
 * **Unified Kueue resource groups and quotas:** When Pathways is active, Cluster Toolkit programmatically unifies Kueue ClusterQueue resource groups (`["google.com/tpu", "cpu", "memory"]`) into a single unified resource group. This setting prevents scheduling conflicts and node selector merging issues on TPU worker pods that request both TPU and CPU or memory resources. ClusterQueue nominal quotas (`tpu_flavor_cpu_quota`, `tpu_flavor_memory_quota`, `tpu_quota`) automatically scale to the physical hardware capacity of your cluster, defaulting to high limits to prevent bottlenecks while supporting custom overrides by using the `config_template_vars` variable.
 * **IAM and Workload Identity permissions:** If you use state persistence (`export ENABLE_PATHWAYS_PERSISTENCE='1'`), ensure that the Google Cloud Service Account (GSA) associated with your workload (typically suffixed with `gke-wl-sa`) is granted the `storage.admin` or `storage.objectAdmin` role on your Cloud Storage bucket.
 
@@ -144,24 +146,22 @@ deployment_groups:
     settings:
       cluster_autoscaling:
         enabled: true
-        autoscaling_profile: OPTIMIZE_UTILIZATION # or BALANCED
-        resource_limits:
-          - resource_type: cpu
-            minimum: 1
-            maximum: 1000
-          - resource_type: memory
-            minimum: 1
-            maximum: 4000
-          - resource_type: nvidia-l4
-            minimum: 0
-            maximum: 64
+        autoprovisioning_disk_size_gb: 100
+        autoprovisioning_disk_type: pd-balanced
+        autoprovisioning_cpu_max: 1000
+        autoprovisioning_memory_max: 4000
+        limits:
+          - autoprovisioning_machine_type: g2-standard-48
+            autoprovisioning_max_count: 64
+          - autoprovisioning_machine_type: ct6e-standard-4t
+            autoprovisioning_max_count: 16
 ```
 
 #### Key cluster configuration requirements
 
 NAP cluster configuration requires the following settings:
 
-* **Resource limits:** Specify `minimum` and `maximum` bounds for CPU, memory, and accelerator types. NAP only creates node pools whose aggregate consumption stays within these defined bounds.
+* **Resource limits:** Specify `autoprovisioning_cpu_max`, `autoprovisioning_memory_max`, and `limits` (`autoprovisioning_machine_type` and `autoprovisioning_max_count`). NAP only creates node pools whose aggregate consumption stays within these defined bounds.
 * **Kueue resource quota alignment:** When integrating with Kueue for job queuing, ensure that Kueue ClusterQueue nominal capacities correspond to your GKE NAP maximum resource bounds so that Kueue can admit workloads smoothly ahead of NAP node pool creation.
 
 ### 3.2 Job submission and workload scheduling (`gcluster job submit`)
@@ -231,7 +231,8 @@ deployment_groups:
     use: [gke_cluster]
     settings:
       apply_manifests:
-      - source: $(ghpc_stage("../modules/management/kubectl-apply/manifests/checkpoint-configuration.yaml.tftpl"))
+      - name: checkpoint-configuration
+        source: $(ghpc_stage("../modules/management/kubectl-apply/manifests/checkpoint-configuration.yaml.tftpl"))
         template_vars:
           namespace: "default"
           inMemoryVolumeSize: "50Gi"
@@ -256,9 +257,100 @@ When submitting training workloads via `gcluster job submit`, add the `--gke-mtc
 
 ---
 
+## 5. Cloud Storage FUSE storage profiles
+
+[GKE Cloud Storage FUSE storage profiles](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles) tune GCSFuse automatically for AI/ML access patterns. Adding `profile=` to a `gs://` mount in `gcluster job submit` generates the PersistentVolume and PersistentVolumeClaim ("gateway") the profile needs, instead of an inline CSI volume. The `--mount` format itself is described in the [gcluster job guide](gcluster_job_guide.md#44-example-submit-job-with-persistent-storage).
+
+### 5.1 Cluster prerequisites
+
+* **GKE version**: GKE `1.35.1-gke.1616000` or later with the Cloud Storage FUSE CSI driver enabled (`enable_gcsfuse_csi: true` on the `gke-cluster` module). Verify with `kubectl get sc -l gke-gcsfuse/profile=true`, which lists the three StorageClasses.
+* **GKE Service Agent IAM**: the GKE Service Agent (`service-<PROJECT_NUMBER>@container-engine-robot.iam.gserviceaccount.com`) needs bucket permissions to scan the bucket and, for Rapid Cache, to manage caches (see [Configure IAM permissions](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#configure_permissions)). Buckets provisioned through the [`gke-persistent-volume`](../modules/file-system/gke-persistent-volume/README.md) module get this binding automatically.
+
+> [!IMPORTANT]
+> **`profile=serving` requires the bucket and the cluster to be in the same
+> region.** GKE documents this co-location as *mandatory* for the
+> `gcsfusecsi-serving` profile, and equally mandatory whenever Rapid Cache
+> (`anywhereCacheZones`) is enabled - on any profile.
+>
+> Confirm the bucket's location before submitting:
+>
+> ```bash
+> gcloud storage buckets describe gs://<YOUR_BUCKET_NAME> --format="value(location)"
+> ```
+>
+> `training` and `checkpointing` without Rapid Cache do not carry this hard
+> requirement, though same-region buckets remain the better choice for
+> throughput and egress cost.
+
+### 5.2 Job submission (`gcluster job submit --mount "...;profile=<profile>"`)
+
+Accepted profiles are `training`, `checkpointing`, and `serving` (canonical `gcsfusecsi-<name>` names are also accepted). To choose one, see [Select performance profile](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#select-performance-profile).
+
+```shell
+./gcluster job submit \
+  --name my-serving-job \
+  --command "python serve.py" \
+  --compute-type n2-standard-32 \
+  --image us-docker.pkg.dev/my-project/my-repo/my-image:latest \
+  --mount "gs://<YOUR_MODEL_BUCKET>/llama;/models;ro;profile=serving"
+```
+
+Before applying anything, `gcluster` checks each profile mount:
+
+* A StorageClass missing from the cluster fails the submission.
+* A bucket outside the cluster's region fails the submission where GKE requires co-location (`serving`, or any profile with Rapid Cache enabled), and only warns otherwise.
+* A GKE Service Agent that appears to lack the bucket permissions produces a warning; submission continues.
+
+A dry run (`--dry-run-out`) turns the blocking checks into warnings.
+
+#### Volume attributes
+
+`attributes=<k=v,...>` overrides the [storage profile StorageClass parameters](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#storageclass_configuration_reference) on the generated volume (without `profile=`, it sets [GCSFuse CSI volume attributes](https://docs.cloud.google.com/kubernetes-engine/docs/reference/cloud-storage-fuse-csi-driver/volume-attr) on the inline mount). `gcluster` derives some attributes from the rest of the `--mount` spec, and supplying one of them through `attributes=` fails validation, so the two cannot silently overwrite each other. Use `options=<opt1>,<opt2>` instead of `attributes=mountOptions=...` for gcsfuse mount flags, and put the bucket in the `<src>` position of `--mount` (`gs://<bucket>[/<path>]`) instead of `attributes=bucketName=...`.
+
+#### Gateway sharing and naming
+
+* The generated claim is named `gcluster-gcsfuse-<bucket>-<profile>-<hash>` and the
+  PersistentVolume `gcluster-gcsfuse-<bucket>-<profile>-<hash>-<namespace>`, where
+  `<hash>` is a short digest of the volume's settings. The names are
+  deterministic, so several jobs that use the same bucket, profile, and settings
+  in the same namespace **share one gateway** rather than each creating their own.
+  A bucket subpath is applied on the pod's mount, so it does not create a new gateway.
+* Any change to the settings gives the mount its own gateway, so
+  it never clashes with the immutable spec of an existing one. Running jobs keep
+  using the old gateway.
+
+#### Managing gateways
+
+`gcluster job cancel` deletes the job, then every unused gateway (claim and volume)
+in the namespace:
+
+* Gateways used by other running jobs, or claimed by a submit in the last two minutes, are kept.
+* Gateways left by jobs that ended on their own or were deleted with `kubectl` are
+  reused by new jobs until the next cancel removes them.
+* A submit right after a cancel waits for the old gateway to go, then recreates it.
+  If a cancel removes a gateway mid-submit, the job is not started; resubmit.
+* Only gateways labelled by gcluster are touched. Bucket data is never affected.
+
+To list gateways:
+
+```bash
+kubectl get pv,pvc -A -l gcluster.google.com/managed-by=cluster-toolkit,gcluster.google.com/storage-type=gcsfuse
+```
+
+To delete one by hand, delete the claim first, then the volume bound to it:
+
+```bash
+VOLUME=$(kubectl get pvc <claim> -n <namespace> -o jsonpath='{.spec.volumeName}') && \
+kubectl delete pvc <claim> -n <namespace> && \
+{ [ -z "$VOLUME" ] || kubectl delete pv "$VOLUME"; }
+```
+
+---
+
 ## What's next
 
 * [TPU Dynamic Slicing on GKE Concepts](https://cloud.google.com/kubernetes-engine/docs/concepts/tpu-dynamic-slicing)
 * [Scheduling Dynamic Slices with Kueue and TAS on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/kueue-tpu-dynamic-slicing)
 * [GKE Node Auto-Provisioning Documentation](https://cloud.google.com/kubernetes-engine/docs/concepts/node-auto-provisioning)
 * [Multi-Tier Checkpointing on GKE Overview](https://cloud.google.com/kubernetes-engine/docs/concepts/multi-tier-checkpointing)
+* [Cloud Storage FUSE storage profiles on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles)

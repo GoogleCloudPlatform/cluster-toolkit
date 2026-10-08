@@ -48,7 +48,10 @@ var JobCmd = &cobra.Command{
 			return nil
 		}
 
-		ctx := loadContext()
+		ctx, err := loadContext()
+		if err != nil {
+			return err
+		}
 		if clusterName == "" {
 			clusterName = ctx.ClusterName
 		}

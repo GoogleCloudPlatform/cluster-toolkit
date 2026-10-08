@@ -52,3 +52,25 @@ variable "recordsets" {
   description = "List of DNS record sets to create in the zone"
   default     = []
 }
+
+variable "visibility" {
+  type        = string
+  description = "Visibility of the zone: public or private. Use private for NetApp volume endpoint DNS."
+  default     = "public"
+  validation {
+    condition     = contains(["public", "private"], var.visibility)
+    error_message = "visibility must be public or private."
+  }
+}
+
+variable "network_id" {
+  type        = string
+  description = "VPC network ID for private zones (projects/PROJECT_ID/global/networks/NETWORK_NAME). Use network_ids for multiple VPCs."
+  default     = null
+}
+
+variable "network_ids" {
+  type        = list(string)
+  description = "VPC network IDs visible to a private zone. Combined with network_id when both are set."
+  default     = []
+}

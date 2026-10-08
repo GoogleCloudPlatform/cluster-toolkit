@@ -25,7 +25,11 @@ the extended [Network Storage documentation](../../../docs/network_storage.md).
 
 This creates a pre-existing-network-storage module in terraform at the
 provided IP in `server_ip` of type nfs that will be mounted at `/home`. Note
-that the `server_ip` must be known before deployment.
+that the `server_ip` must be known before deployment. For large-capacity
+NetApp volumes and FlexCache caches, set `server_ip` to a DNS FQDN whose A
+record contains every NFS endpoint IP. See the
+[dns-managed-zone](../../network/dns-managed-zone/README.md) module and
+[network storage documentation](../../../docs/network_storage.md#mounting-large-capacity-volumes-and-flexcache).
 
 The following is an example of using `pre-existing-network-storage` with a GCS
 bucket:
@@ -181,7 +185,7 @@ No resources.
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Options describing various aspects of the file system. Consider adding setting to 'defaults,\_netdev,implicit\_dirs' when using gcsfuse. | `string` | `"defaults,_netdev"` | no |
 | <a name="input_parallelstore_options"></a> [parallelstore\_options](#input\_parallelstore\_options) | Parallelstore specific options | <pre>object({<br/>    daos_agent_config = optional(string, "")<br/>    dfuse_environment = optional(map(string), {})<br/>  })</pre> | `{}` | no |
 | <a name="input_remote_mount"></a> [remote\_mount](#input\_remote\_mount) | Remote FS name or export. This is the exported directory for nfs, fs name for lustre, and bucket name (without gs://) for gcsfuse. | `string` | n/a | yes |
-| <a name="input_server_ip"></a> [server\_ip](#input\_server\_ip) | The device name as supplied to fs-tab, excluding remote fs-name(for nfs, that is the server IP, for lustre <MGS NID>[:<MGS NID>]). This can be omitted for gcsfuse. | `string` | `""` | no |
+| <a name="input_server_ip"></a> [server\_ip](#input\_server\_ip) | The device name as supplied to fs-tab, excluding remote fs-name (for nfs, the server IP or DNS FQDN; for lustre <MGS NID>[:<MGS NID>]). This can be omitted for gcsfuse. For large-capacity NetApp volumes and FlexCache, use a DNS FQDN whose A record contains every NFS endpoint IP. | `string` | `""` | no |
 
 ## Outputs
 

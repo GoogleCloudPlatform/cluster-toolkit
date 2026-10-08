@@ -59,9 +59,10 @@ variable "nodeset" {
   type = object({
     nodeset_name         = string
     subnetwork_self_link = string
-    additional_networks = list(object({
-      subnetwork = string
-    }))
+    additional_networks = optional(list(object({
+      subnetwork         = optional(string)
+      network_attachment = optional(string)
+    })), [])
   })
 }
 

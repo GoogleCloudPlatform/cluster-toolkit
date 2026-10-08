@@ -99,12 +99,30 @@ def resolve_network_storage() -> List[NSMount]:
 
     return list(mounts.values())
 
-
 def is_controller_mount(mount) -> bool:
+    if not mount:
+        return False
+    if getattr(mount, "fs_type", None) == "gcsfuse":
+        return False
+    if not getattr(mount, "server_ip", None):
+        return lookup().is_controller
     # NOTE: Valid Lustre server_ip can take the form of '<IP>@tcp'
-    server_ip = mount.server_ip.split("@")[0]
-    mount_addr = util.host_lookup(server_ip)
-    return mount_addr == lookup().control_host_addr
+    server_ip = str(mount.server_ip).split("@")[0]
+    try:
+        mount_addr = util.host_lookup(server_ip) if server_ip else None
+    except Exception:
+        mount_addr = None
+    control_host = lookup().control_host
+    control_host_addr = lookup().control_host_addr
+    return (
+        (mount_addr is not None and mount_addr == control_host_addr)
+        or (control_host is not None and server_ip == control_host)
+        or (lookup().is_controller and (
+            server_ip in ("127.0.0.1", "localhost")
+            or server_ip == lookup().hostname
+            or mount_addr in ("127.0.0.1", "localhost")
+        ))
+    )
 
 def setup_network_storage():
     """prepare network fs mounts and add them to fstab"""
@@ -230,6 +248,14 @@ def wait_for_file(file_path: Path, timeout: int = 300):
 def munge_mount_handler():
     if lookup().is_controller:
         return
+
+    munge_key = Path(dirs.munge / "munge.key")
+    # Only in hybrid, elsewhere the controller can regenerate the key and a
+    # rebooting node has to pick the new one up.
+    if lookup().cfg.hybrid and munge_key.is_file():
+        log.info("Key already in place")
+        return
+
     mnt = lookup().munge_mount
 
     log.info(f"Mounting munge share to: {mnt.local_mount}")
@@ -265,7 +291,6 @@ def munge_mount_handler():
     else:
         raise err
 
-    munge_key = Path(dirs.munge / "munge.key")
     src_key = Path(mnt.local_mount / "munge.key")
     wait_for_file(src_key)
     log.info(f"Copy munge.key from: {mnt.local_mount}")
@@ -285,9 +310,18 @@ def munge_mount_handler():
 def slurm_key_mount_handler():
     if lookup().is_controller:
         return
+
+    file_name = "slurm.key"
+    slurm_key = Path(util.slurmdirs.etc / file_name)
+    # Only in hybrid, see the comment in munge_mount_handler.
+    if lookup().cfg.hybrid and slurm_key.is_file():
+        log.info("Key already in place")
+        return
+
     mnt = lookup().slurm_key_mount
 
     log.info(f"Mounting slurm_key share to: {mnt.local_mount}")
+    util.mkdirp(mnt.local_mount)
     if mnt.fs_type == "gcsfuse":
         cmd = [
             "gcsfuse",
@@ -303,7 +337,7 @@ def slurm_key_mount_handler():
             f"{mnt.server_ip}:{mnt.remote_mount}",
             str(mnt.local_mount),
         ]
-    timeout = 120 # wait max 120s to mount
+    timeout = 300 # wait max 300s to mount
     for retry, wait in enumerate(util.backoff_delay(0.5, timeout), 1):
         try:
             run(cmd, timeout=timeout)
@@ -318,15 +352,13 @@ def slurm_key_mount_handler():
     else:
         raise err
 
-    file_name = "slurm.key"
-    dst = Path(util.slurmdirs.etc / file_name)
     src_key = mnt.local_mount / file_name
     wait_for_file(src_key)
     log.info(f"Copy slurm.key from: {mnt.local_mount}")
-    shutil.copy2(src_key, dst)
+    shutil.copy2(src_key, slurm_key)
 
     log.info("Restrict permissions of slurm.key")
-    util.chown_slurm(dst, mode=0o400)
+    util.chown_slurm(slurm_key, mode=0o400)
 
     log.info(f"Unmount {mnt.local_mount}")
     if mnt.fs_type == "gcsfuse":
@@ -361,8 +393,12 @@ def setup_nfs_exports():
 
     # export path if corresponding selector boolean is True
     lines = []
-    for path,options in to_export.items():
+    for path, options in to_export.items():
         util.mkdirp(Path(path))
+        try:
+            os.chmod(Path(path), 0o755)
+        except OSError as e:
+            log.warning(f"Failed to set permissions for {path}: {e}")
         run(rf"sed -i '\#{path}#d' /etc/exports", timeout=30)
         lines.append(f"{path}  {options}")
 
@@ -371,4 +407,4 @@ def setup_nfs_exports():
     with (exportsd / "slurm.exports").open("w") as f:
         f.write("\n")
         f.write("\n".join(lines))
-    run("exportfs -a", timeout=30)
+    run("exportfs -ra", timeout=30)

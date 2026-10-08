@@ -13,6 +13,10 @@ If you use `--build-context` to build images on-the-fly, you must set:
 * `GCLUSTER_IMAGE_REPO`: The name of your Artifact Registry repository only (e.g., `gcluster-repo`). The tool will automatically construct the full path using the cluster's region and project ID.
 * `USER` or `USERNAME`: Used for unique image tagging (usually set automatically by your OS).
 
+### Optional Environment Variables
+
+* `GCLUSTER_REFRESH_CREDENTIALS`: Set to `1` to make every `gcluster job` command re-run `gcloud container clusters get-credentials` instead of reusing an existing, verified `kubeconfig` context for the cluster. See [Cluster connectivity and kubeconfig reuse](#101-cluster-connectivity-and-kubeconfig-reuse) for when this is useful.
+
 > [!NOTE]
 > ### Automated Prerequisite Checks Overview
 >
@@ -113,6 +117,10 @@ By specifying the `--compute-type` flag, you can use the exact same command to t
 > **Simplify Commands with Configuration**: You can set these values once using the configuration command and omit them from subsequent commands:
 >
 > ```bash
+> # Open system editor to edit defaults interactively
+> ./gcluster job config set
+>
+> # Or set values individually
 > ./gcluster job config set project <PROJECT_ID>
 > ./gcluster job config set cluster <CLUSTER_NAME>
 > ./gcluster job config set location <REGION/ZONE>
@@ -121,7 +129,7 @@ By specifying the `--compute-type` flag, you can use the exact same command to t
 > To view your current configuration, run:
 >
 > ```bash
-> ./gcluster job config list
+> ./gcluster job config show
 > ```
 
 ### 4.2 Submit the Job
@@ -169,9 +177,13 @@ If you want to run a job across multiple groups of GPU nodes (e.g., 2 groups of 
 
 You can mount Cloud Storage buckets, Filestore instances, existing PVCs (e.g., for Lustre), or host paths using the `--mount` flag.
 
-Mounts must use the format: `--mount "<src>;<dest>[;<mode>][;options=<options>]"`
+Mounts must use the format: `--mount "<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]"`
 * `mode` is optional and defaults to `ro` (read-only). To allow writes, append `;rw`.
 * `options` is optional and allows passing custom mount options (currently only supported for GCS fuse volumes).
+* `profile` is optional, GCS-only, and selects a [GKE Cloud Storage FUSE storage profile](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles) (see below).
+* `attributes` is optional, GCS-only and sets key-value pairs for CSI volume settings (`key=val,...`).
+  * **Without `profile=`**: Applies standard [GCSFuse CSI volume attributes](https://docs.cloud.google.com/kubernetes-engine/docs/reference/cloud-storage-fuse-csi-driver/volume-attr) directly to the inline mount.
+  * **With `profile=`**: Overrides default [storage profile StorageClass parameters](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#storageclass_configuration_reference) on the generated PVs.
 
 **Supported volume sources (`<src>`):**
 * **Cloud Storage**: `gs://<bucket-name>` (mounts via GCS Fused Driver)
@@ -196,8 +208,27 @@ Mounting a GCS bucket (read-write):
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
+  --service-account "workload-identity-k8s-sa" \
   --mount "gs://<YOUR_BUCKET_NAME>;/data;rw;options=logging:severity:info,enable-atomic-rename-object:true"
 ```
+
+*(Note: Replace `<YOUR_BUCKET_NAME>` with the name of your own bucket. Use `--service-account <KSA_NAME>` to specify the Kubernetes Service Account configured with Workload Identity access to read/write the bucket).*
+
+Mounting GCS buckets with storage profiles:
+
+```bash
+./gcluster job submit \
+  --name my-training-job \
+  --command "python app.py" \
+  --compute-type n2-standard-32 \
+  --base-image python:3.9-slim \
+  --build-context job_details \
+  --service-account "workload-identity-k8s-sa" \
+  --mount "gs://<YOUR_DATASET_BUCKET>/imagenet;/data;ro;profile=training" \
+  --mount "gs://<YOUR_CHECKPOINT_BUCKET>/run-42;/checkpoints;rw;profile=checkpointing"
+```
+
+*(Note: Replace `<YOUR_DATASET_BUCKET>` and `<YOUR_CHECKPOINT_BUCKET>` with the names of your own buckets).*
 
 Mounting an existing PVC named `lustre-pvc` (read-only):
 
@@ -210,6 +241,10 @@ Mounting an existing PVC named `lustre-pvc` (read-only):
   --build-context job_details \
   --mount "lustre-pvc;/data"
 ```
+
+#### GCS FUSE storage profiles (`profile=`)
+
+Adding `profile=` (`training`, `checkpointing`, or `serving`) to a `gs://` mount makes `gcluster` generate a [GKE Cloud Storage FUSE storage profile](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles) PersistentVolume and PersistentVolumeClaim alongside your JobSet. `gcluster job cancel` deletes them once no other workload uses them. For prerequisites, IAM and region requirements, the attributes reference, and how gateways are shared and cleaned up, see [Cloud Storage FUSE storage profiles](gke-advanced-features.md#5-cloud-storage-fuse-storage-profiles).
 
 ### 4.5 Example: Submit Job with Custom Environment Variables
 
@@ -378,8 +413,10 @@ Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (
 ./gcluster job submit \
   ... \
   --name my-robust-job \
-  --restart-on-exit-codes 1,137
+  --restart-on-exit-codes 1,137,143
 ```
+
+*(Note: Exit code `143` corresponds to `SIGTERM` ($128 + 15$). Workload pods interrupted by Spot or Kueue preemption receive SIGTERM and exit with code 143; adding 143 ensures preempted pods are restarted rather than failing the job).*
 
 **Example 6: Private Registry & Service Account**
 Use `--image-pull-secret` and `--service-account` for secure jobs.
@@ -442,13 +479,19 @@ By default, finished jobs are kept for 1 hour. You can change this using `--gke-
 ./gcluster job submit ... --gke-ttl-after-finished 2h  # Keep for 2 hours
 ```
 
-### 6.4 Graceful Termination (Grace Period)
+### 6.4 Graceful Termination & Signal Handling
 
 You can give your workloads a buffer period to save checkpoints or perform cleanups before they are forcefully killed using `--grace-period`.
 
 ```bash
 ./gcluster job submit ... --grace-period 2m # Allow 2 minutes for cleanup
 ```
+
+#### Signal Forwarding & Cleanup
+When a workload pod is evicted, cancelled, or preempted (e.g. on Spot VMs or Kueue preemption), GKE sends `SIGTERM` to the container:
+* `gcluster` runs workload commands in their own process group and forwards `SIGTERM` to child processes so active operations terminate promptly.
+* Post-command cleanup commands in the user script (such as checkpoint flushes or artifact uploads to Cloud Storage) continue to run before the pod grace period expires.
+* If a workload is interrupted by `SIGTERM`, `gcluster` ensures it exits with code `143` even if cleanup commands exit `0`, preventing evicted pods from falsely reporting success.
 
 ### 6.5 Topology & Scheduler
 
@@ -464,7 +507,7 @@ Request a specific TPU slice topology using `--topology`.
   --base-image python:3.9-slim \
   --build-context job_details \
   --command "python app.py" \
-  --compute-type tpu-v6e-slice \
+  --compute-type v6e-16 \
   --topology 4x4
 ```
 
@@ -1008,7 +1051,7 @@ To submit a dynamic slicing workload targeting TPU v7x nodes, enter the followin
 ./gcluster job submit \
   --name my-dynamic-slice-job \
   --command "python train.py" \
-  --compute-type tpu-v7x-slice \
+  --compute-type tpu7x \
   --topology 4x4x4
 ```
 
@@ -1147,21 +1190,33 @@ Pass the `--gke-custom-templates-path` flag to the `submit` command:
 *Use these commands to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*
 
 #### `gcluster job config set [key] [value]`
-Sets a persistent configuration property.
+Modifies configuration defaults. If run without any arguments (`./gcluster job config set`), it automatically opens your default system text editor (`$EDITOR` or `nano`) to edit the configuration file interactively.
 
 * **Supported Keys:**
   * `project`: Google Cloud Project ID
   * `cluster`: GKE Cluster Name
   * `location`: GKE Cluster Location (region or zone)
 
+**Examples:**
+
+```bash
+# Interactive editor mode:
+./gcluster job config set
+
+# Set specific key/value pairs:
+./gcluster job config set project my-awesome-project
+./gcluster job config set cluster my-cluster
+./gcluster job config set location us-central1-a
+```
+
+#### `gcluster job config show`
+Prints the current saved configuration defaults and configuration file path.
+
 **Example:**
 
 ```bash
-./gcluster job config set project my-awesome-project
+./gcluster job config show
 ```
-
-#### `gcluster job config list`
-Lists all persistent configuration properties currently set.
 
 ### 9.3 `submit` Flags
 The `gcluster job submit` command deploys a container image as a job (Kubernetes JobSet) on a GKE cluster, integrated with Kueue for advanced queuing. It can use pre-built images or build images on-the-fly without a local Docker daemon (powered internally by the [Crane](https://github.com/google/go-containerregistry/blob/main/cmd/crane/README.md) container utility).
@@ -1183,7 +1238,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--num-nodes` | `int` | Number of nodes to use per group/slice (Default: `1`). Auto-calculated for TPUs based on topology. |
 | `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. Supports pipe separator (`|`) for multiple values. |
 | `--restarts` | `int` | Maximum number of restarts allowed for the JobSet before marked as failed (Default: `1`). |
-| `--mount` | `stringArray` | Mount storage volumes, buckets, filestore instances, or PVCs using the `<src>;<dest>[;<mode>][;options=<options>]` format. Examples of `<src>`: `gs://my-bucket`, `filestore://my-instance/share`, `my-pvc` (for Lustre/etc), or `/host/path`. |
+| `--mount` | `stringArray` | Mount storage volumes, buckets, filestore instances, or PVCs using the `<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]` format. Examples of `<src>`: `gs://my-bucket`, `filestore://my-instance/share`, `my-pvc` (for Lustre/etc), or `/host/path`. `profile=` (`training`, `checkpointing`, `serving`) is GCS-only and provisions a shared GCS FUSE storage-profile PV/PVC gateway instead of an inline CSI volume. |
 | `--env` | `stringArray` | Custom environment variables to pass exclusively to the user's workload container in KEY=VALUE format (e.g. `--env KEY=VALUE`). Applies to both standard and Pathways workloads. Can be specified multiple times. |
 | `--await-job-completion` | `bool` | If true, the CLI waits for the job to complete before exiting. |
 | `--timeout` | `string` | Time to wait for job completion (e.g., `1h`, `10m`). Used with `--await-job-completion`. |
@@ -1261,7 +1316,44 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 > [!NOTE]
 > **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. You can override this to stream logs from all pods by explicitly passing `--main-only=false`.
 
-## 10. Troubleshooting: ImagePullBackOff
+## 10. Troubleshooting
+
+### 10.1 Cluster connectivity and kubeconfig reuse
+
+Every `gcluster job` command first makes `kubectl` target your cluster. A GKE control plane can be reached through two kinds of endpoints, and which one works depends on *where you run `gcluster` from*:
+
+| Endpoint | Typical failure when it is the wrong one for your network |
+| :--- | :--- |
+| **IP endpoint** (`https://<public-or-private-ip>`) — subject to [Master Authorized Networks](https://cloud.google.com/kubernetes-engine/docs/how-to/authorized-networks) | `dial tcp <ip>:443: i/o timeout` (your client IP is not allow-listed, or has no route to the control plane), or `502 Bad Gateway` / `504 Gateway Timeout` when a corporate forward proxy answers on the control plane's behalf |
+| **DNS endpoint** (`https://gke-<id>.<region>.gke.goog`) — IAM-gated, bypasses authorized networks | `431 Request Header Fields Too Large` (some corporate proxies inflate request headers) |
+
+`gcluster` handles this as follows:
+
+1. **Reuse first.** If your `kubeconfig` already contains a context for the cluster (`gke_<project>_<location>_<cluster>`) that *verifiably* belongs to it — its server is one of the cluster's endpoints, its pinned CA matches the cluster CA (IP endpoint only), and it authenticates through `gke-gcloud-auth-plugin` — `gcluster` runs a short (5s) connectivity probe against that context and, on success, **uses it as-is** without calling `gcloud container clusters get-credentials`. Your namespace and endpoint choice are preserved. You will see:
+
+   ```text
+   Reusing existing kubeconfig context 'gke_my-project_us-central1_my-cluster' (DNS endpoint).
+   ```
+
+2. **Otherwise fetch credentials and verify.** If there is no reusable context (or the probe shows the existing endpoint is unreachable from your machine), `gcluster` runs `get-credentials`, probes again, and if the probe fails with a *connectivity* error it automatically retries with the other endpoint when the cluster offers one:
+
+   ```text
+   WARNING: Cluster 'my-cluster' is unreachable via its IP endpoint (dial tcp 35.1.2.3:443: i/o timeout). Retrying with the DNS endpoint...
+   WARNING: Connected to cluster 'my-cluster' via its DNS endpoint after the IP endpoint was unreachable. kubeconfig context 'gke_my-project_us-central1_my-cluster' now points at the DNS endpoint.
+   ```
+
+   Authentication errors (`Unauthorized`, `gke-gcloud-auth-plugin` failures) are **not** retried against another endpoint because a different endpoint cannot fix credentials; `gcluster` fails immediately and tells you to run `gcloud auth application-default login`.
+
+> [!TIP]
+> **Forcing a credential refresh.** Set `GCLUSTER_REFRESH_CREDENTIALS=1` to skip step 1 and always re-run `get-credentials` (step 2 still applies). Use this if you suspect the reused context is wrong in a way the checks above cannot detect — for example, after deliberately editing the entry by hand, or when sharing a `kubeconfig` between tools that expect a specific endpoint:
+>
+> ```bash
+> GCLUSTER_REFRESH_CREDENTIALS=1 ./gcluster job submit ...
+> ```
+
+If **both** endpoints are unreachable, the error lists what was attempted for each. Typical fixes are adding your egress IP to the cluster's authorized networks, enabling external traffic on the DNS endpoint (`gcloud container clusters update <CLUSTER> --location=<LOCATION> --enable-dns-access`), or running `gcluster` from a network that can reach the control plane.
+
+### 10.2 ImagePullBackOff
 
 If your job status remains `Pending` and the underlying pods show `ImagePullBackOff` or `ErrImagePull`, the GKE node pool service account may lack permission to read from the Artifact Registry repository.
 

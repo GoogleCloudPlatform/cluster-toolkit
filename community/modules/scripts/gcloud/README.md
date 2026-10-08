@@ -11,7 +11,7 @@ This module allows you to run a series of gcloud commands as part of a Cluster T
     commands:
       - gcloud compute networks create my-network --subnet-mode=custom
       - gcloud compute networks subnets create my-subnet --network=my-network --range=10.0.0.0/24 --region=us-central1
-      - gcloud compute instances create my-vm --zone=us-central1-a --network=my-network --subnet=my-subnet --machine-type=e2-medium
+      - gcloud compute instances create my-vm --zone=us-central1-a --network=my-network --subnet=my-subnet --machine-type=n2d-standard-2
 ## Dependency Management
 
 This module uses `local-exec` provisioners to run `gcloud` commands. As such, it does not expose any outputs that other Terraform modules can consume to establish dependencies.

@@ -24,9 +24,15 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
+	crm "google.golang.org/api/cloudresourcemanager/v1"
 	compute "google.golang.org/api/compute/v1"
+	iamapi "google.golang.org/api/iam/v1"
+	gcs "google.golang.org/api/storage/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 )
@@ -43,7 +49,7 @@ const (
 // checkpointConfigurationGVR defines the GroupVersionResource for GKE CheckpointConfiguration resources.
 var checkpointConfigurationGVR = schema.GroupVersionResource{
 	Group:    "checkpointing.gke.io",
-	Version:  "v1alpha1",
+	Version:  "v1",
 	Resource: "checkpointconfigurations",
 }
 
@@ -52,6 +58,70 @@ var namespaceGVR = schema.GroupVersionResource{
 	Group:    "",
 	Version:  "v1",
 	Resource: "namespaces",
+}
+
+// serviceAccountGVR defines the GroupVersionResource for core Kubernetes ServiceAccount resources.
+var serviceAccountGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "serviceaccounts",
+}
+
+// jobSetGVR defines the GroupVersionResource for JobSet resources.
+var jobSetGVR = schema.GroupVersionResource{
+	Group:    "jobset.x-k8s.io",
+	Version:  "v1alpha2",
+	Resource: "jobsets",
+}
+
+// podGVR defines the GroupVersionResource for core Kubernetes Pod resources.
+var podGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "pods",
+}
+
+// daemonsetGVR defines the GroupVersionResource for apps/v1 DaemonSet resources.
+var daemonsetGVR = schema.GroupVersionResource{
+	Group:    "apps",
+	Version:  "v1",
+	Resource: "daemonsets",
+}
+
+var jobGVR = schema.GroupVersionResource{
+	Group:    "batch",
+	Version:  "v1",
+	Resource: "jobs",
+}
+
+var cronJobGVR = schema.GroupVersionResource{
+	Group:    "batch",
+	Version:  "v1",
+	Resource: "cronjobs",
+}
+
+var deploymentGVR = schema.GroupVersionResource{
+	Group:    "apps",
+	Version:  "v1",
+	Resource: "deployments",
+}
+
+var statefulSetGVR = schema.GroupVersionResource{
+	Group:    "apps",
+	Version:  "v1",
+	Resource: "statefulsets",
+}
+
+var pvcGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "persistentvolumeclaims",
+}
+
+var pvGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "persistentvolumes",
 }
 
 // HTTPClient abstracts HTTP GET calls for testability and thread safety.
@@ -70,6 +140,11 @@ type KubeClient interface {
 	DeleteJobSet(namespace string, name string) error
 	ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error)
 	GetCurrentNamespace(clusterName, location, projectID string) (string, error)
+	// An empty namespace means cluster-scoped.
+	ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error)
+	GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error)
+	// A nil pre deletes unconditionally.
+	DeleteResource(gvr schema.GroupVersionResource, namespace, name string, pre *metav1.Preconditions) error
 }
 
 type MachineTypeClient interface {
@@ -109,12 +184,15 @@ type GKEOrchestrator struct {
 	dynamicSlicingCache         map[string]bool
 	staticSlicingCache          map[string]bool
 	topologyCache               map[string]string
-	policyCache                 map[string]string
+	resourcePolicyCache         map[string]*GCEWorkloadPolicy
 	slicingTopologiesChecked    bool
 	slicingTopologiesDetected   bool
 	gkeCustomTemplatesPath      string
 	httpClient                  HTTPClient
 	httpOnce                    sync.Once
+	// kubeconfigLoader reads the merged kubeconfig. nil means the default
+	// client-go loading rules (KUBECONFIG env or ~/.kube/config).
+	kubeconfigLoader kubeconfigLoader
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -210,6 +288,7 @@ type ManifestOptions struct {
 	IsPathwaysJob                 bool
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
+	MLDiagnosticsEnabled          bool
 	Verbose                       bool
 	Env                           map[string]string
 	AdditionalManifests           []string
@@ -221,16 +300,123 @@ type StorageManager struct {
 	getFilestoreIP  func(ctx context.Context, projectID, location, nameOrIP string, isIP bool) (string, string, int64, error)
 	filestoreClient filestoreClient
 	instancesCache  []*filestorepb.Instance
+	preflightClient storagePreflightClient
+	now             func() time.Time // stamps last-claimed-at; nil means time.Now
+}
+
+type storagePreflightClient interface {
+	projectNumber(ctx context.Context, projectID string) (int64, error)
+	projectIAMBindings(ctx context.Context, projectID string) ([]iamBinding, error)
+	bucketIAMBindings(ctx context.Context, bucket string) ([]iamBinding, error)
+	bucketLocation(ctx context.Context, bucket string) (bucketLocation, error)
+	rolePermissions(ctx context.Context, role string) ([]string, error)
+}
+
+type gcpPreflightClient struct {
+	storage *gcs.Service
+	iam     *iamapi.Service
+	crm     *crm.Service
+}
+
+type iamBinding struct {
+	Role    string
+	Members []string
+}
+
+// DataLocations is set only for custom dual-region buckets.
+type bucketLocation struct {
+	Location      string
+	LocationType  string
+	DataLocations []string
+}
+
+type profileMount struct {
+	Bucket             string
+	Profile            string
+	AnywhereCacheZones []string
+	UsesAnywhereCache  bool
+}
+
+type roleResolver struct {
+	client     storagePreflightClient
+	cache      map[string][]string
+	unreadable map[string]bool
+}
+
+// parsedMount is the normalized form of a single --mount string.
+type parsedMount struct {
+	Src        string
+	Dest       string
+	Options    string
+	Profile    string
+	SubPath    string
+	Attributes map[string]string
+	ReadOnly   bool
+}
+
+// mountSegments holds the optional segments parsed off a --mount string.
+type mountSegments struct {
+	RawProfile string
+	ProfileSet bool
+}
+
+// mountBuildState maps generated PV name -> Pod volume name to de-duplicate gateways within a job.
+type mountBuildState struct {
+	gatewayVolumeNames map[string]string
 }
 
 // MountInfo represents parsed volume mount options
 type MountInfo struct {
-	Name      string
-	Source    string
-	MountPath string
-	Type      string
-	ReadOnly  bool
-	Options   string
+	Name                string
+	Source              string
+	MountPath           string
+	Type                string
+	ReadOnly            bool
+	Options             string
+	SubPath             string
+	NeedsGCSFuseSidecar bool
+	Attributes          map[string]string
+}
+
+type GCSFusePVPVCTemplateParams struct {
+	PVName           string
+	PVCName          string
+	Namespace        string
+	StorageClassName string
+	Capacity         string
+	VolumeHandle     string
+	MountOptions     []string
+	VolumeAttributes map[string]string
+	ManagedByLabel   string
+	ManagedByValue   string
+	StorageTypeLabel string
+	StorageType      string
+
+	LastClaimedAtAnnotation string
+	LastClaimedAt           string
+	LastClaimedByAnnotation string
+	LastClaimedBy           string
+}
+
+type existingGatewayPV struct {
+	Metadata struct {
+		Labels            map[string]string `yaml:"labels"`
+		DeletionTimestamp string            `yaml:"deletionTimestamp"`
+	} `yaml:"metadata"`
+	Spec struct {
+		StorageClassName string   `yaml:"storageClassName"`
+		MountOptions     []string `yaml:"mountOptions"`
+		Capacity         struct {
+			Storage string `yaml:"storage"`
+		} `yaml:"capacity"`
+		CSI *struct {
+			VolumeHandle     string            `yaml:"volumeHandle"`
+			VolumeAttributes map[string]string `yaml:"volumeAttributes"`
+		} `yaml:"csi"`
+	} `yaml:"spec"`
+	Status struct {
+		Phase string `yaml:"phase"`
+	} `yaml:"status"`
 }
 
 type FlavorCapacity struct {
@@ -282,6 +468,15 @@ type gkeAutoscaling struct {
 	TotalMaxNodeCount int  `json:"totalMaxNodeCount"`
 }
 
+// GCEWorkloadPolicy represents a Google Compute Engine workload resource policy.
+type GCEWorkloadPolicy struct {
+	Name                    string `json:"name"`
+	Region                  string `json:"region"`
+	AcceleratorTopology     string `json:"acceleratorTopology,omitempty"`
+	AcceleratorTopologyMode string `json:"acceleratorTopologyMode,omitempty"`
+	Type                    string `json:"type,omitempty"`
+}
+
 type gkePlacementPolicy struct {
 	PolicyName              string `json:"policyName,omitempty"`
 	AcceleratorTopologyMode string `json:"acceleratorTopologyMode,omitempty"`
@@ -314,6 +509,20 @@ type gkeCluster struct {
 	Autoscaling                 gkeClusterAutoscaling        `json:"autoscaling"`
 	ControlPlaneEndpointsConfig *controlPlaneEndpointsConfig `json:"controlPlaneEndpointsConfig,omitempty"`
 	AddonsConfig                *gkeAddonsConfig             `json:"addonsConfig,omitempty"`
+	// Endpoint is the legacy top-level control-plane IP (public, or private for private clusters).
+	Endpoint             string                   `json:"endpoint,omitempty"`
+	MasterAuth           *gkeMasterAuth           `json:"masterAuth,omitempty"`
+	PrivateClusterConfig *gkePrivateClusterConfig `json:"privateClusterConfig,omitempty"`
+}
+
+type gkeMasterAuth struct {
+	// ClusterCaCertificate is the base64-encoded PEM CA bundle of the control plane.
+	ClusterCaCertificate string `json:"clusterCaCertificate,omitempty"`
+}
+
+type gkePrivateClusterConfig struct {
+	PublicEndpoint  string `json:"publicEndpoint,omitempty"`
+	PrivateEndpoint string `json:"privateEndpoint,omitempty"`
 }
 
 type gkeAddonsConfig struct {
@@ -326,10 +535,18 @@ type gkeHighScaleCheckpointingConfig struct {
 
 type controlPlaneEndpointsConfig struct {
 	DnsEndpointConfig *dnsEndpointConfig `json:"dnsEndpointConfig,omitempty"`
+	IPEndpointsConfig *ipEndpointsConfig `json:"ipEndpointsConfig,omitempty"`
+}
+
+type ipEndpointsConfig struct {
+	EnablePublicEndpoint bool   `json:"enablePublicEndpoint,omitempty"`
+	PublicEndpoint       string `json:"publicEndpoint,omitempty"`
+	PrivateEndpoint      string `json:"privateEndpoint,omitempty"`
 }
 
 type dnsEndpointConfig struct {
-	AllowExternalTraffic bool `json:"allowExternalTraffic,omitempty"`
+	AllowExternalTraffic bool   `json:"allowExternalTraffic,omitempty"`
+	Endpoint             string `json:"endpoint,omitempty"`
 }
 
 // Types for JobSet status unmarshaling
@@ -341,6 +558,9 @@ type JobSetCondition struct {
 }
 
 type JobSetStatus struct {
+	Spec struct {
+		Suspend bool `json:"suspend"`
+	} `json:"spec"`
 	Status struct {
 		Conditions []JobSetCondition `json:"conditions"`
 	} `json:"status"`
@@ -406,6 +626,7 @@ type jobSetTemplateData struct {
 	IsGPU                         bool
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
+	MLDiagnosticsEnabled          bool
 }
 
 // Types for parsing kubectl get nodes -o json
@@ -476,7 +697,64 @@ type kueueWorkloadList struct {
 // parsedReservation holds the extracted components of a GCE reservation URI/path.
 type parsedReservation struct {
 	Project  string
+	Zone     string
 	Name     string
 	Block    string
 	Subblock string
+}
+
+// parsedResourcePolicy holds the extracted components of a GCE resource policy URI/path.
+type parsedResourcePolicy struct {
+	Project string
+	Region  string
+	Name    string
+}
+
+// reservationListItem represents an entry in the JSON response from gcloud compute reservations list.
+type reservationListItem struct {
+	Zone                string `json:"zone"`
+	SpecificReservation struct {
+		InstanceProperties struct {
+			MachineType string `json:"machineType"`
+		} `json:"instanceProperties"`
+	} `json:"specificReservation"`
+}
+
+// gceResourcePolicyRaw represents the raw JSON output from gcloud compute resource-policies describe.
+type gceResourcePolicyRaw struct {
+	Name           string `json:"name"`
+	Region         string `json:"region"`
+	WorkloadPolicy struct {
+		AcceleratorTopology     string `json:"acceleratorTopology"`
+		AcceleratorTopologyMode string `json:"acceleratorTopologyMode"`
+		Type                    string `json:"type"`
+	} `json:"workloadPolicy"`
+}
+
+// extractURIPart returns the path segment immediately following the given key segment in a slash-delimited URI or URL.
+// Comparison is case-insensitive.
+// E.g., extractURIPart("projects/p/regions/r/resourcePolicies/name", "regions") -> "r"
+func extractURIPart(uri, key string) string {
+	uri = strings.TrimSuffix(strings.TrimSpace(uri), "/")
+	for {
+		part, rest, found := strings.Cut(uri, "/")
+		if strings.EqualFold(part, key) {
+			val, _, _ := strings.Cut(rest, "/")
+			return val
+		}
+		if !found {
+			break
+		}
+		uri = rest
+	}
+	return ""
+}
+
+// isPermissionDenied returns true if the error text indicates a GCP IAM permission denial (403).
+func isPermissionDenied(errStr string) bool {
+	lower := strings.ToLower(errStr)
+	return strings.Contains(lower, "permission denied") ||
+		strings.Contains(lower, "permission_denied") ||
+		strings.Contains(lower, "required 'compute.") ||
+		(strings.Contains(lower, "403") && strings.Contains(lower, "forbidden"))
 }

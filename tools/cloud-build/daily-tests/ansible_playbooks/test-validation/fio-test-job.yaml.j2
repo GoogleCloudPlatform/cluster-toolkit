@@ -18,6 +18,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: fio
+  # Note: The blueprint (storage-gke.yaml) creates the Workload Identity SA in 'default'.
   namespace: default
   annotations:
     gke-gcsfuse/volumes: "true"

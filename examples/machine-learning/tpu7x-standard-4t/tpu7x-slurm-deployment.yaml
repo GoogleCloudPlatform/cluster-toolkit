@@ -1,0 +1,40 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: # supply bucket name to store Terraform state (created automatically by gcluster if missing)
+
+vars:
+  deployment_name: # supply unique deployment name (e.g. tpu7x-slurm)
+  project_id: # supply existing GCP project ID
+  region: # supply region (e.g. us-central1)
+  zone: # supply zone (e.g. us-central1-c)
+  tpu_static_nodes: # supply total static tpu7x-standard-4t VM nodes (4 TPU chips/node; multiple of slice VMs, e.g. 8 for one 2x4x4 slice or two 2x2x4 slices)
+  tpu_dynamic_max_nodes: # max dynamic tpu7x-standard-4t nodes (e.g. 4)
+  tpu_accelerator_topology: # topology per static TPU slice (e.g. 2x2x4)
+  # Note: slice VMs = total chips / 4, e.g. 2x2x4 = 4 nodes/slice, 2x4x4 = 8 nodes/slice
+  tpu_reservation_name: # supply tpu7x-standard-4t reservation name
+
+# Additional provisioning models (pick only one), can be used to substitute `tpu_reservation_name`:
+#
+# tpu_dws_flex_enabled: true
+#
+# To make use of DWS Flex, for more info visit: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md
+#
+# tpu_enable_spot_vm: true
+#
+# To make use of spot VMs, for more info visit: https://cloud.google.com/compute/docs/instances/spot

@@ -85,6 +85,7 @@ deployment_groups:
     settings:
       name: g2-latest-driver
       machine_type: g2-standard-4
+      static_node_count: 1
       guest_accelerator:
       - gpu_driver_installation_config:
           gpu_driver_version: "LATEST"
@@ -117,6 +118,7 @@ deployment_groups:
       name: n1-pool-default
       disk_type: pd-balanced
       machine_type: n1-standard-4
+      static_node_count: 1
       guest_accelerator:
       - type: nvidia-tesla-t4
         count: 2
@@ -145,6 +147,7 @@ deployment_groups:
       name: n1-pool-full-spec
       disk_type: pd-balanced
       machine_type: n1-standard-4
+      static_node_count: 1
       guest_accelerator:
       - type: nvidia-tesla-t4
         count: 2
@@ -177,6 +180,7 @@ deployment_groups:
     use: [gke_cluster, node_pool_service_account]
     settings:
       name: default-settings-pool
+      static_node_count: 1
 
   - id: job_default_settings_pool
     source: modules/compute/gke-job-template

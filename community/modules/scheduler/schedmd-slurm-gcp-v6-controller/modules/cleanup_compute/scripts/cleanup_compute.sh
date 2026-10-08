@@ -47,23 +47,26 @@ fi
 tmpfile=$(mktemp) # have to use a temp file, since `< <(gcloud ...)` doesn't work nicely with `head`
 trap 'rm -f "$tmpfile"' EXIT
 
+# Static MIGs "<cluster>-<nodeset>-mig-<N>" (and their member VMs) are owned and deleted by
+# Terraform (nodeset_mig in partition.tf). Deleting them here races that delete and fails
+# `terraform destroy` with resourceNotReady. Runtime MIGs (e.g. DWS Flex) never match this.
+tf_mig_regex="^${cluster_name}-${nodeset_name}-mig-[0-9]+$"
+
 echo "Deleting managed instance groups"
 mig_filter="name:${cluster_name}-${nodeset_name}-*"
-gcloud compute instance-groups managed list --format="value(self_link)" --filter="${mig_filter}" >"$tmpfile"
-while batch="$(head -n 5)" && [[ ${#batch} -gt 0 ]]; do
-	groups=$(echo "$batch" | paste -sd " " -) # concat into a single space-separated line
-	# The lack of quotes around ${groups} is intentional and causes each new space-separated "word" to
-	# be treated as independent arguments. See PR#2523
-	# shellcheck disable=SC2086
-	for _ in $( #occasionally MIGs will fail to delete due to some active transformation happening, so let's retry
-		seq 1 $MAX_ATTEMPTS
-	); do
-		if gcloud compute instance-groups managed delete --quiet ${groups}; then
-			break
-		fi
-		echo "MIG deletion failed, retrying"
-	done
-done <"$tmpfile"
+for _ in $(seq 1 $MAX_ATTEMPTS); do
+	gcloud compute instance-groups managed list --format="value(self_link)" --filter="${mig_filter}" |
+		awk -F/ -v re="${tf_mig_regex}" '$NF !~ re' >"$tmpfile"
+	[[ ! -s "$tmpfile" ]] && break
+	while batch="$(head -n 5)" && [[ ${#batch} -gt 0 ]]; do
+		groups=$(echo "$batch" | paste -sd " " -) # concat into a single space-separated line
+		# shellcheck disable=SC2086
+		gcloud compute instance-groups managed delete --quiet ${groups} || {
+			echo "MIG deletion failed, retrying"
+			sleep 5
+		}
+	done <"$tmpfile"
+done
 true >"$tmpfile" # Wipe contents of tmp file
 
 echo "Deleting compute nodes"
@@ -71,7 +74,8 @@ node_filter="name:${cluster_name}-${nodeset_name}-* labels.slurm_cluster_name=${
 
 running_nodes_filter="${node_filter} AND status!=STOPPING"
 # List all currently running instances and attempt to delete them
-gcloud compute instances list --format="value(selfLink)" --filter="${running_nodes_filter}" >"$tmpfile"
+gcloud compute instances list --format="value(selfLink,metadata.items.created-by.basename())" --filter="${running_nodes_filter}" |
+	awk -F'\t' -v re="${tf_mig_regex}" '$2 !~ re {print $1}' >"$tmpfile"
 # Do 500 instances at a time
 while batch="$(head -n 500)" && [[ ${#batch} -gt 0 ]]; do
 	nodes=$(echo "$batch" | paste -sd " " -) # concat into a single space-separated line
@@ -94,10 +98,19 @@ while true; do
 done
 
 echo "Deleting resource policies"
-policies_filter="name:${cluster_name}-slurmgcp-managed-${nodeset_name}-*"
+policies_filter="name:${cluster_name}-slurmgcp-managed-${nodeset_name}-* OR name:${cluster_name}-slurmgcp-${nodeset_name}-wp-*"
 gcloud compute resource-policies list --format="value(selfLink)" --filter="${policies_filter}" | while read -r line; do
 	echo "Deleting resource policy: $line"
 	gcloud compute resource-policies delete --quiet "${line}" || {
 		echo "Failed to delete resource policy: $line"
+	}
+done
+
+echo "Deleting copied instance templates"
+templates_filter="properties.labels.slurm_cluster_name=${cluster_name} AND properties.labels.slurm_nodeset=${nodeset_name} AND properties.labels.slurm_template_role=copy"
+gcloud compute instance-templates list --format="value(selfLink)" --filter="${templates_filter}" | while read -r line; do
+	echo "Deleting instance template: $line"
+	gcloud compute instance-templates delete --quiet "${line}" || {
+		echo "Failed to delete instance template: $line"
 	}
 done

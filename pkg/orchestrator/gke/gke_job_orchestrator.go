@@ -15,7 +15,6 @@
 package gke
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,7 +23,6 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
-	"maps"
 	"net/url"
 	"os"
 	"os/exec"
@@ -33,9 +31,11 @@ import (
 	"strings"
 	"time"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 
@@ -44,9 +44,6 @@ import (
 )
 
 const (
-	defaultPathwaysProxyImage  = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
-	defaultPathwaysServerImage = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
-
 	// maxLogRequests is the maximum concurrent log streams allowed by the GKE logs CLI.
 	maxLogRequests = 10
 
@@ -64,7 +61,7 @@ func NewGKEOrchestrator() *GKEOrchestrator {
 		topologyCache:            make(map[string]string),
 		dynamicSlicingCache:      make(map[string]bool),
 		staticSlicingCache:       make(map[string]bool),
-		policyCache:              make(map[string]string),
+		resourcePolicyCache:      make(map[string]*GCEWorkloadPolicy),
 	}
 }
 
@@ -74,6 +71,7 @@ func (g *GKEOrchestrator) SetExecutor(e Executor) {
 
 func (g *GKEOrchestrator) SetDynamicClient(c dynamic.Interface) {
 	g.dynClient = c
+	g.syncKubeClient()
 }
 
 func (g *GKEOrchestrator) SetKubeClient(c KubeClient) {
@@ -95,6 +93,10 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	var err error
 	err = g.initializeJobSubmission(&job)
 	if err != nil {
+		return err
+	}
+
+	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
 		return err
 	}
 
@@ -171,41 +173,6 @@ func (g *GKEOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrato
 	}
 
 	return filteredJobs, nil
-}
-
-// CancelJob deletes a job from the GKE cluster by name.
-// Jobs are filtered via cluster name and location provided through CancelOptions.
-func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions) error {
-	g.namespace = opts.GKENamespace
-	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
-		return err
-	}
-
-	if _, err := g.getDynamicClient(); err != nil {
-		return fmt.Errorf("failed to initialize k8s client: %w", err)
-	}
-
-	ns, err := g.getCurrentNamespace(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
-	if err != nil {
-		return err
-	}
-	foundNamespace := ns
-
-	status, err := g.getJobSetStatus(name, foundNamespace)
-	actionVerb := "Cancel"
-	if err == nil && (status == "Completed" || status == "Failed") {
-		actionVerb = "Cleanup"
-		logging.Info("Cleaning up resources for the '%s' job '%s' in cluster '%s'...", status, name, opts.ClusterName)
-	} else {
-		logging.Info("Canceling job '%s' in cluster '%s'...", name, opts.ClusterName)
-	}
-
-	err = g.kubeClient.DeleteJobSet(foundNamespace, name)
-	if err != nil {
-		return fmt.Errorf("%s operation failed for %s in namespace %s: %w", strings.ToLower(actionVerb), name, foundNamespace, err)
-	}
-	logging.Info("%s operation on Job '%s' completed successfully.", actionVerb, name)
-	return nil
 }
 
 // GetJobLogs fetches the logs for a specific job in the GKE cluster.
@@ -296,7 +263,30 @@ func (g *GKEOrchestrator) fetchLogsWithRetry(ns, selector, containerName string)
 		return res, fmt.Errorf("failed to get logs: %s\n%s", res.Stderr, res.Stdout)
 	}
 
+	jobsetName := extractJobSetNameFromSelector(selector)
+	if jobsetName != "" {
+		warnEvents := g.checkJobSetWarningEvents(ns, jobsetName)
+		if warnEvents != "" {
+			return res, fmt.Errorf("timed out waiting for job to start; JobSet reported warning events:\n%s\nlatest error: %s\n%s", warnEvents, res.Stderr, res.Stdout)
+		}
+	}
 	return res, fmt.Errorf("timed out waiting for job to start; latest error: %s\n%s", res.Stderr, res.Stdout)
+}
+
+func extractJobSetNameFromSelector(selector string) string {
+	sel, err := labels.Parse(selector)
+	if err != nil {
+		return ""
+	}
+	reqs, _ := sel.Requirements()
+	for _, req := range reqs {
+		if req.Key() == "jobset.sigs.k8s.io/jobset-name" && (req.Operator() == selection.Equals || req.Operator() == selection.DoubleEquals || req.Operator() == selection.In) {
+			if vals := req.Values().List(); len(vals) == 1 {
+				return vals[0]
+			}
+		}
+	}
+	return ""
 }
 
 func findWorkloadContainer(containers []string) string {
@@ -312,13 +302,7 @@ func findWorkloadContainer(containers []string) string {
 }
 
 func (g *GKEOrchestrator) getFirstContainerName(ns, selector string) string {
-	var jobsetName string
-	for _, part := range strings.Split(selector, ",") {
-		if strings.HasPrefix(part, "jobset.sigs.k8s.io/jobset-name=") {
-			jobsetName = strings.TrimPrefix(part, "jobset.sigs.k8s.io/jobset-name=")
-			break
-		}
-	}
+	jobsetName := extractJobSetNameFromSelector(selector)
 	if jobsetName != "" {
 		res := g.executor.ExecuteCommand("kubectl", "get", "jobsets.jobset.x-k8s.io", jobsetName, "-n", ns, "-o", "jsonpath="+jobSetContainerNamesJSONPath)
 		if res.ExitCode == 0 && strings.TrimSpace(res.Stdout) != "" {
@@ -434,56 +418,10 @@ func (g *GKEOrchestrator) validateJobConflicts(workloadName string, clusterName 
 	return nil
 }
 
-func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) (string, error) {
-	// Set default values for Pathways-specific fields if not provided
-	if job.Pathways.ProxyServerImage == "" {
-		job.Pathways.ProxyServerImage = defaultPathwaysProxyImage
-	}
-	if job.Pathways.ServerImage == "" {
-		job.Pathways.ServerImage = defaultPathwaysServerImage
-	}
-	if job.Pathways.WorkerImage == "" {
-		// WorkerImage defaults to ServerImage if not explicitly set
-		job.Pathways.WorkerImage = job.Pathways.ServerImage
-	}
-
-	tmpl, err := g.parseGKETemplate("pathways_jobset.tmpl")
-	if err != nil {
-		return "", fmt.Errorf("failed to parse pathways jobset template: %w", err)
-	}
-
-	opts, err := g.PrepareManifestOptions(job, fullImageName, profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		return "", err
-	}
-
-	opts.Pathways = job.Pathways
-
-	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(opts, profile)
-	var resStr string
-	if err == nil {
-		resStr, err = g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit, 14)
-		if err != nil {
-			return "", err
-		}
-	} else {
-		logging.Warn("Warning: failed to calculate resource limits for Pathways job: %v", err)
-	}
-
-	cmdSlice := []string{"/bin/bash", "-c", opts.CommandToRun}
-	isTPU := tpuLimit != ""
-	isGPU := gpuLimit != ""
-	data := g.prepareJobSetTemplateData(opts, cmdSlice, resStr, isTPU, isGPU)
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
-	}
-
-	return assembleManifest(buf.String(), opts.AdditionalManifests), nil
-}
-
 func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, workloadName string) error {
+	if err := ValidateJobSetManifest(manifestContent); err != nil {
+		return err
+	}
 	if outputManifestPath != "" {
 		logging.Info("Saving GKE manifest to %s", outputManifestPath)
 		if err := os.WriteFile(outputManifestPath, []byte(manifestContent), 0644); err != nil {
@@ -497,60 +435,12 @@ func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, wor
 		if err != nil {
 			return fmt.Errorf("failed to apply GKE manifest: %w", err)
 		}
+		if err := g.verifyStorageGateways(manifestContent, workloadName); err != nil {
+			return err
+		}
 		logging.Info("GKE workload deployed successfully.")
 	}
 	return nil
-}
-
-// Initialize fetches GKE cluster metadata and resolves the cluster location,
-// handling regional fallback if necessary.
-func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
-	g.projectID = projectID
-
-	logging.Info("Fetching GKE cluster metadata for '%s'...", clusterName)
-	res := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", clusterName,
-		"--location", location,
-		"--project", g.projectID,
-		"--format=json")
-	if res.ExitCode != 0 {
-		if strings.Contains(res.Stderr, "403") || strings.Contains(strings.ToLower(res.Stderr), "permission denied") {
-			return "", fmt.Errorf("your account lacks the required permission to access cluster '%s' in project '%s'. Please ask your project administrator to grant you the Kubernetes Engine Viewer role (roles/container.viewer)", clusterName, g.projectID)
-		}
-		// If the user specified a zone (location with 3 components, e.g. us-central1-a), try to fallback to the region
-		if len(strings.Split(location, "-")) == 3 {
-			region := shell.ExtractRegion(location)
-			logging.Info("Failed to find cluster in zone %s. Trying fallback to region %s...", location, region)
-			fallbackRes := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", clusterName,
-				"--location", region,
-				"--project", g.projectID,
-				"--format=json")
-			if fallbackRes.ExitCode == 0 {
-				logging.Warn("Cluster '%s' is a regional cluster in '%s'. Found it by falling back from zone '%s'. "+
-					"Note: This does NOT restrict your job to '%s'. To run specifically in '%s', "+
-					"please use the '--node-constraint topology.kubernetes.io/zone=%s' flag.",
-					clusterName, region, location, location, location, location)
-				location = region
-				res = fallbackRes
-			} else {
-				return "", fmt.Errorf("failed to describe GKE cluster %s in zone %s and fallback region %s: %s", clusterName, location, region, res.Stderr)
-			}
-		} else {
-			return "", fmt.Errorf("failed to describe GKE cluster %s: %s", clusterName, res.Stderr)
-		}
-	}
-
-	var clusterDesc gkeCluster
-	if err := json.Unmarshal([]byte(res.Stdout), &clusterDesc); err != nil {
-		return "", fmt.Errorf("failed to parse GKE cluster description: %w", err)
-	}
-
-	g.clusterZones = clusterDesc.Locations
-	g.clusterDesc = clusterDesc
-
-	g.napEnabled = clusterDesc.Autoscaling.EnableNodeAutoprovisioning
-	g.napLimits = parseNAPLimits(clusterDesc.Autoscaling)
-
-	return location, nil
 }
 
 func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinition) error {
@@ -594,78 +484,6 @@ func (g *GKEOrchestrator) isSystemPool(np gkeJobNodePool) bool {
 		}
 	}
 	return false
-}
-
-func (g *GKEOrchestrator) getTargetNamespace(job *orchestrator.JobDefinition) (string, error) {
-	if job == nil {
-		return "", fmt.Errorf("job definition cannot be nil")
-	}
-
-	if job.GKENamespace != "" {
-		return job.GKENamespace, nil
-	}
-
-	return g.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
-}
-
-func (g *GKEOrchestrator) verifyCheckpointConfigurationCR(job *orchestrator.JobDefinition, docRemediationMsg string) error {
-	client, err := g.getDynamicClient()
-	if err != nil {
-		return fmt.Errorf("failed to initialize dynamic client to verify CheckpointConfiguration: %w", err)
-	}
-
-	targetNamespace, err := g.getTargetNamespace(job)
-	if err != nil {
-		return fmt.Errorf("failed to resolve namespace for MTC verification: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	checkpointConfigList, err := client.Resource(checkpointConfigurationGVR).Namespace(targetNamespace).List(ctx, metav1.ListOptions{Limit: 1})
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return fmt.Errorf("the CheckpointConfiguration CustomResourceDefinition (CRD) is not registered on the cluster. %s: %w", docRemediationMsg, err)
-		}
-		if apierrors.IsForbidden(err) {
-			logging.Warn("Insufficient RBAC permissions to verify CheckpointConfiguration resources in namespace %q (403 Forbidden). Proceeding with job submission...", targetNamespace)
-			return nil
-		}
-		return fmt.Errorf("failed to verify CheckpointConfiguration resource in namespace %s: %w", targetNamespace, err)
-	}
-	if len(checkpointConfigList.Items) == 0 {
-		return fmt.Errorf("Multi-Tier Checkpointing (MTC) requires a CheckpointConfiguration resource to be deployed in the target namespace (%s). %s", targetNamespace, docRemediationMsg)
-	}
-
-	return nil
-}
-
-func (g *GKEOrchestrator) validateMTCConfig(job *orchestrator.JobDefinition) error {
-	if job == nil || !job.GKEMTCEnabled {
-		return nil
-	}
-
-	mtcDocURL := "https://cloud.google.com/kubernetes-engine/docs/how-to/multi-tier-checkpointing"
-	docRemediationMsg := fmt.Sprintf("Please follow the official GKE documentation to enable this feature on your cluster: %s", mtcDocURL)
-
-	if job.GKEMTCRamdiskDirectory == "" {
-		return fmt.Errorf("ramdisk directory path (--gke-mtc-ramdisk-dir) cannot be empty when Multi-Tier Checkpointing (MTC) is enabled")
-	}
-
-	sm := &StorageManager{orchestrator: g}
-	if err := sm.ValidateRamdiskDir(job.GKEMTCRamdiskDirectory, job.RawMounts); err != nil {
-		return err
-	}
-
-	if g.clusterDesc.AddonsConfig == nil || g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig == nil || !g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig.Enabled {
-		return fmt.Errorf("Multi-Tier Checkpointing (MTC) requires the HighScaleCheckpointing addon to be enabled on the target GKE cluster. %s", docRemediationMsg)
-	}
-
-	if job.DryRunManifest != "" {
-		return nil
-	}
-
-	return g.verifyCheckpointConfigurationCR(job, docRemediationMsg)
 }
 
 func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinition) error {
@@ -793,8 +611,7 @@ func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location st
 		flavor = accFlavor
 	}
 
-	isHardwareAccel := len(np.Config.Accelerators) > 0 || len(cap.Accelerators) > 0
-	if !isHardwareAccel && !g.isSystemPool(np) {
+	if flavor == "pathways-flavor" {
 		nodeLabels["cloud.google.com/gke-nodepool"] = np.Name
 	}
 
@@ -888,48 +705,6 @@ func (g *GKEOrchestrator) processAccelerators(accelerators []gkeAccelerator, nod
 		}
 	}
 	return gpus, tpus, flavor, nodeLabels, nil
-}
-
-func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefinition) error {
-	ns, err := g.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
-	if err != nil {
-		return err
-	}
-
-	localQueue, err := g.resolveKueueQueue(job.KueueQueueName, ns)
-	if err != nil {
-		if job.DryRunManifest == "" {
-			return err
-		}
-		logging.Info("Warning: Failed to auto-discover Kueue Queue Name: %v. Falling back to %s for dry-run.", err, defaultLocalQueue)
-		localQueue = defaultLocalQueue
-	}
-	job.KueueQueueName = localQueue
-
-	if job.DryRunManifest == "" {
-		exists, err := g.checkLocalQueueExists(localQueue, ns)
-		if err != nil {
-			return fmt.Errorf("failed to check if LocalQueue exists: %w", err)
-		}
-		if !exists {
-			promptMsg := fmt.Sprintf("LocalQueue '%s' does not exist in namespace '%s'. Do you want gcluster to create default Kueue resources (ClusterQueue and LocalQueue) with calculated cluster capacity?", localQueue, ns)
-			if shell.PromptYesNo(promptMsg) {
-				if err := g.createDefaultQueues(localQueue, ns); err != nil {
-					return err
-				}
-			} else {
-				return fmt.Errorf("LocalQueue '%s' does not exist in namespace '%s' and user declined to create default queues. Please create one manually or specify an existing queue using --queue flag", localQueue, ns)
-			}
-		}
-
-		if job.IsPathwaysJob {
-			if err := g.ensureClusterQueueCoverage(localQueue, ns); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
 
 func (g *GKEOrchestrator) queryAllMachineTypes() ([]string, error) {
@@ -1220,59 +995,6 @@ func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (s
 	return "", fmt.Errorf("either --image or --base-image must be provided")
 }
 
-func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
-	// 1. Capture current namespace context before gcloud resets it on best effort to preserve current namespace.
-	// If we can't read it, using 'default' allows gcloud setup to proceed,
-	originalNamespace, err := g.getCurrentNamespace(clusterName, clusterLocation, projectID)
-	if err != nil {
-		logging.Warn("Could not read current namespace before gcloud (defaulting to 'default'): %v. If you want to target a specific namespace please use the --gke-namespace flag", err)
-		originalNamespace = "default"
-	}
-
-	// 2. Refresh credentials via gcloud (this resets namespace to 'default')
-	if err := g.refreshGKEAuth(clusterName, clusterLocation, projectID); err != nil {
-		return err
-	}
-
-	// 3. Restore the original namespace context
-	return g.restoreNamespaceContext(originalNamespace)
-}
-
-// refreshGKEAuth handles the gcloud container clusters get-credentials call.
-func (g *GKEOrchestrator) refreshGKEAuth(clusterName, clusterLocation, projectID string) error {
-	args := []string{"container", "clusters", "get-credentials", clusterName, "--location", clusterLocation, "--project", projectID}
-
-	if g.clusterDesc.ControlPlaneEndpointsConfig != nil &&
-		g.clusterDesc.ControlPlaneEndpointsConfig.DnsEndpointConfig != nil &&
-		g.clusterDesc.ControlPlaneEndpointsConfig.DnsEndpointConfig.AllowExternalTraffic {
-		args = append(args, "--dns-endpoint")
-	}
-
-	credsRes := g.executor.ExecuteCommand("gcloud", args...)
-	if credsRes.ExitCode != 0 {
-		if strings.Contains(strings.ToLower(credsRes.Stderr), "multiple") || strings.Contains(strings.ToLower(credsRes.Stderr), "ambiguous") {
-			return fmt.Errorf("found multiple GKE clusters named %s. Please specify the exact Zone using --location to disambiguate.", clusterName)
-		}
-		return fmt.Errorf("failed to get GKE cluster credentials: %s\n%s", credsRes.Stderr, credsRes.Stdout)
-	}
-	return nil
-}
-
-// restoreNamespaceContext sets the current namespace back to its original value if needed.
-func (g *GKEOrchestrator) restoreNamespaceContext(namespace string) error {
-	// If it was default, gcloud already set it to default, so we can skip.
-	if namespace == "" || namespace == "default" {
-		return nil
-	}
-
-	logging.Info("Restoring namespace context to '%s'...", namespace)
-	restoreRes := g.executor.ExecuteCommand("kubectl", "config", "set-context", "--current", "--namespace="+namespace)
-	if restoreRes.ExitCode != 0 {
-		return fmt.Errorf("failed to restore namespace context to %s: %s", namespace, restoreRes.Stderr)
-	}
-	return nil
-}
-
 func (g *GKEOrchestrator) generateAndApplyManifest(opts ManifestOptions, profile JobProfile, outputManifestPath string) error {
 	logging.Info("Generating GKE manifest...")
 	gkeManifestContent, err := g.GenerateGKEManifest(opts, profile)
@@ -1305,108 +1027,6 @@ func (g *GKEOrchestrator) GenerateGKENodeSelectorLabel(acceleratorType string) s
 	}
 
 	return acceleratorType
-}
-
-func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
-	exclusiveTopology := ""
-	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
-		exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
-	}
-
-	workerBackoffLimit := 2048000
-
-	var proxyArgsList []string
-	if opts.Pathways.ProxyArgs != "" {
-		proxyArgsList = strings.Fields(opts.Pathways.ProxyArgs)
-	}
-	var serverArgsList []string
-	if opts.Pathways.ServerArgs != "" {
-		serverArgsList = strings.Fields(opts.Pathways.ServerArgs)
-	}
-	var workerArgsList []string
-	if opts.Pathways.WorkerArgs != "" {
-		workerArgsList = strings.Fields(opts.Pathways.WorkerArgs)
-	}
-
-	var containers []ContainerData
-	if opts.ParallelContainers > 1 {
-		for i := 0; i < opts.ParallelContainers; i++ {
-			containers = append(containers, ContainerData{
-				Name:          fmt.Sprintf("workload-container-%d", i+1),
-				ResourcesYAML: resourcesYAML,
-			})
-		}
-	} else {
-		containers = append(containers, ContainerData{
-			Name:          "workload-container",
-			ResourcesYAML: resourcesYAML,
-		})
-	}
-
-	return jobSetTemplateData{
-		WorkloadName:                  opts.WorkloadName,
-		ClusterName:                   opts.ClusterName,
-		Containers:                    containers,
-		ProjectID:                     opts.ProjectID,
-		KueueQueueName:                opts.KueueQueueName,
-		TtlSecondsAfterFinished:       opts.TtlSecondsAfterFinished,
-		TerminationGracePeriodSeconds: opts.TerminationGracePeriodSeconds,
-		MaxRestarts:                   opts.MaxRestarts,
-		NumSlices:                     opts.NumSlices,
-		NodesPerSlice:                 opts.NodesPerSlice,
-		WorkerBackoffLimit:            workerBackoffLimit,
-		ProxyArgsList:                 proxyArgsList,
-		ServerArgsList:                serverArgsList,
-		WorkerArgsList:                workerArgsList,
-		PathwaysInstanceType:          opts.PathwaysInstanceType,
-		CommandToRun:                  opts.CommandToRun,
-		ResourcesString:               resourcesYAML,
-		FullImageName:                 opts.FullImageName,
-		Command:                       command,
-		ResourcesYAML:                 resourcesYAML,
-		AcceleratorTypeLabel:          g.GenerateGKENodeSelectorLabel(opts.ComputeType),
-		NodeSelector:                  opts.NodeSelector,
-		Affinity:                      opts.Affinity,
-		PodFailurePolicy:              opts.PodFailurePolicy,
-		ImagePullSecrets:              opts.ImagePullSecrets,
-		ServiceAccountName:            opts.ServiceAccountName,
-		TopologyAnnotation:            opts.TopologyAnnotation,
-		SchedulerName:                 opts.SchedulerName,
-		SchedulingGates:               opts.SchedulingGates,
-		Tolerations:                   opts.Tolerations,
-		PriorityClassName:             opts.PriorityClassName,
-		VolumesYAML:                   opts.VolumesYAML,
-		VolumeMountsYAML:              opts.VolumeMountsYAML,
-		GCSFuseEnabled:                opts.GCSFuseEnabled,
-		HostNetworkEnabled:            isTPU || isGPU,
-		Pathways:                      opts.Pathways,
-		ExclusiveTopologyAnnotation:   exclusiveTopology,
-		Verbose:                       opts.Verbose,
-		Env:                           sortedEnvVars(opts.Env),
-		PathwaysProxyEnv:              sortedEnvVars(opts.Pathways.ProxyEnv),
-		PathwaysServerEnv:             sortedEnvVars(opts.Pathways.ServerEnv),
-		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
-		IsTPU:                         isTPU,
-		IsGPU:                         isGPU,
-		GKEMTCEnabled:                 opts.GKEMTCEnabled,
-		GKEMTCRamdiskDirectory:        opts.GKEMTCRamdiskDirectory,
-	}
-}
-
-func sortedEnvVars(envMap map[string]string) []EnvVar {
-	if len(envMap) == 0 {
-		return nil
-	}
-	envKeys := make([]string, 0, len(envMap))
-	for k := range envMap {
-		envKeys = append(envKeys, k)
-	}
-	slices.Sort(envKeys)
-	res := make([]EnvVar, len(envKeys))
-	for i, k := range envKeys {
-		res[i] = EnvVar{Name: k, Value: envMap[k]}
-	}
-	return res
 }
 
 func (g *GKEOrchestrator) determineIfCPUMachine(job *orchestrator.JobDefinition) (bool, int, error) {
@@ -1466,82 +1086,33 @@ func parseJobStatus(obj map[string]interface{}) (statusStr, completionTime strin
 
 func parseConditions(conditions []interface{}, statusStr *string, completionTime *string) {
 	for _, c := range conditions {
-		cond := c.(map[string]interface{})
+		cond, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
 		condType, _ := cond["type"].(string)
 		condStatus, _ := cond["status"].(string)
 		if condStatus == "True" {
 			switch condType {
-			case "Completed", "Succeeded":
+			case "Completed", "JobSetCompleted", "Succeeded", "Complete":
 				*statusStr = "Succeeded"
 				if *completionTime == "" {
 					if transitionTime, ok := cond["lastTransitionTime"].(string); ok {
 						*completionTime = transitionTime
 					}
 				}
-			case "Failed":
+			case "Failed", "JobSetFailed":
 				*statusStr = "Failed"
 				if *completionTime == "" {
 					if transitionTime, ok := cond["lastTransitionTime"].(string); ok {
 						*completionTime = transitionTime
 					}
 				}
-			case "Suspended":
+			case "Suspended", "JobSetSuspended":
 				*statusStr = "Suspended"
 			}
 		}
 	}
-}
-
-func (g *GKEOrchestrator) validateTargetNamespaceExists(job *orchestrator.JobDefinition) error {
-	ns, err := g.getTargetNamespace(job)
-	if err != nil {
-		return err
-	}
-
-	if ns == "" {
-		return fmt.Errorf("target namespace cannot be empty")
-	}
-
-	client, err := g.getDynamicClient()
-	if err != nil {
-		return fmt.Errorf("failed to initialize Kubernetes client for namespace validation: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	_, err = client.Resource(namespaceGVR).Get(ctx, ns, metav1.GetOptions{})
-	switch {
-	case err == nil:
-		return nil
-	case apierrors.IsNotFound(err):
-		return fmt.Errorf("target namespace %q does not exist on GKE cluster %q. Please create the namespace first (e.g., 'kubectl create namespace %s')", ns, job.ClusterName, ns)
-	case apierrors.IsForbidden(err):
-		logging.Warn("Insufficient RBAC permissions to verify existence of namespace %q on cluster %q (403 Forbidden). Proceeding with job submission...", ns, job.ClusterName)
-		return nil
-	default:
-		return fmt.Errorf("failed to verify existence of namespace %q on cluster %q: %w", ns, job.ClusterName, err)
-	}
-}
-
-func (g *GKEOrchestrator) getKubeClient() KubeClient {
-	if g.kubeClient == nil {
-		g.kubeClient = &DefaultKubeClient{dynClient: g.dynClient}
-	}
-	return g.kubeClient
-}
-
-func (g *GKEOrchestrator) getCurrentNamespace(clusterName, location, projectID string) (string, error) {
-	if g.namespace != "" {
-		return g.namespace, nil
-	}
-
-	ns, err := g.getKubeClient().GetCurrentNamespace(clusterName, location, projectID)
-	if err != nil {
-		return "", err
-	}
-	g.namespace = ns
-	return ns, nil
 }
 
 func (g *GKEOrchestrator) getKueueWorkloadStatus(client dynamic.Interface, ns string, uid string) (string, error) {
@@ -1695,12 +1266,15 @@ func (g *GKEOrchestrator) generatePodFailurePolicy(exitCodes []int) (string, err
 	}
 
 	var validCodes []int
+	seen := make(map[int]bool)
 	for _, code := range exitCodes {
-		if code == 0 {
-			logging.Info("Warning: Exit code 0 (success) cannot be used in PodFailurePolicy. Ignoring it.")
-			continue
+		if code < 1 || code > 255 {
+			return "", fmt.Errorf("invalid exit code %d in restart-on-exit-codes: exit codes must be between 1 and 255", code)
 		}
-		validCodes = append(validCodes, code)
+		if !seen[code] {
+			seen[code] = true
+			validCodes = append(validCodes, code)
+		}
 	}
 
 	if len(validCodes) == 0 {
@@ -1744,8 +1318,27 @@ func (g *GKEOrchestrator) generateImagePullSecrets(secrets string) string {
 	return string(b)
 }
 
+func (g *GKEOrchestrator) syncKubeClient() {
+	if g.kubeClient == nil {
+		g.kubeClient = &DefaultKubeClient{dynClient: g.dynClient}
+	} else if defaultClient, ok := g.kubeClient.(*DefaultKubeClient); ok {
+		defaultClient.dynClient = g.dynClient
+	}
+}
+
+func (g *GKEOrchestrator) needsDynamicClientInit() bool {
+	if g.kubeClient == nil {
+		return true
+	}
+	if defaultClient, ok := g.kubeClient.(*DefaultKubeClient); ok {
+		return defaultClient.dynClient == nil
+	}
+	return false
+}
+
 func (g *GKEOrchestrator) getDynamicClient() (dynamic.Interface, error) {
 	if g.dynClient != nil {
+		g.syncKubeClient()
 		return g.dynClient, nil
 	}
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
@@ -1759,11 +1352,7 @@ func (g *GKEOrchestrator) getDynamicClient() (dynamic.Interface, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
 	}
-	if g.kubeClient == nil {
-		g.kubeClient = &DefaultKubeClient{dynClient: g.dynClient}
-	} else if defaultClient, ok := g.kubeClient.(*DefaultKubeClient); ok && defaultClient.dynClient == nil {
-		defaultClient.dynClient = g.dynClient
-	}
+	g.syncKubeClient()
 	return g.dynClient, nil
 }
 
@@ -1782,7 +1371,7 @@ func (g *GKEOrchestrator) awaitJobCompletion(workloadName, clusterName, clusterL
 	jobConsoleLink := fmt.Sprintf("https://console.cloud.google.com/kubernetes/workload/gke/%s/%s/details/%s?project=%s",
 		clusterLocation, clusterName, workloadName, projectID)
 
-	targetWorkloadName, err := g.findTargetWorkload(ns, workloadName)
+	targetWorkloadName, err := g.findTargetWorkload(ns, workloadName, 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -1819,11 +1408,41 @@ func (g *GKEOrchestrator) getJobSetStatus(workloadName, ns string) (string, erro
 		return "", fmt.Errorf("failed to parse jobset status JSON: %w", err)
 	}
 
+	if terminal := getTerminalJobSetCondition(jsStatus.Status.Conditions); terminal != "" {
+		return terminal, nil
+	}
+
+	if latest := getLatestActiveJobSetCondition(jsStatus.Status.Conditions); latest != "" {
+		return latest, nil
+	}
+
+	if jsStatus.Spec.Suspend {
+		return "Suspended", nil
+	}
+
+	return "Running", nil
+}
+
+func getTerminalJobSetCondition(conditions []JobSetCondition) string {
+	for _, cond := range conditions {
+		if cond.Status == "True" {
+			switch cond.Type {
+			case "Completed", "JobSetCompleted", "Succeeded":
+				return "Completed"
+			case "Failed", "JobSetFailed":
+				return "Failed"
+			}
+		}
+	}
+	return ""
+}
+
+func getLatestActiveJobSetCondition(conditions []JobSetCondition) string {
 	var latestCondition JobSetCondition
 	var latestTime time.Time
 
-	for _, cond := range jsStatus.Status.Conditions {
-		if cond.LastTransitionTime == "" {
+	for _, cond := range conditions {
+		if cond.Status != "True" || cond.LastTransitionTime == "" {
 			continue
 		}
 		transitionTime, err := time.Parse(time.RFC3339, cond.LastTransitionTime)
@@ -1835,29 +1454,78 @@ func (g *GKEOrchestrator) getJobSetStatus(workloadName, ns string) (string, erro
 			latestCondition = cond
 		}
 	}
-
-	if latestCondition.Type == "" {
-		return "", fmt.Errorf("no valid conditions found for jobset %s", workloadName)
-	}
-
-	return latestCondition.Type, nil
+	return latestCondition.Type
 }
 
-func (g *GKEOrchestrator) findTargetWorkload(ns, workloadName string) (string, error) {
-	matchedWorkloads, err := g.kubeClient.ListWorkloads(ns, workloadName)
-	if err != nil {
-		return "", fmt.Errorf("failed to list workloads: %w", err)
+func calculatePollInterval(timeout time.Duration) time.Duration {
+	pollInterval := 2 * time.Second
+	if timeout < pollInterval {
+		pollInterval = timeout / 2
+		if pollInterval < 100*time.Millisecond {
+			pollInterval = 100 * time.Millisecond
+		}
+	}
+	return pollInterval
+}
+
+func (g *GKEOrchestrator) findTargetWorkload(ns, workloadName string, timeout time.Duration) (string, error) {
+	if g.needsDynamicClientInit() {
+		if _, err := g.getDynamicClient(); err != nil {
+			return "", fmt.Errorf("kubernetes client is not initialized: %w", err)
+		}
+	}
+	if g.kubeClient == nil {
+		return "", fmt.Errorf("kubernetes client is not initialized")
 	}
 
-	var targetWorkloadName string
-	if len(matchedWorkloads) > 0 {
-		targetWorkloadName = matchedWorkloads[len(matchedWorkloads)-1]
+	logging.Info("Discovering Kueue workload for jobset '%s'...", workloadName)
+	pollInterval := calculatePollInterval(timeout)
+	deadline := time.Now().Add(timeout)
+
+	var lastErr error
+	for {
+		matchedWorkloads, err := g.kubeClient.ListWorkloads(ns, workloadName)
+		lastErr = err
+		if err == nil && len(matchedWorkloads) > 0 {
+			targetWorkloadName := matchedWorkloads[len(matchedWorkloads)-1]
+			if targetWorkloadName != "" {
+				return targetWorkloadName, nil
+			}
+		}
+
+		if timeout <= 0 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(pollInterval)
 	}
 
-	if targetWorkloadName == "" {
-		return "", fmt.Errorf("failed to find Kueue workload for jobset %s", workloadName)
+	warnEvents := g.checkJobSetWarningEvents(ns, workloadName)
+	var warnSuffix string
+	if warnEvents != "" {
+		warnSuffix = fmt.Sprintf("\nJobSet warning events:\n%s", warnEvents)
 	}
-	return targetWorkloadName, nil
+
+	if lastErr != nil {
+		return "", fmt.Errorf("failed to find Kueue workload for jobset %s: %w%s", workloadName, lastErr, warnSuffix)
+	}
+	if timeout <= 0 {
+		return "", fmt.Errorf("failed to find Kueue workload for jobset %s%s", workloadName, warnSuffix)
+	}
+	return "", fmt.Errorf("failed to find Kueue workload for jobset %s (timed out waiting for Kueue to create workload)%s", workloadName, warnSuffix)
+}
+
+func (g *GKEOrchestrator) checkJobSetWarningEvents(ns, workloadName string) string {
+	if workloadName == "" {
+		return ""
+	}
+	res := g.executor.ExecuteCommand("kubectl", "get", "events", "-n", ns,
+		fmt.Sprintf("--field-selector=involvedObject.name=%s,involvedObject.kind=JobSet,type=Warning", workloadName),
+		"--request-timeout=10s",
+		"--no-headers")
+	if res.ExitCode == 0 && strings.TrimSpace(res.Stdout) != "" {
+		return strings.TrimSpace(res.Stdout)
+	}
+	return ""
 }
 
 func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, jobConsoleLink, workloadName string) error {
@@ -1866,11 +1534,17 @@ func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, 
 		"workload", targetWorkloadName, "-n", ns, "--timeout="+timeout)
 
 	if waitRes.ExitCode != 0 {
+		warnEvents := g.checkJobSetWarningEvents(ns, workloadName)
+		var warnSuffix string
+		if warnEvents != "" {
+			logging.Error("JobSet '%s' reported warning events:\n%s", workloadName, warnEvents)
+			warnSuffix = fmt.Sprintf("\nJobSet warning events:\n%s", warnEvents)
+		}
 		if strings.Contains(waitRes.Stderr, "timed out waiting") || strings.Contains(waitRes.Stdout, "timed out waiting") {
 			logging.Error("Timed out waiting for job '%s' to finish. Check its status in the Cloud Console: %s", workloadName, jobConsoleLink)
-			return fmt.Errorf("job timed out")
+			return fmt.Errorf("job timed out%s", warnSuffix)
 		}
-		return fmt.Errorf("error waiting for job completion: %s\n%s", waitRes.Stderr, waitRes.Stdout)
+		return fmt.Errorf("error waiting for job completion: %s\n%s%s", waitRes.Stderr, waitRes.Stdout, warnSuffix)
 	}
 	return nil
 }
@@ -2000,12 +1674,58 @@ func (g *GKEOrchestrator) buildTopologyAnnotation(topology string, machineType s
 
 // DeleteJobSet deletes a JobSet resource in the specified namespace.
 func (d *DefaultKubeClient) DeleteJobSet(namespace string, name string) error {
-	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
-	return d.dynClient.Resource(gvr).Namespace(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	if d.dynClient == nil {
+		return fmt.Errorf("kubernetes dynamic client is not initialized")
+	}
+	return d.dynClient.Resource(jobSetGVR).Namespace(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
+}
+
+func (d *DefaultKubeClient) resource(gvr schema.GroupVersionResource, namespace string) (dynamic.ResourceInterface, error) {
+	if d.dynClient == nil {
+		return nil, fmt.Errorf("kubernetes dynamic client is not initialized")
+	}
+	if namespace == "" {
+		return d.dynClient.Resource(gvr), nil
+	}
+	return d.dynClient.Resource(gvr).Namespace(namespace), nil
+}
+
+// ListResources returns the raw objects of gvr in namespace matching labelSelector.
+func (d *DefaultKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error) {
+	r, err := d.resource(gvr, namespace)
+	if err != nil {
+		return nil, err
+	}
+	list, err := r.List(context.TODO(), metav1.ListOptions{LabelSelector: labelSelector})
+	if err != nil {
+		return nil, err
+	}
+	return list.Items, nil
+}
+
+// GetResource returns the raw object of gvr named name.
+func (d *DefaultKubeClient) GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
+	r, err := d.resource(gvr, namespace)
+	if err != nil {
+		return nil, err
+	}
+	return r.Get(context.TODO(), name, metav1.GetOptions{})
+}
+
+// DeleteResource deletes the object of gvr named name, only if it still matches pre.
+func (d *DefaultKubeClient) DeleteResource(gvr schema.GroupVersionResource, namespace, name string, pre *metav1.Preconditions) error {
+	r, err := d.resource(gvr, namespace)
+	if err != nil {
+		return err
+	}
+	return r.Delete(context.TODO(), name, metav1.DeleteOptions{Preconditions: pre})
 }
 
 // ListWorkloads lists matching Kueue workloads in the specified namespace.
 func (d *DefaultKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
+	if d.dynClient == nil {
+		return nil, fmt.Errorf("kubernetes dynamic client is not initialized")
+	}
 	// First, retrieve the JobSet to get its UID
 	jobsetGVR := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
 	jobset, err := d.dynClient.Resource(jobsetGVR).Namespace(namespace).Get(context.TODO(), workloadName, metav1.GetOptions{})
@@ -2037,6 +1757,9 @@ func (d *DefaultKubeClient) ListWorkloads(namespace string, workloadName string)
 
 // ListJobSets retrieves job statuses for JobSets matching the given label selector in the namespace.
 func (d *DefaultKubeClient) ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error) {
+	if d.dynClient == nil {
+		return nil, fmt.Errorf("kubernetes dynamic client is not initialized")
+	}
 	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
 	list, err := d.dynClient.Resource(gvr).Namespace(namespace).List(context.Background(), metav1.ListOptions{
 		LabelSelector: labelSelector,
@@ -2078,33 +1801,19 @@ func (d *DefaultExecutor) ExecuteCommandStream(name string, args ...string) erro
 
 // GetCurrentNamespace resolves the target Kubernetes namespace from kubeconfig for the specified cluster.
 func (d *DefaultKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
-	config, err := clientcmd.NewDefaultClientConfigLoadingRules().Load()
+	config, err := defaultKubeconfigLoader()
 	if err != nil {
 		return "", fmt.Errorf("failed to load kubeconfig: %w. You can explicitly specify the namespace using the --gke-namespace flag", err)
 	}
 
-	// Standard GKE context naming convention
-	expectedContext := fmt.Sprintf("gke_%s_%s_%s", projectID, location, clusterName)
-
-	if kubeCtx, ok := config.Contexts[expectedContext]; ok {
-		if kubeCtx.Namespace != "" {
-			return kubeCtx.Namespace, nil
-		}
-		return "default", nil
+	// Standard GKE context naming convention first, then the legacy fallback
+	// for contexts users renamed to the bare cluster name.
+	_, kubeCtx, ok := findKubeContext(config, clusterName, location, projectID)
+	if !ok {
+		return "", fmt.Errorf("no matching context found for cluster %s in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag", clusterName)
 	}
-
-	// Fallback/Legacy: Also check if there's a context with just the cluster name
-	// (sometimes users manually rename them)
-	contextNames := slices.Sorted(maps.Keys(config.Contexts))
-	for _, contextName := range contextNames {
-		kubeCtx := config.Contexts[contextName]
-		if contextName == clusterName || kubeCtx.Cluster == clusterName {
-			if kubeCtx.Namespace != "" {
-				return kubeCtx.Namespace, nil
-			}
-			return "default", nil
-		}
+	if kubeCtx.Namespace != "" {
+		return kubeCtx.Namespace, nil
 	}
-
-	return "", fmt.Errorf("no matching context found for cluster %s in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag", clusterName)
+	return "default", nil
 }
