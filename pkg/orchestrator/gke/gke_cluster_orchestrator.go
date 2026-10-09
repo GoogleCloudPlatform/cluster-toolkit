@@ -17,6 +17,7 @@ package gke
 import (
 	"encoding/json"
 	"fmt"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 )
 
@@ -61,8 +62,21 @@ func (g *GKEOrchestrator) DescribeEnvironment(name string, opts orchestrator.Lis
 
 // ListVolumes discovers and lists available storage options (PVCs labeled ghpc_role=file-system).
 func (g *GKEOrchestrator) ListVolumes(opts orchestrator.ListOptions) ([]orchestrator.VolumeStatus, error) {
+	if opts.ClusterName != "" {
+		if opts.ClusterLocation == "" {
+			return nil, fmt.Errorf("location is required when --cluster is set; please specify it using the --location flag")
+		}
+		if _, err := g.Initialize(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
+			return nil, err
+		}
+		if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
+			return nil, err
+		}
+	} else {
+		logging.Info("No --cluster given; listing volumes from the kubeconfig current-context.")
+	}
 	// Query PVCs with the managed role label
-	result := g.executor.ExecuteCommand("kubectl", "get", "pvc", "--all-namespaces", "-l", "ghpc_role=file-system", "-o", "json")
+	result := g.kubectl("get", "pvc", "--all-namespaces", "-l", "ghpc_role=file-system", "-o", "json")
 	if result.ExitCode != 0 {
 		return nil, fmt.Errorf("kubectl get pvc failed: %s", result.Stderr)
 	}

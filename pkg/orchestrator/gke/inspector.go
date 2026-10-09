@@ -90,7 +90,7 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 
 	writer := &inspectWriter{
 		writer:   outputTarget,
-		executor: g.executor,
+		executor: g.kubectlExecutor(),
 	}
 
 	// --- 1. Local Setup ---
@@ -111,7 +111,7 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	writer.runAndLog("Kubectl: All Nodes", "kubectl", "get", "nodes", "-o", "wide")
 
 	// Count nodes per pool (healthy and total)
-	logNodeCounts(outputTarget, g.executor)
+	logNodeCounts(outputTarget, g.kubectlExecutor())
 
 	// --- 4. Kueue & JobSet Resources ---
 	writer.runAndLog("Kueue: ClusterQueue Details", "kubectl", "describe", "ClusterQueue")
@@ -124,16 +124,16 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	writer.runAndLog("JobSet: JobSet Controller Manager Logs (tail 100)", "kubectl", "logs", "deployment/jobset-controller-manager", "-n", "jobset-system", "-c", "manager", "--tail=100")
 
 	// --- 5. Slice Controller (Dynamic Slicing) ---
-	cResult := g.executor.ExecuteCommand("kubectl", "get", "crd", "topologies.kueue.x-k8s.io")
+	cResult := g.kubectl("get", "crd", "topologies.kueue.x-k8s.io")
 	if cResult.ExitCode == 0 {
 		writer.runAndLog("Slice Controller: Deployment Details", "kubectl", "describe", "deployment", "slice-controller-controller-manager", "-n", "slice-controller-system")
 		writer.runAndLog("Slice Controller: Logs (tail 100)", "kubectl", "logs", "deployment/slice-controller-controller-manager", "-n", "slice-controller-system", "-c", "manager", "--tail=100")
 	}
 
 	// --- 6. Workloads ---
-	logWorkloadList(outputTarget, g.executor, "EVERYTHING", "", targetNamespace)
-	logWorkloadList(outputTarget, g.executor, "QUEUED", "", targetNamespace)
-	logWorkloadList(outputTarget, g.executor, "RUNNING", "", targetNamespace)
+	logWorkloadList(outputTarget, g.kubectlExecutor(), "EVERYTHING", "", targetNamespace)
+	logWorkloadList(outputTarget, g.kubectlExecutor(), "QUEUED", "", targetNamespace)
+	logWorkloadList(outputTarget, g.kubectlExecutor(), "RUNNING", "", targetNamespace)
 
 	g.inspectWorkload(writer, opts.WorkloadName, targetNamespace)
 
@@ -149,7 +149,7 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, w
 		return
 	}
 
-	logWorkloadList(writer.writer, g.executor, "EVERYTHING", workloadName, workloadNamespace)
+	logWorkloadList(writer.writer, g.kubectlExecutor(), "EVERYTHING", workloadName, workloadNamespace)
 
 	writer.runAndLog(fmt.Sprintf("JobSet: Config for %s", workloadName), "kubectl", "describe", "jobsets", workloadName, "-n", workloadNamespace)
 
