@@ -14,10 +14,19 @@
  * limitations under the License.
  */
 
+resource "random_id" "datastore_suffix" {
+  keepers = {
+    project_id = var.project_id
+    location   = var.location
+    engine_id  = var.engine_id
+  }
+  byte_length = 4
+}
+
 resource "google_discovery_engine_data_store" "default" {
   project                     = var.project_id
   location                    = var.location
-  data_store_id               = "${var.engine_id}-ds"
+  data_store_id               = "${var.engine_id}-ds-${random_id.datastore_suffix.hex}"
   display_name                = "${var.engine_id}-ds"
   industry_vertical           = "GENERIC"
   content_config              = "NO_CONTENT"
