@@ -1342,6 +1342,7 @@ This blueprint showcases the integration of several storage solutions:
   * **Anywhere Cache Support:** This blueprint also highlights support for [Anywhere Cache](https://cloud.google.com/storage/docs/anywhere-cache), a fully managed service that caches Cloud Storage data in Google Cloud. This improves read performance by co-locating cached data with compute resources.
     * Note: A maximum of one cache per zone can be created for each bucket. For example, a bucket in `us-east1` can have caches in `us-east1-b` and `us-east1-c`.
     * Refer to [Create a Cache](https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache) for more parameter details.
+  * **Storage profiles:** `data-bucket-training-pv` mounts `data-bucket` through the [`gcsfusecsi-training` profile](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles) and grants the GKE Service Agent the bucket access profiles need, which also covers `gcluster job submit --mount "...;profile=..."` on this bucket.
 
 * **Filestore:**
   * A K8s Job utilizes a Filestore instance as another shared filesystem between pods.
