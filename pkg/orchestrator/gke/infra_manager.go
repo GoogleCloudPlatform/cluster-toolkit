@@ -39,7 +39,8 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-const defaultJobSetVersion = "v0.10.1"
+// Keep in sync with the jobset.version default in modules/management/kubectl-apply/variables.tf (no 'v' prefix there).
+const defaultJobSetVersion = "v0.12.0"
 
 func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
 	if installed, err := g.isJobSetCRDInstalled(); err != nil {
