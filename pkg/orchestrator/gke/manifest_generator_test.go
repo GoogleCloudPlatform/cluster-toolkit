@@ -567,7 +567,7 @@ func TestGenerateGKEManifest_DefaultDevShm_ParallelContainers(t *testing.T) {
 
 // pathwaysPodSpecs parses a rendered Pathways manifest and returns the pod spec
 // of each replicated job, keyed by replicated job name.
-func pathwaysPodSpecs(t *testing.T, manifest string) map[string]corev1.PodSpec {
+func pathwaysPodSpecs(t *testing.T, manifest string) map[string]*corev1.PodSpec {
 	t.Helper()
 	type replicatedJob struct {
 		Name     string `json:"name"`
@@ -579,7 +579,11 @@ func pathwaysPodSpecs(t *testing.T, manifest string) map[string]corev1.PodSpec {
 			} `json:"spec"`
 		} `json:"template"`
 	}
-	for _, doc := range strings.Split(manifest, "\n---\n") {
+	docs, err := splitYAMLDocuments(manifest)
+	if err != nil {
+		t.Fatalf("failed to split manifest into YAML documents: %v", err)
+	}
+	for _, doc := range docs {
 		var js struct {
 			Kind string `json:"kind"`
 			Spec struct {
@@ -592,9 +596,10 @@ func pathwaysPodSpecs(t *testing.T, manifest string) map[string]corev1.PodSpec {
 		if js.Kind != "JobSet" {
 			continue
 		}
-		specs := make(map[string]corev1.PodSpec, len(js.Spec.ReplicatedJobs))
-		for _, rj := range js.Spec.ReplicatedJobs {
-			specs[rj.Name] = rj.Template.Spec.Template.Spec
+		specs := make(map[string]*corev1.PodSpec, len(js.Spec.ReplicatedJobs))
+		for i := range js.Spec.ReplicatedJobs {
+			rj := &js.Spec.ReplicatedJobs[i]
+			specs[rj.Name] = &rj.Template.Spec.Template.Spec
 		}
 		return specs
 	}
@@ -603,7 +608,7 @@ func pathwaysPodSpecs(t *testing.T, manifest string) map[string]corev1.PodSpec {
 }
 
 // devShmMountNames returns the names of the volumes a container mounts at /dev/shm.
-func devShmMountNames(c corev1.Container) []string {
+func devShmMountNames(c *corev1.Container) []string {
 	var names []string
 	for _, m := range c.VolumeMounts {
 		if m.MountPath == "/dev/shm" {
@@ -614,7 +619,7 @@ func devShmMountNames(c corev1.Container) []string {
 }
 
 // findPodVolume returns the pod volume with the given name, or nil.
-func findPodVolume(spec corev1.PodSpec, name string) *corev1.Volume {
+func findPodVolume(spec *corev1.PodSpec, name string) *corev1.Volume {
 	for i := range spec.Volumes {
 		if spec.Volumes[i].Name == name {
 			return &spec.Volumes[i]
@@ -628,9 +633,17 @@ func isMemoryEmptyDir(v *corev1.Volume) bool {
 	return v != nil && v.EmptyDir != nil && v.EmptyDir.Medium == corev1.StorageMediumMemory
 }
 
-// podContainers returns a pod's init containers followed by its containers.
-func podContainers(spec corev1.PodSpec) []corev1.Container {
-	return append(append([]corev1.Container{}, spec.InitContainers...), spec.Containers...)
+// podContainers returns pointers to a pod's init containers followed by its
+// containers.
+func podContainers(spec *corev1.PodSpec) []*corev1.Container {
+	containers := make([]*corev1.Container, 0, len(spec.InitContainers)+len(spec.Containers))
+	for i := range spec.InitContainers {
+		containers = append(containers, &spec.InitContainers[i])
+	}
+	for i := range spec.Containers {
+		containers = append(containers, &spec.Containers[i])
+	}
+	return containers
 }
 
 // renderPathwaysShmTestManifest renders a Pathways manifest with the given
@@ -684,7 +697,7 @@ func renderPathwaysShmTestManifest(t *testing.T, headless bool, sidecarImage str
 // assertHeadDevShm checks that the head pod declares the in-memory dshm volume
 // and that only its workload-container mounts it at /dev/shm. When wantShm is
 // false (headless mode, no workload-container), neither may exist.
-func assertHeadDevShm(t *testing.T, head corev1.PodSpec, wantShm bool) {
+func assertHeadDevShm(t *testing.T, head *corev1.PodSpec, wantShm bool) {
 	t.Helper()
 	dshm := findPodVolume(head, "dshm")
 	if wantShm && !isMemoryEmptyDir(dshm) {
@@ -712,7 +725,7 @@ func assertHeadDevShm(t *testing.T, head corev1.PodSpec, wantShm bool) {
 
 // assertNoDevShm checks that a pod neither declares the dshm volume nor mounts
 // anything at /dev/shm.
-func assertNoDevShm(t *testing.T, podName string, spec corev1.PodSpec) {
+func assertNoDevShm(t *testing.T, podName string, spec *corev1.PodSpec) {
 	t.Helper()
 	if v := findPodVolume(spec, "dshm"); v != nil {
 		t.Errorf("%s pod declares volume dshm %+v, want none", podName, v)
@@ -725,14 +738,15 @@ func assertNoDevShm(t *testing.T, podName string, spec corev1.PodSpec) {
 }
 
 // assertUniqueVolumeNames checks that a pod declares each volume name once.
-func assertUniqueVolumeNames(t *testing.T, podName string, spec corev1.PodSpec) {
+func assertUniqueVolumeNames(t *testing.T, podName string, spec *corev1.PodSpec) {
 	t.Helper()
 	seen := make(map[string]bool)
-	for _, v := range spec.Volumes {
-		if seen[v.Name] {
-			t.Errorf("%s pod declares volume %q more than once", podName, v.Name)
+	for i := range spec.Volumes {
+		name := spec.Volumes[i].Name
+		if seen[name] {
+			t.Errorf("%s pod declares volume %q more than once", podName, name)
 		}
-		seen[v.Name] = true
+		seen[name] = true
 	}
 }
 
