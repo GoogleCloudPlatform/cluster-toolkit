@@ -45,10 +45,28 @@ locals {
     windows-startup-script-ps1 = local.windows_startup_ps1
   } : {}
 
+  shutdown_metadata = local.is_windows_image ? {
+    windows-shutdown-script-ps1 = <<-EOT
+      if (Test-Path "C:\Condor\bin\condor_off.exe") {
+          & "C:\Condor\bin\condor_off.exe" -fast -startd
+      }
+      Stop-Service condor -Force -ErrorAction SilentlyContinue
+    EOT
+    } : {
+    shutdown-script = <<-EOT
+      #!/bin/bash
+      if command -v condor_off >/dev/null 2>&1; then
+          condor_off -fast -startd
+      fi
+      systemctl stop condor || true
+    EOT
+  }
+
   disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
 
   metadata = merge(
     local.windows_startup_metadata,
+    local.shutdown_metadata,
     local.network_storage_metadata,
     local.enable_oslogin,
     local.disable_automatic_updates_metadata,
