@@ -171,6 +171,8 @@ storage intact and b) you can build software before you deploy your cluster.
 
    This deployment group contains the Slurm cluster and compute partitions.
 
+   Once the cluster is up, you can try the example front-end (Verilator/RTLMeter) and back-end (OpenROAD) EDA workloads from the [GCD EDA example](../hpc-slurm-google-cloud-dedicated/eda/README.md#3-front-end-rtl-verification-example-verilator--rtlmeter-nvdla); change `--partition=compute` in its job scripts to `--partition=h4d`, and note that they require Apptainer on the cluster nodes.
+
 ## Teardown Instructions
 
 > [!NOTE]

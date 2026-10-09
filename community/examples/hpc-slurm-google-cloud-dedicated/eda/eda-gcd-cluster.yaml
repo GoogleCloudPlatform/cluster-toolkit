@@ -1,0 +1,480 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+# ==============================================================================
+# EDA Slurm Cluster Blueprint for Google Cloud Dedicated (GCD)
+# ==============================================================================
+#
+# Architecture Overview:
+# 1. Sovereign GCD Deployment Groups:
+#    - Group 1 (`setup`): Provisions a dedicated VPC network (`network`) and
+#      Packer Slurm build scripts (`slurm-build-script`).
+#    - Group 2 (`build-slurm`): Builds a custom Rocky Linux 9 Slurm VM image
+#      (`slurm-rocky9-eda`) in-project with Packer (`custom-slurm-image`), pre-baking
+#      Slurm v6 (`6.12.3`), `apptainer`, `podman`, `numactl`, and `python3.11`.
+#      Can be skipped (`--only setup,cluster`) once `slurm-rocky9-eda` exists.
+#    - Group 3 (`cluster`): Deploys a Hyperdisk-backed standalone NFS server
+#      (`homefs`) exporting `/home`, `/tools`, `/library`, `/scratch`, and
+#      `/opt/apps`, alongside a Slurm C3 compute partition (`compute`), login
+#      node, and controller configured with native SAuth (`enable_slurm_auth`)
+#      and non-OSLogin POSIX SSH synchronization (`enable_oslogin: false`).
+#
+# 2. Built-in Front-End & Back-End EDA Container Support:
+#    - The login node startup script stages `verilator-nvdla.def` to
+#      `/tools/containers/verilator-nvdla.def` via `ghpc_stage` and launches a
+#      background build of `$(vars.container_sif_path)` using node-local
+#      `/var/tmp` (`APPTAINER_TMPDIR=/var/tmp`).
+#    - Back-end RTL-to-GDSII physical design flows (OpenROAD / ORFS) are
+#      supported on the same cluster using `/tools/containers/` for container
+#      images and shared `/scratch` for job results.
+
+blueprint_name: eda-gcd-cluster
+
+# These validators query public Google APIs that are unreachable from a GCD private
+# universe (apis-<location>.goog), so gcluster create would fail before generating
+# anything. On commercial GCP you can safely delete this block to restore the
+# pre-flight checks.
+validators:
+- validator: test_project_exists
+  skip: true
+- validator: test_apis_enabled
+  skip: true
+- validator: test_region_exists
+  skip: true
+- validator: test_zone_exists
+  skip: true
+- validator: test_zone_in_region
+  skip: true
+- validator: test_machine_type_in_zone
+  skip: true
+- validator: test_disk_type_in_zone
+  skip: true
+
+vars:
+  project_id: # <project-id> e.g., <partition>:my-gcd-project
+  deployment_name: eda-gcd
+  region: us-central1
+  zone: us-central1-a
+  universe_domain: googleapis.com # apis-<location>.goog
+  service_account_email: default # <account-id>-compute@developer.<partition>-system.iam.gserviceaccount.com
+  # To enable SSH access to the login node, add your client CIDR e.g. ["x.x.x.x/32"]
+  authorized_ssh_ranges: []
+
+  # Image Build & Instance Settings
+  source_image_family: rocky-linux-9-optimized-gcp
+  source_image_project: rocky-linux-cloud # <partition>-system:rocky-linux-cloud
+  image_build_machine_type: c3-standard-4
+  build_slurm_from_git_ref: 6.12.3
+  built_instance_image:
+    family: slurm-rocky9-eda
+    project: $(vars.project_id)
+
+  # EDA Cluster Sizing, Storage & Container Settings
+  compute_machine_type: c3-standard-176
+  node_count_static: 0
+  node_count_dynamic_max: 16
+
+  # Shared NFS server backing /home, /tools, /library, /scratch, and /opt/apps.
+  # Every compute node's shared-storage I/O goes through this single VM, and
+  # Hyperdisk and network performance are capped per VM by vCPU count. For
+  # better performance with many or I/O-heavy compute nodes, use a larger
+  # machine type (e.g. c3-standard-22 or c3-standard-44) and raise the
+  # provisioned IOPS/throughput to match its per-VM Hyperdisk limits.
+  nfs_machine_type: c3-standard-8
+  nfs_disk_size_gb: 2048 # 2 TB
+  nfs_provisioned_iops: 10000 # Hyperdisk Balanced provisioned IOPS
+  nfs_provisioned_throughput: 400 # Hyperdisk Balanced provisioned throughput (MiB/s)
+  container_sif_path: /tools/containers/verilator-nvdla.sif
+
+terraform_providers:
+  google:
+    source: hashicorp/google
+    version: '>= 5.45.0'
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+      universe_domain: $(vars.universe_domain)
+  google-beta:
+    source: hashicorp/google-beta
+    version: '>= 5.45.0'
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+      universe_domain: $(vars.universe_domain)
+
+deployment_groups:
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Deployment Group 1: Setup (VPC Network & Packer Slurm Build Script)
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+- group: setup
+  modules:
+  # Dedicated VPC for the cluster: a private subnet, internal TCP/UDP/ICMP
+  # firewall rules (the vpc module's default 10.0.0.0/9 rule plus the
+  # subnet-scoped rule below), SSH limited to authorized_ssh_ranges, and a
+  # Cloud Router with Cloud NAT for outbound access.
+  - id: network
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net
+      allowed_ssh_ip_ranges: $(vars.authorized_ssh_ranges)
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-subnet
+        subnet_region: $(vars.region)
+        subnet_ip: "10.128.0.0/20"
+      firewall_rules:
+      - name: $(vars.deployment_name)-allow-internal
+        ranges: ["10.128.0.0/20"]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: slurm-build-script
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: false
+      runners:
+      - type: shell
+        destination: prep-for-slurm-build.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          # Ensure SELinux allows NFS home directories
+          setsebool -P use_nfs_home_dirs 1 || true
+          # Slurm build will install and set python3.12 as the default python3
+          dnf install -y python3.12 python3.12-pip perl-ExtUtils-MakeMaker perl-devel
+          python3.12 -m pip install pip --upgrade
+          python3.12 -m pip install ansible==8.7.0
+          export PATH=/usr/local/bin:$PATH
+          ansible --version
+          n=0
+          until [ "$n" -ge 3 ] || ( { dnf install -y --disablerepo=ciq-sigcloud-next nfs-utils 2>/dev/null || dnf install -y nfs-utils; } && ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents ); do
+            ((n=n+1))
+            sleep 5
+          done
+      - type: data
+        destination: /var/tmp/slurm_vars.json
+        # Add or update slurm-gcp flags as required, https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/ansible/playbook.yml
+        content: |
+          {
+            "reboot": false,
+            "install_cuda": false,
+            "nvidia_version": "latest",
+            "install_ompi": true,
+            "install_lustre": false,
+            "install_gcsfuse": true,
+            "allow_kernel_upgrades": false,
+            "monitoring_agent": "cloud-ops",
+            "install_managed_lustre": false
+          }
+      - type: shell
+        destination: install_slurm.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          dnf update -y
+          dnf install -y epel-release
+          dnf install -y git ansible-core apptainer podman numactl python3.11 python3.11-pip python3.11-devel
+          ansible-pull -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_slurm_from_git_ref) \
+              -i localhost, --limit localhost --connection=local \
+              -e @/var/tmp/slurm_vars.json ansible/playbook.yml
+
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Deployment Group 2: Build Custom Slurm Image (Skip if image already exists)
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+- group: build-slurm
+  modules:
+  - id: custom-slurm-image
+    source: modules/packer/custom-image
+    kind: packer
+    use: [network, slurm-build-script]
+    settings:
+      source_image_project_id: [$(vars.source_image_project)]
+      source_image_family: $(vars.source_image_family)
+      machine_type: $(vars.image_build_machine_type)
+      image_family: $(vars.built_instance_image.family)
+      disk_type: hyperdisk-balanced
+      zone: $(vars.zone)
+      omit_external_ip: false
+      image_licenses: []
+      state_timeout: 30m
+
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Deployment Group 3: EDA Cluster (NFS Server, C3 Partition, Login, Controller)
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+- group: cluster
+  modules:
+  # Hyperdisk-backed NFS server exporting all shared EDA mountpoints on GCD
+  - id: homefs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    settings:
+      local_mounts:
+      - /home
+      - /tools
+      - /library
+      - /scratch
+      - /opt/apps
+      machine_type: $(vars.nfs_machine_type)
+      boot_disk_type: hyperdisk-balanced
+      type: hyperdisk-balanced
+      disk_size: $(vars.nfs_disk_size_gb)
+      provisioned_iops: $(vars.nfs_provisioned_iops)
+      provisioned_throughput: $(vars.nfs_provisioned_throughput)
+      instance_image:
+        family: $(vars.built_instance_image.family)
+        project: $(vars.built_instance_image.project)
+
+  # Common startup script for all nodes (login, compute, and controller):
+  # non-OSLogin SSH setup and EDA shared directory permissions.
+  - id: ssh_config
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: false
+      runners:
+      - &non_oslogin_ssh_runner
+        type: shell
+        destination: setup_non_oslogin_ssh.sh
+        content: |
+          #!/bin/bash
+          # 1. SELinux & Crypto Policy for Rocky Linux 8/9
+          setsebool -P use_nfs_home_dirs 1 || true
+          update-crypto-policies --set DEFAULT:SHA1 || true
+
+          # 2. Wait for the homefs NFS exports to be mounted; [ -d <dir> ] alone
+          #    would pass on an empty local dir that NFS later masks.
+          for d in /home /tools /library /scratch /opt/apps; do
+            for _ in {1..60}; do
+              mountpoint -q "$d" && break
+              sleep 5
+            done
+            if ! mountpoint -q "$d"; then
+              echo "Error: $d is not NFS-mounted; aborting SSH setup." >&2
+              exit 1
+            fi
+          done
+
+          # 3. Make EDA shared directories world-writable with the sticky bit (like /tmp)
+          #    so users cannot delete or rename each other's files, including /tools/containers
+          chmod 1777 /tools /library /scratch /opt/apps 2>/dev/null || true
+
+          # 4. Populate metadata keys and secure inter-node keypair on NFS /home
+          METADATA="http://metadata.google.internal/computeMetadata/v1"
+          PROJ_KEYS=`curl -s -f -H "Metadata-Flavor: Google" "$METADATA/project/attributes/ssh-keys" 2>/dev/null || true`
+          INST_KEYS=`curl -s -f -H "Metadata-Flavor: Google" "$METADATA/instance/attributes/ssh-keys" 2>/dev/null || true`
+          KEYS=`printf "%s\n%s\n" "$PROJ_KEYS" "$INST_KEYS" | grep -v '^[[:space:]]*$' | sort -u`
+
+          for user in `echo "$KEYS" | cut -d: -f1 | sort -u`; do
+            [ -z "$user" ] && continue
+
+            # Create group and user with deterministic UID/GID to ensure consistency across the cluster
+            if ! id "$user" &>/dev/null; then
+              UID_HASH=`printf "%s" "$user" | cksum | cut -d' ' -f1`
+              USER_UID=`expr 2000 + $UID_HASH % 58000`
+              while getent passwd "$USER_UID" >/dev/null || getent group "$USER_UID" >/dev/null; do
+                USER_UID=`expr $USER_UID + 1`
+              done
+              groupadd -g "$USER_UID" "$user" || true
+              useradd -u "$USER_UID" -g "$USER_UID" -m -s /bin/bash "$user"
+            fi
+            mkdir -p "/home/$user/.ssh"
+            chown "$user:$user" "/home/$user"
+            chmod 700 "/home/$user/.ssh"
+
+            # Safely serialize key generation & authorized_keys rebuilding across the cluster
+            (
+              flock 9
+
+              # Generate ED25519 cluster key natively
+              if [ ! -f "/home/$user/.ssh/id_ed25519" ]; then
+                ssh-keygen -t ed25519 -N "" -f "/home/$user/.ssh/id_ed25519"
+              fi
+
+              # Rebuild authorized_keys atomically on the exact same NFS filesystem (prevents O_TRUNC zeroing)
+              TMP_KEYS=`mktemp "/home/$user/.ssh/authorized_keys.XXXXXX"`
+              if [ -n "$TMP_KEYS" ] && [ -f "$TMP_KEYS" ]; then
+                echo "$KEYS" | grep "^$user:" | cut -d: -f2- > "$TMP_KEYS"
+                [ -f "/home/$user/.ssh/id_ed25519.pub" ] && cat "/home/$user/.ssh/id_ed25519.pub" >> "$TMP_KEYS"
+                mv -f "$TMP_KEYS" "/home/$user/.ssh/authorized_keys"
+              fi
+
+            ) 9>"/home/$user/.ssh/keygen.lock"
+
+            # Secure remaining permissions to the user
+            chown -R "$user:$user" "/home/$user/.ssh"
+            chmod 600 "/home/$user/.ssh/"*
+          done
+
+          # 5. Disable StrictHostKeyChecking safely for internal network jumps only
+          if ! grep -q "Host 10.\*" /etc/ssh/ssh_config; then
+            if ! grep -q "StrictHostKeyChecking no" /etc/ssh/ssh_config; then
+              echo -e "Host 10.* 172.16.* 192.168.* *.internal\n    StrictHostKeyChecking no\n    UserKnownHostsFile=/dev/null" >> /etc/ssh/ssh_config
+            fi
+          fi
+
+          # 6. Restart sshd so it loads DEFAULT:SHA1 crypto policy for RSA keys, and disable the
+          #    Ops Agent: it exports to commercial logging/monitoring endpoints, which reject GCD
+          #    credentials (Unauthenticated, ACCESS_TOKEN_TYPE_UNSUPPORTED), so it drops all data
+          #    and logs export errors continuously.
+          systemctl restart sshd
+          systemctl stop google-cloud-ops-agent 2>/dev/null || true
+          systemctl disable google-cloud-ops-agent 2>/dev/null || true
+
+  # Login-only startup script: runs the common setup above, then stages and
+  # builds the built-in Verilator/RTLMeter container. slurm-gcp runs login
+  # startup scripts only on login nodes, so compute and controller nodes skip
+  # these steps.
+  - id: login_startup
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: false
+      runners:
+      - *non_oslogin_ssh_runner
+      # Built-in Verilator/RTLMeter container staging and build
+      - type: data
+        source: $(ghpc_stage("verilator-nvdla.def"))
+        destination: /var/tmp/verilator-nvdla.def
+      - type: shell
+        destination: stage_verilator_container.sh
+        content: |
+          #!/bin/bash
+          set -e
+
+          # Wait for the homefs NFS export to be mounted; [ -d /tools ] alone would
+          # pass on an empty local dir that NFS later masks.
+          for _ in {1..60}; do
+            mountpoint -q /tools && break
+            sleep 5
+          done
+          if ! mountpoint -q /tools; then
+            echo "Error: /tools is not NFS-mounted; skipping container staging." >&2
+            exit 1
+          fi
+
+          mkdir -p /tools/containers
+          chmod 1777 /tools/containers
+          touch /tools/containers/.verilator-nvdla.lock
+          chmod 666 /tools/containers/.verilator-nvdla.lock
+          cp -f /var/tmp/verilator-nvdla.def /tools/containers/verilator-nvdla.def
+
+          cat <<'BUILD_EOF' > /tools/containers/build_verilator_sif.sh
+          #!/bin/bash
+          set -euo pipefail
+          SIF_OUT="${1:-/tools/containers/verilator-nvdla.sif}"
+          DEF_IN="${2:-/tools/containers/verilator-nvdla.def}"
+          LOCK_FILE="/tools/containers/.verilator-nvdla.lock"
+          if [ -f "${SIF_OUT}" ]; then
+            echo "Container already exists at ${SIF_OUT}"
+            exit 0
+          fi
+          # flock is released automatically if this process dies (including kill -9 or a node reboot),
+          # so a crashed build cannot leave a stale lock on the shared /tools volume.
+          exec 9>>"${LOCK_FILE}"
+          if ! flock -n 9; then
+            echo "Container build already in progress (${LOCK_FILE} is locked)."
+            exit 0
+          fi
+          # Re-check after acquiring the lock in case another build just finished.
+          if [ -f "${SIF_OUT}" ]; then
+            echo "Container already exists at ${SIF_OUT}"
+            exit 0
+          fi
+          export APPTAINER_TMPDIR=/var/tmp
+          export APPTAINER_CACHEDIR=/var/tmp/apptainer_cache
+          mkdir -p "${APPTAINER_CACHEDIR}"
+          rm -f "${SIF_OUT}.tmp" # discard a partial image from an interrupted build
+          echo "Building ${SIF_OUT} from ${DEF_IN} using local /var/tmp ..."
+          apptainer build "${SIF_OUT}.tmp" "${DEF_IN}"
+          mv -f "${SIF_OUT}.tmp" "${SIF_OUT}"
+          echo "Successfully built ${SIF_OUT}"
+          BUILD_EOF
+          chmod +x /tools/containers/build_verilator_sif.sh
+
+          if [ ! -f "$(vars.container_sif_path)" ]; then
+            nohup /tools/containers/build_verilator_sif.sh "$(vars.container_sif_path)" >/tools/containers/build_verilator_sif.log 2>&1 &
+          fi
+
+  - id: c3_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, ssh_config]
+    settings:
+      node_count_static: $(vars.node_count_static)
+      node_count_dynamic_max: $(vars.node_count_dynamic_max)
+      machine_type: $(vars.compute_machine_type)
+      disk_type: hyperdisk-balanced
+      disk_size_gb: 100
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+      # reservation_name: c3-16node-reservation
+      # If not using reservation:
+      # enable_placement: true
+      # placement_max_distance: 2
+      instance_image:
+        family: $(vars.built_instance_image.family)
+        project: $(vars.built_instance_image.project)
+      instance_image_custom: true
+      service_account_email: $(vars.service_account_email)
+      service_account_scopes: &id001
+      - https://www.googleapis.com/auth/cloud-platform
+      enable_oslogin: false
+
+  - id: c3_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [c3_nodeset]
+    settings:
+      partition_name: compute
+      is_default: true
+      # Allow jobs of different shapes (e.g. 48-CPU builds and 1-CPU sims) to
+      # share a node; the module default (true) runs one job per node.
+      exclusive: false
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network, login_startup]
+    settings:
+      machine_type: $(vars.image_build_machine_type)
+      disk_type: hyperdisk-balanced
+      enable_login_public_ips: true
+      instance_image:
+        family: $(vars.built_instance_image.family)
+        project: $(vars.built_instance_image.project)
+      instance_image_custom: true
+      service_account_email: $(vars.service_account_email)
+      service_account_scopes: *id001
+      enable_oslogin: false
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, c3_partition, homefs, slurm_login]
+    settings:
+      controller_startup_script: $(ssh_config.controller_startup_script)
+      machine_type: $(vars.image_build_machine_type)
+      disk_type: hyperdisk-balanced
+      controller_state_disk:
+        type: hyperdisk-balanced
+        size: 50
+      enable_controller_public_ips: false
+      instance_image:
+        family: $(vars.built_instance_image.family)
+        project: $(vars.built_instance_image.project)
+      instance_image_custom: true
+      service_account_email: $(vars.service_account_email)
+      service_account_scopes: *id001
+      enable_slurm_auth: true
+      enable_oslogin: false
