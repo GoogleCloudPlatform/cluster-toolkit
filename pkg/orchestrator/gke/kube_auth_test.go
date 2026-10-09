@@ -17,6 +17,10 @@ package gke
 import (
 	"encoding/base64"
 	"errors"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -40,6 +44,7 @@ const (
 	getCredsDNS = getCredsIP + " --dns-endpoint"
 	probeCmd    = "kubectl --context " + testContext + " get --raw /version --request-timeout=5s"
 	useCtxCmd   = "kubectl config use-context " + testContext
+	setNSCmd    = "kubectl config set-context " + testContext + " --namespace=team-ns"
 )
 
 // exactExecutor is a strict, order-recording executor. Unlike MockExecutor it
@@ -384,7 +389,7 @@ func TestConfigureKubectl_ReuseFallsBackToOtherEndpointOnConnectivityFailure(t *
 	exec := newExactExecutor(map[string][]shell.CommandResult{
 		probeCmd:   {{ExitCode: 1, Stderr: "Request Header Fields Too Large"}, {ExitCode: 0}},
 		getCredsIP: {{ExitCode: 0}},
-		"kubectl config set-context --current --namespace=team-ns": {{ExitCode: 0}},
+		setNSCmd:   {{ExitCode: 0}},
 	})
 	orc := newTestGKEOrchestrator(exec)
 	orc.kubeClient = &MockKubeClient{Namespace: "team-ns"}
@@ -409,7 +414,7 @@ func TestConfigureKubectl_ReuseIPContextDemotesIPAndTriesDNSFirst(t *testing.T) 
 	exec := newExactExecutor(map[string][]shell.CommandResult{
 		probeCmd:    {{ExitCode: 1, Stderr: "Unable to connect to the server: dial tcp 203.0.113.10:443: i/o timeout"}, {ExitCode: 0}},
 		getCredsDNS: {{ExitCode: 0}},
-		"kubectl config set-context --current --namespace=team-ns": {{ExitCode: 0}},
+		setNSCmd:    {{ExitCode: 0}},
 	})
 	orc := newTestGKEOrchestrator(exec)
 	orc.kubeClient = &MockKubeClient{Namespace: "team-ns"}
@@ -419,7 +424,7 @@ func TestConfigureKubectl_ReuseIPContextDemotesIPAndTriesDNSFirst(t *testing.T) 
 	if err := orc.configureKubectl(testCluster, testLocation, testProject); err != nil {
 		t.Fatalf("configureKubectl() error = %v", err)
 	}
-	wantOrder := []string{probeCmd, getCredsDNS, "kubectl config set-context --current --namespace=team-ns", probeCmd}
+	wantOrder := []string{probeCmd, getCredsDNS, setNSCmd, probeCmd}
 	if len(exec.calls) != len(wantOrder) {
 		t.Fatalf("calls = %v, want %v", exec.calls, wantOrder)
 	}
@@ -600,7 +605,7 @@ func TestConfigureKubectl_RefreshEnvForcesRegeneration(t *testing.T) {
 	exec := newExactExecutor(map[string][]shell.CommandResult{
 		getCredsIP: {{ExitCode: 0}},
 		probeCmd:   {{ExitCode: 0}},
-		"kubectl config set-context --current --namespace=team-ns": {{ExitCode: 0}},
+		setNSCmd:   {{ExitCode: 0}},
 	})
 	orc := newTestGKEOrchestrator(exec)
 	orc.kubeClient = &MockKubeClient{Namespace: "team-ns"}
@@ -655,7 +660,7 @@ func TestConfigureKubectl_RegenerationPreservesNamespace(t *testing.T) {
 	exec := newExactExecutor(map[string][]shell.CommandResult{
 		getCredsIP: {{ExitCode: 0}},
 		probeCmd:   {{ExitCode: 0}},
-		"kubectl config set-context --current --namespace=team-ns": {{ExitCode: 0}},
+		setNSCmd:   {{ExitCode: 0}},
 	})
 	orc := newTestGKEOrchestrator(exec)
 	orc.kubeClient = &MockKubeClient{Namespace: "team-ns"}
@@ -665,7 +670,7 @@ func TestConfigureKubectl_RegenerationPreservesNamespace(t *testing.T) {
 	if err := orc.configureKubectl(testCluster, testLocation, testProject); err != nil {
 		t.Fatalf("configureKubectl() error = %v", err)
 	}
-	if exec.count("kubectl config set-context --current --namespace=team-ns") != 1 {
+	if exec.count(setNSCmd) != 1 {
 		t.Errorf("namespace must be restored after get-credentials; calls=%v", exec.calls)
 	}
 }
@@ -861,5 +866,189 @@ func TestCheckClusterConnectivity(t *testing.T) {
 				t.Errorf("probe calls = %d, want 1; calls=%v", exec.count(cmd), exec.calls)
 			}
 		})
+	}
+}
+
+func TestWithKubeContext(t *testing.T) {
+	args := []string{"get", "pods"}
+	if got := withKubeContext("", args); !slices.Equal(got, args) {
+		t.Errorf("empty context: got %v, want %v", got, args)
+	}
+	want := []string{"--context", "ctx", "get", "pods"}
+	if got := withKubeContext("ctx", args); !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestContextPinnedExecutor_PinsOnlyKubectl(t *testing.T) {
+	exec := newExactExecutor(map[string][]shell.CommandResult{
+		"kubectl --context ctx get pods": {{ExitCode: 0}},
+		"gcloud version":                 {{ExitCode: 0}},
+	})
+	pinned := contextPinnedExecutor{Executor: exec, kubeContext: "ctx"}
+
+	if res := pinned.ExecuteCommand("kubectl", "get", "pods"); res.ExitCode != 0 {
+		t.Errorf("kubectl call was not pinned; calls=%v", exec.calls)
+	}
+	if res := pinned.ExecuteCommand("gcloud", "version"); res.ExitCode != 0 {
+		t.Errorf("non-kubectl call must pass through unchanged; calls=%v", exec.calls)
+	}
+}
+
+type streamRecorder struct {
+	exactExecutor
+	streamed []string
+}
+
+func (s *streamRecorder) ExecuteCommandStream(name string, args ...string) error {
+	s.streamed = append(s.streamed, name+" "+strings.Join(args, " "))
+	return nil
+}
+
+func TestKubectlExecutorStream_IsPinned(t *testing.T) {
+	rec := &streamRecorder{}
+	g := &GKEOrchestrator{executor: rec, kubeContext: testContext}
+	if err := g.kubectlExecutor().ExecuteCommandStream("kubectl", "logs", "-f"); err != nil {
+		t.Fatal(err)
+	}
+	want := "kubectl --context " + testContext + " logs -f"
+	if len(rec.streamed) != 1 || rec.streamed[0] != want {
+		t.Errorf("streamed = %v, want [%q]", rec.streamed, want)
+	}
+}
+
+// Later calls must hit the configured cluster even after current-context changes.
+func TestConfigureKubectl_PinsReusedContextAgainstCurrentContextChange(t *testing.T) {
+	const applyCmd = "kubectl --context " + testContext + " apply -f job.yaml"
+	exec := newExactExecutor(map[string][]shell.CommandResult{
+		probeCmd: {{ExitCode: 0}},
+		applyCmd: {{ExitCode: 0}},
+	})
+	orc := newTestGKEOrchestrator(exec)
+	orc.clusterDesc = testClusterDesc(true, true)
+	cfg := kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext)
+	orc.kubeconfigLoader = staticLoader(cfg)
+
+	if err := orc.configureKubectl(testCluster, testLocation, testProject); err != nil {
+		t.Fatalf("configureKubectl() error = %v", err)
+	}
+	if orc.kubeContext != testContext {
+		t.Fatalf("kubeContext = %q, want %q", orc.kubeContext, testContext)
+	}
+
+	cfg.CurrentContext = "gke_other-project_us-central1_shared-cluster"
+	if res := orc.kubectl("apply", "-f", "job.yaml"); res.ExitCode != 0 {
+		t.Errorf("apply was not pinned to %q; calls=%v", testContext, exec.calls)
+	}
+}
+
+func TestConfigureKubectl_PinsRegeneratedContext(t *testing.T) {
+	exec := newExactExecutor(map[string][]shell.CommandResult{
+		getCredsIP: {{ExitCode: 0}},
+		probeCmd:   {{ExitCode: 0}},
+	})
+	orc := newTestGKEOrchestrator(exec)
+	orc.clusterDesc = testClusterDesc(true, true)
+	orc.kubeconfigLoader = staticLoader(clientcmdapi.NewConfig())
+
+	if err := orc.configureKubectl(testCluster, testLocation, testProject); err != nil {
+		t.Fatalf("configureKubectl() error = %v", err)
+	}
+	if orc.kubeContext != testContext {
+		t.Errorf("kubeContext = %q, want %q", orc.kubeContext, testContext)
+	}
+}
+
+func TestConfigureKubectl_FailureClearsPinnedContext(t *testing.T) {
+	exec := newExactExecutor(map[string][]shell.CommandResult{
+		getCredsIP: {{ExitCode: 1, Stderr: "ERROR: permission denied"}},
+	})
+	orc := newTestGKEOrchestrator(exec)
+	orc.kubeContext = "stale-context"
+	orc.clusterDesc = testClusterDesc(true, true)
+	orc.kubeconfigLoader = staticLoader(clientcmdapi.NewConfig())
+
+	if err := orc.configureKubectl(testCluster, testLocation, testProject); err == nil {
+		t.Fatal("configureKubectl() error = nil, want error")
+	}
+	if orc.kubeContext != "" {
+		t.Errorf("kubeContext = %q, want empty after failure", orc.kubeContext)
+	}
+}
+
+func TestCheckClusterConnectivity_UsesPinnedContext(t *testing.T) {
+	exec := newExactExecutor(map[string][]shell.CommandResult{probeCmd: {{ExitCode: 0}}})
+	g := &GKEOrchestrator{executor: exec, kubeContext: testContext}
+	if err := g.checkClusterConnectivity(testCluster); err != nil {
+		t.Fatalf("checkClusterConnectivity() error = %v", err)
+	}
+	if exec.count(probeCmd) != 1 {
+		t.Errorf("probe did not use the pinned context; calls=%v", exec.calls)
+	}
+}
+
+func TestRestConfigForContext(t *testing.T) {
+	kubeconfig := `apiVersion: v1
+kind: Config
+current-context: current
+clusters:
+- name: current
+  cluster: {server: "https://current.example.com"}
+- name: pinned
+  cluster: {server: "https://pinned.example.com"}
+users:
+- name: u
+  user: {token: t}
+contexts:
+- name: current
+  context: {cluster: current, user: u}
+- name: pinned
+  context: {cluster: pinned, user: u}
+`
+	path := filepath.Join(t.TempDir(), "config")
+	if err := os.WriteFile(path, []byte(kubeconfig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("KUBECONFIG", path)
+
+	tests := []struct {
+		kubeContext string
+		wantHost    string
+	}{
+		{kubeContext: "pinned", wantHost: "https://pinned.example.com"},
+		{kubeContext: "", wantHost: "https://current.example.com"},
+	}
+	for _, tt := range tests {
+		cfg, err := restConfigForContext(tt.kubeContext)
+		if err != nil {
+			t.Fatalf("restConfigForContext(%q) error = %v", tt.kubeContext, err)
+		}
+		if cfg.Host != tt.wantHost {
+			t.Errorf("restConfigForContext(%q).Host = %q, want %q", tt.kubeContext, cfg.Host, tt.wantHost)
+		}
+	}
+}
+
+// Guards against new kubectl calls that bypass the pinned context.
+func TestNoUnpinnedKubectlCalls(t *testing.T) {
+	unpinned := regexp.MustCompile(`\bexecutor\.ExecuteCommand(Stream)?\("kubectl"`)
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		// kube_auth.go pins its own probe and edits kubeconfig via `kubectl config`.
+		if strings.HasSuffix(f, "_test.go") || f == "kube_auth.go" {
+			continue
+		}
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, line := range strings.Split(string(src), "\n") {
+			if unpinned.MatchString(line) {
+				t.Errorf("%s:%d runs kubectl without the pinned context; use g.kubectl / g.kubectlExecutor()", f, i+1)
+			}
+		}
 	}
 }

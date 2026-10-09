@@ -193,6 +193,8 @@ type GKEOrchestrator struct {
 	// kubeconfigLoader reads the merged kubeconfig. nil means the default
 	// client-go loading rules (KUBECONFIG env or ~/.kube/config).
 	kubeconfigLoader kubeconfigLoader
+	// kubeContext is the context set by configureKubectl; all kubectl and dynamic-client calls use it.
+	kubeContext string
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -213,16 +215,16 @@ type gkeClusterDescribe struct {
 
 func (c gkeClusterDescribe) String() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Cluster Resource Summary for: %s\n", c.Name))
-	sb.WriteString(fmt.Sprintf("Location: %s\n", c.Location))
+	fmt.Fprintf(&sb, "Cluster Resource Summary for: %s\n", c.Name)
+	fmt.Fprintf(&sb, "Location: %s\n", c.Location)
 	sb.WriteString("------------------------------------------\n")
 	for _, np := range c.NodePools {
-		sb.WriteString(fmt.Sprintf("NodePool: %s\n", np.Name))
-		sb.WriteString(fmt.Sprintf("  MachineType: %s\n", np.Config.MachineType))
+		fmt.Fprintf(&sb, "NodePool: %s\n", np.Name)
+		fmt.Fprintf(&sb, "  MachineType: %s\n", np.Config.MachineType)
 		if np.Count > 0 {
-			sb.WriteString(fmt.Sprintf("  Count: %d\n", np.Count))
+			fmt.Fprintf(&sb, "  Count: %d\n", np.Count)
 		}
-		sb.WriteString(fmt.Sprintf("  Status: %s\n", np.Status))
+		fmt.Fprintf(&sb, "  Status: %s\n", np.Status)
 		sb.WriteString("\n")
 	}
 	return sb.String()

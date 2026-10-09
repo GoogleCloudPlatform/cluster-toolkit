@@ -802,7 +802,7 @@ func (sm *StorageManager) checkExistingGatewayPV(pvName, pvcName, ns, renderedYA
 		return nil
 	}
 
-	res := sm.orchestrator.executor.ExecuteCommand("kubectl", "get", "pv", pvName, "--ignore-not-found", "-o", "json")
+	res := sm.orchestrator.kubectl("get", "pv", pvName, "--ignore-not-found", "-o", "json")
 	if res.ExitCode != 0 {
 		return fmt.Errorf("failed to inspect existing gateway PV %q (needs cluster-scoped `get pv`): %s",
 			pvName, strings.TrimSpace(res.Stderr))
@@ -849,7 +849,7 @@ func (sm *StorageManager) recreateStaleGatewayPV(pvName string, existing existin
 	}
 
 	logging.Info("Recreating stale gateway PV %q (%s)", pvName, phase)
-	res := sm.orchestrator.executor.ExecuteCommand("kubectl", "delete", "pv", pvName,
+	res := sm.orchestrator.kubectl("delete", "pv", pvName,
 		"--ignore-not-found", "--wait=true", "--timeout=60s")
 	if res.ExitCode != 0 {
 		return fmt.Errorf("failed to delete stale gateway PV %q: %s", pvName, strings.TrimSpace(res.Stderr))
@@ -868,12 +868,12 @@ func (sm *StorageManager) claimedAt() string {
 // waitForGatewayRelease waits out a gateway deleted by a recent cleanup, so an immediate resubmit recreates it.
 func (sm *StorageManager) waitForGatewayRelease(pvName, pvcName, ns string) error {
 	logging.Info("Waiting up to %s for storage gateway PV %q from a previous job to finish deleting...", gatewayReleaseTimeout, pvName)
-	res := sm.orchestrator.executor.ExecuteCommand("kubectl", "wait", "--for=delete", "pv/"+pvName,
+	res := sm.orchestrator.kubectl("wait", "--for=delete", "pv/"+pvName,
 		"--timeout="+gatewayReleaseTimeout.String())
 	if res.ExitCode == 0 {
 		return nil
 	}
-	if gone := sm.orchestrator.executor.ExecuteCommand("kubectl", "get", "pv", pvName, "--ignore-not-found", "-o", "name"); gone.ExitCode == 0 && strings.TrimSpace(gone.Stdout) == "" {
+	if gone := sm.orchestrator.kubectl("get", "pv", pvName, "--ignore-not-found", "-o", "name"); gone.ExitCode == 0 && strings.TrimSpace(gone.Stdout) == "" {
 		return nil
 	}
 	return fmt.Errorf(
@@ -1316,7 +1316,7 @@ func (sm *StorageManager) validateStorageClassesExist(mounts []profileMount, dry
 }
 
 func (sm *StorageManager) validateStorageClassExists(storageClass string, dryRun bool) error {
-	res := sm.orchestrator.executor.ExecuteCommand("kubectl", "get", "storageclass", storageClass, "--ignore-not-found", "-o", "name")
+	res := sm.orchestrator.kubectl("get", "storageclass", storageClass, "--ignore-not-found", "-o", "name")
 	if res.ExitCode != 0 {
 		logging.Warn("Could not verify that StorageClass %q exists on the cluster: %s. Proceeding with job submission.",
 			storageClass, strings.TrimSpace(res.Stderr))

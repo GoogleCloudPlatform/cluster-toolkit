@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/shell"
 
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -289,11 +290,7 @@ func classifyProbeFailure(stderr string) probeOutcome {
 // probeContext runs a bounded read of /version against contextName (or the
 // current context when empty). Success proves network, TLS and credentials.
 func (g *GKEOrchestrator) probeContext(contextName string) (probeOutcome, string) {
-	args := []string{"get", "--raw", "/version", "--request-timeout=" + probeRequestTimeout}
-	if contextName != "" {
-		args = append([]string{"--context", contextName}, args...)
-	}
-	res := g.executor.ExecuteCommand("kubectl", args...)
+	res := g.executor.ExecuteCommand("kubectl", withKubeContext(contextName, []string{"get", "--raw", "/version", "--request-timeout=" + probeRequestTimeout})...)
 	if res.ExitCode == 0 {
 		return probeOK, ""
 	}
@@ -301,11 +298,11 @@ func (g *GKEOrchestrator) probeContext(contextName string) (probeOutcome, string
 	return classifyProbeFailure(stderr), stderr
 }
 
-// checkClusterConnectivity verifies the current kubectl context can reach the
+// checkClusterConnectivity verifies the pinned kubectl context can reach the
 // cluster. Unrecognised probe output is not fatal, matching configureKubectl.
 func (g *GKEOrchestrator) checkClusterConnectivity(clusterName string) error {
 	logging.Info("Checking cluster connectivity...")
-	outcome, stderr := g.probeContext("")
+	outcome, stderr := g.probeContext(g.kubeContext)
 	switch outcome {
 	case probeOK, probeForbidden:
 		logging.Info("Cluster connectivity verified.")
@@ -343,6 +340,44 @@ func (g *GKEOrchestrator) loadKubeconfig() (*clientcmdapi.Config, error) {
 		return g.kubeconfigLoader()
 	}
 	return defaultKubeconfigLoader()
+}
+
+// withKubeContext prepends --context so kubectl ignores current-context.
+func withKubeContext(kubeContext string, args []string) []string {
+	if kubeContext == "" {
+		return args
+	}
+	return append([]string{"--context", kubeContext}, args...)
+}
+
+// contextPinnedExecutor pins kubectl calls to one context; other commands pass through.
+type contextPinnedExecutor struct {
+	Executor
+	kubeContext string
+}
+
+func (e contextPinnedExecutor) ExecuteCommand(name string, args ...string) shell.CommandResult {
+	if name == "kubectl" {
+		args = withKubeContext(e.kubeContext, args)
+	}
+	return e.Executor.ExecuteCommand(name, args...)
+}
+
+func (e contextPinnedExecutor) ExecuteCommandStream(name string, args ...string) error {
+	if name == "kubectl" {
+		args = withKubeContext(e.kubeContext, args)
+	}
+	return e.Executor.ExecuteCommandStream(name, args...)
+}
+
+// kubectlExecutor returns an executor pinned to the context chosen by configureKubectl.
+func (g *GKEOrchestrator) kubectlExecutor() Executor {
+	return contextPinnedExecutor{Executor: g.executor, kubeContext: g.kubeContext}
+}
+
+// kubectl runs kubectl against the pinned context.
+func (g *GKEOrchestrator) kubectl(args ...string) shell.CommandResult {
+	return g.kubectlExecutor().ExecuteCommand("kubectl", args...)
 }
 
 // inspectExistingContext loads the kubeconfig and statically validates the cluster's entry.
@@ -400,12 +435,12 @@ func (g *GKEOrchestrator) refreshGKEAuth(clusterName, clusterLocation, projectID
 }
 
 // restoreNamespaceContext re-applies a non-default namespace that gcloud reset.
-func (g *GKEOrchestrator) restoreNamespaceContext(namespace string) error {
+func (g *GKEOrchestrator) restoreNamespaceContext(contextName, namespace string) error {
 	if namespace == "" || namespace == "default" {
 		return nil
 	}
 	logging.Info("Restoring namespace context to '%s'...", namespace)
-	restoreRes := g.executor.ExecuteCommand("kubectl", "config", "set-context", "--current", "--namespace="+namespace)
+	restoreRes := g.executor.ExecuteCommand("kubectl", "config", "set-context", contextName, "--namespace="+namespace)
 	if restoreRes.ExitCode != 0 {
 		return fmt.Errorf("failed to restore namespace context to %s: %s", namespace, restoreRes.Stderr)
 	}
@@ -422,7 +457,7 @@ func (g *GKEOrchestrator) refreshCredentialsPreservingNamespace(clusterName, clu
 	if err := g.refreshGKEAuth(clusterName, clusterLocation, projectID, mode == endpointModeDNS); err != nil {
 		return err
 	}
-	return g.restoreNamespaceContext(originalNamespace)
+	return g.restoreNamespaceContext(gkeContextName(projectID, clusterLocation, clusterName), originalNamespace)
 }
 
 // regenerateKubeContext fetches credentials per endpoint mode in order, moving
@@ -445,6 +480,7 @@ func (g *GKEOrchestrator) regenerateKubeContext(clusterName, clusterLocation, pr
 			} else {
 				logging.Info("Cluster connectivity verified via %s endpoint.", mode)
 			}
+			g.kubeContext = contextName
 			return nil
 		case probeAuth:
 			return authFailureError(clusterName, stderr)
@@ -455,6 +491,7 @@ func (g *GKEOrchestrator) regenerateKubeContext(clusterName, clusterLocation, pr
 			}
 		default:
 			logging.Warn("Could not verify connectivity to cluster '%s' via its %s endpoint (%s). Proceeding; subsequent kubectl calls will report the underlying error.", clusterName, mode, firstLine(stderr))
+			g.kubeContext = contextName
 			return nil
 		}
 	}
@@ -465,11 +502,11 @@ func (g *GKEOrchestrator) regenerateKubeContext(clusterName, clusterLocation, pr
 		clusterName, strings.Join(attempts, "; "))
 }
 
-// configureKubectl makes kubectl target the cluster. A verified, reachable
-// existing context is reused as-is (get-credentials would rewrite its endpoint);
-// otherwise credentials are fetched, falling back across endpoint modes.
+// configureKubectl picks the context for this run and pins later kubectl and
+// dynamic-client calls to it: reuse a verified context, else fetch credentials.
 // GCLUSTER_REFRESH_CREDENTIALS=1 skips reuse.
 func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
+	g.kubeContext = ""
 	avoid := endpointModeUnknown
 
 	if forceCredentialRefresh() {
@@ -489,6 +526,7 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 		if err := g.ensureCurrentContext(check); err != nil {
 			return err
 		}
+		g.kubeContext = check.contextName
 		logging.Info("Reusing existing kubeconfig context '%s' (%s endpoint). Set %s=1 to force a credential refresh.", check.contextName, check.mode, refreshCredentialsEnv)
 		return nil
 	case probeAuth:
@@ -500,6 +538,7 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 		if err := g.ensureCurrentContext(check); err != nil {
 			return err
 		}
+		g.kubeContext = check.contextName
 		logging.Warn("Could not verify existing kubeconfig context '%s' (%s). Reusing it; set %s=1 to force a credential refresh.", check.contextName, firstLine(stderr), refreshCredentialsEnv)
 		return nil
 	}

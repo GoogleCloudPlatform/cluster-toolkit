@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"gopkg.in/yaml.v2"
@@ -212,7 +213,7 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 	if opts.Follow {
 		logging.Info("Streaming logs for job '%s'...", name)
 		args := g.buildKubectlLogsArgs(foundNamespace, selector, containerName, true)
-		err = g.executor.ExecuteCommandStream("kubectl", args...)
+		err = g.kubectlExecutor().ExecuteCommandStream("kubectl", args...)
 		return "", err
 	}
 
@@ -247,7 +248,7 @@ func (g *GKEOrchestrator) fetchLogsWithRetry(ns, selector, containerName string)
 	var res shell.CommandResult
 	cmdArgs := g.buildKubectlLogsArgs(ns, selector, containerName, false)
 	for i := 0; i < maxRetries; i++ {
-		res = g.executor.ExecuteCommand("kubectl", cmdArgs...)
+		res = g.kubectl(cmdArgs...)
 		if res.ExitCode == 0 {
 			return res, nil
 		}
@@ -304,7 +305,7 @@ func findWorkloadContainer(containers []string) string {
 func (g *GKEOrchestrator) getFirstContainerName(ns, selector string) string {
 	jobsetName := extractJobSetNameFromSelector(selector)
 	if jobsetName != "" {
-		res := g.executor.ExecuteCommand("kubectl", "get", "jobsets.jobset.x-k8s.io", jobsetName, "-n", ns, "-o", "jsonpath="+jobSetContainerNamesJSONPath)
+		res := g.kubectl("get", "jobsets.jobset.x-k8s.io", jobsetName, "-n", ns, "-o", "jsonpath="+jobSetContainerNamesJSONPath)
 		if res.ExitCode == 0 && strings.TrimSpace(res.Stdout) != "" {
 			if name := findWorkloadContainer(strings.Fields(res.Stdout)); name != "" {
 				return name
@@ -319,7 +320,7 @@ func (g *GKEOrchestrator) getFirstContainerName(ns, selector string) string {
 }
 
 func (g *GKEOrchestrator) getJobPodCount(ns, selector string) (int, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "pods", "-n", ns, "-l", selector, "--no-headers")
+	res := g.kubectl("get", "pods", "-n", ns, "-l", selector, "--no-headers")
 	if res.ExitCode != 0 {
 		return 0, fmt.Errorf("failed to query pods: %s", res.Stderr)
 	}
@@ -931,11 +932,11 @@ func (g *GKEOrchestrator) queryDiscoveredTopologies(accelLabel string, machineTy
 		}
 	}
 
-	res := g.executor.ExecuteCommand("kubectl", "get", "resourceflavors.kueue.x-k8s.io", "-o", "jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
+	res := g.kubectl("get", "resourceflavors.kueue.x-k8s.io", "-o", "jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
 	output := strings.TrimSpace(res.Stdout)
 
 	if output == "" {
-		res = g.executor.ExecuteCommand("kubectl", "get", "nodes", "-o", "jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
+		res = g.kubectl("get", "nodes", "-o", "jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
 		if res.ExitCode != 0 {
 			return "", fmt.Errorf("failed to query Nodes for topology: %s", res.Stderr)
 		}
@@ -1341,10 +1342,7 @@ func (g *GKEOrchestrator) getDynamicClient() (dynamic.Interface, error) {
 		g.syncKubeClient()
 		return g.dynClient, nil
 	}
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	configOverrides := &clientcmd.ConfigOverrides{}
-	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
-	config, err := kubeConfig.ClientConfig()
+	config, err := restConfigForContext(g.kubeContext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
 	}
@@ -1354,6 +1352,13 @@ func (g *GKEOrchestrator) getDynamicClient() (dynamic.Interface, error) {
 	}
 	g.syncKubeClient()
 	return g.dynClient, nil
+}
+
+// restConfigForContext loads kubeconfig for kubeContext; empty means current-context.
+func restConfigForContext(kubeContext string) (*rest.Config, error) {
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	configOverrides := &clientcmd.ConfigOverrides{CurrentContext: kubeContext}
+	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides).ClientConfig()
 }
 
 func (g *GKEOrchestrator) awaitJobCompletion(workloadName, clusterName, clusterLocation, projectID, timeout string) error {
@@ -1398,7 +1403,7 @@ func (g *GKEOrchestrator) awaitJobCompletion(workloadName, clusterName, clusterL
 }
 
 func (g *GKEOrchestrator) getJobSetStatus(workloadName, ns string) (string, error) {
-	statusRes := g.executor.ExecuteCommand("kubectl", "get", "jobset", workloadName, "-n", ns, "-o", "json")
+	statusRes := g.kubectl("get", "jobset", workloadName, "-n", ns, "-o", "json")
 	if statusRes.ExitCode != 0 {
 		return "", fmt.Errorf("failed to get final job status: %s\n%s", statusRes.Stderr, statusRes.Stdout)
 	}
@@ -1518,7 +1523,7 @@ func (g *GKEOrchestrator) checkJobSetWarningEvents(ns, workloadName string) stri
 	if workloadName == "" {
 		return ""
 	}
-	res := g.executor.ExecuteCommand("kubectl", "get", "events", "-n", ns,
+	res := g.kubectl("get", "events", "-n", ns,
 		fmt.Sprintf("--field-selector=involvedObject.name=%s,involvedObject.kind=JobSet,type=Warning", workloadName),
 		"--request-timeout=10s",
 		"--no-headers")
@@ -1530,7 +1535,7 @@ func (g *GKEOrchestrator) checkJobSetWarningEvents(ns, workloadName string) stri
 
 func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, jobConsoleLink, workloadName string) error {
 	logging.Info("Waiting for Kueue workload '%s' to be Finished...", targetWorkloadName)
-	waitRes := g.executor.ExecuteCommand("kubectl", "wait", "--for=condition=Finished",
+	waitRes := g.kubectl("wait", "--for=condition=Finished",
 		"workload", targetWorkloadName, "-n", ns, "--timeout="+timeout)
 
 	if waitRes.ExitCode != 0 {
