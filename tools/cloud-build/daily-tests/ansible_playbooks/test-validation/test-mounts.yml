@@ -23,6 +23,8 @@
     path: "{{ item }}"
   register: stat_mounts
   loop: "{{ custom_vars.mounts }}"
+  become: true
+
 - name: Check if mount exists
   ansible.builtin.fail:
     msg: "{{ item.item }} not mounted"
