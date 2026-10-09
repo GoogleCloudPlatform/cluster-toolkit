@@ -1,0 +1,263 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: alpha-evolve-platform
+
+vars:
+  # === GCP Project & Deployment Infrastructure ===
+  exp_deployment_name: ae-exp
+  user_experiment_name: experiment-1
+  deployment_name: $(vars.exp_deployment_name)-$(vars.user_experiment_name)
+  cloud_build_service_account: "$(vars.infra_deployment_name)-build-sa@$(vars.project_id).iam.gserviceaccount.com"
+  controller_service_account: "$(vars.infra_deployment_name)-ctrl-sa@$(vars.project_id).iam.gserviceaccount.com"
+
+  # === Cloud Build Source ===
+  cloud_build_dir: "solutions/alphaevolve"
+  cloud_build_path: $(ghpc_stage("./build/cloud-build.yaml.tfpl"))
+
+  # === Docker Images ===
+  base_evaluator_image: python:3.12-slim-bookworm # base image for the evaluator job
+
+  # === AlphaEvolve API Config ===
+  concurrency: 4 # number of concurrent candidates to AlphaEvolve will generate at one time.
+  # See supported models: https://docs.cloud.google.com/gemini/enterprise/docs/alphaevolve/reference-guide/api-reference#supported_models
+  model: gemini-3.8-flash
+  max_programs_generated: 100 # max number of programs AE API will generate in total
+  max_duration: 6 # Absolute maximum wall-clock lifespan of the experiment run in hours (valid range: 1 to 24)
+  idle_timeout: 5 # Maximum inactivity period allowed in hours (must be strictly less than max_duration)
+
+  # === Experiment Execution Control ===
+  max_programs_evaluated: 20 # number of evaluations jobs that will be run
+  num_samplers: 4 # number of threads polling AlphaEvolve API for candidates
+  poll_interval: 4 # in seconds
+  evaluation_mode: "batch" # "batch"
+
+  # === Cloud Batch & Worker VM Config ===
+  evaluation_machine_type: n2-standard-4
+  evaluation_provisioning_model: "STANDARD"
+  boot_disk_image: "projects/debian-cloud/global/images/family/debian-12"
+  mount_path: "/mnt/disks/share"
+  max_duration_seconds: 3600
+  delete_succeeded_jobs: "true"
+  accelerator_count: 1 # only used if evaluation_machine_type starts with "n1-" for GPU attach
+  accelerator_type: "nvidia-tesla-t4" # only used if evaluation_machine_type starts with "n1-" for GPU attach
+
+  # === Storage Config ===
+  programs_dir: "program_candidates"
+
+  # === Example Config ===
+  example_dir: "user_examples/adaptive_sort_cpp"
+  is_example_dir_local: false
+
+deployment_groups:
+
+- group: validation
+  modules:
+  - id: validate-experiment
+    source: git::https://github.com/GoogleCloudPlatform/hpc-solutions.git//solutions/alphaevolve/infrastructure/modules/validate-experiment
+    settings:
+      repo_url: $(vars.repo_url)
+      repo_ref: $(vars.repo_ref)
+      user_experiment_name: $(vars.user_experiment_name)
+      cloud_build_dir: $(vars.cloud_build_dir)
+      example_dir: $(vars.example_dir)
+      evaluation_mode: $(vars.evaluation_mode)
+      evaluation_provisioning_model: $(vars.evaluation_provisioning_model)
+      evaluation_machine_type: $(vars.evaluation_machine_type)
+      accelerator_count: $(vars.accelerator_count)
+      accelerator_type: $(vars.accelerator_type)
+      max_duration: $(vars.max_duration)
+      idle_timeout: $(vars.idle_timeout)
+      model: $(vars.model)
+      num_samplers: $(vars.num_samplers)
+      concurrency: $(vars.concurrency)
+      max_programs_generated: $(vars.max_programs_generated)
+      max_programs_evaluated: $(vars.max_programs_evaluated)
+      poll_interval: $(vars.poll_interval)
+      max_duration_seconds: $(vars.max_duration_seconds)
+
+- group: repository-infrastructure
+  modules:
+  - id: artifact-repository
+    source: git::https://github.com/GoogleCloudPlatform/terraform-google-artifact-registry.git
+    settings:
+      project_id: $(vars.project_id)
+      location: $(vars.region)
+      format: DOCKER
+      repository_id: $(vars.deployment_name)-repo
+
+  # Untrusted Sandbox Service Account created per-experiment
+  - id: evaluator-sa
+    source: modules/project/service-account
+    settings:
+      name: "eval-sa"
+      project_roles:
+      - batch.agentReporter
+      - artifactregistry.reader
+      - logging.logWriter
+
+  - id: evaluator-bucket-iam
+    source: git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/storage_buckets_iam
+    settings:
+      storage_buckets:
+      - $(vars.existing_bucket_name)
+      mode: additive
+      bindings:
+        roles/storage.objectUser:
+        - "serviceAccount:$(evaluator-sa.service_account_email)"
+
+  - id: evaluator-pubsub-iam
+    source: git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/pubsub_topics_iam
+    settings:
+      project: $(vars.project_id)
+      pubsub_topics:
+      - $(vars.infra_deployment_name)-batch-notifications
+      mode: additive
+      bindings:
+        roles/pubsub.publisher:
+        - "serviceAccount:$(evaluator-sa.service_account_email)"
+
+  - id: evaluator-sa-user-iam
+    source: git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/service_accounts_iam
+    settings:
+      project: $(vars.project_id)
+      service_accounts:
+      - $(evaluator-sa.service_account_email)
+      mode: additive
+      bindings:
+        roles/iam.serviceAccountUser:
+        - "serviceAccount:$(vars.controller_service_account)"
+
+- group: cloud-build
+  modules:
+  - id: cloud-build
+    source: community/modules/container/cloud-build
+    settings:
+      project_id: $(vars.project_id)
+      region: $(vars.region)
+      repo_url: $(vars.repo_url)
+      repo_ref: $(vars.repo_ref)
+      cloud_build_dir: $(vars.cloud_build_dir)
+      target_dir: $(vars.example_dir)
+      is_target_dir_local: $(vars.is_example_dir_local)
+      cloud_build_template_path: $(vars.cloud_build_path)
+      service_account_email: $(vars.cloud_build_service_account)
+      template_vars:
+        _PROJECT_ID: $(vars.project_id)
+        _REGION: $(vars.region)
+        _REPO_NAME: $(artifact-repository.artifact_name)
+        _INFRA_REPO_NAME: $(vars.infra_artifact_repo)
+        _USER_EXPERIMENT_NAME: $(vars.user_experiment_name)
+        _BASE_EVALUATOR_IMAGE: $(vars.base_evaluator_image)
+        _BOOT_DISK_IMAGE: $(vars.boot_disk_image)
+
+- group: pubsub-subscription
+  modules:
+  - id: project-info
+    source: community/modules/project/pre-existing-project
+    settings:
+      project_id: $(vars.project_id)
+  - id: experiment-subscription
+    source: git::https://github.com/terraform-google-modules/terraform-google-pubsub.git
+    settings:
+      project_id: $(vars.project_id)
+      topic: $(vars.infra_deployment_name)-batch-notifications
+      create_topic: false
+      pull_subscriptions:
+      - name: $(vars.deployment_name)-subscription
+        filter: 'hasPrefix(attributes.JobName, "projects/$(project-info.project_number)/locations/$(vars.region)/jobs/$(vars.deployment_name)-")'
+- group: pubsub-subscription-iam
+  modules:
+  - id: subscription-iam
+    source: git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/pubsub_subscriptions_iam
+    settings:
+      project: $(vars.project_id)
+      pubsub_subscriptions:
+      - $(vars.deployment_name)-subscription
+      mode: additive
+      bindings:
+        roles/pubsub.subscriber:
+        - "serviceAccount:$(vars.controller_service_account)"
+        roles/pubsub.viewer:
+        - "serviceAccount:$(vars.controller_service_account)"
+
+- group: experiment-setup
+  modules:
+  # Option A (Default): Sync experiment source from AE remote Git repository
+  - id: stage-experiment-source
+    source: community/modules/file-system/gcs-sync
+    settings:
+      bucket_name: $(vars.existing_bucket_name)
+      repo_url: $(vars.repo_url)
+      repo_ref: $(vars.repo_ref)
+      directories:
+      - source_path: "$(vars.cloud_build_dir)/$(vars.example_dir)"
+        destination_path: $(vars.user_experiment_name)/source
+  # Option B: Upload experiment source from a local directory on your machine
+  # (Uncomment this block and comment out Option A above)
+  #- id: stage-experiment-source
+  #  source: community/modules/file-system/gcs-objects
+  #  settings:
+  #    bucket_name: $(vars.existing_bucket_name)
+  #    directories:
+  #    - source_path: "$(vars.example_dir)"
+  #      destination_path: $(vars.user_experiment_name)/source
+  - id: experiment-metadata
+    source: community/modules/project/project-metadata
+    settings:
+      project_id: $(vars.project_id)
+      metadata:
+      - key: "$(vars.user_experiment_name)_USER_EXPERIMENT_NAME"
+        value: $(vars.user_experiment_name)
+  - id: experiment-env-file
+    source: community/modules/file-system/gcs-objects
+    settings:
+      bucket_name: $(vars.existing_bucket_name)
+      files:
+      - destination_path: "$(vars.user_experiment_name)/variables.env"
+        content: |
+          _PROJECT_ID="$(vars.project_id)"
+          _PUBSUB_SUBSCRIPTION="$(experiment-subscription.subscription_names[0])"
+          _REPO_NAME="$(artifact-repository.artifact_name)"
+          _MOUNT_PATH="$(vars.mount_path)"
+          _CONCURRENCY="$(vars.concurrency)"
+          _NUM_SAMPLERS="$(vars.num_samplers)"
+          _POLL_INTERVAL="$(vars.poll_interval)"
+          _MODEL="$(vars.model)"
+          _DEPLOYMENT_NAME="$(vars.deployment_name)"
+          _MAX_DURATION_SECONDS="$(vars.max_duration_seconds)"
+          _EVALUATION_MACHINE_TYPE="$(vars.evaluation_machine_type)"
+          _EVALUATION_MODE="$(vars.evaluation_mode)"
+          _PROGRAMS_DIR="$(vars.programs_dir)"
+          _MAX_PROGRAMS_GENERATED="$(vars.max_programs_generated)"
+          _MAX_DURATION="$(vars.max_duration)"
+          _IDLE_TIMEOUT="$(vars.idle_timeout)"
+          _MAX_PROGRAMS_EVALUATED="$(vars.max_programs_evaluated)"
+          _DELETE_SUCCEEDED_JOBS="$(vars.delete_succeeded_jobs)"
+          _EVALUATION_PROVISIONING_MODEL="$(vars.evaluation_provisioning_model)"
+          _USER_EXPERIMENT_NAME="$(vars.user_experiment_name)"
+          _BOOT_DISK_IMAGE="$(vars.boot_disk_image)"
+          _CONTROLLER_IMAGE_URI="$(vars.region)-docker.pkg.dev/$(vars.project_id)/$(artifact-repository.artifact_name)/$(vars.user_experiment_name)-controller:latest"
+          _EVALUATOR_IMAGE_URI="$(vars.region)-docker.pkg.dev/$(vars.project_id)/$(artifact-repository.artifact_name)/$(vars.user_experiment_name)-evaluator:latest"
+          _ACCELERATOR_COUNT="$(vars.accelerator_count)"
+          _ACCELERATOR_TYPE="$(vars.accelerator_type)"
+          _EVALUATOR_SERVICE_ACCOUNT_EMAIL="$(evaluator-sa.service_account_email)"
+
+- group: instructions
+  modules:
+  - id: show-instructions
+    source: git::https://github.com/GoogleCloudPlatform/hpc-solutions.git//solutions/alphaevolve/infrastructure/modules/show-instructions
+    settings:
+      bucket_name: $(vars.existing_bucket_name)
+      user_experiment_name: $(vars.user_experiment_name)

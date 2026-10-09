@@ -1,0 +1,224 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: alpha-evolve-platform
+
+vars:
+  # === GCP Project & Deployment Infrastructure ===
+  deployment_name: $(vars.infra_deployment_name)
+
+  # === Messaging (Pub/Sub) ===
+  pubsub_topic: $(vars.infra_deployment_name)-batch-notifications
+
+  # === AlphaEvolve API Config ===
+  location: global
+  base_url: discoveryengine.googleapis.com
+  collection: default_collection
+  engine: $(vars.infra_deployment_name)-experiment-engine # name of AE Discovery Engine
+  assistant: default_assistant # name of the assistant in AlphaEvolve, current default can't be changed.
+
+  # === Colab Enterprise VM Config ===
+  colab_machine_type: n2-standard-4
+  mount_path: "/mnt/disks/share"
+  runtime_user_email: ## SET USER EMAIL (e.g. your-email@example.com) HERE ##
+
+
+terraform_providers:
+  google:
+    source: hashicorp/google
+    version: ">= 6.0.0"
+    configuration:
+      project: $(vars.project_id)
+      user_project_override: true
+      billing_project: $(vars.project_id)
+  google-beta:
+    source: hashicorp/google-beta
+    version: ">= 6.0.0"
+    configuration:
+      project: $(vars.project_id)
+      user_project_override: true
+      billing_project: $(vars.project_id)
+
+
+deployment_groups:
+- group: apis
+  terraform_providers:
+    google:
+      source: hashicorp/google
+      version: ">= 6.0.0"
+      configuration:
+        project: $(vars.project_id)
+        user_project_override: false
+    google-beta:
+      source: hashicorp/google-beta
+      version: ">= 6.0.0"
+      configuration:
+        project: $(vars.project_id)
+        user_project_override: false
+  modules:
+  # Enable necessary APIs
+  - id: apis
+    source: community/modules/project/service-enablement
+    settings:
+      gcp_service_list:
+      - cloudresourcemanager.googleapis.com
+      - serviceusage.googleapis.com
+      - iam.googleapis.com
+      - compute.googleapis.com
+      - batch.googleapis.com
+      - pubsub.googleapis.com
+      - storage.googleapis.com
+      - artifactregistry.googleapis.com
+      - cloudbuild.googleapis.com
+      - discoveryengine.googleapis.com
+      - aiplatform.googleapis.com
+
+- group: primary
+  modules:
+
+  # Create Cloud Batch Service Agent identity
+  - id: create-batch-identity
+    source: community/modules/project/service-agent
+    settings:
+      project_id: $(vars.project_id)
+      service: batch.googleapis.com
+
+  # Shared Artifact Registry repository for vanilla base images
+  - id: artifact-repository
+    source: git::https://github.com/GoogleCloudPlatform/terraform-google-artifact-registry.git
+    settings:
+      project_id: $(vars.project_id)
+      location: $(vars.region)
+      format: DOCKER
+      repository_id: $(vars.infra_artifact_repo)
+
+  # Specialized Service Accounts for Cloud Build and Controller
+  - id: cloud-build-sa
+    source: modules/project/service-account
+    settings:
+      name: "build-sa"
+      project_roles:
+      - artifactregistry.writer
+      - logging.logWriter
+      - storage.objectViewer
+
+  - id: controller-sa
+    source: modules/project/service-account
+    settings:
+      name: "ctrl-sa"
+      project_roles:
+      - batch.jobsEditor
+      - batch.agentReporter
+      - artifactregistry.reader
+      - discoveryengine.editor
+      - aiplatform.user
+      - logging.logWriter
+
+  - id: bucket-iam
+    source: git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/storage_buckets_iam
+    settings:
+      storage_buckets:
+      - $(vars.existing_bucket_name)
+      mode: additive
+      bindings:
+        roles/storage.objectUser:
+        - "serviceAccount:$(controller-sa.service_account_email)"
+        - "serviceAccount:$(cloud-build-sa.service_account_email)"
+
+# Pub/Sub topic for Batch job notifications
+- group: pubsub-topic
+  modules:
+  - id: pubsubs
+    source: git::https://github.com/terraform-google-modules/terraform-google-pubsub.git
+    settings:
+      project_id: $(vars.project_id)
+      topic: $(vars.pubsub_topic)
+      create_topic: true
+
+# Pub/Sub IAM permissions for Batch service agent
+- group: pubsub-iam
+  modules:
+  - id: pubsub-iam
+    source: git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/pubsub_topics_iam
+    settings:
+      project: $(vars.project_id)
+      pubsub_topics:
+      - $(pubsubs.topic)
+      mode: additive
+      bindings:
+        roles/pubsub.publisher:
+        - "serviceAccount:$(create-batch-identity.service_agent_email)"
+
+# Setup AlphaEvolve infrastructure
+- group: alpha-evolve-infra
+  modules:
+  - id: discovery-engine
+    source: community/modules/ai/discovery-engine
+    settings:
+      project_id: $(vars.project_id)
+      location: $(vars.location)
+      collection: $(vars.collection)
+      engine_id: $(vars.engine)
+      assistant_id: $(vars.assistant)
+  - id: infra-env-file
+    source: community/modules/file-system/gcs-objects
+    settings:
+      bucket_name: $(vars.existing_bucket_name)
+      files:
+      - destination_path: config/variables-infra.env
+        content: |
+          _PROJECT_ID="$(vars.project_id)"
+          _REGION="$(vars.region)"
+          _CLOUD_BUCKET_NAME="$(vars.existing_bucket_name)"
+          _DEPLOYMENT_NAME="$(vars.deployment_name)"
+          _PUBSUB_TOPIC="$(pubsubs.topic)"
+          _MOUNT_PATH="$(vars.mount_path)"
+          _CONTROLLER_SERVICE_ACCOUNT_EMAIL="$(controller-sa.service_account_email)"
+          _LOCATION="$(vars.location)"
+          _BASE_URL="$(vars.base_url)"
+          _COLLECTION="$(vars.collection)"
+          _ENGINE="$(vars.engine)"
+          _ASSISTANT="$(vars.assistant)"
+
+# Colab Enterprise Notebook
+- group: colab
+  modules:
+  - id: stage-infra-files
+    source: community/modules/file-system/gcs-sync
+    settings:
+      bucket_name: $(vars.existing_bucket_name)
+      repo_url: $(vars.repo_url)
+      repo_ref: $(vars.repo_ref)
+      files:
+      - destination_path: config/requirements.txt
+        source_path: "solutions/alphaevolve/infrastructure/requirements.txt"
+      - destination_path: config/controller-batch.yaml
+        source_path: "solutions/alphaevolve/infrastructure/batch_configs/controller-batch.yaml"
+      - destination_path: config/validation-batch.yaml
+        source_path: "solutions/alphaevolve/infrastructure/batch_configs/validation-batch.yaml"
+      - destination_path: notebook/run_notebook.ipynb
+        source_path: "solutions/alphaevolve/google_framework/notebook/run_notebook.ipynb"
+  - id: compute-colab
+    source: community/modules/compute/colab
+    settings:
+      project_id: $(vars.project_id)
+      region: $(vars.region)
+      deployment_name: $(vars.deployment_name)
+      runtime_user: $(vars.runtime_user_email)
+      mount_gcs_bucket: $(vars.existing_bucket_name)
+      mount_path: "/data"
+      colab_machine_type: $(vars.colab_machine_type)
+      environment_variables:
+        _CLOUD_BUCKET_NAME: $(vars.existing_bucket_name)
+        _PROJECT_ID: $(vars.project_id)
