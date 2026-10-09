@@ -874,17 +874,31 @@ def _fetch_config(old_hash: Optional[str], bucket: Optional[str] = None) -> Opti
     if Path(CONFIG_FILE).exists() and old_hash == blobs.hash:
         return None
 
-    def _download(bs) -> List[Any]:
-        return [yaml.safe_load(b.download_as_text()) for b in bs]
+    groups = [
+        [blobs.core],
+        [blobs.controller_addr] if blobs.controller_addr else [],
+        blobs.partition,
+        blobs.nodeset,
+        blobs.nodeset_dyn,
+        blobs.nodeset_tpu,
+        blobs.login_group,
+    ]
+    # One blob per nodeset; fetching thousands of them in sequence outlasts ResumeTimeout.
+    # 10 workers matches the storage client's default HTTP connection pool.
+    with ThreadPoolExecutor(max_workers=10) as exe:
+        docs = iter(exe.map(lambda b: _yaml_load(b.download_as_text()), chain(*groups)))
+        core, addr, partitions, nodesets, nodesets_dyn, nodesets_tpu, login_groups = (
+            [next(docs) for _ in g] for g in groups
+        )
 
     return _assemble_config(
-        core=_download([blobs.core])[0],
-        controller_addr=_download([blobs.controller_addr])[0] if blobs.controller_addr else None,
-        partitions=_download(blobs.partition),
-        nodesets=_download(blobs.nodeset),
-        nodesets_dyn=_download(blobs.nodeset_dyn),
-        nodesets_tpu=_download(blobs.nodeset_tpu),
-        login_groups=_download(blobs.login_group),
+        core=core[0],
+        controller_addr=addr[0] if addr else None,
+        partitions=partitions,
+        nodesets=nodesets,
+        nodesets_dyn=nodesets_dyn,
+        nodesets_tpu=nodesets_tpu,
+        login_groups=login_groups,
     ), blobs.hash
 
 def _fetch_mounted_config() -> NSDict:
@@ -897,7 +911,7 @@ def _fetch_mounted_config() -> NSDict:
         file_yaml=[]
         for file in files:
             with open(file, "r") as f:
-                file_yaml.append(yaml.safe_load(f))
+                file_yaml.append(_yaml_load(f.read()))
         return file_yaml
 
     return _assemble_config(
