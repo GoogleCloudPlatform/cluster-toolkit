@@ -21,7 +21,7 @@ steps:
   args:
   - '-c'
   - |
-    set -e
+    set -eo pipefail
     if [ -n "${_REPO_URL}" ]; then
       echo "Cloning remote repository: ${_REPO_URL} (ref: ${_REPO_REF})..."
 
@@ -113,7 +113,7 @@ steps:
   args:
   - '-c'
   - |
-    set -e
+    set -eo pipefail
     # 1. Check Vanilla Base Image
     BASE_HASH=$$(find infrastructure/build/base.Dockerfile infrastructure/requirements.txt google_framework/alpha_evolve -type f -exec sha256sum {} + | sort | sha256sum | cut -c1-16)
     BASE_REPO="${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_INFRA_REPO_NAME}/alpha-evolve-base"
@@ -205,7 +205,7 @@ steps:
   args:
   - '-c'
   - |
-    set -e
+    set -eo pipefail
     BASE_TAG="$$(cat /workspace/base_image_tag.txt)"
     BASE_LATEST="${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_INFRA_REPO_NAME}/alpha-evolve-base:latest"
     if [ "$$(cat /workspace/base_image_status.txt)" = "BUILD" ]; then
@@ -230,7 +230,7 @@ steps:
   args:
   - '-c'
   - |
-    set -e
+    set -eo pipefail
     CTRL_STATUS="$$(cat /workspace/controller_image_status.txt)"
     if [ "$$CTRL_STATUS" = "BUILD" ]; then
       BASE_TAG="$$(cat /workspace/base_image_tag.txt)"
@@ -258,7 +258,7 @@ steps:
   args:
   - '-c'
   - |
-    set -e
+    set -eo pipefail
     EVAL_DIR="$$(cat /workspace/evaluator_dir.txt 2>/dev/null || true)"
     if [ -z "$$EVAL_DIR" ] || [ ! -f "$$EVAL_DIR/evaluator.Dockerfile" ]; then
       RAW_DIR="${_TARGET_DIR}"
