@@ -82,8 +82,6 @@ deployment_groups:
       metadata:
         gcs-bucket-name: $(zonal-gcs-bucket.gcs_bucket_name)
         gcs-mount-path: $(vars.gcs_bucket_local_mount)
-        regional-gcs-bucket-name: $(regional-gcs-bucket.gcs_bucket_name)
-        regional-gcs-mount-path: $(vars.regional_gcs_bucket_local_mount)
 
   - id: rapid_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -114,8 +112,6 @@ deployment_groups:
       metadata:
         gcs-bucket-name: $(zonal-gcs-bucket.gcs_bucket_name)
         gcs-mount-path: $(vars.gcs_bucket_local_mount)
-        regional-gcs-bucket-name: $(regional-gcs-bucket.gcs_bucket_name)
-        regional-gcs-mount-path: $(vars.regional_gcs_bucket_local_mount)
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
