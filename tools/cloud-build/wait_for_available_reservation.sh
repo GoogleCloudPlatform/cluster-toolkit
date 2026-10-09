@@ -21,6 +21,7 @@ RESERVATION=$1
 ZONE=$2
 RESERVATION_PROJECT=$3
 REQUIRED_COUNT=${4:-1}
+BLUEPRINT_FILE=$5
 
 # If the reservation is provided as a fully qualified URI (projects/<PROJECT>/...),
 # extract the owner project automatically.
@@ -29,7 +30,7 @@ if [[ "${RESERVATION}" =~ ^projects/([^/]+)/ ]]; then
 fi
 RESERVATION="${RESERVATION##*/}"
 if [[ -z "${RESERVATION}" || -z "${ZONE}" ]]; then
-	echo "Usage: $0 <RESERVATION_NAME|RESOURCE_URI> <ZONE> [RESERVATION_OWNER_PROJECT] [REQUIRED_COUNT]" >&2
+	echo "Usage: $0 <RESERVATION_NAME|RESOURCE_URI> <ZONE> [RESERVATION_OWNER_PROJECT] [REQUIRED_COUNT] [BLUEPRINT_FILE]" >&2
 	exit 1
 fi
 if [[ ! "${REQUIRED_COUNT}" =~ ^[1-9][0-9]*$ ]]; then
@@ -83,7 +84,7 @@ while true; do
 		fi
 
 		AVAILABLE=$((TOTAL_COUNT - IN_USE_COUNT))
-		echo "Reservation '${RESERVATION}' capacity: Total=${TOTAL_COUNT}, InUse=${IN_USE_COUNT}, Available=${AVAILABLE}"
+		echo "Reservation '${RESERVATION}' (Project: '${RESERVATION_PROJECT:-<default>}') capacity: Total=${TOTAL_COUNT}, InUse=${IN_USE_COUNT}, Available=${AVAILABLE}"
 
 		if [[ "${TOTAL_COUNT}" -eq 0 ]]; then
 			echo "Reservation '${RESERVATION}' has 0 total capacity." >&2
@@ -105,6 +106,9 @@ while true; do
 
 	if [ "$EXIT_CODE" -eq 0 ]; then
 		echo "--- SUCCESS: Reservation slot is available. ---"
+		if [[ -n "${BLUEPRINT_FILE}" && -n "${RESERVATION_PROJECT}" && -f "${BLUEPRINT_FILE}" ]]; then
+			sed -i '/specific_reservations:/!b;n;/^[[:space:]]*-[[:space:]]*name:/s/^\([[:space:]]*\)-.*$/&\n\1  project: "'"${RESERVATION_PROJECT}"'"/' "${BLUEPRINT_FILE}"
+		fi
 		break
 	elif [ "$EXIT_CODE" -eq 2 ]; then
 		echo "--- Insufficient capacity. RETRYING in 5 minutes... ---" >&2
@@ -114,8 +118,8 @@ while true; do
 		exit 3
 	else
 		# EXIT_CODE=1 (gcloud query failure)
-		if grep -qiE "HTTPError (400|403|404)|not[-_ ]found|permission[-_ ]denied|forbidden" "$RESERVATION_OUTPUT"; then
-			echo "--- FATAL ERROR: Reservation query failed due to permission or non-existent resource. Exiting. ---" >&2
+		if grep -qiE "HTTPError (400|401|403|404)|not[-_ ]found|permission[-_ ]denied|forbidden|unauthenticated|invalid_grant" "$RESERVATION_OUTPUT"; then
+			echo "--- FATAL ERROR: Reservation query failed due to authentication, permission, or non-existent resource. Exiting. ---" >&2
 			exit 1
 		else
 			echo "--- WARNING: Transient gcloud error encountered. Retrying in 1 minute... ---" >&2

@@ -241,7 +241,7 @@ class TestWaitForAvailableReservation(unittest.TestCase):
         res = self._run_script(["any-reservation", "us-central1-a"])
         self.assertEqual(res.returncode, 0)
         self.assertIn(
-            "Reservation 'any-reservation' capacity: Total=1, InUse=0, Available=1",
+            "Reservation 'any-reservation' (Project: '<default>') capacity: Total=1, InUse=0, Available=1",
             res.stdout,
         )
         self.assertIn("--- SUCCESS: Reservation slot is available. ---", res.stdout)
@@ -265,8 +265,9 @@ class TestWaitForAvailableReservation(unittest.TestCase):
                 self.assertEqual(res.returncode, 0)
 
                 available = case["total"] - case["in_use"]
+                expected_proj = case["expected_project"] or "<default>"
                 self.assertIn(
-                    f"Reservation '{case['expected_name']}' capacity: "
+                    f"Reservation '{case['expected_name']}' (Project: '{expected_proj}') capacity: "
                     f"Total={case['total']}, InUse={case['in_use']}, Available={available}",
                     res.stdout,
                 )
@@ -302,7 +303,7 @@ class TestWaitForAvailableReservation(unittest.TestCase):
                 res = self._run_script([res_name, "us-south1-a", "", "2"])
                 self.assertEqual(res.returncode, 0)
                 self.assertIn(
-                    f"Reservation '{res_name}' capacity: Total=2, InUse=0, Available=2",
+                    f"Reservation '{res_name}' (Project: '<default>') capacity: Total=2, InUse=0, Available=2",
                     res.stdout,
                 )
 
@@ -316,7 +317,7 @@ class TestWaitForAvailableReservation(unittest.TestCase):
                 res = self._run_script(["any-reservation", "us-south1-a", "proj", "1"])
                 self.assertEqual(res.returncode, 3)
                 self.assertIn(
-                    "Reservation 'any-reservation' capacity: Total=0, InUse=0, Available=0",
+                    "Reservation 'any-reservation' (Project: 'proj') capacity: Total=0, InUse=0, Available=0",
                     res.stdout,
                 )
                 self.assertIn(
@@ -415,9 +416,10 @@ class TestWaitForAvailableReservation(unittest.TestCase):
         self.assertEqual(sleeps, ["300"])
 
     def test_fatal_gcloud_permission_or_not_found_error_exits_1_without_retry(self):
-        """Fatal gcloud errors (400/403/404, not found, permission denied, forbidden) exit 1."""
+        """Fatal gcloud errors (400/401/403/404, not found, authentication, permission denied, forbidden) exit 1."""
         fatal_errors = [
             "ERROR: (gcloud.compute.reservations.describe) HTTPError 400: Bad Request",
+            "ERROR: (gcloud.compute.reservations.describe) HTTPError 401: Unauthorized",
             "ERROR: (gcloud.compute.reservations.describe) HTTPError 403: Permission denied",
             "ERROR: (gcloud.compute.reservations.describe) HTTPError 404: The resource was not found",
             "ERROR: Resource not_found in zone",
@@ -425,12 +427,13 @@ class TestWaitForAvailableReservation(unittest.TestCase):
             "ERROR: PERMISSION_DENIED: Caller does not have permission",
             "ERROR: permission-denied on resource",
             "ERROR: Caller is forbidden from accessing resource",
+            "ERROR: UNAUTHENTICATED: Request had invalid authentication credentials",
+            "ERROR: Token refresh failed: invalid_grant",
         ]
         for err_msg in fatal_errors:
             with self.subTest(err_msg=err_msg):
                 self._reset_logs()
                 self._write_mock_gcloud(f'echo "{err_msg}" >&2\nexit 1')
-
                 res = self._run_script(["any-reservation", "us-south1-a", "proj", "1"])
                 self.assertEqual(res.returncode, 1)
                 self.assertIn(
@@ -438,7 +441,7 @@ class TestWaitForAvailableReservation(unittest.TestCase):
                     res.stdout,
                 )
                 self.assertIn(
-                    "--- FATAL ERROR: Reservation query failed due to permission or non-existent resource. Exiting. ---",
+                    "--- FATAL ERROR: Reservation query failed due to authentication, permission, or non-existent resource. Exiting. ---",
                     res.stderr,
                 )
                 self.assertFalse(os.path.exists(self.sleep_args_log))
@@ -611,6 +614,40 @@ class TestWaitForAvailableReservation(unittest.TestCase):
                                     int(orig_args[3]), int(expected_count)
                                 )
 
+
+    def test_blueprint_file_injects_reservation_project_on_success(self):
+        """When the parameter BLUEPRINT_FILE is passed, injects project under specific_reservations on exit 0."""
+        self._write_mock_gcloud('printf "READY\\t4\\t2\\n"')
+        bp_path = os.path.join(self.test_dir, "blueprint.yaml")
+        with open(bp_path, "w", encoding="utf-8") as f:
+            f.write(
+                "  - id: g4-pool\n"
+                "    source: modules/compute/gke-node-pool\n"
+                "    settings:\n"
+                "      reservation_affinity:\n"
+                "        consume_reservation_type: SPECIFIC_RESERVATION\n"
+                "        specific_reservations:\n"
+                "        - name: $(vars.reservation)\n"
+                "    outputs: [instructions]\n"
+            )
+
+        res = self._run_script(
+            ["g4-reservation-0", "us-south1-a", "hpc-toolkit-dev", "2", bp_path]
+        )
+        self.assertEqual(res.returncode, 0)
+
+        with open(bp_path, "r", encoding="utf-8") as f:
+            updated_content = f.read()
+        self.assertIn('project: "hpc-toolkit-dev"', updated_content)
+
+        updated_bp = yaml.safe_load(updated_content)
+        spec_res = updated_bp[0]["settings"]["reservation_affinity"][
+            "specific_reservations"
+        ]
+        self.assertEqual(
+            spec_res,
+            [{"name": "$(vars.reservation)", "project": "hpc-toolkit-dev"}],
+        )
 
 if __name__ == "__main__":
     unittest.main()
