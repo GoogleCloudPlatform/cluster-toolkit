@@ -133,7 +133,7 @@ variable "enable_public_ips" {
 }
 
 variable "service_account" {
-  description = "Service account to attach to the Google Cloud Batch compute node and Batch job allocationPolicy (`scopes` is ignored if `instance_template` is provided)."
+  description = "Service account to attach to the Google Cloud Batch compute node and Batch job allocationPolicy. If `instance_template` is provided, `scopes` is ignored and `email` must match the service account set in that template."
   type = object({
     email = string,
     scopes = optional(set(string), [
