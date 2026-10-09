@@ -103,3 +103,33 @@ func TestListVolumes(t *testing.T) {
 		t.Errorf("Unexpected volume status: %+v", vols[0])
 	}
 }
+
+func TestListVolumes_PinsNamedCluster(t *testing.T) {
+	const pvcCmd = "kubectl --context " + testContext + " get pvc --all-namespaces -l ghpc_role=file-system -o json"
+	const describeCmd = "gcloud container clusters describe " + testCluster + " --location " + testLocation + " --project " + testProject + " --format=json"
+	exec := newExactExecutor(map[string][]shell.CommandResult{
+		describeCmd: {{ExitCode: 0, Stdout: `{"controlPlaneEndpointsConfig":{"dnsEndpointConfig":{"allowExternalTraffic":true,"endpoint":"` + testDNSHost + `"}}}`}},
+		probeCmd:    {{ExitCode: 0}},
+		pvcCmd:      {{ExitCode: 0, Stdout: `{"items": [{"metadata": {"name": "pvc-1"}}]}`}},
+	})
+	orc := newTestGKEOrchestrator(exec)
+	orc.kubeconfigLoader = staticLoader(kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext))
+
+	vols, err := orc.ListVolumes(orchestrator.ListOptions{ClusterName: testCluster, ClusterLocation: testLocation, ProjectID: testProject})
+	if err != nil {
+		t.Fatalf("ListVolumes failed: %v", err)
+	}
+	if len(vols) != 1 || vols[0].Name != "pvc-1" {
+		t.Errorf("unexpected volumes: %+v", vols)
+	}
+	if exec.count(pvcCmd) != 1 {
+		t.Errorf("get pvc was not pinned to %q; calls=%v", testContext, exec.calls)
+	}
+}
+
+func TestListVolumes_ClusterWithoutLocationFails(t *testing.T) {
+	orc := newTestGKEOrchestrator(newExactExecutor(nil))
+	if _, err := orc.ListVolumes(orchestrator.ListOptions{ClusterName: testCluster}); err == nil {
+		t.Fatal("expected error when --cluster is set without --location")
+	}
+}

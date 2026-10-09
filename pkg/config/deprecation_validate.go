@@ -41,15 +41,15 @@ func validateDeprecation(modID ModuleID, info modulereader.ModuleInfo) error {
 	var msgBuilder strings.Builder
 	if currentTime.Before(deprecationDate) {
 		// Phase 1: Announcement & Warning Period
-		msgBuilder.WriteString(fmt.Sprintf(`The module %s will be deprecated on %s. Module will be removed on this date.
+		fmt.Fprintf(&msgBuilder, `The module %s will be deprecated on %s. Module will be removed on this date.
 No new features will be added to the module. Bug fixes will be avoided, unless absolutely critical. No new blueprints should use this module.`,
-			modID, deprecationDate.Format("2006-01-02")))
+			modID, deprecationDate.Format("2006-01-02"))
 	} else {
 		// Phase 2: Past Deprecation Date (Module Removed)
-		msgBuilder.WriteString(fmt.Sprintf("The module %s was deprecated on %s and no more support is available.", modID, deprecationDate.Format("2006-01-02")))
+		fmt.Fprintf(&msgBuilder, "The module %s was deprecated on %s and no more support is available.", modID, deprecationDate.Format("2006-01-02"))
 	}
 	if alternativeModule != "" {
-		msgBuilder.WriteString(fmt.Sprintf("\nPlease plan your migration to %s.", alternativeModule))
+		fmt.Fprintf(&msgBuilder, "\nPlease plan your migration to %s.", alternativeModule)
 	}
 	logging.Warn("%s", msgBuilder.String())
 	return nil
