@@ -282,8 +282,8 @@ func TestSubmitCmd_LongWorkloadName_Fails(t *testing.T) {
 }
 
 func TestValidateWorkloadNameLength(t *testing.T) {
-	if got := maxPathwaysWorkloadNameLen(); got != 22 {
-		t.Fatalf("maxPathwaysWorkloadNameLen() = %d, want 22", got)
+	if maxPathwaysWorkloadNameLen != 22 {
+		t.Fatalf("maxPathwaysWorkloadNameLen = %d, want 22", maxPathwaysWorkloadNameLen)
 	}
 	tests := []struct {
 		name       string

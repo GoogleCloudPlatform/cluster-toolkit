@@ -334,18 +334,15 @@ const (
 	maxLabelValueLen   = 63
 	// JobSet labels Pathways pods with jobset.sigs.k8s.io/coordinator=<name>-pathways-head-0-0.<name>.
 	pathwaysCoordinatorSuffix = "-pathways-head-0-0."
+	// Longest Pathways name whose coordinator label still fits in a label value.
+	maxPathwaysWorkloadNameLen = (maxLabelValueLen - len(pathwaysCoordinatorSuffix)) / 2
 )
-
-// maxPathwaysWorkloadNameLen is the longest name whose coordinator label still fits in a label value.
-func maxPathwaysWorkloadNameLen() int {
-	return (maxLabelValueLen - len(pathwaysCoordinatorSuffix)) / 2
-}
 
 func validateWorkloadNameLength(name string, isPathways bool) error {
 	if isPathways {
-		if limit := maxPathwaysWorkloadNameLen(); len(name) > limit {
+		if len(name) > maxPathwaysWorkloadNameLen {
 			return fmt.Errorf("workload name cannot exceed %d characters for Pathways jobs: JobSet sets the label jobset.sigs.k8s.io/coordinator=%s%s%s (the name twice plus %q), and label values are limited to %d characters. The provided name %q has %d characters",
-				limit, name, pathwaysCoordinatorSuffix, name, pathwaysCoordinatorSuffix, maxLabelValueLen, name, len(name))
+				maxPathwaysWorkloadNameLen, name, pathwaysCoordinatorSuffix, name, pathwaysCoordinatorSuffix, maxLabelValueLen, name, len(name))
 		}
 		return nil
 	}
