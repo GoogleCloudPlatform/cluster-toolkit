@@ -191,6 +191,8 @@ spec:
               volumeMounts:
                 - name: shared-tmp
                   mountPath: /tmp
+                - name: dshm
+                  mountPath: /dev/shm
 {{- if .VolumeMountsYAML }}
 {{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
@@ -200,6 +202,11 @@ spec:
                 hostPath:
                   path: /tmp
                   type: DirectoryOrCreate
+{{- if not .Pathways.Headless }}
+              - name: dshm
+                emptyDir:
+                  medium: Memory
+{{- end }}
 {{- if .VolumesYAML }}
 {{(StructuralData .VolumesYAML)}}
 {{- end }}

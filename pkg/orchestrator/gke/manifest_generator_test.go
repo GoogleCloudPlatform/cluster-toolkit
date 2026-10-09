@@ -30,6 +30,7 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 
+	corev1 "k8s.io/api/core/v1"
 	k8syaml "sigs.k8s.io/yaml"
 )
 
@@ -563,6 +564,220 @@ func TestGenerateGKEManifest_DefaultDevShm_ParallelContainers(t *testing.T) {
 		t.Errorf("Expected emptyDir with medium: Memory in manifest, got:\n%s", manifest)
 	}
 }
+
+// pathwaysPodSpecs parses a rendered Pathways manifest and returns the pod spec
+// of each replicated job, keyed by replicated job name.
+func pathwaysPodSpecs(t *testing.T, manifest string) map[string]corev1.PodSpec {
+	t.Helper()
+	type replicatedJob struct {
+		Name     string `json:"name"`
+		Template struct {
+			Spec struct {
+				Template struct {
+					Spec corev1.PodSpec `json:"spec"`
+				} `json:"template"`
+			} `json:"spec"`
+		} `json:"template"`
+	}
+	for _, doc := range strings.Split(manifest, "\n---\n") {
+		var js struct {
+			Kind string `json:"kind"`
+			Spec struct {
+				ReplicatedJobs []replicatedJob `json:"replicatedJobs"`
+			} `json:"spec"`
+		}
+		if err := k8syaml.Unmarshal([]byte(doc), &js); err != nil {
+			t.Fatalf("failed to unmarshal manifest document: %v\n%s", err, doc)
+		}
+		if js.Kind != "JobSet" {
+			continue
+		}
+		specs := make(map[string]corev1.PodSpec, len(js.Spec.ReplicatedJobs))
+		for _, rj := range js.Spec.ReplicatedJobs {
+			specs[rj.Name] = rj.Template.Spec.Template.Spec
+		}
+		return specs
+	}
+	t.Fatalf("no JobSet document found in manifest:\n%s", manifest)
+	return nil
+}
+
+// devShmMountNames returns the names of the volumes a container mounts at /dev/shm.
+func devShmMountNames(c corev1.Container) []string {
+	var names []string
+	for _, m := range c.VolumeMounts {
+		if m.MountPath == "/dev/shm" {
+			names = append(names, m.Name)
+		}
+	}
+	return names
+}
+
+// findPodVolume returns the pod volume with the given name, or nil.
+func findPodVolume(spec corev1.PodSpec, name string) *corev1.Volume {
+	for i := range spec.Volumes {
+		if spec.Volumes[i].Name == name {
+			return &spec.Volumes[i]
+		}
+	}
+	return nil
+}
+
+// isMemoryEmptyDir reports whether v is an emptyDir backed by memory (tmpfs).
+func isMemoryEmptyDir(v *corev1.Volume) bool {
+	return v != nil && v.EmptyDir != nil && v.EmptyDir.Medium == corev1.StorageMediumMemory
+}
+
+// podContainers returns a pod's init containers followed by its containers.
+func podContainers(spec corev1.PodSpec) []corev1.Container {
+	return append(append([]corev1.Container{}, spec.InitContainers...), spec.Containers...)
+}
+
+// renderPathwaysShmTestManifest renders a Pathways manifest with the given
+// head mode, colocated Python sidecar image and --mount values.
+func renderPathwaysShmTestManifest(t *testing.T, headless bool, sidecarImage string, mounts []string) string {
+	t.Helper()
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pathways-shm-test",
+		NumSlices:       2,
+		ClusterLocation: "us-central1",
+		ComputeType:     "n2-standard-2",
+		IsPathwaysJob:   true,
+		RawMounts:       mounts,
+		Pathways: orchestrator.PathwaysJobDefinition{
+			Headless:                    headless,
+			ProxyServerImage:            "proxy:latest",
+			ServerImage:                 "server:latest",
+			WorkerImage:                 "worker:latest",
+			ColocatedPythonSidecarImage: sidecarImage,
+			GCSLocation:                 "gs://my-bucket",
+			HeadNodePool:                "pathways-np",
+		},
+	}
+	image := ""
+	if !headless {
+		job.CommandToRun = "python3 train.py"
+		image = "test-image:latest"
+	}
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	manifest, err := orc.GeneratePathwaysManifest(job, image, profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+	}
+	return manifest
+}
+
+// assertHeadDevShm checks that the head pod declares the in-memory dshm volume
+// and that only its workload-container mounts it at /dev/shm. When wantShm is
+// false (headless mode, no workload-container), neither may exist.
+func assertHeadDevShm(t *testing.T, head corev1.PodSpec, wantShm bool) {
+	t.Helper()
+	dshm := findPodVolume(head, "dshm")
+	if wantShm && !isMemoryEmptyDir(dshm) {
+		t.Errorf("pathways-head volume dshm = %+v, want an emptyDir with medium Memory", dshm)
+	}
+	if !wantShm && dshm != nil {
+		t.Errorf("pathways-head declares volume dshm %+v, want none in headless mode", dshm)
+	}
+
+	sawWorkloadContainer := false
+	for _, c := range podContainers(head) {
+		var want []string
+		if c.Name == "workload-container" {
+			sawWorkloadContainer = true
+			want = []string{"dshm"}
+		}
+		if got := devShmMountNames(c); !reflect.DeepEqual(got, want) {
+			t.Errorf("pathways-head container %q mounts %v at /dev/shm, want %v", c.Name, got, want)
+		}
+	}
+	if sawWorkloadContainer != wantShm {
+		t.Errorf("pathways-head has workload-container = %v, want %v", sawWorkloadContainer, wantShm)
+	}
+}
+
+// assertNoDevShm checks that a pod neither declares the dshm volume nor mounts
+// anything at /dev/shm.
+func assertNoDevShm(t *testing.T, podName string, spec corev1.PodSpec) {
+	t.Helper()
+	if v := findPodVolume(spec, "dshm"); v != nil {
+		t.Errorf("%s pod declares volume dshm %+v, want none", podName, v)
+	}
+	for _, c := range podContainers(spec) {
+		if got := devShmMountNames(c); len(got) > 0 {
+			t.Errorf("%s container %q mounts %v at /dev/shm, want none", podName, c.Name, got)
+		}
+	}
+}
+
+// assertUniqueVolumeNames checks that a pod declares each volume name once.
+func assertUniqueVolumeNames(t *testing.T, podName string, spec corev1.PodSpec) {
+	t.Helper()
+	seen := make(map[string]bool)
+	for _, v := range spec.Volumes {
+		if seen[v.Name] {
+			t.Errorf("%s pod declares volume %q more than once", podName, v.Name)
+		}
+		seen[v.Name] = true
+	}
+}
+
+// TestGeneratePathwaysManifest_HeadDevShm verifies that the Pathways head's
+// workload-container, where the user's Python process runs, gets an in-memory
+// /dev/shm instead of the container runtime's 64 MB default. Data loaders such
+// as Grain pass batches between processes through /dev/shm and die with SIGBUS
+// without it. The Pathways proxy, resource manager and workers run Pathways
+// binaries rather than user code, so they must not get the mount.
+func TestGeneratePathwaysManifest_HeadDevShm(t *testing.T) {
+	tests := []struct {
+		name        string
+		headless    bool
+		sidecar     string
+		mounts      []string
+		wantHeadShm bool
+	}{
+		{name: "default", wantHeadShm: true},
+		{name: "with user mounts", mounts: []string{"gs://my-bucket;/data;ro", "/host/path;/host"}, wantHeadShm: true},
+		{name: "with colocated python sidecar", sidecar: "sidecar:latest", wantHeadShm: true},
+		{name: "headless", headless: true, wantHeadShm: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := renderPathwaysShmTestManifest(t, tc.headless, tc.sidecar, tc.mounts)
+			specs := pathwaysPodSpecs(t, manifest)
+			head, ok := specs["pathways-head"]
+			if !ok {
+				t.Fatalf("pathways-head replicatedJob not found in manifest:\n%s", manifest)
+			}
+			worker, ok := specs["worker"]
+			if !ok {
+				t.Fatalf("worker replicatedJob not found in manifest:\n%s", manifest)
+			}
+
+			assertHeadDevShm(t, head, tc.wantHeadShm)
+			assertNoDevShm(t, "worker", worker)
+			// dshm must not collide with volumes added by --mount, MTC or the sidecar.
+			assertUniqueVolumeNames(t, "pathways-head", head)
+			assertUniqueVolumeNames(t, "worker", worker)
+		})
+	}
+}
+
 func TestGeneratePathwaysManifest_RestartOnExitCodes(t *testing.T) {
 	setupMockMachineConfig(t)
 	job := orchestrator.JobDefinition{
