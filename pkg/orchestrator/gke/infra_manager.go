@@ -33,9 +33,14 @@ import (
 	"gopkg.in/yaml.v2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 )
 
-const defaultJobSetVersion = "v0.10.1"
+// Keep in sync with the jobset.version default in modules/management/kubectl-apply/variables.tf (no 'v' prefix there).
+const defaultJobSetVersion = "v0.12.0"
 
 func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
 	if installed, err := g.isJobSetCRDInstalled(); err != nil {
@@ -365,7 +370,7 @@ func (g *GKEOrchestrator) removeDescriptionFields(data map[interface{}]interface
 // ValidateClusterState runs all cluster-specific validations to fail early on invalid state.
 func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) error {
 	validators := []func() error{
-		g.checkClusterConnectivity,
+		func() error { return g.checkClusterConnectivity(job.ClusterName) },
 		func() error {
 			return g.validateTargetNamespaceExists(job.ClusterName, job.ClusterLocation, job.ProjectID)
 		},
@@ -434,24 +439,12 @@ func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, p
 		return nil
 	case apierrors.IsNotFound(err):
 		return fmt.Errorf("target namespace %q does not exist on GKE cluster %q. Please create the namespace first (e.g., 'kubectl create namespace %s')", ns, clusterName, ns)
-	case apierrors.IsForbidden(err):
+	case isForbiddenError(err):
 		logging.Warn("Insufficient RBAC permissions to verify existence of namespace %q on cluster %q (403 Forbidden). Proceeding with job submission...", ns, clusterName)
 		return nil
 	default:
 		return fmt.Errorf("failed to verify existence of namespace %q on cluster %q: %w", ns, clusterName, err)
 	}
-}
-
-// checkClusterConnectivity verifies that we can connect to the cluster.
-// It uses a short timeout to fail fast if IP is blocked by authorized networks.
-func (g *GKEOrchestrator) checkClusterConnectivity() error {
-	logging.Info("Checking cluster connectivity...")
-	res := g.executor.ExecuteCommand("kubectl", "version", "--request-timeout=5s")
-	if res.ExitCode != 0 {
-		return fmt.Errorf("failed to connect to GKE cluster. Please verify your IP is allowed in the cluster's authorized networks or that you have correct network access. Error: %s", res.Stderr)
-	}
-	logging.Info("Cluster connectivity verified.")
-	return nil
 }
 
 // Initialize fetches GKE cluster metadata and resolves the cluster location,
@@ -552,63 +545,299 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 	return nil
 }
 
-func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
-	// 1. Capture current namespace context before gcloud resets it on best effort to preserve current namespace.
-	// If we can't read it, using 'default' allows gcloud setup to proceed,
-	originalNamespace, err := g.getCurrentNamespace(clusterName, clusterLocation, projectID)
-	if err != nil {
-		logging.Warn("Could not read current namespace before gcloud (defaulting to 'default'): %v. If you want to target a specific namespace please use the --gke-namespace flag", err)
-		originalNamespace = "default"
-	}
-
-	// 2. Refresh credentials via gcloud (this resets namespace to 'default')
-	if err := g.refreshGKEAuth(clusterName, clusterLocation, projectID); err != nil {
-		return err
-	}
-
-	// 3. Restore the original namespace context
-	return g.restoreNamespaceContext(originalNamespace)
-}
-
-// shouldUseDNSEndpoint determines whether to pass --dns-endpoint to gcloud container clusters get-credentials.
-// When a public IP endpoint is enabled, we prefer the IP endpoint to avoid HTTP 431 request header overflow issues on enterprise networks.
-// When only external DNS access is permitted without a public IP endpoint, we use the DNS endpoint.
-func shouldUseDNSEndpoint(cfg *controlPlaneEndpointsConfig) bool {
-	if cfg == nil || cfg.DnsEndpointConfig == nil || !cfg.DnsEndpointConfig.AllowExternalTraffic {
+// isForbiddenError returns true if the error indicates a 403 Forbidden RBAC permission error.
+func isForbiddenError(err error) bool {
+	if err == nil {
 		return false
 	}
-	return cfg.IPEndpointsConfig == nil || !cfg.IPEndpointsConfig.EnablePublicEndpoint
+	return apierrors.IsForbidden(err) || strings.Contains(strings.ToLower(err.Error()), "forbidden")
 }
 
-// refreshGKEAuth handles the gcloud container clusters get-credentials call.
-func (g *GKEOrchestrator) refreshGKEAuth(clusterName, clusterLocation, projectID string) error {
-	args := []string{"container", "clusters", "get-credentials", clusterName, "--location", clusterLocation, "--project", projectID}
-
-	if shouldUseDNSEndpoint(g.clusterDesc.ControlPlaneEndpointsConfig) {
-		args = append(args, "--dns-endpoint")
+func (g *GKEOrchestrator) verifyCheckpointConfigurationCR(docRemediationMsg string) error {
+	client, err := g.getDynamicClient()
+	if err != nil {
+		return fmt.Errorf("failed to initialize dynamic client to verify CheckpointConfiguration: %w", err)
 	}
 
-	credsRes := g.executor.ExecuteCommand("gcloud", args...)
-	if credsRes.ExitCode != 0 {
-		if strings.Contains(strings.ToLower(credsRes.Stderr), "multiple") || strings.Contains(strings.ToLower(credsRes.Stderr), "ambiguous") {
-			return fmt.Errorf("found multiple GKE clusters named %s. Please specify the exact Zone using --location to disambiguate", clusterName)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	checkpointConfigList, err := client.Resource(checkpointConfigurationGVR).List(ctx, metav1.ListOptions{Limit: 1})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return fmt.Errorf("the CheckpointConfiguration CustomResourceDefinition (CRD) is not registered on the cluster. %s: %w", docRemediationMsg, err)
 		}
-		return fmt.Errorf("failed to get GKE cluster credentials: %s\n%s", credsRes.Stderr, credsRes.Stdout)
+		if isForbiddenError(err) {
+			logging.Warn("Insufficient RBAC permissions to verify CheckpointConfiguration resources (403 Forbidden). Assuming CheckpointConfiguration is configured in shared cluster and proceeding with job submission.")
+			return nil
+		}
+		return fmt.Errorf("failed to verify CheckpointConfiguration resource: %w", err)
 	}
+	if len(checkpointConfigList.Items) == 0 {
+		return fmt.Errorf("Multi-Tier Checkpointing (MTC) requires a CheckpointConfiguration resource to be deployed on the cluster. %s", docRemediationMsg)
+	}
+
 	return nil
 }
 
-// restoreNamespaceContext sets the current namespace back to its original value if needed.
-func (g *GKEOrchestrator) restoreNamespaceContext(namespace string) error {
-	// If it was default, gcloud already set it to default, so we can skip.
-	if namespace == "" || namespace == "default" {
+func (g *GKEOrchestrator) validateMTCConfig(job *orchestrator.JobDefinition) error {
+	if job == nil || !job.GKEMTCEnabled {
 		return nil
 	}
 
-	logging.Info("Restoring namespace context to '%s'...", namespace)
-	restoreRes := g.executor.ExecuteCommand("kubectl", "config", "set-context", "--current", "--namespace="+namespace)
-	if restoreRes.ExitCode != 0 {
-		return fmt.Errorf("failed to restore namespace context to %s: %s", namespace, restoreRes.Stderr)
+	mtcDocURL := "https://cloud.google.com/kubernetes-engine/docs/how-to/multi-tier-checkpointing"
+	docRemediationMsg := fmt.Sprintf("Please follow the official GKE documentation to enable this feature on your cluster: %s", mtcDocURL)
+
+	if job.GKEMTCRamdiskDirectory == "" {
+		return fmt.Errorf("ramdisk directory path (--gke-mtc-ramdisk-dir) cannot be empty when Multi-Tier Checkpointing (MTC) is enabled")
 	}
+
+	sm := &StorageManager{orchestrator: g}
+	if err := sm.ValidateRamdiskDir(job.GKEMTCRamdiskDirectory, job.RawMounts); err != nil {
+		return err
+	}
+
+	if g.clusterDesc.AddonsConfig == nil || g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig == nil || !g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig.Enabled {
+		return fmt.Errorf("Multi-Tier Checkpointing (MTC) requires the HighScaleCheckpointing addon to be enabled on the target GKE cluster. %s", docRemediationMsg)
+	}
+
+	if job.DryRunManifest != "" {
+		return nil
+	}
+
+	if err := g.verifyCheckpointConfigurationCR(docRemediationMsg); err != nil {
+		return err
+	}
+
+	return g.ensureMTCWorkloadIdentity()
+}
+
+// getNodeServiceAccount discovers the custom Google Service Account (GSA) used by node pools in the cluster.
+func (g *GKEOrchestrator) getNodeServiceAccount() string {
+	for _, np := range g.clusterDesc.NodePools {
+		if np.Config.ServiceAccount != "" && np.Config.ServiceAccount != "default" {
+			logging.Info("Discovered node service account '%s' (from node pool '%s') for MTC Workload Identity", np.Config.ServiceAccount, np.Name)
+			return np.Config.ServiceAccount
+		}
+	}
+	return ""
+}
+
+func isDaemonSetRolloutComplete(dsObj *unstructured.Unstructured) bool {
+	if dsObj == nil || dsObj.Object == nil {
+		return false
+	}
+	gen, _, _ := unstructured.NestedInt64(dsObj.Object, "metadata", "generation")
+	obsGen, _, _ := unstructured.NestedInt64(dsObj.Object, "status", "observedGeneration")
+	desired, _, _ := unstructured.NestedInt64(dsObj.Object, "status", "desiredNumberScheduled")
+	ready, _, _ := unstructured.NestedInt64(dsObj.Object, "status", "numberReady")
+	updated, _, _ := unstructured.NestedInt64(dsObj.Object, "status", "updatedNumberScheduled")
+
+	if desired > 0 && obsGen >= gen && ready >= desired && updated >= desired {
+		logging.Info("MTC multitier-driver DaemonSet is ready (%d/%d nodes ready).", ready, desired)
+		return true
+	}
+	return false
+}
+
+func getMTCDaemonSet(ctx context.Context, client dynamic.Interface, namespace string) (*unstructured.Unstructured, error) {
+	// First attempt direct get of "multitier-driver" in case it exists with static name.
+	if dsObj, err := client.Resource(daemonsetGVR).Namespace(namespace).Get(ctx, "multitier-driver", metav1.GetOptions{}); err == nil {
+		if dsObj.GetName() == "" {
+			dsObj.SetName("multitier-driver")
+		}
+		return dsObj, nil
+	} else if !apierrors.IsNotFound(err) {
+		return nil, err
+	}
+
+	// In GKE, HighScaleCheckpointing names the DaemonSet "multitier-driver-<instanceHandle>".
+	// List DaemonSets in the namespace to find it.
+	dsList, err := client.Resource(daemonsetGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	for i := range dsList.Items {
+		ds := &dsList.Items[i]
+		if strings.HasPrefix(ds.GetName(), "multitier-driver") || ds.GetLabels()["k8s-app"] == "high-scale-checkpointing" {
+			return ds, nil
+		}
+	}
+	return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, "multitier-driver")
+}
+
+var daemonSetPollInterval = 2 * time.Second
+
+// waitForDaemonSetRollout polls the DaemonSet until its rollout is complete or context times out.
+func waitForDaemonSetRollout(ctx context.Context, client dynamic.Interface, namespace, dsName string) {
+	waitCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+
+	ticker := time.NewTicker(daemonSetPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-waitCtx.Done():
+			logging.Warn("Timed out or context canceled waiting for MTC multitier-driver DaemonSet %s in %s to become ready. Proceeding with job submission.", dsName, namespace)
+			return
+		case <-ticker.C:
+			currentObj, err := client.Resource(daemonsetGVR).Namespace(namespace).Get(waitCtx, dsName, metav1.GetOptions{})
+			if err != nil {
+				if isForbiddenError(err) {
+					logging.Warn("Insufficient RBAC permissions to get multitier-driver DaemonSet %s in %s status (403 Forbidden). Proceeding with job submission.", dsName, namespace)
+					return
+				}
+				logging.Warn("Retrying get of multitier-driver DaemonSet %s: %v", dsName, err)
+				continue
+			}
+			if isDaemonSetRolloutComplete(currentObj) {
+				return
+			}
+		}
+	}
+}
+
+// restartMTCDriverPods restarts the multitier-driver DaemonSet to pick up updated service account tokens.
+func restartMTCDriverPods(ctx context.Context, client dynamic.Interface, namespace string) {
+	dsObj, err := getMTCDaemonSet(ctx, client, namespace)
+	if err != nil {
+		if isForbiddenError(err) {
+			logging.Warn("Insufficient RBAC permissions to get multitier-driver DaemonSet in %s (403 Forbidden). Skipping driver restart.", namespace)
+			return
+		}
+		if apierrors.IsNotFound(err) {
+			logging.Warn("MTC multitier-driver DaemonSet not found in %s. Skipping driver restart.", namespace)
+			return
+		}
+		logging.Warn("Failed to get multitier-driver DaemonSet in %s: %v. Skipping driver restart.", namespace, err)
+		return
+	}
+
+	dsName := dsObj.GetName()
+	patchData := fmt.Appendf(nil, `{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}`, time.Now().UTC().Format(time.RFC3339))
+	_, patchErr := client.Resource(daemonsetGVR).Namespace(namespace).Patch(ctx, dsName, types.StrategicMergePatchType, patchData, metav1.PatchOptions{})
+	if patchErr == nil {
+		logging.Info("Triggered rolling restart of %s DaemonSet in %s", dsName, namespace)
+		waitForDaemonSetRollout(ctx, client, namespace, dsName)
+		return
+	}
+	if isForbiddenError(patchErr) {
+		logging.Warn("Insufficient RBAC permissions to restart %s DaemonSet in %s (403 Forbidden). Skipping driver restart.", dsName, namespace)
+		return
+	}
+
+	logging.Warn("Failed to patch DaemonSet %s for restart: %v. Falling back to pod deletion.", dsName, patchErr)
+	deleteMTCDriverPodsFallback(ctx, client, namespace)
+	waitForDaemonSetRollout(ctx, client, namespace, dsName)
+}
+
+// deleteMTCDriverPodsFallback deletes MTC driver pods to trigger recreation by the DaemonSet controller
+// when strategic merge patch is rejected by cluster admission webhooks. Per Pillar 33, it executes only
+// after DaemonSet existence is verified and handles 403 Forbidden defensively.
+func deleteMTCDriverPodsFallback(ctx context.Context, client dynamic.Interface, namespace string) {
+	listOpts := metav1.ListOptions{
+		LabelSelector: "k8s-app=high-scale-checkpointing",
+	}
+	pods, err := client.Resource(podGVR).Namespace(namespace).List(ctx, listOpts)
+	if err != nil {
+		if isForbiddenError(err) {
+			logging.Warn("Insufficient RBAC permissions to list multitier-driver pods in %s (403 Forbidden). Skipping driver pod restart.", namespace)
+			return
+		}
+		logging.Warn("Failed to list multitier-driver pods in %s for restart: %v", namespace, err)
+		return
+	}
+	if len(pods.Items) == 0 {
+		if fallbackPods, err := client.Resource(podGVR).Namespace(namespace).List(ctx, metav1.ListOptions{}); err == nil {
+			pods = fallbackPods
+		}
+	}
+	podsDeleted := 0
+	for _, pod := range pods.Items {
+		if strings.HasPrefix(pod.GetName(), "multitier-driver") {
+			logging.Info("Restarting MTC driver pod: %s", pod.GetName())
+			if err := client.Resource(podGVR).Namespace(namespace).Delete(ctx, pod.GetName(), metav1.DeleteOptions{}); err != nil {
+				if isForbiddenError(err) {
+					logging.Warn("Insufficient RBAC permissions to delete MTC driver pod %s (403 Forbidden).", pod.GetName())
+					continue
+				}
+				logging.Warn("Failed to delete MTC driver pod %s: %v", pod.GetName(), err)
+			} else {
+				podsDeleted++
+			}
+		}
+	}
+	if podsDeleted > 0 {
+		// Brief pause to allow the DaemonSet controller to observe the pod deletions
+		// and decrement status.numberReady before we poll for readiness.
+		time.Sleep(daemonSetPollInterval)
+	}
+}
+
+// updateMTCServiceAccountAnnotation updates the MTC KSA with the node GSA Workload Identity annotation and restarts driver pods.
+func updateMTCServiceAccountAnnotation(ctx context.Context, client dynamic.Interface, saObj *unstructured.Unstructured, namespace, name, nodeSA string) {
+	const wiAnnotation = "iam.gke.io/gcp-service-account"
+	annotations, _, _ := unstructured.NestedStringMap(saObj.Object, "metadata", "annotations")
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+
+	if annotations[wiAnnotation] == nodeSA {
+		logging.Info("[MTC Verification] ServiceAccount %s/%s already has Workload Identity annotation for GSA %s (provisioned during cluster creation). No annotation update or driver pod restart needed.", namespace, name, nodeSA)
+		return
+	}
+
+	logging.Info("Updating MTC ServiceAccount %s/%s with Workload Identity annotation for GSA %s", namespace, name, nodeSA)
+	annotations[wiAnnotation] = nodeSA
+	if err := unstructured.SetNestedStringMap(saObj.Object, annotations, "metadata", "annotations"); err != nil {
+		logging.Warn("Failed to set annotations on MTC ServiceAccount %s/%s: %v", namespace, name, err)
+		return
+	}
+	if _, err := client.Resource(serviceAccountGVR).Namespace(namespace).Update(ctx, saObj, metav1.UpdateOptions{}); err != nil {
+		if isForbiddenError(err) {
+			logging.Warn("Insufficient RBAC permissions to update MTC ServiceAccount %s/%s (403 Forbidden). Assuming Workload Identity is managed by cluster administrator.", namespace, name)
+			return
+		}
+		logging.Warn("Failed to update MTC ServiceAccount %s/%s with Workload Identity annotation: %v", namespace, name, err)
+		return
+	}
+	restartMTCDriverPods(ctx, client, namespace)
+}
+
+// ensureMTCWorkloadIdentity ensures the MTC Kubernetes ServiceAccount is annotated with the cluster node GSA and restarts driver pods if updated.
+func (g *GKEOrchestrator) ensureMTCWorkloadIdentity() error {
+	nodeSA := g.getNodeServiceAccount()
+	if nodeSA == "" {
+		logging.Warn("No custom GKE node service account detected. Automated Workload Identity configuration for Multi-Tier Checkpointing (MTC) will be skipped. You may need to manually configure IAM permissions for the MTC service account.")
+		return nil
+	}
+
+	logging.Info("[MTC Verification] Checking Workload Identity configuration for MTC ServiceAccount in cluster against node GSA %s...", nodeSA)
+
+	client, err := g.getDynamicClient()
+	if err != nil {
+		logging.Warn("Failed to get dynamic client for MTC Workload Identity verification: %v", err)
+		return nil
+	}
+
+	// Allow sufficient deadline for SA mutation (15s) and subsequent DaemonSet rollout wait (90s).
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	const mtcNamespace = "gke-managed-checkpointing"
+	const mtcKSA = "gke-checkpointing-multitier-node"
+
+	saObj, err := client.Resource(serviceAccountGVR).Namespace(mtcNamespace).Get(ctx, mtcKSA, metav1.GetOptions{})
+	if err != nil {
+		if isForbiddenError(err) {
+			logging.Warn("Insufficient RBAC permissions to read MTC ServiceAccount %s/%s (403 Forbidden). Assuming Workload Identity is configured by cluster administrator.", mtcNamespace, mtcKSA)
+			return nil
+		}
+		logging.Warn("Failed to get MTC ServiceAccount %s/%s: %v", mtcNamespace, mtcKSA, err)
+		return nil
+	}
+
+	updateMTCServiceAccountAnnotation(ctx, client, saObj, mtcNamespace, mtcKSA, nodeSA)
 	return nil
 }

@@ -2,15 +2,20 @@
 
 ## TPU 7x (`tpu7x-standard-4t`) Slurm Cluster Deployment
 
-This directory provides a Cluster Toolkit blueprint ([`tpu7x-slurm-blueprint.yaml`](tpu7x-slurm-blueprint.yaml)) and a deployment configuration ([`tpu7x-slurm-deployment.yaml`](tpu7x-slurm-deployment.yaml)) for provisioning a Slurm 26.05 cluster with GCE-native TPU 7x (`tpu7x-standard-4t`) compute nodes, comprising both a **static** TPU partition (`tpu`) and an on-demand **dynamic** TPU partition (`tpu-dyn`).
+This directory provides a Cluster Toolkit blueprint ([`tpu7x-slurm-blueprint.yaml`](tpu7x-slurm-blueprint.yaml)) and deployment configuration ([`tpu7x-slurm-deployment.yaml`](tpu7x-slurm-deployment.yaml)) for provisioning a Slurm cluster with TPU 7x (`tpu7x-standard-4t`) compute nodes. It sets up a **static** TPU partition (`tpu`), an on-demand **dynamic** TPU partition (`tpu-dyn`), and a Google Cloud Managed Lustre instance mounted at `/home`.
 
-The blueprint builds a custom Slurm 26.05 TPU image (`slurm-tpu-v7x-ubuntu2404`) from `ubuntu-accel-2404-amd64-tpu-tpu7x` using Packer (`image-env` and `image` groups) and deploys the cluster (`cluster-env` and `cluster` groups) with Google Cloud Filestore mounted at `/home`.
-
-Selective deployment and teardown for multi-group blueprints (`image-env`, `image`, `cluster-env`, and `cluster` groups) are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
+Selective deployment and teardown for multi-group blueprints (`cluster-env` and `cluster` groups) are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
 
 ### Build the Cluster Toolkit `gcluster` binary
 
 Follow the instructions [here](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment) to set up your Cluster Toolkit environment, including enabling required APIs and IAM permissions.
+
+### Managed Lustre Capacity
+
+This blueprint provisions a Google Cloud Managed Lustre instance mounted at `/home` across the cluster. By default, it is configured with `36000` GiB (`36` TiB) capacity and `500` MBps/TiB throughput.
+
+- Managed Lustre is supported in specific regions and zones. See [Managed Lustre supported locations](https://cloud.google.com/managed-lustre/docs/locations).
+- Storage capacity (`lustre_size_gib`) and throughput (`per_unit_storage_throughput`) are correlated. See [Managed Lustre performance tiers](https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers) if you want to adjust the size in [`tpu7x-slurm-blueprint.yaml`](tpu7x-slurm-blueprint.yaml).
 
 ### Configure the deployment file
 
@@ -28,16 +33,16 @@ vars:
   project_id: <PROJECT_ID>
   region: <REGION>
   zone: <ZONE>
-  tpu_static_nodes: 16
-  tpu_accelerator_topology: 4x4x4
-  tpu_dynamic_max_nodes: 16
+  tpu_static_nodes: 8
+  tpu_dynamic_max_nodes: 4
+  tpu_accelerator_topology: 2x4x4
   tpu_reservation_name: <RESERVATION_NAME>
 ```
 
 > **Note:**
 >
 > - If the GCS bucket specified in `terraform_backend_defaults.configuration.bucket` does not exist yet, `./gcluster deploy` (or `./gcluster create`) will create it automatically in your `project_id` and `region` (prompting for confirmation unless `--auto-approve` is passed).
-> - Each `tpu7x-standard-4t` VM provides 4 physical TPU chips (`tpus_per_node = 4`, exposing 8 TensorCores). For the static partition (`tpu`), `tpu_accelerator_topology` defines the 3D chip topology **per slice** (`slice_vms = total_chips / 4`, e.g., `2x2x1` = 1 VM, `2x2x2` = 2 VMs, `2x2x4` = 4 VMs, `2x4x4` = 8 VMs, `4x4x4` = 16 VMs), and `tpu_static_nodes` must be a multiple of `slice_vms` (for example, `tpu_static_nodes: 8` with `2x2x4` provisions **two** 4-VM `2x2x4` slices, whereas with `2x4x4` it provisions **one** 8-VM `2x4x4` slice).
+> - Each `tpu7x-standard-4t` VM has 4 TPU chips (8 cores). For the static partition (`tpu`), `tpu_accelerator_topology` sets the 3D chip topology per slice (for example, `2x2x1` = 1 VM, `2x2x2` = 2 VMs, `2x2x4` = 4 VMs, `2x4x4` = 8 VMs, `4x4x4` = 16 VMs), and `tpu_static_nodes` must be a multiple of the number of VMs per slice (for example, `tpu_static_nodes: 8` with `2x2x4` provisions **two** 4-VM `2x2x4` slices, whereas with `2x4x4` it provisions **one** 8-VM `2x4x4` slice).
 
 ### Additional ways to provision
 
@@ -53,8 +58,6 @@ To use one of these alternative models, modify the `vars` section in `tpu7x-slur
 
 ### Deploy the Slurm Cluster
 
-To build the custom Slurm 26.05 image and deploy the cluster in a single step:
-
 ```bash
 ./gcluster deploy \
   -d examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml \
@@ -62,35 +65,37 @@ To build the custom Slurm 26.05 image and deploy the cluster in a single step:
   --auto-approve
 ```
 
-If you have already built the custom Slurm image (`slurm-tpu-v7x-ubuntu2404`) in your project, you can deploy only the `cluster-env` and `cluster` groups by skipping `image-env` and `image`:
+To re-deploy only the `cluster` group while keeping `cluster-env` (networking and Managed Lustre) intact:
 
 ```bash
 ./gcluster deploy \
   -d examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml \
   examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml \
-  --only cluster-env,cluster \
-  --auto-approve
+  --only cluster \
+  --auto-approve -w
 ```
 
 ### Running TPU Workloads
 
-Once logged into the Slurm login node (`<deployment_name>-slurm-login-001`), you can run jobs on either the **static** partition (`-p tpu`, always-warm slice matching `tpu_accelerator_topology`) or the **dynamic** partition (`-p tpu-dyn`, which provisions an on-demand slice matching your `--layout` flag and powers down when idle):
+Once logged into the Slurm login node (`<deployment_name>-slurm-login-001`), you can run jobs on either the **static** partition (`-p tpu`) or the **dynamic** partition (`-p tpu-dyn`) using `--layout=tpu7x=<topology>`:
+
+- **Static partition (`-p tpu`):** When `--layout` is specified, it must match the configured `tpu_accelerator_topology` (and `-N` must match the slice VM count). If `--layout` is omitted, Slurm schedules the job as a standard non-accelerator job.
+- **Dynamic partition (`-p tpu-dyn`):** `--layout` is required so Slurm can provision a TPU slice with the requested topology on demand. Jobs missing `--layout` or specifying an invalid topology or mismatched node count are rejected.
 
 ```bash
 # 1. Create a shared JAX TPU virtualenv on /home:
+sudo mkdir -p "$HOME" && sudo chown "$(id -u):$(id -g)" "$HOME"
 python3 -m venv ~/jax-env
 ~/jax-env/bin/pip install -U pip "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 
-# 2. Run a distributed JAX job across the static TPU slice (e.g., 8 nodes = 2x4x4):
-srun -N 8 -p tpu --layout=tpu7x=2x4x4 ~/jax-env/bin/python3 -c \
-  "import jax; jax.distributed.initialize(); print(f'Rank {jax.process_index()}: {len(jax.devices())} total TPU cores ({len(jax.local_devices())} local)')"
+# 2. Run a JAX job on the static TPU partition (must match tpu_accelerator_topology, e.g., 8 nodes = 2x4x4):
+srun -N 8 -p tpu --layout=tpu7x=2x4x4 ~/jax-env/bin/python -c \
+  "import jax; jax.distributed.initialize(); print(f'Host {jax.process_index()}: total={jax.device_count()}, local={jax.local_device_count()}')"
 
 # 3. Run an on-demand job on the dynamic TPU partition (e.g., 2 nodes = 2x2x2):
-srun -N 2 -p tpu-dyn --layout=tpu7x=2x2x2 ~/jax-env/bin/python3 -c \
-  "import jax; jax.distributed.initialize(); print(f'Rank {jax.process_index()}: {len(jax.devices())} total TPU cores ({len(jax.local_devices())} local)')"
+srun -N 2 -p tpu-dyn --layout=tpu7x=2x2x2 ~/jax-env/bin/python -c \
+  "import jax; jax.distributed.initialize(); print(f'Host {jax.process_index()}: total={jax.device_count()}, local={jax.local_device_count()}')"
 ```
-
-**Note:** If you request more nodes than the partition contains (e.g. `-N 16 -p tpu-dyn` when `tpu_dynamic_max_nodes` is 8), Slurm accepts the job and leaves it pending with reason `PartitionNodeLimit` rather than rejecting it. This is stock Slurm behavior with the default `EnforcePartLimits=NO` and applies to GPU partitions too. No TPU MIG is created for such a job, since the nodes are never allocated.
 
 ## Clean Up
 

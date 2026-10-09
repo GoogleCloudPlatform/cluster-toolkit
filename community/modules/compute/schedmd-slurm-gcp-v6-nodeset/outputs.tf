@@ -26,6 +26,18 @@ output "nodeset" {
   }
 
   precondition {
+    condition = !local.has_flex_policy || alltrue([
+      for mt in setunion([var.machine_type], local.flex_machine_types) : !(
+        (can(regex("^c2-", mt)) && startswith(var.disk_type, "hyperdisk-")) ||
+        (can(regex("^(c3|c3d)-", mt)) && var.disk_type == "pd-standard") ||
+        (can(regex("^h3-", mt)) && contains(["pd-standard", "pd-ssd"], var.disk_type)) ||
+        (can(regex("^(c4|c4a|c4d|h4d|n4|n4a|n4d)-", mt)) && startswith(var.disk_type, "pd-"))
+      )
+    ])
+    error_message = "A disk_type=${var.disk_type} cannot be used with machine_type=${var.machine_type} or one of its instance_flexibility_policy fallback machine types."
+  }
+
+  precondition {
     condition     = var.reservation_name == "" || length(var.zones) == 0
     error_message = <<-EOD
       If a reservation is specified, `var.zones` should be empty.
@@ -95,13 +107,6 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = length(var.zones) == 0 || !var.dws_flex.enabled
-    error_message = <<-EOD
-      If a DWS Flex is enabled, `var.zones` should be empty.
-    EOD
-  }
-
-  precondition {
     condition     = var.on_host_maintenance == "TERMINATE" || !var.dws_flex.enabled
     error_message = "If DWS Flex is used, `on_host_maintenance` should be set to 'TERMINATE'"
   }
@@ -167,5 +172,80 @@ output "nodeset" {
   precondition {
     condition     = !local.is_tpu || !(var.node_count_static > 0 && var.node_count_dynamic_max > 0)
     error_message = "TPU nodesets cannot mix static and dynamic nodes. For static TPU nodesets (node_count_static > 0), please explicitly set node_count_dynamic_max = 0."
+  }
+
+  precondition {
+    condition = local.zone_target_shape == "ANY_SINGLE_ZONE" || !(
+      local.mig_provisioned &&
+      (var.enable_placement || (var.accelerator_topology != null && var.accelerator_topology != ""))
+    )
+    error_message = "zone_target_shape must be 'ANY_SINGLE_ZONE' on MIG NodeSets using enable_placement or accelerator_topology; those policies are zonal."
+  }
+
+  precondition {
+    condition     = !(var.dws_flex.enabled && !var.dws_flex.use_bulk_insert) || local.zone_target_shape == "ANY_SINGLE_ZONE"
+    error_message = "DWS Flex (FLEX_START) Regional MIGs use resize requests, which only support zone_target_shape = 'ANY_SINGLE_ZONE'."
+  }
+
+  precondition {
+    condition     = !local.has_flex_policy || (var.provisioning_engine == "MIG" && !var.dws_flex.enabled)
+    error_message = "instance_flexibility_policy requires provisioning_engine = 'MIG' and is not supported with DWS Flex."
+  }
+
+  precondition {
+    condition     = !local.has_flex_policy || var.accelerator_topology == null || var.accelerator_topology == ""
+    error_message = "instance_flexibility_policy cannot be combined with accelerator_topology."
+  }
+
+  precondition {
+    condition     = !local.has_flex_policy || (var.reservation_name == "" && var.future_reservation == "")
+    error_message = "instance_flexibility_policy cannot be combined with a reservation or future reservation; a specific reservation pins a single machine type."
+  }
+
+  precondition {
+    condition = !local.has_flex_policy || alltrue([
+      for mt in setunion([var.machine_type], local.flex_machine_types) :
+      !can(regex("^(a3-ultragpu|a4|a4x)-", mt))
+    ])
+    error_message = "instance_flexibility_policy is not supported on a3-ultragpu, a4, or a4x machine types."
+  }
+
+  precondition {
+    condition = !local.has_flex_policy || (
+      alltrue([
+        for mt in local.flex_machine_types :
+        local.inferred_gpu_signature[mt] == local.inferred_gpu_signature[var.machine_type]
+        ]) && (
+        length(var.guest_accelerator) == 0 || alltrue([
+          for mt in local.flex_machine_types : startswith(mt, "n1-")
+        ])
+      )
+    )
+    error_message = "Every instance_flexibility_policy machine type must have the same attached GPU model and count as machine_type=${var.machine_type} (and must be an n1-* shape when guest_accelerator is explicitly set)."
+  }
+
+  precondition {
+    condition = !local.has_flex_policy || alltrue([
+      for mt in local.flex_machine_types :
+      can(regex("^(t2a|c4a|n4a)-", mt)) == can(regex("^(t2a|c4a|n4a)-", var.machine_type))
+    ])
+    error_message = "All instance_flexibility_policy machine types must have the same CPU architecture (x86_64 or Arm64) as machine_type=${var.machine_type}."
+  }
+
+  precondition {
+    condition = !local.has_flex_policy || try(var.advanced_machine_features.threads_per_core, null) == 1 || alltrue([
+      for mt in local.flex_machine_types :
+      can(regex("^(t2a|t2d|h3|c4a|n4a|h4d)-", mt)) == can(regex("^(t2a|t2d|h3|c4a|n4a|h4d)-", var.machine_type))
+    ])
+    error_message = "When threads_per_core is not 1, instance_flexibility_policy cannot mix non-SMT machine families (t2a, t2d, h3, c4a, n4a, h4d) with SMT-capable machine families."
+  }
+
+  precondition {
+    condition = !local.has_flex_policy || (
+      length(setunion([var.machine_type], local.flex_machine_types)) <= 10 &&
+      length(distinct([for s in local.instance_flexibility_policy.instance_selections : s.name])) == length(local.instance_flexibility_policy.instance_selections) &&
+      (contains(local.flex_machine_types, var.machine_type) || alltrue([for s in var.instance_flexibility_policy.instance_selections : s.rank > 0]))
+    )
+    error_message = "instance_flexibility_policy may reference at most 10 distinct machine types in total (including machine_type=${var.machine_type}), all selection names must be unique, and fallback selections must use rank >= 1 when machine_type=${var.machine_type} is not explicitly included in instance_selections."
   }
 }
