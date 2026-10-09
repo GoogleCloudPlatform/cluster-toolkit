@@ -17,6 +17,7 @@ package cluster
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"hpc-toolkit/pkg/orchestrator/gke"
 	"hpc-toolkit/pkg/shell"
 	"strings"
@@ -121,6 +122,20 @@ func TestClusterCmd_AmbientProjectResolution(t *testing.T) {
 		wantSubstr := "gcloud config get-value project timed out after"
 		if !strings.Contains(err.Error(), wantSubstr) {
 			t.Errorf("expected error containing %q, got: %v", wantSubstr, err)
+		}
+	})
+
+	t.Run("Returns error when gcloud binary fails to start", func(t *testing.T) {
+		resetClusterCmdFlags()
+		shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+			return shell.CommandResult{ExitCode: -1, Err: fmt.Errorf("executable file not found in PATH")}
+		}
+		_, err := executeCommand(ClusterCmd, "describe", "--cluster", "test-cluster", "--location", "us-central1-a")
+		if err == nil {
+			t.Fatal("expected start error, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to execute gcloud") {
+			t.Errorf("expected error containing 'failed to execute gcloud', got: %v", err)
 		}
 	})
 }

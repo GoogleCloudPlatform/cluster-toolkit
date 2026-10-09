@@ -267,13 +267,31 @@ func TestEnsureGCloudSDKInstalled_Failure(t *testing.T) {
 	origExecuteCommand := shell.ExecuteCommandWithTimeout
 	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
-		return shell.CommandResult{ExitCode: 1, Stderr: "command not found"}
-	}
-	err := ensureGCloudSDKInstalled()
-	if err == nil {
-		t.Error("expected error, got nil")
-	}
+	t.Run("Non-zero exit code", func(t *testing.T) {
+		shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+			return shell.CommandResult{ExitCode: 1, Stderr: "command error"}
+		}
+		err := ensureGCloudSDKInstalled()
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "Please install it from") {
+			t.Errorf("expected installation prompt in error, got %v", err)
+		}
+	})
+
+	t.Run("Binary not found (ExitCode -1)", func(t *testing.T) {
+		shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+			return shell.CommandResult{ExitCode: -1, Err: fmt.Errorf("executable file not found in PATH")}
+		}
+		err := ensureGCloudSDKInstalled()
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "Please install it from") {
+			t.Errorf("expected installation prompt in error, got %v", err)
+		}
+	})
 }
 
 func TestEnsureGCloudAuthenticated_Success(t *testing.T) {
@@ -328,6 +346,9 @@ func TestEnsureGCloudSDKInstalled_Timeout(t *testing.T) {
 	wantSubstr := fmt.Sprintf("gcloud version check timed out after %v", shell.DefaultLocalCommandTimeout)
 	if !strings.Contains(err.Error(), wantSubstr) {
 		t.Errorf("expected error to contain %q, got %v", wantSubstr, err)
+	}
+	if strings.Contains(err.Error(), "Please install it from") {
+		t.Errorf("did not expect timeout error to suggest installing gcloud, got %v", err)
 	}
 }
 

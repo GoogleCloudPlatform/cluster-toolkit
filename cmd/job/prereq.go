@@ -112,7 +112,11 @@ func ensureGCloudSDKInstalled() error {
 
 	timeoutMsg := fmt.Sprintf("gcloud version check timed out after %v. Please verify your local gcloud installation is responsive", shell.DefaultLocalCommandTimeout)
 	if err := shell.HandleExecError(result, "gcloud", timeoutMsg); err != nil {
-		return fmt.Errorf("Google Cloud SDK (gcloud) is required to run prerequisite checks. Aborting job submission.\nPlease install it from https://cloud.google.com/sdk/docs/install and ensure it's in your PATH.\nAfter installation, please run 'gcloud auth login' to authenticate.\nError: %w", err)
+		// only suggest installation if the binary failed to execute (missing from PATH / %PATH%)
+		if result.ExitCode == -1 {
+			return fmt.Errorf("Google Cloud SDK (gcloud) is required to run prerequisite checks. Aborting job submission.\nPlease install it from https://cloud.google.com/sdk/docs/install and ensure it's in your PATH.\nAfter installation, please run 'gcloud auth login' to authenticate.\nError: %w", err)
+		}
+		return err
 	}
 	if result.ExitCode != 0 {
 		return fmt.Errorf("Google Cloud SDK (gcloud) is required to run prerequisite checks. Aborting job submission.\nPlease install it from https://cloud.google.com/sdk/docs/install and ensure it's in your PATH.\nAfter installation, please run 'gcloud auth login' to authenticate.\nError: %s", result.Stderr)
@@ -175,46 +179,30 @@ func printMissingPrereqs(cmd *cobra.Command, missing []missingPrereq) {
 	fmt.Fprintln(cmd.OutOrStdout())
 }
 
-func checkK8sDependencies(state *PrereqState, missing *[]missingPrereq) {
-	// Check kubectl
-	kubectlRes := shell.ExecuteCommandWithTimeout(shell.DefaultLocalCommandTimeout, "kubectl", "version", "--client", "--output=json")
-	if errors.Is(kubectlRes.Err, context.DeadlineExceeded) {
-		logging.Warn("Command timeout while checking kubectl version. Please verify your local kubectl binary is responsive.")
+func checkLocalCLI(name string, checkArgs []string, installedFlag *bool, missing *[]missingPrereq) {
+	res := shell.ExecuteCommandWithTimeout(shell.DefaultLocalCommandTimeout, name, checkArgs...)
+	if errors.Is(res.Err, context.DeadlineExceeded) {
+		logging.Warn("Command timeout while checking %s. Please verify the binary is responsive.", name)
 		*missing = append(*missing, missingPrereq{
-			name:     fmt.Sprintf("kubectl (verification timed out after %v)", shell.DefaultLocalCommandTimeout),
-			commands: []string{"kubectl version --client"},
+			name:     fmt.Sprintf("%s (verification timed out after %v)", name, shell.DefaultLocalCommandTimeout),
+			commands: []string{strings.Join(append([]string{name}, checkArgs...), " ")},
 		})
-	} else if kubectlRes.ExitCode != 0 {
-		var cmds []string
-		if isGCloudComponentManagerEnabled() {
-			cmds = []string{"gcloud components install kubectl --quiet"}
-		} else {
-			cmds = []string{"# Please install kubectl manually for your operating system."}
-		}
-		*missing = append(*missing, missingPrereq{name: "kubectl", commands: cmds})
-	} else {
-		state.KubectlInstalled = true
+		return
 	}
+	if res.ExitCode != 0 {
+		cmd := fmt.Sprintf("# Please install %s manually for your operating system.", name)
+		if isGCloudComponentManagerEnabled() {
+			cmd = fmt.Sprintf("gcloud components install %s --quiet", name)
+		}
+		*missing = append(*missing, missingPrereq{name: name, commands: []string{cmd}})
+		return
+	}
+	*installedFlag = true
+}
 
-	// Check plugin
-	pluginRes := shell.ExecuteCommandWithTimeout(shell.DefaultLocalCommandTimeout, "gke-gcloud-auth-plugin", "--version")
-	if errors.Is(pluginRes.Err, context.DeadlineExceeded) {
-		logging.Warn("Command timeout while checking gke-gcloud-auth-plugin version. Please verify your local plugin binary is responsive.")
-		*missing = append(*missing, missingPrereq{
-			name:     fmt.Sprintf("gke-gcloud-auth-plugin (verification timed out after %v)", shell.DefaultLocalCommandTimeout),
-			commands: []string{"gke-gcloud-auth-plugin --version"},
-		})
-	} else if pluginRes.ExitCode != 0 {
-		var cmds []string
-		if isGCloudComponentManagerEnabled() {
-			cmds = []string{"gcloud components install gke-gcloud-auth-plugin --quiet"}
-		} else {
-			cmds = []string{"# Please install gke-gcloud-auth-plugin manually for your operating system."}
-		}
-		*missing = append(*missing, missingPrereq{name: "gke-gcloud-auth-plugin", commands: cmds})
-	} else {
-		state.GKEGCloudAuthPluginInstalled = true
-	}
+func checkK8sDependencies(state *PrereqState, missing *[]missingPrereq) {
+	checkLocalCLI("kubectl", []string{"version", "--client", "--output=json"}, &state.KubectlInstalled, missing)
+	checkLocalCLI("gke-gcloud-auth-plugin", []string{"--version"}, &state.GKEGCloudAuthPluginInstalled, missing)
 }
 
 // isDockerCredsConfigured checks if Docker is configured to use gcloud credentials for the required registries.

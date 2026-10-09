@@ -58,12 +58,24 @@ type Command struct {
 	stdin  bytes.Buffer
 	stdout bytes.Buffer
 	stderr bytes.Buffer
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // NewCommand creates a new Command instance.
 func NewCommand(name string, args ...string) *Command {
 	cmd := exec.Command(name, args...)
 	return &Command{cmd: cmd}
+}
+
+// NewCommandWithTimeout creates a new Command instance with a timeout.
+func NewCommandWithTimeout(timeout time.Duration, name string, args ...string) *Command {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	cmd := exec.CommandContext(ctx, name, args...)
+	// Forcefully close I/O pipes if orphaned child processes keep them open after timeout.
+	// This unblocks cmd.Run() reliably on both Windows (TerminateProcess) and Unix (SIGKILL).
+	cmd.WaitDelay = 100 * time.Millisecond
+	return &Command{cmd: cmd, ctx: ctx, cancel: cancel}
 }
 
 // SetInput sets the standard input for the command.
@@ -74,19 +86,24 @@ func (c *Command) SetInput(input string) {
 
 // Execute runs the command and returns a CommandResult.
 func (c *Command) Execute() CommandResult {
+	if c.cancel != nil {
+		defer c.cancel()
+	}
 	c.cmd.Stdout = &c.stdout
 	c.cmd.Stderr = &c.stderr
-
 	err := c.cmd.Run()
-
+	if errors.Is(err, exec.ErrWaitDelay) || (err != nil && c.ctx != nil && c.ctx.Err() == context.DeadlineExceeded) {
+		err = context.DeadlineExceeded
+	}
 	result := CommandResult{
 		Stdout: c.stdout.String(),
 		Stderr: c.stderr.String(),
 		Err:    err,
 	}
-
 	if err != nil {
-		if exitError, ok := err.(*exec.ExitError); ok {
+		if errors.Is(err, context.DeadlineExceeded) {
+			result.ExitCode = 124
+		} else if exitError, ok := err.(*exec.ExitError); ok {
 			result.ExitCode = exitError.ExitCode()
 		} else {
 			result.ExitCode = -1
@@ -94,7 +111,6 @@ func (c *Command) Execute() CommandResult {
 	} else {
 		result.ExitCode = 0
 	}
-
 	return result
 }
 
@@ -238,48 +254,14 @@ func ExtractRegion(location string) string {
 // ExecuteCommandWithTimeout executes a shell command but forcibly kills the
 // process if it does not complete within the provided timeout duration.
 var ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) CommandResult {
-	// Create a context that automatically cancels after the timeout
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, name, args...)
-
-	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
-
-	err := cmd.Run()
-
-	if err != nil && ctx.Err() == context.DeadlineExceeded {
-		err = context.DeadlineExceeded
-	}
-
-	result := CommandResult{
-		Stdout: stdoutBuf.String(),
-		Stderr: stderrBuf.String(),
-		Err:    err,
-	}
-
-	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			result.ExitCode = 124
-		} else if exitError, ok := err.(*exec.ExitError); ok {
-			result.ExitCode = exitError.ExitCode()
-		} else {
-			result.ExitCode = -1
-		}
-	} else {
-		result.ExitCode = 0
-	}
-
-	return result
+	return NewCommandWithTimeout(timeout, name, args...).Execute()
 }
 
 // HandleExecError checks if a CommandResult failed due to a timeout or failed to start.
 func HandleExecError(result CommandResult, cmdName string, timeoutMsg string) error {
 	if result.Err != nil {
 		if errors.Is(result.Err, context.DeadlineExceeded) {
-			return errors.New(timeoutMsg)
+			return fmt.Errorf("%s: %w", timeoutMsg, result.Err)
 		}
 		if result.ExitCode == -1 {
 			return fmt.Errorf("failed to execute %s: %w", cmdName, result.Err)
