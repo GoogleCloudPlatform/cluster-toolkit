@@ -90,8 +90,9 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-scale.yaml](#hpc-slurm-scaleyaml-) ![community-badge]
   * [hpc-slurm-multiregion-scale.yaml](#hpc-slurm-multiregion-scaleyaml-) ![community-badge]
   * [hybrid-slurm-cluster (GCD)](#hybrid-slurm-cluster-gcd-) ![community-badge]
-  * [primary-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml)
-  * [burst-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml)
+  * [primary-cluster.yaml (GCD)](#hybrid-slurm-cluster-gcd-) ![community-badge]
+  * [burst-cluster.yaml (GCD)](#hybrid-slurm-cluster-gcd-) ![community-badge]
+  * [eda-gcd-cluster.yaml (GCD)](#eda-gcd-clusteryaml-gcd-) ![community-badge]
   * [slurm-gke.yaml](#slurm-gkeyaml--) ![community-badge] ![experimental-badge]
   * [sycomp](#sycomp--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
@@ -1995,6 +1996,14 @@ This directory includes the following blueprints:
 The deployment instructions can be found in the [README](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/README.md).
 
 [hybrid-slurm-cluster (GCD)]: ../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/README.md
+
+### [eda-gcd-cluster.yaml (GCD)] ![community-badge]
+
+Creates an auto-scaling Slurm cluster intended for EDA use cases on Google Cloud Dedicated (GCD) and sovereign cloud environments. The blueprint creates a dedicated VPC network, uses Packer to pre-build a custom Slurm image based on Rocky Linux 9 with Apptainer, and deploys a standalone NFS server on Hyperdisk Balanced storage that exports `/home`, `/tools`, `/library`, `/scratch` and `/opt/apps`. There is a `compute` partition that uses the `c3-standard-176` machine type. The README includes Verilator (RTLMeter NVDLA) and OpenROAD (ORFS) example workloads.
+
+The deployment instructions can be found in the [README](../community/examples/hpc-slurm-google-cloud-dedicated/eda/README.md).
+
+[eda-gcd-cluster.yaml (GCD)]: ../community/examples/hpc-slurm-google-cloud-dedicated/eda/eda-gcd-cluster.yaml
 
 ### [slurm-gke.yaml] ![community-badge] ![experimental-badge]
 
