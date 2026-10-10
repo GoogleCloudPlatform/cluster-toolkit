@@ -21,6 +21,11 @@ metadata:
   labels:
     {{.ManagedByLabel}}: {{.ManagedByValue}}
     {{.StorageTypeLabel}}: {{.StorageType}}
+{{- if .LastClaimedAt }}
+  annotations:
+    {{.LastClaimedAtAnnotation}}: {{ printf "%q" .LastClaimedAt }}
+    {{.LastClaimedByAnnotation}}: {{ printf "%q" .LastClaimedBy }}
+{{- end }}
 spec:
   accessModes:
   - ReadWriteMany

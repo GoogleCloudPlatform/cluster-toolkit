@@ -89,12 +89,10 @@ RUN chmod a+r $HPC_CONFIG_DIR/$CODE_REQS
 
 COPY tools/cloud-workstations/base-tooling-requirements.txt base-tooling-requirements.txt
 COPY tools/cloud-build/requirements.txt cloud_build_requirements.txt
-COPY docs/hybrid-slurm-cluster/requirements.txt slurm_requirements.txt
 COPY tools/cloud-workstations/requirements.txt slurm_gcp_requirements.txt
 
 # --- Install Python Dependencies ---
 RUN pip install --require-hashes --no-cache-dir -r base-tooling-requirements.txt && \
     pip install --require-hashes --no-cache-dir --prefer-binary --no-build-isolation -r cloud_build_requirements.txt && \
-    pip install --require-hashes --no-cache-dir --prefer-binary --no-build-isolation -r slurm_requirements.txt && \
     pip install --require-hashes --no-cache-dir --prefer-binary --no-build-isolation -r slurm_gcp_requirements.txt && \
     rm -rf ~/.cache/pip/*

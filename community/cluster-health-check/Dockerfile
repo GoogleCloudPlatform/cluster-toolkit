@@ -78,6 +78,6 @@ COPY --from=dcgm-nvidia /usr/bin/dcgmi /usr/bin/dcgmi
 # Copy DCGM libraries. Because the source path uses a wildcard (*-linux-gnu),
 # Docker flattens the output into the destination directory (/usr/lib/).
 COPY --from=dcgm-nvidia /usr/lib/*-linux-gnu/libdcgm.so* /usr/lib/
-COPY --from=dcgm-nvidia /usr/lib/*-linux-gnu/libdcgmmodulenvswitch.so* /usr/lib/
-COPY --from=dcgm-nvidia /usr/lib/*-linux-gnu/libdcgmmodulehealth.so* /usr/lib/
-COPY --from=dcgm-nvidia /usr/lib/*-linux-gnu/libdcgmmodulesysmon.so* /usr/lib/
+COPY --from=dcgm-nvidia /usr/libexec/datacenter-gpu-manager-4/libdcgmmodulenvswitch.so* /usr/lib/
+COPY --from=dcgm-nvidia /usr/libexec/datacenter-gpu-manager-4/libdcgmmodulehealth.so* /usr/lib/
+COPY --from=dcgm-nvidia /usr/libexec/datacenter-gpu-manager-4/libdcgmmodulesysmon.so* /usr/lib/

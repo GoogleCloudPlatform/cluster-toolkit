@@ -417,6 +417,7 @@ resource "google_container_cluster" "gke_cluster" {
   timeouts {
     create = var.timeout_create
     update = var.timeout_update
+    delete = var.timeout_delete
   }
 
 
@@ -592,6 +593,12 @@ resource "google_container_node_pool" "system_node_pools" {
     }
   }
 
+  timeouts {
+    create = var.timeout_create
+    update = var.timeout_update
+    delete = var.timeout_delete
+  }
+
   lifecycle {
     ignore_changes = [
       node_config[0].labels,
@@ -678,6 +685,12 @@ resource "google_container_node_pool" "cpu_np" {
     metadata = {
       "disable-legacy-endpoints" = "true"
     }
+  }
+
+  timeouts {
+    create = var.timeout_create
+    update = var.timeout_update
+    delete = var.timeout_delete
   }
 
   lifecycle {

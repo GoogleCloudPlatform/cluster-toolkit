@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -30,9 +31,11 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 func setupMockMachineConfig(t *testing.T) {
@@ -73,8 +76,9 @@ func setupMockMachineConfig(t *testing.T) {
 }
 
 type MockExecutor struct {
-	responses map[string][]shell.CommandResult
-	callCount map[string]int
+	responses   map[string][]shell.CommandResult
+	callCount   map[string]int
+	streamCalls []string // commands passed to ExecuteCommandStream
 }
 
 func NewMockExecutor(responses map[string][]shell.CommandResult) *MockExecutor {
@@ -95,6 +99,8 @@ func newTestGKEOrchestrator(executor Executor) *GKEOrchestrator {
 		dynamicSlicingCache:      make(map[string]bool),
 		staticSlicingCache:       make(map[string]bool),
 		resourcePolicyCache:      make(map[string]*GCEWorkloadPolicy),
+		// Never read the developer's real kubeconfig in unit tests.
+		kubeconfigLoader: func() (*clientcmdapi.Config, error) { return clientcmdapi.NewConfig(), nil },
 	}
 }
 
@@ -118,7 +124,7 @@ func (m *MockExecutor) ExecuteCommand(name string, args ...string) shell.Command
 }
 
 func (m *MockExecutor) ExecuteCommandStream(name string, args ...string) error {
-	// Mock implementation: just return nil to satisfy interface
+	m.streamCalls = append(m.streamCalls, name+" "+strings.Join(args, " "))
 	return nil
 }
 
@@ -129,6 +135,37 @@ type MockKubeClient struct {
 	WorkloadCallCount  int
 	Err                error
 	ExplicitEmpty      bool
+
+	DeleteJobSetErr error
+	DeletedJobSets  []string
+
+	// Fixtures keyed by gvr.Resource.
+	Objects    map[string][]unstructured.Unstructured
+	ListErrs   map[string]error
+	GetErr     error
+	DeleteErrs map[string]error
+	Deleted    map[string][]string
+	DeletePre  map[string]*metav1.Preconditions
+}
+
+func managedStorageObject(kind, name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]interface{}{
+		"kind": kind,
+		"metadata": map[string]interface{}{
+			"name": name,
+			"labels": map[string]interface{}{
+				managedByLabel:                     managedByValue,
+				"gcluster.google.com/storage-type": "gcsfuse",
+			},
+		},
+	}}
+}
+
+func unmanagedStorageObject(kind, name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]interface{}{
+		"kind":     kind,
+		"metadata": map[string]interface{}{"name": name},
+	}}
 }
 
 func (m *MockKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
@@ -144,11 +181,48 @@ func (m *MockKubeClient) ListWorkloads(namespace string, workloadName string) ([
 }
 
 func (m *MockKubeClient) DeleteJobSet(namespace string, name string) error {
+	m.DeletedJobSets = append(m.DeletedJobSets, name)
+	if m.DeleteJobSetErr != nil {
+		return m.DeleteJobSetErr
+	}
 	return m.Err
 }
 
 func (m *MockKubeClient) ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error) {
 	return []orchestrator.JobStatus{}, m.Err
+}
+
+func (m *MockKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error) {
+	return m.Objects[gvr.Resource], m.ListErrs[gvr.Resource]
+}
+
+func (m *MockKubeClient) GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
+	if m.GetErr != nil {
+		return nil, m.GetErr
+	}
+	if !slices.Contains(m.Deleted[gvr.Resource], name) {
+		for i := range m.Objects[gvr.Resource] {
+			if obj := &m.Objects[gvr.Resource][i]; obj.GetName() == name {
+				return obj.DeepCopy(), nil
+			}
+		}
+	}
+	return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+}
+
+func (m *MockKubeClient) DeleteResource(gvr schema.GroupVersionResource, namespace, name string, pre *metav1.Preconditions) error {
+	if err := m.DeleteErrs[gvr.Resource]; err != nil {
+		return err
+	}
+	if m.Deleted == nil {
+		m.Deleted = map[string][]string{}
+	}
+	if m.DeletePre == nil {
+		m.DeletePre = map[string]*metav1.Preconditions{}
+	}
+	m.DeletePre[name] = pre
+	m.Deleted[gvr.Resource] = append(m.Deleted[gvr.Resource], name)
+	return nil
 }
 
 func (m *MockKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
@@ -406,13 +480,18 @@ func TestGenerateGKEManifest_CommandEscaping(t *testing.T) {
 		t.Fatalf("GenerateGKEManifest failed: %v", err)
 	}
 
-	// We expect the command to be properly rendered as a YAML list
-	expectedSubStr := `                command:
-                - "/bin/bash"
-                - "-c"
-                - "python -c \"print('hello')\" && echo \"world\""`
-	if !strings.Contains(manifest, expectedSubStr) {
-		t.Errorf("manifest command string is not properly rendered as a YAML list.\nExpected substring:\n%s\nActual manifest:\n%s", expectedSubStr, manifest)
+	// We expect the command to be properly rendered as a YAML list including the wrapper
+	expectedSubStrs := []string{
+		`command:`,
+		`- "/bin/bash"`,
+		`- "-c"`,
+		`- "gcluster"`,
+		`- "python -c \"print('hello')\" && echo \"world\""`,
+	}
+	for _, expected := range expectedSubStrs {
+		if !strings.Contains(manifest, expected) {
+			t.Errorf("manifest command string missing expected substring %q.\nActual manifest:\n%s", expected, manifest)
+		}
 	}
 }
 
@@ -456,161 +535,6 @@ spec:
 	}
 	if !strings.Contains(cleanedString, "control-plane: controller-manager") {
 		t.Errorf("Resulting manifest should contain control-plane: controller-manager label.\nGot:\n%s", cleanedString)
-	}
-}
-
-func TestGeneratePathwaysManifest(t *testing.T) {
-	setupMockMachineConfig(t)
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "pathways-test",
-		CommandToRun:    "echo hello",
-		NumSlices:       2,
-		ClusterLocation: "us-central1",
-		ComputeType:     "n2-standard-2",
-		Pathways: orchestrator.PathwaysJobDefinition{
-			ProxyServerImage: "proxy:latest",
-			ServerImage:      "server:latest",
-			WorkerImage:      "worker:latest",
-			GCSLocation:      "gs://my-bucket",
-			HeadNodePool:     "pathways-np",
-		},
-	}
-
-	mockResponses := map[string][]shell.CommandResult{
-		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
-	}
-	mockExec := NewMockExecutor(mockResponses)
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.projectID = "mock-project"
-	orc.clusterZones = []string{"us-central1-a"}
-	orc.clusterDesc.NodePools = []gkeJobNodePool{
-		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
-	}
-	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
-	if err != nil {
-		t.Fatalf("resolveHardwareRequirements failed: %v", err)
-	}
-	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		t.Fatalf("generatePathwaysManifest failed: %v", err)
-	}
-
-	err = os.WriteFile("gcluster_pathways_manifest.yaml", []byte(manifest), 0644)
-	if err != nil {
-		t.Fatalf("failed to write manifest to file: %v", err)
-	}
-	defer os.Remove("gcluster_pathways_manifest.yaml")
-
-	expectedSubstrs := []string{
-		"name: pathways-test",
-		"replicas: 2",
-		"image: proxy:latest",
-		"--gcs_scratch_location=gs://my-bucket",
-		"cloud.google.com/gke-nodepool: pathways-np",
-		"completionMode: Indexed",
-		"alpha.jobset.sigs.k8s.io/exclusive-topology: kubernetes.io/hostname",
-		"MEGASCALE_GRPC_ENABLE_XOR_TRACER",
-		`cpu: "16"`,
-		`memory: "100Gi"`,
-		`cpu: "8"`,
-		`memory: "32Gi"`,
-		"restartStrategy: BlockingRecreate",
-		"privileged: true",
-		"alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool",
-		`cpu: "24"`,
-		`cpu: "2"`,
-		`memory: "8Gi"`,
-		"kill -SIGTERM $PID",
-		"echo \"Exit code: $EXIT_CODE\"",
-		"name: shared-tmp",
-		"hostPath:",
-		"path: /tmp",
-		"type: DirectoryOrCreate",
-		"mountPath: /tmp",
-		"jobset.sigs.k8s.io/hack: \"true\"",
-		"kueue.x-k8s.io/safe-to-forcefully-delete: \"true\"",
-		"cloud.google.com/skip-tpu-webhook-check: \"true\"",
-		"backoffLimitPerIndex: 4000",
-		"podReplacementPolicy: Failed",
-		"maxFailedIndexes: 0",
-	}
-
-	for _, substr := range expectedSubstrs {
-		if !strings.Contains(manifest, substr) {
-			t.Errorf("manifest missing expected substring %q", substr)
-		}
-	}
-}
-
-func TestGeneratePathwaysManifest_MTC(t *testing.T) {
-	setupMockMachineConfig(t)
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "pathways-mtc-test",
-		CommandToRun:    "echo hello",
-		NumSlices:       2,
-		ClusterLocation: "us-central1",
-		ComputeType:     "n2-standard-2",
-		Pathways: orchestrator.PathwaysJobDefinition{
-			ProxyServerImage:            "proxy:latest",
-			ServerImage:                 "server:latest",
-			WorkerImage:                 "worker:latest",
-			ColocatedPythonSidecarImage: "sidecar:latest",
-			GCSLocation:                 "gs://my-bucket",
-			HeadNodePool:                "pathways-np",
-		},
-		IsPathwaysJob:          true,
-		GKEMTCEnabled:          true,
-		GKEMTCRamdiskDirectory: "/tmp/mtc_checkpoints",
-	}
-
-	mockResponses := map[string][]shell.CommandResult{
-		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
-	}
-	mockExec := NewMockExecutor(mockResponses)
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.projectID = "mock-project"
-	orc.clusterZones = []string{"us-central1-a"}
-	orc.clusterDesc.NodePools = []gkeJobNodePool{
-		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
-	}
-	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
-	if err != nil {
-		t.Fatalf("resolveHardwareRequirements failed: %v", err)
-	}
-	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		t.Fatalf("generatePathwaysManifest failed: %v", err)
-	}
-
-	expectedSubstrs := []string{
-		"name: pathways-mtc-test",
-		"colocated-python-sidecar",
-		"restartPolicy: Always",
-		"driver: multitier-checkpoint.csi.storage.gke.io",
-		"name: sidecar-shared-memory",
-		"medium: Memory",
-		"--cloud_pathways_sidecar_shm_directory=/tmp/sidecar",
-		"mountPath: /tmp/mtc_checkpoints",
-	}
-
-	for _, substr := range expectedSubstrs {
-		if !strings.Contains(manifest, substr) {
-			t.Errorf("manifest missing expected substring %q", substr)
-		}
-	}
-
-	parts := strings.Split(manifest, "name: worker")
-	if len(parts) < 2 {
-		t.Fatalf("failed to split manifest into head and worker parts")
-	}
-	headPart := parts[0]
-	workerPart := parts[1]
-
-	if strings.Contains(headPart, "colocated-python-sidecar") {
-		t.Errorf("headPart should not contain colocated-python-sidecar container")
-	}
-	if !strings.Contains(workerPart, "colocated-python-sidecar") {
-		t.Errorf("workerPart should contain colocated-python-sidecar container")
 	}
 }
 
@@ -1961,76 +1885,6 @@ func TestGenerateGKEManifest_DynamicSlicingActive_TPU7x(t *testing.T) {
 	}
 }
 
-func TestGeneratePathwaysManifest_DynamicSlicing(t *testing.T) {
-	setupMockMachineConfig(t)
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "pathways-test",
-		CommandToRun:    "echo hello",
-		NumSlices:       2,
-		ClusterLocation: "us-central1-a",
-		ComputeType:     "tpu7x-standard-4t",
-		Topology:        "4x4x4",
-		Pathways: orchestrator.PathwaysJobDefinition{
-			ProxyServerImage: "proxy:latest",
-			ServerImage:      "server:latest",
-			WorkerImage:      "worker:latest",
-			GCSLocation:      "gs://my-bucket",
-			HeadNodePool:     "pathways-np",
-		},
-	}
-
-	mockResponses := map[string][]shell.CommandResult{
-		"kubectl get resourceflavors":                   {{ExitCode: 0, Stdout: ""}},
-		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-partition-4x4x4-id"}]}}]}`}},
-		"kubectl get admissioncheck":                    {{ExitCode: 0, Stdout: `{"items": [{"spec": {"controllerName": "accelerator.gke.io/slice"}}]}`}},
-		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu7x": {{ExitCode: 0, Stdout: "8x8x8"}},
-		"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json":                                                                          {{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu7x-standard-4t"}]}`}},
-	}
-	mockExec := NewMockExecutor(mockResponses)
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.projectID = "mock-project"
-	orc.clusterDesc.NodePools = []gkeJobNodePool{
-		{
-			Name: "tpu-pool",
-			Config: gkeNodePoolConfig{
-				MachineType: "tpu7x-standard-4t",
-			},
-			PlacementPolicy: &gkePlacementPolicy{
-				AcceleratorTopologyMode: "PROVISION_ONLY",
-			},
-		},
-	}
-
-	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
-	if err != nil {
-		t.Fatalf("resolveHardwareRequirements failed: %v", err)
-	}
-	if !isDynamicSlicing {
-		t.Fatalf("Expected isDynamicSlicing to be true")
-	}
-
-	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
-	}
-
-	// 1. Manifest must NOT contain strict NodeSelector topology
-	if strings.Contains(manifest, "cloud.google.com/gke-tpu-topology: 4x4x4") {
-		t.Errorf("Expected manifest to NOT contain strict nodeSelector topology, but it was found\nManifest: %s", manifest)
-	}
-
-	// 2. Kueue TAS annotations must be present under pathways worker replicatedJob template annotations
-	expectedSubstrs := []string{
-		"kueue.x-k8s.io/podset-slice-required-topology: cloud.google.com/gke-tpu-partition-4x4x4-id",
-		"cloud.google.com/gke-tpu-slice-topology: 4x4x4",
-	}
-	for _, substr := range expectedSubstrs {
-		if !strings.Contains(manifest, substr) {
-			t.Errorf("manifest missing expected substring %q\nManifest: %s", substr, manifest)
-		}
-	}
-}
-
 func TestGenerateGKEManifest_StaticSlicingActive_v6e(t *testing.T) {
 	setupMockMachineConfig(t)
 
@@ -2338,61 +2192,6 @@ func TestGenerateGKEManifest_CustomEnv(t *testing.T) {
 	}
 }
 
-func TestGeneratePathwaysManifest_CustomEnv(t *testing.T) {
-	setupMockMachineConfig(t)
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "pathways-env-job",
-		CommandToRun:    "echo hello",
-		ComputeType:     "tpu-v5-lite-podslice",
-		ClusterLocation: "us-central1-a",
-		IsPathwaysJob:   true,
-		Pathways: orchestrator.PathwaysJobDefinition{
-			ProxyServerImage: "proxy:latest",
-			ServerImage:      "server:latest",
-			WorkerImage:      "worker:latest",
-			GCSLocation:      "gs://my-bucket",
-		},
-		Env: map[string]string{
-			"PATHWAYS_UNSAFE_UNSAFE_OVERRIDE_GRPC_CREDENTIALS": "grpc_insecure_override",
-		},
-	}
-
-	mockResponses := map[string][]shell.CommandResult{
-		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
-		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "16x16"}},
-		"gcloud compute machine-types describe tpu-v5-lite-podslice --zone=us-central1-a --format=json":                         {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v5-lite-podslice"}]}`}},
-	}
-	mockExec := NewMockExecutor(mockResponses)
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.projectID = "mock-project"
-	orc.clusterDesc.NodePools = []gkeJobNodePool{
-		{Config: gkeNodePoolConfig{MachineType: "tpu-v5-lite-podslice"}},
-	}
-
-	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
-	if err != nil {
-		t.Fatalf("resolveHardwareRequirements failed: %v", err)
-	}
-
-	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
-	}
-
-	// The custom environment variables must be present only in the workload-container container spec
-	expectedLines := []string{
-		`- name: PATHWAYS_UNSAFE_UNSAFE_OVERRIDE_GRPC_CREDENTIALS`,
-		`  value: "grpc_insecure_override"`,
-	}
-	for _, line := range expectedLines {
-		count := strings.Count(manifest, line)
-		// We expect it to appear exactly once: in the workload-container
-		if count != 1 {
-			t.Errorf("expected line %q to appear exactly 1 time in manifest, got %d. Manifest:\n%s", line, count, manifest)
-		}
-	}
-}
-
 func TestPrepareManifestOptions_PathwaysPlatform(t *testing.T) {
 	setupMockMachineConfig(t)
 	tests := []struct {
@@ -2614,73 +2413,107 @@ func TestGetJobLogs(t *testing.T) {
 	jobName := "test-job"
 	trueVal := true
 	falseVal := false
+	const (
+		mainJobRank0Logs = "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/replicatedjob-name=main-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --max-log-requests=10 --tail=-1"
+		allPodsLogs      = "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=10 --tail=-1"
+		noLiveLogs       = "Job exists but has no live logs available (it may have finished or failed to start pods)"
+	)
+	mainJob := shell.CommandResult{ExitCode: 0, Stdout: "main-job"}
 
 	tests := []struct {
 		desc               string
 		mainOnly           *bool
-		mockGetPods1Stdout string // response for total count check
-		mockGetPods2Stdout string // response for filtered count check
+		follow             bool
+		podCount           int // pods returned by the pod-count query
+		mockJobSet         shell.CommandResult
+		emptyLogs          bool // the logs command prints nothing
 		expectedCmdLogsKey string
 		expectErrorContain string
 	}{
 		{
-			desc:               "explicit MainOnly=true uses coordinator-only selector (1 pod, succeeds)",
+			desc:               "explicit MainOnly=true reads rank-0 of the first replicated job, container left to kubectl",
 			mainOnly:           &trueVal,
-			mockGetPods2Stdout: "pod-main-0-0\n",
-			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 -c workload-container --max-log-requests=10 --tail=-1",
+			mockJobSet:         mainJob,
+			expectedCmdLogsKey: mainJobRank0Logs,
 		},
 		{
-			desc:               "explicit MainOnly=false with pods <= 10 uses all-job selector (succeeds)",
-			mainOnly:           &falseVal,
-			mockGetPods2Stdout: "pod-1\npod-2\npod-3\npod-4\npod-5\npod-6\npod-7\npod-8\n", // 8 pods
-			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=10 --tail=-1",
+			desc:               "explicit MainOnly=true on a Pathways JobSet targets pathways-head, not the workers",
+			mainOnly:           &trueVal,
+			mockJobSet:         shell.CommandResult{ExitCode: 0, Stdout: "pathways-head"},
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/replicatedjob-name=pathways-head,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --max-log-requests=10 --tail=-1",
 		},
 		{
-			desc:               "explicit MainOnly=false with pods > 10 fails proactively with Console URL",
+			desc:               "explicit MainOnly=true on a custom-template JobSet with a renamed first replicated job",
+			mainOnly:           &trueVal,
+			mockJobSet:         shell.CommandResult{ExitCode: 0, Stdout: "trainer"},
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/replicatedjob-name=trainer,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --max-log-requests=10 --tail=-1",
+		},
+		{
+			desc:               "explicit MainOnly=true when the JobSet cannot be inspected falls back to rank-0 of every replicated job",
+			mainOnly:           &trueVal,
+			mockJobSet:         shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden)"},
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --max-log-requests=10 --tail=-1",
+		},
+		{
+			desc:               "explicit MainOnly=true when the pod has printed nothing yet",
+			mainOnly:           &trueVal,
+			mockJobSet:         mainJob,
+			emptyLogs:          true,
+			expectedCmdLogsKey: mainJobRank0Logs,
+		},
+		{
+			desc:               "explicit MainOnly=false with 10 pods (at the fetch limit) reads every container of every pod",
 			mainOnly:           &falseVal,
-			mockGetPods2Stdout: "pod-1\npod-2\npod-3\npod-4\npod-5\npod-6\npod-7\npod-8\npod-9\npod-10\npod-11\npod-12\n", // 12 pods
+			podCount:           10,
+			expectedCmdLogsKey: allPodsLogs,
+		},
+		{
+			desc:               "explicit MainOnly=false with 11 pods fails proactively with Console URL",
+			mainOnly:           &falseVal,
+			podCount:           11,
 			expectErrorContain: "exceeds the max fetch limit (10). Please view logs directly in the Google Cloud Console",
 		},
 		{
-			desc:               "implicit MainOnly (nil) with pods <= 5 defaults to all pods (succeeds)",
-			mainOnly:           nil,
-			mockGetPods1Stdout: "pod-1\npod-2\n", // 2 pods (total)
-			mockGetPods2Stdout: "pod-1\npod-2\n", // 2 pods (filtered)
-			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=10 --tail=-1",
+			desc:               "implicit MainOnly (nil) with 5 pods defaults to all pods",
+			podCount:           5,
+			expectedCmdLogsKey: allPodsLogs,
 		},
 		{
-			desc:               "implicit MainOnly (nil) with pods > 5 defaults to coordinator-only (succeeds)",
-			mainOnly:           nil,
-			mockGetPods1Stdout: "pod-1\npod-2\npod-3\npod-4\npod-5\npod-6\npod-7\npod-8\n", // 8 pods total
-			mockGetPods2Stdout: "pod-main-0-0\n",                                           // 1 pod coordinator
-			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 -c workload-container --max-log-requests=10 --tail=-1",
+			desc:               "implicit MainOnly (nil) with 6 pods defaults to main-only",
+			podCount:           6,
+			mockJobSet:         mainJob,
+			expectedCmdLogsKey: mainJobRank0Logs,
+		},
+		{
+			desc:               "implicit MainOnly (nil) with 11 pods defaults to main-only instead of hitting the fetch limit",
+			podCount:           11,
+			mockJobSet:         mainJob,
+			expectedCmdLogsKey: mainJobRank0Logs,
+		},
+		{
+			desc:               "follow with MainOnly=true streams the default container of the main pod",
+			mainOnly:           &trueVal,
+			follow:             true,
+			mockJobSet:         mainJob,
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/replicatedjob-name=main-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 -f --max-log-requests=10 --tail=-1",
+		},
+		{
+			desc:               "follow with MainOnly=false streams every container of every pod",
+			mainOnly:           &falseVal,
+			follow:             true,
+			podCount:           2,
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers -f --max-log-requests=10 --tail=-1",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
-			totalQuery := "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job --no-headers"
-			filteredQuery := "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --no-headers"
-			if tc.mainOnly != nil && !*tc.mainOnly {
-				filteredQuery = "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job --no-headers"
+			logsOut, wantLogs := "mock-logs-content", "mock-logs-content"
+			if tc.emptyLogs {
+				logsOut, wantLogs = "", noLiveLogs
 			}
 
-			mockResponses := map[string][]shell.CommandResult{
-				"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0, Stdout: ""}},
-				"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
-				"kubectl get jobsets.jobset.x-k8s.io test-job -n default -o jsonpath={.spec.replicatedJobs[0].template.spec.template.spec.containers[*].name}": {{ExitCode: 0, Stdout: "workload-container\n"}},
-			}
-			if totalQuery == filteredQuery {
-				mockResponses[totalQuery] = []shell.CommandResult{{ExitCode: 0, Stdout: tc.mockGetPods2Stdout}}
-			} else {
-				mockResponses[totalQuery] = []shell.CommandResult{{ExitCode: 0, Stdout: tc.mockGetPods1Stdout}, {ExitCode: 0, Stdout: tc.mockGetPods1Stdout}}
-				mockResponses[filteredQuery] = []shell.CommandResult{{ExitCode: 0, Stdout: tc.mockGetPods2Stdout}}
-			}
-			if tc.expectedCmdLogsKey != "" {
-				mockResponses[tc.expectedCmdLogsKey] = []shell.CommandResult{{ExitCode: 0, Stdout: "mock-logs-content"}}
-			}
-
-			mockExec := NewMockExecutor(mockResponses)
+			mockExec := NewMockExecutor(getJobLogsMocks(tc.podCount, tc.mockJobSet, tc.expectedCmdLogsKey, logsOut))
 			orc := newTestGKEOrchestrator(mockExec)
 			orc.kubeClient = &MockKubeClient{Namespace: "default"}
 
@@ -2688,18 +2521,15 @@ func TestGetJobLogs(t *testing.T) {
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
 				ProjectID:       "test-project",
-				Follow:          false,
+				Follow:          tc.follow,
 				MainOnly:        tc.mainOnly,
 			}
 
 			logs, err := orc.GetJobLogs(jobName, opts)
 
 			if tc.expectErrorContain != "" {
-				if err == nil {
-					t.Fatalf("expected error containing %q, got nil", tc.expectErrorContain)
-				}
-				if !strings.Contains(err.Error(), tc.expectErrorContain) {
-					t.Errorf("error %q does not contain %q", err.Error(), tc.expectErrorContain)
+				if err == nil || !strings.Contains(err.Error(), tc.expectErrorContain) {
+					t.Fatalf("GetJobLogs() error = %v, want it to contain %q", err, tc.expectErrorContain)
 				}
 				return
 			}
@@ -2708,76 +2538,105 @@ func TestGetJobLogs(t *testing.T) {
 				t.Fatalf("GetJobLogs failed: %v", err)
 			}
 
-			if logs != "mock-logs-content" {
-				t.Errorf("expected logs %q, got %q", "mock-logs-content", logs)
+			if tc.follow {
+				if len(mockExec.streamCalls) != 1 || mockExec.streamCalls[0] != tc.expectedCmdLogsKey {
+					t.Errorf("streamed %q, want [%q]", mockExec.streamCalls, tc.expectedCmdLogsKey)
+				}
+				return
+			}
+
+			if logs != wantLogs {
+				t.Errorf("expected logs %q, got %q", wantLogs, logs)
 			}
 
 			if mockExec.callCount[tc.expectedCmdLogsKey] != 1 {
 				t.Errorf("expected command %q to be called exactly once, call count: %d", tc.expectedCmdLogsKey, mockExec.callCount[tc.expectedCmdLogsKey])
 			}
 		})
-
 	}
 }
 
-func TestGeneratePathwaysManifest_Headless(t *testing.T) {
-	setupMockMachineConfig(t)
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "pathways-headless-test",
-		NumSlices:       1,
-		ClusterLocation: "us-central1",
-		ComputeType:     "n2-standard-2",
-		Pathways: orchestrator.PathwaysJobDefinition{
-			Headless:         true,
-			ProxyServerImage: "proxy:latest",
-			ServerImage:      "server:latest",
-			WorkerImage:      "worker:latest",
-			GCSLocation:      "gs://my-bucket",
-			HeadNodePool:     "pathways-np",
-		},
+// getJobLogsMocks returns the command responses GetJobLogs needs for test-job: podCount pods, the JobSet lookup
+// result, and logsKey printing logsOut.
+func getJobLogsMocks(podCount int, jobSet shell.CommandResult, logsKey, logsOut string) map[string][]shell.CommandResult {
+	var podList strings.Builder
+	for i := 1; i <= podCount; i++ {
+		fmt.Fprintf(&podList, "pod-%d\n", i)
 	}
+	responses := map[string][]shell.CommandResult{
+		"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+		"gcloud container clusters describe":                                                                      {{ExitCode: 0, Stdout: "description"}},
+		"kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job --no-headers":                     {{ExitCode: 0, Stdout: podList.String()}},
+		"kubectl get jobsets.jobset.x-k8s.io test-job -n default -o jsonpath=" + jobSetFirstReplicatedJobJSONPath: {jobSet},
+	}
+	if logsKey != "" { // an empty key would prefix-match every command
+		responses[logsKey] = []shell.CommandResult{{ExitCode: 0, Stdout: logsOut}}
+	}
+	return responses
+}
 
-	mockResponses := map[string][]shell.CommandResult{
-		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
-	}
-	mockExec := NewMockExecutor(mockResponses)
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.projectID = "mock-project"
-	orc.clusterZones = []string{"us-central1-a"}
-	orc.clusterDesc.NodePools = []gkeJobNodePool{
-		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
-	}
-	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
-	if err != nil {
-		t.Fatalf("resolveHardwareRequirements failed: %v", err)
-	}
-	manifest, err := orc.GeneratePathwaysManifest(job, "", profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		t.Fatalf("generatePathwaysManifest failed: %v", err)
-	}
-
-	expectedSubstrs := []string{
-		"name: pathways-headless-test",
-		"image: proxy:latest",
-		"image: server:latest",
-		"--gcs_scratch_location=gs://my-bucket",
-		"cloud.google.com/gke-nodepool: pathways-np",
-	}
-
-	for _, substr := range expectedSubstrs {
-		if !strings.Contains(manifest, substr) {
-			t.Errorf("manifest missing expected substring %q", substr)
+// Regression: --main-only used to match both pathways-head-0-0 and worker-0-0 (job-index/job-completion-index
+// are per replicated job), so `kubectl logs -c workload-container` failed against the worker.
+func TestResolveLogsSelector_MainOnlyTargetsMainReplicatedJob(t *testing.T) {
+	trueVal := true
+	pod := func(jobSet, replicatedJob, completionIndex string) labels.Set {
+		return labels.Set{
+			"jobset.sigs.k8s.io/jobset-name":           jobSet,
+			"jobset.sigs.k8s.io/replicatedjob-name":    replicatedJob,
+			"jobset.sigs.k8s.io/job-index":             "0",
+			"batch.kubernetes.io/job-completion-index": completionIndex,
 		}
 	}
+	jobSetQuery := "kubectl get jobsets.jobset.x-k8s.io pw-job -n default -o jsonpath=" + jobSetFirstReplicatedJobJSONPath
 
-	// In headless mode, the workload-container must NOT be present.
-	if strings.Contains(manifest, "workload-container") {
-		t.Errorf("manifest contains 'workload-container', which is unexpected in headless mode")
+	tests := []struct {
+		name        string
+		jobSet      shell.CommandResult
+		wantMatch   []labels.Set
+		wantNoMatch []labels.Set
+	}{
+		{
+			name:        "Pathways JobSet: pathways-head matched, workers excluded",
+			jobSet:      shell.CommandResult{ExitCode: 0, Stdout: "pathways-head"},
+			wantMatch:   []labels.Set{pod("pw-job", "pathways-head", "0")},
+			wantNoMatch: []labels.Set{pod("pw-job", "worker", "0"), pod("pw-job", "pathways-head", "1"), pod("other-job", "pathways-head", "0")},
+		},
+		{
+			name:        "custom template with a renamed first replicated job",
+			jobSet:      shell.CommandResult{ExitCode: 0, Stdout: "trainer"},
+			wantMatch:   []labels.Set{pod("pw-job", "trainer", "0")},
+			wantNoMatch: []labels.Set{pod("pw-job", "evaluator", "0"), pod("pw-job", "main-job", "0")},
+		},
+		{
+			name:        "unreadable JobSet falls back to rank-0 of every replicated job",
+			jobSet:      shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden)"},
+			wantMatch:   []labels.Set{pod("pw-job", "pathways-head", "0"), pod("pw-job", "worker", "0")},
+			wantNoMatch: []labels.Set{pod("pw-job", "worker", "1"), pod("other-job", "worker", "0")},
+		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{jobSetQuery: {tt.jobSet}}))
 
-	// In headless mode, the command template block must NOT be present.
-	if strings.Contains(manifest, "JAX_PLATFORMS") || strings.Contains(manifest, "kill -SIGTERM") {
-		t.Errorf("manifest contains workload command envs/traps, which is unexpected in headless mode")
+			selector, mainOnly, _ := orc.resolveLogsSelector("pw-job", "default", &trueVal)
+			if !mainOnly {
+				t.Fatalf("resolveLogsSelector() mainOnly = false, want true")
+			}
+			sel, err := labels.Parse(selector)
+			if err != nil {
+				t.Fatalf("selector %q is not a valid label selector: %v", selector, err)
+			}
+			for _, p := range tt.wantMatch {
+				if !sel.Matches(p) {
+					t.Errorf("selector %q must match pod %v", selector, p)
+				}
+			}
+			for _, p := range tt.wantNoMatch {
+				if sel.Matches(p) {
+					t.Errorf("selector %q must not match pod %v", selector, p)
+				}
+			}
+		})
 	}
 }
 
@@ -2926,48 +2785,6 @@ func TestProcessNodePoolCapacity_FlavorsAndLabels(t *testing.T) {
 	}
 }
 
-func TestGeneratePathwaysManifest_CommandWithQuotes(t *testing.T) {
-	setupMockMachineConfig(t)
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "pathways-test",
-		CommandToRun:    `pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print("JAX Device count:", jax.device_count())'`,
-		NumSlices:       1,
-		ClusterLocation: "us-central1",
-		ComputeType:     "n2-standard-2",
-		Pathways: orchestrator.PathwaysJobDefinition{
-			ProxyServerImage: "proxy:latest",
-			ServerImage:      "server:latest",
-			WorkerImage:      "worker:latest",
-			GCSLocation:      "gs://my-bucket",
-			HeadNodePool:     "pathways-np",
-		},
-	}
-
-	mockResponses := map[string][]shell.CommandResult{
-		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
-	}
-	mockExec := NewMockExecutor(mockResponses)
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.projectID = "mock-project"
-	orc.clusterZones = []string{"us-central1-a"}
-	orc.clusterDesc.NodePools = []gkeJobNodePool{
-		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
-	}
-	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
-	if err != nil {
-		t.Fatalf("resolveHardwareRequirements failed: %v", err)
-	}
-	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		t.Fatalf("generatePathwaysManifest failed: %v", err)
-	}
-
-	expectedCommand := `pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print("JAX Device count:", jax.device_count())'`
-	if !strings.Contains(manifest, expectedCommand) {
-		t.Errorf("manifest does not contain expected command exactly.\nExpected to find: %q\nManifest: %s", expectedCommand, manifest)
-	}
-}
-
 func TestDefaultKubeClient_GetCurrentNamespace(t *testing.T) {
 	tempDir := t.TempDir()
 	kubeconfigPath := filepath.Join(tempDir, "kubeconfig")
@@ -3085,258 +2902,142 @@ users: []
 	}
 }
 
-func TestFetchLogsWithRetry_JobSetDiscovery(t *testing.T) {
-	mockResponses := map[string][]shell.CommandResult{
-		"kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job -c workload-container --max-log-requests=10 --tail=-1": {
-			{ExitCode: 1, Stderr: "container is waiting to start"},
-			{ExitCode: 0, Stdout: "Successful Job Output Log"},
-		},
+func TestFetchLogsWithRetry(t *testing.T) {
+	oldInterval := logsRetryInterval
+	logsRetryInterval = time.Millisecond
+	defer func() { logsRetryInterval = oldInterval }()
+
+	const logsCmd = "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --max-log-requests=10 --tail=-1"
+	const eventsCmd = "kubectl get events -n default --field-selector=involvedObject.name=test-job,involvedObject.kind=JobSet,type=Warning"
+	waiting := shell.CommandResult{ExitCode: 1, Stderr: `container "workload-container" in pod "test-job-main-job-0-0" is waiting to start: ContainerCreating`}
+	success := shell.CommandResult{ExitCode: 0, Stdout: "Successful Job Output Log"}
+	timedOut := make([]shell.CommandResult, 12)
+	for i := range timedOut {
+		timedOut[i] = waiting
 	}
 
-	mockExecutor := NewMockExecutor(mockResponses)
-	g := newTestGKEOrchestrator(mockExecutor)
-
-	res, err := g.fetchLogsWithRetry("default", "jobset.sigs.k8s.io/jobset-name=test-job", "workload-container")
-	if err != nil {
-		t.Fatalf("fetchLogsWithRetry failed unexpectedly: %v", err)
-	}
-
-	if res.Stdout != "Successful Job Output Log" {
-		t.Errorf("fetchLogsWithRetry stdout = %q, want %q", res.Stdout, "Successful Job Output Log")
-	}
-}
-
-func TestGetFirstContainerName_JobSetDiscovery(t *testing.T) {
 	tests := []struct {
-		name          string
-		selector      string
-		mockResponses map[string][]shell.CommandResult
-		wantContainer string
+		name       string
+		logs       []shell.CommandResult
+		events     []shell.CommandResult
+		wantStdout string
+		wantCalls  int
+		wantErr    []string
 	}{
 		{
-			name:     "JobSet CR spec query succeeds with standard container",
-			selector: "jobset.sigs.k8s.io/jobset-name=test-job",
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get jobsets.jobset.x-k8s.io test-job -n default -o jsonpath={.spec.replicatedJobs[0].template.spec.template.spec.containers[*].name}": {
-					{ExitCode: 0, Stdout: "workload-container\n"},
-				},
-			},
-			wantContainer: "workload-container",
+			name:       "waits while containers are starting",
+			logs:       []shell.CommandResult{waiting, success},
+			wantStdout: "Successful Job Output Log",
+			wantCalls:  2,
 		},
 		{
-			name:     "JobSet CR spec query succeeds with Pathways containers",
-			selector: "jobset.sigs.k8s.io/jobset-name=pathways-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0",
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get jobsets.jobset.x-k8s.io pathways-job -n default -o jsonpath={.spec.replicatedJobs[0].template.spec.template.spec.containers[*].name}": {
-					{ExitCode: 0, Stdout: "pathways-proxy pathways-rm\n"},
-				},
-			},
-			wantContainer: "pathways-proxy",
+			name:       "waits while containers are starting, with Windows line endings",
+			logs:       []shell.CommandResult{{ExitCode: 1, Stderr: waiting.Stderr + "\r\n"}, success},
+			wantStdout: "Successful Job Output Log",
+			wantCalls:  2,
 		},
 		{
-			name:     "JobSet CR spec query succeeds with custom container name",
-			selector: "jobset.sigs.k8s.io/jobset-name=custom-job",
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get jobsets.jobset.x-k8s.io custom-job -n default -o jsonpath={.spec.replicatedJobs[0].template.spec.template.spec.containers[*].name}": {
-					{ExitCode: 0, Stdout: "my-custom-trainer helper\n"},
-				},
-			},
-			wantContainer: "my-custom-trainer",
+			name:      "returns at once when no pod matches (kubectl exits 0)",
+			logs:      []shell.CommandResult{{ExitCode: 0, Stderr: "No resources found in default namespace."}},
+			wantCalls: 1,
 		},
 		{
-			name:     "JobSet CR query fails (returns empty string to trigger all-containers fallback)",
-			selector: "jobset.sigs.k8s.io/jobset-name=test-job",
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get jobsets.jobset.x-k8s.io test-job -n default -o jsonpath={.spec.replicatedJobs[0].template.spec.template.spec.containers[*].name}": {
-					{ExitCode: 1, Stderr: "Error from server (NotFound)"},
-				},
-			},
-			wantContainer: "",
+			name:      "returns empty output from running pods without waiting",
+			logs:      []shell.CommandResult{{ExitCode: 0}},
+			wantCalls: 1,
+		},
+		{
+			name:      "fails fast on other errors",
+			logs:      []shell.CommandResult{{ExitCode: 1, Stderr: "Error from server (Forbidden)"}},
+			wantCalls: 1,
+			wantErr:   []string{"failed to get logs", "Forbidden"},
+		},
+		{
+			name:      "times out after 12 attempts and reports JobSet warning events",
+			logs:      timedOut,
+			events:    []shell.CommandResult{{ExitCode: 0, Stdout: "Warning FailedCreate jobset/test-job quota exceeded"}},
+			wantCalls: 12,
+			wantErr:   []string{"timed out waiting for job to start", "quota exceeded", "is waiting to start"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockExecutor := NewMockExecutor(tt.mockResponses)
-			g := newTestGKEOrchestrator(mockExecutor)
+			responses := map[string][]shell.CommandResult{logsCmd: tt.logs}
+			if tt.events != nil {
+				responses[eventsCmd] = tt.events
+			}
+			mockExec := NewMockExecutor(responses)
+			g := newTestGKEOrchestrator(mockExec)
 
-			got := g.getFirstContainerName("default", tt.selector)
-			if got != tt.wantContainer {
-				t.Errorf("getFirstContainerName() = %q, want %q", got, tt.wantContainer)
+			res, err := g.fetchLogsWithRetry("default", "test-job", "jobset.sigs.k8s.io/jobset-name=test-job", false)
+			if len(tt.wantErr) == 0 && err != nil {
+				t.Fatalf("fetchLogsWithRetry() error = %v", err)
+			}
+			for _, want := range tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), want) {
+					t.Errorf("fetchLogsWithRetry() error = %v, want it to contain %q", err, want)
+				}
+			}
+			if res.Stdout != tt.wantStdout {
+				t.Errorf("fetchLogsWithRetry() stdout = %q, want %q", res.Stdout, tt.wantStdout)
+			}
+			if got := mockExec.callCount[logsCmd]; got != tt.wantCalls {
+				t.Errorf("kubectl logs called %d times, want %d", got, tt.wantCalls)
 			}
 		})
 	}
 }
 
-func TestValidateMTCConfig(t *testing.T) {
+func TestFirstReplicatedJobName(t *testing.T) {
+	query := "kubectl get jobsets.jobset.x-k8s.io test-job -n default -o jsonpath=" + jobSetFirstReplicatedJobJSONPath
 	tests := []struct {
-		name          string
-		job           *orchestrator.JobDefinition
-		clusterDesc   gkeCluster
-		dynClient     dynamic.Interface
-		kubeClient    KubeClient
-		wantErr       bool
-		wantErrSubstr string
+		name   string
+		result shell.CommandResult
+		want   string
 	}{
-		{
-			name: "MTC Disabled - Pass",
-			job:  &orchestrator.JobDefinition{GKEMTCEnabled: false},
-		},
-		{
-			name:          "MTC Enabled without HighScaleCheckpointing Addon - Fail",
-			job:           &orchestrator.JobDefinition{GKEMTCEnabled: true, GKEMTCRamdiskDirectory: "/tmp/ramdisk"},
-			wantErr:       true,
-			wantErrSubstr: "HighScaleCheckpointing addon",
-		},
-		{
-			name: "MTC Enabled with DryRunManifest - Pass without k8s client",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "/tmp/ramdisk",
-				DryRunManifest:         "manifest.yaml",
-			},
-			clusterDesc: gkeCluster{
-				AddonsConfig: &gkeAddonsConfig{
-					HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{Enabled: true},
-				},
-			},
-		},
-		{
-			name: "MTC Enabled with CheckpointConfiguration CR present - Pass",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "/tmp/ramdisk",
-				GKENamespace:           "custom-ns",
-			},
-			clusterDesc: gkeCluster{
-				AddonsConfig: &gkeAddonsConfig{
-					HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{Enabled: true},
-				},
-			},
-			dynClient: &mockDynamicClient{
-				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-					return &unstructured.UnstructuredList{
-						Items: []unstructured.Unstructured{
-							{Object: map[string]interface{}{"kind": "CheckpointConfiguration"}},
-						},
-					}, nil
-				},
-			},
-		},
-		{
-			name: "MTC Enabled with CheckpointConfiguration CR missing - Fail",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "/tmp/ramdisk",
-				GKENamespace:           "custom-ns",
-			},
-			clusterDesc: gkeCluster{
-				AddonsConfig: &gkeAddonsConfig{
-					HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{Enabled: true},
-				},
-			},
-			dynClient: &mockDynamicClient{
-				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-					return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{}}, nil
-				},
-			},
-			wantErr:       true,
-			wantErrSubstr: "requires a CheckpointConfiguration resource",
-		},
-		{
-			name: "MTC Enabled with 403 Forbidden - Pass with warning",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "/tmp/ramdisk",
-				GKENamespace:           "restricted-ns",
-			},
-			clusterDesc: gkeCluster{
-				AddonsConfig: &gkeAddonsConfig{
-					HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{Enabled: true},
-				},
-			},
-			dynClient: &mockDynamicClient{
-				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-					return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "checkpointconfigurations"}, "test", fmt.Errorf("forbidden"))
-				},
-			},
-		},
-		{
-			name: "MTC Enabled with CheckpointConfiguration CRD Unregistered - Fail",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "/tmp/ramdisk",
-				GKENamespace:           "custom-ns",
-			},
-			clusterDesc: gkeCluster{
-				AddonsConfig: &gkeAddonsConfig{
-					HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{Enabled: true},
-				},
-			},
-			dynClient: &mockDynamicClient{
-				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-					return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "checkpointconfigurations"}, "")
-				},
-			},
-			wantErr:       true,
-			wantErrSubstr: "is not registered on the cluster",
-		},
-		{
-			name: "MTC Enabled with Empty Ramdisk Directory - Fail",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "",
-			},
-			wantErr:       true,
-			wantErrSubstr: "ramdisk directory path (--gke-mtc-ramdisk-dir) cannot be empty",
-		},
-		{
-			name: "MTC Enabled with generic k8s client error - Fail",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "/tmp/ramdisk",
-				GKENamespace:           "custom-ns",
-			},
-			clusterDesc: gkeCluster{
-				AddonsConfig: &gkeAddonsConfig{
-					HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{Enabled: true},
-				},
-			},
-			dynClient: &mockDynamicClient{
-				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-					return nil, fmt.Errorf("internal server error")
-				},
-			},
-			wantErr:       true,
-			wantErrSubstr: "failed to verify CheckpointConfiguration resource",
-		},
-		{
-			name: "MTC Enabled with Invalid Ramdisk Path (Relative) - Fail",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "relative/path",
-			},
-			wantErr:       true,
-			wantErrSubstr: "--gke-mtc-ramdisk-dir must be an absolute path",
-		},
+		{name: "standard JobSet", result: shell.CommandResult{ExitCode: 0, Stdout: "main-job"}, want: "main-job"},
+		{name: "Pathways JobSet", result: shell.CommandResult{ExitCode: 0, Stdout: "pathways-head\n"}, want: "pathways-head"},
+		{name: "Windows line ending is trimmed", result: shell.CommandResult{ExitCode: 0, Stdout: "trainer\r\n"}, want: "trainer"},
+		{name: "JobSet query fails", result: shell.CommandResult{ExitCode: 1, Stderr: "Error from server (NotFound)"}, want: ""},
+		{name: "JobSet query returns nothing usable", result: shell.CommandResult{ExitCode: 0, Stdout: " \n"}, want: ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			orc := &GKEOrchestrator{
-				clusterDesc: tt.clusterDesc,
-				dynClient:   tt.dynClient,
-				kubeClient:  tt.kubeClient,
+			g := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{query: {tt.result}}))
+
+			if got := g.firstReplicatedJobName("default", "test-job"); got != tt.want {
+				t.Errorf("firstReplicatedJobName() = %q, want %q", got, tt.want)
 			}
-			err := orc.validateMTCConfig(tt.job)
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("expected an error, but got nil")
-				} else if !strings.Contains(err.Error(), tt.wantErrSubstr) {
-					t.Errorf("expected error to contain %q, but got: %v", tt.wantErrSubstr, err)
-				}
-			} else if err != nil {
-				t.Errorf("expected no error, but got: %v", err)
+		})
+	}
+}
+
+func TestGetJobPodCount(t *testing.T) {
+	const query = "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job --no-headers"
+	tests := []struct {
+		name    string
+		result  shell.CommandResult
+		want    int
+		wantErr bool
+	}{
+		{name: "one line per pod", result: shell.CommandResult{Stdout: "pod-a   1/1   Running\npod-b   1/1   Running\n"}, want: 2},
+		{name: "Windows line endings", result: shell.CommandResult{Stdout: "pod-a   1/1   Running\r\npod-b   1/1   Running\r\n"}, want: 2},
+		{name: "no pods (kubectl exits 0)", result: shell.CommandResult{Stderr: "No resources found in default namespace."}, want: 0},
+		{name: "query fails", result: shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden)"}, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{query: {tt.result}}))
+
+			got, err := g.getJobPodCount("default", "jobset.sigs.k8s.io/jobset-name=test-job")
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("getJobPodCount() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("getJobPodCount() = %d, want %d", got, tt.want)
 			}
 		})
 	}
@@ -3409,1093 +3110,6 @@ func (m *mockDynamicClient) Resource(resource schema.GroupVersionResource) dynam
 	}
 }
 
-func TestGetNodeServiceAccount(t *testing.T) {
-	tests := []struct {
-		name        string
-		clusterDesc gkeCluster
-		wantSA      string
-	}{
-		{
-			name: "No node pools",
-			clusterDesc: gkeCluster{
-				NodePools: []gkeJobNodePool{},
-			},
-			wantSA: "",
-		},
-		{
-			name: "Default service account ignored",
-			clusterDesc: gkeCluster{
-				NodePools: []gkeJobNodePool{
-					{Config: gkeNodePoolConfig{ServiceAccount: "default"}},
-				},
-			},
-			wantSA: "",
-		},
-		{
-			name: "Custom node pool service account found",
-			clusterDesc: gkeCluster{
-				NodePools: []gkeJobNodePool{
-					{Config: gkeNodePoolConfig{ServiceAccount: "default"}},
-					{Config: gkeNodePoolConfig{ServiceAccount: "custom-gsa@project.iam.gserviceaccount.com"}},
-				},
-			},
-			wantSA: "custom-gsa@project.iam.gserviceaccount.com",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			orc := &GKEOrchestrator{clusterDesc: tt.clusterDesc}
-			got := orc.getNodeServiceAccount()
-			if got != tt.wantSA {
-				t.Errorf("getNodeServiceAccount() = %q, want %q", got, tt.wantSA)
-			}
-		})
-	}
-}
-
-func TestEnsureMTCWorkloadIdentity_Basic(t *testing.T) {
-	const nodeSA = "test-node-sa@test-proj.iam.gserviceaccount.com"
-	clusterWithSA := gkeCluster{
-		NodePools: []gkeJobNodePool{
-			{Config: gkeNodePoolConfig{ServiceAccount: nodeSA}},
-		},
-	}
-
-	t.Run("MTC Disabled - No op", func(t *testing.T) {
-		orc := &GKEOrchestrator{clusterDesc: clusterWithSA}
-		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: false})
-		if err != nil {
-			t.Fatalf("expected nil error, got %v", err)
-		}
-	})
-
-	t.Run("No custom node SA - No op", func(t *testing.T) {
-		orc := &GKEOrchestrator{
-			clusterDesc: gkeCluster{
-				NodePools: []gkeJobNodePool{
-					{Config: gkeNodePoolConfig{ServiceAccount: "default"}},
-				},
-			},
-		}
-		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
-		if err != nil {
-			t.Fatalf("expected nil error, got %v", err)
-		}
-	})
-
-	t.Run("Annotation already correct - No update or restart", func(t *testing.T) {
-		updated := false
-		deleted := false
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return &unstructured.Unstructured{
-					Object: map[string]interface{}{
-						"metadata": map[string]interface{}{
-							"annotations": map[string]interface{}{
-								"iam.gke.io/gcp-service-account": nodeSA,
-							},
-						},
-					},
-				}, nil
-			},
-			updateFunc: func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				updated = true
-				return obj, nil
-			},
-			deleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
-				deleted = true
-				return nil
-			},
-		}
-
-		orc := &GKEOrchestrator{
-			clusterDesc: clusterWithSA,
-			dynClient:   dynClient,
-		}
-		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
-		if err != nil {
-			t.Fatalf("expected nil error, got %v", err)
-		}
-		if updated || deleted {
-			t.Errorf("expected no update or delete when annotation is correct, got updated=%v, deleted=%v", updated, deleted)
-		}
-	})
-}
-
-func TestEnsureMTCWorkloadIdentity_Restart(t *testing.T) {
-	const nodeSA = "test-node-sa@test-proj.iam.gserviceaccount.com"
-	clusterWithSA := gkeCluster{
-		NodePools: []gkeJobNodePool{
-			{Config: gkeNodePoolConfig{ServiceAccount: nodeSA}},
-		},
-	}
-
-	oldInterval := daemonSetPollInterval
-	daemonSetPollInterval = 1 * time.Millisecond
-	defer func() { daemonSetPollInterval = oldInterval }()
-
-	t.Run("Annotation missing - Updates SA and restarts DaemonSet", func(t *testing.T) {
-		updated := false
-		patchedDS := false
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				if name == "multitier-driver" {
-					return &unstructured.Unstructured{
-						Object: map[string]interface{}{
-							"metadata": map[string]interface{}{
-								"name":       "multitier-driver",
-								"generation": int64(1),
-							},
-							"status": map[string]interface{}{
-								"observedGeneration":     int64(1),
-								"desiredNumberScheduled": int64(1),
-								"numberReady":            int64(1),
-								"updatedNumberScheduled": int64(1),
-							},
-						},
-					}, nil
-				}
-				return &unstructured.Unstructured{
-					Object: map[string]interface{}{
-						"metadata": map[string]interface{}{
-							"annotations": map[string]interface{}{},
-						},
-					},
-				}, nil
-			},
-			updateFunc: func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				updated = true
-				return obj, nil
-			},
-			patchFunc: func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				if name == "multitier-driver" {
-					patchedDS = true
-				}
-				return &unstructured.Unstructured{}, nil
-			},
-		}
-
-		orc := &GKEOrchestrator{
-			clusterDesc: clusterWithSA,
-			dynClient:   dynClient,
-		}
-		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
-		if err != nil {
-			t.Fatalf("expected nil error, got %v", err)
-		}
-		if !updated {
-			t.Errorf("expected SA to be updated, but was not")
-		}
-		if !patchedDS {
-			t.Errorf("expected DaemonSet multitier-driver to be patched for restart, but was not")
-		}
-	})
-
-	t.Run("Annotation missing - Updates SA and falls back to restarting driver pods when DaemonSet patch fails", func(t *testing.T) {
-		updated := false
-		deletedPods := []string{}
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				if name == "multitier-driver" {
-					return &unstructured.Unstructured{
-						Object: map[string]interface{}{
-							"metadata": map[string]interface{}{
-								"name":       "multitier-driver",
-								"generation": int64(1),
-							},
-							"status": map[string]interface{}{
-								"observedGeneration":     int64(1),
-								"desiredNumberScheduled": int64(1),
-								"numberReady":            int64(1),
-								"updatedNumberScheduled": int64(1),
-							},
-						},
-					}, nil
-				}
-				return &unstructured.Unstructured{
-					Object: map[string]interface{}{
-						"metadata": map[string]interface{}{
-							"annotations": map[string]interface{}{},
-						},
-					},
-				}, nil
-			},
-			updateFunc: func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				updated = true
-				return obj, nil
-			},
-			patchFunc: func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, fmt.Errorf("daemonset not found")
-			},
-			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-				return &unstructured.UnstructuredList{
-					Items: []unstructured.Unstructured{
-						{
-							Object: map[string]interface{}{
-								"metadata": map[string]interface{}{
-									"name": "multitier-driver-abc12",
-								},
-							},
-						},
-						{
-							Object: map[string]interface{}{
-								"metadata": map[string]interface{}{
-									"name": "other-pod-xyz",
-								},
-							},
-						},
-					},
-				}, nil
-			},
-			deleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
-				deletedPods = append(deletedPods, name)
-				return nil
-			},
-		}
-
-		orc := &GKEOrchestrator{
-			clusterDesc: clusterWithSA,
-			dynClient:   dynClient,
-		}
-		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
-		if err != nil {
-			t.Fatalf("expected nil error, got %v", err)
-		}
-		if !updated {
-			t.Errorf("expected SA to be updated, but was not")
-		}
-		if len(deletedPods) != 1 || deletedPods[0] != "multitier-driver-abc12" {
-			t.Errorf("expected driver pod multitier-driver-abc12 to be deleted, got %v", deletedPods)
-		}
-	})
-}
-
-func TestEnsureMTCWorkloadIdentity_RBAC(t *testing.T) {
-	const nodeSA = "test-node-sa@test-proj.iam.gserviceaccount.com"
-	clusterWithSA := gkeCluster{
-		NodePools: []gkeJobNodePool{
-			{Config: gkeNodePoolConfig{ServiceAccount: nodeSA}},
-		},
-	}
-
-	oldInterval := daemonSetPollInterval
-	daemonSetPollInterval = 1 * time.Millisecond
-	defer func() { daemonSetPollInterval = oldInterval }()
-
-	t.Run("Get SA fails - Self-healing logs warning and continues without failing job", func(t *testing.T) {
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "serviceaccounts"}, "gke-checkpointing-multitier-node")
-			},
-		}
-		orc := &GKEOrchestrator{
-			clusterDesc: clusterWithSA,
-			dynClient:   dynClient,
-		}
-		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
-		if err != nil {
-			t.Fatalf("expected nil error, got %v", err)
-		}
-	})
-
-	t.Run("403 Forbidden on Get SA - Continues gracefully", func(t *testing.T) {
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "serviceaccounts"}, "gke-checkpointing-multitier-node", fmt.Errorf("forbidden"))
-			},
-		}
-		orc := &GKEOrchestrator{
-			clusterDesc: clusterWithSA,
-			dynClient:   dynClient,
-		}
-		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
-		if err != nil {
-			t.Fatalf("expected nil error, got %v", err)
-		}
-	})
-
-	t.Run("403 Forbidden on Update SA - Continues gracefully", func(t *testing.T) {
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return &unstructured.Unstructured{
-					Object: map[string]interface{}{
-						"metadata": map[string]interface{}{
-							"annotations": map[string]interface{}{},
-						},
-					},
-				}, nil
-			},
-			updateFunc: func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "serviceaccounts"}, "gke-checkpointing-multitier-node", fmt.Errorf("forbidden"))
-			},
-		}
-		orc := &GKEOrchestrator{
-			clusterDesc: clusterWithSA,
-			dynClient:   dynClient,
-		}
-		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
-		if err != nil {
-			t.Fatalf("expected nil error, got %v", err)
-		}
-	})
-
-	t.Run("403 Forbidden on List driver pods - Continues gracefully", func(t *testing.T) {
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				if name == "multitier-driver" {
-					return &unstructured.Unstructured{
-						Object: map[string]interface{}{
-							"metadata": map[string]interface{}{
-								"name":       "multitier-driver",
-								"generation": int64(1),
-							},
-							"status": map[string]interface{}{
-								"observedGeneration":     int64(1),
-								"desiredNumberScheduled": int64(1),
-								"numberReady":            int64(1),
-								"updatedNumberScheduled": int64(1),
-							},
-						},
-					}, nil
-				}
-				return &unstructured.Unstructured{
-					Object: map[string]interface{}{
-						"metadata": map[string]interface{}{
-							"annotations": map[string]interface{}{},
-						},
-					},
-				}, nil
-			},
-			updateFunc: func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return obj, nil
-			},
-			patchFunc: func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, fmt.Errorf("patch failed")
-			},
-			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-				return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "", fmt.Errorf("forbidden"))
-			},
-		}
-		orc := &GKEOrchestrator{
-			clusterDesc: clusterWithSA,
-			dynClient:   dynClient,
-		}
-		err := orc.ensureMTCWorkloadIdentity(&orchestrator.JobDefinition{GKEMTCEnabled: true})
-		if err != nil {
-			t.Fatalf("expected nil error, got %v", err)
-		}
-	})
-}
-
-func TestWaitForDaemonSetRollout(t *testing.T) {
-	oldInterval := daemonSetPollInterval
-	daemonSetPollInterval = 1 * time.Millisecond
-	defer func() { daemonSetPollInterval = oldInterval }()
-
-	t.Run("DaemonSet ready immediately", func(t *testing.T) {
-		calls := 0
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				calls++
-				return &unstructured.Unstructured{
-					Object: map[string]interface{}{
-						"metadata": map[string]interface{}{"generation": int64(2)},
-						"status": map[string]interface{}{
-							"observedGeneration":     int64(2),
-							"desiredNumberScheduled": int64(3),
-							"numberReady":            int64(3),
-							"updatedNumberScheduled": int64(3),
-						},
-					},
-				}, nil
-			},
-		}
-		waitForDaemonSetRollout(context.Background(), dynClient, "gke-managed-checkpointing", "multitier-driver-uuid")
-		if calls != 1 {
-			t.Errorf("expected 1 call for immediate ready, got %d", calls)
-		}
-	})
-
-	t.Run("DaemonSet rollout completes after polling", func(t *testing.T) {
-		calls := 0
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				calls++
-				if calls < 2 {
-					return &unstructured.Unstructured{
-						Object: map[string]interface{}{
-							"metadata": map[string]interface{}{"generation": int64(2)},
-							"status": map[string]interface{}{
-								"observedGeneration":     int64(2),
-								"desiredNumberScheduled": int64(3),
-								"numberReady":            int64(1),
-								"updatedNumberScheduled": int64(1),
-							},
-						},
-					}, nil
-				}
-				return &unstructured.Unstructured{
-					Object: map[string]interface{}{
-						"metadata": map[string]interface{}{"generation": int64(2)},
-						"status": map[string]interface{}{
-							"observedGeneration":     int64(2),
-							"desiredNumberScheduled": int64(3),
-							"numberReady":            int64(3),
-							"updatedNumberScheduled": int64(3),
-						},
-					},
-				}, nil
-			},
-		}
-		waitForDaemonSetRollout(context.Background(), dynClient, "gke-managed-checkpointing", "multitier-driver-uuid")
-		if calls < 2 {
-			t.Errorf("expected at least 2 calls for polling, got %d", calls)
-		}
-	})
-
-	t.Run("403 Forbidden returns gracefully", func(t *testing.T) {
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "daemonsets"}, name, fmt.Errorf("forbidden"))
-			},
-		}
-		waitForDaemonSetRollout(context.Background(), dynClient, "gke-managed-checkpointing", "multitier-driver-uuid")
-	})
-
-	t.Run("Context canceled returns gracefully", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return &unstructured.Unstructured{}, nil
-			},
-		}
-		waitForDaemonSetRollout(ctx, dynClient, "gke-managed-checkpointing", "multitier-driver-uuid")
-	})
-
-	t.Run("Transient error during polling retries and succeeds", func(t *testing.T) {
-		calls := 0
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				calls++
-				if calls == 1 {
-					return nil, fmt.Errorf("transient network failure")
-				}
-				return &unstructured.Unstructured{
-					Object: map[string]interface{}{
-						"metadata": map[string]interface{}{"generation": int64(2)},
-						"status": map[string]interface{}{
-							"observedGeneration":     int64(2),
-							"desiredNumberScheduled": int64(3),
-							"numberReady":            int64(3),
-							"updatedNumberScheduled": int64(3),
-						},
-					},
-				}, nil
-			},
-		}
-		waitForDaemonSetRollout(context.Background(), dynClient, "gke-managed-checkpointing", "multitier-driver-uuid")
-		if calls < 2 {
-			t.Errorf("expected at least 2 polling calls after transient retry, got %d", calls)
-		}
-	})
-}
-
-func TestIsDaemonSetRolloutComplete(t *testing.T) {
-	tests := []struct {
-		name      string
-		gen       int64
-		obsGen    int64
-		desired   int64
-		ready     int64
-		updated   int64
-		wantReady bool
-	}{
-		{
-			name:      "zero desired scheduled pods (uninitialized)",
-			gen:       1,
-			obsGen:    1,
-			desired:   0,
-			ready:     0,
-			updated:   0,
-			wantReady: false,
-		},
-		{
-			name:      "observedGeneration behind spec generation",
-			gen:       2,
-			obsGen:    1,
-			desired:   3,
-			ready:     3,
-			updated:   3,
-			wantReady: false,
-		},
-		{
-			name:      "ready pods less than desired",
-			gen:       2,
-			obsGen:    2,
-			desired:   3,
-			ready:     2,
-			updated:   3,
-			wantReady: false,
-		},
-		{
-			name:      "updated pods less than desired",
-			gen:       2,
-			obsGen:    2,
-			desired:   3,
-			ready:     3,
-			updated:   2,
-			wantReady: false,
-		},
-		{
-			name:      "all pods ready and updated",
-			gen:       2,
-			obsGen:    2,
-			desired:   3,
-			ready:     3,
-			updated:   3,
-			wantReady: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dsObj := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"generation": tt.gen,
-					},
-					"status": map[string]interface{}{
-						"observedGeneration":     tt.obsGen,
-						"desiredNumberScheduled": tt.desired,
-						"numberReady":            tt.ready,
-						"updatedNumberScheduled": tt.updated,
-					},
-				},
-			}
-			got := isDaemonSetRolloutComplete(dsObj)
-			if got != tt.wantReady {
-				t.Errorf("isDaemonSetRolloutComplete() = %v, want %v", got, tt.wantReady)
-			}
-		})
-	}
-
-	t.Run("nil dsObj returns false", func(t *testing.T) {
-		if isDaemonSetRolloutComplete(nil) {
-			t.Errorf("isDaemonSetRolloutComplete(nil) = true, want false")
-		}
-	})
-
-	t.Run("nil dsObj.Object returns false", func(t *testing.T) {
-		if isDaemonSetRolloutComplete(&unstructured.Unstructured{}) {
-			t.Errorf("isDaemonSetRolloutComplete(empty) = true, want false")
-		}
-	})
-}
-
-func TestIsForbiddenError(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{
-			name: "Nil error returns false",
-			err:  nil,
-			want: false,
-		},
-		{
-			name: "Typed 403 Forbidden returns true",
-			err:  apierrors.NewForbidden(schema.GroupResource{Resource: "services"}, "test-svc", fmt.Errorf("forbidden")),
-			want: true,
-		},
-		{
-			name: "Generic error with forbidden substring returns true",
-			err:  fmt.Errorf("Error from server (Forbidden): request forbidden"),
-			want: true,
-		},
-		{
-			name: "Other error returns false",
-			err:  fmt.Errorf("connection refused"),
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := isForbiddenError(tt.err); got != tt.want {
-				t.Errorf("isForbiddenError(%v) = %v; want %v", tt.err, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestVerifyCheckpointConfigurationCR(t *testing.T) {
-	const docRemediation = "Please follow the documentation."
-
-	tests := []struct {
-		name          string
-		dynClient     dynamic.Interface
-		wantErr       bool
-		wantErrSubstr string
-	}{
-		{
-			name: "Success - CR exists",
-			dynClient: &mockDynamicClient{
-				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-					return &unstructured.UnstructuredList{
-						Items: []unstructured.Unstructured{
-							{
-								Object: map[string]interface{}{
-									"metadata": map[string]interface{}{"name": "default"},
-								},
-							},
-						},
-					}, nil
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "CRD Not Found - returns error",
-			dynClient: &mockDynamicClient{
-				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-					return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "checkpointconfigurations"}, "")
-				},
-			},
-			wantErr:       true,
-			wantErrSubstr: "the CheckpointConfiguration CustomResourceDefinition (CRD) is not registered on the cluster",
-		},
-		{
-			name: "403 Forbidden typed error - proceeds without error",
-			dynClient: &mockDynamicClient{
-				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-					return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "checkpointconfigurations"}, "", fmt.Errorf("user cannot list resource"))
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "403 Forbidden string error - proceeds without error",
-			dynClient: &mockDynamicClient{
-				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-					return nil, fmt.Errorf("Error from server (Forbidden): checkpointconfigurations.checkpointing.gke.io is forbidden")
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "0 CR items - returns error",
-			dynClient: &mockDynamicClient{
-				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-					return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{}}, nil
-				},
-			},
-			wantErr:       true,
-			wantErrSubstr: "Multi-Tier Checkpointing (MTC) requires a CheckpointConfiguration resource to be deployed on the cluster",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			orc := &GKEOrchestrator{
-				dynClient: tt.dynClient,
-			}
-			err := orc.verifyCheckpointConfigurationCR(&orchestrator.JobDefinition{GKEMTCEnabled: true}, docRemediation)
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("expected an error, but got nil")
-				} else if !strings.Contains(err.Error(), tt.wantErrSubstr) {
-					t.Errorf("expected error to contain %q, but got: %v", tt.wantErrSubstr, err)
-				}
-			} else if err != nil {
-				t.Errorf("expected no error, but got: %v", err)
-			}
-		})
-	}
-}
-
-func TestGetMTCDaemonSet(t *testing.T) {
-	t.Run("Static name multitier-driver", func(t *testing.T) {
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				if name == "multitier-driver" {
-					return &unstructured.Unstructured{
-						Object: map[string]interface{}{
-							"metadata": map[string]interface{}{
-								"name": "multitier-driver",
-							},
-						},
-					}, nil
-				}
-				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
-			},
-		}
-		ds, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
-		if err != nil {
-			t.Fatalf("expected nil error, got %v", err)
-		}
-		if ds.GetName() != "multitier-driver" {
-			t.Errorf("expected DaemonSet name multitier-driver, got %s", ds.GetName())
-		}
-	})
-
-	t.Run("Dynamic name multitier-driver-uuid discovered via list", func(t *testing.T) {
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
-			},
-			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-				return &unstructured.UnstructuredList{
-					Items: []unstructured.Unstructured{
-						{
-							Object: map[string]interface{}{
-								"metadata": map[string]interface{}{
-									"name": "multitier-driver-fd6c6ab5-2191-47e6-8e95-11b3d9ac7cb6",
-									"labels": map[string]interface{}{
-										"k8s-app": "high-scale-checkpointing",
-									},
-								},
-							},
-						},
-					},
-				}, nil
-			},
-		}
-		ds, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
-		if err != nil {
-			t.Fatalf("expected nil error, got %v", err)
-		}
-		expectedName := "multitier-driver-fd6c6ab5-2191-47e6-8e95-11b3d9ac7cb6"
-		if ds.GetName() != expectedName {
-			t.Errorf("expected DaemonSet name %s, got %s", expectedName, ds.GetName())
-		}
-	})
-
-	t.Run("403 Forbidden on Get returns error without listing", func(t *testing.T) {
-		listCalled := false
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name, fmt.Errorf("forbidden"))
-			},
-			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-				listCalled = true
-				return nil, nil
-			},
-		}
-		_, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
-		if err == nil {
-			t.Fatalf("expected error, got nil")
-		}
-		if !isForbiddenError(err) {
-			t.Errorf("expected forbidden error, got %v", err)
-		}
-		if listCalled {
-			t.Errorf("expected List not to be called when Get returns 403 Forbidden")
-		}
-	})
-}
-
-func TestGetMTCDaemonSet_EdgeCases(t *testing.T) {
-	t.Run("404 NotFound when Get fails and List returns no matching DaemonSets", func(t *testing.T) {
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
-			},
-			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-				return &unstructured.UnstructuredList{
-					Items: []unstructured.Unstructured{
-						{
-							Object: map[string]interface{}{
-								"metadata": map[string]interface{}{
-									"name":   "kube-proxy",
-									"labels": map[string]interface{}{"k8s-app": "kube-proxy"},
-								},
-							},
-						},
-					},
-				}, nil
-			},
-		}
-		ds, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
-		if err == nil {
-			t.Fatalf("expected NotFound error, got nil")
-		}
-		if !apierrors.IsNotFound(err) {
-			t.Errorf("expected IsNotFound(err) == true, got %v", err)
-		}
-		if ds != nil {
-			t.Errorf("expected nil ds, got %v", ds)
-		}
-	})
-
-	t.Run("403 Forbidden on List propagates error", func(t *testing.T) {
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
-			},
-			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-				return nil, apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, "", fmt.Errorf("forbidden"))
-			},
-		}
-		_, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
-		if err == nil {
-			t.Fatalf("expected error, got nil")
-		}
-		if !isForbiddenError(err) {
-			t.Errorf("expected forbidden error, got %v", err)
-		}
-	})
-
-	t.Run("Context canceled on Get returns error without calling List", func(t *testing.T) {
-		listCalled := false
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, context.Canceled
-			},
-			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-				listCalled = true
-				return &unstructured.UnstructuredList{}, nil
-			},
-		}
-		_, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
-		if err == nil {
-			t.Fatalf("expected context.Canceled error, got nil")
-		}
-		if listCalled {
-			t.Errorf("expected List NOT to be called when Get returns context.Canceled")
-		}
-	})
-
-	t.Run("Transient network error on Get returns error without calling List", func(t *testing.T) {
-		listCalled := false
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, fmt.Errorf("connection refused")
-			},
-			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-				listCalled = true
-				return &unstructured.UnstructuredList{}, nil
-			},
-		}
-		_, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
-		if err == nil {
-			t.Fatalf("expected network error, got nil")
-		}
-		if listCalled {
-			t.Errorf("expected List NOT to be called when Get returns network error")
-		}
-	})
-
-	t.Run("Filters unrelated DaemonSets and matches by label", func(t *testing.T) {
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
-			},
-			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-				return &unstructured.UnstructuredList{
-					Items: []unstructured.Unstructured{
-						{
-							Object: map[string]interface{}{
-								"metadata": map[string]interface{}{
-									"name": "unrelated-daemonset",
-								},
-							},
-						},
-						{
-							Object: map[string]interface{}{
-								"metadata": map[string]interface{}{
-									"name": "custom-checkpoint-driver",
-									"labels": map[string]interface{}{
-										"k8s-app": "high-scale-checkpointing",
-									},
-								},
-							},
-						},
-					},
-				}, nil
-			},
-		}
-		ds, err := getMTCDaemonSet(context.Background(), dynClient, "gke-managed-checkpointing")
-		if err != nil {
-			t.Fatalf("expected nil error, got %v", err)
-		}
-		if ds.GetName() != "custom-checkpoint-driver" {
-			t.Errorf("expected custom-checkpoint-driver, got %s", ds.GetName())
-		}
-	})
-}
-
-func TestRestartMTCDriverPods_DynamicName(t *testing.T) {
-	oldInterval := daemonSetPollInterval
-	daemonSetPollInterval = 1 * time.Millisecond
-	defer func() { daemonSetPollInterval = oldInterval }()
-
-	patchedName := ""
-	dynClient := &mockDynamicClient{
-		getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-			if name == "multitier-driver-8f2c7adf-1b1e-47e4-ba2e-104ffa2c846b" {
-				return &unstructured.Unstructured{
-					Object: map[string]interface{}{
-						"metadata": map[string]interface{}{
-							"name":       "multitier-driver-8f2c7adf-1b1e-47e4-ba2e-104ffa2c846b",
-							"generation": int64(1),
-						},
-						"status": map[string]interface{}{
-							"observedGeneration":     int64(1),
-							"desiredNumberScheduled": int64(4),
-							"numberReady":            int64(4),
-							"updatedNumberScheduled": int64(4),
-						},
-					},
-				}, nil
-			}
-			return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
-		},
-		listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-			return &unstructured.UnstructuredList{
-				Items: []unstructured.Unstructured{
-					{
-						Object: map[string]interface{}{
-							"metadata": map[string]interface{}{
-								"name": "multitier-driver-8f2c7adf-1b1e-47e4-ba2e-104ffa2c846b",
-								"labels": map[string]interface{}{
-									"k8s-app": "high-scale-checkpointing",
-								},
-							},
-						},
-					},
-				},
-			}, nil
-		},
-		patchFunc: func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
-			patchedName = name
-			return &unstructured.Unstructured{}, nil
-		},
-	}
-
-	restartMTCDriverPods(context.Background(), dynClient, "gke-managed-checkpointing")
-	expectedName := "multitier-driver-8f2c7adf-1b1e-47e4-ba2e-104ffa2c846b"
-	if patchedName != expectedName {
-		t.Errorf("expected patched DaemonSet name %s, got %s", expectedName, patchedName)
-	}
-}
-
-func TestRestartMTCDriverPods_ForbiddenAndNotFound(t *testing.T) {
-	oldInterval := daemonSetPollInterval
-	daemonSetPollInterval = 1 * time.Millisecond
-	defer func() { daemonSetPollInterval = oldInterval }()
-
-	t.Run("403 Forbidden on Patch skips pod deletion fallback", func(t *testing.T) {
-		deleteCalled := false
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return &unstructured.Unstructured{
-					Object: map[string]interface{}{
-						"metadata": map[string]interface{}{"name": "multitier-driver"},
-					},
-				}, nil
-			},
-			patchFunc: func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name, fmt.Errorf("forbidden"))
-			},
-			deleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
-				deleteCalled = true
-				return nil
-			},
-		}
-
-		restartMTCDriverPods(context.Background(), dynClient, "gke-managed-checkpointing")
-		if deleteCalled {
-			t.Errorf("expected delete fallback NOT to be called when patch returns 403 Forbidden")
-		}
-	})
-
-	t.Run("404 NotFound on getMTCDaemonSet skips pod deletion fallback", func(t *testing.T) {
-		deleteCalled := false
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
-			},
-			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-				return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{}}, nil
-			},
-			deleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
-				deleteCalled = true
-				return nil
-			},
-		}
-
-		restartMTCDriverPods(context.Background(), dynClient, "gke-managed-checkpointing")
-		if deleteCalled {
-			t.Errorf("expected delete fallback NOT to be called when DaemonSet is not found")
-		}
-	})
-
-	t.Run("Unexpected error on getMTCDaemonSet skips pod deletion fallback", func(t *testing.T) {
-		deleteCalled := false
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, fmt.Errorf("connection timeout")
-			},
-			deleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
-				deleteCalled = true
-				return nil
-			},
-		}
-
-		restartMTCDriverPods(context.Background(), dynClient, "gke-managed-checkpointing")
-		if deleteCalled {
-			t.Errorf("expected delete fallback NOT to be called when getMTCDaemonSet returns unexpected error")
-		}
-	})
-
-	t.Run("Non-forbidden error on Patch triggers pod deletion fallback", func(t *testing.T) {
-		deleteCalled := false
-		dynClient := &mockDynamicClient{
-			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return &unstructured.Unstructured{
-					Object: map[string]interface{}{
-						"metadata": map[string]interface{}{
-							"name": "multitier-driver",
-						},
-						"status": map[string]interface{}{
-							"observedGeneration":     int64(1),
-							"desiredNumberScheduled": int64(1),
-							"numberReady":            int64(1),
-							"updatedNumberScheduled": int64(1),
-						},
-					},
-				}, nil
-			},
-			patchFunc: func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, fmt.Errorf("internal patch error")
-			},
-			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-				return &unstructured.UnstructuredList{
-					Items: []unstructured.Unstructured{
-						{
-							Object: map[string]interface{}{
-								"metadata": map[string]interface{}{"name": "multitier-driver-pod-1"},
-							},
-						},
-					},
-				}, nil
-			},
-			deleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
-				deleteCalled = true
-				return nil
-			},
-		}
-
-		restartMTCDriverPods(context.Background(), dynClient, "gke-managed-checkpointing")
-		if !deleteCalled {
-			t.Errorf("expected delete fallback to be called when patch fails with non-forbidden error")
-		}
-	})
-}
-
 func TestCalculateClusterCapacity_MultipleCPUPools(t *testing.T) {
 	setupMockMachineConfig(t)
 	mockResponses := map[string][]shell.CommandResult{
@@ -4559,74 +3173,6 @@ func TestCalculateClusterCapacity_MultipleCPUPools(t *testing.T) {
 	// Verify flavor-default has NO cloud.google.com/gke-nodepool label!
 	if npLabel, ok := defaultFlavor.NodeLabels["cloud.google.com/gke-nodepool"]; ok {
 		t.Errorf("expected flavor-default not to have cloud.google.com/gke-nodepool label, but got %q", npLabel)
-	}
-}
-
-func TestExtractJobSetNameFromSelector(t *testing.T) {
-	tests := []struct {
-		name     string
-		selector string
-		expected string
-	}{
-		{
-			name:     "single jobset selector",
-			selector: "jobset.sigs.k8s.io/jobset-name=my-job",
-			expected: "my-job",
-		},
-		{
-			name:     "multi-part selector",
-			selector: "jobset.sigs.k8s.io/jobset-name=my-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0",
-			expected: "my-job",
-		},
-		{
-			name:     "jobset selector in middle of list",
-			selector: "app=train,jobset.sigs.k8s.io/jobset-name=my-job,slice-index=0",
-			expected: "my-job",
-		},
-		{
-			name:     "jobset selector at end of list with whitespace",
-			selector: "app=train, slice-index=0 , jobset.sigs.k8s.io/jobset-name=my-job",
-			expected: "my-job",
-		},
-		{
-			name:     "set-based selector with comma inside parentheses before jobset selector",
-			selector: "environment in (production, qa),jobset.sigs.k8s.io/jobset-name=my-job",
-			expected: "my-job",
-		},
-		{
-			name:     "set-based jobset selector with single value",
-			selector: "jobset.sigs.k8s.io/jobset-name in (my-job)",
-			expected: "my-job",
-		},
-		{
-			name:     "double equals operator",
-			selector: "jobset.sigs.k8s.io/jobset-name==my-job",
-			expected: "my-job",
-		},
-		{
-			name:     "empty value in jobset selector",
-			selector: "jobset.sigs.k8s.io/jobset-name=",
-			expected: "",
-		},
-		{
-			name:     "no jobset in selector",
-			selector: "app=nginx,role=frontend",
-			expected: "",
-		},
-		{
-			name:     "empty selector",
-			selector: "",
-			expected: "",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := extractJobSetNameFromSelector(tc.selector)
-			if got != tc.expected {
-				t.Errorf("extractJobSetNameFromSelector(%q) = %q, want %q", tc.selector, got, tc.expected)
-			}
-		})
 	}
 }
 

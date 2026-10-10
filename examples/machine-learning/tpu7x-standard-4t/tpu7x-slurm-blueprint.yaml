@@ -24,21 +24,20 @@ vars:
   tpu_dynamic_max_nodes: # max dynamic tpu7x-standard-4t nodes (e.g. 4)
 
   # Image settings
-  # Base image for building the Slurm image
-  source_image_family: ubuntu-accel-2404-amd64-tpu-tpu7x
-  source_image_project: ubuntu-os-accelerator-images
-
-  # Name of the built image family
-  built_image_family: slurm-tpu-v7x-ubuntu2404
   instance_image:
-    family: $(vars.built_image_family)
-    project: $(vars.project_id)
+    family: aci-tpu-tpu7x-u2404-slurm-2605-amd64
+    project: advanced-compute-images
 
-  instance_image_custom: true
-  image_build_machine_type: n2d-standard-4
-  build_slurm_from_git_ref: 7ae87188aae8dae28d27671c28ff789ce33c9551 # tpu-2605
+  # Cluster Settings
   disk_size_gb: 100
-  filestore_ip_range: 192.168.0.0/29
+
+  # Managed Lustre is only supported in specific regions and zones
+  # Please refer https://cloud.google.com/managed-lustre/docs/locations
+  lustre_instance_id: $(vars.deployment_name)-lustre # Managed-Lustre instance name. This should be unique for each deployment.
+  # The values of size_gib and per_unit_storage_throughput are co-related
+  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  lustre_size_gib: 36000 # Storage capacity of the lustre instance in GiB
+  per_unit_storage_throughput: 500 # Maximum throughput of the lustre instance in MBps per TiB
 
   #Provisioning models (set to true or fill in reservation name, pick only one)
   tpu_reservation_name: "" # supply reservation name
@@ -46,114 +45,6 @@ vars:
   tpu_enable_spot_vm: false
 
 deployment_groups:
-- group: image-env
-  modules:
-  - id: build-net
-    source: modules/network/vpc
-    settings:
-      network_name: $(vars.deployment_name)-build-net
-      subnetwork_name: $(vars.deployment_name)-build-subnet
-
-  - id: slurm-build-script
-    source: modules/scripts/startup-script
-    settings:
-      install_ansible: true
-      runners:
-      - type: shell
-        destination: wait_for_apt.sh
-        content: |
-          #!/bin/bash
-          echo "Waiting for apt-get locks..."
-          while sudo fuser /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-            sleep 2
-          done
-          echo "Apt locks released."
-
-      - type: data
-        destination: /var/tmp/slurm_vars.json
-        content: |
-          {
-            "reboot": false,
-            "install_cuda": false,
-            "install_lustre": false,
-            "install_managed_lustre": false,
-            "slurm_patch_files": ["patches/tpu-2605.patch"],
-            "allow_kernel_upgrades": false,
-            "kernel_packages": ["linux-image-gcp", "linux-gcp"],
-            "monitoring_agent": "cloud-ops"
-          }
-
-      - type: ansible-local
-        destination: install_custom_deps.yml
-        content: |
-          ---
-          - name: Install custom TPU dependencies
-            hosts: all
-            become: true
-            tasks:
-              - name: Install system packages
-                ansible.builtin.apt:
-                  name:
-                    - python3-pip
-                    - git
-                    - lua-posix
-                    - python3.12
-                    - python3.12-venv
-                  state: present
-                  update_cache: yes
-
-      - type: shell
-        destination: install_slurm.sh
-        content: |
-          #!/bin/bash
-          set -e -o pipefail
-          sudo apt-mark unhold linux-headers-gcp || true
-          echo 'APT::Get::allow-change-held-packages "true";' | sudo tee /etc/apt/apt.conf.d/99allow-held
-          sudo apt update
-          ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_slurm_from_git_ref) \
-              -i localhost, --limit localhost --connection=local \
-              -e @/var/tmp/slurm_vars.json \
-              ansible/playbook.yml
-
-- group: image
-  modules:
-  - id: packer-image
-    source: modules/packer/custom-image
-    kind: packer
-    settings:
-      disk_size: $(vars.disk_size_gb)
-      machine_type: $(vars.image_build_machine_type)
-      source_image_family: $(vars.source_image_family)
-      source_image_project_id: [$(vars.source_image_project)]
-      image_family: $(vars.built_image_family)
-      omit_external_ip: false
-
-      metadata:
-        # Needed in Ubuntu 24.04 for enroot, not required on VMs using this image
-        # Unattended upgrades are disabled in this blueprint so that software does not
-        # get updated daily and lead to potential instability in the cluster environment.
-        #
-        # Unattended Upgrades installs available security updates from the Ubuntu
-        # security pocket for installed packages daily by default. Administrators who
-        # disable this feature assume all responsibility for manually reviewing and
-        # patching their systems against vulnerabilities.
-        #
-        # To enable unattended upgrades, please remove this section.
-        user-data: |
-          #cloud-config
-          create_hostname_file: true
-          write_files:
-          - path: /etc/apt/apt.conf.d/20auto-upgrades
-            permissions: '0644'
-            owner: root
-            content: |
-              APT::Periodic::Update-Package-Lists "0";
-              APT::Periodic::Unattended-Upgrade "0";
-    use:
-    - build-net
-    - slurm-build-script
-
 - group: cluster-env
   modules:
   - id: slurm-network
@@ -174,14 +65,23 @@ deployment_groups:
           ports: ["0-65535"]
         - protocol: icmp
 
-  - id: homefs
-    source: modules/file-system/filestore
+  - id: private_service_access
+    source: modules/network/private-service-access
     use: [slurm-network]
+
+  - id: homefs
+    source: modules/file-system/managed-lustre
+    use:
+    - slurm-network
+    - private_service_access
     settings:
-      filestore_tier: BASIC_SSD
-      size_gb: 2560
+      size_gib: $(vars.lustre_size_gib)
+      name: $(vars.lustre_instance_id)
       local_mount: /home
-      reserved_ip_range: $(vars.filestore_ip_range)
+      remote_mount: lustrefs
+      per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
+    outputs:
+    - network_storage
 
 - group: cluster
   modules:

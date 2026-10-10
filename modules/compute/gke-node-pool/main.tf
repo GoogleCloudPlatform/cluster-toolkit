@@ -335,6 +335,7 @@ resource "google_container_node_pool" "node_pool" {
   timeouts {
     create = var.timeout_create
     update = var.timeout_update
+    delete = var.timeout_delete
   }
 
   lifecycle {
