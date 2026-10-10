@@ -1,5 +1,16 @@
 taskGroups:
     - taskSpec:
+        %{~ if max_retry_count != null ~}
+        maxRetryCount: ${max_retry_count}
+        %{~ endif ~}
+        %{~ if length(lifecycle_policies) > 0 ~}
+        lifecyclePolicies:
+        %{~ for policy in lifecycle_policies ~}
+        - action: ${policy.action}
+          actionCondition:
+            exitCodes: ${jsonencode(policy.exit_codes)}
+        %{~ endfor ~}
+        %{~ endif ~}
         runnables:
         %{~ if synchronized ~}
         - barrier:

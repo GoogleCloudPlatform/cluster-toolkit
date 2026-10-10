@@ -162,6 +162,10 @@ deployment_groups:
       task_count: 2 # This provisions 2 compute nodes (in mpi_mode, task_count_per_node defaults to 1)
       mpi_mode: true
       allow_automatic_updates: false
+      max_retry_count: 2
+      lifecycle_policies:
+      - action: RETRY_TASK
+        exit_codes: [50001]
 
   - id: batch-login
     source: modules/scheduler/batch-login-node
