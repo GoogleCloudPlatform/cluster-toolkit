@@ -18,7 +18,7 @@ locals {
   autoname      = replace(var.deployment_name, "_", "-")
   network_name  = var.network_name == null ? "${local.autoname}-net" : var.network_name
   subnet_prefix = var.subnetworks_template == null || var.subnetworks_template.name_prefix == null ? "${local.autoname}-subnet" : var.subnetworks_template.name_prefix
-  is_roce_metal = var.network_profile != null ? can(regex("vpc-roce-metal", var.network_profile)) : false
+  is_roce_metal = can(regex("vpc-roce-metal", var.network_profile))
 
   new_bits = local.is_roce_metal ? 0 : ceil(log(var.subnetworks_template.count, 2))
   /** RoCE metal profile doesn't allow creating a subnetwork, as the profile 
