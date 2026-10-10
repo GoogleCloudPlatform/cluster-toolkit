@@ -17,11 +17,14 @@ limitations under the License.
 package shell
 
 import (
+	"context"
+	"errors"
 	"hpc-toolkit/pkg/config"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	. "gopkg.in/check.v1"
 )
@@ -225,4 +228,63 @@ func (s *MySuite) TestAskForConfirmation_No(c *C) {
 
 	got := PromptYesNo("Test prompt")
 	c.Assert(got, Equals, false)
+}
+
+func (s *MySuite) TestExecuteCommandWithTimeout_SuccessfulExecution(c *C) {
+	timeout := 2 * time.Second
+
+	result := ExecuteCommandWithTimeout(timeout, "echo", "hello world")
+
+	c.Assert(result.Err, IsNil)
+	c.Assert(result.ExitCode, Equals, 0)
+
+	expectedOutput := "hello world\n"
+	c.Assert(result.Stdout, Equals, expectedOutput)
+}
+
+func (s *MySuite) TestExecuteCommandWithTimeout_KillsHangingProcess(c *C) {
+	timeout := 100 * time.Millisecond
+
+	result := ExecuteCommandWithTimeout(timeout, "sleep", "5")
+
+	c.Assert(result.Err, NotNil)
+	c.Assert(errors.Is(result.Err, context.DeadlineExceeded), Equals, true)
+	c.Assert(result.ExitCode, Equals, 124)
+}
+
+func (s *MySuite) TestExecuteCommandWithTimeout_NonZeroExitCode(c *C) {
+	timeout := 2 * time.Second
+	result := ExecuteCommandWithTimeout(timeout, "sh", "-c", "exit 42")
+	c.Assert(result.Err, NotNil)
+	c.Assert(result.ExitCode, Equals, 42)
+}
+
+func (s *MySuite) TestExecuteCommandWithTimeout_BinaryNotFound(c *C) {
+	timeout := 2 * time.Second
+	result := ExecuteCommandWithTimeout(timeout, "nonexistent-binary-xyz-12345")
+	c.Assert(result.Err, NotNil)
+	c.Assert(result.ExitCode, Equals, -1)
+}
+
+func (s *MySuite) TestHandleExecError(c *C) {
+	timeoutMsg := "command timed out after 30s"
+
+	okRes := CommandResult{ExitCode: 0, Stdout: "ok", Err: nil}
+	c.Assert(HandleExecError(okRes, "gcloud", timeoutMsg), IsNil)
+
+	timeoutRes := CommandResult{ExitCode: 124, Err: context.DeadlineExceeded}
+	err := HandleExecError(timeoutRes, "gcloud", timeoutMsg)
+	c.Assert(err, NotNil)
+	c.Assert(err, ErrorMatches, timeoutMsg+": context deadline exceeded")
+	c.Assert(errors.Is(err, context.DeadlineExceeded), Equals, true)
+
+	startErr := errors.New("executable file not found in $PATH")
+	notFoundRes := CommandResult{ExitCode: -1, Err: startErr}
+	err = HandleExecError(notFoundRes, "gcloud", timeoutMsg)
+	c.Assert(err, NotNil)
+	c.Assert(err, ErrorMatches, "failed to execute gcloud: executable file not found in \\$PATH")
+	c.Assert(errors.Is(err, startErr), Equals, true)
+
+	exitErrRes := CommandResult{ExitCode: 42, Stderr: "some cli error", Err: errors.New("exit status 42")}
+	c.Assert(HandleExecError(exitErrRes, "gcloud", timeoutMsg), IsNil)
 }

@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
@@ -34,6 +35,10 @@ func (m *mockExecutor) ExecuteCommand(name string, args ...string) shell.Command
 		return m.executeCommandFunc(name, args...)
 	}
 	return shell.CommandResult{ExitCode: 0}
+}
+
+func (m *mockExecutor) ExecuteCommandWithTimeout(_ time.Duration, name string, args ...string) shell.CommandResult {
+	return m.ExecuteCommand(name, args...)
 }
 
 func (m *mockExecutor) ExecuteCommandStream(name string, args ...string) error {

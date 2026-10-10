@@ -219,6 +219,91 @@ func TestInitialize_LocationFallback(t *testing.T) {
 	}
 }
 
+func TestInitialize_TimeoutAndExecErrors(t *testing.T) {
+	primaryCmd := "gcloud container clusters describe my-cluster --location us-central1-a --project my-project --format=json"
+	fallbackCmd := "gcloud container clusters describe my-cluster --location us-central1 --project my-project --format=json"
+
+	tests := []struct {
+		name          string
+		mockResponses map[string][]shell.CommandResult
+		wantErrSubstr string
+	}{
+		{
+			name: "Primary describe query times out",
+			mockResponses: map[string][]shell.CommandResult{
+				primaryCmd: {
+					{
+						ExitCode: 124,
+						Err:      context.DeadlineExceeded,
+					},
+				},
+			},
+			wantErrSubstr: fmt.Sprintf("timed out after %v while trying to reach GKE cluster 'my-cluster' in 'us-central1-a'", shell.DefaultCloudAPITimeout),
+		},
+		{
+			name: "Primary describe query fails to execute",
+			mockResponses: map[string][]shell.CommandResult{
+				primaryCmd: {
+					{
+						ExitCode: -1,
+						Err:      fmt.Errorf("executable file not found in $PATH"),
+					},
+				},
+			},
+			wantErrSubstr: "failed to execute gcloud: executable file not found in $PATH",
+		},
+		{
+			name: "Fallback regional describe query times out",
+			mockResponses: map[string][]shell.CommandResult{
+				primaryCmd: {
+					{
+						ExitCode: 1,
+						Stderr:   "Resource my-cluster was not found in us-central1-a",
+					},
+				},
+				fallbackCmd: {
+					{
+						ExitCode: 124,
+						Err:      context.DeadlineExceeded,
+					},
+				},
+			},
+			wantErrSubstr: fmt.Sprintf("timed out after %v while trying to reach GKE cluster 'my-cluster' in fallback region 'us-central1'", shell.DefaultCloudAPITimeout),
+		},
+		{
+			name: "Fallback regional describe query fails to execute",
+			mockResponses: map[string][]shell.CommandResult{
+				primaryCmd: {
+					{
+						ExitCode: 1,
+						Stderr:   "Resource my-cluster was not found in us-central1-a",
+					},
+				},
+				fallbackCmd: {
+					{
+						ExitCode: -1,
+						Err:      fmt.Errorf("fork/exec gcloud: resource temporarily unavailable"),
+					},
+				},
+			},
+			wantErrSubstr: "failed to execute gcloud: fork/exec gcloud: resource temporarily unavailable",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := newTestGKEOrchestrator(NewMockExecutor(tt.mockResponses))
+			_, err := orc.Initialize("my-cluster", "us-central1-a", "my-project")
+			if err == nil {
+				t.Fatalf("expected Initialize to fail, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantErrSubstr) {
+				t.Errorf("Initialize() error = %q, want substring %q", err.Error(), tt.wantErrSubstr)
+			}
+		})
+	}
+}
+
 // countingKubeClient wraps MockKubeClient to count GetCurrentNamespace calls.
 type countingKubeClient struct {
 	MockKubeClient

@@ -453,10 +453,16 @@ func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (s
 	g.projectID = projectID
 
 	logging.Info("Fetching GKE cluster metadata for '%s'...", clusterName)
-	res := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", clusterName,
+	res := g.executor.ExecuteCommandWithTimeout(shell.DefaultCloudAPITimeout, "gcloud", "container", "clusters", "describe", clusterName,
 		"--location", location,
 		"--project", g.projectID,
 		"--format=json")
+
+	timeoutMsg := fmt.Sprintf("timed out after %v while trying to reach GKE cluster '%s' in '%s'. Please check your network connection", shell.DefaultCloudAPITimeout, clusterName, location)
+	if err := shell.HandleExecError(res, "gcloud", timeoutMsg); err != nil {
+		return "", err
+	}
+
 	if res.ExitCode != 0 {
 		if strings.Contains(res.Stderr, "403") || strings.Contains(strings.ToLower(res.Stderr), "permission denied") {
 			return "", fmt.Errorf("your account lacks the required permission to access cluster '%s' in project '%s'. Please ask your project administrator to grant you the Kubernetes Engine Viewer role (roles/container.viewer)", clusterName, g.projectID)
@@ -465,10 +471,16 @@ func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (s
 		if len(strings.Split(location, "-")) == 3 {
 			region := shell.ExtractRegion(location)
 			logging.Info("Failed to find cluster in zone %s. Trying fallback to region %s...", location, region)
-			fallbackRes := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", clusterName,
+			fallbackRes := g.executor.ExecuteCommandWithTimeout(shell.DefaultCloudAPITimeout, "gcloud", "container", "clusters", "describe", clusterName,
 				"--location", region,
 				"--project", g.projectID,
 				"--format=json")
+
+			fallbackTimeoutMsg := fmt.Sprintf("timed out after %v while trying to reach GKE cluster '%s' in fallback region '%s'. Please check your network connection", shell.DefaultCloudAPITimeout, clusterName, region)
+			if err := shell.HandleExecError(fallbackRes, "gcloud", fallbackTimeoutMsg); err != nil {
+				return "", err
+			}
+
 			if fallbackRes.ExitCode == 0 {
 				logging.Warn("Cluster '%s' is a regional cluster in '%s'. Found it by falling back from zone '%s'. "+
 					"Note: This does NOT restrict your job to '%s'. To run specifically in '%s', "+

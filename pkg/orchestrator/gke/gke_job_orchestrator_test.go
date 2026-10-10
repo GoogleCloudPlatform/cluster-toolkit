@@ -123,6 +123,10 @@ func (m *MockExecutor) ExecuteCommand(name string, args ...string) shell.Command
 	}
 }
 
+func (m *MockExecutor) ExecuteCommandWithTimeout(_ time.Duration, name string, args ...string) shell.CommandResult {
+	return m.ExecuteCommand(name, args...)
+}
+
 func (m *MockExecutor) ExecuteCommandStream(name string, args ...string) error {
 	m.streamCalls = append(m.streamCalls, name+" "+strings.Join(args, " "))
 	return nil
