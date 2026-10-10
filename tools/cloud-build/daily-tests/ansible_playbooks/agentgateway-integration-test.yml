@@ -1,0 +1,239 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+# Invoke with tests/agentgateway.yml and project, deployment_name, authorized_cidr.
+# The runner needs access to the GKE API; the smoke Job reaches the internal LB.
+- name: Agentgateway CPU integration test
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+  - name: Require explicit test project and runner access
+    ansible.builtin.assert:
+      that:
+      - project is defined
+      - deployment_name is defined
+      - authorized_cidr is defined
+      - deployment_name | length <= 20
+
+  - name: Require existing identities when IAM provisioning is disabled
+    ansible.builtin.assert:
+      that:
+      - node_service_account_email | length > 0
+      - proxy_service_account_email | length > 0
+    when: not (create_service_accounts | bool)
+
+  - name: Validate optional provider test configuration
+    ansible.builtin.assert:
+      that:
+      - item.provider in ['openai', 'anthropic']
+      - item.model | length > 0
+      - item.secret_name | length > 0
+      - item.token_parameter | default('max_tokens') in ['max_tokens', 'max_completion_tokens']
+      - item.provider != 'anthropic' or item.token_parameter | default('max_tokens') == 'max_tokens'
+      - (item.max_output_tokens | default(128) | int) > 0
+      - external_provider_setup_tasks | default('') | length > 0
+    loop: "{{ external_provider_tests | default([]) }}"
+
+  - name: Require one configuration per external provider
+    ansible.builtin.assert:
+      that:
+      - (external_provider_tests | default([]) | map(attribute='provider') | unique | length) == (external_provider_tests | default([]) | length)
+
+  - name: Build deployment creation command
+    ansible.builtin.set_fact:
+      deployment_create_command:
+      - "{{ workspace }}/gcluster"
+      - create
+      - "{{ blueprint_yaml }}"
+      - --vars
+      - "project_id={{ project }},deployment_name={{ deployment_name }},region={{ region }},authorized_cidr={{ authorized_cidr }},vertex_model={{ vertex_model }},create_service_accounts={{ create_service_accounts | bool | lower }},node_service_account_email={{ node_service_account_email }},proxy_service_account_email={{ proxy_service_account_email }}"
+
+  - name: Create deployment directory
+    ansible.builtin.command:
+      argv: "{{ deployment_create_command }}"
+      creates: "{{ workspace }}/{{ deployment_name }}"
+      chdir: "{{ workspace }}"
+
+  - name: Deploy, test and always destroy
+    block:
+    - name: Deploy all four groups
+      ansible.builtin.command:
+        argv: ["{{ workspace }}/gcluster", deploy, "{{ workspace }}/{{ deployment_name }}", --auto-approve]
+      changed_when: true
+
+    - name: Fetch cluster credentials
+      ansible.builtin.command:
+        argv: [gcloud, container, clusters, get-credentials, "{{ deployment_name }}", --region, "{{ region }}", --project, "{{ project }}"]
+      changed_when: false
+
+    - name: Provision external-provider Secrets using runner-supplied tasks
+      ansible.builtin.include_tasks: "{{ external_provider_setup_tasks }}"
+      when: external_provider_tests | default([]) | length > 0
+
+    - name: Enable configured external-provider routes
+      vars:
+        openai_test_secret: "{{ external_provider_tests | selectattr('provider', 'equalto', 'openai') | map(attribute='secret_name') | first | default('') }}"
+        anthropic_test_secret: "{{ external_provider_tests | selectattr('provider', 'equalto', 'anthropic') | map(attribute='secret_name') | first | default('') }}"
+      ansible.builtin.command:
+        argv: "{{ deployment_create_command + ['--overwrite-deployment', '--vars', 'openai_secret_name=' + openai_test_secret + ',anthropic_secret_name=' + anthropic_test_secret] }}"
+        chdir: "{{ workspace }}"
+      when: external_provider_tests | default([]) | length > 0
+      changed_when: true
+
+    - name: Deploy external-provider routes
+      ansible.builtin.command:
+        argv: ["{{ workspace }}/gcluster", deploy, "{{ workspace }}/{{ deployment_name }}", --auto-approve]
+      when: external_provider_tests | default([]) | length > 0
+      changed_when: true
+
+    - name: Reapply to exercise idempotence
+      ansible.builtin.command:
+        argv: ["{{ workspace }}/gcluster", deploy, "{{ workspace }}/{{ deployment_name }}", --auto-approve]
+      changed_when: false
+
+    - name: Require an empty plan after reapplication
+      ansible.builtin.command:
+        argv: [terraform, "-chdir={{ workspace }}/{{ deployment_name }}/{{ item }}", plan, -detailed-exitcode, -input=false, -no-color]
+      loop: [infrastructure, controller, gateway, ingress]
+      register: stable_plan
+      failed_when: stable_plan.rc != 0
+      changed_when: false
+
+    - name: Verify synchronous and streaming Gemini requests through the internal LB
+      ansible.builtin.command:
+        argv:
+        - python3
+        - "{{ workspace }}/tools/cloud-build/daily-tests/ansible_playbooks/test-validation/agentgateway/run-in-cluster.py"
+        - --namespace
+        - "{{ agentgateway_namespace }}"
+        - --model
+        - "{{ vertex_model }}"
+      changed_when: false
+
+    - name: Verify missing and existing provider secret references with a synthetic backend
+      ansible.builtin.command:
+        argv:
+        - python3
+        - "{{ workspace }}/tools/cloud-build/daily-tests/ansible_playbooks/test-validation/agentgateway/run-in-cluster.py"
+        - --namespace
+        - "{{ agentgateway_namespace }}"
+        - --mock-provider
+      changed_when: false
+
+    - name: Verify optional real-provider requests through the internal LB
+      ansible.builtin.command:
+        argv:
+        - python3
+        - "{{ workspace }}/tools/cloud-build/daily-tests/ansible_playbooks/test-validation/agentgateway/run-in-cluster.py"
+        - --namespace
+        - "{{ agentgateway_namespace }}"
+        - --provider
+        - "{{ item.provider }}"
+        - --model
+        - "{{ item.model }}"
+        - --token-parameter
+        - "{{ item.token_parameter | default('max_tokens') }}"
+        - --max-output-tokens
+        - "{{ item.max_output_tokens | default(128) | string }}"
+      loop: "{{ external_provider_tests | default([]) }}"
+      changed_when: false
+
+    - name: Verify Cloud Logging receives proxy workload logs
+      ansible.builtin.command:
+        argv:
+        - gcloud
+        - logging
+        - read
+        - 'resource.type="k8s_container" AND resource.labels.cluster_name="{{ deployment_name }}" AND resource.labels.namespace_name="{{ agentgateway_namespace }}" AND resource.labels.container_name="agentgateway"'
+        - --project
+        - "{{ project }}"
+        - --freshness=1h
+        - --limit=1
+        - --format=value(timestamp)
+      register: proxy_logs
+      until: proxy_logs.stdout | length > 0
+      retries: 12
+      delay: 10
+      changed_when: false
+
+    always:
+    - name: Destroy in reverse group order while controllers can reconcile deletion
+      ansible.builtin.command:
+        argv: ["{{ workspace }}/gcluster", destroy, "{{ workspace }}/{{ deployment_name }}", --auto-approve, --robust]
+      register: destroy_result
+      # Run resource checks even if an undeployed group cannot import its inputs.
+      failed_when: false
+      changed_when: true
+
+    - name: Verify the cluster is gone
+      ansible.builtin.command:
+        argv: [gcloud, container, clusters, list, --project, "{{ project }}", "--filter=name={{ deployment_name }}", --format=value(name)]
+      register: remaining_clusters
+      failed_when: remaining_clusters.rc != 0 or remaining_clusters.stdout | length > 0
+      changed_when: false
+
+    - name: Verify no load-balancer forwarding rules remain on the dedicated network
+      ansible.builtin.command:
+        argv:
+        - gcloud
+        - compute
+        - forwarding-rules
+        - list
+        - --project
+        - "{{ project }}"
+        - "--filter=network:{{ deployment_name }}-net"
+        - --format=value(name)
+      register: remaining_forwarding_rules
+      failed_when: remaining_forwarding_rules.rc != 0 or remaining_forwarding_rules.stdout | length > 0
+      changed_when: false
+
+    - name: Verify the network is gone, including dependent subnets and NEGs
+      ansible.builtin.command:
+        argv: [gcloud, compute, networks, list, --project, "{{ project }}", "--filter=name={{ deployment_name }}-net", --format=value(name)]
+      register: remaining_networks
+      failed_when: remaining_networks.rc != 0 or remaining_networks.stdout | length > 0
+      changed_when: false
+
+    - name: Verify managed service accounts are gone
+      when: create_service_accounts | bool
+      ansible.builtin.command:
+        argv:
+        - gcloud
+        - iam
+        - service-accounts
+        - list
+        - --project
+        - "{{ project }}"
+        - "--filter=email:{{ deployment_name }}-nodes@ OR email:{{ deployment_name }}-proxy@"
+        - --format=value(email)
+      register: remaining_accounts
+      failed_when: remaining_accounts.rc != 0 or remaining_accounts.stdout | length > 0
+      changed_when: false
+
+    - name: Verify existing service accounts remain after cleanup
+      ansible.builtin.command:
+        argv: [gcloud, iam, service-accounts, describe, "{{ item }}", --format=value(email)]
+      loop: ["{{ node_service_account_email }}", "{{ proxy_service_account_email }}"]
+      register: existing_account
+      failed_when: existing_account.rc != 0 or existing_account.stdout != item
+      changed_when: false
+      when: not (create_service_accounts | bool)
+
+    - name: Report any destroy failure after checking for remaining resources
+      ansible.builtin.assert:
+        that:
+        - destroy_result.rc == 0
+        fail_msg: "gcluster destroy failed: {{ destroy_result.stderr }}"
