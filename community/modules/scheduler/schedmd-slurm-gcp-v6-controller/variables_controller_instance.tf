@@ -322,8 +322,8 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-12-hpc-rocky-linux-9"
-    project = "schedmd-slurm-public"
+    family  = "aci-cpu-rocky-linux-9-slurm-2605-amd64"
+    project = "advanced-compute-images"
   }
 
   validation {
