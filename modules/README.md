@@ -178,8 +178,10 @@ Modules that are still in development and less stable are labeled with the
 ### IAM
 
 * **[iap-policy]** ![core-badge] : Configures IAM policy for Identity-Aware Proxy (IAP) on a Google Cloud Backend Service.
+* **[service-account-profiles]** ![community-badge] ![experimental-badge] : Applies a named least-privilege permission profile (Slurm controller, login or compute, Packer image builder, or custom) with resource-scoped IAM bindings to an existing keyless service account.
 
 [iap-policy]: iam/iap-policy/README.md
+[service-account-profiles]: ../community/modules/iam/service-account-profiles/README.md
 
 ### Management
 

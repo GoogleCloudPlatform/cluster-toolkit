@@ -31,49 +31,66 @@ deployment_groups:
 - group: primary
   modules:
   # Service Accounts
-  - id: controller_sa
+  #
+  # Separate, single-purpose identities from community/modules/iam/service-account-profiles
+  # rather than broad predefined roles. HA specifics:
+  #
+  #  * enable_backup_controller runs both controllers from one instance
+  #    template, so they share controller_sa.
+  #  * HA needs no additional permissions: failover is native Slurm ctld
+  #    failover, and the MIG, internal IPs and health check are created by
+  #    Terraform, not by the controller at run time.
+  #  * The controller module grants its own Cloud SQL secret access; the
+  #    database connection needs no IAM permission.
+  #  * No capability flags apply: the nodeset sets enable_placement: false, and
+  #    neither the controller nor login has a public IP.
+  - id: controller_account
     source: modules/project/service-account
-    kind: terraform
     settings:
-      deployment_name: $(vars.deployment_name)
-      project_id: $(vars.project_id)
-      name: controller-sa
-      description: Controller Service Account
-      display_name: Controller SA
-      project_roles:
-      - compute.instanceAdmin.v1
-      - iam.serviceAccountUser
-      - storage.objectViewer
-      - logging.logWriter
-      - monitoring.metricWriter
+      name: controller
+      project_roles: []
+
+  - id: controller_sa
+    source: community/modules/iam/service-account-profiles
+    use: [controller_account]
+    settings:
+      name: controller
+      profile: slurm-controller
+      # Same literal value as slurm_controller's slurm_cluster_name below: the
+      # module takes it as-is (no re-deriving), so the name-scoped role's
+      # instance-name condition can't drift from the controller's real names.
+      slurm_cluster_name: hpcslurmha
+      # Only the compute identity: the controller attaches it to the nodes it
+      # creates at run time. Login VMs are created by Terraform under the
+      # deploying principal, so the controller never needs to act as login_sa.
+      act_as_service_accounts:
+      - $(compute_sa.service_account_email)
+
+  - id: login_account
+    source: modules/project/service-account
+    settings:
+      name: login
+      project_roles: []
 
   - id: login_sa
-    source: modules/project/service-account
-    kind: terraform
+    source: community/modules/iam/service-account-profiles
+    use: [login_account]
     settings:
-      deployment_name: $(vars.deployment_name)
-      project_id: $(vars.project_id)
-      name: login-sa
-      description: Login Node Service Account
-      display_name: Login SA
-      project_roles:
-      - logging.logWriter
-      - monitoring.metricWriter
-      - storage.objectViewer
+      name: login
+      profile: slurm-login
+
+  - id: compute_account
+    source: modules/project/service-account
+    settings:
+      name: compute
+      project_roles: []
 
   - id: compute_sa
-    source: modules/project/service-account
-    kind: terraform
+    source: community/modules/iam/service-account-profiles
+    use: [compute_account]
     settings:
-      deployment_name: $(vars.deployment_name)
-      project_id: $(vars.project_id)
-      name: compute-sa
-      description: Compute Node Service Account
-      display_name: Compute SA
-      project_roles:
-      - logging.logWriter
-      - monitoring.metricWriter
-      - storage.objectViewer
+      name: compute
+      profile: slurm-compute
 
   # Network
   - id: network
@@ -86,11 +103,13 @@ deployment_groups:
         subnet_ip: 10.80.0.0/24
 
   # Filestore (Shared /home)
+  #
+  # BASIC_SSD, the module's default tier, requires at least 2560 GiB.
   - id: home_fs
     source: modules/file-system/filestore
     settings:
       network_id: $(network.network_id)
-      size_gb: 1024
+      size_gb: 2560
       zone: $(vars.zone)
 
   # Debug Logic (Define Login Node properties, does not create VM directly)
@@ -135,11 +154,13 @@ deployment_groups:
       is_default: true
 
   # Filestore (Dedicated State for Controller)
+  #
+  # size_gb: 2560 for the same reason as home_fs above.
   - id: controller_fs
     source: modules/file-system/filestore
     settings:
       network_id: $(network.network_id)
-      size_gb: 1024
+      size_gb: 2560
       zone: $(vars.zone)
 
   # Cloud SQL (External DB)
