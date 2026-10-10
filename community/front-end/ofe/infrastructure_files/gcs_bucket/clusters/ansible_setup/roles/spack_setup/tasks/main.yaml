@@ -48,9 +48,20 @@
   ansible.builtin.command: "{{ spack_dir }}/bin/spack config --scope system add packages:gcc:buildable:true"
   when: True
 
-- name: Spack Find DevTool compiler
-  ansible.builtin.command: "{{ spack_dir }}/bin/spack compiler find --scope system /opt/rh/devtoolset-11/root/usr/bin"
-  when: True
+# Register whichever toolsets dev_env installed rather than naming versions.
+# Nodes without /opt/rh (e.g. the controller) find none and skip.
+- name: Find installed developer toolsets
+  ansible.builtin.find:
+    paths: /opt/rh
+    patterns: "gcc-toolset-*,devtoolset-*"
+    file_type: directory
+  register: devtoolsets
+
+- name: Spack Find DevTool compilers
+  ansible.builtin.command: "{{ spack_dir }}/bin/spack compiler find --scope system {{ item.path }}/root/usr/bin"
+  loop: "{{ devtoolsets.files | sort(attribute='path') }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
 
 
 - name: Add Spack to default shells
