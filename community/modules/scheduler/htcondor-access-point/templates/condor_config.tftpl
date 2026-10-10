@@ -68,3 +68,11 @@ JOB_TRANSFORM_MIGID @=end
   SET Requirements ($(MY.Requirements)) && regexp(strcat("/", My.RequireId, "$"), CloudCreatedBy)
 @end
 %{ endif ~}
+
+# Automatically re-queue jobs that fail to initialize on Windows during VM shutdown:
+# -1073741502 (0xC0000142) = STATUS_DLL_INIT_FAILED
+# -1073741205 (0xC000026B) = STATUS_DLL_INIT_FAILED_LOGOFF
+JOB_TRANSFORM_NAMES = $(JOB_TRANSFORM_NAMES) RETRY_WINDOWS_SHUTDOWN
+JOB_TRANSFORM_RETRY_WINDOWS_SHUTDOWN @=end
+  SET OnExitRemove ($(MY.OnExitRemove:True)) && !((ExitBySignal is False) && ((ExitCode == -1073741502) || (ExitCode == -1073741205)))
+@end
