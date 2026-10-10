@@ -1,0 +1,251 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# vLLM server for google/diffusiongemma-26B-A4B-it on one Spot G4 node
+# (1x NVIDIA RTX PRO 6000). Terraform template rendered by the kubectl-apply
+# module with three variables: `hf_secret_name`, the Hugging Face token Secret
+# (key hf_api_token) created by the blueprint's kubernetes-secret module, and
+# the blueprint vars `model_bucket` and `model_path` that select where the
+# model weights come from:
+#   * model_bucket set:   the `wait-for-weights` initContainer waits until the
+#     standalone `diffusiongemma-stage-weights` Job has finished uploading the
+#     Hugging Face snapshot (`config.json` + `*.safetensors`) under
+#     gs://<model_bucket>/<model_path>, then vLLM streams the safetensors
+#     straight from Cloud Storage into GPU memory with the Run:ai Model Streamer
+#     (--load-format=runai_streamer):
+#     https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/run-ai-model-streamer
+#   * model_bucket empty: vLLM downloads the weights from Hugging Face into the
+#     Hyperdisk volume (Hugging Face cache) and loads them from disk.
+# Cloud Storage access comes from Workload Identity: the pod runs as the
+# `workload-identity-k8s-sa` Kubernetes service account that the gke-cluster
+# module binds to the workload Google service account of the blueprint
+# (roles/storage.objectAdmin + roles/storage.bucketViewer on the project).
+#
+# DiffusionGemma is an encoder-decoder block-diffusion model: each step
+# denoises a 256-token canvas instead of decoding one token. The server flags
+# follow the constraints enforced by vLLM (DiffusionGemmaModelForBlockDiffusionConfig):
+#   * FlashInfer is rejected                 -> --attention-backend=TRITON_ATTN
+#   * Tensor parallelism > 1 is unsupported  -> --tensor-parallel-size=1 (BF16, ~52 GB)
+#   * Sampler materializes [num_seqs, canvas, vocab] in fp32 -> --max-num-seqs=8
+---
+# Hyperdisk Balanced is the only persistent disk type supported on G4.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: diffusiongemma-hyperdisk-balanced
+provisioner: pd.csi.storage.gke.io
+parameters:
+  type: hyperdisk-balanced
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+---
+# Hugging Face cache when loading from disk (model_bucket empty). Survives Spot
+# preemptions.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: diffusiongemma-hf-cache
+spec:
+  storageClassName: diffusiongemma-hyperdisk-balanced
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 200Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diffusiongemma-vllm
+  labels:
+    app: diffusiongemma-vllm
+spec:
+  replicas: 1
+  # The PVC is ReadWriteOnce: the old pod must be gone before the new one starts.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: diffusiongemma-vllm
+  template:
+    metadata:
+      labels:
+        app: diffusiongemma-vllm
+    spec:
+      # Created by the gke-cluster module (configure_workload_identity_sa: true);
+      # gives the containers the workload service account's Cloud Storage access.
+      serviceAccountName: workload-identity-k8s-sa
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-rtx-pro-6000
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      - key: cloud.google.com/gke-spot
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+      initContainers:
+      # Waits for the standalone `diffusiongemma-stage-weights` Job (Stage 1) to
+      # finish populating gs://<model_bucket>/<model_path> before starting vLLM
+      # (Stage 2). Keeping the download/upload in a single-pod Job rather than
+      # in the server pod's initContainer prevents multiple server pods in a
+      # distributed or multi-replica deployment from concurrently downloading
+      # and overwriting the same Cloud Storage objects.
+      - name: wait-for-weights
+        image: vllm/vllm-openai:v0.30.0
+        command: ["python3", "-u", "-c"]
+        args:
+        - |
+          import os, sys, time
+
+          bucket_name = os.environ.get("MODEL_BUCKET", "").strip()
+          if not bucket_name:
+              print("model_bucket is empty: vLLM downloads the weights from Hugging Face.")
+              sys.exit(0)
+
+          from google.cloud import storage
+
+          prefix = os.environ.get("MODEL_PATH", "").strip().strip("/")
+          blob_prefix = prefix + "/" if prefix else ""
+          gcs_dir = "gs://" + bucket_name + ("/" + prefix if prefix else "")
+          client = storage.Client()
+
+          timeout_s = 3600
+          deadline = time.monotonic() + timeout_s
+          while True:
+              existing = [
+                  b.name[len(blob_prefix):]
+                  for b in client.list_blobs(bucket_name, prefix=blob_prefix)
+              ]
+              if "config.json" in existing and any(n.endswith(".safetensors") for n in existing):
+                  print(
+                      f"Verified complete snapshot ({len(existing)} objects) under {gcs_dir}; "
+                      "starting vLLM server."
+                  )
+                  sys.exit(0)
+              if time.monotonic() >= deadline:
+                  print(
+                      f"Timed out after {timeout_s}s waiting for staged weights under {gcs_dir} "
+                      f"({len(existing)} objects present). Check job/diffusiongemma-stage-weights logs."
+                  )
+                  sys.exit(1)
+              print(
+                  f"Waiting for job/diffusiongemma-stage-weights to finish staging weights "
+                  f"under {gcs_dir} ({len(existing)} objects present so far)..."
+              )
+              time.sleep(15)
+        env:
+        - name: MODEL_BUCKET
+          value: "${model_bucket}"
+        - name: MODEL_PATH
+          value: "${model_path}"
+        resources:
+          requests:
+            cpu: "1"
+            memory: 2Gi
+      containers:
+      - name: vllm
+        image: vllm/vllm-openai:v0.30.0
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          set -euo pipefail
+          if [ -n "$MODEL_BUCKET" ]; then
+            MODEL="gs://$MODEL_BUCKET/$(echo "$MODEL_PATH" | sed 's#^/*##; s#/*$##')"
+            # distributed=true: recommended by GKE for object storage on CUDA.
+            LOAD_ARGS="--load-format=runai_streamer --model-loader-extra-config={\"distributed\":true}"
+            echo "Streaming weights from $MODEL with the Run:ai Model Streamer"
+          else
+            MODEL="$MODEL_ID"
+            LOAD_ARGS="--download-dir=/data"
+            echo "Loading $MODEL from Hugging Face (cache in /data)"
+          fi
+          exec vllm serve "$MODEL" --served-model-name "$MODEL_ID" $LOAD_ARGS \
+            --host=0.0.0.0 --port=8000 \
+            --tensor-parallel-size=1 \
+            --attention-backend=TRITON_ATTN \
+            --max-model-len=4096 \
+            --max-num-seqs=8 \
+            --gpu-memory-utilization=0.85 \
+            --reasoning-parser=gemma4 \
+            --tool-call-parser=gemma4 \
+            --enable-auto-tool-choice
+        env:
+        - name: MODEL_ID
+          value: google/diffusiongemma-26B-A4B-it
+        - name: MODEL_BUCKET
+          value: "${model_bucket}"
+        - name: MODEL_PATH
+          value: "${model_path}"
+        - name: HF_HOME
+          value: /data
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: ${hf_secret_name}
+              key: hf_api_token
+        - name: VLLM_ENGINE_READY_TIMEOUT_S
+          value: "1800"
+        - name: PYTORCH_CUDA_ALLOC_CONF
+          value: "expandable_segments:True"
+        ports:
+        - containerPort: 8000
+          name: http
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "8"
+            memory: 64Gi
+        # Streaming or loading ~52 GB of weights plus CUDA graph capture; when
+        # loading from Hugging Face the first start also downloads them: 40 min.
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 15
+          failureThreshold: 160
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 10
+        volumeMounts:
+        - name: hf-cache
+          mountPath: /data
+        - name: dshm
+          mountPath: /dev/shm
+      volumes:
+      - name: hf-cache
+        persistentVolumeClaim:
+          claimName: diffusiongemma-hf-cache
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 16Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: diffusiongemma-vllm
+spec:
+  type: ClusterIP
+  selector:
+    app: diffusiongemma-vllm
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000

@@ -1,0 +1,209 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Stage 1 of the benchmark sequence: standalone weight-staging Job
+# (`diffusiongemma-stage-weights`).
+#
+# Running weight staging as a single-pod Job (parallelism: 1, completions: 1)
+# on the on-demand system node pool rather than inside the inference server's
+# initContainer prevents two problems:
+#   1. Multi-pod race conditions: in distributed or multi-replica deployments
+#      (JobSet, LeaderWorkerSet, or Deployment with replicas > 1), an
+#      initContainer in the server pod spec would make every pod download from
+#      Hugging Face and overwrite the same Cloud Storage objects concurrently.
+#   2. Multi-TB local disk exhaustion: instead of downloading the entire model
+#      snapshot to disk before uploading, this Job pipelines download ->
+#      concurrent multipart upload -> immediate local deletion per file (at
+#      most 3 files in flight), capping peak local disk usage to ~15 GiB even
+#      for multi-TB models.
+#
+# `config.json` is uploaded last as an atomic completion marker so that the
+# Stage 2 inference server pods (`wait-for-weights` initContainer) only start
+# streaming once all shards are present in Cloud Storage.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: diffusiongemma-stage-weights
+spec:
+  parallelism: 1
+  completions: 1
+  backoffLimit: 3
+  activeDeadlineSeconds: 5400
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: diffusiongemma-stage-weights
+    spec:
+      serviceAccountName: workload-identity-k8s-sa
+      restartPolicy: Never
+      containers:
+      - name: stage-weights
+        image: vllm/vllm-openai:v0.30.0
+        command: ["python3", "-u", "-c"]
+        args:
+        - |
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          import fnmatch, os, shutil, sys, tempfile, time
+
+          bucket_name = os.environ.get("MODEL_BUCKET", "").strip()
+          if not bucket_name:
+              print("model_bucket is empty: skipping Cloud Storage weight staging.")
+              sys.exit(0)
+
+          from google.cloud import storage
+          from google.cloud.storage import transfer_manager
+          from huggingface_hub import HfApi, RepoFile, hf_hub_download
+
+          model_id = os.environ["MODEL_ID"]
+          prefix = os.environ.get("MODEL_PATH", "").strip().strip("/")
+          blob_prefix = prefix + "/" if prefix else ""
+          gcs_dir = "gs://" + bucket_name + ("/" + prefix if prefix else "")
+
+          client = storage.Client()
+          bucket = client.bucket(bucket_name)
+          existing = {
+              b.name[len(blob_prefix):]: b.size
+              for b in client.list_blobs(bucket_name, prefix=blob_prefix)
+          }
+          if "config.json" in existing and any(n.endswith(".safetensors") for n in existing):
+              print(
+                  f"Found complete snapshot ({len(existing)} objects) under {gcs_dir}; "
+                  "nothing to stage."
+              )
+              sys.exit(0)
+
+          # Reading from the mounted Secret volume lets a user who deployed
+          # with an empty hf_token patch `hf-secret` after deploy without the
+          # Job burning through backoffLimit: 3 on 401 errors beforehand.
+          def read_token():
+              try:
+                  with open("/etc/hf-secret/hf_api_token", encoding="utf-8") as f:
+                      t = f.read().strip()
+                      if t:
+                          return t
+              except OSError:
+                  pass
+              return (os.environ.get("HUGGING_FACE_HUB_TOKEN") or "").strip() or None
+
+          token = read_token()
+          while not token:
+              print(
+                  "hf_api_token in Secret is empty; waiting for `kubectl patch secret` "
+                  "before downloading from Hugging Face..."
+              )
+              time.sleep(10)
+              token = read_token()
+
+          ignore_patterns = ["original/*", ".gitattributes", ".cache/*"]
+          api = HfApi(token=token)
+          entries = [
+              item for item in api.list_repo_tree(repo_id=model_id, recursive=True, token=token)
+              if isinstance(item, RepoFile)
+              and not any(fnmatch.fnmatch(item.path, pat) for pat in ignore_patterns)
+          ]
+          main_entries = sorted(
+              [e for e in entries if e.path != "config.json"],
+              key=lambda e: -e.size,
+          )
+          marker_entries = [e for e in entries if e.path == "config.json"]
+
+          staging_root = "/tmp/hf-staging"
+          os.makedirs(staging_root, exist_ok=True)
+          total_gib = sum(e.size for e in entries) / (2**30)
+          print(
+              f"Staging {len(entries)} files ({total_gib:.1f} GiB) for {model_id} "
+              f"to {gcs_dir} (rolling per-file pipeline, max 3 files in flight)..."
+          )
+
+          def stage_one(item):
+              rel_path = item.path
+              if rel_path != "config.json" and existing.get(rel_path) == item.size:
+                  print(f"Skipping already uploaded {rel_path} ({item.size / (2**20):.1f} MiB)")
+                  return item.size
+              file_stage_dir = tempfile.mkdtemp(prefix="shard-", dir=staging_root)
+              try:
+                  t0 = time.time()
+                  local_path = hf_hub_download(
+                      repo_id=model_id,
+                      filename=rel_path,
+                      local_dir=file_stage_dir,
+                      token=token,
+                  )
+                  dl_s = time.time() - t0
+                  t1 = time.time()
+                  blob = bucket.blob(blob_prefix + rel_path)
+                  if item.size >= 64 * 1024 * 1024:
+                      transfer_manager.upload_chunks_concurrently(
+                          local_path,
+                          blob,
+                          chunk_size=64 * 1024 * 1024,
+                          worker_type=transfer_manager.THREAD,
+                          max_workers=4,
+                      )
+                  else:
+                      blob.upload_from_filename(local_path, timeout=600)
+                  up_s = time.time() - t1
+                  print(
+                      f"Staged {rel_path} ({item.size / (2**20):.1f} MiB): "
+                      f"download {dl_s:.1f}s, upload {up_s:.1f}s"
+                  )
+                  return item.size
+              finally:
+                  shutil.rmtree(file_stage_dir, ignore_errors=True)
+
+          started = time.time()
+          staged_bytes = 0
+          with ThreadPoolExecutor(max_workers=3) as pool:
+              futures = {pool.submit(stage_one, e): e.path for e in main_entries}
+              for fut in as_completed(futures):
+                  staged_bytes += fut.result()
+
+          # Upload config.json last so server pods waiting on config.json only
+          # proceed after every weight shard is present in Cloud Storage.
+          for e in marker_entries:
+              staged_bytes += stage_one(e)
+
+          elapsed = time.time() - started
+          print(
+              f"Completed staging {len(entries)} files ({staged_bytes / (2**30):.1f} GiB) "
+              f"to {gcs_dir} in {elapsed:.0f}s."
+          )
+        env:
+        - name: MODEL_ID
+          value: google/diffusiongemma-26B-A4B-it
+        - name: MODEL_BUCKET
+          value: "${model_bucket}"
+        - name: MODEL_PATH
+          value: "${model_path}"
+        - name: HF_HUB_ENABLE_HF_TRANSFER
+          value: "1"
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: ${hf_secret_name}
+              key: hf_api_token
+        volumeMounts:
+        - name: hf-secret
+          mountPath: /etc/hf-secret
+          readOnly: true
+        resources:
+          requests:
+            cpu: "4"
+            memory: 8Gi
+      volumes:
+      - name: hf-secret
+        secret:
+          secretName: ${hf_secret_name}
