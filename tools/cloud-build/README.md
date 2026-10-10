@@ -63,3 +63,33 @@ To run the unit tests:
 ```bash
 python3 -m unittest tools/tests/test_cloud_build_zone_retry.py -v
 ```
+
+## GCE Reservation Capacity Polling
+
+For integration tests that deploy against specific GCE hardware reservations, `wait_for_available_reservation.sh` validates reservation state and polls for available capacity before starting deployment:
+
+```bash
+bash /workspace/tools/cloud-build/wait_for_available_reservation.sh \
+  "<RESERVATION_NAME|RESOURCE_URI>" "<ZONE>" "[RESERVATION_OWNER_PROJECT]" "[REQUIRED_COUNT]"
+```
+
+For example, in `daily-tests/builds/gke-g4-confidential.yaml`:
+
+```bash
+bash /workspace/tools/cloud-build/wait_for_available_reservation.sh "g4-reservation-0" "us-south1-a" "hpc-toolkit-dev" 2
+```
+
+* If `AVAILABLE >= REQUIRED_COUNT`, it exits `0` immediately and allows the test deployment to proceed.
+* If `AVAILABLE < REQUIRED_COUNT` (capacity is currently in use by another build), it retries every 5 minutes (up to 8 hours).
+* If the reservation is not in `READY` state, has `0` total capacity, or `TOTAL_COUNT < REQUIRED_COUNT`, it fails fast with exit code `3`.
+* If the reservation does not exist (`404`) or lacks permissions (`403`), it fails fast with exit code `1`.
+
+## Unit Testing
+
+Unit tests for GCE reservation capacity polling (`wait_for_available_reservation.sh`) are located in `tools/tests/test_wait_for_available_reservation.py`.
+
+To run the unit tests:
+
+```bash
+python3 -m unittest tools/tests/test_wait_for_available_reservation.py -v
+```
