@@ -1,0 +1,145 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+Bootstrap: docker
+From: rockylinux:9
+
+%environment
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+    export SYSTEMC_ROOT=/opt/systemc # spellchecker:disable-line
+    export SYSTEMC_INCLUDE=/opt/systemc/include # spellchecker:disable-line
+    export SYSTEMC_LIBDIR=/opt/systemc/lib64 # spellchecker:disable-line
+    export LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64:/usr/local/lib:/usr/local/lib64:/opt/systemc/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+    export RTLMETER_DIR=/opt/rtlmeter
+    export PATH=/opt/rtlmeter:/opt/rh/gcc-toolset-14/root/usr/bin:/usr/local/bin:$PATH
+    # Upstream's rtlmeter launcher exports PYTHONPATH=${ROOT}/src but runs
+    # `python3 -m src.rtlmeter.main`, which needs ${ROOT} itself on sys.path.
+    # It only resolves because `python -m` prepends the CWD, so it works from
+    # the repo root and fails elsewhere with "No module named 'src.rtlmeter'".
+    # The launcher prepends to PYTHONPATH, so this value survives.
+    export PYTHONPATH=/opt/rtlmeter${PYTHONPATH:+:$PYTHONPATH}
+
+%post
+    dnf install -y epel-release
+    dnf --enablerepo=crb install -y \
+        gcc gcc-c++ make autoconf automake libtool cmake git \
+        gcc-toolset-14-gcc gcc-toolset-14-gcc-c++ \
+        bison flex help2man zlib-devel eigen3-devel \
+        perl-core perl-FindBin perl-File-Compare perl-File-Copy \
+        python3 python3-pip python3-devel numactl which procps-ng \
+        python3.11 python3.11-pip python3.11-devel \
+        time diffutils findutils patch bc file gzip tar xz bzip2
+    python3 -m pip install --no-cache-dir distro pyyaml
+    dnf clean all
+
+    # Enable GCC 14
+    source /opt/rh/gcc-toolset-14/enable
+
+    # 1. Build Accellera SystemC 2.3.4
+    mkdir -p /tmp/systemc-build
+    cd /tmp/systemc-build
+    git clone --depth 1 --branch 2.3.4 https://github.com/accellera-official/systemc.git /tmp/systemc
+    cd /tmp/systemc
+    mkdir build && cd build
+    cmake .. -DCMAKE_CXX_STANDARD=17 \
+             -DCMAKE_INSTALL_PREFIX=/opt/systemc \
+             -DCMAKE_BUILD_TYPE=Release
+    make -j$(nproc)
+    make install
+    cd /
+    rm -rf /tmp/systemc /tmp/systemc-build
+
+    # 2. Build Verilator 5
+    # Note: v5.030 requires nearly 2x RSS memory during the verilate stage and
+    # achieves lower simulation throughput compared to v5.052.
+    mkdir -p /tmp/verilator-build
+    cd /tmp/verilator-build
+    git clone --depth 1 --branch v5.052 https://github.com/verilator/verilator.git /tmp/verilator
+    cd /tmp/verilator
+    autoconf
+    unset VERILATOR_ROOT
+    ./configure --prefix=/usr/local
+    make -j$(nproc)
+    make install
+    cd /
+    rm -rf /tmp/verilator /tmp/verilator-build
+
+    # 3. Install RTLMeter benchmark framework
+    # venv MUST be built by the container's python3.11 -- a host-built venv
+    # symlinks to an interpreter path invisible inside the container.
+    # Pinned to a known-good commit because "main" drifts.
+    git clone https://github.com/verilator/rtlmeter.git /opt/rtlmeter
+    cd /opt/rtlmeter
+    git checkout d4cd38138eba33ea5121a76a8e8fc4aedebe0f5b
+    python3.11 -m venv venv
+    ./venv/bin/pip install --no-cache-dir --upgrade pip
+    ./venv/bin/pip install --no-cache-dir -r python-requirements.txt
+    ./venv/bin/python3 -V
+    # Deliberately NOT run from /opt/rtlmeter: the launcher only resolves its
+    # own module when the CWD happens to be the repo root, so checking from
+    # there hides exactly the breakage that kills a batch job.
+    cd /
+    PYTHONPATH=/opt/rtlmeter /opt/rtlmeter/rtlmeter --help > /dev/null
+
+    # 4. Built-in Smoke Test Runner
+    cat <<'EOF' > /usr/local/bin/run_nvdla_smoke.sh
+#!/bin/bash
+set -e
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
+
+echo "========================================================="
+echo " Verilator & RTLMeter Container Environment Smoke Test"
+echo "========================================================="
+verilator --version
+echo "SystemC Root: ${SYSTEMC_ROOT:-/opt/systemc}" # spellchecker:disable-line
+echo "RTLMeter Dir: ${RTLMETER_DIR:-/opt/rtlmeter}"
+
+SMOKE_TMP=$(mktemp -d /tmp/vlt_smoke_XXXXXX)
+trap 'rm -rf "$SMOKE_TMP"' EXIT
+cd "$SMOKE_TMP"
+
+cat <<'VEOF' > test_top.sv
+module test_top;
+  initial begin
+    $display(">>> Simulation started: evaluating logic cycles...");
+    $display(">>> Verilator compilation and execution verified successfully!");
+    $finish;
+  end
+endmodule
+VEOF
+
+echo "--- 1. Running Verilator ---"
+verilator --cc --main --exe test_top.sv
+
+echo "--- 2. Compiling C++ model with g++ ---"
+make -C obj_dir -f Vtest_top.mk
+
+echo "--- 3. Executing simulation binary ---"
+./obj_dir/Vtest_top
+
+rm -rf "$SMOKE_TMP"
+echo "========================================================="
+echo ">>> ALL SMOKE TESTS PASSED SUCCESSFULLY!"
+echo "========================================================="
+EOF
+    chmod +x /usr/local/bin/run_nvdla_smoke.sh
+
+%runscript
+    if [ "$#" -gt 0 ]; then
+        exec "$@"
+    else
+        exec /usr/local/bin/run_nvdla_smoke.sh
+    fi

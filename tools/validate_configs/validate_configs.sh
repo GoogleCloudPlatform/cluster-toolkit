@@ -142,6 +142,7 @@ EXCLUDE_EXAMPLE["community/examples/eda/eda-hybrid-cloud.yaml"]=
 EXCLUDE_EXAMPLE["community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml"]=
 EXCLUDE_EXAMPLE["community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml"]=
 EXCLUDE_EXAMPLE["community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml"]=
+EXCLUDE_EXAMPLE["community/examples/hpc-slurm-google-cloud-dedicated/eda/eda-gcd-cluster.yaml"]=
 
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}
