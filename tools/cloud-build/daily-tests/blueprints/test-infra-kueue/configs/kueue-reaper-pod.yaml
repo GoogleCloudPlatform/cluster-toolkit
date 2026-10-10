@@ -86,7 +86,7 @@ data:
             if [ -n "$bid" ]; then
               build_statuses["$bid"]="$bstatus"
             fi
-          done < <(gcloud builds list --filter="$filter_str" --format="value(id,status)")
+          done < <(gcloud builds list --filter="create_time > -P2D AND ($filter_str)" --format="value(id,status)")
 
           # Check and delete jobs for cancelled/failed builds
           for item in "${active_jobs[@]}"; do
@@ -96,14 +96,14 @@ data:
             if [ "$status" == "CANCELLED" ] || [ "$status" == "FAILURE" ] || [ "$status" == "TIMEOUT" ]; then
               echo "WARNING: Cloud Build $build_id is $status!"
               echo "Deleting suspended/active Kubernetes Job $job_name to trigger graceful cleanup or remove it from Kueue..."
-              kubectl delete job "$job_name" 2>/dev/null || true
+              kubectl delete job "$job_name" -n default --wait=false 2>/dev/null || true
             fi
           done
         fi
       fi
 
-      # Poll every 30 seconds
-      sleep 30
+      # Poll every minute
+      sleep 60
     done
 ---
 apiVersion: apps/v1
