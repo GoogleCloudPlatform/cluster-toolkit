@@ -1,0 +1,369 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+steps:
+# Step 0: Clone the remote repository directly inside Cloud Build (if repo_url is set)
+- name: 'gcr.io/cloud-builders/git'
+  id: 'clone-repo'
+  waitFor: ['-'] # Start immediately
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    set -eo pipefail
+    if [ -n "${_REPO_URL}" ]; then
+      echo "Cloning remote repository: ${_REPO_URL} (ref: ${_REPO_REF})..."
+
+      # If local example directory or source overlay was uploaded, back it up
+      mkdir -p /tmp/local_backup
+      RAW_DIR="${_TARGET_DIR}"
+      BACKUP_NAME=$$(basename "$${RAW_DIR%/}")
+      if [ -n "$$BACKUP_NAME" ] && [ -d "$$BACKUP_NAME" ]; then
+        echo "Found locally uploaded directory: $$BACKUP_NAME. Preserving local files..."
+        cp -r "$$BACKUP_NAME" /tmp/local_backup/
+      fi
+      if [ -n "${_TARGET_DIR}" ] && [ -d "${_TARGET_DIR}" ]; then
+        echo "Found locally uploaded example directory: ${_TARGET_DIR}. Preserving local example..."
+        cp -r "${_TARGET_DIR}" /tmp/local_backup/
+      fi
+      if [ -d "user_examples" ]; then
+        echo "Found locally uploaded user_examples directory. Preserving local examples..."
+        cp -r user_examples /tmp/local_backup/
+      fi
+
+      mkdir -p /tmp/ae_clone_dir
+      cd /tmp/ae_clone_dir
+      git init
+      git remote add origin "${_REPO_URL}"
+
+      if ! git fetch --depth 1 origin "${_REPO_REF}" 2>/dev/null && ! git fetch --depth 1 origin 2>/dev/null; then
+        echo "ERROR: Failed to fetch from remote Git repository '${_REPO_URL}' (ref: '${_REPO_REF}')." >&2
+        exit 1
+      fi
+
+      if ! git checkout "${_REPO_REF}" 2>/dev/null && ! git checkout FETCH_HEAD 2>/dev/null; then
+        echo "ERROR: Failed to checkout ref '${_REPO_REF}' from remote Git repository '${_REPO_URL}'." >&2
+        exit 1
+      fi
+      cd - >/dev/null
+
+      echo "--> Successfully cloned remote repository. Overlaying into workspace..."
+      if [ -n "${_CLOUD_BUILD_DIR}" ] && [ "${_CLOUD_BUILD_DIR}" != "." ]; then
+        if [ -d "/tmp/ae_clone_dir/${_CLOUD_BUILD_DIR}" ]; then
+          cp -r /tmp/ae_clone_dir/${_CLOUD_BUILD_DIR}/. .
+        else
+          echo "ERROR: Configured cloud_build_dir '${_CLOUD_BUILD_DIR}' not found in remote Git repository." >&2
+          exit 1
+        fi
+      else
+        cp -r /tmp/ae_clone_dir/. .
+      fi
+      rm -rf /tmp/ae_clone_dir
+
+      # Restore locally uploaded user_examples over Git repository
+      if [ -d "/tmp/local_backup/user_examples" ]; then
+        echo "--> Restoring local user_examples over Git repository..."
+        cp -r /tmp/local_backup/user_examples/. user_examples/
+      fi
+      RAW_DIR="${_TARGET_DIR}"
+      BACKUP_NAME=$$(basename "$${RAW_DIR%/}")
+      if [ -d "/tmp/local_backup/$$BACKUP_NAME" ]; then
+        echo "--> Restoring local example '$$BACKUP_NAME' into workspace..."
+        mkdir -p "user_examples/$$BACKUP_NAME"
+        cp -r "/tmp/local_backup/$$BACKUP_NAME/." "user_examples/$$BACKUP_NAME/"
+      fi
+      rm -rf /tmp/local_backup
+
+      # If _TARGET_DIR was passed as an absolute path, map/symlink to user_examples/<name> if found in workspace
+      EXAMPLE_NAME=$$(basename "${_TARGET_DIR}")
+      if [ -d "user_examples/$$EXAMPLE_NAME" ] && [ ! -d "${_TARGET_DIR}" ]; then
+        mkdir -p "$$(dirname "${_TARGET_DIR}")" 2>/dev/null || true
+        ln -s "$$(pwd)/user_examples/$$EXAMPLE_NAME" "${_TARGET_DIR}" 2>/dev/null || true
+      fi
+    else
+      echo "No remote repository specified. Using local workspace source."
+      RAW_DIR="${_TARGET_DIR}"
+      BACKUP_NAME=$$(basename "$${RAW_DIR%/}")
+      if [ -n "$$BACKUP_NAME" ] && [ -d "$$BACKUP_NAME" ]; then
+        mkdir -p "user_examples/$$BACKUP_NAME"
+        cp -r "$$BACKUP_NAME/." "user_examples/$$BACKUP_NAME/"
+      fi
+      if [ -n "$$BACKUP_NAME" ] && [ -d "user_examples/$$BACKUP_NAME" ] && [ ! -d "${_TARGET_DIR}" ]; then
+        mkdir -p "$$(dirname "${_TARGET_DIR}")" 2>/dev/null || true
+        ln -s "$$(pwd)/user_examples/$$BACKUP_NAME" "${_TARGET_DIR}" 2>/dev/null || true
+      fi
+    fi
+
+# Step 1: Check if base, controller, and evaluator images already exist in Artifact Registry
+- name: 'gcr.io/cloud-builders/gcloud'
+  id: 'check-cached-images'
+  waitFor: ['clone-repo']
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    set -eo pipefail
+    # 1. Check Vanilla Base Image
+    BASE_HASH=$$(find infrastructure/build/base.Dockerfile infrastructure/requirements.txt google_framework/alpha_evolve -type f -exec sha256sum {} + | sort | sha256sum | cut -c1-16)
+    BASE_REPO="${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_INFRA_REPO_NAME}/alpha-evolve-base"
+    BASE_TAG="$$BASE_REPO:$$BASE_HASH"
+    echo "$$BASE_TAG" > /workspace/base_image_tag.txt
+
+    if gcloud artifacts docker images describe "$$BASE_TAG" >/dev/null 2>&1; then
+      echo "--> Vanilla base image ($$BASE_TAG) already exists in Artifact Registry. Skipping base build."
+      echo "EXISTS" > /workspace/base_image_status.txt
+    else
+      echo "--> Vanilla base image changed or missing ($$BASE_TAG). Building..."
+      echo "BUILD" > /workspace/base_image_status.txt
+    fi
+
+    # 2. Check Custom Base Image if specified
+    EVAL_BASE="${_BASE_EVALUATOR_IMAGE}"
+    DEFAULT_BASE="python:3.12-slim-bookworm"
+    if [ -z "$$EVAL_BASE" ] || [ "$$EVAL_BASE" = "$$DEFAULT_BASE" ] || [ "$$EVAL_BASE" = "alpha-evolve-base" ]; then
+      FINAL_BASE="$$BASE_TAG"
+      echo "$$FINAL_BASE" > /workspace/eval_base_tag.txt
+      echo "EXISTS" > /workspace/eval_base_status.txt
+    else
+      CUSTOM_HASH=$$(printf -- '%s-%s' "$$EVAL_BASE" "$$BASE_HASH" | sha256sum | cut -c1-16)
+      CUSTOM_TAG="${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_INFRA_REPO_NAME}/alpha-evolve-base-custom:$$CUSTOM_HASH"
+      echo "$$CUSTOM_TAG" > /workspace/eval_base_tag.txt
+      FINAL_BASE="$$CUSTOM_TAG"
+      if gcloud artifacts docker images describe "$$CUSTOM_TAG" >/dev/null 2>&1; then
+        echo "--> Custom base image ($$CUSTOM_TAG) already exists in Artifact Registry. Skipping custom base build."
+        echo "EXISTS" > /workspace/eval_base_status.txt
+      else
+        echo "--> Custom base image ($$CUSTOM_TAG) missing or changed. Building..."
+        echo "BUILD" > /workspace/eval_base_status.txt
+      fi
+    fi
+
+    # 3. Check Controller Image
+    CONTROLLER_CONTENT_HASH=$$(find infrastructure/build/controller.Dockerfile infrastructure/batch_configs/eval-batch.yaml -type f -exec sha256sum {} + | sort | sha256sum | cut -c1-16)
+    CONTROLLER_HASH=$$(printf -- '%s-%s' "$$BASE_TAG" "$$CONTROLLER_CONTENT_HASH" | sha256sum | cut -c1-16)
+    CTRL_REPO="${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO_NAME}/${_USER_EXPERIMENT_NAME}-controller"
+    CTRL_TAG="$$CTRL_REPO:$$CONTROLLER_HASH"
+    CTRL_LATEST="$$CTRL_REPO:latest"
+    echo "$$CTRL_TAG" > /workspace/controller_image_tag.txt
+    echo "$$CTRL_LATEST" > /workspace/controller_image_latest.txt
+
+    if gcloud artifacts docker images describe "$$CTRL_TAG" >/dev/null 2>&1; then
+      echo "--> Controller image ($$CONTROLLER_HASH) already exists in Artifact Registry. Skipping controller build."
+      echo "EXISTS" > /workspace/controller_image_status.txt
+    else
+      echo "--> Controller image changed or missing (hash: $$CONTROLLER_HASH). Building..."
+      echo "BUILD" > /workspace/controller_image_status.txt
+    fi
+
+    # 4. Check Evaluator Image if evaluator.Dockerfile exists
+    RAW_DIR="${_TARGET_DIR}"
+    EVAL_DIR="$${RAW_DIR%/}"
+    if [ ! -f "$$EVAL_DIR/evaluator.Dockerfile" ]; then
+      EXAMPLE_NAME=$$(basename "$$EVAL_DIR")
+      if [ -f "user_examples/$$EXAMPLE_NAME/evaluator.Dockerfile" ]; then
+        EVAL_DIR="user_examples/$$EXAMPLE_NAME"
+      elif [ -f "$$EXAMPLE_NAME/evaluator.Dockerfile" ]; then
+        EVAL_DIR="$$EXAMPLE_NAME"
+      fi
+    fi
+    echo "$$EVAL_DIR" > /workspace/evaluator_dir.txt
+
+    if [ -f "$$EVAL_DIR/evaluator.Dockerfile" ]; then
+      EXAMPLE_HASH=$$(cd "$$EVAL_DIR" && find . -type f -exec sha256sum {} + | sort | sha256sum | cut -c1-16)
+      EVALUATOR_HASH=$$(printf -- '%s-%s' "$$FINAL_BASE" "$$EXAMPLE_HASH" | sha256sum | cut -c1-16)
+      EVAL_REPO="${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO_NAME}/${_USER_EXPERIMENT_NAME}-evaluator"
+      EVAL_TAG="$$EVAL_REPO:$$EVALUATOR_HASH"
+      EVAL_LATEST="$$EVAL_REPO:latest"
+      echo "$$EVAL_TAG" > /workspace/evaluator_image_tag.txt
+      echo "$$EVAL_LATEST" > /workspace/evaluator_image_latest.txt
+
+      if gcloud artifacts docker images describe "$$EVAL_TAG" >/dev/null 2>&1; then
+        echo "--> Evaluator image ($$EVALUATOR_HASH) already exists in Artifact Registry. Skipping evaluator build."
+        echo "EXISTS" > /workspace/evaluator_image_status.txt
+      else
+        echo "--> Evaluator image changed or missing (hash: $$EVALUATOR_HASH). Building..."
+        echo "BUILD" > /workspace/evaluator_image_status.txt
+      fi
+    fi
+
+# Step 2: Build and push the shared base image only if changed or missing
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'build-base-image'
+  waitFor: ['check-cached-images']
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    set -eo pipefail
+    BASE_TAG="$$(cat /workspace/base_image_tag.txt)"
+    BASE_LATEST="${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_INFRA_REPO_NAME}/alpha-evolve-base:latest"
+    if [ "$$(cat /workspace/base_image_status.txt)" = "BUILD" ]; then
+      echo "Building shared vanilla base image ($$BASE_TAG)..."
+      docker build \
+        -t "$$BASE_TAG" \
+        -t "$$BASE_LATEST" \
+        -f infrastructure/build/base.Dockerfile \
+        .
+      echo "Pushing shared base image ($$BASE_TAG and $$BASE_LATEST) to Artifact Registry..."
+      docker push "$$BASE_TAG"
+      docker push "$$BASE_LATEST"
+    else
+      echo "Using existing shared base image: $$BASE_TAG"
+    fi
+
+# Step 3: Build the controller image using the shared base image
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'build-controller'
+  waitFor: ['build-base-image']
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    set -eo pipefail
+    CTRL_STATUS="$$(cat /workspace/controller_image_status.txt)"
+    if [ "$$CTRL_STATUS" = "BUILD" ]; then
+      BASE_TAG="$$(cat /workspace/base_image_tag.txt)"
+      CTRL_TAG="$$(cat /workspace/controller_image_tag.txt)"
+      CTRL_LATEST="$$(cat /workspace/controller_image_latest.txt)"
+      echo "--> Building controller image ($$CTRL_TAG)..."
+      docker build \
+        -t "$$CTRL_TAG" \
+        -t "$$CTRL_LATEST" \
+        -f 'infrastructure/build/controller.Dockerfile' \
+        --build-arg "BASE_IMAGE=$$BASE_TAG" \
+        .
+      echo "--> Pushing controller image ($$CTRL_TAG and $$CTRL_LATEST) to Artifact Registry..."
+      docker push "$$CTRL_TAG"
+      docker push "$$CTRL_LATEST"
+    else
+      echo "--> Controller image is cached in Artifact Registry ($$(cat /workspace/controller_image_tag.txt)). Skipping build."
+    fi
+
+# Step 4: Build the evaluator image
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'build-evaluator'
+  waitFor: ['build-base-image']
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    set -eo pipefail
+    EVAL_DIR="$$(cat /workspace/evaluator_dir.txt 2>/dev/null || true)"
+    if [ -z "$$EVAL_DIR" ] || [ ! -f "$$EVAL_DIR/evaluator.Dockerfile" ]; then
+      RAW_DIR="${_TARGET_DIR}"
+      EVAL_DIR="$${RAW_DIR%/}"
+      if [ ! -f "$$EVAL_DIR/evaluator.Dockerfile" ]; then
+        EXAMPLE_NAME=$$(basename "$$EVAL_DIR")
+        if [ -f "user_examples/$$EXAMPLE_NAME/evaluator.Dockerfile" ]; then
+          EVAL_DIR="user_examples/$$EXAMPLE_NAME"
+        elif [ -f "$$EXAMPLE_NAME/evaluator.Dockerfile" ]; then
+          EVAL_DIR="$$EXAMPLE_NAME"
+        fi
+      fi
+    fi
+
+    if [ -f "$$EVAL_DIR/evaluator.Dockerfile" ]; then
+      EVAL_STATUS="$$(cat /workspace/evaluator_image_status.txt)"
+      if [ "$$EVAL_STATUS" = "BUILD" ]; then
+        EVAL_BASE="$$(cat /workspace/eval_base_tag.txt)"
+        BASE_STATUS="$$(cat /workspace/eval_base_status.txt)"
+
+        if [ "$$BASE_STATUS" = "BUILD" ]; then
+          echo "--> Building custom base image ($$EVAL_BASE)..."
+          docker build \
+            -t "$$EVAL_BASE" \
+            -f infrastructure/build/base.Dockerfile \
+            --build-arg BASE_PYTHON_IMAGE="${_BASE_EVALUATOR_IMAGE}" \
+            .
+          echo "--> Pushing custom base image ($$EVAL_BASE) to Artifact Registry..."
+          docker push "$$EVAL_BASE"
+        else
+          echo "--> Using base image: $$EVAL_BASE"
+        fi
+
+        EVAL_TAG="$$(cat /workspace/evaluator_image_tag.txt)"
+        EVAL_LATEST="$$(cat /workspace/evaluator_image_latest.txt)"
+        echo "--> Building evaluator image ($$EVAL_TAG) from $$EVAL_DIR/evaluator.Dockerfile..."
+        docker build \
+          -t "$$EVAL_TAG" \
+          -t "$$EVAL_LATEST" \
+          -f "$$EVAL_DIR/evaluator.Dockerfile" \
+          --build-arg BASE_IMAGE="$$EVAL_BASE" \
+          --build-arg PROJECT_ID=${_PROJECT_ID} \
+          .
+        echo "--> Pushing evaluator image ($$EVAL_TAG and $$EVAL_LATEST) to Artifact Registry..."
+        docker push "$$EVAL_TAG"
+        docker push "$$EVAL_LATEST"
+      else
+        echo "--> Evaluator image is cached in Artifact Registry ($$(cat /workspace/evaluator_image_tag.txt)). Skipping build."
+      fi
+    else
+      echo "No custom evaluator Dockerfile found in $$EVAL_DIR. Skipping evaluator build."
+    fi
+
+# Step 5: Run unit tests on the built controller image
+- name: '${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO_NAME}/${_USER_EXPERIMENT_NAME}-controller:latest'
+  id: 'test-controller'
+  waitFor: ['build-controller']
+  entrypoint: 'sh'
+  args:
+  - '-c'
+  - |
+    if [ "$$(cat /workspace/controller_image_status.txt)" = "EXISTS" ]; then
+      echo "Controller image reused from Artifact Registry. Unit tests previously verified."
+    else
+      echo "Running AlphaEvolve unit test suite..."
+      python -m pytest /app/src/alpha_evolve/tests/ -v -s
+    fi
+
+# Step 6: Finalize controller image
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'finalize-controller'
+  waitFor: ['test-controller']
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    if [ "$$(cat /workspace/controller_image_status.txt)" = "EXISTS" ]; then
+      echo "Controller image reused from Artifact Registry."
+    else
+      echo "Controller image build and verification completed."
+    fi
+
+# Step 7: Finalize evaluator image
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'finalize-evaluator'
+  waitFor: ['build-evaluator']
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    EVAL_DIR="$$(cat /workspace/evaluator_dir.txt 2>/dev/null || true)"
+    if [ -z "$$EVAL_DIR" ]; then
+      RAW_DIR="${_TARGET_DIR}"
+      EVAL_DIR="$${RAW_DIR%/}"
+    fi
+    if [ -f "$$EVAL_DIR/evaluator.Dockerfile" ]; then
+      if [ "$$(cat /workspace/evaluator_image_status.txt)" = "EXISTS" ]; then
+        echo "Evaluator image reused from Artifact Registry."
+      else
+        echo "Evaluator image build and push completed."
+      fi
+    else
+      echo "Skipping evaluator image setup."
+    fi
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
