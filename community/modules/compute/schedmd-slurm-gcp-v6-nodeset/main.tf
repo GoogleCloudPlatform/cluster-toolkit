@@ -210,7 +210,7 @@ locals {
 
     zone_target_shape = local.zone_target_shape
     zone_policy_allow = local.zones_allow
-    zone_policy_deny  = local.zones_deny
+    zone_policy_deny  = toset([]) # derived by the controller
 
     instance_flexibility_policy = local.instance_flexibility_policy
 
@@ -237,23 +237,8 @@ locals {
     var.future_reservation == ""
   )
 
-  zones_allow = local.expand_zones ? toset(data.google_compute_zones.available.names) : local.zones
-  zones_deny  = setsubtract(data.google_compute_zones.available.names, local.zones_allow)
-}
-
-data "google_compute_zones" "available" {
-  project = var.project_id
-  region  = var.region
-
-  lifecycle {
-    postcondition {
-      condition     = length(setsubtract(local.zones, self.names)) == 0
-      error_message = <<-EOD
-      Invalid zones=${jsonencode(setsubtract(local.zones, self.names))}
-      Available zones=${jsonencode(self.names)}
-      EOD
-    }
-  }
+  # null means every zone of the region. The controller resolves it with its per-region zones data source.
+  zones_allow = local.expand_zones ? null : local.zones
 }
 
 locals {
