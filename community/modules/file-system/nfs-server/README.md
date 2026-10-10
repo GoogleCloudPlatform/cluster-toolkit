@@ -118,7 +118,10 @@ No modules.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_auto_delete_disk"></a> [auto\_delete\_disk](#input\_auto\_delete\_disk) | DEPRECATED: Whether or not the NFS disk should be auto-deleted | `string` | `null` | no |
+| <a name="input_boot_disk_provisioned_iops"></a> [boot\_disk\_provisioned\_iops](#input\_boot\_disk\_provisioned\_iops) | Indicates how many IOPS to provision for the boot disk. This sets the number of I/O operations per second that the disk can handle. | `number` | `null` | no |
+| <a name="input_boot_disk_provisioned_throughput"></a> [boot\_disk\_provisioned\_throughput](#input\_boot\_disk\_provisioned\_throughput) | Indicates how much throughput to provision for the boot disk, in MB/s. This sets the amount of data that can be read or written from the disk per second. | `number` | `null` | no |
 | <a name="input_boot_disk_size"></a> [boot\_disk\_size](#input\_boot\_disk\_size) | Storage size in GB for the boot disk | `number` | `null` | no |
+| <a name="input_boot_disk_storage_pool"></a> [boot\_disk\_storage\_pool](#input\_boot\_disk\_storage\_pool) | Storage pool to use for the boot disk. Note that storage pools are only supported with Hyperdisk types. For boot disks, only hyperdisk-balanced is supported. You must provide an existing storage pool, as this module does not create new ones. | `string` | `null` | no |
 | <a name="input_boot_disk_type"></a> [boot\_disk\_type](#input\_boot\_disk\_type) | Storage type for the boot disk | `string` | `null` | no |
 | <a name="input_create_boot_snapshot_before_destroy"></a> [create\_boot\_snapshot\_before\_destroy](#input\_create\_boot\_snapshot\_before\_destroy) | Whether to create a snapshot before destroying the boot disk | `bool` | `false` | no |
 | <a name="input_create_snapshot_before_destroy"></a> [create\_snapshot\_before\_destroy](#input\_create\_snapshot\_before\_destroy) | Whether to create a snapshot before destroying the NFS data disk | `bool` | `false` | no |
@@ -137,6 +140,7 @@ No modules.
 | <a name="input_provisioned_throughput"></a> [provisioned\_throughput](#input\_provisioned\_throughput) | Provisioned throughput for the NFS data disk if using Hyperdisk Balanced/Extreme | `number` | `null` | no |
 | <a name="input_scopes"></a> [scopes](#input\_scopes) | Scopes to apply to the controller | `list(string)` | <pre>[<br/>  "https://www.googleapis.com/auth/cloud-platform"<br/>]</pre> | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service Account for the NFS server | `string` | `null` | no |
+| <a name="input_storage_pool"></a> [storage\_pool](#input\_storage\_pool) | Storage pool to use for the NFS data disk. Note that storage pools are only supported with Hyperdisk types. You must provide an existing storage pool, as this module does not create new ones. | `string` | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork to attach the NFS VM. | `string` | `null` | no |
 | <a name="input_type"></a> [type](#input\_type) | Storage type for the NFS data disk | `string` | `"pd-ssd"` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | The zone name where the NFS instance located in. | `string` | n/a | yes |

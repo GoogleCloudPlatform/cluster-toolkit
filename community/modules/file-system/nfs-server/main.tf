@@ -57,6 +57,7 @@ resource "google_compute_disk" "attached_disk" {
   name                           = "${local.name}-nfs-instance-disk"
   size                           = var.disk_size
   type                           = var.type
+  storage_pool                   = var.storage_pool
   zone                           = var.zone
   labels                         = local.labels
   provisioned_iops               = var.provisioned_iops
@@ -84,6 +85,9 @@ resource "google_compute_disk" "boot_disk" {
   name                           = "${local.name}-boot-disk"
   size                           = var.boot_disk_size
   type                           = var.boot_disk_type
+  storage_pool                   = var.boot_disk_storage_pool
+  provisioned_iops               = var.boot_disk_provisioned_iops
+  provisioned_throughput         = var.boot_disk_provisioned_throughput
   image                          = data.google_compute_image.compute_image.self_link
   labels                         = local.labels
   zone                           = var.zone
