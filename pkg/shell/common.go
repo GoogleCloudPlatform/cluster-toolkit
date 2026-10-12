@@ -91,8 +91,12 @@ func (c *Command) Execute() CommandResult {
 	}
 	c.cmd.Stdout = &c.stdout
 	c.cmd.Stderr = &c.stderr
+
 	err := c.cmd.Run()
-	if errors.Is(err, exec.ErrWaitDelay) || (err != nil && c.ctx != nil && c.ctx.Err() == context.DeadlineExceeded) {
+	if errors.Is(err, exec.ErrWaitDelay) {
+		// The process exited successfully; only a child kept stdout/stderr open.
+		err = nil
+	} else if err != nil && c.ctx != nil && c.ctx.Err() == context.DeadlineExceeded {
 		err = context.DeadlineExceeded
 	}
 	result := CommandResult{

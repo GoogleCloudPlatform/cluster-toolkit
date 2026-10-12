@@ -18,9 +18,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/shell"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -282,7 +284,7 @@ func TestEnsureGCloudSDKInstalled_Failure(t *testing.T) {
 
 	t.Run("Binary not found (ExitCode -1)", func(t *testing.T) {
 		shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
-			return shell.CommandResult{ExitCode: -1, Err: fmt.Errorf("executable file not found in PATH")}
+			return shell.CommandResult{ExitCode: -1, Err: &exec.Error{Name: "gcloud", Err: exec.ErrNotFound}}
 		}
 		err := ensureGCloudSDKInstalled()
 		if err == nil {
@@ -373,6 +375,44 @@ func TestEnsureGCloudAuthenticated_Timeout(t *testing.T) {
 	}
 }
 
+func TestEnsureBasicPrerequisites_GCloudAuthTimeout(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
+
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		if name == "gcloud" && len(args) > 1 && args[0] == "auth" && args[1] == "list" {
+			return shell.CommandResult{ExitCode: 124, Err: context.DeadlineExceeded}
+		}
+		return shell.CommandResult{ExitCode: 0}
+	}
+
+	origStore := store
+	defer func() { store = origStore }()
+	store = &mockPrereqStore{}
+
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	err := ensureBasicPrerequisites(cmd, "test-project")
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected error to wrap context.DeadlineExceeded, got %v", err)
+	}
+	wantSubstr := fmt.Sprintf("gcloud authentication check timed out after %v", shell.DefaultLocalCommandTimeout)
+	if !strings.Contains(err.Error(), wantSubstr) {
+		t.Errorf("expected error to contain %q, got %v", wantSubstr, err)
+	}
+	if strings.Contains(buf.String(), "gcloud auth login") {
+		t.Errorf("did not expect 'gcloud auth login' prompt on timeout, got output:\n%s", buf.String())
+	}
+}
+
 func TestEnsureProjectExists_Timeout(t *testing.T) {
 	origExecuteCommand := shell.ExecuteCommandWithTimeout
 	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
@@ -438,11 +478,11 @@ func TestCheckK8sDependencies_Timeout(t *testing.T) {
 	if len(missing) != 2 {
 		t.Fatalf("expected 2 missing prereqs, got %d", len(missing))
 	}
-	wantKubectl := fmt.Sprintf("kubectl (verification timed out after %v)", shell.DefaultLocalCommandTimeout)
+	wantKubectl := fmt.Sprintf("kubectl (installed, but did not respond within %v)", shell.DefaultLocalCommandTimeout)
 	if missing[0].name != wantKubectl {
 		t.Errorf("missing[0].name = %q, want %q", missing[0].name, wantKubectl)
 	}
-	wantPlugin := fmt.Sprintf("gke-gcloud-auth-plugin (verification timed out after %v)", shell.DefaultLocalCommandTimeout)
+	wantPlugin := fmt.Sprintf("gke-gcloud-auth-plugin (installed, but did not respond within %v)", shell.DefaultLocalCommandTimeout)
 	if missing[1].name != wantPlugin {
 		t.Errorf("missing[1].name = %q, want %q", missing[1].name, wantPlugin)
 	}

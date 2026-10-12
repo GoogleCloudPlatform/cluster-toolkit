@@ -22,6 +22,7 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/shell"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -105,6 +106,8 @@ func isStateStale(state PrereqState, currentProjectID string) bool {
 	return false
 }
 
+const gcloudRequiredMsg = "Google Cloud SDK (gcloud) is required to run prerequisite checks. Aborting job submission.\nPlease install it from https://cloud.google.com/sdk/docs/install and ensure it's in your PATH.\nAfter installation, please run 'gcloud auth login' to authenticate."
+
 // ensureGCloudSDKInstalled checks if gcloud SDK is installed and available in PATH.
 func ensureGCloudSDKInstalled() error {
 
@@ -113,13 +116,13 @@ func ensureGCloudSDKInstalled() error {
 	timeoutMsg := fmt.Sprintf("gcloud version check timed out after %v. Please verify your local gcloud installation is responsive", shell.DefaultLocalCommandTimeout)
 	if err := shell.HandleExecError(result, "gcloud", timeoutMsg); err != nil {
 		// only suggest installation if the binary failed to execute (missing from PATH / %PATH%)
-		if result.ExitCode == -1 {
-			return fmt.Errorf("Google Cloud SDK (gcloud) is required to run prerequisite checks. Aborting job submission.\nPlease install it from https://cloud.google.com/sdk/docs/install and ensure it's in your PATH.\nAfter installation, please run 'gcloud auth login' to authenticate.\nError: %w", err)
+		if errors.Is(result.Err, exec.ErrNotFound) {
+			return fmt.Errorf("%s\nError: %w", gcloudRequiredMsg, err)
 		}
 		return err
 	}
 	if result.ExitCode != 0 {
-		return fmt.Errorf("Google Cloud SDK (gcloud) is required to run prerequisite checks. Aborting job submission.\nPlease install it from https://cloud.google.com/sdk/docs/install and ensure it's in your PATH.\nAfter installation, please run 'gcloud auth login' to authenticate.\nError: %s", result.Stderr)
+		return fmt.Errorf("%s\nError: %s", gcloudRequiredMsg, result.Stderr)
 	}
 	return nil
 }
@@ -184,8 +187,8 @@ func checkLocalCLI(name string, checkArgs []string, installedFlag *bool, missing
 	if errors.Is(res.Err, context.DeadlineExceeded) {
 		logging.Warn("Command timeout while checking %s. Please verify the binary is responsive.", name)
 		*missing = append(*missing, missingPrereq{
-			name:     fmt.Sprintf("%s (verification timed out after %v)", name, shell.DefaultLocalCommandTimeout),
-			commands: []string{strings.Join(append([]string{name}, checkArgs...), " ")},
+			name:     fmt.Sprintf("%s (installed, but did not respond within %v)", name, shell.DefaultLocalCommandTimeout),
+			commands: []string{fmt.Sprintf("# Check that '%s' completes on its own, then retry.", strings.Join(append([]string{name}, checkArgs...), " "))},
 		})
 		return
 	}
@@ -300,6 +303,9 @@ func ensureBasicPrerequisites(cmd *cobra.Command, projectID string) error {
 	// Check GCloud Auth
 	gcloudAuthOK := false
 	if err := ensureGCloudAuthenticated(); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
 		missing = append(missing, missingPrereq{name: "Google Cloud Authentication", commands: []string{"gcloud auth login"}})
 	} else {
 		gcloudAuthOK = true
