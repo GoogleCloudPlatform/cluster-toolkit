@@ -174,22 +174,33 @@ fi
 
 # Step 3: Delete all Filestore VPC network peerings (safe because no instances or active tests exist).
 echo "Deleting Filestore peering networks..."
-gcloud compute networks peerings list \
+if ! PEERINGS=$(gcloud compute networks peerings list \
 	--project "${PROJECT_ID}" \
 	--flatten="peerings[]" \
-	--format="value(peerings.name,name)" |
+	--format="value(peerings.name,name)"); then
+	echo "ERROR: Failed to list network peerings." >&2
+	CLEANUP_FAILED=true
+fi
+
+if [[ -n "$PEERINGS" ]]; then
 	while read -r peering network; do
 		[[ "$peering" =~ ^filestore-peer-[0-9]+$ ]] || continue
 		if [ "$DRY_RUN" = "true" ]; then
 			echo "[DRY-RUN] Would delete peering ${peering} from ${network}."
-		else
-			echo "Deleting ${peering} from ${network}..."
-			gcloud compute networks peerings delete "$peering" \
-				--network "$network" \
-				--project "${PROJECT_ID}" \
-				--quiet
+			continue
 		fi
-	done
+		echo "Deleting ${peering} from ${network}..."
+		if ! gcloud compute networks peerings delete "$peering" \
+			--network "$network" \
+			--project "${PROJECT_ID}" \
+			--quiet; then
+			echo "ERROR: Failed to delete peering ${peering} from ${network}." >&2
+			CLEANUP_FAILED=true
+		fi
+	done <<<"$PEERINGS"
+else
+	echo "No network peerings found."
+fi
 
 [ "$CLEANUP_FAILED" = true ] && exit 1
 echo "Filestore & Peering cleanup completed successfully."
