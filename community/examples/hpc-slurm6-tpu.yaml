@@ -45,6 +45,8 @@ deployment_groups:
       name: controller
       profile: slurm-controller
       enable_tpu: true
+      # TPU nodesets do not use placement policies.
+      enable_placement_policies: false
       act_as_service_accounts:
       - $(tpu_profile.service_account_email)
 

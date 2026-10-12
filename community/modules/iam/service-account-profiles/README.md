@@ -29,24 +29,29 @@ propagated, for `use:` by the Slurm v6 controller, login and nodeset modules and
 | Profile | Project roles | Custom role | Name-scoped role | Also accepts |
 | --- | --- | --- | --- | --- |
 | `slurm-controller` | `logging.logWriter`, `monitoring.metricWriter` | Compute Engine permissions Slurm needs to create, poll, suspend and delete nodes | `compute.instances.setMetadata` | capability flags, `act_as_service_accounts` |
-| `slurm-login` | `logging.logWriter`, `monitoring.metricWriter` | none | none | resource-scoped bindings only |
-| `slurm-compute` | `logging.logWriter`, `monitoring.metricWriter` | none | none | resource-scoped bindings only |
-| `image-builder` | `logging.logWriter`, `monitoring.metricWriter` | `compute.instances.get`, plus actAs on itself | `compute.instances.setMetadata` | resource-scoped bindings only |
+| `slurm-login` | `logging.logWriter`, `monitoring.metricWriter` | none | none | resource-scoped bindings; capability flags are ignored |
+| `slurm-compute` | `logging.logWriter`, `monitoring.metricWriter` | none | none | resource-scoped bindings; capability flags are ignored |
+| `image-builder` | `logging.logWriter`, `monitoring.metricWriter` | `compute.instances.get`, plus actAs on itself | `compute.instances.setMetadata` | resource-scoped bindings; capability flags are ignored |
 | `custom` | `logging.logWriter`, `monitoring.metricWriter` | `custom_permissions` | none | `custom_profile_name` (required), `custom_permissions`, `custom_roles`, capability flags except `enable_mig`, `enable_mig_flex` and `enable_tpu_gce`, `*_bindings` |
 
 Every profile accepts the resource-scoped `*_bindings` variables. The exact permission lists
-are in the `profiles` catalogue in `main.tf`, and inputs a profile does not accept are rejected
-at plan time. A new profile needs a catalogue entry and its name in `metadata.yaml`'s
-`allowed_enum` validator.
+are in the `profiles` catalogue in `main.tf`. Other inputs a profile does not accept are
+rejected at plan time; capability flags are the exception below. A new profile needs a
+catalogue entry and its name in `metadata.yaml`'s `allowed_enum` validator.
 
-Capability flags, for `slurm-controller` and (except the MIG and Compute Engine TPU flags)
-`custom`. Set them in the module's `settings`, not as deployment variables: a deployment
-variable reaches every module with an input of the same name, and the login and compute
-profiles reject capability flags.
+Capability flags apply to `slurm-controller` and, except the MIG and Compute Engine TPU flags,
+to `custom`; `custom` rejects those three. `slurm-login`, `slurm-compute` and `image-builder`
+ignore every capability flag, so a flag set as a deployment variable (for example
+`enable_public_ips` in `vars`, which also gives nodesets external IPs) is safe. A deployment
+variable also reaches the controller and any `custom` profile in the blueprint and turns the
+capability on there.
 
-- `enable_placement_policies`: create and use placement policies. Needed whenever a nodeset
-  keeps `schedmd-slurm-gcp-v6-nodeset`'s default `enable_placement: true`, or uses a
-  reservation with its own attached resource policies.
+- `enable_placement_policies`: create and use placement policies. On by default for
+  `slurm-controller`, because `schedmd-slurm-gcp-v6-nodeset` defaults to
+  `enable_placement: true` and `schedmd-slurm-gcp-v6-partition` to `exclusive: true`, so Slurm
+  creates a placement policy for multi-node jobs. Set it to `false` when no nodeset uses
+  placement. Off by default for `custom`. Also needed for a reservation with its own attached
+  resource policies.
 - `enable_public_ips`: resume nodes that get an external IP (a nodeset with
   `enable_public_ips` or an `access_config`).
 - `enable_mig`: manage nodesets backed by a managed instance group that Terraform creates
@@ -375,7 +380,8 @@ gcloud iam roles describe "$(terraform output -raw custom_role_id)" \
   instance that should match, the prefix is wrong: check `instance_name_prefixes` (or
   `slurm_cluster_name`) against the instance name.
 - Slurm controller denials appear in `/var/log/slurm/resume.log` or `slurmsync.log` on the
-  controller. A missing `enable_placement_policies` shows as a `CRITICAL: failed to create
+  controller. A controller with `enable_placement_policies: false` whose nodesets still use
+  placement shows a `CRITICAL: failed to create
   placement policies` line followed by a `bulkInsert` 404 for the policy; the 404 is what
   Slurm reports on the job and node.
 - Denials for resource-scoped bindings come back from `terraform apply`. Denials for
@@ -470,7 +476,7 @@ No modules.
 | <a name="input_enable_bigquery_load"></a> [enable\_bigquery\_load](#input\_enable\_bigquery\_load) | Capability: add the BigQuery permissions for the Slurm controller's enable\_bigquery\_load job accounting. | `bool` | `false` | no |
 | <a name="input_enable_mig"></a> [enable\_mig](#input\_enable\_mig) | Capability: add the permissions to manage nodesets backed by a managed instance group that<br/>Terraform creates (provisioning\_engine = "MIG"). Includes compute.instances.setMetadata<br/>without a name condition, because Google requires it for instance group manager patch,<br/>whose target is a group rather than an instance. | `bool` | `false` | no |
 | <a name="input_enable_mig_flex"></a> [enable\_mig\_flex](#input\_enable\_mig\_flex) | Capability: add the regional instance-group permissions needed to manage DWS Flex nodesets<br/>(a nodeset with dws\_flex enabled). Includes everything enable\_mig adds, including the<br/>unscoped compute.instances.setMetadata. | `bool` | `false` | no |
-| <a name="input_enable_placement_policies"></a> [enable\_placement\_policies](#input\_enable\_placement\_policies) | Capability: add the permissions to create and use placement policies. | `bool` | `false` | no |
+| <a name="input_enable_placement_policies"></a> [enable\_placement\_policies](#input\_enable\_placement\_policies) | Capability: add the permissions to create and use placement policies. Unset means true<br/>for slurm-controller, whose nodesets and partitions default to enable\_placement = true and<br/>exclusive = true, and false for custom. Set false to opt out when no nodeset uses placement. | `bool` | `null` | no |
 | <a name="input_enable_public_ips"></a> [enable\_public\_ips](#input\_enable\_public\_ips) | Capability: add compute.subnetworks.useExternalIp, needed to resume nodes that get an<br/>external IP (a nodeset with enable\_public\_ips or an access\_config). | `bool` | `false` | no |
 | <a name="input_enable_tpu"></a> [enable\_tpu](#input\_enable\_tpu) | Capability: add the Cloud TPU API permissions needed to manage TPU VM nodesets (schedmd-slurm-gcp-v6-nodeset-tpu). | `bool` | `false` | no |
 | <a name="input_enable_tpu_gce"></a> [enable\_tpu\_gce](#input\_enable\_tpu\_gce) | Capability: add the permissions to manage TPU machine types on Compute Engine (a regular<br/>nodeset whose machine type is in a ct or tpu family), which the controller provisions through<br/>a MIG per slice. Includes everything enable\_mig\_flex adds, including the unscoped<br/>compute.instances.setMetadata. | `bool` | `false` | no |

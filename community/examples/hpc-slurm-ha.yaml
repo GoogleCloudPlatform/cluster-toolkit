@@ -42,8 +42,9 @@ deployment_groups:
   #    Terraform, not by the controller at run time.
   #  * The controller module grants its own Cloud SQL secret access; the
   #    database connection needs no IAM permission.
-  #  * No capability flags apply: the nodeset sets enable_placement: false, and
-  #    neither the controller nor login has a public IP.
+  #  * No capability flags apply: the nodeset sets enable_placement: false
+  #    (so the controller opts out of enable_placement_policies, on by
+  #    default), and neither the controller nor login has a public IP.
   - id: controller_sa
     source: modules/project/service-account
     kind: terraform
@@ -65,6 +66,7 @@ deployment_groups:
       # module takes it as-is (no re-deriving), so the name-scoped role's
       # instance-name condition can't drift from the controller's real names.
       slurm_cluster_name: hpcslurmha
+      enable_placement_policies: false
       # Only the compute identity: the controller attaches it to the nodes it
       # creates at run time. Login VMs are created by Terraform under the
       # deploying principal, so the controller never needs to act as login_sa.

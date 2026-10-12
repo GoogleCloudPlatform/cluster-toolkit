@@ -49,8 +49,11 @@ locals {
   ]
 
   # Profile catalogue: predefined project roles (without "roles/"), the
-  # generated role's permissions, the name-scoped role's permissions, and the
-  # optional inputs each profile accepts.
+  # generated role's permissions, the name-scoped role's permissions, the
+  # optional inputs each profile accepts, and the capabilities it turns on when
+  # their flag is unset. tools/cleanup.sh matches the description strings
+  # below, and the "Custom least-privilege permissions: " prefix in grants, to
+  # find leaked generated roles; keep it in step.
   profiles = {
     "slurm-controller" = {
       title         = "Slurm Controller"
@@ -112,6 +115,7 @@ locals {
       scoped_permissions             = ["compute.instances.setMetadata"]
       default_instance_name_prefixes = ["${local.slurm_cluster_name_default}-"]
       accepted_capabilities          = ["placement_policies", "public_ips", "mig", "mig_flex", "bigquery_load", "tpu", "tpu_gce"]
+      default_capabilities           = ["placement_policies"]
       accepts_act_as                 = true
       self_act_as                    = false
       custom                         = false
@@ -124,6 +128,7 @@ locals {
       scoped_permissions             = []
       default_instance_name_prefixes = []
       accepted_capabilities          = []
+      default_capabilities           = []
       accepts_act_as                 = false
       self_act_as                    = false
       custom                         = false
@@ -136,6 +141,7 @@ locals {
       scoped_permissions             = []
       default_instance_name_prefixes = []
       accepted_capabilities          = []
+      default_capabilities           = []
       accepts_act_as                 = false
       self_act_as                    = false
       custom                         = false
@@ -155,6 +161,7 @@ locals {
       scoped_permissions             = ["compute.instances.setMetadata"]
       default_instance_name_prefixes = ["packer-"]
       accepted_capabilities          = []
+      default_capabilities           = []
       accepts_act_as                 = false
       self_act_as                    = true
       custom                         = false
@@ -169,6 +176,7 @@ locals {
       # No mig/mig_flex/tpu_gce: their setMetadata cannot be name-scoped, and
       # custom_permissions denies setMetadata.
       accepted_capabilities = ["placement_policies", "public_ips", "bigquery_load", "tpu"]
+      default_capabilities  = []
       accepts_act_as        = false
       self_act_as           = false
       custom                = true
@@ -230,7 +238,8 @@ locals {
       "compute.subnetworks.get",
     ])
   }
-  enabled_capabilities = [for capability, enabled in {
+  # null means "use the profile default" (default_capabilities).
+  capability_flags = {
     placement_policies = var.enable_placement_policies
     public_ips         = var.enable_public_ips
     mig                = var.enable_mig
@@ -238,8 +247,20 @@ locals {
     bigquery_load      = var.enable_bigquery_load
     tpu                = var.enable_tpu
     tpu_gce            = var.enable_tpu_gce
-  } : capability if enabled]
-  capability_grants = flatten([for capability in local.enabled_capabilities : local.capability_permissions[capability]])
+  }
+  # Flags explicitly set to true. Variable validations read these two, so they
+  # must not depend on var.profile.
+  enabled_capabilities = [for capability, enabled in local.capability_flags : capability if enabled == true]
+  capability_grants    = flatten([for capability in local.enabled_capabilities : local.capability_permissions[capability]])
+
+  # What the generated role gets. A deployment variable such as
+  # enable_public_ips reaches every module with that input, so a profile
+  # ignores flags it does not accept; an unset flag takes the profile default.
+  applied_capabilities = [
+    for capability, enabled in local.capability_flags : capability
+    if contains(local.profile.accepted_capabilities, capability) && coalesce(enabled, contains(local.profile.default_capabilities, capability))
+  ]
+  applied_capability_grants = flatten([for capability in local.applied_capabilities : local.capability_permissions[capability]])
 
   # Denylist for custom_permissions only; the built-in catalogue is reviewed by
   # hand. Best effort: it blocks known escalation paths, not every one.
@@ -311,7 +332,7 @@ locals {
 
   profile       = local.profiles[var.profile]
   title         = coalesce(local.profile.custom ? var.custom_profile_name : local.profile.title, var.name)
-  permissions   = sort(distinct(concat(local.profile.permissions, local.capability_grants, var.custom_permissions)))
+  permissions   = sort(distinct(concat(local.profile.permissions, local.applied_capability_grants, var.custom_permissions)))
   generate_role = length(local.permissions) > 0
 
   scoped_permissions   = sort(distinct(local.profile.scoped_permissions))

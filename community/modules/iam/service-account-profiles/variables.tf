@@ -87,8 +87,10 @@ variable "profile" {
     error_message = "profile must be one of: ${join(", ", keys(local.profiles))}."
   }
 
+  # A profile that accepts no capability flags ignores them (a deployment
+  # variable reaches every module); one that accepts some rejects the rest.
   validation {
-    condition = alltrue([
+    condition = length(try(local.profiles[var.profile].accepted_capabilities, [])) == 0 || alltrue([
       for capability in local.enabled_capabilities : contains(try(local.profiles[var.profile].accepted_capabilities, []), capability)
     ])
     error_message = "profile = \"${var.profile}\" does not accept one or more of the enabled capability flags. Accepted for this profile: ${length(try(local.profiles[var.profile].accepted_capabilities, [])) == 0 ? "none" : join(", ", try(local.profiles[var.profile].accepted_capabilities, []))}."
@@ -130,7 +132,11 @@ variable "profile" {
   }
 
   validation {
-    condition     = var.custom_role_stage == null || length(concat(try(local.profiles[var.profile].permissions, ["?"]), local.capability_grants, var.custom_permissions)) > 0
+    condition = var.custom_role_stage == null || length(concat(
+      try(local.profiles[var.profile].permissions, ["?"]),
+      [for capability in local.enabled_capabilities : capability if contains(try(local.profiles[var.profile].accepted_capabilities, []), capability)],
+      var.custom_permissions,
+    )) > 0
     error_message = "custom_role_stage is set, but this account gets no generated custom role (its profile, capability flags and custom_permissions grant no permissions), so the stage would have nothing to apply to. Leave custom_role_stage unset."
   }
 }
@@ -280,9 +286,13 @@ variable "subnetwork_bindings" {
 }
 
 variable "enable_placement_policies" {
-  description = "Capability: add the permissions to create and use placement policies."
+  description = <<-EOT
+    Capability: add the permissions to create and use placement policies. Unset means true
+    for slurm-controller, whose nodesets and partitions default to enable_placement = true and
+    exclusive = true, and false for custom. Set false to opt out when no nodeset uses placement.
+  EOT
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "enable_public_ips" {
