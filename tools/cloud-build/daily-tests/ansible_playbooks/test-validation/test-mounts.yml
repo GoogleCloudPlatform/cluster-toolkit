@@ -19,7 +19,11 @@
     - custom_vars.mounts is defined
 
 - name: Verify mount points are actively mounted
-  ansible.builtin.command: "mountpoint -q {{ item }}"
+  ansible.builtin.command:
+    argv:
+    - mountpoint
+    - -q
+    - "{{ item }}"
   loop: "{{ custom_vars.mounts }}"
   become: true
   changed_when: false
