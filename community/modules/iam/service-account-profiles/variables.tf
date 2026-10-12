@@ -37,8 +37,24 @@ variable "name" {
   }
 
   validation {
-    condition     = length(var.deployment_name) + length(var.name) + length(".scoped") + 1 <= 64
-    error_message = "deployment_name and name together are too long: the generated custom role id \"<deployment_name>.<name>.scoped\" may be at most 64 bytes, so deployment_name plus name may be at most ${64 - length(".scoped") - 1} characters."
+    condition     = length(var.deployment_name) + length(var.name) + (var.role_id_suffix == null ? 0 : length(var.role_id_suffix) + 1) + length(".scoped") + 1 <= 64
+    error_message = "deployment_name and name together are too long: the generated custom role id \"<deployment_name>.<name>[.<role_id_suffix>].scoped\" may be at most 64 bytes, so deployment_name plus name may be at most ${64 - length(".scoped") - 1} characters, or ${64 - length(".scoped") - 2} minus the length of role_id_suffix when it is set."
+  }
+}
+
+variable "role_id_suffix" {
+  description = <<-EOT
+    Optional suffix for the generated custom role ids: "<deployment_name>.<name>.<role_id_suffix>"
+    (and ".scoped" after it for the name-scoped role). Set or change it to redeploy a destroyed
+    deployment under the same deployment_name while Google still holds the old role id (from 7
+    to 44 days after destroy). See "Custom role lifecycle" in the README.
+  EOT
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.role_id_suffix == null || (can(regex("^[a-z0-9]{1,8}$", var.role_id_suffix == null ? "" : var.role_id_suffix)) && var.role_id_suffix != "scoped")
+    error_message = "role_id_suffix must be 1-8 lowercase letters or digits, and not \"scoped\" (the name-scoped role already ends in .scoped)."
   }
 }
 

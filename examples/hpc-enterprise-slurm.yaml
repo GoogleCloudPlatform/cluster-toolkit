@@ -69,6 +69,9 @@ deployment_groups:
   # roles/compute.instanceAdmin.v1, and roles/iam.serviceAccountUser granted
   # only on the compute account the controller actually attaches to the nodes
   # it creates. See community/modules/iam/service-account-profiles/README.md.
+  # Redeploying under the same deployment_name 7-44 days after a destroy needs a
+  # new role_id_suffix on each profile block; see "Custom role lifecycle" in the
+  # module README.
   - id: controller_sa
     source: modules/project/service-account
     settings:

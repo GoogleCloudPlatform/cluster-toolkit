@@ -397,13 +397,20 @@ If only your deployment needs it, use a resource-scoped binding or the custom pr
 
 ## Custom role lifecycle
 
-The generated role's id is `<deployment_name>.<name>`, each part with dashes replaced by
-underscores (for example `my_dep.my_name`); the name-scoped role adds `.scoped`. Neither part
-can contain a period, so two different inputs never produce the same id. Ids are limited to 64
-bytes, so `deployment_name` plus `name` can be at most 56 characters. What destroy and
-recreate do depends on `custom_role_deletion_policy` (see Inputs): with the default, recreate
-the same deployment within 7 days or use a new `deployment_name`. After an undelete, a second
-`apply` may be needed for a non-default `custom_role_stage` to take effect.
+The generated role's id is `<deployment_name>.<name>`, or `<deployment_name>.<name>.<role_id_suffix>`
+when `role_id_suffix` is set, each part with dashes replaced by underscores (for example
+`my_dep.my_name`); the name-scoped role adds `.scoped`. No part can contain a period, and the
+suffix cannot be `scoped`, so two different inputs never produce the same id. Ids are limited
+to 64 bytes, so `deployment_name` plus `name` can be at most 56 characters, or 55 minus the
+suffix's length when it is set.
+
+What destroy and recreate do depends on `custom_role_deletion_policy` (see Inputs). With the
+default, Google keeps a deleted role's id for up to 44 days: recreating the same deployment
+within 7 days undeletes the role, but between 7 and 44 days after a destroy the create fails.
+To redeploy in that window, set or change `role_id_suffix` on each profile block, or use a new
+`deployment_name`. Do not change the suffix on every deploy: each deleted role counts toward
+the project's custom-role limit until Google removes it. After an undelete, a second `apply`
+may be needed for a non-default `custom_role_stage` to take effect.
 
 Copyright 2026 Google LLC
 
@@ -487,6 +494,7 @@ No modules.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of the project the service account and its generated roles live in. | `string` | n/a | yes |
 | <a name="input_pubsub_subscription_bindings"></a> [pubsub\_subscription\_bindings](#input\_pubsub\_subscription\_bindings) | Roles to grant on individual Pub/Sub subscriptions: a map of { project (default project\_id), subscription, role }. | <pre>map(object({<br/>    project      = optional(string)<br/>    subscription = string<br/>    role         = string<br/>  }))</pre> | `{}` | no |
 | <a name="input_pubsub_topic_bindings"></a> [pubsub\_topic\_bindings](#input\_pubsub\_topic\_bindings) | Roles to grant on individual Pub/Sub topics: a map of { project (default project\_id), topic, role }. | <pre>map(object({<br/>    project = optional(string)<br/>    topic   = string<br/>    role    = string<br/>  }))</pre> | `{}` | no |
+| <a name="input_role_id_suffix"></a> [role\_id\_suffix](#input\_role\_id\_suffix) | Optional suffix for the generated custom role ids: "<deployment\_name>.<name>.<role\_id\_suffix>"<br/>(and ".scoped" after it for the name-scoped role). Set or change it to redeploy a destroyed<br/>deployment under the same deployment\_name while Google still holds the old role id (from 7<br/>to 44 days after destroy). See "Custom role lifecycle" in the README. | `string` | `null` | no |
 | <a name="input_secret_bindings"></a> [secret\_bindings](#input\_secret\_bindings) | Roles to grant on individual Secret Manager secrets: a map of { project (default project\_id), secret\_id, role }. | <pre>map(object({<br/>    project   = optional(string)<br/>    secret_id = string<br/>    role      = string<br/>  }))</pre> | `{}` | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | E-mail address of the existing service account to grant this profile's permissions to.<br/>Usually set by use: [<account module id>] on a modules/project/service-account block, which<br/>supplies its service\_account\_email output; can also be set directly to any existing account's<br/>e-mail. This module does not create service accounts. | `string` | n/a | yes |
 | <a name="input_slurm_cluster_name"></a> [slurm\_cluster\_name](#input\_slurm\_cluster\_name) | For the Slurm controller profile: the same value given to<br/>schedmd-slurm-gcp-v6-controller's slurm\_cluster\_name input, if set. Slurm names every<br/>VM "<slurm\_cluster\_name>-...", and the controller does not re-normalise an explicit<br/>value, so passing the identical value here keeps the name-scoped role's instance-name<br/>condition correct without hand-deriving instance\_name\_prefixes. Unset mirrors the<br/>controller's own derived default (the first 10 characters of deployment\_name,<br/>lowercase, letters and digits only). Ignored if instance\_name\_prefixes is also set. | `string` | `null` | no |

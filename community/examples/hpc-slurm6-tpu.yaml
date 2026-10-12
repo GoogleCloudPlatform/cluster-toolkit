@@ -32,6 +32,9 @@ deployment_groups:
   # enable_tpu adds the Cloud TPU API permissions. The TPU API also requires the
   # caller to act as the TPU VM's service account, so the TPU VM gets its own
   # tpu_sa and the controller gets actAs on it alone.
+  # Redeploying under the same deployment_name 7-44 days after a destroy needs a
+  # new role_id_suffix on each profile block; see "Custom role lifecycle" in the
+  # module README.
   - id: controller_sa
     source: modules/project/service-account
     settings:

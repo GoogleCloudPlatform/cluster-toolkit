@@ -16,6 +16,8 @@ locals {
   baseline_project_roles = ["logging.logWriter", "monitoring.metricWriter"]
 
   # Input patterns shared by several variable validations (variables.tf).
+  # metadata.yaml repeats id_part_pattern, role_stages and
+  # role_deletion_policies so gcluster create fails early; keep them in step.
   id_part_pattern              = "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
   instance_name_prefix_pattern = "^[a-z][-a-z0-9]{3,61}$"
   custom_role_id_pattern       = "^(projects|organizations)/[^/]+/roles/[a-zA-Z0-9_.]{3,64}$"
@@ -353,9 +355,10 @@ locals {
     )
   }
 
-  # Injective: neither part can contain "." or "_" (variables.tf), so the
-  # first "." splits deployment from name and "_" always came from "-".
-  role_id        = "${replace(var.deployment_name, "-", "_")}.${replace(var.name, "-", "_")}"
+  # Injective: no part can contain "." or "_" (variables.tf), so the "."s
+  # split deployment, name and suffix, and "_" always came from "-". The
+  # suffix cannot be "scoped", so no role id equals another's scoped role id.
+  role_id        = "${replace(var.deployment_name, "-", "_")}.${replace(var.name, "-", "_")}${var.role_id_suffix == null ? "" : ".${var.role_id_suffix}"}"
   scoped_role_id = "${local.role_id}.scoped"
 
   # Everything this module grants to var.service_account_email, normalised;

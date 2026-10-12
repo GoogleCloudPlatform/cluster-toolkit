@@ -45,6 +45,10 @@ deployment_groups:
   #  * No capability flags apply: the nodeset sets enable_placement: false
   #    (so the controller opts out of enable_placement_policies, on by
   #    default), and neither the controller nor login has a public IP.
+  #
+  # Redeploying under the same deployment_name 7-44 days after a destroy needs a
+  # new role_id_suffix on each profile block; see "Custom role lifecycle" in the
+  # module README.
   - id: controller_sa
     source: modules/project/service-account
     kind: terraform

@@ -57,6 +57,9 @@ deployment_groups:
   # community/modules/iam/service-account-profiles/README.md. Account IDs
   # ("<deployment_name>-<name>") are limited to 30 characters, so names here
   # and below are short.
+  # Redeploying under the same deployment_name 7-44 days after a destroy needs a
+  # new role_id_suffix on each profile block; see "Custom role lifecycle" in the
+  # module README.
   - id: image_builder_sa
     source: modules/project/service-account
     settings:
