@@ -73,6 +73,32 @@ No profile or flag covers the Slurm repair flow (`compute.instances.update`), op
 maintenance on compute nodes (`compute.instances.performMaintenance`), or
 `controller_network_attachment` (the controller writes its address to the config bucket).
 
+### Storage access
+
+No profile grants project-wide Cloud Storage access. The roles these profiles replace in the
+example blueprints did (`roles/storage.objectViewer`, or `roles/storage.objectUser` on
+`hpc-enterprise-slurm`'s compute account), so grant each bucket a VM reads explicitly.
+
+A startup script from `modules/scripts/startup-script` downloads its runners from that
+module's staging bucket using the VM's own account. Every account whose VMs run it (a nodeset's
+`startup_script`, a login node's `startup_script`, the controller's `controller_startup_script`
+or a Packer build) needs read access there, or startup fails with a 403 from
+`gcloud storage cp`. Grant it with the module's `bucket_viewers`:
+
+```yaml
+- id: compute_startup
+  source: modules/scripts/startup-script
+  settings:
+    bucket_viewers:
+    - serviceAccount:$(compute_profile.service_account_email)
+    runners: ...
+```
+
+Use `bucket_viewers` rather than a `bucket_bindings` entry with `roles/storage.objectViewer`
+for this bucket: `startup-script` grants that role with an authoritative binding, which
+removes any other grant of the same role on the bucket at its next apply. Grant data buckets
+(for example a GCS mount) through `bucket_bindings`.
+
 ### MIG capabilities
 
 **`enable_mig`, `enable_mig_flex` and `enable_tpu_gce` grant `compute.instances.setMetadata` on
@@ -324,10 +350,8 @@ default Compute Engine service account:
 The account id is `<deployment_name>-<name>` and is limited to 30 characters (enforced by
 `modules/project/service-account`), so keep `name` short.
 
-The profile grants no project-wide storage access. A build whose startup script comes from
-`modules/scripts/startup-script` downloads its runners from that module's staging bucket, so
-give the build account read access there, or the build fails with a 403 from
-`gcloud storage cp`:
+As with every profile, grant the build account read access to the startup-script staging
+bucket; see [Storage access](#storage-access):
 
 ```yaml
 - id: scripts_for_image

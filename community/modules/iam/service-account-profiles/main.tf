@@ -229,7 +229,9 @@ locals {
     ]
     # TPU machine types on Compute Engine (ct*/tpu* in a regular nodeset):
     # mig_flex.py copies the nodeset's template, ensures a workload policy and
-    # creates a MIG per slice, deleting it on suspend.
+    # creates a MIG per slice, deleting it on suspend. images.get and
+    # subnetworks.get are for instanceTemplates.insert, which checks the image
+    # and subnetwork the copied template references; mig_flex.py reads neither.
     tpu_gce = concat(local.mig_permissions, local.mig_group_lifecycle_permissions, [
       "compute.images.get",
       "compute.instanceGroups.create",
