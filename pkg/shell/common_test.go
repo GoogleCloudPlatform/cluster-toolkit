@@ -24,6 +24,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	. "gopkg.in/check.v1"
@@ -233,19 +234,37 @@ func (s *MySuite) TestAskForConfirmation_No(c *C) {
 func (s *MySuite) TestExecuteCommandWithTimeout_SuccessfulExecution(c *C) {
 	timeout := 2 * time.Second
 
-	result := ExecuteCommandWithTimeout(timeout, "echo", "hello world")
+	var cmdName string
+	var cmdArgs []string
+	if runtime.GOOS == "windows" {
+		cmdName = "cmd"
+		cmdArgs = []string{"/c", "echo hello world"}
+	} else {
+		cmdName = "echo"
+		cmdArgs = []string{"hello world"}
+	}
+
+	result := ExecuteCommandWithTimeout(timeout, cmdName, cmdArgs...)
 
 	c.Assert(result.Err, IsNil)
 	c.Assert(result.ExitCode, Equals, 0)
-
-	expectedOutput := "hello world\n"
-	c.Assert(result.Stdout, Equals, expectedOutput)
+	c.Assert(strings.TrimSpace(result.Stdout), Equals, "hello world")
 }
 
 func (s *MySuite) TestExecuteCommandWithTimeout_KillsHangingProcess(c *C) {
 	timeout := 100 * time.Millisecond
 
-	result := ExecuteCommandWithTimeout(timeout, "sleep", "5")
+	var cmdName string
+	var cmdArgs []string
+	if runtime.GOOS == "windows" {
+		cmdName = "ping"
+		cmdArgs = []string{"127.0.0.1", "-n", "6"}
+	} else {
+		cmdName = "sleep"
+		cmdArgs = []string{"5"}
+	}
+
+	result := ExecuteCommandWithTimeout(timeout, cmdName, cmdArgs...)
 
 	c.Assert(result.Err, NotNil)
 	c.Assert(errors.Is(result.Err, context.DeadlineExceeded), Equals, true)
@@ -254,7 +273,18 @@ func (s *MySuite) TestExecuteCommandWithTimeout_KillsHangingProcess(c *C) {
 
 func (s *MySuite) TestExecuteCommandWithTimeout_NonZeroExitCode(c *C) {
 	timeout := 2 * time.Second
-	result := ExecuteCommandWithTimeout(timeout, "sh", "-c", "exit 42")
+
+	var cmdName string
+	var cmdArgs []string
+	if runtime.GOOS == "windows" {
+		cmdName = "cmd"
+		cmdArgs = []string{"/c", "exit 42"}
+	} else {
+		cmdName = "sh"
+		cmdArgs = []string{"-c", "exit 42"}
+	}
+
+	result := ExecuteCommandWithTimeout(timeout, cmdName, cmdArgs...)
 	c.Assert(result.Err, NotNil)
 	c.Assert(result.ExitCode, Equals, 42)
 }
