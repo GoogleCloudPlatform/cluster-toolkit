@@ -32,44 +32,44 @@ deployment_groups:
   # enable_tpu adds the Cloud TPU API permissions. The TPU API also requires the
   # caller to act as the TPU VM's service account, so the TPU VM gets its own
   # tpu_sa and the controller gets actAs on it alone.
-  - id: controller_account
+  - id: controller_sa
     source: modules/project/service-account
     settings:
       name: controller
       project_roles: []
 
-  - id: controller_sa
+  - id: controller_profile
     source: community/modules/iam/service-account-profiles
-    use: [controller_account]
+    use: [controller_sa]
     settings:
       name: controller
       profile: slurm-controller
       enable_tpu: true
       act_as_service_accounts:
-      - $(tpu_sa.service_account_email)
+      - $(tpu_profile.service_account_email)
 
-  - id: login_account
+  - id: login_sa
     source: modules/project/service-account
     settings:
       name: login
       project_roles: []
 
-  - id: login_sa
+  - id: login_profile
     source: community/modules/iam/service-account-profiles
-    use: [login_account]
+    use: [login_sa]
     settings:
       name: login
       profile: slurm-login
 
-  - id: tpu_account
+  - id: tpu_sa
     source: modules/project/service-account
     settings:
       name: tpu
       project_roles: []
 
-  - id: tpu_sa
+  - id: tpu_profile
     source: community/modules/iam/service-account-profiles
-    use: [tpu_account]
+    use: [tpu_sa]
     settings:
       name: tpu
       profile: slurm-compute
@@ -78,7 +78,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     use: [network]
     settings:
-      service_account_email: $(tpu_sa.service_account_email)
+      service_account_email: $(tpu_profile.service_account_email)
       node_type: v3-8
       tf_version: 2.14.0
       # Preemptible TPUs cost much less than non-preemptible TPUs.
@@ -100,7 +100,7 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network, login_sa]
+    use: [network, login_profile]
     settings:
       machine_type: n2-standard-4
       enable_login_public_ips: true
@@ -111,6 +111,6 @@ deployment_groups:
     - tpu_partition
     - slurm_login
     - network
-    - controller_sa
+    - controller_profile
     settings:
       enable_controller_public_ips: true

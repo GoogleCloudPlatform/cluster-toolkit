@@ -69,15 +69,15 @@ deployment_groups:
   # roles/compute.instanceAdmin.v1, and roles/iam.serviceAccountUser granted
   # only on the compute account the controller actually attaches to the nodes
   # it creates. See community/modules/iam/service-account-profiles/README.md.
-  - id: controller_account
+  - id: controller_sa
     source: modules/project/service-account
     settings:
       name: controller
       project_roles: []
 
-  - id: controller_sa
+  - id: controller_profile
     source: community/modules/iam/service-account-profiles
-    use: [controller_account]
+    use: [controller_sa]
     settings:
       name: controller
       profile: slurm-controller
@@ -92,30 +92,30 @@ deployment_groups:
       # creates at run time. Login VMs are created by Terraform under the
       # deploying principal, so the controller never needs to act as login_sa.
       act_as_service_accounts:
-      - $(compute_sa.service_account_email)
+      - $(compute_profile.service_account_email)
 
-  - id: login_account
+  - id: login_sa
     source: modules/project/service-account
     settings:
       name: login
       project_roles: []
 
-  - id: login_sa
+  - id: login_profile
     source: community/modules/iam/service-account-profiles
-    use: [login_account]
+    use: [login_sa]
     settings:
       name: login
       profile: slurm-login
 
-  - id: compute_account
+  - id: compute_sa
     source: modules/project/service-account
     settings:
       name: compute
       project_roles: []
 
-  - id: compute_sa
+  - id: compute_profile
     source: community/modules/iam/service-account-profiles
-    use: [compute_account]
+    use: [compute_sa]
     settings:
       name: compute
       profile: slurm-compute
@@ -143,7 +143,7 @@ deployment_groups:
 
   - id: n2_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network, compute_sa]
+    use: [network, compute_profile]
     settings:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
@@ -162,7 +162,7 @@ deployment_groups:
 
   - id: c2_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network, compute_sa]
+    use: [network, compute_profile]
     settings:
       node_count_dynamic_max: 20
       machine_type: c2-standard-60  # this is the default
@@ -184,7 +184,7 @@ deployment_groups:
 
   - id: c2d_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network, compute_sa]
+    use: [network, compute_profile]
     settings:
       node_count_dynamic_max: 20
       machine_type: c2d-standard-112
@@ -202,7 +202,7 @@ deployment_groups:
 
   - id: c3_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network, compute_sa]
+    use: [network, compute_profile]
     settings:
       node_count_dynamic_max: 20
       machine_type: c3-highcpu-176
@@ -220,7 +220,7 @@ deployment_groups:
 
   - id: a2_8_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network, compute_sa]
+    use: [network, compute_profile]
     settings:
       node_count_dynamic_max: 16
       machine_type: a2-ultragpu-8g
@@ -250,7 +250,7 @@ deployment_groups:
 
   - id: a2_16_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network, compute_sa]
+    use: [network, compute_profile]
     settings:
       node_count_dynamic_max: 16
       machine_type: a2-megagpu-16g
@@ -280,7 +280,7 @@ deployment_groups:
 
   - id: h3_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network, compute_sa]
+    use: [network, compute_profile]
     settings:
       node_count_dynamic_max: 16
       # Note that H3 is available in only specific zones. https://cloud.google.com/compute/docs/regions-zones
@@ -303,7 +303,7 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network, login_sa]
+    use: [network, login_profile]
     settings:
       instance_image: $(vars.slurm_image)
       machine_type: n2-standard-4
@@ -314,7 +314,7 @@ deployment_groups:
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [network, controller_sa, homefs, projectsfs, lustre-gcp, slurm_login,
+    use: [network, controller_profile, homefs, projectsfs, lustre-gcp, slurm_login,
           n2_partition, c2_partition, c2d_partition, c3_partition, a2_8_partition, a2_16_partition, h3_partition]
     settings:
       instance_image: $(vars.slurm_image)

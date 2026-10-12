@@ -129,41 +129,41 @@ account, and `service-account-profiles` applies the profile to it, connected wit
 the baseline roles come from the profile.
 
 ```yaml
-- id: compute_account
+- id: compute_sa
   source: modules/project/service-account
   settings:
     name: compute
     project_roles: []
 
-- id: compute_sa
+- id: compute_profile
   source: community/modules/iam/service-account-profiles
-  use: [compute_account]
+  use: [compute_sa]
   settings:
     name: compute
     profile: slurm-compute
 
-- id: login_account
+- id: login_sa
   source: modules/project/service-account
   settings:
     name: login
     project_roles: []
 
-- id: login_sa
+- id: login_profile
   source: community/modules/iam/service-account-profiles
-  use: [login_account]
+  use: [login_sa]
   settings:
     name: login
     profile: slurm-login
 
-- id: controller_account
+- id: controller_sa
   source: modules/project/service-account
   settings:
     name: controller
     project_roles: []
 
-- id: controller_sa
+- id: controller_profile
   source: community/modules/iam/service-account-profiles
-  use: [controller_account]
+  use: [controller_sa]
   settings:
     name: controller
     profile: slurm-controller
@@ -171,11 +171,11 @@ the baseline roles come from the profile.
     # Only the accounts the controller attaches to nodes it creates. Login VMs are
     # created by Terraform, so no actAs on login_sa is needed.
     act_as_service_accounts:
-    - $(compute_sa.service_account_email)
+    - $(compute_profile.service_account_email)
 
 - id: n2_nodeset
   source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-  use: [network, compute_sa]
+  use: [network, compute_profile]
   settings:
     node_count_dynamic_max: 4
     machine_type: n2-standard-2
@@ -189,11 +189,11 @@ the baseline roles come from the profile.
 
 - id: slurm_login
   source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-  use: [network, login_sa]
+  use: [network, login_profile]
 
 - id: slurm_controller
   source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-  use: [network, controller_sa, slurm_login, n2_partition]
+  use: [network, controller_profile, slurm_login, n2_partition]
 ```
 
 The remaining examples show only the `service-account-profiles` block; each also needs the
@@ -211,9 +211,9 @@ resource. `project` defaults to `project_id` (buckets have none). For Shared VPC
 `roles/compute.networkUser` on the host-project subnetwork the identity creates instances in:
 
 ```yaml
-- id: compute_sa
+- id: compute_profile
   source: community/modules/iam/service-account-profiles
-  use: [compute_account]
+  use: [compute_sa]
   settings:
     name: compute
     profile: slurm-compute
@@ -222,9 +222,9 @@ resource. `project` defaults to `project_id` (buckets have none). For Shared VPC
         bucket: $(vars.deployment_name)-results
         role: roles/storage.objectUser
 
-- id: controller_sa
+- id: controller_profile
   source: community/modules/iam/service-account-profiles
-  use: [controller_account]
+  use: [controller_sa]
   settings:
     name: controller
     profile: slurm-controller
@@ -245,9 +245,9 @@ and `enable_tpu_gce`, or a `*_bindings` entry. Predefined roles beyond the loggi
 monitoring baseline are not accepted. The Open Front End web identity, for example:
 
 ```yaml
-- id: frontend_sa
+- id: frontend_profile
   source: community/modules/iam/service-account-profiles
-  use: [frontend_account]
+  use: [frontend_sa]
   settings:
     name: fe
     profile: custom
@@ -301,9 +301,9 @@ monitoring baseline are not accepted. The Open Front End web identity, for examp
 default Compute Engine service account:
 
 ```yaml
-- id: image_builder_sa
+- id: image_builder_profile
   source: community/modules/iam/service-account-profiles
-  use: [image_builder_account]
+  use: [image_builder_sa]
   settings:
     name: builder
     profile: image-builder
@@ -311,7 +311,7 @@ default Compute Engine service account:
 - id: my-image
   source: modules/packer/custom-image
   kind: packer
-  use: [network, image_builder_sa]
+  use: [network, image_builder_profile]
   settings:
     ...
 ```
@@ -329,7 +329,7 @@ give the build account read access there, or the build fails with a 403 from
   source: modules/scripts/startup-script
   settings:
     bucket_viewers:
-    - serviceAccount:$(image_builder_sa.service_account_email)
+    - serviceAccount:$(image_builder_profile.service_account_email)
     runners: ...
 ```
 

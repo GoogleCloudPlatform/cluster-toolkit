@@ -44,15 +44,20 @@ deployment_groups:
   #    database connection needs no IAM permission.
   #  * No capability flags apply: the nodeset sets enable_placement: false, and
   #    neither the controller nor login has a public IP.
-  - id: controller_account
+  - id: controller_sa
     source: modules/project/service-account
+    kind: terraform
     settings:
-      name: controller
+      deployment_name: $(vars.deployment_name)
+      project_id: $(vars.project_id)
+      name: controller-sa
+      description: Controller Service Account
+      display_name: Controller SA
       project_roles: []
 
-  - id: controller_sa
+  - id: controller_profile
     source: community/modules/iam/service-account-profiles
-    use: [controller_account]
+    use: [controller_sa]
     settings:
       name: controller
       profile: slurm-controller
@@ -64,30 +69,40 @@ deployment_groups:
       # creates at run time. Login VMs are created by Terraform under the
       # deploying principal, so the controller never needs to act as login_sa.
       act_as_service_accounts:
-      - $(compute_sa.service_account_email)
-
-  - id: login_account
-    source: modules/project/service-account
-    settings:
-      name: login
-      project_roles: []
+      - $(compute_profile.service_account_email)
 
   - id: login_sa
+    source: modules/project/service-account
+    kind: terraform
+    settings:
+      deployment_name: $(vars.deployment_name)
+      project_id: $(vars.project_id)
+      name: login-sa
+      description: Login Node Service Account
+      display_name: Login SA
+      project_roles: []
+
+  - id: login_profile
     source: community/modules/iam/service-account-profiles
-    use: [login_account]
+    use: [login_sa]
     settings:
       name: login
       profile: slurm-login
 
-  - id: compute_account
+  - id: compute_sa
     source: modules/project/service-account
+    kind: terraform
     settings:
-      name: compute
+      deployment_name: $(vars.deployment_name)
+      project_id: $(vars.project_id)
+      name: compute-sa
+      description: Compute Node Service Account
+      display_name: Compute SA
       project_roles: []
 
-  - id: compute_sa
+  - id: compute_profile
     source: community/modules/iam/service-account-profiles
-    use: [compute_account]
+    use: [compute_sa]
     settings:
       name: compute
       profile: slurm-compute
@@ -119,7 +134,7 @@ deployment_groups:
       name_prefix: debug
       num_instances: 1
       machine_type: n1-standard-2
-      service_account_email: $(login_sa.service_account_email)
+      service_account_email: $(login_profile.service_account_email)
       service_account_scopes: ["https://www.googleapis.com/auth/cloud-platform"]
       enable_oslogin: true
       subnetwork_self_link: $(network.subnetwork_self_link)
@@ -133,7 +148,7 @@ deployment_groups:
       node_count_dynamic_max: 4
       node_count_static: 0
       machine_type: n1-standard-2
-      service_account_email: $(compute_sa.service_account_email)
+      service_account_email: $(compute_profile.service_account_email)
       service_account_scopes: ["https://www.googleapis.com/auth/cloud-platform"]
       enable_oslogin: true
       subnetwork_self_link: $(network.subnetwork_self_link)
@@ -195,7 +210,7 @@ deployment_groups:
       enable_controller_public_ips: false # NO EXTERNAL IP
       machine_type: n1-standard-2
       zone: $(vars.zone)
-      service_account_email: $(controller_sa.service_account_email)
+      service_account_email: $(controller_profile.service_account_email)
       service_account_scopes: ["https://www.googleapis.com/auth/cloud-platform"]
       enable_oslogin: true
       subnetwork_self_link: $(network.subnetwork_self_link)

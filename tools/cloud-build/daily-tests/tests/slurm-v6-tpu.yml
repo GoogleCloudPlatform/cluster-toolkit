@@ -39,7 +39,7 @@ custom_vars:
    # community/examples/hpc-slurm6-tpu.yaml uses community/modules/iam/service-account-profiles
    # for its identities; see test-validation/test-service-account-profiles.yml.
    service_account_profiles:
-      # enable_tpu: true on controller_sa in the blueprint.
+      # enable_tpu: true on controller_profile in the blueprint.
       extra_controller_permissions:
       - tpu.acceleratortypes.get
       - tpu.nodes.create
