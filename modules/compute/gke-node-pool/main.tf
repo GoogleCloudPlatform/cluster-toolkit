@@ -65,6 +65,9 @@ locals {
     startswith(var.machine_type, "a4x-")
   )
 
+  # Custom node image (image_type = CUSTOM_CONTAINERD).
+  use_node_image_config = try(var.node_image_config.image, null) != null
+
   dranet_device_class_name_default = local.is_mellanox_rdma_machine ? "mrdma.google.com" : "netdev.google.com"
   dranet_device_class_name_actual  = coalesce(var.dranet_device_class_name, local.dranet_device_class_name_default)
 
@@ -186,6 +189,14 @@ resource "google_container_node_pool" "node_pool" {
     max_run_duration            = var.max_run_duration != null ? "${var.max_run_duration}s" : null
     enable_confidential_storage = var.enable_confidential_storage
     boot_disk_kms_key           = var.boot_disk_kms_key
+
+    dynamic "node_image_config" {
+      for_each = local.use_node_image_config ? [var.node_image_config] : []
+      content {
+        image         = node_image_config.value.image
+        image_project = node_image_config.value.image_project
+      }
+    }
 
     dynamic "guest_accelerator" {
       for_each = local.guest_accelerator
@@ -348,6 +359,10 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = !(length(compact(local.input_reservation_suffixes)) > 0 && length((var.zones != null ? var.zones : [])) == 0)
       error_message = "var.zones must be explicitly provided when using an extended reservation block."
+    }
+    precondition {
+      condition     = local.use_node_image_config == (upper(var.image_type) == "CUSTOM_CONTAINERD")
+      error_message = "node_image_config.image must be set if and only if image_type is CUSTOM_CONTAINERD."
     }
     precondition {
       condition     = var.disk_storage_pool == null || var.disk_storage_pool == "" || can(regex("^hyperdisk-", lower(var.disk_type)))

@@ -123,9 +123,22 @@ variable "guest_accelerator" {
 }
 
 variable "image_type" {
-  description = "The default image type used by NAP once a new node pool is being created. Use either COS_CONTAINERD or UBUNTU_CONTAINERD."
+  description = "The default image type used by NAP once a new node pool is being created. Use either COS_CONTAINERD or UBUNTU_CONTAINERD. Use CUSTOM_CONTAINERD together with var.node_image_config to run a custom node image."
   type        = string
   default     = "COS_CONTAINERD"
+}
+
+variable "node_image_config" {
+  description = <<-EOT
+  Custom OS image for the nodes. Requires var.image_type = "CUSTOM_CONTAINERD".
+  The GKE service agent of the project needs roles/compute.imageUser on image_project.
+  EOT
+  type = object({
+    image         = optional(string)
+    image_project = optional(string)
+  })
+  default  = null
+  nullable = true
 }
 
 variable "local_ssd_count_ephemeral_storage" {
