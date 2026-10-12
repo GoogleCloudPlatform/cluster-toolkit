@@ -148,7 +148,7 @@ echo "Checking for active Filestore Cloud Builds before resetting Filestore API.
 
 if ! CURRENT_BUILDS=$(gcloud builds list \
 	--project "${PROJECT_ID}" \
-	--filter="tags=m.filestore" \
+	--filter="tags=m.filestore AND id != ${BUILD_ID}" \
 	--format="value(id)" \
 	--ongoing); then
 	echo "ERROR: Failed to list ongoing Cloud Builds; not resetting." >&2
@@ -184,6 +184,7 @@ fi
 
 if [[ -n "$PEERINGS" ]]; then
 	while read -r peering network; do
+		[[ -z "$peering" || -z "$network" ]] && continue
 		[[ "$peering" =~ ^filestore-peer-[0-9]+$ ]] || continue
 		if [ "$DRY_RUN" = "true" ]; then
 			echo "[DRY-RUN] Would delete peering ${peering} from ${network}."
