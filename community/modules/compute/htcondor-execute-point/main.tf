@@ -49,6 +49,7 @@ locals {
     windows-shutdown-script-ps1 = <<-EOT
       if (Test-Path "C:\Condor\bin\condor_off.exe") {
           & "C:\Condor\bin\condor_off.exe" -fast -startd
+          Start-Sleep -Seconds 5
       }
       Stop-Service condor -Force -ErrorAction SilentlyContinue
     EOT
@@ -57,6 +58,7 @@ locals {
       #!/bin/bash
       if command -v condor_off >/dev/null 2>&1; then
           condor_off -fast -startd
+          sleep 5
       fi
       systemctl stop condor || true
     EOT
