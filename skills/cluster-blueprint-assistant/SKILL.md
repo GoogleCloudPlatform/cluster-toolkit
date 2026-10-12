@@ -42,17 +42,29 @@ allowed_read_only_commands:
    blueprint under `examples/` or `community/examples/` that already matches the
    request. Do not grep `.tf` files to discover modules; the catalog's
    `module_wiring` section lists every module's `required_inputs`, `outputs`,
-   and which modules provide each input.
-2. **Customize through `vars:` or a `deployment.yaml`, not module blocks.** If the
-   request only changes project, region/zone, node counts, machine types,
-   Spot/reservation, or storage size, write a `deployment.yaml` that overrides
-   the blueprint's `vars:` and pass it with `-d`. Do **not** add, remove, rename
-   or edit `deployment_groups[].modules[]` entries for these changes.
+   and which modules provide each input. If the request is a question ("do we
+   have…", "can I get…", "what's in…"), answer it from the catalog and
+   `examples/README.md` and confirm the approach with the user **before**
+   editing anything.
+2. **Customize through a `deployment.yaml`, not module blocks.** If the request
+   only changes project, region/zone, node counts, machine types,
+   Spot/reservation, or storage size, put the user's values in a
+   `deployment.yaml` and pass it with `-d`. For templates under `examples/` or
+   `community/examples/`, only touch the blueprint's `vars:` when the knob does
+   not exist yet: add it with a default **equal to the value that was
+   hardcoded**, reference it via `$(vars.<name>)`, and keep the user's requested
+   value in `deployment.yaml` only. (If the blueprint is the user's own copy,
+   editing its `vars:` directly is fine.) Do **not** add, remove, rename or edit
+   `deployment_groups[].modules[]` entries for these changes.
 3. **Only edit module blocks when adding or removing capability** (e.g. adding a
-   Managed Lustre instance or a second node pool). When you do, copy the module
-   block from a blueprint in the catalog that already has it, keep its `use:`
-   list, and check `module_wiring.<source>.required_inputs` to confirm every
-   required input is satisfied by a module in `use:`.
+   Managed Lustre instance or a second node pool) — and do it on a **copy**, not
+   the shared template: copy the blueprint to a new file in the **same
+   directory** (e.g. `examples/gke-a4/my-gke-a4.yaml`) or copy the whole folder,
+   because blueprints reference sibling files via `$(ghpc_stage("./…"))`. Never
+   modify files under `examples/` or `community/examples/` in place. Copy the
+   module block from a blueprint in the catalog that already has it, keep its
+   `use:` list, and check `module_wiring.<source>.required_inputs` to confirm
+   every required input is satisfied by a module in `use:`.
 4. **Mark agent-authored blueprints.** Add `ai_assisted: true` at the top level
    of any blueprint you create or modify.
 5. **Validate with gcluster, fix the blueprint, never the output.**
@@ -61,10 +73,13 @@ allowed_read_only_commands:
    gcluster. Never edit generated files under `<deployment_name>/` (`main.tf`,
    `variables.tf`, `terraform.tfvars`, `.ghpc/`) and never run `terraform`
    directly — gcluster regenerates these files on every run.
-6. **Mutating actions require confirmation.** `gcluster deploy`,
+6. **Destructive or mutating actions require confirmation.** `gcluster deploy`,
    `gcluster destroy`, and anything that creates or deletes cloud resources must
    be presented as a `[PROPOSED REMEDIATION PLAN]` and wait for the user to reply
-   `yes`.
+   `yes`. The same applies to local destructive steps: deleting a deployment
+   folder, deleting or overwriting user files, and `git checkout` / `git reset`
+   of user edits — state exactly what will be removed and wait for `yes`.
+   Prefer `gcluster create … -w` over deleting the deployment folder.
 
 ## Workflow
 
