@@ -1160,6 +1160,9 @@ First, use the `gke-template-extract` command to extract the embedded default te
 
 Open the extracted `.tmpl` files in your preferred editor. These are standard Go text templates (`text/template` and `yamltemplate`). You can inject any static Kubernetes YAML or modify the existing template variables.
 
+> [!NOTE]
+> `gcluster job logs --main-only` lets `kubectl` choose which container to read: the one named by the pod-template annotation `kubectl.kubernetes.io/default-container`, otherwise the first entry in `containers` (kubectl 1.24 or later; older versions require the annotation when there are several containers). Set this annotation if your template lists a regular (non-native) sidecar before your workload container.
+
 #### 3. Use your custom templates
 
 When submitting your job, you can tell `gcluster` to use your custom templates instead of the embedded ones.
@@ -1311,7 +1314,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | Flag | Type | Description |
 | :--- | :--- | :--- |
 | `-f, --follow` | `flag` | Stream logs continuously (like `tail -f`). |
-| `--main-only` | `bool` | Fetch logs only for the coordinator/leader pod (Rank 0) of the main replicated job (e.g. `main-job` or `pathways-head`). |
+| `--main-only` | `bool` | Fetch logs only from the rank-0 pod of the JobSet's first replicated job (`main-job`, or `pathways-head` for Pathways), using that pod's default container. |
 
 > [!NOTE]
 > **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. You can override this to stream logs from all pods by explicitly passing `--main-only=false`.

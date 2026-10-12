@@ -336,6 +336,13 @@ func TestParseSingleVolume(t *testing.T) {
 			wantErrSub: "use options=",
 		},
 		{
+			// The bucket already comes from the gs:// source.
+			name:       "bucketName is rejected as an attribute",
+			input:      "gs://my-bucket;/data;profile=training;attributes=bucketName=other",
+			wantErr:    true,
+			wantErrSub: "the bucket is taken from the mount source",
+		},
+		{
 			// Whitespace is trimmed on both sides of the '=', so a naturally
 			// typed ", " separator does not smuggle a leading space into the
 			// value that the CSI driver would then see.
@@ -1572,8 +1579,8 @@ func assertProfilePVSpec(t *testing.T, pv map[string]interface{}, wantPV, wantPV
 	if got := nestedString(t, pv, "spec", "csi", "driver"); got != "gcsfuse.csi.storage.gke.io" {
 		t.Errorf("PV csi driver = %q", got)
 	}
-	if got := nestedString(t, pv, "spec", "csi", "volumeHandle"); got != "imagenet-dataset" {
-		t.Errorf("PV volumeHandle = %q, want imagenet-dataset", got)
+	if got := nestedString(t, pv, "spec", "csi", "volumeHandle"); got != "imagenet-dataset:"+wantPV {
+		t.Errorf("PV volumeHandle = %q, want imagenet-dataset:%s", got, wantPV)
 	}
 	if got := nestedString(t, pv, "spec", "claimRef", "name"); got != wantPVC {
 		t.Errorf("PV claimRef.name = %q, want %q", got, wantPVC)
@@ -1782,8 +1789,8 @@ func TestGCSFuseProfile_SubPathIsDelegatedToPod(t *testing.T) {
 	}
 
 	pv := findDoc(t, splitManifestDocs(t, manifests[0]), "PersistentVolume")
-	if got := nestedString(t, pv, "spec", "csi", "volumeHandle"); got != "model-checkpoints" {
-		t.Errorf("PV volumeHandle = %q, want the bare bucket name", got)
+	if got := nestedString(t, pv, "spec", "csi", "volumeHandle"); got != "model-checkpoints:gcluster-gcsfuse-model-checkpoints-checkpointing-c75dd3-default" {
+		t.Errorf("PV volumeHandle = %q, want the bucket name with a per-PV suffix (sub path must not leak in)", got)
 	}
 	if _, present := pv["spec"].(map[string]interface{})["mountOptions"]; present {
 		t.Error("PV must not receive only-dir/read-only mountOptions derived from the sub path")
@@ -2519,12 +2526,13 @@ func TestBuildVolumeSpec_AttributesOnlyApplyToInlineGCSFuse(t *testing.T) {
 func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 	pvcName := gatewayNameFor(t, profileStorageManager(t.TempDir()), "gs://bkt;/data;profile=training")
 	pvName := pvcName + "-default"
+	volumeHandle := "bkt:" + pvName
 
 	matchingPVJSON := `{
 		"spec": {
 			"storageClassName": "gcsfusecsi-training",
 			"capacity": {"storage": "5Gi"},
-			"csi": {"volumeHandle": "bkt"}
+			"csi": {"volumeHandle": "` + volumeHandle + `"}
 		},
 		"status": {"phase": "Bound"}
 	}`
@@ -2532,7 +2540,7 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 		"spec": {
 			"storageClassName": "gcsfusecsi-training",
 			"capacity": {"storage": "10Gi"},
-			"csi": {"volumeHandle": "bkt"}
+			"csi": {"volumeHandle": "` + volumeHandle + `"}
 		},
 		"status": {"phase": "Bound"}
 	}`
@@ -2540,7 +2548,7 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 		"spec": {
 			"storageClassName": "gcsfusecsi-training",
 			"capacity": {"storage": "5Gi"},
-			"csi": {"volumeHandle": "bkt"}
+			"csi": {"volumeHandle": "` + volumeHandle + `"}
 		},
 		"status": {"phase": "Released"}
 	}`
@@ -2549,7 +2557,7 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 		"spec": {
 			"storageClassName": "gcsfusecsi-training",
 			"capacity": {"storage": "10Gi"},
-			"csi": {"volumeHandle": "bkt"}
+			"csi": {"volumeHandle": "` + volumeHandle + `"}
 		},
 		"status": {"phase": "Released"}
 	}`
@@ -2559,7 +2567,7 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 		"spec": {
 			"storageClassName": "gcsfusecsi-training",
 			"capacity": {"storage": "10Gi"},
-			"csi": {"volumeHandle": "bkt"}
+			"csi": {"volumeHandle": "` + volumeHandle + `"}
 		},
 		"status": {"phase": "Bound"}
 	}`

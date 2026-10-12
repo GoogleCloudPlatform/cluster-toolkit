@@ -281,6 +281,63 @@ func TestSubmitCmd_LongWorkloadName_Fails(t *testing.T) {
 	}
 }
 
+func TestValidateWorkloadNameLength(t *testing.T) {
+	if maxPathwaysWorkloadNameLen != 22 {
+		t.Fatalf("maxPathwaysWorkloadNameLen = %d, want 22", maxPathwaysWorkloadNameLen)
+	}
+	tests := []struct {
+		name       string
+		isPathways bool
+		wantErr    bool
+	}{
+		{strings.Repeat("a", 22), true, false},
+		{strings.Repeat("a", 23), true, true},
+		{strings.Repeat("a", 28), false, false},
+		{strings.Repeat("a", 29), false, true},
+	}
+	for _, tc := range tests {
+		err := validateWorkloadNameLength(tc.name, tc.isPathways)
+		if (err != nil) != tc.wantErr {
+			t.Errorf("validateWorkloadNameLength(%d chars, pathways=%v) err = %v, wantErr %v", len(tc.name), tc.isPathways, err, tc.wantErr)
+		}
+	}
+}
+
+func TestSubmitCmd_PathwaysLongWorkloadName_Fails(t *testing.T) {
+	setupSubmitTestEnv(t)
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp: time.Now(),
+		},
+	}
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--pathways",
+		"--name", "a-twenty-three-char-nm1",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--compute-type", "n2-standard-4",
+		"--pathways-gcs-location", "gs://my-bucket",
+	)
+
+	if err == nil {
+		t.Fatalf("expected error when passing 23-char Pathways workload name, but got nil")
+	}
+
+	for _, want := range []string{"cannot exceed 22 characters for Pathways jobs", "jobset.sigs.k8s.io/coordinator=a-twenty-three-char-nm1-pathways-head-0-0.a-twenty-three-char-nm1"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("expected error message to contain %q, got: %v", want, err)
+		}
+	}
+}
+
 func setupSubmitTestEnv(t *testing.T) {
 	imageName = ""
 	baseImage = ""

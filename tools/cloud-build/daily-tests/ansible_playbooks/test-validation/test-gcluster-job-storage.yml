@@ -1,0 +1,145 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Get outputs from primary group
+  delegate_to: localhost
+  ansible.builtin.command:
+    cmd: terraform output -json
+    chdir: "{{ workspace }}/{{ deployment_name }}/primary"
+  register: outputs
+  changed_when: false
+
+- name: Set storage profile test facts
+  ansible.builtin.set_fact:
+    bucket: "{{ (outputs.stdout | from_json)['gcs_bucket_name_data-bucket']['value'] }}"
+    ksa: "{{ (outputs.stdout | from_json)['k8s_service_account_name_gke_cluster']['value'] }}"
+    gcluster_args: >-
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ (custom_vars | default({})).project | default(project) }}
+      --skip-prereqs
+
+- name: Run storage profile test and ensure cleanup
+  block:
+  - name: Seed an object for the read-only serving mount
+    delegate_to: localhost
+    ansible.builtin.shell: echo ok | gcloud storage cp - gs://{{ bucket }}/serve-probe.txt
+    changed_when: false
+
+  # The command fails the job unless: options= set file ownership on /train,
+  # /ckpt is writable, and /serve is readable but not writable.
+  - name: Execute GCluster Job Submit with all storage profiles
+    delegate_to: localhost
+    ansible.builtin.shell: >-
+      yes | ./gcluster job submit {{ gcluster_args }}
+      --name storage-profile-test
+      --compute-type {{ (custom_vars | default({})).compute_type | default('n2d-standard-2') }}
+      --image {{ (custom_vars | default({})).image | default('debian:bookworm-slim') }}
+      --service-account {{ ksa }}
+      --mount "gs://{{ bucket }}/train;/train;rw;profile=training;options=uid=1001,gid=3003"
+      --mount "gs://{{ bucket }};/ckpt;rw;profile=checkpointing;attributes=fuseMemoryAllocatableFactor=0.5"
+      --mount "gs://{{ bucket }};/serve;ro;profile=serving"
+      --command 'set -e;
+      echo ok > /train/probe.txt; test "$(stat -c %u:%g /train/probe.txt)" = 1001:3003;
+      echo ok > /ckpt/ckpt-probe.txt; grep -q ok /ckpt/ckpt-probe.txt;
+      grep -q ok /serve/serve-probe.txt; if touch /serve/denied; then exit 1; fi;
+      echo PROFILES_OK'
+      --timeout 15m
+      --await-job-completion
+    args:
+      chdir: "{{ workspace }}"
+    register: profile_job_result
+
+  - name: Print storage profile job output
+    ansible.builtin.debug:
+      var: profile_job_result.stdout_lines
+
+  - name: Verify writes landed in the bucket (training subpath and checkpointing root)
+    delegate_to: localhost
+    ansible.builtin.command: gcloud storage cat gs://{{ bucket }}/train/probe.txt gs://{{ bucket }}/ckpt-probe.txt
+    changed_when: false
+
+  - name: Wait for the GKE profile controller to scan all three PVs
+    delegate_to: localhost
+    ansible.builtin.command: >-
+      kubectl get pv -l gcluster.google.com/storage-type=gcsfuse
+      -o jsonpath='{range .items[*]}{.spec.storageClassName}={.metadata.annotations.gke-gcsfuse/bucket-scan-status}{"\n"}{end}'
+    register: scan
+    until: scan.stdout_lines | select('search', '=completed$') | list | length == 3
+    retries: 30
+    delay: 10
+    changed_when: false
+
+  - name: Get gcluster-created GCSFuse PVs
+    delegate_to: localhost
+    ansible.builtin.command: kubectl get pv -l gcluster.google.com/storage-type=gcsfuse -o json
+    register: pv_json
+    changed_when: false
+
+  - name: Verify profile StorageClasses, options and attributes on the PVs
+    vars:
+      pvs: "{{ (pv_json.stdout | from_json)['items'] }}"
+      train_pv: "{{ pvs | selectattr('spec.storageClassName', 'equalto', 'gcsfusecsi-training') | first }}"
+      ckpt_pv: "{{ pvs | selectattr('spec.storageClassName', 'equalto', 'gcsfusecsi-checkpointing') | first }}"
+    ansible.builtin.assert:
+      that:
+      - pvs | map(attribute='spec.storageClassName') | sort == ['gcsfusecsi-checkpointing', 'gcsfusecsi-serving', 'gcsfusecsi-training']
+      - "'uid=1001' in train_pv.spec.mountOptions"
+      - "'gid=3003' in train_pv.spec.mountOptions"
+      - ckpt_pv.spec.csi.volumeAttributes.fuseMemoryAllocatableFactor == '0.5'
+
+  - name: Cancel storage profile test job
+    delegate_to: localhost
+    ansible.builtin.command: ./gcluster job cancel storage-profile-test {{ gcluster_args }}
+    args:
+      chdir: "{{ workspace }}"
+    changed_when: false
+
+  - name: Verify cancel removed the storage gateways
+    delegate_to: localhost
+    ansible.builtin.command: kubectl get pv,pvc -l gcluster.google.com/storage-type=gcsfuse -o name
+    register: gateways
+    until: gateways.stdout == ""
+    retries: 12
+    delay: 10
+    changed_when: false
+
+  rescue:
+  - name: Get storage profile job logs on failure
+    delegate_to: localhost
+    ansible.builtin.command: ./gcluster job logs storage-profile-test {{ gcluster_args }}
+    args:
+      chdir: "{{ workspace }}"
+    register: failure_logs
+    changed_when: false
+    ignore_errors: true
+
+  - name: Print storage profile job logs on failure
+    ansible.builtin.debug:
+      msg: "{{ failure_logs.stdout_lines | default('No job logs found') }}"
+
+  - name: Describe storage profile job pods on failure
+    delegate_to: localhost
+    ansible.builtin.command: kubectl describe pods -l jobset.sigs.k8s.io/jobset-name=storage-profile-test
+    register: failure_pods
+    changed_when: false
+    ignore_errors: true
+
+  - name: Print storage profile job pods on failure
+    ansible.builtin.debug:
+      msg: "{{ failure_pods.stdout_lines | default('No pods found') }}"
+
+  - name: Force failure of Ansible run
+    ansible.builtin.fail:
+      msg: "Storage profile integration test failed."

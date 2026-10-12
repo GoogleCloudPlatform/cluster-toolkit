@@ -782,6 +782,7 @@ func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx in
 	}
 
 	params.PVName, params.PVCName = pvName, pvcName
+	params.VolumeHandle = bucket + ":" + pvName
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, params); err != nil {
 		return MountInfo{}, "", fmt.Errorf("failed to execute GCSFuse PV/PVC template: %w", err)

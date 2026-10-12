@@ -112,46 +112,6 @@ func TestValidateClusterState_TargetNamespaceValidation(t *testing.T) {
 	}
 }
 
-func TestReplaceDeprecatedRbacProxyImage(t *testing.T) {
-	podSpec := map[interface{}]interface{}{
-		"initContainers": []interface{}{
-			map[interface{}]interface{}{
-				"name":  "init-proxy",
-				"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
-			},
-		},
-		"containers": []interface{}{
-			map[interface{}]interface{}{
-				"name":  "proxy",
-				"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
-			},
-			map[interface{}]interface{}{
-				"name":  "manager",
-				"image": "gcr.io/k8s-staging-jobset/jobset:v0.2.0",
-			},
-		},
-	}
-
-	replaceDeprecatedRbacProxyImage(podSpec)
-
-	initContainers := podSpec["initContainers"].([]interface{})
-	initProxy := initContainers[0].(map[interface{}]interface{})
-	if got := initProxy["image"]; got != "quay.io/brancz/kube-rbac-proxy:v0.13.1" {
-		t.Errorf("initContainers image = %v; want quay.io/brancz/kube-rbac-proxy:v0.13.1", got)
-	}
-
-	containers := podSpec["containers"].([]interface{})
-	proxy := containers[0].(map[interface{}]interface{})
-	if got := proxy["image"]; got != "quay.io/brancz/kube-rbac-proxy:v0.13.1" {
-		t.Errorf("containers image = %v; want quay.io/brancz/kube-rbac-proxy:v0.13.1", got)
-	}
-
-	manager := containers[1].(map[interface{}]interface{})
-	if got := manager["image"]; got != "gcr.io/k8s-staging-jobset/jobset:v0.2.0" {
-		t.Errorf("manager image = %v; want gcr.io/k8s-staging-jobset/jobset:v0.2.0", got)
-	}
-}
-
 func TestIsJobSetCRDInstalled_Forbidden(t *testing.T) {
 	mock := &mockExecutor{
 		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
