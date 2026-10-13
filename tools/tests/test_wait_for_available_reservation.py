@@ -649,5 +649,15 @@ class TestWaitForAvailableReservation(unittest.TestCase):
             [{"name": "$(vars.reservation)", "project": "hpc-toolkit-dev"}],
         )
 
+        # Running a second time on the same blueprint file should be idempotent
+        res2 = self._run_script(
+            ["g4-reservation-0", "us-south1-a", "hpc-toolkit-dev", "2", bp_path]
+        )
+        self.assertEqual(res2.returncode, 0)
+        with open(bp_path, "r", encoding="utf-8") as f:
+            second_content = f.read()
+        self.assertEqual(second_content, updated_content)
+        self.assertEqual(second_content.count("project:"), 1)
+
 if __name__ == "__main__":
     unittest.main()

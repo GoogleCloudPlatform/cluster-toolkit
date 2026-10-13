@@ -107,7 +107,21 @@ while true; do
 	if [ "$EXIT_CODE" -eq 0 ]; then
 		echo "--- SUCCESS: Reservation slot is available. ---"
 		if [[ -n "${BLUEPRINT_FILE}" && -n "${RESERVATION_PROJECT}" && -f "${BLUEPRINT_FILE}" ]]; then
-			sed -i '/specific_reservations:/!b;n;/^[[:space:]]*-[[:space:]]*name:/s/^\([[:space:]]*\)-.*$/&\n\1  project: "'"${RESERVATION_PROJECT}"'"/' "${BLUEPRINT_FILE}"
+			awk -v proj="${RESERVATION_PROJECT}" '
+				pending != "" {
+					if ($0 !~ /^[[:space:]]*project:/) print pending
+					pending = ""
+				}
+				/^[[:space:]]*specific_reservations:[[:space:]]*$/ { in_spec = 1 }
+				in_spec && /^[[:space:]]*-[[:space:]]*name:/ {
+					indent = $0
+					sub(/-[[:space:]].*$/, "", indent)
+					pending = indent "  project: \"" proj "\""
+					in_spec = 0
+				}
+				{ print }
+				END { if (pending != "") print pending }
+			' "${BLUEPRINT_FILE}" >"${BLUEPRINT_FILE}.tmp" && mv "${BLUEPRINT_FILE}.tmp" "${BLUEPRINT_FILE}"
 		fi
 		break
 	elif [ "$EXIT_CODE" -eq 2 ]; then
