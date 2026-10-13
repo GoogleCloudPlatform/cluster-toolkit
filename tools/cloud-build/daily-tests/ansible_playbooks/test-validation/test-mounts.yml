@@ -22,7 +22,6 @@
   ansible.builtin.command:
     argv:
     - mountpoint
-    - -q
     - "{{ item }}"
   loop: "{{ custom_vars.mounts }}"
   become: true

@@ -104,26 +104,29 @@
     fail_msg: "FIO read performance thresholds not met. Bandwidth: {{ fio_results.jobs[0].read.bw_mean }} KB/s (expected >= 1000 KB/s), IOPS: {{ fio_results.jobs[0].read.iops_mean }} (expected >= 300)."
     success_msg: "FIO read performance thresholds met. Bandwidth: {{ fio_results.jobs[0].read.bw_mean }} KB/s, IOPS: {{ fio_results.jobs[0].read.iops_mean }}."
 
-- name: Validate functional write on regional bucket via gcsfuse mount
-  ansible.builtin.shell: |
-    echo "hello world" > "{{ regional_gcs_bucket_local_mount }}/testfile.txt"
-  changed_when: false
-  become: true
+- name: Verify regional bucket functional write via gcsfuse mount
+  block:
+  - name: Validate functional write on regional bucket via gcsfuse mount
+    ansible.builtin.shell: |
+      echo "hello world" > "{{ regional_gcs_bucket_local_mount }}/testfile.txt"
+    changed_when: false
+    become: true
 
-- name: Assert regional bucket functional read/write succeeded in GCS
-  delegate_to: localhost
-  ansible.builtin.command: "gcloud storage cat gs://{{ regional_bucket_name }}/testfile.txt"
-  register: regional_rw_test
-  changed_when: false
-  until: regional_rw_test.rc == 0 and regional_rw_test.stdout == "hello world"
-  retries: 5
-  delay: 2
-
-- name: Clean up test file
-  ansible.builtin.file:
-    path: "{{ regional_gcs_bucket_local_mount }}/testfile.txt"
-    state: absent
-  become: true
+  - name: Assert regional bucket functional read/write succeeded in GCS
+    delegate_to: localhost
+    ansible.builtin.command: "gcloud storage cat gs://{{ regional_bucket_name }}/testfile.txt"
+    register: regional_rw_test
+    changed_when: false
+    until: regional_rw_test.rc == 0 and regional_rw_test.stdout == "hello world"
+    retries: 5
+    delay: 2
+  always:
+  - name: Clean up test file
+    ansible.builtin.file:
+      path: "{{ regional_gcs_bucket_local_mount }}/testfile.txt"
+      state: absent
+    changed_when: false
+    become: true
 
 - name: Verify Controller Instance Template Storage Pools
   delegate_to: localhost
