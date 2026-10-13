@@ -105,6 +105,10 @@ func newTestGKEOrchestrator(executor Executor) *GKEOrchestrator {
 }
 
 func (m *MockExecutor) ExecuteCommand(name string, args ...string) shell.CommandResult {
+	// Match keys without the pinned --context; kube_auth_test.go asserts pinning.
+	if name == "kubectl" && len(args) > 2 && args[0] == "--context" {
+		args = args[2:]
+	}
 	cmdKey := name + " " + strings.Join(args, " ")
 
 	for key, results := range m.responses {
@@ -128,6 +132,9 @@ func (m *MockExecutor) ExecuteCommandWithTimeout(_ time.Duration, name string, a
 }
 
 func (m *MockExecutor) ExecuteCommandStream(name string, args ...string) error {
+	if name == "kubectl" && len(args) > 2 && args[0] == "--context" {
+		args = args[2:]
+	}
 	m.streamCalls = append(m.streamCalls, name+" "+strings.Join(args, " "))
 	return nil
 }
