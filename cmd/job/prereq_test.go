@@ -491,6 +491,39 @@ func TestCheckK8sDependencies_Timeout(t *testing.T) {
 	}
 }
 
+func TestCheckK8sDependencies_Missing(t *testing.T) {
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
+
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		return shell.CommandResult{ExitCode: -1, Err: &exec.Error{Name: name, Err: exec.ErrNotFound}}
+	}
+
+	var state PrereqState
+	var missing []missingPrereq
+	checkK8sDependencies(&state, &missing)
+
+	if len(missing) != 2 {
+		t.Fatalf("expected 2 missing prereqs, got %d", len(missing))
+	}
+	for i, bin := range []string{"kubectl", "gke-gcloud-auth-plugin"} {
+		if missing[i].name != bin {
+			t.Errorf("missing[%d].name = %q, want %q", i, missing[i].name, bin)
+		}
+		if len(missing[i].commands) != 2 {
+			t.Fatalf("expected 2 install commands for %s, got %d", bin, len(missing[i].commands))
+		}
+		wantCmd0 := fmt.Sprintf("gcloud components install %s --quiet   # gcloud from Google's installer", bin)
+		wantCmd1 := fmt.Sprintf("# or install %s with your OS package manager (apt/dnf/brew) if gcloud came from there", bin)
+		if missing[i].commands[0] != wantCmd0 {
+			t.Errorf("missing[%d].commands[0] = %q, want %q", i, missing[i].commands[0], wantCmd0)
+		}
+		if missing[i].commands[1] != wantCmd1 {
+			t.Errorf("missing[%d].commands[1] = %q, want %q", i, missing[i].commands[1], wantCmd1)
+		}
+	}
+}
+
 func TestEnsureApplicationDefaultCredentials_Failure(t *testing.T) {
 	origCreds := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
 	defer os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", origCreds)

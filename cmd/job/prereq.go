@@ -160,12 +160,6 @@ func getADCSetupCommand() string {
 	return ""
 }
 
-// isGCloudComponentManagerEnabled checks if component manager is enabled for gcloud.
-func isGCloudComponentManagerEnabled() bool {
-	result := shell.ExecuteCommandWithTimeout(shell.DefaultLocalCommandTimeout, "gcloud", "components", "list", "--quiet")
-	return !strings.Contains(result.Stderr, "component manager is disabled")
-}
-
 func printMissingPrereqs(cmd *cobra.Command, missing []missingPrereq) {
 	fmt.Fprintln(cmd.OutOrStdout(), "\nSome required prerequisites are missing. Please install the dependencies or configure the credentials listed below to proceed:")
 	for _, m := range missing {
@@ -193,11 +187,13 @@ func checkLocalCLI(name string, checkArgs []string, installedFlag *bool, missing
 		return
 	}
 	if res.ExitCode != 0 {
-		cmd := fmt.Sprintf("# Please install %s manually for your operating system.", name)
-		if isGCloudComponentManagerEnabled() {
-			cmd = fmt.Sprintf("gcloud components install %s --quiet", name)
-		}
-		*missing = append(*missing, missingPrereq{name: name, commands: []string{cmd}})
+		*missing = append(*missing, missingPrereq{
+			name: name,
+			commands: []string{
+				fmt.Sprintf("gcloud components install %s --quiet   # gcloud from Google's installer", name),
+				fmt.Sprintf("# or install %s with your OS package manager (apt/dnf/brew) if gcloud came from there", name),
+			},
+		})
 		return
 	}
 	*installedFlag = true
