@@ -163,6 +163,12 @@ variable "startup_script" {
   default     = null
 }
 
+variable "startup_script_path" {
+  description = "The GCS bucket or bucket path (e.g. 'gs://bucket-name', 'gs://bucket-name/path', or 'bucket-name') to use for startup scripts. If provided, the module will not create a new GCS bucket for startup scripts."
+  type        = string
+  default     = null
+}
+
 variable "network_storage" {
   description = "An array of network attached storage mounts to be configured. Ignored if `instance_template` is provided."
   type = list(object({
