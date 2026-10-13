@@ -74,5 +74,7 @@ JOB_TRANSFORM_MIGID @=end
 # -1073741205 (0xC000026B) = STATUS_DLL_INIT_FAILED_LOGOFF
 JOB_TRANSFORM_NAMES = $(JOB_TRANSFORM_NAMES) RETRY_WINDOWS_SHUTDOWN
 JOB_TRANSFORM_RETRY_WINDOWS_SHUTDOWN @=end
-  SET OnExitRemove ($(MY.OnExitRemove:True)) && !((ExitBySignal is False) && ((ExitCode == -1073741502) || (ExitCode == -1073741205)))
+  DEFAULT OnExitRemove True
+  COPY OnExitRemove PreTransformOnExitRemove
+  SET OnExitRemove PreTransformOnExitRemove && !((ExitBySignal is False) && ((ExitCode == -1073741502) || (ExitCode == -1073741205)))
 @end

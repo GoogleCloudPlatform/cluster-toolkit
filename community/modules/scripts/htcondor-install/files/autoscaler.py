@@ -374,7 +374,7 @@ class AutoScaler:
                 projection=["Machine", "CloudZone"]
             )
             latest_claimed_node_ads = coll.query(
-                htcondor.AdType.Startd,
+                ad_type=htcondor.AdTypes.Startd,
                 constraint=combined_constraint,
                 projection=[NODENAME_ATTRIBUTE]
             )
