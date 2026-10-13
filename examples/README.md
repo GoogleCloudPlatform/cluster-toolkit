@@ -96,6 +96,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [slurm-gke.yaml](#slurm-gkeyaml--) ![community-badge] ![experimental-badge]
   * [sycomp](#sycomp--) ![community-badge] ![experimental-badge]
   * [alphaevolve](#alphaevolve-) ![community-badge]
+  * [gke-large-scale](#gke-large-scale-) ![core-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -2152,6 +2153,18 @@ This directory includes the following blueprints and configuration files:
 The deployment instructions can be found in the [README](../community/examples/alphaevolve/README.md).
 
 [alphaevolve]: ../community/examples/alphaevolve
+
+### [gke-large-scale] ![core-badge]
+
+Provides blueprints for deploying large-scale GKE Standard clusters (1,000–5,000 nodes) with Kueue, JobSet, Cloud Storage FUSE, Multi-NIC `multivpc`, and Google Cloud Managed Service for Lustre:
+
+* [`gke-scale-5k-autoscaled.yaml`](./gke-large-scale/gke-scale-5k-autoscaled.yaml): Deploys up to 4,900 worker nodes across 49 autoscaled node pools (`initial_node_count: 0`) with Cloud Storage FUSE, Kueue, and JobSet.
+* [`gke-scale-5k-static.yaml`](./gke-large-scale/gke-scale-5k-static.yaml): Deploys up to 4,900 worker nodes across 49 fixed-size node pools (`static_node_count`) using a two-step bootstrap workflow with Cloud Storage FUSE, Kueue, and JobSet.
+* [`gke-scale-multinic-lustre.yaml`](./gke-large-scale/gke-scale-multinic-lustre.yaml): Deploys up to 250 Multi-NIC nodes across 8 NICs (`1` primary VPC + `7` secondary `multivpc` networks at MTU `8896`) with an 18 TiB Managed Lustre filesystem, Kueue, and JobSet.
+
+The deployment, scaling, and teardown instructions can be found in the [README](./gke-large-scale/README.md).
+
+[gke-large-scale]: ./gke-large-scale
 
 ## Blueprint Schema
 
