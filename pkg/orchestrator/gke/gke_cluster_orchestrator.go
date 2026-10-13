@@ -66,10 +66,11 @@ func (g *GKEOrchestrator) ListVolumes(opts orchestrator.ListOptions) ([]orchestr
 		if opts.ClusterLocation == "" {
 			return nil, fmt.Errorf("location is required when --cluster is set; please specify it using the --location flag")
 		}
-		if _, err := g.Initialize(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
+		resolvedLocation, err := g.Initialize(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
+		if err != nil {
 			return nil, err
 		}
-		if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
+		if err := g.configureKubectl(opts.ClusterName, resolvedLocation, opts.ProjectID); err != nil {
 			return nil, err
 		}
 	} else {

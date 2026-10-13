@@ -133,3 +133,29 @@ func TestListVolumes_ClusterWithoutLocationFails(t *testing.T) {
 		t.Fatal("expected error when --cluster is set without --location")
 	}
 }
+
+// A zone given for a regional cluster must be resolved to the region before the context is looked up.
+func TestListVolumes_UsesResolvedLocationForContext(t *testing.T) {
+	const zone = testLocation + "-a"
+	const pvcCmd = "kubectl --context " + testContext + " get pvc --all-namespaces -l ghpc_role=file-system -o json"
+	const describeZone = "gcloud container clusters describe " + testCluster + " --location " + zone + " --project " + testProject + " --format=json"
+	const describeRegion = "gcloud container clusters describe " + testCluster + " --location " + testLocation + " --project " + testProject + " --format=json"
+	exec := newExactExecutor(map[string][]shell.CommandResult{
+		describeZone:   {{ExitCode: 1, Stderr: "ERROR: (gcloud.container.clusters.describe) ResponseError: code=404"}},
+		describeRegion: {{ExitCode: 0, Stdout: `{"controlPlaneEndpointsConfig":{"dnsEndpointConfig":{"allowExternalTraffic":true,"endpoint":"` + testDNSHost + `"}}}`}},
+		probeCmd:       {{ExitCode: 0}},
+		pvcCmd:         {{ExitCode: 0, Stdout: `{"items": []}`}},
+	})
+	orc := newTestGKEOrchestrator(exec)
+	orc.kubeconfigLoader = staticLoader(kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext))
+
+	if _, err := orc.ListVolumes(orchestrator.ListOptions{ClusterName: testCluster, ClusterLocation: zone, ProjectID: testProject}); err != nil {
+		t.Fatalf("ListVolumes failed: %v", err)
+	}
+	if orc.kubeContext != testContext {
+		t.Errorf("kubeContext = %q, want regional context %q; calls=%v", orc.kubeContext, testContext, exec.calls)
+	}
+	if exec.count(pvcCmd) != 1 {
+		t.Errorf("get pvc was not pinned to %q; calls=%v", testContext, exec.calls)
+	}
+}
