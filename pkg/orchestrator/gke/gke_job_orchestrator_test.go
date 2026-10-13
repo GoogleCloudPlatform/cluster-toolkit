@@ -79,6 +79,7 @@ type MockExecutor struct {
 	responses   map[string][]shell.CommandResult
 	callCount   map[string]int
 	streamCalls []string // commands passed to ExecuteCommandStream
+	contexts    []string // --context values stripped from kubectl calls, in order
 }
 
 func NewMockExecutor(responses map[string][]shell.CommandResult) *MockExecutor {
@@ -105,10 +106,8 @@ func newTestGKEOrchestrator(executor Executor) *GKEOrchestrator {
 }
 
 func (m *MockExecutor) ExecuteCommand(name string, args ...string) shell.CommandResult {
-	// Match keys without the pinned --context; kube_auth_test.go asserts pinning.
-	if name == "kubectl" && len(args) > 2 && args[0] == "--context" {
-		args = args[2:]
-	}
+	// Match keys without the pinned --context; the stripped value is recorded for assertions.
+	args = m.stripContext(name, args)
 	cmdKey := name + " " + strings.Join(args, " ")
 
 	for key, results := range m.responses {
@@ -132,11 +131,30 @@ func (m *MockExecutor) ExecuteCommandWithTimeout(_ time.Duration, name string, a
 }
 
 func (m *MockExecutor) ExecuteCommandStream(name string, args ...string) error {
-	if name == "kubectl" && len(args) > 2 && args[0] == "--context" {
-		args = args[2:]
-	}
+	args = m.stripContext(name, args)
 	m.streamCalls = append(m.streamCalls, name+" "+strings.Join(args, " "))
 	return nil
+}
+
+func (m *MockExecutor) stripContext(name string, args []string) []string {
+	if name == "kubectl" && len(args) > 2 && args[0] == "--context" {
+		m.contexts = append(m.contexts, args[1])
+		return args[2:]
+	}
+	return args
+}
+
+// assertAllKubectlPinned fails unless every kubectl call carried --context ctx.
+func (m *MockExecutor) assertAllKubectlPinned(t *testing.T, ctx string) {
+	t.Helper()
+	if len(m.contexts) == 0 {
+		t.Fatalf("no kubectl call carried --context; expected %q", ctx)
+	}
+	for _, got := range m.contexts {
+		if got != ctx {
+			t.Errorf("kubectl pinned to %q, want %q", got, ctx)
+		}
+	}
 }
 
 type MockKubeClient struct {
@@ -2548,6 +2566,7 @@ func TestGetJobLogs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GetJobLogs failed: %v", err)
 			}
+			mockExec.assertAllKubectlPinned(t, "gke_test-project_us-central1-a_test-cluster")
 
 			if tc.follow {
 				if len(mockExec.streamCalls) != 1 || mockExec.streamCalls[0] != tc.expectedCmdLogsKey {

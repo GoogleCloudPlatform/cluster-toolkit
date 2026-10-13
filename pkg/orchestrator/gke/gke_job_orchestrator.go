@@ -206,7 +206,7 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 	if opts.Follow {
 		logging.Info("Streaming logs for job '%s'...", name)
 		args := g.buildKubectlLogsArgs(foundNamespace, selector, allContainers, true)
-		err = g.kubectlExecutor().ExecuteCommandStream("kubectl", args...)
+		err = g.kubectlStream(args...)
 		return "", err
 	}
 

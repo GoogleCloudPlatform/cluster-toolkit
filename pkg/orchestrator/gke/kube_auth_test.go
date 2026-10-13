@@ -15,6 +15,7 @@
 package gke
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -912,21 +913,21 @@ func TestWithKubeContext(t *testing.T) {
 	}
 }
 
-func TestContextPinnedExecutor_PinsOnlyKubectl(t *testing.T) {
-	exec := newExactExecutor(map[string][]shell.CommandResult{
-		"kubectl --context ctx get pods": {{ExitCode: 0}},
-		"gcloud version":                 {{ExitCode: 0}},
-	})
-	pinned := contextPinnedExecutor{Executor: exec, kubeContext: "ctx"}
+func TestKubectlHelpers_PinContext(t *testing.T) {
+	rec := &streamRecorder{exactExecutor: *newExactExecutor(map[string][]shell.CommandResult{
+		"kubectl --context " + testContext + " get pods": {{ExitCode: 0}},
+	})}
+	g := &GKEOrchestrator{executor: rec, kubeContext: testContext}
 
-	if res := pinned.ExecuteCommand("kubectl", "get", "pods"); res.ExitCode != 0 {
-		t.Errorf("kubectl call was not pinned; calls=%v", exec.calls)
+	if res := g.kubectl("get", "pods"); res.ExitCode != 0 {
+		t.Errorf("kubectl call was not pinned; calls=%v", rec.calls)
 	}
-	if res := pinned.ExecuteCommand("gcloud", "version"); res.ExitCode != 0 {
-		t.Errorf("non-kubectl call must pass through unchanged; calls=%v", exec.calls)
+	if err := g.kubectlStream("logs", "-f"); err != nil {
+		t.Fatal(err)
 	}
-	if res := pinned.ExecuteCommandWithTimeout(time.Second, "kubectl", "get", "pods"); res.ExitCode != 0 {
-		t.Errorf("kubectl call with timeout was not pinned; calls=%v", exec.calls)
+	want := "kubectl --context " + testContext + " logs -f"
+	if len(rec.streamed) != 1 || rec.streamed[0] != want {
+		t.Errorf("streamed = %v, want [%q]", rec.streamed, want)
 	}
 }
 
@@ -938,18 +939,6 @@ type streamRecorder struct {
 func (s *streamRecorder) ExecuteCommandStream(name string, args ...string) error {
 	s.streamed = append(s.streamed, name+" "+strings.Join(args, " "))
 	return nil
-}
-
-func TestKubectlExecutorStream_IsPinned(t *testing.T) {
-	rec := &streamRecorder{}
-	g := &GKEOrchestrator{executor: rec, kubeContext: testContext}
-	if err := g.kubectlExecutor().ExecuteCommandStream("kubectl", "logs", "-f"); err != nil {
-		t.Fatal(err)
-	}
-	want := "kubectl --context " + testContext + " logs -f"
-	if len(rec.streamed) != 1 || rec.streamed[0] != want {
-		t.Errorf("streamed = %v, want [%q]", rec.streamed, want)
-	}
 }
 
 // Later calls must hit the configured cluster even after current-context changes.
@@ -1064,9 +1053,9 @@ contexts:
 	}
 }
 
-// Guards against new kubectl calls that bypass the pinned context.
+// Guards against new kubectl calls that bypass the pinned context, whatever the executor variable is called.
 func TestNoUnpinnedKubectlCalls(t *testing.T) {
-	unpinned := regexp.MustCompile(`\bexecutor\.ExecuteCommand(Stream|WithTimeout\([^,]+,\s*)?\(?"kubectl"`)
+	unpinned := regexp.MustCompile(`\.ExecuteCommand(?:Stream|WithTimeout\([^,]+,)?\s*\(?\s*"kubectl"`)
 	files, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
@@ -1080,10 +1069,9 @@ func TestNoUnpinnedKubectlCalls(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for i, line := range strings.Split(string(src), "\n") {
-			if unpinned.MatchString(line) {
-				t.Errorf("%s:%d runs kubectl without the pinned context; use g.kubectl / g.kubectlExecutor()", f, i+1)
-			}
+		if loc := unpinned.FindIndex(src); loc != nil {
+			line := 1 + bytes.Count(src[:loc[0]], []byte("\n"))
+			t.Errorf("%s:%d runs kubectl without the pinned context; use g.kubectl / g.kubectlStream", f, line)
 		}
 	}
 }

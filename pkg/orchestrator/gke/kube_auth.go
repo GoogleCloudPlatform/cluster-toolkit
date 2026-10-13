@@ -25,7 +25,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/shell"
@@ -351,41 +350,14 @@ func withKubeContext(kubeContext string, args []string) []string {
 	return append([]string{"--context", kubeContext}, args...)
 }
 
-// contextPinnedExecutor pins kubectl calls to one context; other commands pass through.
-type contextPinnedExecutor struct {
-	Executor
-	kubeContext string
-}
-
-func (e contextPinnedExecutor) ExecuteCommand(name string, args ...string) shell.CommandResult {
-	if name == "kubectl" {
-		args = withKubeContext(e.kubeContext, args)
-	}
-	return e.Executor.ExecuteCommand(name, args...)
-}
-
-func (e contextPinnedExecutor) ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...string) shell.CommandResult {
-	if name == "kubectl" {
-		args = withKubeContext(e.kubeContext, args)
-	}
-	return e.Executor.ExecuteCommandWithTimeout(timeout, name, args...)
-}
-
-func (e contextPinnedExecutor) ExecuteCommandStream(name string, args ...string) error {
-	if name == "kubectl" {
-		args = withKubeContext(e.kubeContext, args)
-	}
-	return e.Executor.ExecuteCommandStream(name, args...)
-}
-
-// kubectlExecutor returns an executor pinned to the context chosen by configureKubectl.
-func (g *GKEOrchestrator) kubectlExecutor() Executor {
-	return contextPinnedExecutor{Executor: g.executor, kubeContext: g.kubeContext}
-}
-
-// kubectl runs kubectl against the pinned context.
+// kubectl runs kubectl against the context chosen by configureKubectl.
 func (g *GKEOrchestrator) kubectl(args ...string) shell.CommandResult {
-	return g.kubectlExecutor().ExecuteCommand("kubectl", args...)
+	return g.executor.ExecuteCommand("kubectl", withKubeContext(g.kubeContext, args)...)
+}
+
+// kubectlStream streams kubectl output against the context chosen by configureKubectl.
+func (g *GKEOrchestrator) kubectlStream(args ...string) error {
+	return g.executor.ExecuteCommandStream("kubectl", withKubeContext(g.kubeContext, args)...)
 }
 
 // inspectExistingContext loads the kubeconfig and statically validates the cluster's entry.

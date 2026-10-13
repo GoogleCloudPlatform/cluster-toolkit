@@ -82,35 +82,13 @@ func TestDescribeEnvironment(t *testing.T) {
 	}
 }
 
-func TestListVolumes(t *testing.T) {
-	mockResponses := map[string][]shell.CommandResult{
-		"kubectl get pvc": {
-			{ExitCode: 0, Stdout: `{"items": [{"metadata": {"name": "pvc-1"}, "spec": {"storageClassName": "standard"}} ]}`},
-		},
-	}
-	orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
-
-	vols, err := orc.ListVolumes(orchestrator.ListOptions{})
-	if err != nil {
-		t.Fatalf("ListVolumes failed: %v", err)
-	}
-
-	if len(vols) != 1 {
-		t.Errorf("Expected 1 volume, got %d", len(vols))
-	}
-
-	if vols[0].Name != "pvc-1" || vols[0].Type != "standard" {
-		t.Errorf("Unexpected volume status: %+v", vols[0])
-	}
-}
-
 func TestListVolumes_PinsNamedCluster(t *testing.T) {
 	const pvcCmd = "kubectl --context " + testContext + " get pvc --all-namespaces -l ghpc_role=file-system -o json"
 	const describeCmd = "gcloud container clusters describe " + testCluster + " --location " + testLocation + " --project " + testProject + " --format=json"
 	exec := newExactExecutor(map[string][]shell.CommandResult{
 		describeCmd: {{ExitCode: 0, Stdout: `{"controlPlaneEndpointsConfig":{"dnsEndpointConfig":{"allowExternalTraffic":true,"endpoint":"` + testDNSHost + `"}}}`}},
 		probeCmd:    {{ExitCode: 0}},
-		pvcCmd:      {{ExitCode: 0, Stdout: `{"items": [{"metadata": {"name": "pvc-1"}}]}`}},
+		pvcCmd:      {{ExitCode: 0, Stdout: `{"items": [{"metadata": {"name": "pvc-1"}, "spec": {"storageClassName": "standard"}}]}`}},
 	})
 	orc := newTestGKEOrchestrator(exec)
 	orc.kubeconfigLoader = staticLoader(kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext))
@@ -119,7 +97,7 @@ func TestListVolumes_PinsNamedCluster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListVolumes failed: %v", err)
 	}
-	if len(vols) != 1 || vols[0].Name != "pvc-1" {
+	if len(vols) != 1 || vols[0].Name != "pvc-1" || vols[0].Type != "standard" || vols[0].Cluster != testCluster {
 		t.Errorf("unexpected volumes: %+v", vols)
 	}
 	if exec.count(pvcCmd) != 1 {
@@ -127,10 +105,12 @@ func TestListVolumes_PinsNamedCluster(t *testing.T) {
 	}
 }
 
-func TestListVolumes_ClusterWithoutLocationFails(t *testing.T) {
+func TestListVolumes_RequiresClusterAndLocation(t *testing.T) {
 	orc := newTestGKEOrchestrator(newExactExecutor(nil))
-	if _, err := orc.ListVolumes(orchestrator.ListOptions{ClusterName: testCluster}); err == nil {
-		t.Fatal("expected error when --cluster is set without --location")
+	for _, opts := range []orchestrator.ListOptions{{}, {ClusterName: testCluster}, {ClusterLocation: testLocation}} {
+		if _, err := orc.ListVolumes(opts); err == nil {
+			t.Errorf("ListVolumes(%+v) error = nil, want error", opts)
+		}
 	}
 }
 

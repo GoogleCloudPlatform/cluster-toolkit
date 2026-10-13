@@ -177,10 +177,12 @@ var cancelOpts = orchestrator.CancelOptions{ClusterName: "c", ClusterLocation: "
 // referenced by any JobSet, but the namespace sweep must still reclaim it.
 func TestCancelJob_SweepsGatewaysLeftByTTLExpiredJobs(t *testing.T) {
 	mock := gatewayMock(nil)
-	if err := cancelTestOrchestrator(mock).CancelJob("job-b", cancelOpts); err != nil {
+	orc := cancelTestOrchestrator(mock)
+	if err := orc.CancelJob("job-b", cancelOpts); err != nil {
 		t.Fatalf("CancelJob() unexpected error: %v", err)
 	}
 	assertDeleted(t, mock, []string{testClaim}, []string{testPV})
+	orc.executor.(*MockExecutor).assertAllKubectlPinned(t, "gke_p_us-central1_c")
 }
 
 // TestCancelJob_NotFoundStillReclaimsAndReportsError covers cancelling a job
