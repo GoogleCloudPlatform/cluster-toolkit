@@ -35,14 +35,14 @@ steps:
     max_retries=3
 
     while [ "$attempt" -le "$max_retries" ]; do
-        echo "Execution attempt ${attempt} of ${max_retries}..."
+        echo "Execution attempt $${attempt} of $${max_retries}..."
 
         if /workspace/tools/clean-filestore-limit.sh; then
             echo "Filestore cleanup completed successfully."
             exit 0
         fi
 
-        echo "Cleanup script failed on attempt ${attempt}."
+        echo "Cleanup script failed on attempt $${attempt}."
         if [ "$attempt" -lt "$max_retries" ]; then
             echo "Waiting 15 seconds before retrying..."
             sleep 15
@@ -50,5 +50,5 @@ steps:
         attempt=$((attempt + 1))
     done
 
-    echo "ERROR: Cleanup failed after ${max_retries} attempts."
+    echo "ERROR: Cleanup failed after $${max_retries} attempts."
     exit 1
