@@ -270,6 +270,29 @@ reservation_affinity:
 
 Once the future reservation is active or the reservation is fulfilled, set the `is_reservation_active` input variable to `true`. Also set the node count information with either the `static_node_count` to define the required number of static nodes, or the `autoscaling_min_node_count` and `autoscaling_max_node_count` to use node scaling. Remember to use the `-w` flag in the `gcluster deploy` command and DO NOT change the `deployment_name` variable.
 
+## Best-effort provisioning
+
+By default, GKE node pool creation fails if some nodes can't be created, for example because of a stockout. With best-effort provisioning, creation succeeds once a minimum number of nodes is running, and GKE keeps creating the remaining nodes as capacity becomes available. This is the same as `gcloud container node-pools create --enable-best-effort-provision --min-provision-nodes`.
+
+Use [`best_effort_provisioning`](#input_best_effort_provisioning) to enable it:
+
+```yaml
+  - id: gpu_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      machine_type: g2-standard-24
+      static_node_count: 8
+      best_effort_provisioning:
+        min_provision_nodes: 4
+```
+
+- `min_provision_nodes` is the minimum number of running nodes **per zone** for creation to succeed. If it isn't set, GKE uses 1. It can't be larger than `static_node_count` or `initial_node_count`.
+- The setting only applies when the node pool is created. Changing it later has no effect, and it never causes an existing node pool to be recreated.
+- GKE only tolerates stockouts. If nodes can't be created because a specific reservation doesn't have enough capacity, creation still fails.
+- Best-effort provisioning isn't supported for TPU node pools or for node pools that use [`placement_policy`](#input_placement_policy), including workload policies such as the ones used by A4X node pools. See [Node pool creation fails due to insufficient resources](https://cloud.google.com/kubernetes-engine/docs/troubleshooting/node-pools#insufficient-resources).
+- Requires version 8.7.0 or later of the `google-beta` provider.
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -293,7 +316,7 @@ limitations under the License.
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.24.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 8.7.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
@@ -301,7 +324,7 @@ limitations under the License.
 | Name | Version |
 | ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.24.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 8.7.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
@@ -342,6 +365,7 @@ limitations under the License.
 | <a name="input_autoscaling_min_node_count"></a> [autoscaling\_min\_node\_count](#input\_autoscaling\_min\_node\_count) | Minimum number of nodes per zone in the NodePool. Cannot be used with autoscaling\_total\_min\_nodes. | `number` | `null` | no |
 | <a name="input_autoscaling_total_max_nodes"></a> [autoscaling\_total\_max\_nodes](#input\_autoscaling\_total\_max\_nodes) | Total maximum number of nodes in the NodePool. | `number` | `1000` | no |
 | <a name="input_autoscaling_total_min_nodes"></a> [autoscaling\_total\_min\_nodes](#input\_autoscaling\_total\_min\_nodes) | Total minimum number of nodes in the NodePool. | `number` | `0` | no |
+| <a name="input_best_effort_provisioning"></a> [best\_effort\_provisioning](#input\_best\_effort\_provisioning) | Enables GKE best-effort provisioning when the node pool is created, similar to<br/>`gcloud container node-pools create --enable-best-effort-provision --min-provision-nodes`.<br/>Creation succeeds once `min_provision_nodes` nodes per zone are running (GKE uses 1 if unset),<br/>and GKE keeps creating the remaining nodes as capacity becomes available. `enabled` defaults to true.<br/>Only applies at creation; later changes are ignored. Not supported for TPU node pools or with<br/>`placement_policy`. See the module README for details. | <pre>object({<br/>    enabled             = optional(bool, true)<br/>    min_provision_nodes = optional(number)<br/>  })</pre> | `null` | no |
 | <a name="input_boot_disk_kms_key"></a> [boot\_disk\_kms\_key](#input\_boot\_disk\_kms\_key) | The Customer Managed Encryption Key (CMEK) used to encrypt the boot disks of the GKE nodes. Required if enable\_confidential\_storage is true. | `string` | `null` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | projects/{{project}}/locations/{{location}}/clusters/{{cluster}} | `string` | n/a | yes |
 | <a name="input_compact_placement"></a> [compact\_placement](#input\_compact\_placement) | DEPRECATED: Use `placement_policy` | `bool` | `null` | no |
