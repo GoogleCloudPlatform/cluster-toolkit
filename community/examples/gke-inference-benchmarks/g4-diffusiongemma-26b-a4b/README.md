@@ -26,16 +26,20 @@ Everything the benchmark needs is in this directory:
 
 | File | Purpose |
 | --- | --- |
-| [`blueprint.yaml`](blueprint.yaml) | VPC, service accounts, GKE cluster (Dataplane V2; GCS FUSE, Filestore and Managed Lustre CSI drivers enabled), Spot G4 node pool, the `hf-secret` Kubernetes `Secret` (via the [`kubernetes-secret`](../../../../modules/security/kubernetes-secret/README.md) module) and the `kubectl-apply` step that installs the manifests in three stages. |
-| [`deployment.yaml`](deployment.yaml) | The values you fill in: project, Terraform state bucket, region/zone, authorized CIDR, model weights bucket. |
+| [`blueprint.yaml`](blueprint.yaml) | VPC, service accounts, GKE cluster (Dataplane V2; GCS FUSE, Filestore and Managed Lustre CSI drivers enabled; a single-zone `n2d-standard-8` system node pool), Spot G4 node pool, the `hf-secret` Kubernetes `Secret` (via the [`kubernetes-secret`](../../../../modules/security/kubernetes-secret/README.md) module, created with an empty token when `hf_token` is empty) and the `kubectl-apply` step that installs the JobSet controller and the manifests in three stages. The pinned vLLM image tag, serving flags and default benchmark workload keep runs comparable. |
+| [`deployment.yaml`](deployment.yaml) | The values you fill in: project, Terraform state bucket, region/zone, authorized CIDR, model weights bucket, benchmark workload (`bench_*`). |
 | [`manifests/stage-weights.yaml.tftpl`](manifests/stage-weights.yaml.tftpl) | **Stage 1:** Standalone `diffusiongemma-stage-weights` `Job` (enabled when `model_bucket` is set) that checks `gs://<model_bucket>/<model_path>` and stages the Hugging Face snapshot using a rolling per-file download $\to$ concurrent multipart upload $\to$ delete pipeline. |
-| [`manifests/vllm-serve.yaml.tftpl`](manifests/vllm-serve.yaml.tftpl) | **Stage 2:** StorageClass + PersistentVolumeClaim, vLLM `Deployment` (`wait-for-weights` initContainer + server) and `Service`; rendered with `model_bucket`/`model_path`. |
-| [`manifests/vllm-bench.yaml.tftpl`](manifests/vllm-bench.yaml.tftpl) | **Stage 3:** `vllm bench serve` `Job` that waits for the server, prints the results and fails if any request failed. |
+| [`manifests/vllm-serve.yaml.tftpl`](manifests/vllm-serve.yaml.tftpl) | **Stage 2:** StorageClass + PersistentVolumeClaim (Hyperdisk Balanced, the persistent disk type supported on G4), vLLM `Deployment` (`wait-for-weights` initContainer + server) and `Service`; rendered with `model_bucket`/`model_path`. |
+| [`manifests/vllm-bench.yaml.tftpl`](manifests/vllm-bench.yaml.tftpl) | **Stage 3:** `vllm bench serve` `Job` that waits for the server, prints the results and fails if any request failed; rendered with the `bench_*` workload variables, which are also part of the Job name. |
 
 The three manifests are Terraform templates. Their `${hf_secret_name}`
 expression is the name of the Secret created by the module, which makes
 Terraform create the Secret before the pods that mount it; the staging Job and
-server manifests additionally take `${model_bucket}` and `${model_path}`.
+server manifests additionally take `${model_bucket}` and `${model_path}`, and
+the benchmark Job the `${bench_*}` variables. The `kubectl-apply` module
+installs each manifest as a Helm release and does not wait for the server
+rollout (`wait_for_rollout: false`), so `gcluster deploy` returns while the
+weights are still loading.
 
 ## Prerequisites
 
@@ -236,8 +240,9 @@ To run a different workload, change `bench_input_len`, `bench_output_len`,
 which overwrites the deployment directory but keeps the Terraform state. The
 only resource that changes is the benchmark Job and, because its name embeds
 the values, the previous Job is replaced instead of being updated in place
-(a Job's pod template is immutable). Set `bench_run_id` (for example `run2`) to
-repeat a workload with unchanged parameters:
+(a Job's pod template is immutable). Set `bench_run_id` (a short suffix such
+as `run2`; Kubernetes limits Job names to 63 characters and the default name
+uses 48) to repeat a workload with unchanged parameters:
 
 ```shell
 ./gcluster deploy -w -d community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/deployment.yaml \

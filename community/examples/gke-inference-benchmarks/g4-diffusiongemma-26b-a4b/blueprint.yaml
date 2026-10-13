@@ -12,26 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# GKE inference benchmark: DiffusionGemma 26B-A4B on a Spot G4 node pool.
-#
-# Provisions a GKE cluster with a single-zone Spot G4 node pool
-# (g4-standard-48, 1x NVIDIA RTX PRO 6000), serves
-# google/diffusiongemma-26B-A4B-it with vLLM and runs a `vllm bench serve`
-# benchmark Job, all as part of one `gcluster deploy`. The vLLM image tag,
-# serving flags and benchmark parameters are pinned in the manifests so that
-# results are reproducible and comparable between runs.
-#
-# With model_bucket set, a standalone `diffusiongemma-stage-weights` Job
-# copies the Hugging Face snapshot to Cloud Storage the first time (if it is
-# not already there), and the vLLM pod streams the weights from Cloud Storage
-# with the Run:ai Model Streamer; otherwise they are downloaded to a Hyperdisk
-# volume.
-#
-# Everything this benchmark needs is in this directory; see README.md.
-#
-#   ./gcluster deploy -d community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/deployment.yaml \
-#     community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml \
-#     --vars hf_token=$HF_TOKEN,model_bucket=$MODEL_BUCKET
+# GKE inference benchmark: DiffusionGemma 26B-A4B served with vLLM on a Spot
+# G4 node pool, benchmarked with `vllm bench serve`. See README.md for the
+# deploy command, the variables and the three-stage workflow.
 
 blueprint_name: gke-inference-benchmark-g4-diffusiongemma
 
@@ -46,68 +29,45 @@ vars:
   # The GCP Region used for this deployment.
   region:
 
-  # The GCP Zone used for this deployment. Spot capacity is zonal; pick a zone
-  # where G4 is available: https://cloud.google.com/compute/docs/gpus/gpu-regions-zones
+  # The GCP Zone used for this deployment (Spot capacity is zonal).
   zone:
 
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
   authorized_cidr:
 
-  # The VM shape. g4-standard-48 = 1x NVIDIA RTX PRO 6000 (96 GB), enough for
-  # DiffusionGemma 26B-A4B in BF16 with tensor parallelism 1.
+  # g4-standard-48 = 1x NVIDIA RTX PRO 6000 (96 GB).
   # See allowed values here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
   machine_type: g4-standard-48
 
   # Number of GPUs in the VM. Can be found here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
   num_gpus: 1
 
-  # The number of Spot nodes to be created. One node is enough for this benchmark.
+  # The number of nodes to be created. One node is enough for this benchmark.
   static_node_count: 1
 
   # Consumption model: Spot VMs (preemptible). Set to false for on-demand.
   spot: true
   auto_repair: true
 
-  # Hugging Face token with access to the gated google/diffusiongemma-26B-A4B-it,
-  # stored in the `hf-secret` Kubernetes Secret (key hf_api_token) by the
-  # kubernetes-secret module below. Pass it with `--vars hf_token=$HF_TOKEN`.
-  # NOTE: a token passed this way is written in plaintext to the deployment
-  # folder's terraform.tfvars and to the Terraform state in the GCS bucket
-  # (Terraform marks it sensitive, so it is not printed). If that is not
-  # acceptable, leave it empty and put the token into the Secret yourself after
-  # deployment (see README.md):
-  #   kubectl patch secret hf-secret --type merge -p "{\"stringData\":{\"hf_api_token\":\"$HF_TOKEN\"}}"
+  # Hugging Face token for the gated model; pass it with --vars hf_token=$HF_TOKEN
+  # (see README.md for the plaintext state caveat and the kubectl alternative).
   hf_token: ""
 
-  # Cloud Storage location of the model weights. When model_bucket is set, a
-  # standalone `diffusiongemma-stage-weights` Job copies the Hugging Face
-  # snapshot to gs://<model_bucket>/<model_path> if it does not exist yet
-  # (rolling per-file download -> upload -> delete so multi-TB models fit on
-  # standard boot disks and multiple server pods never race to upload), and the
-  # vLLM pod streams the safetensors straight from Cloud Storage with the
-  # Run:ai Model Streamer. The bucket must exist; buckets in this project are
-  # accessible through the workload service account below. Leave model_bucket
-  # empty to download the weights from Hugging Face into the Hyperdisk volume
-  # instead.
+  # Existing Cloud Storage bucket (name only) and prefix for the model weights;
+  # leave model_bucket empty to use a Hyperdisk volume instead (see README.md).
   model_bucket: ""
   model_path: models/diffusiongemma-26B-A4B-it
 
   # Set to false to only deploy the vLLM server (no benchmark Job).
   run_benchmark: true
 
-  # Benchmark workload (`vllm bench serve`, random dataset). The values are
-  # embedded in the Job name, so changing one and re-running `gcluster deploy -w`
-  # replaces the Job instead of patching its immutable pod template. Keep
-  # bench_output_len a multiple of 256 (the diffusion canvas) and
-  # bench_max_concurrency at or below the server's --max-num-seqs (8).
+  # Benchmark workload; part of the Job name, so change them with
+  # `gcluster deploy -w` (see README.md). bench_run_id repeats a workload.
   bench_input_len: 1024
   bench_output_len: 1024
   bench_num_prompts: 64
   bench_max_concurrency: 8
-  # Optional short suffix for the Job name, to repeat a workload with unchanged
-  # parameters (for example bench_run_id: run2). Job names are limited to 63
-  # characters; the default workload uses 48.
   bench_run_id: ""
 
   system_node_pool_disk_size_gb: 100
@@ -153,10 +113,7 @@ deployment_groups:
       - storage.objectViewer
       - artifactregistry.reader
 
-  # Bound to the `workload-identity-k8s-sa` Kubernetes service account by the
-  # cluster module; the vLLM pod uses it to read and populate the model bucket
-  # (objectAdmin for objects, bucketViewer because the Run:ai GCS backend reads
-  # bucket metadata).
+  # Used by the pods (Workload Identity) to read and populate the model bucket.
   - id: workload_service_account
     source: modules/project/service-account
     settings:
@@ -174,16 +131,12 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-g4-net-0, workload_service_account]
     settings:
-      # A small, single-zone system node pool is enough for a single GPU node
-      # and avoids depending on capacity in the region's other zones.
+      # Single-zone system node pool: one GPU node does not need more.
       system_node_pool_machine_type: "n2d-standard-8"
       system_node_pool_zones: [$(vars.zone)]
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
-      # Storage CSI drivers (GCS FUSE, Filestore, Managed Lustre) so that model
-      # weights or datasets on those systems can be mounted without recreating
-      # the cluster, and Dataplane V2 (immutable after cluster creation).
       enable_gcsfuse_csi: true
       enable_filestore_csi: true
       enable_managed_lustre_csi: true # Enable Managed Lustre for the cluster
@@ -203,9 +156,6 @@ deployment_groups:
         exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
     outputs: [instructions]
 
-  # Single-zone Spot node pool. GKE labels Spot nodes with
-  # cloud.google.com/gke-spot=true; the workload manifests below also tolerate
-  # the optional cloud.google.com/gke-spot=true:NoSchedule taint.
   - id: g4-spot-pool
     source: modules/compute/gke-node-pool
     use: [g4-cluster, node_pool_service_account]
@@ -221,39 +171,19 @@ deployment_groups:
         count: $(vars.num_gpus)
     outputs: [instructions]
 
-  # Hugging Face token Secret (`hf-secret`, key hf_api_token), managed by
-  # Terraform with the value marked sensitive. The module cannot be made
-  # conditional, so with an empty hf_token the Secret exists with an empty
-  # token until you patch it (see the hf_token comment above).
+  # Hugging Face token Secret (`hf-secret`, key hf_api_token).
   - id: hf-secret
     source: modules/security/kubernetes-secret
     use: [g4-cluster]
     settings:
-      # cluster_endpoint and cluster_ca_certificate come from g4-cluster via
-      # `use`, so the module's fallback data source is not needed; keeping
-      # cluster_id null lets Terraform evaluate the data source `count` at plan
-      # time before the cluster exists.
+      # Endpoint and CA come from g4-cluster via `use`; null keeps the module's
+      # data source count known at plan time.
       cluster_id: null
       secret_name: hf-secret
       data:
         hf_api_token: '$(vars.hf_token != null ? vars.hf_token : "")'
 
-  # Runs the DiffusionGemma vLLM benchmark in three stages as part of `gcluster deploy`:
-  #   1. diffusiongemma-stage-weights: single-pod Job that stages the Hugging
-  #      Face snapshot to Cloud Storage if not already present (only when
-  #      model_bucket is set)
-  #   2. diffusiongemma-vllm-serve: StorageClass + PVC + Deployment
-  #      (wait-for-weights initContainer + vLLM) + Service, rendered with
-  #      model_bucket/model_path
-  #   3. diffusiongemma-vllm-bench: `vllm bench serve` Job (only if run_benchmark
-  #      is true), rendered with the bench_* workload variables that are also
-  #      part of the Job name
-  # All three reference the Secret by the module's output, which makes Terraform
-  # create the Secret before the pods. Each manifest is a Helm release managed by
-  # Terraform; do not edit the applied resources by hand (a Job's pod template is
-  # immutable, so change the bench_* variables and re-run `gcluster deploy -w`
-  # instead). JobSet is installed so that JobSet-based benchmarks can target this
-  # cluster too.
+  # Three stages: stage weights to Cloud Storage, serve, benchmark (README.md).
   - id: diffusiongemma-vllm
     source: modules/management/kubectl-apply
     use: [g4-cluster]
@@ -275,8 +205,7 @@ deployment_groups:
           hf_secret_name: $(hf-secret.secret_name)
           model_bucket: '$(vars.model_bucket != null ? vars.model_bucket : "")'
           model_path: '$(vars.model_path != null ? vars.model_path : "")'
-        # Staging or downloading (~52 GB) and loading the weights takes 5-25
-        # minutes; do not block `gcluster deploy` on the rollout.
+        # Loading the weights takes 5-25 minutes; do not block the deploy.
         wait_for_rollout: false
       - name: diffusiongemma-vllm-bench
         enable: $(vars.run_benchmark)

@@ -28,7 +28,6 @@ vars:
   # The GCP Region and Zone used for this deployment. Spot capacity is zonal;
   # pick a zone with G4 availability:
   # https://cloud.google.com/compute/docs/gpus/gpu-regions-zones
-  # (the reference results in README.md were measured in us-central1-b).
   region: us-central1
   zone: us-central1-b
 
@@ -37,8 +36,8 @@ vars:
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
 
-  # g4-standard-48 (1x RTX PRO 6000, 96 GB) is enough for DiffusionGemma 26B-A4B
-  # in BF16. See allowed values here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
+  # g4-standard-48 = 1x NVIDIA RTX PRO 6000 (96 GB).
+  # See allowed values here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
   machine_type: g4-standard-48
   num_gpus: 1
 
@@ -48,39 +47,20 @@ vars:
   # Consumption model: Spot VMs (preemptible). Set to false for on-demand.
   spot: true
 
-  # Hugging Face token with access to the gated google/diffusiongemma-26B-A4B-it
-  # (accept the license at https://huggingface.co/google/diffusiongemma-26B-A4B-it).
-  # The blueprint stores it in the `hf-secret` Kubernetes Secret through the
-  # kubernetes-secret module. Do NOT commit this file with a real token; pass it
-  # on the command line instead:
-  #   --vars hf_token=$HF_TOKEN
-  # NOTE: a token passed this way is written in plaintext to the deployment
-  # folder's terraform.tfvars and to the Terraform state in the bucket above.
-  # If that is not acceptable, leave it empty and patch the (then empty) Secret
-  # yourself after deployment, see README.md:
-  #   kubectl patch secret hf-secret --type merge -p "{\"stringData\":{\"hf_api_token\":\"$HF_TOKEN\"}}"
+  # Hugging Face token for the gated model. Do NOT commit it here; pass it with
+  # --vars hf_token=$HF_TOKEN (see README.md for the plaintext state caveat).
   hf_token: ""
 
-  # Cloud Storage bucket (name only, no gs://) and object prefix for the model
-  # weights. Set model_bucket to an existing bucket, ideally in the same region
-  # as the cluster, to stream the weights from gs://<model_bucket>/<model_path>
-  # with the Run:ai Model Streamer; the first deployment copies them there from
-  # Hugging Face, later ones (and restarts after a Spot preemption) only stream.
-  # Buckets in this project work out of the box; see README.md for buckets in
-  # other projects. Leave model_bucket empty to download the weights from
-  # Hugging Face into a Hyperdisk volume instead.
+  # Existing Cloud Storage bucket (name only, no gs://) and prefix for the model
+  # weights; leave model_bucket empty to use a Hyperdisk volume (see README.md).
   model_bucket: ""
   model_path: models/diffusiongemma-26B-A4B-it
 
   # Set to false to only deploy the vLLM server (no benchmark Job).
   run_benchmark: true
 
-  # Benchmark workload (random dataset): input/output tokens per request,
-  # number of prompts and client concurrency. Keep bench_output_len a multiple
-  # of 256 and bench_max_concurrency <= 8 (the server's --max-num-seqs). The
-  # values are part of the Job name, so changing them here or with --vars and
-  # re-running `gcluster deploy -w` replaces the Job; set bench_run_id (for
-  # example run2) to repeat a workload with unchanged parameters.
+  # Benchmark workload (random dataset); part of the Job name, so change them
+  # with `gcluster deploy -w` (see README.md). bench_run_id repeats a workload.
   bench_input_len: 1024
   bench_output_len: 1024
   bench_num_prompts: 64

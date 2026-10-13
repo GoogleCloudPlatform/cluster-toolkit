@@ -12,24 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Benchmark Job: waits for the vLLM server, then runs `vllm bench serve` with
-# the DiffusionGemma G4 workload (random dataset; by default ISL 1024 /
-# OSL 1024, 64 prompts, concurrency 8). Terraform template rendered by the
-# kubectl-apply module with `hf_secret_name` (the Hugging Face token Secret
-# created by the blueprint's kubernetes-secret module) and the blueprint's
-# bench_* workload variables.
-#
-# The Job name embeds the workload (and the optional bench_run_id), because a
-# Job's pod template is immutable: changing a bench_* variable and re-running
-# `gcluster deploy -w` then replaces the Job through the Helm release that
-# kubectl-apply manages, instead of failing on an in-place update. Do not edit
-# the applied Job by hand; see "Benchmark results" in README.md.
-#
-# The Job has no node selector or tolerations, so it lands on the on-demand
-# system node pool rather than on the Spot GPU node: a preemption of the GPU
-# node then interrupts in-flight requests but not the Job pod, whose wait loop
-# simply resumes once the server is back. A run with failed requests exits
-# non-zero so that the Job retries it instead of reporting partial numbers.
+# Stage 3: `vllm bench serve` Job. Runs on the system node pool (no GPU node
+# selector), waits for the server, and fails runs with incomplete requests so
+# that they are retried. The bench_* values are part of the Job name; change
+# them with `gcluster deploy -w` rather than by editing this file (README.md).
 ---
 apiVersion: batch/v1
 kind: Job
@@ -38,10 +24,8 @@ metadata:
   labels:
     app: diffusiongemma-vllm-bench
 spec:
-  # Retried if the server is preempted mid-run (see the result check below).
   backoffLimit: 3
-  # Gives up on its own if the server never comes up or a run stalls:
-  # 40 min server startupProbe budget + a few runs + margin.
+  # 40 min server start-up budget + a few runs.
   activeDeadlineSeconds: 5400
   ttlSecondsAfterFinished: 86400
   template:
@@ -106,8 +90,7 @@ spec:
             --save-result --result-dir /tmp/results
           echo "===== RESULT JSON ====="
           cat /tmp/results/*.json
-          # Fail (and let the Job retry) unless every request succeeded, e.g.
-          # when the Spot node serving the model was preempted mid-run.
+          # Fail (and retry) unless every request succeeded.
           python3 - <<'EOF'
           import glob, json, os, sys
           result = json.load(open(sorted(glob.glob("/tmp/results/*.json"))[-1]))

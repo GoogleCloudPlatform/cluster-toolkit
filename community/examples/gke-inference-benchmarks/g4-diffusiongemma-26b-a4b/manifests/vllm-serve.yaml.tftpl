@@ -12,32 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# vLLM server for google/diffusiongemma-26B-A4B-it on one Spot G4 node
-# (1x NVIDIA RTX PRO 6000). Terraform template rendered by the kubectl-apply
-# module with three variables: `hf_secret_name`, the Hugging Face token Secret
-# (key hf_api_token) created by the blueprint's kubernetes-secret module, and
-# the blueprint vars `model_bucket` and `model_path` that select where the
-# model weights come from:
-#   * model_bucket set:   the `wait-for-weights` initContainer waits until the
-#     standalone `diffusiongemma-stage-weights` Job has finished uploading the
-#     Hugging Face snapshot (`config.json` + `*.safetensors`) under
-#     gs://<model_bucket>/<model_path>, then vLLM streams the safetensors
-#     straight from Cloud Storage into GPU memory with the Run:ai Model Streamer
-#     (--load-format=runai_streamer):
-#     https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/run-ai-model-streamer
-#   * model_bucket empty: vLLM downloads the weights from Hugging Face into the
-#     Hyperdisk volume (Hugging Face cache) and loads them from disk.
-# Cloud Storage access comes from Workload Identity: the pod runs as the
-# `workload-identity-k8s-sa` Kubernetes service account that the gke-cluster
-# module binds to the workload Google service account of the blueprint
-# (roles/storage.objectAdmin + roles/storage.bucketViewer on the project).
-#
-# DiffusionGemma is an encoder-decoder block-diffusion model: each step
-# denoises a 256-token canvas instead of decoding one token. The server flags
-# follow the constraints enforced by vLLM (DiffusionGemmaModelForBlockDiffusionConfig):
-#   * FlashInfer is rejected                 -> --attention-backend=TRITON_ATTN
-#   * Tensor parallelism > 1 is unsupported  -> --tensor-parallel-size=1 (BF16, ~52 GB)
-#   * Sampler materializes [num_seqs, canvas, vocab] in fp32 -> --max-num-seqs=8
+# Stage 2: vLLM server for google/diffusiongemma-26B-A4B-it on one Spot G4 node.
+# With model_bucket set, the weights are streamed from Cloud Storage with the
+# Run:ai Model Streamer once the stage-weights Job has finished; otherwise they
+# are downloaded to the Hyperdisk volume. The serving flags follow the
+# constraints vLLM enforces for this model; see README.md for both.
 ---
 # Hyperdisk Balanced is the only persistent disk type supported on G4.
 apiVersion: storage.k8s.io/v1
@@ -83,8 +62,7 @@ spec:
       labels:
         app: diffusiongemma-vllm
     spec:
-      # Created by the gke-cluster module (configure_workload_identity_sa: true);
-      # gives the containers the workload service account's Cloud Storage access.
+      # Workload Identity service account created by the gke-cluster module.
       serviceAccountName: workload-identity-k8s-sa
       nodeSelector:
         cloud.google.com/gke-accelerator: nvidia-rtx-pro-6000
@@ -97,12 +75,8 @@ spec:
         value: "true"
         effect: NoSchedule
       initContainers:
-      # Waits for the standalone `diffusiongemma-stage-weights` Job (Stage 1) to
-      # finish populating gs://<model_bucket>/<model_path> before starting vLLM
-      # (Stage 2). Keeping the download/upload in a single-pod Job rather than
-      # in the server pod's initContainer prevents multiple server pods in a
-      # distributed or multi-replica deployment from concurrently downloading
-      # and overwriting the same Cloud Storage objects.
+      # Waits (up to 60 min) until the stage-weights Job has uploaded the
+      # snapshot; exits immediately when model_bucket is empty.
       - name: wait-for-weights
         image: vllm/vllm-openai:v0.30.0
         command: ["python3", "-u", "-c"]

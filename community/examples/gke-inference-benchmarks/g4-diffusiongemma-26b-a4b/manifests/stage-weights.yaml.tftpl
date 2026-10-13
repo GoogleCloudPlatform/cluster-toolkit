@@ -12,25 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Stage 1 of the benchmark sequence: standalone weight-staging Job
-# (`diffusiongemma-stage-weights`).
-#
-# Running weight staging as a single-pod Job (parallelism: 1, completions: 1)
-# on the on-demand system node pool rather than inside the inference server's
-# initContainer prevents two problems:
-#   1. Multi-pod race conditions: in distributed or multi-replica deployments
-#      (JobSet, LeaderWorkerSet, or Deployment with replicas > 1), an
-#      initContainer in the server pod spec would make every pod download from
-#      Hugging Face and overwrite the same Cloud Storage objects concurrently.
-#   2. Multi-TB local disk exhaustion: instead of downloading the entire model
-#      snapshot to disk before uploading, this Job pipelines download ->
-#      concurrent multipart upload -> immediate local deletion per file (at
-#      most 3 files in flight), capping peak local disk usage to ~15 GiB even
-#      for multi-TB models.
-#
-# `config.json` is uploaded last as an atomic completion marker so that the
-# Stage 2 inference server pods (`wait-for-weights` initContainer) only start
-# streaming once all shards are present in Cloud Storage.
+# Stage 1: single-pod Job that stages the Hugging Face snapshot to
+# gs://<model_bucket>/<model_path> if it is not there yet (per-file download ->
+# upload -> delete; config.json last). See "Model weights" in README.md.
 ---
 apiVersion: batch/v1
 kind: Job
@@ -85,9 +69,8 @@ spec:
               )
               sys.exit(0)
 
-          # Reading from the mounted Secret volume lets a user who deployed
-          # with an empty hf_token patch `hf-secret` after deploy without the
-          # Job burning through backoffLimit: 3 on 401 errors beforehand.
+          # Wait for the token from the mounted Secret (patched after deploy
+          # when hf_token was left empty) instead of failing on 401s.
           def read_token():
               try:
                   with open("/etc/hf-secret/hf_api_token", encoding="utf-8") as f:
@@ -171,8 +154,7 @@ spec:
               for fut in as_completed(futures):
                   staged_bytes += fut.result()
 
-          # Upload config.json last so server pods waiting on config.json only
-          # proceed after every weight shard is present in Cloud Storage.
+          # config.json last: it is the completion marker for wait-for-weights.
           for e in marker_entries:
               staged_bytes += stage_one(e)
 
