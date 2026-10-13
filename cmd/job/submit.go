@@ -97,8 +97,8 @@ It accepts parameters for the container image, command to execute, accelerator t
 and JobSet/Kueue specific configurations like workload name, queue, nodes, and restarts.`,
 	RunE: runSubmitCmd,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		if len(workloadName) > 28 {
-			return fmt.Errorf("workload name cannot exceed 28 characters due to Kubernetes/GCE resource name limits. The provided name %q has %d characters", workloadName, len(workloadName))
+		if err := validateWorkloadNameLength(workloadName, isPathwaysJob); err != nil {
+			return err
 		}
 
 		if !pathways.Headless && commandToRun == "" {
@@ -327,6 +327,32 @@ func parseDurationToSeconds(dStr string, flagName string) (int, error) {
 	}
 
 	return 0, fmt.Errorf("invalid duration format for %s: %s. Expected formats: 1h, 30m, 3600", flagName, dStr)
+}
+
+const (
+	maxWorkloadNameLen = 28
+	maxLabelValueLen   = 63
+	// JobSet labels Pathways pods with jobset.sigs.k8s.io/coordinator=<name>-pathways-head-0-0.<name>.
+	pathwaysCoordinatorSuffix = "-pathways-head-0-0."
+)
+
+// maxPathwaysWorkloadNameLen is the longest name whose coordinator label still fits in a label value.
+func maxPathwaysWorkloadNameLen() int {
+	return (maxLabelValueLen - len(pathwaysCoordinatorSuffix)) / 2
+}
+
+func validateWorkloadNameLength(name string, isPathways bool) error {
+	if isPathways {
+		if limit := maxPathwaysWorkloadNameLen(); len(name) > limit {
+			return fmt.Errorf("workload name cannot exceed %d characters for Pathways jobs: JobSet sets the label jobset.sigs.k8s.io/coordinator=%s%s%s (the name twice plus %q), and label values are limited to %d characters. The provided name %q has %d characters",
+				limit, name, pathwaysCoordinatorSuffix, name, pathwaysCoordinatorSuffix, maxLabelValueLen, name, len(name))
+		}
+		return nil
+	}
+	if len(name) > maxWorkloadNameLen {
+		return fmt.Errorf("workload name cannot exceed %d characters due to Kubernetes/GCE resource name limits. The provided name %q has %d characters", maxWorkloadNameLen, name, len(name))
+	}
+	return nil
 }
 
 func validatePathwaysFlags() error {

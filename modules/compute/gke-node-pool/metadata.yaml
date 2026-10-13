@@ -63,3 +63,32 @@ ghpc:
       dependent: enable_flex_start
       dependent_value: true
     error_message: "enable_queued_provisioning requires enable_flex_start to be set to true."
+  - validator: exclusive
+    inputs:
+      vars: [enable_flex_start, spot]
+    error_message: "Both enable_flex_start and spot consumption option cannot be set to true at the same time."
+  - validator: exclusive
+    inputs:
+      vars: [enable_queued_provisioning, spot]
+    error_message: "Both enable_queued_provisioning and spot consumption option cannot be set to true at the same time."
+  - validator: conditional_regex
+    inputs:
+      trigger: spot
+      trigger_value: true
+      dependent: reservation_affinity.consume_reservation_type
+      pattern: "^NO_RESERVATION$"
+    error_message: "Spot consumption option only works with reservation_affinity consume_reservation_type NO_RESERVATION."
+  - validator: conditional_regex
+    inputs:
+      trigger: enable_flex_start
+      trigger_value: true
+      dependent: reservation_affinity.consume_reservation_type
+      pattern: "^NO_RESERVATION$"
+    error_message: "enable_flex_start requires reservation_affinity.consume_reservation_type to be 'NO_RESERVATION'."
+  - validator: conditional_regex
+    inputs:
+      trigger: enable_queued_provisioning
+      trigger_value: true
+      dependent: reservation_affinity.consume_reservation_type
+      pattern: "^NO_RESERVATION$"
+    error_message: "reservation_affinity should be NO_RESERVATION when enable_queued_provisioning is true."

@@ -166,8 +166,6 @@ deployment_groups:
       guest_accelerator:
       - type: nvidia-rtx-pro-6000
         count: $(vars.num_gpus)
-        gpu_driver_installation_config:
-          gpu_driver_version: LATEST # TODO: Move to a fixed GPU driver version.
       placement_policy: $(vars.placement_policy)
       additional_networks: $(gke-g4-net-1.instance_additional_networks)
     outputs: [instructions]

@@ -139,7 +139,7 @@ class SlurmConfigGenerator:
                 "use_interactive_step",
             ],
             "SlurmctldParameters": [
-                "cloud_dns" if not(any_dynamic or any_tpu or any_gke) else None,
+                "cloud_dns" if not(any_dynamic or any_tpu or any_gke or self.lkp.cfg.hybrid) else None,
                 "enable_configless",
                 "idle_on_node_suspend",
             ],
@@ -246,8 +246,7 @@ class SlurmConfigGenerator:
             nodeset = self.lkp.cfg.nodeset.get(nodeset_name)
             if not nodeset:
                 return MIN_MEM_PER_CPU
-            template = nodeset.instance_template
-            machine = self.lkp.template_machine_conf(template)
+            machine = self.lkp.nodeset_machine_conf(nodeset)
             mem_spec_limit = int(nodeset.node_conf.get("MemSpecLimit", 0))
             return max(MIN_MEM_PER_CPU, (machine.memory - mem_spec_limit) // machine.cpus)
 
@@ -333,7 +332,8 @@ class SlurmConfigGenerator:
 
     def generate_configs(self) -> None:
         self.install_slurm_conf()
-        self.install_slurmdbd_conf()
+        if not self.lkp.is_hybrid_setup:
+            self.install_slurmdbd_conf()
         self.gen_cloud_conf()
         self.gen_cloud_gres_conf()
         self.install_gres_conf()
@@ -372,7 +372,7 @@ def conflines(lkp: util.Lookup) -> str:
 
 def nodeset_lines(nodeset, lkp: util.Lookup) -> str:
     template_info = lkp.template_info(nodeset.instance_template)
-    machine_conf = lkp.template_machine_conf(nodeset.instance_template)
+    machine_conf = lkp.nodeset_machine_conf(nodeset)
 
     # follow https://slurm.schedmd.com/slurm.conf.html#OPT_Boards
     # by setting Boards, SocketsPerBoard, CoresPerSocket, and ThreadsPerCore
@@ -462,7 +462,7 @@ def install_slurm_conf(lkp: util.Lookup) -> None:
 
     conf_options = {
         "name": lkp.cfg.slurm_cluster_name,
-        "control_addr": lkp.control_addr if lkp.control_addr else lkp.hostname_fqdn,
+        "control_addr": lkp.control_addr or (lkp.control_host_addr if lkp.cfg.hybrid else lkp.hostname_fqdn),
         "control_host": lkp.control_host,
         "accounting_storage_host": lkp.control_addr if lkp.cfg.controller_network_attachment else lkp.control_host,
         "control_host_port": lkp.control_host_port,
@@ -609,7 +609,7 @@ def install_jobsubmit_lua(lkp: util.Lookup) -> None:
 def install_gres_conf(lkp: util.Lookup) -> None:
     conf_file = lkp.etc_dir / "cloud_gres.conf"
     gres_conf = lkp.etc_dir / "gres.conf"
-    if not gres_conf.exists():
+    if not (gres_conf.exists() or lkp.is_hybrid_setup):
         gres_conf.symlink_to(conf_file)
     util.chown_slurm(gres_conf, mode=0o600)
 
@@ -920,7 +920,7 @@ def install_topology_yaml(lkp: util.Lookup) -> None:
     summary_file = lkp.etc_dir / "cloud_topology.summary.json"
     topo_yaml = lkp.etc_dir / "topology.yaml"
 
-    if not topo_yaml.exists():
+    if not (topo_yaml.exists() or lkp.is_hybrid_setup):
         topo_yaml.symlink_to(yaml_file)
 
     util.chown_slurm(yaml_file, mode=0o644)

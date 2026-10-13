@@ -180,6 +180,14 @@ variable "nodeset" {
     zone_target_shape = string
     zone_policy_allow = set(string)
     zone_policy_deny  = set(string)
+
+    instance_flexibility_policy = optional(object({
+      instance_selections = list(object({
+        name          = optional(string)
+        rank          = optional(number, 1)
+        machine_types = set(string)
+      }))
+    }))
   }))
   default = []
 

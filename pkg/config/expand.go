@@ -689,7 +689,7 @@ func isTPUTopologyWorkloadPolicy(bp Blueprint, wpMap map[string]cty.Value) bool 
 		return false
 	}
 	if ev, err := bp.Eval(topVal); err == nil && ev.IsKnown() && !ev.IsNull() && ev.Type() == cty.String {
-		return strings.Count(ev.AsString(), "x") == 2
+		return strings.Count(strings.ToLower(ev.AsString()), "x") == 2
 	}
 	return true
 }

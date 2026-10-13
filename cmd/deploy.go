@@ -38,7 +38,8 @@ func addDeployFlags(c *cobra.Command) *cobra.Command {
 		addGroupSelectionFlags(
 			addAutoApproveFlag(
 				addArtifactsDirFlag(
-					addCreateFlags(c)))))
+					addParallelismFlag(
+						addCreateFlags(c))))))
 }
 
 func init() {
@@ -52,8 +53,11 @@ var (
 		Long:              "deploy all resources in a Toolkit deployment directory.",
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkExists),
 		ValidArgsFunction: filterYaml,
-		Run:               runDeployCmd,
-		SilenceUsage:      true,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return validateParallelismFlag()
+		},
+		Run:          runDeployCmd,
+		SilenceUsage: true,
 	})
 )
 
@@ -76,6 +80,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 }
 
 func doDeploy(cmd *cobra.Command, deplRoot string, skipSecurity bool) {
+	shell.SetTerraformParallelism(flagParallelism)
 	artDir := getArtifactsDir(deplRoot)
 	checkErr(shell.CheckWritableDir(artDir), nil)
 	bp, ctx := artifactBlueprintOrDie(artDir)
