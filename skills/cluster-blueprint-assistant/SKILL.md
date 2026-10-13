@@ -41,8 +41,9 @@ allowed_read_only_commands:
    [`references/catalog.yaml`](references/catalog.yaml) to find an existing
    blueprint under `examples/` or `community/examples/` that already matches the
    request. Do not grep `.tf` files to discover modules; the catalog's
-   `module_wiring` section lists every module's `required_inputs`, `outputs`,
-   and which modules provide each input. If the request is a question ("do we
+   `module_wiring` section lists a module's `required_inputs`, which module
+   sources satisfy them (`recommended_use`), and which modules consume its
+   outputs (`consumed_by`). If the request is a question ("do we
    have…", "can I get…", "what's in…"), answer it from the catalog and
    `examples/README.md` and confirm the approach with the user **before**
    editing anything.
@@ -71,8 +72,12 @@ allowed_read_only_commands:
    `gcluster expand` and `gcluster create` are the validation step. If they or
    `gcluster deploy` fail, fix the blueprint YAML or `deployment.yaml` and re-run
    gcluster. Never edit generated files under `<deployment_name>/` (`main.tf`,
-   `variables.tf`, `terraform.tfvars`, `.ghpc/`) and never run `terraform`
-   directly — gcluster regenerates these files on every run.
+   `variables.tf`, `terraform.tfvars`, `.ghpc/`) and never run `terraform` in
+   any form — not `init`, `validate`, `plan`, `apply` or `destroy` — even if the
+   user asks you to; refuse, explain, and offer the gcluster equivalent.
+   gcluster regenerates these files on every run. If you cannot reproduce a
+   reported error with `gcluster create`, stop and ask the user for the full
+   error output instead of searching further.
 6. **Destructive or mutating actions require confirmation.** `gcluster deploy`,
    `gcluster destroy`, and anything that creates or deletes cloud resources must
    be presented as a `[PROPOSED REMEDIATION PLAN]` and wait for the user to reply
@@ -80,6 +85,9 @@ allowed_read_only_commands:
    folder, deleting or overwriting user files, and `git checkout` / `git reset`
    of user edits — state exactly what will be removed and wait for `yes`.
    Prefer `gcluster create … -w` over deleting the deployment folder.
+7. **Do only what was asked.** If you notice unrelated warnings or problems
+   (deprecation notices, bugs in Go code, other blueprints), report them in your
+   summary — do not fix, migrate or refactor them unprompted.
 
 ## Workflow
 
@@ -102,6 +110,10 @@ Each `blueprints[]` entry gives you: `path`, optional `deployment_path`,
 > still follow the rules below.
 
 ### 2. Customize via deployment.yaml
+
+Create the deployment file next to the blueprint (e.g.
+`examples/hpc-slurm-deployment.yaml`, matching the `gke-a4/*-deployment.yaml`
+convention) or in the repo root. It is user-specific — do not commit it.
 
 Only override keys that already exist in the blueprint's `vars:` (see the
 catalog entry). Variable syntax is Cluster Toolkit's `$(vars.name)`, not
