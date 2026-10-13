@@ -547,16 +547,33 @@ variable "controller_state_disk" {
   NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
   EOD
   type = object({
-    type                   = string
-    size                   = number
-    storage_pool           = optional(string)
-    provisioned_iops       = optional(number)
-    provisioned_throughput = optional(number)
+    type                        = string
+    size                        = number
+    storage_pool                = optional(string)
+    disk_provisioned_iops       = optional(number)
+    disk_provisioned_throughput = optional(number)
+    provisioned_iops            = optional(number)
+    provisioned_throughput      = optional(number)
   })
 
   default = {
     type = "pd-ssd"
     size = 50
+  }
+
+  validation {
+    condition     = var.controller_state_disk == null || var.controller_state_disk.storage_pool == null || var.controller_state_disk.storage_pool == "" || contains(["hyperdisk-balanced", "hyperdisk-throughput"], lower(var.controller_state_disk.type))
+    error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
+  }
+
+  validation {
+    condition     = var.controller_state_disk == null || (var.controller_state_disk.disk_provisioned_iops == null && var.controller_state_disk.provisioned_iops == null) || contains(["hyperdisk-balanced", "hyperdisk-extreme", "pd-extreme"], lower(var.controller_state_disk.type))
+    error_message = "disk_provisioned_iops is only supported with hyperdisk-balanced, hyperdisk-extreme, or pd-extreme disk types."
+  }
+
+  validation {
+    condition     = var.controller_state_disk == null || (var.controller_state_disk.disk_provisioned_throughput == null && var.controller_state_disk.provisioned_throughput == null) || contains(["hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-ml"], lower(var.controller_state_disk.type))
+    error_message = "disk_provisioned_throughput is only supported with hyperdisk-balanced, hyperdisk-throughput, or hyperdisk-ml disk types."
   }
 }
 

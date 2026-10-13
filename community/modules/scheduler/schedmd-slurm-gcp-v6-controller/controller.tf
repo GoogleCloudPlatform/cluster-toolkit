@@ -94,29 +94,14 @@ resource "google_compute_disk" "controller_disk" {
   size                   = var.controller_state_disk.size
   zone                   = var.zone
   storage_pool           = var.controller_state_disk.storage_pool == "" ? null : var.controller_state_disk.storage_pool
-  provisioned_iops       = var.controller_state_disk.provisioned_iops
-  provisioned_throughput = var.controller_state_disk.provisioned_throughput
+  provisioned_iops       = var.controller_state_disk.disk_provisioned_iops != null ? var.controller_state_disk.disk_provisioned_iops : var.controller_state_disk.provisioned_iops
+  provisioned_throughput = var.controller_state_disk.disk_provisioned_throughput != null ? var.controller_state_disk.disk_provisioned_throughput : var.controller_state_disk.provisioned_throughput
 
   dynamic "disk_encryption_key" {
     for_each = compact([var.disk_encryption_key])
     content {
       kms_key_self_link       = disk_encryption_key.value
       kms_key_service_account = var.disk_encryption_key_service_account
-    }
-  }
-
-  lifecycle {
-    precondition {
-      condition     = var.controller_state_disk.storage_pool == null || var.controller_state_disk.storage_pool == "" || contains(["hyperdisk-balanced", "hyperdisk-throughput"], lower(var.controller_state_disk.type))
-      error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
-    }
-    precondition {
-      condition     = var.controller_state_disk.provisioned_iops == null || contains(["hyperdisk-balanced", "hyperdisk-extreme", "pd-extreme"], lower(var.controller_state_disk.type))
-      error_message = "provisioned_iops is only supported with hyperdisk-balanced, hyperdisk-extreme, or pd-extreme disk types."
-    }
-    precondition {
-      condition     = var.controller_state_disk.provisioned_throughput == null || contains(["hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-ml"], lower(var.controller_state_disk.type))
-      error_message = "provisioned_throughput is only supported with hyperdisk-balanced, hyperdisk-throughput, or hyperdisk-ml disk types."
     }
   }
 }

@@ -233,12 +233,12 @@ resource "google_compute_instance_template" "tpl" {
     }
 
     precondition {
-      condition     = var.disk_provisioned_iops == null || can(regex("^(hyperdisk-|pd-extreme$)", lower(coalesce(var.disk_type, ""))))
+      condition     = var.disk_provisioned_iops == null || (var.disk_type != null && (startswith(lower(var.disk_type), "hyperdisk-") || lower(var.disk_type) == "pd-extreme"))
       error_message = "disk_provisioned_iops is only supported with Hyperdisk or pd-extreme disk types."
     }
 
     precondition {
-      condition     = var.disk_provisioned_throughput == null || can(regex("^hyperdisk-", lower(coalesce(var.disk_type, ""))))
+      condition     = var.disk_provisioned_throughput == null || (var.disk_type != null && startswith(lower(var.disk_type), "hyperdisk-"))
       error_message = "disk_provisioned_throughput is only supported with Hyperdisk disk types."
     }
 

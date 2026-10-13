@@ -95,12 +95,14 @@ variable "local_ssd_interface" {
 variable "additional_persistent_disks" {
   description = "Configurations of additional disks to be included on the partition nodes. Note that storage_pool is only supported with Hyperdisk types (balanced or throughput). You must provide an existing storage pool, as this module does not create new ones."
   type = object({
-    count                  = optional(number, 0)
-    type                   = optional(string, "pd-balanced")
-    size                   = optional(number, 200)
-    storage_pool           = optional(string)
-    provisioned_iops       = optional(number)
-    provisioned_throughput = optional(number)
+    count                       = optional(number, 0)
+    type                        = optional(string, "pd-balanced")
+    size                        = optional(number, 200)
+    storage_pool                = optional(string)
+    disk_provisioned_iops       = optional(number)
+    disk_provisioned_throughput = optional(number)
+    provisioned_iops            = optional(number)
+    provisioned_throughput      = optional(number)
   })
   default  = {}
   nullable = false

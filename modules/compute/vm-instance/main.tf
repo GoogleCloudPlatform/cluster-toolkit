@@ -103,6 +103,9 @@ locals {
       network_ip = google_compute_address.compute_ip[i].address
     })
   ]
+
+  additional_disk_provisioned_iops       = var.additional_persistent_disks.disk_provisioned_iops != null ? var.additional_persistent_disks.disk_provisioned_iops : var.additional_persistent_disks.provisioned_iops
+  additional_disk_provisioned_throughput = var.additional_persistent_disks.disk_provisioned_throughput != null ? var.additional_persistent_disks.disk_provisioned_throughput : var.additional_persistent_disks.provisioned_throughput
 }
 
 resource "null_resource" "image" {
@@ -125,8 +128,8 @@ resource "google_compute_disk" "additional_disks" {
   labels                 = local.labels
   zone                   = var.zone
   storage_pool           = var.additional_persistent_disks.storage_pool == "" ? null : var.additional_persistent_disks.storage_pool
-  provisioned_iops       = var.additional_persistent_disks.provisioned_iops
-  provisioned_throughput = var.additional_persistent_disks.provisioned_throughput
+  provisioned_iops       = local.additional_disk_provisioned_iops
+  provisioned_throughput = local.additional_disk_provisioned_throughput
 }
 
 resource "google_compute_resource_policy" "placement_policy" {
@@ -364,12 +367,12 @@ resource "google_compute_instance" "compute_vm" {
       error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
     }
     precondition {
-      condition     = var.additional_persistent_disks.count == 0 || var.additional_persistent_disks.provisioned_iops == null || contains(["hyperdisk-balanced", "hyperdisk-extreme", "pd-extreme"], lower(var.additional_persistent_disks.type))
-      error_message = "provisioned_iops is only supported with hyperdisk-balanced, hyperdisk-extreme, or pd-extreme disk types."
+      condition     = var.additional_persistent_disks.count == 0 || local.additional_disk_provisioned_iops == null || contains(["hyperdisk-balanced", "hyperdisk-extreme", "pd-extreme"], lower(var.additional_persistent_disks.type))
+      error_message = "disk_provisioned_iops is only supported with hyperdisk-balanced, hyperdisk-extreme, or pd-extreme disk types."
     }
     precondition {
-      condition     = var.additional_persistent_disks.count == 0 || var.additional_persistent_disks.provisioned_throughput == null || contains(["hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-ml"], lower(var.additional_persistent_disks.type))
-      error_message = "provisioned_throughput is only supported with hyperdisk-balanced, hyperdisk-throughput, or hyperdisk-ml disk types."
+      condition     = var.additional_persistent_disks.count == 0 || local.additional_disk_provisioned_throughput == null || contains(["hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-ml"], lower(var.additional_persistent_disks.type))
+      error_message = "disk_provisioned_throughput is only supported with hyperdisk-balanced, hyperdisk-throughput, or hyperdisk-ml disk types."
     }
   }
 }
