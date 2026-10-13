@@ -142,7 +142,7 @@ locals {
   # A null zone_policy_allow means every available zone of the nodeset's region.
   nodeset_zone_allow = {
     for name, ns in local.nodeset_map : name => (
-      ns.zone_policy_allow != null ? ns.zone_policy_allow :
+      ns.zone_policy_allow != null ? toset(local.nodeset_explicit_zones[name]) :
       toset(data.google_compute_zones.available[coalesce(ns.region, var.region)].names)
     )
   }
