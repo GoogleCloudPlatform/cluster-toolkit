@@ -62,10 +62,11 @@ allowed_read_only_commands:
    the shared template: copy the blueprint to a new file in the **same
    directory** (e.g. `examples/gke-a4/my-gke-a4.yaml`) or copy the whole folder,
    because blueprints reference sibling files via `$(ghpc_stage("./…"))`. Never
-   modify files under `examples/` or `community/examples/` in place. Copy the
-   module block from a blueprint in the catalog that already has it, keep its
-   `use:` list, and check `module_wiring.<source>.required_inputs` to confirm
-   every required input is satisfied by a module in `use:`.
+   modify existing template files under `examples/` or `community/examples/` in
+   place (once you create a copy, edit that copy directly for follow-ups). Copy
+   the module block from a blueprint in the catalog that already has it, keep
+   its `use:` list, and check `module_wiring.<source>.required_inputs` to
+   confirm every required input is satisfied by a module in `use:`.
 4. **Mark agent-authored blueprints.** Add `ai_assisted: true` at the top level
    of any blueprint you create or modify.
 5. **Validate with gcluster, fix the blueprint, never the output.**
@@ -178,7 +179,7 @@ creates cloud resources:
 [PROPOSED REMEDIATION PLAN]
 - Target Resource: deployment <deployment_name> in project <project_id>
 - Root Cause Identified: <why this deployment / change is needed>
-- Proposed Action / Command: gcluster deploy examples/<blueprint>.yaml -d my-deployment.yaml --auto-approve
+- Proposed Action / Command: gcluster deploy examples/<blueprint>.yaml -d my-deployment.yaml
 - Blast Radius: creates VPC, Filestore, Slurm controller/login/compute VMs (billable)
 - Confirmation Required: Reply 'yes' to proceed.
 ```
