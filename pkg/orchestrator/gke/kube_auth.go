@@ -369,18 +369,6 @@ func (g *GKEOrchestrator) inspectExistingContext(clusterName, location, projectI
 	return evaluateExistingContext(cfg, clusterName, location, projectID, g.clusterDesc)
 }
 
-// ensureCurrentContext points current-context at the reused context.
-func (g *GKEOrchestrator) ensureCurrentContext(check kubeContextCheck) error {
-	if check.current == check.contextName {
-		return nil
-	}
-	res := g.executor.ExecuteCommand("kubectl", "config", "use-context", check.contextName)
-	if res.ExitCode != 0 {
-		return fmt.Errorf("failed to switch kubectl current-context to %q: %s", check.contextName, res.Stderr)
-	}
-	return nil
-}
-
 // endpointModeOrder lists the modes to try, preferred first. A mode already
 // seen to be unreachable is demoted rather than dropped.
 func (g *GKEOrchestrator) endpointModeOrder(avoid endpointMode) []endpointMode {
@@ -431,12 +419,14 @@ func (g *GKEOrchestrator) restoreNamespaceContext(contextName, namespace string)
 	return nil
 }
 
-// refreshCredentialsPreservingNamespace runs get-credentials and keeps the user's namespace.
+// refreshCredentialsPreservingNamespace runs get-credentials and keeps the namespace
+// already stored in the kubeconfig context (not the --gke-namespace flag value).
 func (g *GKEOrchestrator) refreshCredentialsPreservingNamespace(clusterName, clusterLocation, projectID string, mode endpointMode) error {
-	originalNamespace, err := g.getCurrentNamespace(clusterName, clusterLocation, projectID)
-	if err != nil {
-		logging.Warn("Could not read current namespace before gcloud (defaulting to 'default'): %v. If you want to target a specific namespace please use the --gke-namespace flag", err)
-		originalNamespace = "default"
+	originalNamespace := "default"
+	if cfg, err := g.loadKubeconfig(); err == nil {
+		if _, kubeCtx, ok := findKubeContext(cfg, clusterName, clusterLocation, projectID); ok && kubeCtx.Namespace != "" {
+			originalNamespace = kubeCtx.Namespace
+		}
 	}
 	if err := g.refreshGKEAuth(clusterName, clusterLocation, projectID, mode == endpointModeDNS); err != nil {
 		return err
@@ -488,6 +478,7 @@ func (g *GKEOrchestrator) regenerateKubeContext(clusterName, clusterLocation, pr
 
 // configureKubectl picks the context for this run and pins later kubectl and
 // dynamic-client calls to it: reuse a verified context, else fetch credentials.
+// Reuse never writes to kubeconfig; only get-credentials changes current-context.
 // GCLUSTER_REFRESH_CREDENTIALS=1 skips reuse.
 func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
 	g.kubeContext = ""
@@ -507,9 +498,6 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 	outcome, stderr := g.probeContext(check.contextName)
 	switch outcome {
 	case probeOK, probeForbidden:
-		if err := g.ensureCurrentContext(check); err != nil {
-			return err
-		}
 		g.kubeContext = check.contextName
 		logging.Info("Reusing existing kubeconfig context '%s' (%s endpoint). Set %s=1 to force a credential refresh.", check.contextName, check.mode, refreshCredentialsEnv)
 		return nil
@@ -519,9 +507,6 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 		logging.Warn("Existing kubeconfig context '%s' (%s endpoint) is unreachable from here (%s). Refreshing credentials...", check.contextName, check.mode, firstLine(stderr))
 		avoid = check.mode
 	default:
-		if err := g.ensureCurrentContext(check); err != nil {
-			return err
-		}
 		g.kubeContext = check.contextName
 		logging.Warn("Could not verify existing kubeconfig context '%s' (%s). Reusing it; set %s=1 to force a credential refresh.", check.contextName, firstLine(stderr), refreshCredentialsEnv)
 		return nil

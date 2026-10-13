@@ -1300,12 +1300,14 @@ func (g *GKEOrchestrator) needsDynamicClientInit() bool {
 	return false
 }
 
+// getDynamicClient builds the client once, for the context set by configureKubectl,
+// and caches it; configureKubectl must run first and is not re-run within a command.
 func (g *GKEOrchestrator) getDynamicClient() (dynamic.Interface, error) {
 	if g.dynClient != nil {
 		g.syncKubeClient()
 		return g.dynClient, nil
 	}
-	config, err := restConfigForContext(g.kubeContext)
+	config, err := g.restConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
 	}
@@ -1317,11 +1319,14 @@ func (g *GKEOrchestrator) getDynamicClient() (dynamic.Interface, error) {
 	return g.dynClient, nil
 }
 
-// restConfigForContext loads kubeconfig for kubeContext; empty means current-context.
-func restConfigForContext(kubeContext string) (*rest.Config, error) {
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	configOverrides := &clientcmd.ConfigOverrides{CurrentContext: kubeContext}
-	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides).ClientConfig()
+// restConfig builds a client-go config for the pinned context from the same kubeconfig
+// loader the rest of the orchestrator uses; an empty context means current-context.
+func (g *GKEOrchestrator) restConfig() (*rest.Config, error) {
+	cfg, err := g.loadKubeconfig()
+	if err != nil {
+		return nil, err
+	}
+	return clientcmd.NewNonInteractiveClientConfig(*cfg, g.kubeContext, &clientcmd.ConfigOverrides{}, nil).ClientConfig()
 }
 
 func (g *GKEOrchestrator) awaitJobCompletion(workloadName, clusterName, clusterLocation, projectID, timeout string) error {

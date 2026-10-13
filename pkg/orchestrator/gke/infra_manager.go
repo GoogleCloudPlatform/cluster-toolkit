@@ -367,19 +367,42 @@ func (g *GKEOrchestrator) getKubeClient() KubeClient {
 
 // getCurrentNamespace is the single source of truth for the target namespace.
 // It returns the cached namespace (seeded from --gke-namespace at every
-// orchestrator entry point) or, if unset, resolves and caches the kubeconfig
-// context namespace.
+// orchestrator entry point) or, if unset, resolves and caches the namespace of
+// the pinned kubeconfig context, falling back to a lookup by cluster name.
 func (g *GKEOrchestrator) getCurrentNamespace(clusterName, location, projectID string) (string, error) {
 	if g.namespace != "" {
 		return g.namespace, nil
 	}
 
+	if ns, ok := g.pinnedContextNamespace(); ok {
+		g.namespace = ns
+		return ns, nil
+	}
 	ns, err := g.getKubeClient().GetCurrentNamespace(clusterName, location, projectID)
 	if err != nil {
 		return "", err
 	}
 	g.namespace = ns
 	return ns, nil
+}
+
+// pinnedContextNamespace reads the namespace of g.kubeContext from kubeconfig.
+func (g *GKEOrchestrator) pinnedContextNamespace() (string, bool) {
+	if g.kubeContext == "" {
+		return "", false
+	}
+	cfg, err := g.loadKubeconfig()
+	if err != nil {
+		return "", false
+	}
+	kubeCtx := cfg.Contexts[g.kubeContext]
+	if kubeCtx == nil {
+		return "", false
+	}
+	if kubeCtx.Namespace == "" {
+		return "default", true
+	}
+	return kubeCtx.Namespace, true
 }
 
 func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, projectID string) error {
