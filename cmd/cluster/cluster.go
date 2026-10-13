@@ -45,7 +45,13 @@ var ClusterCmd = &cobra.Command{
 		orc = gkeOrchestratorFactory()
 
 		if projectID == "" {
-			result := shell.ExecuteCommand("gcloud", "config", "get-value", "project")
+
+			result := shell.ExecuteCommandWithTimeout(shell.DefaultLocalCommandTimeout, "gcloud", "config", "get-value", "project")
+
+			if err := shell.HandleExecError(result, "gcloud", fmt.Sprintf("gcloud config get-value project timed out after %v. Please verify your local gcloud installation is responsive", shell.DefaultLocalCommandTimeout)); err != nil {
+				return err
+			}
+
 			ambientProject := strings.TrimSpace(result.Stdout)
 
 			if result.ExitCode != 0 || ambientProject == "" {

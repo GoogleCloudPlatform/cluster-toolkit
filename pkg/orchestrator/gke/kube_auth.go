@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/shell"
 
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -389,7 +390,11 @@ func (g *GKEOrchestrator) refreshGKEAuth(clusterName, clusterLocation, projectID
 	if useDNSEndpoint {
 		args = append(args, "--dns-endpoint")
 	}
-	credsRes := g.executor.ExecuteCommand("gcloud", args...)
+	credsRes := g.executor.ExecuteCommandWithTimeout(shell.DefaultCloudAPITimeout, "gcloud", args...)
+	timeoutMsg := fmt.Sprintf("timed out after %v while fetching GKE cluster credentials for '%s' in '%s'. Please check your network connection", shell.DefaultCloudAPITimeout, clusterName, clusterLocation)
+	if err := shell.HandleExecError(credsRes, "gcloud", timeoutMsg); err != nil {
+		return err
+	}
 	if credsRes.ExitCode != 0 {
 		if strings.Contains(strings.ToLower(credsRes.Stderr), "multiple") || strings.Contains(strings.ToLower(credsRes.Stderr), "ambiguous") {
 			return fmt.Errorf("found multiple GKE clusters named %s. Please specify the exact Zone using --location to disambiguate", clusterName)

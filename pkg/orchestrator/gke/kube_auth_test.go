@@ -15,10 +15,13 @@
 package gke
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"hpc-toolkit/pkg/shell"
 
@@ -68,6 +71,10 @@ func (e *exactExecutor) ExecuteCommand(name string, args ...string) shell.Comman
 	}
 	e.callCount[key]++
 	return results[idx]
+}
+
+func (e *exactExecutor) ExecuteCommandWithTimeout(_ time.Duration, name string, args ...string) shell.CommandResult {
+	return e.ExecuteCommand(name, args...)
 }
 
 func (e *exactExecutor) ExecuteCommandStream(name string, args ...string) error { return nil }
@@ -773,6 +780,7 @@ func TestRefreshGKEAuth_DNSEndpoint(t *testing.T) {
 		clusterDesc   gkeCluster
 		mockResponses map[string][]shell.CommandResult
 		wantErr       bool
+		wantErrSubstr string
 	}{
 		{
 			name: "Appends --dns-endpoint when shouldUseDNSEndpoint is true",
@@ -812,6 +820,28 @@ func TestRefreshGKEAuth_DNSEndpoint(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name:        "Returns timeout error when get-credentials times out",
+			clusterDesc: gkeCluster{},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud container clusters get-credentials my-cluster --location us-central1-a --project my-project": {
+					{ExitCode: 124, Err: context.DeadlineExceeded},
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: "timed out after",
+		},
+		{
+			name:        "Returns execution error when gcloud fails to start",
+			clusterDesc: gkeCluster{},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud container clusters get-credentials my-cluster --location us-central1-a --project my-project": {
+					{ExitCode: -1, Err: fmt.Errorf("executable file not found in $PATH")},
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: "failed to execute gcloud: executable file not found in $PATH",
+		},
 	}
 
 	for _, tt := range tests {
@@ -819,10 +849,12 @@ func TestRefreshGKEAuth_DNSEndpoint(t *testing.T) {
 			mockExec := NewMockExecutor(tt.mockResponses)
 			orc := newTestGKEOrchestrator(mockExec)
 			orc.clusterDesc = tt.clusterDesc
-
 			err := orc.refreshGKEAuth("my-cluster", "us-central1-a", "my-project", shouldUseDNSEndpoint(tt.clusterDesc.ControlPlaneEndpointsConfig))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("refreshGKEAuth() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErrSubstr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErrSubstr)) {
+				t.Errorf("refreshGKEAuth() error = %v, want substring %q", err, tt.wantErrSubstr)
 			}
 		})
 	}

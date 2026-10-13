@@ -131,6 +131,7 @@ type HTTPClient interface {
 
 type Executor interface {
 	ExecuteCommand(name string, args ...string) shell.CommandResult
+	ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...string) shell.CommandResult
 	ExecuteCommandStream(name string, args ...string) error
 }
 
