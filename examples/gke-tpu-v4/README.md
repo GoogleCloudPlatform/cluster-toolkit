@@ -162,7 +162,7 @@ Submit the job to your live GKE cluster:
   --pathways \
   --pathways-gcs-location gs://YOUR_COORDINATION_BUCKET/pathways-scratch \
   --image us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest \
-  --command "pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print(\"JAX Device count:\", jax.device_count())'"
+  --command "pip install -U jax jaxlib pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print(\"JAX Device count:\", jax.device_count())'"
 ```
 
 ### 3. Monitor and Manage the Job
