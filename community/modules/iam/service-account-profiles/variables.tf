@@ -432,6 +432,18 @@ variable "instance_name_prefixes" {
   }
 }
 
+variable "grant_baseline_roles" {
+  description = <<-EOT
+    Grant the logging.logWriter and monitoring.metricWriter project roles every profile includes.
+    Set false only when the account's modules/project/service-account block already grants them
+    in project_roles, as when converting a blueprint whose deployments already exist: two
+    resources managing the same binding race on redeploy, and the one destroyed last removes it.
+    See "Converting an existing deployment" in the README.
+  EOT
+  type        = bool
+  default     = true
+}
+
 variable "iam_propagation_wait" {
   description = <<-EOT
     How long the service_account_email output waits after this module's grants are created, as a Go duration

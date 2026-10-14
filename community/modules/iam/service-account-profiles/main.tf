@@ -369,7 +369,7 @@ locals {
   grants = {
     name               = var.name
     description        = local.profile.custom ? "Custom least-privilege permissions: ${local.title}." : local.profile.description
-    project_roles      = local.profile.project_roles
+    project_roles      = var.grant_baseline_roles ? local.profile.project_roles : []
     permissions        = local.permissions
     scoped_permissions = local.scoped_permissions
     scoped_condition   = local.generate_scoped_role ? local.scoped_condition : null

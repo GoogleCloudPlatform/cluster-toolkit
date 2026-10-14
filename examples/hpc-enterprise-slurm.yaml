@@ -69,6 +69,9 @@ deployment_groups:
   # roles/compute.instanceAdmin.v1, and roles/iam.serviceAccountUser granted
   # only on the compute account the controller actually attaches to the nodes
   # it creates. See community/modules/iam/service-account-profiles/README.md.
+  # The account blocks keep logging.logWriter and monitoring.metricWriter, with
+  # grant_baseline_roles: false on each profile, so redeploying an existing
+  # deployment does not drop them; see "Converting an existing deployment".
   # Redeploying under the same deployment_name 7-44 days after a destroy needs a
   # new role_id_suffix on each profile block; see "Custom role lifecycle" in the
   # module README.
@@ -76,7 +79,9 @@ deployment_groups:
     source: modules/project/service-account
     settings:
       name: controller
-      project_roles: []
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
 
   - id: controller_profile
     source: community/modules/iam/service-account-profiles
@@ -84,6 +89,7 @@ deployment_groups:
     settings:
       name: controller
       profile: slurm-controller
+      grant_baseline_roles: false
       # The c2/c2d/c3/a208/a216 partitions below default to exclusive
       # scheduling, which the Slurm controller module backs with a compact
       # placement policy per job -- hence this flag.
@@ -101,7 +107,9 @@ deployment_groups:
     source: modules/project/service-account
     settings:
       name: login
-      project_roles: []
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
 
   - id: login_profile
     source: community/modules/iam/service-account-profiles
@@ -109,12 +117,15 @@ deployment_groups:
     settings:
       name: login
       profile: slurm-login
+      grant_baseline_roles: false
 
   - id: compute_sa
     source: modules/project/service-account
     settings:
       name: compute
-      project_roles: []
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
 
   - id: compute_profile
     source: community/modules/iam/service-account-profiles
@@ -122,6 +133,7 @@ deployment_groups:
     settings:
       name: compute
       profile: slurm-compute
+      grant_baseline_roles: false
 
   - id: homefs
     source: modules/file-system/filestore

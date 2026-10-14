@@ -82,8 +82,9 @@ example blueprints did (`roles/storage.objectViewer`, or `roles/storage.objectUs
 A startup script from `modules/scripts/startup-script` downloads its runners from that
 module's staging bucket using the VM's own account. Every account whose VMs run it (a nodeset's
 `startup_script`, a login node's `startup_script`, the controller's `controller_startup_script`
-or a Packer build) needs read access there, or startup fails with a 403 from
-`gcloud storage cp`. Grant it with the module's `bucket_viewers`:
+or a Packer build) needs read access there. Without it, startup retries and then fails, logging
+`gcloud storage cp --no-user-output-enabled reported non-zero exit code fetching gs://...`, and a
+Slurm node never joins the cluster. Grant it with the module's `bucket_viewers`:
 
 ```yaml
 - id: compute_startup
@@ -157,7 +158,8 @@ The scope is a naming convention, not ownership: another VM in the project whose
 Each identity is two module blocks: `modules/project/service-account` creates the keyless
 account, and `service-account-profiles` applies the profile to it, connected with
 `use: [<account module id>]`. Give both blocks the same `name`, and leave `project_roles` empty;
-the baseline roles come from the profile.
+the baseline roles come from the profile. Converting a blueprint that already has deployments is
+the exception; see [Converting an existing deployment](#converting-an-existing-deployment).
 
 ```yaml
 - id: compute_sa
@@ -234,6 +236,38 @@ To give a nodeset its own compute account, for example one with access to a resu
 add another `slurm-compute` identity, use it in that nodeset, and add it to the controller's
 `act_as_service_accounts`. A TPU nodeset needs the same. With `enable_backup_controller`, both
 HA controllers share `controller_sa`; HA needs no additional permissions.
+
+### Converting an existing deployment
+
+To move a blueprint that already has deployments from predefined roles to this module, keep each
+`modules/project/service-account` block's module id and `name`, so the account is not replaced.
+Keep `logging.logWriter` and `monitoring.metricWriter` in its `project_roles`, drop the other
+roles, and set `grant_baseline_roles: false` on the profile block:
+
+```yaml
+- id: controller_sa
+  source: modules/project/service-account
+  settings:
+    name: controller
+    project_roles:
+    - logging.logWriter
+    - monitoring.metricWriter
+
+- id: controller_profile
+  source: community/modules/iam/service-account-profiles
+  use: [controller_sa]
+  settings:
+    name: controller
+    profile: slurm-controller
+    grant_baseline_roles: false
+```
+
+Without this, the redeploy creates the profile's grant of each baseline role and destroys the
+account module's grant of the same role in the same apply. Both are non-authoritative grants of
+one binding, so if the destroy runs last it removes the binding: logging and metrics stop with no
+error. `hpc-enterprise-slurm.yaml` and `hpc-slurm-ha.yaml` are converted this way. The old roles
+are removed in the same apply that grants the new custom roles, so redeploy while the cluster is
+idle.
 
 ### Resource-scoped access
 
@@ -511,6 +545,7 @@ No modules.
 | <a name="input_enable_public_ips"></a> [enable\_public\_ips](#input\_enable\_public\_ips) | Capability: add compute.subnetworks.useExternalIp, needed to resume nodes that get an<br/>external IP (a nodeset with enable\_public\_ips or an access\_config). | `bool` | `false` | no |
 | <a name="input_enable_tpu"></a> [enable\_tpu](#input\_enable\_tpu) | Capability: add the Cloud TPU API permissions needed to manage TPU VM nodesets (schedmd-slurm-gcp-v6-nodeset-tpu). | `bool` | `false` | no |
 | <a name="input_enable_tpu_gce"></a> [enable\_tpu\_gce](#input\_enable\_tpu\_gce) | Capability: add the permissions to manage TPU machine types on Compute Engine (a regular<br/>nodeset whose machine type is in a ct or tpu family), which the controller provisions through<br/>a MIG per slice. Includes everything enable\_mig\_flex adds, including the unscoped<br/>compute.instances.setMetadata. | `bool` | `false` | no |
+| <a name="input_grant_baseline_roles"></a> [grant\_baseline\_roles](#input\_grant\_baseline\_roles) | Grant the logging.logWriter and monitoring.metricWriter project roles every profile includes.<br/>Set false only when the account's modules/project/service-account block already grants them<br/>in project\_roles, as when converting a blueprint whose deployments already exist: two<br/>resources managing the same binding race on redeploy, and the one destroyed last removes it.<br/>See "Converting an existing deployment" in the README. | `bool` | `true` | no |
 | <a name="input_iam_propagation_wait"></a> [iam\_propagation\_wait](#input\_iam\_propagation\_wait) | How long the service\_account\_email output waits after this module's grants are created, as a Go duration<br/>("30s", "2m"). Best effort: Google documents IAM changes as eventually consistent, "typically<br/>2 minutes, potentially 7 minutes or longer", so no value guarantees the grants are effective.<br/>Raise it if the first use of the account fails with PERMISSION\_DENIED right after apply. | `string` | `"30s"` | no |
 | <a name="input_instance_name_prefixes"></a> [instance\_name\_prefixes](#input\_instance\_name\_prefixes) | For profiles that get a name-scoped role (slurm-controller, image-builder): prefixes of the<br/>Compute Engine instance names that role covers, 4-62 characters each. Unset uses the<br/>profile default: slurm-controller "<slurm\_cluster\_name, if set, or the first 10 characters<br/>of deployment\_name, lowercase, letters and digits only>-"; image-builder "packer-". For the<br/>controller, prefer setting slurm\_cluster\_name over this variable when the controller's own<br/>slurm\_cluster\_name is set: it takes the exact value, with no risk of re-deriving it<br/>differently here. Scoping is by name only: any other VM in the project with a matching name<br/>is covered too; a short prefix makes an accidental match more likely, hence the 4-character<br/>floor. | `list(string)` | `null` | no |
 | <a name="input_name"></a> [name](#input\_name) | Short name for this identity. With deployment\_name, it builds the generated custom role ids. Use the name given to whatever created the account. | `string` | n/a | yes |
