@@ -875,7 +875,7 @@ def _fetch_config(old_hash: Optional[str], bucket: Optional[str] = None) -> Opti
         return None
 
     def _download(bs) -> List[Any]:
-        return [yaml.safe_load(b.download_as_text()) for b in bs]
+        return [_yaml_load(b.download_as_text()) for b in bs]
 
     return _assemble_config(
         core=_download([blobs.core])[0],
@@ -897,7 +897,7 @@ def _fetch_mounted_config() -> NSDict:
         file_yaml=[]
         for file in files:
             with open(file, "r") as f:
-                file_yaml.append(yaml.safe_load(f))
+                file_yaml.append(_yaml_load(f.read()))
         return file_yaml
 
     return _assemble_config(
@@ -1675,7 +1675,8 @@ def host_lookup(host_name: str) -> str:
     return socket.gethostbyname(host_name)
 
 
-class Dumper(yaml.SafeDumper):
+# libyaml when available, same output as the pure Python dumper at a fraction of the time
+class Dumper(getattr(yaml, "CSafeDumper", yaml.SafeDumper)):  # type: ignore
     """Add representers for pathlib.Path and NSDict for yaml serialization"""
 
     def __init__(self, *args, **kwargs):
@@ -2834,8 +2835,12 @@ class Lookup:
 
 _lkp: Optional[Lookup] = None
 
+def _yaml_load(text: str) -> Any:
+    # libyaml when available, the pure Python loader takes seconds on a big config
+    return yaml.load(text, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
 def _load_config() -> NSDict:
-    return NSDict(yaml.safe_load(CONFIG_FILE.read_text()))
+    return NSDict(_yaml_load(CONFIG_FILE.read_text()))
 
 def lookup() -> Lookup:
     global _lkp
