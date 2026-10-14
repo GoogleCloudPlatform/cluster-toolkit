@@ -297,25 +297,6 @@ func (g *GKEOrchestrator) probeContext(contextName string) (probeOutcome, string
 	return classifyProbeFailure(stderr), stderr
 }
 
-// checkClusterConnectivity verifies the pinned kubectl context can reach the
-// cluster. Unrecognised probe output is not fatal, matching configureKubectl.
-func (g *GKEOrchestrator) checkClusterConnectivity(clusterName string) error {
-	logging.Info("Checking cluster connectivity...")
-	outcome, stderr := g.probeContext(g.kubeContext)
-	switch outcome {
-	case probeOK, probeForbidden:
-		logging.Info("Cluster connectivity verified.")
-		return nil
-	case probeAuth:
-		return authFailureError(clusterName, stderr)
-	case probeConnectivity:
-		return fmt.Errorf("failed to connect to GKE cluster %q. Please verify your IP is allowed in the cluster's authorized networks or that you have correct network access. Error: %s", clusterName, stderr)
-	default:
-		logging.Warn("Could not verify connectivity to GKE cluster '%s' (%s). Proceeding; subsequent kubectl calls will report the underlying error.", clusterName, firstLine(stderr))
-		return nil
-	}
-}
-
 func authFailureError(clusterName, stderr string) error {
 	return fmt.Errorf("authentication to GKE cluster %q failed: %s. Re-fetching cluster credentials will not help; run 'gcloud auth application-default login' (or 'gcloud auth login') and ensure %s is installed",
 		clusterName, firstLine(stderr), gkeAuthPluginBinary)
