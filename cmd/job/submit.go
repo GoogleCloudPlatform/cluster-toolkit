@@ -236,7 +236,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 	pathways.ProxyEnv = parseEnvFlags(pathwaysProxyEnv)
 	pathways.ServerEnv = parseEnvFlags(pathwaysServerEnv)
 	pathways.WorkerEnv = parseEnvFlags(pathwaysWorkerEnv)
-        if !cmd.Flags().Changed("pathways-max-slice-restarts") {
+	if !cmd.Flags().Changed("pathways-max-slice-restarts") {
 		pathways.MaxSliceRestarts = 0
 	}
 
