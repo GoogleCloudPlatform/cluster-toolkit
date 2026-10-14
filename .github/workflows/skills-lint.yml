@@ -29,6 +29,7 @@ on:
     - hotfix-*
     paths:
     - "skills/**"
+    - "community/skills/**"
     - "tools/run_eval.py"
     - "tools/tests/test_run_eval.py"
     - ".github/workflows/skills-lint.yml"
@@ -40,6 +41,7 @@ on:
     - develop
     paths:
     - "skills/**"
+    - "community/skills/**"
     - "tools/run_eval.py"
     - "tools/tests/test_run_eval.py"
     - ".github/workflows/skills-lint.yml"
