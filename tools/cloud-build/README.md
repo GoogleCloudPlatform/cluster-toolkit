@@ -70,19 +70,19 @@ For integration tests that deploy against specific GCE hardware reservations, `w
 
 ```bash
 bash /workspace/tools/cloud-build/wait_for_available_reservation.sh \
-  "<RESERVATION_NAME|RESOURCE_URI>" "<ZONE>" "[RESERVATION_OWNER_PROJECT]" "[REQUIRED_COUNT]"
+  "<RESERVATION_NAME|RESOURCE_URI>" "<ZONE>" "[RESERVATION_OWNER_PROJECT]" "[REQUIRED_COUNT]" "[BLUEPRINT_FILE]"
 ```
 
 For example, in `daily-tests/builds/gke-g4-confidential.yaml`:
 
 ```bash
-bash /workspace/tools/cloud-build/wait_for_available_reservation.sh "g4-reservation-0" "us-south1-a" "hpc-toolkit-dev" 2
+bash /workspace/tools/cloud-build/wait_for_available_reservation.sh "g4-reservation-0" "us-south1-a" "hpc-toolkit-dev" 2 "\$$EXAMPLE_BP"
 ```
 
-* If `AVAILABLE >= REQUIRED_COUNT`, it exits `0` immediately and allows the test deployment to proceed.
+* If `AVAILABLE >= REQUIRED_COUNT`, it exits `0` immediately (and if `BLUEPRINT_FILE` and `RESERVATION_OWNER_PROJECT` are provided, injects `project: "<RESERVATION_OWNER_PROJECT>"` under `specific_reservations:`) to allow the test deployment to proceed.
 * If `AVAILABLE < REQUIRED_COUNT` (capacity is currently in use by another build), it retries every 5 minutes (up to 8 hours).
 * If the reservation is not in `READY` state, has `0` total capacity, or `TOTAL_COUNT < REQUIRED_COUNT`, it fails fast with exit code `3`.
-* If the reservation does not exist (`404`) or lacks permissions (`403`), it fails fast with exit code `1`.
+* If the reservation does not exist (`404`), lacks permissions (`403`), or fails authentication/validation (`400`/`401`), it fails fast with exit code `1`.
 
 ## Unit Testing
 
