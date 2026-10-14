@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 const (
@@ -167,7 +168,8 @@ func cancelTestOrchestrator(kc KubeClient) *GKEOrchestrator {
 		"gcloud":  {{ExitCode: 0}, {ExitCode: 0}, {ExitCode: 0}},
 		"kubectl": {{ExitCode: 0}, {ExitCode: 0}, {ExitCode: 0}},
 	})
-	return &GKEOrchestrator{executor: ex, kubeClient: kc, namespace: "default", dynClient: nopDynamicClient{}}
+	return &GKEOrchestrator{executor: ex, kubeClient: kc, namespace: "default", dynClient: nopDynamicClient{},
+		kubeconfigLoader: staticLoader(clientcmdapi.NewConfig())}
 }
 
 var cancelOpts = orchestrator.CancelOptions{ClusterName: "c", ClusterLocation: "us-central1", ProjectID: "p"}

@@ -149,7 +149,6 @@ func findKubeContext(cfg *clientcmdapi.Config, clusterName, location, projectID 
 type kubeContextCheck struct {
 	contextName string
 	mode        endpointMode
-	current     string // current-context at load time
 	reason      string // non-empty when the context must not be reused
 }
 
@@ -163,7 +162,7 @@ func evaluateExistingContext(cfg *clientcmdapi.Config, clusterName, location, pr
 	if !ok {
 		return kubeContextCheck{reason: fmt.Sprintf("no kubeconfig context found for cluster %q", clusterName)}
 	}
-	check := kubeContextCheck{contextName: name, current: cfg.CurrentContext}
+	check := kubeContextCheck{contextName: name}
 
 	cluster := cfg.Clusters[kubeCtx.Cluster]
 	if cluster == nil {
@@ -499,7 +498,7 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 	switch outcome {
 	case probeOK, probeForbidden:
 		g.kubeContext = check.contextName
-		logging.Info("Reusing existing kubeconfig context '%s' (%s endpoint). Set %s=1 to force a credential refresh.", check.contextName, check.mode, refreshCredentialsEnv)
+		logging.Info("Reusing existing kubeconfig context '%s' (%s endpoint); use 'kubectl --context %s' for manual commands. Set %s=1 to force a credential refresh.", check.contextName, check.mode, check.contextName, refreshCredentialsEnv)
 		return nil
 	case probeAuth:
 		return authFailureError(clusterName, stderr)
@@ -508,7 +507,7 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 		avoid = check.mode
 	default:
 		g.kubeContext = check.contextName
-		logging.Warn("Could not verify existing kubeconfig context '%s' (%s). Reusing it; set %s=1 to force a credential refresh.", check.contextName, firstLine(stderr), refreshCredentialsEnv)
+		logging.Warn("Could not verify existing kubeconfig context '%s' (%s). Reusing it; use 'kubectl --context %s' for manual commands, or set %s=1 to force a credential refresh.", check.contextName, firstLine(stderr), check.contextName, refreshCredentialsEnv)
 		return nil
 	}
 	return g.regenerateKubeContext(clusterName, clusterLocation, projectID, avoid)

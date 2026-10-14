@@ -216,16 +216,16 @@ type gkeClusterDescribe struct {
 
 func (c gkeClusterDescribe) String() string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "Cluster Resource Summary for: %s\n", c.Name)
-	fmt.Fprintf(&sb, "Location: %s\n", c.Location)
+	sb.WriteString(fmt.Sprintf("Cluster Resource Summary for: %s\n", c.Name))
+	sb.WriteString(fmt.Sprintf("Location: %s\n", c.Location))
 	sb.WriteString("------------------------------------------\n")
 	for _, np := range c.NodePools {
-		fmt.Fprintf(&sb, "NodePool: %s\n", np.Name)
-		fmt.Fprintf(&sb, "  MachineType: %s\n", np.Config.MachineType)
+		sb.WriteString(fmt.Sprintf("NodePool: %s\n", np.Name))
+		sb.WriteString(fmt.Sprintf("  MachineType: %s\n", np.Config.MachineType))
 		if np.Count > 0 {
-			fmt.Fprintf(&sb, "  Count: %d\n", np.Count)
+			sb.WriteString(fmt.Sprintf("  Count: %d\n", np.Count))
 		}
-		fmt.Fprintf(&sb, "  Status: %s\n", np.Status)
+		sb.WriteString(fmt.Sprintf("  Status: %s\n", np.Status))
 		sb.WriteString("\n")
 	}
 	return sb.String()
