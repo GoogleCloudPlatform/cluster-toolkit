@@ -84,13 +84,6 @@ steps:
         cp -r "/tmp/local_backup/$$BACKUP_NAME/." "user_examples/$$BACKUP_NAME/"
       fi
       rm -rf /tmp/local_backup
-
-      # If _TARGET_DIR was passed as an absolute path, map/symlink to user_examples/<name> if found in workspace
-      EXAMPLE_NAME=$$(basename "${_TARGET_DIR}")
-      if [ -d "user_examples/$$EXAMPLE_NAME" ] && [ ! -d "${_TARGET_DIR}" ]; then
-        mkdir -p "$$(dirname "${_TARGET_DIR}")" 2>/dev/null || true
-        ln -s "$$(pwd)/user_examples/$$EXAMPLE_NAME" "${_TARGET_DIR}" 2>/dev/null || true
-      fi
     else
       echo "No remote repository specified. Using local workspace source."
       RAW_DIR="${_TARGET_DIR}"
@@ -98,10 +91,6 @@ steps:
       if [ -n "$$BACKUP_NAME" ] && [ -d "$$BACKUP_NAME" ]; then
         mkdir -p "user_examples/$$BACKUP_NAME"
         cp -r "$$BACKUP_NAME/." "user_examples/$$BACKUP_NAME/"
-      fi
-      if [ -n "$$BACKUP_NAME" ] && [ -d "user_examples/$$BACKUP_NAME" ] && [ ! -d "${_TARGET_DIR}" ]; then
-        mkdir -p "$$(dirname "${_TARGET_DIR}")" 2>/dev/null || true
-        ln -s "$$(pwd)/user_examples/$$BACKUP_NAME" "${_TARGET_DIR}" 2>/dev/null || true
       fi
     fi
 
@@ -166,7 +155,7 @@ steps:
       echo "BUILD" > /workspace/controller_image_status.txt
     fi
 
-    # 4. Check Evaluator Image if evaluator.Dockerfile exists
+    # 4. Check Evaluator Image
     RAW_DIR="${_TARGET_DIR}"
     EVAL_DIR="$${RAW_DIR%/}"
     if [ ! -f "$$EVAL_DIR/evaluator.Dockerfile" ]; then
@@ -177,24 +166,26 @@ steps:
         EVAL_DIR="$$EXAMPLE_NAME"
       fi
     fi
+    if [ ! -f "$$EVAL_DIR/evaluator.Dockerfile" ]; then
+      echo "ERROR: evaluator.Dockerfile not found in '$$EVAL_DIR'." >&2
+      exit 1
+    fi
     echo "$$EVAL_DIR" > /workspace/evaluator_dir.txt
 
-    if [ -f "$$EVAL_DIR/evaluator.Dockerfile" ]; then
-      EXAMPLE_HASH=$$(cd "$$EVAL_DIR" && find . -type f -exec sha256sum {} + | sort | sha256sum | cut -c1-16)
-      EVALUATOR_HASH=$$(printf -- '%s-%s' "$$FINAL_BASE" "$$EXAMPLE_HASH" | sha256sum | cut -c1-16)
-      EVAL_REPO="${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO_NAME}/${_USER_EXPERIMENT_NAME}-evaluator"
-      EVAL_TAG="$$EVAL_REPO:$$EVALUATOR_HASH"
-      EVAL_LATEST="$$EVAL_REPO:latest"
-      echo "$$EVAL_TAG" > /workspace/evaluator_image_tag.txt
-      echo "$$EVAL_LATEST" > /workspace/evaluator_image_latest.txt
+    EXAMPLE_HASH=$$(cd "$$EVAL_DIR" && find . -type f -exec sha256sum {} + | sort | sha256sum | cut -c1-16)
+    EVALUATOR_HASH=$$(printf -- '%s-%s' "$$FINAL_BASE" "$$EXAMPLE_HASH" | sha256sum | cut -c1-16)
+    EVAL_REPO="${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO_NAME}/${_USER_EXPERIMENT_NAME}-evaluator"
+    EVAL_TAG="$$EVAL_REPO:$$EVALUATOR_HASH"
+    EVAL_LATEST="$$EVAL_REPO:latest"
+    echo "$$EVAL_TAG" > /workspace/evaluator_image_tag.txt
+    echo "$$EVAL_LATEST" > /workspace/evaluator_image_latest.txt
 
-      if gcloud artifacts docker images describe "$$EVAL_TAG" >/dev/null 2>&1; then
-        echo "--> Evaluator image ($$EVALUATOR_HASH) already exists in Artifact Registry. Skipping evaluator build."
-        echo "EXISTS" > /workspace/evaluator_image_status.txt
-      else
-        echo "--> Evaluator image changed or missing (hash: $$EVALUATOR_HASH). Building..."
-        echo "BUILD" > /workspace/evaluator_image_status.txt
-      fi
+    if gcloud artifacts docker images describe "$$EVAL_TAG" >/dev/null 2>&1; then
+      echo "--> Evaluator image ($$EVALUATOR_HASH) already exists in Artifact Registry. Skipping evaluator build."
+      echo "EXISTS" > /workspace/evaluator_image_status.txt
+    else
+      echo "--> Evaluator image changed or missing (hash: $$EVALUATOR_HASH). Building..."
+      echo "BUILD" > /workspace/evaluator_image_status.txt
     fi
 
 # Step 2: Build and push the shared base image only if changed or missing
@@ -272,44 +263,44 @@ steps:
         fi
       fi
     fi
+    if [ ! -f "$$EVAL_DIR/evaluator.Dockerfile" ]; then
+      echo "ERROR: evaluator.Dockerfile not found in '$$EVAL_DIR'." >&2
+      exit 1
+    fi
 
-    if [ -f "$$EVAL_DIR/evaluator.Dockerfile" ]; then
-      EVAL_STATUS="$$(cat /workspace/evaluator_image_status.txt)"
-      if [ "$$EVAL_STATUS" = "BUILD" ]; then
-        EVAL_BASE="$$(cat /workspace/eval_base_tag.txt)"
-        BASE_STATUS="$$(cat /workspace/eval_base_status.txt)"
+    EVAL_STATUS="$$(cat /workspace/evaluator_image_status.txt)"
+    if [ "$$EVAL_STATUS" = "BUILD" ]; then
+      EVAL_BASE="$$(cat /workspace/eval_base_tag.txt)"
+      BASE_STATUS="$$(cat /workspace/eval_base_status.txt)"
 
-        if [ "$$BASE_STATUS" = "BUILD" ]; then
-          echo "--> Building custom base image ($$EVAL_BASE)..."
-          docker build \
-            -t "$$EVAL_BASE" \
-            -f infrastructure/build/base.Dockerfile \
-            --build-arg BASE_PYTHON_IMAGE="${_BASE_EVALUATOR_IMAGE}" \
-            .
-          echo "--> Pushing custom base image ($$EVAL_BASE) to Artifact Registry..."
-          docker push "$$EVAL_BASE"
-        else
-          echo "--> Using base image: $$EVAL_BASE"
-        fi
-
-        EVAL_TAG="$$(cat /workspace/evaluator_image_tag.txt)"
-        EVAL_LATEST="$$(cat /workspace/evaluator_image_latest.txt)"
-        echo "--> Building evaluator image ($$EVAL_TAG) from $$EVAL_DIR/evaluator.Dockerfile..."
+      if [ "$$BASE_STATUS" = "BUILD" ]; then
+        echo "--> Building custom base image ($$EVAL_BASE)..."
         docker build \
-          -t "$$EVAL_TAG" \
-          -t "$$EVAL_LATEST" \
-          -f "$$EVAL_DIR/evaluator.Dockerfile" \
-          --build-arg BASE_IMAGE="$$EVAL_BASE" \
-          --build-arg PROJECT_ID=${_PROJECT_ID} \
+          -t "$$EVAL_BASE" \
+          -f infrastructure/build/base.Dockerfile \
+          --build-arg BASE_PYTHON_IMAGE="${_BASE_EVALUATOR_IMAGE}" \
           .
-        echo "--> Pushing evaluator image ($$EVAL_TAG and $$EVAL_LATEST) to Artifact Registry..."
-        docker push "$$EVAL_TAG"
-        docker push "$$EVAL_LATEST"
+        echo "--> Pushing custom base image ($$EVAL_BASE) to Artifact Registry..."
+        docker push "$$EVAL_BASE"
       else
-        echo "--> Evaluator image is cached in Artifact Registry ($$(cat /workspace/evaluator_image_tag.txt)). Skipping build."
+        echo "--> Using base image: $$EVAL_BASE"
       fi
+
+      EVAL_TAG="$$(cat /workspace/evaluator_image_tag.txt)"
+      EVAL_LATEST="$$(cat /workspace/evaluator_image_latest.txt)"
+      echo "--> Building evaluator image ($$EVAL_TAG) from $$EVAL_DIR/evaluator.Dockerfile..."
+      docker build \
+        -t "$$EVAL_TAG" \
+        -t "$$EVAL_LATEST" \
+        -f "$$EVAL_DIR/evaluator.Dockerfile" \
+        --build-arg BASE_IMAGE="$$EVAL_BASE" \
+        --build-arg PROJECT_ID=${_PROJECT_ID} \
+        .
+      echo "--> Pushing evaluator image ($$EVAL_TAG and $$EVAL_LATEST) to Artifact Registry..."
+      docker push "$$EVAL_TAG"
+      docker push "$$EVAL_LATEST"
     else
-      echo "No custom evaluator Dockerfile found in $$EVAL_DIR. Skipping evaluator build."
+      echo "--> Evaluator image is cached in Artifact Registry ($$(cat /workspace/evaluator_image_tag.txt)). Skipping build."
     fi
 
 # Step 5: Run unit tests on the built controller image
@@ -349,19 +340,10 @@ steps:
   args:
   - '-c'
   - |
-    EVAL_DIR="$$(cat /workspace/evaluator_dir.txt 2>/dev/null || true)"
-    if [ -z "$$EVAL_DIR" ]; then
-      RAW_DIR="${_TARGET_DIR}"
-      EVAL_DIR="$${RAW_DIR%/}"
-    fi
-    if [ -f "$$EVAL_DIR/evaluator.Dockerfile" ]; then
-      if [ "$$(cat /workspace/evaluator_image_status.txt)" = "EXISTS" ]; then
-        echo "Evaluator image reused from Artifact Registry."
-      else
-        echo "Evaluator image build and push completed."
-      fi
+    if [ "$$(cat /workspace/evaluator_image_status.txt)" = "EXISTS" ]; then
+      echo "Evaluator image reused from Artifact Registry."
     else
-      echo "Skipping evaluator image setup."
+      echo "Evaluator image build and push completed."
     fi
 
 options:

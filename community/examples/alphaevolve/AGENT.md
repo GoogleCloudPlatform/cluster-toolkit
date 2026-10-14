@@ -32,8 +32,10 @@ This file contains the shared, environment-specific variables that are used acro
 | Variable | Description |
 | :--- | :--- |
 | `project_id` | GCP Project ID where resources are deployed. |
+| `infra_deployment_name` | Name of the base infrastructure deployment (default: `alpha-evolve-infra`). |
 | `existing_bucket_name` | Name of the existing GCS bucket to use. |
-| `region` | GCP region for deployment (e.g., `us-central1`). |
+| `region` | GCP region for deployment (default: `us-central1`). |
+| `infra_artifact_repo` | Shared Artifact Registry repository ID for base container images (default: `$(vars.infra_deployment_name)-repo`). |
 | `repo_url` | Remote Git repository URL containing the AlphaEvolve framework and examples (default: `https://github.com/GoogleCloudPlatform/hpc-solutions.git`). |
 | `repo_ref` | Git branch, tag, or commit SHA to use from `repo_url` (default: `main`). |
 
@@ -43,18 +45,16 @@ This file defines variables for provisioning static, shared resources like GCP A
 
 | Variable | Description |
 | :--- | :--- |
-| `infra_deployment_name` | Name of the infrastructure deployment (default: `alpha-evolve-infra`). |
-| `cloud_build_dir` | Directory context for Cloud Build. (Do not modify) |
-| `pubsub_topic` | Pub/Sub topic name for batch notifications. |
-| `pubsub_subscription` | Pub/Sub subscription name for batch notifications. |
-| `region_code` | Region code for Vertex AI / Discovery Engine. |
-| `location` | Location for Discovery Engine (e.g., `global`). |
-| `base_url` | Base URL for Discovery Engine API. |
-| `collection` | Collection ID in Discovery Engine. |
-| `engine` | Engine ID in Discovery Engine to communicate with AlphaEvolve API. |
-| `assistant` | Assistant ID in Discovery Engine. |
+| `deployment_name` | Deployment name for the base infrastructure workspace (default: `$(vars.infra_deployment_name)`). |
+| `pubsub_topic` | Pub/Sub topic name for Cloud Batch job notifications (default: `$(vars.infra_deployment_name)-batch-notifications`). |
+| `location` | Location for Discovery Engine (default: `global`). |
+| `base_url` | Base URL for Discovery Engine API (default: `discoveryengine.googleapis.com`). |
+| `collection` | Collection ID in Discovery Engine (default: `default_collection`). |
+| `engine` | Engine ID in Discovery Engine to communicate with the AlphaEvolve API (default: `$(vars.infra_deployment_name)-experiment-engine`). |
+| `assistant` | Assistant ID in Discovery Engine (default: `default_assistant`). |
+| `mount_path` | GCS mount path inside Cloud Batch VMs (default: `/mnt/disks/share`). |
 | `colab_machine_type` | Machine type for Colab Enterprise runtime VM (default: `n2-standard-4`). |
-| `mount_path` | Mount path for shared storage on VMs. |
+| `colab_mount_path` | GCS mount path inside the Colab Enterprise runtime VM (default: `/data`). |
 | `runtime_user_email` | User email address assigned to the Vertex AI Colab Enterprise runtime (e.g., `user@example.com`). Required for connecting to the runtime. |
 
 ### 3. Experiment Blueprint (`alpha-evolve-experiment.yaml`)
@@ -63,30 +63,33 @@ This file controls experiment-specific runs, container image builds, limits, and
 
 | Variable | Description |
 | :--- | :--- |
-| `exp_deployment_name` | Name of the user experiment deployment (default: `ae-exp`). |
-| `user_experiment_name` | Name of the user experiment (e.g., `circle-packing`). Used to name experiment-specific resources and the artifact repository for the containers. |
-| `service_account` | Service account email for running jobs. |
-| `cloud_build_path` | Path to the Cloud Build YAML configuration. (Do not modify) |
-| `cloud_build_dir` | Directory context for Cloud Build. (Do not modify) |
-| `base_controller_image` | Base Docker image for the controller. |
-| `base_evaluator_image` | Base Docker image for the evaluator. |
-| `concurrency` | Max programs to generate in parallel by the AlphaEvolve API (API limit). |
+| `exp_deployment_name` | Prefix for the user experiment deployment (default: `ae-exp`). |
+| `user_experiment_name` | Name of the user experiment (default: `experiment-1`, e.g., `circle-packing`). Used to isolate experiment-specific resources, GCS paths, and container images. |
+| `deployment_name` | Combined deployment name for the experiment workspace (default: `$(vars.exp_deployment_name)-$(vars.user_experiment_name)`). |
+| `cloud_build_service_account` | Service account email used by Cloud Build to build and push container images (default: `$(vars.infra_deployment_name)-build-sa@$(vars.project_id).iam.gserviceaccount.com`). |
+| `controller_service_account` | Service account email used by the controller and Cloud Batch jobs (default: `$(vars.infra_deployment_name)-ctrl-sa@$(vars.project_id).iam.gserviceaccount.com`). |
+| `cloud_build_dir` | Directory context within the repository for Cloud Build (default: `solutions/alphaevolve`). (Do not modify) |
+| `cloud_build_path` | Staged path to the Cloud Build YAML template (`./build/cloud-build.yaml.tfpl`). (Do not modify) |
+| `base_evaluator_image` | Base Docker image for the evaluator job (default: `python:3.12-slim-bookworm`). |
+| `concurrency` | Max programs to generate in parallel by the AlphaEvolve API (default: `4`). |
 | `model` | LLM model to use for generation. Supported models: `gemini-3.8-flash` (default; global, us, eu), `gemini-3.7-flash` (global, us, eu), `gemini-3.5-flash` (global, us, eu), and `gemini-3.1-pro-preview` (global only). You can provide standard model name strings (e.g., `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.5-flash`, `gemini-3.1-pro-preview`) or legacy uppercase enum names (`GEMINI_V3P8_FLASH`). Defaults to `gemini-3.8-flash` if unspecified. Supports single models or custom weighted mixtures delimited by semicolon (e.g., `gemini-3.8-flash:0.5;gemini-3.1-pro-preview:0.5`). Note that capped models like `gemini-3.1-pro-preview` cannot exceed 50% share of the mixture weight and are only supported in `global` location. See [Supported Models](https://docs.cloud.google.com/gemini/enterprise/docs/alphaevolve/reference-guide/api-reference#supported_models) for details. |
-| `max_programs_generated` | Max programs to generate in total. |
-| `max_programs_evaluated` | Max programs to evaluate before stopping. |
-| `num_samplers` | Number of sampler workers to pull jobs (worker count). |
-| `poll_interval` | Interval in seconds to wait between polling for new programs (default: 4). |
+| `max_programs_generated` | Max programs to generate in total (default: `100`). |
+| `max_duration` | Absolute maximum wall-clock lifespan of the experiment run in hours (valid range: 1 to 24, default: `6`). |
+| `idle_timeout` | Maximum inactivity period allowed in hours before the experiment is automatically paused (must be strictly less than `max_duration`, default: `5`). |
+| `max_programs_evaluated` | Max programs to evaluate before stopping (default: `20`). |
+| `num_samplers` | Number of sampler threads polling the AlphaEvolve API for candidates (default: `4`). |
+| `poll_interval` | Interval in seconds to wait between polling for new programs (default: `4`). |
 | `evaluation_mode` | Execution mode for the evaluator process (must be `batch` on Cloud Batch). |
-| `evaluation_machine_type` | Machine type for Evaluator Cloud Batch VMs. |
-| `evaluation_provisioning_model` | Provisioning model for Evaluator Cloud Batch VMs (`SPOT`, `STANDARD`, or `FLEX_START` for GPU/HPC workloads). **Note:** `SPOT` VMs can be preempted by GCP at any time, leading to lost program evaluations. |
-| `boot_disk_image` | OS image for the cloud batch VM boot disk. |
-| `mount_path` | Mount path for shared storage on VMs. |
-| `max_duration_seconds` | Max run duration for batch jobs. |
-| `max_duration` | Absolute maximum wall-clock lifespan of the experiment run in hours (valid range: 1 to 24, default: 6). |
-| `idle_timeout` | Maximum inactivity period allowed in hours before the experiment is automatically paused (must be strictly less than `max_duration`, default: 5). |
-| `delete_succeeded_jobs` | Whether to delete successful batch jobs (`true`/`false`). Set to false for debugging to inspect VM logs. |
-| `programs_dir` | Directory name for program storage on GCS. |
-| `example_dir` | Directory containing the experiment example to build. For pre-shipped examples in the remote repository ([`solutions/alphaevolve/`](https://github.com/GoogleCloudPlatform/hpc-solutions/tree/main/solutions/alphaevolve)), pass a relative path (e.g. `user_examples/circle_packing_cloud_batch`). For custom local experiments, provide the full local path and configure `stage-experiment-source` to use `file-system/gcs-objects`. |
+| `evaluation_machine_type` | Machine type for Evaluator Cloud Batch VMs (default: `n2-standard-4`). |
+| `evaluation_provisioning_model` | Provisioning model for Evaluator Cloud Batch VMs (`STANDARD`, `SPOT`, or `FLEX_START` for GPU/HPC workloads; default: `STANDARD`). **Note:** `SPOT` VMs can be preempted by GCP at any time, leading to lost program evaluations. |
+| `boot_disk_image` | OS image for the Cloud Batch VM boot disk (default: `projects/debian-cloud/global/images/family/debian-12`). |
+| `mount_path` | Mount path for shared GCS storage on Cloud Batch VMs (default: `/mnt/disks/share`). |
+| `max_duration_seconds` | Max run duration in seconds for individual Cloud Batch evaluation jobs (default: `3600`). |
+| `delete_succeeded_jobs` | Whether to delete successful batch jobs (`true`/`false`, default: `"true"`). Set to `"false"` for debugging to inspect VM logs. |
+| `accelerator_count` | Number of GPU accelerators to attach when `evaluation_machine_type` starts with `n1-` (default: `1`). |
+| `accelerator_type` | GPU accelerator type to attach when `evaluation_machine_type` starts with `n1-` (default: `nvidia-tesla-t4`). |
+| `programs_dir` | Directory name for program candidate storage on GCS (default: `program_candidates`). |
+| `example_dir` | Directory containing the experiment example to build (default: `user_examples/adaptive_sort_cpp`). For pre-shipped examples in the remote repository ([`solutions/alphaevolve/`](https://github.com/GoogleCloudPlatform/hpc-solutions/tree/main/solutions/alphaevolve)), pass a relative path (e.g. `user_examples/circle_packing_cloud_batch`). For custom local experiments, provide the full local path and configure `stage-experiment-source` to use `file-system/gcs-objects`. |
 | `is_example_dir_local` | Whether `example_dir` resides on the local machine (`true`/`false`, default: `false`). When `true`, `example_dir` is staged from the local filesystem and uploaded to Cloud Build as a local overlay on top of the remote Git repository. When `false`, `example_dir` is assumed to reside inside the remote Git repository. |
 
 ## Configuration
@@ -161,7 +164,7 @@ To define a new experiment, create a new folder for the experiment `your_new_exa
        - Do NOT add any other text or comments on the same line as the markers (e.g., `// EVOLVE-BLOCK-START (Helper functions)` is invalid).
        - Do NOT include any blank lines (line skipping) or trailing whitespace immediately after any `EVOLVE-BLOCK-START` marker line.
      - If the file contains an `evaluate` function used by `evaluator.py`, this function must NOT be placed within the `EVOLVE-BLOCK` markers, as it should remain unchanged across iterations. Only the code targeted for optimization should be inside the `EVOLVE-BLOCK`.
-4. **`Makefile` (Required for Cloud Batch mode)**: Used if evaluation requires compiling code (like C++ libraries) or sophisticated simulation environments. Even if your experiment does not require compilation, it is required for Batch mode to generate the `evaluator.sh` script.
+4. **`Makefile` (Optional - Required only for compiled experiments)**: Used if evaluation requires compiling code (like C++ libraries) or sophisticated simulation environments.
    - **What to modify**:
      - Change the target build based on what dependencies need to be compiled and built.
      - **Cloud Batch Support**: If your experiment requires compilation (e.g. C++ shared libraries or binaries), define your compile rules (e.g. `all: target`) in `Makefile`. The platform runner automatically runs `make -C /app/experiment all` before evaluation. Pure Python experiments do not need a `Makefile`.

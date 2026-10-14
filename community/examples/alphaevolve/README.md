@@ -24,11 +24,11 @@ The solution splits infrastructure into reusable base components and per-experim
 * **[`alpha-evolve-infra.yaml`](alpha-evolve-infra.yaml)**: Deploys the reusable base infrastructure required for running optimizations:
   * Activates required GCP APIs (Cloud Batch, Pub/Sub, Artifact Registry, Discovery Engine, Cloud Build, Vertex AI).
   * Configures dedicated Service Accounts and IAM permissions.
-  * Creates an Artifact Registry repository and builds the shared base container image (`alpha-evolve-base:latest`).
+  * Creates a shared Artifact Registry repository for storing the base container image (`alpha-evolve-base:latest`).
   * Creates Pub/Sub notification topics for Batch job tracking.
   * Provisions a Vertex AI Colab Enterprise custom runtime.
 * **[`alpha-evolve-experiment.yaml`](alpha-evolve-experiment.yaml)**: Builds and stages the software environment for a specific optimization problem:
-  * Invokes Cloud Build to construct problem-specific container images inheriting from `alpha-evolve-base`.
+  * Invokes Cloud Build to build and cache the shared base container image (`alpha-evolve-base:latest`) on first run, and constructs problem-specific controller and evaluator container images inheriting from it.
   * Generates and stages Batch job execution templates and environment configurations to Cloud Storage (GCS).
   * Creates Pub/Sub subscriptions for tracking experiment worker events.
 

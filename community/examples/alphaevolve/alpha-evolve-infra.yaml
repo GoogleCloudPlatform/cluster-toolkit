@@ -28,9 +28,12 @@ vars:
   engine: $(vars.infra_deployment_name)-experiment-engine # name of AE Discovery Engine
   assistant: default_assistant # name of the assistant in AlphaEvolve, current default can't be changed.
 
+  # === Cloud Batch Config ===
+  mount_path: "/mnt/disks/share" # GCS mount path inside Cloud Batch VMs
+
   # === Colab Enterprise VM Config ===
   colab_machine_type: n2-standard-4
-  mount_path: "/mnt/disks/share"
+  colab_mount_path: "/data" # GCS mount path inside the Colab Enterprise runtime
   runtime_user_email: ## SET USER EMAIL (e.g. your-email@example.com) HERE ##
 
 
@@ -217,7 +220,7 @@ deployment_groups:
       deployment_name: $(vars.deployment_name)
       runtime_user: $(vars.runtime_user_email)
       mount_gcs_bucket: $(vars.existing_bucket_name)
-      mount_path: "/data"
+      mount_path: $(vars.colab_mount_path)
       colab_machine_type: $(vars.colab_machine_type)
       environment_variables:
         _CLOUD_BUCKET_NAME: $(vars.existing_bucket_name)
