@@ -12,7 +12,7 @@ This deployment combines a dedicated IBM Spectrum Symphony Master VM on Google C
 * **Artifact Registry:** Managed Docker repository for storing and serving Symphony compute container images (`sym-compute:latest`), provisioned via the Cluster Toolkit Artifact Registry module (`community/modules/container/artifact-registry`).
 * **Google Cloud Secret Manager:** Securely stores the Symphony `Admin` password (`<DEPLOYMENT_NAME>-admin-password`) and provides it to the Master VM at runtime via `gcloud secrets`, preventing plaintext password exposure in VM metadata or process logs.
 * **Cloud Build:** Builds and pushes the containerized Symphony compute image using Cloud BuildKit.
-* **Packer:** Automatically builds the Rocky Linux 8 base image with IBM Spectrum Symphony and the `hf-gke` provider plugin compiled and installed.
+* **Packer:** Automatically builds the Rocky Linux 9 base image with IBM Spectrum Symphony and the `hf-gke` provider plugin compiled and installed.
 * **Google Cloud Storage (GCS):** Storage bucket holding Symphony binary installers, fixpacks, and entitlement files.
 
 ## Architecture

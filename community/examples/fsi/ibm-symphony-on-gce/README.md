@@ -9,7 +9,7 @@ This blueprint deploys an IBM Spectrum Symphony cluster consisting of a dedicate
 * **Google Compute Engine (GCE):** Virtual machines for master and compute nodes, with MIGs for autoscaled worker nodes.
 * **Google Cloud Storage (GCS):** Storage bucket holding Symphony binary installers, fixpacks, and entitlement files.
 * **Google Cloud Secret Manager:** Securely stores the Symphony `Admin` password (`<DEPLOYMENT_NAME>-admin-password`) and provides it to the Master VM at runtime via `gcloud secrets`, preventing plaintext password exposure in VM metadata or process logs.
-* **Packer:** Automated creation of a custom Rocky Linux 8 base image pre-installed with Symphony and the GCP Host Factory provider plugin (`hf-gce`).
+* **Packer:** Automated creation of a custom Rocky Linux 9 base image pre-installed with Symphony and the GCP Host Factory provider plugin (`hf-gce`).
 * **Cloud Logging & Cloud Pub/Sub:** Cloud audit log sink routing GCE instance lifecycle events to Pub/Sub for real-time Host Factory monitoring (`hf-monitor`).
 
 ## Architecture

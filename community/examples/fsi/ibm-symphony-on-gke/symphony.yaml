@@ -29,8 +29,6 @@ vars:
   base_image:
     family: rocky-linux-9-optimized-gcp
     project: rocky-linux-cloud
-    #family: hpc-rocky-linux-8
-    #project: cloud-hpc-image-public
   new_image:
     family: $(vars.deployment_name)
     project: $(vars.project_id)
