@@ -51,8 +51,10 @@ locals {
     local.startup_script_runner
   )
 
-  startup_script_gcs_bucket_path = var.startup_script_path == null || var.startup_script_path == "" ? null : (
-    startswith(var.startup_script_path, "gs://") ? var.startup_script_path : "gs://${var.startup_script_path}"
+  startup_script_gcs_bucket_path = var.startup_script_path == null ? null : (
+    var.startup_script_path == "" ? null : (
+      startswith(var.startup_script_path, "gs://") ? var.startup_script_path : "gs://${var.startup_script_path}"
+    )
   )
 
   startup_from_network_storage = module.netstorage_startup_script.startup_script
