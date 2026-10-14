@@ -86,7 +86,8 @@ data:
             if [ -n "$bid" ]; then
               build_statuses["$bid"]="$bstatus"
             fi
-          done < <(gcloud builds list --filter="create_time > -P2D AND ($filter_str)" --format="value(id,status)")
+         done < <(gcloud builds list --filter="create_time > -P2D AND ($filter_str)" --format="value(id,status)")
+
 
           # Check and delete jobs for cancelled/failed builds
           for item in "${active_jobs[@]}"; do

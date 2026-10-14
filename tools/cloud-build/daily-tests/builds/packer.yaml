@@ -115,7 +115,7 @@ steps:
 
               DEPLOYMENT_NAME="pkrv6$$BUILD_ID_SHORT"
               BLUEPRINT="examples/image-builder.yaml"
-              BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$BLUEPRINT" 2>/dev/null | awk '{print \$$2}')
+              BP_NAME=\`grep -m1 '^blueprint_name:' "\$$BLUEPRINT" 2>/dev/null | sed 's/^blueprint_name:[[:space:]]*//' | tr -d '\r'\`
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
