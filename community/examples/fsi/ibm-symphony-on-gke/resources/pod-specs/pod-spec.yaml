@@ -24,10 +24,10 @@ containers:
     value: MASTER_IP_PLACEHOLDER
   - name: MASTER_ALIAS
     value: MASTER_HOSTNAME_PLACEHOLDER
-    resources:
-      requests:
-        cpu: "4"
-        memory: "16384Mi"
-      limits:
-        cpu: "4"
-        memory: "16384Mi"
+  resources:
+    requests:
+      cpu: "4"
+      memory: "16384Mi"
+    limits:
+      cpu: "4"
+      memory: "16384Mi"

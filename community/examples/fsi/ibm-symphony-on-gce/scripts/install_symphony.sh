@@ -22,13 +22,7 @@ export sym_entitlement=$3
 export symphony_install_dir=$4
 export sym_source_bucket=$5
 
-# 1. Remove the stale Berkeley DB (BDB) environment files
-rm -f /var/lib/rpm/__db*
-
-# 2. Rebuild the RPM database index
-rpm --rebuilddb
-
-# 3. Clean package manager caches to ensure a fresh state
+# Update package manager
 yum clean all
 ##### Update some packages
 
@@ -94,7 +88,7 @@ SYM_FIXPACK_DIR="/opt/ibm/${SYM_FIXPACK_NAME}"
 export SYM_FIXPACK_DIR
 
 mkdir -p "${SYM_FIXPACK_DIR}"
-chmod 770 "${SYM_FIXPACK_DIR}"
+chmod 755 "${SYM_FIXPACK_DIR}"
 tar -xf "${SYM_FIXPACK_PATH}" -C "${SYM_FIXPACK_DIR}"
 chmod u+r "${SYM_FIXPACK_DIR}"/*
 chmod a+x "${SYM_FIXPACK_DIR}"/*.sh
@@ -104,7 +98,9 @@ cd "${SYM_FIXPACK_DIR}" || exit 1
 su -s /bin/bash "$CLUSTERADMIN" -c "source $EGO_TOP/profile.platform && ${SYM_FIXPACK_DIR}/sym-7.3.2.sh -c -i"
 
 # shellcheck source=/dev/null
+set +e +o pipefail
 source "$EGO_TOP/profile.platform"
+set -e -o pipefail
 "${SYM_FIXPACK_DIR}/symrpm-7.3.2.sh" -c -i
 
 cd /tmp || exit 1

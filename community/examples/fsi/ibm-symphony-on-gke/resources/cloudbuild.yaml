@@ -32,12 +32,13 @@ steps:
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', '$_IMAGE']
 - name: 'gcr.io/cloud-builders/git'
-  args: ['clone', 'https://github.com/google/symphony-gcp.git']
+  args: ['clone', '--branch', 'v1.0.4', '--depth', '1', 'https://github.com/google/symphony-gcp.git']
 - name: 'gcr.io/cloud-builders/docker'
   entrypoint: 'bash'
   args:
   - '-c'
   - |
+    sed -i 's/"kubernetes >= 30.3.0"/"kubernetes >= 30.3.0, < 35.0.0"/' symphony-gcp/k8s-operator/pyproject.toml
     export DOCKER_BUILDKIT=1
     docker build -t $_OPERATOR_IMAGE symphony-gcp/k8s-operator
 - name: 'gcr.io/cloud-builders/docker'

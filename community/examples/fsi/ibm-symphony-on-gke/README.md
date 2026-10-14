@@ -138,7 +138,7 @@ The GCS bucket layout:
      sym_entitlement: sym_adv_entitlement.dat
      symphony_install_dir: /opt/ibm/spectrumcomputing
      admin_password_secret: sym-gke-01-admin-password
-     gke_node_machine_type: c2-standard-4
+     gke_node_machine_type: c2-standard-16
      gke_min_node_count: 1
      gke_max_node_count: 100
    ```

@@ -25,8 +25,9 @@ export ADMIN_PASSWORD_SECRET=$3
 # Add symphony environment to global profile
 echo "source $EGO_TOP/profile.platform" >>/etc/profile
 
-# shellcheck source=/dev/null
+set +e +o pipefail
 source "$EGO_TOP/profile.platform" && egosetsudoers.sh -f
+set -e -o pipefail
 
 set +x
 if ! ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret="$ADMIN_PASSWORD_SECRET"); then
@@ -34,6 +35,6 @@ if ! ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret="$ADMIN_PAS
 	exit 1
 fi
 export ADMIN_PASSWORD
-su -s /bin/bash egoadmin -c "source $EGO_TOP/profile.platform  && egoconfig join $SYM_MASTER -f  && egoconfig setpassword -x \"\$ADMIN_PASSWORD\" -f && egoconfig setentitlement ${EGO_TOP}/*.dat -f && egosh ego start"
+su -s /bin/bash egoadmin -c "source $EGO_TOP/profile.platform && egoconfig join $SYM_MASTER -f && egoconfig setpassword -x \"\$ADMIN_PASSWORD\" -f && egoconfig setentitlement ${EGO_TOP}/*.dat -f && egosh ego start"
 unset ADMIN_PASSWORD
 set -x

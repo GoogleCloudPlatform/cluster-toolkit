@@ -33,10 +33,8 @@ fi
 echo "source $EGO_TOP/profile.platform" >>/etc/profile
 
 set +e +o pipefail
-# shellcheck source=/dev/null
-source "$EGO_TOP/profile.platform"
+source "$EGO_TOP/profile.platform" && egosetsudoers.sh -f
 set -e -o pipefail
-egosetsudoers.sh -f
 
 set +x
 if ! ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret="$ADMIN_PASSWORD_SECRET"); then

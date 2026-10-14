@@ -22,8 +22,8 @@ vars:
   region: us-central1
   zone: us-central1-a
   base_image:
-    family: hpc-rocky-linux-8
-    project: cloud-hpc-image-public
+    family: rocky-linux-9-optimized-gcp
+    project: rocky-linux-cloud
   new_image:
     family: $(vars.deployment_name)
     project: $(vars.project_id)

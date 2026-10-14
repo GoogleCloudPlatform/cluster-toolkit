@@ -30,17 +30,10 @@ echo "Entitlement:      ${sym_entitlement}"
 echo "Install Dir:      ${symphony_install_dir}"
 echo "Source Bucket:    ${sym_source_bucket}"
 
-echo "=== 1/7: Rebuilding RPM database and cleaning cache ==="
-# 1. Remove the stale Berkeley DB (BDB) environment files
-rm -f /var/lib/rpm/__db*
-
-# 2. Rebuild the RPM database index
-rpm --rebuilddb
-
-# 3. Clean package manager caches to ensure a fresh state
+# Update package manager
 yum clean all
 
-echo "=== 2/7: Installing required dependencies and packages ==="
+# Install required dependencies and packages
 yum install -y \
 	bc \
 	gettext \
