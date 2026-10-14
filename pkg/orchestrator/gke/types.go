@@ -194,6 +194,8 @@ type GKEOrchestrator struct {
 	// kubeconfigLoader reads the merged kubeconfig. nil means the default
 	// client-go loading rules (KUBECONFIG env or ~/.kube/config).
 	kubeconfigLoader kubeconfigLoader
+	// kubeContext is the context set by configureKubectl; all kubectl and dynamic-client calls use it.
+	kubeContext string
 }
 
 // Types for GetClusterInfo unmarshaling

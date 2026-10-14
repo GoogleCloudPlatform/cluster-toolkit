@@ -47,7 +47,7 @@ func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
 		return err
 	} else if installed {
 		logging.Info("JobSet CRD found. Verifying Webhook health...")
-		cmdEndpoints := g.executor.ExecuteCommand("kubectl", "get", "endpointslice", "-l", "kubernetes.io/service-name=jobset-webhook-service", "-n", "jobset-system", "-o", "json")
+		cmdEndpoints := g.kubectl("get", "endpointslice", "-l", "kubernetes.io/service-name=jobset-webhook-service", "-n", "jobset-system", "-o", "json")
 		if cmdEndpoints.ExitCode == 0 {
 			var eps k8sEndpointSliceList
 			if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
@@ -113,14 +113,14 @@ func (eps *k8sEndpointSliceList) HasReadyEndpoint() bool {
 
 func (g *GKEOrchestrator) waitForJobSetWebhook() error {
 	logging.Info("Waiting for JobSet webhook service to be ready...")
-	res := g.executor.ExecuteCommand("kubectl", "rollout", "status", "deployment/jobset-controller-manager", "-n", "jobset-system", "--timeout=600s")
+	res := g.kubectl("rollout", "status", "deployment/jobset-controller-manager", "-n", "jobset-system", "--timeout=600s")
 	if res.ExitCode != 0 {
 		return fmt.Errorf("jobset controller manager failed to become ready: %s\n%s", res.Stderr, res.Stdout)
 	}
 
 	logging.Info("Verifying JobSet webhook service endpoints...")
 	for i := 0; i < 40; i++ {
-		cmdEndpoints := g.executor.ExecuteCommand("kubectl", "get", "endpointslice", "-l", "kubernetes.io/service-name=jobset-webhook-service", "-n", "jobset-system", "-o", "json")
+		cmdEndpoints := g.kubectl("get", "endpointslice", "-l", "kubernetes.io/service-name=jobset-webhook-service", "-n", "jobset-system", "-o", "json")
 		if cmdEndpoints.ExitCode == 0 {
 			var eps k8sEndpointSliceList
 			if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
@@ -138,7 +138,7 @@ func (g *GKEOrchestrator) waitForJobSetWebhook() error {
 }
 
 func (g *GKEOrchestrator) isJobSetCRDInstalled() (bool, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "crd", "jobsets.jobset.x-k8s.io")
+	res := g.kubectl("get", "crd", "jobsets.jobset.x-k8s.io")
 	if res.ExitCode == 0 {
 		return true, nil
 	}
@@ -308,7 +308,7 @@ func (g *GKEOrchestrator) applyManifests(manifests []byte, filename string) erro
 	}
 	logging.Info("Manifests saved to %s", filePath)
 
-	res := g.executor.ExecuteCommand("kubectl", "apply", "-f", filePath)
+	res := g.kubectl("apply", "-f", filePath)
 	if res.ExitCode != 0 {
 		return fmt.Errorf("kubectl apply failed with exit code %d: %s\n%s", res.ExitCode, res.Stderr, res.Stdout)
 	}
@@ -367,19 +367,42 @@ func (g *GKEOrchestrator) getKubeClient() KubeClient {
 
 // getCurrentNamespace is the single source of truth for the target namespace.
 // It returns the cached namespace (seeded from --gke-namespace at every
-// orchestrator entry point) or, if unset, resolves and caches the kubeconfig
-// context namespace.
+// orchestrator entry point) or, if unset, resolves and caches the namespace of
+// the pinned kubeconfig context, falling back to a lookup by cluster name.
 func (g *GKEOrchestrator) getCurrentNamespace(clusterName, location, projectID string) (string, error) {
 	if g.namespace != "" {
 		return g.namespace, nil
 	}
 
+	if ns, ok := g.pinnedContextNamespace(); ok {
+		g.namespace = ns
+		return ns, nil
+	}
 	ns, err := g.getKubeClient().GetCurrentNamespace(clusterName, location, projectID)
 	if err != nil {
 		return "", err
 	}
 	g.namespace = ns
 	return ns, nil
+}
+
+// pinnedContextNamespace reads the namespace of g.kubeContext from kubeconfig.
+func (g *GKEOrchestrator) pinnedContextNamespace() (string, bool) {
+	if g.kubeContext == "" {
+		return "", false
+	}
+	cfg, err := g.loadKubeconfig()
+	if err != nil {
+		return "", false
+	}
+	kubeCtx := cfg.Contexts[g.kubeContext]
+	if kubeCtx == nil {
+		return "", false
+	}
+	if kubeCtx.Namespace == "" {
+		return "default", true
+	}
+	return kubeCtx.Namespace, true
 }
 
 func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, projectID string) error {

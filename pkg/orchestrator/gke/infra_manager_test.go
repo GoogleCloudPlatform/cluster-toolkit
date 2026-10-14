@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 func TestCleanAndProcessManifests(t *testing.T) {
@@ -82,9 +83,10 @@ func TestValidateClusterState_TargetNamespaceValidation(t *testing.T) {
 	// test proves the seeded namespace (not the kubeconfig one) is validated.
 	kube := &countingKubeClient{MockKubeClient: MockKubeClient{Namespace: "kube-ctx-ns"}}
 	orc := &GKEOrchestrator{
-		executor:   mockExec,
-		dynClient:  mockDyn,
-		kubeClient: kube,
+		executor:         mockExec,
+		dynClient:        mockDyn,
+		kubeClient:       kube,
+		kubeconfigLoader: staticLoader(clientcmdapi.NewConfig()),
 	}
 
 	job := &orchestrator.JobDefinition{

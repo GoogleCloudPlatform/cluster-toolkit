@@ -1347,6 +1347,8 @@ Every `gcluster job` command first makes `kubectl` target your cluster. A GKE co
 
    Authentication errors (`Unauthorized`, `gke-gcloud-auth-plugin` failures) are **not** retried against another endpoint because a different endpoint cannot fix credentials; `gcluster` fails immediately and tells you to run `gcloud auth application-default login`.
 
+After this step, every `kubectl` call and Kubernetes API request that `gcluster` makes passes the chosen context explicitly (`kubectl --context <context> ...`). Switching `current-context` in another terminal, or another tool running `get-credentials` while `gcluster` is running, does not redirect the job to a different cluster. When an existing context is reused, `gcluster` does not modify your kubeconfig at all; `current-context` only changes when credentials have to be fetched, because `gcloud container clusters get-credentials` sets it.
+
 > [!TIP]
 > **Forcing a credential refresh.** Set `GCLUSTER_REFRESH_CREDENTIALS=1` to skip step 1 and always re-run `get-credentials` (step 2 still applies). Use this if you suspect the reused context is wrong in a way the checks above cannot detect — for example, after deliberately editing the entry by hand, or when sharing a `kubeconfig` between tools that expect a specific endpoint:
 >
