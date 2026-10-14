@@ -500,7 +500,7 @@ variable "best_effort_provisioning" {
   description = <<-EOT
   Enables GKE best-effort provisioning when the node pool is created, similar to
   `gcloud container node-pools create --enable-best-effort-provision --min-provision-nodes`.
-  Creation succeeds once `min_provision_nodes` nodes per zone are running (GKE uses 1 if unset),
+  Creation succeeds once `min_provision_nodes` nodes per zone are running (no minimum is sent if unset),
   and GKE keeps creating the remaining nodes as capacity becomes available. `enabled` defaults to true.
   Only applies at creation; later changes are ignored. Not supported for TPU node pools or with
   `placement_policy`. See the module README for details.

@@ -81,8 +81,8 @@ locals {
   initial_node_set = try(var.initial_node_count > 0, false)
 
   best_effort_enabled = try(var.best_effort_provisioning.enabled, false)
-  # GKE uses a minimum of 1 node per zone when min_provision_nodes is not set.
-  best_effort_min_nodes = coalesce(try(var.best_effort_provisioning.min_provision_nodes, null), 1)
+  # The provider doesn't send min_provision_nodes when it's unset, so no minimum applies.
+  best_effort_min_nodes = coalesce(try(var.best_effort_provisioning.min_provision_nodes, null), 0)
 
   module_unique_id = replace(lower(var.internal_ghpc_module_id), "/[^a-z0-9\\-]/", "")
   pool_name_prefix = coalesce(var.name, join("-", [var.machine_type, local.module_unique_id]))
@@ -532,7 +532,7 @@ resource "google_container_node_pool" "node_pool" {
     }
     precondition {
       condition     = !local.best_effort_enabled || local.best_effort_min_nodes <= coalesce(var.static_node_count, var.initial_node_count, 0)
-      error_message = "best_effort_provisioning.min_provision_nodes (1 if not set) cannot be larger than the per-zone node count set by static_node_count or initial_node_count."
+      error_message = "best_effort_provisioning.min_provision_nodes cannot be larger than the per-zone node count the node pool is created with: static_node_count, or initial_node_count for autoscaling node pools (0 if neither is set)."
     }
   }
 }
