@@ -550,6 +550,11 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 	}
 
 	workerBackoffLimit := 2048000
+	workerBackoffLimitPerIndex := 4000
+	if opts.Pathways.MaxSliceRestarts > 0 {
+		workerBackoffLimitPerIndex = opts.Pathways.MaxSliceRestarts
+		workerBackoffLimit = opts.Pathways.MaxSliceRestarts * opts.NodesPerSlice
+	}
 
 	var proxyArgsList []string
 	if opts.Pathways.ProxyArgs != "" {
@@ -591,6 +596,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		NumSlices:                     opts.NumSlices,
 		NodesPerSlice:                 opts.NodesPerSlice,
 		WorkerBackoffLimit:            workerBackoffLimit,
+		WorkerBackoffLimitPerIndex:    workerBackoffLimitPerIndex,
 		ProxyArgsList:                 proxyArgsList,
 		ServerArgsList:                serverArgsList,
 		WorkerArgsList:                workerArgsList,

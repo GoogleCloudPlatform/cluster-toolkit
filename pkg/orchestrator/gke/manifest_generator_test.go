@@ -2232,3 +2232,86 @@ func TestGeneratePathwaysManifest_DefaultImages(t *testing.T) {
 		t.Errorf("manifest missing default server image %q", defaultPathwaysServerImage)
 	}
 }
+
+func TestGeneratePathwaysManifest_MaxSliceRestarts(t *testing.T) {
+	tests := []struct {
+		name                     string
+		maxSliceRestarts         int
+		wantBackoffLimit         string
+		wantBackoffLimitPerIndex string
+	}{
+		{
+			name:                     "flag set to 5 on 2 x v6e-32",
+			maxSliceRestarts:         5,
+			wantBackoffLimit:         "backoffLimit: 40",
+			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 5",
+		},
+		{
+			name:                     "flag not set uses default constants",
+			maxSliceRestarts:         0,
+			wantBackoffLimit:         "backoffLimit: 2048000",
+			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 4000",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupMockMachineConfig(t)
+			job := orchestrator.JobDefinition{
+				WorkloadName:    "pathways-restarts-test",
+				CommandToRun:    "python3 train.py",
+				NumSlices:       2,
+				ClusterLocation: "us-central1-a",
+				ComputeType:     "v6e-32",
+				IsPathwaysJob:   true,
+				Pathways: orchestrator.PathwaysJobDefinition{
+					ProxyServerImage: "proxy:latest",
+					ServerImage:      "server:latest",
+					WorkerImage:      "worker:latest",
+					GCSLocation:      "gs://my-bucket",
+					HeadNodePool:     "pathways-np",
+					MaxSliceRestarts: tc.maxSliceRestarts,
+				},
+			}
+
+			mockResponses := map[string][]shell.CommandResult{
+				"kubectl get resourceflavors":                   {{ExitCode: 0, Stdout: ""}},
+				"kubectl get nodes":                             {{ExitCode: 0, Stdout: "4x8\n"}},
+				"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[]}`}},
+				"gcloud compute machine-types describe ct6e-standard-4t --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
+				},
+			}
+			orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+			orc.projectID = "mock-project"
+			orc.clusterZones = []string{"us-central1-a"}
+			orc.clusterDesc.NodePools = []gkeJobNodePool{
+				{
+					Name:            "v6e-pool",
+					Config:          gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+					PlacementPolicy: &gkePlacementPolicy{TpuTopology: "4x8"},
+				},
+			}
+
+			profile, isDynamic, isStatic, err := orc.resolveHardwareRequirements(&job)
+			if err != nil {
+				t.Fatalf("resolveHardwareRequirements failed: %v", err)
+			}
+			if job.NodesPerSlice != 8 {
+				t.Fatalf("expected NodesPerSlice = 8 for v6e-32, got %d", job.NodesPerSlice)
+			}
+
+			manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamic, isStatic)
+			if err != nil {
+				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+			}
+
+			if !strings.Contains(manifest, tc.wantBackoffLimit) {
+				t.Errorf("manifest missing %q\nGot:\n%s", tc.wantBackoffLimit, manifest)
+			}
+			if !strings.Contains(manifest, tc.wantBackoffLimitPerIndex) {
+				t.Errorf("manifest missing %q\nGot:\n%s", tc.wantBackoffLimitPerIndex, manifest)
+			}
+		})
+	}
+}

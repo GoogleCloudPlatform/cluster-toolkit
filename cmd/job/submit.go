@@ -182,7 +182,7 @@ func init() {
 	SubmitCmd.Flags().BoolVar(&pathways.Headless, "pathways-headless", false, "If present, the user's workload container will not be deployed within the `pathways-head` job.")
 	SubmitCmd.Flags().StringVar(&pathways.GCSLocation, "pathways-gcs-location", "", "Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.")
 	SubmitCmd.Flags().IntVar(&pathways.ElasticSlices, "pathways-elastic-slices", 0, "Configures the number of elastic slices, potentially allowing for more flexible resource allocation.")
-	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 1, "Maximum times the workers in a slice can be restarted. Used with --pathways-elastic-slices.")
+	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 1, "Maximum times the workers in a slice can be restarted. Maps to backoffLimitPerIndex=N and backoffLimit=N*nodesPerSlice on the worker Job. Used with --pathways-elastic-slices.")
 	SubmitCmd.Flags().StringVar(&pathways.ProxyArgs, "pathways-proxy-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-proxy` executable.")
 	SubmitCmd.Flags().StringVar(&pathways.ServerArgs, "pathways-server-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-rm` (resource manager) executable.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerArgs, "pathways-worker-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-worker` executable.")
@@ -236,6 +236,9 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 	pathways.ProxyEnv = parseEnvFlags(pathwaysProxyEnv)
 	pathways.ServerEnv = parseEnvFlags(pathwaysServerEnv)
 	pathways.WorkerEnv = parseEnvFlags(pathwaysWorkerEnv)
+        if !cmd.Flags().Changed("pathways-max-slice-restarts") {
+		pathways.MaxSliceRestarts = 0
+	}
 
 	jobDef := orchestrator.JobDefinition{
 		ImageName:                     imageName,
