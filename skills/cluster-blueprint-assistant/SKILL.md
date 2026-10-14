@@ -52,26 +52,36 @@ allowed_read_only_commands:
    editing anything.
 2. **Customize through a `deployment.yaml`, not module blocks.** If the request
    only changes project, region/zone, node counts, machine types,
-   Spot/reservation, or storage size, put the user's values in a
-   `deployment.yaml` and pass it with `-d`. For templates under `examples/` or
-   `community/examples/`, only touch the blueprint's `vars:` when the knob does
-   not exist yet: add it with a default **equal to the value that was
-   hardcoded**, reference it via `$(vars.<name>)`, and keep the user's requested
-   value in `deployment.yaml` only. (If the blueprint is the user's own copy,
-   editing its `vars:` directly is fine.) Do **not** add, remove, rename or edit
-   `deployment_groups[].modules[]` entries for these changes.
-3. **Only edit module blocks when adding or removing capability** (e.g. adding a
-   Managed Lustre instance or a second node pool) — and do it on a **copy**, not
-   the shared template: copy the blueprint to a new file in the **same
-   directory** (e.g. `examples/gke-a4/my-gke-a4.yaml`) or copy the whole folder,
-   because blueprints reference sibling files via `$(ghpc_stage("./…"))`. Never
-   modify existing template files under `examples/` or `community/examples/` in
-   place (once you create a copy, edit that copy directly for follow-ups). Copy
-   the module block from a blueprint in the catalog that already has it, keep
-   its `use:` list, and check `module_wiring.<source>.required_inputs` to
-   confirm every required input is satisfied by a module in `use:`.
+   Spot/reservation, or storage size:
+   - **Case 1 — All requested knobs already exist in `vars:`:** Create or edit
+     **only** `deployment.yaml` (passed with `-d`). Do **not** copy or edit the
+     blueprint `.yaml` file (even if a knob is commented out in a companion
+     `-deployment.yaml`).
+   - **Case 2 — Promoting a hardcoded module setting to `vars:`:** When a
+     requested setting is hardcoded inside a module block and missing from
+     `vars:`, never modify a tracked template under `examples/` or
+     `community/examples/` in place. Instead, copy the template to a new file in
+     the **same directory** with `ai_assisted: true` (or reuse an existing custom
+     copy in place), add the missing knob to `vars:` with a default **equal to
+     the value that was hardcoded**, reference it in the module via
+     `$(vars.<name>)`, and put the user's override value in `deployment.yaml`.
+   - Do **not** add, remove, rename or restructure `deployment_groups[].modules[]`
+     entries for value overrides.
+3. **Only edit module blocks when adding or removing capability** (Case 3 — e.g.
+   adding a Managed Lustre instance or a second node pool) — and do it on a
+   **copy**, not the shared template: copy the blueprint to a new file in the
+   **same directory** (e.g. `examples/gke-a4/my-gke-a4.yaml`) or copy the whole
+   folder, because blueprints reference sibling files via
+   `$(ghpc_stage("./…"))`. Never modify tracked template files under
+   `examples/` or `community/examples/` in place (once a custom copy
+   exists—identifiable by `ai_assisted: true` or untracked `git status`—edit
+   that copy directly in place for follow-ups rather than copying it a second
+   time). Copy the module block from a blueprint in the catalog that already has
+   it, keep its `use:` list, and check `module_wiring.<source>.required_inputs`
+   to confirm every required input is satisfied by a module in `use:`.
 4. **Mark agent-authored blueprints.** Add `ai_assisted: true` at the top level
-   of any blueprint you create or modify.
+   of any blueprint you create, copy, or repair/fix (if an existing custom
+   blueprint you are fixing lacks `ai_assisted: true`, add it).
 5. **Validate with gcluster, fix the blueprint, never the output.**
    `./gcluster expand` and `./gcluster create` are the validation step. If they or
    `./gcluster deploy` fail, fix the blueprint YAML or `deployment.yaml` and re-run
@@ -150,10 +160,12 @@ vars:
 > nodesets, `slurm_login`, and `slurm_controller`, and `enable_spot_vm` would
 > apply to all three nodesets (`debug_nodeset`, `compute_nodeset`, `h3_nodeset`).
 
-If the blueprint does not expose the setting you need in `vars:`, add a new
-`vars:` key with the current hardcoded value as its default and reference it
-from the module via `$(vars.<name>)` — this keeps the existing behaviour and
-makes the knob reusable.
+If the blueprint does not expose the setting you need in `vars:`, copy the
+tracked template to a new file in the same directory with `ai_assisted: true`
+(or edit your existing custom copy in place), add a new `vars:` key with the
+current hardcoded value as its default, reference it from the module via
+`$(vars.<name>)`, and put the user's override value in `deployment.yaml` — this
+keeps the existing behaviour and leaves tracked templates untouched.
 
 ### 3. Validate
 

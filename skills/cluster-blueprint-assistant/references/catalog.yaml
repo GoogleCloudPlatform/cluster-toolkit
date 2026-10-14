@@ -332,8 +332,8 @@ blueprints:
     settings: [cluster_storage, compute_node_specs, login_node_specs, manager_machine_type, manager_name_prefix, service_account_emails, subnetwork]
 - path: community/examples/fsi-montecarlo-on-batch.yaml
   blueprint_name: fsi-montecarlo-on-batch
-  scheduler: none
-  description: "This directory contains blueprints contributed externally by the community. These can be used by the Toolkit to provision your infrastructure."
+  scheduler: batch
+  description: "This blueprint will take you through a tutorial on an FSI Value at Risk calculation using Cloud tools:"
   machine_types: [n1-standard-4]
   vars:
     deployment_name: fsimontecarlo
@@ -384,7 +384,7 @@ blueprints:
   description: "This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top of an existing image, hpc-rocky-linux-9 in the case of this example."
   machine_types: [n2d-standard-2, n2d-standard-4, n2d-standard-16]
   vars:
-    build_from_git_ref: 6.12.3
+    build_from_git_ref: 6.13.2
     build_from_image_family: hpc-rocky-linux-9
     build_from_image_project: cloud-hpc-image-public
     built_image_family: my-custom-slurm
@@ -420,7 +420,7 @@ blueprints:
     settings: [instance_image, machine_type]
 - path: community/examples/hpc-slinky/hpc-slinky.yaml
   blueprint_name: hpc-slinky
-  scheduler: gke
+  scheduler: slurm-on-gke (slinky)
   description: "The SchedMD Slinky Project deploys Slurm on Kubernetes. Slinky is particularly useful for: 1. Those with a prefer a Slurm workload management paradigm, but a cloud-native operational experience 2. Those who want the flexibility of..."
   machine_types: [n2d-standard-8, h3-standard-88]
   vars:
@@ -475,7 +475,7 @@ blueprints:
   description: "Creates a Slurm cluster on C3 machine types for Google Cloud Dedicated (GCD) and sovereign cloud environments using Packer to pre-build a custom Slurm image based on Rocky Linux 8, configured with NFS home directories, SAuth..."
   machine_types: [c3-standard-176, c3-standard-4]
   vars:
-    build_slurm_from_git_ref: 6.12.3
+    build_slurm_from_git_ref: 6.13.2
     built_instance_image:
       family: slurm-rocky9
       project: null
@@ -627,7 +627,7 @@ blueprints:
 - path: community/examples/hpc-slurm-gromacs.yaml
   blueprint_name: hpc-slurm-gromacs
   scheduler: slurm
-  description: "Spack is an HPC software package manager. This example creates a small Slurm cluster with software installed using the The controller will install and configure spack, and install location (/sw) via filestore. This build leverages the..."
+  description: "Spack is an HPC software package manager. This example creates a small Slurm cluster with software installed using the spack-setup and spack-execute modules. The controller will install and configure spack, and install gromacs using..."
   vars:
     deployment_name: hpc-slurm-gromacs
     project_id: null
@@ -676,7 +676,7 @@ blueprints:
 - path: community/examples/hpc-slurm-ha-lb.yaml
   blueprint_name: hpcslurmlb
   scheduler: slurm
-  description: "This directory contains blueprints contributed externally by the community. These can be used by the Toolkit to provision your infrastructure."
+  description: "Cluster Toolkit blueprint (community/examples/hpc-slurm-ha-lb.yaml)."
   machine_types: [n1-standard-2]
   vars:
     deployment_name: hpcslurmlb
@@ -959,7 +959,7 @@ blueprints:
 - path: community/examples/hpc-slurm-ubuntu2204.yaml
   blueprint_name: hpc-slurm-ubuntu2204-v6
   scheduler: slurm
-  description: "Similar to the hpc-slurm.yaml example, but using Ubuntu 22.04 instead of CentOS 7."
+  description: "Similar to the hpc-slurm.yaml example, but using Ubuntu 22.04 instead of CentOS 7. Other operating systems are supported by SchedMD for the Slurm on GCP project and images are listed here. Only the examples listed on this page have been..."
   machine_types: [n2-standard-2, n2-standard-4]
   vars:
     deployment_name: slurm-gcp-v6
@@ -1401,7 +1401,7 @@ blueprints:
     settings: [enable_controller_public_ips]
 - path: community/examples/slurm-gke/slurm-gke.yaml
   blueprint_name: slurm-gke
-  scheduler: gke
+  scheduler: slurm
   description: "Deploys a hybrid Slurm cluster with a GCE-based controller, login node, and debug partition alongside a GKE-backed compute partition managed by the Slinky Slurm operator. The blueprint also creates a VPC, a Filestore instance mounted at..."
   machine_types: [n2d-standard-4, c2-standard-16, n2-standard-2, n2-standard-4]
   vars:
@@ -3482,7 +3482,7 @@ blueprints:
 - path: examples/hcls-blueprint.yaml
   blueprint_name: hcls-cluster-v6
   scheduler: slurm
-  description: "This blueprint demonstrates an advanced architecture that can be used to run GROMACS with GPUs and CPUs on Google Cloud. For full documentation, refer"
+  description: "This blueprint demonstrates an advanced architecture that can be used to run GROMACS with GPUs and CPUs on Google Cloud. For full documentation, refer document."
   machine_types: [c2-standard-16, c2-standard-60, g2-standard-4]
   vars:
     bucket_force_destroy: false
@@ -3577,8 +3577,8 @@ blueprints:
     project_id: null
     region: us-central1
     slurm_image:
-      family: slurm-gcp-6-12-hpc-rocky-linux-9
-      project: schedmd-slurm-public
+      family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+      project: advanced-compute-images
     zone: us-central1-a
   modules:
   - id: network
@@ -3717,8 +3717,8 @@ blueprints:
     h4d_enable_spot_vm: false
     h4d_reservation_name: ""
     instance_image:
-      family: slurm-gcp-6-12-hpc-rocky-linux-9
-      project: schedmd-slurm-public
+      family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+      project: advanced-compute-images
     project_id: null
     rdma_net_range: 192.168.128.0/18
     region: us-central1
@@ -3736,7 +3736,7 @@ blueprints:
     settings: [filestore_share_name, filestore_tier, local_mount, size_gb]
   - id: h4d_startup
     source: modules/scripts/startup-script
-    settings: [local_ssd_filesystem, set_ofi_cloud_rdma_tunables]
+    settings: [install_ansible, local_ssd_filesystem, set_ofi_cloud_rdma_tunables]
   - id: h4d_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [h4d_startup, h4d-slurm-net-0]
@@ -3860,7 +3860,7 @@ blueprints:
     a3_dws_flex_enabled: false
     a3_enable_spot_vm: false
     a3_reservation_name: ""
-    build_slurm_from_git_ref: 6.12.3
+    build_slurm_from_git_ref: 6.13.2
     disk_size_gb: 200
     enable_nvidia_dcgm: true
     instance_image:
@@ -3923,7 +3923,7 @@ blueprints:
 - path: examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml
   blueprint_name: a3mega-slurm
   scheduler: slurm
-  description: "To deploy an a3-megagpu-8g cluster running Slurm on Google Cloud, please follow these instructions."
+  description: "This directory provides a Cluster Toolkit blueprint (a3mega-slurm-blueprint.yaml) and deployment configuration (a3mega-slurm-deployment.yaml) for provisioning a Slurm cluster with a3-megagpu-8g (8x NVIDIA H100) compute nodes..."
   machine_types: [c2-standard-8, n2-standard-2, a3-megagpu-8g, c2-standard-4]
   vars:
     a3mega_dws_flex_enabled: false
@@ -3933,7 +3933,7 @@ blueprints:
     base_image:
       image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260522
       project: ubuntu-os-accelerator-images
-    build_slurm_from_git_ref: 6.12.3
+    build_slurm_from_git_ref: 6.13.2
     disk_size_gb: 100
     enable_controller_public_ips: true
     enable_login_public_ips: true
@@ -4003,7 +4003,7 @@ blueprints:
 - path: examples/machine-learning/a3-megagpu-8g/a3mega-slurm-gcsfuse-lssd-blueprint.yaml
   blueprint_name: a3mega-slurm
   scheduler: slurm
-  description: "To deploy an a3-megagpu-8g cluster running Slurm on Google Cloud, please follow these instructions."
+  description: "This directory provides a Cluster Toolkit blueprint (a3mega-slurm-blueprint.yaml) and deployment configuration (a3mega-slurm-deployment.yaml) for provisioning a Slurm cluster with a3-megagpu-8g (8x NVIDIA H100) compute nodes..."
   machine_types: [c2-standard-8, n2-standard-2, a3-megagpu-8g, c2-standard-4]
   vars:
     a3m_runners:
@@ -4018,7 +4018,7 @@ blueprints:
     base_image:
       image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
       project: ubuntu-os-accelerator-images
-    build_slurm_from_git_ref: 6.12.3
+    build_slurm_from_git_ref: 6.13.2
     controller_runners:
     - content: null
       destination: stage_scripts.sh
@@ -4108,7 +4108,7 @@ blueprints:
 - path: examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml
   blueprint_name: a3ultra-slurm
   scheduler: slurm
-  description: "For further information on deploying an A3 Ultra cluster with Slurm, please see:"
+  description: "This blueprint provisions an A3 Ultra (a3-ultragpu-8g, 8x NVIDIA H200) Slurm cluster with multi-NIC RoCE GPUDirect RDMA networking (gpu-rdma-vpc), a 36 TiB Google Cloud Managed Lustre filesystem (modules/file-system/managed-lustre)..."
   machine_types: [a3-ultragpu-8g, n2d-standard-16]
   vars:
     a3u_cluster_size: null
@@ -4120,7 +4120,7 @@ blueprints:
     disk_size_gb: 300
     enable_multinic: true
     instance_image:
-      family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-amd64
+      family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-amd64
       project: advanced-compute-images
     local_ssd_mountpoint: /mnt/localssd
     lustre_instance_id: null
@@ -4186,7 +4186,7 @@ blueprints:
   deployment_path: examples/machine-learning/a3-ultragpu-8g/a3ultra-vm-deployment.yaml
   blueprint_name: a3ultra-vm-instance
   scheduler: none
-  description: "For further information on deploying an A3 Ultra cluster with Slurm, please see:"
+  description: "This blueprint provisions an A3 Ultra (a3-ultragpu-8g, 8x NVIDIA H200) Slurm cluster with multi-NIC RoCE GPUDirect RDMA networking (gpu-rdma-vpc), a 36 TiB Google Cloud Managed Lustre filesystem (modules/file-system/managed-lustre)..."
   machine_types: [a3-ultragpu-8g]
   vars:
     a3u_provisioning_model: RESERVATION_BOUND
@@ -4232,7 +4232,7 @@ blueprints:
 - path: examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml
   blueprint_name: a4high-slurm
   scheduler: slurm
-  description: "For further information on deploying an A4 High cluster with Slurm, please see:"
+  description: "This blueprint provisions an A4 High (a4-highgpu-8g, 8x NVIDIA B200) Slurm cluster with multi-NIC RoCE GPUDirect RDMA networking (gpu-rdma-vpc), a 36 TiB Google Cloud Managed Lustre filesystem (modules/file-system/managed-lustre)..."
   machine_types: [a4-highgpu-8g, n2d-standard-8]
   vars:
     a4h_cluster_size: null
@@ -4245,7 +4245,7 @@ blueprints:
     disk_size_gb: 300
     enable_multinic: true
     instance_image:
-      family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-amd64
+      family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-amd64
       project: advanced-compute-images
     local_ssd_mountpoint: /mnt/localssd
     lustre_instance_id: null
@@ -4311,7 +4311,7 @@ blueprints:
   deployment_path: examples/machine-learning/a4-highgpu-8g/a4high-vm-deployment.yaml
   blueprint_name: a4high-vm-instance
   scheduler: none
-  description: "For further information on deploying an A4 High cluster with Slurm, please see:"
+  description: "This blueprint provisions an A4 High (a4-highgpu-8g, 8x NVIDIA B200) Slurm cluster with multi-NIC RoCE GPUDirect RDMA networking (gpu-rdma-vpc), a 36 TiB Google Cloud Managed Lustre filesystem (modules/file-system/managed-lustre)..."
   machine_types: [a4-highgpu-8g]
   vars:
     a4h_provisioning_model: RESERVATION_BOUND
@@ -4354,6 +4354,60 @@ blueprints:
   - id: wait-for-vms
     source: community/modules/scripts/wait-for-startup
     settings: [instance_names, timeout]
+- path: examples/machine-learning/a4x-highgpu-4g/a4x-vm.yaml
+  deployment_path: examples/machine-learning/a4x-highgpu-4g/a4x-vm-deployment.yaml
+  blueprint_name: a4x-jbvm
+  scheduler: none
+  description: "This document outlines the deployment steps for provisioning A4X High a4x-highgpu-4g VMs using either Slurm as an orchestrator or as a standalone VM group."
+  machine_types: [t2a-standard-16, a4x-highgpu-4g]
+  vars:
+    base_image:
+      image: ubuntu-accelerator-2404-arm64-with-nvidia-580-v20260218
+      project: ubuntu-os-accelerator-images
+    deployment_name: null
+    disk_size_gb: 100
+    filestore_ip_range: 192.168.32.0/24
+    hostname_prefix: null
+    image_disk_size_gb: 100
+    instance_count: null
+    instance_image:
+      family: jbvm-ubuntu2404-accelerator-arm64
+      project: null
+    machine_type: a4x-highgpu-4g
+    net0_range: 192.168.0.0/19
+    net1_range: 192.168.64.0/19
+    project_id: null
+    region: null
+    reservation_name: null
+    zone: null
+  modules:
+  - id: a4x_net_0
+    source: modules/network/vpc
+    settings: [firewall_rules, mtu, network_name, subnetworks]
+  - id: a4x_net_1
+    source: modules/network/vpc
+    settings: [firewall_rules, mtu, network_name, subnetworks]
+  - id: image-build-script
+    source: modules/scripts/startup-script
+    settings: [configure_ssh_host_patterns, install_ansible, runners]
+  - id: custom-image
+    source: modules/packer/custom-image
+    use: [a4x_net_0, image-build-script]
+    settings: [disk_size, image_family, machine_type, metadata, omit_external_ip, source_image, source_image_project_id, state_timeout]
+  - id: a4x_rdma_net
+    source: modules/network/gpu-rdma-vpc
+    settings: [mtu, network_name, network_profile, network_routing_mode, subnetworks_template]
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [a4x_net_0]
+    settings: [filestore_tier, local_mount, reserved_ip_range, size_gb]
+  - id: a4x_vms
+    source: modules/compute/vm-instance
+    use: [homefs]
+    settings: [automatic_restart, disk_size_gb, disk_type, instance_count, instance_image, machine_type, name_prefix, network_interfaces, on_host_maintenance, placement_policy, reservation_name]
+  - id: wait-for-vms
+    source: community/modules/scripts/wait-for-startup
+    settings: [instance_names, timeout]
 - path: examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml
   blueprint_name: a4xhigh-slurm
   scheduler: slurm
@@ -4366,7 +4420,7 @@ blueprints:
     deployment_name: null
     disk_size_gb: 100
     instance_image:
-      family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-arm64
+      family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-arm64
       project: advanced-compute-images
     local_ssd_mountpoint: /mnt/localssd
     lustre_instance_id: null
@@ -4409,7 +4463,7 @@ blueprints:
     settings: [fs_type, local_mount, mount_options, remote_mount]
   - id: a4x_startup
     source: modules/scripts/startup-script
-    settings: [docker, local_ssd_filesystem, runners]
+    settings: [docker, install_ansible, local_ssd_filesystem, runners]
   - id: a4x_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [a4x-slurm-net-0, a4x_startup]
@@ -4440,7 +4494,7 @@ blueprints:
     benchmark_dir: null
     build_from_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-580
     build_from_image_project: ubuntu-os-accelerator-images
-    build_slurm_from_git_ref: 6.12.3
+    build_slurm_from_git_ref: 6.13.2
     built_image_family: slurm-ubuntu2404-a4x-max-metal
     deployment_name: null
     disk_size_gb: 100
@@ -4528,7 +4582,7 @@ blueprints:
 - path: examples/machine-learning/build-service-images/a3m/blueprint.yaml
   blueprint_name: roll-a3m-image
   scheduler: none
-  description: you may not use this file except in compliance with the License. You may obtain a copy of the License at
+  description: "Cluster Toolkit blueprint (examples/machine-learning/build-service-images/a3m/blueprint.yaml)."
   machine_types: [c2-standard-8]
   modules:
   - id: image-net
@@ -4543,7 +4597,7 @@ blueprints:
 - path: examples/machine-learning/build-service-images/a4x/blueprint.yaml
   blueprint_name: roll-a4x-image
   scheduler: none
-  description: you may not use this file except in compliance with the License. You may obtain a copy of the License at
+  description: "Cluster Toolkit blueprint (examples/machine-learning/build-service-images/a4x/blueprint.yaml)."
   machine_types: [c4a-highcpu-16]
   modules:
   - id: image-net
@@ -4558,7 +4612,7 @@ blueprints:
 - path: examples/machine-learning/build-service-images/common/blueprint.yaml
   blueprint_name: roll-common-image
   scheduler: none
-  description: you may not use this file except in compliance with the License. You may obtain a copy of the License at
+  description: "Cluster Toolkit blueprint (examples/machine-learning/build-service-images/common/blueprint.yaml)."
   machine_types: [n2-standard-16]
   modules:
   - id: image-net
@@ -4669,7 +4723,7 @@ blueprints:
   description: "This blueprint creates a Slurm cluster on Google Cloud optimized for machine learning workloads using NVIDIA G4 vGPUs (Fractional GPUs). It automates the installation of the necessary NVIDIA GRID drivers and configures Slurm to..."
   machine_types: [n2-standard-4, g4-standard-12]
   vars:
-    build_slurm_from_git_ref: 6.12.3
+    build_slurm_from_git_ref: 6.13.2
     built_image_family: slurm-vgpu-ubuntu2404
     cluster_size: 2
     deployment_name: g4-vgpu
@@ -4728,7 +4782,7 @@ blueprints:
   description: "This blueprint deploys a high-performance computing (HPC) cluster featuring a Slurm scheduler, optimized for machine learning workloads."
   machine_types: [n2-standard-4, g4-standard-48]
   vars:
-    build_slurm_from_git_ref: 6.12.3
+    build_slurm_from_git_ref: 6.13.2
     built_image_family: slurm-g4-ubuntu2404
     cluster_size: 2
     deployment_name: g4-ml-example
@@ -4938,8 +4992,8 @@ blueprints:
     project_id: null
     region: us-central1
     slurm_image:
-      family: slurm-gcp-6-12-hpc-rocky-linux-9
-      project: schedmd-slurm-public
+      family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+      project: advanced-compute-images
     zone: us-central1-a
   modules:
   - id: network
@@ -4998,7 +5052,7 @@ blueprints:
   deployment_path: examples/science/af3-slurm/af3-slurm-deployment.yaml
   blueprint_name: af3-slurm
   scheduler: slurm
-  description: "This blueprint lets you create a high-throughput execution environment for Google Deepmind's in your own GCP project. It uses the unmodified AlphaFold 3 package, and provides a best-practices mapping of it to Google Cloud, leveraging..."
+  description: "This blueprint lets you create a high-throughput execution environment for Google Deepmind's AlphaFold 3 in your own GCP project. It uses the unmodified AlphaFold 3 package, and provides a best-practices mapping of it to Google Cloud..."
   machine_types: [n2-standard-4, c2-standard-8, n2-standard-16]
   vars:
     af3service_activate: false
@@ -5035,8 +5089,8 @@ blueprints:
       source: null
       type: ansible-local
     base_image:
-      family: slurm-gcp-6-12-hpc-rocky-linux-9
-      project: schedmd-slurm-public
+      family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+      project: advanced-compute-images
     conformer_max_iterations: ""
     controller_runners:
     - args: null
@@ -5375,7 +5429,7 @@ module_wiring:
     - modules/file-system/netapp-volume
     - modules/file-system/pre-existing-network-storage
   community/modules/compute/schedmd-slurm-gcp-v6-nodeset:
-    required_inputs: [name, subnetwork_self_link]
+    required_inputs: [subnetwork_self_link]
     recommended_use:
     - modules/network/pre-existing-vpc
     - modules/network/vpc
@@ -5383,7 +5437,7 @@ module_wiring:
     - community/modules/compute/schedmd-slurm-gcp-v6-partition
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
   community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic:
-    required_inputs: [name, slurm_bucket_path, slurm_cluster_name, subnetwork_self_link]
+    required_inputs: [slurm_bucket_path, slurm_cluster_name, subnetwork_self_link]
     recommended_use:
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - modules/network/pre-existing-vpc
@@ -5392,7 +5446,7 @@ module_wiring:
     - community/modules/compute/schedmd-slurm-gcp-v6-partition
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
   community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu:
-    required_inputs: [name, subnetwork_self_link]
+    required_inputs: [subnetwork_self_link]
     recommended_use:
     - modules/network/pre-existing-vpc
     - modules/network/vpc
@@ -5412,8 +5466,11 @@ module_wiring:
     consumed_by:
     - community/modules/database/bigquery-table
     - community/modules/files/fsi-montecarlo-on-batch
+    - community/modules/pubsub/bigquery-sub
   community/modules/database/bigquery-table:
     required_inputs: [dataset_id, table_schema]
+    recommended_use:
+    - community/modules/database/bigquery-dataset
     consumed_by:
     - community/modules/files/fsi-montecarlo-on-batch
     - community/modules/pubsub/bigquery-sub
@@ -5453,6 +5510,7 @@ module_wiring:
   community/modules/files/fsi-montecarlo-on-batch:
     required_inputs: [dataset_id, table_id, topic_id, topic_schema]
     recommended_use:
+    - community/modules/database/bigquery-dataset
     - community/modules/pubsub/topic
   community/modules/management/dependencies-installer:
     required_inputs: [cluster_id]
@@ -5483,15 +5541,14 @@ module_wiring:
     - community/modules/scripts/htcondor-install
   community/modules/pubsub/bigquery-sub:
     required_inputs: [dataset_id, table_id, topic_id]
+    recommended_use:
+    - community/modules/database/bigquery-dataset
   community/modules/pubsub/topic:
     consumed_by:
     - community/modules/files/fsi-montecarlo-on-batch
     - community/modules/pubsub/bigquery-sub
   community/modules/remote-desktop/chrome-remote-desktop:
     required_inputs: [install_nvidia_driver]
-    consumed_by:
-    - community/modules/scripts/spanner-migrations-runner
-    - modules/database/spanner
   community/modules/scheduler/htcondor-access-point:
     required_inputs: [access_point_service_account_email, central_manager_ips, htcondor_bucket_name, instance_image]
     recommended_use:
@@ -5541,7 +5598,7 @@ module_wiring:
     - community/modules/compute/gke-partition
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
   community/modules/scheduler/schedmd-slurm-gcp-v6-login:
-    required_inputs: [name_prefix, subnetwork_self_link]
+    required_inputs: [subnetwork_self_link]
     recommended_use:
     - modules/network/pre-existing-vpc
     - modules/network/vpc
@@ -5554,8 +5611,7 @@ module_wiring:
     - modules/scheduler/pre-existing-gke-cluster
     consumed_by:
     - community/modules/compute/gke-nodeset
-  community/modules/scripts/gcloud:
-    required_inputs: [module_instance_id]
+  community/modules/scripts/gcloud: {}
   community/modules/scripts/gke-backend-fetcher:
     required_inputs: [cluster_name, location, namespace, service_name, service_port]
     consumed_by:
@@ -5624,8 +5680,6 @@ module_wiring:
     - modules/scheduler/batch-login-node
   community/modules/scripts/spanner-migrations-runner:
     required_inputs: [database_name, instance_name, migrations_dir]
-    recommended_use:
-    - community/modules/remote-desktop/chrome-remote-desktop
   community/modules/scripts/wait-for-startup: {}
   community/modules/scripts/windows-startup-script: {}
   community/modules/security/kms-key:
@@ -5650,7 +5704,7 @@ module_wiring:
     required_inputs: [image, service_name]
   modules/compute/gke-job-template: {}
   modules/compute/gke-node-pool:
-    required_inputs: [cluster_id, gke_version, internal_ghpc_module_id]
+    required_inputs: [cluster_id, gke_version]
     recommended_use:
     - modules/scheduler/gke-cluster
     - modules/scheduler/pre-existing-gke-cluster
@@ -5671,8 +5725,6 @@ module_wiring:
     - modules/network/vpc
   modules/database/spanner:
     required_inputs: [instance_name]
-    recommended_use:
-    - community/modules/remote-desktop/chrome-remote-desktop
   modules/file-system/cloud-storage-bucket:
     consumed_by:
     - community/modules/compute/gke-nodeset
@@ -5963,7 +6015,6 @@ module_wiring:
     recommended_use:
     - modules/project/service-account
   modules/scheduler/batch-job-template:
-    required_inputs: [job_id]
     consumed_by:
     - modules/scheduler/batch-login-node
   modules/scheduler/batch-login-node:
