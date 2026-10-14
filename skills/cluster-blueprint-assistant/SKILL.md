@@ -135,9 +135,10 @@ vars:
 > Global `vars:` are injected into **every** module that declares an input with
 > the same name and does not set it explicitly. That is why blueprint vars use
 > prefixed names such as `compute_machine_type` / `compute_enable_spot_vm`.
-> Never add an unprefixed generic name such as `machine_type` or
-> `enable_spot_vm` to `vars:` — it would silently apply to all nodesets, the
-> login node and the controller.
+> Never add an unprefixed variable name that is shared by multiple modules in
+> the blueprint: for example, `machine_type` would silently apply to all
+> nodesets, `slurm_login`, and `slurm_controller`, and `enable_spot_vm` would
+> apply to all three nodesets (`debug_nodeset`, `compute_nodeset`, `h3_nodeset`).
 
 If the blueprint does not expose the setting you need in `vars:`, add a new
 `vars:` key with the current hardcoded value as its default and reference it
@@ -147,8 +148,12 @@ makes the knob reusable.
 ### 3. Validate
 
 ```bash
-# Fast, offline: expands the blueprint, applies deployment vars, runs schema checks.
-gcluster expand examples/hpc-slurm.yaml -d my-deployment.yaml
+# Dry-run (no deployment folder or expanded.yaml written; still runs cloud validators if authenticated):
+gcluster expand examples/hpc-slurm.yaml -d my-deployment.yaml -o /dev/null
+
+# Offline (when using a placeholder project_id or without GCP credentials):
+GHPC_MOCK_MACHINE_CONFIG='{}' gcluster expand examples/hpc-slurm.yaml -d my-deployment.yaml -o /dev/null \
+  --skip-validators="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_quota_availability,test_machine_type_in_zone,test_reservation_exists,test_disk_type_in_zone"
 
 # Full: writes the deployment folder and runs read-only cloud validators
 # (project, APIs, zone, machine type, reservations). Use -w on re-runs instead
