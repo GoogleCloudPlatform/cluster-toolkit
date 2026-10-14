@@ -13,6 +13,7 @@
 # limitations under the License.
 
 ---
+timeout: 3600s
 options:
   defaultLogsBucketBehavior: REGIONAL_USER_OWNED_BUCKET
 
@@ -30,25 +31,35 @@ steps:
 
     echo "Starting Filestore Cleanup..."
 
-    # Retry the cleanup script up to 3 times to handle transient gcloud API errors.
-    attempt=1
-    max_retries=3
+    # Retry with exponential backoff (up to ~34 minutes) if Filestore is in use by active builds.
+    attempt=0
+    max_retries=10
 
-    while [ "$attempt" -le "$max_retries" ]; do
-        echo "Execution attempt $${attempt} of $${max_retries}..."
-
-        if /workspace/tools/clean-filestore-limit.sh; then
-            echo "Filestore cleanup completed successfully."
-            exit 0
+    while [ "$$attempt" -le "$$max_retries" ]; do
+        if [ "$$attempt" -gt 0 ]; then
+            wait_time=$$((2 ** attempt))
+            echo "Waiting $${wait_time}s before retry $${attempt} of $${max_retries}..."
+            sleep "$$wait_time"
         fi
 
-        echo "Cleanup script failed on attempt $${attempt}."
-        if [ "$attempt" -lt "$max_retries" ]; then
-            echo "Waiting 15 seconds before retrying..."
-            sleep 15
-        fi
-        attempt=$((attempt + 1))
+        rc=0
+        /workspace/tools/clean-filestore-limit.sh || rc=$$?
+
+        case "$$rc" in
+            0)
+                echo "Filestore cleanup and limit reset completed successfully."
+                exit 0
+                ;;
+            2)
+                echo "Filestore is currently in use; retrying with backoff..."
+                ;;
+            *)
+                echo "Cleanup script encountered an error (exit code: $${rc}); retrying..."
+                ;;
+        esac
+
+        attempt=$$((attempt + 1))
     done
 
-    echo "ERROR: Cleanup failed after $${max_retries} attempts."
+    echo "ERROR: Filestore cleanup could not complete after $${max_retries} retries."
     exit 1
