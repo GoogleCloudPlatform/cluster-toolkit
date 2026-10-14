@@ -200,7 +200,7 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName, ns string) error {
 	cqName := defaultClusterQueue
 	cqExists, err := g.checkClusterQueueExists(cqName)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "forbidden") {
+		if isForbiddenError(err) {
 			return fmt.Errorf("LocalQueue '%s' does not exist in namespace '%s' and cluster permissions are restricted (403 Forbidden). Please ask your cluster administrator to create a LocalQueue in namespace '%s'", localQueueName, ns, ns)
 		}
 		return fmt.Errorf("failed to check if ClusterQueue %s exists: %w", cqName, err)
@@ -727,7 +727,7 @@ func (g *GKEOrchestrator) getClusterPriorityClasses() ([]string, error) {
 func (g *GKEOrchestrator) hasUserPriorityClasses() (bool, error) {
 	existing, err := g.getClusterPriorityClasses()
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "forbidden") {
+		if isForbiddenError(err) {
 			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping default PriorityClass installation.")
 			return true, nil
 		}
@@ -790,7 +790,7 @@ func (g *GKEOrchestrator) validatePriorityClass(requestedPriority string) error 
 
 	existing, err := g.getClusterPriorityClasses()
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "forbidden") {
+		if isForbiddenError(err) {
 			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping PriorityClass validation for %q.", requestedPriority)
 			return nil
 		}
@@ -1035,11 +1035,26 @@ func (g *GKEOrchestrator) getNominalQuota(resName string, fc FlavorCapacity, fna
 	return getStaticNominalQuota(resName, fc)
 }
 
+func compareKueueFlavors(a, b string) int {
+	if a == b {
+		return 0
+	}
+	if a == "pathways-flavor" {
+		return -1
+	}
+	if b == "pathways-flavor" {
+		return 1
+	}
+	return strings.Compare(a, b)
+}
+
 func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
 	coveredResourcesMap := g.calculateCoveredResources()
 
 	var mainFlavors []map[string]interface{}
-	fnames := slices.Sorted(maps.Keys(g.capacity.Flavors))
+	// Order pathways-flavor before accelerator flavors so CPU-only Pathways head pods
+	// match pathways-flavor first instead of TPU flavors with unconstrained CPU/Memory quotas.
+	fnames := slices.SortedFunc(maps.Keys(g.capacity.Flavors), compareKueueFlavors)
 
 	for _, fname := range fnames {
 		fc := g.capacity.Flavors[fname]

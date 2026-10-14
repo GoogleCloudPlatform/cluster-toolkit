@@ -185,29 +185,14 @@ spec:
                 value: {{ printf "%q" .Value }}
               {{- end }}
               command:
-              - "/bin/bash"
-              - "-c"
-              - |
-                echo "GCluster Start: $(date)"
-                _sigterm() {
-                  if [ -n "$PID" ]; then
-                    kill -SIGTERM $PID 2>/dev/null
-                    wait $PID
-                  fi
-                  exit 143
-                }
-                trap _sigterm SIGTERM
-                (
-                  {{.CommandToRun}}
-                ) & PID=$!
-                wait $PID
-                EXIT_CODE=$?
-                echo "GCluster End: $(date)"
-                echo "Exit code: $EXIT_CODE"
-                exit $EXIT_CODE
+              {{- range $.Command }}
+              - {{ printf "%q" . }}
+              {{- end }}
               volumeMounts:
                 - name: shared-tmp
                   mountPath: /tmp
+                - name: dshm
+                  mountPath: /dev/shm
 {{- if .VolumeMountsYAML }}
 {{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
@@ -217,6 +202,11 @@ spec:
                 hostPath:
                   path: /tmp
                   type: DirectoryOrCreate
+{{- if not .Pathways.Headless }}
+              - name: dshm
+                emptyDir:
+                  medium: Memory
+{{- end }}
 {{- if .VolumesYAML }}
 {{(StructuralData .VolumesYAML)}}
 {{- end }}

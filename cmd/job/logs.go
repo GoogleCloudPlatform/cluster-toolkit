@@ -34,7 +34,7 @@ var mainOnly bool
 
 func init() {
 	LogsCmd.Flags().BoolVarP(&follow, "follow", "f", false, "Stream logs continuously")
-	LogsCmd.Flags().BoolVar(&mainOnly, "main-only", false, "Fetch logs only for the main replicated job (main-job or pathways-head)")
+	LogsCmd.Flags().BoolVar(&mainOnly, "main-only", false, "Fetch logs only from the rank-0 pod of the JobSet's first replicated job (main-job or pathways-head), using its default container")
 }
 
 func runLogsCmd(cmd *cobra.Command, args []string) error {

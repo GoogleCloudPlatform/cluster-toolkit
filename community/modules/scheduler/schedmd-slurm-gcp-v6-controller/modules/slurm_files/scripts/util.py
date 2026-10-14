@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Union, Set
 import argparse
 import base64
+import copy
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime, timezone
 import hashlib
@@ -157,6 +158,7 @@ slurmdirs = NSDict(
     etc = Path("/usr/local/etc/slurm"),
     state = Path("/var/spool/slurm"),
     key_distribution = Path("/slurm/key_distribution"),
+    home = Path("/var/lib/slurm"),
 )
 
 
@@ -212,7 +214,7 @@ class MachineType:
     @property
     def supports_smt(self) -> bool:
         # https://cloud.google.com/compute/docs/cpu-platforms
-        if self.family in  ("t2a", "t2d", "h3", "c4a", "h4d",):
+        if self.family in ("t2a", "t2d", "h3", "c4a", "n4a", "h4d"):
             return False
         if self.guest_cpus == 1:
             return False
@@ -370,9 +372,11 @@ def parse_gcp_timestamp(s: str) -> datetime:
 
 def universe_domain() -> str:
     try:
-        return instance_metadata("attributes/universe_domain")
+        ud = instance_metadata("attributes/universe_domain")
     except MetadataNotFoundError:
-        return DEFAULT_UNIVERSE_DOMAIN
+        ud = None
+    # Empty off a GCE VM, e.g. an on-prem controller, where config.yaml carries it.
+    return ud or lookup().cfg.get("universe_domain") or DEFAULT_UNIVERSE_DOMAIN
 
 
 def endpoint_version(api: ApiEndpoint) -> Optional[str]:
@@ -587,8 +591,8 @@ def blob_get(file):
     return storage_client().get_bucket(bucket_name).blob(blob_name)
 
 
-def blob_list(prefix="", delimiter=None):
-    bucket_name, path = _get_bucket_and_common_prefix()
+def blob_list(prefix="", delimiter=None, bucket: Optional[str] = None):
+    bucket_name, path = parse_bucket_uri(bucket) if bucket else _get_bucket_and_common_prefix()
     blob_prefix = f"{path}/{prefix}"
     # Note: The call returns a response only when the iterator is consumed.
     blobs = storage_client().list_blobs(
@@ -747,18 +751,33 @@ class DeffetiveStoredConfigError(Exception):
 
 
 def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
-    if not cfg.slurm_log_dir:
-        cfg.slurm_log_dir = dirs.log
-    if not cfg.slurm_bin_dir:
-        cfg.slurm_bin_dir = slurmdirs.prefix / "bin"
-    if not cfg.slurm_control_host:
-        try:
-            control_dns_name = instance_metadata("attributes/slurm_control_dns", silent=True)
-            cfg.slurm_control_host = control_dns_name
-        except MetadataNotFoundError:
-            cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
-    if not cfg.slurm_control_host_port:
-        cfg.slurm_control_host_port = "6820-6830"
+    hybrid_conf = cfg.hybrid_conf
+    if not hybrid_conf:
+        if not cfg.slurm_log_dir:
+            cfg.slurm_log_dir = dirs.log
+        if not cfg.slurm_bin_dir:
+            cfg.slurm_bin_dir = slurmdirs.prefix / "bin"
+        if not cfg.slurm_control_host:
+            try:
+                control_dns_name = instance_metadata("attributes/slurm_control_dns", silent=True)
+                cfg.slurm_control_host = control_dns_name
+            except MetadataNotFoundError:
+                cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
+        if not cfg.slurm_control_host_port:
+            cfg.slurm_control_host_port = "6820-6830"
+    else:
+        #Required values
+        cfg.slurm_control_host = hybrid_conf.slurm_control_host
+        #Default by terraform
+        cfg.slurm_control_host_port = hybrid_conf.slurm_control_host_port
+        #Default by python
+        cfg.slurm_log_dir = hybrid_conf.slurm_log_dir if hybrid_conf.slurm_log_dir else dirs.log
+        cfg.slurm_bin_dir = hybrid_conf.slurm_bin_dir if hybrid_conf.slurm_bin_dir else slurmdirs.prefix / "bin"
+        #Optional values
+        if hybrid_conf.slurm_control_addr:
+            cfg.slurm_control_addr = hybrid_conf.slurm_control_addr
+        if hybrid_conf.google_app_cred_path:
+            cfg.google_app_cred_path = hybrid_conf.google_app_cred_path
     return cfg
 
 @dataclass
@@ -803,16 +822,16 @@ class _ConfigFiles:
     nodeset_tpu: List[Path] = field(default_factory=list)
     login_group: List[Path] = field(default_factory=list)
 
-def _list_config_blobs() -> _ConfigBlobs:
-    _, common_prefix = _get_bucket_and_common_prefix()
+def _list_config_blobs(bucket: Optional[str] = None) -> _ConfigBlobs:
+    _, common_prefix = parse_bucket_uri(bucket) if bucket else _get_bucket_and_common_prefix()
 
     core: Optional[storage.Blob] = None
     controller_addr: Optional[storage.Blob] = None
     rest: Dict[str, List[storage.Blob]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": [], "login_group": []}
 
-    is_controller = instance_role() == "controller"
+    is_controller = bucket is None and instance_role() == "controller"
 
-    for blob in blob_list(prefix=""):
+    for blob in blob_list(prefix="",bucket=bucket):
         if blob.name == f"{common_prefix}/config.yaml":
             core = blob
         if blob.name == f"{common_prefix}/controller_addr.yaml" and not is_controller:
@@ -849,10 +868,10 @@ def _list_config_files() -> _ConfigFiles:
     
     return _ConfigFiles(core=core, controller_addr=None, **rest)
 
-def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
+def _fetch_config(old_hash: Optional[str], bucket: Optional[str] = None) -> Optional[Tuple[NSDict, str]]:
     """Fetch config from bucket, returns None if no changes are detected."""
-    blobs = _list_config_blobs()
-    if old_hash == blobs.hash:
+    blobs = _list_config_blobs(bucket=bucket)
+    if Path(CONFIG_FILE).exists() and old_hash == blobs.hash:
         return None
 
     def _download(bs) -> List[Any]:
@@ -962,12 +981,12 @@ def _assemble_config(
 
     return _fill_cfg_defaults(cfg)
 
-def fetch_config() -> Tuple[bool, NSDict]:
+def fetch_config(bucket: Optional[str] = None) -> Tuple[bool, NSDict]:
     """
     Fetches config from bucket and saves it locally
     Returns True if new (updated) config was fetched
     """
-    hash_file = Path("/slurm/scripts/.config.hash")
+    hash_file = Path(CONFIG_FILE).with_name(".config.hash")
     old_hash = hash_file.read_text() if hash_file.exists() else None
     
     if should_mount_slurm_bucket() and instance_role() != "controller":
@@ -976,7 +995,7 @@ def fetch_config() -> Tuple[bool, NSDict]:
         chown_slurm(CONFIG_FILE)
         return False, cfg
     
-    cfg_and_hash = _fetch_config(old_hash=old_hash)
+    cfg_and_hash = _fetch_config(old_hash=old_hash,bucket=bucket)
     
     if not cfg_and_hash:
         return False, _load_config()
@@ -1019,13 +1038,14 @@ def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
         help="Enable detailed api request output",
     )
     args = parser.parse_args()
+    lookup().hybrid_setup = getattr(args, 'hybrid', False)
     loglevel = args.loglevel
     if lookup().cfg.enable_debug_logging:
         loglevel = logging.DEBUG
     if args.trace_api:
         lookup().cfg.extra_logging_flags["trace_api"] = True
     # Configure root logger
-    logging.config.dictConfig({
+    log_config:dict = {
         "version": 1,
         "disable_existing_loggers": True,
         "formatters": {
@@ -1042,19 +1062,25 @@ def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
                 "formatter": "standard",
                 "class": "logging.StreamHandler",
                 "stream": sys.stdout,
-            },
-            "file_handler": {
-                "()": owned_file_handler,
-                "level": logging.DEBUG,
-                "formatter": "stamp",
-                "filename": get_log_path(),
-            },
+            }
         },
         "root": {
-            "handlers": ["stdout_handler", "file_handler"],
+            "handlers": ["stdout_handler"],
             "level": loglevel,
         },
-    })
+    }
+
+    if not lookup().is_hybrid_setup: #Regular install
+        log_config["handlers"]["file_handler"] = {
+            "()":  owned_file_handler,
+            "level": logging.DEBUG,
+            "formatter": "stamp",
+            "filename": get_log_path(),
+        }
+        log_config["root"]["handlers"].append("file_handler")
+
+    # Apply logging configuration
+    logging.config.dictConfig(log_config)
 
     sys.excepthook = _handle_exception
 
@@ -1150,6 +1176,9 @@ def log_subprocess(subj: subprocess.CalledProcessError | subprocess.TimeoutExpir
 
 
 def chown_slurm(path: Path, mode=None) -> None:
+    if lookup().is_hybrid_setup:
+        #In hybrid setup we do not want to chown to slurm as the host might not have slurm user
+        return
     if path.exists():
         if mode:
             path.chmod(mode)
@@ -1329,6 +1358,10 @@ def backoff_delay(start, timeout=None, ratio=None, count: int = 0):
 
 
 ROOT_URL = "http://metadata.google.internal/computeMetadata/v1"
+METADATA_TIMEOUT = 2
+# Set once the metadata server turns out to be unreachable, so a host without
+# one, an on-prem controller, does not wait for the same failure on every key.
+_metadata_unreachable = False
 
 class MetadataNotFoundError(Exception):
     pass
@@ -1337,11 +1370,22 @@ def get_metadata(path:str, silent=False) -> str:
     """Get metadata relative to metadata/computeMetadata/v1"""
     HEADERS = {"Metadata-Flavor": "Google"}
     url = f"{ROOT_URL}/{path}"
+    global _metadata_unreachable
+    if _metadata_unreachable:
+        raise MetadataNotFoundError(f"no metadata server, not fetching {url}")
     try:
-        resp = requests_lib.get(url, headers=HEADERS)
+        resp = requests_lib.get(url, headers=HEADERS, timeout=METADATA_TIMEOUT)
         resp.raise_for_status()
         return resp.text
-    except requests_lib.exceptions.HTTPError:
+    except requests_lib.exceptions.ConnectionError:
+        # Nothing listening at all, an on-prem controller, so stop asking it for
+        # anything else. A timeout does not qualify, there the server is up and
+        # just slow, and poisoning the process would break a cloud node.
+        _metadata_unreachable = True
+        if not silent:
+            log.warning(f"metadata server unreachable ({url})")
+        raise MetadataNotFoundError(f"failed to get_metadata from {url}")
+    except (requests_lib.exceptions.Timeout, requests_lib.exceptions.HTTPError):
         if not silent:
             log.warning(f"metadata not found ({url})")
         raise MetadataNotFoundError(f"failed to get_metadata from {url}")
@@ -1349,6 +1393,8 @@ def get_metadata(path:str, silent=False) -> str:
 
 @lru_cache(maxsize=None)
 def instance_metadata(path: str, silent:bool=False) -> str:
+    if lookup().is_hybrid_setup:
+        return ""
     return get_metadata(f"instance/{path}", silent=silent)
 
 def instance_role():
@@ -1705,6 +1751,7 @@ class Lookup:
 
     def __init__(self, cfg):
         self._cfg = cfg
+        self.hybrid_setup = False
 
     @property
     def cfg(self):
@@ -1760,6 +1807,10 @@ class Lookup:
     @property
     def is_login_node(self):
         return self.instance_role_safe == "login"
+
+    @property
+    def is_hybrid_setup(self):
+        return self.hybrid_setup
 
     @cached_property
     def compute(self):
@@ -1934,8 +1985,7 @@ class Lookup:
         nodeset_name = self.node_nodeset_name(node_name)
         idx = self.node_index(node_name)
         slice_size = self.nodeset_slice_size(nodeset_name)
-        mig_idx = idx // slice_size
-        return self.mig_name(nodeset_name, index=mig_idx)
+        return self.mig_name(nodeset_name, index=idx // slice_size)
 
     def node_is_fr(self, node_name:str) -> bool:
         return bool(self.node_nodeset(node_name).future_reservation)
@@ -2323,20 +2373,15 @@ class Lookup:
             next(iter(per_zone.values())) # pick the first/any zone
         )
 
-    def template_machine_conf(self, template_link):
-        template = self.template_info(template_link)
-        machine = template.machine_type
-
+    def _machine_conf(self, machine: MachineType, threads_per_core: int, visible_cores) -> NSDict:
         machine_conf = NSDict()
         machine_conf.boards = 1  # No information, assume 1
         machine_conf.sockets = machine.sockets
         # the value below for SocketsPerBoard must be type int
         machine_conf.sockets_per_board = machine_conf.sockets // machine_conf.boards
-        threads_per_core = getThreadsPerCore(template)
         machine_conf.threads_per_core = threads_per_core
         _div = 2 if threads_per_core == 1 else 1
         # Check if visibleCoreCount is specified in the instance template
-        visible_cores = template.advancedMachineFeatures.visibleCoreCount
         if visible_cores:
             machine_conf.cpus = int(visible_cores) * threads_per_core
         else:
@@ -2352,6 +2397,76 @@ class Lookup:
         gb = machine.memory_mb // 1024
         machine_conf.memory = machine.memory_mb - (400 + (30 * gb))
         return machine_conf
+
+    def template_machine_conf(self, template_link):
+        template = self.template_info(template_link)
+        amf = template.get("advancedMachineFeatures")
+        return self._machine_conf(
+            template.machine_type,
+            getThreadsPerCore(template),
+            amf.get("visibleCoreCount") if amf else None,
+        )
+
+    def nodeset_machine_conf(self, nodeset) -> NSDict:
+        """Return machine_conf floored to the smallest shape across instance_flexibility_policy."""
+        base = self.template_machine_conf(nodeset.instance_template)
+
+        policy = nodeset.get("instance_flexibility_policy") if isinstance(nodeset, dict) else getattr(nodeset, "instance_flexibility_policy", None)
+        selections = (policy.get("instance_selections") if isinstance(policy, dict) else getattr(policy, "instance_selections", None)) if policy else None
+        if not selections:
+            return NSDict(base) if isinstance(base, dict) else copy.copy(base)
+
+        template = self.template_info(nodeset.instance_template)
+        amf = template.get("advancedMachineFeatures")
+        amf_tpc = amf.get("threadsPerCore") if amf else None
+        visible_cores = amf.get("visibleCoreCount") if amf else None
+
+        sel_iter = selections.values() if isinstance(selections, dict) else selections
+        confs = [base]
+        for name in sorted({mt for sel in sel_iter for mt in ((sel.get("machine_types") if isinstance(sel, dict) else getattr(sel, "machine_types", None)) or [])}):
+            try:
+                mt = self.machine_type(name)
+                mt_tpc = 1 if not mt.supports_smt else (int(amf_tpc) if amf_tpc else 2)
+                mt_phys_cores = max(1, mt.guest_cpus // 2) if mt.supports_smt else mt.guest_cpus
+                mt_visible_cores = min(int(visible_cores), mt_phys_cores) if visible_cores else None
+                confs.append(
+                    self._machine_conf(
+                        mt,
+                        mt_tpc,
+                        mt_visible_cores,
+                    )
+                )
+            except Exception as e:
+                raise RuntimeError(
+                    f"Cannot size nodeset {nodeset.nodeset_name}: failed to resolve fallback machine type {name}; "
+                    "emitting the primary shape would DRAIN smaller fallback VMs"
+                ) from e
+
+        min_cpu_conf = min(
+            confs,
+            key=lambda c: (
+                c.cpus,
+                c.boards * c.sockets_per_board * c.cores_per_socket,
+                c.sockets,
+                c.threads_per_core,
+            ),
+        )
+        smallest = NSDict(min_cpu_conf) if isinstance(min_cpu_conf, dict) else copy.copy(min_cpu_conf)
+        min_sockets = min(c.sockets for c in confs)
+        min_total_cores = min(c.boards * c.sockets_per_board * c.cores_per_socket for c in confs)
+        min_tpc = min(c.threads_per_core for c in confs)
+        if (
+            smallest.sockets > min_sockets
+            or (smallest.boards * smallest.sockets_per_board * smallest.cores_per_socket) > min_total_cores
+            or smallest.threads_per_core > min_tpc
+        ):
+            smallest.sockets = min_sockets
+            smallest.sockets_per_board = max(1, min_sockets // smallest.boards)
+            smallest.cores_per_socket = max(1, min_total_cores // (smallest.boards * smallest.sockets_per_board))
+            smallest.threads_per_core = min_tpc
+            smallest.cpus = smallest.boards * smallest.sockets_per_board * smallest.cores_per_socket * smallest.threads_per_core
+        smallest.memory = min(c.memory for c in confs)
+        return smallest
 
     @lru_cache(maxsize=None)
     def template_info(self, template_link):
@@ -2436,6 +2551,12 @@ class Lookup:
     @cached_property
     def slurm_version(self) -> str:
         """Get slurm version from slurmctld -V"""
+        # A hybrid deployment host has no slurmctld to interrogate, so the
+        # on-prem version has to be declared in hybrid_conf instead.
+        hybrid_conf = self.cfg.get("hybrid_conf")
+        if hybrid_conf and hybrid_conf.get("slurm_version"):
+            return hybrid_conf.get("slurm_version")
+
         try:
             slurmctld_path = slurmdirs.prefix / "sbin" / "slurmctld"
             result = run(f"{slurmctld_path} -V")
@@ -2770,10 +2891,19 @@ def wait_slurmctld_up(lkp: Lookup, timeout: float = 60) -> None:
     raise TimeoutError(f"slurmctld ({target_role}) is not fully up after {timeout} seconds")
 
 
-def scontrol_reconfigure(lkp: Lookup) -> None:
-    log.info("Running systemctl restart slurmctld.service")
-    run("sudo systemctl restart slurmctld.service", timeout=30)
-    wait_slurmctld_up(lkp)
+def scontrol_reconfigure(lkp: Lookup, restart: bool = True) -> None:
+    """Make Slurm pick up regenerated configuration.
+
+    Args:
+        restart: also restart slurmctld. Needed when slurm.conf/cloud.conf
+            content changed. A topology-only change is picked up by `scontrol
+            reconfigure` alone, and restarting for it makes slurmctld falsely
+            flag nodes that register during the restart as not responding.
+    """
+    if restart:
+        log.info("Running systemctl restart slurmctld.service")
+        run("sudo systemctl restart slurmctld.service", timeout=30)
+        wait_slurmctld_up(lkp)
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure")
 

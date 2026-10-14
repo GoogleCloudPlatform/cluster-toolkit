@@ -93,6 +93,7 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup,
       zones=[
          dict(zone=f"zones/{z}") for z in nodeset.zone_policy_allow
       ],
+      # Regional MIG resize requests (Flex-start) require ANY_SINGLE_ZONE.
       targetShape="ANY_SINGLE_ZONE" ),
     updatePolicy = dict(instanceRedistributionType = "NONE" ),
     instanceLifecyclePolicy=dict(defaultActionOnFailure= "DO_NOTHING" ), # TODO(FLEX): Not supported yet, migrate once supported
