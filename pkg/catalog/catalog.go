@@ -54,9 +54,10 @@ var autoInjectedGlobals = map[string]bool{
 // genericOutputNames are output names that are too generic for blind
 // name-based output-to-input matching unless backed by an observed blueprint use edge.
 var genericOutputNames = map[string]bool{
-	"id":        true,
-	"name":      true,
-	"self_link": true,
+	"id":            true,
+	"instance_name": true,
+	"name":          true,
+	"self_link":     true,
 }
 
 // integrationInputNames are optional module inputs that commonly wire modules
@@ -72,7 +73,6 @@ var integrationInputNames = map[string]bool{
 	"startup_script":            true,
 	"compute_startup_script":    true,
 	"controller_startup_script": true,
-	"instance_A":                false,
 }
 
 // Catalog is the top-level structure serialized to references/catalog.yaml.
@@ -278,18 +278,23 @@ func normalizeModuleSource(src string) string {
 	return strings.TrimPrefix(strings.TrimSpace(src), "./")
 }
 
+var schedulerMatchers = []struct {
+	substr    string
+	scheduler string
+}{
+	{"slurm", "slurm"},
+	{"slinky", "slurm-on-gke (slinky)"},
+	{"gke-cluster", "gke"},
+	{"batch", "batch"},
+	{"htcondor", "htcondor"},
+}
+
 func inferScheduler(modules []ModuleSummary) string {
-	for _, m := range modules {
-		s := m.Source
-		switch {
-		case strings.Contains(s, "slurm") || strings.Contains(s, "slinky"):
-			return "slurm"
-		case strings.Contains(s, "gke-cluster") || strings.Contains(s, "pre-existing-gke-cluster"):
-			return "gke"
-		case strings.Contains(s, "batch-"):
-			return "batch"
-		case strings.Contains(s, "htcondor"):
-			return "htcondor"
+	for _, rule := range schedulerMatchers {
+		for _, m := range modules {
+			if strings.Contains(m.Source, rule.substr) {
+				return rule.scheduler
+			}
 		}
 	}
 	return "none"
@@ -428,9 +433,10 @@ func ctyMappingToPlain(v cty.Value) map[string]interface{} {
 }
 
 var (
-	headingRegex  = regexp.MustCompile(`^###\s+\[([^\]]+)\]`)
-	mdLinkRegex   = regexp.MustCompile(`\[([^\]]+)\]\([^\)]+\)|\[([^\]]+)\]\[[^\]]*\]|\[([^\]]+)\]`)
-	spaceRunRegex = regexp.MustCompile(`\s+`)
+	headingRegex    = regexp.MustCompile(`^###\s+\[([^\]]+)\]`)
+	mdLinkRegex     = regexp.MustCompile(`\[([^\]]+)\]\([^\)]+\)|\[([^\]]+)\]\[[^\]]*\]|\[([^\]]+)\]`)
+	linkRefDefRegex = regexp.MustCompile(`^\[[^\]]+\]:\s*`)
+	spaceRunRegex   = regexp.MustCompile(`\s+`)
 )
 
 func parseReadmeDescriptions(readmePath string) map[string]string {
@@ -474,14 +480,14 @@ func parseReadmeDescriptions(readmePath string) map[string]string {
 }
 
 func shouldStopParagraph(trimmed string, hasLines bool) bool {
-	if strings.HasPrefix(trimmed, "#") {
+	if strings.HasPrefix(trimmed, "### ") || (hasLines && strings.HasPrefix(trimmed, "#")) {
 		return true
 	}
 	return trimmed == "" && hasLines
 }
 
 func isParagraphLine(trimmed string) bool {
-	if trimmed == "" || strings.HasPrefix(trimmed, "[") || strings.HasPrefix(trimmed, "!") {
+	if trimmed == "" || strings.HasPrefix(trimmed, "#") || linkRefDefRegex.MatchString(trimmed) || strings.HasPrefix(trimmed, "!") {
 		return false
 	}
 	return !strings.HasPrefix(trimmed, "<!--") && !strings.HasPrefix(trimmed, ">") && !strings.HasPrefix(trimmed, "```")
@@ -520,8 +526,10 @@ func lookupDescription(repoRoot, absPath, relPath string, readmeDescs map[string
 			return d
 		}
 	}
-	if d := extractFirstParagraphFromMarkdown(filepath.Join(filepath.Dir(absPath), "README.md")); d != "" {
-		return d
+	if parentDir != "examples" {
+		if d := extractFirstParagraphFromMarkdown(filepath.Join(filepath.Dir(absPath), "README.md")); d != "" {
+			return d
+		}
 	}
 	if d := extractBlueprintHeaderComment(absPath); d != "" {
 		return d
@@ -555,11 +563,14 @@ func extractBlueprintHeaderComment(yamlPath string) string {
 	var comments []string
 	for _, line := range strings.Split(string(data), "\n") {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "---" || (trimmed != "" && !strings.HasPrefix(trimmed, "#")) {
+		if trimmed == "" || trimmed == "---" {
 			if len(comments) > 0 {
 				break
 			}
 			continue
+		}
+		if !strings.HasPrefix(trimmed, "#") {
+			break
 		}
 		c := strings.TrimSpace(strings.TrimPrefix(trimmed, "#"))
 		if !isLicenseCommentLine(c) && c != "" {
@@ -571,7 +582,7 @@ func extractBlueprintHeaderComment(yamlPath string) string {
 
 func isLicenseCommentLine(c string) bool {
 	lower := strings.ToLower(c)
-	for _, kw := range []string{"copyright", "licensed under", "apache license", "http://www.apache.org", "https://www.apache.org", "unless required", "distributed under", "without warranties", "see the license", "limitations under"} {
+	for _, kw := range []string{"copyright", "licensed under", "you may not use", "you may obtain a copy", "apache license", "http://www.apache.org", "https://www.apache.org", "unless required", "distributed under", "without warranties", "see the license", "limitations under"} {
 		if strings.Contains(lower, kw) {
 			return true
 		}
@@ -682,21 +693,30 @@ func detectModuleKind(modAbs string) string {
 
 func buildParsedModule(source string, info modulereader.ModuleInfo) parsedModule {
 	allInputs := make(map[string]bool, len(info.Inputs))
+	injectedID := info.Metadata.Ghpc.InjectModuleId
 	var reqInputs []string
 	for _, in := range info.Inputs {
 		allInputs[in.Name] = true
-		if in.Required && !autoInjectedGlobals[in.Name] {
+		if in.Required && !autoInjectedGlobals[in.Name] && in.Name != injectedID {
 			reqInputs = append(reqInputs, in.Name)
 		}
 	}
 	sort.Strings(reqInputs)
 
-	// Echo variable suppression: only treat an output as a root provider output
-	// if the module does not also declare an input with the exact same name.
+	// Echo variable suppression: exclude outputs that share a name with an input
+	// on the same module, unless the module is a root provider (no required inputs)
+	// whose only outputs also accept optional name-override inputs.
 	trueOutputs := make(map[string]bool, len(info.Outputs))
 	for _, out := range info.Outputs {
 		if !allInputs[out.Name] && !genericOutputNames[out.Name] {
 			trueOutputs[out.Name] = true
+		}
+	}
+	if len(trueOutputs) == 0 && len(reqInputs) == 0 {
+		for _, out := range info.Outputs {
+			if !genericOutputNames[out.Name] {
+				trueOutputs[out.Name] = true
+			}
 		}
 	}
 	return parsedModule{

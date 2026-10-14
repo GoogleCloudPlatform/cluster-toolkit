@@ -76,6 +76,23 @@ func TestScanBlueprintsAndPairing(t *testing.T) {
 	if gkeA4.Scheduler != "gke" {
 		t.Errorf("expected gke-a4 scheduler=gke, got %q", gkeA4.Scheduler)
 	}
+
+	slinky, ok := byPath["community/examples/hpc-slinky/hpc-slinky.yaml"]
+	if !ok || slinky.Scheduler != "slurm-on-gke (slinky)" {
+		t.Errorf("expected hpc-slinky scheduler=slurm-on-gke (slinky), got %+v", slinky)
+	}
+	batchBP, ok := byPath["community/examples/fsi-montecarlo-on-batch.yaml"]
+	if !ok || batchBP.Scheduler != "batch" || !strings.Contains(batchBP.Description, "Value at Risk") {
+		t.Errorf("expected fsi-montecarlo-on-batch scheduler=batch and Value at Risk description, got %+v", batchBP)
+	}
+	af3, ok := byPath["examples/science/af3-slurm/af3-slurm.yaml"]
+	if !ok || !strings.Contains(af3.Description, "AlphaFold 3") {
+		t.Errorf("expected af3-slurm description to preserve inline link text 'AlphaFold 3', got %q", af3.Description)
+	}
+	a3mImg, ok := byPath["examples/machine-learning/build-service-images/a3m/blueprint.yaml"]
+	if !ok || strings.Contains(strings.ToLower(a3mImg.Description), "you may not use") {
+		t.Errorf("expected license text to be stripped from description, got %q", a3mImg.Description)
+	}
 }
 
 func TestScanModuleWiringAndEchoSuppression(t *testing.T) {
@@ -115,10 +132,24 @@ func TestScanModuleWiringAndEchoSuppression(t *testing.T) {
 	if slices.Contains(pvc.RecommendedUse, "modules/compute/gke-node-pool") {
 		t.Errorf("echo output cluster_id on gke-node-pool must be suppressed from gke-persistent-volume recommended_use: %v", pvc.RecommendedUse)
 	}
-	// 2. spanner echoes instance_name; it must not recommend itself.
+	// 2. spanner echoes instance_name; it must not recommend itself or chrome-remote-desktop.
 	spanner := wiring["modules/database/spanner"]
-	if slices.Contains(spanner.RecommendedUse, "modules/database/spanner") {
-		t.Errorf("spanner must not recommend itself via echo variable instance_name: %v", spanner.RecommendedUse)
+	if slices.Contains(spanner.RecommendedUse, "modules/database/spanner") || slices.Contains(spanner.RecommendedUse, "community/modules/remote-desktop/chrome-remote-desktop") {
+		t.Errorf("spanner must not recommend itself or chrome-remote-desktop via instance_name: %v", spanner.RecommendedUse)
+	}
+	// 3. Auto-injected module IDs (inject_module_id) must be excluded from required_inputs.
+	np := wiring["modules/compute/gke-node-pool"]
+	if slices.Contains(np.RequiredInputs, "internal_ghpc_module_id") {
+		t.Errorf("internal_ghpc_module_id must be excluded from gke-node-pool required_inputs: %v", np.RequiredInputs)
+	}
+	gcloudMod := wiring["community/modules/gcloud/gcloud"]
+	if slices.Contains(gcloudMod.RequiredInputs, "module_instance_id") {
+		t.Errorf("module_instance_id must be excluded from gcloud required_inputs: %v", gcloudMod.RequiredInputs)
+	}
+	// 4. bigquery-table must recommend bigquery-dataset.
+	bqTable := wiring["community/modules/database/bigquery-table"]
+	if !slices.Contains(bqTable.RecommendedUse, "community/modules/database/bigquery-dataset") {
+		t.Errorf("expected bigquery-dataset in bigquery-table recommended_use, got %v", bqTable.RecommendedUse)
 	}
 }
 
