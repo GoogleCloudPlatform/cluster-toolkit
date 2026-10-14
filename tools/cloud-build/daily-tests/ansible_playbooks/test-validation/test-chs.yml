@@ -19,6 +19,7 @@
   vars:
     ansible_async_dir: "/tmp/.ansible_async_user"
     ansible_async_dir_root: "/tmp/.ansible_async_root"
+    chs_bucket: "chs-results"
   block:
   - name: Ensure async directories exist
     block:
@@ -97,7 +98,7 @@
     - name: Configure bucket for CHS
       ansible.builtin.shell: |
         set -e -u
-        chs configure storage gcs chs-results
+        chs configure storage gcs {{ chs_bucket }}
       async: 120
       poll: 10
       changed_when: false
@@ -122,6 +123,44 @@
       loop: "{{ chs_runs.results }}"
       loop_control:
         label: "{{ item.item }}"
+
+    # `chs run` exits 0 even when health checks fail; the verdict lives in the
+    # Bill of Health (BoH) that CHS uploads to
+    # gs://<bucket>/bills_of_health/<timestamp>_<run_id>.json (report_id).
+    - name: Extract CHS run IDs
+      ansible.builtin.set_fact:
+        chs_run_ids: "{{ chs_runs.results | map(attribute='stdout') | map('regex_search', 'Run ID:\\s+(\\S+)', '\\1') | select | map('first') | list }}"
+
+    - name: Assert a run ID was found for every CHS suite
+      ansible.builtin.assert:
+        that: chs_run_ids | length == chs_runs.results | length
+        fail_msg: "Could not determine CHS run IDs from `chs run` output: {{ chs_run_ids }}"
+
+    - name: Download CHS Bills of Health by report ID
+      ansible.builtin.shell: |
+        set -e -u
+        gcloud storage cp "gs://{{ chs_bucket }}/bills_of_health/*_{{ item }}.json" "{{ chs_temp_dir.path }}/boh_{{ item }}.json"
+      loop: "{{ chs_run_ids }}"
+      changed_when: false
+
+    - name: Validate CHS Bills of Health
+      ansible.builtin.script: "{{ playbook_dir }}/../validate_chs_boh.py --bucket {{ chs_bucket }} {{ chs_temp_dir.path }}/boh_{{ item }}.json"
+      loop: "{{ chs_run_ids }}"
+      register: chs_boh_validation
+      failed_when: false
+      changed_when: false
+
+    - name: CHS Bill of Health summary
+      ansible.builtin.debug:
+        msg: "{{ item.stdout }}"
+      loop: "{{ chs_boh_validation.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Fail on CHS Bill of Health non-success results
+      ansible.builtin.fail:
+        msg: "CHS reported non-success results for run(s): {{ chs_boh_validation.results | rejectattr('rc', 'equalto', 0) | map(attribute='item') | list }}"
+      when: chs_boh_validation.results | rejectattr('rc', 'equalto', 0) | list | length > 0
 
   rescue:
   - name: CHS Test Failure
