@@ -113,19 +113,18 @@ grep -n "managed-lustre" skills/cluster-blueprint-assistant/references/catalog.y
 
 Each `blueprints[]` entry gives you: `path`, optional `deployment_path`,
 `scheduler`, `description`, `machine_types`, the default `vars`, and the
-`modules` list with `id`, `source` and `use`. Prefer blueprints under
-`examples/` over `community/examples/` when both match.
-
-> The catalog is currently a starter covering `examples/hpc-slurm.yaml` and
-> `examples/gke-a4/gke-a4.yaml`. If neither fits, browse
-> [`examples/README.md`](../../examples/README.md) for the right template and
-> still follow the rules below.
+`modules` list with `id`, `source`, `use`, and configured `settings` keys.
+Prefer blueprints under `examples/` over `community/examples/` when both match.
 
 ### 2. Customize via deployment.yaml
 
 Create the deployment file next to the blueprint (e.g.
 `examples/hpc-slurm-deployment.yaml`, matching the `gke-a4/*-deployment.yaml`
-convention) or in the repo root. It is user-specific — do not commit it.
+convention) or in the repo root. If the catalog entry already has a tracked
+`deployment_path` (such as `examples/gke-a4/gke-a4-deployment.yaml`), copy that
+file to a new user deployment file in the **same directory** (so relative
+`$(ghpc_stage("./..."))` paths still resolve) rather than editing the tracked
+template in place. It is user-specific — do not commit it.
 
 Only override keys that already exist in the blueprint's `vars:` (see the
 catalog entry). Variable syntax is Cluster Toolkit's `$(vars.name)`, not
