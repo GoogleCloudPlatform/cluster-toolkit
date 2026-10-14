@@ -30,7 +30,10 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	k8syaml "sigs.k8s.io/yaml"
 )
 
@@ -1773,7 +1776,6 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		"restartStrategy: BlockingRecreate",
 		"privileged: true",
 		"alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool",
-		`cpu: "24"`,
 		`cpu: "2"`,
 		`memory: "8Gi"`,
 		`kill -TERM -- \"-$child\"`,
@@ -1795,6 +1797,97 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		if !strings.Contains(manifest, substr) {
 			t.Errorf("manifest missing expected substring %q", substr)
 		}
+	}
+}
+
+func TestGeneratePathwaysManifest_HeadContainerResources(t *testing.T) {
+	type wantResources struct {
+		limits   corev1.ResourceList
+		requests corev1.ResourceList
+	}
+
+	tests := []struct {
+		name           string
+		headless       bool
+		wantContainers map[string]wantResources
+	}{
+		{
+			name:     "default with workload-container",
+			headless: false,
+			wantContainers: map[string]wantResources{
+				"pathways-proxy": {
+					limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("16"),
+						corev1.ResourceMemory: resource.MustParse("100Gi"),
+					},
+				},
+				"pathways-rm": {
+					limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("8"),
+						corev1.ResourceMemory: resource.MustParse("32Gi"),
+					},
+				},
+				"workload-container": {
+					limits: nil,
+					requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("2"),
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
+					},
+				},
+			},
+		},
+		{
+			name:     "headless",
+			headless: true,
+			wantContainers: map[string]wantResources{
+				"pathways-proxy": {
+					limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("16"),
+						corev1.ResourceMemory: resource.MustParse("100Gi"),
+					},
+				},
+				"pathways-rm": {
+					limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("8"),
+						corev1.ResourceMemory: resource.MustParse("32Gi"),
+					},
+				},
+			},
+		},
+	}
+
+	quantityOpt := cmp.Comparer(func(x, y resource.Quantity) bool {
+		return x.Cmp(y) == 0
+	})
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := renderPathwaysShmTestManifest(t, tc.headless, "", nil)
+			specs := pathwaysPodSpecs(t, manifest)
+			head, ok := specs["pathways-head"]
+			if !ok {
+				t.Fatalf("pathways-head replicatedJob not found in manifest:\n%s", manifest)
+			}
+
+			containers := podContainers(head)
+			if len(containers) != len(tc.wantContainers) {
+				t.Fatalf("pathways-head container count = %d, want %d", len(containers), len(tc.wantContainers))
+			}
+
+			for _, c := range containers {
+				want, ok := tc.wantContainers[c.Name]
+				if !ok {
+					t.Errorf("unexpected container %q in pathways-head", c.Name)
+					continue
+				}
+				if diff := cmp.Diff(want.limits, c.Resources.Limits, quantityOpt, cmpopts.EquateEmpty()); diff != "" {
+					t.Errorf("container %q limits mismatch (-want +got):\n%s", c.Name, diff)
+				}
+				if diff := cmp.Diff(want.requests, c.Resources.Requests, quantityOpt, cmpopts.EquateEmpty()); diff != "" {
+					t.Errorf("container %q requests mismatch (-want +got):\n%s", c.Name, diff)
+				}
+			}
+		})
 	}
 }
 
