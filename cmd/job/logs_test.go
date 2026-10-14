@@ -26,14 +26,17 @@ import (
 type mockLogsExecutor struct{}
 
 func (m *mockLogsExecutor) ExecuteCommand(name string, args ...string) shell.CommandResult {
-	if name == "gcloud" && len(args) >= 3 && args[0] == "container" && args[1] == "clusters" && args[2] == "describe" {
+	cmdLine := strings.Join(args, " ")
+	if name == "gcloud" && strings.HasPrefix(cmdLine, "container clusters describe") {
 		return shell.CommandResult{ExitCode: 0, Stdout: "{}"}
 	}
-	if name == "kubectl" && len(args) > 2 && args[0] == "--context" {
-		args = args[2:]
-	}
-	if name == "kubectl" && len(args) > 0 && args[0] == "logs" {
-		return shell.CommandResult{ExitCode: 0, Stdout: "mock logs output"}
+	if name == "kubectl" {
+		if strings.Contains(cmdLine, "get pods") {
+			return shell.CommandResult{ExitCode: 0, Stdout: "main\n"}
+		}
+		if strings.Contains(cmdLine, "logs") {
+			return shell.CommandResult{ExitCode: 0, Stdout: "mock logs output"}
+		}
 	}
 	return shell.CommandResult{ExitCode: 0}
 }
