@@ -515,41 +515,42 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 	}
 	job.KueueQueueName = localQueue
 
-	if job.DryRunManifest == "" {
-		exists := discovered
-		if !exists && explicitQueue {
-			exists, err = g.checkLocalQueueExists(localQueue, ns)
-			if err != nil {
-				return fmt.Errorf("failed to check if LocalQueue exists: %w", err)
-			}
-		}
-		if !exists {
-			var availableQueues []string
-			if explicitQueue {
-				availableQueues = g.listLocalQueues(ns)
-			}
-			availableStr := ""
-			if len(availableQueues) > 0 {
-				availableStr = fmt.Sprintf(" Available LocalQueues in namespace '%s': %s.", ns, strings.Join(availableQueues, ", "))
-			}
-			promptMsg := fmt.Sprintf("LocalQueue '%s' does not exist in namespace '%s'.%s Do you want gcluster to create default Kueue resources (ClusterQueue and LocalQueue) with calculated cluster capacity?", localQueue, ns, availableStr)
-			if shell.PromptYesNo(promptMsg) {
-				if err := g.createDefaultQueues(localQueue, ns); err != nil {
-					return err
-				}
-			} else {
-				return fmt.Errorf("LocalQueue '%s' does not exist in namespace '%s' and user declined to create default queues.%s Please create one manually or specify an existing queue using --queue flag", localQueue, ns, availableStr)
-			}
-		}
+	if job.DryRunManifest != "" {
+		return nil
+	}
+	if err := g.ensureLocalQueueExists(localQueue, ns, discovered, explicitQueue); err != nil {
+		return err
+	}
+	if job.IsPathwaysJob {
+		return g.ensureClusterQueueCoverage(localQueue, ns)
+	}
+	return nil
+}
 
-		if job.IsPathwaysJob {
-			if err := g.ensureClusterQueueCoverage(localQueue, ns); err != nil {
-				return err
-			}
+func (g *GKEOrchestrator) ensureLocalQueueExists(localQueue, ns string, discovered, explicitQueue bool) error {
+	if discovered {
+		return nil
+	}
+	if explicitQueue {
+		exists, err := g.checkLocalQueueExists(localQueue, ns)
+		if err != nil {
+			return fmt.Errorf("failed to check if LocalQueue exists: %w", err)
+		}
+		if exists {
+			return nil
 		}
 	}
-
-	return nil
+	var availableStr string
+	if explicitQueue {
+		if availableQueues := g.listLocalQueues(ns); len(availableQueues) > 0 {
+			availableStr = fmt.Sprintf(" Available LocalQueues in namespace '%s': %s.", ns, strings.Join(availableQueues, ", "))
+		}
+	}
+	promptMsg := fmt.Sprintf("LocalQueue '%s' does not exist in namespace '%s'.%s Do you want gcluster to create default Kueue resources (ClusterQueue and LocalQueue) with calculated cluster capacity?", localQueue, ns, availableStr)
+	if !shell.PromptYesNo(promptMsg) {
+		return fmt.Errorf("LocalQueue '%s' does not exist in namespace '%s' and user declined to create default queues.%s Please create one manually or specify an existing queue using --queue flag", localQueue, ns, availableStr)
+	}
+	return g.createDefaultQueues(localQueue, ns)
 }
 
 // isForbiddenError returns true if the error indicates a 403 Forbidden RBAC permission error.

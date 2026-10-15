@@ -368,38 +368,31 @@ type kueueDeployment struct {
 	} `json:"status"`
 }
 
-func isKueueDeploymentRolledOut(dep *kueueDeployment) bool {
-	if dep == nil || dep.Spec.Paused {
-		return false
-	}
+func hasFailedDeploymentCondition(dep *kueueDeployment) bool {
 	for _, cond := range dep.Status.Conditions {
 		if cond.Type == "Progressing" && (cond.Reason == "ProgressDeadlineExceeded" || cond.Status == "False") {
-			return false
+			return true
 		}
 		if cond.Type == "Available" && cond.Status == "False" {
-			return false
+			return true
 		}
+	}
+	return false
+}
+
+func isKueueDeploymentRolledOut(dep *kueueDeployment) bool {
+	if dep == nil || dep.Spec.Paused || hasFailedDeploymentCondition(dep) {
+		return false
 	}
 	desired := int32(1)
 	if dep.Spec.Replicas != nil {
 		desired = *dep.Spec.Replicas
 	}
-	if desired <= 0 {
-		return false
-	}
-	if dep.Metadata.Generation > dep.Status.ObservedGeneration {
-		return false
-	}
-	if dep.Status.UpdatedReplicas < desired {
-		return false
-	}
-	if dep.Status.Replicas > dep.Status.UpdatedReplicas {
-		return false
-	}
-	if dep.Status.AvailableReplicas < dep.Status.UpdatedReplicas {
-		return false
-	}
-	return true
+	return desired > 0 &&
+		dep.Metadata.Generation <= dep.Status.ObservedGeneration &&
+		dep.Status.UpdatedReplicas >= desired &&
+		dep.Status.Replicas <= dep.Status.UpdatedReplicas &&
+		dep.Status.AvailableReplicas >= dep.Status.UpdatedReplicas
 }
 
 // CheckAndInstallKueue verifies if Kueue is installed on the GKE cluster, installing or updating it if required.
