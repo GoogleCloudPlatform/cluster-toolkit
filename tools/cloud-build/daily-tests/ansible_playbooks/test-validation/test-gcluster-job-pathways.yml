@@ -139,7 +139,6 @@
       | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec.template.spec.containers') | flatten
       | selectattr('name', 'equalto', 'pathways-worker') | map(attribute='env') | flatten
       | selectattr('name', 'equalto', 'TEST_WORKER_VAR') | selectattr('value', 'equalto', 'worker_val') | list | length > 0
-    fail_msg: "Environment variables failed to inject properly in dry-run output"
     # 4. Assert worker backoffLimitPerIndex and backoffLimit match --pathways-max-slice-restarts
     - >
       (dry_run_yaml.spec.replicatedJobs
