@@ -17,7 +17,6 @@ gcloud services enable \
   lustre.googleapis.com \
   servicenetworking.googleapis.com \
   storage.googleapis.com \
-  tpu.googleapis.com \
   --project=<PROJECT_ID>
 
 test -x ./gcluster || make

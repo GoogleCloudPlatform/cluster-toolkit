@@ -2,7 +2,7 @@
 
 This directory provides a Cluster Toolkit blueprint ([`a3mega-slurm-blueprint.yaml`](a3mega-slurm-blueprint.yaml)) and deployment configuration ([`a3mega-slurm-deployment.yaml`](a3mega-slurm-deployment.yaml)) for provisioning a Slurm cluster with `a3-megagpu-8g` (8x NVIDIA H100) compute nodes, GPUDirect-TCPXO multi-NIC networking (8 GPU VPCs), and a **36 TiB Google Cloud Managed Lustre** filesystem (`lustre_size_gib: 36000`) mounted at `/home`.
 
-For additional details, see [Deploy an A3 Mega Slurm cluster](https://cloud.google.com/cluster-toolkit/docs/deploy/deploy-a3-mega-cluster). Selective deployment and teardown across the 4 deployment groups (`primary`, `build_script`, `image`, and `cluster`) are documented centrally in [examples/machine-learning/README.md](../README.md).
+For additional details, see [Deploy an A3 Mega Slurm cluster](https://cloud.google.com/cluster-toolkit/docs/deploy/deploy-a3-mega-cluster). Selective deployment and teardown across the 4 deployment groups (`primary`, `build_script`, `slurm-build`, and `cluster`) are documented centrally in [examples/machine-learning/README.md](../README.md).
 
 ## Quickstart (`a3mega-slurm-blueprint.yaml`)
 
@@ -17,7 +17,7 @@ gcloud services enable \
   servicenetworking.googleapis.com \
   lustre.googleapis.com \
   storage.googleapis.com \
-  --project=<PROJECT_ID>
+  --project=<PROJECT_ID> # logging & monitoring used by Ops Agent (enable_ops_agent: true)
 ```
 
 ### 2. Build the `gcluster` Binary
@@ -60,7 +60,7 @@ vars:
 
 ### 4. Deploy (and Destroy) the Slurm Cluster
 
-Deploy all 4 deployment groups (`primary`, `build_script`, `image`, `cluster`):
+Deploy all 4 deployment groups (`primary`, `build_script`, `slurm-build`, `cluster`):
 
 ```bash
 ./gcluster deploy \

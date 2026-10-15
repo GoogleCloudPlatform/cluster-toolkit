@@ -66,13 +66,13 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 | **macOS (amd64 / arm64)** | ✅ | Native support via the Mac binary. |
 | **Windows** | ⚠️ | Pre-built bundle not provided; please [Build from source](#building-from-source) (`go build -o gcluster.exe .`). WSL2 is recommended for blueprints using shell-based `local-exec` provisioners. |
 
-1. Download and extract the latest bundle (or set `TAG=v1.103.0` to pin a specific release from [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases)):
+1. Download and extract the latest bundle from [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases):
 
     ```shell
     # Set your OS (linux or mac) and architecture (amd64 or arm64)
     OS="linux"
     ARCH="amd64"
-    # Download and extract the latest platform-specific bundle in a single step
+    # Latest release (to pin a specific version, replace "latest/download" with "download/vX.Y.Z")
     mkdir -p cluster-toolkit && curl -L https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/latest/download/gcluster_bundle_${OS}_${ARCH}.tgz | tar -xz -C cluster-toolkit && cd cluster-toolkit
     ```
 
@@ -180,8 +180,8 @@ After installing `gcluster`, you can deploy, manage, and destroy infrastructure 
 | `./gcluster create <BLUEPRINT_FILE> [-d <DEPLOYMENT_FILE>]` | Generate a self-contained Terraform/Packer deployment directory from a blueprint. |
 | `./gcluster expand <BLUEPRINT_FILE> [-d <DEPLOYMENT_FILE>]` | Expand and validate a blueprint without writing the deployment directory. |
 | `./gcluster destroy <DEPLOYMENT_DIR>` | Destroy all cloud resources in a deployment directory. |
-| `./gcluster export-outputs <DEPLOYMENT_ROOT>` | Export Terraform outputs from deployment groups for cross-group consumption. |
-| `./gcluster import-inputs <DEPLOYMENT_ROOT>` | Import output values from prior deployment groups as input `.tfvars`. |
+| `./gcluster export-outputs <DEPLOYMENT_GROUP_DIR>` | Export Terraform outputs from a deployment group for cross-group consumption. |
+| `./gcluster import-inputs <DEPLOYMENT_GROUP_DIR>` | Import output values from prior deployment groups as input `.tfvars`. |
 | `./gcluster cluster <list\|describe\|info\|volume>` | Discover, list, and inspect deployed target clusters and storage volumes. |
 | `./gcluster job <submit\|list\|logs\|cancel\|config\|inspect\|gke-template-extract>` | Submit, monitor, inspect, and manage workloads on GKE clusters. |
 | `./gcluster telemetry <on\|off>` | Enable or disable anonymous usage telemetry. |

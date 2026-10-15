@@ -24,7 +24,7 @@ metadata:
   author: GoogleCloudPlatform
   status: experimental
   domain: blueprints
-allowed-tools: Bash(make:*) Bash(./gcluster expand:*) Bash(./gcluster create:*) Bash(gcluster expand:*) Bash(gcluster create:*)
+allowed-tools: Bash(make) Bash(./gcluster expand:*) Bash(./gcluster create:*) Bash(gcluster expand:*) Bash(gcluster create:*)
 allowed_read_only_commands:
   - "make"
   - "./gcluster expand"

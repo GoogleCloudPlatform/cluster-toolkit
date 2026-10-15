@@ -28,7 +28,7 @@ Use the `--only` flag to have the command act on only the specified, comma-separ
 
 **Examples:**
 
-- Deploy only the `base` group (for `a3high-slurm-blueprint.yaml`, which has groups `base`, `build-script`, `image`, `cluster`; `a3mega-slurm-blueprint.yaml` uses `primary`, `build_script`, `image`, `cluster`):
+- Deploy only the `base` group (for `a3high-slurm-blueprint.yaml`, which has groups `base`, `build-script`, `image`, `cluster`; `a3mega-slurm-blueprint.yaml` uses `primary`, `build_script`, `slurm-build`, `cluster`):
 
 ```bash
 ./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml --only base
@@ -40,7 +40,7 @@ Use the `--only` flag to have the command act on only the specified, comma-separ
 ./gcluster destroy deployment-name --only image
 ```
 
-- Deploy only the `cluster-env` group (for `a3ultra-slurm-blueprint.yaml`, `a4high-slurm-blueprint.yaml`, `a4xhigh-slurm-blueprint.yaml`, `a4xmax-bm-slurm-blueprint.yaml`, and `tpu7x-slurm-blueprint.yaml`, which have groups `cluster-env` and `cluster`):
+- Deploy only the `cluster-env` group (for `a3ultra-slurm-blueprint.yaml`, `a4high-slurm-blueprint.yaml`, `a4xhigh-slurm-blueprint.yaml`, and `tpu7x-slurm-blueprint.yaml`, which have groups `cluster-env` and `cluster`; `a4xmax-bm-slurm-blueprint.yaml` has groups `image-env`, `image`, `cluster-env`, and `cluster`):
 
 ```bash
 ./gcluster deploy -d examples/machine-learning/a4-highgpu-8g/a4high-slurm-deployment.yaml examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml --only cluster-env

@@ -63,6 +63,7 @@ gcluster deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
 * `-w, --overwrite-deployment`: If specified, an existing deployment directory is overwritten by the new deployment.
 * `--parallelism <int>`: Limit the number of concurrent operations in Terraform (default: 10, or `GCLUSTER_TERRAFORM_PARALLELISM`).
 * `--skip <strings>`: Skip groups with the given names (comma-separated).
+* `--skip-gke-security-check`: Bypass dynamic GKE version security vulnerability check.
 * `--skip-validators <strings>`: Validators to skip (comma-separated).
 * `-l, --validation-level <string>`: Set validation level to one of (`"ERROR"`, `"WARNING"`, `"IGNORE"`) (default `"ERROR"`).
 * `--vars <strings>`: Comma-separated list of `name=value` variables to override YAML configuration. Can be used multiple times.
@@ -76,7 +77,7 @@ Refer to the [Selective Deployment and Exclusion Guide](https://github.com/Googl
 ### Usage - create
 
 ```sh
-gcluster create BLUEPRINT_FILE [FLAGS]
+gcluster create <BLUEPRINT_FILE> [flags]
 ```
 
 ### Positional arguments - create
@@ -145,22 +146,22 @@ gcluster expand BLUEPRINT_NAME [flags]
 
 ## gcluster export-outputs
 
-`gcluster export-outputs` exports Terraform output values from a deployment group for consumption by subsequent deployment groups.
+`gcluster export-outputs` exports Terraform output values from a deployment group for consumption by subsequent deployment groups (e.g., `gcluster export-outputs hpc-slurm/primary`).
 
 ### Usage - export-outputs
 
 ```bash
-gcluster export-outputs DEPLOYMENT_ROOT [GROUP_NAME] [flags]
+gcluster export-outputs DEPLOYMENT_GROUP_DIRECTORY [flags]
 ```
 
 ## gcluster import-inputs
 
-`gcluster import-inputs` imports output values exported by previous deployment groups as input `.tfvars` for subsequent deployment groups.
+`gcluster import-inputs` imports output values exported by previous deployment groups as input `.tfvars` for subsequent deployment groups (e.g., `gcluster import-inputs hpc-slurm/cluster`).
 
 ### Usage - import-inputs
 
 ```bash
-gcluster import-inputs DEPLOYMENT_ROOT [GROUP_NAME] [flags]
+gcluster import-inputs DEPLOYMENT_GROUP_DIRECTORY [flags]
 ```
 
 ## gcluster cluster
@@ -190,7 +191,7 @@ gcluster job <submit|list|logs|cancel|config|inspect|gke-template-extract> [flag
 ### Usage - telemetry
 
 ```bash
-gcluster telemetry <on|off>
+gcluster telemetry [on|off] [flags]
 ```
 
 ## gcluster completion

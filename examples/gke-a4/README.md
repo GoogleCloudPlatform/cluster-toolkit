@@ -1,6 +1,6 @@
 # GKE A4 (`a4-highgpu-8g`) Blueprint
 
-This blueprint provisions an AI-optimized Google Kubernetes Engine (GKE) cluster with `a4-highgpu-8g` (8x NVIDIA B200) GPU nodes, multi-NIC RoCE GPUDirect RDMA networking (`gpu-rdma-vpc`), Kueue + JobSet workload management, NCCL gIB installer, and Cloud Storage FUSE / Managed Lustre CSI support.
+This blueprint provisions an AI-optimized Google Kubernetes Engine (GKE) cluster with `a4-highgpu-8g` (8x NVIDIA B200) GPU nodes, multi-NIC RoCE GPUDirect RDMA networking (`enable_dranet: true`), Kueue + JobSet workload management, NCCL gIB installer, and Cloud Storage FUSE / Managed Lustre CSI support.
 
 ## Quickstart (Deploy with `gcluster`)
 

@@ -57,7 +57,7 @@ gcloud services enable \
   servicenetworking.googleapis.com \
   lustre.googleapis.com \
   storage.googleapis.com \
-  --project=<PROJECT_ID>
+  --project=<PROJECT_ID> # logging & monitoring used by Ops Agent (enable_ops_agent: true)
 
 test -x ./gcluster || make
 ```
@@ -78,7 +78,7 @@ test -x ./gcluster || make
 
 ### Managed Lustre Capacity
 
-This blueprint provisions a **36 TiB Google Cloud Managed Lustre** instance (`lustre_size_gib: 36000`, `per_unit_storage_throughput: 1000`) mounted at `/home` across the cluster. See [Managed Lustre supported locations](https://cloud.google.com/managed-lustre/docs/locations) and [performance tiers](https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers) for details.
+This blueprint provisions an **18,000 GiB (~17.6 TiB) Google Cloud Managed Lustre** instance (`lustre_size_gib: 18000`, `per_unit_storage_throughput: 500`) mounted at `/home` across the cluster. See [Managed Lustre supported locations](https://cloud.google.com/managed-lustre/docs/locations) and [performance tiers](https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers) for details.
 
 ### Create/modify the deployment file with your preferred configuration
 
@@ -123,7 +123,7 @@ vars:
 
 **Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
 
-Selective deployment and teardown for this blueprint (`cluster-env` and `cluster` groups) are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
+Selective deployment and teardown for this blueprint (`image-env`, `image`, `cluster-env`, and `cluster` groups) are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
 
 Example (deploy only the `cluster-env` group for this blueprint):
 

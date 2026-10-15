@@ -17,7 +17,7 @@ gcloud services enable \
   servicenetworking.googleapis.com \
   lustre.googleapis.com \
   storage.googleapis.com \
-  --project=<PROJECT_ID>
+  --project=<PROJECT_ID> # logging & monitoring used by Ops Agent (enable_ops_agent: true)
 ```
 
 ### 2. Build the `gcluster` Binary
@@ -107,7 +107,7 @@ gcloud storage buckets update gs://${TF_STATE_BUCKET_NAME} --versioning
 
 ### Obtain Filestore Zonal Capacity (Standalone VM Blueprint Only)
 
-The standalone VM blueprint (`a4high-vm.yaml`) uses a Filestore Zonal instance (`10 TiB` / `10240 GiB` default), which may require a quota increase request. See [Requesting Filestore quota increases](https://cloud.google.com/filestore/docs/requesting-quota-increases) for more information. *(Note: The Slurm blueprint above uses 36 TiB Managed Lustre instead of Filestore).*
+The standalone VM blueprint (`a4high-vm.yaml`) uses a Filestore Zonal instance (`10 TiB` / `10240 GiB` default, requiring `gcloud services enable file.googleapis.com --project=<PROJECT_ID>`), which may require a quota increase request. See [Requesting Filestore quota increases](https://cloud.google.com/filestore/docs/requesting-quota-increases) for more information. *(Note: The Slurm blueprint above uses 36 TiB Managed Lustre instead of Filestore).*
 
 ### Create/modify the deployment file with your preferred configuration
 
