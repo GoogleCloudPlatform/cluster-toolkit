@@ -17,6 +17,7 @@ package config
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -28,6 +29,7 @@ const defaultAcceleratorsPerVM = 4
 var tpuFamilyDefaults = map[string]int{
 	"ct5lp":     8, // Default for TPU v5litepod when suffix is missing
 	"v5litepod": 8, // Legacy string literal default
+	"v5e":       8,
 }
 
 var tpuRegex = regexp.MustCompile(`^v[4-6][ep]?(-\d+)?$`)
@@ -43,7 +45,7 @@ var tpu3DConstraintsMap = map[string]tpu3DConstraints{
 	"tpu7x": {maxCubes: 144},
 }
 
-var valid2DTPUFamilies = []string{"ct6e", "ct5lp", "v5litepod", "v5-lite", "v6e"}
+var valid2DTPUFamilies = []string{"ct6e", "ct5lp", "v5litepod", "v5-lite", "v5e", "v6e"}
 var valid3DTPUFamilies = []string{"v4", "v5p", "ct4p", "ct5p", "tpu7"}
 
 // AcceleratorShorthandMap maps shorthand names to full machine types.
@@ -78,12 +80,15 @@ var AcceleratorShorthandMap = map[string]string{
 	"b200-8":           "a4-highgpu-8g",
 	"gb200-4":          "a4x-highgpu-4g",
 
-	// TPU mappings
+	// TPU mappings (slice shorthands to default host machine types)
 	"v4-8":        "ct4p-hightpu-4t",
 	"v5p-8":       "ct5p-hightpu-4t",
 	"v5litepod-1": "ct5lp-hightpu-1t",
 	"v5litepod-4": "ct5lp-hightpu-4t",
 	"v5litepod-8": "ct5lp-hightpu-8t",
+	"v5e-1":       "ct5lp-hightpu-1t",
+	"v5e-4":       "ct5lp-hightpu-4t",
+	"v5e-8":       "ct5lp-hightpu-8t",
 	"v6e-1":       "ct6e-standard-1t",
 	"v6e-4":       "ct6e-standard-4t",
 	"v6e-8":       "ct6e-standard-8t",
@@ -319,7 +324,7 @@ func IsTPU(acceleratorType string) bool {
 	return tpuRegex.MatchString(resolvedLower)
 }
 
-// GetCandidatesForShorthand returns all full machine types that match the given shorthand prefix.
+// GetCandidatesForShorthand returns all unique full machine types that match the given shorthand prefix, sorted alphabetically.
 func GetCandidatesForShorthand(shorthand string) []string {
 	var candidates []string
 	shorthandLower := strings.ToLower(shorthand)
@@ -328,7 +333,8 @@ func GetCandidatesForShorthand(shorthand string) []string {
 			candidates = append(candidates, v)
 		}
 	}
-	return candidates
+	slices.Sort(candidates)
+	return slices.Compact(candidates)
 }
 
 func parseShorthand(accelaratorType string) (size int, err error) {
