@@ -50,7 +50,7 @@ The following requirements apply to an AI-optimized A4X-Max Bare Metal GKE clust
 
     vars:
       project_id: <PROJECT_ID>
-      deployment_name: gke-a4x-max-bm
+      deployment_name: gke-a4x-max-bm-dep
       region: <COMPUTE_REGION>
       zone: <COMPUTE_ZONE>
       static_node_count: 18
@@ -60,7 +60,7 @@ The following requirements apply to an AI-optimized A4X-Max Bare Metal GKE clust
       num_node_pools: 1
     ```
 
-   * DEPLOYMENT_NAME (`deployment_name`): a unique name for the deployment, which must be between 6 and 30 characters in length. If the deployment name isn't unique within a project, cluster creation fails. The default value is gke-a4x-max-bm.
+   * DEPLOYMENT_NAME (`deployment_name`): a unique name for the deployment, which must be between 6 and 30 characters in length. If the deployment name isn't unique within a project, cluster creation fails. The default value is `gke-a4x-max-bm-dep`.
    * BUCKET_NAME (`bucket`): the name of the Cloud Storage bucket you created in the previous step.
    * PROJECT_ID (`project_id` / `reservation_project_id`): your Google Cloud project ID (and the project ID hosting the reservation).
    * COMPUTE_REGION (`region`): the compute region for the cluster.

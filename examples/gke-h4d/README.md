@@ -107,7 +107,7 @@ Any job applied to this node pool must meet the following requirements:
 1. Connect to the GKE cluster:
 
    ```sh
-   gcloud container clusters get-credentials <cluster-name> --region <region> --project <project-id>
+   gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project=PROJECT_ID
    ```
 
 2. Submit the sample test job:

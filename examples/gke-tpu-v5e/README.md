@@ -108,10 +108,10 @@ By default, the toolkit dynamically applies an embedded kueue configuration base
 1. **Connect to your cluster:**
 
     ```sh
-    gcloud container clusters get-credentials gke-tpu-v5e --region=REGION --project=PROJECT_ID
+    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project=PROJECT_ID
     ```
 
-    Replace `REGION` and `PROJECT_ID` with your deployment region and project ID.
+    Replace `DEPLOYMENT_NAME`, `REGION`, and `PROJECT_ID` with your deployment name, region, and project ID.
 
 2. **Update the Node Selector:** Open `examples/gke-tpu-v5e/tpu-kueue-jax-sample.yaml` and verify that the `nodeSelector` values match the TPU accelerator and topology configured in your deployment:
 
@@ -219,7 +219,7 @@ Once you have verified the manifest, submit the job to your live GKE cluster by 
 1. **Monitor and Check Logs:** Use the `gcluster` CLI to track the execution status and view the workload logs:
 
    ```sh
-   gcluster job logs pathways-job
+   ./gcluster job logs pathways-job
    ```
 
    A successful execution will output logs ending with:
@@ -231,7 +231,7 @@ Once you have verified the manifest, submit the job to your live GKE cluster by 
 2. **Cancel and Clean Up Job:** To terminate a running job or clean up resources once finished, run:
 
    ```sh
-   gcluster job cancel pathways-job
+   ./gcluster job cancel pathways-job
    ```
 
 ## Tear down the cluster
