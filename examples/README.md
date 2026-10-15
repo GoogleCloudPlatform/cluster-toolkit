@@ -87,6 +87,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
   * [hpc-slurm-google-cloud-dedicated.yaml](#hpc-slurm-google-cloud-dedicatedyaml-) ![community-badge]
   * [cloud-build-remote.yaml](#cloud-build-remoteyaml--) ![community-badge] ![experimental-badge]
+  * [instructions-demo.yaml](#instructions-demoyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-scale.yaml](#hpc-slurm-scaleyaml-) ![community-badge]
   * [hpc-slurm-multiregion-scale.yaml](#hpc-slurm-multiregion-scaleyaml-) ![community-badge]
   * [hybrid-slurm-cluster (GCD)](#hybrid-slurm-cluster-gcd-) ![community-badge]
@@ -1969,6 +1970,14 @@ Demonstrates how to use the `artifact-registry` and `cloud-build` community modu
 The deployment instructions can be found in the [README](../community/examples/cloud-build/README.md).
 
 [cloud-build-remote.yaml]: ../community/examples/cloud-build/cloud-build-remote.yaml
+
+### [instructions-demo.yaml] ![community-badge] ![experimental-badge]
+
+Demonstrates how to use the `instructions` community module to render dynamic post-deployment instructions from a template, wrap next steps in a terminal banner, and persist reference files to disk.
+
+The deployment instructions can be found in the [README](../community/examples/instructions/README.md).
+
+[instructions-demo.yaml]: ../community/examples/instructions/instructions-demo.yaml
 ### [hpc-slurm-scale.yaml] ![community-badge]
 
 Creates a high-performance, single-region auto-scaling Slurm cluster scaled up to 800 dynamic Spot or On-Demand compute nodes (102,400 vCPUs) across 4 zones with multi-zonal dynamic failover and Cloud NAT.
