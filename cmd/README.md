@@ -63,7 +63,6 @@ gcluster deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
 * `-w, --overwrite-deployment`: If specified, an existing deployment directory is overwritten by the new deployment.
 * `--parallelism <int>`: Limit the number of concurrent operations in Terraform (default: 10, or `GCLUSTER_TERRAFORM_PARALLELISM`).
 * `--skip <strings>`: Skip groups with the given names (comma-separated).
-* `--skip-gke-security-check`: Bypass dynamic GKE version security vulnerability check.
 * `--skip-validators <strings>`: Validators to skip (comma-separated).
 * `-l, --validation-level <string>`: Set validation level to one of (`"ERROR"`, `"WARNING"`, `"IGNORE"`) (default `"ERROR"`).
 * `--vars <strings>`: Comma-separated list of `name=value` variables to override YAML configuration. Can be used multiple times.
@@ -146,7 +145,7 @@ gcluster expand BLUEPRINT_NAME [flags]
 
 ## gcluster export-outputs
 
-`gcluster export-outputs` exports Terraform output values from a deployment group for consumption by subsequent deployment groups (e.g., `gcluster export-outputs hpc-slurm/primary`).
+`gcluster export-outputs` exports Terraform output values from a deployment group for consumption by subsequent deployment groups (e.g., `gcluster export-outputs a3ultra-slurm/cluster-env`).
 
 ### Usage - export-outputs
 
@@ -156,7 +155,7 @@ gcluster export-outputs DEPLOYMENT_GROUP_DIRECTORY [flags]
 
 ## gcluster import-inputs
 
-`gcluster import-inputs` imports output values exported by previous deployment groups as input `.tfvars` for subsequent deployment groups (e.g., `gcluster import-inputs hpc-slurm/cluster`).
+`gcluster import-inputs` imports output values exported by previous deployment groups as input `.tfvars` for subsequent deployment groups (e.g., `gcluster import-inputs a3ultra-slurm/cluster`).
 
 ### Usage - import-inputs
 
