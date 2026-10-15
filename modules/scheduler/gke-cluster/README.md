@@ -130,6 +130,7 @@ limitations under the License.
 | Name | Source | Version |
 | ---- | ------ | ------- |
 | <a name="module_high_scale_checkpointing_version_check"></a> [high\_scale\_checkpointing\_version\_check](#module\_high\_scale\_checkpointing\_version\_check) | ../../internal/semver_compare | n/a |
+| <a name="module_inference_gateway_version_check"></a> [inference\_gateway\_version\_check](#module\_inference\_gateway\_version\_check) | ../../internal/semver_compare | n/a |
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
 | <a name="module_mldiagnostics_version_check"></a> [mldiagnostics\_version\_check](#module\_mldiagnostics\_version\_check) | ../../internal/semver_compare | n/a |
 | <a name="module_slice_controller_version_check"></a> [slice\_controller\_version\_check](#module\_slice\_controller\_version\_check) | ../../internal/semver_compare | n/a |

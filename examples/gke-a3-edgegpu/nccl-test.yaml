@@ -1,0 +1,236 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Upstream source: https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/master/gpudirect-tcpx/nccl-test.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nccl-host-1
+spec:
+  selector:
+    name: nccl-host-1
+  clusterIP: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nccl-host-2
+spec:
+  selector:
+    name: nccl-host-2
+  clusterIP: None
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nccl-test-host-1
+  labels:
+    name: nccl-host-1
+  annotations:
+    networking.gke.io/default-interface: 'eth0'
+    networking.gke.io/interfaces: |
+      [
+        {"interfaceName":"eth0","network":"default"},
+        {"interfaceName":"eth1","network":"vpc1"},
+        {"interfaceName":"eth2","network":"vpc2"},
+        {"interfaceName":"eth3","network":"vpc3"},
+        {"interfaceName":"eth4","network":"vpc4"}
+      ]
+    devices.gke.io/container.tcpx-daemon: |+
+      - path: /dev/nvidia0
+      - path: /dev/nvidia1
+      - path: /dev/nvidia2
+      - path: /dev/nvidia3
+      - path: /dev/nvidia4
+      - path: /dev/nvidia5
+      - path: /dev/nvidia6
+      - path: /dev/nvidia7
+      - path: /dev/nvidiactl
+      - path: /dev/nvidia-uvm
+spec:
+  containers:
+  - name: tcpx-daemon
+    image: us-docker.pkg.dev/gce-ai-infra/gpudirect-tcpx/tcpgpudmarxd-dev:v2.0.12
+    imagePullPolicy: Always
+    command:
+    - /tcpgpudmarxd/build/app/tcpgpudmarxd
+    - --gpu_nic_preset
+    - a3vm
+    - --gpu_shmem_type
+    - fd
+    - --uds_path
+    - /run/tcpx
+    - --setup_param
+    - \"--verbose 128 2 0 \"
+    securityContext:
+      capabilities:
+        add:
+        - NET_ADMIN
+    volumeMounts:
+    - name: libraries
+      mountPath: /usr/local/nvidia/lib64
+    - name: tcpx-socket
+      mountPath: /run/tcpx
+    - name: sys
+      mountPath: /hostsysfs
+    - name: proc
+      mountPath: /hostprocsysfs
+    env:
+    - name: LD_LIBRARY_PATH
+      value: /usr/local/nvidia/lib64
+  - name: nccl-test
+    image: us-docker.pkg.dev/gce-ai-infra/gpudirect-tcpx/nccl-plugin-gpudirecttcpx-dev:v3.1.9
+    imagePullPolicy: Always
+    command:
+    - /bin/sh
+    - -c
+    - |
+      service ssh restart;
+      sleep infinity;
+    env:
+    - name: LD_LIBRARY_PATH
+      value: /usr/local/nvidia/lib64
+    securityContext:
+      capabilities:
+        add:
+        - IPC_LOCK
+    volumeMounts:
+    - name: tcpx-socket
+      mountPath: /tmp
+    - name: libraries
+      mountPath: /usr/local/nvidia/lib64
+    - name: config-volume
+      mountPath: /configs
+    resources:
+      limits:
+        nvidia.com/gpu: 8
+  volumes:
+  - name: config-volume
+    configMap:
+      name: nccl-configmap
+      defaultMode: 0777
+  - name: libraries
+    hostPath:
+      path: /home/kubernetes/bin/nvidia/lib64
+  - name: tcpx-socket
+    hostPath:
+      path: /run/tcpx
+  - name: sys
+    hostPath:
+      path: /sys
+  - name: proc
+    hostPath:
+      path: /proc/sys
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nccl-test-host-2
+  labels:
+    name: nccl-host-2
+  annotations:
+    networking.gke.io/default-interface: 'eth0'
+    networking.gke.io/interfaces: |
+      [
+        {"interfaceName":"eth0","network":"default"},
+        {"interfaceName":"eth1","network":"vpc1"},
+        {"interfaceName":"eth2","network":"vpc2"},
+        {"interfaceName":"eth3","network":"vpc3"},
+        {"interfaceName":"eth4","network":"vpc4"}
+      ]
+    devices.gke.io/container.tcpx-daemon: |+
+      - path: /dev/nvidia0
+      - path: /dev/nvidia1
+      - path: /dev/nvidia2
+      - path: /dev/nvidia3
+      - path: /dev/nvidia4
+      - path: /dev/nvidia5
+      - path: /dev/nvidia6
+      - path: /dev/nvidia7
+      - path: /dev/nvidiactl
+      - path: /dev/nvidia-uvm
+spec:
+  containers:
+  - name: tcpx-daemon
+    image: us-docker.pkg.dev/gce-ai-infra/gpudirect-tcpx/tcpgpudmarxd-dev:v2.0.12
+    imagePullPolicy: Always
+    command:
+    - /tcpgpudmarxd/build/app/tcpgpudmarxd
+    - --gpu_nic_preset
+    - a3vm
+    - --gpu_shmem_type
+    - fd
+    - --uds_path
+    - /run/tcpx
+    - --setup_param
+    - \"--verbose 128 2 0 \"
+    securityContext:
+      capabilities:
+        add:
+        - NET_ADMIN
+    volumeMounts:
+    - name: libraries
+      mountPath: /usr/local/nvidia/lib64
+    - name: tcpx-socket
+      mountPath: /run/tcpx
+    - name: sys
+      mountPath: /hostsysfs
+    - name: proc-sys
+      mountPath: /hostprocsysfs
+    env:
+    - name: LD_LIBRARY_PATH
+      value: /usr/local/nvidia/lib64
+  - name: nccl-test
+    image: us-docker.pkg.dev/gce-ai-infra/gpudirect-tcpx/nccl-plugin-gpudirecttcpx-dev:v3.1.9
+    imagePullPolicy: Always
+    command:
+    - /bin/sh
+    - -c
+    - |
+      service ssh restart;
+      sleep infinity;
+    env:
+    - name: LD_LIBRARY_PATH
+      value: /usr/local/nvidia/lib64
+    securityContext:
+      capabilities:
+        add:
+        - IPC_LOCK
+    volumeMounts:
+    - name: tcpx-socket
+      mountPath: /tmp
+    - name: libraries
+      mountPath: /usr/local/nvidia/lib64
+    - name: config-volume
+      mountPath: /configs
+    resources:
+      limits:
+        nvidia.com/gpu: 8
+  volumes:
+  - name: config-volume
+    configMap:
+      name: nccl-configmap
+      defaultMode: 0777
+  - name: libraries
+    hostPath:
+      path: /home/kubernetes/bin/nvidia/lib64
+  - name: tcpx-socket
+    hostPath:
+      path: /run/tcpx
+  - name: sys
+    hostPath:
+      path: /sys
+  - name: proc-sys
+    hostPath:
+      path: /proc/sys
