@@ -524,8 +524,8 @@ variable "additional_networks" {
 }
 
 variable "cluster_reference_type" {
-  description = "How the google_container_node_pool.system_node_pools refers to the cluster. Possible values are: {SELF_LINK, NAME}"
-  default     = "SELF_LINK"
+  description = "How system node pools refer to the cluster. Possible values are: {SELF_LINK, NAME}"
+  default     = "NAME"
   type        = string
   nullable    = false
   validation {
