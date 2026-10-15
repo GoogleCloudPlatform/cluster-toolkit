@@ -120,6 +120,14 @@
     until: regional_rw_test.rc == 0 and regional_rw_test.stdout == "hello world"
     retries: 5
     delay: 2
+
+  - name: Validate functional read on regional bucket via gcsfuse mount
+    ansible.builtin.command: cat "{{ regional_gcs_bucket_local_mount }}/testfile.txt"
+    register: regional_mount_read
+    changed_when: false
+    become: true
+    failed_when: regional_mount_read.stdout != "hello world"
+
   always:
   - name: Clean up test file
     ansible.builtin.file:
