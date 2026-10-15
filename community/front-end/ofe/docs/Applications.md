@@ -1,11 +1,11 @@
-# Cluster Toolkit FrontEnd - Application Installation Guide
+# Open Front End (OFE) - Application Installation Guide
 
 <!--
 0        1         2         3         4         5         6         7        8
 1234567890123456789012345678901234567890123456789012345678901234567890234567890
 -->
 
-Administrators can install and manage applications in TKFE in the following
+Administrators can install and manage applications in OFE in the following
 ways:
 
 ## Install Spack applications
@@ -13,7 +13,7 @@ ways:
 The recommended method of application installation is via
 [Spack](https://spack.readthedocs.io). Spack, an established package
 management system for HPC, contains build recipes of the most widely used
-open-source HPC applications. This method is completed automated. Spack
+open-source HPC applications. This method is completely automated. Spack
 installation is performed as a Slurm job. Simply choose a Slurm partition to
 run Spack.
 
@@ -31,8 +31,8 @@ applications.
 
 Complex packages, such as some commercial applications that may require
 special steps to set up, can be installed manually on the cluster's shared
-filesystem. Once done, they can be registered with the FrontEnd so that future
-job submissions can be automated through the FrontEnd.
+filesystem. Once done, they can be registered with the OFE so that future
+job submissions can be automated through the OFE.
 
 ---
 
@@ -46,7 +46,7 @@ to show different actions:
 - `n` - Application is being newly configured by an admin user through the web
   interface. At this stage, only a database record exists in the system. The
   user is free to edit this application, although in the case of a Spack
-  application  , most information is automatically populated. When ready,
+  application, most information is automatically populated. When ready,
   clicking Spack Install from the Actions menu to initiate the installation
   process.
 - `p` - Application is being prepared. In this state, application build is
@@ -89,19 +89,25 @@ A typical workflow for installing a new Spack application is as follows:
    be switched on manually. Advanced users may supply additional specs using
    the optional *Spack spec* field.
    - For a guide to the Spack spec syntax see the [Spack documentation](https://spack.readthedocs.io/en/latest/basic_usage.html#building-a-specific-version)
-   - By default, the GCC 11.2 compiler is used for building all applications.
+   - The OFE does not select a compiler. Spack uses whichever compiler
+     it detects on the cluster (a system compiler on the Slurm image) unless
+     you add a `%` compiler specifier.
    - Other compilers may be specified with the `%` compiler specifier and an
      optional version number using the `@` version specifier (e.g.,
      `%intel@19.1.1.217`). Obviously, admin users are responsible for
      installing and configuring those additional compilers and, if
      applicable, arrange their licenses.
-   - Spack is configured in this system to use Intel MPI to build
-     application.
+   - Spack is configured on each cluster with an MPI provider preference
+     order of `intel-mpi`, `intel-oneapi-mpi`, `openmpi`, `mpich`
+     (`packages:all:providers:mpi` in the `spack_install` Ansible role). Spack
+     builds with the first provider it can concretize, so the provider is not
+     necessarily Intel MPI. OpenMPI defaults to `+pmi +legacylaunchers
+     schedulers=slurm fabrics=auto`, and MPICH to `+slurm netmod=tcp`.
    - Other MPI libraries may be specified with the ^ dependency specifier and
-     an optional version number.
+     an optional version number (e.g., `^mpich@4.1`).
 1. The Description field is populated automatically from the information found
    in the Spack repository.
-1. Choose an Slurm partition from the drop-down list to run the Slurm job for
+1. Choose a Slurm partition from the drop-down list to run the Slurm job for
    application installation. This, typically, should be the same partitions to
    run the application in the future.
 1. Click the *Save* button. A database record is then created for this
