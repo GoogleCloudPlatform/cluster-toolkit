@@ -93,6 +93,7 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup,
       zones=[
          dict(zone=f"zones/{z}") for z in nodeset.zone_policy_allow
       ],
+      # Regional MIG resize requests (Flex-start) require ANY_SINGLE_ZONE.
       targetShape="ANY_SINGLE_ZONE" ),
     updatePolicy = dict(instanceRedistributionType = "NONE" ),
     instanceLifecyclePolicy=dict(defaultActionOnFailure= "DO_NOTHING" ), # TODO(FLEX): Not supported yet, migrate once supported
@@ -325,9 +326,6 @@ def get_instance_template_copy(nodeset: NSDict, lkp: util.Lookup) -> str:
     if lkp.is_tpu_nodeset(nodeset.nodeset_name):
         if isinstance(properties.get("advancedMachineFeatures"), dict):
             properties["advancedMachineFeatures"].pop("threadsPerCore", None)
-        scheduling = properties.get("scheduling") or {}
-        if scheduling.get("provisioningModel") == "SPOT" or scheduling.get("preemptible"):
-            scheduling["instanceTerminationAction"] = "DELETE"
     req = lkp.compute.instanceTemplates().insert(
         project=lkp.project,
         body=dict(

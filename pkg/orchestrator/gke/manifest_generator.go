@@ -22,6 +22,7 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"io"
+	"slices"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -29,6 +30,52 @@ import (
 	k8syamlutil "k8s.io/apimachinery/pkg/util/yaml"
 	k8syaml "sigs.k8s.io/yaml"
 )
+
+const workloadWrapperScript = `echo "GCluster Start: $(date 2>/dev/null || true)" >&2
+
+# Run workload in a separate process group
+set -m
+/bin/bash -c 'trap : TERM; cmd="$1"; shift; eval "$cmd"' gcluster "$1" &
+child=$!
+
+# Forward signals to the workload process group
+got_sigterm=0
+_fwd() {
+  got_sigterm=1
+  echo "gcluster: SIGTERM received, running cleanup" >&2
+  kill -TERM -- "-$child" 2>/dev/null
+}
+trap _fwd TERM INT
+
+# Wait for workload to exit
+while :; do
+  wait "$child"; rc=$?
+  is_job=0
+  for p in $(jobs -p); do
+    [ "$p" = "$child" ] && is_job=1
+  done
+  [ "$is_job" -eq 1 ] || break
+done
+
+# Interrupted workloads should not exit 0 even if cleanup succeeded
+if [ "$got_sigterm" -ne 0 ] && [ "$rc" -eq 0 ]; then
+  rc=143
+fi
+
+echo "GCluster End: $(date 2>/dev/null || true)" >&2
+echo "Exit code: $rc" >&2
+exit "$rc"
+`
+
+// workloadContainerCommand wraps the user's workload command with SIGTERM
+// forwarding and lifecycle logging. When the container receives SIGTERM (e.g. on
+// job cancellation or Kueue/spot preemption), the signal is forwarded to the
+// workload process group so that in-flight commands terminate and any subsequent
+// cleanup/upload commands in the user's script can run before the pod grace
+// period expires.
+func workloadContainerCommand(userCommand string) []string {
+	return []string{"/bin/bash", "-c", workloadWrapperScript, "gcluster", userCommand}
+}
 
 func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobProfile) (string, error) {
 	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(opts, profile)
@@ -46,7 +93,7 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 		return "", err
 	}
 
-	cmdSlice := []string{"/bin/bash", "-c", opts.CommandToRun}
+	cmdSlice := workloadContainerCommand(opts.CommandToRun)
 
 	tmpl, err := g.parseGKETemplate("jobset.tmpl")
 	if err != nil {
@@ -437,4 +484,164 @@ func ValidateJobSetManifest(manifestContent string) error {
 		}
 	}
 	return nil
+}
+
+const (
+	defaultPathwaysProxyImage  = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
+	defaultPathwaysServerImage = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
+)
+
+// GeneratePathwaysManifest generates the Kubernetes JobSet manifest for a Pathways job.
+func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) (string, error) {
+	// Set default values for Pathways-specific fields if not provided
+	if job.Pathways.ProxyServerImage == "" {
+		job.Pathways.ProxyServerImage = defaultPathwaysProxyImage
+	}
+	if job.Pathways.ServerImage == "" {
+		job.Pathways.ServerImage = defaultPathwaysServerImage
+	}
+	if job.Pathways.WorkerImage == "" {
+		// WorkerImage defaults to ServerImage if not explicitly set
+		job.Pathways.WorkerImage = job.Pathways.ServerImage
+	}
+
+	tmpl, err := g.parseGKETemplate("pathways_jobset.tmpl")
+	if err != nil {
+		return "", fmt.Errorf("failed to parse pathways jobset template: %w", err)
+	}
+
+	opts, err := g.PrepareManifestOptions(job, fullImageName, profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		return "", err
+	}
+
+	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(opts, profile)
+	var resStr string
+	if err == nil {
+		resStr, err = g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit, 14)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		logging.Warn("Warning: failed to calculate resource limits for Pathways job: %v", err)
+	}
+
+	cmdSlice := workloadContainerCommand(opts.CommandToRun)
+	isTPU := tpuLimit != ""
+	isGPU := gpuLimit != ""
+	data := g.prepareJobSetTemplateData(opts, cmdSlice, resStr, isTPU, isGPU)
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
+	}
+
+	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
+	if err := ValidateJobSetManifest(manifest); err != nil {
+		return "", err
+	}
+	return manifest, nil
+}
+
+func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
+	exclusiveTopology := ""
+	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
+		exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
+	}
+
+	workerBackoffLimit := 2048000
+
+	var proxyArgsList []string
+	if opts.Pathways.ProxyArgs != "" {
+		proxyArgsList = strings.Fields(opts.Pathways.ProxyArgs)
+	}
+	var serverArgsList []string
+	if opts.Pathways.ServerArgs != "" {
+		serverArgsList = strings.Fields(opts.Pathways.ServerArgs)
+	}
+	var workerArgsList []string
+	if opts.Pathways.WorkerArgs != "" {
+		workerArgsList = strings.Fields(opts.Pathways.WorkerArgs)
+	}
+
+	var containers []ContainerData
+	if opts.ParallelContainers > 1 {
+		for i := 0; i < opts.ParallelContainers; i++ {
+			containers = append(containers, ContainerData{
+				Name:          fmt.Sprintf("workload-container-%d", i+1),
+				ResourcesYAML: resourcesYAML,
+			})
+		}
+	} else {
+		containers = append(containers, ContainerData{
+			Name:          "workload-container",
+			ResourcesYAML: resourcesYAML,
+		})
+	}
+
+	return jobSetTemplateData{
+		WorkloadName:                  opts.WorkloadName,
+		ClusterName:                   opts.ClusterName,
+		Containers:                    containers,
+		ProjectID:                     opts.ProjectID,
+		KueueQueueName:                opts.KueueQueueName,
+		TtlSecondsAfterFinished:       opts.TtlSecondsAfterFinished,
+		TerminationGracePeriodSeconds: opts.TerminationGracePeriodSeconds,
+		MaxRestarts:                   opts.MaxRestarts,
+		NumSlices:                     opts.NumSlices,
+		NodesPerSlice:                 opts.NodesPerSlice,
+		WorkerBackoffLimit:            workerBackoffLimit,
+		ProxyArgsList:                 proxyArgsList,
+		ServerArgsList:                serverArgsList,
+		WorkerArgsList:                workerArgsList,
+		PathwaysInstanceType:          opts.PathwaysInstanceType,
+		CommandToRun:                  opts.CommandToRun,
+		ResourcesString:               resourcesYAML,
+		FullImageName:                 opts.FullImageName,
+		Command:                       command,
+		ResourcesYAML:                 resourcesYAML,
+		AcceleratorTypeLabel:          g.GenerateGKENodeSelectorLabel(opts.ComputeType),
+		NodeSelector:                  opts.NodeSelector,
+		Affinity:                      opts.Affinity,
+		PodFailurePolicy:              opts.PodFailurePolicy,
+		ImagePullSecrets:              opts.ImagePullSecrets,
+		ServiceAccountName:            opts.ServiceAccountName,
+		TopologyAnnotation:            opts.TopologyAnnotation,
+		SchedulerName:                 opts.SchedulerName,
+		SchedulingGates:               opts.SchedulingGates,
+		Tolerations:                   opts.Tolerations,
+		PriorityClassName:             opts.PriorityClassName,
+		VolumesYAML:                   opts.VolumesYAML,
+		VolumeMountsYAML:              opts.VolumeMountsYAML,
+		GCSFuseEnabled:                opts.GCSFuseEnabled,
+		HostNetworkEnabled:            isTPU || isGPU,
+		Pathways:                      opts.Pathways,
+		ExclusiveTopologyAnnotation:   exclusiveTopology,
+		Verbose:                       opts.Verbose,
+		Env:                           sortedEnvVars(opts.Env),
+		PathwaysProxyEnv:              sortedEnvVars(opts.Pathways.ProxyEnv),
+		PathwaysServerEnv:             sortedEnvVars(opts.Pathways.ServerEnv),
+		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
+		IsTPU:                         isTPU,
+		IsGPU:                         isGPU,
+		MLDiagnosticsEnabled:          opts.MLDiagnosticsEnabled,
+		GKEMTCEnabled:                 opts.GKEMTCEnabled,
+		GKEMTCRamdiskDirectory:        opts.GKEMTCRamdiskDirectory,
+	}
+}
+
+func sortedEnvVars(envMap map[string]string) []EnvVar {
+	if len(envMap) == 0 {
+		return nil
+	}
+	envKeys := make([]string, 0, len(envMap))
+	for k := range envMap {
+		envKeys = append(envKeys, k)
+	}
+	slices.Sort(envKeys)
+	res := make([]EnvVar, len(envKeys))
+	for i, k := range envKeys {
+		res[i] = EnvVar{Name: k, Value: envMap[k]}
+	}
+	return res
 }

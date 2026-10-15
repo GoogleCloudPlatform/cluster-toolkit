@@ -17,9 +17,15 @@ limitations under the License.
 package shell
 
 import (
+	"context"
+	"errors"
 	"hpc-toolkit/pkg/config"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
 
 	. "gopkg.in/check.v1"
 )
@@ -62,17 +68,75 @@ func (s *MySuite) TestCheckWritableDir(c *C) {
 	}
 	c.Assert(CheckWritableDir(dir), IsNil)
 
-	// This test reliably fails in Cloud Build although it works in Linux
-	// and in MacOS. TODO: investigate why
-	// err = os.Chmod(dir, 0600)
-	// if err != nil {
-	//      c.Error(err)
-	// }
-	// err = CheckWritableDir(dir)
-	// c.Assert(err, NotNil)
+	func() {
+		cleanup := makeDirReadOnly(c, dir)
+		defer cleanup()
+		if runtime.GOOS == "windows" || os.Geteuid() != 0 {
+			c.Assert(CheckWritableDir(dir), NotNil)
+		}
+	}()
 
 	os.RemoveAll(dir)
 	c.Assert(CheckWritableDir(dir), NotNil)
+}
+
+func makeDirReadOnly(c *C, dir string) func() {
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("icacls", dir, "/deny", "*S-1-1-0:(W)")
+		if err := cmd.Run(); err != nil {
+			c.Fatal(err)
+		}
+		return func() {
+			_ = exec.Command("icacls", dir, "/remove:d", "*S-1-1-0").Run()
+		}
+	}
+
+	if os.Geteuid() != 0 {
+		if err := os.Chmod(dir, 0555); err != nil {
+			c.Fatal(err)
+		}
+		return func() {
+			_ = os.Chmod(dir, 0700)
+		}
+	}
+
+	return func() {}
+}
+
+func (s *MySuite) TestDirInfo(c *C) {
+	isDir, isWritable := DirInfo("")
+	c.Assert(isDir, Equals, false)
+	c.Assert(isWritable, Equals, false)
+
+	dir := c.MkDir()
+	isDir, isWritable = DirInfo(dir)
+	c.Assert(isDir, Equals, true)
+	c.Assert(isWritable, Equals, true)
+
+	// read-only directory
+	func() {
+		readOnlyDir := c.MkDir()
+		cleanupRO := makeDirReadOnly(c, readOnlyDir)
+		defer cleanupRO()
+		if runtime.GOOS == "windows" || os.Geteuid() != 0 {
+			isDir, isWritable = DirInfo(readOnlyDir)
+			c.Assert(isDir, Equals, true)
+			c.Assert(isWritable, Equals, false)
+		}
+	}()
+
+	// regular file should report isDir=false, isWritable=false
+	filePath := filepath.Join(dir, "testfile")
+	err := os.WriteFile(filePath, []byte("content"), 0644)
+	c.Assert(err, IsNil)
+	isDir, isWritable = DirInfo(filePath)
+	c.Assert(isDir, Equals, false)
+	c.Assert(isWritable, Equals, false)
+
+	// non-existent path
+	isDir, isWritable = DirInfo(filepath.Join(dir, "nonexistent"))
+	c.Assert(isDir, Equals, false)
+	c.Assert(isWritable, Equals, false)
 }
 
 func (s *MySuite) TestMergeMapsWithoutLoss(c *C) {
@@ -165,4 +229,92 @@ func (s *MySuite) TestAskForConfirmation_No(c *C) {
 
 	got := PromptYesNo("Test prompt")
 	c.Assert(got, Equals, false)
+}
+
+func (s *MySuite) TestExecuteCommandWithTimeout_SuccessfulExecution(c *C) {
+	timeout := 2 * time.Second
+
+	var cmdName string
+	var cmdArgs []string
+	if runtime.GOOS == "windows" {
+		cmdName = "cmd"
+		cmdArgs = []string{"/c", "echo hello world"}
+	} else {
+		cmdName = "echo"
+		cmdArgs = []string{"hello world"}
+	}
+
+	result := ExecuteCommandWithTimeout(timeout, cmdName, cmdArgs...)
+
+	c.Assert(result.Err, IsNil)
+	c.Assert(result.ExitCode, Equals, 0)
+	c.Assert(strings.TrimSpace(result.Stdout), Equals, "hello world")
+}
+
+func (s *MySuite) TestExecuteCommandWithTimeout_KillsHangingProcess(c *C) {
+	timeout := 100 * time.Millisecond
+
+	var cmdName string
+	var cmdArgs []string
+	if runtime.GOOS == "windows" {
+		cmdName = "ping"
+		cmdArgs = []string{"127.0.0.1", "-n", "6"}
+	} else {
+		cmdName = "sleep"
+		cmdArgs = []string{"5"}
+	}
+
+	result := ExecuteCommandWithTimeout(timeout, cmdName, cmdArgs...)
+
+	c.Assert(result.Err, NotNil)
+	c.Assert(errors.Is(result.Err, context.DeadlineExceeded), Equals, true)
+	c.Assert(result.ExitCode, Equals, 124)
+}
+
+func (s *MySuite) TestExecuteCommandWithTimeout_NonZeroExitCode(c *C) {
+	timeout := 2 * time.Second
+
+	var cmdName string
+	var cmdArgs []string
+	if runtime.GOOS == "windows" {
+		cmdName = "cmd"
+		cmdArgs = []string{"/c", "exit 42"}
+	} else {
+		cmdName = "sh"
+		cmdArgs = []string{"-c", "exit 42"}
+	}
+
+	result := ExecuteCommandWithTimeout(timeout, cmdName, cmdArgs...)
+	c.Assert(result.Err, NotNil)
+	c.Assert(result.ExitCode, Equals, 42)
+}
+
+func (s *MySuite) TestExecuteCommandWithTimeout_BinaryNotFound(c *C) {
+	timeout := 2 * time.Second
+	result := ExecuteCommandWithTimeout(timeout, "nonexistent-binary-xyz-12345")
+	c.Assert(result.Err, NotNil)
+	c.Assert(result.ExitCode, Equals, -1)
+}
+
+func (s *MySuite) TestHandleExecError(c *C) {
+	timeoutMsg := "command timed out after 30s"
+
+	okRes := CommandResult{ExitCode: 0, Stdout: "ok", Err: nil}
+	c.Assert(HandleExecError(okRes, "gcloud", timeoutMsg), IsNil)
+
+	timeoutRes := CommandResult{ExitCode: 124, Err: context.DeadlineExceeded}
+	err := HandleExecError(timeoutRes, "gcloud", timeoutMsg)
+	c.Assert(err, NotNil)
+	c.Assert(err, ErrorMatches, timeoutMsg+": context deadline exceeded")
+	c.Assert(errors.Is(err, context.DeadlineExceeded), Equals, true)
+
+	startErr := errors.New("executable file not found in $PATH")
+	notFoundRes := CommandResult{ExitCode: -1, Err: startErr}
+	err = HandleExecError(notFoundRes, "gcloud", timeoutMsg)
+	c.Assert(err, NotNil)
+	c.Assert(err, ErrorMatches, "failed to execute gcloud: executable file not found in \\$PATH")
+	c.Assert(errors.Is(err, startErr), Equals, true)
+
+	exitErrRes := CommandResult{ExitCode: 42, Stderr: "some cli error", Err: errors.New("exit status 42")}
+	c.Assert(HandleExecError(exitErrRes, "gcloud", timeoutMsg), IsNil)
 }
