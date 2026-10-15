@@ -44,6 +44,13 @@ func TestScanBlueprintsAndPairing(t *testing.T) {
 		t.Fatalf("expected at least 40 blueprints across examples/ and community/examples/, got %d", len(blueprints))
 	}
 
+	byPath := indexBlueprintsByPath(t, blueprints)
+	verifyCoreBlueprints(t, byPath)
+	verifyCommunityAndSpecialBlueprints(t, byPath)
+}
+
+func indexBlueprintsByPath(t *testing.T, blueprints []BlueprintEntry) map[string]BlueprintEntry {
+	t.Helper()
 	byPath := make(map[string]BlueprintEntry, len(blueprints))
 	for _, bp := range blueprints {
 		byPath[bp.Path] = bp
@@ -54,7 +61,11 @@ func TestScanBlueprintsAndPairing(t *testing.T) {
 			t.Errorf("non-blueprint manifest %s must be skipped", bp.Path)
 		}
 	}
+	return byPath
+}
 
+func verifyCoreBlueprints(t *testing.T, byPath map[string]BlueprintEntry) {
+	t.Helper()
 	slurm, ok := byPath["examples/hpc-slurm.yaml"]
 	if !ok {
 		t.Fatalf("expected examples/hpc-slurm.yaml in catalog")
@@ -76,7 +87,10 @@ func TestScanBlueprintsAndPairing(t *testing.T) {
 	if gkeA4.Scheduler != "gke" {
 		t.Errorf("expected gke-a4 scheduler=gke, got %q", gkeA4.Scheduler)
 	}
+}
 
+func verifyCommunityAndSpecialBlueprints(t *testing.T, byPath map[string]BlueprintEntry) {
+	t.Helper()
 	slinky, ok := byPath["community/examples/hpc-slinky/hpc-slinky.yaml"]
 	if !ok || slinky.Scheduler != "slurm-on-gke (slinky)" {
 		t.Errorf("expected hpc-slinky scheduler=slurm-on-gke (slinky), got %+v", slinky)
@@ -107,6 +121,12 @@ func TestScanModuleWiringAndEchoSuppression(t *testing.T) {
 		t.Fatalf("ScanModuleWiring failed: %v", err)
 	}
 
+	verifyLustreWiring(t, wiring)
+	verifyEchoAndInjectedIDSuppression(t, wiring)
+}
+
+func verifyLustreWiring(t *testing.T, wiring map[string]ModuleWiringEntry) {
+	t.Helper()
 	lustre, ok := wiring["modules/file-system/managed-lustre"]
 	if !ok {
 		t.Fatalf("expected modules/file-system/managed-lustre in module_wiring")
@@ -125,8 +145,10 @@ func TestScanModuleWiringAndEchoSuppression(t *testing.T) {
 	if !slices.Contains(lustre.ConsumedBy, "modules/file-system/gke-persistent-volume") || !slices.Contains(lustre.ConsumedBy, "community/modules/scheduler/schedmd-slurm-gcp-v6-controller") {
 		t.Errorf("expected gke-persistent-volume and schedmd-slurm-gcp-v6-controller in managed-lustre consumed_by, got %v", lustre.ConsumedBy)
 	}
+}
 
-	// Verify echo variable suppression:
+func verifyEchoAndInjectedIDSuppression(t *testing.T, wiring map[string]ModuleWiringEntry) {
+	t.Helper()
 	// 1. gke-node-pool echoes cluster_id and machine_type; it must not recommend itself or act as cluster_id provider for gke-persistent-volume.
 	pvc := wiring["modules/file-system/gke-persistent-volume"]
 	if slices.Contains(pvc.RecommendedUse, "modules/compute/gke-node-pool") {
