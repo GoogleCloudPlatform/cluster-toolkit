@@ -1738,6 +1738,7 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 			WorkerImage:      "worker:latest",
 			GCSLocation:      "gs://my-bucket",
 			HeadNodePool:     "pathways-np",
+			MaxSliceRestarts: 4000,
 		},
 	}
 
@@ -2247,9 +2248,9 @@ func TestGeneratePathwaysManifest_MaxSliceRestarts(t *testing.T) {
 			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 5",
 		},
 		{
-			name:                     "flag not set uses default constants",
-			maxSliceRestarts:         0,
-			wantBackoffLimit:         "backoffLimit: 2048000",
+			name:                     "default 4000 on 2 x v6e-32",
+			maxSliceRestarts:         4000,
+			wantBackoffLimit:         "backoffLimit: 32000",
 			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 4000",
 		},
 	}

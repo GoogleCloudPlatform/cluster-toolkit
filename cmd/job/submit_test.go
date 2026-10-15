@@ -375,7 +375,7 @@ func setupSubmitTestEnv(t *testing.T) {
 	priority = "medium"
 	isPathwaysJob = false
 	skipPrereqs = false
-	pathways = orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}
+	pathways = orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 4000}
 	gkeNapProvisioning = ""
 	gkeNapReservation = ""
 	envVars = nil
