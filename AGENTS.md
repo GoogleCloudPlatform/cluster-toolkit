@@ -4,7 +4,7 @@ This file is read by coding agents (Gemini CLI, Claude Code, Codex, Cursor, Copi
 
 ## Before creating, editing, validating or deploying a blueprint
 
-1. Ensure the `./gcluster` binary is built at the repository root:
+1. Ensure the `./gcluster` binary is built at the repository root (run `make` directly after pulling or editing changes under `cmd/`, `pkg/`, or `modules/`):
    ```bash
    test -x ./gcluster || make
    ```

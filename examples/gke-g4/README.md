@@ -20,7 +20,7 @@ This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, al
      container.googleapis.com \
      iam.googleapis.com \
      storage.googleapis.com \
-     --project=PROJECT_ID
+     --project=<PROJECT_ID>
 
    test -x ./gcluster || make
    ```

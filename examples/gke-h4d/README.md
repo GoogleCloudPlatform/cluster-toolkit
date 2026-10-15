@@ -20,7 +20,7 @@ Follow these steps to configure and deploy the GKE-H4D cluster.
      file.googleapis.com \
      iam.googleapis.com \
      storage.googleapis.com \
-     --project=PROJECT_ID
+     --project=<PROJECT_ID>
 
    test -x ./gcluster || make
    ```
