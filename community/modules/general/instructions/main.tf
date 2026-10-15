@@ -47,14 +47,14 @@ resource "local_file" "instructions_file" {
 }
 
 resource "terraform_data" "print_instructions" {
-  count = var.print_to_terminal ? 1 : 0
-  input = local.formatted_instructions
+  count            = var.print_to_terminal ? 1 : 0
+  input            = local.formatted_instructions
+  triggers_replace = local.formatted_instructions
 
   provisioner "local-exec" {
-    command = <<-EOT
-      cat <<'__INSTRUCTIONS_EOF__'
-${local.formatted_instructions}
-__INSTRUCTIONS_EOF__
-    EOT
+    command = "printf '%s\\n' \"$INSTRUCTIONS\""
+    environment = {
+      INSTRUCTIONS = local.formatted_instructions
+    }
   }
 }
