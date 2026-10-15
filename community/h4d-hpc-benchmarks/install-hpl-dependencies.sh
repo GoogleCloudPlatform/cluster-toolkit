@@ -638,6 +638,7 @@ ruamel-yaml-clib==0.2.8 \
     --hash=sha256:edaef1c1200c4b4cb914583150dcaa3bc30e592e907c01117c08b13a07255ec2 \
     --hash=sha256:f481f16baec5290e45aebdc2a5168ebc6d35189ae6fea7a58787613a25f6e875 \
     --hash=sha256:fff3573c2db359f091e1589c3d7c5fc2f86f5bdb6f24252c2d8e539d4e45f412
+
 REQ_EOF
 
 # SECURITY FIX: Added --require-hashes to satisfy the vulnerability scanner policy
