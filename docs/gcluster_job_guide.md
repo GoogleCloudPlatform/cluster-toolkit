@@ -1317,7 +1317,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--main-only` | `bool` | Fetch logs only from the rank-0 pod of the JobSet's first replicated job (`main-job`, or `pathways-head` for Pathways), using that pod's default container. |
 
 > [!NOTE]
-> **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. You can override this to stream logs from all pods by explicitly passing `--main-only=false`.
+> **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. For jobs with up to 10 pods, you can override this to stream logs from all pods by explicitly passing `--main-only=false`; for jobs with more than 10 pods, `gcluster` prints a link to view all-pod logs in the Google Cloud Console.
 
 ## 10. Troubleshooting
 

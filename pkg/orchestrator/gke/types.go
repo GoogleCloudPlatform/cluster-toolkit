@@ -569,6 +569,18 @@ type JobSetStatus struct {
 	} `json:"status"`
 }
 
+type jobSetInfo struct {
+	terminalState string
+	suspended     bool
+	firstJob      string
+	expectedPods  int
+	queried       bool
+}
+
+func (info jobSetInfo) terminal() bool {
+	return info.terminalState == "Completed" || info.terminalState == "Failed"
+}
+
 type ContainerData struct {
 	Name          string
 	ResourcesYAML string
