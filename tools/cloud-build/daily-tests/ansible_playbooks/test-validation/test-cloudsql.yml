@@ -1,0 +1,341 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+# Runs on the client VM from blueprints/cloudsql-database.yaml, with
+# localhost (the test runner) used for gcloud and Terraform state checks.
+# Never prints the password: every task that handles it sets no_log.
+
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - custom_vars.deployment_group is defined
+
+- name: Read the cloudsql module outputs
+  delegate_to: localhost
+  ansible.builtin.command:
+    cmd: terraform output -json
+    chdir: "{{ workspace }}/{{ deployment_name }}/{{ custom_vars.deployment_group }}"
+  register: tf_outputs
+  changed_when: false
+
+- name: Record the module outputs
+  vars:
+    outputs: "{{ tf_outputs.stdout | from_json }}"
+  ansible.builtin.set_fact:
+    sql_instance: "{{ outputs['instance_name_sql']['value'] }}"
+    sql_username: "{{ outputs['username_sql']['value'] }}"
+    secret_id: "{{ outputs['password_secret_id_sql']['value'] }}"
+    private_ip: "{{ outputs['private_ip_address_sql']['value'] }}"
+    adopt_username: "{{ outputs['username_sql_adopt']['value'] }}"
+    adopt_secret_id: "{{ outputs['password_secret_id_sql_adopt']['value'] }}"
+    adopt_ip: "{{ outputs['private_ip_address_sql_adopt']['value'] }}"
+    pg_instance: "{{ outputs['instance_name_pg']['value'] }}"
+    pg_username: "{{ outputs['username_pg']['value'] }}"
+    pg_secret_id: "{{ outputs['password_secret_id_pg']['value'] }}"
+    pg_ip: "{{ outputs['private_ip_address_pg']['value'] }}"
+
+- name: Describe the Cloud SQL instance
+  delegate_to: localhost
+  ansible.builtin.command: >-
+    gcloud sql instances describe {{ sql_instance }}
+    --project {{ project }}
+    --format=json(settings.ipConfiguration.ipv4Enabled,ipAddresses)
+  register: sql_describe
+  changed_when: false
+
+- name: Record instance facts
+  ansible.builtin.set_fact:
+    sql_info: "{{ sql_describe.stdout | from_json }}"
+
+- name: Assert the instance is private and the module reports its private IP
+  ansible.builtin.assert:
+    that:
+    - not (sql_info.settings.ipConfiguration.ipv4Enabled | default(false) | bool)
+    - sql_info.ipAddresses | selectattr('type', 'equalto', 'PRIMARY') | list | length == 0
+    - sql_info.ipAddresses | selectattr('type', 'equalto', 'PRIVATE') | map(attribute='ipAddress') | list == [private_ip]
+    fail_msg: >-
+      Cloud SQL instance {{ sql_instance }} has a public IPv4 address, or its
+      private IP does not match the module's private_ip_address output ({{ private_ip }})
+
+- name: Assert the adopting module reports the adopted instance's private IP
+  ansible.builtin.assert:
+    that:
+    - adopt_ip == private_ip
+
+- name: Describe the PostgreSQL instance
+  delegate_to: localhost
+  ansible.builtin.command: >-
+    gcloud sql instances describe {{ pg_instance }}
+    --project {{ project }}
+    --format=json(settings.ipConfiguration)
+  register: pg_describe
+  changed_when: false
+
+- name: Assert the PostgreSQL instance is reachable only through Private Service Connect
+  vars:
+    pg_ip_config: "{{ (pg_describe.stdout | from_json).settings.ipConfiguration }}"
+  ansible.builtin.assert:
+    that:
+    - not (pg_ip_config.ipv4Enabled | default(false) | bool)
+    - pg_ip_config.pscConfig.pscEnabled | default(false) | bool
+    - pg_ip_config.privateNetwork is not defined
+    fail_msg: "{{ pg_instance }} is not PSC-only: {{ pg_ip_config }}"
+
+- name: Install MySQL and PostgreSQL clients on the client VM
+  become: true
+  ansible.builtin.apt:
+    name:
+    - default-mysql-client
+    - postgresql-client
+    update_cache: true
+    lock_timeout: 300
+
+# The VM's service account was granted access in the same apply, and IAM
+# changes can take a few minutes to propagate.
+- name: Read the password from Secret Manager with the VM's service account
+  ansible.builtin.command: >-
+    gcloud secrets versions access latest --secret={{ secret_id }}
+    --project {{ project }}
+  register: vm_secret
+  no_log: true
+  changed_when: false
+  failed_when: false
+  retries: 30
+  delay: 10
+  until: vm_secret.rc == 0 and (vm_secret.stdout | length) > 0
+
+- name: Show why the secret could not be read
+  ansible.builtin.debug:
+    var: vm_secret.stderr
+  when: vm_secret.rc != 0
+
+- name: Fail if the secret could not be read
+  ansible.builtin.fail:
+    msg: The client VM could not read {{ secret_id }} with its own service account
+  when: vm_secret.rc != 0 or (vm_secret.stdout | length) == 0
+
+- name: Read the adopting and PostgreSQL modules' passwords with the VM's service account
+  ansible.builtin.command: >-
+    gcloud secrets versions access latest --secret={{ item }}
+    --project {{ project }}
+  loop:
+  - "{{ adopt_secret_id }}"
+  - "{{ pg_secret_id }}"
+  register: other_secrets
+  no_log: true
+  changed_when: false
+  retries: 30
+  delay: 10
+  until: other_secrets.rc == 0 and (other_secrets.stdout | length) > 0
+
+- name: Log in to the database over TLS at the module's private_ip_address
+  ansible.builtin.command: >-
+    mysql --ssl --connect-timeout=10 -h {{ private_ip }} -u {{ sql_username }} -N -e 'SELECT 1'
+  environment:
+    MYSQL_PWD: "{{ vm_secret.stdout }}"
+  register: login
+  no_log: true
+  changed_when: false
+  retries: 3
+  delay: 5
+  until: login.rc == 0
+
+- name: Assert an unencrypted connection is refused (ssl_mode ENCRYPTED_ONLY)
+  ansible.builtin.command: >-
+    mysql --skip-ssl --connect-timeout=10 -h {{ private_ip }} -u {{ sql_username }} -N -e 'SELECT 1'
+  environment:
+    MYSQL_PWD: "{{ vm_secret.stdout }}"
+  register: plaintext_login
+  no_log: true
+  changed_when: false
+  # Cloud SQL has answered "Access denied"; MySQL's own refusal is error 3159.
+  failed_when: >-
+    plaintext_login.rc == 0 or
+    ('Access denied' not in plaintext_login.stderr and 'insecure transport' not in plaintext_login.stderr)
+
+- name: Assert the root user cannot log in without a password
+  ansible.builtin.command: >-
+    mysql --ssl --connect-timeout=10 -h {{ private_ip }} -u root -N -e 'SELECT 1'
+  register: root_login
+  changed_when: false
+  failed_when: root_login.rc == 0 or 'Access denied' not in root_login.stderr
+
+- name: Log in to the adopted instance as the adopting module's user
+  ansible.builtin.command: >-
+    mysql --ssl --connect-timeout=10 -h {{ adopt_ip }} -u {{ adopt_username }} -N -e 'SELECT 1' adopteddb
+  environment:
+    MYSQL_PWD: "{{ other_secrets.results[0].stdout }}"
+  register: adopt_login
+  no_log: true
+  changed_when: false
+  retries: 3
+  delay: 5
+  until: adopt_login.rc == 0
+
+- name: Log in to PostgreSQL over TLS through the PSC endpoint
+  ansible.builtin.command: >-
+    psql "host={{ pg_ip }} dbname=pgappdb user={{ pg_username }} sslmode=require connect_timeout=10"
+    -tAc 'SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()'
+  environment:
+    PGPASSWORD: "{{ other_secrets.results[1].stdout }}"
+  register: pg_login
+  no_log: true
+  changed_when: false
+  retries: 3
+  delay: 5
+  until: pg_login.rc == 0 and (pg_login.stdout | trim) == 't'
+
+- name: Assert an unencrypted PostgreSQL connection is refused (ssl_mode ENCRYPTED_ONLY)
+  ansible.builtin.command: >-
+    psql "host={{ pg_ip }} dbname=pgappdb user={{ pg_username }} sslmode=disable connect_timeout=10"
+    -tAc 'SELECT 1'
+  environment:
+    PGPASSWORD: "{{ other_secrets.results[1].stdout }}"
+  register: pg_plaintext_login
+  no_log: true
+  changed_when: false
+  failed_when: pg_plaintext_login.rc == 0 or 'no encryption' not in pg_plaintext_login.stderr
+
+- name: Pull the Terraform state
+  delegate_to: localhost
+  ansible.builtin.command: >-
+    terraform -chdir={{ workspace }}/{{ deployment_name }}/{{ custom_vars.deployment_group }} state pull
+  register: tf_state
+  no_log: true
+  changed_when: false
+  failed_when: tf_state.rc != 0 or 'google_sql_database_instance' not in tf_state.stdout
+
+- name: Search the state for the passwords
+  vars:
+    passwords: "{{ [vm_secret.stdout] + (other_secrets.results | map(attribute='stdout') | list) }}"
+  ansible.builtin.set_fact:
+    password_in_state: "{{ passwords | map('trim') | select('in', tf_state.stdout) | list | length > 0 }}"
+  no_log: true
+
+- name: Assert no password is stored in Terraform state
+  ansible.builtin.assert:
+    that:
+    - not password_in_state
+    fail_msg: A database password was found in Terraform state
+
+- name: Rotate the MySQL password by re-applying with mysql_password_version 2
+  delegate_to: localhost
+  ansible.builtin.command: >-
+    terraform -chdir={{ workspace }}/{{ deployment_name }}/{{ custom_vars.deployment_group }}
+    apply -auto-approve -input=false -no-color -var mysql_password_version=2
+  changed_when: true
+
+- name: List the MySQL password secret's versions
+  delegate_to: localhost
+  ansible.builtin.command: >-
+    gcloud secrets versions list {{ secret_id }}
+    --project {{ project }}
+    --format=json(name,state)
+  register: secret_versions
+  changed_when: false
+
+- name: Assert the old version is disabled, not deleted, and the new one enabled
+  vars:
+    versions: "{{ secret_versions.stdout | from_json }}"
+  ansible.builtin.assert:
+    that:
+    - versions | selectattr('name', 'search', '/versions/1$') | map(attribute='state') | list == ['DISABLED']
+    - versions | selectattr('name', 'search', '/versions/2$') | map(attribute='state') | list == ['ENABLED']
+    fail_msg: "Unexpected secret versions after rotation: {{ versions }}"
+
+- name: Read the rotated password with the VM's service account
+  ansible.builtin.command: >-
+    gcloud secrets versions access latest --secret={{ secret_id }}
+    --project {{ project }}
+  register: rotated_secret
+  no_log: true
+  changed_when: false
+  failed_when: rotated_secret.rc != 0 or (rotated_secret.stdout | length) == 0 or rotated_secret.stdout == vm_secret.stdout
+
+- name: Log in with the rotated password
+  ansible.builtin.command: >-
+    mysql --ssl --connect-timeout=10 -h {{ private_ip }} -u {{ sql_username }} -N -e 'SELECT 1'
+  environment:
+    MYSQL_PWD: "{{ rotated_secret.stdout }}"
+  register: rotated_login
+  no_log: true
+  changed_when: false
+  retries: 3
+  delay: 5
+  until: rotated_login.rc == 0
+
+- name: Assert the old password no longer works
+  ansible.builtin.command: >-
+    mysql --ssl --connect-timeout=10 -h {{ private_ip }} -u {{ sql_username }} -N -e 'SELECT 1'
+  environment:
+    MYSQL_PWD: "{{ vm_secret.stdout }}"
+  register: old_login
+  no_log: true
+  changed_when: false
+  failed_when: old_login.rc == 0 or 'Access denied' not in old_login.stderr
+
+- name: Turn on deletion protection for the MySQL instance
+  delegate_to: localhost
+  ansible.builtin.command: >-
+    terraform -chdir={{ workspace }}/{{ deployment_name }}/{{ custom_vars.deployment_group }}
+    apply -auto-approve -input=false -no-color
+    -var mysql_password_version=2 -var mysql_deletion_protection=true
+  changed_when: true
+
+# Targeting the database also destroys everything that depends on it,
+# including the module's destroy guard, which runs first.
+- name: Try to destroy the protected database
+  delegate_to: localhost
+  ansible.builtin.command: >-
+    terraform -chdir={{ workspace }}/{{ deployment_name }}/{{ custom_vars.deployment_group }}
+    destroy -auto-approve -input=false -no-color
+    -var mysql_password_version=2 -var mysql_deletion_protection=true
+    -target=module.sql.google_sql_database.database
+  register: protected_destroy
+  changed_when: false
+  failed_when: >-
+    protected_destroy.rc == 0 or
+    'Set both to false and apply before destroying it' not in (protected_destroy.stdout + protected_destroy.stderr)
+
+- name: List the instance's databases
+  delegate_to: localhost
+  ansible.builtin.command: >-
+    gcloud sql databases list --instance={{ sql_instance }}
+    --project {{ project }} --format=value(name)
+  register: databases_after
+  changed_when: false
+
+- name: Assert the refused destroy left the database in place
+  ansible.builtin.assert:
+    that:
+    - "'appdb' in databases_after.stdout_lines"
+
+- name: Log in after the refused destroy
+  ansible.builtin.command: >-
+    mysql --ssl --connect-timeout=10 -h {{ private_ip }} -u {{ sql_username }} -N -e 'SELECT 1' appdb
+  environment:
+    MYSQL_PWD: "{{ rotated_secret.stdout }}"
+  register: guarded_login
+  no_log: true
+  changed_when: false
+
+- name: Turn deletion protection off again so the deployment can be destroyed
+  delegate_to: localhost
+  ansible.builtin.command: >-
+    terraform -chdir={{ workspace }}/{{ deployment_name }}/{{ custom_vars.deployment_group }}
+    apply -auto-approve -input=false -no-color
+    -var mysql_password_version=2 -var mysql_deletion_protection=false
+  changed_when: true
