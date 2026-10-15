@@ -112,8 +112,8 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 		if err := validatePathwaysFlags(); err != nil {
 			return err
 		}
-		if !skipPrereqs {
-			if err := ensurePrerequisites(cmd, projectID, location); err != nil {
+		if !skipPrereqs && buildContext != "" {
+			if err := ensureBuildPrerequisites(cmd, projectID, location); err != nil {
 				return err
 			}
 		}
