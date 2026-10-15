@@ -556,12 +556,17 @@ func getCanonicalWorkloadPolicyName(machineType, topology string) string {
 		tensorcores := chips * 2
 		return fmt.Sprintf("tpu7x-%d-%s-placement-policy", tensorcores, topology)
 	}
+	// Sorted so the name is stable if several shorthands alias one machine type.
 	shorthand := strings.ToLower(machineType)
+	var matches []string
 	for short, full := range config.AcceleratorShorthandMap {
 		if strings.EqualFold(full, machineType) {
-			shorthand = short
-			break
+			matches = append(matches, short)
 		}
+	}
+	if len(matches) > 0 {
+		sort.Strings(matches)
+		shorthand = matches[0]
 	}
 	return fmt.Sprintf("%s-%s-placement-policy", shorthand, topology)
 }
