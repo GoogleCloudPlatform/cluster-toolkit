@@ -549,8 +549,7 @@ func (g *GKEOrchestrator) nodePoolPolicyModeAndTopology(np gkeJobNodePool, polic
 
 // getCanonicalWorkloadPolicyName generates the deterministic GCE resource policy name for a
 // machine type and topology. TPU 7x uses "tpu7x-<tensorcores>-<topology>-placement-policy";
-// GPUs use "<shorthand>-<topology>-placement-policy" (e.g. "gb200-4-1x72-placement-policy"),
-// matching the names XPK creates so clusters migrated from XPK reuse the same policy.
+// GPUs use "<shorthand>-<topology>-placement-policy" (e.g. "gb200-4-1x72-placement-policy").
 func getCanonicalWorkloadPolicyName(machineType, topology string) string {
 	if strings.Contains(strings.ToLower(machineType), "tpu7x") {
 		chips := calculateChipsFromTopology(topology)
