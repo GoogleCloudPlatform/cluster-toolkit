@@ -19,6 +19,13 @@ The main components of Cluster Toolkit include:
 
 For more information, see [Google Cluster Toolkit overview](https://cloud.google.com/cluster-toolkit/docs/overview).
 
+### Why use Cluster Toolkit (`gcluster`) instead of raw `gcloud` or raw Terraform?
+
+- **Turnkey Multi-NIC GPUDirect RDMA for AI Hypercomputer (A3 Ultra, A4, A4X):** GPU clusters with 8 NICs require secondary RoCE/MRDMA VPCs, `GKENetworkParamSet` objects, NCCL `gib` installers, and Kueue Topology-Aware Scheduling (TAS) or Slurm topology plugins—none of which a single `gcloud container clusters create` or `gcloud compute instances create` command configures.
+- **Automatic Cross-Module Wiring (`use:`):** Connecting a VPC, Private Service Access, Managed Lustre / Filestore / GCS FUSE (`network_storage`), and multiple Slurm partitions or GKE node pools takes a single `use: [vpc, homefs]` line instead of hundreds of lines of manual Terraform variable/output plumbing.
+- **Staged Deployment Groups (`deployment_groups`):** Automatically sequences multi-stage infrastructure (`cluster-env` → `image` → `cluster`) so Packer image builds and Kubernetes/Helm providers never fail during `terraform plan` before the cluster exists.
+- **Fast Pre-Deploy Validation:** Validates YAML syntax, module inputs, enabled GCP APIs, quotas, zones, and reservations in seconds via `./gcluster expand` / `./gcluster create` before Terraform runs.
+
 ## AI Hypercomputer
 
 Cluster Toolkit is an integral part of [Google Cloud AI Hypercomputer](https://cloud.google.com/ai-hypercomputer/docs). For more information about GKE and Slurm deployments in AI Hypercomputer, see [Create an AI-optimized GKE cluster with default configuration](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute) and [Create a self-managed Slurm cluster for AI workloads](https://docs.cloud.google.com/ai-hypercomputer/docs/create/create-self-managed-slurm-cluster).
@@ -59,17 +66,14 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 | **macOS (amd64 / arm64)** | ✅ | Native support via the Mac binary. |
 | **Windows** | ⚠️ | Pre-built bundle not provided; please [Build from source](#building-from-source) (`go build -o gcluster.exe .`). WSL2 is recommended for blueprints using shell-based `local-exec` provisioners. |
 
-1. Download and extract the bundle:
+1. Download and extract the latest bundle from [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases):
 
     ```shell
-    # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
-    # Set the desired version TAG (e.g., v1.103.0)
-    TAG=vX.Y.Z
     # Set your OS (linux or mac) and architecture (amd64 or arm64)
     OS="linux"
     ARCH="amd64"
-    # Download and extract the platform-specific bundle in a single step
-    mkdir -p cluster-toolkit && curl -L https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster_bundle_${OS}_${ARCH}.tgz | tar -xz -C cluster-toolkit && cd cluster-toolkit
+    # Latest release (to pin a specific version, replace "latest/download" with "download/vX.Y.Z")
+    mkdir -p cluster-toolkit && curl -L https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/latest/download/gcluster_bundle_${OS}_${ARCH}.tgz | tar -xz -C cluster-toolkit && cd cluster-toolkit
     ```
 
 2. Verify the installation:
@@ -81,11 +85,10 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 
 ### Building from source
 
-If you prefer to build the `gcluster` binary from source,
-you can use the following commands:
+If you prefer to build the `gcluster` binary from source (requires Go 1.26+, Terraform 1.12.2+, and Packer 1.15.3+), run:
 
 ```bash
-git clone https://github.com/GoogleCloudPlatform/cluster-toolkit
+git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
 cd cluster-toolkit
 make
 ./gcluster --version
@@ -102,10 +105,11 @@ Before deploying your first cluster, ensure the following are configured in your
 ### Enable APIs
 
 Several APIs must be enabled to deploy your cluster. While Terraform identifies missing APIs during `terraform apply`, enabling them upfront saves time. Required APIs typically include:
-- Compute Engine API
-- Filestore API
-- Cloud Storage API
-- Service Usage API
+- Compute Engine API (`compute.googleapis.com`)
+- Managed Lustre API (`lustre.googleapis.com`) and Service Networking API (`servicenetworking.googleapis.com`) for AI Hypercomputer GPU/TPU blueprints
+- Filestore API (`file.googleapis.com`)
+- Cloud Storage API (`storage.googleapis.com`)
+- Service Usage API (`serviceusage.googleapis.com`)
 
 For more information, see [Set up Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment).
 
@@ -148,15 +152,17 @@ Cluster Toolkit telemetry overall is handled in accordance with the [Google Priv
 
 After installing `gcluster`, you can deploy, manage, and destroy infrastructure using cluster blueprints:
 
-1. **Create deployment folder**: Use a blueprint YAML file to generate deployment files:
+1. **Deploy cluster in a single step** (expands the blueprint and provisions infrastructure with Terraform, optionally passing user overrides via `-d deployment.yaml`):
 
    ```bash
-   ./gcluster create examples/hpc-slurm.yaml
+   ./gcluster deploy examples/hpc-slurm.yaml --vars project_id=<PROJECT_ID>
    ```
 
-2. **Deploy cluster**: Provision infrastructure with Terraform:
+2. **Or validate and create the deployment folder first** without provisioning cloud resources:
 
    ```bash
+   ./gcluster expand examples/hpc-slurm.yaml --vars project_id=<PROJECT_ID> -o /dev/null
+   ./gcluster create examples/hpc-slurm.yaml --vars project_id=<PROJECT_ID>
    ./gcluster deploy hpc-slurm
    ```
 
@@ -165,6 +171,23 @@ After installing `gcluster`, you can deploy, manage, and destroy infrastructure 
    ```bash
    ./gcluster destroy hpc-slurm
    ```
+
+### CLI Commands Overview
+
+| Command | Description |
+| :--- | :--- |
+| `./gcluster deploy (<DEPLOYMENT_DIR> \| <BLUEPRINT_FILE>) [-d <DEPLOYMENT_FILE>]` | Create (if given a blueprint) and deploy all resources in a deployment directory. |
+| `./gcluster create <BLUEPRINT_FILE> [-d <DEPLOYMENT_FILE>]` | Generate a self-contained Terraform/Packer deployment directory from a blueprint. |
+| `./gcluster expand <BLUEPRINT_FILE> [-d <DEPLOYMENT_FILE>]` | Expand and validate a blueprint without writing the deployment directory. |
+| `./gcluster destroy <DEPLOYMENT_DIR>` | Destroy all cloud resources in a deployment directory. |
+| `./gcluster export-outputs <DEPLOYMENT_GROUP_DIR>` | Export Terraform outputs from a deployment group for cross-group consumption. |
+| `./gcluster import-inputs <DEPLOYMENT_GROUP_DIR>` | Import output values from prior deployment groups as input `.tfvars`. |
+| `./gcluster cluster <list\|describe\|info\|volume>` | Discover, list, and inspect deployed target clusters and storage volumes. |
+| `./gcluster job <submit\|list\|logs\|cancel\|config\|inspect\|gke-template-extract>` | Submit, monitor, inspect, and manage workloads on GKE clusters. |
+| `./gcluster telemetry <on\|off>` | Enable or disable anonymous usage telemetry. |
+| `./gcluster completion <bash\|zsh\|fish\|powershell>` | Generate shell autocompletion scripts. |
+
+For complete flag documentation, see [`cmd/README.md`](cmd/README.md).
 
 ### Automatic Dependency Management
 

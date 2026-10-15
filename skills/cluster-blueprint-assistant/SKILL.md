@@ -24,8 +24,11 @@ metadata:
   author: GoogleCloudPlatform
   status: experimental
   domain: blueprints
-allowed-tools: Bash(gcluster expand:*) Bash(gcluster create:*)
+allowed-tools: Bash(make) Bash(./gcluster expand:*) Bash(./gcluster create:*) Bash(gcluster expand:*) Bash(gcluster create:*)
 allowed_read_only_commands:
+  - "make"
+  - "./gcluster expand"
+  - "./gcluster create"
   - "gcluster expand"
   - "gcluster create"
 ---
@@ -70,27 +73,35 @@ allowed_read_only_commands:
 4. **Mark agent-authored blueprints.** Add `ai_assisted: true` at the top level
    of any blueprint you create or modify.
 5. **Validate with gcluster, fix the blueprint, never the output.**
-   `gcluster expand` and `gcluster create` are the validation step. If they or
-   `gcluster deploy` fail, fix the blueprint YAML or `deployment.yaml` and re-run
-   gcluster. Never edit generated files under `<deployment_name>/` (`main.tf`,
+   `./gcluster expand` and `./gcluster create` are the validation step. If they or
+   `./gcluster deploy` fail, fix the blueprint YAML or `deployment.yaml` and re-run
+   `./gcluster`. Never edit generated files under `<deployment_name>/` (`main.tf`,
    `variables.tf`, `terraform.tfvars`, `.ghpc/`) and never run `terraform` in
    any form — not `init`, `validate`, `plan`, `apply` or `destroy` — even if the
    user asks you to; refuse, explain, and offer the gcluster equivalent.
    gcluster regenerates these files on every run. If you cannot reproduce a
-   reported error with `gcluster create`, stop and ask the user for the full
+   reported error with `./gcluster create`, stop and ask the user for the full
    error output instead of searching further.
-6. **Destructive or mutating actions require confirmation.** `gcluster deploy`,
-   `gcluster destroy`, and anything that creates or deletes cloud resources must
+6. **Destructive or mutating actions require confirmation.** `./gcluster deploy`,
+   `./gcluster destroy`, and anything that creates or deletes cloud resources must
    be presented as a `[PROPOSED REMEDIATION PLAN]` and wait for the user to reply
    `yes`. The same applies to local destructive steps: deleting a deployment
    folder, deleting or overwriting user files, and `git checkout` / `git reset`
    of user edits — state exactly what will be removed and wait for `yes`.
-   Prefer `gcluster create … -w` over deleting the deployment folder.
+   Prefer `./gcluster create … -w` over deleting the deployment folder.
 7. **Do only what was asked.** If you notice unrelated warnings or problems
    (deprecation notices, bugs in Go code, other blueprints), report them in your
    summary — do not fix, migrate or refactor them unprompted.
 
 ## Workflow
+
+### 0. Ensure `./gcluster` is built
+
+From the root of the repository, verify that `./gcluster` exists or build it via `make`:
+
+```bash
+test -x ./gcluster || make
+```
 
 ### 1. Find the right template
 
@@ -149,16 +160,16 @@ makes the knob reusable.
 
 ```bash
 # Dry-run (no deployment folder or expanded.yaml written; still runs cloud validators if authenticated):
-gcluster expand examples/hpc-slurm.yaml -d my-deployment.yaml -o /dev/null
+./gcluster expand examples/hpc-slurm.yaml -d my-deployment.yaml -o /dev/null
 
 # Offline (when using a placeholder project_id or without GCP credentials):
-GHPC_MOCK_MACHINE_CONFIG='{}' gcluster expand examples/hpc-slurm.yaml -d my-deployment.yaml -o /dev/null \
+GHPC_MOCK_MACHINE_CONFIG='{}' ./gcluster expand examples/hpc-slurm.yaml -d my-deployment.yaml -o /dev/null \
   --skip-validators="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_quota_availability,test_machine_type_in_zone,test_reservation_exists,test_disk_type_in_zone"
 
 # Full: writes the deployment folder and runs read-only cloud validators
 # (project, APIs, zone, machine type, reservations). Use -w on re-runs instead
 # of deleting the folder.
-gcluster create examples/hpc-slurm.yaml -d my-deployment.yaml -w
+./gcluster create examples/hpc-slurm.yaml -d my-deployment.yaml -w
 ```
 
 Read errors bottom-up. A path such as
