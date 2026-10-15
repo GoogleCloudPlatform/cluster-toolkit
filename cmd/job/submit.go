@@ -359,7 +359,7 @@ func validatePathwaysFlags() error {
 		}
 	} else {
 		// Check if any pathways-specific flag is set without --pathways
-		if !reflect.DeepEqual(pathways, orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 4000}) || len(pathwaysProxyEnv) > 0 || len(pathwaysServerEnv) > 0 || len(pathwaysWorkerEnv) > 0 {
+		if !reflect.DeepEqual(pathways, orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 4000}) || SubmitCmd.Flags().Changed("pathways-max-slice-restarts") || len(pathwaysProxyEnv) > 0 || len(pathwaysServerEnv) > 0 || len(pathwaysWorkerEnv) > 0 {
 			return fmt.Errorf("pathways flags specified but --pathways flag is missing")
 		}
 	}
