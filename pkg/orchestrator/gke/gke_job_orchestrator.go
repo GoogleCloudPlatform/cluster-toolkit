@@ -205,14 +205,8 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 		return "Job exists but has no live logs available (it may have finished or failed to start pods)", nil
 	}
 
-	if !jsInfo.queried {
-		if info, err := g.getJobSetInfo(foundNamespace, name); err == nil {
-			jsInfo = info
-		} else {
-			logging.Warn("Failed to query JobSet: %v", err)
-		}
-	}
 	// Pods appear in batches (and after the leader with InOrder startup), so size decisions on the spec.
+	jsInfo = g.ensureJobSetInfo(foundNamespace, name, jsInfo)
 	podCount = max(podCount, jsInfo.expectedPods)
 	consoleURL := getCloudConsoleLogsURL(opts.ProjectID, opts.ClusterLocation, opts.ClusterName, foundNamespace, name)
 	selector, mainOnly := g.resolveLogsSelector(name, opts.MainOnly, podCount, jsInfo.firstJob, consoleURL)
@@ -332,6 +326,18 @@ func (g *GKEOrchestrator) getJobSetInfo(ns, jobsetName string) (jobSetInfo, erro
 	info := parseJobSetInfo(res.Stdout)
 	info.queried = true
 	return info, nil
+}
+
+func (g *GKEOrchestrator) ensureJobSetInfo(ns, jobsetName string, info jobSetInfo) jobSetInfo {
+	if info.queried {
+		return info
+	}
+	queried, err := g.getJobSetInfo(ns, jobsetName)
+	if err != nil {
+		logging.Warn("Failed to query JobSet: %v", err)
+		return info
+	}
+	return queried
 }
 
 // parseJobSetInfo parses the output of jobSetInfoJSONPath. Each line after the tab-separated header is one
