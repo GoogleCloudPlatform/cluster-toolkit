@@ -208,11 +208,17 @@ func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string
 	relPath = filepath.ToSlash(relPath)
 
 	varsMap := dictToPlainMap(bp.Vars)
+	if varsMap == nil {
+		varsMap = make(map[string]interface{})
+	}
 	deployRel := findCompanionDeployment(repoRoot, absPath, varsMap)
 	modules := extractModuleSummaries(bp)
 	scheduler := inferScheduler(modules)
 	machineTypes := extractMachineTypes(bp, varsMap)
 	desc := lookupDescription(repoRoot, absPath, relPath, readmeDescs)
+	if len(varsMap) == 0 {
+		varsMap = nil
+	}
 
 	return BlueprintEntry{
 		Path:           relPath,
@@ -506,8 +512,9 @@ func cleanDescriptionText(raw string) string {
 	s = strings.ReplaceAll(s, "`", "")
 	s = strings.ReplaceAll(s, "**", "")
 	s = spaceRunRegex.ReplaceAllString(strings.TrimSpace(s), " ")
-	if len(s) > 240 {
-		cut := s[:237]
+	runes := []rune(s)
+	if len(runes) > 240 {
+		cut := string(runes[:237])
 		if idx := strings.LastIndex(cut, " "); idx > 0 {
 			cut = cut[:idx]
 		}
