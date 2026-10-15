@@ -425,23 +425,23 @@ func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) 
 	return nil
 }
 
-// resolveTPUWorkloadPolicy resolves or auto-creates a GCE HIGH_THROUGHPUT workload policy
-// required for multi-host TPU 7x Node Auto-Provisioning (NAP) to successfully scale from 0.
+// resolveWorkloadPolicy resolves or auto-creates the GCE HIGH_THROUGHPUT workload policy
+// required for multi-host TPU 7x and A4X Node Auto-Provisioning (NAP) to scale from 0.
 // Resolution order:
-//  1. Check existing TPU 7x node pools in the cluster for an attached placement policy.
+//  1. Check existing node pools of the same machine type for an attached placement policy.
 //  2. Check the regional resource policy cache or query GCE for a policy matching the topology.
 //  3. If missing and not in dry-run mode, auto-create the canonical workload policy.
-func (g *GKEOrchestrator) resolveTPUWorkloadPolicy(machineType, topology, clusterLocation, projectID string, isDryRun bool) (string, error) {
+func (g *GKEOrchestrator) resolveWorkloadPolicy(machineType, topology, clusterLocation, projectID string, isDryRun bool) (string, error) {
 	if topology == "" {
-		return "", fmt.Errorf("cannot resolve TPU workload policy: topology is empty")
+		return "", fmt.Errorf("cannot resolve workload policy for %s: topology is empty", machineType)
 	}
 
 	if policy := g.findPolicyInClusterNodePools(machineType, topology); policy != "" {
 		return policy, nil
 	}
 
-	canonicalPolicyName := getCanonicalTPUWorkloadPolicyName(topology)
-	if policy := g.getCachedTPUWorkloadPolicy(canonicalPolicyName, topology); policy != "" {
+	canonicalPolicyName := getCanonicalWorkloadPolicyName(machineType, topology)
+	if policy := g.getCachedWorkloadPolicy(canonicalPolicyName, topology); policy != "" {
 		return policy, nil
 	}
 
@@ -471,7 +471,7 @@ func (g *GKEOrchestrator) resolveTPUWorkloadPolicy(machineType, topology, cluste
 	}
 
 	if !isDryRun {
-		if err := g.createTPUWorkloadPolicy(canonicalPolicyName, region, resolvedProjID, topology); err != nil {
+		if err := g.createWorkloadPolicy(canonicalPolicyName, region, resolvedProjID, topology); err != nil {
 			return "", err
 		}
 	} else {
@@ -490,7 +490,7 @@ func isStaticWorkloadPolicyMode(mode string) bool {
 	return trimmed == "" || strings.EqualFold(trimmed, "AUTO_CONNECT")
 }
 
-func (g *GKEOrchestrator) getCachedTPUWorkloadPolicy(canonicalPolicyName, topology string) string {
+func (g *GKEOrchestrator) getCachedWorkloadPolicy(canonicalPolicyName, topology string) string {
 	if g.resourcePolicyCache == nil {
 		return ""
 	}
@@ -502,40 +502,69 @@ func (g *GKEOrchestrator) getCachedTPUWorkloadPolicy(canonicalPolicyName, topolo
 }
 
 // findPolicyInClusterNodePools inspects the cluster's existing node pools for an active
-// placement policy matching the requested machine type and TPU topology.
+// placement policy matching the requested machine type and topology. TPU node pools expose
+// their topology directly; GPU node pools do not, so the topology is taken from the resource
+// policy cache when available and otherwise trusted, since the node pool's attached policy is
+// the only one its nodes can ever match.
 // Non-static policies (such as dynamic slicing PROVISION_ONLY) are skipped for static workloads.
 func (g *GKEOrchestrator) findPolicyInClusterNodePools(machineType, topology string) string {
+	isTPU := config.IsTPU(machineType)
 	for _, np := range g.clusterDesc.NodePools {
-		if strings.EqualFold(np.Config.MachineType, machineType) && np.PlacementPolicy != nil && np.PlacementPolicy.PolicyName != "" {
-			mode := np.PlacementPolicy.AcceleratorTopologyMode
-			if mode == "" && g.resourcePolicyCache != nil {
-				if cached := g.resourcePolicyCache[path.Base(np.PlacementPolicy.PolicyName)]; cached != nil {
-					mode = cached.AcceleratorTopologyMode
-				}
-			}
-			if !isStaticWorkloadPolicyMode(mode) {
-				continue // Skip non-static (e.g. PROVISION_ONLY) policies for static workloads
-			}
-			topo := np.PlacementPolicy.TpuTopology
-			if topo == "" && np.Config.Labels != nil {
-				topo = np.Config.Labels[tpuTopologyLabel]
-			}
-			if topo != "" && topo == topology {
-				policy := path.Base(np.PlacementPolicy.PolicyName)
-				logging.Info("Discovered matching placement policy %q from existing node pool %q", policy, np.Name)
-				return policy
-			}
+		if !strings.EqualFold(np.Config.MachineType, machineType) || np.PlacementPolicy == nil || np.PlacementPolicy.PolicyName == "" {
+			continue
+		}
+		policy := path.Base(np.PlacementPolicy.PolicyName)
+		mode, topo := g.nodePoolPolicyModeAndTopology(np, policy)
+		if !isStaticWorkloadPolicyMode(mode) {
+			continue // Skip non-static (e.g. PROVISION_ONLY) policies for static workloads
+		}
+		if (topo != "" && topo == topology) || (topo == "" && !isTPU) {
+			logging.Info("Discovered matching placement policy %q from existing node pool %q", policy, np.Name)
+			return policy
 		}
 	}
 	return ""
 }
 
-// getCanonicalTPUWorkloadPolicyName generates the deterministic GCE resource policy name
-// for a given TPU 7x topology (e.g., "tpu7x-16-2x2x2-placement-policy").
-func getCanonicalTPUWorkloadPolicyName(topology string) string {
-	chips := calculateChipsFromTopology(topology)
-	tensorcores := chips * 2
-	return fmt.Sprintf("tpu7x-%d-%s-placement-policy", tensorcores, topology)
+// nodePoolPolicyModeAndTopology returns the accelerator topology mode and topology of the
+// node pool's placement policy, falling back to the resource policy cache for either value.
+func (g *GKEOrchestrator) nodePoolPolicyModeAndTopology(np gkeJobNodePool, policy string) (mode, topo string) {
+	mode = np.PlacementPolicy.AcceleratorTopologyMode
+	topo = np.PlacementPolicy.TpuTopology
+	if topo == "" && np.Config.Labels != nil {
+		topo = np.Config.Labels[tpuTopologyLabel]
+	}
+	if g.resourcePolicyCache != nil {
+		if cached := g.resourcePolicyCache[policy]; cached != nil {
+			if mode == "" {
+				mode = cached.AcceleratorTopologyMode
+			}
+			if topo == "" {
+				topo = cached.AcceleratorTopology
+			}
+		}
+	}
+	return mode, topo
+}
+
+// getCanonicalWorkloadPolicyName generates the deterministic GCE resource policy name for a
+// machine type and topology. TPU 7x uses "tpu7x-<tensorcores>-<topology>-placement-policy";
+// GPUs use "<shorthand>-<topology>-placement-policy" (e.g. "gb200-4-1x72-placement-policy"),
+// matching the names XPK creates so clusters migrated from XPK reuse the same policy.
+func getCanonicalWorkloadPolicyName(machineType, topology string) string {
+	if strings.Contains(strings.ToLower(machineType), "tpu7x") {
+		chips := calculateChipsFromTopology(topology)
+		tensorcores := chips * 2
+		return fmt.Sprintf("tpu7x-%d-%s-placement-policy", tensorcores, topology)
+	}
+	shorthand := strings.ToLower(machineType)
+	for short, full := range config.AcceleratorShorthandMap {
+		if strings.EqualFold(full, machineType) {
+			shorthand = short
+			break
+		}
+	}
+	return fmt.Sprintf("%s-%s-placement-policy", shorthand, topology)
 }
 
 // resolvePolicyRegionAndProject determines the target GCP region and project ID
@@ -605,10 +634,10 @@ func (g *GKEOrchestrator) discoverRegionalWorkloadPolicy(canonicalPolicyName, re
 	return "", nil
 }
 
-// createTPUWorkloadPolicy executes 'gcloud compute resource-policies create workload-policy'
+// createWorkloadPolicy executes 'gcloud compute resource-policies create workload-policy'
 // to provision a new HIGH_THROUGHPUT workload policy with the requested accelerator topology.
 // Handles concurrent creation (HTTP 409 / already exists) gracefully.
-func (g *GKEOrchestrator) createTPUWorkloadPolicy(canonicalPolicyName, region, projectID, topology string) error {
+func (g *GKEOrchestrator) createWorkloadPolicy(canonicalPolicyName, region, projectID, topology string) error {
 	logging.Info("Workload policy for topology %s not found. Creating workload policy %q...", topology, canonicalPolicyName)
 	createRes := g.executor.ExecuteCommand("gcloud", "compute", "resource-policies", "create", "workload-policy", canonicalPolicyName, "--region="+region, "--project="+projectID, "--type=HIGH_THROUGHPUT", "--accelerator-topology="+topology)
 	if createRes.ExitCode != 0 {

@@ -160,7 +160,7 @@ func init() {
 	SubmitCmd.Flags().StringVar(&gracePeriodStr, "grace-period", "30s", "Time to wait before forcefully terminating a pod (e.g. 30s, 2m). Gives the workload time to save checkpoints or clean up distributed state during cancellation or preemption events (like Spot VM evictions).")
 	SubmitCmd.Flags().BoolVar(&gkeDisableParallelContainers, "gke-disable-parallel-containers", false, "Disable parallel containers for TPU7x on GKE.")
 
-	SubmitCmd.Flags().StringVar(&placementPolicy, "placement-policy", "", "Name of the GKE placement policy to use.")
+	SubmitCmd.Flags().StringVar(&placementPolicy, "placement-policy", "", "Name of an existing GCE compact placement or workload policy attached to the target node pool. Under NAP on machines that support compact placement it is also used as the GKE placement group identifier.")
 	SubmitCmd.Flags().StringToStringVar(&nodeConstraint, "node-constraint", nil, "Key=value pairs for node labels to target specific nodes. Maps to nodeSelector in GKE, and to SLURM's --constraint.")
 	SubmitCmd.Flags().StringVar(&cpuAffinityStr, "cpu-affinity", "", "CPU affinity rules (e.g., 'numa').")
 	SubmitCmd.Flags().IntSliceVar(&restartOnExitCodes, "restart-on-exit-codes", nil, "List of exit codes that should not trigger a job failure.")

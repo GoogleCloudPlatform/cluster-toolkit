@@ -1270,6 +1270,134 @@ func TestResolveWorkloadPlacementPolicy(t *testing.T) {
 	}
 }
 
+func TestResolveGPUPlacementPolicy(t *testing.T) {
+	a4xPool := gkeJobNodePool{
+		Name:            "a4x-pool",
+		Config:          gkeNodePoolConfig{MachineType: "a4x-highgpu-4g"},
+		PlacementPolicy: &gkePlacementPolicy{PolicyName: "projects/my-project/regions/us-central1/resourcePolicies/a4x-workload-policy"},
+	}
+	a4xDescribe := "gcloud compute resource-policies describe a4x-workload-policy --region=us-central1 --project=my-project --format=json"
+
+	tests := []struct {
+		name          string
+		job           *orchestrator.JobDefinition
+		nodePools     []gkeJobNodePool
+		mockResponses map[string][]shell.CommandResult
+		wantPolicy    string
+		wantErr       bool
+		wantCreated   bool
+	}{
+		{
+			name:       "non-workload-policy GPU without flag resolves nothing",
+			job:        &orchestrator.JobDefinition{MachineType: "a3-ultragpu-8g", ClusterLocation: "us-central1-c", ProjectID: "my-project"},
+			nodePools:  []gkeJobNodePool{a4xPool},
+			wantPolicy: "",
+		},
+		{
+			name:       "non-workload-policy GPU with explicit policy is sanitized but not described",
+			job:        &orchestrator.JobDefinition{MachineType: "a3-highgpu-8g", ClusterLocation: "us-central1-c", ProjectID: "my-project", PlacementPolicy: "projects/my-project/regions/us-central1/resourcePolicies/h100-compact"},
+			wantPolicy: "h100-compact",
+		},
+		{
+			name:       "A4X static cluster picks the policy attached to its node pool",
+			job:        &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project"},
+			nodePools:  []gkeJobNodePool{{Name: "cpu", Config: gkeNodePoolConfig{MachineType: "n2-standard-8"}}, a4xPool},
+			wantPolicy: "a4x-workload-policy",
+		},
+		{
+			name:       "A4X static cluster without a policy-bearing node pool warns and resolves nothing",
+			job:        &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project"},
+			nodePools:  []gkeJobNodePool{{Name: "a4x-nopolicy", Config: gkeNodePoolConfig{MachineType: "a4x-highgpu-4g"}}},
+			wantPolicy: "",
+		},
+		{
+			name: "A4X explicit policy is validated for HIGH_THROUGHPUT 1x72",
+			job:  &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project", PlacementPolicy: "a4x-workload-policy"},
+			mockResponses: map[string][]shell.CommandResult{
+				a4xDescribe: {{ExitCode: 0, Stdout: `{"name":"a4x-workload-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"1x72"}}`}},
+			},
+			wantPolicy: "a4x-workload-policy",
+		},
+		{
+			name: "A4X explicit policy with wrong topology is rejected",
+			job:  &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project", PlacementPolicy: "a4x-workload-policy"},
+			mockResponses: map[string][]shell.CommandResult{
+				a4xDescribe: {{ExitCode: 0, Stdout: `{"name":"a4x-workload-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"1x4"}}`}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "A4X explicit policy missing in GCE is rejected",
+			job:  &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project", PlacementPolicy: "a4x-workload-policy"},
+			mockResponses: map[string][]shell.CommandResult{
+				a4xDescribe: {{ExitCode: 1, Stderr: "ERROR: The resource 'a4x-workload-policy' was not found"}},
+			},
+			wantErr: true,
+		},
+		{
+			name:       "A4X explicit policy in dry-run skips GCE validation",
+			job:        &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project", PlacementPolicy: "a4x-workload-policy", DryRunManifest: "out.yaml"},
+			wantPolicy: "a4x-workload-policy",
+		},
+		{
+			name: "A4X NAP discovers the canonical regional policy",
+			job:  &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project", GKENAPProvisioning: "auto"},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe gb200-4-1x72-placement-policy --region=us-central1 --project=my-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"gb200-4-1x72-placement-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"1x72"}}`},
+				},
+			},
+			wantPolicy: "gb200-4-1x72-placement-policy",
+		},
+		{
+			name: "A4X NAP creates the canonical policy when missing",
+			job:  &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project", GKENAPProvisioning: "auto"},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe gb200-4-1x72-placement-policy": {{ExitCode: 1, Stderr: "not found"}},
+				"gcloud compute resource-policies list":                                   {{ExitCode: 0, Stdout: ""}},
+				"gcloud compute resource-policies create workload-policy gb200-4-1x72-placement-policy --region=us-central1 --project=my-project --type=HIGH_THROUGHPUT --accelerator-topology=1x72": {{ExitCode: 0}},
+			},
+			wantPolicy:  "gb200-4-1x72-placement-policy",
+			wantCreated: true,
+		},
+		{
+			name:       "A4X NAP reuses the policy of an existing A4X node pool before touching GCE",
+			job:        &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project", GKENAPProvisioning: "auto"},
+			nodePools:  []gkeJobNodePool{a4xPool},
+			wantPolicy: "a4x-workload-policy",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExecutor := NewMockExecutor(tt.mockResponses)
+			g := newTestGKEOrchestrator(mockExecutor)
+			g.projectID = tt.job.ProjectID
+			g.clusterDesc.NodePools = tt.nodePools
+
+			err := g.resolveGPUPlacementPolicy(tt.job)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("resolveGPUPlacementPolicy() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if tt.job.PlacementPolicy != tt.wantPolicy {
+				t.Errorf("PlacementPolicy = %q, want %q", tt.job.PlacementPolicy, tt.wantPolicy)
+			}
+			created := false
+			for key, n := range mockExecutor.callCount {
+				if n > 0 && strings.Contains(key, "resource-policies create workload-policy") {
+					created = true
+				}
+			}
+			if created != tt.wantCreated {
+				t.Errorf("workload policy created = %v, want %v (calls: %v)", created, tt.wantCreated, mockExecutor.callCount)
+			}
+		})
+	}
+}
+
 func TestVerifyDynamicSlicingActive(t *testing.T) {
 	tests := []struct {
 		name          string

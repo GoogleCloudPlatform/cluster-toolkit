@@ -455,12 +455,110 @@ func TestGenerateGKEManifest_GPU_Placement(t *testing.T) {
 		t.Fatalf("GenerateGKEManifest failed for GPU: %v", err)
 	}
 
-	if !strings.Contains(gpuManifest, "cloud.google.com/gke-placement-group: my-gpu-group") {
-		t.Errorf("Expected cloud.google.com/gke-placement-group for GPU, got:\n%s", gpuManifest)
+	if !strings.Contains(gpuManifest, "cloud.google.com/placement-policy-name: my-gpu-group") {
+		t.Errorf("Expected cloud.google.com/placement-policy-name for static GPU, got:\n%s", gpuManifest)
 	}
-	if strings.Contains(gpuManifest, "cloud.google.com/placement-policy-name") {
-		t.Errorf("Did not expect cloud.google.com/placement-policy-name for GPU, got:\n%s", gpuManifest)
+	if strings.Contains(gpuManifest, "cloud.google.com/gke-placement-group") {
+		t.Errorf("Did not expect cloud.google.com/gke-placement-group for static GPU, got:\n%s", gpuManifest)
 	}
+
+	// Under NAP the same policy is also used as the GKE placement group identifier.
+	orc.napEnabled = true
+	orc.napLimits = map[string]int64{"nvidia.com/gpu": 100}
+	napJob := gpuJob
+	napJob.GKENAPProvisioning = "auto"
+	napProfile, isDyn, isStat, err := orc.resolveHardwareRequirements(&napJob)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed for NAP GPU: %v", err)
+	}
+	napOpts, err := orc.PrepareManifestOptions(napJob, "test-image:latest", napProfile, isDyn, isStat)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed for NAP GPU: %v", err)
+	}
+	napManifest, err := orc.GenerateGKEManifest(napOpts, napProfile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed for NAP GPU: %v", err)
+	}
+	for _, want := range []string{"cloud.google.com/placement-policy-name: my-gpu-group", "cloud.google.com/gke-placement-group: my-gpu-group"} {
+		if !strings.Contains(napManifest, want) {
+			t.Errorf("Expected %q for NAP GPU, got:\n%s", want, napManifest)
+		}
+	}
+}
+
+func TestGenerateGKEManifest_A4X_WorkloadPolicy(t *testing.T) {
+	setupMockMachineConfig(t)
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: ""}},
+		"gcloud compute machine-types describe a4x-highgpu-4g --zone=us-central1-a --format=json":                               {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "nvidia-gb200"}]}`}},
+	}
+	render := func(t *testing.T, orc *GKEOrchestrator, job orchestrator.JobDefinition) string {
+		t.Helper()
+		profile, isDyn, isStat, err := orc.resolveHardwareRequirements(&job)
+		if err != nil {
+			t.Fatalf("resolveHardwareRequirements failed: %v", err)
+		}
+		opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDyn, isStat)
+		if err != nil {
+			t.Fatalf("PrepareManifestOptions failed: %v", err)
+		}
+		manifest, err := orc.GenerateGKEManifest(opts, profile)
+		if err != nil {
+			t.Fatalf("GenerateGKEManifest failed: %v", err)
+		}
+		return manifest
+	}
+	baseJob := orchestrator.JobDefinition{
+		WorkloadName:    "a4x-job",
+		CommandToRun:    "echo hello",
+		ComputeType:     "a4x-highgpu-4g",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "mock-project",
+	}
+
+	t.Run("static cluster inherits node pool policy without flag", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+		orc.projectID = "mock-project"
+		orc.clusterZones = []string{"us-central1-a"}
+		orc.clusterDesc.NodePools = []gkeJobNodePool{{
+			Name:            "a4x-pool",
+			Config:          gkeNodePoolConfig{MachineType: "a4x-highgpu-4g"},
+			PlacementPolicy: &gkePlacementPolicy{PolicyName: "a4x-workload-policy"},
+		}}
+		manifest := render(t, orc, baseJob)
+		if !strings.Contains(manifest, "cloud.google.com/placement-policy-name: a4x-workload-policy") {
+			t.Errorf("Expected node pool workload policy in manifest, got:\n%s", manifest)
+		}
+		if strings.Contains(manifest, "cloud.google.com/gke-placement-group") {
+			t.Errorf("A4X must not carry gke-placement-group, got:\n%s", manifest)
+		}
+	})
+
+	t.Run("NAP resolves canonical policy and never emits placement group", func(t *testing.T) {
+		responses := map[string][]shell.CommandResult{
+			"gcloud compute resource-policies describe gb200-4-1x72-placement-policy --region=us-central1 --project=mock-project --format=json": {
+				{ExitCode: 0, Stdout: `{"name":"gb200-4-1x72-placement-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"1x72"}}`},
+			},
+		}
+		for k, v := range mockResponses {
+			responses[k] = v
+		}
+		orc := newTestGKEOrchestrator(NewMockExecutor(responses))
+		orc.projectID = "mock-project"
+		orc.clusterZones = []string{"us-central1-a"}
+		orc.napEnabled = true
+		orc.napLimits = map[string]int64{"nvidia.com/gpu": 100}
+		napJob := baseJob
+		napJob.GKENAPProvisioning = "auto"
+		manifest := render(t, orc, napJob)
+		if !strings.Contains(manifest, "cloud.google.com/placement-policy-name: gb200-4-1x72-placement-policy") {
+			t.Errorf("Expected canonical workload policy in manifest, got:\n%s", manifest)
+		}
+		if strings.Contains(manifest, "cloud.google.com/gke-placement-group") {
+			t.Errorf("A4X must not carry gke-placement-group under NAP, got:\n%s", manifest)
+		}
+	})
 }
 
 func TestGenerateGKEManifest_DefaultDevShm(t *testing.T) {

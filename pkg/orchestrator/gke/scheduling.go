@@ -25,11 +25,42 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+const (
+	placementPolicyNameLabel = "cloud.google.com/placement-policy-name"
+	placementGroupLabel      = "cloud.google.com/gke-placement-group"
+)
+
+// gpuWorkloadPolicyTopologies maps GPU machine-type prefixes that require a GCE
+// HIGH_THROUGHPUT workload policy to the accelerator topology that policy must carry.
+var gpuWorkloadPolicyTopologies = map[string]string{
+	"a4x-": "1x72",
+}
+
+// gpuWorkloadPolicyTopology returns the required workload policy topology for GPU
+// machine types that cannot be scheduled without one, or "" for all other machines.
+func gpuWorkloadPolicyTopology(machineType string) string {
+	lower := strings.ToLower(machineType)
+	for prefix, topology := range gpuWorkloadPolicyTopologies {
+		if strings.HasPrefix(lower, prefix) {
+			return topology
+		}
+	}
+	return ""
+}
+
+// requiresWorkloadPolicy reports whether the machine type is only schedulable through a
+// GCE workload policy. GCE rejects dynamic compact placement groups for these machines.
+func requiresWorkloadPolicy(machineType string) bool {
+	return strings.Contains(strings.ToLower(machineType), "tpu7x") || gpuWorkloadPolicyTopology(machineType) != ""
+}
+
 type SchedulingOptions struct {
 	PlacementPolicy    string
 	Topology           string
 	Scheduler          string
+	MachineType        string
 	IsTPU              bool
+	IsNAP              bool
 	NodeAffinityLabels map[string]string
 	IsDynamicSlicing   bool
 	IsStaticSlicing    bool
@@ -39,17 +70,17 @@ func getNodeSelector(opts SchedulingOptions) (map[string]string, error) {
 	nodeSelector := make(map[string]string)
 
 	if opts.PlacementPolicy != "" {
-		// In GKE, placement policy labels differ by accelerator architecture:
-		// 1. TPUs (specifically TPU 7x multi-host NAP): GKE requires referencing a pre-created
-		//    GCE Workload Policy (HIGH_THROUGHPUT) via "cloud.google.com/placement-policy-name".
-		// 2. Non-TPUs (GPUs/CPUs): GKE NAP uses "cloud.google.com/gke-placement-group" to dynamically
-		//    generate compact placement groups on the fly for co-located VM scheduling.
+		// GKE labels nodes with "cloud.google.com/placement-policy-name=<policy>" for every node pool
+		// created from a pre-existing GCE resource policy, whether it is a compact placement policy or
+		// a workload policy, and NAP attaches an existing policy by that same selector. So the policy
+		// name always goes there. "cloud.google.com/gke-placement-group" is a GKE-managed compact group
+		// identifier: on existing nodes it holds the node pool name, and under NAP it asks GKE to create
+		// a group named after it. It is only added for NAP on machines that accept group placement.
 		// Slashes from full URIs/paths are stripped so the label value conforms to Kubernetes RFC 1123 format.
 		policyName := path.Base(strings.TrimSuffix(strings.TrimSpace(opts.PlacementPolicy), "/"))
-		if opts.IsTPU {
-			nodeSelector["cloud.google.com/placement-policy-name"] = policyName
-		} else {
-			nodeSelector["cloud.google.com/gke-placement-group"] = policyName
+		nodeSelector[placementPolicyNameLabel] = policyName
+		if opts.IsNAP && !opts.IsTPU && !requiresWorkloadPolicy(opts.MachineType) {
+			nodeSelector[placementGroupLabel] = policyName
 		}
 	}
 

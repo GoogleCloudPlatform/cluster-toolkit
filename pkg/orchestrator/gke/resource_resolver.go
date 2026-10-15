@@ -561,7 +561,7 @@ func (g *GKEOrchestrator) resolveTPUPlacementPolicy(job *orchestrator.JobDefinit
 		return g.resolveWorkloadPlacementPolicy(job, isTPU7x, isDynamicSlicing)
 	}
 	if isTPU7x && !isDynamicSlicing && job.NodesPerSlice > 1 {
-		policy, err := g.resolveTPUWorkloadPolicy(job.MachineType, job.Topology, job.ClusterLocation, job.ProjectID, job.DryRunManifest != "")
+		policy, err := g.resolveWorkloadPolicy(job.MachineType, job.Topology, job.ClusterLocation, job.ProjectID, job.DryRunManifest != "")
 		if err != nil {
 			return err
 		}
@@ -605,13 +605,49 @@ func (g *GKEOrchestrator) resolveWorkloadPlacementPolicy(job *orchestrator.JobDe
 		return err
 	}
 
-	// GCE Workload Resource Policies are only queried and validated for static multi-host TPU 7x workloads.
-	// For GPUs/CPUs, GKE NAP dynamically creates compact placement groups on the fly.
-	if isTPU7x && !isDynamicSlicing && job.NodesPerSlice > 1 && job.DryRunManifest == "" {
+	// GCE workload policies are queried and validated only where the hardware requires one:
+	// static multi-host TPU 7x and GPU families listed in gpuWorkloadPolicyTopologies.
+	// Other GPUs/CPUs may use either a compact placement or a workload policy, so only locality is checked.
+	expectedTopology := ""
+	if isTPU7x && !isDynamicSlicing && job.NodesPerSlice > 1 {
+		expectedTopology = job.Topology
+	} else if !isTPU7x {
+		expectedTopology = gpuWorkloadPolicyTopology(job.MachineType)
+	}
+	if expectedTopology != "" && job.DryRunManifest == "" {
 		clusterRegion := shell.ExtractRegion(job.ClusterLocation)
-		return g.validateTPU7xPlacementPolicy(parsed.Name, clusterRegion, job.ProjectID, job.Topology)
+		return g.validateWorkloadPlacementPolicy(parsed.Name, clusterRegion, job.ProjectID, expectedTopology)
 	}
 
+	return nil
+}
+
+// resolveGPUPlacementPolicy validates a user-specified placement policy for GPU/CPU jobs and,
+// for GPU families that cannot schedule without a GCE workload policy (e.g. A4X), discovers one
+// when none was given: from the matching node pool on static clusters, or from GCE (creating the
+// canonical policy if missing) under NAP. A policy is never created for a static cluster because
+// nodes only carry the policy their node pool was built with.
+func (g *GKEOrchestrator) resolveGPUPlacementPolicy(job *orchestrator.JobDefinition) error {
+	if job.PlacementPolicy != "" {
+		return g.resolveWorkloadPlacementPolicy(job, false, false)
+	}
+	topology := gpuWorkloadPolicyTopology(job.MachineType)
+	if topology == "" {
+		return nil
+	}
+	if job.GKENAPProvisioning != "" {
+		policy, err := g.resolveWorkloadPolicy(job.MachineType, topology, job.ClusterLocation, job.ProjectID, job.DryRunManifest != "")
+		if err != nil {
+			return err
+		}
+		job.PlacementPolicy = policy
+		return nil
+	}
+	if policy := g.findPolicyInClusterNodePools(job.MachineType, topology); policy != "" {
+		job.PlacementPolicy = policy
+		return nil
+	}
+	logging.Warn("No node pool for %s carries a placement policy. %s requires a HIGH_THROUGHPUT workload policy with topology %s attached to its node pool; pods may fail to schedule or run with degraded performance. Create the policy, attach it to the node pool, and pass it via --placement-policy.", job.MachineType, job.MachineType, topology)
 	return nil
 }
 
@@ -626,7 +662,7 @@ func validateResourcePolicyLocality(parsed parsedResourcePolicy, projectID, clus
 	return nil
 }
 
-func (g *GKEOrchestrator) validateTPU7xPlacementPolicy(name, region, projectID, expectedTopology string) error {
+func (g *GKEOrchestrator) validateWorkloadPlacementPolicy(name, region, projectID, expectedTopology string) error {
 	policy, err := g.describeResourcePolicyCached(name, region, projectID)
 	if err != nil {
 		if errors.Is(err, ErrResourcePolicyPermissionDenied) {
@@ -642,7 +678,7 @@ func (g *GKEOrchestrator) validateTPU7xPlacementPolicy(name, region, projectID, 
 		return fmt.Errorf("placement policy %q has type %q; expected %q", name, policy.Type, "HIGH_THROUGHPUT")
 	}
 	if !isStaticWorkloadPolicyMode(policy.AcceleratorTopologyMode) {
-		return fmt.Errorf("placement policy %q has mode %q, which is incompatible with static multi-host TPU workloads (expected AUTO_CONNECT or default static placement)", name, policy.AcceleratorTopologyMode)
+		return fmt.Errorf("placement policy %q has mode %q, which is incompatible with static multi-host workloads (expected AUTO_CONNECT or default static placement)", name, policy.AcceleratorTopologyMode)
 	}
 	if expectedTopology != "" && policy.AcceleratorTopology != "" && !strings.EqualFold(policy.AcceleratorTopology, expectedTopology) {
 		return fmt.Errorf("placement policy %q has topology %q; expected %q", name, policy.AcceleratorTopology, expectedTopology)
@@ -677,8 +713,7 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 			}
 		}
 	} else {
-		// For non-TPU workloads (GPU/CPU), validate placement policy if specified.
-		if err := g.resolveWorkloadPlacementPolicy(job, false, false); err != nil {
+		if err := g.resolveGPUPlacementPolicy(job); err != nil {
 			return JobProfile{}, isDynamicSlicing, isStaticSlicing, err
 		}
 	}
