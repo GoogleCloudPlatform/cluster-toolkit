@@ -54,6 +54,9 @@ managerConfig:
     clientConnection:
       qps: 300
       burst: 500
+    waitForPodsReady:
+      timeout: ${timeout}
+      recoveryTimeout: ${recovery_timeout}
     integrations:
       frameworks:
       - "batch/job"

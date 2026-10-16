@@ -174,53 +174,6 @@ locals {
   kueue_controller_cpu      = try(var.kueue.controller_cpu, null) != null ? var.kueue.controller_cpu : (local.enable_slicing ? "16" : null)
   kueue_controller_memory   = try(var.kueue.controller_memory, null) != null ? var.kueue.controller_memory : (local.enable_slicing ? "64Gi" : null)
   kueue_controller_replicas = try(var.kueue.controller_replicas, null) != null ? var.kueue.controller_replicas : (local.enable_slicing ? 3 : null)
-
-  kueue_base_helm_values = yamldecode(file("${path.module}/kueue/kueue-helm-values.yaml"))
-
-  kueue_pods_ready_timeout = (
-    var.kueue.wait_for_pods_ready != null || local.enable_pathways ?
-    coalesce(try(var.kueue.wait_for_pods_ready.timeout, null), "30m") :
-    null
-  )
-  kueue_pods_ready_recovery_timeout = (
-    try(var.kueue.wait_for_pods_ready.recovery_timeout, null) != null ?
-    var.kueue.wait_for_pods_ready.recovery_timeout :
-    (local.enable_pathways ? "0s" : null)
-  )
-  kueue_wait_for_pods_ready = local.kueue_pods_ready_timeout != null ? merge(
-    { timeout = local.kueue_pods_ready_timeout },
-    local.kueue_pods_ready_recovery_timeout != null ? { recoveryTimeout = local.kueue_pods_ready_recovery_timeout } : {}
-  ) : null
-
-  kueue_controller_manager_overrides = merge(
-    local.kueue_controller_replicas != null ? { replicas = local.kueue_controller_replicas } : {},
-    local.kueue_controller_cpu != null || local.kueue_controller_memory != null ? {
-      manager = {
-        resources = {
-          requests = merge(
-            local.kueue_controller_cpu != null ? { cpu = local.kueue_controller_cpu } : {},
-            local.kueue_controller_memory != null ? { memory = local.kueue_controller_memory } : {}
-          )
-          limits = merge(
-            local.kueue_controller_cpu != null ? { cpu = local.kueue_controller_cpu } : {},
-            local.kueue_controller_memory != null ? { memory = local.kueue_controller_memory } : {}
-          )
-        }
-      }
-    } : {}
-  )
-
-  kueue_manager_config_override = local.kueue_wait_for_pods_ready != null ? {
-    controllerManagerConfigYaml = yamlencode(merge(
-      yamldecode(local.kueue_base_helm_values.managerConfig.controllerManagerConfigYaml),
-      { waitForPodsReady = local.kueue_wait_for_pods_ready }
-    ))
-  } : null
-
-  kueue_dynamic_helm_values = merge(
-    length(local.kueue_controller_manager_overrides) > 0 ? { controllerManager = local.kueue_controller_manager_overrides } : {},
-    local.kueue_manager_config_override != null ? { managerConfig = local.kueue_manager_config_override } : {}
-  )
 }
 
 data "http" "manifest_from_url" {
@@ -268,8 +221,29 @@ module "install_kueue" {
   namespace        = "kueue-system"
   create_namespace = true
   values_yaml = compact([
-    file("${path.module}/kueue/kueue-helm-values.yaml"),
-    length(local.kueue_dynamic_helm_values) > 0 ? yamlencode(local.kueue_dynamic_helm_values) : ""
+    templatefile("${path.module}/kueue/kueue-helm-values.yaml", {
+      timeout          = coalesce(try(var.kueue.wait_for_pods_ready.timeout, null), "30m")
+      recovery_timeout = coalesce(try(var.kueue.wait_for_pods_ready.recovery_timeout, null), local.enable_pathways ? "0s" : "30m")
+    }),
+    local.kueue_controller_cpu != null || local.kueue_controller_memory != null || local.kueue_controller_replicas != null ? yamlencode({
+      controllerManager = merge(
+        local.kueue_controller_replicas != null ? { replicas = local.kueue_controller_replicas } : {},
+        local.kueue_controller_cpu != null || local.kueue_controller_memory != null ? {
+          manager = {
+            resources = {
+              requests = merge(
+                local.kueue_controller_cpu != null ? { cpu = local.kueue_controller_cpu } : {},
+                local.kueue_controller_memory != null ? { memory = local.kueue_controller_memory } : {}
+              )
+              limits = merge(
+                local.kueue_controller_cpu != null ? { cpu = local.kueue_controller_cpu } : {},
+                local.kueue_controller_memory != null ? { memory = local.kueue_controller_memory } : {}
+              )
+            }
+          }
+        } : {}
+      )
+    }) : ""
   ])
 
   dependencies = var.system_node_pool_id != null ? [var.system_node_pool_id] : []
