@@ -146,6 +146,44 @@ variable "apply_manifests" {
   }
 }
 
+variable "checkpoint_configuration" {
+  description = "Install and configure GKE Multi-Tier Checkpointing (MTC) CheckpointConfiguration Custom Resource."
+  type = object({
+    install                   = optional(bool, false)
+    name                      = optional(string, "default")
+    cloud_storage_bucket_name = optional(string, null)
+    in_memory_volume_size     = optional(string, null)
+    node_selector             = optional(map(string), null)
+    tolerations = optional(list(object({
+      key      = optional(string, null)
+      operator = optional(string, null)
+      value    = optional(string, null)
+      effect   = optional(string, null)
+    })), null)
+    gcs_fuse_mount_options = optional(list(string), null)
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = !var.checkpoint_configuration.install || (var.checkpoint_configuration.cloud_storage_bucket_name != null && trimspace(var.checkpoint_configuration.cloud_storage_bucket_name) != "")
+    error_message = "checkpoint_configuration.cloud_storage_bucket_name must be a non-empty string when checkpoint_configuration.install is true."
+  }
+
+  validation {
+    condition     = var.checkpoint_configuration.cloud_storage_bucket_name == null || !startswith(var.checkpoint_configuration.cloud_storage_bucket_name, "gs://")
+    error_message = "checkpoint_configuration.cloud_storage_bucket_name must be a bucket name without the gs:// prefix."
+  }
+
+  validation {
+    condition = var.checkpoint_configuration.name == null || (
+      length(var.checkpoint_configuration.name) <= 253 &&
+      can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$", var.checkpoint_configuration.name))
+    )
+    error_message = "checkpoint_configuration.name must be a non-empty RFC 1123 subdomain (lowercase alphanumeric characters, '-' or '.', max 253 characters)."
+  }
+}
+
 
 variable "kueue" {
   description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."

@@ -157,6 +157,23 @@ You can install the `asapd-lite` daemonset for **A4X-Max Bare Metal** ([gke-a4x-
         config_path: $(ghpc_stage("manifests/asapd-lite-installer.yaml"))
 ```
 
+You can create the GKE Multi-Tier Checkpointing (MTC) `CheckpointConfiguration` resource by setting the `checkpoint_configuration` input variable; the module manages one such resource per cluster. The cluster needs `enable_multi_tier_checkpointing: true` and `enable_gcsfuse_csi: true`, and the bucket must have hierarchical namespace enabled and grant `$(gke_cluster.mtc_service_account_member)` object access; see [Multi-Tier Checkpointing](../../../docs/gke-advanced-features.md#4-multi-tier-checkpointing-mtc--highscalecheckpointing). Set `cloud_storage_bucket_name` to the bucket name without the `gs://` prefix. Set `tolerations` (and optionally `node_selector`) so the MTC driver runs on tainted TPU or GPU nodes, and `gcs_fuse_mount_options` to pass Cloud Storage FUSE mount options (`gcsFuseMountOptions`).
+
+```yaml
+  - id: workload_component_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      checkpoint_configuration:
+        install: true
+        cloud_storage_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
+        in_memory_volume_size: "50Gi"
+        tolerations:
+        - key: google.com/tpu
+          operator: Exists
+          effect: NoSchedule
+```
+
 > **_NOTE:_**
 >
 > The `project_id` and `region` settings would be inferred from the deployment variables of the same name, but they are included here for clarity.
@@ -279,6 +296,7 @@ limitations under the License.
 | <a name="module_configure_kueue"></a> [configure\_kueue](#module\_configure\_kueue) | ./helm_install | n/a |
 | <a name="module_install_asapd_lite"></a> [install\_asapd\_lite](#module\_install\_asapd\_lite) | ./helm_install | n/a |
 | <a name="module_install_cert_manager"></a> [install\_cert\_manager](#module\_install\_cert\_manager) | ./helm_install | n/a |
+| <a name="module_install_checkpoint_configuration"></a> [install\_checkpoint\_configuration](#module\_install\_checkpoint\_configuration) | ./helm_install | n/a |
 | <a name="module_install_gib"></a> [install\_gib](#module\_install\_gib) | ./helm_install | n/a |
 | <a name="module_install_gpu_operator"></a> [install\_gpu\_operator](#module\_install\_gpu\_operator) | ./helm_install | n/a |
 | <a name="module_install_jobset"></a> [install\_jobset](#module\_install\_jobset) | ./helm_install | n/a |
@@ -310,6 +328,7 @@ limitations under the License.
 | <a name="input_apply_manifests"></a> [apply\_manifests](#input\_apply\_manifests) | A list of manifests to apply to the GKE cluster using helm\_install. For more details on the underlying deployment mechanism, see the [helm\_install module](helm\_install/README.md). The `enable` input acts as a FF to apply a manifest or not. By default it is always set to `true`. | <pre>list(object({<br/>    name             = optional(string, null)<br/>    enable           = optional(bool, true)<br/>    content          = optional(string, null)<br/>    source           = optional(string, null)<br/>    template_vars    = optional(map(any), null)<br/>    wait_for_rollout = optional(bool, true)<br/>    namespace        = optional(string, null)<br/>  }))</pre> | `[]` | no |
 | <a name="input_asapd_lite"></a> [asapd\_lite](#input\_asapd\_lite) | Install the asapd-lite daemonset for A4X-Max Bare Metal. | <pre>object({<br/>    install              = optional(bool, false)<br/>    config_path          = optional(string, null)<br/>    config_template_vars = optional(map(any), {})<br/>  })</pre> | `{}` | no |
 | <a name="input_cert_manager"></a> [cert\_manager](#input\_cert\_manager) | Install [cert-manager](https://cert-manager.io/docs/) which manages TLS certificates for Kubernetes. | <pre>object({<br/>    install = optional(bool, false)<br/>    version = optional(string, "v1.17.2")<br/>  })</pre> | `{}` | no |
+| <a name="input_checkpoint_configuration"></a> [checkpoint\_configuration](#input\_checkpoint\_configuration) | Install and configure GKE Multi-Tier Checkpointing (MTC) CheckpointConfiguration Custom Resource. | <pre>object({<br/>    install                   = optional(bool, false)<br/>    name                      = optional(string, "default")<br/>    cloud_storage_bucket_name = optional(string, null)<br/>    in_memory_volume_size     = optional(string, null)<br/>    node_selector             = optional(map(string), null)<br/>    tolerations = optional(list(object({<br/>      key      = optional(string, null)<br/>      operator = optional(string, null)<br/>      value    = optional(string, null)<br/>      effect   = optional(string, null)<br/>    })), null)<br/>    gcs_fuse_mount_options = optional(list(string), null)<br/>  })</pre> | `{}` | no |
 | <a name="input_cluster_ca_certificate"></a> [cluster\_ca\_certificate](#input\_cluster\_ca\_certificate) | The base64 encoded CA certificate of the GKE cluster. Must be base64 encoded; the module internally decodes this value using base64decode(...) before passing it to the providers. | `string` | `null` | no |
 | <a name="input_cluster_endpoint"></a> [cluster\_endpoint](#input\_cluster\_endpoint) | The endpoint of the GKE cluster. | `string` | `null` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the gke cluster resource with format projects/<project\_id>/locations/<region>/clusters/<name>. | `string` | n/a | yes |
