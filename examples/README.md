@@ -26,7 +26,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [apptainer-artifact-registry-openfoam.yaml](#apptainer-artifact-registry-openfoamyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [ml-slurm-g4.yaml](#ml-slurm-g4yaml-) ![core-badge]
-  * [ml-slurm-g4-vgpu.yaml](#ml-slurm-g4-vgu-yaml-) ![community-badge] ![experimental-badge]
+  * [ml-slurm-g4-vgpu.yaml](#ml-slurm-g4-vgpuyaml--) ![community-badge] ![experimental-badge]
   * [h4d-vm.yaml](#h4d-vmyaml--) ![core-badge] ![experimental-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [batch.yaml](#batchyaml-) ![core-badge]
@@ -251,7 +251,7 @@ instance fails, the Slurm services can be failed over to the backup controller, 
 downtime. This blueprint configures the necessary shared storage and network settings to
 support the HA configuration.
 
-[hpc-slurm-ha.yaml]: ./hpc-slurm-ha.yaml
+[hpc-slurm-ha.yaml]: ../community/examples/hpc-slurm-ha.yaml
 
 ### [hpc-enterprise-slurm.yaml] ![core-badge]
 

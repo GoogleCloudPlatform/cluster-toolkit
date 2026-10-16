@@ -54,7 +54,7 @@ print("This is a sample application running on GKE.")
 ```
 
 > [!NOTE]
-> This on-the-fly image build does not execute a Dockerfile. It simply copies the contents of the build context directory into the image. If you need to install dependencies, make sure they are already present in your `--base-image`.
+> This on-the-fly image build does not execute a Dockerfile. It copies the contents of the build context directory into `/` in the image, honoring `.dockerignore` and skipping `.git`, `.terraform`, `.ghpc`, `.ansible`, `vendor`, `bin`, `pkg`, `node_modules`, `tmp/`, `__pycache__`, `.DS_Store`, and `*.log`. If you need to install dependencies, make sure they are already present in your `--base-image`.
 
 ## 3. Deploy a GKE Cluster
 
@@ -111,7 +111,7 @@ Now that the cluster is deployed and your application code is prepared, you can 
 
 ### 4.1 Unified Job Submission
 
-By specifying the `--compute-type` flag, you can use the exact same command to target a standard CPU cluster (using a full GCE machine type like `n2-standard-32`), an accelerated GPU cluster (using a GKE accelerator type like `nvidia-l4`), or a TPU cluster (using a shorthand string representing total chips/cores like `v6e-8`). The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed.
+By specifying the `--compute-type` flag, you can use the exact same command to target a standard CPU cluster (using a full GCE machine type like `n2-standard-32`), an accelerated GPU cluster (using a GPU shorthand like `h100-80gb-8` or a GKE accelerator label like `nvidia-l4` when a matching node pool is already present on the cluster), or a TPU cluster (using a shorthand string representing total chips/cores like `v6e-8`). The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed.
 
 > [!TIP]
 > **Simplify Commands with Configuration**: You can set these values once using the configuration command and omit them from subsequent commands:
@@ -141,7 +141,7 @@ By specifying the `--compute-type` flag, you can use the exact same command to t
   --location <REGION/ZONE> \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --command "python app.py" \
+  --command "python /app.py" \
   --name my-python-app-job \
   --compute-type n2-standard-32
 ```
@@ -407,7 +407,7 @@ Use `--placement-policy` to specify a GCE Placement Policy (e.g., for compact pl
 *(Note: requires a `PlacementPolicy` resource named `compact-placement` to exist on the cluster)*
 
 **Example 5: Pod Failure Policy**
-Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (these do not count against the `restarts` budget).
+Use `--restart-on-exit-codes` to specify the allowlist of retriable container exit codes (`PodFailurePolicy` with `action: FailJob` on `NotIn`). Any non-zero exit code *not* in the list fails the JobSet immediately, whereas exit codes in the list allow the job to restart up to the `--restarts` budget.
 
 ```bash
 ./gcluster job submit \
@@ -416,7 +416,7 @@ Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (
   --restart-on-exit-codes 1,137,143
 ```
 
-*(Note: Exit code `143` corresponds to `SIGTERM` ($128 + 15$). Workload pods interrupted by Spot or Kueue preemption receive SIGTERM and exit with code 143; adding 143 ensures preempted pods are restarted rather than failing the job).*
+*(Note: Exit code `143` corresponds to `SIGTERM` ($128 + 15$). Workload pods interrupted by Spot or Kueue preemption receive SIGTERM and exit with code 143; adding 143 ensures preempted pods are restarted rather than failing the job immediately).*
 
 **Example 6: Private Registry & Service Account**
 Use `--image-pull-secret` and `--service-account` for secure jobs.
@@ -1050,6 +1050,7 @@ To submit a dynamic slicing workload targeting TPU v7x nodes, enter the followin
 ```shell
 ./gcluster job submit \
   --name my-dynamic-slice-job \
+  --image <CONTAINER_IMAGE> \
   --command "python train.py" \
   --compute-type tpu7x \
   --topology 4x4x4
@@ -1081,6 +1082,7 @@ To submit a standard multi-slice Pathways training workload, enter the following
 ```shell
 ./gcluster job submit \
   --name my-pathways-job \
+  --image <CONTAINER_IMAGE> \
   --command "python train_pathways.py" \
   --compute-type v6e-16 \
   --pathways \
@@ -1115,7 +1117,7 @@ NAP integration provides the following capabilities:
 
 * **Consumption targeting:** The `--gke-nap-provisioning` flag lets you target `spot`, `on-demand`, or `reservation` compute models.
 * **Reservation integration:** The `--gke-nap-reservation RESERVATION_NAME` flag injects reservation affinity selectors, letting NAP spawn node pools directly in specific Compute Engine reservations.
-* **Pre-flight limit verification:** Cluster Toolkit validates requested machine types against cluster NAP limits before job submission, failing quickly with a diagnostic error if limits would be exceeded.
+* **Pre-flight limit verification:** Cluster Toolkit validates that the requested accelerator resource type is enabled (non-zero maximum) in the cluster's NAP resource limits before submission.
 
 #### Example CLI commands
 
@@ -1124,6 +1126,7 @@ To target Spot VMs, enter the following command:
 ```shell
 ./gcluster job submit \
   --name my-nap-spot-job \
+  --image <CONTAINER_IMAGE> \
   --command "python app.py" \
   --compute-type v6e-4 \
   --gke-nap-provisioning spot
@@ -1134,6 +1137,7 @@ To target a Compute Engine reservation, enter the following command:
 ```shell
 ./gcluster job submit \
   --name my-nap-reservation-job \
+  --image <CONTAINER_IMAGE> \
   --command "python app.py" \
   --compute-type v6e-4 \
   --gke-nap-provisioning reservation \
@@ -1229,9 +1233,9 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-n, --name` | `string` | Name of the job (JobSet) to create. Used for Kubernetes resources. Maximum of 28 characters. *(Required)* |
+| `-n, --name` | `string` | Name of the job (JobSet) to create. Used for Kubernetes resources. Maximum of 28 characters for standard workloads, or 22 characters when `--pathways` is enabled. *(Required)* |
 | `-e, --command` | `string` | Command to execute inside the container (e.g., `'python app.py'`). *(Required)* |
-| `--compute-type` | `string` | The hardware target for the job. Accepts a full GCE machine type (e.g., 'n2-standard-32'), a GKE accelerator type (e.g., 'nvidia-l4'), or a TPU shorthand string representing total chips/cores (e.g., 'v6e-8'). *(Required)* The tool will automatically resolve the machine type, calculate num-nodes, and deduce the correct TPU topology if needed. |
+| `--compute-type` | `string` | The hardware target for the job. Accepts a full GCE machine type (e.g., `n2-standard-32`), a GPU shorthand (e.g., `h100-80gb-8`), a GKE accelerator type matching an existing node pool on the cluster (e.g., `nvidia-l4`), or a TPU shorthand string representing total chips/cores (e.g., `v6e-8`). *(Required)* The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed. |
 | `-i, --image` | `string` | Full registry path of a pre-built container image to run. |
 | `-B, --base-image` | `string` | Name of the base container image to build upon (e.g., `python:3.9-slim`). |
 | `-b, --build-context` | `string` | Path to the local build context directory for on-the-fly image builds. |
@@ -1254,7 +1258,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `--topology` | `string` | TPU slice topology (e.g., `2x2x1`, `2x4`, `2x4x4`). Required if `--num-nodes` is omitted. |
+| `--topology` | `string` | TPU slice topology (e.g., `2x2x1`, `2x4`, `2x4x4`). Applies to TPU workloads only; required only when `--compute-type` does not imply a default topology (e.g., `tpu7x`). |
 | `--pathways` | `flag` | If present, generates a manifest tailored for a Pathways distributed job paradigm. |
 | `--pathways-gcs-location` | `string` | GCS bucket location to store Pathways artifacts. *(Required when --pathways is set)* |
 | `--pathways-proxy-server-image` | `string` | Container image for the Pathways proxy server. |
@@ -1276,7 +1280,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 *Use these flags to tune specialized multi-GPU topologies and related node parameters.*
 
 > [!NOTE]
-> Currently, GPU workloads leverage the standard **General Flags** (such as passing `--compute-type nvidia-l4` or `--compute-type nvidia-h100-8px`) and **GKE Only Flags** (such as placement policies). Specialized GPU flags (e.g., multi-node NVLink topologies or custom GPU drivers) will be documented here as they are added.
+> Currently, GPU workloads leverage the standard **General Flags** (such as passing `--compute-type h100-80gb-8`, `--compute-type a3-highgpu-8g`, or `--compute-type nvidia-l4` when an L4 node pool is already present on the cluster) and **GKE Only Flags** (such as placement policies). Specialized GPU flags (e.g., multi-node NVLink topologies or custom GPU drivers) will be documented here as they are added.
 
 #### 9.3.4 GKE & Advanced Orchestration Flags
 *These flags unlock advanced GKE capabilities, including Kueue queue priorities, workload identities, network placements, and robust lifecycle failure policies.*
@@ -1290,7 +1294,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--gke-mtc-ramdisk-dir` | `string` | The ramdisk directory path for local checkpoints in MTC (required when `--gke-mtc-enabled` is set). |
 | `--gke-ttl-after-finished` | `string` | Time duration to retain the JobSet resources after completion (Default: `1h`). |
 | `--placement-policy` | `string` | Specifies a GCE Placement Policy name (e.g., `compact-placement`) to minimize latency. |
-| `--restart-on-exit-codes` | `string` | Comma-separated list of retriable exit codes that bypass the main restart budget. |
+| `--restart-on-exit-codes` | `string` | Comma-separated allowlist of retriable container exit codes (`1..255`). Exit codes in this list allow the job to restart up to `--restarts`, while any other non-zero exit code fails the job immediately (`action: FailJob` on `NotIn`). |
 | `--gke-scheduler` | `string` | Specific GKE scheduler selection (e.g., `gke.io/topology-aware-auto`). |
 | `--image-pull-secret` | `string` | Secret name required to authenticate and pull images from private container registries. |
 | `--service-account` | `string` | Kubernetes service account name used to provide fine-grained IAM roles to the job pods. |
@@ -1305,7 +1309,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `--status` | `string` | Filter jobs by status (e.g., `Pending`, `Running`, `Succeeded`, `Failed`, `Suspended`). |
+| `--status` | `string` | Filter jobs by status (`Running`, `Succeeded`, `Failed`, `Suspended`; Kueue-queued JobSets report `Suspended`). `Pending` is accepted but `job list` never reports it. |
 | `--name-contains` | `string` | Filter jobs by name containing the specified string. |
 
 ### 9.5 `logs` Flags
@@ -1318,6 +1322,19 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 > [!NOTE]
 > **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. For jobs with up to 10 pods, you can override this to stream logs from all pods by explicitly passing `--main-only=false`; for jobs with more than 10 pods, `gcluster` prints a link to view all-pod logs in the Google Cloud Console.
+
+### 9.6 Additional `gcluster job` and `gcluster cluster` Subcommands
+
+| Command | Description |
+| :--- | :--- |
+| `./gcluster job cancel <job-name>` | Deletes the JobSet and reclaims unshared GCS FUSE / Filestore gateway PVCs/PVs created by `gcluster` (`gcluster-gcsfuse-*`, `gcluster-filestore-*`). |
+| `./gcluster job inspect [--name <job-name>] [-s/--show] [-o <file>]` | Writes a cluster + workload diagnostic bundle to `gcluster-inspect-<cluster>-<timestamp>.log`. |
+| `./gcluster job config set [<key> <value>]` / `show` | Persist or print default `project`, `cluster`, `location` (opens an editor when key/value omitted). |
+| `./gcluster job gke-template-extract [--output-dir <dir>] [--overwrite]` | Extracts the embedded manifest templates (`jobset.tmpl`, `pathways_jobset.tmpl`, `gcs_fuse_pv_pvc.tmpl`, `filestore.tmpl`, `local_queue.tmpl`, `priority_classes.tmpl`) to `./gke-templates` by default. |
+| `./gcluster cluster list [-p <project>]` | Lists GKE clusters in the project. |
+| `./gcluster cluster describe -c <cluster> -l <location>` | Prints the full `gcloud container clusters describe` output (YAML) for the cluster. |
+| `./gcluster cluster info -c <cluster> -l <location>` | Prints a per-node-pool summary (name, machine type, status). |
+| `./gcluster cluster volume -c <cluster> -l <location>` | Lists Toolkit-managed PVCs (label `ghpc_role=file-system`) across all namespaces, with their module or storage class. |
 
 ## 10. Troubleshooting
 

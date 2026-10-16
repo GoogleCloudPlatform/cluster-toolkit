@@ -58,7 +58,7 @@ gcloud compute instance-groups managed update-instances \
 This mode can be switched to proactive (automatic) replacement by setting
 [var.update_policy](#input_update_policy) to "PROACTIVE". In this case we
 recommend the use of Filestore to store the job queue state ("spool") and
-setting [var.spool_parent_dir][#input_spool_parent_dir] to its mount point:
+setting [var.spool_parent_dir](#input_spool_parent_dir) to its mount point:
 
 ```yaml
   - id: spoolfs
@@ -69,7 +69,7 @@ setting [var.spool_parent_dir][#input_spool_parent_dir] to its mount point:
       filestore_tier: ENTERPRISE
       local_mount: /shared
 
-...
+  # ...
 
   - id: htcondor_access
     source: community/modules/scheduler/htcondor-access-point
