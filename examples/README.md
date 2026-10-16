@@ -94,6 +94,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [burst-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml)
   * [slurm-gke.yaml](#slurm-gkeyaml--) ![community-badge] ![experimental-badge]
   * [sycomp](#sycomp--) ![community-badge] ![experimental-badge]
+  * [alphaevolve](#alphaevolve-) ![community-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1747,20 +1748,20 @@ deployment_groups:
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
 ### [gke-tpu-v4] ![core-badge]
-This example shows how a TPU v4 cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this [README](/examples/gke-tpu-v4/README.md).
+This example shows how a TPU v4 cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this [README](gke-tpu-v4/README.md).
 [gke-tpu-v4]: ../examples/gke-tpu-v4
 
 ### [gke-tpu-v5e] ![core-badge]
-This example shows how a TPU v5e cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this [README](/examples/gke-tpu-v5e/README.md).
+This example shows how a TPU v5e cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this [README](gke-tpu-v5e/README.md).
 [gke-tpu-v5e]: ../examples/gke-tpu-v5e
 
 ### [gke-tpu-v5p] ![core-badge]
-This example shows how a TPU v5p cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this [README](/examples/gke-tpu-v5p/README.md).
+This example shows how a TPU v5p cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this [README](gke-tpu-v5p/README.md).
 [gke-tpu-v5p]: ../examples/gke-tpu-v5p
 
 ### [gke-tpu-v6e] ![core-badge]
 
-This example shows how TPU v6e cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/examples/gke-tpu-v6e/README.md).
+This example shows how TPU v6e cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](gke-tpu-v6e/README.md).
 
 [gke-tpu-v6e]: ../examples/gke-tpu-v6e
 
@@ -1812,37 +1813,37 @@ python3 xpk.py info --cluster xpk-01
 
 ### [gke-h4d] ![core-badge]
 
-This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found [here](https://cloud.google.com/blog/products/compute/new-h4d-vms-optimized-for-hpc). The deployment instructions can be found in the [README](/examples/gke-h4d/README.md).
+This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found [here](https://cloud.google.com/blog/products/compute/new-h4d-vms-optimized-for-hpc). The deployment instructions can be found in the [README](gke-h4d/README.md).
 
 [gke-h4d]: ../examples/gke-h4d
 
 ### [gke-g4] ![core-badge]
 
-This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-g4-vm-with-nvidia-rtx-pro-6000). The deployment instructions can be found in the [README](/examples/gke-g4/README.md).
+This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-g4-vm-with-nvidia-rtx-pro-6000). The deployment instructions can be found in the [README](gke-g4/README.md).
 
 [gke-g4]: ../examples/gke-g4
 
 ### [gke-g4-confidential] ![core-badge]
 
-This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV-SNP) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure boot-disk encryption for all node pools and supports dynamic Persistent Volumes encrypted with Customer-Managed Encryption Keys (CMEK) via GKE Confidential Storage. The deployment and verification instructions can be found in the [README](/examples/gke-g4-confidential/README.md).
+This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV-SNP) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure boot-disk encryption for all node pools and supports dynamic Persistent Volumes encrypted with Customer-Managed Encryption Keys (CMEK) via GKE Confidential Storage. The deployment and verification instructions can be found in the [README](gke-g4-confidential/README.md).
 
 [gke-g4-confidential]: ../examples/gke-g4-confidential
 
 ### [gke-a4] ![core-badge]
 
-This blueprint uses GKE to provision Kubernetes cluster and a A4 node pool, along with networks and service accounts. Information about a4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-a4-vms-powered-by-nvidia-b200-gpu-aka-blackwell). The deployment instructions can be found in the [README](/examples/gke-a4/README.md).
+This blueprint uses GKE to provision Kubernetes cluster and a A4 node pool, along with networks and service accounts. Information about a4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-a4-vms-powered-by-nvidia-b200-gpu-aka-blackwell). The deployment instructions can be found in the [README](gke-a4/README.md).
 
 [gke-a4]: ../examples/gke-a4
 
 ### [gke-a4x] ![core-badge]
 
-This blueprint uses GKE to provision Kubernetes cluster and a A4X node pool, along with networks and service accounts. Information about A4X machines can be found [here](https://cloud.google.com/blog/products/compute/new-a4x-vms-powered-by-nvidia-gb200-gpus). The deployment instructions can be found in the [README](/examples/gke-a4x/README.md).
+This blueprint uses GKE to provision Kubernetes cluster and a A4X node pool, along with networks and service accounts. Information about A4X machines can be found [here](https://cloud.google.com/blog/products/compute/new-a4x-vms-powered-by-nvidia-gb200-gpus). The deployment instructions can be found in the [README](gke-a4x/README.md).
 
 [gke-a4x]: ../examples/gke-a4x
 
 ### [gke-a4x-max-bm] ![core-badge]
 
-This blueprint uses GKE to provision a Kubernetes cluster and a A4X Max node pool, along with networks and service accounts. Information about A4X Max machines can be found [here](https://cloud.google.com/blog/products/compute/now-shipping-a4x-max-vertex-ai-training-and-more). The deployment instructions can be found in the [README](/examples/gke-a4x-max-bm/README.md).
+This blueprint uses GKE to provision a Kubernetes cluster and a A4X Max node pool, along with networks and service accounts. Information about A4X Max machines can be found [here](https://cloud.google.com/blog/products/compute/now-shipping-a4x-max-vertex-ai-training-and-more). The deployment instructions can be found in the [README](gke-a4x-max-bm/README.md).
 
 [gke-a4x-max-bm]: ../examples/gke-a4x-max-bm
 
@@ -1924,7 +1925,7 @@ After the cluster is deployed, SSH to the Slurm login node and confirm `/home` i
 
 ### [gke-tpu-7x] ![core-badge]
 
-This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/examples/gke-tpu-7x/README.md).
+This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](gke-tpu-7x/README.md).
 
 [gke-tpu-7x]: ../examples/gke-tpu-7x
 
@@ -2017,6 +2018,19 @@ This directory includes the following blueprints:
 The deployment instructions can be found in the [README](../community/examples/sycomp/README.md).
 
 [sycomp]: ../community/examples/sycomp
+
+### [alphaevolve] ![community-badge]
+
+Deploys the Google Cloud infrastructure and per-experiment software environments required to run scalable AlphaEvolve evolutionary code optimization experiments on Cloud Batch and Vertex AI Colab Enterprise.
+
+This directory includes the following blueprints and configuration files:
+* [`alpha-evolve-deployment.yaml`](../community/examples/alphaevolve/alpha-evolve-deployment.yaml): Shared environment variables (project, region, GCS bucket, and Git repository settings).
+* [`alpha-evolve-infra.yaml`](../community/examples/alphaevolve/alpha-evolve-infra.yaml): Provisions reusable base infrastructure including GCP APIs, IAM service accounts, Artifact Registry, Pub/Sub notifications, Discovery Engine, and a Vertex AI Colab Enterprise runtime.
+* [`alpha-evolve-experiment.yaml`](../community/examples/alphaevolve/alpha-evolve-experiment.yaml): Builds problem-specific controller and evaluator container images via Cloud Build and stages experiment assets and configuration to Cloud Storage.
+
+The deployment instructions can be found in the [README](../community/examples/alphaevolve/README.md).
+
+[alphaevolve]: ../community/examples/alphaevolve
 
 ## Blueprint Schema
 

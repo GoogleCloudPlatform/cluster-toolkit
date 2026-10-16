@@ -113,6 +113,8 @@ Now that the cluster is deployed and your application code is prepared, you can 
 
 By specifying the `--compute-type` flag, you can use the exact same command to target a standard CPU cluster (using a full GCE machine type like `n2-standard-32`), an accelerated GPU cluster (using a GKE accelerator type like `nvidia-l4`), or a TPU cluster (using a shorthand string representing total chips/cores like `v6e-8`). The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed.
 
+A TPU shorthand names a slice size, not a host shape. GKE can run the same slice on different machine types of a TPU family (an 8-chip `2x4` v5e slice is one `ct5lp-hightpu-8t` host or two `ct5lp-hightpu-4t` hosts), so `gcluster` uses the machine type of that family found in the cluster's node pools. `v5e-N` and `v5litepod-N` are equivalent. To pin a specific host shape, pass the full machine type (for example `--compute-type ct5lp-hightpu-4t`).
+
 > [!TIP]
 > **Simplify Commands with Configuration**: You can set these values once using the configuration command and omit them from subsequent commands:
 >
@@ -395,7 +397,7 @@ If you want to schedule a job with a smaller TPU topology on a node pool with la
 ```
 
 **Example 4: Use Placement Policy**
-Use `--placement-policy` to specify a GCE Placement Policy (e.g., for compact placement to reduce latency).
+Use `--placement-policy` to name an existing GCE compact placement policy or workload policy. The job is pinned to nodes carrying that policy through the `cloud.google.com/placement-policy-name` node selector.
 
 ```bash
 ./gcluster job submit \
@@ -404,7 +406,9 @@ Use `--placement-policy` to specify a GCE Placement Policy (e.g., for compact pl
   --placement-policy "compact-placement"
 ```
 
-*(Note: requires a `PlacementPolicy` resource named `compact-placement` to exist on the cluster)*
+*(Note: the policy must exist in the cluster's region and be attached to the target node pool. With `--gke-nap-provisioning`, GKE attaches it to the auto-created node pool instead; on machines that support compact placement the same name is also used as the `cloud.google.com/gke-placement-group` identifier.)*
+
+A4X (`gb200-4`) and multi-host TPU 7x nodes require a `HIGH_THROUGHPUT` workload policy. When `--placement-policy` is omitted for these machine types, gcluster uses the policy attached to the matching node pool; under NAP it looks up, and if needed creates, the canonical policy (`gb200-4-1x72-placement-policy`, `tpu7x-<cores>-<topology>-placement-policy`) in the cluster's region.
 
 **Example 5: Pod Failure Policy**
 Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (these do not count against the `restarts` budget).
@@ -1262,7 +1266,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--pathways-worker-image` | `string` | Container image for the Pathways workers. |
 | `--pathways-headless` | `flag` | If present, the user workload container will not be deployed in the `pathways-head` job. |
 | `--pathways-elastic-slices` | `int` | Configures the number of elastic slices for resilient training scaling. |
-| `--pathways-max-slice-restarts` | `int` | Maximum number of times the workers within a single slice can be restarted. |
+| `--pathways-max-slice-restarts` | `int` | Maximum number of times the workers within a single slice can be restarted (Default: `4000`). Maps to `backoffLimitPerIndex: N` and `backoffLimit: N * nodesPerSlice` on the Pathways worker Job. |
 | `--pathways-proxy-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-proxy`. |
 | `--pathways-server-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-rm`. |
 | `--pathways-worker-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-worker`. |
@@ -1289,7 +1293,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--gke-mtc-enabled` | `flag` | If present, enables Multi-Tier Checkpointing (MTC) for the workload. |
 | `--gke-mtc-ramdisk-dir` | `string` | The ramdisk directory path for local checkpoints in MTC (required when `--gke-mtc-enabled` is set). |
 | `--gke-ttl-after-finished` | `string` | Time duration to retain the JobSet resources after completion (Default: `1h`). |
-| `--placement-policy` | `string` | Specifies a GCE Placement Policy name (e.g., `compact-placement`) to minimize latency. |
+| `--placement-policy` | `string` | Name of an existing GCE compact placement or workload policy; the job is pinned to nodes carrying it via `cloud.google.com/placement-policy-name`. Auto-resolved for A4X and multi-host TPU 7x when omitted. |
 | `--restart-on-exit-codes` | `string` | Comma-separated list of retriable exit codes that bypass the main restart budget. |
 | `--gke-scheduler` | `string` | Specific GKE scheduler selection (e.g., `gke.io/topology-aware-auto`). |
 | `--image-pull-secret` | `string` | Secret name required to authenticate and pull images from private container registries. |
@@ -1317,7 +1321,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--main-only` | `bool` | Fetch logs only from the rank-0 pod of the JobSet's first replicated job (`main-job`, or `pathways-head` for Pathways), using that pod's default container. |
 
 > [!NOTE]
-> **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. You can override this to stream logs from all pods by explicitly passing `--main-only=false`.
+> **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. For jobs with up to 10 pods, you can override this to stream logs from all pods by explicitly passing `--main-only=false`; for jobs with more than 10 pods, `gcluster` prints a link to view all-pod logs in the Google Cloud Console.
 
 ## 10. Troubleshooting
 
@@ -1346,6 +1350,8 @@ Every `gcluster job` command first makes `kubectl` target your cluster. A GKE co
    ```
 
    Authentication errors (`Unauthorized`, `gke-gcloud-auth-plugin` failures) are **not** retried against another endpoint because a different endpoint cannot fix credentials; `gcluster` fails immediately and tells you to run `gcloud auth application-default login`.
+
+After this step, every `kubectl` call and Kubernetes API request that `gcluster` makes passes the chosen context explicitly (`kubectl --context <context> ...`). Switching `current-context` in another terminal, or another tool running `get-credentials` while `gcluster` is running, does not redirect the job to a different cluster. When an existing context is reused, `gcluster` does not modify your kubeconfig at all; `current-context` only changes when credentials have to be fetched, because `gcloud container clusters get-credentials` sets it.
 
 > [!TIP]
 > **Forcing a credential refresh.** Set `GCLUSTER_REFRESH_CREDENTIALS=1` to skip step 1 and always re-run `get-credentials` (step 2 still applies). Use this if you suspect the reused context is wrong in a way the checks above cannot detect — for example, after deliberately editing the entry by hand, or when sharing a `kubeconfig` between tools that expect a specific endpoint:

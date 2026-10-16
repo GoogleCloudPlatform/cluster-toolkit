@@ -47,7 +47,7 @@ func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
 		return err
 	} else if installed {
 		logging.Info("JobSet CRD found. Verifying Webhook health...")
-		cmdEndpoints := g.executor.ExecuteCommand("kubectl", "get", "endpointslice", "-l", "kubernetes.io/service-name=jobset-webhook-service", "-n", "jobset-system", "-o", "json")
+		cmdEndpoints := g.kubectl("get", "endpointslice", "-l", "kubernetes.io/service-name=jobset-webhook-service", "-n", "jobset-system", "-o", "json")
 		if cmdEndpoints.ExitCode == 0 {
 			var eps k8sEndpointSliceList
 			if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
@@ -113,14 +113,14 @@ func (eps *k8sEndpointSliceList) HasReadyEndpoint() bool {
 
 func (g *GKEOrchestrator) waitForJobSetWebhook() error {
 	logging.Info("Waiting for JobSet webhook service to be ready...")
-	res := g.executor.ExecuteCommand("kubectl", "rollout", "status", "deployment/jobset-controller-manager", "-n", "jobset-system", "--timeout=600s")
+	res := g.kubectl("rollout", "status", "deployment/jobset-controller-manager", "-n", "jobset-system", "--timeout=600s")
 	if res.ExitCode != 0 {
 		return fmt.Errorf("jobset controller manager failed to become ready: %s\n%s", res.Stderr, res.Stdout)
 	}
 
 	logging.Info("Verifying JobSet webhook service endpoints...")
 	for i := 0; i < 40; i++ {
-		cmdEndpoints := g.executor.ExecuteCommand("kubectl", "get", "endpointslice", "-l", "kubernetes.io/service-name=jobset-webhook-service", "-n", "jobset-system", "-o", "json")
+		cmdEndpoints := g.kubectl("get", "endpointslice", "-l", "kubernetes.io/service-name=jobset-webhook-service", "-n", "jobset-system", "-o", "json")
 		if cmdEndpoints.ExitCode == 0 {
 			var eps k8sEndpointSliceList
 			if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
@@ -138,7 +138,7 @@ func (g *GKEOrchestrator) waitForJobSetWebhook() error {
 }
 
 func (g *GKEOrchestrator) isJobSetCRDInstalled() (bool, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "crd", "jobsets.jobset.x-k8s.io")
+	res := g.kubectl("get", "crd", "jobsets.jobset.x-k8s.io")
 	if res.ExitCode == 0 {
 		return true, nil
 	}
@@ -276,8 +276,6 @@ func (g *GKEOrchestrator) injectTolerationsAndLabels(data map[interface{}]interf
 		podSpec["tolerations"] = tolerations
 	}
 
-	replaceDeprecatedRbacProxyImage(podSpec)
-
 	if podMeta, ok := template["metadata"].(map[interface{}]interface{}); ok {
 		labels, ok := podMeta["labels"].(map[interface{}]interface{})
 		if !ok {
@@ -289,37 +287,6 @@ func (g *GKEOrchestrator) injectTolerationsAndLabels(data map[interface{}]interf
 		labels["control-plane"] = "controller-manager"
 		labels["app.kubernetes.io/component"] = "controller-manager"
 	}
-}
-
-// replaceDeprecatedRbacProxyImage replaces the deprecated image "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1"
-// with "quay.io/brancz/kube-rbac-proxy:v0.13.1" in the JobSet controller pods to avoid deployment failures
-// due to GCR container registry deprecation.
-//
-// TODO: Remove this helper function once the default JobSet version/manifest is upgraded.
-func replaceDeprecatedRbacProxyImage(podSpec map[interface{}]interface{}) {
-	replaceInContainerList := func(containerKey string) {
-		containers, ok := podSpec[containerKey].([]interface{})
-		if !ok {
-			return
-		}
-		for _, c := range containers {
-			containerMap, ok := c.(map[interface{}]interface{})
-			if !ok {
-				continue
-			}
-			img, ok := containerMap["image"].(string)
-			const deprecatedProxyPrefix = "gcr.io/kubebuilder/kube-rbac-proxy"
-			if ok && (img == deprecatedProxyPrefix || strings.HasPrefix(img, deprecatedProxyPrefix+":") || strings.HasPrefix(img, deprecatedProxyPrefix+"@")) {
-				suffix := strings.TrimPrefix(img, deprecatedProxyPrefix)
-				newImg := "quay.io/brancz/kube-rbac-proxy" + suffix
-				containerMap["image"] = newImg
-				logging.Info("Replaced deprecated image %s with %s in %s", img, newImg, containerKey)
-			}
-		}
-	}
-
-	replaceInContainerList("containers")
-	replaceInContainerList("initContainers")
 }
 
 func (g *GKEOrchestrator) applyManifests(manifests []byte, filename string) error {
@@ -341,7 +308,7 @@ func (g *GKEOrchestrator) applyManifests(manifests []byte, filename string) erro
 	}
 	logging.Info("Manifests saved to %s", filePath)
 
-	res := g.executor.ExecuteCommand("kubectl", "apply", "-f", filePath)
+	res := g.kubectl("apply", "-f", filePath)
 	if res.ExitCode != 0 {
 		return fmt.Errorf("kubectl apply failed with exit code %d: %s\n%s", res.ExitCode, res.Stderr, res.Stdout)
 	}
@@ -400,19 +367,42 @@ func (g *GKEOrchestrator) getKubeClient() KubeClient {
 
 // getCurrentNamespace is the single source of truth for the target namespace.
 // It returns the cached namespace (seeded from --gke-namespace at every
-// orchestrator entry point) or, if unset, resolves and caches the kubeconfig
-// context namespace.
+// orchestrator entry point) or, if unset, resolves and caches the namespace of
+// the pinned kubeconfig context, falling back to a lookup by cluster name.
 func (g *GKEOrchestrator) getCurrentNamespace(clusterName, location, projectID string) (string, error) {
 	if g.namespace != "" {
 		return g.namespace, nil
 	}
 
+	if ns, ok := g.pinnedContextNamespace(); ok {
+		g.namespace = ns
+		return ns, nil
+	}
 	ns, err := g.getKubeClient().GetCurrentNamespace(clusterName, location, projectID)
 	if err != nil {
 		return "", err
 	}
 	g.namespace = ns
 	return ns, nil
+}
+
+// pinnedContextNamespace reads the namespace of g.kubeContext from kubeconfig.
+func (g *GKEOrchestrator) pinnedContextNamespace() (string, bool) {
+	if g.kubeContext == "" {
+		return "", false
+	}
+	cfg, err := g.loadKubeconfig()
+	if err != nil {
+		return "", false
+	}
+	kubeCtx := cfg.Contexts[g.kubeContext]
+	if kubeCtx == nil {
+		return "", false
+	}
+	if kubeCtx.Namespace == "" {
+		return "default", true
+	}
+	return kubeCtx.Namespace, true
 }
 
 func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, projectID string) error {
@@ -453,10 +443,16 @@ func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (s
 	g.projectID = projectID
 
 	logging.Info("Fetching GKE cluster metadata for '%s'...", clusterName)
-	res := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", clusterName,
+	res := g.executor.ExecuteCommandWithTimeout(shell.DefaultCloudAPITimeout, "gcloud", "container", "clusters", "describe", clusterName,
 		"--location", location,
 		"--project", g.projectID,
 		"--format=json")
+
+	timeoutMsg := fmt.Sprintf("timed out after %v while trying to reach GKE cluster '%s' in '%s'. Please check your network connection", shell.DefaultCloudAPITimeout, clusterName, location)
+	if err := shell.HandleExecError(res, "gcloud", timeoutMsg); err != nil {
+		return "", err
+	}
+
 	if res.ExitCode != 0 {
 		if strings.Contains(res.Stderr, "403") || strings.Contains(strings.ToLower(res.Stderr), "permission denied") {
 			return "", fmt.Errorf("your account lacks the required permission to access cluster '%s' in project '%s'. Please ask your project administrator to grant you the Kubernetes Engine Viewer role (roles/container.viewer)", clusterName, g.projectID)
@@ -465,10 +461,16 @@ func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (s
 		if len(strings.Split(location, "-")) == 3 {
 			region := shell.ExtractRegion(location)
 			logging.Info("Failed to find cluster in zone %s. Trying fallback to region %s...", location, region)
-			fallbackRes := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", clusterName,
+			fallbackRes := g.executor.ExecuteCommandWithTimeout(shell.DefaultCloudAPITimeout, "gcloud", "container", "clusters", "describe", clusterName,
 				"--location", region,
 				"--project", g.projectID,
 				"--format=json")
+
+			fallbackTimeoutMsg := fmt.Sprintf("timed out after %v while trying to reach GKE cluster '%s' in fallback region '%s'. Please check your network connection", shell.DefaultCloudAPITimeout, clusterName, region)
+			if err := shell.HandleExecError(fallbackRes, "gcloud", fallbackTimeoutMsg); err != nil {
+				return "", err
+			}
+
 			if fallbackRes.ExitCode == 0 {
 				logging.Warn("Cluster '%s' is a regional cluster in '%s'. Found it by falling back from zone '%s'. "+
 					"Note: This does NOT restrict your job to '%s'. To run specifically in '%s', "+
