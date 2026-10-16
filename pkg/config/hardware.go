@@ -237,6 +237,25 @@ func expandHardwareSettings(bp Blueprint, mod *Module) error {
 	return nil
 }
 
+// AcceleratorsPerVM returns the number of accelerator chips/cores per VM for a machine type,
+// parsed from the "-Nt" suffix (e.g. 4 for "ct5lp-hightpu-4t") or machine family defaults.
+func AcceleratorsPerVM(machineType string) int {
+	// Check for explicit accelerators count in machine_type (e.g., "-4t")
+	if idx := strings.LastIndex(machineType, "-"); idx != -1 && strings.HasSuffix(machineType, "t") {
+		if val, err := strconv.Atoi(machineType[idx+1 : len(machineType)-1]); err == nil && val > 0 {
+			return val
+		}
+	}
+	// Fallback to known machine family defaults
+	for family, defaultAccs := range tpuFamilyDefaults {
+		if strings.Contains(machineType, family) {
+			return defaultAccs
+		}
+	}
+	// Final fallback to global default
+	return defaultAcceleratorsPerVM
+}
+
 // CalculateAcceleratorNodes derives the node count from topology and machine type.
 // If acceleratorsPerVM is <= 0, it falls back to deriving it from machineType or defaults.
 func CalculateAcceleratorNodes(machineType, topology string, acceleratorsPerVM int) (int, error) {
@@ -257,22 +276,7 @@ func CalculateAcceleratorNodes(machineType, topology string, acceleratorsPerVM i
 
 	// 2. Identify Accelerators per VM if not provided
 	if acceleratorsPerVM <= 0 {
-		acceleratorsPerVM = func() int {
-			// Check for explicit accelerators count in machine_type (e.g., "-4t")
-			if idx := strings.LastIndex(machineType, "-"); idx != -1 && strings.HasSuffix(machineType, "t") {
-				if val, err := strconv.Atoi(machineType[idx+1 : len(machineType)-1]); err == nil && val > 0 {
-					return val
-				}
-			}
-			// Fallback to known machine family defaults
-			for family, defaultAccs := range tpuFamilyDefaults {
-				if strings.Contains(machineType, family) {
-					return defaultAccs
-				}
-			}
-			// Final fallback to global default
-			return defaultAcceleratorsPerVM
-		}()
+		acceleratorsPerVM = AcceleratorsPerVM(machineType)
 	}
 
 	// 3. Calculate Nodes

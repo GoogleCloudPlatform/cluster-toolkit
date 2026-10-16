@@ -690,6 +690,22 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 	}, isDynamicSlicing, isStaticSlicing, nil
 }
 
+func isCandidateCompatibleForComputeType(computeType, candidate string) bool {
+	if !config.IsTPU(candidate) {
+		return true
+	}
+	topo, err := config.ResolveTopologyForChips(strings.ToLower(computeType), candidate)
+	if err != nil {
+		return true
+	}
+	nodes, err := config.CalculateAcceleratorNodes(candidate, topo, 0)
+	if err != nil {
+		return false
+	}
+	hostChips := config.AcceleratorsPerVM(candidate)
+	return nodes == 1 || hostChips == 4
+}
+
 func (g *GKEOrchestrator) resolveShorthandFromCluster(computeType, defaultMachineType string) (string, error) {
 	prefix := strings.Split(computeType, "-")[0]
 	candidates := config.GetCandidatesForShorthand(prefix)
@@ -704,10 +720,8 @@ func (g *GKEOrchestrator) resolveShorthandFromCluster(computeType, defaultMachin
 
 	var inCluster []string
 	for _, c := range candidates {
-		if topo, err := config.ResolveTopologyForChips(strings.ToLower(computeType), c); err == nil {
-			if _, err := config.CalculateAcceleratorNodes(c, topo, 0); err != nil {
-				continue
-			}
+		if !isCandidateCompatibleForComputeType(computeType, c) {
+			continue
 		}
 		if slices.ContainsFunc(clusterMachineTypes, func(cmt string) bool { return strings.EqualFold(cmt, c) }) {
 			inCluster = append(inCluster, c)

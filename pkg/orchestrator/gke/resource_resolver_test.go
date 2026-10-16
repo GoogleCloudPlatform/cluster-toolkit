@@ -151,10 +151,28 @@ func TestResolveJobMachineType_TPUShorthandFollowsCluster(t *testing.T) {
 			want:        "ct5lp-hightpu-8t",
 		},
 		{
-			name:        "two other machine types of the family is ambiguous",
+			name:        "v5litepod-4 ignores 1t pool and falls back to default 4t for NAP",
+			computeType: "v5litepod-4",
+			nodePools:   []string{"ct5lp-hightpu-1t"},
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "v5litepod-8 ignores 1t pool and falls back to default 8t for NAP",
+			computeType: "v5litepod-8",
+			nodePools:   []string{"ct5lp-hightpu-1t"},
+			want:        "ct5lp-hightpu-8t",
+		},
+		{
+			name:        "v5litepod-8 ignores 1t pool and selects 4t pool",
 			computeType: "v5litepod-8",
 			nodePools:   []string{"ct5lp-hightpu-1t", "ct5lp-hightpu-4t"},
-			wantErr:     "multiple matching machine types found in cluster for shorthand",
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "v5e-16 cannot run on 8t pool and returns error",
+			computeType: "v5e-16",
+			nodePools:   []string{"ct5lp-hightpu-8t"},
+			wantErr:     "no matching machine types found in cluster",
 		},
 		{
 			name:        "explicit machine type is never substituted",
@@ -442,8 +460,8 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 		{
 			name:            "TPU shorthand with chip count resolved",
 			acceleratorType: "v6e-256",
-			nodePools:       []string{"ct6e-standard-8t"},
-			wantType:        "ct6e-standard-8t", // Resolves to full machine type
+			nodePools:       []string{"ct6e-standard-4t"},
+			wantType:        "ct6e-standard-4t", // Resolves to full machine type
 			wantTopology:    "16x16",
 			wantErr:         false,
 		},
@@ -490,8 +508,8 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 		{
 			name:            "TPU shorthand with valid size >= 16",
 			acceleratorType: "v6e-32",
-			nodePools:       []string{"ct6e-standard-8t"},
-			wantType:        "ct6e-standard-8t",
+			nodePools:       []string{"ct6e-standard-4t"},
+			wantType:        "ct6e-standard-4t",
 			wantTopology:    "4x8",
 			wantErr:         false,
 		},
