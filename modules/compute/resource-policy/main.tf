@@ -53,5 +53,9 @@ resource "google_compute_resource_policy" "policy" {
       condition     = var.workload_policy.accelerator_topology_mode == null || (var.workload_policy.type != null && var.workload_policy.accelerator_topology != null)
       error_message = "Both workload_policy.type and workload_policy.accelerator_topology must be set when accelerator_topology_mode is specified."
     }
+    precondition {
+      condition     = !var.random_name_suffix || length(var.name) <= 54
+      error_message = "The resource policy name must be 54 characters or less when random_name_suffix is true to accommodate the 9-character suffix."
+    }
   }
 }
