@@ -163,8 +163,30 @@ variable "kueue" {
     slice_controller_memory_request = optional(string, "16Gi")
     slice_controller_cpu_limit      = optional(string, "12000m")
     slice_controller_memory_limit   = optional(string, "32Gi")
+    wait_for_pods_ready = optional(object({
+      timeout          = optional(string)
+      recovery_timeout = optional(string)
+    }), null)
   })
   default = {}
+
+  validation {
+    condition = (
+      try(var.kueue.wait_for_pods_ready.timeout, null) == null || (
+        can(regex("^([0-9]+(ns|us|ms|s|m|h))+$", var.kueue.wait_for_pods_ready.timeout)) &&
+        !can(regex("^0+(ns|us|ms|s|m|h)$", var.kueue.wait_for_pods_ready.timeout))
+      )
+    )
+    error_message = "kueue.wait_for_pods_ready.timeout must be a positive duration string (e.g., '30m', '1h')."
+  }
+
+  validation {
+    condition = (
+      try(var.kueue.wait_for_pods_ready.recovery_timeout, null) == null ||
+      can(regex("^([0-9]+(ns|us|ms|s|m|h))+$", var.kueue.wait_for_pods_ready.recovery_timeout))
+    )
+    error_message = "kueue.wait_for_pods_ready.recovery_timeout must be a non-negative duration string (e.g., '0s', '30m', '2h')."
+  }
 }
 
 variable "enable_pathways_for_tpus" {
