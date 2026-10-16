@@ -503,9 +503,8 @@ func (g *GKEOrchestrator) getCachedWorkloadPolicy(canonicalPolicyName, topology 
 
 // findPolicyInClusterNodePools inspects the cluster's existing node pools for an active
 // placement policy matching the requested machine type and topology. TPU node pools expose
-// their topology directly; GPU node pools do not, so the topology is taken from the resource
-// policy cache when available and otherwise trusted, since the node pool's attached policy is
-// the only one its nodes can ever match.
+// their topology directly; GPU node pools do not, so the node pool's attached policy is
+// trusted since it is the only one its nodes can ever match.
 // Non-static policies (such as dynamic slicing PROVISION_ONLY) are skipped for static workloads.
 func (g *GKEOrchestrator) findPolicyInClusterNodePools(machineType, topology string) string {
 	isTPU := config.IsTPU(machineType)
@@ -514,37 +513,23 @@ func (g *GKEOrchestrator) findPolicyInClusterNodePools(machineType, topology str
 			continue
 		}
 		policy := path.Base(np.PlacementPolicy.PolicyName)
-		mode, topo := g.nodePoolPolicyModeAndTopology(np, policy)
+		mode := np.PlacementPolicy.AcceleratorTopologyMode
+		if mode == "" && g.resourcePolicyCache != nil && g.resourcePolicyCache[policy] != nil {
+			mode = g.resourcePolicyCache[policy].AcceleratorTopologyMode
+		}
 		if !isStaticWorkloadPolicyMode(mode) {
 			continue // Skip non-static (e.g. PROVISION_ONLY) policies for static workloads
 		}
-		if (topo != "" && topo == topology) || (topo == "" && !isTPU) {
+		topo := np.PlacementPolicy.TpuTopology
+		if topo == "" && np.Config.Labels != nil {
+			topo = np.Config.Labels[tpuTopologyLabel]
+		}
+		if !isTPU || topo == topology {
 			logging.Info("Discovered matching placement policy %q from existing node pool %q", policy, np.Name)
 			return policy
 		}
 	}
 	return ""
-}
-
-// nodePoolPolicyModeAndTopology returns the accelerator topology mode and topology of the
-// node pool's placement policy, falling back to the resource policy cache for either value.
-func (g *GKEOrchestrator) nodePoolPolicyModeAndTopology(np gkeJobNodePool, policy string) (mode, topo string) {
-	mode = np.PlacementPolicy.AcceleratorTopologyMode
-	topo = np.PlacementPolicy.TpuTopology
-	if topo == "" && np.Config.Labels != nil {
-		topo = np.Config.Labels[tpuTopologyLabel]
-	}
-	if g.resourcePolicyCache != nil {
-		if cached := g.resourcePolicyCache[policy]; cached != nil {
-			if mode == "" {
-				mode = cached.AcceleratorTopologyMode
-			}
-			if topo == "" {
-				topo = cached.AcceleratorTopology
-			}
-		}
-	}
-	return mode, topo
 }
 
 // getCanonicalWorkloadPolicyName generates the deterministic GCE resource policy name for a
@@ -556,7 +541,9 @@ func getCanonicalWorkloadPolicyName(machineType, topology string) string {
 		tensorcores := chips * 2
 		return fmt.Sprintf("tpu7x-%d-%s-placement-policy", tensorcores, topology)
 	}
-	// Sorted so the name is stable if several shorthands alias one machine type.
+	// Sorted so the name is stable if several shorthands alias one machine type. Adding a
+	// shorthand that sorts before an existing one (e.g. "a4x" before "gb200-4") renames the
+	// canonical policy and makes NAP create a new one.
 	shorthand := strings.ToLower(machineType)
 	var matches []string
 	for short, full := range config.AcceleratorShorthandMap {

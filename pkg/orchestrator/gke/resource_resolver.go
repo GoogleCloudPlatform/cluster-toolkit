@@ -647,7 +647,7 @@ func (g *GKEOrchestrator) resolveGPUPlacementPolicy(job *orchestrator.JobDefinit
 		job.PlacementPolicy = policy
 		return nil
 	}
-	logging.Warn("No node pool for %s carries a placement policy. %s requires a HIGH_THROUGHPUT workload policy with topology %s attached to its node pool; pods may fail to schedule or run with degraded performance. Create the policy, attach it to the node pool, and pass it via --placement-policy.", job.MachineType, job.MachineType, topology)
+	logging.Warn("No node pool for %s carries a placement policy. %s requires a HIGH_THROUGHPUT workload policy with topology %s attached to its node pool; pods may fail to schedule or run with degraded performance. Create a node pool with the workload policy attached (it will then be discovered automatically), or use --gke-nap-provisioning.", job.MachineType, job.MachineType, topology)
 	return nil
 }
 

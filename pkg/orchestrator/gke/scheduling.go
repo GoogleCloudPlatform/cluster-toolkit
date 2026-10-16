@@ -25,13 +25,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-const (
-	placementPolicyNameLabel = "cloud.google.com/placement-policy-name"
-	placementGroupLabel      = "cloud.google.com/gke-placement-group"
-)
-
 // gpuWorkloadPolicyTopologies maps GPU machine-type prefixes that require a GCE
 // HIGH_THROUGHPUT workload policy to the accelerator topology that policy must carry.
+// 1x72 (one full NVLink domain) is assumed for every a4x-* shape; revisit if GKE adds
+// other A4X topologies or a --topology override for GPUs.
 var gpuWorkloadPolicyTopologies = map[string]string{
 	"a4x-": "1x72",
 }

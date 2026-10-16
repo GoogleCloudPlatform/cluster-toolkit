@@ -1353,9 +1353,9 @@ func TestResolveGPUPlacementPolicy(t *testing.T) {
 			name: "A4X NAP creates the canonical policy when missing",
 			job:  &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project", GKENAPProvisioning: "auto"},
 			mockResponses: map[string][]shell.CommandResult{
-				"gcloud compute resource-policies describe gb200-4-1x72-placement-policy": {{ExitCode: 1, Stderr: "not found"}},
-				"gcloud compute resource-policies list":                                   {{ExitCode: 0, Stdout: ""}},
-				"gcloud compute resource-policies create workload-policy gb200-4-1x72-placement-policy --region=us-central1 --project=my-project --type=HIGH_THROUGHPUT --accelerator-topology=1x72": {{ExitCode: 0}},
+				"gcloud compute resource-policies describe gb200-4-1x72-placement-policy --region=us-central1 --project=my-project --format=json":                                                                                                            {{ExitCode: 1, Stderr: "not found"}},
+				"gcloud compute resource-policies list --project=my-project --filter=region:( us-central1 ) AND workloadPolicy.acceleratorTopology=1x72 AND workloadPolicy.type=HIGH_THROUGHPUT --format=value(name,workloadPolicy.acceleratorTopologyMode)": {{ExitCode: 0, Stdout: ""}},
+				"gcloud compute resource-policies create workload-policy gb200-4-1x72-placement-policy --region=us-central1 --project=my-project --type=HIGH_THROUGHPUT --accelerator-topology=1x72":                                                         {{ExitCode: 0}},
 			},
 			wantPolicy:  "gb200-4-1x72-placement-policy",
 			wantCreated: true,
