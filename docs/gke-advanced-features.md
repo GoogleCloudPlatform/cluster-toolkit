@@ -45,6 +45,7 @@ Submit a dynamic slicing workload that requests a `4x4x4` TPU v7x topology:
 ```shell
 ./gcluster job submit \
   --name my-dynamic-slice-job \
+  --image <CONTAINER_IMAGE> \
   --command "python train.py" \
   --compute-type tpu7x \
   --topology 4x4x4
@@ -110,6 +111,7 @@ Submit a multi-slice Pathways training workload with Cloud Storage state persist
 ```shell
 ./gcluster job submit \
   --name my-pathways-job \
+  --image <CONTAINER_IMAGE> \
   --command "python train_pathways.py" \
   --compute-type v6e-16 \
   --pathways \
@@ -145,7 +147,6 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     settings:
       cluster_autoscaling:
-        enabled: true
         autoprovisioning_disk_size_gb: 100
         autoprovisioning_disk_type: pd-balanced
         autoprovisioning_cpu_max: 1000
@@ -184,6 +185,7 @@ Submit a workload that provisions Spot VMs dynamically:
 ```shell
 ./gcluster job submit \
   --name my-nap-spot-job \
+  --image <CONTAINER_IMAGE> \
   --command "python app.py" \
   --compute-type v6e-4 \
   --gke-nap-provisioning spot
@@ -194,6 +196,7 @@ Submit a workload that targets an existing Compute Engine reservation:
 ```shell
 ./gcluster job submit \
   --name my-nap-reservation-job \
+  --image <CONTAINER_IMAGE> \
   --command "python app.py" \
   --compute-type v6e-4 \
   --gke-nap-provisioning reservation \
@@ -208,7 +211,7 @@ Multi-Tier Checkpointing (MTC) provides high-throughput, low-latency checkpoint 
 
 ### 4.1 Blueprint configuration
 
-To enable MTC on your GKE cluster, configure `enable_multi_tier_checkpointing: true` in your `gke-cluster` module settings, grant GKE Node Service Account access in your GCS checkpoint bucket's `object_users` list, and apply the `CheckpointConfiguration` Custom Resource (CR):
+To enable MTC on your GKE cluster, configure `enable_multi_tier_checkpointing: true` and `enable_gcsfuse_csi: true` in your `gke-cluster` module settings, grant GKE Node Service Account access in your GCS checkpoint bucket's `object_users` list, and apply the `CheckpointConfiguration` Custom Resource (CR):
 
 ```yaml
 deployment_groups:
@@ -224,6 +227,7 @@ deployment_groups:
   - id: gke_cluster
     source: modules/scheduler/gke-cluster
     settings:
+      enable_gcsfuse_csi: true               # Required precondition for Multi-Tier Checkpointing
       enable_multi_tier_checkpointing: true  # Enables MTC GKE Addon & Workload Identity
 
   - id: apply_mtc_config
@@ -245,14 +249,16 @@ deployment_groups:
 
 ### 4.2 One-Command MTC Job Submission (`gcluster job submit --gke-mtc-enabled`)
 
-When submitting training workloads via `gcluster job submit`, add the `--gke-mtc-enabled` flag. `gcluster` will automatically inject the MTC CSI driver (`multitier-checkpoint.csi.storage.gke.io`) into your pod specification mounted at `/tmp/mtc_checkpoints`:
+When submitting training workloads via `gcluster job submit`, add the `--gke-mtc-enabled` and `--gke-mtc-ramdisk-dir` flags. `gcluster` will automatically inject the MTC CSI driver (`multitier-checkpoint.csi.storage.gke.io`) into your pod specification mounted at the specified ramdisk directory:
 
 ```shell
 ./gcluster job submit \
   --name my-mtc-training-job \
+  --image <CONTAINER_IMAGE> \
   --command "python train.py --checkpoint-dir=/tmp/mtc_checkpoints" \
   --compute-type v6e-4 \
-  --gke-mtc-enabled
+  --gke-mtc-enabled \
+  --gke-mtc-ramdisk-dir /tmp/mtc_checkpoints
 ```
 
 ---

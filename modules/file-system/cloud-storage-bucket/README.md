@@ -3,7 +3,7 @@
 This module creates a [Google Cloud Storage (GCS) bucket](https://cloud.google.com/storage).
 
 For more information on this and other network storage options in the Cluster
-Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
+Toolkit, see the extended [Network Storage documentation](../../../docs/network_storage.md).
 
 ### Example
 
@@ -84,7 +84,7 @@ following example:
       - $(bucket.mount_runner)
 ```
 
-[matrix]: ../../../../docs/network_storage.md#compatibility-matrix
+[matrix]: ../../../docs/network_storage.md#compatibility-matrix
 
 ## License
 

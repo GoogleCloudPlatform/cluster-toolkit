@@ -32,7 +32,7 @@ user will modify the template after running the Cluster Toolkit.
 ```
 
 See the
-[Google Cloud Batch Example](../../../../examples/README.md#batchyaml-)
+[Google Cloud Batch Example](../../../examples/README.md#batchyaml-)
 for how to use the `batch-job-template` module with other Cluster Toolkit modules such
 as `filestore` and `startup-script`.
 

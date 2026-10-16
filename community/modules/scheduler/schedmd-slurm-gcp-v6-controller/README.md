@@ -13,8 +13,6 @@ controller for optimal performance at different scales.
 [slurm\_instance\_template]: /community/modules/internal/slurm-gcp/instance_template/README.md
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
 [enable\_cleanup\_compute]: #input\_enable\_cleanup\_compute
-[enable\_cleanup\_subscriptions]: #input\_enable\_cleanup\_subscriptions
-[enable\_reconfigure]: #input\_enable\_reconfigure
 
 ### Example
 
@@ -281,6 +279,7 @@ control the `max-distance` behavior. See the following example:
       node_count_dynamic_max: 30
       enable_placement: true
       placement_max_distance: 1
+```
 
 > [!NOTE]
 > `schedmd-slurm-gcp-v6-nodeset.settings.enable_placement: true` must also be
@@ -315,7 +314,7 @@ If the largest partition was 200 nodes, configure the blueprint as follows:
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    ...
+    # ...
     settings:
       cloud_parameters:
         tree_width: 200
@@ -345,7 +344,7 @@ configure the blueprint as follows:
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    ...
+    # ...
     settings:
       cloud_parameters:
         resume_rate: 100

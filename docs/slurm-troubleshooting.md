@@ -34,11 +34,11 @@ $ cat /var/log/slurm/resume.log
 resume.py ERROR: ... "Quota 'C2_CPUS' exceeded. Limit: 300.0 in region europe-west4.". Details: "[{'message': "Quota 'C2_CPUS' exceeded. Limit: 300.0 in region europe-west4.", 'domain': 'usageLimits', 'reason': 'quotaExceeded'}]">
 ```
 
-The solution here is to [request more of the specified quota](#gcp-quotas),
+The solution here is to [request more of the specified quota](https://cloud.google.com/compute/quotas),
 `C2 CPUs` in the example above. Alternatively, you could switch the partition's
 [machine type][partition-machine-type], to one which has sufficient quota.
 
-[partition-machine-type]: community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md#input_machine_type
+[partition-machine-type]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md#input_machine_type
 
 #### Insufficient Capacity
 
@@ -159,8 +159,8 @@ After creating the service account, it can be set via the
 
 [def-compute-sa]: https://cloud.google.com/compute/docs/access/service-accounts#default_service_account
 [slurm-on-gcp-ug]: https://goo.gle/slurm-gcp-user-guide
-[slurm-on-gcp-con]: community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
-[slurm-on-gcp-login]: community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
+[slurm-on-gcp-con]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
+[slurm-on-gcp-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
 
 ### Timeout Error / Startup Script Failure (Slurm V6)
 
@@ -211,9 +211,8 @@ the `local_mount` and `filestore_share_name`.
 
 ### `local-exec provisioner error` During Terraform Apply
 
-Using the `enable_reconfigure` setting with Slurm v6 modules uses `local-exec`
-provisioners to perform additional cluster configuration. Some common issues
-experienced when using this feature are missing local python requirements and
-incorrectly configured gcloud cli. There is more information about these issues
-and fixes on the
-[`schedmd-slurm-gcp-v6-controller` documentation](../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md#live-cluster-reconfiguration-enable_reconfigure).
+Earlier versions of the Slurm v6 modules used `local-exec` provisioners for
+cluster configuration. Some common issues experienced when using `local-exec`
+are missing local python requirements and an incorrectly configured `gcloud` CLI.
+See the [`schedmd-slurm-gcp-v6-controller` documentation](../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md#live-cluster-reconfiguration)
+for current configuration options.

@@ -4,7 +4,7 @@ Creates a BigQuery dataset.
 
 Primarily used for FSI - MonteCarlo Tutorial: **[fsi-montecarlo-on-batch-tutorial]**.
 
-[fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
+[fsi-montecarlo-on-batch-tutorial]: ../../../../docs/tutorials/fsi-montecarlo-on-batch/README.md
 
 ## Usage
 This is a simple usage.

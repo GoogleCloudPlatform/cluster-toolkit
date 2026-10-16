@@ -107,35 +107,30 @@ Run `gcluster deploy` to create the cluster. Sample command:
 
 To upgrade an existing cluster, you can perform a version upgrade to a specific target version or change the cluster's release channel to align with a different stability track. This section covers procedures for upgrading both the master control plane and individual node pools using **Cluster Toolkit blueprints**, the **`gcloud` CLI**, or the **Google Cloud Console (UI)**.
 
-> [!WARNING]
-> **Configuration Drift**: Performing manual upgrades via `gcloud` or the Google Cloud Console will cause configuration drift. The actual state of the cluster will no longer match the Terraform state managed by the Cluster Toolkit.
+> [!NOTE]
+> **How `version_prefix` vs. `release_channel` Interacts with Terraform State**:
 >
-> To maintain the blueprint as the source of truth, the preferred method is to update the `version_prefix` or `release_channel` in the blueprint and run `./gcluster deploy <path-to-blueprint.yaml> -w`.
->
-> If a manual upgrade is performed, subsequent toolkit operations may attempt to revert the cluster to the version defined in the blueprint unless the blueprint is also updated to match.
+> `gke-cluster` sets `ignore_changes = [min_master_version]` on the cluster (and `ignore_changes = [version]` on its in-module system node pools), so changing `version_prefix` does not upgrade an existing control plane (use `release_channel`, `gcloud`, or the Console). `gke-node-pool` does **not** ignore `version`: its `version` comes from the required `gke_version` input, normally wired via `use:` from the cluster's live master version, so after a control-plane upgrade the next `gcluster deploy` will plan an in-place node-pool version update. Pin `gke_version` on the node pool if you need to control that timing, and pass `--skip-gke-security-check` to `gcluster deploy` if you need to bypass the dynamic GKE version security vulnerability check during deployment.
 
-### Upgrading via Blueprint
+### Changing Release Channel via Blueprint
 
-To maintain your blueprint as the source of truth and avoid configuration drift, the recommended way to upgrade an existing cluster is by updating the blueprint and redeploying.
+You can update `release_channel` in your blueprint and redeploy:
 
 #### Step 1: Update Blueprint
-Modify your blueprint file to specify the new GKE version or release channel.
-
-Example: Update `version_prefix` to a new minor version or specific patch.
+Modify your blueprint file to specify the target `release_channel` (and update `version_prefix` for any new clusters):
 
 ```yaml
     settings:
-      version_prefix: "1.35." # Upgrading to 1.35
+      release_channel: REGULAR
+      version_prefix: "1.35." # Applied to newly created clusters
 ```
 
 #### Step 2: Redeploy
-Run the `gcluster deploy` command again pointing to your blueprint:
+Run `gcluster deploy` pointing to your blueprint:
 
 ```shell
 ./gcluster deploy <path-to-blueprint.yaml> -w
 ```
-
-Cluster Toolkit will detect the configuration change in the underlying Terraform state and initiate the upgrade of the cluster control plane and node pools.
 
 ### Upgrading via gcloud CLI
 
