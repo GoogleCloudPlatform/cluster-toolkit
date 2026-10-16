@@ -233,13 +233,13 @@ resource "google_compute_instance_template" "tpl" {
     }
 
     precondition {
-      condition     = var.disk_provisioned_iops == null || (var.disk_type != null && (startswith(lower(var.disk_type), "hyperdisk-") || lower(var.disk_type) == "pd-extreme"))
-      error_message = "disk_provisioned_iops is only supported with Hyperdisk or pd-extreme disk types."
+      condition     = var.disk_provisioned_iops == null || (var.disk_type != null && contains(["hyperdisk-balanced", "pd-extreme"], lower(var.disk_type)))
+      error_message = "disk_provisioned_iops is only supported with hyperdisk-balanced or pd-extreme boot disks."
     }
 
     precondition {
-      condition     = var.disk_provisioned_throughput == null || (var.disk_type != null && startswith(lower(var.disk_type), "hyperdisk-"))
-      error_message = "disk_provisioned_throughput is only supported with Hyperdisk disk types."
+      condition     = var.disk_provisioned_throughput == null || (var.disk_type != null && lower(var.disk_type) == "hyperdisk-balanced")
+      error_message = "disk_provisioned_throughput is only supported with hyperdisk-balanced boot disks."
     }
 
     precondition {
