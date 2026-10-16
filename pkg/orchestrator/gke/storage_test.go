@@ -127,6 +127,12 @@ func TestParseSingleVolume(t *testing.T) {
 			wantErrSub: "Unsupported scheme",
 		},
 		{
+			name:       "invalid pvc scheme",
+			input:      "pvc://my-claim;/data",
+			wantErr:    true,
+			wantErrSub: "Unsupported scheme: pvc. Only gs:// and filestore:// schemes are supported. To mount an existing PVC, specify the volume claim name directly without a URI scheme prefix (e.g. '<pvc-name>;<destination>').",
+		},
+		{
 			name:       "missing destination for gcsfuse",
 			input:      "gs://my-bucket",
 			wantErr:    true,

@@ -541,7 +541,8 @@ func validateSrcScheme(src string, vStr string) error {
 		}
 		return nil
 	}
-	return fmt.Errorf("invalid volume format: %s. Unsupported scheme.", vStr)
+	scheme, _, _ := strings.Cut(src, ":")
+	return fmt.Errorf("Unsupported scheme: %s. Only gs:// and filestore:// schemes are supported. To mount an existing PVC, specify the volume claim name directly without a URI scheme prefix (e.g. '<pvc-name>;<destination>').", scheme)
 }
 
 // truncatePVCName enforces maxLen without leaving a trailing '-'.
