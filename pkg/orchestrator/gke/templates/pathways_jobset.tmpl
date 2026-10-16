@@ -218,7 +218,7 @@ spec:
         parallelism: {{.NodesPerSlice}}
         completions: {{.NodesPerSlice}}
         backoffLimit: {{.WorkerBackoffLimit}}
-        backoffLimitPerIndex: 4000
+        backoffLimitPerIndex: {{.WorkerBackoffLimitPerIndex}}
         podReplacementPolicy: Failed
         maxFailedIndexes: 0
         template:

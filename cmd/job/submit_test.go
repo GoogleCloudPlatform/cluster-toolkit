@@ -375,7 +375,7 @@ func setupSubmitTestEnv(t *testing.T) {
 	priority = "medium"
 	isPathwaysJob = false
 	skipPrereqs = false
-	pathways = orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}
+	pathways = orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 4000}
 	gkeNapProvisioning = ""
 	gkeNapReservation = ""
 	envVars = nil
@@ -1389,5 +1389,30 @@ func TestSubmitCmd_InvalidRestartOnExitCodes(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid exit code 0") {
 		t.Errorf("expected error to contain 'invalid exit code 0', got: %v", err)
+	}
+}
+
+func TestSubmitCmd_PathwaysMaxSliceRestartsWithoutPathways_Fails(t *testing.T) {
+	setupSubmitTestEnv(t)
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "pathways-missing-flag-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--pathways-max-slice-restarts", "5",
+	)
+
+	if err == nil {
+		t.Fatal("expected error when passing --pathways-max-slice-restarts without --pathways, got nil")
+	}
+
+	expectedErr := "pathways flags specified but --pathways flag is missing"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
 	}
 }

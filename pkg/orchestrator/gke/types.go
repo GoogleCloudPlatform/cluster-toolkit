@@ -606,6 +606,7 @@ type jobSetTemplateData struct {
 	NumSlices                     int
 	NodesPerSlice                 int
 	WorkerBackoffLimit            int
+	WorkerBackoffLimitPerIndex    int
 	PathwaysInstanceType          string
 	CommandToRun                  string
 	ResourcesString               string
