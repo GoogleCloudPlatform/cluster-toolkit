@@ -18,7 +18,8 @@ resource "random_id" "resource_name_suffix" {
 }
 
 locals {
-  name = "${var.name}-${random_id.resource_name_suffix.hex}"
+  suffix = var.random_name_suffix ? "-${random_id.resource_name_suffix.hex}" : ""
+  name   = "${var.name}${local.suffix}"
 }
 
 resource "google_compute_resource_policy" "policy" {

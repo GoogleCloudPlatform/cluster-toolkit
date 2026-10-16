@@ -30,12 +30,23 @@ variable "name" {
 
   validation {
     # Check if the variable matches the GCP resource naming regex.
-    condition     = can(regex("^[a-z]([-a-z0-9]{0,52}[a-z0-9])?$", var.name))
+    condition = (
+      var.random_name_suffix ?
+      can(regex("^[a-z]([-a-z0-9]{0,52}[a-z0-9])?$", var.name)) :
+      can(regex("^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$", var.name))
+    )
     error_message = <<-EOD
-    The resource policy name must be between 1 and 54 characters, start with a lowercase letter, end with an alphanumeric, and contain only lowercase letters, numbers, and hyphens.
-    Underscores are not allowed. A shorter length is enforced to accommodate a random suffix.
+    The resource policy name must start with a lowercase letter, end with an alphanumeric, and contain only lowercase letters, numbers, and hyphens.
+    Underscores are not allowed. Maximum length is 54 characters when random_name_suffix is true (to accommodate a random suffix), or 63 characters when false.
     EOD
   }
+}
+
+variable "random_name_suffix" {
+  description = "Appends a random suffix to the resource policy name to avoid clashes."
+  type        = bool
+  default     = true
+  nullable    = false
 }
 
 variable "group_placement_max_distance" {
