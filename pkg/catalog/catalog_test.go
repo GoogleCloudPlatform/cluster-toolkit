@@ -16,6 +16,7 @@ package catalog
 
 import (
 	"hpc-toolkit/pkg/sourcereader"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -47,6 +48,7 @@ func TestScanBlueprintsAndPairing(t *testing.T) {
 	byPath := indexBlueprintsByPath(t, blueprints)
 	verifyCoreBlueprints(t, byPath)
 	verifyCommunityAndSpecialBlueprints(t, byPath)
+	verifyAllDeploymentFilesPaired(t, root, blueprints)
 }
 
 func indexBlueprintsByPath(t *testing.T, blueprints []BlueprintEntry) map[string]BlueprintEntry {
@@ -87,13 +89,66 @@ func verifyCoreBlueprints(t *testing.T, byPath map[string]BlueprintEntry) {
 	if gkeA4.Scheduler != "gke" {
 		t.Errorf("expected gke-a4 scheduler=gke, got %q", gkeA4.Scheduler)
 	}
+
+	a3High, ok := byPath["examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"]
+	if !ok || a3High.DeploymentPath != "examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml" {
+		t.Errorf("expected a3high-slurm-blueprint paired with a3high-slurm-deployment.yaml, got %q", a3High.DeploymentPath)
+	}
+	if _, hasVar := a3High.Vars["a3_static_cluster_size"]; !hasVar {
+		t.Errorf("expected a3_static_cluster_size from deployment file in a3high-slurm-blueprint vars")
+	}
+	verifyExpressionVarDefaults(t, byPath)
+}
+
+func verifyExpressionVarDefaults(t *testing.T, byPath map[string]BlueprintEntry) {
+	t.Helper()
+	gkeA4 := byPath["examples/gke-a4/gke-a4.yaml"]
+	if got := gkeA4.Vars["kueue_configuration_path"]; got != `$(ghpc_stage("./kueue-configuration.yaml.tftpl"))` {
+		t.Errorf("expected gke-a4 kueue_configuration_path expression preserved, got %v", got)
+	}
+	gkeA4x := byPath["examples/gke-a4x/gke-a4x.yaml"]
+	if got := gkeA4x.Vars["reservation_project_id"]; got != "$(vars.project_id)" {
+		t.Errorf("expected gke-a4x reservation_project_id=$(vars.project_id), got %v", got)
+	}
+	tpuV6e := byPath["examples/gke-tpu-v6e/gke-tpu-v6e.yaml"]
+	if got, exists := tpuV6e.Vars["authorized_cidr"]; !exists || got != nil {
+		t.Errorf("expected gke-tpu-v6e authorized_cidr=nil for $(null), got %v (exists=%v)", got, exists)
+	}
+}
+
+func verifyAllDeploymentFilesPaired(t *testing.T, root string, blueprints []BlueprintEntry) {
+	t.Helper()
+	paired := make(map[string]bool, len(blueprints))
+	for _, bp := range blueprints {
+		if bp.DeploymentPath != "" {
+			paired[bp.DeploymentPath] = true
+		}
+	}
+	for _, relRoot := range []string{"examples", filepath.Join("community", "examples")} {
+		_ = filepath.WalkDir(filepath.Join(root, relRoot), func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), "-deployment.yaml") {
+				return err
+			}
+			rel, _ := filepath.Rel(root, path)
+			relSlash := filepath.ToSlash(rel)
+			if !paired[relSlash] {
+				t.Errorf("deployment file %s is not paired with any blueprint in catalog", relSlash)
+			}
+			return nil
+		})
+	}
 }
 
 func verifyCommunityAndSpecialBlueprints(t *testing.T, byPath map[string]BlueprintEntry) {
 	t.Helper()
-	slinky, ok := byPath["community/examples/hpc-slinky/hpc-slinky.yaml"]
-	if !ok || slinky.Scheduler != "slurm-on-gke (slinky)" {
-		t.Errorf("expected hpc-slinky scheduler=slurm-on-gke (slinky), got %+v", slinky)
+	for path, wantSched := range map[string]string{
+		"community/examples/hpc-slinky/hpc-slinky.yaml":       "slurm-on-gke (slinky)",
+		"community/examples/slurm-gke/slurm-gke.yaml":         "slurm-on-gke (slinky)",
+		"community/examples/flux-framework/flux-cluster.yaml": "flux",
+	} {
+		if bp, ok := byPath[path]; !ok || bp.Scheduler != wantSched {
+			t.Errorf("expected %s scheduler=%s, got %+v", path, wantSched, bp)
+		}
 	}
 	batchBP, ok := byPath["community/examples/fsi-montecarlo-on-batch.yaml"]
 	if !ok || batchBP.Scheduler != "batch" || !strings.Contains(batchBP.Description, "Value at Risk") {
@@ -106,6 +161,45 @@ func verifyCommunityAndSpecialBlueprints(t *testing.T, byPath map[string]Bluepri
 	a3mImg, ok := byPath["examples/machine-learning/build-service-images/a3m/blueprint.yaml"]
 	if !ok || strings.Contains(strings.ToLower(a3mImg.Description), "you may not use") {
 		t.Errorf("expected license text to be stripped from description, got %q", a3mImg.Description)
+	}
+	verifyMultiBlueprintDescriptions(t, byPath)
+}
+
+func verifyMultiBlueprintDescriptions(t *testing.T, byPath map[string]BlueprintEntry) {
+	t.Helper()
+	a3uVM := byPath["examples/machine-learning/a3-ultragpu-8g/a3ultra-vm.yaml"]
+	if !strings.Contains(a3uVM.Description, "standalone VM blueprint (a3ultra-vm.yaml)") {
+		t.Errorf("expected standalone VM description for a3ultra-vm.yaml, got %q", a3uVM.Description)
+	}
+	a4hVM := byPath["examples/machine-learning/a4-highgpu-8g/a4high-vm.yaml"]
+	if !strings.Contains(a4hVM.Description, "standalone VM blueprint (a4high-vm.yaml)") {
+		t.Errorf("expected standalone VM description for a4high-vm.yaml, got %q", a4hVM.Description)
+	}
+	a4xVM := byPath["examples/machine-learning/a4x-highgpu-4g/a4x-vm.yaml"]
+	if !strings.Contains(a4xVM.Description, "standalone group") {
+		t.Errorf("expected standalone group description for a4x-vm.yaml, got %q", a4xVM.Description)
+	}
+	a3mGcs := byPath["examples/machine-learning/a3-megagpu-8g/a3mega-slurm-gcsfuse-lssd-blueprint.yaml"]
+	if !strings.Contains(a3mGcs.Description, "GCSFuse with Local SSD Cache") {
+		t.Errorf("expected GCSFuse with Local SSD Cache description for a3mega-slurm-gcsfuse-lssd-blueprint.yaml, got %q", a3mGcs.Description)
+	}
+}
+
+func TestSkipAIAssistedAndYAMLQuoting(t *testing.T) {
+	root := testRepoRoot(t)
+	tmpDir := t.TempDir()
+	aiBP := filepath.Join(tmpDir, "custom.yaml")
+	content := "blueprint_name: custom\nai_assisted: true\ndeployment_groups:\n- group: primary\n  modules:\n  - id: net\n    source: modules/network/vpc\n"
+	if err := os.WriteFile(aiBP, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write temp blueprint: %v", err)
+	}
+	if _, ok := parseBlueprintEntry(root, aiBP, nil); ok {
+		t.Errorf("expected blueprint with ai_assisted: true to be skipped by parseBlueprintEntry")
+	}
+	for _, s := range []string{"line1\nline2", "col1\tcol2", "cr\rreturn"} {
+		if !needsQuotedYAMLString(s) {
+			t.Errorf("expected needsQuotedYAMLString(%q) to be true", s)
+		}
 	}
 }
 
@@ -168,10 +262,14 @@ func verifyEchoAndInjectedIDSuppression(t *testing.T, wiring map[string]ModuleWi
 	if slices.Contains(gcloudMod.RequiredInputs, "module_instance_id") {
 		t.Errorf("module_instance_id must be excluded from gcloud required_inputs: %v", gcloudMod.RequiredInputs)
 	}
-	// 4. bigquery-table must recommend bigquery-dataset.
+	// 4. Root providers with multiple outputs (vpc, pubsub/topic, bigquery-dataset) must retain their outputs.
 	bqTable := wiring["community/modules/database/bigquery-table"]
 	if !slices.Contains(bqTable.RecommendedUse, "community/modules/database/bigquery-dataset") {
 		t.Errorf("expected bigquery-dataset in bigquery-table recommended_use, got %v", bqTable.RecommendedUse)
+	}
+	packer := wiring["modules/packer/custom-image"]
+	if !slices.Contains(packer.RecommendedUse, "modules/network/vpc") {
+		t.Errorf("expected modules/network/vpc in custom-image recommended_use, got %v", packer.RecommendedUse)
 	}
 }
 

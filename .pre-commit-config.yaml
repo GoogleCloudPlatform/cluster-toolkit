@@ -105,7 +105,7 @@ repos:
     name: catalog-gen
     entry: go run ./tools/catalog-gen
     language: system
-    files: '^(examples/.*\.yaml|community/examples/.*\.yaml|modules/.*\.(tf|hcl|yaml)|community/modules/.*\.(tf|hcl|yaml)|pkg/catalog/.*\.go|tools/catalog-gen/.*\.go)$'
+    files: '^(examples/.*\.(yaml|md)|community/examples/.*\.(yaml|md)|modules/.*\.(tf|hcl|yaml)|community/modules/.*\.(tf|hcl|yaml)|pkg/catalog/.*\.go|tools/catalog-gen/.*\.go|skills/cluster-blueprint-assistant/references/catalog\.yaml)$'
     pass_filenames: false
     require_serial: true
   - id: pytest-check

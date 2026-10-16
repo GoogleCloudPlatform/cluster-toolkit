@@ -79,6 +79,153 @@ blueprints:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [network, homefs, swfs, low_cost_partition, compute_partition, slurm_login]
     settings: [login_startup_script, login_startup_scripts_timeout, machine_type]
+- path: community/examples/alphaevolve/alpha-evolve-experiment.yaml
+  deployment_path: community/examples/alphaevolve/alpha-evolve-deployment.yaml
+  blueprint_name: alpha-evolve-platform
+  scheduler: none
+  description: "Deploys the Google Cloud infrastructure and per-experiment software environments required to run scalable AlphaEvolve evolutionary code optimization experiments on Cloud Batch and Vertex AI Colab Enterprise."
+  machine_types: [n2-standard-4]
+  vars:
+    accelerator_count: 1
+    accelerator_type: nvidia-tesla-t4
+    base_evaluator_image: "python:3.12-slim-bookworm"
+    boot_disk_image: projects/debian-cloud/global/images/family/debian-12
+    cloud_build_dir: solutions/alphaevolve
+    cloud_build_path: "$(ghpc_stage(\"./build/cloud-build.yaml.tfpl\"))"
+    cloud_build_service_account: "$(\"${vars.infra_deployment_name}-build-sa@${vars.project_id}.iam.gserviceaccount.com\")"
+    concurrency: 4
+    controller_service_account: "$(\"${vars.infra_deployment_name}-ctrl-sa@${vars.project_id}.iam.gserviceaccount.com\")"
+    delete_succeeded_jobs: "true"
+    deployment_name: "$(\"${vars.exp_deployment_name}-${vars.user_experiment_name}\")"
+    evaluation_machine_type: n2-standard-4
+    evaluation_mode: batch
+    evaluation_provisioning_model: STANDARD
+    example_dir: user_examples/adaptive_sort_cpp
+    existing_bucket_name: alpha-evolve-existing-bucket
+    exp_deployment_name: ae-exp
+    idle_timeout: 5
+    infra_artifact_repo: "$(\"${vars.infra_deployment_name}-repo\")"
+    infra_deployment_name: alpha-evolve-infra
+    is_example_dir_local: false
+    max_duration: 6
+    max_duration_seconds: 3600
+    max_programs_evaluated: 20
+    max_programs_generated: 100
+    model: gemini-3.8-flash
+    mount_path: /mnt/disks/share
+    num_samplers: 4
+    poll_interval: 4
+    programs_dir: program_candidates
+    project_id: null
+    region: us-central1
+    repo_ref: main
+    repo_url: "https://github.com/GoogleCloudPlatform/hpc-solutions.git"
+    user_experiment_name: experiment-1
+  modules:
+  - id: validate-experiment
+    source: "git::https://github.com/GoogleCloudPlatform/hpc-solutions.git//solutions/alphaevolve/infrastructure/modules/validate-experiment"
+    settings: [accelerator_count, accelerator_type, cloud_build_dir, concurrency, evaluation_machine_type, evaluation_mode, evaluation_provisioning_model, example_dir, idle_timeout, max_duration, max_duration_seconds, max_programs_evaluated, max_programs_generated, model, num_samplers, poll_interval, repo_ref, repo_url, user_experiment_name]
+  - id: artifact-repository
+    source: "git::https://github.com/GoogleCloudPlatform/terraform-google-artifact-registry.git"
+    settings: [format, location, project_id, repository_id]
+  - id: evaluator-sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: evaluator-bucket-iam
+    source: "git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/storage_buckets_iam"
+    settings: [bindings, mode, storage_buckets]
+  - id: evaluator-pubsub-iam
+    source: "git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/pubsub_topics_iam"
+    settings: [bindings, mode, project, pubsub_topics]
+  - id: evaluator-sa-user-iam
+    source: "git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/service_accounts_iam"
+    settings: [bindings, mode, project, service_accounts]
+  - id: cloud-build
+    source: community/modules/container/cloud-build
+    settings: [cloud_build_dir, cloud_build_template_path, is_target_dir_local, project_id, region, repo_ref, repo_url, service_account_email, target_dir, template_vars]
+  - id: project-info
+    source: community/modules/project/pre-existing-project
+    settings: [project_id]
+  - id: experiment-subscription
+    source: "git::https://github.com/terraform-google-modules/terraform-google-pubsub.git"
+    settings: [create_topic, project_id, pull_subscriptions, topic]
+  - id: subscription-iam
+    source: "git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/pubsub_subscriptions_iam"
+    settings: [bindings, mode, project, pubsub_subscriptions]
+  - id: stage-experiment-source
+    source: community/modules/file-system/gcs-sync
+    settings: [bucket_name, directories, repo_ref, repo_url]
+  - id: experiment-metadata
+    source: community/modules/project/project-metadata
+    settings: [metadata, project_id]
+  - id: experiment-env-file
+    source: community/modules/file-system/gcs-objects
+    settings: [bucket_name, files]
+  - id: show-instructions
+    source: "git::https://github.com/GoogleCloudPlatform/hpc-solutions.git//solutions/alphaevolve/infrastructure/modules/show-instructions"
+    settings: [bucket_name, user_experiment_name]
+- path: community/examples/alphaevolve/alpha-evolve-infra.yaml
+  deployment_path: community/examples/alphaevolve/alpha-evolve-deployment.yaml
+  blueprint_name: alpha-evolve-platform
+  scheduler: none
+  description: "Deploys the Google Cloud infrastructure and per-experiment software environments required to run scalable AlphaEvolve evolutionary code optimization experiments on Cloud Batch and Vertex AI Colab Enterprise."
+  machine_types: [n2-standard-4]
+  vars:
+    assistant: default_assistant
+    base_url: discoveryengine.googleapis.com
+    colab_machine_type: n2-standard-4
+    colab_mount_path: /data
+    collection: default_collection
+    deployment_name: $(vars.infra_deployment_name)
+    engine: "$(\"${vars.infra_deployment_name}-experiment-engine\")"
+    existing_bucket_name: alpha-evolve-existing-bucket
+    infra_artifact_repo: "$(\"${vars.infra_deployment_name}-repo\")"
+    infra_deployment_name: alpha-evolve-infra
+    location: global
+    mount_path: /mnt/disks/share
+    project_id: null
+    pubsub_topic: "$(\"${vars.infra_deployment_name}-batch-notifications\")"
+    region: us-central1
+    repo_ref: main
+    repo_url: "https://github.com/GoogleCloudPlatform/hpc-solutions.git"
+    runtime_user_email: null
+  modules:
+  - id: apis
+    source: community/modules/project/service-enablement
+    settings: [gcp_service_list]
+  - id: create-batch-identity
+    source: community/modules/project/service-agent
+    settings: [project_id, service]
+  - id: artifact-repository
+    source: "git::https://github.com/GoogleCloudPlatform/terraform-google-artifact-registry.git"
+    settings: [format, location, project_id, repository_id]
+  - id: cloud-build-sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: controller-sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: bucket-iam
+    source: "git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/storage_buckets_iam"
+    settings: [bindings, mode, storage_buckets]
+  - id: pubsubs
+    source: "git::https://github.com/terraform-google-modules/terraform-google-pubsub.git"
+    settings: [create_topic, project_id, topic]
+  - id: pubsub-iam
+    source: "git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/pubsub_topics_iam"
+    settings: [bindings, mode, project, pubsub_topics]
+  - id: discovery-engine
+    source: community/modules/ai/discovery-engine
+    settings: [assistant_id, collection, engine_id, location, project_id]
+  - id: infra-env-file
+    source: community/modules/file-system/gcs-objects
+    settings: [bucket_name, files]
+  - id: stage-infra-files
+    source: community/modules/file-system/gcs-sync
+    settings: [bucket_name, files, repo_ref, repo_url]
+  - id: compute-colab
+    source: community/modules/compute/colab
+    settings: [colab_machine_type, deployment_name, environment_variables, mount_gcs_bucket, mount_path, project_id, region, runtime_user]
 - path: community/examples/apptainer-artifact-registry-openfoam.yaml
   blueprint_name: apptainer-artifact-registry-openfoam
   scheduler: none
@@ -91,11 +238,11 @@ blueprints:
     openfoam_entrypoint: bash
     openfoam_entrypoint_args:
     - -c
-    - null
+    - "$(\"source /usr/lib/openfoam/openfoam${vars.openfoam_image_tag}/etc/bashrc && exec \\\"$@\\\"\")"
     - openfoam
     openfoam_image_tag: "2406"
     openfoam_smoke_test_runners:
-    - content: null
+    - content: "$(\"#!/bin/bash\\nset -euo pipefail\\nwrapper_path=\\\"${vars.shared_root}/bin/${vars.openfoam_app_id}\\\"\\nlog_file=/var/log/openfoam-smoke-test.log\\nif \\\"$wrapper_path\\\" simpleFoam -help >\\\"$log_file\\\" 2>&1; then\\n  echo \\\"openfoam smoke test: OK\\\" >>\\\"$log_file\\\"\\nelse\\n  echo \\\"openfoam smoke test: FAILED\\\" >>\\\"$log_file\\\"\\n  exit 1\\nfi\\n\")"
       destination: run-openfoam-smoke-test.sh
       type: shell
     openfoam_upstream_image: opencfd/openfoam-default
@@ -312,7 +459,7 @@ blueprints:
     settings: [cloud_parameters, enable_controller_public_ips, enable_slurm_auth]
 - path: community/examples/flux-framework/flux-cluster.yaml
   blueprint_name: flux-fw-cluster
-  scheduler: none
+  scheduler: flux
   description: "The flux-cluster.yaml blueprint describes a flux-framework cluster where flux is deployed as the native resource manager."
   vars:
     deployment_name: flux-fw-cluster
@@ -382,15 +529,15 @@ blueprints:
   blueprint_name: hpc-build-slurm-image
   scheduler: slurm
   description: "This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top of an existing image, hpc-rocky-linux-9 in the case of this example."
-  machine_types: [n2d-standard-2, n2d-standard-4, n2d-standard-16]
+  machine_types: [n2d-standard-16, n2d-standard-2, n2d-standard-4]
   vars:
     build_from_git_ref: 6.13.2
     build_from_image_family: hpc-rocky-linux-9
     build_from_image_project: cloud-hpc-image-public
     built_image_family: my-custom-slurm
     built_instance_image:
-      family: null
-      project: null
+      family: $(vars.built_image_family)
+      project: $(vars.project_id)
     deployment_name: build-slurm-1
     image_build_machine_type: n2d-standard-16
     project_id: null
@@ -432,7 +579,7 @@ blueprints:
     compute_pool_size: 2
     debug_nodeset_replicas: 2
     deployment_name: slinky-01
-    exporter_pod_monitoring_path: null
+    exporter_pod_monitoring_path: "$(ghpc_stage(\"./exporter-pod-monitoring.yaml\"))"
     gcp_public_cidrs_access_enabled: false
     login_rootSshAuthorizedKeys: []
     project_id: null
@@ -473,12 +620,12 @@ blueprints:
   blueprint_name: hpc-c3-slurm-google-cloud-dedicated
   scheduler: slurm
   description: "Creates a Slurm cluster on C3 machine types for Google Cloud Dedicated (GCD) and sovereign cloud environments using Packer to pre-build a custom Slurm image based on Rocky Linux 8, configured with NFS home directories, SAuth..."
-  machine_types: [c3-standard-176, c3-standard-4]
+  machine_types: [c3-standard-4, c3-standard-176]
   vars:
     build_slurm_from_git_ref: 6.13.2
     built_instance_image:
       family: slurm-rocky9
-      project: null
+      project: $(vars.project_id)
     deployment_name: hpc-slurm
     image_build_machine_type: c3-standard-4
     project_id: null
@@ -531,7 +678,7 @@ blueprints:
     authorized_ssh_ranges: []
     built_instance_image:
       family: slurm-rocky9
-      project: null
+      project: $(vars.project_id)
     deployment_name: burst-cluster
     image_build_machine_type: c3-standard-4
     nfs_server_ip: null
@@ -574,13 +721,13 @@ blueprints:
   blueprint_name: primary-cluster
   scheduler: slurm
   description: "This directory contains the blueprints, playbooks, test scripts, and architecture for demonstrating Multi-Cluster Slurm with Elastic Cloud Bursting between two autonomous projects in Google Cloud Dedicated (GCD) environments (e.g..."
-  machine_types: [c3-standard-176, c3-standard-4]
+  machine_types: [c3-standard-4, c3-standard-176]
   vars:
     authorized_ssh_ranges: []
     build_slurm_from_git_ref: 6.12.1
     built_instance_image:
       family: slurm-rocky9
-      project: null
+      project: $(vars.project_id)
     deployment_name: primary-cluster
     image_build_machine_type: c3-standard-4
     project_id: null
@@ -1010,7 +1157,7 @@ blueprints:
   vars:
     custom_image:
       family: apptainer-enabled
-      project: null
+      project: $(vars.project_id)
     deployment_name: slurm6-apptainer
     disk_size: 64
     project_id: null
@@ -1051,7 +1198,7 @@ blueprints:
     controller_ip_range: 192.168.1.0/24
     custom_image:
       family: hybrid
-      project: null
+      project: $(vars.project_id)
     deployment_name: slurm6-hybrid
     disk_size: 64
     key_export_dir: /slurm/key_distribution
@@ -1059,7 +1206,7 @@ blueprints:
     on_prem_install_dir: your_slurm_installation_directory
     onprem_ctld_addr: your_slurmctld_IPaddress
     onprem_ctld_host: your_slurmctld_name
-    output_dir: null
+    output_dir: "$(\"/share/${vars.deployment_name}-files\")"
     project_id: null
     region: us-central1
     slurm_gid: 620
@@ -1169,12 +1316,12 @@ blueprints:
     enable_shielded_vm: true
     new_image:
       family: htcondor-10x
-      project: null
+      project: $(vars.project_id)
     project_id: null
     region: us-central1
     zone: us-central1-c
     zones:
-    - null
+    - $(vars.zone)
     - us-central1-f
   modules:
   - id: network1
@@ -1222,7 +1369,7 @@ blueprints:
     enable_public_ips: true
     project_id: null
     region: us-west4
-    staged_configs: null
+    staged_configs: "$(ghpc_stage(\"../modules/scheduler/schedmd-slurm-gcp-v6-controller/etc\"))"
     zone: us-west4-c
   modules:
   - id: network
@@ -1277,7 +1424,7 @@ blueprints:
     deployment_name: kms-per-service
     enable_slurm_auth: true
     filestore_key_name: my-filestore-key
-    filestore_key_project: null
+    filestore_key_project: $(vars.project_id)
     filestore_key_ring: my-filestore-keyring
     project_id: null
     region: us-central1
@@ -1351,7 +1498,7 @@ blueprints:
   vars:
     deployment_name: kms-key-example
     enable_slurm_auth: true
-    key_project_id: null
+    key_project_id: $(vars.project_id)
     project_id: null
     region: us-central1
     zone: us-central1-a
@@ -1401,7 +1548,7 @@ blueprints:
     settings: [enable_controller_public_ips]
 - path: community/examples/slurm-gke/slurm-gke.yaml
   blueprint_name: slurm-gke
-  scheduler: slurm
+  scheduler: slurm-on-gke (slinky)
   description: "Deploys a hybrid Slurm cluster with a GCE-based controller, login node, and debug partition alongside a GKE-backed compute partition managed by the Slinky Slurm operator. The blueprint also creates a VPC, a Filestore instance mounted at..."
   machine_types: [n2d-standard-4, c2-standard-16, n2-standard-2, n2-standard-4]
   vars:
@@ -1474,7 +1621,7 @@ blueprints:
   blueprint_name: hpc-slurm-multiregion-scale
   scheduler: slurm
   description: "Creates a massive-scale, multi-region Slurm cluster provisioning up to 1,500 dynamic compute nodes (96,000 to 192,000 vCPUs) aggregated under a unified partition across 3 Google Cloud regions and 10 zones."
-  machine_types: [n2d-standard-64, n2-standard-16, n2-standard-4]
+  machine_types: [n2d-standard-64, n2-standard-4, n2-standard-16]
   vars:
     central_zones:
     - us-central1-a
@@ -1495,7 +1642,7 @@ blueprints:
     node_count_dynamic_max_per_region: 500
     project_id: null
     region: us-central1
-    staged_configs: null
+    staged_configs: "$(ghpc_stage(\"../../modules/scheduler/schedmd-slurm-gcp-v6-controller/etc\"))"
     west_zones:
     - us-west1-a
     - us-west1-b
@@ -1535,7 +1682,7 @@ blueprints:
   blueprint_name: hpc-slurm-scale
   scheduler: slurm
   description: "Creates a high-performance, single-region auto-scaling Slurm cluster scaled up to 800 dynamic Spot or On-Demand compute nodes (102,400 vCPUs) across 4 zones with multi-zonal dynamic failover and Cloud NAT."
-  machine_types: [n2-standard-128, n2-standard-8, n2-standard-4]
+  machine_types: [n2-standard-128, n2-standard-4, n2-standard-8]
   vars:
     compute_machine_type: n2-standard-128
     compute_zones:
@@ -1552,7 +1699,7 @@ blueprints:
     node_count_dynamic_max: 800
     project_id: null
     region: us-central1
-    staged_configs: null
+    staged_configs: "$(ghpc_stage(\"../../modules/scheduler/schedmd-slurm-gcp-v6-controller/etc\"))"
     zone: us-central1-a
   modules:
   - id: network
@@ -1777,20 +1924,20 @@ blueprints:
   machine_types: [n2-standard-32]
   vars:
     authorized_cidr: "<your-ip-address>/32"
-    config_map_path: null
+    config_map_path: "$(ghpc_stage(\"./config-map.yaml.tftpl\"))"
     deployment_name: xpk-01
     filestore_zone: us-central1-a
     gcp_public_cidrs_access_enabled: false
     jobset_version: 0.10.1
     kjob_version: f775609365df47bdc3e7c10290d8efae7f512464
-    kueue_config_path: null
+    kueue_config_path: "$(ghpc_stage(\"./kueue-xpk-configuration.yaml.tftpl\"))"
     kueue_version: v0.17.1
     machine_type: n2-standard-32
     project_id: null
     region: us-central1
     slice_cpu_count: 64
     slice_vm_count: 2
-    storage_crd_path: null
+    storage_crd_path: "$(ghpc_stage(\"./storage-crd.yaml\"))"
     xpk_version: v0.8.0
     zones:
     - us-central1-a
@@ -1988,12 +2135,12 @@ blueprints:
     enable_flex_start: false
     enable_queued_provisioning: false
     gcp_public_cidrs_access_enabled: false
-    kueue_configuration_path: null
-    nccl_config_path: null
-    nccl_tcpx_installer_path: null
+    kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
+    nccl_config_path: "$(ghpc_stage(\"./nccl-config.yaml\"))"
+    nccl_tcpx_installer_path: "$(ghpc_stage(\"./nccl-tcpx-installer.yaml.tftpl\"))"
     nccl_tcpx_version: v3.1.9
-    network_name: null
-    nri_device_injector_path: null
+    network_name: "$(\"${vars.deployment_name}-net\")"
+    nri_device_injector_path: "$(ghpc_stage(\"./nri-device-injector.yaml\"))"
     placement_policy:
       name: null
       type: null
@@ -2046,10 +2193,10 @@ blueprints:
     enable_flex_start: false
     enable_queued_provisioning: false
     gcp_public_cidrs_access_enabled: false
-    kueue_configuration_path: null
-    nccl_tcpxo_installer_path: null
+    kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
+    nccl_tcpxo_installer_path: "$(ghpc_stage(\"./nccl-tcpxo-installer.yaml.tftpl\"))"
     nccl_tcpxo_version: v1.0.15
-    nri_device_injector_path: null
+    nri_device_injector_path: "$(ghpc_stage(\"./nri-device-injector.yaml\"))"
     placement_policy:
       name: null
       type: null
@@ -2102,8 +2249,8 @@ blueprints:
     deployment_name: null
     enable_flex_start: false
     enable_queued_provisioning: false
-    gib_installer_path: null
-    kueue_configuration_path: null
+    gib_installer_path: "$(ghpc_stage(\"./nccl-installer.yaml.tftpl\"))"
+    kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
     placement_policy:
       name: null
       type: null
@@ -2178,8 +2325,8 @@ blueprints:
     enable_flex_start: false
     enable_inference_gateway: false
     enable_queued_provisioning: false
-    gib_installer_path: null
-    kueue_configuration_path: null
+    gib_installer_path: "$(ghpc_stage(\"./nccl-installer.yaml.tftpl\"))"
+    kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
     placement_policy:
       name: null
       type: null
@@ -2246,19 +2393,19 @@ blueprints:
   vars:
     a4x_max_node_pool_disk_size_gb: 100
     accelerator_type: nvidia-gb300
-    asapd_lite_installer_path: null
+    asapd_lite_installer_path: "$(ghpc_stage(\"./asapd-lite-installer.yaml\"))"
     authorized_cidr: null
     compute_nodepool_machine_type: a4x-maxgpu-4g-metal
     deployment_name: gke-a4x-max-bm-dep
-    gib_installer_path: null
+    gib_installer_path: "$(ghpc_stage(\"./nccl-installer.yaml.tftpl\"))"
     k8s_service_account_name: workload-identity-k8s-sa
-    kueue_configuration_path: null
+    kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
     num_node_pools: null
-    nvidia_dra_driver_path: null
+    nvidia_dra_driver_path: "$(ghpc_stage(\"./nvidia-dra-driver.yaml\"))"
     project_id: null
     region: null
     reservation: null
-    reservation_project_id: null
+    reservation_project_id: $(vars.project_id)
     static_node_count: null
     system_node_pool_disk_size_gb: 200
     system_nodepool_machine_type: n2d-standard-16
@@ -2323,15 +2470,15 @@ blueprints:
     authorized_cidr: null
     compute_nodepool_machine_type: a4x-highgpu-4g
     deployment_name: gke-a4x
-    gib_installer_path: null
+    gib_installer_path: "$(ghpc_stage(\"./nccl-installer.yaml.tftpl\"))"
     k8s_service_account_name: workload-identity-k8s-sa
-    kueue_configuration_path: null
+    kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
     num_node_pools: null
-    nvidia_dra_driver_path: null
+    nvidia_dra_driver_path: "$(ghpc_stage(\"./nvidia-dra-driver.yaml\"))"
     project_id: null
     region: null
     reservation: null
-    reservation_project_id: null
+    reservation_project_id: $(vars.project_id)
     static_node_count: null
     system_node_pool_disk_size_gb: 200
     system_nodepool_machine_type: n2d-standard-16
@@ -2441,8 +2588,8 @@ blueprints:
     enable_queued_provisioning: true
     gcp_public_cidrs_access_enabled: false
     gpu_nominal_quota: 512
-    kueue_configuration_path: null
-    nccl_installer_path: null
+    kueue_configuration_path: "$(ghpc_stage(\"./dws-queues.yaml.tftpl\"))"
+    nccl_installer_path: "$(ghpc_stage(\"./nccl-installer.yaml\"))"
     project_id: null
     region: null
     system_node_pool_disk_size_gb: 100
@@ -2490,7 +2637,7 @@ blueprints:
     enable_flex_start: true
     enable_pathways_for_tpus: true
     enable_queued_provisioning: true
-    kueue_configuration_path: null
+    kueue_configuration_path: "$(ghpc_stage(\"../tpu-dws-queues.yaml.tftpl\"))"
     machine_type: tpu7x-standard-4t
     num_slices: 1
     project_id: null
@@ -2554,7 +2701,7 @@ blueprints:
     enable_flex_start: true
     enable_pathways_for_tpus: true
     enable_queued_provisioning: true
-    kueue_configuration_path: null
+    kueue_configuration_path: "$(ghpc_stage(\"../tpu-dws-queues.yaml.tftpl\"))"
     machine_type: ct6e-standard-4t
     num_slices: 1
     project_id: null
@@ -2614,7 +2761,7 @@ blueprints:
     authorized_cidr: null
     deployment_name: gke-a3u-dws-fs
     enable_flex_start: true
-    nccl_installer_path: null
+    nccl_installer_path: "$(ghpc_stage(\"./nccl-installer.yaml\"))"
     project_id: null
     region: null
     system_node_pool_disk_size_gb: 100
@@ -2661,7 +2808,7 @@ blueprints:
     deployment_name: gke-tpu-7x-flex
     enable_flex_start: true
     enable_pathways_for_tpus: true
-    kueue_configuration_path: null
+    kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
     machine_type: tpu7x-standard-4t
     num_slices: 1
     project_id: null
@@ -2728,7 +2875,7 @@ blueprints:
     deployment_name: gke-tpu-v6e-flex
     enable_flex_start: true
     enable_pathways_for_tpus: true
-    kueue_configuration_path: null
+    kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
     machine_type: ct6e-standard-4t
     num_slices: 1
     project_id: null
@@ -2793,15 +2940,15 @@ blueprints:
     disk_encryption_kms_key: ""
     enable_confidential_storage: false
     machine_type: g4-standard-48
-    network_name_0: null
-    network_name_1: null
+    network_name_0: "$(\"${vars.deployment_name}-net-0\")"
+    network_name_1: "$(\"${vars.deployment_name}-net-1\")"
     num_gpus: 1
     project_id: null
     region: null
     reservation: null
     static_node_count: 1
-    subnetwork_name_0: null
-    subnetwork_name_1: null
+    subnetwork_name_0: "$(\"${vars.deployment_name}-sub-0\")"
+    subnetwork_name_1: "$(\"${vars.deployment_name}-sub-1\")"
     zone: null
   modules:
   - id: gke-g4-net-0
@@ -3008,7 +3155,7 @@ blueprints:
   machine_types: [n2d-standard-4]
   vars:
     authorized_cidr: null
-    base_network_name: null
+    base_network_name: $(vars.deployment_name)
     deployment_name: null
     kms_key: ""
     lustre_instance_id: gke-lustre-instance
@@ -3054,6 +3201,7 @@ blueprints:
     use: [gke_cluster, node_pool_service_account]
     settings: [auto_upgrade, machine_type, name, zones]
 - path: examples/gke-tpu-7x/gke-tpu-7x-advanced.yaml
+  deployment_path: examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml
   blueprint_name: gke-tpu-7x
   scheduler: gke
   description: "This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this README."
@@ -3072,14 +3220,14 @@ blueprints:
     enable_queued_provisioning: false
     kueue_configuration_path: null
     machine_type: tpu7x-standard-4t
-    num_slices: null
+    num_slices: 1
     project_id: null
     region: null
     reservation_affinity:
       consume_reservation_type: NO_RESERVATION
       specific_reservations: []
     spot: false
-    tpu_topology: null
+    tpu_topology: 2x2x1
     user_namespace: default
     zone: null
   modules:
@@ -3321,6 +3469,7 @@ blueprints:
     use: [gke-tpu-v5p-cluster]
     settings: [cert_manager, jobset, kueue]
 - path: examples/gke-tpu-v6e/gke-tpu-v6e-advanced.yaml
+  deployment_path: examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml
   blueprint_name: gke-tpu-v6e
   scheduler: gke
   description: "This example shows how TPU v6e cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this README."
@@ -3338,7 +3487,7 @@ blueprints:
     enable_queued_provisioning: false
     kueue_configuration_path: null
     machine_type: ct6e-standard-4t
-    num_slices: null
+    num_slices: 2
     project_id: null
     region: null
     reservation_affinity:
@@ -3346,7 +3495,7 @@ blueprints:
       specific_reservations: []
     spot: false
     system_node_pool_disk_size_gb: 200
-    tpu_topology: null
+    tpu_topology: 4x4
     user_namespace: default
     v6e_node_pool_disk_size_gb: 100
     version_prefix: "1.35."
@@ -3450,9 +3599,9 @@ blueprints:
   description: "This blueprint deploys a cluster containing a pair of h4d-highmem-192-lssd VMs with RDMA networking enabled along with a filestore instance mounted to /home."
   machine_types: [h4d-highmem-192-lssd]
   vars:
-    base_network_name: null
+    base_network_name: $(vars.deployment_name)
     deployment_name: h4d-cluster
-    hostname_prefix: null
+    hostname_prefix: "$(\"${vars.deployment_name}-odyssey\")"
     project_id: null
     rdma_net_range: 192.168.32.0/24
     region: us-central1
@@ -3760,7 +3909,7 @@ blueprints:
   blueprint_name: hpc-slurm
   scheduler: slurm
   description: "Creates a basic auto-scaling Slurm cluster with mostly default settings. The blueprint also creates a new VPC network, and a filestore instance mounted to /home."
-  machine_types: [n2-standard-2, h3-standard-88, n2-standard-4, c2-standard-60]
+  machine_types: [n2-standard-2, c2-standard-60, h3-standard-88, n2-standard-4]
   vars:
     compute_enable_spot_vm: false
     compute_machine_type: c2-standard-60
@@ -3819,7 +3968,7 @@ blueprints:
   vars:
     custom_image:
       family: my-slurm-image
-      project: null
+      project: $(vars.project_id)
     deployment_name: image-builder-v6-001
     disk_size: 50
     project_id: null
@@ -3852,6 +4001,7 @@ blueprints:
     use: [network, compute_partition, slurm_login]
     settings: [disk_size_gb, enable_controller_public_ips, instance_image]
 - path: examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml
+  deployment_path: examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml
   blueprint_name: a3high-slurm
   scheduler: slurm
   description: "This document will guide you to successfully provisioning a Slurm cluster with a3-highgpu-8g compute nodes running NVIDIA H100 GPUs."
@@ -3859,21 +4009,31 @@ blueprints:
   vars:
     a3_dws_flex_enabled: false
     a3_enable_spot_vm: false
+    a3_partition_name: null
     a3_reservation_name: ""
+    a3_static_cluster_size: null
     build_slurm_from_git_ref: 6.13.2
+    deployment_name: null
     disk_size_gb: 200
     enable_nvidia_dcgm: true
     instance_image:
-      family: null
-      project: null
+      family: "$(\"${vars.deployment_name}-tcpx-image\")"
+      project: $(vars.project_id)
+    keyserver_ubuntu_key: null
     local_mount_homefs: /home
     localssd_mountpoint: /mnt/localssd
-    lustre_instance_id: null
+    lustre_instance_id: "$(\"${vars.deployment_name}-lustre\")"
     lustre_size_gib: 36000
     per_unit_storage_throughput: 500
+    project_id: null
+    region: null
+    slurm_cluster_name: null
     source_image_family: ubuntu-2204-lts
     source_image_project_id: ubuntu-os-cloud
     sys_net_range: 172.16.0.0/16
+    tcpx_kernel_login: null
+    tcpx_kernel_password: null
+    zone: null
   modules:
   - id: sysnet
     source: modules/network/vpc
@@ -3921,11 +4081,13 @@ blueprints:
     use: [sysnet, a3_partition, slurm_login, homefs]
     settings: [cloud_parameters, controller_startup_script, disk_type, enable_controller_public_ips, enable_external_prolog_epilog, login_startup_script, machine_type, slurm_conf_tpl]
 - path: examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml
+  deployment_path: examples/machine-learning/a3-megagpu-8g/a3mega-slurm-deployment.yaml
   blueprint_name: a3mega-slurm
   scheduler: slurm
   description: "This directory provides a Cluster Toolkit blueprint (a3mega-slurm-blueprint.yaml) and deployment configuration (a3mega-slurm-deployment.yaml) for provisioning a Slurm cluster with a3-megagpu-8g (8x NVIDIA H100) compute nodes..."
   machine_types: [c2-standard-8, n2-standard-2, a3-megagpu-8g, c2-standard-4]
   vars:
+    a3mega_cluster_size: null
     a3mega_dws_flex_enabled: false
     a3mega_enable_spot_vm: false
     a3mega_partition_name: a3mega
@@ -3934,18 +4096,29 @@ blueprints:
       image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260522
       project: ubuntu-os-accelerator-images
     build_slurm_from_git_ref: 6.13.2
+    deployment_name: null
     disk_size_gb: 100
     enable_controller_public_ips: true
     enable_login_public_ips: true
+    enable_nvidia_dcgm: true
+    enable_nvidia_persistenced: true
+    enable_ops_agent: true
+    final_image_family: slurm-a3mega
     instance_image:
-      family: null
-      project: null
+      family: $(vars.final_image_family)
+      project: $(vars.project_id)
     local_mount_homefs: /home
     localssd_mountpoint: /mnt/localssd
-    lustre_instance_id: null
+    lustre_instance_id: "$(\"${vars.deployment_name}-lustre\")"
     lustre_size_gib: 36000
+    network_name_system: null
     per_unit_storage_throughput: 500
+    project_id: null
+    region: null
+    slurm_cluster_name: null
+    subnetwork_name_system: null
     sys_net_range: 172.16.0.0/16
+    zone: null
   modules:
   - id: sysnet
     source: modules/network/vpc
@@ -4001,53 +4174,69 @@ blueprints:
     use: [sysnet, a3mega_partition, debug_partition, slurm_login, homefs, data-bucket]
     settings: [controller_startup_script, enable_cleanup_compute, enable_controller_public_ips, enable_external_prolog_epilog, login_startup_script, machine_type, prolog_scripts, slurm_conf_tpl]
 - path: examples/machine-learning/a3-megagpu-8g/a3mega-slurm-gcsfuse-lssd-blueprint.yaml
+  deployment_path: examples/machine-learning/a3-megagpu-8g/a3mega-slurm-deployment.yaml
   blueprint_name: a3mega-slurm
   scheduler: slurm
-  description: "This directory provides a Cluster Toolkit blueprint (a3mega-slurm-blueprint.yaml) and deployment configuration (a3mega-slurm-deployment.yaml) for provisioning a Slurm cluster with a3-megagpu-8g (8x NVIDIA H100) compute nodes..."
+  description: "GCSFuse with Local SSD Cache (a3mega-slurm-gcsfuse-lssd-blueprint.yaml): Reflects best practices for using GCSFuse for ML workloads. It is configured to mount GCS buckets on two mountpoints on a3-mega nodes. Use the gcs_bucket variable..."
   machine_types: [c2-standard-8, n2-standard-2, a3-megagpu-8g, c2-standard-4]
   vars:
     a3m_runners:
     - content: "---\n- name: Configure Slurm to depend upon aperture devices\n  hosts: all\n  become: true\n  vars: {}\n  tasks:\n  - name: Ensure slurmd starts after aperture devices are ready\n    ansible.builtin.copy:\n      dest: /etc/systemd/system/slurmd.service.d/aperture.conf\n      owner: root\n      group: root\n      mode: 0o644\n      content: |\n        [Service]\n        ExecCondition=/usr/bin/test -d /dev/aperture_devices/\n    notify: Reload SystemD\n  handlers:\n  - name: Reload SystemD\n    ansible.builtin.systemd:\n      daemon_reload: true\n"
       destination: slurm_aperture.yml
       type: ansible-local
-    - content: null
+    - content: "$(\"---\\n- name: Enable NVIDIA DCGM on GPU nodes\\n  hosts: all\\n  become: true\\n  vars:\\n    enable_ops_agent: ${vars.enable_ops_agent}\\n    enable_nvidia_dcgm: ${vars.enable_nvidia_dcgm}\\n    enable_nvidia_persistenced: ${vars.enable_nvidia_persistenced}\\n  tasks:\\n  - name: Update Ops Agent configuration\\n    ansible.builtin.blockinfile:\\n      path: /etc/google-cloud-ops-agent/config.yaml\\n      insertafter: EOF\\n      block: |\\n        metrics:\\n          receivers:\\n            dcgm:\\n              type: dcgm\\n          service:\\n            pipelines:\\n              dcgm:\\n                receivers:\\n                  - dcgm\\n    notify:\\n    - Restart Google Cloud Ops Agent\\n  handlers:\\n  - name: Restart Google Cloud Ops Agent\\n    ansible.builtin.service:\\n      name: google-cloud-ops-agent.service\\n      state: \\\"{{ 'restarted' if enable_ops_agent else 'stopped' }}\\\"\\n      enabled: \\\"{{ enable_ops_agent }}\\\"\\n  post_tasks:\\n  - name: Enable Google Cloud Ops Agent\\n    ansible.builtin.service:\\n      name: google-cloud-ops-agent.service\\n      state: \\\"{{ 'started' if enable_ops_agent else 'stopped' }}\\\"\\n      enabled: \\\"{{ enable_ops_agent }}\\\"\\n  - name: Enable NVIDIA DCGM\\n    ansible.builtin.service:\\n      name: nvidia-dcgm.service\\n      state: \\\"{{ 'started' if enable_nvidia_dcgm else 'stopped' }}\\\"\\n      enabled: \\\"{{ enable_nvidia_dcgm }}\\\"\\n  - name: Enable NVIDIA Persistence Daemon\\n    ansible.builtin.service:\\n      name: nvidia-persistenced.service\\n      state: \\\"{{ 'started' if enable_nvidia_persistenced else 'stopped' }}\\\"\\n      enabled: \\\"{{ enable_nvidia_persistenced }}\\\"\\n\")"
       destination: enable_dcgm.yml
       type: ansible-local
+    a3mega_cluster_size: null
+    a3mega_dws_flex_enabled: false
+    a3mega_enable_spot_vm: false
     a3mega_maintenance_interval: ""
     a3mega_partition_name: a3mega
+    a3mega_reservation_name: null
     base_image:
       image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
       project: ubuntu-os-accelerator-images
     build_slurm_from_git_ref: 6.13.2
     controller_runners:
-    - content: null
+    - content: "$(\"#!/bin/bash\\nSLURM_ROOT=/opt/apps/adm/slurm\\nmkdir -m 0755 -p \\\"$${SLURM_ROOT}/scripts\\\"\\nmkdir -p \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-prolog_slurmd.d\\\"\\nmkdir -p \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-epilog_slurmd.d\\\"\\ncurl -s -o \\\"$${SLURM_ROOT}/scripts/sudo-oslogin\\\" \\\\\\n    https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin\\nchmod 0755 \\\"$${SLURM_ROOT}/scripts/sudo-oslogin\\\"\\nln -s \\\"$${SLURM_ROOT}/scripts/sudo-oslogin\\\" \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-prolog_slurmd.d/sudo-oslogin.prolog_slurmd\\\"\\nln -s \\\"$${SLURM_ROOT}/scripts/sudo-oslogin\\\" \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-epilog_slurmd.d/sudo-oslogin.epilog_slurmd\\\"\\ncurl -s -o \\\"$${SLURM_ROOT}/scripts/rxdm\\\" \\\\\\n    https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/receive-data-path-manager-mega\\nchmod 0755 \\\"$${SLURM_ROOT}/scripts/rxdm\\\"\\nln -s \\\"$${SLURM_ROOT}/scripts/rxdm\\\" \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-prolog_slurmd.d/rxdm.prolog_slurmd\\\"\\nln -s \\\"$${SLURM_ROOT}/scripts/rxdm\\\" \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-epilog_slurmd.d/rxdm.epilog_slurmd\\\"\\n# Uncomment the line below to enable epilog that will check health of GPUs and drain node if problem is detected.\\n# ln -s \\\"/slurm/scripts/tools/gpu-test\\\" \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-epilog_slurmd.d/gpu-test.epilog_slurmd\\\"\\n\")"
       destination: stage_scripts.sh
       type: shell
     - content: "#!/bin/bash\n# reset enroot to defaults of files under /home and running under /run\n# allows basic enroot testing with reduced I/O performance\nrm -f /etc/enroot/enroot.conf\n"
       destination: reset_enroot.sh
       type: shell
+    deployment_name: null
     enable_controller_public_ips: true
     enable_login_public_ips: true
+    enable_nvidia_dcgm: true
+    enable_nvidia_persistenced: true
+    enable_ops_agent: true
     enable_placement: false
+    final_image_family: slurm-a3mega
     gcs_bucket: ""
     gcsfuse_lssd_runners:
-    - content: null
+    - content: "$(\"---\\n- name: Create LSSD optimized gcsfuse mount\\n  hosts: localhost\\n  become: true\\n  tasks:\\n  - name: Create gcsfuse rwx configuration\\n    ansible.builtin.copy:\\n      dest: /etc/gcsfuse.yml\\n      owner: root\\n      group: root\\n      mode: 0o644\\n      content: |\\n        file-cache:\\n          max-size-mb: -1\\n          enable-parallel-downloads: true\\n          download-chunk-size-mb: 50\\n          parallel-downloads-per-file: 16\\n        cache-dir: ${vars.localssd_mountpoint}\\n        file-system:\\n          dir-mode: \\\"777\\\"\\n          file-mode: \\\"777\\\"\\n          rename-dir-limit: 0  # Set to 20000 for hierarchical buckets\\n          temp-dir: ${vars.localssd_mountpoint}\\n          fuse-options: allow_other\\n        foreground: true\\n\\n  - name: Create gcsfuse ro configuration\\n    ansible.builtin.copy:\\n      dest: /etc/gcsfuse-ro.yml\\n      owner: root\\n      group: root\\n      mode: 0o644\\n      content: |\\n        file-cache:\\n          max-size-mb: -1\\n        metadata-cache:\\n          ttl-secs: 3600\\n        cache-dir: ${vars.localssd_mountpoint}\\n        file-system:\\n          dir-mode: \\\"555\\\" # need 5 on dir to enable ls\\n          file-mode: \\\"444\\\"\\n          rename-dir-limit: 0  # Set to 20000 for hierarchical buckets\\n          temp-dir: ${vars.localssd_mountpoint}\\n          fuse-options: allow_other\\n          kernel-list-cache-ttl-secs: 60\\n        foreground: true\\n\\n  - name: Create gcsfuse systemd service\\n    ansible.builtin.copy:\\n      dest: /etc/systemd/system/gcsfuse.service\\n      owner: root\\n      group: root\\n      mode: 0o644\\n      content: |\\n        [Unit]\\n        Description=gcsfuse mount of all buckets\\n        After=local-fs.target\\n\\n        [Service]\\n        Type=simple\\n        User=root\\n        ExecStartPre=/bin/mkdir -p /gcs\\n        ExecStart=gcsfuse --config-file /etc/gcsfuse.yml ${vars.gcs_bucket} /gcs\\n        ExecStop=fusermount3 -u /gcs\\n\\n        [Install]\\n        WantedBy=slurmd.service multi-user.target\\n\\n  - name: Create gcsfuse-ro systemd service\\n    ansible.builtin.copy:\\n      dest: /etc/systemd/system/gcsfuse-ro.service\\n      owner: root\\n      group: root\\n      mode: 0o644\\n      content: |\\n        [Unit]\\n        Description=gcsfuse ro mount of all buckets\\n        After=local-fs.target\\n\\n        [Service]\\n        Type=simple\\n        User=root\\n        ExecStartPre=/bin/mkdir -p /gcs-ro\\n        ExecStart=gcsfuse --config-file /etc/gcsfuse-ro.yml ${vars.gcs_bucket} /gcs-ro\\n        ExecStop=fusermount3 -u /gcs-ro\\n\\n        [Install]\\n        WantedBy=slurmd.service multi-user.target\\n\\n  post_tasks:\\n  - name: Enable and restart gcsfuse\\n    ansible.builtin.service:\\n      name: gcsfuse.service\\n      state: restarted\\n      enabled: true\\n\\n  - name: Enable and restart gcsfuse-ro\\n    ansible.builtin.service:\\n      name: gcsfuse-ro.service\\n      state: restarted\\n      enabled: true\\n\")"
       destination: gcsfuse.yml
       type: ansible-local
     gcsfuse_runners:
-    - content: null
+    - content: "$(\"---\\n- name: Create LSSD optimized gcsfuse mount\\n  hosts: localhost\\n  become: true\\n  tasks:\\n  - name: Create gcsfuse configuration\\n    ansible.builtin.copy:\\n      dest: /etc/gcsfuse.yml\\n      owner: root\\n      group: root\\n      mode: 0o644\\n      content: |\\n        file-system:\\n          dir-mode: \\\"777\\\"\\n          file-mode: \\\"777\\\"\\n          rename-dir-limit: 0  # Set to 20000 for hierarchical buckets\\n          fuse-options: allow_other\\n        foreground: true\\n\\n  - name: Create gcsfuse systemd service\\n    ansible.builtin.copy:\\n      dest: /etc/systemd/system/gcsfuse.service\\n      owner: root\\n      group: root\\n      mode: 0o644\\n      content: |\\n        [Unit]\\n        Description=gcsfuse mount of all buckets\\n        After=local-fs.target\\n\\n        [Service]\\n        Type=simple\\n        User=root\\n        ExecStartPre=/bin/mkdir -p /gcs\\n        ExecStart=gcsfuse --config-file /etc/gcsfuse.yml ${vars.gcs_bucket} /gcs\\n        ExecStop=fusermount3 -u /gcs\\n\\n        [Install]\\n        WantedBy=slurmd.service multi-user.target\\n\\n  post_tasks:\\n  - name: Enable and restart gcsfuse\\n    ansible.builtin.service:\\n      name: gcsfuse.service\\n      state: restarted\\n      enabled: true\\n\")"
       destination: gcsfuse.yml
       type: ansible-local
     instance_image:
-      family: null
-      project: null
+      family: $(vars.final_image_family)
+      project: $(vars.project_id)
     local_mount_homefs: /home
     localssd_mountpoint: /mnt/localssd
     login_runners:
     - content: "#!/bin/bash\n# reset enroot to defaults of files under /home and running under /run\n# allows basic enroot testing with reduced I/O performance\nrm -f /etc/enroot/enroot.conf\n"
       destination: reset_enroot.sh
       type: shell
+    network_name_system: null
+    project_id: null
+    region: null
+    slurm_cluster_name: null
+    subnetwork_name_system: null
     sys_net_range: 172.16.0.0/16
+    zone: null
   modules:
   - id: sysnet
     source: modules/network/vpc
@@ -4106,6 +4295,7 @@ blueprints:
     use: [sysnet, a3mega_partition, debug_partition, slurm_login, homefs, data-bucket]
     settings: [controller_startup_script, enable_cleanup_compute, enable_external_prolog_epilog, login_startup_script, machine_type, prolog_scripts, slurm_conf_tpl]
 - path: examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml
+  deployment_path: examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml
   blueprint_name: a3ultra-slurm
   scheduler: slurm
   description: "This blueprint provisions an A3 Ultra (a3-ultragpu-8g, 8x NVIDIA H200) Slurm cluster with multi-NIC RoCE GPUDirect RDMA networking (gpu-rdma-vpc), a 36 TiB Google Cloud Managed Lustre filesystem (modules/file-system/managed-lustre)..."
@@ -4115,7 +4305,7 @@ blueprints:
     a3u_dws_flex_enabled: false
     a3u_enable_spot_vm: false
     a3u_reservation_name: ""
-    base_network_name: null
+    base_network_name: $(vars.deployment_name)
     deployment_name: null
     disk_size_gb: 300
     enable_multinic: true
@@ -4123,9 +4313,9 @@ blueprints:
       family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-amd64
       project: advanced-compute-images
     local_ssd_mountpoint: /mnt/localssd
-    lustre_instance_id: null
+    lustre_instance_id: "$(\"${vars.deployment_name}-lustre\")"
     lustre_size_gib: 36000
-    multinic_client_tag: null
+    multinic_client_tag: "$(\"${vars.deployment_name}-multinic-client\")"
     network_address_range: 172.16.0.0/16
     per_unit_storage_throughput: 500
     primary_subnet: 172.16.0.0/20
@@ -4186,15 +4376,15 @@ blueprints:
   deployment_path: examples/machine-learning/a3-ultragpu-8g/a3ultra-vm-deployment.yaml
   blueprint_name: a3ultra-vm-instance
   scheduler: none
-  description: "This blueprint provisions an A3 Ultra (a3-ultragpu-8g, 8x NVIDIA H200) Slurm cluster with multi-NIC RoCE GPUDirect RDMA networking (gpu-rdma-vpc), a 36 TiB Google Cloud Managed Lustre filesystem (modules/file-system/managed-lustre)..."
+  description: "The standalone VM blueprint (a3ultra-vm.yaml) uses a Filestore Zonal instance (2.5 TiB / 2560 GiB default, requiring gcloud services enable file.googleapis.com --project=<PROJECT_ID>), which may require a quota increase request. See..."
   machine_types: [a3-ultragpu-8g]
   vars:
     a3u_provisioning_model: RESERVATION_BOUND
     a3u_reservation_name: null
-    base_network_name: null
+    base_network_name: $(vars.deployment_name)
     deployment_name: a3ultra-vm-instance
     filestore_ip_range: 192.168.32.0/29
-    hostname_prefix: null
+    hostname_prefix: "$(\"${vars.deployment_name}-beowulf\")"
     instance_image:
       name: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
       project: ubuntu-os-accelerator-images
@@ -4230,6 +4420,7 @@ blueprints:
     source: community/modules/scripts/wait-for-startup
     settings: [instance_names, timeout]
 - path: examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml
+  deployment_path: examples/machine-learning/a4-highgpu-8g/a4high-slurm-deployment.yaml
   blueprint_name: a4high-slurm
   scheduler: slurm
   description: "This blueprint provisions an A4 High (a4-highgpu-8g, 8x NVIDIA B200) Slurm cluster with multi-NIC RoCE GPUDirect RDMA networking (gpu-rdma-vpc), a 36 TiB Google Cloud Managed Lustre filesystem (modules/file-system/managed-lustre)..."
@@ -4239,8 +4430,8 @@ blueprints:
     a4h_dws_flex_enabled: false
     a4h_enable_spot_vm: false
     a4h_reservation_name: ""
-    base_network_name: null
-    benchmark_dir: null
+    base_network_name: $(vars.deployment_name)
+    benchmark_dir: "$(ghpc_stage(\"system_benchmarks\"))"
     deployment_name: null
     disk_size_gb: 300
     enable_multinic: true
@@ -4248,9 +4439,9 @@ blueprints:
       family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-amd64
       project: advanced-compute-images
     local_ssd_mountpoint: /mnt/localssd
-    lustre_instance_id: null
+    lustre_instance_id: "$(\"${vars.deployment_name}-lustre\")"
     lustre_size_gib: 36000
-    multinic_client_tag: null
+    multinic_client_tag: "$(\"${vars.deployment_name}-multinic-client\")"
     network_address_range: 172.16.0.0/16
     per_unit_storage_throughput: 500
     primary_subnet: 172.16.0.0/20
@@ -4311,14 +4502,14 @@ blueprints:
   deployment_path: examples/machine-learning/a4-highgpu-8g/a4high-vm-deployment.yaml
   blueprint_name: a4high-vm-instance
   scheduler: none
-  description: "This blueprint provisions an A4 High (a4-highgpu-8g, 8x NVIDIA B200) Slurm cluster with multi-NIC RoCE GPUDirect RDMA networking (gpu-rdma-vpc), a 36 TiB Google Cloud Managed Lustre filesystem (modules/file-system/managed-lustre)..."
+  description: "The standalone VM blueprint (a4high-vm.yaml) uses a Filestore Zonal instance (10 TiB / 10240 GiB default, requiring gcloud services enable file.googleapis.com --project=<PROJECT_ID>), which may require a quota increase request. See..."
   machine_types: [a4-highgpu-8g]
   vars:
     a4h_provisioning_model: RESERVATION_BOUND
     a4h_reservation_name: null
     deployment_name: a4high-vm
     filestore_ip_range: 192.168.32.0/24
-    hostname_prefix: null
+    hostname_prefix: $(vars.deployment_name)
     instance_image:
       family: ubuntu-2204-lts
       project: ubuntu-os-cloud
@@ -4358,7 +4549,7 @@ blueprints:
   deployment_path: examples/machine-learning/a4x-highgpu-4g/a4x-vm-deployment.yaml
   blueprint_name: a4x-jbvm
   scheduler: none
-  description: "This document outlines the deployment steps for provisioning A4X High a4x-highgpu-4g VMs using either Slurm as an orchestrator or as a standalone VM group."
+  description: "This section covers deploying A4X High VMs as a standalone group, which is suitable for workloads that do not require the Slurm scheduler."
   machine_types: [t2a-standard-16, a4x-highgpu-4g]
   vars:
     base_image:
@@ -4367,12 +4558,12 @@ blueprints:
     deployment_name: null
     disk_size_gb: 100
     filestore_ip_range: 192.168.32.0/24
-    hostname_prefix: null
+    hostname_prefix: $(vars.deployment_name)
     image_disk_size_gb: 100
     instance_count: null
     instance_image:
       family: jbvm-ubuntu2404-accelerator-arm64
-      project: null
+      project: $(vars.project_id)
     machine_type: a4x-highgpu-4g
     net0_range: 192.168.0.0/19
     net1_range: 192.168.64.0/19
@@ -4409,6 +4600,7 @@ blueprints:
     source: community/modules/scripts/wait-for-startup
     settings: [instance_names, timeout]
 - path: examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml
+  deployment_path: examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-deployment.yaml
   blueprint_name: a4xhigh-slurm
   scheduler: slurm
   description: "This document outlines the deployment steps for provisioning A4X High a4x-highgpu-4g VMs using either Slurm as an orchestrator or as a standalone VM group."
@@ -4416,14 +4608,14 @@ blueprints:
   vars:
     a4x_cluster_size: null
     a4x_reservation_name: ""
-    benchmark_dir: null
+    benchmark_dir: "$(ghpc_stage(\"system_benchmarks\"))"
     deployment_name: null
     disk_size_gb: 100
     instance_image:
       family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-arm64
       project: advanced-compute-images
     local_ssd_mountpoint: /mnt/localssd
-    lustre_instance_id: null
+    lustre_instance_id: "$(\"${vars.deployment_name}-lustre\")"
     lustre_size_gib: 36000
     net0_range: 192.168.0.0/19
     net1_range: 192.168.64.0/19
@@ -4484,14 +4676,15 @@ blueprints:
     use: [a4x_partition, a4x-slurm-net-0, homefs, gcs_bucket, slurm_login]
     settings: [cloud_parameters, compute_startup_scripts_timeout, controller_startup_script, controller_state_disk, disk_size_gb, disk_type, enable_controller_public_ips, enable_external_prolog_epilog, instance_image_custom, machine_type, zone]
 - path: examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml
+  deployment_path: examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml
   blueprint_name: a4xmax-bm-slurm
   scheduler: slurm
   description: "This document outlines the deployment steps for provisioning A4X Max a4x-maxgpu-4g-metal VMs using Slurm as an orchestrator."
-  machine_types: [a4x-maxgpu-4g-metal, c4a-standard-4, c4a-highcpu-16]
+  machine_types: [c4a-highcpu-16, a4x-maxgpu-4g-metal, c4a-standard-4]
   vars:
     a4x_max_cluster_size: null
     a4x_max_reservation_name: ""
-    benchmark_dir: null
+    benchmark_dir: "$(ghpc_stage(\"system_benchmarks\"))"
     build_from_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-580
     build_from_image_project: ubuntu-os-accelerator-images
     build_slurm_from_git_ref: 6.13.2
@@ -4502,10 +4695,10 @@ blueprints:
     image_build_machine_type: c4a-highcpu-16
     image_disk_size_gb: 100
     instance_image:
-      family: null
-      project: null
+      family: $(vars.built_image_family)
+      project: $(vars.project_id)
     local_ssd_mountpoint: /mnt/localssd
-    lustre_instance_id: null
+    lustre_instance_id: "$(\"${vars.deployment_name}-lustre\")"
     lustre_size_gib: 18000
     nccl_plugin_image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-gib-a4x-max-arm64
     nccl_plugin_version: v1.1.1
@@ -4625,6 +4818,7 @@ blueprints:
     use: [image-net, build-script]
     settings: [disk_size, image_family, machine_type, metadata, omit_external_ip, source_image, source_image_project_id]
 - path: examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml
+  deployment_path: examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml
   blueprint_name: tpu7x-slurm
   scheduler: slurm
   description: "This directory provides a Cluster Toolkit blueprint (tpu7x-slurm-blueprint.yaml) and deployment configuration (tpu7x-slurm-deployment.yaml) for provisioning a Slurm cluster with TPU 7x (tpu7x-standard-4t) compute nodes. It sets up a..."
@@ -4635,7 +4829,7 @@ blueprints:
     instance_image:
       family: aci-tpu-tpu7x-u2404-slurm-2605-amd64
       project: advanced-compute-images
-    lustre_instance_id: null
+    lustre_instance_id: "$(\"${vars.deployment_name}-lustre\")"
     lustre_size_gib: 36000
     per_unit_storage_throughput: 500
     project_id: null
@@ -4849,7 +5043,7 @@ blueprints:
       VmDnsSetting: GlobalOnly
     new_image:
       family: ml-slurm
-      project: null
+      project: $(vars.project_id)
     project_id: null
     region: asia-southeast1
     zone: asia-southeast1-b
@@ -4981,7 +5175,7 @@ blueprints:
   blueprint_name: managed-lustre-slurm
   scheduler: slurm
   description: "This blueprint, managed-lustre-slurm, is a specialized configuration designed to deploy a high-performance compute cluster on Google Cloud. It integrates the Slurm Workload Manager with Google Cloud Managed Service for Lustre, a fully..."
-  machine_types: [n2-standard-4, c2-standard-4]
+  machine_types: [c2-standard-4, n2-standard-4]
   vars:
     compute_node_machine_type: c2-standard-4
     deployment_name: managed-lustre-slurm
@@ -5053,49 +5247,49 @@ blueprints:
   blueprint_name: af3-slurm
   scheduler: slurm
   description: "This blueprint lets you create a high-throughput execution environment for Google Deepmind's AlphaFold 3 in your own GCP project. It uses the unmodified AlphaFold 3 package, and provides a best-practices mapping of it to Google Cloud..."
-  machine_types: [n2-standard-4, c2-standard-8, n2-standard-16]
+  machine_types: [n2-standard-16, n2-standard-4, c2-standard-8]
   vars:
     af3service_activate: false
     af3service_jobbucket: ""
     af3service_user: af3
     af3_job_launcher_runner:
     - destination: /tmp/launch_af3_job.sh.j2
-      source: null
+      source: "$(ghpc_stage(\"examples/simple_job_launcher/launch_af3_job.sh.j2\"))"
       type: data
-    - args: null
+    - args: "$(\"-e sif_dir=${vars.sif_dir} -e db_dir=${vars.db_dir} -e model_dir=${vars.model_dir} -e pdb_database_path=${vars.pdb_database_path} -e jax_compilation_cache_path=${vars.jax_compilation_cache_path} -e datapipeline_partition=${vars.default_datapipeline_partition.name} -e datapipeline_memory=${vars.default_datapipeline_partition.memory} -e datapipeline_cpu_count=${vars.default_datapipeline_partition.cpu_count} -e datapipeline_timeout=${vars.default_datapipeline_timeout} -e inference_partition=${vars.default_inference_partition.name} -e inference_memory=${vars.default_inference_partition.memory} -e inference_cpu_count=${vars.default_inference_partition.cpu_count} -e inference_timeout=${vars.default_inference_timeout} -e max_template_date=${vars.max_template_date} -e conformer_max_iterations=${vars.conformer_max_iterations} -e num_recycles=${vars.num_recycles} -e num_diffusion_samples=${vars.num_diffusion_samples} -e num_seeds=${vars.num_seeds} -e save_embeddings=${vars.save_embeddings}\")"
       destination: af3-job-launcher.yml
-      source: null
+      source: "$(ghpc_stage(\"examples/simple_job_launcher/af3-job-launcher.yml\"))"
       type: ansible-local
     af3_service_runners:
     - destination: /tmp/af3config.json.j2
-      source: null
+      source: "$(ghpc_stage(\"examples/simple_service_launcher/af3config.json.j2\"))"
       type: data
     - destination: /opt/apps/af3/examples/simple_service_launcher/requirements.txt
-      source: null
+      source: "$(ghpc_stage(\"examples/simple_service_launcher/requirements.txt\"))"
       type: data
-    - content: null
+    - content: "$(\"#!/bin/bash\\ninstall -d /opt/apps/af3/venv\\nchown ${vars.af3service_user} /opt/apps/af3/venv\\nsudo -u ${vars.af3service_user} python3 -m venv /opt/apps/af3/venv\\nsudo -u ${vars.af3service_user} /opt/apps/af3/venv/bin/pip install -r /opt/apps/af3/examples/simple_service_launcher/requirements.txt\\nchmod -R 755 /opt/apps/af3/venv\\n\")"
       destination: install-service-requirements.sh
       type: shell
     - destination: /opt/apps/af3/examples/simple_service_launcher/simple_service_launcher.py
-      source: null
+      source: "$(ghpc_stage(\"examples/simple_service_launcher/simple_service_launcher.py\"))"
       type: data
-    - args: null
+    - args: "$(\"-e service_user=${vars.af3service_user} -e af3service_activate=${vars.af3service_activate} -e bucket_name=${vars.af3service_jobbucket} -e sif_dir=${vars.sif_dir} -e db_dir=${vars.db_dir} -e model_dir=${vars.model_dir} -e pdb_database_path=${vars.pdb_database_path} -e jax_compilation_cache_path=${vars.jax_compilation_cache_path} -e datapipeline_partition=${vars.default_datapipeline_partition.name} -e datapipeline_memory=${vars.default_datapipeline_partition.memory} -e datapipeline_cpu_count=${vars.default_datapipeline_partition.cpu_count} -e datapipeline_timeout=${vars.default_datapipeline_timeout} -e inference_partition=${vars.default_inference_partition.name} -e inference_memory=${vars.default_inference_partition.memory} -e inference_cpu_count=${vars.default_inference_partition.cpu_count} -e inference_timeout=${vars.default_inference_timeout}  -e max_template_date=${vars.max_template_date} -e conformer_max_iterations=${vars.conformer_max_iterations} -e num_recycles=${vars.num_recycles} -e num_diffusion_samples=${vars.num_diffusion_samples} -e num_seeds=${vars.num_seeds} -e save_embeddings=${vars.save_embeddings}\")"
       destination: af3-service.yml
-      source: null
+      source: "$(ghpc_stage(\"examples/simple_service_launcher/af3-service.yml\"))"
       type: ansible-local
     af3_service_user_runner:
-    - args: null
+    - args: "$(\"-e service_user=${vars.af3service_user}\")"
       destination: af3-user.yml
-      source: null
+      source: "$(ghpc_stage(\"examples/simple_service_launcher/af3-user.yml\"))"
       type: ansible-local
     base_image:
       family: aci-cpu-rocky-linux-9-slurm-2605-amd64
       project: advanced-compute-images
     conformer_max_iterations: ""
     controller_runners:
-    - args: null
+    - args: "$(\"-e modelweights_bucket=${vars.modelweights_bucket} -e model_dir=${vars.model_dir} -e sif_dir=${vars.sif_dir}\")"
       destination: controller.yml
-      source: null
+      source: "$(ghpc_stage(\"adm/controller.yml\"))"
       type: ansible-local
     database_bucket: ""
     datapipeline_c3dhm_partition:
@@ -5106,14 +5300,14 @@ blueprints:
       node_count_dynamic: 3
       node_count_static: 0
     datapipeline_runners:
-    - args: null
+    - args: "$(\"-e database_bucket=${vars.database_bucket} -e db_dir=${vars.db_dir}\")"
       destination: datapipeline.yml
-      source: null
+      source: "$(ghpc_stage(\"adm/datapipeline.yml\"))"
       type: ansible-local
     db_dir: /dev/shm/public_databases
-    default_datapipeline_partition: null
+    default_datapipeline_partition: $(vars.datapipeline_c3dhm_partition)
     default_datapipeline_timeout: 5400
-    default_inference_partition: null
+    default_inference_partition: $(vars.inference_g2_partition)
     default_inference_timeout: 3600
     deployment_name: af3-slurm
     disk_size_gb: 64
@@ -5140,18 +5334,18 @@ blueprints:
       node_count_dynamic: 10
       node_count_static: 0
     inference_runners:
-    - args: null
+    - args: "$(\"-e jax_compilation_cache_path=${vars.jax_compilation_cache_path}\")"
       destination: inference.yml
-      source: null
+      source: "$(ghpc_stage(\"adm/inference.yml\"))"
       type: ansible-local
     instance_image:
-      family: null
-      project: null
+      family: "$(\"${vars.deployment_name}-slurm-apptainer\")"
+      project: $(vars.project_id)
     jax_compilation_cache_path: ""
     login_runners:
-    - args: null
+    - args: "$(\"-e database_bucket=${vars.database_bucket} -e datapipeline_partition=${vars.default_datapipeline_partition.name}\")"
       destination: onetime_prepare_databasebucket.yml
-      source: null
+      source: "$(ghpc_stage(\"adm/onetime_prepare_databasebucket.yml\"))"
       type: ansible-local
     max_template_date: ""
     model_dir: /opt/apps/af3/models
@@ -5244,8 +5438,8 @@ blueprints:
     authorized_cidr: null
     deployment_name: storage-gke-01
     gcp_public_cidrs_access_enabled: false
-    hyperdisk_balanced_storage_pool: null
-    hyperdisk_throughput_storage_pool: null
+    hyperdisk_balanced_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-balanced\")"
+    hyperdisk_throughput_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-throughput\")"
     project_id: null
     region: us-central1
     zone: us-central1-b
@@ -5328,8 +5522,8 @@ blueprints:
   vars:
     deployment_name: storage-slurm
     gcs_bucket_local_mount: /data
-    hyperdisk_balanced_storage_pool: null
-    hyperdisk_throughput_storage_pool: null
+    hyperdisk_balanced_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-balanced\")"
+    hyperdisk_throughput_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-throughput\")"
     project_id: null
     region: us-central1
     regional_gcs_bucket_local_mount: /data_regional
@@ -5366,8 +5560,8 @@ blueprints:
   machine_types: [c3d-standard-4]
   vars:
     deployment_name: vm-storage
-    hyperdisk_balanced_storage_pool: null
-    hyperdisk_throughput_storage_pool: null
+    hyperdisk_balanced_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-balanced\")"
+    hyperdisk_throughput_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-throughput\")"
     network_name: default-net
     project_id: null
     region: us-central1
@@ -5431,6 +5625,7 @@ module_wiring:
   community/modules/compute/schedmd-slurm-gcp-v6-nodeset:
     required_inputs: [subnetwork_self_link]
     recommended_use:
+    - modules/network/pre-existing-subnetwork
     - modules/network/pre-existing-vpc
     - modules/network/vpc
     consumed_by:
@@ -5440,6 +5635,7 @@ module_wiring:
     required_inputs: [slurm_bucket_path, slurm_cluster_name, subnetwork_self_link]
     recommended_use:
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    - modules/network/pre-existing-subnetwork
     - modules/network/pre-existing-vpc
     - modules/network/vpc
     consumed_by:
@@ -5448,6 +5644,7 @@ module_wiring:
   community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu:
     required_inputs: [subnetwork_self_link]
     recommended_use:
+    - modules/network/pre-existing-subnetwork
     - modules/network/pre-existing-vpc
     - modules/network/vpc
     consumed_by:
@@ -5528,6 +5725,7 @@ module_wiring:
     required_inputs: [backends, endpoints, network_self_link, subnetwork_self_link]
     recommended_use:
     - modules/network/gpu-rdma-vpc
+    - modules/network/pre-existing-subnetwork
     - modules/network/pre-existing-vpc
     - modules/network/vpc
   community/modules/project/pre-existing-project: {}
@@ -5543,6 +5741,7 @@ module_wiring:
     required_inputs: [dataset_id, table_id, topic_id]
     recommended_use:
     - community/modules/database/bigquery-dataset
+    - community/modules/pubsub/topic
   community/modules/pubsub/topic:
     consumed_by:
     - community/modules/files/fsi-montecarlo-on-batch
@@ -5582,6 +5781,7 @@ module_wiring:
     required_inputs: [access_point_service_account_email, central_manager_service_account_email, execute_point_service_account_email, subnetwork_self_link]
     recommended_use:
     - community/modules/scheduler/htcondor-service-accounts
+    - modules/network/pre-existing-subnetwork
     - modules/network/pre-existing-vpc
     - modules/network/vpc
     consumed_by:
@@ -5591,6 +5791,7 @@ module_wiring:
   community/modules/scheduler/schedmd-slurm-gcp-v6-controller:
     required_inputs: [subnetwork_self_link]
     recommended_use:
+    - modules/network/pre-existing-subnetwork
     - modules/network/pre-existing-vpc
     - modules/network/vpc
     consumed_by:
@@ -5600,6 +5801,7 @@ module_wiring:
   community/modules/scheduler/schedmd-slurm-gcp-v6-login:
     required_inputs: [subnetwork_self_link]
     recommended_use:
+    - modules/network/pre-existing-subnetwork
     - modules/network/pre-existing-vpc
     - modules/network/vpc
     consumed_by:
@@ -5914,6 +6116,7 @@ module_wiring:
   modules/network/firewall-rules:
     required_inputs: [subnetwork_self_link]
     recommended_use:
+    - modules/network/pre-existing-subnetwork
     - modules/network/pre-existing-vpc
     - modules/network/vpc
   modules/network/global-static-ip:
@@ -5938,6 +6141,16 @@ module_wiring:
   modules/network/pre-existing-subnetwork:
     consumed_by:
     - community/modules/compute/gke-nodeset
+    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
+    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
+    - community/modules/network/int-app-lb
+    - community/modules/scheduler/htcondor-setup
+    - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    - community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    - modules/network/firewall-rules
+    - modules/packer/custom-image
+    - modules/scheduler/gke-cluster
   modules/network/pre-existing-vpc:
     consumed_by:
     - community/modules/compute/gke-nodeset
@@ -6000,6 +6213,10 @@ module_wiring:
     - modules/scheduler/gke-cluster
   modules/packer/custom-image:
     required_inputs: [subnetwork_name]
+    recommended_use:
+    - modules/network/pre-existing-subnetwork
+    - modules/network/pre-existing-vpc
+    - modules/network/vpc
   modules/project/service-account:
     required_inputs: [name, project_roles]
     consumed_by:
@@ -6025,6 +6242,7 @@ module_wiring:
     required_inputs: [network_id, subnetwork_self_link]
     recommended_use:
     - modules/network/gpu-rdma-vpc
+    - modules/network/pre-existing-subnetwork
     - modules/network/pre-existing-vpc
     - modules/network/vpc
     consumed_by:

@@ -197,7 +197,7 @@ func isCandidateBlueprintFile(path string) bool {
 
 func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string) (BlueprintEntry, bool) {
 	bp, _, err := config.NewBlueprint(absPath)
-	if err != nil || len(bp.Groups) == 0 {
+	if err != nil || len(bp.Groups) == 0 || bp.AIAssisted {
 		return BlueprintEntry{}, false
 	}
 
@@ -211,7 +211,7 @@ func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string
 	if varsMap == nil {
 		varsMap = make(map[string]interface{})
 	}
-	deployRel := findCompanionDeployment(repoRoot, absPath, varsMap)
+	deployRel := findCompanionDeployment(repoRoot, absPath, bp.BlueprintName, varsMap)
 	modules := extractModuleSummaries(bp)
 	scheduler := inferScheduler(modules)
 	machineTypes := extractMachineTypes(bp, varsMap)
@@ -232,14 +232,9 @@ func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string
 	}, true
 }
 
-func findCompanionDeployment(repoRoot, bpAbsPath string, varsMap map[string]interface{}) string {
+func findCompanionDeployment(repoRoot, bpAbsPath, blueprintName string, varsMap map[string]interface{}) string {
 	dir := filepath.Dir(bpAbsPath)
-	stem := strings.TrimSuffix(filepath.Base(bpAbsPath), ".yaml")
-	candidates := []string{
-		filepath.Join(dir, stem+"-deployment.yaml"),
-		filepath.Join(dir, "deployment.yaml"),
-	}
-	for _, cand := range candidates {
+	for _, cand := range companionDeploymentCandidates(dir, filepath.Base(bpAbsPath), blueprintName) {
 		if _, err := os.Stat(cand); err != nil {
 			continue
 		}
@@ -257,6 +252,22 @@ func findCompanionDeployment(repoRoot, bpAbsPath string, varsMap map[string]inte
 		}
 	}
 	return ""
+}
+
+func companionDeploymentCandidates(dir, baseName, blueprintName string) []string {
+	stem := strings.TrimSuffix(baseName, ".yaml")
+	candidates := []string{
+		filepath.Join(dir, stem+"-deployment.yaml"),
+	}
+	if blueprintName != "" {
+		candidates = append(candidates, filepath.Join(dir, blueprintName+"-deployment.yaml"))
+	}
+	for _, suffix := range []string{"-blueprint", "-advanced", "-infra", "-experiment"} {
+		if trimmed := strings.TrimSuffix(stem, suffix); trimmed != stem {
+			candidates = append(candidates, filepath.Join(dir, trimmed+"-deployment.yaml"))
+		}
+	}
+	return append(candidates, filepath.Join(dir, "deployment.yaml"))
 }
 
 func extractModuleSummaries(bp config.Blueprint) []ModuleSummary {
@@ -288,11 +299,12 @@ var schedulerMatchers = []struct {
 	substr    string
 	scheduler string
 }{
-	{"slurm", "slurm"},
 	{"slinky", "slurm-on-gke (slinky)"},
+	{"slurm", "slurm"},
 	{"gke-cluster", "gke"},
 	{"batch", "batch"},
 	{"htcondor", "htcondor"},
+	{"flux", "flux"},
 }
 
 func inferScheduler(modules []ModuleSummary) string {
@@ -368,17 +380,20 @@ func dictToPlainMap(d config.Dict) map[string]interface{} {
 }
 
 func ctyToPlainValue(v cty.Value) interface{} {
-	if !v.IsKnown() || v.IsNull() {
-		return nil
-	}
 	if expr, isExpr := config.IsExpressionValue(v); isExpr {
 		return formatBlueprintExpression(expr)
+	}
+	if !v.IsKnown() || v.IsNull() {
+		return nil
 	}
 	return ctyKnownToPlain(v)
 }
 
-func formatBlueprintExpression(expr config.Expression) string {
+func formatBlueprintExpression(expr config.Expression) interface{} {
 	raw := strings.TrimSpace(string(expr.Tokenize().Bytes()))
+	if raw == "null" {
+		return nil
+	}
 	raw = strings.ReplaceAll(raw, "var.", "vars.")
 	return "$(" + raw + ")"
 }
@@ -534,7 +549,7 @@ func lookupDescription(repoRoot, absPath, relPath string, readmeDescs map[string
 		}
 	}
 	if parentDir != "examples" {
-		if d := extractFirstParagraphFromMarkdown(filepath.Join(filepath.Dir(absPath), "README.md")); d != "" {
+		if d := extractSiblingReadmeDescription(filepath.Dir(absPath), base); d != "" {
 			return d
 		}
 	}
@@ -544,22 +559,169 @@ func lookupDescription(repoRoot, absPath, relPath string, readmeDescs map[string
 	return fmt.Sprintf("Cluster Toolkit blueprint (%s).", relPath)
 }
 
-func extractFirstParagraphFromMarkdown(mdPath string) string {
-	data, err := os.ReadFile(mdPath)
+func extractSiblingReadmeDescription(dir, base string) string {
+	data, err := os.ReadFile(filepath.Join(dir, "README.md"))
 	if err != nil {
 		return ""
 	}
-	var para []string
-	for _, line := range strings.Split(string(data), "\n") {
+	text := string(data)
+	if d := extractHeadingParagraphForBlueprint(text, base); d != "" {
+		return d
+	}
+	others := otherBlueprintYAMLsInDir(dir, base)
+	if d := extractFirstParagraphIfUnclaimed(text, others); d != "" {
+		return d
+	}
+	return extractSectionParagraphMentioning(strings.Split(text, "\n"), base)
+}
+
+func extractHeadingParagraphForBlueprint(mdText, base string) string {
+	lines := strings.Split(mdText, "\n")
+	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" && len(para) > 0 {
+		level := markdownHeadingLevel(trimmed)
+		if level == 0 || !strings.Contains(trimmed, base) {
+			continue
+		}
+		section := sliceUntilSameOrOuterHeading(lines[i+1:], level)
+		if d := extractImmediateParagraph(section); d != "" {
+			return d
+		}
+		if d := extractSectionParagraphMentioning(section, base); d != "" {
+			return d
+		}
+	}
+	return ""
+}
+
+func markdownHeadingLevel(trimmed string) int {
+	n := 0
+	for n < len(trimmed) && trimmed[n] == '#' {
+		n++
+	}
+	if n > 0 && n < len(trimmed) && trimmed[n] == ' ' {
+		return n
+	}
+	return 0
+}
+
+func sliceUntilSameOrOuterHeading(lines []string, level int) []string {
+	for i, line := range lines {
+		if l := markdownHeadingLevel(strings.TrimSpace(line)); l > 0 && l <= level {
+			return lines[:i]
+		}
+	}
+	return lines
+}
+
+func extractImmediateParagraph(lines []string) string {
+	var para []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if shouldStopParagraph(trimmed, len(para) > 0) || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "```") {
 			break
 		}
-		if !strings.HasPrefix(trimmed, "#") && isParagraphLine(trimmed) {
+		if isParagraphLine(trimmed) {
 			para = append(para, trimmed)
 		}
 	}
 	return cleanDescriptionText(strings.Join(para, " "))
+}
+
+func extractSectionParagraphMentioning(lines []string, base string) string {
+	var para []string
+	inCode := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") {
+			inCode = !inCode
+			para = nil
+			continue
+		}
+		if inCode {
+			continue
+		}
+		if isParagraphBoundary(trimmed, len(para) > 0) {
+			if d := matchBlueprintParagraph(para, base); d != "" {
+				return d
+			}
+			para = nil
+		}
+		if isParagraphLine(trimmed) {
+			para = append(para, trimmed)
+		}
+	}
+	return matchBlueprintParagraph(para, base)
+}
+
+func isParagraphBoundary(trimmed string, hasLines bool) bool {
+	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+		return true
+	}
+	return hasLines && strings.HasPrefix(trimmed, "- ")
+}
+
+func matchBlueprintParagraph(para []string, base string) string {
+	if len(para) == 0 {
+		return ""
+	}
+	joined := strings.TrimSpace(strings.TrimPrefix(strings.Join(para, " "), "- "))
+	if !strings.Contains(joined, base) || strings.HasSuffix(joined, ":") {
+		return ""
+	}
+	return cleanDescriptionText(joined)
+}
+
+func extractFirstParagraphIfUnclaimed(mdText string, otherYAMLs []string) string {
+	var para []string
+	for _, line := range strings.Split(mdText, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" && len(para) > 0 {
+			break
+		}
+		if strings.HasPrefix(trimmed, "#") {
+			if len(para) > 0 || mentionsAnyString(trimmed, otherYAMLs) {
+				break
+			}
+			continue
+		}
+		if isParagraphLine(trimmed) {
+			para = append(para, trimmed)
+		}
+	}
+	raw := strings.Join(para, " ")
+	if raw == "" || mentionsAnyString(raw, otherYAMLs) {
+		return ""
+	}
+	return cleanDescriptionText(raw)
+}
+
+func otherBlueprintYAMLsInDir(dir, base string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || name == base || !isCandidateBlueprintFile(name) {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err == nil && strings.Contains(string(data), "deployment_groups:") {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func mentionsAnyString(text string, substrs []string) bool {
+	for _, s := range substrs {
+		if strings.Contains(text, s) {
+			return true
+		}
+	}
+	return false
 }
 
 func extractBlueprintHeaderComment(yamlPath string) string {
@@ -712,16 +874,16 @@ func buildParsedModule(source string, info modulereader.ModuleInfo) parsedModule
 
 	// Echo variable suppression: exclude outputs that share a name with an input
 	// on the same module, unless the module is a root provider (no required inputs)
-	// whose only outputs also accept optional name-override inputs.
+	// whose outputs also accept optional name-override inputs.
 	trueOutputs := make(map[string]bool, len(info.Outputs))
 	for _, out := range info.Outputs {
 		if !allInputs[out.Name] && !genericOutputNames[out.Name] {
 			trueOutputs[out.Name] = true
 		}
 	}
-	if len(trueOutputs) == 0 && len(reqInputs) == 0 {
+	if len(reqInputs) == 0 {
 		for _, out := range info.Outputs {
-			if !genericOutputNames[out.Name] {
+			if !genericOutputNames[out.Name] && !integrationInputNames[out.Name] {
 				trueOutputs[out.Name] = true
 			}
 		}
@@ -967,7 +1129,7 @@ func needsQuotedYAMLString(s string) bool {
 	if s == "" || s == "true" || s == "false" || s == "True" || s == "False" || s == "null" || s == "~" {
 		return true
 	}
-	if strings.HasSuffix(s, ".") || strings.ContainsAny(s, ":#{}[]&*!|>'\"%@`,?") {
+	if strings.ContainsAny(s, "\n\r\t") || strings.HasSuffix(s, ".") || strings.ContainsAny(s, ":#{}[]&*!|>'\"%@`,?") {
 		return true
 	}
 	return strings.TrimSpace(s) != s
