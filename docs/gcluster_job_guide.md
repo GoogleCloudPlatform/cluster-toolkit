@@ -397,7 +397,7 @@ If you want to schedule a job with a smaller TPU topology on a node pool with la
 ```
 
 **Example 4: Use Placement Policy**
-Use `--placement-policy` to specify a GCE Placement Policy (e.g., for compact placement to reduce latency).
+Use `--placement-policy` to name an existing GCE compact placement policy or workload policy. The job is pinned to nodes carrying that policy through the `cloud.google.com/placement-policy-name` node selector.
 
 ```bash
 ./gcluster job submit \
@@ -406,7 +406,9 @@ Use `--placement-policy` to specify a GCE Placement Policy (e.g., for compact pl
   --placement-policy "compact-placement"
 ```
 
-*(Note: requires a `PlacementPolicy` resource named `compact-placement` to exist on the cluster)*
+*(Note: the policy must exist in the cluster's region and be attached to the target node pool. With `--gke-nap-provisioning`, GKE attaches it to the auto-created node pool instead; on machines that support compact placement the same name is also used as the `cloud.google.com/gke-placement-group` identifier.)*
+
+A4X (`gb200-4`) and multi-host TPU 7x nodes require a `HIGH_THROUGHPUT` workload policy. When `--placement-policy` is omitted for these machine types, gcluster uses the policy attached to the matching node pool; under NAP it looks up, and if needed creates, the canonical policy (`gb200-4-1x72-placement-policy`, `tpu7x-<cores>-<topology>-placement-policy`) in the cluster's region.
 
 **Example 5: Pod Failure Policy**
 Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (these do not count against the `restarts` budget).
@@ -1291,7 +1293,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--gke-mtc-enabled` | `flag` | If present, enables Multi-Tier Checkpointing (MTC) for the workload. |
 | `--gke-mtc-ramdisk-dir` | `string` | The ramdisk directory path for local checkpoints in MTC (required when `--gke-mtc-enabled` is set). |
 | `--gke-ttl-after-finished` | `string` | Time duration to retain the JobSet resources after completion (Default: `1h`). |
-| `--placement-policy` | `string` | Specifies a GCE Placement Policy name (e.g., `compact-placement`) to minimize latency. |
+| `--placement-policy` | `string` | Name of an existing GCE compact placement or workload policy; the job is pinned to nodes carrying it via `cloud.google.com/placement-policy-name`. Auto-resolved for A4X and multi-host TPU 7x when omitted. |
 | `--restart-on-exit-codes` | `string` | Comma-separated list of retriable exit codes that bypass the main restart budget. |
 | `--gke-scheduler` | `string` | Specific GKE scheduler selection (e.g., `gke.io/topology-aware-auto`). |
 | `--image-pull-secret` | `string` | Secret name required to authenticate and pull images from private container registries. |

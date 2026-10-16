@@ -42,6 +42,10 @@ const (
 	tpuTopologyLabel = "cloud.google.com/gke-tpu-topology"
 	// nodePoolLabel is the GKE label for the node pool name.
 	nodePoolLabel = "cloud.google.com/gke-nodepool"
+	// placementPolicyNameLabel selects nodes carrying a named GCE compact placement or workload policy.
+	placementPolicyNameLabel = "cloud.google.com/placement-policy-name"
+	// placementGroupLabel is the GKE-managed compact placement group identifier used by NAP.
+	placementGroupLabel = "cloud.google.com/gke-placement-group"
 	// multitierCheckpointCSIDriver is the CSI driver for Multi-Tier Checkpointing (MTC).
 	multitierCheckpointCSIDriver = "multitier-checkpoint.csi.storage.gke.io"
 )

@@ -173,7 +173,9 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		Scheduler:          job.GKEScheduler,
 		IsDynamicSlicing:   isDynamicSlicing,
 		IsStaticSlicing:    isStaticSlicing,
+		MachineType:        job.MachineType,
 		IsTPU:              config.IsTPU(job.MachineType) || config.IsTPU(originalAccelType),
+		IsNAP:              job.GKENAPProvisioning != "",
 	}
 
 	// Reuse GCluster's existing GKE accelerator label mapping and algorithmically
