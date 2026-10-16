@@ -94,6 +94,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [burst-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml)
   * [slurm-gke.yaml](#slurm-gkeyaml--) ![community-badge] ![experimental-badge]
   * [sycomp](#sycomp--) ![community-badge] ![experimental-badge]
+  * [alphaevolve](#alphaevolve-) ![community-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -2017,6 +2018,19 @@ This directory includes the following blueprints:
 The deployment instructions can be found in the [README](../community/examples/sycomp/README.md).
 
 [sycomp]: ../community/examples/sycomp
+
+### [alphaevolve] ![community-badge]
+
+Deploys the Google Cloud infrastructure and per-experiment software environments required to run scalable AlphaEvolve evolutionary code optimization experiments on Cloud Batch and Vertex AI Colab Enterprise.
+
+This directory includes the following blueprints and configuration files:
+* [`alpha-evolve-deployment.yaml`](../community/examples/alphaevolve/alpha-evolve-deployment.yaml): Shared environment variables (project, region, GCS bucket, and Git repository settings).
+* [`alpha-evolve-infra.yaml`](../community/examples/alphaevolve/alpha-evolve-infra.yaml): Provisions reusable base infrastructure including GCP APIs, IAM service accounts, Artifact Registry, Pub/Sub notifications, Discovery Engine, and a Vertex AI Colab Enterprise runtime.
+* [`alpha-evolve-experiment.yaml`](../community/examples/alphaevolve/alpha-evolve-experiment.yaml): Builds problem-specific controller and evaluator container images via Cloud Build and stages experiment assets and configuration to Cloud Storage.
+
+The deployment instructions can be found in the [README](../community/examples/alphaevolve/README.md).
+
+[alphaevolve]: ../community/examples/alphaevolve
 
 ## Blueprint Schema
 
