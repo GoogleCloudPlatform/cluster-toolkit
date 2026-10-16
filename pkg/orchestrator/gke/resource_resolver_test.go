@@ -99,6 +99,149 @@ func TestResolveMachineName_Dynamic(t *testing.T) {
 	}
 }
 
+// A TPU shorthand names a slice size; the cluster's node pools decide the host shape.
+func TestResolveJobMachineType_TPUShorthandFollowsCluster(t *testing.T) {
+	tests := []struct {
+		name        string
+		computeType string
+		nodePools   []string
+		want        string
+		wantErr     string
+	}{
+		{
+			name:        "mapped machine type present in cluster is kept",
+			computeType: "v5litepod-8",
+			nodePools:   []string{"ct5lp-hightpu-8t", "n2-standard-8"},
+			want:        "ct5lp-hightpu-8t",
+		},
+		{
+			name:        "mapped machine type present next to another of its family is kept",
+			computeType: "v5litepod-8",
+			nodePools:   []string{"ct5lp-hightpu-4t", "ct5lp-hightpu-8t"},
+			want:        "ct5lp-hightpu-8t",
+		},
+		{
+			name:        "cluster's machine type of the same family wins",
+			computeType: "v5litepod-8",
+			nodePools:   []string{"ct5lp-hightpu-4t", "n2-standard-8"},
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "v5e alias follows the cluster too",
+			computeType: "v5e-8",
+			nodePools:   []string{"ct5lp-hightpu-4t"},
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "shorthand is case-insensitive",
+			computeType: "V5LitePod-8",
+			nodePools:   []string{"ct5lp-hightpu-4t"},
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "v6e-8 on a 4t cluster",
+			computeType: "v6e-8",
+			nodePools:   []string{"ct6e-standard-4t"},
+			want:        "ct6e-standard-4t",
+		},
+		{
+			name:        "no pools of the family keeps the mapping for node auto-provisioning",
+			computeType: "v5litepod-8",
+			nodePools:   []string{"n2-standard-8"},
+			want:        "ct5lp-hightpu-8t",
+		},
+		{
+			name:        "v5litepod-4 ignores 1t pool and falls back to default 4t for NAP",
+			computeType: "v5litepod-4",
+			nodePools:   []string{"ct5lp-hightpu-1t"},
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "v5litepod-8 ignores 1t pool and falls back to default 8t for NAP",
+			computeType: "v5litepod-8",
+			nodePools:   []string{"ct5lp-hightpu-1t"},
+			want:        "ct5lp-hightpu-8t",
+		},
+		{
+			name:        "v5litepod-8 ignores 1t pool and selects 4t pool",
+			computeType: "v5litepod-8",
+			nodePools:   []string{"ct5lp-hightpu-1t", "ct5lp-hightpu-4t"},
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "v5e-16 cannot run on 8t pool and returns error",
+			computeType: "v5e-16",
+			nodePools:   []string{"ct5lp-hightpu-8t"},
+			wantErr:     "no matching machine types found in cluster",
+		},
+		{
+			name:        "explicit machine type is never substituted",
+			computeType: "ct5lp-hightpu-8t",
+			nodePools:   []string{"ct5lp-hightpu-4t"},
+			want:        "ct5lp-hightpu-8t",
+		},
+		{
+			name:        "GPU shorthand is unaffected",
+			computeType: "l4-1",
+			nodePools:   []string{"g2-standard-48"},
+			want:        "g2-standard-12",
+		},
+		{
+			name:        "unmapped multi-host shorthand resolves to cluster pool",
+			computeType: "v5e-16",
+			nodePools:   []string{"ct5lp-hightpu-4t"},
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "unmapped shorthand with no matching pool returns error",
+			computeType: "v5e-16",
+			nodePools:   []string{"n2-standard-8"},
+			wantErr:     "no matching machine types found in cluster",
+		},
+		{
+			name:        "larger host shape in cluster is not substituted for smaller slice",
+			computeType: "v5e-4",
+			nodePools:   []string{"ct5lp-hightpu-8t"},
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "1-chip slice ignores 4t and 8t pools in cluster",
+			computeType: "v5e-1",
+			nodePools:   []string{"ct5lp-hightpu-4t", "ct5lp-hightpu-8t"},
+			want:        "ct5lp-hightpu-1t",
+		},
+		{
+			name:        "unknown shorthand returns error",
+			computeType: "unknown-8",
+			nodePools:   []string{"n2-standard-8"},
+			wantErr:     "is not a known shorthand",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := newTestGKEOrchestrator(nil)
+			for _, mt := range tt.nodePools {
+				g.clusterDesc.NodePools = append(g.clusterDesc.NodePools, gkeJobNodePool{Config: gkeNodePoolConfig{MachineType: mt}})
+			}
+
+			got, err := g.resolveJobMachineType(tt.computeType)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("resolveJobMachineType() error = %v, want containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveJobMachineType() unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("resolveJobMachineType() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFetchMachineCapacity_AllZonesFail(t *testing.T) {
 	g := newTestGKEOrchestrator(nil)
 	g.machineTypeClient = &MockMachineTypeClient{FailAll: true}
@@ -317,10 +460,40 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 		{
 			name:            "TPU shorthand with chip count resolved",
 			acceleratorType: "v6e-256",
-			nodePools:       []string{"ct6e-standard-8t"},
-			wantType:        "ct6e-standard-8t", // Resolves to full machine type
+			nodePools:       []string{"ct6e-standard-4t"},
+			wantType:        "ct6e-standard-4t", // Resolves to full machine type
 			wantTopology:    "16x16",
 			wantErr:         false,
+		},
+		{
+			name:            "v5litepod-8 uses the cluster's 4t hosts for a 2x4 slice",
+			acceleratorType: "v5litepod-8",
+			nodePools:       []string{"ct5lp-hightpu-4t"},
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get nodes -o jsonpath": {{ExitCode: 0, Stdout: "2x4\n"}, {ExitCode: 0, Stdout: "2x4\n"}},
+			},
+			wantType:     "ct5lp-hightpu-4t",
+			wantTopology: "2x4",
+		},
+		{
+			name:            "v5e-8 alias resolves like v5litepod-8",
+			acceleratorType: "v5e-8",
+			nodePools:       []string{"ct5lp-hightpu-4t"},
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get nodes -o jsonpath": {{ExitCode: 0, Stdout: "2x4\n"}, {ExitCode: 0, Stdout: "2x4\n"}},
+			},
+			wantType:     "ct5lp-hightpu-4t",
+			wantTopology: "2x4",
+		},
+		{
+			name:            "v5e-16 resolves through the cluster's machine type",
+			acceleratorType: "v5e-16",
+			nodePools:       []string{"ct5lp-hightpu-4t"},
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get nodes -o jsonpath": {{ExitCode: 0, Stdout: "4x4\n"}, {ExitCode: 0, Stdout: "4x4\n"}},
+			},
+			wantType:     "ct5lp-hightpu-4t",
+			wantTopology: "4x4",
 		},
 		{
 			name:            "TPU shorthand with invalid size (not power of 2)",
@@ -335,8 +508,8 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 		{
 			name:            "TPU shorthand with valid size >= 16",
 			acceleratorType: "v6e-32",
-			nodePools:       []string{"ct6e-standard-8t"},
-			wantType:        "ct6e-standard-8t",
+			nodePools:       []string{"ct6e-standard-4t"},
+			wantType:        "ct6e-standard-4t",
 			wantTopology:    "4x8",
 			wantErr:         false,
 		},

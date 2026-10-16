@@ -23,6 +23,7 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -486,34 +487,26 @@ func (g *GKEOrchestrator) resolveMachineName(acceleratorType string) (string, er
 
 	// Check if the input is a full machine type and present in the cluster (required for CPUs).
 	clusterMachineTypes, err := g.queryAllMachineTypes()
-	if err == nil {
-		for _, cmt := range clusterMachineTypes {
-			if strings.EqualFold(acceleratorType, cmt) {
-				return acceleratorType, nil
-			}
-		}
+	if err == nil && slices.ContainsFunc(clusterMachineTypes, func(cmt string) bool { return strings.EqualFold(acceleratorType, cmt) }) {
+		return acceleratorType, nil
 	}
 
 	// 3. Fail fast
 	return "", fmt.Errorf("machine type %q could not be resolved from static maps or cluster state", acceleratorType)
 }
 
+// resolveJobMachineType maps --compute-type to a machine type, preferring the host shape used by the cluster's node pools for TPU shorthands.
 func (g *GKEOrchestrator) resolveJobMachineType(computeType string) (string, error) {
-	parts := strings.Split(computeType, "-")
+	if mapped, isShorthand := config.AcceleratorShorthandMap[strings.ToLower(computeType)]; isShorthand {
+		if config.IsTPU(mapped) {
+			return g.resolveShorthandFromCluster(computeType, mapped)
+		}
+		return mapped, nil
+	}
+
 	machineName, err := g.resolveMachineName(computeType)
-	if err == nil {
-		return machineName, nil
-	}
-
-	prefix := parts[0]
-	candidates := config.GetCandidatesForShorthand(prefix)
-	if len(candidates) == 0 {
-		return "", fmt.Errorf("compute type %q is not a known shorthand and could not be resolved", prefix)
-	}
-
-	machineName, err = g.resolveAmbiguousComputeShorthand(prefix, candidates)
 	if err != nil {
-		return "", err
+		return g.resolveShorthandFromCluster(computeType, "")
 	}
 	return machineName, nil
 }
@@ -697,36 +690,59 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 	}, isDynamicSlicing, isStaticSlicing, nil
 }
 
-func (g *GKEOrchestrator) resolveAmbiguousComputeShorthand(prefix string, candidates []string) (string, error) {
-	logging.Info("Detected ambiguous compute shorthand %q, finding candidates...", prefix)
+func isCandidateCompatibleForComputeType(computeType, candidate string) bool {
+	if !config.IsTPU(candidate) {
+		return true
+	}
+	topo, err := config.ResolveTopologyForChips(strings.ToLower(computeType), candidate)
+	if err != nil {
+		return true
+	}
+	nodes, err := config.CalculateAcceleratorNodes(candidate, topo, 0)
+	if err != nil {
+		return false
+	}
+	hostChips := config.AcceleratorsPerVM(candidate)
+	return nodes == 1 || hostChips == 4
+}
+
+func (g *GKEOrchestrator) resolveShorthandFromCluster(computeType, defaultMachineType string) (string, error) {
+	prefix := strings.Split(computeType, "-")[0]
+	candidates := config.GetCandidatesForShorthand(prefix)
+	if len(candidates) == 0 {
+		return "", fmt.Errorf("compute type %q is not a known shorthand and could not be resolved", prefix)
+	}
 
 	clusterMachineTypes, err := g.queryAllMachineTypes()
 	if err != nil {
 		return "", err
 	}
 
-	cmtSet := make(map[string]bool, len(clusterMachineTypes))
-	for _, cmt := range clusterMachineTypes {
-		cmtSet[cmt] = true
-	}
-
-	var matchedCandidates []string
+	var inCluster []string
 	for _, c := range candidates {
-		if cmtSet[c] {
-			matchedCandidates = append(matchedCandidates, c)
+		if !isCandidateCompatibleForComputeType(computeType, c) {
+			continue
+		}
+		if slices.ContainsFunc(clusterMachineTypes, func(cmt string) bool { return strings.EqualFold(cmt, c) }) {
+			inCluster = append(inCluster, c)
 		}
 	}
 
-	if len(matchedCandidates) == 1 {
-		logging.Info("Disambiguated %q to %q based on cluster state.", prefix, matchedCandidates[0])
-		return matchedCandidates[0], nil
+	if defaultMachineType != "" && (len(inCluster) == 0 || slices.Contains(inCluster, defaultMachineType)) {
+		// Present, or absent along with the rest of its family: node auto-provisioning
+		// may still create it, and otherwise the capacity lookup reports the gap.
+		return defaultMachineType, nil
 	}
 
-	if len(matchedCandidates) == 0 {
+	switch len(inCluster) {
+	case 1:
+		logging.Info("Disambiguated %q to %q based on cluster state.", prefix, inCluster[0])
+		return inCluster[0], nil
+	case 0:
 		return "", fmt.Errorf("no matching machine types found in cluster for shorthand %q. Available candidates: %v", prefix, candidates)
+	default:
+		return "", fmt.Errorf("multiple matching machine types found in cluster for shorthand %q: %v. Please pass the required machine type with --compute-type to disambiguate", prefix, inCluster)
 	}
-
-	return "", fmt.Errorf("multiple matching machine types found in cluster for shorthand %q: %v. Please pass the required machine type directly to disambiguate.", prefix, matchedCandidates)
 }
 
 func (g *GKEOrchestrator) dynamicallyCalculateNodesPerSlice(job *orchestrator.JobDefinition) error {
