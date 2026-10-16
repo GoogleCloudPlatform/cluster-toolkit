@@ -41,7 +41,7 @@ If you use `--build-context` to build images on-the-fly, you must set:
 
 If you plan to use Multi-Tier Checkpointing (`--gke-mtc-enabled` flag), ensure that the Multi-Tier Checkpointing feature is enabled on your GKE cluster.
 
-To use this feature, the cluster administrator must also ensure that the required `CheckpointConfiguration` Custom Resource is deployed to the cluster, specifying the target cloud storage bucket for checkpoints. Once the cluster is configured, job submitters simply pass `--gke-mtc-enabled` to their jobs. For more details on cluster configuration, see the [GKE Multi-Tier Checkpointing documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/multi-tier-checkpointing).
+To use this feature, the cluster administrator must also deploy the `CheckpointConfiguration` Custom Resource that names the checkpoint Cloud Storage bucket, and grant the MTC driver access to that bucket (see [MTC blueprint configuration](gke-advanced-features.md#41-blueprint-configuration)). Once the cluster is configured, job submitters pass `--gke-mtc-enabled` with `--gke-mtc-ramdisk-dir <dir>` (for example `/tmp/mtc_checkpoints`) to set the local checkpoint directory. For more details on cluster configuration, see the [GKE Multi-Tier Checkpointing documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/machine-learning/training/multi-tier-checkpointing).
 
 ## 2. Prepare Sample Application Code
 
@@ -1068,8 +1068,8 @@ To submit a dynamic slicing workload targeting TPU v7x nodes, enter the followin
 
 #### GKE documentation reference
 
-* [TPU Dynamic Slicing on GKE Concepts](https://cloud.google.com/kubernetes-engine/docs/concepts/tpu-dynamic-slicing)
-* [Scheduling Dynamic Slices with Kueue and TAS on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/kueue-tpu-dynamic-slicing)
+* [TPU Dynamic Slicing on GKE Concepts](https://cloud.google.com/kubernetes-engine/docs/concepts/dynamic-slicing)
+* [Scheduling Dynamic Slices with Kueue and TAS on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/use-gke-dynamic-slicing)
 
 ---
 
@@ -1084,6 +1084,7 @@ Pathways integration provides the following orchestration capabilities:
 * **Multi-role JobSet orchestration:** When you specify the `--pathways` flag, Cluster Toolkit generates and coordinates a multi-role JobSet comprising the Resource Manager (`pathways-rm`), Proxy server (`pathways-proxy`), and JAX worker pods.
 * **Kueue resource management:** Cluster Toolkit automatically maps multi-slice resource limits and unifies Kueue ClusterQueue resource groups so that coordinator and worker pods schedule without resource deadlocks.
 * **Headless execution mode:** With the `--pathways-headless` flag, Cluster Toolkit provisions the Pathways server infrastructure without requiring a client workload container, letting external clients (such as local notebooks) connect to the cluster.
+* **Completion and restart semantics:** In non-headless mode, the JobSet's `successPolicy` tracks `pathways-head`: when `workload-container` exits `0`, the entire JobSet is marked `Completed` and the worker pods are torn down; when it exits non-zero (including `143` on `SIGTERM`), the JobSet `failurePolicy` restarts the job up to `--restarts` times. Ensure your training command exits non-zero on fatal errors (for example, if a framework catches checkpoint or data-loader exceptions and exits `0` early, the JobSet will complete as `Succeeded` instead of restarting).
 
 #### Example CLI commands
 
@@ -1169,6 +1170,8 @@ First, use the `gke-template-extract` command to extract the embedded default te
 ```
 
 *(Use `--overwrite` if the directory already contains files you want to replace).*
+
+Extracted templates match the gcluster version that extracted them. After upgrading gcluster, extract them again and re-apply your changes, because newer versions can move logic into the templates. For example, `pathways_jobset.tmpl` now defines the Pathways Multi-Tier Checkpointing and colocated-sidecar volumes itself, so an older copy of that file omits them.
 
 #### 2. Modify the templates
 
