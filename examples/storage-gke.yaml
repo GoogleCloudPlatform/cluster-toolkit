@@ -106,6 +106,7 @@ deployment_groups:
       force_destroy: true
       object_users:
         gke_node_sa: "serviceAccount:$(gke_cluster.node_service_account)"
+        mtc_sa: $(gke_cluster.mtc_service_account_member)
       # Refer https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache for parameter details
       anywhere_cache:
         zones: [$(vars.zone)]
@@ -127,12 +128,12 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [gke_cluster]
     settings:
-      apply_manifests:
-      - name: checkpoint-configuration
-        source: $(ghpc_stage("../modules/management/kubectl-apply/manifests/checkpoint-configuration.yaml.tftpl"))
-        template_vars:
-          inMemoryVolumeSize: "50Gi"
-          cloudStorageBucketName: $(data-bucket.gcs_bucket_name)
+      checkpoint_configuration:
+        install: true
+        in_memory_volume_size: "50Gi"
+        # MTC backups need a bucket with hierarchical namespace, which data-bucket does
+        # not have; use a bucket with enable_hierarchical_namespace: true for real checkpoints.
+        cloud_storage_bucket_name: $(data-bucket.gcs_bucket_name)
 
   - id: data-bucket-pv
     source: modules/file-system/gke-persistent-volume

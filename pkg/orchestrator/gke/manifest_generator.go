@@ -537,12 +537,25 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
 	}
+	if err := requirePathwaysMTCVolume(buf.String(), opts.GKEMTCEnabled); err != nil {
+		return "", err
+	}
 
 	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
 	if err := ValidateJobSetManifest(manifest); err != nil {
 		return "", err
 	}
 	return manifest, nil
+}
+
+// requirePathwaysMTCVolume fails when MTC is enabled but the rendered Pathways
+// JobSet has no MTC CSI volume, as with a pathways_jobset.tmpl extracted from
+// an older gcluster version.
+func requirePathwaysMTCVolume(jobSet string, mtcEnabled bool) error {
+	if !mtcEnabled || strings.Contains(jobSet, multitierCheckpointCSIDriver) {
+		return nil
+	}
+	return fmt.Errorf("--gke-mtc-enabled is set but the Pathways manifest has no %s volume. If you use --gke-custom-templates-path, re-extract pathways_jobset.tmpl with 'gcluster job gke-template-extract' and re-apply your changes", multitierCheckpointCSIDriver)
 }
 
 func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {

@@ -142,7 +142,6 @@ limitations under the License.
 | [google-beta_google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_cluster) | resource |
 | [google-beta_google_container_node_pool.cpu_np](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
 | [google-beta_google_container_node_pool.system_node_pools](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
-| [google_service_account_iam_member.mtc_node_workload_identity](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account_iam_member) | resource |
 | [kubernetes_labels.workload_namespace_labels](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/labels) | resource |
 | [kubernetes_namespace.user_namespace](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/namespace) | resource |
 | [terraform_data.validate_high_scale_checkpointing_version](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
@@ -260,6 +259,7 @@ limitations under the License.
 | <a name="output_gke_version"></a> [gke\_version](#output\_gke\_version) | GKE cluster's version. |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to connect to the created cluster. |
 | <a name="output_k8s_service_account_name"></a> [k8s\_service\_account\_name](#output\_k8s\_service\_account\_name) | Name of k8s service account. |
+| <a name="output_mtc_service_account_member"></a> [mtc\_service\_account\_member](#output\_mtc\_service\_account\_member) | Workload Identity Federation principal of the Multi-Tier Checkpointing (MTC) driver's Kubernetes service account. Grant it object access on the MTC checkpoint bucket; it is only used when enable\_multi\_tier\_checkpointing is true. |
 | <a name="output_namespace"></a> [namespace](#output\_namespace) | The namespace where Workload Identity is configured (created if not 'default'). |
 | <a name="output_node_service_account"></a> [node\_service\_account](#output\_node\_service\_account) | The GCP Service Account email used by the GKE node pools. |
 | <a name="output_system_node_pool_id"></a> [system\_node\_pool\_id](#output\_system\_node\_pool\_id) | The ID of the system node pool. |
