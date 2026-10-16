@@ -130,11 +130,10 @@ Prefer blueprints under `examples/` over `community/examples/` when both match.
 
 Create the deployment file next to the blueprint (e.g.
 `examples/hpc-slurm-deployment.yaml`, matching the `gke-a4/*-deployment.yaml`
-convention) or in the repo root. If the catalog entry already has a tracked
-`deployment_path` (such as `examples/gke-a4/gke-a4-deployment.yaml`), copy that
-file to a new user deployment file in the **same directory** (so relative
-`$(ghpc_stage("./..."))` paths still resolve) rather than editing the tracked
-template in place. It is user-specific — do not commit it.
+convention) or in the repo root, or edit the blueprint's existing companion
+`-deployment.yaml` file (`deployment_path` in the catalog entry, such as
+`examples/gke-a4/gke-a4-deployment.yaml`). It is user-specific — do not commit
+it.
 
 Only override keys that already exist in the blueprint's `vars:` (see the
 catalog entry). Variable syntax is Cluster Toolkit's `$(vars.name)`, not
