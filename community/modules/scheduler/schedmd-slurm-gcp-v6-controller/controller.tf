@@ -93,9 +93,9 @@ resource "google_compute_disk" "controller_disk" {
   type                   = var.controller_state_disk.type
   size                   = var.controller_state_disk.size
   zone                   = var.zone
-  storage_pool           = var.controller_state_disk.storage_pool == "" ? null : var.controller_state_disk.storage_pool
-  provisioned_iops       = var.controller_state_disk.disk_provisioned_iops != null ? var.controller_state_disk.disk_provisioned_iops : var.controller_state_disk.provisioned_iops
-  provisioned_throughput = var.controller_state_disk.disk_provisioned_throughput != null ? var.controller_state_disk.disk_provisioned_throughput : var.controller_state_disk.provisioned_throughput
+  storage_pool           = try(var.controller_state_disk.storage_pool, null) == "" ? null : try(var.controller_state_disk.storage_pool, null)
+  provisioned_iops       = try(var.controller_state_disk.disk_provisioned_iops != null ? var.controller_state_disk.disk_provisioned_iops : var.controller_state_disk.provisioned_iops, null)
+  provisioned_throughput = try(var.controller_state_disk.disk_provisioned_throughput != null ? var.controller_state_disk.disk_provisioned_throughput : var.controller_state_disk.provisioned_throughput, null)
 
   dynamic "disk_encryption_key" {
     for_each = compact([var.disk_encryption_key])
