@@ -2248,6 +2248,12 @@ func TestGeneratePathwaysManifest_MaxSliceRestarts(t *testing.T) {
 			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 5",
 		},
 		{
+			name:                     "flag set to 0 on 2 x v6e-32",
+			maxSliceRestarts:         0,
+			wantBackoffLimit:         "backoffLimit: 0",
+			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 0",
+		},
+		{
 			name:                     "default 4000 on 2 x v6e-32",
 			maxSliceRestarts:         4000,
 			wantBackoffLimit:         "backoffLimit: 32000",
@@ -2307,11 +2313,16 @@ func TestGeneratePathwaysManifest_MaxSliceRestarts(t *testing.T) {
 				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
 			}
 
-			if !strings.Contains(manifest, tc.wantBackoffLimit) {
-				t.Errorf("manifest missing %q\nGot:\n%s", tc.wantBackoffLimit, manifest)
+			parts := strings.Split(manifest, "name: worker")
+			if len(parts) < 2 {
+				t.Fatalf("worker replicatedJob not found in manifest:\n%s", manifest)
 			}
-			if !strings.Contains(manifest, tc.wantBackoffLimitPerIndex) {
-				t.Errorf("manifest missing %q\nGot:\n%s", tc.wantBackoffLimitPerIndex, manifest)
+			workerManifest := parts[1]
+			if !strings.Contains(workerManifest, tc.wantBackoffLimit) {
+				t.Errorf("worker spec missing %q\nGot:\n%s", tc.wantBackoffLimit, workerManifest)
+			}
+			if !strings.Contains(workerManifest, tc.wantBackoffLimitPerIndex) {
+				t.Errorf("worker spec missing %q\nGot:\n%s", tc.wantBackoffLimitPerIndex, workerManifest)
 			}
 		})
 	}
