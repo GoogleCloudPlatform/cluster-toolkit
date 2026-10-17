@@ -874,17 +874,31 @@ def _fetch_config(old_hash: Optional[str], bucket: Optional[str] = None) -> Opti
     if Path(CONFIG_FILE).exists() and old_hash == blobs.hash:
         return None
 
-    def _download(bs) -> List[Any]:
-        return [yaml.safe_load(b.download_as_text()) for b in bs]
+    groups = [
+        [blobs.core],
+        [blobs.controller_addr] if blobs.controller_addr else [],
+        blobs.partition,
+        blobs.nodeset,
+        blobs.nodeset_dyn,
+        blobs.nodeset_tpu,
+        blobs.login_group,
+    ]
+    # One blob per nodeset; fetching thousands of them in sequence outlasts ResumeTimeout.
+    # 10 workers matches the storage client's default HTTP connection pool.
+    with ThreadPoolExecutor(max_workers=10) as exe:
+        docs = iter(exe.map(lambda b: _yaml_load(b.download_as_text()), chain(*groups)))
+        core, addr, partitions, nodesets, nodesets_dyn, nodesets_tpu, login_groups = (
+            [next(docs) for _ in g] for g in groups
+        )
 
     return _assemble_config(
-        core=_download([blobs.core])[0],
-        controller_addr=_download([blobs.controller_addr])[0] if blobs.controller_addr else None,
-        partitions=_download(blobs.partition),
-        nodesets=_download(blobs.nodeset),
-        nodesets_dyn=_download(blobs.nodeset_dyn),
-        nodesets_tpu=_download(blobs.nodeset_tpu),
-        login_groups=_download(blobs.login_group),
+        core=core[0],
+        controller_addr=addr[0] if addr else None,
+        partitions=partitions,
+        nodesets=nodesets,
+        nodesets_dyn=nodesets_dyn,
+        nodesets_tpu=nodesets_tpu,
+        login_groups=login_groups,
     ), blobs.hash
 
 def _fetch_mounted_config() -> NSDict:
@@ -897,7 +911,7 @@ def _fetch_mounted_config() -> NSDict:
         file_yaml=[]
         for file in files:
             with open(file, "r") as f:
-                file_yaml.append(yaml.safe_load(f))
+                file_yaml.append(_yaml_load(f.read()))
         return file_yaml
 
     return _assemble_config(
@@ -1831,6 +1845,14 @@ class Lookup:
     def zone(self):
         return instance_metadata("zone")
 
+    @cached_property
+    def _nodeset_names(self) -> frozenset:
+        # _node_desc runs once per node; rebuilding this per call was O(nodes x nodesets).
+        return frozenset(
+            getattr(ns, "nodeset_name", None)
+            for ns in chain(self.cfg.nodeset.values(), self.cfg.nodeset_tpu.values(), self.cfg.nodeset_dyn.values())
+        )
+
     @lru_cache(maxsize=None)
     def _node_desc(self, node_name: str) -> dict:
         """Get parts from node name"""
@@ -1855,13 +1877,8 @@ class Lookup:
             raise Exception(f"node name {node_name} does not start with cluster name {cluster_name}")
             
         matched_ns = prefix[len(cluster_name)+1:]
-        
-        valid_nodesets = [
-            getattr(ns, "nodeset_name", None) 
-            for ns in chain(self.cfg.nodeset.values(), self.cfg.nodeset_tpu.values(), self.cfg.nodeset_dyn.values())
-        ]
-        
-        if matched_ns not in valid_nodesets:
+
+        if matched_ns not in self._nodeset_names:
             raise Exception(f"could not find nodeset {matched_ns} for node {node_name}")
             
         is_range = suffix.startswith("[") and suffix.endswith("]")
@@ -2834,8 +2851,12 @@ class Lookup:
 
 _lkp: Optional[Lookup] = None
 
+def _yaml_load(text: str) -> Any:
+    # libyaml when available, the pure Python loader takes seconds on a big config.
+    return yaml.load(text, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
 def _load_config() -> NSDict:
-    return NSDict(yaml.safe_load(CONFIG_FILE.read_text()))
+    return NSDict(_yaml_load(CONFIG_FILE.read_text()))
 
 def lookup() -> Lookup:
     global _lkp
