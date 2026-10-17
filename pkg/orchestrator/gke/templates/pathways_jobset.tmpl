@@ -275,7 +275,7 @@ spec:
                 mountPath: /tmp/sidecar
               {{- if .GKEMTCEnabled}}
               - name: cache
-                mountPath: {{.GKEMTCRamdiskDirectory}}
+                mountPath: {{ printf "%q" .GKEMTCRamdiskDirectory }}
               {{- end}}
             {{- end}}
             containers:
@@ -291,7 +291,7 @@ spec:
                 - --server_port=29005
                 - --resource_manager_address=$(PATHWAYS_HEAD):29001
                 - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
-                {{- if .GKEMTCEnabled}}
+                {{- if .Pathways.ColocatedPythonSidecarImage}}
                 - --cloud_pathways_sidecar_shm_directory=/tmp/sidecar
                 {{- end}}
                 {{- range .WorkerArgsList }}
@@ -342,6 +342,14 @@ spec:
               volumeMounts:
                 - name: shared-tmp
                   mountPath: /tmp
+                {{- if .Pathways.ColocatedPythonSidecarImage}}
+                - name: sidecar-shared-memory
+                  mountPath: /tmp/sidecar
+                {{- end}}
+                {{- if .GKEMTCEnabled}}
+                - name: cache
+                  mountPath: {{ printf "%q" .GKEMTCRamdiskDirectory }}
+                {{- end}}
 {{- if .VolumeMountsYAML }}
 {{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
@@ -350,6 +358,16 @@ spec:
                 hostPath:
                   path: /tmp
                   type: DirectoryOrCreate
+              {{- if .Pathways.ColocatedPythonSidecarImage}}
+              - name: sidecar-shared-memory
+                emptyDir:
+                  medium: Memory
+              {{- end}}
+              {{- if .GKEMTCEnabled}}
+              - name: cache
+                csi:
+                  driver: multitier-checkpoint.csi.storage.gke.io
+              {{- end}}
 {{- if .VolumesYAML }}
 {{(StructuralData .VolumesYAML)}}
 {{- end }}

@@ -41,7 +41,7 @@ If you use `--build-context` to build images on-the-fly, you must set:
 
 If you plan to use Multi-Tier Checkpointing (`--gke-mtc-enabled` flag), ensure that the Multi-Tier Checkpointing feature is enabled on your GKE cluster.
 
-To use this feature, the cluster administrator must also ensure that the required `CheckpointConfiguration` Custom Resource is deployed to the cluster, specifying the target cloud storage bucket for checkpoints. Once the cluster is configured, job submitters simply pass `--gke-mtc-enabled` to their jobs. For more details on cluster configuration, see the [GKE Multi-Tier Checkpointing documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/multi-tier-checkpointing).
+To use this feature, the cluster administrator must also deploy the `CheckpointConfiguration` Custom Resource that names the checkpoint Cloud Storage bucket, and grant the MTC driver access to that bucket (see [MTC blueprint configuration](gke-advanced-features.md#41-blueprint-configuration)). Once the cluster is configured, job submitters pass `--gke-mtc-enabled` with `--gke-mtc-ramdisk-dir <dir>` (for example `/tmp/mtc_checkpoints`) to set the local checkpoint directory. For more details on cluster configuration, see the [GKE Multi-Tier Checkpointing documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/machine-learning/training/multi-tier-checkpointing).
 
 ## 2. Prepare Sample Application Code
 
@@ -1063,8 +1063,8 @@ To submit a dynamic slicing workload targeting TPU v7x nodes, enter the followin
 
 #### GKE documentation reference
 
-* [TPU Dynamic Slicing on GKE Concepts](https://cloud.google.com/kubernetes-engine/docs/concepts/tpu-dynamic-slicing)
-* [Scheduling Dynamic Slices with Kueue and TAS on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/kueue-tpu-dynamic-slicing)
+* [TPU Dynamic Slicing on GKE Concepts](https://cloud.google.com/kubernetes-engine/docs/concepts/dynamic-slicing)
+* [Scheduling Dynamic Slices with Kueue and TAS on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/use-gke-dynamic-slicing)
 
 ---
 
@@ -1161,6 +1161,8 @@ First, use the `gke-template-extract` command to extract the embedded default te
 ```
 
 *(Use `--overwrite` if the directory already contains files you want to replace).*
+
+Extracted templates match the gcluster version that extracted them. After upgrading gcluster, extract them again and re-apply your changes, because newer versions can move logic into the templates. For example, `pathways_jobset.tmpl` now defines the Pathways Multi-Tier Checkpointing and colocated-sidecar volumes itself, so an older copy of that file omits them.
 
 #### 2. Modify the templates
 
