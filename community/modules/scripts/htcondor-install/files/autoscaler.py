@@ -186,10 +186,6 @@ class AutoScaler:
         # stewardship. A full list of Job ClassAd attributes can be found at
         # https://htcondor.readthedocs.io/en/latest/classad-attributes/job-classad-attributes.html
         schedd = htcondor.Schedd()
-        # encourage the job queue to start a new negotiation cycle; there are
-        # internal unconfigurable rate limits so not guaranteed; this is not
-        # strictly required for success, but may reduce latency of autoscaling
-        schedd.reschedule()
         REQUEST_CPUS_ATTRIBUTE = "RequestCpus"
         REQUEST_GPUS_ATTRIBUTE = "RequestGpus"
         REQUEST_MEMORY_ATTRIBUTE = "RequestMemory"
@@ -210,7 +206,7 @@ class AutoScaler:
         # VM instance template is configured for Spot pricing
         spot_query = classad.ExprTree(f"RequireId == \"{self.instance_group_manager}\"")
 
-        # For purpose of scaling a Managed Instance Group, count only jobs that
+        # For purpose of scaling up a Managed Instance Group, count only jobs that
         # are idle and likely participated in a negotiation cycle (there does
         # not appear to be a single classad attribute for this).
         # https://htcondor.readthedocs.io/en/latest/classad-attributes/job-classad-attributes.html#JobStatus
@@ -232,6 +228,13 @@ class AutoScaler:
 
         total_idle_request_cpus = sum(j[REQUEST_CPUS_ATTRIBUTE] for j in idle_job_ads)
         print(f"Total CPUs requested by idle jobs: {total_idle_request_cpus}")
+
+        # Count all idle jobs (including newly submitted jobs with QDate >= last_negotiation_cycle_time)
+        # so that scale-down does not delete idle nodes while newly submitted jobs are waiting to match.
+        all_idle_query_str = f'JobStatus == 1 && RequireId == "{self.instance_group_manager}"'
+        all_idle_job_ads = schedd.query(constraint=all_idle_query_str, projection=job_attributes)
+        all_idle_request_cpus = sum(j.get(REQUEST_CPUS_ATTRIBUTE) if isinstance(j.get(REQUEST_CPUS_ATTRIBUTE), (int, float)) else 1 for j in all_idle_job_ads)
+        min_hosts_for_all_idle_jobs = math.ceil(all_idle_request_cpus / self.cores_per_node)
 
         if self.debug > 1:
             print("Information about the compute instance template")
@@ -334,7 +337,14 @@ class AutoScaler:
             pprint(idle_nodes)
 
         # always keep size tending toward the minimum idle VMs requested
-        new_target = current_target + self.compute_instance_min_idle - n_idle + min_hosts_for_idle_jobs
+        new_target = max(0, current_target + self.compute_instance_min_idle - n_idle + min_hosts_for_idle_jobs)
+        if new_target < current_target:
+            scale_down_target = max(0, min(
+                current_target,
+                current_target + self.compute_instance_min_idle - n_idle + min_hosts_for_all_idle_jobs,
+            ))
+            new_target = max(0, max(new_target, scale_down_target))
+
         if new_target > self.compute_instance_limit:
             self.size = self.compute_instance_limit
             print(f"MIG target size will be limited by {self.compute_instance_limit}")
@@ -348,12 +358,60 @@ class AutoScaler:
             print(responseGroupInfo)
 
         if self.size == current_target:
+            if all_idle_request_cpus > 0:
+                schedd.reschedule()
             if current_target == 0:
                 print("Queue is empty")
             print("Running correct number of VMs to handle queue")
             exit()
 
         if self.size < current_target:
+            # Re-query the collector for current idle and claimed nodes so we do not
+            # delete nodes that became claimed during the GCP API calls
+            latest_idle_node_ads = coll.query(
+                ad_type=htcondor.AdTypes.Startd,
+                constraint=combined_node_query,
+                projection=["Machine", "CloudZone"]
+            )
+            latest_claimed_node_ads = coll.query(
+                ad_type=htcondor.AdTypes.Startd,
+                constraint=combined_constraint,
+                projection=[NODENAME_ATTRIBUTE]
+            )
+            latest_claimed_nodes = {ad[NODENAME_ATTRIBUTE].split(".")[0] for ad in latest_claimed_node_ads}
+
+            idle_nodes = OrderedDict()
+            for instance in modifyingInstances:
+                self_link = instance["instance"]
+                node_name = self_link.rsplit("/", 1)[-1]
+                if node_name not in latest_claimed_nodes:
+                    idle_nodes[self_link] = "modifying"
+
+            for ad in latest_idle_node_ads:
+                node = ad["Machine"].split(".")[0]
+                zone = ad["CloudZone"]
+                self_link = "https://www.googleapis.com/compute/v1/projects/" + \
+                    self.project + "/zones/" + zone + "/instances/" + node
+                if self_link in idle_nodes:
+                    idle_nodes.move_to_end(self_link)
+                idle_nodes[self_link] = "idle"
+            n_idle = len(idle_nodes)
+
+            # Re-verify that no new idle jobs arrived while querying GCP APIs
+            latest_idle_job_ads = schedd.query(constraint=all_idle_query_str, projection=job_attributes)
+            latest_idle_request_cpus = sum(j.get(REQUEST_CPUS_ATTRIBUTE) if isinstance(j.get(REQUEST_CPUS_ATTRIBUTE), (int, float)) else 1 for j in latest_idle_job_ads)
+            latest_min_hosts = math.ceil(latest_idle_request_cpus / self.cores_per_node)
+            latest_scale_down_target = max(0, min(
+                current_target,
+                current_target + self.compute_instance_min_idle - n_idle + latest_min_hosts,
+            ))
+            if latest_scale_down_target > self.size:
+                self.size = min(latest_scale_down_target, self.compute_instance_limit)
+                if self.size >= current_target:
+                    schedd.reschedule()
+                    print("New jobs arrived in queue; aborting scale down")
+                    exit()
+
             print("Scaling down. Looking for nodes that can be shut down")
 
             if self.debug > 1:
@@ -365,7 +423,8 @@ class AutoScaler:
             nodes_to_delete = list(idle_nodes.keys())[0:current_target-self.size]
             for node in nodes_to_delete:
                 print(f"Attempting to delete: {node.rsplit('/',1)[-1]}")
-            respDel = self.deleteFromMig(nodes_to_delete)
+            if nodes_to_delete:
+                respDel = self.deleteFromMig(nodes_to_delete)
 
             if self.debug > 1:
                 print("Scaling down complete")
@@ -374,6 +433,10 @@ class AutoScaler:
             print(
                 "Scaling up. Need to increase number of instances to " + str(self.size)
             )
+            # encourage the job queue to start a new negotiation cycle; there are
+            # internal unconfigurable rate limits so not guaranteed; this is not
+            # strictly required for success, but may reduce latency of autoscaling
+            schedd.reschedule()
             # Request to resize
             request = self.instanceGroupManagers.resize(
                 project=self.project,
