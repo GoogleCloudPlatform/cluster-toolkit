@@ -189,7 +189,6 @@ modules. For support with the underlying modules, see the instructions in the
 | Name | Type |
 | ---- | ---- |
 | [google_compute_reservation.reservation](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_reservation) | data source |
-| [google_compute_zones.available](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_zones) | data source |
 
 ## Inputs
 
