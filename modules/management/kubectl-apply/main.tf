@@ -174,6 +174,33 @@ locals {
   kueue_controller_cpu      = try(var.kueue.controller_cpu, null) != null ? var.kueue.controller_cpu : (local.enable_slicing ? "16" : null)
   kueue_controller_memory   = try(var.kueue.controller_memory, null) != null ? var.kueue.controller_memory : (local.enable_slicing ? "64Gi" : null)
   kueue_controller_replicas = try(var.kueue.controller_replicas, null) != null ? var.kueue.controller_replicas : (local.enable_slicing ? 3 : null)
+
+  kueue_enable_wait_for_pods_ready = (
+    var.kueue.wait_for_pods_ready != null ||
+    (local.enable_pathways && module.kueue_pods_ready_default_on_check.is_greater_than_or_equal)
+  )
+  kueue_pods_ready_recovery_timeout = (
+    try(var.kueue.wait_for_pods_ready.recovery_timeout, null) != null ?
+    var.kueue.wait_for_pods_ready.recovery_timeout :
+    (local.enable_pathways && module.kueue_pods_ready_default_on_check.is_greater_than_or_equal ? "0s" : null)
+  )
+  kueue_wait_for_pods_ready = local.kueue_enable_wait_for_pods_ready ? merge(
+    { timeout = coalesce(try(var.kueue.wait_for_pods_ready.timeout, null), "30m") },
+    local.kueue_pods_ready_recovery_timeout != null ? { recoveryTimeout = local.kueue_pods_ready_recovery_timeout } : {},
+    try(var.kueue.wait_for_pods_ready.block_admission, null) != null ? { blockAdmission = var.kueue.wait_for_pods_ready.block_admission } : {}
+  ) : null
+}
+
+module "kueue_pods_ready_default_on_check" {
+  source          = "../../internal/semver_compare"
+  current_version = var.kueue.version
+  minimum_version = "0.19.0"
+}
+
+module "kueue_zero_recovery_timeout_check" {
+  source          = "../../internal/semver_compare"
+  current_version = var.kueue.version
+  minimum_version = "0.16.0"
 }
 
 data "http" "manifest_from_url" {
@@ -221,10 +248,15 @@ module "install_kueue" {
   namespace        = "kueue-system"
   create_namespace = true
   values_yaml = compact([
-    templatefile("${path.module}/kueue/kueue-helm-values.yaml", {
-      timeout          = coalesce(try(var.kueue.wait_for_pods_ready.timeout, null), "30m")
-      recovery_timeout = coalesce(try(var.kueue.wait_for_pods_ready.recovery_timeout, null), local.enable_pathways ? "0s" : "30m")
-    }),
+    file("${path.module}/kueue/kueue-helm-values.yaml"),
+    local.kueue_wait_for_pods_ready != null ? yamlencode({
+      managerConfig = {
+        controllerManagerConfigYaml = yamlencode(merge(
+          yamldecode(file("${path.module}/kueue/kueue-manager-config.yaml")),
+          { waitForPodsReady = local.kueue_wait_for_pods_ready }
+        ))
+      }
+    }) : "",
     local.kueue_controller_cpu != null || local.kueue_controller_memory != null || local.kueue_controller_replicas != null ? yamlencode({
       controllerManager = merge(
         local.kueue_controller_replicas != null ? { replicas = local.kueue_controller_replicas } : {},

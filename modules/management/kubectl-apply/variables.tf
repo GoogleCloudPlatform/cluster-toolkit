@@ -75,6 +75,11 @@ resource "terraform_data" "kueue_validations" {
       condition     = !(var.kueue.enable_dynamic_slicing_for_tpus && !var.jobset.install)
       error_message = "Slice controller requires Jobset to be installed. Set jobset.install to true when kueue.enable_dynamic_slicing_for_tpus is true."
     }
+    precondition {
+      # On Kueue 0.15.x a zero recoveryTimeout evicts immediately; 0.16+ treats it as "never".
+      condition     = !var.kueue.install || module.kueue_zero_recovery_timeout_check.is_greater_than_or_equal || !can(regex("^(0+(\\.0+)?(ns|us|ms|s|m|h))+$", try(var.kueue.wait_for_pods_ready.recovery_timeout, "")))
+      error_message = "kueue.wait_for_pods_ready.recovery_timeout of zero is not supported on Kueue 0.15.x (it evicts immediately there). Use Kueue >= 0.16.0 or a non-zero value."
+    }
   }
 }
 
@@ -163,29 +168,31 @@ variable "kueue" {
     slice_controller_memory_request = optional(string, "16Gi")
     slice_controller_cpu_limit      = optional(string, "12000m")
     slice_controller_memory_limit   = optional(string, "32Gi")
+    # Optional Kueue waitForPodsReady settings. On Kueue >= 0.19.0 with Pathways
+    # enabled, defaults to timeout = "30m" and recovery_timeout = "0s".
     wait_for_pods_ready = optional(object({
       timeout          = optional(string)
       recovery_timeout = optional(string)
+      block_admission  = optional(bool)
     }), null)
   })
   default = {}
 
   validation {
-    condition = (
-      try(var.kueue.wait_for_pods_ready.timeout, null) == null || (
-        can(regex("^([0-9]+(ns|us|ms|s|m|h))+$", var.kueue.wait_for_pods_ready.timeout)) &&
-        !can(regex("^0+(ns|us|ms|s|m|h)$", var.kueue.wait_for_pods_ready.timeout))
-      )
-    )
-    error_message = "kueue.wait_for_pods_ready.timeout must be a positive duration string (e.g., '30m', '1h')."
+    condition = alltrue([
+      for d in [try(var.kueue.wait_for_pods_ready.timeout, null), try(var.kueue.wait_for_pods_ready.recovery_timeout, null)] :
+      d == null || can(regex("^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$", d))
+    ])
+    error_message = "kueue.wait_for_pods_ready.timeout and recovery_timeout must be Go duration strings (e.g. '30m', '1.5h', '0s')."
   }
 
   validation {
-    condition = (
-      try(var.kueue.wait_for_pods_ready.recovery_timeout, null) == null ||
-      can(regex("^([0-9]+(ns|us|ms|s|m|h))+$", var.kueue.wait_for_pods_ready.recovery_timeout))
-    )
-    error_message = "kueue.wait_for_pods_ready.recovery_timeout must be a non-negative duration string (e.g., '0s', '30m', '2h')."
+    condition = var.kueue.wait_for_pods_ready == null || anytrue([
+      var.kueue.wait_for_pods_ready.timeout != null,
+      var.kueue.wait_for_pods_ready.recovery_timeout != null,
+      var.kueue.wait_for_pods_ready.block_admission != null,
+    ])
+    error_message = "kueue.wait_for_pods_ready must set at least one of timeout, recovery_timeout or block_admission."
   }
 }
 
