@@ -52,7 +52,7 @@ resource "terraform_data" "kueue_validations" {
       error_message = "Supported version of Kueue are ${join(", ", local.kueue_supported_versions)}"
     }
     precondition {
-      condition     = !var.kueue.install || !(var.enable_pathways_for_tpus || try(var.kueue.enable_pathways_for_tpus, false)) || try(var.kueue.config_path, "") != "" || contains(keys(coalesce(var.kueue.config_template_vars, {})), "accelerator_type")
+      condition     = !var.kueue.install || !(var.enable_pathways_for_tpus || try(var.kueue.enable_pathways_for_tpus, false)) || (var.kueue.config_path != null && var.kueue.config_path != "") || contains(keys(coalesce(var.kueue.config_template_vars, {})), "accelerator_type")
       error_message = "accelerator_type must be set in kueue.config_template_vars when using the default pathways configuration."
     }
     precondition {
@@ -64,7 +64,7 @@ resource "terraform_data" "kueue_validations" {
       error_message = "When enable_dynamic_slicing_for_tpus is true, machine_type must be a TPU machine type."
     }
     precondition {
-      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || coalesce(var.kueue.config_path, "") != "" || (var.kueue.config_template_vars != null && contains(keys(var.kueue.config_template_vars), "accelerator_type"))
+      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || (var.kueue.config_path != null && var.kueue.config_path != "") || (var.kueue.config_template_vars != null && contains(keys(var.kueue.config_template_vars), "accelerator_type"))
       error_message = "accelerator_type must be set in kueue.config_template_vars when using the default dynamic slicing configuration."
     }
     precondition {

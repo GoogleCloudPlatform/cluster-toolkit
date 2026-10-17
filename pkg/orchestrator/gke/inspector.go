@@ -31,15 +31,19 @@ import (
 const spacer = "========================================================"
 
 type inspectWriter struct {
-	writer   io.Writer
-	executor Executor
+	writer io.Writer
+	orc    *GKEOrchestrator
 }
 
+// runAndLog pins kubectl to the chosen context before logging so the report shows the command that ran.
 func (w *inspectWriter) runAndLog(description string, command string, args ...string) {
+	if command == "kubectl" {
+		args = withKubeContext(w.orc.kubeContext, args)
+	}
 	outputStr := fmt.Sprintf("Description: %s\nCommand: %s %v\n", description, command, args)
 	_, _ = fmt.Fprint(w.writer, outputStr)
 
-	res := w.executor.ExecuteCommand(command, args...)
+	res := w.orc.executor.ExecuteCommand(command, args...)
 	if res.ExitCode != 0 {
 		errStr := fmt.Sprintf("Error (%d):\n%s\n", res.ExitCode, res.Stderr)
 		_, _ = fmt.Fprint(w.writer, errStr)
@@ -89,8 +93,8 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	_, _ = fmt.Fprintf(outputTarget, "==================\nGCLUSTER INSPECT OUTPUT:\n==================\n\n")
 
 	writer := &inspectWriter{
-		writer:   outputTarget,
-		executor: g.executor,
+		writer: outputTarget,
+		orc:    g,
 	}
 
 	// --- 1. Local Setup ---
@@ -111,7 +115,7 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	writer.runAndLog("Kubectl: All Nodes", "kubectl", "get", "nodes", "-o", "wide")
 
 	// Count nodes per pool (healthy and total)
-	logNodeCounts(outputTarget, g.executor)
+	g.logNodeCounts(outputTarget)
 
 	// --- 4. Kueue & JobSet Resources ---
 	writer.runAndLog("Kueue: ClusterQueue Details", "kubectl", "describe", "ClusterQueue")
@@ -124,16 +128,16 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	writer.runAndLog("JobSet: JobSet Controller Manager Logs (tail 100)", "kubectl", "logs", "deployment/jobset-controller-manager", "-n", "jobset-system", "-c", "manager", "--tail=100")
 
 	// --- 5. Slice Controller (Dynamic Slicing) ---
-	cResult := g.executor.ExecuteCommand("kubectl", "get", "crd", "topologies.kueue.x-k8s.io")
+	cResult := g.kubectl("get", "crd", "topologies.kueue.x-k8s.io")
 	if cResult.ExitCode == 0 {
 		writer.runAndLog("Slice Controller: Deployment Details", "kubectl", "describe", "deployment", "slice-controller-controller-manager", "-n", "slice-controller-system")
 		writer.runAndLog("Slice Controller: Logs (tail 100)", "kubectl", "logs", "deployment/slice-controller-controller-manager", "-n", "slice-controller-system", "-c", "manager", "--tail=100")
 	}
 
 	// --- 6. Workloads ---
-	logWorkloadList(outputTarget, g.executor, "EVERYTHING", "", targetNamespace)
-	logWorkloadList(outputTarget, g.executor, "QUEUED", "", targetNamespace)
-	logWorkloadList(outputTarget, g.executor, "RUNNING", "", targetNamespace)
+	g.logWorkloadList(outputTarget, "EVERYTHING", "", targetNamespace)
+	g.logWorkloadList(outputTarget, "QUEUED", "", targetNamespace)
+	g.logWorkloadList(outputTarget, "RUNNING", "", targetNamespace)
 
 	g.inspectWorkload(writer, opts.WorkloadName, targetNamespace)
 
@@ -149,7 +153,7 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, w
 		return
 	}
 
-	logWorkloadList(writer.writer, g.executor, "EVERYTHING", workloadName, workloadNamespace)
+	g.logWorkloadList(writer.writer, "EVERYTHING", workloadName, workloadNamespace)
 
 	writer.runAndLog(fmt.Sprintf("JobSet: Config for %s", workloadName), "kubectl", "describe", "jobsets", workloadName, "-n", workloadNamespace)
 
@@ -166,11 +170,11 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, w
 
 }
 
-func logNodeCounts(w io.Writer, exec Executor) {
+func (g *GKEOrchestrator) logNodeCounts(w io.Writer) {
 	desc := "Kubectl: Node count analysis"
 	_, _ = fmt.Fprintf(w, "Description: %s\n", desc)
 
-	nodeList, err := fetchNodeList(exec)
+	nodeList, err := g.fetchNodeList()
 	if err != nil {
 		errStr := fmt.Sprintf("Error fetching nodes for analysis: %v\n", err)
 		_, _ = fmt.Fprint(w, errStr)
@@ -201,8 +205,8 @@ func logNodeCounts(w io.Writer, exec Executor) {
 	_, _ = fmt.Fprintf(w, "\n%s\n\n", spacer)
 }
 
-func fetchNodeList(exec Executor) (*kubernetesNodeList, error) {
-	res := exec.ExecuteCommand("kubectl", "get", "nodes", "-o", "json")
+func (g *GKEOrchestrator) fetchNodeList() (*kubernetesNodeList, error) {
+	res := g.kubectl("get", "nodes", "-o", "json")
 	if res.ExitCode != 0 {
 		return nil, fmt.Errorf("kubectl get nodes failed (%d): %s", res.ExitCode, res.Stderr)
 	}
@@ -285,7 +289,7 @@ func logConsoleLinks(w io.Writer, opts orchestrator.InspectOptions, workloadName
 	_, _ = fmt.Fprintf(w, "\n%s\n\n", spacer)
 }
 
-func logWorkloadList(w io.Writer, exec Executor, filterStatus string, filterWorkload string, namespace string) {
+func (g *GKEOrchestrator) logWorkloadList(w io.Writer, filterStatus string, filterWorkload string, namespace string) {
 	desc := fmt.Sprintf("Kubectl: List Jobs with filter-by-status=%s", filterStatus)
 	if filterWorkload != "" {
 		desc += fmt.Sprintf(" with filter-by-job=%s", filterWorkload)
@@ -300,7 +304,7 @@ func logWorkloadList(w io.Writer, exec Executor, filterStatus string, filterWork
 		args = append(args, "-A")
 	}
 	args = append(args, "-o", "json")
-	res := exec.ExecuteCommand("kubectl", args...)
+	res := g.kubectl(args...)
 	if res.ExitCode != 0 {
 		errStr := fmt.Sprintf("Error listing workloads (%d):\n%s\n", res.ExitCode, res.Stderr)
 		_, _ = fmt.Fprint(w, errStr)

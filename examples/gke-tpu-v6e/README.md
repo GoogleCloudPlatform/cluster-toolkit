@@ -11,7 +11,16 @@ Key parameters when working with TPUs:
 
 Before you start, make sure you have performed the following tasks:
 
-* Enable the Google Kubernetes Engine API.
+* Enable the required Google Cloud APIs (`compute.googleapis.com`, `container.googleapis.com`, `iam.googleapis.com`, `storage.googleapis.com`):
+
+  ```sh
+  gcloud services enable \
+    compute.googleapis.com \
+    container.googleapis.com \
+    iam.googleapis.com \
+    storage.googleapis.com \
+    --project=<PROJECT_ID>
+  ```
 
 * If you want to use the Google Cloud CLI for this task, [install](https://cloud.google.com/sdk/docs/install) and then [initialize](https://cloud.google.com/sdk/docs/initializing) the gcloud CLI. If you previously installed the gcloud CLI, get the latest version by running gcloud components update.
   > **NOTE:** For existing gcloud CLI installations, make sure to set the compute/region and compute/zone properties. By setting default locations, you can avoid errors in gcloud CLI like the following: One of [--zone, --region] must be supplied: Please specify location.
@@ -31,17 +40,10 @@ This section guides you through the cluster creation process, ensuring that your
 
 1. [Launch Cloud Shell](https://cloud.google.com/shell/docs/launching-cloud-shell). You can use a different environment; however, we recommend Cloud Shell because the dependencies are already pre-installed for Cluster Toolkit. If you don't want to use Cloud Shell, follow the instructions to [install dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies) to prepare a different environment.
 
-1. Clone the Cluster Toolkit from the git repository:
+1. From the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository, build `./gcluster` (if not already built):
 
     ```sh
-    cd ~
-    git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
-    ```
-
-1. Install the Cluster Toolkit:
-
-    ```sh
-    cd cluster-toolkit && git checkout main && make
+    test -x ./gcluster || make
     ```
 
 1. Create a Cloud Storage bucket to store the state of the Terraform deployment:
@@ -83,7 +85,6 @@ This section guides you through the cluster creation process, ensuring that your
     using TPU v6e machine types:
 
    ```sh
-    cd ~/cluster-toolkit
     ./gcluster deploy -d \
     examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml \
     examples/gke-tpu-v6e/gke-tpu-v6e.yaml
@@ -103,12 +104,11 @@ This repository also includes an advanced blueprint, `gke-tpu-v6e-advanced.yaml`
 
 The process is nearly identical to the basic deployment.
 
-1. Ensure you have completed steps 1-7 from the "Create a cluster" section above. The same `gke-tpu-v6e-deployment.yaml` file can be used.
+1. Ensure you have completed steps 1-6 from the "Create a cluster" section above. The same `gke-tpu-v6e-deployment.yaml` file can be used.
 
 1. In the final deploy command, simply point to the `gke-tpu-v6e-advanced.yaml` blueprint instead.
 
     ```sh
-    cd ~/cluster-toolkit
     ./gcluster deploy -d \
     examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml \
     examples/gke-tpu-v6e/gke-tpu-v6e-advanced.yaml
@@ -134,7 +134,7 @@ By default, the toolkit dynamically applies an embedded kueue configuration base
     A sample job file is provided: `kueue-job-sample.yaml`.
 
     ```sh
-    kubectl create -f ~/cluster-toolkit/examples/gke-tpu-v6e/kueue-job-sample.yaml
+    kubectl create -f examples/gke-tpu-v6e/kueue-job-sample.yaml
     ```
 
 4. **Validation:** Check the status of your workload.
@@ -150,10 +150,10 @@ The [tpu-multislice.yaml](https://github.com/GoogleCloudPlatform/cluster-toolkit
 1. Connect to your cluster:
 
     ```sh
-    gcloud container clusters get-credentials gke-tpu-v6e --region=REGION --project=PROJECT_ID
+    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project=PROJECT_ID
     ```
 
-    Replace the `REGION` and `PROJECT_ID` with the ones used in the blueprint.
+    Replace `DEPLOYMENT_NAME`, `REGION`, and `PROJECT_ID` with the ones used in the blueprint.
 
 1. Update the nodeSelector under the template spec of tpu-multislice.yaml file. The values depend on the tpu accelerator and tpu topology used in the blueprint.
 
@@ -166,7 +166,7 @@ The [tpu-multislice.yaml](https://github.com/GoogleCloudPlatform/cluster-toolkit
 1. Create the resources:
 
     ```sh
-    kubectl create -f ~/cluster-toolkit/examples/gke-tpu-v6e/tpu-multislice.yaml
+    kubectl create -f examples/gke-tpu-v6e/tpu-multislice.yaml
     ```
 
     This command returns a service and a job name.

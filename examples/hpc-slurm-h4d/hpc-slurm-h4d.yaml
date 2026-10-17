@@ -20,10 +20,9 @@ vars:
   zone: us-central1-a
   rdma_net_range: 192.168.128.0/18
   instance_image:
-    # Rocky 8: slurm-gcp-6-12-hpc-rocky-linux-8
-    # Rocky 9: slurm-gcp-6-12-hpc-rocky-linux-9
-    family: slurm-gcp-6-12-hpc-rocky-linux-9
-    project: schedmd-slurm-public
+    # Rocky 9: aci-cpu-rocky-linux-9-slurm-2605-amd64
+    family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+    project: advanced-compute-images
   h4d_cluster_size: 2
 
   #Provisioning model, select one, lack of selection will rely on on-demand capacity
@@ -74,6 +73,7 @@ deployment_groups:
   - id: h4d_startup
     source: modules/scripts/startup-script
     settings:
+      install_ansible: false
       set_ofi_cloud_rdma_tunables: true
       local_ssd_filesystem:
         fs_type: ext4

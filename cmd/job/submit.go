@@ -112,8 +112,8 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 		if err := validatePathwaysFlags(); err != nil {
 			return err
 		}
-		if !skipPrereqs {
-			if err := ensurePrerequisites(cmd, projectID, location); err != nil {
+		if !skipPrereqs && buildContext != "" {
+			if err := ensureBuildPrerequisites(cmd, projectID, location); err != nil {
 				return err
 			}
 		}
@@ -160,7 +160,7 @@ func init() {
 	SubmitCmd.Flags().StringVar(&gracePeriodStr, "grace-period", "30s", "Time to wait before forcefully terminating a pod (e.g. 30s, 2m). Gives the workload time to save checkpoints or clean up distributed state during cancellation or preemption events (like Spot VM evictions).")
 	SubmitCmd.Flags().BoolVar(&gkeDisableParallelContainers, "gke-disable-parallel-containers", false, "Disable parallel containers for TPU7x on GKE.")
 
-	SubmitCmd.Flags().StringVar(&placementPolicy, "placement-policy", "", "Name of the GKE placement policy to use.")
+	SubmitCmd.Flags().StringVar(&placementPolicy, "placement-policy", "", "Name of an existing GCE compact placement or workload policy attached to the target node pool. Under NAP on machines that support compact placement it is also used as the GKE placement group identifier.")
 	SubmitCmd.Flags().StringToStringVar(&nodeConstraint, "node-constraint", nil, "Key=value pairs for node labels to target specific nodes. Maps to nodeSelector in GKE, and to SLURM's --constraint.")
 	SubmitCmd.Flags().StringVar(&cpuAffinityStr, "cpu-affinity", "", "CPU affinity rules (e.g., 'numa').")
 	SubmitCmd.Flags().IntSliceVar(&restartOnExitCodes, "restart-on-exit-codes", nil, "List of exit codes that should not trigger a job failure.")
@@ -182,7 +182,7 @@ func init() {
 	SubmitCmd.Flags().BoolVar(&pathways.Headless, "pathways-headless", false, "If present, the user's workload container will not be deployed within the `pathways-head` job.")
 	SubmitCmd.Flags().StringVar(&pathways.GCSLocation, "pathways-gcs-location", "", "Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.")
 	SubmitCmd.Flags().IntVar(&pathways.ElasticSlices, "pathways-elastic-slices", 0, "Configures the number of elastic slices, potentially allowing for more flexible resource allocation.")
-	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 1, "Maximum times the workers in a slice can be restarted. Used with --pathways-elastic-slices.")
+	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 4000, "Maximum times the workers in a slice can be restarted. Maps to backoffLimitPerIndex=N and backoffLimit=N*nodesPerSlice on the worker Job. Used with --pathways-elastic-slices.")
 	SubmitCmd.Flags().StringVar(&pathways.ProxyArgs, "pathways-proxy-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-proxy` executable.")
 	SubmitCmd.Flags().StringVar(&pathways.ServerArgs, "pathways-server-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-rm` (resource manager) executable.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerArgs, "pathways-worker-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-worker` executable.")
@@ -334,18 +334,15 @@ const (
 	maxLabelValueLen   = 63
 	// JobSet labels Pathways pods with jobset.sigs.k8s.io/coordinator=<name>-pathways-head-0-0.<name>.
 	pathwaysCoordinatorSuffix = "-pathways-head-0-0."
+	// Longest Pathways name whose coordinator label still fits in a label value.
+	maxPathwaysWorkloadNameLen = (maxLabelValueLen - len(pathwaysCoordinatorSuffix)) / 2
 )
-
-// maxPathwaysWorkloadNameLen is the longest name whose coordinator label still fits in a label value.
-func maxPathwaysWorkloadNameLen() int {
-	return (maxLabelValueLen - len(pathwaysCoordinatorSuffix)) / 2
-}
 
 func validateWorkloadNameLength(name string, isPathways bool) error {
 	if isPathways {
-		if limit := maxPathwaysWorkloadNameLen(); len(name) > limit {
+		if len(name) > maxPathwaysWorkloadNameLen {
 			return fmt.Errorf("workload name cannot exceed %d characters for Pathways jobs: JobSet sets the label jobset.sigs.k8s.io/coordinator=%s%s%s (the name twice plus %q), and label values are limited to %d characters. The provided name %q has %d characters",
-				limit, name, pathwaysCoordinatorSuffix, name, pathwaysCoordinatorSuffix, maxLabelValueLen, name, len(name))
+				maxPathwaysWorkloadNameLen, name, pathwaysCoordinatorSuffix, name, pathwaysCoordinatorSuffix, maxLabelValueLen, name, len(name))
 		}
 		return nil
 	}
@@ -362,7 +359,7 @@ func validatePathwaysFlags() error {
 		}
 	} else {
 		// Check if any pathways-specific flag is set without --pathways
-		if !reflect.DeepEqual(pathways, orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}) || len(pathwaysProxyEnv) > 0 || len(pathwaysServerEnv) > 0 || len(pathwaysWorkerEnv) > 0 {
+		if !reflect.DeepEqual(pathways, orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 4000}) || len(pathwaysProxyEnv) > 0 || len(pathwaysServerEnv) > 0 || len(pathwaysWorkerEnv) > 0 {
 			return fmt.Errorf("pathways flags specified but --pathways flag is missing")
 		}
 	}

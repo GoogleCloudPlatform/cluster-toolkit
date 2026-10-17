@@ -173,7 +173,9 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		Scheduler:          job.GKEScheduler,
 		IsDynamicSlicing:   isDynamicSlicing,
 		IsStaticSlicing:    isStaticSlicing,
+		MachineType:        job.MachineType,
 		IsTPU:              config.IsTPU(job.MachineType) || config.IsTPU(originalAccelType),
+		IsNAP:              job.GKENAPProvisioning != "",
 	}
 
 	// Reuse GCluster's existing GKE accelerator label mapping and algorithmically
@@ -549,7 +551,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
 	}
 
-	workerBackoffLimit := 2048000
+	workerBackoffLimit := opts.Pathways.MaxSliceRestarts * opts.NodesPerSlice
 
 	var proxyArgsList []string
 	if opts.Pathways.ProxyArgs != "" {
@@ -591,6 +593,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		NumSlices:                     opts.NumSlices,
 		NodesPerSlice:                 opts.NodesPerSlice,
 		WorkerBackoffLimit:            workerBackoffLimit,
+		WorkerBackoffLimitPerIndex:    opts.Pathways.MaxSliceRestarts,
 		ProxyArgsList:                 proxyArgsList,
 		ServerArgsList:                serverArgsList,
 		WorkerArgsList:                workerArgsList,

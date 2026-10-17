@@ -325,7 +325,7 @@ deployment_groups:
         $(concat(
           [
           merge(a4x_net_0.instance_additional_networks[0],
-          { access_config = [{ nat_ip = null, public_ptr_domain_name = null, network_tier = null }] })
+          { access_config = [{ nat_ip = null, public_ptr_domain_name = null, network_tier = null }] }),
           merge(a4x_net_1.instance_additional_networks[0],
           { access_config = [{ nat_ip = null, public_ptr_domain_name = null, network_tier = null }] })
           ],

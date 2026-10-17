@@ -161,9 +161,6 @@ spec:
               securityContext:
                 privileged: true
               resources:
-                limits:
-                  cpu: "24"
-                  memory: "100Gi"
                 requests:
                   cpu: "2"
                   memory: "8Gi"
@@ -221,7 +218,7 @@ spec:
         parallelism: {{.NodesPerSlice}}
         completions: {{.NodesPerSlice}}
         backoffLimit: {{.WorkerBackoffLimit}}
-        backoffLimitPerIndex: 4000
+        backoffLimitPerIndex: {{.WorkerBackoffLimitPerIndex}}
         podReplacementPolicy: Failed
         maxFailedIndexes: 0
         template:

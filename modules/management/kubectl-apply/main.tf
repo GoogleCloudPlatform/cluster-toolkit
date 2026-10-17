@@ -42,13 +42,13 @@ locals {
     var.kueue.config_template_vars != null ? var.kueue.config_template_vars : {}
   )
 
-  kueue_default_config_content = local.kueue_default_config_template != "" ? (
+  kueue_default_config_content = (local.install_kueue && local.kueue_user_config_content == "" && local.kueue_default_config_template != "") ? (
     endswith(local.kueue_default_config_template, ".tftpl") ?
     templatefile(local.kueue_default_config_template, local.kueue_config_template_vars) :
     file(local.kueue_default_config_template)
   ) : ""
 
-  kueue_user_config_content = var.kueue.config_path != "" && var.kueue.config_path != null ? (
+  kueue_user_config_content = (local.install_kueue && var.kueue.config_path != "" && var.kueue.config_path != null) ? (
     endswith(var.kueue.config_path, ".tftpl") || (var.kueue.config_template_vars != null && length(var.kueue.config_template_vars) > 0) ?
     templatefile(var.kueue.config_path, local.kueue_config_template_vars) :
     file(var.kueue.config_path)
@@ -60,7 +60,7 @@ locals {
   webhook_wait_duration = "60s"
 
   asapd_lite_config_content = (
-    var.asapd_lite.config_path != null && var.asapd_lite.config_path != "" ?
+    local.install_asapd_lite && var.asapd_lite.config_path != null && var.asapd_lite.config_path != "" ?
     (
       endswith(var.asapd_lite.config_path, ".tftpl") || (var.asapd_lite.config_template_vars != null && length(var.asapd_lite.config_template_vars) > 0) ?
       templatefile(var.asapd_lite.config_path, var.asapd_lite.config_template_vars != null ? var.asapd_lite.config_template_vars : {}) :

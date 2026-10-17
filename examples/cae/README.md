@@ -88,17 +88,10 @@ storage intact and b) you can build software before you deploy your cluster.
 > However, this is merely an example sizing for an instance of this reference architecture.
 > Node counts and remote desktop seats can easily be adjusted in the blueprint.
 
-1. Clone the repo
+1. From the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository, build `./gcluster` (if not already built):
 
    ```bash
-   git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
-   cd cluster-toolkit
-   ```
-
-1. Build the Cluster Toolkit
-
-   ```bash
-   make
+   test -x ./gcluster || make
    ```
 
 1. Generate the deployment folder after replacing `<project>` with the project

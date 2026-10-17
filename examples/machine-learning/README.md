@@ -12,9 +12,9 @@ the latest VM families from Google Cloud
 - [TPU7x](tpu7x-standard-4t)
 
 Further documentation for A3 High, A3 Mega, A3 Ultra, A4 and A4X solutions are available at
-[Create an AI-optimized Slurm cluster][aihc-slurm].
+[Create a self-managed Slurm cluster for AI workloads][aihc-slurm].
 
-[aihc-slurm]: https://cloud.google.com/ai-hypercomputer/docs/create/create-slurm-cluster
+[aihc-slurm]: https://cloud.google.com/ai-hypercomputer/docs/create/create-self-managed-slurm-cluster
 
 ## Selective Deployment and Destruction using --only and --skip flags
 
@@ -28,10 +28,10 @@ Use the `--only` flag to have the command act on only the specified, comma-separ
 
 **Examples:**
 
-- Deploy only the `base` group:
+- Deploy only the `base` group (for `a3high-slurm-blueprint.yaml`, which has groups `base`, `build-script`, `image`, `cluster`; `a3mega-slurm-blueprint.yaml` uses `primary`, `build_script`, `slurm-build`, `cluster`):
 
 ```bash
-./gcluster deploy -d a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml --only base
+./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml --only base
 ```
 
 - Destroy only the `image` group:
@@ -40,10 +40,10 @@ Use the `--only` flag to have the command act on only the specified, comma-separ
 ./gcluster destroy deployment-name --only image
 ```
 
-- Deploy only the `base` and `cluster` groups:
+- Deploy only the `cluster-env` group (for `a3ultra-slurm-blueprint.yaml`, `a4high-slurm-blueprint.yaml`, `a4xhigh-slurm-blueprint.yaml`, and `tpu7x-slurm-blueprint.yaml`, which have groups `cluster-env` and `cluster`; `a4xmax-bm-slurm-blueprint.yaml` has groups `image-env`, `image`, `cluster-env`, and `cluster`):
 
 ```bash
-./gcluster deploy -d a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml --only base,cluster
+./gcluster deploy -d examples/machine-learning/a4-highgpu-8g/a4high-slurm-deployment.yaml examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml --only cluster-env
 ```
 
 ### `--skip <group1>,<group2>,...`
@@ -52,16 +52,16 @@ Use the `--skip` flag to have the command act on all groups except those specifi
 
 **Examples:**
 
-- Deploy everything except the `image` group:
+- Deploy everything except the `image` group (on `a3high-slurm-blueprint.yaml`):
 
 ```bash
-./gcluster deploy -d a4high-slurm-deployment.yaml examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml --skip image
+./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml --skip image
 ```
 
-- Destroy everything except the `base` group:
+- Destroy only `cluster` while keeping `cluster-env` (networking and Managed Lustre) intact:
 
 ```bash
-./gcluster destroy deployment-name --skip base
+./gcluster destroy deployment-name --skip cluster-env
 ```
 
 **Use cases:**

@@ -122,7 +122,7 @@ func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName, ns string) (stri
 		return cleanName, nil
 	}
 
-	res := g.executor.ExecuteCommand("kubectl", "get", "localqueue", "-n", ns, "-o", "jsonpath={.items[*].metadata.name}")
+	res := g.kubectl("get", "localqueue", "-n", ns, "-o", "jsonpath={.items[*].metadata.name}")
 	if res.ExitCode != 0 {
 		return "", fmt.Errorf("failed to query LocalQueues in namespace %s: %s", ns, res.Stderr)
 	}
@@ -153,7 +153,7 @@ func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName, ns string) (stri
 
 // listLocalQueues returns a slice of existing LocalQueue names in the given namespace.
 func (g *GKEOrchestrator) listLocalQueues(ns string) []string {
-	res := g.executor.ExecuteCommand("kubectl", "get", "localqueue", "-n", ns, "-o", "jsonpath={.items[*].metadata.name}")
+	res := g.kubectl("get", "localqueue", "-n", ns, "-o", "jsonpath={.items[*].metadata.name}")
 	if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) == "" {
 		return nil
 	}
@@ -162,7 +162,7 @@ func (g *GKEOrchestrator) listLocalQueues(ns string) []string {
 
 // checkLocalQueueExists checks if a LocalQueue with the given name exists in the namespace.
 func (g *GKEOrchestrator) checkLocalQueueExists(name, ns string) (bool, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "localqueue", name, "-n", ns)
+	res := g.kubectl("get", "localqueue", name, "-n", ns)
 	if res.ExitCode == 0 {
 		return true, nil
 	}
@@ -175,7 +175,7 @@ func (g *GKEOrchestrator) checkLocalQueueExists(name, ns string) (bool, error) {
 
 // checkClusterQueueExists checks if a ClusterQueue with the given name exists in the cluster.
 func (g *GKEOrchestrator) checkClusterQueueExists(name string) (bool, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "clusterqueue", name)
+	res := g.kubectl("get", "clusterqueue", name)
 	if res.ExitCode == 0 {
 		return true, nil
 	}
@@ -267,7 +267,7 @@ func (g *GKEOrchestrator) ensureClusterQueueCoverage(localQueueName, ns string) 
 
 // getClusterQueueName inspects a LocalQueue to retrieve the name of its bound ClusterQueue.
 func (g *GKEOrchestrator) getClusterQueueName(localQueueName, ns string) (string, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "localqueue", localQueueName, "-n", ns, "-o", "jsonpath={.spec.clusterQueue}")
+	res := g.kubectl("get", "localqueue", localQueueName, "-n", ns, "-o", "jsonpath={.spec.clusterQueue}")
 	if res.ExitCode != 0 {
 		return "", fmt.Errorf("failed to find clusterqueue for %s in namespace %s: %s", localQueueName, ns, res.Stderr)
 	}
@@ -280,7 +280,7 @@ func (g *GKEOrchestrator) getClusterQueueName(localQueueName, ns string) (string
 
 // checkClusterQueueCoverage inspects a ClusterQueue to verify if resourceGroups cover CPU and Memory.
 func (g *GKEOrchestrator) checkClusterQueueCoverage(cqName string) (bool, bool, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "clusterqueue", cqName, "-o", "json")
+	res := g.kubectl("get", "clusterqueue", cqName, "-o", "json")
 	if res.ExitCode != 0 {
 		errStr := strings.ToLower(res.Stderr)
 		if strings.Contains(errStr, "forbidden") {
@@ -435,7 +435,7 @@ func (g *GKEOrchestrator) checkKueueInstallPermissions(version string) error {
 	logging.Info("Verifying cluster permissions for Kueue installation...")
 	var missing []string
 	for _, c := range kueuePermissionChecks {
-		res := g.executor.ExecuteCommand("kubectl", "auth", "can-i", c.verb, c.resource)
+		res := g.kubectl("auth", "can-i", c.verb, c.resource)
 		if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) != "yes" {
 			missing = append(missing, fmt.Sprintf("'%s %s'", c.verb, c.resource))
 		}
@@ -447,7 +447,7 @@ func (g *GKEOrchestrator) checkKueueInstallPermissions(version string) error {
 }
 
 func (g *GKEOrchestrator) isKueueInstalled() (bool, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "crd", "clusterqueues.kueue.x-k8s.io")
+	res := g.kubectl("get", "crd", "clusterqueues.kueue.x-k8s.io")
 	if res.ExitCode == 0 {
 		logging.Info("Kueue CRD found.")
 		return true, nil
@@ -465,7 +465,7 @@ func (g *GKEOrchestrator) isKueueInstalled() (bool, error) {
 }
 
 func (g *GKEOrchestrator) isKueueDeploymentInstalled() (bool, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "deployment", "kueue-controller-manager", "-n", "kueue-system")
+	res := g.kubectl("get", "deployment", "kueue-controller-manager", "-n", "kueue-system")
 	if res.ExitCode == 0 {
 		logging.Info("Kueue deployment found.")
 		return true, nil
@@ -484,7 +484,7 @@ func (g *GKEOrchestrator) isKueueDeploymentInstalled() (bool, error) {
 
 // GetKueueVersion queries the cluster for the deployed version of the Kueue controller.
 func (g *GKEOrchestrator) GetKueueVersion() (string, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "deployment", "kueue-controller-manager", "-n", "kueue-system", "-o", "jsonpath={.spec.template.spec.containers[0].image}")
+	res := g.kubectl("get", "deployment", "kueue-controller-manager", "-n", "kueue-system", "-o", "jsonpath={.spec.template.spec.containers[0].image}")
 	if res.ExitCode != 0 {
 		return "", fmt.Errorf("failed to get Kueue version: %s\n%s", res.Stderr, res.Stdout)
 	}
@@ -531,7 +531,7 @@ func parseVersion(v string) (int, int, int) {
 // DeleteKueueDeployment deletes the kueue-controller-manager deployment from the cluster.
 func (g *GKEOrchestrator) DeleteKueueDeployment() error {
 	logging.Info("Deleting Kueue deployment...")
-	res := g.executor.ExecuteCommand("kubectl", "delete", "deployment", "kueue-controller-manager", "-n", "kueue-system", "--ignore-not-found")
+	res := g.kubectl("delete", "deployment", "kueue-controller-manager", "-n", "kueue-system", "--ignore-not-found")
 	if res.ExitCode != 0 {
 		return fmt.Errorf("failed to delete Kueue deployment: %s\n%s", res.Stderr, res.Stdout)
 	}
@@ -542,14 +542,14 @@ func (g *GKEOrchestrator) DeleteKueueDeployment() error {
 func (g *GKEOrchestrator) DeleteAllKueueResources() error {
 	resourceList := strings.Join(kueueCRDs, ",")
 	logging.Info("Deleting all Kueue custom resources...")
-	res := g.executor.ExecuteCommand("kubectl", "delete", resourceList, "--all", "--ignore-not-found", "--timeout=60s")
+	res := g.kubectl("delete", resourceList, "--all", "--ignore-not-found", "--timeout=60s")
 	if res.ExitCode != 0 {
 		logging.Info("Warning: Non-zero exit code while deleting Kueue custom resources: %s", res.Stderr)
 	}
 
 	logging.Info("Deleting Kueue CRDs...")
 	args := append([]string{"delete", "crd", "--ignore-not-found", "--timeout=60s"}, kueueCRDs...)
-	res = g.executor.ExecuteCommand("kubectl", args...)
+	res = g.kubectl(args...)
 	if res.ExitCode != 0 {
 		return fmt.Errorf("failed to delete Kueue CRDs: %s\n%s", res.Stderr, res.Stdout)
 	}
@@ -558,7 +558,7 @@ func (g *GKEOrchestrator) DeleteAllKueueResources() error {
 }
 
 func (g *GKEOrchestrator) waitForKueueWebhookFast() error {
-	res := g.executor.ExecuteCommand("kubectl", "rollout", "status", "deployment/kueue-controller-manager", "-n", "kueue-system", kueueControllerRolloutTimeout)
+	res := g.kubectl("rollout", "status", "deployment/kueue-controller-manager", "-n", "kueue-system", kueueControllerRolloutTimeout)
 	if res.ExitCode != 0 {
 		podDetails := g.getKueuePodDetails()
 		return fmt.Errorf("kueue controller manager failed to become ready: %s\n%s%s", res.Stderr, res.Stdout, podDetails)
@@ -609,7 +609,7 @@ func (g *GKEOrchestrator) probeKueueWebhookReadiness() error {
 	probeFile := f.Name()
 	defer func() {
 		_ = f.Close()
-		_ = g.executor.ExecuteCommand("kubectl", "delete", "-f", probeFile, "--ignore-not-found")
+		_ = g.kubectl("delete", "-f", probeFile, "--ignore-not-found")
 		_ = os.Remove(probeFile)
 	}()
 
@@ -621,7 +621,7 @@ func (g *GKEOrchestrator) probeKueueWebhookReadiness() error {
 	}
 
 	for i := 0; i < 20; i++ {
-		res := g.executor.ExecuteCommand("kubectl", "apply", "-f", probeFile)
+		res := g.kubectl("apply", "-f", probeFile)
 		if res.ExitCode == 0 {
 			logging.Info("Kueue webhook is fully operational.")
 			return nil
@@ -633,7 +633,7 @@ func (g *GKEOrchestrator) probeKueueWebhookReadiness() error {
 }
 
 func (g *GKEOrchestrator) getKueuePodDetails() string {
-	podRes := g.executor.ExecuteCommand("kubectl", "get", "pods", "-n", "kueue-system", "-l", "control-plane=controller-manager", "-o", "json")
+	podRes := g.kubectl("get", "pods", "-n", "kueue-system", "-l", "control-plane=controller-manager", "-o", "json")
 	var podDetails string
 	if podRes.ExitCode == 0 {
 		var podList struct {
@@ -670,9 +670,9 @@ func (g *GKEOrchestrator) getKueuePodDetails() string {
 func (g *GKEOrchestrator) checkKueueEndpoints(useEndpointSlice bool) (bool, error) {
 	var cmdEndpoints shell.CommandResult
 	if useEndpointSlice {
-		cmdEndpoints = g.executor.ExecuteCommand("kubectl", "get", "endpointslice", "-l", "kubernetes.io/service-name=kueue-webhook-service", "-n", "kueue-system", "-o", "json")
+		cmdEndpoints = g.kubectl("get", "endpointslice", "-l", "kubernetes.io/service-name=kueue-webhook-service", "-n", "kueue-system", "-o", "json")
 	} else {
-		cmdEndpoints = g.executor.ExecuteCommand("kubectl", "get", "endpoints", "kueue-webhook-service", "-n", "kueue-system", "-o", "json")
+		cmdEndpoints = g.kubectl("get", "endpoints", "kueue-webhook-service", "-n", "kueue-system", "-o", "json")
 	}
 
 	if cmdEndpoints.ExitCode != 0 {
@@ -717,7 +717,7 @@ func (g *GKEOrchestrator) checkKueueEndpoints(useEndpointSlice bool) (bool, erro
 // -----------------------------------------------------------------------------
 
 func (g *GKEOrchestrator) getClusterPriorityClasses() ([]string, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "priorityclass", "-o", "jsonpath={.items[*].metadata.name}")
+	res := g.kubectl("get", "priorityclass", "-o", "jsonpath={.items[*].metadata.name}")
 	if res.ExitCode != 0 {
 		return nil, fmt.Errorf("failed to list priority classes: %s", res.Stderr)
 	}
@@ -810,7 +810,7 @@ func (g *GKEOrchestrator) validatePriorityClass(requestedPriority string) error 
 // EnsureResourceFlavors ensures that Kueue ResourceFlavors exist for all cluster capacity flavors.
 func (g *GKEOrchestrator) EnsureResourceFlavors() error {
 	logging.Info("Ensuring Kueue ResourceFlavors exist...")
-	cmd := g.executor.ExecuteCommand("kubectl", "get", "resourceflavor", "-o", "jsonpath={.items[*].metadata.name}")
+	cmd := g.kubectl("get", "resourceflavor", "-o", "jsonpath={.items[*].metadata.name}")
 	existingFlavors := make(map[string]bool)
 	if cmd.ExitCode != 0 {
 		errStr := strings.ToLower(cmd.Stderr + " " + cmd.Stdout)

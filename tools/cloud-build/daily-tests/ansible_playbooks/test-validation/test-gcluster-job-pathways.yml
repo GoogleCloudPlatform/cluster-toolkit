@@ -95,6 +95,8 @@
     - "TEST_SERVER_VAR=server_val"
     - "--pathways-worker-env"
     - "TEST_WORKER_VAR=worker_val"
+    - "--pathways-max-slice-restarts"
+    - "5"
     - "--dry-run-out"
     - "{{ dry_run_file }}"
   changed_when: false
@@ -137,7 +139,16 @@
       | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec.template.spec.containers') | flatten
       | selectattr('name', 'equalto', 'pathways-worker') | map(attribute='env') | flatten
       | selectattr('name', 'equalto', 'TEST_WORKER_VAR') | selectattr('value', 'equalto', 'worker_val') | list | length > 0
-    fail_msg: "Environment variables failed to inject properly in dry-run output"
+    # 4. Assert worker backoffLimitPerIndex and backoffLimit match --pathways-max-slice-restarts
+    - >
+      (dry_run_yaml.spec.replicatedJobs
+      | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec') | first).backoffLimitPerIndex == 5
+    - >
+      (dry_run_yaml.spec.replicatedJobs
+      | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec') | first).backoffLimit
+      == 5 * (dry_run_yaml.spec.replicatedJobs
+      | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec') | first).parallelism
+    fail_msg: "Environment variables or slice restart limits failed to inject properly in dry-run output"
 
 # ==========================================
 # WORKFLOW 2: Submit & Environment Verification
@@ -224,16 +235,7 @@
     delegate_to: localhost
     ansible.builtin.shell:
       cmd: |
-        state_json=$(kubectl get pod -l jobset.sigs.k8s.io/jobset-name={{ job_name }},jobset.sigs.k8s.io/replicatedjob-name=pathways-head -o jsonpath='{.items[*].status.containerStatuses[?(@.name=="workload-container")].state}')
-        if echo "$state_json" | grep -q "running"; then
-          opts="-f"
-        elif echo "$state_json" | grep -q "terminated"; then
-          opts=""
-        else
-          # Neither running nor terminated; fail to trigger Ansible's retry
-          exit 1
-        fi
-        timeout 600 {{ workspace }}/gcluster job logs "{{ job_name }}" $opts --cluster {{ deployment_name }} --location {{ region }} --project {{ custom_vars.project }} --main-only | grep -m 1 "JAX TPU Result"
+        timeout 600 {{ workspace }}/gcluster job logs "{{ job_name }}" -f --cluster {{ deployment_name }} --location {{ region }} --project {{ custom_vars.project }} --main-only | grep -m 1 "JAX TPU Result"
     register: streaming_logs
     until: streaming_logs.rc == 0
     retries: 10

@@ -43,7 +43,7 @@ custom_vars:
   num_slices: 1
   workload_image: "us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest"
   workload_command: >-
-    pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; dc = jax.device_count(); print("JAX Device count:", dc); assert dc == 4, f"Expected 4 devices, got {dc}"; a = jax.random.normal(jax.random.PRNGKey(0), (2, 2)); print("JAX TPU Result:", a)'
+    pip install -U jax jaxlib pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; dc = jax.device_count(); print("JAX Device count:", dc); assert dc == 4, f"Expected 4 devices, got {dc}"; a = jax.random.normal(jax.random.PRNGKey(0), (2, 2)); print("JAX TPU Result:", a)'
   expected_log_output: "JAX TPU Result:"
 instance_type: "tpuv5p"
 scheduler: "gke"
