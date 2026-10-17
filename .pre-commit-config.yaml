@@ -101,6 +101,13 @@ repos:
     files: '^(skills/.*|tools/run_eval\.py|tools/tests/test_run_eval\.py)$'
     pass_filenames: false
     require_serial: true
+  - id: catalog-gen
+    name: catalog-gen
+    entry: go run ./tools/catalog-gen
+    language: system
+    files: '^(examples/.*\.(yaml|md)|community/examples/.*\.(yaml|md)|modules/.*\.(tf|hcl|yaml)|community/modules/.*\.(tf|hcl|yaml)|pkg/catalog/.*\.go|tools/catalog-gen/.*\.go|skills/cluster-blueprint-assistant/references/catalog\.yaml)$'
+    pass_filenames: false
+    require_serial: true
   - id: pytest-check
     name: pytest-check
     entry: pytest
