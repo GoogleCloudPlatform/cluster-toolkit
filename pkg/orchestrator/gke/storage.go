@@ -243,8 +243,23 @@ func (sm *StorageManager) ValidateMounts(mounts []string) error {
 	return nil
 }
 
-// ValidateRamdiskDir checks --gke-mtc-ramdisk-dir for valid path format, root '/' prohibition, reserved system directory prohibition, and conflicts with user mounts.
-func (sm *StorageManager) ValidateRamdiskDir(ramdiskDir string, rawMounts []string) error {
+// pathwaysMountConflict returns the built-in Pathways mount that cleanPath
+// collides with, or "" if there is none. /tmp/sidecar is only mounted when a
+// colocated Python sidecar is configured.
+func pathwaysMountConflict(cleanPath string, hasColocatedSidecar bool) string {
+	if cleanPath == "/tmp" {
+		return "/tmp"
+	}
+	if hasColocatedSidecar && (cleanPath == "/tmp/sidecar" || strings.HasPrefix(cleanPath, "/tmp/sidecar/")) {
+		return "/tmp/sidecar"
+	}
+	return ""
+}
+
+// ValidateRamdiskDir checks that --gke-mtc-ramdisk-dir is an absolute,
+// non-reserved path that collides with no --mount destination and, for
+// Pathways jobs, no built-in Pathways mount.
+func (sm *StorageManager) ValidateRamdiskDir(ramdiskDir string, rawMounts []string, isPathways bool, hasColocatedSidecar bool) error {
 	if ramdiskDir == "" {
 		return nil
 	}
@@ -254,6 +269,11 @@ func (sm *StorageManager) ValidateRamdiskDir(ramdiskDir string, rawMounts []stri
 	cleanRamdisk := normalizeMountPath(ramdiskDir)
 	if err := checkReservedSystemPath(cleanRamdisk, "--gke-mtc-ramdisk-dir"); err != nil {
 		return err
+	}
+	if isPathways {
+		if builtin := pathwaysMountConflict(cleanRamdisk, hasColocatedSidecar); builtin != "" {
+			return fmt.Errorf("--gke-mtc-ramdisk-dir path %q conflicts with built-in Pathways mount %q; choose a different path", ramdiskDir, builtin)
+		}
 	}
 	for _, m := range rawMounts {
 		pm, err := sm.parseSingleVolume(m)
@@ -265,6 +285,32 @@ func (sm *StorageManager) ValidateRamdiskDir(ramdiskDir string, rawMounts []stri
 		}
 	}
 	return nil
+}
+
+// ValidatePathwaysMounts rejects --mount destinations that collide with built-in Pathways mounts.
+func (sm *StorageManager) ValidatePathwaysMounts(rawMounts []string, hasColocatedSidecar bool) error {
+	for _, m := range rawMounts {
+		pm, err := sm.parseSingleVolume(m)
+		if err != nil {
+			return err
+		}
+		if builtin := pathwaysMountConflict(normalizeMountPath(pm.Dest), hasColocatedSidecar); builtin != "" {
+			return fmt.Errorf("mount destination %q conflicts with built-in Pathways mount %q; choose a different path", pm.Dest, builtin)
+		}
+	}
+	return nil
+}
+
+// validateJobMounts validates --mount values and, for Pathways jobs, rejects
+// destinations that collide with the built-in Pathways mounts.
+func (sm *StorageManager) validateJobMounts(rawMounts []string, isPathways bool, hasColocatedSidecar bool) error {
+	if err := sm.ValidateMounts(rawMounts); err != nil {
+		return err
+	}
+	if !isPathways {
+		return nil
+	}
+	return sm.ValidatePathwaysMounts(rawMounts, hasColocatedSidecar)
 }
 
 func missingDestOrFormatErr(vStr string) error {
@@ -932,7 +978,8 @@ func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountIn
 		}
 	}
 
-	if opts.GKEMTCEnabled {
+	// Pathways jobs get the MTC volume from pathways_jobset.tmpl, on worker pods only.
+	if opts.GKEMTCEnabled && !opts.IsPathwaysJob {
 		ramdiskDir := opts.GKEMTCRamdiskDirectory
 		mountSpecs = append(mountSpecs,
 			map[string]interface{}{"name": "cache", "mountPath": ramdiskDir},
@@ -940,11 +987,6 @@ func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountIn
 		volSpecs = append(volSpecs,
 			map[string]interface{}{"name": "cache", "csi": map[string]interface{}{"driver": multitierCheckpointCSIDriver}},
 		)
-	}
-
-	if opts.IsPathwaysJob && opts.Pathways.ColocatedPythonSidecarImage != "" {
-		mountSpecs = append(mountSpecs, map[string]interface{}{"name": "sidecar-shared-memory", "mountPath": "/tmp/sidecar"})
-		volSpecs = append(volSpecs, map[string]interface{}{"name": "sidecar-shared-memory", "emptyDir": map[string]interface{}{"medium": "Memory"}})
 	}
 
 	if len(volSpecs) == 0 {

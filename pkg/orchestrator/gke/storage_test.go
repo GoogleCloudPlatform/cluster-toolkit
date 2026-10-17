@@ -595,11 +595,13 @@ func TestValidateRamdiskDir(t *testing.T) {
 	sm := &StorageManager{}
 
 	type testCase struct {
-		name       string
-		ramdiskDir string
-		rawMounts  []string
-		wantErr    bool
-		errSubstr  string
+		name                string
+		ramdiskDir          string
+		rawMounts           []string
+		isPathways          bool
+		hasColocatedSidecar bool
+		wantErr             bool
+		errSubstr           string
 	}
 
 	tests := []testCase{
@@ -631,6 +633,48 @@ func TestValidateRamdiskDir(t *testing.T) {
 			ramdiskDir: "/tmp/ramdisk",
 			rawMounts:  []string{"gs://bucket;/data"},
 		},
+		{
+			name:       "Valid Nested /tmp Path on Pathways - Pass",
+			ramdiskDir: "/tmp/ramdisk",
+			rawMounts:  []string{"gs://bucket;/data"},
+			isPathways: true,
+		},
+		{
+			name:       "Built-in /tmp Mount Conflict on Pathways - Fail",
+			ramdiskDir: "/tmp",
+			isPathways: true,
+			wantErr:    true,
+			errSubstr:  "conflicts with built-in Pathways mount",
+		},
+		{
+			name:                "Built-in Pathways /tmp/sidecar Mount Conflict - Fail",
+			ramdiskDir:          "/tmp/sidecar",
+			isPathways:          true,
+			hasColocatedSidecar: true,
+			wantErr:             true,
+			errSubstr:           "conflicts with built-in Pathways mount",
+		},
+		{
+			name:                "Built-in Pathways /tmp/sidecar Subdir Mount Conflict - Fail",
+			ramdiskDir:          "/tmp/sidecar/shm",
+			isPathways:          true,
+			hasColocatedSidecar: true,
+			wantErr:             true,
+			errSubstr:           "conflicts with built-in Pathways mount",
+		},
+		{
+			name:                "Pathways /tmp/sidecar Without Colocated Sidecar - Pass",
+			ramdiskDir:          "/tmp/sidecar",
+			isPathways:          true,
+			hasColocatedSidecar: false,
+			wantErr:             false,
+		},
+		{
+			name:       "Pathways Sidecar Path on Non-Pathways Job - Pass",
+			ramdiskDir: "/tmp/sidecar",
+			isPathways: false,
+			wantErr:    false,
+		},
 	}
 
 	for _, reserved := range []string{"/dev", "/proc", "/sys", "/etc", "/bin", "/sbin", "/usr", "/lib", "/lib64", "/proc/"} {
@@ -653,7 +697,7 @@ func TestValidateRamdiskDir(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := sm.ValidateRamdiskDir(tt.ramdiskDir, tt.rawMounts)
+			err := sm.ValidateRamdiskDir(tt.ramdiskDir, tt.rawMounts, tt.isPathways, tt.hasColocatedSidecar)
 			if tt.wantErr {
 				if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
 					t.Errorf("expected error containing %q, got %v", tt.errSubstr, err)
@@ -663,6 +707,156 @@ func TestValidateRamdiskDir(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidatePathwaysMounts(t *testing.T) {
+	sm := &StorageManager{}
+
+	tests := []struct {
+		name                string
+		mounts              []string
+		hasColocatedSidecar bool
+		wantErr             bool
+		errSubstr           string
+	}{
+		{
+			name:   "Valid Mounts - Pass",
+			mounts: []string{"gs://bucket;/data", "gs://bucket;/tmp/checkpoints"},
+		},
+		{
+			name:      "Conflict with /tmp - Fail",
+			mounts:    []string{"gs://bucket;/tmp"},
+			wantErr:   true,
+			errSubstr: "conflicts with built-in Pathways mount \"/tmp\"",
+		},
+		{
+			name:                "Conflict with /tmp/sidecar when Sidecar Enabled - Fail",
+			mounts:              []string{"gs://bucket;/tmp/sidecar"},
+			hasColocatedSidecar: true,
+			wantErr:             true,
+			errSubstr:           "conflicts with built-in Pathways mount \"/tmp/sidecar\"",
+		},
+		{
+			name:                "Conflict with /tmp/sidecar subpath when Sidecar Enabled - Fail",
+			mounts:              []string{"gs://bucket;/tmp/sidecar/ipc"},
+			hasColocatedSidecar: true,
+			wantErr:             true,
+			errSubstr:           "conflicts with built-in Pathways mount \"/tmp/sidecar\"",
+		},
+		{
+			name:                "/tmp/sidecar Allowed when Sidecar Not Enabled - Pass",
+			mounts:              []string{"gs://bucket;/tmp/sidecar"},
+			hasColocatedSidecar: false,
+			wantErr:             false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := sm.ValidatePathwaysMounts(tt.mounts, tt.hasColocatedSidecar)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ValidatePathwaysMounts() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && !strings.Contains(err.Error(), tt.errSubstr) {
+				t.Errorf("expected error containing %q, got %q", tt.errSubstr, err.Error())
+			}
+		})
+	}
+}
+
+func TestValidateJobMounts(t *testing.T) {
+	sm := &StorageManager{}
+
+	tests := []struct {
+		name                string
+		mounts              []string
+		isPathways          bool
+		hasColocatedSidecar bool
+		errSubstr           string
+	}{
+		{
+			name:   "Non-Pathways job may mount at /tmp",
+			mounts: []string{"gs://bucket;/tmp"},
+		},
+		{
+			name:       "Pathways job rejects /tmp",
+			mounts:     []string{"gs://bucket;/tmp"},
+			isPathways: true,
+			errSubstr:  "conflicts with built-in Pathways mount \"/tmp\"",
+		},
+		{
+			name:                "Pathways job with sidecar rejects /tmp/sidecar",
+			mounts:              []string{"gs://bucket;/tmp/sidecar"},
+			isPathways:          true,
+			hasColocatedSidecar: true,
+			errSubstr:           "conflicts with built-in Pathways mount \"/tmp/sidecar\"",
+		},
+		{
+			name:       "Pathways job without sidecar allows /tmp/sidecar",
+			mounts:     []string{"gs://bucket;/tmp/sidecar"},
+			isPathways: true,
+		},
+		{
+			name:      "Non-Pathways job rejects duplicate destinations",
+			mounts:    []string{"gs://a;/data", "gs://b;/data"},
+			errSubstr: "duplicate volume destination",
+		},
+		{
+			name:       "Pathways job rejects duplicate destinations",
+			mounts:     []string{"gs://a;/data", "gs://b;/data"},
+			isPathways: true,
+			errSubstr:  "duplicate volume destination",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := sm.validateJobMounts(tt.mounts, tt.isPathways, tt.hasColocatedSidecar)
+			if tt.errSubstr == "" {
+				if err != nil {
+					t.Fatalf("validateJobMounts() unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
+				t.Errorf("validateJobMounts() error = %v, want error containing %q", err, tt.errSubstr)
+			}
+		})
+	}
+}
+
+func TestAddVolumeOptions_MTC(t *testing.T) {
+	sm := &StorageManager{}
+
+	t.Run("Standard job adds MTC cache volume to VolumesYAML and VolumeMountsYAML", func(t *testing.T) {
+		opts := ManifestOptions{
+			GKEMTCEnabled:          true,
+			GKEMTCRamdiskDirectory: "/tmp/mtc",
+			IsPathwaysJob:          false,
+		}
+		sm.AddVolumeOptions(&opts, nil)
+		if !strings.Contains(opts.VolumesYAML, multitierCheckpointCSIDriver) {
+			t.Errorf("expected VolumesYAML to contain MTC CSI driver for standard job, got %q", opts.VolumesYAML)
+		}
+		if !strings.Contains(opts.VolumeMountsYAML, "mountPath: /tmp/mtc") {
+			t.Errorf("expected VolumeMountsYAML to contain /tmp/mtc for standard job, got %q", opts.VolumeMountsYAML)
+		}
+	})
+
+	t.Run("Pathways job leaves MTC volumes to the Pathways template", func(t *testing.T) {
+		opts := ManifestOptions{
+			GKEMTCEnabled:          true,
+			GKEMTCRamdiskDirectory: "/tmp/mtc",
+			IsPathwaysJob:          true,
+			Pathways: orchestrator.PathwaysJobDefinition{
+				ColocatedPythonSidecarImage: "gcr.io/pathways/sidecar:latest",
+			},
+		}
+		sm.AddVolumeOptions(&opts, nil)
+		if opts.VolumesYAML != "" || opts.VolumeMountsYAML != "" {
+			t.Errorf("expected no shared volumes for Pathways job, got VolumesYAML=%q VolumeMountsYAML=%q", opts.VolumesYAML, opts.VolumeMountsYAML)
+		}
+	})
 }
 
 func TestProcessMounts_Basic(t *testing.T) {
