@@ -337,7 +337,6 @@ func (g *GKEOrchestrator) removeDescriptionFields(data map[interface{}]interface
 // ValidateClusterState runs all cluster-specific validations to fail early on invalid state.
 func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) error {
 	validators := []func() error{
-		func() error { return g.checkClusterConnectivity(job.ClusterName) },
 		func() error {
 			return g.validateTargetNamespaceExists(job.ClusterName, job.ClusterLocation, job.ProjectID)
 		},
@@ -346,10 +345,9 @@ func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) 
 	}
 
 	if job.PriorityClassName != "" {
-		validators = append(validators,
-			func() error { return g.ensurePriorityClassesInstalled() },
-			func() error { return g.validatePriorityClass(job.PriorityClassName) },
-		)
+		validators = append(validators, func() error {
+			return g.ensureAndValidatePriorityClass(job.PriorityClassName)
+		})
 	}
 
 	for _, validate := range validators {
@@ -506,7 +504,8 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 		return err
 	}
 
-	localQueue, err := g.resolveKueueQueue(job.KueueQueueName, ns)
+	explicitQueue := job.KueueQueueName != ""
+	localQueue, discovered, err := g.resolveKueueQueue(job.KueueQueueName, ns)
 	if err != nil {
 		if job.DryRunManifest == "" {
 			return err
@@ -516,35 +515,42 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 	}
 	job.KueueQueueName = localQueue
 
-	if job.DryRunManifest == "" {
+	if job.DryRunManifest != "" {
+		return nil
+	}
+	if err := g.ensureLocalQueueExists(localQueue, ns, discovered, explicitQueue); err != nil {
+		return err
+	}
+	if job.IsPathwaysJob {
+		return g.ensureClusterQueueCoverage(localQueue, ns)
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) ensureLocalQueueExists(localQueue, ns string, discovered, explicitQueue bool) error {
+	if discovered {
+		return nil
+	}
+	if explicitQueue {
 		exists, err := g.checkLocalQueueExists(localQueue, ns)
 		if err != nil {
 			return fmt.Errorf("failed to check if LocalQueue exists: %w", err)
 		}
-		if !exists {
-			availableQueues := g.listLocalQueues(ns)
-			availableStr := ""
-			if len(availableQueues) > 0 {
-				availableStr = fmt.Sprintf(" Available LocalQueues in namespace '%s': %s.", ns, strings.Join(availableQueues, ", "))
-			}
-			promptMsg := fmt.Sprintf("LocalQueue '%s' does not exist in namespace '%s'.%s Do you want gcluster to create default Kueue resources (ClusterQueue and LocalQueue) with calculated cluster capacity?", localQueue, ns, availableStr)
-			if shell.PromptYesNo(promptMsg) {
-				if err := g.createDefaultQueues(localQueue, ns); err != nil {
-					return err
-				}
-			} else {
-				return fmt.Errorf("LocalQueue '%s' does not exist in namespace '%s' and user declined to create default queues.%s Please create one manually or specify an existing queue using --queue flag", localQueue, ns, availableStr)
-			}
-		}
-
-		if job.IsPathwaysJob {
-			if err := g.ensureClusterQueueCoverage(localQueue, ns); err != nil {
-				return err
-			}
+		if exists {
+			return nil
 		}
 	}
-
-	return nil
+	var availableStr string
+	if explicitQueue {
+		if availableQueues := g.listLocalQueues(ns); len(availableQueues) > 0 {
+			availableStr = fmt.Sprintf(" Available LocalQueues in namespace '%s': %s.", ns, strings.Join(availableQueues, ", "))
+		}
+	}
+	promptMsg := fmt.Sprintf("LocalQueue '%s' does not exist in namespace '%s'.%s Do you want gcluster to create default Kueue resources (ClusterQueue and LocalQueue) with calculated cluster capacity?", localQueue, ns, availableStr)
+	if !shell.PromptYesNo(promptMsg) {
+		return fmt.Errorf("LocalQueue '%s' does not exist in namespace '%s' and user declined to create default queues.%s Please create one manually or specify an existing queue using --queue flag", localQueue, ns, availableStr)
+	}
+	return g.createDefaultQueues(localQueue, ns)
 }
 
 // isForbiddenError returns true if the error indicates a 403 Forbidden RBAC permission error.
