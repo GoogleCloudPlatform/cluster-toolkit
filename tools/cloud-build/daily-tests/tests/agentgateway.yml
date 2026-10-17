@@ -1,0 +1,35 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+test_name: agentgateway
+workspace: /workspace
+blueprint_yaml: "{{ workspace }}/community/examples/agentgateway-gke/agentgateway-gke.yaml"
+region: us-central1
+agentgateway_namespace: agentgateway-system
+vertex_model: gemini-2.5-flash
+create_service_accounts: true
+node_service_account_email: ""
+proxy_service_account_email: ""
+
+# Optional real-provider tests. The setup task file creates the referenced
+# Secrets in agentgateway_namespace after the initial deployment.
+external_provider_setup_tasks: ""
+external_provider_tests: []
+# Example entry (no credentials here):
+# - provider: openai
+#   model: YOUR_OPENAI_MODEL_ID
+#   secret_name: openai-secret
+#   token_parameter: max_completion_tokens
+#   max_output_tokens: 2048

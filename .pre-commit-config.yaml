@@ -26,6 +26,28 @@ repos:
     - --hook-config=--retry-once-with-cleanup=true
 - repo: local
   hooks:
+  - id: gke-gateway-api-tests
+    name: gke-gateway-api-tests
+    entry: bash -c 'terraform -chdir=modules/scheduler/gke-cluster init -backend=false -input=false && terraform -chdir=modules/scheduler/gke-cluster test -filter=tests/gateway_api.tftest.hcl'
+    language: system
+    files: '^modules/scheduler/gke-cluster/(main\.tf|variables\.tf|tests/.*)$'
+    pass_filenames: false
+    require_serial: true
+  - id: agentgateway-identity-tests
+    name: agentgateway-identity-tests
+    entry: bash -c 'for module in agentgateway-identity vertex-ai-prediction; do terraform -chdir=community/modules/project/$module init -backend=false -input=false && terraform -chdir=community/modules/project/$module test || exit; done'
+    language: system
+    files: '^community/modules/project/(agentgateway-identity|vertex-ai-prediction)/.*\.tf(test\.hcl)?$'
+    pass_filenames: false
+    require_serial: true
+  - id: agentgateway-static
+    name: agentgateway-static
+    entry: python3 tools/validate_configs/agentgateway/validate-static.py
+    language: python
+    additional_dependencies: ['PyYAML', 'jsonschema']
+    files: '^(community/examples/agentgateway-gke/|tools/validate_configs/agentgateway/)'
+    pass_filenames: false
+    require_serial: true
   - id: validate-kueue-tests
     name: validate-kueue-tests
     entry: python3 tools/cloud-build/daily-tests/validate_kueue_tests.py
