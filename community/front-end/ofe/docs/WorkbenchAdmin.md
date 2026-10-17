@@ -1,10 +1,12 @@
+# Open Front End (OFE) - Workbench Administration
+
 ## Workbench Management
 
 The Workbench feature provides a way to create and control VertexAI
 Workbenches, which provide a single interactive development
 environment using a Jupyter Notebook perfect for pre/post processing
 of data. Workbenches can be located within the same VPC as other GCP
-resources managed by the FrontEnd.
+resources managed by the OFE.
 
 ### Workbench Configuration
 
@@ -26,23 +28,52 @@ for more detail on currently available regions. Once a region is
 selected the cloud zone field will be populated with the available
 zones.
 
-### Trusted Users
+### Trusted User
 
 The trusted user field will govern which user has access to the
 workbench. This is a 1:1 relationship as each workbench has a single
-instance owner that is set by the trusted user value. The workbench
+instance owner that is set by the trusted user value. The user is
+selected from the OFE's users, and their email address is passed to
+Terraform as `trusted_user` and `owner_id`. The workbench
 is then configured to run the jupyter notebook as the users OSLogin
-account. Access to the notebook is controlled by a proxy that
+account (found from their Google social account ID). Access to the notebook is controlled by a proxy that
 requires the user to be logged into their google account to gain
 access.
 
 Workbench instances have a limited number of configurations:
+
 - Machine type
-- Boot disk type
-- Boot disk capacity
+- Boot disk type: Standard Persistent Disk (`PD_STANDARD`, the default),
+  Balanced Persistent Disk (`PD_BALANCED`) or SSD Persistent Disk (`PD_SSD`)
+- Boot disk capacity in GB (default and minimum 120)
 - Image type
+- Attached cluster (optional)
 
 ![Workbench create process part 2](images/Workbench-Create-2.png)
+
+### Attached cluster
+
+The optional *attached cluster* field lists clusters that are currently running
+(cloud state "m"). The workbench and the cluster must share a VPC, otherwise
+the form is rejected with "Cluster and workbench must share a vpc". When a
+cluster is attached, the cluster's filesystem mount points are copied to the
+workbench, and the workbench can be used to submit jobs to that cluster.
+
+### Workbench status
+
+| Status | Meaning |
+| ------ | ------- |
+| `n` | Newly configured; only a database record exists |
+| `c` | Being created |
+| `i` | Being initialised |
+| `r` | Ready |
+| `s` | Stopped (can be restarted) |
+| `t` | Terminating |
+| `e` | Deployment has failed |
+| `d` | Destroyed |
+
+The `s` status is defined in the model; the *Start Workbench* action in the
+list is offered for newly configured (`n`) workbenches only.
 
 ### Machine type & Workbench Presets
 
@@ -50,7 +81,7 @@ An administrator can configure any type of machine type that is
 available. Users with the "Normal User" class will only be able to
 create workbenches using the preset machine type configurations while
 users with the "Viewer" class will not be able to create workbenches
-for themselves. The Cluster Toolkit Frontend comes with some
+for themselves. The Open Front End (OFE) comes with some
 pre-configured workbench presets:
 - Small - 1x core with 3840 Memory (n1-standard-1)
 - Medium - 2x cores with 7680 Memory (n1-standard-2)
@@ -97,6 +128,7 @@ If a workbench is stuck in "Creating" status this can be resolved by
 manually changing the status back to newly created in the admin
 portal and then starting the creation process again. Logs for this
 process can be seen at
-`$HPCtoolkitHome/frontend/workbenches/workbench_##/terraform/google/`
-where HPCtoolkitHome is normally /opt/gcluster and ## will be the id
+`$OFE_HOME/workbenches/workbench_##/terraform/google/`
+where `$OFE_HOME` is normally
+`/opt/gcluster/cluster-toolkit/community/front-end/ofe` and ## will be the id
 number of the workbench in question.

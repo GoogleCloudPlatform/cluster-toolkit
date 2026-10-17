@@ -54,3 +54,5 @@ No modules.
 | ---- | ----------- |
 | <a name="output_subnet_name"></a> [subnet\_name](#output\_subnet\_name) | Name of the generated subnet |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+
+> **Note:** this module is internal to the OFE server deployment in `tf/`, which `deploy.sh` and `teardown.sh` run. It is created only when no subnet is given. Do not use it on its own.
