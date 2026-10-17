@@ -86,6 +86,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
   * [hpc-slurm-google-cloud-dedicated.yaml](#hpc-slurm-google-cloud-dedicatedyaml-) ![community-badge]
+  * [cloudsql-database.yaml](#cloudsql-databaseyaml--) ![community-badge] ![experimental-badge]
   * [cloud-build-remote.yaml](#cloud-build-remoteyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-scale.yaml](#hpc-slurm-scaleyaml-) ![community-badge]
   * [hpc-slurm-multiregion-scale.yaml](#hpc-slurm-multiregion-scaleyaml-) ![community-badge]
@@ -1962,6 +1963,14 @@ Creates a Slurm cluster on C3 machine types for Google Cloud Dedicated (GCD) and
 The deployment instructions can be found in the [README](../community/examples/hpc-slurm-google-cloud-dedicated/README.md).
 
 [hpc-slurm-google-cloud-dedicated.yaml]: ../community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml
+
+### [cloudsql-database.yaml] ![community-badge] ![experimental-badge]
+
+A private Cloud SQL instance whose generated password is delivered through
+Secret Manager; see the [cloudsql] module README.
+
+[cloudsql]: ../community/modules/database/cloudsql/README.md
+[cloudsql-database.yaml]: ../community/examples/cloudsql-database.yaml
 
 ### [cloud-build-remote.yaml] ![community-badge] ![experimental-badge]
 
