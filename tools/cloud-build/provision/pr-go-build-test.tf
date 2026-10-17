@@ -21,6 +21,10 @@ resource "google_cloudbuild_trigger" "pr_go_build_test" {
   description = "Test that the PR builds with Go ${each.key}"
 
   build {
+    timeout = "1200s"
+    options {
+      machine_type = "N1_HIGHCPU_8"
+    }
     step {
       name       = "golang:${each.key}"
       entrypoint = "/bin/bash"
