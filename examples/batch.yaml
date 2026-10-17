@@ -47,6 +47,10 @@ deployment_groups:
       task_count: 8
       task_count_per_node: 4
       allow_automatic_updates: false
+      max_retry_count: 2
+      lifecycle_policies:
+      - action: RETRY_TASK
+        exit_codes: [50001]
 
   - id: batch-login
     source: modules/scheduler/batch-login-node
