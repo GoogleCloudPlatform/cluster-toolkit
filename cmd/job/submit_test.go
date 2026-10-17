@@ -41,7 +41,6 @@ func TestMain(m *testing.M) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 			ArtifactRegistryAPIEnabled:   true,
 		},
 	}
@@ -79,7 +78,6 @@ func TestSubmitCmd_PathwaysDryRun(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -154,7 +152,6 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -223,7 +220,6 @@ func TestSubmitCmd_TPUWithNumNodes_Fails(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -440,7 +436,6 @@ func (m *MockPrereqStore) Load() PrereqState {
 		state.ADCConfigured = true
 		state.KubectlInstalled = true
 		state.GKEGCloudAuthPluginInstalled = true
-		state.DockerCredsConfigured = true
 		state.ArtifactRegistryAPIEnabled = true
 	}
 	return state
@@ -616,7 +611,6 @@ func TestSubmitCmd_InvalidGKENAPProvisioning(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -656,7 +650,6 @@ func TestSubmitCmd_ReservationModelWithoutName_Fails(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -696,7 +689,6 @@ func TestSubmitCmd_NonReservationModelWithName_Fails(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -1132,7 +1124,6 @@ func TestSubmitCmd_PathwaysMTCFlags(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -1186,7 +1177,6 @@ func TestSubmitCmd_PathwaysHeadless(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -1253,7 +1243,7 @@ func TestSubmitCmd_SkipPrereqs_BypassesChecks(t *testing.T) {
 		"--skip-prereqs", "true",
 	)
 
-	// Since --skip-prereqs is true, all ensureBasicPrerequisites and ensurePrerequisites
+	// Since --skip-prereqs is true, all ensureBasicPrerequisites and ensureBuildPrerequisites
 	// checks must be bypassed, making it succeed and reach the mock orchestrator.
 	if err != nil {
 		t.Fatalf("expected no error when --skip-prereqs is true, got: %v", err)
@@ -1298,6 +1288,68 @@ func TestSubmitCmd_SkipPrereqsFalse_RunsChecks(t *testing.T) {
 	// which will fail either due to absence of gcloud or missing authentication in test env.
 	if err == nil {
 		t.Fatalf("expected an error (prerequisite check failure) since --skip-prereqs is false/omitted, but got nil")
+	}
+}
+
+// Build prerequisites (Artifact Registry API, Docker credentials) only apply when
+// gcluster builds and pushes the image; a pre-built --image is pulled by the nodes.
+func TestSubmitCmd_BuildPrerequisitesOnlyForCraneBuild(t *testing.T) {
+	t.Setenv("GCLUSTER_IMAGE_REPO", "test-repo")
+	t.Setenv("USER", "tester")
+	buildDir := t.TempDir()
+
+	tests := []struct {
+		name       string
+		imageArgs  []string
+		wantErr    bool
+		wantARCall bool
+	}{
+		{
+			name:      "pre-built image",
+			imageArgs: []string{"--image", "us-south1-docker.pkg.dev/other-project/repo/app:tag"},
+		},
+		{
+			name:       "Crane build",
+			imageArgs:  []string{"--base-image", "python:3.9-slim", "--build-context", buildDir},
+			wantErr:    true,
+			wantARCall: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupSubmitTestEnv(t)
+			executed := stubPrereqCommands(t)
+
+			args := append([]string{
+				"submit",
+				"--name", "test-build-prereqs",
+				"--command", "echo hello",
+				"--compute-type", "n2-standard-4",
+				"--cluster", "test-cluster",
+				"--location", "us-west4-a",
+				"--project", "test-project",
+			}, tt.imageArgs...)
+			out, err := executeCommand(JobCmd, args...)
+
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("submit error = %v, wantErr %v\noutput:\n%s", err, tt.wantErr, out)
+			}
+			if got := strings.Contains(out, "Docker Credentials"); got != tt.wantErr {
+				t.Errorf("output asks for Docker credentials = %v, want %v\noutput:\n%s", got, tt.wantErr, out)
+			}
+			if got := ranArtifactRegistryCheck(*executed); got != tt.wantARCall {
+				t.Errorf("Artifact Registry API check ran = %v, want %v\nexecuted: %v", got, tt.wantARCall, *executed)
+			}
+			if tt.wantErr {
+				if want := "gcloud auth configure-docker us-west4-docker.pkg.dev --quiet"; !strings.Contains(out, want) {
+					t.Errorf("expected remediation %q, got:\n%s", want, out)
+				}
+				if strings.Contains(out, "gcr.io") {
+					t.Errorf("remediation must not mention gcr.io:\n%s", out)
+				}
+			}
+		})
 	}
 }
 

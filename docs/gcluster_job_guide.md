@@ -26,12 +26,14 @@ If you use `--build-context` to build images on-the-fly, you must set:
 > * **Gcloud Authentication**: Checks if authenticated and if Application Default Credentials (ADC) are valid.
 > * **`kubectl` Installation**: Checks if `kubectl` is installed.
 > * **GKE Auth Plugin**: Checks if `gke-gcloud-auth-plugin` is installed.
-> * **Container Credential Helper**: Checks if Docker is configured for GCR and Artifact Registry.
-> * **Artifact Registry API**: Checks if `artifactregistry.googleapis.com` is enabled.
+> * **Artifact Registry API** (Crane builds only): Checks if `artifactregistry.googleapis.com` is enabled in the cluster's project.
+> * **Container Credential Helper** (Crane builds only): Checks that Docker uses `gcloud` credentials for the Artifact Registry host the build pushes to (`<cluster-region>-docker.pkg.dev`).
+>
+> The two Crane-build checks only run when `gcluster` builds and pushes the image itself (`--base-image` with `--build-context`). A pre-built `--image` is pulled by the cluster nodes and needs neither.
 >
 > If any required dependencies are missing or unconfigured, `gcluster` will identify them and print the necessary installation or remediation commands directly to your console for review and execution
 >
-> Successful checks are remembered in `~/.gcluster/job_prereq_state.json` to optimize subsequent runs. Checks are re-run if the state is older than 24 hours or if you switch projects.
+> Successful checks are remembered in `~/.gcluster/job_prereq_state.json` to optimize subsequent runs. Checks are re-run if the state is older than 24 hours or if you switch projects. The Docker credential check is not cached: it reads your local Docker config on every Crane build, because the registry depends on the cluster's region.
 >
 > **Bypassing Checks:** If you are running `gcluster` in a complex environment (such as an automated CI/CD pipeline without a human `gcloud` session, a system with custom Docker credential helpers, or an environment with strict least-privilege IAM limits), you can completely bypass these validations by appending the `--skip-prereqs` flag.
 
