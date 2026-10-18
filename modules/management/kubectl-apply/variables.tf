@@ -151,7 +151,8 @@ variable "kueue" {
   description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
   type = object({
     # ATTENTION: If you update the KUEUE's default version below, please also update the corresponding
-    # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go. (note the 'v' prefix there)
+    # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go (note the 'v' prefix there)
+    # and keep kueue/kueue-manager-config.yaml in sync with the chart's default managerConfig.controllerManagerConfigYaml.
     version                         = optional(string, "0.19.6")
     install                         = optional(bool, false)
     config_path                     = optional(string, null)
@@ -182,7 +183,12 @@ variable "kueue" {
       for d in [try(var.kueue.wait_for_pods_ready.timeout, null), try(var.kueue.wait_for_pods_ready.recovery_timeout, null)] :
       d == null || can(regex("^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$", d))
     ])
-    error_message = "kueue.wait_for_pods_ready.timeout and recovery_timeout must be Go duration strings (e.g. '30m', '1.5h', '0s')."
+    error_message = "kueue.wait_for_pods_ready.timeout and recovery_timeout must be Go duration strings (e.g. '30m', '1.5h', or '0s' for recovery_timeout)."
+  }
+
+  validation {
+    condition     = try(var.kueue.wait_for_pods_ready.timeout, null) == null || can(regex("[1-9]", var.kueue.wait_for_pods_ready.timeout))
+    error_message = "kueue.wait_for_pods_ready.timeout must be greater than 0s ('0s' is only valid for recovery_timeout)."
   }
 
   validation {
