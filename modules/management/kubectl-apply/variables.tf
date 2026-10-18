@@ -77,7 +77,7 @@ resource "terraform_data" "kueue_validations" {
     }
     precondition {
       # On Kueue 0.15.x a zero recoveryTimeout evicts immediately; 0.16+ treats it as "never".
-      condition     = !var.kueue.install || module.kueue_zero_recovery_timeout_check.is_greater_than_or_equal || !can(regex("^(0+(\\.0+)?(ns|us|ms|s|m|h))+$", try(var.kueue.wait_for_pods_ready.recovery_timeout, "")))
+      condition     = !var.kueue.install || module.kueue_zero_recovery_timeout_check.is_greater_than_or_equal || !can(regex("^(0+(\\.0+)?(ns|us|ms|s|m|h))+$", coalesce(try(var.kueue.wait_for_pods_ready.recovery_timeout, null), "1s")))
       error_message = "kueue.wait_for_pods_ready.recovery_timeout of zero is not supported on Kueue 0.15.x (it evicts immediately there). Use Kueue >= 0.16.0 or a non-zero value."
     }
   }

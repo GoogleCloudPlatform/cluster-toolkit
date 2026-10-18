@@ -286,6 +286,7 @@ limitations under the License.
 | <a name="module_install_slice_controller"></a> [install\_slice\_controller](#module\_install\_slice\_controller) | ./helm_install | n/a |
 | <a name="module_kubectl_apply_manifests"></a> [kubectl\_apply\_manifests](#module\_kubectl\_apply\_manifests) | ./helm_install | n/a |
 | <a name="module_kueue_pods_ready_default_on_check"></a> [kueue\_pods\_ready\_default\_on\_check](#module\_kueue\_pods\_ready\_default\_on\_check) | ../../internal/semver_compare | n/a |
+| <a name="module_kueue_rayservice_framework_check"></a> [kueue\_rayservice\_framework\_check](#module\_kueue\_rayservice\_framework\_check) | ../../internal/semver_compare | n/a |
 | <a name="module_kueue_zero_recovery_timeout_check"></a> [kueue\_zero\_recovery\_timeout\_check](#module\_kueue\_zero\_recovery\_timeout\_check) | ../../internal/semver_compare | n/a |
 
 ## Resources
