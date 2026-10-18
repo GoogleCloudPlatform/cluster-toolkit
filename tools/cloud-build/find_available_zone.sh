@@ -222,7 +222,7 @@ check_filestore_quota() {
 	local limit
 	limit=$(gcloud beta quotas info list --service=file.googleapis.com --project="${PROJECT_ID}" \
 		--filter="quotaId=${quota_id}" --format="json" 2>/dev/null |
-		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($region) or (.dimensions?.region? // "") == $region) | .details?.value? | select(. != null) | tonumber] | max' 2>/dev/null)
+		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($region) or (.dimensions?.region? // "") == $region) | (.details?.value? // "0") | tonumber] | max' 2>/dev/null)
 
 	if [[ "${limit}" == "-1" ]]; then
 		FILESTORE_QUOTA_CACHE[$region]=0
@@ -277,7 +277,7 @@ check_lustre_quota() {
 	local limit
 	limit=$(gcloud beta quotas info list --service=lustre.googleapis.com --project="${PROJECT_ID}" \
 		--filter="quotaId=Capacity" --format="json" 2>/dev/null |
-		jq -r --arg zone "$zone" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($zone) or (.dimensions?.zone? // "") == $zone) | .details?.value? | select(. != null) | tonumber] | max' 2>/dev/null)
+		jq -r --arg zone "$zone" '[.[].dimensionsInfos[]? | select((.applicableLocations? // []) | index($zone) or (.dimensions?.zone? // "") == $zone) | (.details?.value? // "0") | tonumber] | max' 2>/dev/null)
 
 	if [[ "${limit}" == "-1" ]]; then
 		LUSTRE_QUOTA_CACHE[$zone]=0
