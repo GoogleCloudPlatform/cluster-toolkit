@@ -2148,15 +2148,261 @@ func TestGeneratePathwaysManifest_MTC(t *testing.T) {
 }
 
 func TestGeneratePathwaysManifest_MTCRejectsStaleCustomTemplate(t *testing.T) {
-	dir := t.TempDir()
-	// A custom pathways_jobset.tmpl from an older gcluster version has no MTC volume.
-	stale := "apiVersion: jobset.x-k8s.io/v1alpha2\nkind: JobSet\nmetadata:\n  name: stale\n"
-	if err := os.WriteFile(filepath.Join(dir, "pathways_jobset.tmpl"), []byte(stale), 0o644); err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name        string
+		tmplContent string
+		sidecar     string
+		wantErr     string
+	}{
+		{
+			name:        "missing worker and MTC volume entirely",
+			tmplContent: "apiVersion: jobset.x-k8s.io/v1alpha2\nkind: JobSet\nmetadata:\n  name: stale\n",
+			wantErr:     "no worker replicatedJob",
+		},
+		{
+			name: "driver string only in YAML comment",
+			tmplContent: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: comment-only
+# multitier-checkpoint.csi.storage.gke.io
+spec:
+  replicatedJobs:
+  - name: worker
+    template:
+      spec:
+        template:
+          spec:
+            containers:
+            - name: pathways-worker
+`,
+			wantErr: "no multitier-checkpoint.csi.storage.gke.io volume on worker pods",
+		},
+		{
+			name: "MTC volume declared on pathways-head instead of worker",
+			tmplContent: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: head-mtc
+spec:
+  replicatedJobs:
+  - name: pathways-head
+    template:
+      spec:
+        template:
+          spec:
+            volumes:
+            - name: cache
+              csi:
+                driver: multitier-checkpoint.csi.storage.gke.io
+            containers:
+            - name: workload-container
+              volumeMounts:
+              - name: cache
+                mountPath: /tmp/mtc_checkpoints
+  - name: worker
+    template:
+      spec:
+        template:
+          spec:
+            containers:
+            - name: pathways-worker
+`,
+			wantErr: "pathways-head declares a multitier-checkpoint.csi.storage.gke.io volume",
+		},
+		{
+			name: "worker declares MTC volume but pathways-worker does not mount it at ramdisk dir",
+			tmplContent: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: worker-unmounted
+spec:
+  replicatedJobs:
+  - name: worker
+    template:
+      spec:
+        template:
+          spec:
+            volumes:
+            - name: cache
+              csi:
+                driver: multitier-checkpoint.csi.storage.gke.io
+            containers:
+            - name: pathways-worker
+              volumeMounts:
+              - name: cache
+                mountPath: /wrong/path
+`,
+			wantErr: `container "pathways-worker" does not mount multitier-checkpoint.csi.storage.gke.io volume "cache" at "/tmp/mtc_checkpoints"`,
+		},
+		{
+			name:    "colocated-python-sidecar does not mount MTC volume when sidecar is enabled",
+			sidecar: "sidecar:latest",
+			tmplContent: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: sidecar-unmounted
+spec:
+  replicatedJobs:
+  - name: worker
+    template:
+      spec:
+        template:
+          spec:
+            volumes:
+            - name: cache
+              csi:
+                driver: multitier-checkpoint.csi.storage.gke.io
+            containers:
+            - name: colocated-python-sidecar
+            - name: pathways-worker
+              volumeMounts:
+              - name: cache
+                mountPath: /tmp/mtc_checkpoints
+`,
+			wantErr: `container "colocated-python-sidecar" does not mount multitier-checkpoint.csi.storage.gke.io volume "cache" at "/tmp/mtc_checkpoints"`,
+		},
 	}
-	_, err := generatePathwaysTestManifest(t, dir, false, "", "/tmp/mtc_checkpoints", nil)
-	if err == nil || !strings.Contains(err.Error(), "re-extract pathways_jobset.tmpl") {
-		t.Fatalf("GeneratePathwaysManifest() error = %v, want a hint to re-extract pathways_jobset.tmpl", err)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "pathways_jobset.tmpl"), []byte(tc.tmplContent), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, err := generatePathwaysTestManifest(t, dir, false, tc.sidecar, "/tmp/mtc_checkpoints", nil)
+			if err == nil {
+				t.Fatalf("GeneratePathwaysManifest() succeeded, want error containing %q", tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) || !strings.Contains(err.Error(), "re-extract pathways_jobset.tmpl") {
+				t.Fatalf("GeneratePathwaysManifest() error = %v, want substring %q and hint to re-extract pathways_jobset.tmpl", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateJobSetManifest_PodSpecVolumes(t *testing.T) {
+	tests := []struct {
+		name     string
+		manifest string
+		wantErr  string
+	}{
+		{
+			name: "valid JobSet volumes and mounts",
+			manifest: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+spec:
+  replicatedJobs:
+  - name: slice-job
+    template:
+      spec:
+        template:
+          spec:
+            volumes:
+            - name: dshm
+              emptyDir:
+                medium: Memory
+            containers:
+            - name: workload-container
+              volumeMounts:
+              - name: dshm
+                mountPath: /dev/shm
+`,
+		},
+		{
+			name: "JobSet mounts undefined volume",
+			manifest: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+spec:
+  replicatedJobs:
+  - name: slice-job
+    template:
+      spec:
+        template:
+          spec:
+            containers:
+            - name: workload-container
+              volumeMounts:
+              - name: missing-vol
+                mountPath: /mnt/data
+`,
+			wantErr: `replicatedJob "slice-job" container "workload-container" mounts undefined volume "missing-vol" at "/mnt/data"`,
+		},
+		{
+			name: "JobSet declares duplicate volume name",
+			manifest: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+spec:
+  replicatedJobs:
+  - name: slice-job
+    template:
+      spec:
+        template:
+          spec:
+            volumes:
+            - name: cache
+              emptyDir: {}
+            - name: cache
+              emptyDir: {}
+`,
+			wantErr: `replicatedJob "slice-job" declares duplicate volume "cache"`,
+		},
+		{
+			name: "JobSet container has duplicate volumeMount path",
+			manifest: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+spec:
+  replicatedJobs:
+  - name: slice-job
+    template:
+      spec:
+        template:
+          spec:
+            volumes:
+            - name: vol-a
+              emptyDir: {}
+            - name: vol-b
+              emptyDir: {}
+            containers:
+            - name: workload-container
+              volumeMounts:
+              - name: vol-a
+                mountPath: /mnt/shared
+              - name: vol-b
+                mountPath: /mnt/shared
+`,
+			wantErr: `replicatedJob "slice-job" container "workload-container" has duplicate volumeMount path "/mnt/shared"`,
+		},
+		{
+			name: "Job mounts undefined volume",
+			manifest: `apiVersion: batch/v1
+kind: Job
+spec:
+  template:
+    spec:
+      containers:
+      - name: workload-container
+        volumeMounts:
+        - name: missing
+          mountPath: /data
+`,
+			wantErr: `invalid Job manifest: container "workload-container" mounts undefined volume "missing" at "/data"`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateJobSetManifest(tc.manifest)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("ValidateJobSetManifest() unexpected error = %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("ValidateJobSetManifest() error = %v, want substring %q", err, tc.wantErr)
+			}
+		})
 	}
 }
 
@@ -3067,5 +3313,66 @@ func TestGenerateGKEManifest_CoordinatorEnv_TPU7xParallelContainers(t *testing.T
 	}
 	for _, c := range podSpec.Containers {
 		assertContainerEnvMap(t, c, wantEnv)
+	}
+}
+
+func TestValidatePathwaysMTCManifest_CleansMountPath(t *testing.T) {
+	manifest := `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+spec:
+  replicatedJobs:
+  - name: worker
+    template:
+      spec:
+        template:
+          spec:
+            volumes:
+            - name: cache
+              csi:
+                driver: multitier-checkpoint.csi.storage.gke.io
+            containers:
+            - name: pathways-worker
+              volumeMounts:
+              - name: cache
+                mountPath: /tmp/mtc_checkpoints/
+`
+	opts := ManifestOptions{GKEMTCEnabled: true, GKEMTCRamdiskDirectory: "/tmp/mtc_checkpoints"}
+	if err := validatePathwaysMTCManifest(manifest, opts); err != nil {
+		t.Fatalf("validatePathwaysMTCManifest() error = %v, want nil for a mountPath that differs only by a trailing slash", err)
+	}
+}
+
+func TestValidateJobSetManifest_DuplicateMountPathNormalized(t *testing.T) {
+	manifest := `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: dup-mount-norm
+spec:
+  replicatedJobs:
+  - name: worker
+    replicas: 1
+    template:
+      spec:
+        parallelism: 1
+        completions: 1
+        template:
+          spec:
+            volumes:
+            - name: vol-a
+              emptyDir: {}
+            - name: vol-b
+              emptyDir: {}
+            containers:
+            - name: main
+              image: busybox
+              volumeMounts:
+              - name: vol-a
+                mountPath: /mnt/shared
+              - name: vol-b
+                mountPath: /mnt/shared/
+`
+	err := ValidateJobSetManifest(manifest)
+	if err == nil || !strings.Contains(err.Error(), `has duplicate volumeMount path "/mnt/shared/"`) {
+		t.Fatalf("ValidateJobSetManifest() error = %v, want duplicate volumeMount path error", err)
 	}
 }
