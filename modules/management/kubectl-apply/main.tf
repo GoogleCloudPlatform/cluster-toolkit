@@ -176,8 +176,8 @@ locals {
   kueue_controller_replicas = try(var.kueue.controller_replicas, null) != null ? var.kueue.controller_replicas : (local.enable_slicing ? 3 : null)
 
   kueue_enable_wait_for_pods_ready = (
-    var.kueue.wait_for_pods_ready != null ||
-    (local.enable_pathways && module.kueue_pods_ready_default_on_check.is_greater_than_or_equal)
+    module.kueue_pods_ready_default_on_check.is_greater_than_or_equal &&
+    (var.kueue.wait_for_pods_ready != null || local.enable_pathways)
   )
   kueue_pods_ready_recovery_timeout = (
     try(var.kueue.wait_for_pods_ready.recovery_timeout, null) != null ?
@@ -189,30 +189,12 @@ locals {
     local.kueue_pods_ready_recovery_timeout != null ? { recoveryTimeout = local.kueue_pods_ready_recovery_timeout } : {},
     try(var.kueue.wait_for_pods_ready.block_admission, null) != null ? { blockAdmission = var.kueue.wait_for_pods_ready.block_admission } : {}
   ) : null
-
-  kueue_base_manager_config = yamldecode(file("${path.module}/kueue/kueue-manager-config.yaml"))
-  kueue_frameworks = [
-    for f in local.kueue_base_manager_config.integrations.frameworks : f
-    if f != "ray.io/rayservice" || module.kueue_rayservice_framework_check.is_greater_than_or_equal
-  ]
 }
 
 module "kueue_pods_ready_default_on_check" {
   source          = "../../internal/semver_compare"
   current_version = var.kueue.version
   minimum_version = "0.19.0"
-}
-
-module "kueue_rayservice_framework_check" {
-  source          = "../../internal/semver_compare"
-  current_version = var.kueue.version
-  minimum_version = "0.17.0"
-}
-
-module "kueue_zero_recovery_timeout_check" {
-  source          = "../../internal/semver_compare"
-  current_version = var.kueue.version
-  minimum_version = "0.16.0"
 }
 
 data "http" "manifest_from_url" {
@@ -264,13 +246,8 @@ module "install_kueue" {
     local.kueue_wait_for_pods_ready != null ? yamlencode({
       managerConfig = {
         controllerManagerConfigYaml = yamlencode(merge(
-          local.kueue_base_manager_config,
-          {
-            waitForPodsReady = local.kueue_wait_for_pods_ready
-            integrations = {
-              frameworks = local.kueue_frameworks
-            }
-          }
+          yamldecode(file("${path.module}/kueue/kueue-manager-config.yaml")),
+          { waitForPodsReady = local.kueue_wait_for_pods_ready }
         ))
       }
     }) : "",

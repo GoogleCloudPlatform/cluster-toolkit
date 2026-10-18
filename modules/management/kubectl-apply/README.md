@@ -97,7 +97,7 @@ If you want to enforce strict capacity sharing on the TPU pool, you can override
 
 Kueue 0.19+ enables [`waitForPodsReady`](https://kueue.sigs.k8s.io/docs/tasks/manage/setup_wait_for_pods_ready/) by default (`timeout: "30m"` and `recoveryTimeout: "30m"`). When Pathways is enabled (`enable_pathways_for_tpus: true`) on Kueue `>= 0.19.0`, this module keeps `timeout: "30m"` for initial admission deadlock protection and defaults `recoveryTimeout: "0s"`, which disables mid-run recovery eviction so elastic Pathways jobs (`--pathways-elastic-slices`) can continue training on surviving slices while waiting longer than 30 minutes for replacement TPU slice nodes. On non-Pathways clusters and earlier Kueue versions, the chart's default manager configuration is left unchanged unless `kueue.wait_for_pods_ready` is set.
 
-You can explicitly configure `timeout`, `recovery_timeout`, and `block_admission` under `kueue.wait_for_pods_ready` (`recovery_timeout: "0s"` requires Kueue `>= 0.16.0`):
+You can explicitly configure `timeout`, `recovery_timeout`, and `block_admission` under `kueue.wait_for_pods_ready` (supported on Kueue `>= 0.19.0`):
 
 ```yaml
   - id: workload_component_install
@@ -286,8 +286,6 @@ limitations under the License.
 | <a name="module_install_slice_controller"></a> [install\_slice\_controller](#module\_install\_slice\_controller) | ./helm_install | n/a |
 | <a name="module_kubectl_apply_manifests"></a> [kubectl\_apply\_manifests](#module\_kubectl\_apply\_manifests) | ./helm_install | n/a |
 | <a name="module_kueue_pods_ready_default_on_check"></a> [kueue\_pods\_ready\_default\_on\_check](#module\_kueue\_pods\_ready\_default\_on\_check) | ../../internal/semver_compare | n/a |
-| <a name="module_kueue_rayservice_framework_check"></a> [kueue\_rayservice\_framework\_check](#module\_kueue\_rayservice\_framework\_check) | ../../internal/semver_compare | n/a |
-| <a name="module_kueue_zero_recovery_timeout_check"></a> [kueue\_zero\_recovery\_timeout\_check](#module\_kueue\_zero\_recovery\_timeout\_check) | ../../internal/semver_compare | n/a |
 
 ## Resources
 
