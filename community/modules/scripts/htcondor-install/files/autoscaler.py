@@ -337,13 +337,13 @@ class AutoScaler:
             pprint(idle_nodes)
 
         # always keep size tending toward the minimum idle VMs requested
-        new_target = max(0, current_target + self.compute_instance_min_idle - n_idle + min_hosts_for_idle_jobs)
+        new_target = current_target + self.compute_instance_min_idle - n_idle + min_hosts_for_idle_jobs
         if new_target < current_target:
-            scale_down_target = max(0, min(
+            new_target = min(
                 current_target,
                 current_target + self.compute_instance_min_idle - n_idle + min_hosts_for_all_idle_jobs,
-            ))
-            new_target = max(0, max(new_target, scale_down_target))
+            )
+        new_target = max(0, new_target)
 
         if new_target > self.compute_instance_limit:
             self.size = self.compute_instance_limit
