@@ -3815,3 +3815,141 @@ func TestGetJobLogs_FollowProbesContainersBeforeStreaming(t *testing.T) {
 		})
 	}
 }
+
+func TestSubmitJob_SkipsConflictCheckOnDryRun(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	existingJobSet := unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "jobset.x-k8s.io/v1alpha2",
+			"kind":       "JobSet",
+			"metadata": map[string]interface{}{
+				"name":      "existing-job",
+				"namespace": "default",
+				"uid":       "uid-123",
+			},
+			"status": map[string]interface{}{
+				"conditions": []interface{}{
+					map[string]interface{}{
+						"type":               "Failed",
+						"status":             "True",
+						"lastTransitionTime": "2026-10-19T00:00:00Z",
+					},
+				},
+			},
+		},
+	}
+
+	newOrchestratorWithExistingJob := func(t *testing.T) *GKEOrchestrator {
+		t.Helper()
+		mockResponses := map[string][]shell.CommandResult{
+			"gcloud container clusters describe": {
+				{ExitCode: 0, Stdout: `{"locations":["us-central1-a"],"nodePools":[{"name":"gpu-pool","initialNodeCount":1,"config":{"machineType":"g2-standard-48","accelerators":[{"acceleratorCount":4,"acceleratorType":"nvidia-l4"}]}}]}`},
+			},
+			"gcloud container clusters get-credentials": {
+				{ExitCode: 0},
+			},
+			"kubectl get --raw /version": {
+				{ExitCode: 0, Stdout: `{}`},
+				{ExitCode: 0, Stdout: `{}`},
+			},
+			"kubectl get crd": {
+				{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+				{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+			},
+			"kubectl get deployment": {
+				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
+				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
+				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
+				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
+			},
+			"kubectl rollout status": {
+				{ExitCode: 0, Stdout: "successfully rolled out"},
+				{ExitCode: 0, Stdout: "successfully rolled out"},
+			},
+			"kubectl get endpointslice": {
+				{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`},
+				{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`},
+			},
+			"kubectl get clusterqueue": {
+				{ExitCode: 0, Stdout: "cluster-queue\n"},
+			},
+			"kubectl get localqueue": {
+				{ExitCode: 0, Stdout: "multislice-queue\n"},
+				{ExitCode: 0, Stdout: "multislice-queue\n"},
+			},
+			"kubectl get resourceflavors": {
+				{ExitCode: 0, Stdout: ""},
+				{ExitCode: 0, Stdout: ""},
+			},
+			"gcloud compute machine-types describe g2-standard-48": {
+				{ExitCode: 0, Stdout: `{"guestCpus": 48, "memoryMb": 192000, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "nvidia-l4"}]}`},
+			},
+		}
+		orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+		orc.SetDynamicClient(&mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": name},
+					},
+				}, nil
+			},
+			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				if strings.Contains(opts.FieldSelector, "metadata.name=existing-job") {
+					return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{existingJobSet}}, nil
+				}
+				return &unstructured.UnstructuredList{}, nil
+			},
+		})
+		return orc
+	}
+
+	t.Run("dry-run succeeds when job with same name already exists", func(t *testing.T) {
+		orc := newOrchestratorWithExistingJob(t)
+		dryRunPath := filepath.Join(t.TempDir(), "manifest.yaml")
+		job := orchestrator.JobDefinition{
+			WorkloadName:    "existing-job",
+			ClusterName:     "test-cluster",
+			ClusterLocation: "us-central1-a",
+			ProjectID:       "test-project",
+			GKENamespace:    "default",
+			ComputeType:     "g2-standard-48",
+			ImageName:       "gcr.io/test-project/test-image:latest",
+			CommandToRun:    "echo hello",
+			KueueQueueName:  "multislice-queue",
+			DryRunManifest:  dryRunPath,
+		}
+
+		if err := orc.SubmitJob(job); err != nil {
+			t.Fatalf("SubmitJob() with DryRunManifest failed unexpectedly: %v", err)
+		}
+		content, err := os.ReadFile(dryRunPath)
+		if err != nil {
+			t.Fatalf("failed to read generated dry-run manifest: %v", err)
+		}
+		if !strings.Contains(string(content), "name: existing-job") {
+			t.Errorf("dry-run manifest missing workload name; got:\n%s", string(content))
+		}
+	})
+
+	t.Run("normal submit fails when job with same name already exists", func(t *testing.T) {
+		orc := newOrchestratorWithExistingJob(t)
+		job := orchestrator.JobDefinition{
+			WorkloadName:    "existing-job",
+			ClusterName:     "test-cluster",
+			ClusterLocation: "us-central1-a",
+			ProjectID:       "test-project",
+			GKENamespace:    "default",
+			ComputeType:     "g2-standard-48",
+			ImageName:       "gcr.io/test-project/test-image:latest",
+			CommandToRun:    "echo hello",
+			KueueQueueName:  "multislice-queue",
+		}
+
+		err := orc.SubmitJob(job)
+		if err == nil || !strings.Contains(err.Error(), "job with name 'existing-job' already exists in state 'Failed'") {
+			t.Fatalf("SubmitJob() without DryRunManifest error = %v, want job conflict error", err)
+		}
+	})
+}
