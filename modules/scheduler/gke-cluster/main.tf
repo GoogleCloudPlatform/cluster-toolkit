@@ -55,6 +55,28 @@ locals {
     "WORKLOADS"
   ]
 
+  gke_monitoring_component_order = [
+    "SYSTEM_COMPONENTS",
+    "APISERVER",
+    "SCHEDULER",
+    "CONTROLLER_MANAGER",
+    "STORAGE",
+    "HPA",
+    "POD",
+    "DAEMONSET",
+    "DEPLOYMENT",
+    "STATEFULSET",
+    "CADVISOR",
+    "KUBELET",
+    "DCGM",
+    "JOBSET",
+  ]
+  raw_monitoring_components = var.enable_dcgm_monitoring && length(var.monitoring_components) > 0 ? distinct(concat(var.monitoring_components, ["DCGM"])) : distinct(var.monitoring_components)
+  monitoring_components = concat(
+    [for c in local.gke_monitoring_component_order : c if contains(local.raw_monitoring_components, c)],
+    [for c in local.raw_monitoring_components : c if !contains(local.gke_monitoring_component_order, c)]
+  )
+
   # Check if n4-standard-4 is present across all target system node pool zones
   n4_available_in_catalog = length(local.target_system_node_pool_zones) > 0 && alltrue([
     for z in local.target_system_node_pool_zones : length(data.google_compute_machine_types.available_system_machines[z].machine_types) > 0
@@ -486,7 +508,7 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   monitoring_config {
-    enable_components = var.enable_dcgm_monitoring ? distinct(concat(var.monitoring_components, ["DCGM"])) : var.monitoring_components
+    enable_components = local.monitoring_components
     managed_prometheus {
       enabled = true
       auto_monitoring_config {

@@ -243,12 +243,12 @@ variable "monitoring_components" {
   nullable    = false
   default = [
     "SYSTEM_COMPONENTS",
+    "STORAGE",
+    "HPA",
     "POD",
     "DAEMONSET",
     "DEPLOYMENT",
     "STATEFULSET",
-    "STORAGE",
-    "HPA",
     "CADVISOR",
     "KUBELET",
     "JOBSET"
