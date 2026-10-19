@@ -381,7 +381,7 @@ class AutoScaler:
             latest_claimed_nodes = {
                 val.split("@")[-1].split(".")[0]
                 for ad in latest_claimed_node_ads
-                if (val := ad.get(NODENAME_ATTRIBUTE)) is not None
+                if (val := ad.get(NODENAME_ATTRIBUTE)) is not None and isinstance(val, str)
             }
 
             idle_nodes = OrderedDict()
