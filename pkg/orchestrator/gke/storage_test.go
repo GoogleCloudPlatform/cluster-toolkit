@@ -118,19 +118,19 @@ func TestParseSingleVolume(t *testing.T) {
 			name:       "invalid scheme",
 			input:      "parallelstore://my-instance/share;/data",
 			wantErr:    true,
-			wantErrSub: "Unsupported scheme",
+			wantErrSub: "unsupported scheme",
 		},
 		{
 			name:       "invalid scheme with mode",
 			input:      "parallelstore://my-instance/share;/data;ro",
 			wantErr:    true,
-			wantErrSub: "Unsupported scheme",
+			wantErrSub: "unsupported scheme",
 		},
 		{
 			name:       "invalid pvc scheme",
 			input:      "pvc://my-claim;/data",
 			wantErr:    true,
-			wantErrSub: "Unsupported scheme: pvc. Only gs:// and filestore:// schemes are supported. To mount an existing PVC, specify the volume claim name directly without a URI scheme prefix (e.g. '<pvc-name>;<destination>').",
+			wantErrSub: "invalid volume format: pvc://my-claim;/data. unsupported scheme: pvc. Only gs:// and filestore:// schemes are supported. To mount an existing PVC (including for other storage types), specify the volume claim name directly without a URI scheme prefix (e.g. '<pvc-name>;<destination>')",
 		},
 		{
 			name:       "missing destination for gcsfuse",
@@ -545,7 +545,7 @@ func TestValidateMounts(t *testing.T) {
 				"parallelstore://foo;/data",
 			},
 			wantErr:   true,
-			errSubstr: "Unsupported scheme",
+			errSubstr: "unsupported scheme",
 		},
 		{
 			name: "root directory",
