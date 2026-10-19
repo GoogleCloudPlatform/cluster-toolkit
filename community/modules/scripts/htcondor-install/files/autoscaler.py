@@ -378,7 +378,11 @@ class AutoScaler:
                 constraint=combined_constraint,
                 projection=[NODENAME_ATTRIBUTE]
             )
-            latest_claimed_nodes = {ad[NODENAME_ATTRIBUTE].split(".")[0] for ad in latest_claimed_node_ads}
+            latest_claimed_nodes = {
+                ad[NODENAME_ATTRIBUTE].split(".")[0]
+                for ad in latest_claimed_node_ads
+                if ad.get(NODENAME_ATTRIBUTE)
+            }
 
             idle_nodes = OrderedDict()
             for instance in modifyingInstances:
@@ -388,8 +392,11 @@ class AutoScaler:
                     idle_nodes[self_link] = "modifying"
 
             for ad in latest_idle_node_ads:
-                node = ad["Machine"].split(".")[0]
-                zone = ad["CloudZone"]
+                node_attr = ad.get("Machine")
+                zone = ad.get("CloudZone")
+                if not node_attr or not zone:
+                    continue
+                node = node_attr.split(".")[0]
                 self_link = "https://www.googleapis.com/compute/v1/projects/" + \
                     self.project + "/zones/" + zone + "/instances/" + node
                 if self_link in idle_nodes:
