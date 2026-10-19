@@ -1919,11 +1919,19 @@ func TestGeneratePathwaysManifest_HeadContainerResources(t *testing.T) {
 						corev1.ResourceCPU:    resource.MustParse("16"),
 						corev1.ResourceMemory: resource.MustParse("100Gi"),
 					},
+					requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("8"),
+						corev1.ResourceMemory: resource.MustParse("32Gi"),
+					},
 				},
 				"pathways-rm": {
 					limits: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("8"),
 						corev1.ResourceMemory: resource.MustParse("32Gi"),
+					},
+					requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("2"),
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
 					},
 				},
 				"workload-container": {
@@ -1944,11 +1952,19 @@ func TestGeneratePathwaysManifest_HeadContainerResources(t *testing.T) {
 						corev1.ResourceCPU:    resource.MustParse("16"),
 						corev1.ResourceMemory: resource.MustParse("100Gi"),
 					},
+					requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("8"),
+						corev1.ResourceMemory: resource.MustParse("32Gi"),
+					},
 				},
 				"pathways-rm": {
 					limits: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("8"),
 						corev1.ResourceMemory: resource.MustParse("32Gi"),
+					},
+					requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("2"),
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
 					},
 				},
 			},
