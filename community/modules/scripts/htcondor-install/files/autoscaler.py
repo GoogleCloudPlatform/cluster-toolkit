@@ -396,7 +396,7 @@ class AutoScaler:
                 zone = ad.get("CloudZone")
                 if not node_attr or not zone:
                     continue
-                node = node_attr.split(".")[0]
+                node = node_attr.split("@")[-1].split(".")[0]
                 self_link = f"https://www.googleapis.com/compute/v1/projects/{self.project}/zones/{zone}/instances/{node}"
                 if self_link in idle_nodes:
                     idle_nodes.move_to_end(self_link)
