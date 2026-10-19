@@ -226,7 +226,7 @@ class AutoScaler:
         combined_query_str = f'JobStatus == 1 && QDate < {last_negotiation_cycle_time} && RequireId == "{self.instance_group_manager}"'
         idle_job_ads = schedd.query(constraint=combined_query_str, projection=job_attributes)
 
-        total_idle_request_cpus = sum(j[REQUEST_CPUS_ATTRIBUTE] for j in idle_job_ads)
+        total_idle_request_cpus = sum(val if isinstance(val := j.get(REQUEST_CPUS_ATTRIBUTE), (int, float)) else 1 for j in idle_job_ads)
         print(f"Total CPUs requested by idle jobs: {total_idle_request_cpus}")
 
         # Count all idle jobs (including newly submitted jobs with QDate >= last_negotiation_cycle_time)
@@ -320,7 +320,7 @@ class AutoScaler:
                 idle_nodes[self_link] = "modifying"
 
         for ad in idle_node_ads:
-            node = ad["Machine"].split(".")[0]
+            node = ad["Machine"].split("@")[-1].split(".")[0]
             zone = ad["CloudZone"]
             self_link = "https://www.googleapis.com/compute/v1/projects/" + \
                 self.project + "/zones/" + zone + "/instances/" + node

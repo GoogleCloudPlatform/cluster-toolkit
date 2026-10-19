@@ -53,7 +53,7 @@ locals {
       }
       Stop-Service condor -Force -ErrorAction SilentlyContinue
     EOT
-    } : {
+  } : {
     shutdown-script = <<-EOT
       #!/bin/bash
       if command -v condor_off >/dev/null 2>&1; then
