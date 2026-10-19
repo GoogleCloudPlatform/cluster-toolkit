@@ -59,6 +59,9 @@ locals {
       if command -v condor_off >/dev/null 2>&1; then
           condor_off -fast -startd
           sleep 5
+      elif [ -x /usr/sbin/condor_off ]; then
+          /usr/sbin/condor_off -fast -startd
+          sleep 5
       fi
       systemctl stop condor || true
     EOT
