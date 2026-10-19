@@ -92,10 +92,15 @@ class NodeActionPowerDown():
 
 @dataclass(frozen=True)
 class NodeActionPowerDownForce():
+    reason: Optional[str] = None
+
     def apply(self, nodes:List[str]) -> None:
         hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} instances to power down ({hostlist})")
-        run(f"{lookup().scontrol} update nodename={hostlist} state=power_down_force")
+        cmd = f"{lookup().scontrol} update nodename={hostlist} state=power_down_force"
+        if self.reason:
+            cmd += f" reason={shlex.quote(self.reason)}"
+        run(cmd)
 
 @dataclass(frozen=True)
 class NodeActionDeleteMIG():
@@ -368,7 +373,7 @@ def get_node_action(nodename: str) -> NodeAction:
                 if inst.scheduling.preemptible
                 else "Instance terminated"
             )
-            return NodeActionPowerDown(reason=termination_reason)
+            return NodeActionPowerDownForce(reason=termination_reason)
         if lkp.is_node_mig(nodename):
             # MIG auto-healing (default_action_on_failure=REPAIR) recreates the VM
             # (delete + insert). Do not start it; wait for RUNNING, then resume via

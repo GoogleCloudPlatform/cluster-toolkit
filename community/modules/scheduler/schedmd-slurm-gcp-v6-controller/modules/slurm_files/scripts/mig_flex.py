@@ -435,16 +435,7 @@ def resume_tpu_chunk(
         reason = shlex.quote("Node cannot be resumed, not all nodes in the target TPU slice are ready to be resumed")
         util.run(f"{lkp.scontrol} update nodename={nodelist} state=POWER_DOWN_FORCE reason={reason}", check=False)
         return
-    slices = list(util.chunked(chunk, n=vmcount))
-    if len(slices) == 1:
-        _resume_single_tpu_node(slices[0], job_id, lkp, topology=topology)
-    elif slices:
-        def _resume_slice(slice_chunk: List[str]) -> None:
-            _resume_single_tpu_node(slice_chunk, job_id, lkp, topology=topology)
-
-        for res in util.map_with_futures(_resume_slice, slices):
-            if isinstance(res, Exception):
-                raise res
+    _resume_single_tpu_node(chunk, job_id, lkp, topology=topology)
 
 
 def resume_tpu_chunks(
@@ -622,9 +613,9 @@ def _resume_single_tpu_node(
             raise RuntimeError(f"TPU MIG resize operation failed: {err_str}")
     except Exception:
         mig_self_link = (
-            f"zones/{zones[0]}/instanceGroupManagers/{mig_name}"
+            f"projects/{lkp.project}/zones/{zones[0]}/instanceGroupManagers/{mig_name}"
             if is_zonal
-            else f"regions/{region}/instanceGroupManagers/{mig_name}"
+            else f"projects/{lkp.project}/regions/{region}/instanceGroupManagers/{mig_name}"
         )
         _delete_tpu_mig(mig_self_link, chunk, lkp)
         raise

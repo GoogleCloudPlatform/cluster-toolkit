@@ -43,8 +43,10 @@ class SlurmConfigGeneratorV2605(SlurmConfigGeneratorV2511):
                 conf_options[param] = [val]
             if "tpu" not in conf_options[param]:
                 conf_options[param].append("tpu")
-        if "SlurmctldParameters" in conf_options:
-            val = conf_options["SlurmctldParameters"]
+        val = conf_options.get("SlurmctldParameters", None)
+        if not val:
+            conf_options["SlurmctldParameters"] = ["enable_async_reply"]
+        else:
             if isinstance(val, str):
                 conf_options["SlurmctldParameters"] = [val]
             if "enable_async_reply" not in conf_options["SlurmctldParameters"]:
@@ -126,7 +128,8 @@ class SlurmConfigGeneratorV2605(SlurmConfigGeneratorV2511):
         return "\n".join(combined)
 
     def install_cgroup_conf(self) -> None:
-        # tpu7x and v5p have dual cores per chip (8 VFIO devices for 4 chips), so set ConstrainDevices=no
+        # tpu7x has dual cores per chip (8 VFIO devices for 4 chips), so set ConstrainDevices=no
+        # v5p (ct5p) also requires ConstrainDevices=no so Slurm cgroups do not block VFIO IOMMU group access
         if not self.lkp.remove_device_constrain():
             return super().install_cgroup_conf()
 
