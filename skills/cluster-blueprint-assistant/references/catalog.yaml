@@ -3344,7 +3344,6 @@ blueprints:
     project_id: null
     region: null
     reservation: null
-    spot: null
     system_node_pool_disk_size_gb: 200
     tpu_topology: null
     user_namespace: default

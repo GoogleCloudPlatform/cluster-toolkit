@@ -27,6 +27,8 @@ TF_DOCS_MARKER = "<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->"
 REMOTE_SOURCE_PREFIXES = (
     "github.com/",
     "git::",
+    "git@",
+    "gcs::",
     "http://",
     "https://",
     "registry.terraform.io/",
@@ -35,9 +37,35 @@ REMOTE_SOURCE_PREFIXES = (
 
 def _hcl_block_body(content: str, start: int) -> str:
     """Returns the body of the HCL block whose opening brace ends at index `start`."""
-    depth, i = 1, start
-    while depth and i < len(content):
-        depth += {"{": 1, "}": -1}.get(content[i], 0)
+    depth, i, n = 1, start, len(content)
+    while depth and i < n:
+        ch = content[i]
+        if ch == "#":
+            i = content.find("\n", i + 1)
+            if i == -1:
+                break
+        elif ch == "/" and i + 1 < n and content[i + 1] == "/":
+            i = content.find("\n", i + 2)
+            if i == -1:
+                break
+        elif ch == "/" and i + 1 < n and content[i + 1] == "*":
+            end_comment = content.find("*/", i + 2)
+            if end_comment == -1:
+                break
+            i = end_comment + 1
+        elif ch == '"':
+            i += 1
+            while i < n:
+                if content[i] == "\\":
+                    i += 2
+                    continue
+                if content[i] == '"':
+                    break
+                i += 1
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
         i += 1
     return content[start:i]
 
@@ -66,7 +94,7 @@ def get_tf_vars_and_outputs(mod_dir: str) -> tuple[set[str], set[str], set[str]]
                 name = re.escape(m.group(1))
                 body = _hcl_block_body(content, m.end())
                 if re.search(
-                    rf"condition\s*=\s*(?:var\.{name}\s*==\s*null|length\(var\.{name}\)\s*==\s*0)\s*$",
+                    rf"condition\s*=\s*(?:var\.{name}\s*==\s*null|length\(var\.{name}\)\s*==\s*0)\s*(?:(?:#|//).*)?$",
                     body,
                     re.MULTILINE,
                 ):
@@ -88,8 +116,13 @@ def extract_modules_from_yaml(data: object) -> list[dict]:
     mods: list[dict] = []
     if isinstance(data, list):
         for item in data:
-            if isinstance(item, dict) and "source" in item and "id" in item:
-                mods.append(item)
+            if isinstance(item, dict):
+                if "source" in item and "id" in item:
+                    mods.append(item)
+                if isinstance(item.get("modules"), list):
+                    for sub in item["modules"]:
+                        if isinstance(sub, dict) and "source" in sub and "id" in sub:
+                            mods.append(sub)
     elif isinstance(data, dict):
         if "source" in data and "id" in data:
             mods.append(data)
@@ -426,7 +459,10 @@ def validate_markdown_links_and_cli() -> list[str]:
             else:
                 abs_target = os.path.normpath(os.path.join(os.path.dirname(abs_path), file_part))
 
-            if not os.path.exists(abs_target):
+            if (
+                os.path.commonpath([REPO_ROOT, os.path.abspath(abs_target)]) != REPO_ROOT
+                or not os.path.exists(abs_target)
+            ):
                 errors.append(f"{rel_path}: broken relative file link '{target}'")
                 continue
 
