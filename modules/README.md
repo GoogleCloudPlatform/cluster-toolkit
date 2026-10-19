@@ -402,7 +402,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 ### ID (Required)
 
 The `id` field is used to uniquely identify and reference a defined module.
-ID's are used in [variables](#common-settings) and become the
+ID's are used in [variables](../examples/README.md#variables-expressions-and-functions) and become the
 name of each module when writing the terraform `main.tf` file. They are also
 used in the [use](#use-optional) and [outputs](#outputs-optional) lists
 described below.

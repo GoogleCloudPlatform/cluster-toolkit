@@ -11,10 +11,11 @@
 
 ## Accelerator definition automation
 
-The `schedmd-slurm-gcp-v6` modules ([nodeset], [controller] and [login]),
-the [vm-instance] and [gke-node-pool] modules, and [htcondor-execute-point] support
-automation for defining the `guest_accelerator` config via the shared internal
-`modules/internal/gpu-definition` module and `machine_configs` injection. If the
+The [nodeset] (`schedmd-slurm-gcp-v6-nodeset`), [vm-instance] and [gke-node-pool]
+modules support automation for defining the `guest_accelerator` config via the
+shared internal `modules/internal/gpu-definition` module and `machine_configs`
+injection ([controller], [login] and [htcondor-execute-point] do not receive
+`machine_configs`, so set `guest_accelerator` explicitly on them). If the
 user supplies an explicit value for `guest_accelerator`, the automation is
 bypassed.
 

@@ -113,7 +113,7 @@ Now that the cluster is deployed and your application code is prepared, you can 
 
 ### 4.1 Unified Job Submission
 
-By specifying the `--compute-type` flag, you can use the exact same command to target a standard CPU cluster (using a full GCE machine type like `n2-standard-32`), an accelerated GPU cluster (using a GPU shorthand like `h100-80gb-8` or a GKE accelerator label like `nvidia-l4` when a matching node pool is already present on the cluster), or a TPU cluster (using a shorthand string representing total chips/cores like `v6e-8`). The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed.
+By specifying the `--compute-type` flag, you can use the exact same command to target a standard CPU cluster (using a full GCE machine type like `n2-standard-32`), an accelerated GPU cluster (using a GPU shorthand like `h100-80gb-8` or `l4-1`, a mapped GPU machine type like `a3-highgpu-8g`, or a GKE accelerator label like `nvidia-l4`), or a TPU cluster (using a shorthand string representing total chips/cores like `v6e-8`). GPU/TPU shorthands and machine types in `gcluster`'s built-in shorthand map resolve without a pre-existing node pool (so they also work on NAP clusters), whereas unmapped CPU machine types (e.g., `n2-standard-32`) and raw GKE accelerator labels (e.g., `nvidia-l4`) resolve against the cluster's existing node pools. The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed.
 
 A TPU shorthand names a slice size, not a host shape. GKE can run the same slice on different machine types of a TPU family (an 8-chip `2x4` v5e slice is one `ct5lp-hightpu-8t` host or two `ct5lp-hightpu-4t` hosts), so `gcluster` uses the machine type of that family found in the cluster's node pools. `v5e-N` and `v5litepod-N` are equivalent. To pin a specific host shape, pass the full machine type (for example `--compute-type ct5lp-hightpu-4t`).
 
@@ -370,6 +370,7 @@ Use a pipe separator (`|`) in `--node-constraint` to specify multiple allowed va
 ```bash
 ./gcluster job submit \
   --name my-fallback-job \
+  --image <CONTAINER_IMAGE> \
   --command "python app.py" \
   --compute-type c2-standard-60 \
   --node-constraint "cloud.google.com/gke-nodepool=nodepool-a|nodepool-b"
@@ -393,6 +394,7 @@ If you want to schedule a job with a smaller TPU topology on a node pool with la
 ```bash
 ./gcluster job submit \
   --name my-subslicing-job \
+  --image <CONTAINER_IMAGE> \
   --command "python app.py" \
   --compute-type v6e-4 \
   --node-constraint "cloud.google.com/gke-tpu-topology=4x4"
@@ -460,6 +462,7 @@ Use the `--gke-nap-provisioning spot` option to run your workload on Spot VMs:
 ```bash
 ./gcluster job submit \
   --name my-spot-job \
+  --image <CONTAINER_IMAGE> \
   --command "python app.py" \
   --compute-type v6e-4 \
   --gke-nap-provisioning spot
@@ -470,6 +473,7 @@ Use the `--gke-nap-provisioning reservation` option and target a GCE reservation
 ```bash
 ./gcluster job submit \
   --name my-reservation-job \
+  --image <CONTAINER_IMAGE> \
   --command "python app.py" \
   --compute-type v6e-4 \
   --gke-nap-provisioning reservation \
@@ -1241,7 +1245,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | :--- | :--- | :--- |
 | `-n, --name` | `string` | Name of the job (JobSet) to create. Used for Kubernetes resources. Maximum of 28 characters for standard workloads, or 22 characters when `--pathways` is enabled. *(Required)* |
 | `-e, --command` | `string` | Command to execute inside the container (e.g., `'python app.py'`). *(Required)* |
-| `--compute-type` | `string` | The hardware target for the job. Accepts a full GCE machine type (e.g., `n2-standard-32`), a GPU shorthand (e.g., `h100-80gb-8`), a GKE accelerator type matching an existing node pool on the cluster (e.g., `nvidia-l4`), or a TPU shorthand string representing total chips/cores (e.g., `v6e-8`). *(Required)* The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed. |
+| `--compute-type` | `string` | The hardware target for the job. GPU/TPU shorthands (e.g., `h100-80gb-8`, `l4-1`, `v6e-8`) and machine types from `gcluster`'s built-in shorthand map (e.g., `a3-highgpu-8g`) resolve without a matching node pool, so they also work on NAP clusters. Any other GCE machine type (e.g., `n2-standard-32`) or a GKE accelerator label (e.g., `nvidia-l4`) is resolved against the cluster's existing node pools. *(Required)* The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed. |
 | `-i, --image` | `string` | Full registry path of a pre-built container image to run. |
 | `-B, --base-image` | `string` | Name of the base container image to build upon (e.g., `python:3.9-slim`). |
 | `-b, --build-context` | `string` | Path to the local build context directory for on-the-fly image builds. |
@@ -1264,7 +1268,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `--topology` | `string` | TPU slice topology (e.g., `2x2x1`, `2x4`, `2x4x4`). Applies to TPU workloads only; when omitted, `gcluster` resolves it from a slice shorthand (e.g., `v6e-16` -> `4x4`) or auto-discovers it from matching TPU node pools on the cluster. |
+| `--topology` | `string` | TPU slice topology (e.g., `2x2x1`, `2x4`, `2x4x4`). Applies to TPU workloads only (rejected for GPU/CPU jobs). **Required for TPU 7x.** For other TPU types, when omitted, `gcluster` resolves it from a slice shorthand (e.g., `v6e-16` -> `4x4`) or auto-discovers it from matching TPU node pools on the cluster. |
 | `--pathways` | `flag` | If present, generates a manifest tailored for a Pathways distributed job paradigm. |
 | `--pathways-gcs-location` | `string` | GCS bucket location to store Pathways artifacts. *(Required when --pathways is set)* |
 | `--pathways-proxy-server-image` | `string` | Container image for the Pathways proxy server. |
@@ -1286,7 +1290,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 *Use these flags to tune specialized multi-GPU topologies and related node parameters.*
 
 > [!NOTE]
-> Currently, GPU workloads leverage the standard **General Flags** (such as passing `--compute-type h100-80gb-8`, `--compute-type a3-highgpu-8g`, or `--compute-type nvidia-l4`) and **GKE Only Flags** (such as placement policies). Specialized GPU flags (e.g., multi-node NVLink topologies or custom GPU drivers) will be documented here as they are added.
+> Currently, GPU workloads leverage the standard **General Flags** (such as passing GPU shorthands like `--compute-type h100-80gb-8` or `--compute-type l4-1`, mapped machine types like `--compute-type a3-highgpu-8g`, or an accelerator label matching an existing node pool like `--compute-type nvidia-l4`) and **GKE Only Flags** (such as placement policies). Specialized GPU flags (e.g., multi-node NVLink topologies or custom GPU drivers) will be documented here as they are added.
 
 #### 9.3.4 GKE & Advanced Orchestration Flags
 *These flags unlock advanced GKE capabilities, including Kueue queue priorities, workload identities, network placements, and robust lifecycle failure policies.*

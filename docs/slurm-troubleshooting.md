@@ -211,8 +211,9 @@ the `local_mount` and `filestore_share_name`.
 
 ### `local-exec provisioner error` During Terraform Apply
 
-Earlier versions of the Slurm v6 modules used `local-exec` provisioners for
-cluster configuration. Some common issues experienced when using `local-exec`
-are missing local python requirements and an incorrectly configured `gcloud` CLI.
-See the [`schedmd-slurm-gcp-v6-controller` documentation](../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md#live-cluster-reconfiguration)
+Slurm v6 modules use destroy-time `local-exec` provisioners (`enable_cleanup_compute`,
+default `true`) that call the local `gcloud` CLI to clean up compute nodes and resource
+policies during `terraform destroy` (or during `apply` when a nodeset is removed or
+replaced). Ensure `gcloud` is installed and authenticated, or see the
+[`schedmd-slurm-gcp-v6-controller` documentation](../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md#live-cluster-reconfiguration)
 for current configuration options.

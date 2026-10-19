@@ -255,7 +255,7 @@ breaking changes.
 ```yaml
   # Before
   - id: spack-install
-    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/spack-install?ref=v1.22.1&depth=1
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/spack-install?ref=v1.21.0&depth=1
     settings:
       install_dir: /sw/spack
       compilers:
@@ -301,7 +301,7 @@ version from GitHub. Note the source line in the following example.
 
 ```yaml
   - id: spack-install
-    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/spack-install?ref=v1.22.1&depth=1
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/spack-install?ref=v1.21.0&depth=1
 ```
 
 ## License
