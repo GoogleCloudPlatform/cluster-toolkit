@@ -298,7 +298,7 @@ class AutoScaler:
             constraint=combined_constraint,
             projection=[NODENAME_ATTRIBUTE]
         )
-        claimed_nodes = [ ad[NODENAME_ATTRIBUTE].split("@")[-1].split(".")[0] for ad in claimed_node_ads]
+        claimed_nodes = [ ad.get(NODENAME_ATTRIBUTE, "").split("@")[-1].split(".")[0] for ad in claimed_node_ads]
 
         # treat OrderedDict as a set by ignoring key values; this set will
         # contain VMs we would consider deleting, in inverse order of
@@ -320,7 +320,7 @@ class AutoScaler:
                 idle_nodes[self_link] = "modifying"
 
         for ad in idle_node_ads:
-            node = ad["Machine"].split("@")[-1].split(".")[0]
+            node = ad.get("Machine", "").split("@")[-1].split(".")[0]
             zone = ad["CloudZone"]
             self_link = "https://www.googleapis.com/compute/v1/projects/" + \
                 self.project + "/zones/" + zone + "/instances/" + node
