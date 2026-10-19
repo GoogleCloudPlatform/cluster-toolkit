@@ -369,7 +369,7 @@ class AutoScaler:
             # Re-query the collector for current idle and claimed nodes so we do not
             # delete nodes that became claimed during the GCP API calls
             latest_idle_node_ads = coll.query(
-                ad_type=htcondor.AdTypes.Startd,
+                ad_type=htcondor.AdType.Startd,
                 constraint=combined_node_query,
                 projection=["Machine", "CloudZone"]
             )
