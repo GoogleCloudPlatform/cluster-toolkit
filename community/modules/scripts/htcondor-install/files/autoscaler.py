@@ -233,7 +233,7 @@ class AutoScaler:
         # so that scale-down does not delete idle nodes while newly submitted jobs are waiting to match.
         all_idle_query_str = f'JobStatus == 1 && RequireId == "{self.instance_group_manager}"'
         all_idle_job_ads = schedd.query(constraint=all_idle_query_str, projection=job_attributes)
-        all_idle_request_cpus = sum(j.get(REQUEST_CPUS_ATTRIBUTE) if isinstance(j.get(REQUEST_CPUS_ATTRIBUTE), (int, float)) else 1 for j in all_idle_job_ads)
+        all_idle_request_cpus = sum(val if isinstance(val, (int, float)) else 1 for j in all_idle_job_ads for val in (j.get(REQUEST_CPUS_ATTRIBUTE),))
         min_hosts_for_all_idle_jobs = math.ceil(all_idle_request_cpus / self.cores_per_node)
 
         if self.debug > 1:
@@ -379,9 +379,9 @@ class AutoScaler:
                 projection=[NODENAME_ATTRIBUTE]
             )
             latest_claimed_nodes = {
-                ad[NODENAME_ATTRIBUTE].split(".")[0]
+                val.split(".")[0]
                 for ad in latest_claimed_node_ads
-                if ad.get(NODENAME_ATTRIBUTE)
+                if (val := ad.get(NODENAME_ATTRIBUTE)) is not None
             }
 
             idle_nodes = OrderedDict()
@@ -397,8 +397,7 @@ class AutoScaler:
                 if not node_attr or not zone:
                     continue
                 node = node_attr.split(".")[0]
-                self_link = "https://www.googleapis.com/compute/v1/projects/" + \
-                    self.project + "/zones/" + zone + "/instances/" + node
+                self_link = f"https://www.googleapis.com/compute/v1/projects/{self.project}/zones/{zone}/instances/{node}"
                 if self_link in idle_nodes:
                     idle_nodes.move_to_end(self_link)
                 idle_nodes[self_link] = "idle"
@@ -406,7 +405,7 @@ class AutoScaler:
 
             # Re-verify that no new idle jobs arrived while querying GCP APIs
             latest_idle_job_ads = schedd.query(constraint=all_idle_query_str, projection=job_attributes)
-            latest_idle_request_cpus = sum(j.get(REQUEST_CPUS_ATTRIBUTE) if isinstance(j.get(REQUEST_CPUS_ATTRIBUTE), (int, float)) else 1 for j in latest_idle_job_ads)
+            latest_idle_request_cpus = sum(val if isinstance(val, (int, float)) else 1 for j in latest_idle_job_ads for val in (j.get(REQUEST_CPUS_ATTRIBUTE),))
             latest_min_hosts = math.ceil(latest_idle_request_cpus / self.cores_per_node)
             latest_scale_down_target = max(0, min(
                 current_target,
