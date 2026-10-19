@@ -24,6 +24,7 @@ import (
 	"hpc-toolkit/pkg/modulereader"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -152,11 +153,12 @@ func BuildCatalog(repoRoot string) (Catalog, error) {
 // examples/ and community/examples/.
 func ScanBlueprints(repoRoot string, readmeDescs map[string]string) ([]BlueprintEntry, error) {
 	searchRoots := []string{"examples", filepath.Join("community", "examples")}
+	tracked := gitTrackedFiles(repoRoot, searchRoots...)
 	var entries []BlueprintEntry
 
 	for _, relRoot := range searchRoots {
 		absRoot := filepath.Join(repoRoot, relRoot)
-		found, err := scanBlueprintDir(repoRoot, absRoot, readmeDescs)
+		found, err := scanBlueprintDir(repoRoot, absRoot, readmeDescs, tracked)
 		if err != nil {
 			return nil, err
 		}
@@ -169,22 +171,45 @@ func ScanBlueprints(repoRoot string, readmeDescs map[string]string) ([]Blueprint
 	return entries, nil
 }
 
-func scanBlueprintDir(repoRoot, absRoot string, readmeDescs map[string]string) ([]BlueprintEntry, error) {
+func scanBlueprintDir(repoRoot, absRoot string, readmeDescs map[string]string, tracked map[string]bool) ([]BlueprintEntry, error) {
 	if _, err := os.Stat(absRoot); os.IsNotExist(err) {
 		return nil, nil
 	}
 	var entries []BlueprintEntry
 	err := filepath.WalkDir(absRoot, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil || d.IsDir() || !isCandidateBlueprintFile(path) {
+		if walkErr != nil || d.IsDir() || !isCandidateBlueprintFile(path) || !isTracked(repoRoot, path, tracked) {
 			return walkErr
 		}
-		entry, ok := parseBlueprintEntry(repoRoot, path, readmeDescs)
+		entry, ok := parseBlueprintEntry(repoRoot, path, readmeDescs, tracked)
 		if ok {
 			entries = append(entries, entry)
 		}
 		return nil
 	})
 	return entries, err
+}
+
+func gitTrackedFiles(repoRoot string, roots ...string) map[string]bool {
+	args := append([]string{"-C", repoRoot, "ls-files", "-z", "--"}, roots...)
+	out, err := exec.Command("git", args...).Output()
+	if err != nil {
+		return nil
+	}
+	set := make(map[string]bool)
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p != "" {
+			set[p] = true
+		}
+	}
+	return set
+}
+
+func isTracked(repoRoot, absPath string, tracked map[string]bool) bool {
+	if tracked == nil {
+		return true
+	}
+	rel, err := filepath.Rel(repoRoot, absPath)
+	return err == nil && tracked[filepath.ToSlash(rel)]
 }
 
 func isCandidateBlueprintFile(path string) bool {
@@ -195,7 +220,7 @@ func isCandidateBlueprintFile(path string) bool {
 	return !strings.HasSuffix(base, "-deployment.yaml") && base != "deployment.yaml"
 }
 
-func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string) (BlueprintEntry, bool) {
+func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string, tracked map[string]bool) (BlueprintEntry, bool) {
 	bp, _, err := config.NewBlueprint(absPath)
 	if err != nil || len(bp.Groups) == 0 || bp.AIAssisted {
 		return BlueprintEntry{}, false
@@ -211,7 +236,7 @@ func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string
 	if varsMap == nil {
 		varsMap = make(map[string]interface{})
 	}
-	deployRel := findCompanionDeployment(repoRoot, absPath, bp.BlueprintName, varsMap)
+	deployRel := findCompanionDeployment(repoRoot, absPath, bp.BlueprintName, varsMap, tracked)
 	modules := extractModuleSummaries(bp)
 	scheduler := inferScheduler(modules)
 	machineTypes := extractMachineTypes(bp, varsMap)
@@ -232,9 +257,12 @@ func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string
 	}, true
 }
 
-func findCompanionDeployment(repoRoot, bpAbsPath, blueprintName string, varsMap map[string]interface{}) string {
+func findCompanionDeployment(repoRoot, bpAbsPath, blueprintName string, varsMap map[string]interface{}, tracked map[string]bool) string {
 	dir := filepath.Dir(bpAbsPath)
 	for _, cand := range companionDeploymentCandidates(dir, filepath.Base(bpAbsPath), blueprintName) {
+		if !isTracked(repoRoot, cand, tracked) {
+			continue
+		}
 		if _, err := os.Stat(cand); err != nil {
 			continue
 		}
@@ -543,9 +571,11 @@ func lookupDescription(repoRoot, absPath, relPath string, readmeDescs map[string
 	stem := strings.TrimSuffix(base, ".yaml")
 	parentDir := filepath.Base(filepath.Dir(absPath))
 
-	for _, key := range []string{base, stem, parentDir, parentDir + ".yaml"} {
-		if d := readmeDescs[key]; d != "" {
-			return d
+	if !strings.HasPrefix(relPath, "examples/gke-consumption-options/") {
+		for _, key := range []string{base, stem, parentDir, parentDir + ".yaml"} {
+			if d := readmeDescs[key]; d != "" {
+				return d
+			}
 		}
 	}
 	if parentDir != "examples" {

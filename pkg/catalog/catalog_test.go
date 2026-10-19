@@ -124,9 +124,11 @@ func verifyAllDeploymentFilesPaired(t *testing.T, root string, blueprints []Blue
 			paired[bp.DeploymentPath] = true
 		}
 	}
-	for _, relRoot := range []string{"examples", filepath.Join("community", "examples")} {
+	roots := []string{"examples", filepath.Join("community", "examples")}
+	tracked := gitTrackedFiles(root, roots...)
+	for _, relRoot := range roots {
 		_ = filepath.WalkDir(filepath.Join(root, relRoot), func(path string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), "-deployment.yaml") {
+			if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), "-deployment.yaml") || !isTracked(root, path, tracked) {
 				return err
 			}
 			rel, _ := filepath.Rel(root, path)
@@ -183,6 +185,14 @@ func verifyMultiBlueprintDescriptions(t *testing.T, byPath map[string]BlueprintE
 	if !strings.Contains(a3mGcs.Description, "GCSFuse with Local SSD Cache") {
 		t.Errorf("expected GCSFuse with Local SSD Cache description for a3mega-slurm-gcsfuse-lssd-blueprint.yaml, got %q", a3mGcs.Description)
 	}
+	for bpPath := range byPath {
+		if strings.HasPrefix(bpPath, "examples/gke-consumption-options/") {
+			desc := byPath[bpPath].Description
+			if !strings.Contains(desc, "DWS") && !strings.Contains(desc, "Dynamic Workload Scheduler") {
+				t.Errorf("expected DWS description for %s, got %q", bpPath, desc)
+			}
+		}
+	}
 }
 
 func TestSkipAIAssistedAndYAMLQuoting(t *testing.T) {
@@ -193,13 +203,28 @@ func TestSkipAIAssistedAndYAMLQuoting(t *testing.T) {
 	if err := os.WriteFile(aiBP, []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write temp blueprint: %v", err)
 	}
-	if _, ok := parseBlueprintEntry(root, aiBP, nil); ok {
+	if _, ok := parseBlueprintEntry(root, aiBP, nil, nil); ok {
 		t.Errorf("expected blueprint with ai_assisted: true to be skipped by parseBlueprintEntry")
 	}
 	for _, s := range []string{"line1\nline2", "col1\tcol2", "cr\rreturn"} {
 		if !needsQuotedYAMLString(s) {
 			t.Errorf("expected needsQuotedYAMLString(%q) to be true", s)
 		}
+	}
+	untrackedDeploy := filepath.Join(root, "examples", "hpc-slurm-deployment.yaml")
+	if err := os.WriteFile(untrackedDeploy, []byte("vars:\n  project_id: leaked-project\n"), 0644); err != nil {
+		t.Fatalf("failed to write untracked deployment file: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(untrackedDeploy) })
+
+	blueprints, err := ScanBlueprints(root, nil)
+	if err != nil {
+		t.Fatalf("ScanBlueprints failed with untracked file present: %v", err)
+	}
+	verifyAllDeploymentFilesPaired(t, root, blueprints)
+	byPath := indexBlueprintsByPath(t, blueprints)
+	if slurm := byPath["examples/hpc-slurm.yaml"]; slurm.DeploymentPath != "" || slurm.Vars["project_id"] != nil {
+		t.Errorf("untracked deployment file leaked into hpc-slurm catalog entry: deployment_path=%q project_id=%v", slurm.DeploymentPath, slurm.Vars["project_id"])
 	}
 }
 

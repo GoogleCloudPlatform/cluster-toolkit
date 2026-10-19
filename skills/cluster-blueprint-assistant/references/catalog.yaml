@@ -1319,10 +1319,10 @@ blueprints:
       project: $(vars.project_id)
     project_id: null
     region: us-central1
-    zone: us-central1-c
+    zone: us-central1-a
     zones:
     - $(vars.zone)
-    - us-central1-f
+    - us-central1-b
   modules:
   - id: network1
     source: modules/network/vpc
@@ -2535,7 +2535,7 @@ blueprints:
   deployment_path: examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d/gke-h4d-deployment.yaml
   blueprint_name: gke-h4d
   scheduler: gke
-  description: "This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found here. The deployment instructions can be found in the README."
+  description: "Dynamic Workload Scheduler (DWS) is a resource management and job scheduling platform designed for AI Hypercomputer. Dynamic Workload Scheduler improves your access to AI/ML resources, helps you optimize your spend, and can improve the..."
   machine_types: [h4d-standard-192]
   vars:
     authorized_cidr: null
@@ -2578,7 +2578,7 @@ blueprints:
   deployment_path: examples/gke-consumption-options/dws-flex-start-queued-provisioning/gke-a3-ultragpu-deployment.yaml
   blueprint_name: gke-a3-ultra
   scheduler: gke
-  description: "Refer to AI Hypercomputer Documentation for instructions."
+  description: "Dynamic Workload Scheduler (DWS) is a resource management and job scheduling platform designed for AI Hypercomputer. Dynamic Workload Scheduler improves your access to AI/ML resources, helps you optimize your spend, and can improve the..."
   machine_types: [a3-ultragpu-8g]
   vars:
     a3ultra_node_pool_disk_size_gb: 100
@@ -2626,7 +2626,7 @@ blueprints:
   deployment_path: examples/gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-7x/gke-tpu-7x-deployment.yaml
   blueprint_name: gke-tpu-7x-qp
   scheduler: gke
-  description: "This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this README."
+  description: "This example demonstrates how to deploy a GKE cluster with TPU 7x nodes using Dynamic Workload Scheduler (DWS) with Queued Provisioning."
   machine_types: [tpu7x-standard-4t]
   vars:
     accelerator_type: tpu7x
@@ -2690,7 +2690,7 @@ blueprints:
   deployment_path: examples/gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml
   blueprint_name: gke-tpu-v6e-qp
   scheduler: gke
-  description: "This example shows how TPU v6e cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this README."
+  description: "This example demonstrates how to deploy a GKE cluster with TPU v6e nodes using Dynamic Workload Scheduler (DWS) with Queued Provisioning."
   machine_types: [ct6e-standard-4t]
   vars:
     accelerator_type: tpu-v6e-slice
@@ -2754,7 +2754,7 @@ blueprints:
   deployment_path: examples/gke-consumption-options/dws-flex-start/gke-a3-ultragpu-deployment.yaml
   blueprint_name: gke-a3-ultra
   scheduler: gke
-  description: "Refer to AI Hypercomputer Documentation for instructions."
+  description: "Dynamic Workload Scheduler (DWS) is a resource management and job scheduling platform designed for AI Hypercomputer. Dynamic Workload Scheduler improves your access to AI/ML resources, helps you optimize your spend, and can improve the..."
   machine_types: [a3-ultragpu-8g]
   vars:
     a3ultra_node_pool_disk_size_gb: 100
@@ -2798,7 +2798,7 @@ blueprints:
   deployment_path: examples/gke-consumption-options/dws-flex-start/gke-tpu-7x/gke-tpu-7x-deployment.yaml
   blueprint_name: gke-tpu-7x
   scheduler: gke
-  description: "This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this README."
+  description: "These steps guide you through the cluster creation process for TPUs using DWS Flex Start."
   machine_types: [tpu7x-standard-4t]
   vars:
     accelerator_type: tpu7x
@@ -2865,7 +2865,7 @@ blueprints:
   deployment_path: examples/gke-consumption-options/dws-flex-start/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml
   blueprint_name: gke-tpu-v6e-flex
   scheduler: gke
-  description: "This example shows how TPU v6e cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this README."
+  description: "These steps guide you through the cluster creation process for TPUs using DWS Flex Start."
   machine_types: [ct6e-standard-4t]
   vars:
     accelerator_type: tpu-v6e-slice
