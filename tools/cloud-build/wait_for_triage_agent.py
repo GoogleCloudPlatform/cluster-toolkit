@@ -51,9 +51,11 @@ def main():
     url = f"{firestore_url.rstrip('/')}/{build_id}"
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
 
-    # Wait for Cloud Run to dynamically hydrate the Document
+    # Wait for the agent to create the document. Each triage now runs as a
+    # Cloud Run Job, and the document appeared 95-255 seconds after /trigger
+    # (26 runs, Oct 2026), so wait up to 5 minutes rather than 1.
     doc_hydrated = False
-    for _ in range(12):
+    for _ in range(60):
         try:
             with urllib.request.urlopen(req, timeout=10) as response:
                 doc = json.loads(response.read().decode())
@@ -69,7 +71,7 @@ def main():
         time.sleep(5)
 
     if not doc_hydrated:
-        print("Agent failed to start: Database document was not created within 60 seconds.", file=sys.stderr)
+        print("Agent failed to start: Database document was not created within 5 minutes.", file=sys.stderr)
         sys.exit(1)
 
     # Poll for completion status
