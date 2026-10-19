@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 resource "google_cloudbuild_trigger" "pr_go_build_test" {
   # NOTE: make sure that go.mod:go and Makefile:MIN_GOLANG_VERSION match lowest version.
-  for_each = toset(["1.24", "1.26"])
+  for_each = toset(["1.26"])
 
   name        = "PR-Go-${replace(each.key, ".", "-")}-build-test"
   description = "Test that the PR builds with Go ${each.key}"
