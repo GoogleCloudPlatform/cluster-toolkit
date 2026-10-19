@@ -51,13 +51,13 @@ variable "disk_autoresize" {
 }
 
 variable "disk_size_gb" {
-  description = "Size of the database disk in GiB."
+  description = <<-EOT
+    Size of the database disk in GiB. Raising it later resizes the disk in place. With
+    disk_autoresize on, Cloud SQL may grow the disk beyond this size, and the provider then
+    ignores the smaller configured value instead of shrinking or recreating the instance.
+    EOT
   type        = number
   default     = null
-  validation {
-    condition     = var.disk_size_gb == null || !var.disk_autoresize
-    error_message = "If setting disk_size_gb set disk_autoresize to false to prevent re-provisioning of the instance after disk auto-expansion."
-  }
 }
 
 variable "edition" {
