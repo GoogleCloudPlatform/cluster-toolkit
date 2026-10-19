@@ -210,9 +210,11 @@ spec:
   - name: worker
     replicas: {{.NumSlices}}
     template:
+{{- if .ExclusiveTopologyAnnotation }}
       metadata:
         annotations:
-          alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool
+          {{(StructuralData .ExclusiveTopologyAnnotation)}}
+{{- end }}
       spec:
         completionMode: Indexed
         parallelism: {{.NodesPerSlice}}
