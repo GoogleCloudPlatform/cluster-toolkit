@@ -21,3 +21,23 @@
 - name: Connect to the GKE cluster using gcloud command
   delegate_to: localhost
   ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
+
+- name: Describe GKE cluster control plane endpoint configuration
+  delegate_to: localhost
+  register: gke_cluster_info
+  changed_when: false
+  until: "'RUNNING' in gke_cluster_info.stdout"
+  retries: 30
+  delay: 10
+  ansible.builtin.command: >-
+    gcloud container clusters describe {{ deployment_name }}
+    --region {{ region }}
+    --project {{ custom_vars.project }}
+    --format="value(status,privateClusterConfig.masterIpv4CidrBlock,privateClusterConfig.privateEndpoint)"
+
+- name: Verify GKE cluster is RUNNING without legacy 172.16.0.32/28 master CIDR block
+  delegate_to: localhost
+  ansible.builtin.assert:
+    that:
+    - "'RUNNING' in gke_cluster_info.stdout"
+    - "'172.16.0.32/28' not in gke_cluster_info.stdout"
