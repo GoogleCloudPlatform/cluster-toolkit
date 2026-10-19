@@ -43,7 +43,7 @@ vars:
   disk_size_gb: 100 # It is recommended to have at least 100 GB per node.
   local_ssd_mountpoint: /mnt/localssd
   nccl_plugin_image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-gib-a4x-max-arm64
-  nccl_plugin_version: v1.1.1
+  nccl_plugin_version: v1.1.4
   instance_image:
     project: $(vars.project_id)
     family: $(vars.built_image_family)
