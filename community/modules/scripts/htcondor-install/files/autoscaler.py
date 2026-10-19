@@ -324,8 +324,11 @@ class AutoScaler:
                 idle_nodes[self_link] = "modifying"
 
         for ad in idle_node_ads:
-            node = ad.get("Machine", "").split("@")[-1].split(".")[0]
-            zone = ad["CloudZone"]
+            node_attr = ad.get("Machine")
+            zone = ad.get("CloudZone")
+            if not isinstance(node_attr, str) or not isinstance(zone, str):
+                continue
+            node = node_attr.split("@")[-1].split(".")[0]
             self_link = "https://www.googleapis.com/compute/v1/projects/" + \
                 self.project + "/zones/" + zone + "/instances/" + node
             # there is potential for nodes in MIG health check "VERIFYING" state
@@ -385,7 +388,7 @@ class AutoScaler:
             latest_claimed_nodes = {
                 val.split("@")[-1].split(".")[0]
                 for ad in latest_claimed_node_ads
-                if (val := ad.get(NODENAME_ATTRIBUTE)) is not None and isinstance(val, str)
+                if isinstance(val := ad.get(NODENAME_ATTRIBUTE), str)
             }
 
             idle_nodes = OrderedDict()
@@ -398,7 +401,7 @@ class AutoScaler:
             for ad in latest_idle_node_ads:
                 node_attr = ad.get("Machine")
                 zone = ad.get("CloudZone")
-                if not node_attr or not zone:
+                if not isinstance(node_attr, str) or not isinstance(zone, str):
                     continue
                 node = node_attr.split("@")[-1].split(".")[0]
                 self_link = f"https://www.googleapis.com/compute/v1/projects/{self.project}/zones/{zone}/instances/{node}"
