@@ -123,6 +123,16 @@ steps:
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
+              # Configure network1 with 172.16.0.0/12 (primary subnet 172.16.0.0/20) and wire
+              # pre-existing-vpc into gke_cluster to verify no master_ipv4_cidr_block collision.
+              sed -i '/^      subnetwork_name: \$(vars.deployment_name)-subnet$/a\      network_address_range: 172.16.0.0/12\n      default_primary_subnetwork_size: 8' "\$$SG_EXAMPLE"
+              sed -i 's/use: \[network1, workload_service_account\]/use: [existing_network, workload_service_account]/' "\$$SG_EXAMPLE"
+              grep -q "network_address_range: 172.16.0.0/12" "\$$SG_EXAMPLE"
+              grep -q "use: \[existing_network, workload_service_account\]" "\$$SG_EXAMPLE"
+              echo '  - id: existing_network'                    >> \$$SG_EXAMPLE
+              echo '    source: modules/network/pre-existing-vpc' >> \$$SG_EXAMPLE
+              echo '    use: [network1]'                         >> \$$SG_EXAMPLE
+
               # adding vm to act as remote node
               echo '  - id: remote-node'                     >> \$$SG_EXAMPLE
               echo '    source: modules/compute/vm-instance' >> \$$SG_EXAMPLE
