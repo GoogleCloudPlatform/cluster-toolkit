@@ -416,7 +416,8 @@ class AutoScaler:
                 if self.size >= current_target:
                     schedd.reschedule()
                     print("New jobs arrived in queue; aborting scale down")
-                    exit()
+                    import sys
+                    sys.exit()
 
             print("Scaling down. Looking for nodes that can be shut down")
 
