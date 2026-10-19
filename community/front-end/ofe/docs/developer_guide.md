@@ -431,7 +431,7 @@ boots:
 - Copy Jupyter configuration files from `/home/jupyter/.jupyter` to
   `/tmp/jupyterhome/.jupyter`.
 - Create `DATA_LOSS_WARNING.txt` file with warning message.
-- Configure specified mount points in order specified on OFE.
+- Configure specified mount points in the order specified on OFE.
 - Add symlink to `/tmp/jupyterhome/` which will serve as working directory on
   the web interface.
   - This process of mounting and symlinking means the mountpoint will appear
