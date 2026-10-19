@@ -53,6 +53,7 @@ To deploy a GKE cluster into an existing VPC and subnetwork using [pre-existing-
     source: modules/scheduler/gke-cluster
     use: [existing_network]
     settings:
+      enable_private_endpoint: false # Or set enable_external_dns_endpoint: true when deploying from outside the VPC
       pods_ip_range_name: pods
       services_ip_range_name: services
 ```

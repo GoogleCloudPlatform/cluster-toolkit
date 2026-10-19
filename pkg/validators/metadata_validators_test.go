@@ -1878,10 +1878,17 @@ func TestCIDRValidator(t *testing.T) {
 	t.Run("scalar_cidr_allows_null_when_configured", func(t *testing.T) {
 		scalarRule := modulereader.ValidationRule{
 			Validator:    "cidr",
-			ErrorMessage: "master_ipv4_cidr_block must be null or a valid IPv4 /28 CIDR block (e.g. 1.2.3.0/28).",
+			ErrorMessage: "master_ipv4_cidr_block must be null or a valid CIDR block (e.g. 1.2.3.0/28).",
 			Inputs: map[string]interface{}{
 				"vars":       []interface{}{"master_ipv4_cidr_block"},
 				"allow_null": true,
+			},
+		}
+		disallowNullRule := modulereader.ValidationRule{
+			Validator:    "cidr",
+			ErrorMessage: "master_ipv4_cidr_block must be a valid CIDR block (e.g. 1.2.3.0/28).",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"master_ipv4_cidr_block"},
 			},
 		}
 
@@ -1891,6 +1898,9 @@ func TestCIDRValidator(t *testing.T) {
 		})
 		if err := validator.Validate(bp, bp.Groups[0].Modules[0], scalarRule, bp.Groups[0], 0); err != nil {
 			t.Fatalf("expected null master_ipv4_cidr_block to pass when allow_null is true, got: %v", err)
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], disallowNullRule, bp.Groups[0], 0); err == nil {
+			t.Fatal("expected null master_ipv4_cidr_block to fail when allow_null is not enabled, got nil")
 		}
 
 		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{

@@ -365,7 +365,11 @@ variable "master_ipv4_cidr_block" {
   type        = string
   default     = null
   validation {
-    condition     = var.master_ipv4_cidr_block == null || (can(cidrnetmask(var.master_ipv4_cidr_block)) && can(regex("/28$", var.master_ipv4_cidr_block)))
+    condition = var.master_ipv4_cidr_block == null || try(
+      cidrnetmask(var.master_ipv4_cidr_block) == "255.255.255.240" &&
+      cidrsubnet(var.master_ipv4_cidr_block, 0, 0) == var.master_ipv4_cidr_block,
+      false
+    )
     error_message = "master_ipv4_cidr_block must be null or a valid IPv4 /28 CIDR block (e.g. 1.2.3.0/28)."
   }
 }

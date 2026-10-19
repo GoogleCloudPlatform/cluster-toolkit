@@ -26,18 +26,19 @@
   delegate_to: localhost
   register: gke_cluster_info
   changed_when: false
-  until: "'RUNNING' in gke_cluster_info.stdout"
+  until: (gke_cluster_info.stdout | from_json).status == 'RUNNING'
   retries: 30
   delay: 10
   ansible.builtin.command: >-
     gcloud container clusters describe {{ deployment_name }}
     --region {{ region }}
     --project {{ custom_vars.project }}
-    --format="value(status,privateClusterConfig.masterIpv4CidrBlock,privateClusterConfig.privateEndpoint)"
+    --format=json
 
-- name: Verify GKE cluster is RUNNING without legacy 172.16.0.32/28 master CIDR block
+- name: Verify GKE cluster is RUNNING with PSC privateEndpoint and no masterIpv4CidrBlock
   delegate_to: localhost
   ansible.builtin.assert:
     that:
-    - "'RUNNING' in gke_cluster_info.stdout"
-    - "'172.16.0.32/28' not in gke_cluster_info.stdout"
+    - (gke_cluster_info.stdout | from_json).status == 'RUNNING'
+    - (gke_cluster_info.stdout | from_json).privateClusterConfig.masterIpv4CidrBlock | default('') == ''
+    - (gke_cluster_info.stdout | from_json).privateClusterConfig.privateEndpoint | default('') | length > 0
