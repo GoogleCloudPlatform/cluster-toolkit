@@ -298,7 +298,11 @@ class AutoScaler:
             constraint=combined_constraint,
             projection=[NODENAME_ATTRIBUTE]
         )
-        claimed_nodes = [ ad.get(NODENAME_ATTRIBUTE, "").split("@")[-1].split(".")[0] for ad in claimed_node_ads]
+        claimed_nodes = [
+            val.split("@")[-1].split(".")[0]
+            for ad in claimed_node_ads
+            if isinstance(val := ad.get(NODENAME_ATTRIBUTE), str)
+        ]
 
         # treat OrderedDict as a set by ignoring key values; this set will
         # contain VMs we would consider deleting, in inverse order of
