@@ -86,7 +86,7 @@ fi
 # - No TTL label and createTime < 24h (or unparsable) -> in use -> keep instance and skip API reset.
 if ! FILESTORE_INSTANCES=$(gcloud filestore instances list \
 	--project "${PROJECT_ID}" \
-	--format="value(name.basename(),name.segment(3),createTime,state,deletionProtectionEnabled,labels.time-to-live)"); then
+	--format="value(name.basename(),name.segment(3),createTime,state,deletionProtectionEnabled.yesno(yes=true,no=false),labels.time-to-live)"); then
 	echo "ERROR: Failed to list Filestore instances; not touching anything." >&2
 	exit 1
 fi
