@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 func TestCleanAndProcessManifests(t *testing.T) {
@@ -82,9 +83,10 @@ func TestValidateClusterState_TargetNamespaceValidation(t *testing.T) {
 	// test proves the seeded namespace (not the kubeconfig one) is validated.
 	kube := &countingKubeClient{MockKubeClient: MockKubeClient{Namespace: "kube-ctx-ns"}}
 	orc := &GKEOrchestrator{
-		executor:   mockExec,
-		dynClient:  mockDyn,
-		kubeClient: kube,
+		executor:         mockExec,
+		dynClient:        mockDyn,
+		kubeClient:       kube,
+		kubeconfigLoader: staticLoader(clientcmdapi.NewConfig()),
 	}
 
 	job := &orchestrator.JobDefinition{
@@ -109,46 +111,6 @@ func TestValidateClusterState_TargetNamespaceValidation(t *testing.T) {
 	}
 	if kube.calls != 0 {
 		t.Errorf("kubeconfig namespace lookup should be skipped when --gke-namespace is set, got %d calls", kube.calls)
-	}
-}
-
-func TestReplaceDeprecatedRbacProxyImage(t *testing.T) {
-	podSpec := map[interface{}]interface{}{
-		"initContainers": []interface{}{
-			map[interface{}]interface{}{
-				"name":  "init-proxy",
-				"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
-			},
-		},
-		"containers": []interface{}{
-			map[interface{}]interface{}{
-				"name":  "proxy",
-				"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
-			},
-			map[interface{}]interface{}{
-				"name":  "manager",
-				"image": "gcr.io/k8s-staging-jobset/jobset:v0.2.0",
-			},
-		},
-	}
-
-	replaceDeprecatedRbacProxyImage(podSpec)
-
-	initContainers := podSpec["initContainers"].([]interface{})
-	initProxy := initContainers[0].(map[interface{}]interface{})
-	if got := initProxy["image"]; got != "quay.io/brancz/kube-rbac-proxy:v0.13.1" {
-		t.Errorf("initContainers image = %v; want quay.io/brancz/kube-rbac-proxy:v0.13.1", got)
-	}
-
-	containers := podSpec["containers"].([]interface{})
-	proxy := containers[0].(map[interface{}]interface{})
-	if got := proxy["image"]; got != "quay.io/brancz/kube-rbac-proxy:v0.13.1" {
-		t.Errorf("containers image = %v; want quay.io/brancz/kube-rbac-proxy:v0.13.1", got)
-	}
-
-	manager := containers[1].(map[interface{}]interface{})
-	if got := manager["image"]; got != "gcr.io/k8s-staging-jobset/jobset:v0.2.0" {
-		t.Errorf("manager image = %v; want gcr.io/k8s-staging-jobset/jobset:v0.2.0", got)
 	}
 }
 
@@ -216,6 +178,91 @@ func TestInitialize_LocationFallback(t *testing.T) {
 
 	if job.ClusterLocation != "us-central1" {
 		t.Errorf("Expected job.ClusterLocation to fall back to 'us-central1', got %q", job.ClusterLocation)
+	}
+}
+
+func TestInitialize_TimeoutAndExecErrors(t *testing.T) {
+	primaryCmd := "gcloud container clusters describe my-cluster --location us-central1-a --project my-project --format=json"
+	fallbackCmd := "gcloud container clusters describe my-cluster --location us-central1 --project my-project --format=json"
+
+	tests := []struct {
+		name          string
+		mockResponses map[string][]shell.CommandResult
+		wantErrSubstr string
+	}{
+		{
+			name: "Primary describe query times out",
+			mockResponses: map[string][]shell.CommandResult{
+				primaryCmd: {
+					{
+						ExitCode: 124,
+						Err:      context.DeadlineExceeded,
+					},
+				},
+			},
+			wantErrSubstr: fmt.Sprintf("timed out after %v while trying to reach GKE cluster 'my-cluster' in 'us-central1-a'", shell.DefaultCloudAPITimeout),
+		},
+		{
+			name: "Primary describe query fails to execute",
+			mockResponses: map[string][]shell.CommandResult{
+				primaryCmd: {
+					{
+						ExitCode: -1,
+						Err:      fmt.Errorf("executable file not found in $PATH"),
+					},
+				},
+			},
+			wantErrSubstr: "failed to execute gcloud: executable file not found in $PATH",
+		},
+		{
+			name: "Fallback regional describe query times out",
+			mockResponses: map[string][]shell.CommandResult{
+				primaryCmd: {
+					{
+						ExitCode: 1,
+						Stderr:   "Resource my-cluster was not found in us-central1-a",
+					},
+				},
+				fallbackCmd: {
+					{
+						ExitCode: 124,
+						Err:      context.DeadlineExceeded,
+					},
+				},
+			},
+			wantErrSubstr: fmt.Sprintf("timed out after %v while trying to reach GKE cluster 'my-cluster' in fallback region 'us-central1'", shell.DefaultCloudAPITimeout),
+		},
+		{
+			name: "Fallback regional describe query fails to execute",
+			mockResponses: map[string][]shell.CommandResult{
+				primaryCmd: {
+					{
+						ExitCode: 1,
+						Stderr:   "Resource my-cluster was not found in us-central1-a",
+					},
+				},
+				fallbackCmd: {
+					{
+						ExitCode: -1,
+						Err:      fmt.Errorf("fork/exec gcloud: resource temporarily unavailable"),
+					},
+				},
+			},
+			wantErrSubstr: "failed to execute gcloud: fork/exec gcloud: resource temporarily unavailable",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := newTestGKEOrchestrator(NewMockExecutor(tt.mockResponses))
+			_, err := orc.Initialize("my-cluster", "us-central1-a", "my-project")
+			if err == nil {
+				t.Fatalf("expected Initialize to fail, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantErrSubstr) {
+				t.Errorf("Initialize() error = %q, want substring %q", err.Error(), tt.wantErrSubstr)
+			}
+		})
 	}
 }
 

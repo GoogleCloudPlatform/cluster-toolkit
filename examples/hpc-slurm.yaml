@@ -21,6 +21,16 @@ vars:
   deployment_name: hpc-slurm
   region: us-central1
   zone: us-central1-a
+  # The following settings are safe to override via `-d deployment.yaml` or
+  # `--vars` without editing the module blocks below.
+  # Maximum number of dynamically provisioned nodes in the debug partition.
+  debug_node_count_max: 4
+  # Maximum number of dynamically provisioned nodes in the compute partition.
+  compute_node_count_max: 20
+  # Machine type for the compute partition.
+  compute_machine_type: c2-standard-60
+  # Use Spot VMs for the compute partition.
+  compute_enable_spot_vm: false
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -53,7 +63,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      node_count_dynamic_max: 4
+      node_count_dynamic_max: $(vars.debug_node_count_max)
       machine_type: n2-standard-2
       allow_automatic_updates: false
 
@@ -70,7 +80,9 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      node_count_dynamic_max: 20
+      node_count_dynamic_max: $(vars.compute_node_count_max)
+      machine_type: $(vars.compute_machine_type)
+      enable_spot_vm: $(vars.compute_enable_spot_vm)
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
 

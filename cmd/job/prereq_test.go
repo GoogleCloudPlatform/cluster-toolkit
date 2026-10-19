@@ -16,9 +16,13 @@ package job
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"hpc-toolkit/pkg/shell"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -246,16 +250,15 @@ func TestSavePrereqState_WriteError(t *testing.T) {
 }
 
 func TestEnsureGCloudSDKInstalled_Success(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		if name == "gcloud" && len(args) > 0 && args[0] == "version" {
 			return shell.CommandResult{ExitCode: 0, Stdout: "Google Cloud SDK 123.0.0"}
 		}
 		return shell.CommandResult{ExitCode: 1}
 	}
-
 	err := ensureGCloudSDKInstalled()
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
@@ -263,24 +266,41 @@ func TestEnsureGCloudSDKInstalled_Success(t *testing.T) {
 }
 
 func TestEnsureGCloudSDKInstalled_Failure(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
-		return shell.CommandResult{ExitCode: 1, Stderr: "command not found"}
-	}
+	t.Run("Non-zero exit code", func(t *testing.T) {
+		shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+			return shell.CommandResult{ExitCode: 1, Stderr: "command error"}
+		}
+		err := ensureGCloudSDKInstalled()
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "Please install it from") {
+			t.Errorf("expected installation prompt in error, got %v", err)
+		}
+	})
 
-	err := ensureGCloudSDKInstalled()
-	if err == nil {
-		t.Error("expected error, got nil")
-	}
+	t.Run("Binary not found (ExitCode -1)", func(t *testing.T) {
+		shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+			return shell.CommandResult{ExitCode: -1, Err: &exec.Error{Name: "gcloud", Err: exec.ErrNotFound}}
+		}
+		err := ensureGCloudSDKInstalled()
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "Please install it from") {
+			t.Errorf("expected installation prompt in error, got %v", err)
+		}
+	})
 }
 
 func TestEnsureGCloudAuthenticated_Success(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		if name == "gcloud" && len(args) > 1 && args[0] == "auth" {
 			return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
 		}
@@ -294,10 +314,10 @@ func TestEnsureGCloudAuthenticated_Success(t *testing.T) {
 }
 
 func TestEnsureGCloudAuthenticated_Failure(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		if name == "gcloud" && len(args) > 1 && args[0] == "auth" {
 			return shell.CommandResult{ExitCode: 0, Stdout: ""}
 		}
@@ -307,6 +327,200 @@ func TestEnsureGCloudAuthenticated_Failure(t *testing.T) {
 	err := ensureGCloudAuthenticated()
 	if err == nil {
 		t.Error("expected error, got nil")
+	}
+}
+
+func TestEnsureGCloudSDKInstalled_Timeout(t *testing.T) {
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
+
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		if timeout != shell.DefaultLocalCommandTimeout {
+			t.Errorf("expected timeout %v, got %v", shell.DefaultLocalCommandTimeout, timeout)
+		}
+		return shell.CommandResult{ExitCode: 124, Err: context.DeadlineExceeded}
+	}
+
+	err := ensureGCloudSDKInstalled()
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	wantSubstr := fmt.Sprintf("gcloud version check timed out after %v", shell.DefaultLocalCommandTimeout)
+	if !strings.Contains(err.Error(), wantSubstr) {
+		t.Errorf("expected error to contain %q, got %v", wantSubstr, err)
+	}
+	if strings.Contains(err.Error(), "Please install it from") {
+		t.Errorf("did not expect timeout error to suggest installing gcloud, got %v", err)
+	}
+}
+
+func TestEnsureGCloudAuthenticated_Timeout(t *testing.T) {
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
+
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		if timeout != shell.DefaultLocalCommandTimeout {
+			t.Errorf("expected timeout %v, got %v", shell.DefaultLocalCommandTimeout, timeout)
+		}
+		return shell.CommandResult{ExitCode: 124, Err: context.DeadlineExceeded}
+	}
+
+	err := ensureGCloudAuthenticated()
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	wantSubstr := fmt.Sprintf("gcloud authentication check timed out after %v", shell.DefaultLocalCommandTimeout)
+	if !strings.Contains(err.Error(), wantSubstr) {
+		t.Errorf("expected error to contain %q, got %v", wantSubstr, err)
+	}
+}
+
+func TestEnsureBasicPrerequisites_GCloudAuthTimeout(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
+
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		if name == "gcloud" && len(args) > 1 && args[0] == "auth" && args[1] == "list" {
+			return shell.CommandResult{ExitCode: 124, Err: context.DeadlineExceeded}
+		}
+		return shell.CommandResult{ExitCode: 0}
+	}
+
+	origStore := store
+	defer func() { store = origStore }()
+	store = &mockPrereqStore{}
+
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	err := ensureBasicPrerequisites(cmd, "test-project")
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected error to wrap context.DeadlineExceeded, got %v", err)
+	}
+	wantSubstr := fmt.Sprintf("gcloud authentication check timed out after %v", shell.DefaultLocalCommandTimeout)
+	if !strings.Contains(err.Error(), wantSubstr) {
+		t.Errorf("expected error to contain %q, got %v", wantSubstr, err)
+	}
+	if strings.Contains(buf.String(), "gcloud auth login") {
+		t.Errorf("did not expect 'gcloud auth login' prompt on timeout, got output:\n%s", buf.String())
+	}
+}
+
+func TestEnsureProjectExists_Timeout(t *testing.T) {
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
+
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		if timeout != shell.DefaultCloudAPITimeout {
+			t.Errorf("expected timeout %v, got %v", shell.DefaultCloudAPITimeout, timeout)
+		}
+		return shell.CommandResult{ExitCode: 124, Err: context.DeadlineExceeded}
+	}
+
+	err := ensureProjectExists("test-project")
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	wantSubstr := fmt.Sprintf("gcloud project validation timed out after %v", shell.DefaultCloudAPITimeout)
+	if !strings.Contains(err.Error(), wantSubstr) {
+		t.Errorf("expected error to contain %q, got %v", wantSubstr, err)
+	}
+}
+
+func TestCheckArtifactRegistryAPI_Timeout(t *testing.T) {
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
+
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		if timeout != shell.DefaultCloudAPITimeout {
+			t.Errorf("expected timeout %v, got %v", shell.DefaultCloudAPITimeout, timeout)
+		}
+		return shell.CommandResult{ExitCode: 124, Err: context.DeadlineExceeded}
+	}
+
+	var state PrereqState
+	var missing []missingPrereq
+
+	checkArtifactRegistryAPI("test-project", &state, &missing)
+
+	if len(missing) != 1 {
+		t.Fatalf("expected 1 missing prereq, got %d", len(missing))
+	}
+
+	expectedName := fmt.Sprintf("Artifact Registry API (verification timed out after %v)", shell.DefaultCloudAPITimeout)
+	if missing[0].name != expectedName {
+		t.Errorf("missing[0].name = %q, want %q", missing[0].name, expectedName)
+	}
+	if state.ArtifactRegistryAPIEnabled {
+		t.Error("expected ArtifactRegistryAPIEnabled to remain false on timeout")
+	}
+}
+
+func TestCheckK8sDependencies_Timeout(t *testing.T) {
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		if timeout != shell.DefaultLocalCommandTimeout {
+			t.Errorf("expected timeout %v, got %v", shell.DefaultLocalCommandTimeout, timeout)
+		}
+		return shell.CommandResult{ExitCode: 124, Err: context.DeadlineExceeded}
+	}
+	var state PrereqState
+	var missing []missingPrereq
+	checkK8sDependencies(&state, &missing)
+	if len(missing) != 2 {
+		t.Fatalf("expected 2 missing prereqs, got %d", len(missing))
+	}
+	wantKubectl := fmt.Sprintf("kubectl (installed, but did not respond within %v)", shell.DefaultLocalCommandTimeout)
+	if missing[0].name != wantKubectl {
+		t.Errorf("missing[0].name = %q, want %q", missing[0].name, wantKubectl)
+	}
+	wantPlugin := fmt.Sprintf("gke-gcloud-auth-plugin (installed, but did not respond within %v)", shell.DefaultLocalCommandTimeout)
+	if missing[1].name != wantPlugin {
+		t.Errorf("missing[1].name = %q, want %q", missing[1].name, wantPlugin)
+	}
+	if state.KubectlInstalled || state.GKEGCloudAuthPluginInstalled {
+		t.Error("expected K8s dependency state flags to remain false on timeout")
+	}
+}
+
+func TestCheckK8sDependencies_Missing(t *testing.T) {
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
+
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		return shell.CommandResult{ExitCode: -1, Err: &exec.Error{Name: name, Err: exec.ErrNotFound}}
+	}
+
+	var state PrereqState
+	var missing []missingPrereq
+	checkK8sDependencies(&state, &missing)
+
+	if len(missing) != 2 {
+		t.Fatalf("expected 2 missing prereqs, got %d", len(missing))
+	}
+	for i, bin := range []string{"kubectl", "gke-gcloud-auth-plugin"} {
+		if missing[i].name != bin {
+			t.Errorf("missing[%d].name = %q, want %q", i, missing[i].name, bin)
+		}
+		if len(missing[i].commands) != 2 {
+			t.Fatalf("expected 2 install commands for %s, got %d", bin, len(missing[i].commands))
+		}
+		wantCmd0 := fmt.Sprintf("gcloud components install %s --quiet   # gcloud from Google's installer", bin)
+		wantCmd1 := fmt.Sprintf("# or install %s with your OS package manager (apt/dnf/brew) if gcloud came from there", bin)
+		if missing[i].commands[0] != wantCmd0 {
+			t.Errorf("missing[%d].commands[0] = %q, want %q", i, missing[i].commands[0], wantCmd0)
+		}
+		if missing[i].commands[1] != wantCmd1 {
+			t.Errorf("missing[%d].commands[1] = %q, want %q", i, missing[i].commands[1], wantCmd1)
+		}
 	}
 }
 
@@ -421,10 +635,10 @@ func TestEnsurePrerequisites_DockerCreds(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		if name == "gcloud" && len(args) > 1 && args[0] == "auth" && args[1] == "list" {
 			return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
 		}
@@ -479,10 +693,10 @@ func TestEnsureBasicPrerequisites_InvalidProject(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		cmdStr := name + " " + strings.Join(args, " ")
 		switch {
 		case strings.HasPrefix(cmdStr, "gcloud auth list"):
@@ -521,10 +735,10 @@ func TestEnsureBasicPrerequisites_SaveState(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
 	}
 
@@ -571,10 +785,10 @@ func TestEnsureBasicPrerequisites_RestrictedPermissions_Proceeds(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		cmdStr := name + " " + strings.Join(args, " ")
 		switch {
 		case strings.HasPrefix(cmdStr, "gcloud auth list"):
@@ -607,10 +821,10 @@ func TestEnsureBasicPrerequisites_ProjectNameContainsPermission_Fails(t *testing
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+	origExecuteCommand := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
 
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		cmdStr := name + " " + strings.Join(args, " ")
 		switch {
 		case strings.HasPrefix(cmdStr, "gcloud auth list"):

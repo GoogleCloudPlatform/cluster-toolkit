@@ -82,24 +82,60 @@ func TestDescribeEnvironment(t *testing.T) {
 	}
 }
 
-func TestListVolumes(t *testing.T) {
-	mockResponses := map[string][]shell.CommandResult{
-		"kubectl get pvc": {
-			{ExitCode: 0, Stdout: `{"items": [{"metadata": {"name": "pvc-1"}, "spec": {"storageClassName": "standard"}} ]}`},
-		},
-	}
-	orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
+func TestListVolumes_PinsNamedCluster(t *testing.T) {
+	const pvcCmd = "kubectl --context " + testContext + " get pvc --all-namespaces -l ghpc_role=file-system -o json"
+	const describeCmd = "gcloud container clusters describe " + testCluster + " --location " + testLocation + " --project " + testProject + " --format=json"
+	exec := newExactExecutor(map[string][]shell.CommandResult{
+		describeCmd: {{ExitCode: 0, Stdout: `{"controlPlaneEndpointsConfig":{"dnsEndpointConfig":{"allowExternalTraffic":true,"endpoint":"` + testDNSHost + `"}}}`}},
+		probeCmd:    {{ExitCode: 0}},
+		pvcCmd:      {{ExitCode: 0, Stdout: `{"items": [{"metadata": {"name": "pvc-1"}, "spec": {"storageClassName": "standard"}}]}`}},
+	})
+	orc := newTestGKEOrchestrator(exec)
+	orc.kubeconfigLoader = staticLoader(kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext))
 
-	vols, err := orc.ListVolumes(orchestrator.ListOptions{})
+	vols, err := orc.ListVolumes(orchestrator.ListOptions{ClusterName: testCluster, ClusterLocation: testLocation, ProjectID: testProject})
 	if err != nil {
 		t.Fatalf("ListVolumes failed: %v", err)
 	}
-
-	if len(vols) != 1 {
-		t.Errorf("Expected 1 volume, got %d", len(vols))
+	if len(vols) != 1 || vols[0].Name != "pvc-1" || vols[0].Type != "standard" || vols[0].Cluster != testCluster {
+		t.Errorf("unexpected volumes: %+v", vols)
 	}
+	if exec.count(pvcCmd) != 1 {
+		t.Errorf("get pvc was not pinned to %q; calls=%v", testContext, exec.calls)
+	}
+}
 
-	if vols[0].Name != "pvc-1" || vols[0].Type != "standard" {
-		t.Errorf("Unexpected volume status: %+v", vols[0])
+func TestListVolumes_RequiresClusterAndLocation(t *testing.T) {
+	orc := newTestGKEOrchestrator(newExactExecutor(nil))
+	for _, opts := range []orchestrator.ListOptions{{}, {ClusterName: testCluster}, {ClusterLocation: testLocation}} {
+		if _, err := orc.ListVolumes(opts); err == nil {
+			t.Errorf("ListVolumes(%+v) error = nil, want error", opts)
+		}
+	}
+}
+
+// A zone given for a regional cluster must be resolved to the region before the context is looked up.
+func TestListVolumes_UsesResolvedLocationForContext(t *testing.T) {
+	const zone = testLocation + "-a"
+	const pvcCmd = "kubectl --context " + testContext + " get pvc --all-namespaces -l ghpc_role=file-system -o json"
+	const describeZone = "gcloud container clusters describe " + testCluster + " --location " + zone + " --project " + testProject + " --format=json"
+	const describeRegion = "gcloud container clusters describe " + testCluster + " --location " + testLocation + " --project " + testProject + " --format=json"
+	exec := newExactExecutor(map[string][]shell.CommandResult{
+		describeZone:   {{ExitCode: 1, Stderr: "ERROR: (gcloud.container.clusters.describe) ResponseError: code=404"}},
+		describeRegion: {{ExitCode: 0, Stdout: `{"controlPlaneEndpointsConfig":{"dnsEndpointConfig":{"allowExternalTraffic":true,"endpoint":"` + testDNSHost + `"}}}`}},
+		probeCmd:       {{ExitCode: 0}},
+		pvcCmd:         {{ExitCode: 0, Stdout: `{"items": []}`}},
+	})
+	orc := newTestGKEOrchestrator(exec)
+	orc.kubeconfigLoader = staticLoader(kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext))
+
+	if _, err := orc.ListVolumes(orchestrator.ListOptions{ClusterName: testCluster, ClusterLocation: zone, ProjectID: testProject}); err != nil {
+		t.Fatalf("ListVolumes failed: %v", err)
+	}
+	if orc.kubeContext != testContext {
+		t.Errorf("kubeContext = %q, want regional context %q; calls=%v", orc.kubeContext, testContext, exec.calls)
+	}
+	if exec.count(pvcCmd) != 1 {
+		t.Errorf("get pvc was not pinned to %q; calls=%v", testContext, exec.calls)
 	}
 }

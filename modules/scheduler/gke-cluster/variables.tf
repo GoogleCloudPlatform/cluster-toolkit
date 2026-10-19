@@ -524,7 +524,7 @@ variable "additional_networks" {
 }
 
 variable "cluster_reference_type" {
-  description = "How the google_container_node_pool.system_node_pools refers to the cluster. Possible values are: {SELF_LINK, NAME}"
+  description = "How system node pools refer to the cluster. Possible values are: {SELF_LINK, NAME}. Defaults to SELF_LINK to prevent destructive replacement of existing node pools (since cluster is immutable). For new clusters deployed with Google Provider >= 8.0, set this to 'NAME' to avoid provider URL path concatenation errors (HTTP 404)."
   default     = "SELF_LINK"
   type        = string
   nullable    = false
