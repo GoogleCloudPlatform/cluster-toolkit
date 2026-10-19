@@ -46,8 +46,8 @@ variable "deployment_name" {
   type        = string
   nullable    = false
   validation {
-    condition     = length(var.deployment_name) >= 3 && length(var.deployment_name) <= 22 && can(regex("^[a-z][-a-z0-9]*[a-z0-9]$", var.deployment_name))
-    error_message = "The variable 'deployment_name' must be 3 to 22 characters long, contain only a-z (lowercase), 0-9 and '-', start with a letter and end with a letter or digit, so that service account IDs such as \"<name>-tkfe-sa\" fit within 30 characters."
+    condition     = length(var.deployment_name) >= 3 && length(var.deployment_name) <= 24 && can(regex("^[a-z][-a-z0-9]*[a-z0-9]$", var.deployment_name))
+    error_message = "The variable 'deployment_name' must be 3 to 24 characters long, contain only a-z (lowercase), 0-9 and '-', start with a letter and end with a letter or digit, so that the service account ID \"<name>-fe-sa\" fits within 30 characters."
   }
 }
 
