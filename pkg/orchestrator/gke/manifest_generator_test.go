@@ -2359,13 +2359,13 @@ func TestGeneratePathwaysManifest_MaxSliceRestarts(t *testing.T) {
 			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 5",
 		},
 		{
-			name:                     "flag set to 0 on 2 x v6e-32",
+			name:                     "non-elastic default 0 on 2 x v6e-32",
 			maxSliceRestarts:         0,
 			wantBackoffLimit:         "backoffLimit: 0",
 			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 0",
 		},
 		{
-			name:                     "default 4000 on 2 x v6e-32",
+			name:                     "elastic default 4000 on 2 x v6e-32",
 			maxSliceRestarts:         4000,
 			wantBackoffLimit:         "backoffLimit: 32000",
 			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 4000",

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 func TestMain(m *testing.M) {
@@ -371,13 +372,19 @@ func setupSubmitTestEnv(t *testing.T) {
 	priority = "medium"
 	isPathwaysJob = false
 	skipPrereqs = false
-	pathways = orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 4000}
+	pathways = orchestrator.PathwaysJobDefinition{}
 	gkeNapProvisioning = ""
 	gkeNapReservation = ""
 	envVars = nil
 	pathwaysProxyEnv = nil
 	pathwaysServerEnv = nil
 	pathwaysWorkerEnv = nil
+	SubmitCmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if f.Name == "pathways-max-slice-restarts" || f.Name == "pathways-elastic-slices" {
+			_ = f.Value.Set(f.DefValue)
+		}
+		f.Changed = false
+	})
 
 	oldFactory := gkeOrchestratorFactory
 	defer t.Cleanup(func() {
@@ -1445,26 +1452,136 @@ func TestSubmitCmd_InvalidRestartOnExitCodes(t *testing.T) {
 }
 
 func TestSubmitCmd_PathwaysMaxSliceRestartsWithoutPathways_Fails(t *testing.T) {
-	setupSubmitTestEnv(t)
-
-	_, err := executeCommand(JobCmd,
-		"submit",
-		"--name", "pathways-missing-flag-test",
-		"--image", "busybox",
-		"--command", "echo hello",
-		"--compute-type", "n2-standard-4",
-		"--cluster", "test-cluster",
-		"--location", "us-central1-a",
-		"--project", "test-project",
-		"--pathways-max-slice-restarts", "5",
-	)
-
-	if err == nil {
-		t.Fatal("expected error when passing --pathways-max-slice-restarts without --pathways, got nil")
+	tests := []struct {
+		name      string
+		extraArgs []string
+		wantErr   string
+	}{
+		{
+			name:      "non-zero max-slice-restarts without --pathways",
+			extraArgs: []string{"--pathways-max-slice-restarts", "5"},
+			wantErr:   "pathways flags specified but --pathways flag is missing",
+		},
+		{
+			name:      "zero max-slice-restarts without --pathways",
+			extraArgs: []string{"--pathways-max-slice-restarts", "0"},
+			wantErr:   "pathways flags specified but --pathways flag is missing",
+		},
+		{
+			name:      "zero elastic-slices without --pathways",
+			extraArgs: []string{"--pathways-elastic-slices", "0"},
+			wantErr:   "pathways flags specified but --pathways flag is missing",
+		},
+		{
+			name:      "negative max-slice-restarts with --pathways",
+			extraArgs: []string{"--pathways", "--pathways-gcs-location", "gs://my-bucket", "--pathways-max-slice-restarts", "-1"},
+			wantErr:   "--pathways-max-slice-restarts must be non-negative",
+		},
+		{
+			name:      "negative elastic-slices with --pathways",
+			extraArgs: []string{"--pathways", "--pathways-gcs-location", "gs://my-bucket", "--pathways-elastic-slices", "-1"},
+			wantErr:   "--pathways-elastic-slices must be non-negative",
+		},
 	}
 
-	expectedErr := "pathways flags specified but --pathways flag is missing"
-	if !strings.Contains(err.Error(), expectedErr) {
-		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupSubmitTestEnv(t)
+
+			args := append([]string{
+				"submit",
+				"--name", "pathways-flag-val-test",
+				"--image", "busybox",
+				"--command", "echo hello",
+				"--compute-type", "n2-standard-4",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+			}, tc.extraArgs...)
+
+			_, err := executeCommand(JobCmd, args...)
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("expected error containing %q, got: %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
+	tests := []struct {
+		name                 string
+		extraArgs            []string
+		wantElasticSlices    int
+		wantMaxSliceRestarts int
+	}{
+		{
+			name:                 "defaults to 0 when elastic-slices is 0 (omitted)",
+			extraArgs:            nil,
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 0,
+		},
+		{
+			name:                 "defaults to 4000 when elastic-slices > 0 and max-slice-restarts omitted",
+			extraArgs:            []string{"--pathways-elastic-slices", "2"},
+			wantElasticSlices:    2,
+			wantMaxSliceRestarts: 4000,
+		},
+		{
+			name:                 "honors explicit max-slice-restarts when elastic-slices > 0",
+			extraArgs:            []string{"--pathways-elastic-slices", "2", "--pathways-max-slice-restarts", "10"},
+			wantElasticSlices:    2,
+			wantMaxSliceRestarts: 10,
+		},
+		{
+			name:                 "honors explicit max-slice-restarts=0 when elastic-slices > 0",
+			extraArgs:            []string{"--pathways-elastic-slices", "2", "--pathways-max-slice-restarts", "0"},
+			wantElasticSlices:    2,
+			wantMaxSliceRestarts: 0,
+		},
+		{
+			name:                 "honors explicit max-slice-restarts when elastic-slices is 0",
+			extraArgs:            []string{"--pathways-max-slice-restarts", "5"},
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 5,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupSubmitTestEnv(t)
+
+			mockOrc := &mockOrchestrator{}
+			gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+				return mockOrc
+			}
+
+			args := append([]string{
+				"submit",
+				"--pathways",
+				"--pathways-gcs-location", "gs://my-bucket",
+				"--name", "pw-restarts-default",
+				"--image", "busybox",
+				"--command", "echo hello",
+				"--compute-type", "n2-standard-4",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+			}, tc.extraArgs...)
+
+			_, err := executeCommand(JobCmd, args...)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if got := mockOrc.SubmittedJob.Pathways.ElasticSlices; got != tc.wantElasticSlices {
+				t.Errorf("ElasticSlices = %d, want %d", got, tc.wantElasticSlices)
+			}
+			if got := mockOrc.SubmittedJob.Pathways.MaxSliceRestarts; got != tc.wantMaxSliceRestarts {
+				t.Errorf("MaxSliceRestarts = %d, want %d", got, tc.wantMaxSliceRestarts)
+			}
+		})
 	}
 }
