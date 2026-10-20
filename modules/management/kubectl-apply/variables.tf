@@ -21,11 +21,11 @@ locals {
 
   # Note: The apiVersion associated with the kueue resources should be kueue.x-k8s.io/v1beta2 when using v0.15.0 or higher.
   # Refer: https://github.com/kubernetes-sigs/kueue/blob/main/CHANGELOG/CHANGELOG-0.15.md#v0150
-  kueue_supported_versions = ["0.17.1", "0.16.0", "0.15.3", "0.15.2", "0.15.1", "0.15.0"]
+  kueue_supported_versions = ["0.19.6", "0.18.2", "0.17.1", "0.16.0", "0.15.3", "0.15.2", "0.15.1", "0.15.0"]
 
   # Officially supported latest helm chart versions of Jobset.
   # For details refer the official change log https://github.com/kubernetes-sigs/jobset/releases
-  jobset_supported_versions    = ["0.10.1", "0.10.0", "0.9.1", "0.9.0"]
+  jobset_supported_versions    = ["0.12.0", "0.10.1", "0.10.0", "0.9.1", "0.9.0"]
   gib_supported_versions_x86   = ["v1.1.2", "v1.1.0", "v1.0.6", "v1.0.5", "v1.0.3", "v1.0.2"]
   gib_supported_versions_arm64 = ["v1.1.2", "v1.1.0", "v1.0.7"]
   gib_supported_versions = var.target_architecture == "arm64" ? (
@@ -52,7 +52,7 @@ resource "terraform_data" "kueue_validations" {
       error_message = "Supported version of Kueue are ${join(", ", local.kueue_supported_versions)}"
     }
     precondition {
-      condition     = !var.kueue.install || !(var.enable_pathways_for_tpus || try(var.kueue.enable_pathways_for_tpus, false)) || try(var.kueue.config_path, "") != "" || contains(keys(coalesce(var.kueue.config_template_vars, {})), "accelerator_type")
+      condition     = !var.kueue.install || !(var.enable_pathways_for_tpus || try(var.kueue.enable_pathways_for_tpus, false)) || (var.kueue.config_path != null && var.kueue.config_path != "") || contains(keys(coalesce(var.kueue.config_template_vars, {})), "accelerator_type")
       error_message = "accelerator_type must be set in kueue.config_template_vars when using the default pathways configuration."
     }
     precondition {
@@ -64,7 +64,7 @@ resource "terraform_data" "kueue_validations" {
       error_message = "When enable_dynamic_slicing_for_tpus is true, machine_type must be a TPU machine type."
     }
     precondition {
-      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || coalesce(var.kueue.config_path, "") != "" || (var.kueue.config_template_vars != null && contains(keys(var.kueue.config_template_vars), "accelerator_type"))
+      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || (var.kueue.config_path != null && var.kueue.config_path != "") || (var.kueue.config_template_vars != null && contains(keys(var.kueue.config_template_vars), "accelerator_type"))
       error_message = "accelerator_type must be set in kueue.config_template_vars when using the default dynamic slicing configuration."
     }
     precondition {
@@ -74,6 +74,10 @@ resource "terraform_data" "kueue_validations" {
     precondition {
       condition     = !(var.kueue.enable_dynamic_slicing_for_tpus && !var.jobset.install)
       error_message = "Slice controller requires Jobset to be installed. Set jobset.install to true when kueue.enable_dynamic_slicing_for_tpus is true."
+    }
+    precondition {
+      condition     = !var.kueue.install || var.kueue.wait_for_pods_ready == null || module.kueue_pods_ready_default_on_check.is_greater_than_or_equal
+      error_message = "kueue.wait_for_pods_ready is only supported on Kueue >= 0.19.0."
     }
   }
 }
@@ -147,8 +151,9 @@ variable "kueue" {
   description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
   type = object({
     # ATTENTION: If you update the KUEUE's default version below, please also update the corresponding
-    # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go. (note the 'v' prefix there)
-    version                         = optional(string, "0.17.1")
+    # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go (note the 'v' prefix there)
+    # and keep kueue/kueue-manager-config.yaml in sync with the chart's default managerConfig.controllerManagerConfigYaml.
+    version                         = optional(string, "0.19.6")
     install                         = optional(bool, false)
     config_path                     = optional(string, null)
     config_template_vars            = optional(map(any), null)
@@ -163,8 +168,37 @@ variable "kueue" {
     slice_controller_memory_request = optional(string, "16Gi")
     slice_controller_cpu_limit      = optional(string, "12000m")
     slice_controller_memory_limit   = optional(string, "32Gi")
+    # Optional Kueue waitForPodsReady settings. On Kueue >= 0.19.0 with Pathways
+    # enabled, defaults to timeout = "30m" and recovery_timeout = "0s".
+    wait_for_pods_ready = optional(object({
+      timeout          = optional(string)
+      recovery_timeout = optional(string)
+      block_admission  = optional(bool)
+    }), null)
   })
   default = {}
+
+  validation {
+    condition = alltrue([
+      for d in [try(var.kueue.wait_for_pods_ready.timeout, null), try(var.kueue.wait_for_pods_ready.recovery_timeout, null)] :
+      d == null || can(regex("^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$", d))
+    ])
+    error_message = "kueue.wait_for_pods_ready.timeout and recovery_timeout must be Go duration strings (e.g. '30m', '1.5h', or '0s' for recovery_timeout)."
+  }
+
+  validation {
+    condition     = try(var.kueue.wait_for_pods_ready.timeout, null) == null || can(regex("[1-9]", var.kueue.wait_for_pods_ready.timeout))
+    error_message = "kueue.wait_for_pods_ready.timeout must be greater than 0s ('0s' is only valid for recovery_timeout)."
+  }
+
+  validation {
+    condition = var.kueue.wait_for_pods_ready == null || anytrue([
+      var.kueue.wait_for_pods_ready.timeout != null,
+      var.kueue.wait_for_pods_ready.recovery_timeout != null,
+      var.kueue.wait_for_pods_ready.block_admission != null,
+    ])
+    error_message = "kueue.wait_for_pods_ready must set at least one of timeout, recovery_timeout or block_admission."
+  }
 }
 
 variable "enable_pathways_for_tpus" {
@@ -183,7 +217,7 @@ variable "jobset" {
   description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
   type = object({
     install           = optional(bool, false)
-    version           = optional(string, "0.10.1")
+    version           = optional(string, "0.12.0")
     controller_cpu    = optional(string, null)
     controller_memory = optional(string, null)
   })

@@ -15,7 +15,6 @@
 package gke
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,7 +23,6 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
-	"maps"
 	"net/url"
 	"os"
 	"os/exec"
@@ -33,14 +31,11 @@ import (
 	"strings"
 	"time"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/selection"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"gopkg.in/yaml.v2"
@@ -48,16 +43,23 @@ import (
 )
 
 const (
-	defaultPathwaysProxyImage  = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
-	defaultPathwaysServerImage = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
-
-	// maxLogRequests is the maximum concurrent log streams allowed by the GKE logs CLI.
+	// maxLogRequests caps the number of pods from which gcluster fetches logs in the terminal before
+	// redirecting to Cloud Logging, and serves as the floor for kubectl's --max-log-requests flag.
 	maxLogRequests = 10
 
-	workloadContainerPrefix      = "workload-container"
-	pathwaysContainerPrefix      = "pathways-"
-	jobSetContainerNamesJSONPath = "{.spec.replicatedJobs[0].template.spec.template.spec.containers[*].name}"
+	// jobSetInfoJSONPath reads terminalState, the Suspended condition status, and the first replicated job's
+	// name on line 1 (tab-separated), followed by "<replicas> <parallelism>" per replicated job.
+	jobSetInfoJSONPath = `{.status.terminalState}{"\t"}{.status.conditions[?(@.type=="Suspended")].status}{"\t"}{.spec.replicatedJobs[0].name}{"\n"}{range .spec.replicatedJobs[*]}{.replicas}{" "}{.template.spec.parallelism}{"\n"}{end}`
+
+	// podContainersJSONPath prints one line per pod with all container names for pod and stream counting.
+	podContainersJSONPath = `{range .items[*]}{.spec.initContainers[*].name}{" "}{.spec.containers[*].name}{" "}{.spec.ephemeralContainers[*].name}{"\n"}{end}`
 )
+
+// logsRetryInterval is the wait between waitForJobPods and fetchLogsWithRetry attempts; tests shorten it.
+var logsRetryInterval = 5 * time.Second
+
+// logsMaxAttempts bounds both wait loops: 12 attempts 5s apart (~1 minute plus kubectl latency).
+const logsMaxAttempts = 12
 
 func NewGKEOrchestrator() *GKEOrchestrator {
 	return &GKEOrchestrator{
@@ -115,7 +117,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err != nil {
 		return err
 	}
-	if err := g.validateJobConflicts(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
+	if err := g.validateJobConflicts(job); err != nil {
 		return err
 	}
 
@@ -130,12 +132,10 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 
 	if job.DryRunManifest == "" {
 		g.printConsoleLinks(job)
-	}
-
-	if job.AwaitJobCompletion && job.DryRunManifest == "" {
-		err = g.awaitJobCompletion(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, job.Timeout)
-		if err != nil {
-			return err
+		if job.AwaitJobCompletion {
+			if err := g.awaitJobCompletion(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, job.Timeout); err != nil {
+				return err
+			}
 		}
 	}
 	logging.Info("gcluster job submit workflow completed.")
@@ -190,176 +190,228 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 		return "", err
 	}
 
-	ns, err := g.getCurrentNamespace(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
-	if err != nil {
-		return "", err
-	}
-	foundNamespace := ns
-
-	selector, mainOnly, podCountForNotice := g.resolveLogsSelector(name, foundNamespace, opts.MainOnly)
-
-	if opts.MainOnly == nil && mainOnly {
-		logging.Info("Job has %d pods (> 5). Defaulting to --main-only logs. To fetch logs from all pods, run with --main-only=false.", podCountForNotice)
-	}
-
-	// Proactively check pod count against GKE logs limits
-	if podCountForNotice > maxLogRequests && !mainOnly {
-		consoleURL := getCloudConsoleLogsURL(opts.ProjectID, opts.ClusterLocation, opts.ClusterName, foundNamespace, name)
-		return "", fmt.Errorf("job '%s' has %d pods matching logs query, which exceeds the max fetch limit (%d). Please view logs directly in the Google Cloud Console:\n%s", name, podCountForNotice, maxLogRequests, consoleURL)
-	}
-
-	var containerName string
-	if mainOnly {
-		containerName = g.getFirstContainerName(foundNamespace, selector)
-		if containerName == "" {
-			logging.Info("Could not determine specific workload container from JobSet; streaming all containers...")
-		}
-	}
-
-	if opts.Follow {
-		logging.Info("Streaming logs for job '%s'...", name)
-		args := g.buildKubectlLogsArgs(foundNamespace, selector, containerName, true)
-		err = g.executor.ExecuteCommandStream("kubectl", args...)
-		return "", err
-	}
-
-	res, err := g.fetchLogsWithRetry(foundNamespace, selector, containerName)
+	foundNamespace, err := g.getCurrentNamespace(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
 	if err != nil {
 		return "", err
 	}
 
-	if strings.TrimSpace(res.Stdout) == "" {
+	podCount, streamCount, jsInfo, err := g.waitForJobPods(foundNamespace, name)
+	if err != nil {
+		return "", err
+	}
+	if podCount == 0 {
 		return "Job exists but has no live logs available (it may have finished or failed to start pods)", nil
 	}
 
+	// Pods appear in batches (and after the leader with InOrder startup), so size decisions on the spec.
+	jsInfo = g.ensureJobSetInfo(foundNamespace, name, jsInfo)
+	podCount = max(podCount, jsInfo.expectedPods)
+	consoleURL := getCloudConsoleLogsURL(opts.ProjectID, opts.ClusterLocation, opts.ClusterName, foundNamespace, name)
+	selector, mainOnly := g.resolveLogsSelector(name, opts.MainOnly, podCount, jsInfo.firstJob, consoleURL)
+	if podCount > maxLogRequests && !mainOnly {
+		return "", fmt.Errorf("job '%s' has %d pods matching logs query, which exceeds the max fetch limit (%d). Please view logs directly in the Google Cloud Console:\n%s", name, podCount, maxLogRequests, consoleURL)
+	}
+
+	allContainers := !mainOnly
+	if opts.Follow {
+		logging.Info("Streaming logs for job '%s'...", name)
+		if _, err := g.fetchLogsWithRetry(foundNamespace, name, selector, allContainers, streamCount, 1); err != nil {
+			return "", err
+		}
+		if _, fresh, err := g.getJobPodStreams(foundNamespace, selector); err == nil {
+			streamCount = max(streamCount, fresh) // pods created while the probe waited
+		}
+		args := g.buildKubectlLogsArgs(foundNamespace, selector, allContainers, true, streamCount, -1)
+		return "", g.kubectlStream(args...)
+	}
+	res, err := g.fetchLogsWithRetry(foundNamespace, name, selector, allContainers, streamCount, -1)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(res.Stdout) == "" {
+		return "Job exists but has no live logs available (it may have finished or failed to start pods)", nil
+	}
 	return res.Stdout, nil
 }
 
-func (g *GKEOrchestrator) buildKubectlLogsArgs(ns, selector, containerName string, follow bool) []string {
+// buildKubectlLogsArgs leaves the container to kubectl unless allContainers is set. kubectl (1.24+) then reads the
+// pod's kubectl.kubernetes.io/default-container, else spec.containers[0]; native sidecars are never picked.
+func (g *GKEOrchestrator) buildKubectlLogsArgs(ns, selector string, allContainers, follow bool, streamCount, tail int) []string {
 	args := []string{"logs", "-n", ns, "-l", selector}
-	if containerName != "" {
-		args = append(args, "-c", containerName)
-	} else {
+	if allContainers {
 		args = append(args, "--all-containers")
 	}
 	if follow {
 		args = append(args, "-f")
 	}
-	args = append(args, fmt.Sprintf("--max-log-requests=%d", maxLogRequests), "--tail=-1")
+	maxReqs := maxLogRequests
+	if allContainers && streamCount > maxReqs {
+		maxReqs = streamCount
+	}
+	args = append(args, fmt.Sprintf("--max-log-requests=%d", maxReqs), fmt.Sprintf("--tail=%d", tail))
 	return args
 }
 
-func (g *GKEOrchestrator) fetchLogsWithRetry(ns, selector, containerName string) (shell.CommandResult, error) {
-	maxRetries := 12 // 12 * 5s = 1 minute timeout
+func (g *GKEOrchestrator) fetchLogsWithRetry(ns, jobsetName, selector string, allContainers bool, streamCount, tail int) (shell.CommandResult, error) {
 	var res shell.CommandResult
-	cmdArgs := g.buildKubectlLogsArgs(ns, selector, containerName, false)
-	for i := 0; i < maxRetries; i++ {
-		res = g.executor.ExecuteCommand("kubectl", cmdArgs...)
+	cmdArgs := g.buildKubectlLogsArgs(ns, selector, allContainers, false, streamCount, tail)
+	for i := 0; i < logsMaxAttempts; i++ {
+		if i > 0 {
+			time.Sleep(logsRetryInterval)
+		}
+		res = g.kubectl(cmdArgs...)
 		if res.ExitCode == 0 {
 			return res, nil
 		}
 
-		if strings.Contains(res.Stderr, "is waiting to start") || strings.Contains(res.Stderr, "No resources found") {
+		if strings.Contains(res.Stderr, "is waiting to start") {
 			if i == 0 {
 				logging.Info("Job containers are waiting to start (likely pulling images). Waiting...")
 			}
-			time.Sleep(5 * time.Second)
 			continue
 		}
 
 		return res, fmt.Errorf("failed to get logs: %s\n%s", res.Stderr, res.Stdout)
 	}
 
-	jobsetName := extractJobSetNameFromSelector(selector)
-	if jobsetName != "" {
-		warnEvents := g.checkJobSetWarningEvents(ns, jobsetName)
-		if warnEvents != "" {
-			return res, fmt.Errorf("timed out waiting for job to start; JobSet reported warning events:\n%s\nlatest error: %s\n%s", warnEvents, res.Stderr, res.Stdout)
-		}
+	if warnEvents := g.checkJobSetWarningEvents(ns, jobsetName); warnEvents != "" {
+		return res, fmt.Errorf("timed out waiting for job to start; JobSet reported warning events:\n%s\nlatest error: %s\n%s", warnEvents, res.Stderr, res.Stdout)
 	}
 	return res, fmt.Errorf("timed out waiting for job to start; latest error: %s\n%s", res.Stderr, res.Stdout)
 }
 
-func extractJobSetNameFromSelector(selector string) string {
-	sel, err := labels.Parse(selector)
-	if err != nil {
-		return ""
-	}
-	reqs, _ := sel.Requirements()
-	for _, req := range reqs {
-		if req.Key() == "jobset.sigs.k8s.io/jobset-name" && (req.Operator() == selection.Equals || req.Operator() == selection.DoubleEquals || req.Operator() == selection.In) {
-			if vals := req.Values().List(); len(vals) == 1 {
-				return vals[0]
-			}
+// waitForJobPods polls until the JobSet has at least one pod, or returns 0 pods if the JobSet already finished.
+// If it queries the JobSet while waiting, it returns the parsed jobSetInfo so the caller does not re-query it.
+func (g *GKEOrchestrator) waitForJobPods(ns, jobsetName string) (int, int, jobSetInfo, error) {
+	selector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", jobsetName)
+	var info jobSetInfo
+	for i := 0; i < logsMaxAttempts; i++ {
+		if i > 0 {
+			time.Sleep(logsRetryInterval)
+		}
+		pods, streams, err := g.getJobPodStreams(ns, selector)
+		if err != nil || pods > 0 {
+			return pods, streams, info, err
+		}
+		info, err = g.getJobSetInfo(ns, jobsetName)
+		if err != nil {
+			return 0, 0, jobSetInfo{}, err
+		}
+		if info.terminal() {
+			return 0, 0, info, nil
+		}
+		if i == 0 {
+			logging.Info("Waiting for job '%s' pods to be created...", jobsetName)
 		}
 	}
-	return ""
+	if warnEvents := g.checkJobSetWarningEvents(ns, jobsetName); warnEvents != "" {
+		return 0, 0, jobSetInfo{}, fmt.Errorf("timed out waiting for job to start; JobSet reported warning events:\n%s", warnEvents)
+	}
+	if info.suspended {
+		return 0, 0, jobSetInfo{}, fmt.Errorf("timed out waiting for job '%s' to start: job is still queued (JobSet suspended, waiting for Kueue admission); re-run once admitted or check gcluster job inspect", jobsetName)
+	}
+	return 0, 0, jobSetInfo{}, fmt.Errorf("timed out waiting for job to start: no pods created for job '%s'", jobsetName)
 }
 
-func findWorkloadContainer(containers []string) string {
-	for _, c := range containers {
-		if strings.HasPrefix(c, workloadContainerPrefix) || strings.HasPrefix(c, pathwaysContainerPrefix) {
-			return c
-		}
-	}
-	if len(containers) > 0 {
-		return containers[0]
-	}
-	return ""
-}
-
-func (g *GKEOrchestrator) getFirstContainerName(ns, selector string) string {
-	jobsetName := extractJobSetNameFromSelector(selector)
-	if jobsetName != "" {
-		res := g.executor.ExecuteCommand("kubectl", "get", "jobsets.jobset.x-k8s.io", jobsetName, "-n", ns, "-o", "jsonpath="+jobSetContainerNamesJSONPath)
-		if res.ExitCode == 0 && strings.TrimSpace(res.Stdout) != "" {
-			if name := findWorkloadContainer(strings.Fields(res.Stdout)); name != "" {
-				return name
-			}
-		} else if res.ExitCode != 0 {
-			logging.Warn("Failed to query JobSet '%s' for container names: %s", jobsetName, strings.TrimSpace(res.Stderr))
-		} else {
-			logging.Warn("Could not determine a primary workload container for JobSet '%s' from output: %s", jobsetName, strings.TrimSpace(res.Stdout))
-		}
-	}
-	return ""
-}
-
-func (g *GKEOrchestrator) getJobPodCount(ns, selector string) (int, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "pods", "-n", ns, "-l", selector, "--no-headers")
+func (g *GKEOrchestrator) getJobSetInfo(ns, jobsetName string) (jobSetInfo, error) {
+	res := g.kubectl("get", "jobsets.jobset.x-k8s.io", jobsetName, "-n", ns, "-o", "jsonpath="+jobSetInfoJSONPath)
 	if res.ExitCode != 0 {
-		return 0, fmt.Errorf("failed to query pods: %s", res.Stderr)
+		if strings.Contains(res.Stderr, "NotFound") {
+			return jobSetInfo{}, fmt.Errorf("job '%s' not found in namespace '%s' (run 'gcluster job list' or check --gke-namespace)", jobsetName, ns)
+		}
+		return jobSetInfo{}, fmt.Errorf("failed to read status of job '%s': %s", jobsetName, strings.TrimSpace(res.Stderr))
+	}
+	info := parseJobSetInfo(res.Stdout)
+	info.queried = true
+	return info, nil
+}
+
+func (g *GKEOrchestrator) ensureJobSetInfo(ns, jobsetName string, info jobSetInfo) jobSetInfo {
+	if info.queried {
+		return info
+	}
+	queried, err := g.getJobSetInfo(ns, jobsetName)
+	if err != nil {
+		logging.Warn("Failed to query JobSet: %v", err)
+		return info
+	}
+	return queried
+}
+
+// parseJobSetInfo parses the output of jobSetInfoJSONPath. Each line after the tab-separated header is one
+// replicated job; a missing replicas or parallelism field defaults to 1 (the API default), so a blank line
+// still counts as one pod, while an explicit 0 counts as zero.
+func parseJobSetInfo(stdout string) jobSetInfo {
+	stdout = strings.ReplaceAll(stdout, "\r\n", "\n")
+	header, rest, _ := strings.Cut(stdout, "\n")
+	var info jobSetInfo
+	if parts := strings.Split(header, "\t"); len(parts) == 3 {
+		info.terminalState = strings.TrimSpace(parts[0])
+		info.suspended = strings.Contains(parts[1], "True")
+		info.firstJob = strings.TrimSpace(parts[2])
+	}
+	rest = strings.TrimRight(rest, "\n")
+	if rest == "" {
+		return info
+	}
+	for _, line := range strings.Split(rest, "\n") {
+		pods := 1
+		for _, f := range strings.Fields(line) {
+			if n, err := strconv.Atoi(f); err == nil && n >= 0 {
+				pods *= n
+			}
+		}
+		info.expectedPods += pods
+	}
+	return info
+}
+
+func (g *GKEOrchestrator) getJobPodStreams(ns, selector string) (int, int, error) {
+	res := g.kubectl("get", "pods", "-n", ns, "-l", selector, "-o", "jsonpath="+podContainersJSONPath)
+	if res.ExitCode != 0 {
+		return 0, 0, fmt.Errorf("failed to query pods: %s", res.Stderr)
 	}
 	stdout := strings.TrimSpace(res.Stdout)
 	if stdout == "" {
-		return 0, nil
+		return 0, 0, nil
 	}
-	return len(strings.Split(stdout, "\n")), nil
+	pods, streams := 0, 0
+	for _, line := range strings.Split(stdout, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		pods++
+		streams += len(fields)
+	}
+	return pods, streams, nil
 }
 
-func (g *GKEOrchestrator) resolveLogsSelector(name, ns string, optsMainOnly *bool) (string, bool, int) {
-	mainOnly := false
-	podCount := 0
+// resolveLogsSelector returns the pod selector and whether logs are main-only. Main-only selects rank-0 of the
+// first replicated job: job-index and job-completion-index alone are per replicated job and would also match
+// e.g. a Pathways worker-0-0.
+func (g *GKEOrchestrator) resolveLogsSelector(name string, optsMainOnly *bool, podCount int, firstJob, consoleURL string) (string, bool) {
 	selector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name)
-
+	mainOnly := podCount > 5
 	if optsMainOnly != nil {
 		mainOnly = *optsMainOnly
-	}
-
-	if !mainOnly {
-		var err error
-		podCount, err = g.getJobPodCount(ns, selector)
-
-		if optsMainOnly == nil && err == nil && podCount > 5 {
-			mainOnly = true
+	} else if mainOnly {
+		if podCount > maxLogRequests {
+			logging.Info("Job has %d pods (> %d). Defaulting to --main-only logs. To view logs from all pods, use the Google Cloud Console:\n%s", podCount, maxLogRequests, consoleURL)
+		} else {
+			logging.Info("Job has %d pods (> 5). Defaulting to --main-only logs. To fetch logs from all pods, run with --main-only=false.", podCount)
 		}
 	}
-
 	if mainOnly {
+		if firstJob != "" {
+			selector += ",jobset.sigs.k8s.io/replicatedjob-name=" + firstJob
+		} else {
+			logging.Info("Falling back to the rank-0 pod of every replicated job in '%s'.", name)
+		}
 		selector = fmt.Sprintf("%s,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0", selector)
 	}
 
-	return selector, mainOnly, podCount
+	return selector, mainOnly
 }
 
 func (g *GKEOrchestrator) generateAndSubmitManifests(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) error {
@@ -414,68 +466,18 @@ func (g *GKEOrchestrator) printConsoleLinks(job orchestrator.JobDefinition) {
 	logging.Info("View your workload logs in real-time here: %s or use gcluster job logs [job-name] to view logs using kubectl", logsLink)
 }
 
-func (g *GKEOrchestrator) validateJobConflicts(workloadName string, clusterName string, clusterLocation string, projectID string) error {
-	status, err := g.getJobStatus(workloadName)
+func (g *GKEOrchestrator) validateJobConflicts(job orchestrator.JobDefinition) error {
+	if job.DryRunManifest != "" {
+		return nil
+	}
+	status, err := g.getJobStatus(job.WorkloadName)
 	if err != nil {
 		return err
 	}
 	if status != "" {
-		return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s --cluster %s --location %s --project %s' or resubmit this workload with a different name using '--name'", workloadName, status, workloadName, clusterName, clusterLocation, projectID)
+		return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s --cluster %s --location %s --project %s' or resubmit this workload with a different name using '--name'", job.WorkloadName, status, job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID)
 	}
 	return nil
-}
-
-func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) (string, error) {
-	// Set default values for Pathways-specific fields if not provided
-	if job.Pathways.ProxyServerImage == "" {
-		job.Pathways.ProxyServerImage = defaultPathwaysProxyImage
-	}
-	if job.Pathways.ServerImage == "" {
-		job.Pathways.ServerImage = defaultPathwaysServerImage
-	}
-	if job.Pathways.WorkerImage == "" {
-		// WorkerImage defaults to ServerImage if not explicitly set
-		job.Pathways.WorkerImage = job.Pathways.ServerImage
-	}
-
-	tmpl, err := g.parseGKETemplate("pathways_jobset.tmpl")
-	if err != nil {
-		return "", fmt.Errorf("failed to parse pathways jobset template: %w", err)
-	}
-
-	opts, err := g.PrepareManifestOptions(job, fullImageName, profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		return "", err
-	}
-
-	opts.Pathways = job.Pathways
-
-	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(opts, profile)
-	var resStr string
-	if err == nil {
-		resStr, err = g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit, 14)
-		if err != nil {
-			return "", err
-		}
-	} else {
-		logging.Warn("Warning: failed to calculate resource limits for Pathways job: %v", err)
-	}
-
-	cmdSlice := []string{"/bin/bash", "-c", opts.CommandToRun}
-	isTPU := tpuLimit != ""
-	isGPU := gpuLimit != ""
-	data := g.prepareJobSetTemplateData(opts, cmdSlice, resStr, isTPU, isGPU)
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
-	}
-
-	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
-	if err := ValidateJobSetManifest(manifest); err != nil {
-		return "", err
-	}
-	return manifest, nil
 }
 
 func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, workloadName string) error {
@@ -544,304 +546,6 @@ func (g *GKEOrchestrator) isSystemPool(np gkeJobNodePool) bool {
 		}
 	}
 	return false
-}
-
-// isForbiddenError returns true if the error indicates a 403 Forbidden RBAC permission error.
-func isForbiddenError(err error) bool {
-	if err == nil {
-		return false
-	}
-	return apierrors.IsForbidden(err) || strings.Contains(strings.ToLower(err.Error()), "forbidden")
-}
-
-func (g *GKEOrchestrator) verifyCheckpointConfigurationCR(job *orchestrator.JobDefinition, docRemediationMsg string) error {
-	client, err := g.getDynamicClient()
-	if err != nil {
-		return fmt.Errorf("failed to initialize dynamic client to verify CheckpointConfiguration: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	checkpointConfigList, err := client.Resource(checkpointConfigurationGVR).List(ctx, metav1.ListOptions{Limit: 1})
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return fmt.Errorf("the CheckpointConfiguration CustomResourceDefinition (CRD) is not registered on the cluster. %s: %w", docRemediationMsg, err)
-		}
-		if isForbiddenError(err) {
-			logging.Warn("Insufficient RBAC permissions to verify CheckpointConfiguration resources (403 Forbidden). Assuming CheckpointConfiguration is configured in shared cluster and proceeding with job submission.")
-			return nil
-		}
-		return fmt.Errorf("failed to verify CheckpointConfiguration resource: %w", err)
-	}
-	if len(checkpointConfigList.Items) == 0 {
-		return fmt.Errorf("Multi-Tier Checkpointing (MTC) requires a CheckpointConfiguration resource to be deployed on the cluster. %s", docRemediationMsg)
-	}
-
-	return nil
-}
-
-func (g *GKEOrchestrator) validateMTCConfig(job *orchestrator.JobDefinition) error {
-	if job == nil || !job.GKEMTCEnabled {
-		return nil
-	}
-
-	mtcDocURL := "https://cloud.google.com/kubernetes-engine/docs/how-to/multi-tier-checkpointing"
-	docRemediationMsg := fmt.Sprintf("Please follow the official GKE documentation to enable this feature on your cluster: %s", mtcDocURL)
-
-	if job.GKEMTCRamdiskDirectory == "" {
-		return fmt.Errorf("ramdisk directory path (--gke-mtc-ramdisk-dir) cannot be empty when Multi-Tier Checkpointing (MTC) is enabled")
-	}
-
-	sm := &StorageManager{orchestrator: g}
-	if err := sm.ValidateRamdiskDir(job.GKEMTCRamdiskDirectory, job.RawMounts); err != nil {
-		return err
-	}
-
-	if g.clusterDesc.AddonsConfig == nil || g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig == nil || !g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig.Enabled {
-		return fmt.Errorf("Multi-Tier Checkpointing (MTC) requires the HighScaleCheckpointing addon to be enabled on the target GKE cluster. %s", docRemediationMsg)
-	}
-
-	if job.DryRunManifest != "" {
-		return nil
-	}
-
-	if err := g.verifyCheckpointConfigurationCR(job, docRemediationMsg); err != nil {
-		return err
-	}
-
-	return g.ensureMTCWorkloadIdentity(job)
-}
-
-// getNodeServiceAccount discovers the custom Google Service Account (GSA) used by node pools in the cluster.
-func (g *GKEOrchestrator) getNodeServiceAccount() string {
-	for _, np := range g.clusterDesc.NodePools {
-		if np.Config.ServiceAccount != "" && np.Config.ServiceAccount != "default" {
-			logging.Info("Discovered node service account '%s' (from node pool '%s') for MTC Workload Identity", np.Config.ServiceAccount, np.Name)
-			return np.Config.ServiceAccount
-		}
-	}
-	return ""
-}
-
-func isDaemonSetRolloutComplete(dsObj *unstructured.Unstructured) bool {
-	if dsObj == nil || dsObj.Object == nil {
-		return false
-	}
-	gen, _, _ := unstructured.NestedInt64(dsObj.Object, "metadata", "generation")
-	obsGen, _, _ := unstructured.NestedInt64(dsObj.Object, "status", "observedGeneration")
-	desired, _, _ := unstructured.NestedInt64(dsObj.Object, "status", "desiredNumberScheduled")
-	ready, _, _ := unstructured.NestedInt64(dsObj.Object, "status", "numberReady")
-	updated, _, _ := unstructured.NestedInt64(dsObj.Object, "status", "updatedNumberScheduled")
-
-	if desired > 0 && obsGen >= gen && ready >= desired && updated >= desired {
-		logging.Info("MTC multitier-driver DaemonSet is ready (%d/%d nodes ready).", ready, desired)
-		return true
-	}
-	return false
-}
-
-func getMTCDaemonSet(ctx context.Context, client dynamic.Interface, namespace string) (*unstructured.Unstructured, error) {
-	// First attempt direct get of "multitier-driver" in case it exists with static name.
-	if dsObj, err := client.Resource(daemonsetGVR).Namespace(namespace).Get(ctx, "multitier-driver", metav1.GetOptions{}); err == nil {
-		if dsObj.GetName() == "" {
-			dsObj.SetName("multitier-driver")
-		}
-		return dsObj, nil
-	} else if !apierrors.IsNotFound(err) {
-		return nil, err
-	}
-
-	// In GKE, HighScaleCheckpointing names the DaemonSet "multitier-driver-<instanceHandle>".
-	// List DaemonSets in the namespace to find it.
-	dsList, err := client.Resource(daemonsetGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	for i := range dsList.Items {
-		ds := &dsList.Items[i]
-		if strings.HasPrefix(ds.GetName(), "multitier-driver") || ds.GetLabels()["k8s-app"] == "high-scale-checkpointing" {
-			return ds, nil
-		}
-	}
-	return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, "multitier-driver")
-}
-
-var daemonSetPollInterval = 2 * time.Second
-
-// waitForDaemonSetRollout polls the DaemonSet until its rollout is complete or context times out.
-func waitForDaemonSetRollout(ctx context.Context, client dynamic.Interface, namespace, dsName string) {
-	waitCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
-	defer cancel()
-
-	ticker := time.NewTicker(daemonSetPollInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-waitCtx.Done():
-			logging.Warn("Timed out or context canceled waiting for MTC multitier-driver DaemonSet %s in %s to become ready. Proceeding with job submission.", dsName, namespace)
-			return
-		case <-ticker.C:
-			currentObj, err := client.Resource(daemonsetGVR).Namespace(namespace).Get(waitCtx, dsName, metav1.GetOptions{})
-			if err != nil {
-				if isForbiddenError(err) {
-					logging.Warn("Insufficient RBAC permissions to get multitier-driver DaemonSet %s in %s status (403 Forbidden). Proceeding with job submission.", dsName, namespace)
-					return
-				}
-				logging.Warn("Retrying get of multitier-driver DaemonSet %s: %v", dsName, err)
-				continue
-			}
-			if isDaemonSetRolloutComplete(currentObj) {
-				return
-			}
-		}
-	}
-}
-
-// restartMTCDriverPods restarts the multitier-driver DaemonSet to pick up updated service account tokens.
-func restartMTCDriverPods(ctx context.Context, client dynamic.Interface, namespace string) {
-	dsObj, err := getMTCDaemonSet(ctx, client, namespace)
-	if err != nil {
-		if isForbiddenError(err) {
-			logging.Warn("Insufficient RBAC permissions to get multitier-driver DaemonSet in %s (403 Forbidden). Skipping driver restart.", namespace)
-			return
-		}
-		if apierrors.IsNotFound(err) {
-			logging.Warn("MTC multitier-driver DaemonSet not found in %s. Skipping driver restart.", namespace)
-			return
-		}
-		logging.Warn("Failed to get multitier-driver DaemonSet in %s: %v. Skipping driver restart.", namespace, err)
-		return
-	}
-
-	dsName := dsObj.GetName()
-	patchData := fmt.Appendf(nil, `{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}`, time.Now().UTC().Format(time.RFC3339))
-	_, patchErr := client.Resource(daemonsetGVR).Namespace(namespace).Patch(ctx, dsName, types.StrategicMergePatchType, patchData, metav1.PatchOptions{})
-	if patchErr == nil {
-		logging.Info("Triggered rolling restart of %s DaemonSet in %s", dsName, namespace)
-		waitForDaemonSetRollout(ctx, client, namespace, dsName)
-		return
-	}
-	if isForbiddenError(patchErr) {
-		logging.Warn("Insufficient RBAC permissions to restart %s DaemonSet in %s (403 Forbidden). Skipping driver restart.", dsName, namespace)
-		return
-	}
-
-	logging.Warn("Failed to patch DaemonSet %s for restart: %v. Falling back to pod deletion.", dsName, patchErr)
-	deleteMTCDriverPodsFallback(ctx, client, namespace)
-	waitForDaemonSetRollout(ctx, client, namespace, dsName)
-}
-
-func deleteMTCDriverPodsFallback(ctx context.Context, client dynamic.Interface, namespace string) {
-	listOpts := metav1.ListOptions{
-		LabelSelector: "k8s-app=high-scale-checkpointing",
-	}
-	pods, err := client.Resource(podGVR).Namespace(namespace).List(ctx, listOpts)
-	if err != nil {
-		if isForbiddenError(err) {
-			logging.Warn("Insufficient RBAC permissions to list multitier-driver pods in %s (403 Forbidden). Skipping driver pod restart.", namespace)
-			return
-		}
-		logging.Warn("Failed to list multitier-driver pods in %s for restart: %v", namespace, err)
-		return
-	}
-	if len(pods.Items) == 0 {
-		if fallbackPods, err := client.Resource(podGVR).Namespace(namespace).List(ctx, metav1.ListOptions{}); err == nil {
-			pods = fallbackPods
-		}
-	}
-	podsDeleted := 0
-	for _, pod := range pods.Items {
-		if strings.HasPrefix(pod.GetName(), "multitier-driver") {
-			logging.Info("Restarting MTC driver pod: %s", pod.GetName())
-			if err := client.Resource(podGVR).Namespace(namespace).Delete(ctx, pod.GetName(), metav1.DeleteOptions{}); err != nil {
-				if isForbiddenError(err) {
-					logging.Warn("Insufficient RBAC permissions to delete MTC driver pod %s (403 Forbidden).", pod.GetName())
-					continue
-				}
-				logging.Warn("Failed to delete MTC driver pod %s: %v", pod.GetName(), err)
-			} else {
-				podsDeleted++
-			}
-		}
-	}
-	if podsDeleted > 0 {
-		// Brief pause to allow the DaemonSet controller to observe the pod deletions
-		// and decrement status.numberReady before we poll for readiness.
-		time.Sleep(daemonSetPollInterval)
-	}
-}
-
-// updateMTCServiceAccountAnnotation updates the MTC KSA with the node GSA Workload Identity annotation and restarts driver pods.
-func updateMTCServiceAccountAnnotation(ctx context.Context, client dynamic.Interface, saObj *unstructured.Unstructured, namespace, name, nodeSA string) {
-	const wiAnnotation = "iam.gke.io/gcp-service-account"
-	annotations, _, _ := unstructured.NestedStringMap(saObj.Object, "metadata", "annotations")
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
-
-	if annotations[wiAnnotation] == nodeSA {
-		logging.Info("[MTC Verification] ServiceAccount %s/%s already has Workload Identity annotation for GSA %s (provisioned during cluster creation). No annotation update or driver pod restart needed.", namespace, name, nodeSA)
-		return
-	}
-
-	logging.Info("Updating MTC ServiceAccount %s/%s with Workload Identity annotation for GSA %s", namespace, name, nodeSA)
-	annotations[wiAnnotation] = nodeSA
-	if err := unstructured.SetNestedStringMap(saObj.Object, annotations, "metadata", "annotations"); err != nil {
-		logging.Warn("Failed to set annotations on MTC ServiceAccount %s/%s: %v", namespace, name, err)
-		return
-	}
-	if _, err := client.Resource(serviceAccountGVR).Namespace(namespace).Update(ctx, saObj, metav1.UpdateOptions{}); err != nil {
-		if isForbiddenError(err) {
-			logging.Warn("Insufficient RBAC permissions to update MTC ServiceAccount %s/%s (403 Forbidden). Assuming Workload Identity is managed by cluster administrator.", namespace, name)
-			return
-		}
-		logging.Warn("Failed to update MTC ServiceAccount %s/%s with Workload Identity annotation: %v", namespace, name, err)
-		return
-	}
-	restartMTCDriverPods(ctx, client, namespace)
-}
-
-// ensureMTCWorkloadIdentity ensures the MTC Kubernetes ServiceAccount is annotated with the cluster node GSA and restarts driver pods if updated.
-func (g *GKEOrchestrator) ensureMTCWorkloadIdentity(job *orchestrator.JobDefinition) error {
-	if job == nil || !job.GKEMTCEnabled || job.DryRunManifest != "" {
-		return nil
-	}
-
-	nodeSA := g.getNodeServiceAccount()
-	if nodeSA == "" {
-		logging.Warn("No custom GKE node service account detected. Automated Workload Identity configuration for Multi-Tier Checkpointing (MTC) will be skipped. You may need to manually configure IAM permissions for the MTC service account.")
-		return nil
-	}
-
-	logging.Info("[MTC Verification] Checking Workload Identity configuration for MTC ServiceAccount in cluster against node GSA %s...", nodeSA)
-
-	client, err := g.getDynamicClient()
-	if err != nil {
-		logging.Warn("Failed to get dynamic client for MTC Workload Identity verification: %v", err)
-		return nil
-	}
-
-	// Allow sufficient deadline for SA mutation (15s) and subsequent DaemonSet rollout wait (90s).
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	const mtcNamespace = "gke-managed-checkpointing"
-	const mtcKSA = "gke-checkpointing-multitier-node"
-
-	saObj, err := client.Resource(serviceAccountGVR).Namespace(mtcNamespace).Get(ctx, mtcKSA, metav1.GetOptions{})
-	if err != nil {
-		if isForbiddenError(err) {
-			logging.Warn("Insufficient RBAC permissions to read MTC ServiceAccount %s/%s (403 Forbidden). Assuming Workload Identity is configured by cluster administrator.", mtcNamespace, mtcKSA)
-			return nil
-		}
-		logging.Warn("Failed to get MTC ServiceAccount %s/%s: %v", mtcNamespace, mtcKSA, err)
-		return nil
-	}
-
-	updateMTCServiceAccountAnnotation(ctx, client, saObj, mtcNamespace, mtcKSA, nodeSA)
-	return nil
 }
 
 func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinition) error {
@@ -1289,11 +993,11 @@ func (g *GKEOrchestrator) queryDiscoveredTopologies(accelLabel string, machineTy
 		}
 	}
 
-	res := g.executor.ExecuteCommand("kubectl", "get", "resourceflavors.kueue.x-k8s.io", "-o", "jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
+	res := g.kubectl("get", "resourceflavors.kueue.x-k8s.io", "-o", "jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
 	output := strings.TrimSpace(res.Stdout)
 
 	if output == "" {
-		res = g.executor.ExecuteCommand("kubectl", "get", "nodes", "-o", "jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
+		res = g.kubectl("get", "nodes", "-o", "jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
 		if res.ExitCode != 0 {
 			return "", fmt.Errorf("failed to query Nodes for topology: %s", res.Stderr)
 		}
@@ -1385,109 +1089,6 @@ func (g *GKEOrchestrator) GenerateGKENodeSelectorLabel(acceleratorType string) s
 	}
 
 	return acceleratorType
-}
-
-func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
-	exclusiveTopology := ""
-	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
-		exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
-	}
-
-	workerBackoffLimit := 2048000
-
-	var proxyArgsList []string
-	if opts.Pathways.ProxyArgs != "" {
-		proxyArgsList = strings.Fields(opts.Pathways.ProxyArgs)
-	}
-	var serverArgsList []string
-	if opts.Pathways.ServerArgs != "" {
-		serverArgsList = strings.Fields(opts.Pathways.ServerArgs)
-	}
-	var workerArgsList []string
-	if opts.Pathways.WorkerArgs != "" {
-		workerArgsList = strings.Fields(opts.Pathways.WorkerArgs)
-	}
-
-	var containers []ContainerData
-	if opts.ParallelContainers > 1 {
-		for i := 0; i < opts.ParallelContainers; i++ {
-			containers = append(containers, ContainerData{
-				Name:          fmt.Sprintf("workload-container-%d", i+1),
-				ResourcesYAML: resourcesYAML,
-			})
-		}
-	} else {
-		containers = append(containers, ContainerData{
-			Name:          "workload-container",
-			ResourcesYAML: resourcesYAML,
-		})
-	}
-
-	return jobSetTemplateData{
-		WorkloadName:                  opts.WorkloadName,
-		ClusterName:                   opts.ClusterName,
-		Containers:                    containers,
-		ProjectID:                     opts.ProjectID,
-		KueueQueueName:                opts.KueueQueueName,
-		TtlSecondsAfterFinished:       opts.TtlSecondsAfterFinished,
-		TerminationGracePeriodSeconds: opts.TerminationGracePeriodSeconds,
-		MaxRestarts:                   opts.MaxRestarts,
-		NumSlices:                     opts.NumSlices,
-		NodesPerSlice:                 opts.NodesPerSlice,
-		WorkerBackoffLimit:            workerBackoffLimit,
-		ProxyArgsList:                 proxyArgsList,
-		ServerArgsList:                serverArgsList,
-		WorkerArgsList:                workerArgsList,
-		PathwaysInstanceType:          opts.PathwaysInstanceType,
-		CommandToRun:                  opts.CommandToRun,
-		ResourcesString:               resourcesYAML,
-		FullImageName:                 opts.FullImageName,
-		Command:                       command,
-		ResourcesYAML:                 resourcesYAML,
-		AcceleratorTypeLabel:          g.GenerateGKENodeSelectorLabel(opts.ComputeType),
-		NodeSelector:                  opts.NodeSelector,
-		Affinity:                      opts.Affinity,
-		PodFailurePolicy:              opts.PodFailurePolicy,
-		ImagePullSecrets:              opts.ImagePullSecrets,
-		ServiceAccountName:            opts.ServiceAccountName,
-		TopologyAnnotation:            opts.TopologyAnnotation,
-		SchedulerName:                 opts.SchedulerName,
-		SchedulingGates:               opts.SchedulingGates,
-		Tolerations:                   opts.Tolerations,
-		PriorityClassName:             opts.PriorityClassName,
-		VolumesYAML:                   opts.VolumesYAML,
-		VolumeMountsYAML:              opts.VolumeMountsYAML,
-		GCSFuseEnabled:                opts.GCSFuseEnabled,
-		HostNetworkEnabled:            isTPU || isGPU,
-		Pathways:                      opts.Pathways,
-		ExclusiveTopologyAnnotation:   exclusiveTopology,
-		Verbose:                       opts.Verbose,
-		Env:                           sortedEnvVars(opts.Env),
-		PathwaysProxyEnv:              sortedEnvVars(opts.Pathways.ProxyEnv),
-		PathwaysServerEnv:             sortedEnvVars(opts.Pathways.ServerEnv),
-		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
-		IsTPU:                         isTPU,
-		IsGPU:                         isGPU,
-		MLDiagnosticsEnabled:          opts.MLDiagnosticsEnabled,
-		GKEMTCEnabled:                 opts.GKEMTCEnabled,
-		GKEMTCRamdiskDirectory:        opts.GKEMTCRamdiskDirectory,
-	}
-}
-
-func sortedEnvVars(envMap map[string]string) []EnvVar {
-	if len(envMap) == 0 {
-		return nil
-	}
-	envKeys := make([]string, 0, len(envMap))
-	for k := range envMap {
-		envKeys = append(envKeys, k)
-	}
-	slices.Sort(envKeys)
-	res := make([]EnvVar, len(envKeys))
-	for i, k := range envKeys {
-		res[i] = EnvVar{Name: k, Value: envMap[k]}
-	}
-	return res
 }
 
 func (g *GKEOrchestrator) determineIfCPUMachine(job *orchestrator.JobDefinition) (bool, int, error) {
@@ -1797,15 +1398,14 @@ func (g *GKEOrchestrator) needsDynamicClientInit() bool {
 	return false
 }
 
+// getDynamicClient builds the client once, for the context set by configureKubectl,
+// and caches it; configureKubectl must run first and is not re-run within a command.
 func (g *GKEOrchestrator) getDynamicClient() (dynamic.Interface, error) {
 	if g.dynClient != nil {
 		g.syncKubeClient()
 		return g.dynClient, nil
 	}
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	configOverrides := &clientcmd.ConfigOverrides{}
-	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
-	config, err := kubeConfig.ClientConfig()
+	config, err := g.restConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
 	}
@@ -1815,6 +1415,16 @@ func (g *GKEOrchestrator) getDynamicClient() (dynamic.Interface, error) {
 	}
 	g.syncKubeClient()
 	return g.dynClient, nil
+}
+
+// restConfig builds a client-go config for the pinned context from the same kubeconfig
+// loader the rest of the orchestrator uses; an empty context means current-context.
+func (g *GKEOrchestrator) restConfig() (*rest.Config, error) {
+	cfg, err := g.loadKubeconfig()
+	if err != nil {
+		return nil, err
+	}
+	return clientcmd.NewNonInteractiveClientConfig(*cfg, g.kubeContext, &clientcmd.ConfigOverrides{}, nil).ClientConfig()
 }
 
 func (g *GKEOrchestrator) awaitJobCompletion(workloadName, clusterName, clusterLocation, projectID, timeout string) error {
@@ -1859,7 +1469,7 @@ func (g *GKEOrchestrator) awaitJobCompletion(workloadName, clusterName, clusterL
 }
 
 func (g *GKEOrchestrator) getJobSetStatus(workloadName, ns string) (string, error) {
-	statusRes := g.executor.ExecuteCommand("kubectl", "get", "jobset", workloadName, "-n", ns, "-o", "json")
+	statusRes := g.kubectl("get", "jobset", workloadName, "-n", ns, "-o", "json")
 	if statusRes.ExitCode != 0 {
 		return "", fmt.Errorf("failed to get final job status: %s\n%s", statusRes.Stderr, statusRes.Stdout)
 	}
@@ -1979,7 +1589,7 @@ func (g *GKEOrchestrator) checkJobSetWarningEvents(ns, workloadName string) stri
 	if workloadName == "" {
 		return ""
 	}
-	res := g.executor.ExecuteCommand("kubectl", "get", "events", "-n", ns,
+	res := g.kubectl("get", "events", "-n", ns,
 		fmt.Sprintf("--field-selector=involvedObject.name=%s,involvedObject.kind=JobSet,type=Warning", workloadName),
 		"--request-timeout=10s",
 		"--no-headers")
@@ -1991,7 +1601,7 @@ func (g *GKEOrchestrator) checkJobSetWarningEvents(ns, workloadName string) stri
 
 func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, jobConsoleLink, workloadName string) error {
 	logging.Info("Waiting for Kueue workload '%s' to be Finished...", targetWorkloadName)
-	waitRes := g.executor.ExecuteCommand("kubectl", "wait", "--for=condition=Finished",
+	waitRes := g.kubectl("wait", "--for=condition=Finished",
 		"workload", targetWorkloadName, "-n", ns, "--timeout="+timeout)
 
 	if waitRes.ExitCode != 0 {
@@ -2253,6 +1863,10 @@ func (d *DefaultExecutor) ExecuteCommand(name string, args ...string) shell.Comm
 	return shell.ExecuteCommand(name, args...)
 }
 
+func (d *DefaultExecutor) ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...string) shell.CommandResult {
+	return shell.ExecuteCommandWithTimeout(timeout, name, args...)
+}
+
 func (d *DefaultExecutor) ExecuteCommandStream(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
@@ -2262,33 +1876,19 @@ func (d *DefaultExecutor) ExecuteCommandStream(name string, args ...string) erro
 
 // GetCurrentNamespace resolves the target Kubernetes namespace from kubeconfig for the specified cluster.
 func (d *DefaultKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
-	config, err := clientcmd.NewDefaultClientConfigLoadingRules().Load()
+	config, err := defaultKubeconfigLoader()
 	if err != nil {
 		return "", fmt.Errorf("failed to load kubeconfig: %w. You can explicitly specify the namespace using the --gke-namespace flag", err)
 	}
 
-	// Standard GKE context naming convention
-	expectedContext := fmt.Sprintf("gke_%s_%s_%s", projectID, location, clusterName)
-
-	if kubeCtx, ok := config.Contexts[expectedContext]; ok {
-		if kubeCtx.Namespace != "" {
-			return kubeCtx.Namespace, nil
-		}
-		return "default", nil
+	// Standard GKE context naming convention first, then the legacy fallback
+	// for contexts users renamed to the bare cluster name.
+	_, kubeCtx, ok := findKubeContext(config, clusterName, location, projectID)
+	if !ok {
+		return "", fmt.Errorf("no matching context found for cluster %s in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag", clusterName)
 	}
-
-	// Fallback/Legacy: Also check if there's a context with just the cluster name
-	// (sometimes users manually rename them)
-	contextNames := slices.Sorted(maps.Keys(config.Contexts))
-	for _, contextName := range contextNames {
-		kubeCtx := config.Contexts[contextName]
-		if contextName == clusterName || kubeCtx.Cluster == clusterName {
-			if kubeCtx.Namespace != "" {
-				return kubeCtx.Namespace, nil
-			}
-			return "default", nil
-		}
+	if kubeCtx.Namespace != "" {
+		return kubeCtx.Namespace, nil
 	}
-
-	return "", fmt.Errorf("no matching context found for cluster %s in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag", clusterName)
+	return "default", nil
 }

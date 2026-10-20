@@ -456,6 +456,11 @@ func TestGetIsTestData(t *testing.T) {
 			want:      "true",
 		},
 		{
+			name:      "dev-2 project",
+			projectID: "hpc-toolkit-dev-2",
+			want:      "true",
+		},
+		{
 			name:      "prod project",
 			projectID: "some-other-project",
 			want:      "false",
@@ -2387,6 +2392,21 @@ func TestGetErrorType(t *testing.T) {
 			name:     "Network Timeout with Substrings",
 			err:      errors.New("RouterNat: googleapi: Error 404: The resource was not found"),
 			expected: ErrTypeRouternatResourceNotFound,
+		},
+		{
+			name:     "HTTP Bad Gateway",
+			err:      errors.New("Error response from daemon: received unexpected HTTP status: 502 Bad Gateway"),
+			expected: ErrTypeHttpBadGateway,
+		},
+		{
+			name:     "Pod Initialization Timeout",
+			err:      errors.New("Error: Pod initialization timed out after 20 minutes."),
+			expected: ErrTypePodTimeout,
+		},
+		{
+			name:     "IAM Project Access Denied",
+			err:      errors.New("User [sa@example.iam.gserviceaccount.com] does not have permission to access projects instance [my-project] (or it may not exist)"),
+			expected: ErrTypeIamPermissionDenied,
 		},
 	}
 

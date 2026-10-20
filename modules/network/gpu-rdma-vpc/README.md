@@ -105,7 +105,7 @@ limitations under the License.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
-| <a name="module_vpc"></a> [vpc](#module\_vpc) | terraform-google-modules/network/google | ~> 13.0 |
+| <a name="module_vpc"></a> [vpc](#module\_vpc) | terraform-google-modules/network/google | ~> 18.3 |
 
 ## Resources
 

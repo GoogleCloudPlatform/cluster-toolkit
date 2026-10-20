@@ -40,11 +40,11 @@ variable "collection" {
 }
 
 variable "engine_id" {
-  description = "Unique ID for the Discovery Engine chat assistant engine."
+  description = "Unique ID for the Discovery Engine chat assistant engine (max 50 characters)."
   type        = string
   validation {
-    condition     = can(regex("^[a-z0-9]([a-z0-9-_]{0,58}[a-z0-9])?$", var.engine_id))
-    error_message = "Engine ID must conform to (1-60 characters, lowercase letters, numbers, and hyphens, underscores, starting and ending with an alphanumeric character)."
+    condition     = can(regex("^[a-z0-9]([a-z0-9-_]{0,48}[a-z0-9])?$", var.engine_id))
+    error_message = "Engine ID must be 1-50 characters, lowercase letters, numbers, hyphens, and underscores, starting and ending with an alphanumeric character (to reserve space for internal data store suffix)."
   }
 }
 

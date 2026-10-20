@@ -93,7 +93,11 @@ If you want to enforce strict capacity sharing on the TPU pool, you can override
           tpu_flavor_memory_quota: "4096G"
 ```
 
-You can specify a particular kueue version that you would like to use using the `version` flag. By default, we recommend customers to [use v0.17.1](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L126). You can find the list of supported kueue versions [here](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L24).
+### Kueue `waitForPodsReady` Configuration
+
+Kueue 0.19+ enables [`waitForPodsReady`](https://kueue.sigs.k8s.io/docs/tasks/manage/setup_wait_for_pods_ready/) by default (`timeout: "30m"` and `recoveryTimeout: "30m"`). When Pathways is enabled (`enable_pathways_for_tpus: true`) on Kueue `>= 0.19.0`, this module keeps `timeout: "30m"` for initial admission deadlock protection and defaults `recoveryTimeout: "0s"`, which disables mid-run recovery eviction so elastic Pathways jobs (`--pathways-elastic-slices`) can continue training on surviving slices while waiting longer than 30 minutes for replacement TPU slice nodes. On non-Pathways clusters and earlier Kueue versions, the chart's default manager configuration is left unchanged unless `kueue.wait_for_pods_ready` is set.
+
+You can explicitly configure `timeout`, `recovery_timeout`, and `block_admission` under `kueue.wait_for_pods_ready` (supported on Kueue `>= 0.19.0`; `timeout` must be `> 0s`, while `recovery_timeout: "0s"` disables recovery eviction):
 
 ```yaml
   - id: workload_component_install
@@ -102,7 +106,22 @@ You can specify a particular kueue version that you would like to use using the 
     settings:
       kueue:
         install: true
-        version: 0.17.1
+        wait_for_pods_ready:
+          timeout: "30m"
+          recovery_timeout: "0s"
+          block_admission: false
+```
+
+You can specify a particular kueue version that you would like to use using the `version` flag. By default, we recommend customers to [use v0.19.6](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L126). You can find the list of supported kueue versions [here](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L24).
+
+```yaml
+  - id: workload_component_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      kueue:
+        install: true
+        version: 0.19.6
         config_path: $(ghpc_stage("manifests/user-provided-kueue-config.yaml.tftpl"))
         config_template_vars: {name: "dev-config", public: "false"}
       jobset:
@@ -266,6 +285,7 @@ limitations under the License.
 | <a name="module_install_nvidia_dra_driver"></a> [install\_nvidia\_dra\_driver](#module\_install\_nvidia\_dra\_driver) | ./helm_install | n/a |
 | <a name="module_install_slice_controller"></a> [install\_slice\_controller](#module\_install\_slice\_controller) | ./helm_install | n/a |
 | <a name="module_kubectl_apply_manifests"></a> [kubectl\_apply\_manifests](#module\_kubectl\_apply\_manifests) | ./helm_install | n/a |
+| <a name="module_kueue_pods_ready_default_on_check"></a> [kueue\_pods\_ready\_default\_on\_check](#module\_kueue\_pods\_ready\_default\_on\_check) | ../../internal/semver_compare | n/a |
 
 ## Resources
 
@@ -296,8 +316,8 @@ limitations under the License.
 | <a name="input_gib"></a> [gib](#input\_gib) | Install the NCCL gIB plugin | <pre>object({<br/>    install = bool<br/>    path    = string<br/>    template_vars = object({<br/>      image   = optional(string, "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib")<br/>      version = string<br/>      node_affinity = optional(any, {<br/>        requiredDuringSchedulingIgnoredDuringExecution = {<br/>          nodeSelectorTerms = [{<br/>            matchExpressions = [{<br/>              key      = "cloud.google.com/gke-gpu",<br/>              operator = "In",<br/>              values   = ["true"]<br/>            }]<br/>          }]<br/>        }<br/>      })<br/>      accelerator_count = number<br/>      max_unavailable   = optional(string, "50%")<br/>    })<br/>  })</pre> | <pre>{<br/>  "install": false,<br/>  "path": "",<br/>  "template_vars": {<br/>    "accelerator_count": 0,<br/>    "version": ""<br/>  }<br/>}</pre> | no |
 | <a name="input_gke_cluster_exists"></a> [gke\_cluster\_exists](#input\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. | `bool` | `false` | no |
 | <a name="input_gpu_operator"></a> [gpu\_operator](#input\_gpu\_operator) | Install [GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) which uses the [Kubernetes operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) to automate the management of all NVIDIA software components needed to provision GPU. | <pre>object({<br/>    install = optional(bool, false)<br/>    version = optional(string, "v25.3.0")<br/>  })</pre> | `{}` | no |
-| <a name="input_jobset"></a> [jobset](#input\_jobset) | Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit. | <pre>object({<br/>    install           = optional(bool, false)<br/>    version           = optional(string, "0.10.1")<br/>    controller_cpu    = optional(string, null)<br/>    controller_memory = optional(string, null)<br/>  })</pre> | `{}` | no |
-| <a name="input_kueue"></a> [kueue](#input\_kueue) | Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config\_path to be applied right after kueue installation. If a template file provided, its variables can be set to config\_template\_vars. | <pre>object({<br/>    # ATTENTION: If you update the KUEUE's default version below, please also update the corresponding<br/>    # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go. (note the 'v' prefix there)<br/>    version                         = optional(string, "0.17.1")<br/>    install                         = optional(bool, false)<br/>    config_path                     = optional(string, null)<br/>    config_template_vars            = optional(map(any), null)<br/>    enable_pathways_for_tpus        = optional(bool, false)<br/>    enable_dynamic_slicing_for_tpus = optional(bool, false)<br/>    accelerator_topology_mode       = optional(string, null)<br/>    machine_type                    = optional(string, null)<br/>    controller_cpu                  = optional(string, null)<br/>    controller_memory               = optional(string, null)<br/>    controller_replicas             = optional(number, null)<br/>    slice_controller_cpu_request    = optional(string, "8000m")<br/>    slice_controller_memory_request = optional(string, "16Gi")<br/>    slice_controller_cpu_limit      = optional(string, "12000m")<br/>    slice_controller_memory_limit   = optional(string, "32Gi")<br/>  })</pre> | `{}` | no |
+| <a name="input_jobset"></a> [jobset](#input\_jobset) | Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit. | <pre>object({<br/>    install           = optional(bool, false)<br/>    version           = optional(string, "0.12.0")<br/>    controller_cpu    = optional(string, null)<br/>    controller_memory = optional(string, null)<br/>  })</pre> | `{}` | no |
+| <a name="input_kueue"></a> [kueue](#input\_kueue) | Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config\_path to be applied right after kueue installation. If a template file provided, its variables can be set to config\_template\_vars. | <pre>object({<br/>    # ATTENTION: If you update the KUEUE's default version below, please also update the corresponding<br/>    # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go (note the 'v' prefix there)<br/>    # and keep kueue/kueue-manager-config.yaml in sync with the chart's default managerConfig.controllerManagerConfigYaml.<br/>    version                         = optional(string, "0.19.6")<br/>    install                         = optional(bool, false)<br/>    config_path                     = optional(string, null)<br/>    config_template_vars            = optional(map(any), null)<br/>    enable_pathways_for_tpus        = optional(bool, false)<br/>    enable_dynamic_slicing_for_tpus = optional(bool, false)<br/>    accelerator_topology_mode       = optional(string, null)<br/>    machine_type                    = optional(string, null)<br/>    controller_cpu                  = optional(string, null)<br/>    controller_memory               = optional(string, null)<br/>    controller_replicas             = optional(number, null)<br/>    slice_controller_cpu_request    = optional(string, "8000m")<br/>    slice_controller_memory_request = optional(string, "16Gi")<br/>    slice_controller_cpu_limit      = optional(string, "12000m")<br/>    slice_controller_memory_limit   = optional(string, "32Gi")<br/>    # Optional Kueue waitForPodsReady settings. On Kueue >= 0.19.0 with Pathways<br/>    # enabled, defaults to timeout = "30m" and recovery_timeout = "0s".<br/>    wait_for_pods_ready = optional(object({<br/>      timeout          = optional(string)<br/>      recovery_timeout = optional(string)<br/>      block_admission  = optional(bool)<br/>    }), null)<br/>  })</pre> | `{}` | no |
 | <a name="input_module_id"></a> [module\_id](#input\_module\_id) | The ID of the module as defined in the blueprint. Injected by ghpc. | `string` | `"kubectl-apply"` | no |
 | <a name="input_nvidia_dra_driver"></a> [nvidia\_dra\_driver](#input\_nvidia\_dra\_driver) | Installs [Nvidia DRA driver](https://github.com/NVIDIA/k8s-dra-driver-gpu) which supports Dynamic Resource Allocation for NVIDIA GPUs in Kubernetes | <pre>object({<br/>    install          = optional(bool, false)<br/>    version          = optional(string, "v25.3.0")<br/>    accelerator_type = optional(string, "nvidia-gb200")<br/>  })</pre> | `{}` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID that hosts the gke cluster. | `string` | n/a | yes |

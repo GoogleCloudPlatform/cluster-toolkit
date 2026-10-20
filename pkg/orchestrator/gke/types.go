@@ -42,6 +42,10 @@ const (
 	tpuTopologyLabel = "cloud.google.com/gke-tpu-topology"
 	// nodePoolLabel is the GKE label for the node pool name.
 	nodePoolLabel = "cloud.google.com/gke-nodepool"
+	// placementPolicyNameLabel selects nodes carrying a named GCE compact placement or workload policy.
+	placementPolicyNameLabel = "cloud.google.com/placement-policy-name"
+	// placementGroupLabel is the GKE-managed compact placement group identifier used by NAP.
+	placementGroupLabel = "cloud.google.com/gke-placement-group"
 	// multitierCheckpointCSIDriver is the CSI driver for Multi-Tier Checkpointing (MTC).
 	multitierCheckpointCSIDriver = "multitier-checkpoint.csi.storage.gke.io"
 )
@@ -131,6 +135,7 @@ type HTTPClient interface {
 
 type Executor interface {
 	ExecuteCommand(name string, args ...string) shell.CommandResult
+	ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...string) shell.CommandResult
 	ExecuteCommandStream(name string, args ...string) error
 }
 
@@ -190,6 +195,11 @@ type GKEOrchestrator struct {
 	gkeCustomTemplatesPath      string
 	httpClient                  HTTPClient
 	httpOnce                    sync.Once
+	// kubeconfigLoader reads the merged kubeconfig. nil means the default
+	// client-go loading rules (KUBECONFIG env or ~/.kube/config).
+	kubeconfigLoader kubeconfigLoader
+	// kubeContext is the context set by configureKubectl; all kubectl and dynamic-client calls use it.
+	kubeContext string
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -506,6 +516,20 @@ type gkeCluster struct {
 	Autoscaling                 gkeClusterAutoscaling        `json:"autoscaling"`
 	ControlPlaneEndpointsConfig *controlPlaneEndpointsConfig `json:"controlPlaneEndpointsConfig,omitempty"`
 	AddonsConfig                *gkeAddonsConfig             `json:"addonsConfig,omitempty"`
+	// Endpoint is the legacy top-level control-plane IP (public, or private for private clusters).
+	Endpoint             string                   `json:"endpoint,omitempty"`
+	MasterAuth           *gkeMasterAuth           `json:"masterAuth,omitempty"`
+	PrivateClusterConfig *gkePrivateClusterConfig `json:"privateClusterConfig,omitempty"`
+}
+
+type gkeMasterAuth struct {
+	// ClusterCaCertificate is the base64-encoded PEM CA bundle of the control plane.
+	ClusterCaCertificate string `json:"clusterCaCertificate,omitempty"`
+}
+
+type gkePrivateClusterConfig struct {
+	PublicEndpoint  string `json:"publicEndpoint,omitempty"`
+	PrivateEndpoint string `json:"privateEndpoint,omitempty"`
 }
 
 type gkeAddonsConfig struct {
@@ -522,11 +546,14 @@ type controlPlaneEndpointsConfig struct {
 }
 
 type ipEndpointsConfig struct {
-	EnablePublicEndpoint bool `json:"enablePublicEndpoint,omitempty"`
+	EnablePublicEndpoint bool   `json:"enablePublicEndpoint,omitempty"`
+	PublicEndpoint       string `json:"publicEndpoint,omitempty"`
+	PrivateEndpoint      string `json:"privateEndpoint,omitempty"`
 }
 
 type dnsEndpointConfig struct {
-	AllowExternalTraffic bool `json:"allowExternalTraffic,omitempty"`
+	AllowExternalTraffic bool   `json:"allowExternalTraffic,omitempty"`
+	Endpoint             string `json:"endpoint,omitempty"`
 }
 
 // Types for JobSet status unmarshaling
@@ -544,6 +571,18 @@ type JobSetStatus struct {
 	Status struct {
 		Conditions []JobSetCondition `json:"conditions"`
 	} `json:"status"`
+}
+
+type jobSetInfo struct {
+	terminalState string
+	suspended     bool
+	firstJob      string
+	expectedPods  int
+	queried       bool
+}
+
+func (info jobSetInfo) terminal() bool {
+	return info.terminalState == "Completed" || info.terminalState == "Failed"
 }
 
 type ContainerData struct {
@@ -571,6 +610,7 @@ type jobSetTemplateData struct {
 	NumSlices                     int
 	NodesPerSlice                 int
 	WorkerBackoffLimit            int
+	WorkerBackoffLimitPerIndex    int
 	PathwaysInstanceType          string
 	CommandToRun                  string
 	ResourcesString               string

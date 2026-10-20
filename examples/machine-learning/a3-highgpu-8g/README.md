@@ -14,18 +14,8 @@ a3-highgpu-8g compute nodes running NVIDIA H100 GPUs.
 
 ## Upgrading from the "legacy" solution
 There is no direct path for upgrading the a3-highgpu-8g legacy solution.
-The recommended path requires temporarily bringing down your cluster and
+The recommended path requires temporarily bringing down your cluster (`./gcluster destroy <LEGACY_DEPLOYMENT_FOLDER>`) and
 replacing it with the solution described in this document.
-
-We recommend using `gcluster destroy` to destroy the deployments provisioned by the legacy blueprints:
-
-- ![deprecated-badge] [Legacy v5 image building blueprint](v5-legacy/ml-slurm-a3-1-image-v5-legacy.yaml)
-- ![deprecated-badge] [Legacy v5 cluster provisioning blueprint](v5-legacy/ml-slurm-a3-2-cluster-v5-legacy.yaml)
-- ![deprecated-badge] [Legacy base provisioning blueprint](/examples/machine-learning/a3-highgpu-8g/ml-slurm-a3-0-base.yaml)
-- ![deprecated-badge] [Legacy image provisioning blueprint](/examples/machine-learning/a3-highgpu-8g/ml-slurm-a3-1-image.yaml)
-- ![deprecated-badge] [Legacy cluster provisioning blueprint](/examples/machine-learning/a3-highgpu-8g/ml-slurm-a3-2-cluster.yaml)
-
-Then follow the instructions below.
 
 ## Required setup
 
@@ -34,23 +24,30 @@ Please follow the initial instructions for:
 - Installing Cluster Toolkit [dependencies][tkdeps] (Go, Terraform, Packer)
 - Installing the Cluster [Toolkit][tkinstall]
 
-Verify that your release of the Cluster Toolkit is 1.37.0 or later.
+From the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository, enable the required GCP APIs, build `./gcluster` (if not already built), and verify that your release is 1.37.0 or later:
 
 ```shell
-gcluster --version
+gcloud services enable \
+  compute.googleapis.com \
+  iam.googleapis.com \
+  logging.googleapis.com \
+  lustre.googleapis.com \
+  servicenetworking.googleapis.com \
+  storage.googleapis.com \
+  --project=<PROJECT_ID>
+
+test -x ./gcluster || make
+./gcluster --version
 ```
 
 ## Top-Level Design of Solution
 
-The blueprint is split into 3 deployment groups:
+The blueprint is split into 4 deployment groups (`base`, `build-script`, `image`, and `cluster`):
 
-1. Group 1 provisions the system network, gpu network and 1 Managed Lustre instance for mounting `/home`
-across the cluster.
-2. Group 2 builds a custom image installing Slurm on an Ubuntu 22.04 image. The image
-runs a custom GCP TCPX kernel patched with performance enhancements for the a3-highgpu-8g VM.
-As part of this build, the Lustre client modules are explicitly compiled via DKMS against the TCPX kernel
-so that the managed Lustre `/home` directory can mount successfully when the nodes boot.
-3. Group 3 provisions Slurm cluster and a3-highgpu-8g nodes using the custom image.
+1. Group 1 (`base`) provisions the system network, GPU network, and 1 Managed Lustre instance (`36000` GiB) for mounting `/home` across the cluster.
+2. Group 2 (`build-script`) generates the startup and Ansible scripts used during custom image creation.
+3. Group 3 (`image`) builds a custom image installing Slurm on an Ubuntu 22.04 image. The image runs a custom GCP TCPX kernel patched with performance enhancements for the a3-highgpu-8g VM. As part of this build, the Lustre client modules are explicitly compiled via DKMS against the TCPX kernel so that the Managed Lustre `/home` directory can mount successfully when the nodes boot.
+4. Group 4 (`cluster`) provisions the Slurm cluster and a3-highgpu-8g nodes using the custom image.
 
 ## First time considerations
 
@@ -82,13 +79,29 @@ terraform_backend_defaults:
 
 ### Deployment variables
 
-Set the values in a3high-slurm-deployment.yaml for your deployment
+Set the values in [`a3high-slurm-deployment.yaml`](a3high-slurm-deployment.yaml) for your deployment:
 
 ```yaml
+---
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: customer-bucket
+
+vars:
   deployment_name: unique-name
   project_id: customer-project
   region: customer-region
   zone: customer-zone
+  tcpx_kernel_login: # use value supplied by Google Cloud staff
+  tcpx_kernel_password: # use value supplied by Google Cloud staff
+  keyserver_ubuntu_key: # use value supplied by Google Cloud staff
+  a3_reservation_name: reservation-name-provided-by-google
+  slurm_cluster_name: a3slurm # lowercase letters, numbers, and hyphens, max 20 chars
+  a3_static_cluster_size: 32
+  a3_partition_name: a3
+  a3_dws_flex_enabled: false
+  a3_enable_spot_vm: false
 ```
 
 #### Set kernel-patched OS image
@@ -166,7 +179,7 @@ Similarly to make use of Spot VMs with Slurm, set the `a3_enable_spot_vm` variab
     # the rest of the variables
 ```
 
-To learn more about Spot VM  visit: https://cloud.google.com/compute/docs/instances/spot
+To learn more about Spot VM visit: https://cloud.google.com/compute/docs/instances/spot
 
 #### Set cluster size
 
@@ -199,12 +212,12 @@ Important Restrictions:
 1. This skip option is only valid when recreating the cluster; the initial deployment always requires an image build.
 2. The image build cannot be skipped if the `deployment_name` is changed.
 
-Selective deployment and teardown for this blueprint are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
+Selective deployment and teardown for this blueprint (`base`, `build-script`, `image`, and `cluster` groups) are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
 
-Example (deploy only the primary group for this blueprint):
+Example (deploy only the `base` group for this blueprint):
 
 ```bash
-./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml --only primary
+./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml --only base
 ```
 
 ## Receive Data Path Manager (RxDM)
@@ -298,7 +311,5 @@ sbatch run-nccl-tests.sh
 
 **Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
 
-[consume]: https://cloud.google.com/compute/docs/instances/reservations-consume#consuming_instances_from_any_matching_reservation
 [tkdeps]: https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies
 [tkinstall]: https://github.com/GoogleCloudPlatform/cluster-toolkit/#quickstart
-[deprecated-badge]: https://img.shields.io/badge/-deprecated-%23fea2a2?style=plastic

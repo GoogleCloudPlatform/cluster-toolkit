@@ -33,8 +33,8 @@ vars:
   per_unit_storage_throughput: 500
   kms_key: ""
   slurm_image:
-    family: slurm-gcp-6-12-hpc-rocky-linux-9
-    project: schedmd-slurm-public
+    family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+    project: advanced-compute-images
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md

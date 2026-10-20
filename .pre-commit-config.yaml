@@ -101,6 +101,13 @@ repos:
     files: '^(skills/.*|tools/run_eval\.py|tools/tests/test_run_eval\.py)$'
     pass_filenames: false
     require_serial: true
+  - id: catalog-gen
+    name: catalog-gen
+    entry: go run ./tools/catalog-gen
+    language: system
+    files: '^(examples/.*\.(yaml|md)|community/examples/.*\.(yaml|md)|modules/.*\.(tf|hcl|yaml)|community/modules/.*\.(tf|hcl|yaml)|pkg/catalog/.*\.go|tools/catalog-gen/.*\.go|skills/cluster-blueprint-assistant/references/catalog\.yaml)$'
+    pass_filenames: false
+    require_serial: true
   - id: pytest-check
     name: pytest-check
     entry: pytest
@@ -203,7 +210,7 @@ repos:
     # MD041 - First line in file should be a top level header
     # MD046 - Code block style
     # MD024 - Multiple headings cannot contain the same content.
-    exclude: (GEMINI\.md|skills\/.*)
+    exclude: (AGENTS\.md|CLAUDE\.md|GEMINI\.md|skills\/.*)
     args: [--disable-rules, "MD013,MD022,MD033,MD034,MD041,MD046,MD024", scan]
 - repo: https://github.com/jumanjihouse/pre-commit-hooks
   rev: "3.0.0"
