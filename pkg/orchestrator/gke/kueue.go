@@ -339,6 +339,7 @@ func (g *GKEOrchestrator) hasRequiredResources(rgList []interface{}) bool {
 // 3. Kueue Installation & Cluster Lifecycle Management (Cluster-Level)
 // -----------------------------------------------------------------------------
 
+// hasFailedDeploymentCondition checks if any of the deployment conditions indicate a failure.
 func hasFailedDeploymentCondition(dep *kueueDeployment) bool {
 	for _, cond := range dep.Status.Conditions {
 		if cond.Type == "Progressing" && (cond.Reason == "ProgressDeadlineExceeded" || cond.Status == "False") {
@@ -351,6 +352,7 @@ func hasFailedDeploymentCondition(dep *kueueDeployment) bool {
 	return false
 }
 
+// isKueueDeploymentRolledOut checks if the Kueue deployment has been fully rolled out and is healthy.
 func isKueueDeploymentRolledOut(dep *kueueDeployment) bool {
 	if dep == nil || dep.Spec.Paused || hasFailedDeploymentCondition(dep) {
 		return false
@@ -493,6 +495,7 @@ func (g *GKEOrchestrator) isKueueInstalled() (bool, error) {
 	return false, fmt.Errorf("failed to check for Kueue CRD: %s\n%s", res.Stderr, res.Stdout)
 }
 
+// getKueueDeployment retrieves the Kueue controller manager deployment from the cluster.
 func (g *GKEOrchestrator) getKueueDeployment() (*kueueDeployment, bool, error) {
 	res := g.kubectl("get", "deployment", "kueue-controller-manager", "-n", "kueue-system", "-o", "json")
 	if res.ExitCode == 0 {

@@ -527,6 +527,7 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 	return nil
 }
 
+// ensureLocalQueueExists verifies that the specified LocalQueue exists in the namespace, prompting to create it if missing.
 func (g *GKEOrchestrator) ensureLocalQueueExists(localQueue, ns string, discovered, explicitQueue bool) error {
 	if discovered {
 		return nil
