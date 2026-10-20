@@ -98,6 +98,69 @@ func verifyCoreBlueprints(t *testing.T, byPath map[string]BlueprintEntry) {
 		t.Errorf("expected a3_static_cluster_size from deployment file in a3high-slurm-blueprint vars")
 	}
 	verifyExpressionVarDefaults(t, byPath)
+	verifyDeploymentPairings(t, byPath)
+}
+
+// verifyDeploymentPairings pins the expected deployment_path for every
+// pairing shape present in the repository so the matcher cannot regress.
+func verifyDeploymentPairings(t *testing.T, byPath map[string]BlueprintEntry) {
+	t.Helper()
+	for bp, want := range map[string]string{
+		// exact: <stem>-deployment.yaml
+		"examples/machine-learning/a3-ultragpu-8g/a3ultra-vm.yaml": "examples/machine-learning/a3-ultragpu-8g/a3ultra-vm-deployment.yaml",
+		// prefix: -blueprint / -advanced / -infra / -experiment suffixes
+		"examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml":            "examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml",
+		"examples/machine-learning/a3-megagpu-8g/a3mega-slurm-gcsfuse-lssd-blueprint.yaml": "examples/machine-learning/a3-megagpu-8g/a3mega-slurm-deployment.yaml",
+		"examples/gke-tpu-7x/gke-tpu-7x-advanced.yaml":                                     "examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml",
+		"community/examples/alphaevolve/alpha-evolve-infra.yaml":                           "community/examples/alphaevolve/alpha-evolve-deployment.yaml",
+		"community/examples/alphaevolve/alpha-evolve-experiment.yaml":                      "community/examples/alphaevolve/alpha-evolve-deployment.yaml",
+		// two blueprints + two deployment files in one folder must not cross-pair
+		"examples/machine-learning/a4x-highgpu-4g/a4x-vm.yaml":                  "examples/machine-learning/a4x-highgpu-4g/a4x-vm-deployment.yaml",
+		"examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml": "examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-deployment.yaml",
+		// root-level blueprints have no companion
+		"examples/hpc-slurm.yaml": "",
+	} {
+		entry, ok := byPath[bp]
+		if !ok {
+			t.Errorf("expected %s in catalog", bp)
+			continue
+		}
+		if entry.DeploymentPath != want {
+			t.Errorf("%s: deployment_path = %q, want %q", bp, entry.DeploymentPath, want)
+		}
+	}
+}
+
+func TestMatchDeploymentFile(t *testing.T) {
+	cases := []struct {
+		name         string
+		base, bpName string
+		candidates   []string
+		inSubfolder  bool
+		want         string
+	}{
+		{"exact stem", "gke-a4.yaml", "gke-a4", []string{"gke-a4-deployment.yaml"}, true, "gke-a4-deployment.yaml"},
+		{"exact blueprint_name", "cluster.yaml", "my-cluster", []string{"my-cluster-deployment.yaml"}, true, "my-cluster-deployment.yaml"},
+		{"exact beats prefix", "a4x-vm.yaml", "", []string{"a4x-deployment.yaml", "a4x-vm-deployment.yaml"}, true, "a4x-vm-deployment.yaml"},
+		{"prefix -blueprint", "a3ultra-slurm-blueprint.yaml", "", []string{"a3ultra-slurm-deployment.yaml", "a3ultra-vm-deployment.yaml"}, true, "a3ultra-slurm-deployment.yaml"},
+		{"prefix -advanced", "gke-tpu-7x-advanced.yaml", "", []string{"gke-tpu-7x-deployment.yaml"}, true, "gke-tpu-7x-deployment.yaml"},
+		{"prefix arbitrary suffix", "foo-anything-else.yaml", "", []string{"foo-deployment.yaml"}, true, "foo-deployment.yaml"},
+		{"longest prefix wins", "a3-slurm-gcsfuse-blueprint.yaml", "", []string{"a3-deployment.yaml", "a3-slurm-deployment.yaml"}, true, "a3-slurm-deployment.yaml"},
+		{"reverse prefix", "foo.yaml", "", []string{"foo-bar-deployment.yaml"}, true, "foo-bar-deployment.yaml"},
+		{"no partial-word prefix", "gke-a4x.yaml", "", []string{"gke-a4-deployment.yaml"}, false, ""},
+		{"single file fallback in subfolder", "cluster.yaml", "", []string{"infra-deployment.yaml"}, true, "infra-deployment.yaml"},
+		{"bare deployment.yaml fallback", "cluster.yaml", "", []string{"deployment.yaml"}, true, "deployment.yaml"},
+		{"no fallback at examples root", "cluster.yaml", "", []string{"infra-deployment.yaml"}, false, ""},
+		{"ambiguous without prefix stays unpaired", "cluster.yaml", "", []string{"a-deployment.yaml", "b-deployment.yaml"}, true, ""},
+		{"empty candidates", "cluster.yaml", "cluster", nil, true, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := matchDeploymentFile(tc.base, tc.bpName, tc.candidates, tc.inSubfolder); got != tc.want {
+				t.Errorf("matchDeploymentFile(%q, %q, %v, %v) = %q, want %q", tc.base, tc.bpName, tc.candidates, tc.inSubfolder, got, tc.want)
+			}
+		})
+	}
 }
 
 func verifyExpressionVarDefaults(t *testing.T, byPath map[string]BlueprintEntry) {

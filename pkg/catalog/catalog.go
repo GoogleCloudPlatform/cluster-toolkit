@@ -257,45 +257,103 @@ func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string
 	}, true
 }
 
+// findCompanionDeployment pairs a blueprint with a git-tracked deployment file
+// in the same directory and merges the deployment file's vars into varsMap for
+// keys that are missing or null in the blueprint. It returns the repo-relative
+// path of the matched deployment file, or "" when none matches.
 func findCompanionDeployment(repoRoot, bpAbsPath, blueprintName string, varsMap map[string]interface{}, tracked map[string]bool) string {
 	dir := filepath.Dir(bpAbsPath)
-	for _, cand := range companionDeploymentCandidates(dir, filepath.Base(bpAbsPath), blueprintName) {
-		if !isTracked(repoRoot, cand, tracked) {
-			continue
-		}
-		if _, err := os.Stat(cand); err != nil {
-			continue
-		}
-		ds, _, err := config.NewDeploymentSettings(cand)
-		if err == nil {
-			for k, v := range dictToPlainMap(ds.Vars) {
-				if _, exists := varsMap[k]; !exists || varsMap[k] == nil {
-					varsMap[k] = v
-				}
+	candidates := trackedDeploymentFiles(repoRoot, dir, tracked)
+	match := matchDeploymentFile(filepath.Base(bpAbsPath), blueprintName, candidates, isExampleSubfolder(repoRoot, dir))
+	if match == "" {
+		return ""
+	}
+	cand := filepath.Join(dir, match)
+	if ds, _, err := config.NewDeploymentSettings(cand); err == nil {
+		for k, v := range dictToPlainMap(ds.Vars) {
+			if _, exists := varsMap[k]; !exists || varsMap[k] == nil {
+				varsMap[k] = v
 			}
 		}
-		rel, err := filepath.Rel(repoRoot, cand)
-		if err == nil {
-			return filepath.ToSlash(rel)
+	}
+	rel, err := filepath.Rel(repoRoot, cand)
+	if err != nil {
+		return ""
+	}
+	return filepath.ToSlash(rel)
+}
+
+// trackedDeploymentFiles returns the sorted basenames of git-tracked
+// `*-deployment.yaml` / `deployment.yaml` files directly inside dir.
+func trackedDeploymentFiles(repoRoot, dir string, tracked map[string]bool) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !isDeploymentFileName(name) || !isTracked(repoRoot, filepath.Join(dir, name), tracked) {
+			continue
 		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func isDeploymentFileName(name string) bool {
+	return name == "deployment.yaml" || strings.HasSuffix(name, "-deployment.yaml")
+}
+
+// isExampleSubfolder reports whether dir is a subfolder below examples/ or
+// community/examples/ rather than one of those roots themselves.
+func isExampleSubfolder(repoRoot, dir string) bool {
+	rel, err := filepath.Rel(repoRoot, dir)
+	if err != nil {
+		return false
+	}
+	rel = filepath.ToSlash(rel)
+	return rel != "examples" && rel != "community/examples"
+}
+
+// matchDeploymentFile selects the deployment file for a blueprint from the
+// candidates (basenames) in the same directory using three deterministic steps:
+//  1. exact match: <stem>-deployment.yaml or <blueprint_name>-deployment.yaml
+//  2. longest prefix match: <prefix>-deployment.yaml where <stem> starts with
+//     "<prefix>-" or <prefix> starts with "<stem>-"
+//  3. single-file fallback: the only candidate when dir is an examples subfolder
+func matchDeploymentFile(baseName, blueprintName string, candidates []string, inSubfolder bool) string {
+	if len(candidates) == 0 {
+		return ""
+	}
+	stem := strings.TrimSuffix(baseName, ".yaml")
+	for _, exact := range []string{stem + "-deployment.yaml", blueprintName + "-deployment.yaml"} {
+		if exact != "-deployment.yaml" && slices.Contains(candidates, exact) {
+			return exact
+		}
+	}
+	if best := longestPrefixDeployment(stem, candidates); best != "" {
+		return best
+	}
+	if inSubfolder && len(candidates) == 1 {
+		return candidates[0]
 	}
 	return ""
 }
 
-func companionDeploymentCandidates(dir, baseName, blueprintName string) []string {
-	stem := strings.TrimSuffix(baseName, ".yaml")
-	candidates := []string{
-		filepath.Join(dir, stem+"-deployment.yaml"),
-	}
-	if blueprintName != "" {
-		candidates = append(candidates, filepath.Join(dir, blueprintName+"-deployment.yaml"))
-	}
-	for _, suffix := range []string{"-blueprint", "-advanced", "-infra", "-experiment"} {
-		if trimmed := strings.TrimSuffix(stem, suffix); trimmed != stem {
-			candidates = append(candidates, filepath.Join(dir, trimmed+"-deployment.yaml"))
+func longestPrefixDeployment(stem string, candidates []string) string {
+	best, bestLen := "", 0
+	for _, cand := range candidates {
+		prefix := strings.TrimSuffix(cand, "-deployment.yaml")
+		if prefix == cand || prefix == "" {
+			continue
+		}
+		if (strings.HasPrefix(stem, prefix+"-") || strings.HasPrefix(prefix, stem+"-")) && len(prefix) > bestLen {
+			best, bestLen = cand, len(prefix)
 		}
 	}
-	return append(candidates, filepath.Join(dir, "deployment.yaml"))
+	return best
 }
 
 func extractModuleSummaries(bp config.Blueprint) []ModuleSummary {
