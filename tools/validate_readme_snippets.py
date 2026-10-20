@@ -70,6 +70,44 @@ def _hcl_block_body(content: str, start: int) -> str:
     return content[start:i]
 
 
+def _strip_hcl_comments(content: str) -> str:
+    """Strips HCL comments (#, //, /* ... */) outside double-quoted strings."""
+    out: list[str] = []
+    i, n = 0, len(content)
+    while i < n:
+        ch = content[i]
+        if ch == "#" or (ch == "/" and i + 1 < n and content[i + 1] == "/"):
+            nl = content.find("\n", i + 1)
+            if nl == -1:
+                break
+            out.append("\n")
+            i = nl + 1
+        elif ch == "/" and i + 1 < n and content[i + 1] == "*":
+            end_comment = content.find("*/", i + 2)
+            if end_comment == -1:
+                break
+            out.append(" ")
+            i = end_comment + 2
+        elif ch == '"':
+            out.append(ch)
+            i += 1
+            while i < n:
+                out.append(content[i])
+                if content[i] == "\\":
+                    if i + 1 < n:
+                        out.append(content[i + 1])
+                    i += 2
+                    continue
+                if content[i] == '"':
+                    i += 1
+                    break
+                i += 1
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
 def get_tf_vars_and_outputs(mod_dir: str) -> tuple[set[str], set[str], set[str]]:
     """Extracts active variables, deprecated variables, and outputs from a module directory.
 
@@ -87,14 +125,14 @@ def get_tf_vars_and_outputs(mod_dir: str) -> tuple[set[str], set[str], set[str]]
         for tf_file in glob.glob(pattern):
             try:
                 with open(tf_file, encoding="utf-8") as f:
-                    content = f.read()
+                    content = _strip_hcl_comments(f.read())
             except OSError:
                 continue
             for m in re.finditer(r'variable\s+"([^"]+)"\s*\{', content):
                 name = re.escape(m.group(1))
                 body = _hcl_block_body(content, m.end())
                 if re.search(
-                    rf"condition\s*=\s*(?:var\.{name}\s*==\s*null|length\(var\.{name}\)\s*==\s*0)\s*(?:(?:#|//).*)?$",
+                    rf"condition\s*=\s*(?:var\.{name}\s*==\s*null|length\(var\.{name}\)\s*==\s*0)\s*$",
                     body,
                     re.MULTILINE,
                 ):
@@ -278,13 +316,20 @@ def validate_yaml_block(
 
 
 def validate_module_readme_snippets() -> list[str]:
-    """Validates YAML snippets in module READMEs, docs/**/*.md, and os_compatibility_tests blueprints."""
+    """Validates YAML snippets in module/blueprint READMEs, docs/**/*.md, and os_compatibility_tests."""
     errors: list[str] = []
-    readme_paths = sorted(
-        glob.glob(os.path.join(REPO_ROOT, "modules", "*", "*", "README.md"))
-        + glob.glob(os.path.join(REPO_ROOT, "community", "modules", "*", "*", "README.md"))
-        + glob.glob(os.path.join(REPO_ROOT, "docs", "**", "*.md"), recursive=True)
-    )
+    readme_paths = [
+        p
+        for p in sorted(
+            glob.glob(os.path.join(REPO_ROOT, "modules", "*", "*", "README.md"))
+            + glob.glob(os.path.join(REPO_ROOT, "community", "modules", "*", "*", "README.md"))
+            + glob.glob(os.path.join(REPO_ROOT, "docs", "**", "*.md"), recursive=True)
+            + glob.glob(os.path.join(REPO_ROOT, "examples", "*", "**", "*.md"), recursive=True)
+            + glob.glob(os.path.join(REPO_ROOT, "community", "examples", "**", "*.md"), recursive=True)
+            + glob.glob(os.path.join(REPO_ROOT, "community", "front-end", "**", "*.md"), recursive=True)
+        )
+        if os.path.isfile(p) and "node_modules" not in p
+    ]
     tf_cache: dict[str, tuple[set[str], set[str], set[str]]] = {}
 
     for abs_path in readme_paths:

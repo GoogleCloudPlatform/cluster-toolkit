@@ -174,6 +174,13 @@ gcluster import-inputs DEPLOYMENT_GROUP_DIRECTORY [flags]
 gcluster cluster <list|describe|info|volume> [flags]
 ```
 
+### Subcommands - cluster
+
+* `gcluster cluster list [-p <project>]`: Lists GKE clusters in the project.
+* `gcluster cluster describe -c <cluster> -l <location>`: Prints the full `gcloud container clusters describe` output (YAML) for the cluster.
+* `gcluster cluster info -c <cluster> -l <location>`: Prints a per-node-pool summary (name, machine type, status).
+* `gcluster cluster volume -c <cluster> -l <location>`: Lists Toolkit-managed PVCs (label `ghpc_role=file-system`) across all namespaces, with their module or storage class.
+
 ## gcluster job
 
 `gcluster job` submits, monitors, and manages batch and distributed workloads on GKE clusters (`submit`, `list`, `logs`, `cancel`, `config`, `inspect`, `gke-template-extract`). For detailed usage, see [`docs/gcluster_job_guide.md`](../docs/gcluster_job_guide.md).

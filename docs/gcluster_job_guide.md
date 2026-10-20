@@ -56,7 +56,7 @@ print("This is a sample application running on GKE.")
 ```
 
 > [!NOTE]
-> This on-the-fly image build does not execute a Dockerfile. It packages the files from your build context directory directly into the root directory (`/`) of the container image, honoring `.dockerignore` and skipping `.git`, `.terraform`, `.ghpc`, `.ansible`, `vendor`, `bin`, `pkg`, `node_modules`, `tmp/`, `__pycache__`, `.DS_Store`, and `*.log`. If you need to install dependencies, make sure they are already present in your `--base-image`.
+> This on-the-fly image build does not execute a Dockerfile. It packages the files from your build context directory directly into the root directory (`/`) of the container image, honoring `.dockerignore` and skipping common VCS/build artifacts (such as `.git`, `.terraform`, `node_modules`, and `__pycache__`). If you need to install dependencies, make sure they are already present in your `--base-image`.
 
 ## 3. Deploy a GKE Cluster
 
@@ -145,7 +145,7 @@ A TPU shorthand names a slice size, not a host shape. GKE can run the same slice
   --location <REGION/ZONE> \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --command "python /app.py" \
+  --command "python app.py" \
   --name my-python-app-job \
   --compute-type n2-standard-32
 ```
@@ -1127,7 +1127,7 @@ NAP integration provides the following capabilities:
 
 * **Consumption targeting:** The `--gke-nap-provisioning` flag lets you target `spot`, `on-demand`, or `reservation` compute models.
 * **Reservation integration:** The `--gke-nap-reservation RESERVATION_NAME` flag injects reservation affinity selectors, letting NAP spawn node pools directly in specific Compute Engine reservations.
-* **Pre-flight limit verification:** Cluster Toolkit validates that the requested accelerator resource type is enabled (non-zero maximum) in the cluster's NAP resource limits before submission.
+* **Pre-flight limit verification:** When `--gke-nap-provisioning` is passed, Cluster Toolkit validates before submission that the requested accelerator resource type (or the `cpu` limit for CPU machine types) has a non-zero maximum in the cluster's NAP resource limits.
 
 #### Example CLI commands
 
@@ -1244,11 +1244,11 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | Flag | Type | Description |
 | :--- | :--- | :--- |
 | `-n, --name` | `string` | Name of the job (JobSet) to create. Used for Kubernetes resources. Maximum of 28 characters for standard workloads, or 22 characters when `--pathways` is enabled. *(Required)* |
-| `-e, --command` | `string` | Command to execute inside the container (e.g., `'python app.py'`). *(Required)* |
+| `-e, --command` | `string` | Command to execute inside the container (e.g., `'python app.py'`). *(Required except when `--pathways-headless` is set)* |
 | `--compute-type` | `string` | The hardware target for the job. GPU/TPU shorthands (e.g., `h100-80gb-8`, `l4-1`, `v6e-8`) and machine types from `gcluster`'s built-in shorthand map (e.g., `a3-highgpu-8g`) resolve without a matching node pool, so they also work on NAP clusters. Any other GCE machine type (e.g., `n2-standard-32`) or a GKE accelerator label (e.g., `nvidia-l4`) is resolved against the cluster's existing node pools. *(Required)* The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed. |
-| `-i, --image` | `string` | Full registry path of a pre-built container image to run. |
-| `-B, --base-image` | `string` | Name of the base container image to build upon (e.g., `python:3.9-slim`). |
-| `-b, --build-context` | `string` | Path to the local build context directory for on-the-fly image builds. |
+| `-i, --image` | `string` | Full registry path of a pre-built container image to run. Either `--image`, **or** both `--base-image` and `--build-context`, is required and the two forms are mutually exclusive (except when `--pathways-headless` is set, where no image is needed). |
+| `-B, --base-image` | `string` | Name of the base container image to build upon (e.g., `python:3.9-slim`). Requires `--build-context`; mutually exclusive with `--image`. |
+| `-b, --build-context` | `string` | Path to the local build context directory for on-the-fly image builds. Requires `--base-image`; mutually exclusive with `--image`. |
 | `-f, --platform` | `string` | Target platform architecture for the image build (Default: `linux/amd64`). |
 | `-o, --dry-run-out` | `string` | Local file path to save the generated Kubernetes manifest instead of applying it (must specify a file path, not a directory). |
 | `--num-slices` | `int` | Number of independent groups/slices to use (Default: `1`). |
@@ -1332,19 +1332,6 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 > [!NOTE]
 > **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. For jobs with up to 10 pods, you can override this to stream logs from all pods by explicitly passing `--main-only=false`; for jobs with more than 10 pods, `gcluster` prints a link to view all-pod logs in the Google Cloud Console.
-
-### 9.6 Additional `gcluster job` and `gcluster cluster` Subcommands
-
-| Command | Description |
-| :--- | :--- |
-| `./gcluster job cancel <job-name>` | Deletes the JobSet and reclaims unshared GCS FUSE / Filestore gateway PVCs/PVs created by `gcluster` (`gcluster-gcsfuse-*`, `gcluster-filestore-*`). |
-| `./gcluster job inspect [--name <job-name>] [-s/--show] [-o <file>]` | Writes a cluster + workload diagnostic bundle to `gcluster-inspect-<cluster>-<timestamp>.log`. |
-| `./gcluster job config set [<key> <value>]` / `show` | Persist or print default `project`, `cluster`, `location` (opens an editor when key/value omitted). |
-| `./gcluster job gke-template-extract [--output-dir <dir>] [--overwrite]` | Extracts the embedded manifest templates (`jobset.tmpl`, `pathways_jobset.tmpl`, `gcs_fuse_pv_pvc.tmpl`, `filestore.tmpl`, `local_queue.tmpl`, `priority_classes.tmpl`) to `./gke-templates` by default. |
-| `./gcluster cluster list [-p <project>]` | Lists GKE clusters in the project. |
-| `./gcluster cluster describe -c <cluster> -l <location>` | Prints the full `gcloud container clusters describe` output (YAML) for the cluster. |
-| `./gcluster cluster info -c <cluster> -l <location>` | Prints a per-node-pool summary (name, machine type, status). |
-| `./gcluster cluster volume -c <cluster> -l <location>` | Lists Toolkit-managed PVCs (label `ghpc_role=file-system`) across all namespaces, with their module or storage class. |
 
 ## 10. Troubleshooting
 

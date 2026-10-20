@@ -176,7 +176,7 @@ When submitting jobs to a NAP-enabled GKE cluster by using the `gcluster job sub
 
 * **Spot versus on-demand provisioning:** Use `--gke-nap-provisioning spot` or `--gke-nap-provisioning on-demand`. When you specify `spot`, Cluster Toolkit injects the standard GKE provisioning toleration (`cloud.google.com/gke-provisioning=spot:NoSchedule`) and node selector into the pod template.
 * **Compute Engine reservation targeting:** Use `--gke-nap-provisioning reservation` in combination with `--gke-nap-reservation RESERVATION_NAME`. Cluster Toolkit automatically populates the reservation node selector and tolerations (`cloud.google.com/reservation-name=RESERVATION_NAME:NoSchedule`), letting GKE NAP spawn node pools directly inside your targeted Compute Engine reservation. You can also pass a full Google Cloud resource URI (for example, `projects/PROJECT_ID/reservations/RESERVATION_NAME`) to target shared reservations in other projects, which automatically configures the `cloud.google.com/reservation-project` label.
-* **Pre-flight limit verification:** Before submitting a job, Cluster Toolkit queries GKE cluster metadata to verify that the requested machine type (for example, `v6e-4` or `a3-megagpu-8g`) is explicitly permitted by your cluster's NAP resource limits. If not permitted, submission fails quickly with a clear diagnostic error.
+* **Pre-flight limit verification:** When `--gke-nap-provisioning` is passed, Cluster Toolkit queries GKE cluster metadata before submission to verify that the requested accelerator resource type (or the `cpu` limit for CPU machine types) has a non-zero maximum in your cluster's NAP resource limits. If not permitted, submission fails quickly with a clear diagnostic error.
 
 #### Example CLI commands
 

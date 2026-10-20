@@ -183,7 +183,7 @@ Spot VMs are preemptible instances suitable for fault-tolerant workloads. For mo
 #### Option 2: Using DWS Flex Start (Queued Provisioning)
 DWS Flex Start is a queued provisioning model that allocates all requested GPU resources at the same time, once the entire capacity becomes available. For more details, refer to the [GKE DWS Flex Start documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training). To configure the cluster for DWS Flex Start:
 1. Open [`gke-g4-confidential.yaml`](./gke-g4-confidential.yaml) and locate the `g4-pool` module settings block.
-2. Comment out or remove the `static_node_count` setting and the `reservation_affinity` block (and comment out or remove `static_node_count:` and `reservation:` from the `vars:` block in both `gke-g4-confidential.yaml` and `gke-g4-confidential-deployment.yaml`).
+2. Comment out or remove the `static_node_count` setting and the `reservation_affinity` block in `g4-pool` (and comment out or remove `reservation:` from the `vars:` block in both `gke-g4-confidential.yaml` and `gke-g4-confidential-deployment.yaml` so `gcluster`'s unused-variable validator passes; keep `static_node_count:` in `vars:` as it is still referenced by `nvidia_smi_job_template`).
 3. Add the following DWS parameters to the settings block:
 
 ```yaml
