@@ -3858,10 +3858,7 @@ func TestSubmitJob_SkipsConflictCheckOnDryRun(t *testing.T) {
 				{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
 			},
 			"kubectl get deployment": {
-				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
-				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
-				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
-				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
+				{ExitCode: 0, Stdout: `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"image":"registry.k8s.io/kueue/kueue:v0.15.2"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`},
 			},
 			"kubectl rollout status": {
 				{ExitCode: 0, Stdout: "successfully rolled out"},
