@@ -1036,12 +1036,15 @@ func TestIsKueueDeploymentInstalled_Forbidden(t *testing.T) {
 	}
 	orc := &GKEOrchestrator{executor: mock}
 
-	installed, err := orc.isKueueDeploymentInstalled()
+	dep, installed, err := orc.getKueueDeployment()
 	if err != nil {
-		t.Fatalf("isKueueDeploymentInstalled should succeed and return true on 403 Forbidden, got err: %v", err)
+		t.Fatalf("getKueueDeployment should succeed and return true on 403 Forbidden, got err: %v", err)
+	}
+	if dep != nil {
+		t.Errorf("getKueueDeployment on 403 Forbidden dep = %v; want nil", dep)
 	}
 	if !installed {
-		t.Errorf("isKueueDeploymentInstalled on 403 Forbidden = false; want true")
+		t.Errorf("getKueueDeployment on 403 Forbidden = false; want true")
 	}
 }
 
@@ -1689,5 +1692,62 @@ func TestWaitForKueueWebhook_RolloutBeforeDeploymentGet(t *testing.T) {
 	}
 	if len(callOrder) < 3 || callOrder[0] != "rollout" || callOrder[1] != "get-deployment" || callOrder[2] != "get-endpointslice" {
 		t.Errorf("waitForKueueWebhook call order = %v, want [rollout get-deployment get-endpointslice ...]", callOrder)
+	}
+}
+
+func TestGetKueueVersion_SidecarInKueueRepoBeforeManager(t *testing.T) {
+	raw := `{"spec":{"template":{"spec":{"containers":[` +
+		`{"name":"kube-rbac-proxy","image":"us-docker.pkg.dev/my-proj/kueue-mirror/kube-rbac-proxy:v0.18.0"},` +
+		`{"name":"manager","image":"us-docker.pkg.dev/my-proj/kueue-mirror/kueue:v0.16.1"}` +
+		`]}}}}`
+	var dep kueueDeployment
+	if err := json.Unmarshal([]byte(raw), &dep); err != nil {
+		t.Fatalf("failed to unmarshal deployment JSON: %v", err)
+	}
+
+	orc := &GKEOrchestrator{}
+	ver, err := orc.getKueueVersion(&dep)
+	if err != nil {
+		t.Fatalf("getKueueVersion failed: %v", err)
+	}
+	if ver != "v0.16.1" {
+		t.Errorf("getKueueVersion() = %q, want %q (manager container version)", ver, "v0.16.1")
+	}
+}
+
+func TestCheckAndInstallKueue_SharedClusterForbidden(t *testing.T) {
+	getDepCalls := 0
+	rolloutCalls := 0
+
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			if strings.Contains(fullCmd, "kubectl get crd") {
+				return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): forbidden"}
+			}
+			if strings.Contains(fullCmd, "kubectl get deployment") {
+				getDepCalls++
+				return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): forbidden"}
+			}
+			if strings.Contains(fullCmd, "kubectl rollout status") {
+				rolloutCalls++
+				return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): forbidden"}
+			}
+			if strings.Contains(fullCmd, "kubectl get endpointslice") {
+				return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): forbidden"}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+
+	orc := &GKEOrchestrator{executor: mock}
+	if err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a"); err != nil {
+		t.Fatalf("CheckAndInstallKueue should succeed on 403 Forbidden in shared cluster, got: %v", err)
+	}
+	if getDepCalls != 1 {
+		t.Errorf("kubectl get deployment calls = %d, want 1", getDepCalls)
+	}
+	if rolloutCalls != 1 {
+		t.Errorf("kubectl rollout status calls = %d, want 1", rolloutCalls)
 	}
 }

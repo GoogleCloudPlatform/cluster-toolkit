@@ -339,35 +339,6 @@ func (g *GKEOrchestrator) hasRequiredResources(rgList []interface{}) bool {
 // 3. Kueue Installation & Cluster Lifecycle Management (Cluster-Level)
 // -----------------------------------------------------------------------------
 
-type kueueDeployment struct {
-	Metadata struct {
-		Generation int64 `json:"generation"`
-	} `json:"metadata"`
-	Spec struct {
-		Replicas *int32 `json:"replicas"`
-		Paused   bool   `json:"paused"`
-		Template struct {
-			Spec struct {
-				Containers []struct {
-					Name  string `json:"name"`
-					Image string `json:"image"`
-				} `json:"containers"`
-			} `json:"spec"`
-		} `json:"template"`
-	} `json:"spec"`
-	Status struct {
-		ObservedGeneration int64 `json:"observedGeneration"`
-		Replicas           int32 `json:"replicas"`
-		UpdatedReplicas    int32 `json:"updatedReplicas"`
-		AvailableReplicas  int32 `json:"availableReplicas"`
-		Conditions         []struct {
-			Type   string `json:"type"`
-			Status string `json:"status"`
-			Reason string `json:"reason"`
-		} `json:"conditions"`
-	} `json:"status"`
-}
-
 func hasFailedDeploymentCondition(dep *kueueDeployment) bool {
 	for _, cond := range dep.Status.Conditions {
 		if cond.Type == "Progressing" && (cond.Reason == "ProgressDeadlineExceeded" || cond.Status == "False") {
@@ -405,8 +376,8 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName strin
 	if errDep != nil {
 		return fmt.Errorf("failed to verify Kueue deployment status: %w", errDep)
 	}
-	currentVersion, errVer := g.GetKueueVersion(dep)
-	if errVer != nil && (kueueCRDInstalled && kueueDeploymentInstalled) {
+	currentVersion, errVer := g.getKueueVersion(dep)
+	if errVer != nil && dep != nil {
 		logging.Info("Warning: Unable to determine installed Kueue version: %v", errVer)
 	}
 
@@ -544,13 +515,8 @@ func (g *GKEOrchestrator) getKueueDeployment() (*kueueDeployment, bool, error) {
 	return nil, false, fmt.Errorf("failed to check for Kueue deployment: %s\n%s", res.Stderr, res.Stdout)
 }
 
-func (g *GKEOrchestrator) isKueueDeploymentInstalled() (bool, error) {
-	_, installed, err := g.getKueueDeployment()
-	return installed, err
-}
-
-// GetKueueVersion extracts the deployed version of the Kueue controller from its Deployment object.
-func (g *GKEOrchestrator) GetKueueVersion(dep *kueueDeployment) (string, error) {
+// getKueueVersion extracts the deployed version of the Kueue controller from its Deployment object.
+func (g *GKEOrchestrator) getKueueVersion(dep *kueueDeployment) (string, error) {
 	if dep == nil {
 		return "", fmt.Errorf("kueue deployment object is nil")
 	}
@@ -560,9 +526,12 @@ func (g *GKEOrchestrator) GetKueueVersion(dep *kueueDeployment) (string, error) 
 	}
 	image := strings.TrimSpace(containers[0].Image)
 	for _, c := range containers {
-		if c.Name == "manager" || strings.Contains(c.Image, "kueue") {
+		if c.Name == "manager" {
 			image = strings.TrimSpace(c.Image)
 			break
+		}
+		if strings.Contains(c.Image, "kueue") {
+			image = strings.TrimSpace(c.Image)
 		}
 	}
 	if idx := strings.Index(image, "@"); idx != -1 {
@@ -637,6 +606,10 @@ func (g *GKEOrchestrator) waitForKueueWebhookFast(dep *kueueDeployment) error {
 	if !isKueueDeploymentRolledOut(dep) {
 		res := g.kubectl("rollout", "status", "deployment/kueue-controller-manager", "-n", "kueue-system", kueueControllerRolloutTimeout)
 		if res.ExitCode != 0 {
+			if strings.Contains(strings.ToLower(res.Stderr+" "+res.Stdout), "forbidden") {
+				logging.Warn("Insufficient RBAC permissions to check Kueue deployment rollout status in kueue-system (403 Forbidden). Skipping rollout status check.")
+				return g.waitForKueueEndpoints(true)
+			}
 			podDetails := g.getKueuePodDetails()
 			return fmt.Errorf("kueue controller manager failed to become ready: %s\n%s%s", res.Stderr, res.Stdout, podDetails)
 		}
@@ -649,7 +622,7 @@ func (g *GKEOrchestrator) waitForKueueWebhookFast(dep *kueueDeployment) error {
 		}
 	}
 
-	version, err := g.GetKueueVersion(dep)
+	version, err := g.getKueueVersion(dep)
 	if err != nil {
 		logging.Warn("Failed to get Kueue version, defaulting to Endpoints check: %v", err)
 		version = defaultKueueVersion
@@ -989,14 +962,8 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 		return err
 	}
 
-	hasUserClasses, err := g.hasUserPriorityClasses()
-	if err != nil {
+	if err := g.EnsurePriorityClassesInstalled(); err != nil {
 		return err
-	}
-	if !hasUserClasses {
-		if err := g.installPriorityClasses(); err != nil {
-			return err
-		}
 	}
 
 	// Install ClusterQueue
