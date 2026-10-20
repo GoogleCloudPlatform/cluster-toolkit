@@ -59,6 +59,8 @@ class TstPartition:
     partition_name: str = "euler"
     partition_nodeset: list[str] = field(default_factory=list)
     partition_nodeset_tpu: list[str] = field(default_factory=list)
+    partition_nodeset_dyn: list[str] = field(default_factory=list)
+    partition_conf: dict[str, str] = field(default_factory=dict)
     enable_job_exclusive: bool = False
 
 @dataclass
@@ -67,6 +69,7 @@ class TstCfg:
     project: str = "p"
     provisioning_engine: str = "BULK_INSERT"
     cloud_parameters: dict[str, Any] = field(default_factory=dict)
+    capacity_circuit_breaker: dict[str, Any] = field(default_factory=dict)
     experimental: dict[str, Any] = field(default_factory=dict)
     enable_health_check_start_only: bool = False
     enable_expedited_requeue: bool = False
