@@ -76,5 +76,5 @@ JOB_TRANSFORM_NAMES = $(JOB_TRANSFORM_NAMES) RETRY_WINDOWS_SHUTDOWN
 JOB_TRANSFORM_RETRY_WINDOWS_SHUTDOWN @=end
   DEFAULT OnExitRemove True
   COPY OnExitRemove PreTransformOnExitRemove
-  SET OnExitRemove PreTransformOnExitRemove && !(!ExitBySignal && ((ExitCode == -1073741502) || (ExitCode == 3221225794) || (ExitCode == -1073741205) || (ExitCode == 3221226091)))
+  SET OnExitRemove PreTransformOnExitRemove && !(!ExitBySignal && ((ExitCode == -1073741502) || (ExitCode == 3221225794) || (ExitCode == -1073741205) || (ExitCode == 3221226091)) && (NumJobCompletions < 5))
 @end

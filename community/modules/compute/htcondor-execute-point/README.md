@@ -162,6 +162,28 @@ gcloud compute instance-groups managed update-instances \
 
 [replacement]: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#type
 
+### Shutdown Scripts
+
+By default, this module configures a VM shutdown script in instance metadata to
+stop the HTCondor service when an Execute Point is being shut down or deleted:
+
+- **Windows (`windows-shutdown-script-ps1`)**: Runs `Stop-Service condor -Force`
+  to remove the node from the pool and prevent new jobs from starting during VM
+  termination.
+- **Linux (`shutdown-script`)**: Runs `condor_off -fast -startd` and stops the
+  `condor` systemd service.
+
+User-supplied [`var.metadata`](#input_metadata) overrides these defaults. Setting
+`metadata.shutdown-script` (on Linux) or `metadata.windows-shutdown-script-ps1`
+(on Windows) replaces the module's built-in shutdown script.
+
+In addition, the [htcondor-access-point] module configures a job transform rule
+(`RETRY_WINDOWS_SHUTDOWN`) that automatically re-queues jobs up to 5 times
+(`NumJobCompletions < 5`) if they exit with Windows shutdown/DLL initialization
+error codes (`0xC0000142` or `0xC000026B`). Note that this retry rule is applied
+at the Access Point scheduler level and therefore applies to all jobs in the
+pool, including Linux jobs.
+
 ## Known Issues
 
 When using OS Login with "external users" (outside of the Google Cloud

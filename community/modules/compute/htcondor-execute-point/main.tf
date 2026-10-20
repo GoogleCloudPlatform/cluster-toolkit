@@ -46,14 +46,12 @@ locals {
   } : {}
 
   shutdown_metadata = local.is_windows_image ? {
+    # Runs as SYSTEM, which has no HTCondor admin rights here, so condor_off.exe
+    # would be refused. Stopping the service removes the node from the pool.
     windows-shutdown-script-ps1 = <<-EOT
-      if (Test-Path "C:\Condor\bin\condor_off.exe") {
-          & "C:\Condor\bin\condor_off.exe" -fast -startd
-          Start-Sleep -Seconds 5
-      }
       Stop-Service condor -Force -ErrorAction SilentlyContinue
     EOT
-  } : {
+    } : {
     shutdown-script = <<-EOT
       #!/bin/bash
       if command -v condor_off >/dev/null 2>&1; then
