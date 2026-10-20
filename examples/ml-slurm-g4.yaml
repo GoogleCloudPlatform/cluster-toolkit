@@ -43,6 +43,12 @@ vars:
   g4_reservation_name: "" # To use a reservation, provide its name here.
   g4_enable_spot_vm: false # To use Spot VMs, set this to true.
   g4_dws_flex_enabled: false # To use DWS Flex Provisioning
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
+  # Machine type for the controller node.
+  controller_machine_type: n2-standard-4
+  # Size in GB of the /home Filestore instance.
+  homefs_size_gb: 2560
 
 deployment_groups:
 - group: image-env
@@ -204,7 +210,7 @@ deployment_groups:
     - net0 # Filestore attached to net0
     settings:
       filestore_tier: BASIC_SSD
-      size_gb: 2560
+      size_gb: $(vars.homefs_size_gb)
       local_mount: /home
       reserved_ip_range: $(vars.filestore_ip_range)
 
@@ -312,7 +318,7 @@ deployment_groups:
     use:
     - net0
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       instance_image:
         project: $(vars.project_id)
         family: $(vars.built_image_family)
@@ -327,7 +333,7 @@ deployment_groups:
     - homefs
     - slurm_login
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.controller_machine_type)
       instance_image:
         project: $(vars.project_id)
         family: $(vars.built_image_family)

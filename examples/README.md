@@ -299,7 +299,7 @@ the experimental badge (![experimental-badge]).
 | [examples/pfs-managed-lustre-slurm.yaml](./pfs-managed-lustre-slurm.yaml) | slurm | c2-standard-4, n2-standard-4 | This blueprint, managed-lustre-slurm, is a specialized configuration designed to deploy a high-performance compute cluster on Google Cloud. It integrates the Slurm Workload Manager with Google Cloud Managed Service for Lustre, a fully... |
 | [examples/pfs-managed-lustre-vm.yaml](./pfs-managed-lustre-vm.yaml) | none | n2-standard-2 | Creates a Managed Lustre file-system that is mounted in one client instance. |
 | [examples/science/af3-slurm/af3-slurm.yaml](./science/af3-slurm/af3-slurm.yaml) | slurm | n2-standard-16, n2-standard-4, c2-standard-8 | This blueprint lets you create a high-throughput execution environment for Google Deepmind's AlphaFold 3 in your own GCP project. It uses the unmodified AlphaFold 3 package, and provides a best-practices mapping of it to Google Cloud... |
-| [examples/storage-gke.yaml](./storage-gke.yaml) | gke | n2d-standard-2, c3d-standard-8 | This blueprint showcases the integration of several storage solutions: |
+| [examples/storage-gke.yaml](./storage-gke.yaml) | gke | n2d-standard-2, c3d-standard-8, n2d-standard-4 | This blueprint showcases the integration of several storage solutions: |
 | [examples/storage-slurm.yaml](./storage-slurm.yaml) | slurm | c3d-standard-4 | This blueprint showcases the integration of several storage solutions: |
 | [examples/storage-vm.yaml](./storage-vm.yaml) | none | c3d-standard-4 | Creates a standalone VM instance and securely attaches persistent disks that are provisioned directly into specified hyperdisk-balanced and hyperdisk-throughput Storage Pools. This allows the VM to share IOPS and throughput capacity... |
 

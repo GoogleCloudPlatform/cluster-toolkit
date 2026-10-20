@@ -65,6 +65,13 @@ allowed_read_only_commands:
      copy in place), add the missing knob to `vars:` with a default **equal to
      the value that was hardcoded**, reference it in the module via
      `$(vars.<name>)`, and put the user's override value in `deployment.yaml`.
+   - **A template only exposes knobs it already set explicitly.** Tracked
+     blueprints promote to `vars:` only settings that were literal values in a
+     module block; they do not add Spot, reservation, DWS or any other input the
+     module block was silent about. If the knob you need is not in `vars:`
+     (check the catalog entry), it is Case 2 — copy the blueprint. Never add the
+     knob to the tracked template, and never pass it as a bare module-input name
+     in `deployment.yaml` hoping it will be picked up.
    - Do **not** add, remove, rename or restructure `deployment_groups[].modules[]`
      entries for value overrides.
 3. **Only edit module blocks when adding or removing capability** (Case 3 — e.g.
@@ -144,20 +151,83 @@ Terraform's `${var.name}`.
 ---
 vars:
   project_id: my-proj
-  deployment_name: hpc-slurm-spot
+  deployment_name: hpc-slurm-small
   region: us-central1
   zone: us-central1-a
-  compute_node_count_max: 4
-  compute_enable_spot_vm: true
+  compute_node_count_dynamic_max: 4
+  compute_machine_type: c2-standard-30
 ```
 
 > Global `vars:` are injected into **every** module that declares an input with
 > the same name and does not set it explicitly. That is why blueprint vars use
-> prefixed names such as `compute_machine_type` / `compute_enable_spot_vm`.
-> Never add an unprefixed variable name that is shared by multiple modules in
-> the blueprint: for example, `machine_type` would silently apply to all
-> nodesets, `slurm_login`, and `slurm_controller`, and `enable_spot_vm` would
-> apply to all three nodesets (`debug_nodeset`, `compute_nodeset`, `h3_nodeset`).
+> prefixed names such as `compute_machine_type` /
+> `compute_node_count_dynamic_max`. Never add an unprefixed variable name that
+> is shared by multiple modules in the blueprint: in `hpc-slurm.yaml`, for
+> example, a bare `enable_spot_vm` would silently apply to all three nodesets
+> (`debug_nodeset`, `compute_nodeset`, `h3_nodeset` — none of them sets it), and
+> a bare `machine_type` would silently apply to `slurm_controller` only (the one
+> module that does not set it explicitly). Where every module already sets the
+> input explicitly (as `node_count_dynamic_max` is on all three nodesets in
+> `hpc-slurm.yaml`), the bare name is injected nowhere and `gcluster` fails with
+> `test_deployment_variable_not_used` instead.
+
+#### Variable naming & override rules
+
+Customizable vars in `examples/*.yaml` follow
+`<functional_role>_<exact_terraform_input>`; the suffix is the module input
+the var feeds (`_machine_type`, `_node_count_dynamic_max`, `_static_node_count`,
+`_instance_count`, `_size_gb`, `_size_gib`, `_capacity_gb`, `_disk_size_gb`),
+so no translation is needed between the var and the setting. Only settings that
+were already explicit literals in the module block are exposed this way — a
+tracked template never gains a `vars:` key for an input the module block did not
+set (there is, for example, no Spot or reservation var in `hpc-slurm.yaml`
+because its nodesets never set those inputs; Spot on that cluster is Case 2).
+
+| Role prefix | Meaning |
+| :--- | :--- |
+| `compute_` | the worker nodes — a Slurm nodeset **or** a GKE node pool — when the blueprint has one |
+| `login_` / `controller_` | the Slurm login / controller VM |
+| `system_node_pool_` | the GKE system node pool (literal `gke-cluster` input) |
+| `client_` | a plain VM that mounts storage (e.g. `pfs-managed-lustre-vm`) |
+| `image_build_` | the temporary Packer VM that builds a custom image (`ml-slurm`, `ml-slurm-g4`) |
+| `<partition>_` / `<pool>_` (`debug_`, `hp_pool_`, `local_ssd_pool_`, `n2_`, `h3_`, `a2_8_`) | one of several worker pools; the prefix is the partition / pool name the user already addresses |
+| `homefs_`, `lustre_`, `hyperdisk_<type>_`, `data_disk_` | storage, by mount role |
+
+Rules the agent must respect:
+
+- **Hardware-named partitions expose `node_count_dynamic_max` only, never
+  `machine_type`** (`h3`, `a2`, `g2`, `n2`, `c2`, `c2d`, `c3`, `a2_8`,
+  `a2_16`). The hardware name *is* the partition's identity; "run the `g2`
+  partition on g4" is "add a partition" → Case 2/3 (copy the blueprint), not a
+  `deployment.yaml` override. Functionally named pools (`compute`, `debug`,
+  `hp_pool`, …) do expose `<role>_machine_type`.
+- **Three override states.** `""` means "empty string" (e.g.
+  `g4_reservation_name: ""` in `ml-slurm-g4` = no reservation); `$(null)` means
+  "unset this input" (e.g. `static_node_count` must be unset under flex-start);
+  a bare `key:` in YAML or `key=` on `--vars` is **always an error** (`deployment
+  variable "key" was not set`). That error means a **null value in your `-d`
+  file or `--vars`** — even though the location gcluster prints is the
+  blueprint's `vars:` line, the fix belongs in `deployment.yaml`, not in the
+  template.
+- **Precedence:** blueprint `vars:` < `-d deployment.yaml` < `--vars`. Later
+  sources override earlier ones key by key.
+- **Only use keys present in the catalog entry's `vars`.** A `deployment.yaml`
+  key that is *not* in the blueprint's `vars:` but happens to match a module
+  input (a typo such as `machine_type` instead of `compute_machine_type`, or
+  `enable_spot_vm` on a blueprint that has no Spot var) is **silently injected
+  into every module that lacks that setting** — no error is raised as long as
+  at least one module can absorb it (only when *no* module can does
+  `test_deployment_variable_not_used` fail). Check `vars` in the catalog before
+  writing the key. Never run `gcluster` with `-l IGNORE` or add
+  `test_deployment_variable_not_used` to `--skip-validators`: that validator is
+  the only guard against a typo'd key, so if it fails, fix the key.
+- **Legacy names that pre-date the convention** (kept for compatibility, do not
+  rename): `cluster_size`, `g4_machine_type` / `g4_reservation_name` /
+  `g4_enable_spot_vm` / `g4_dws_flex_enabled` / `disk_size_gb` (`ml-slurm-g4`),
+  bare `machine_type` / `reservation_name` (`ml-slurm-g4-vgpu`),
+  `compute_node_machine_type` (`pfs-managed-lustre-slurm`), `size_gib`
+  (`gke-managed-lustre`), bare `disk_size_gb` in `ml-slurm` (intentionally
+  broadcast to all nodesets, login and controller).
 
 If the blueprint does not expose the setting you need in `vars:`, copy the
 tracked template to a new file in the same directory with `ai_assisted: true`
@@ -193,6 +263,8 @@ YAML — fix it there.
 | `a required setting "X" is missing from a module "Y"` | Add the module that outputs `X` to `Y`'s `use:` list (see `module_wiring.<source>.recommended_use` in the catalog, or the `outputs.tf` of candidate modules). |
 | `module "X" was not used` | Add `X` to the `use:` list of its consumer (e.g. `private_service_access` → filestore / lustre). |
 | `module "X" references unknown global variable "Y"` | Add `Y` under `vars:` in the blueprint or `deployment.yaml`. |
+| `deployment variable "X" was not set` | A null value (`X:` with nothing after it) in **your** `-d` file or `--vars`, even though the location printed is the blueprint's `vars:` line. Set the value in `deployment.yaml`; do not edit the template. |
+| `test_deployment_variable_not_used` / `the variable "X" was not used in this blueprint` | `X` is not a key in the blueprint's `vars:` and no module declares an input named `X` — almost always a typo'd key in `deployment.yaml`. Fix the key; never silence it with `-l IGNORE` or `--skip-validators`. |
 | Reservation / machine type not found in zone | Change `zone` / `machine_type` in `vars:` or `deployment.yaml`. |
 | Terraform error pointing at `<deployment_name>/<group>/main.tf` | Do **not** edit that file. Fix the blueprint and re-run `gcluster create ... -w` (or `gcluster deploy <blueprint> -d <deployment.yaml> -w` after confirmation). |
 

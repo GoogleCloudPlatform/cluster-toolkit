@@ -3110,7 +3110,11 @@ blueprints:
   machine_types: [c3-standard-88]
   vars:
     authorized_cidr: null
+    compute_machine_type: c3-standard-88
     deployment_name: gke-managed-hd
+    hyperdisk_balanced_capacity_gb: 100
+    hyperdisk_extreme_capacity_gb: 100
+    hyperdisk_throughput_capacity_gb: 5000
     project_id: null
     region: europe-west1
     zone: europe-west1-b
@@ -3156,6 +3160,7 @@ blueprints:
   vars:
     authorized_cidr: null
     base_network_name: $(vars.deployment_name)
+    compute_machine_type: n2d-standard-4
     deployment_name: null
     kms_key: ""
     lustre_instance_id: gke-lustre-instance
@@ -3712,16 +3717,25 @@ blueprints:
   description: "This advanced blueprint creates a cluster with Slurm with several performance tunings enabled, along with tiered file systems for higher performance. Some of these features come with additional cost and required additional quotas."
   machine_types: [n2-standard-2, c2-standard-60, c2d-standard-112, c3-highcpu-176, a2-ultragpu-8g, a2-megagpu-16g, h3-standard-88, n2-standard-4]
   vars:
+    a2_8_node_count_dynamic_max: 16
+    a2_16_node_count_dynamic_max: 16
+    c2d_node_count_dynamic_max: 20
+    c2_node_count_dynamic_max: 20
+    c3_node_count_dynamic_max: 20
     deployment_name: hpc01
     gpu_zones:
     - us-central1-a
     - us-central1-b
     - us-central1-c
     - us-central1-f
+    h3_node_count_dynamic_max: 16
     instance_image_custom: false
+    login_machine_type: n2-standard-4
     lustre_instance_id: lustre-hpc
+    lustre_size_gib: 36000
     metadata:
       VmDnsSetting: GlobalOnly
+    n2_node_count_dynamic_max: 4
     project_id: null
     region: us-central1
     slurm_image:
@@ -3910,11 +3924,13 @@ blueprints:
   description: "Creates a basic auto-scaling Slurm cluster with mostly default settings. The blueprint also creates a new VPC network, and a filestore instance mounted to /home."
   machine_types: [n2-standard-2, c2-standard-60, h3-standard-88, n2-standard-4]
   vars:
-    compute_enable_spot_vm: false
     compute_machine_type: c2-standard-60
-    compute_node_count_max: 20
-    debug_node_count_max: 4
+    compute_node_count_dynamic_max: 20
+    debug_machine_type: n2-standard-2
+    debug_node_count_dynamic_max: 4
     deployment_name: hpc-slurm
+    h3_node_count_dynamic_max: 20
+    login_machine_type: n2-standard-4
     project_id: null
     region: us-central1
     zone: us-central1-a
@@ -3939,7 +3955,7 @@ blueprints:
   - id: compute_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
-    settings: [allow_automatic_updates, bandwidth_tier, enable_spot_vm, machine_type, node_count_dynamic_max]
+    settings: [allow_automatic_updates, bandwidth_tier, machine_type, node_count_dynamic_max]
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [compute_nodeset]
@@ -4882,6 +4898,8 @@ blueprints:
   machine_types: [g2-standard-4]
   vars:
     authorized_cidr: null
+    compute_machine_type: g2-standard-4
+    compute_static_node_count: 1
     deployment_name: ml-01
     gcp_public_cidrs_access_enabled: false
     project_id: null
@@ -4919,11 +4937,14 @@ blueprints:
     build_slurm_from_git_ref: 6.13.2
     built_image_family: slurm-vgpu-ubuntu2404
     cluster_size: 2
+    controller_machine_type: n2-standard-4
     deployment_name: g4-vgpu
     disk_size_gb: 100
     filestore_ip_range: 192.168.1.0/29
+    homefs_size_gb: 2560
     image_build_machine_type: n2-standard-4
     image_disk_size_gb: 50
+    login_machine_type: n2-standard-4
     machine_type: g4-standard-12
     net0_range: 192.168.0.0/24
     project_id: null
@@ -4978,6 +4999,7 @@ blueprints:
     build_slurm_from_git_ref: 6.13.2
     built_image_family: slurm-g4-ubuntu2404
     cluster_size: 2
+    controller_machine_type: n2-standard-4
     deployment_name: g4-ml-example
     disk_size_gb: 100
     filestore_ip_range: 192.168.1.0/29
@@ -4985,8 +5007,10 @@ blueprints:
     g4_enable_spot_vm: false
     g4_machine_type: g4-standard-48
     g4_reservation_name: ""
+    homefs_size_gb: 2560
     image_build_machine_type: n2-standard-4
     image_disk_size_gb: 50
+    login_machine_type: n2-standard-4
     net0_range: 192.168.0.0/24
     project_id: null
     region: us-central1
@@ -5036,8 +5060,12 @@ blueprints:
   description: "This blueprint provisions an HPC cluster running the Slurm scheduler with the machine learning frameworks PyTorch and TensorFlow pre-installed on every VM. The cluster has 2 partitions:"
   machine_types: [c2-standard-4, a2-highgpu-1g, g2-standard-4]
   vars:
+    a2_node_count_dynamic_max: 20
     deployment_name: ml-example-v6
     disk_size_gb: 200
+    g2_node_count_dynamic_max: 20
+    homefs_size_gb: 2560
+    image_build_machine_type: c2-standard-4
     metadata:
       VmDnsSetting: GlobalOnly
     new_image:
@@ -5176,9 +5204,12 @@ blueprints:
   description: "This blueprint, managed-lustre-slurm, is a specialized configuration designed to deploy a high-performance compute cluster on Google Cloud. It integrates the Slurm Workload Manager with Google Cloud Managed Service for Lustre, a fully..."
   machine_types: [c2-standard-4, n2-standard-4]
   vars:
+    compute_node_count_dynamic_max: 2
     compute_node_machine_type: c2-standard-4
+    controller_machine_type: n2-standard-4
     deployment_name: managed-lustre-slurm
     kms_key: ""
+    login_machine_type: n2-standard-4
     lustre_instance_id: lustre-instance
     lustre_size_gib: 36000
     per_unit_storage_throughput: 500
@@ -5220,6 +5251,8 @@ blueprints:
   description: "Creates a Managed Lustre file-system that is mounted in one client instance."
   machine_types: [n2-standard-2]
   vars:
+    client_instance_count: 1
+    client_machine_type: n2-standard-2
     deployment_name: pfs-managed-lustre-vms
     lustre_instance_id: lustre-instance
     lustre_size_gib: 36000
@@ -5432,15 +5465,24 @@ blueprints:
   blueprint_name: storage-gke
   scheduler: gke
   description: "This blueprint showcases the integration of several storage solutions:"
-  machine_types: [n2d-standard-2, c3d-standard-8]
+  machine_types: [n2d-standard-2, c3d-standard-8, n2d-standard-4]
   vars:
     authorized_cidr: null
+    debug_pool_machine_type: n2d-standard-2
+    debug_pool_static_node_count: 2
     deployment_name: storage-gke-01
     gcp_public_cidrs_access_enabled: false
+    hp_pool_machine_type: c3d-standard-8
+    hp_pool_static_node_count: 1
+    hyperdisk_balanced_capacity_gb: 20
     hyperdisk_balanced_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-balanced\")"
+    hyperdisk_throughput_capacity_gb: 5000
     hyperdisk_throughput_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-throughput\")"
+    local_ssd_pool_machine_type: n2d-standard-2
+    local_ssd_pool_static_node_count: 1
     project_id: null
     region: us-central1
+    system_node_pool_machine_type: n2d-standard-4
     zone: us-central1-b
   modules:
   - id: network1
@@ -5519,10 +5561,15 @@ blueprints:
   description: "This blueprint showcases the integration of several storage solutions:"
   machine_types: [c3d-standard-4]
   vars:
+    compute_machine_type: c3d-standard-4
+    compute_node_count_dynamic_max: 2
+    controller_machine_type: c3d-standard-4
+    data_disk_size_gb: 2048
     deployment_name: storage-slurm
     gcs_bucket_local_mount: /data
     hyperdisk_balanced_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-balanced\")"
     hyperdisk_throughput_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-throughput\")"
+    login_machine_type: c3d-standard-4
     project_id: null
     region: us-central1
     regional_gcs_bucket_local_mount: /data_regional
@@ -5558,6 +5605,9 @@ blueprints:
   description: "Creates a standalone VM instance and securely attaches persistent disks that are provisioned directly into specified hyperdisk-balanced and hyperdisk-throughput Storage Pools. This allows the VM to share IOPS and throughput capacity..."
   machine_types: [c3d-standard-4]
   vars:
+    compute_instance_count: 1
+    compute_machine_type: c3d-standard-4
+    data_disk_size_gb: 2048
     deployment_name: vm-storage
     hyperdisk_balanced_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-balanced\")"
     hyperdisk_throughput_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-throughput\")"
