@@ -25,6 +25,16 @@ vars:
   deployment_name: netapp-volumes
   region:     ## Set GCP Region Here ##
   zone:       ## Set GCP Zone Here ##
+  # The following settings are safe to override via `-d deployment.yaml` or
+  # `--vars` without editing the module blocks below. Defaults equal the
+  # values that were previously hardcoded in the modules.
+  # Capacity in GiB of the NetApp storage pool.
+  netapp_pool_capacity_gib: 6144
+  # Capacity in GiB of the /home volume (4800 GiB is the minimum large-capacity volume size).
+  homefs_capacity_gib: 4800
+  # Number and machine type of the example client VMs that mount the volume.
+  client_instance_count: 1
+  client_machine_type: n2-standard-2
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/cluster-toolkit
@@ -55,7 +65,7 @@ deployment_groups:
       region: $(vars.region)
       zone: $(vars.zone)
       scale_type: SCALE_TYPE_SCALEOUT
-      capacity_gib: 6144
+      capacity_gib: $(vars.netapp_pool_capacity_gib)
       total_throughput_mibps: 256
       total_iops: 4096
 
@@ -64,7 +74,7 @@ deployment_groups:
     use: [netapp_pool]
     settings:
       volume_name: homefs
-      capacity_gib: 4800
+      capacity_gib: $(vars.homefs_capacity_gib)
       large_capacity_config:
         constituent_count: 48
       local_mount: /home
@@ -76,8 +86,8 @@ deployment_groups:
     source: modules/compute/vm-instance
     use: [network, homefs]
     settings:
-      instance_count: 1
-      machine_type: n2-standard-2
+      instance_count: $(vars.client_instance_count)
+      machine_type: $(vars.client_machine_type)
 
   - id: wait-for-vms
     source: community/modules/scripts/wait-for-startup

@@ -2094,12 +2094,14 @@ blueprints:
   description: "This blueprint demonstrates how to use Spack to run a real MPI job on Batch."
   machine_types: [c2-standard-16, c2-standard-60]
   vars:
+    compute_machine_type: c2-standard-60
     deployment_name: batch-wrf
     instance_image:
       family: hpc-rocky-linux-9
       project: cloud-hpc-image-public
     project_id: null
     region: us-central1
+    spack_builder_machine_type: c2-standard-16
     zone: us-central1-c
   modules:
   - id: network1
@@ -2135,6 +2137,7 @@ blueprints:
   description: "This example demonstrates how to use the Cluster Toolkit to set up a Google Cloud Batch job that mounts a Filestore instance and runs startup scripts."
   machine_types: [n2-standard-4]
   vars:
+    compute_machine_type: n2-standard-4
     deployment_name: hello-workload
     project_id: null
     region: us-central1
@@ -2216,6 +2219,10 @@ blueprints:
   machine_types: [a3-highgpu-8g, n2d-standard-2]
   vars:
     authorized_cidr: null
+    compute_machine_type: a3-highgpu-8g
+    cpu_pool_autoscaling_total_max_nodes: 3
+    cpu_pool_autoscaling_total_min_nodes: 1
+    cpu_pool_machine_type: n2d-standard-2
     deployment_name: null
     gcp_public_cidrs_access_enabled: false
     gpu_static_node_count: 2
@@ -3731,6 +3738,7 @@ blueprints:
   machine_types: [h4d-highmem-192-lssd]
   vars:
     base_network_name: $(vars.deployment_name)
+    compute_instance_count: 2
     deployment_name: h4d-cluster
     hostname_prefix: "$(\"${vars.deployment_name}-odyssey\")"
     project_id: null
@@ -3766,9 +3774,14 @@ blueprints:
   machine_types: [c2-standard-16, c2-standard-60, g2-standard-4]
   vars:
     bucket_force_destroy: false
+    compute_machine_type: c2-standard-60
+    compute_node_count_dynamic_max: 20
     deployment_name: hcls-cluster-v6
+    gpu_machine_type: g2-standard-4
+    gpu_node_count_dynamic_max: 20
     project_id: null
     region: asia-southeast1
+    spack_builder_machine_type: c2-standard-16
     zone: asia-southeast1-b
   modules:
   - id: services-api
@@ -4108,6 +4121,7 @@ blueprints:
   scheduler: slurm
   description: "This blueprint uses the Packer template module to create a custom VM image and uses it to provision an HPC cluster using the Slurm scheduler. By using a custom image, the cluster is able to begin running jobs sooner and more reliably..."
   vars:
+    compute_node_count_dynamic_max: 20
     custom_image:
       family: my-slurm-image
       project: $(vars.project_id)
@@ -5255,7 +5269,14 @@ blueprints:
   description: "This blueprint creates a basic Slurm cluster that mounts a Flex Unified large-capacity NetApp volume at /home. A private Cloud DNS zone publishes all NFS endpoint IPs under one FQDN so Slurm clients are distributed across endpoints..."
   machine_types: [n2-standard-4]
   vars:
+    compute_machine_type: n2-standard-4
+    compute_node_count_dynamic_max: 10
+    compute_node_count_static: 2
+    controller_machine_type: n2-standard-4
     deployment_name: netapp-volumes-slurm
+    homefs_capacity_gib: 4800
+    login_machine_type: n2-standard-4
+    netapp_pool_capacity_gib: 12288
     project_id: null
     region: us-central1
     zone: us-central1-a
@@ -5299,7 +5320,11 @@ blueprints:
   description: "This blueprint demonstrates how to provision NFS volumes as shared filesystems for compute VMs, using Google Cloud NetApp Volumes. It can be used as an alternative to FileStore in blueprints."
   machine_types: [n2-standard-2]
   vars:
+    client_instance_count: 1
+    client_machine_type: n2-standard-2
     deployment_name: netapp-volumes
+    homefs_capacity_gib: 4800
+    netapp_pool_capacity_gib: 6144
     project_id: null
     region: null
     zone: null
