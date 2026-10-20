@@ -110,6 +110,9 @@ spec:
                 limits:
                   cpu: "16"
                   memory: "100Gi"
+                requests:
+                  cpu: "8"
+                  memory: "32Gi"
             - name: pathways-rm
               image: {{.Pathways.ServerImage}}
               imagePullPolicy: Always
@@ -153,6 +156,9 @@ spec:
                 limits:
                   cpu: "8"
                   memory: "32Gi"
+                requests:
+                  cpu: "2"
+                  memory: "8Gi"
             {{- if not .Pathways.Headless}}
             containers:
             - name: workload-container
