@@ -971,6 +971,48 @@ blueprints:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [network, debug_partition, compute_partition, h3_partition, homefs, slurm_login]
     settings: [disk_encryption_key, disk_encryption_key_service_account, enable_controller_public_ips, slurm_bucket_kms_key]
+- path: community/examples/hpc-slurm-lldap.yaml
+  blueprint_name: hpc-slurm-lldap
+  scheduler: slurm
+  description: "Creates a Slurm cluster whose users and groups come from an LLDAP server created by the lldap-server module. The blueprint declares the users, groups, UIDs and GIDs; each new user gets a random initial password in Secret Manager..."
+  machine_types: [n2-standard-2, n2-standard-4]
+  vars:
+    deployment_name: slurm-lldap
+    project_id: null
+    region: us-central1
+    zone: us-central1-a
+  modules:
+  - id: network
+    source: modules/network/vpc
+  - id: controller_sa
+    source: modules/project/service-account
+    settings: [description, display_name, name, project_roles]
+  - id: login_sa
+    source: modules/project/service-account
+    settings: [description, display_name, name, project_roles]
+  - id: compute_sa
+    source: modules/project/service-account
+    settings: [description, display_name, name, project_roles]
+  - id: lldap
+    source: community/modules/security/lldap-server
+    use: [network]
+    settings: [base_dn, client_secret_wait_seconds, client_service_accounts, groups, users]
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, lldap]
+    settings: [allow_automatic_updates, machine_type, node_count_dynamic_max, service_account_email]
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset]
+    settings: [is_default, partition_name]
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network, lldap]
+    settings: [enable_login_public_ips, machine_type, service_account_email]
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, compute_partition, slurm_login, lldap]
+    settings: [compute_startup_scripts_timeout, controller_startup_scripts_timeout, enable_controller_public_ips, login_startup_scripts_timeout, service_account_email]
 - path: community/examples/hpc-slurm-local-ssd.yaml
   blueprint_name: hpc-slurm-local-ssd-v6
   scheduler: slurm
@@ -5898,6 +5940,24 @@ module_wiring:
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
     - modules/file-system/filestore
+  community/modules/security/lldap-server:
+    required_inputs: [base_dn, network_self_link, subnetwork_self_link]
+    recommended_use:
+    - modules/network/gpu-rdma-vpc
+    - modules/network/pre-existing-subnetwork
+    - modules/network/pre-existing-vpc
+    - modules/network/vpc
+    consumed_by:
+    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
+    - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    - community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    - modules/compute/vm-instance
+    - modules/packer/custom-image
+    - modules/scheduler/batch-job-template
+    - modules/scheduler/batch-login-node
+    - modules/scripts/startup-script
   community/modules/security/pre-existing-kms-key:
     required_inputs: [key_name, key_ring_name, location]
     consumed_by:
@@ -6126,6 +6186,7 @@ module_wiring:
     consumed_by:
     - community/modules/database/slurm-cloudsql-federation
     - community/modules/network/int-app-lb
+    - community/modules/security/lldap-server
     - modules/database/redis
     - modules/file-system/filestore
     - modules/file-system/managed-lustre
@@ -6148,6 +6209,7 @@ module_wiring:
     - community/modules/scheduler/htcondor-setup
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    - community/modules/security/lldap-server
     - modules/network/firewall-rules
     - modules/packer/custom-image
     - modules/scheduler/gke-cluster
@@ -6163,6 +6225,7 @@ module_wiring:
     - community/modules/scheduler/htcondor-setup
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    - community/modules/security/lldap-server
     - modules/compute/vm-instance
     - modules/database/redis
     - modules/file-system/filestore
@@ -6201,6 +6264,7 @@ module_wiring:
     - community/modules/scheduler/htcondor-setup
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    - community/modules/security/lldap-server
     - modules/compute/vm-instance
     - modules/database/redis
     - modules/file-system/filestore

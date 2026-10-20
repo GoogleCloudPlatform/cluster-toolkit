@@ -65,6 +65,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-kms.yaml](#hpc-slurm-kmsyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-lldap.yaml](#hpc-slurm-lldapyaml--) ![community-badge] ![experimental-badge]
   * [kms-key.yaml](#kms-keyyaml--) ![community-badge] ![experimental-badge]
   * [kms-key-per-service.yaml](#kms-key-per-serviceyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
@@ -217,6 +218,7 @@ the experimental badge (![experimental-badge]).
 | [community/examples/hpc-slurm-ha-lb.yaml](../community/examples/hpc-slurm-ha-lb.yaml) | slurm | n1-standard-2 | Cluster Toolkit blueprint (community/examples/hpc-slurm-ha-lb.yaml). |
 | [community/examples/hpc-slurm-ha.yaml](../community/examples/hpc-slurm-ha.yaml) | slurm | n1-standard-2 | Creates a highly available (HA) Slurm cluster. This setup includes a primary controller and a backup controller to ensure control plane resilience. If the primary controller instance fails, the Slurm services can be failed over to the... |
 | [community/examples/hpc-slurm-kms.yaml](../community/examples/hpc-slurm-kms.yaml) | slurm | n2-standard-2, h3-standard-88, n2-standard-4 | Creates a Slurm cluster with Customer-Managed Encryption Keys (CMEK) enabled for controller, login, and compute nodesets, as well as the Slurm configuration GCS bucket. |
+| [community/examples/hpc-slurm-lldap.yaml](../community/examples/hpc-slurm-lldap.yaml) | slurm | n2-standard-2, n2-standard-4 | Creates a Slurm cluster whose users and groups come from an LLDAP server created by the lldap-server module. The blueprint declares the users, groups, UIDs and GIDs; each new user gets a random initial password in Secret Manager... |
 | [community/examples/hpc-slurm-local-ssd.yaml](../community/examples/hpc-slurm-local-ssd.yaml) | slurm | c2-standard-4, n1-standard-4 | This blueprint demonstrates the use of Slurm and Filestore, with compute nodes that have local ssd drives deployed. |
 | [community/examples/hpc-slurm-ramble-gromacs.yaml](../community/examples/hpc-slurm-ramble-gromacs.yaml) | slurm | n2-standard-4 | Ramble is an experimentation framework which can drive the installation of software with Spack and create, execute, and analyze experiments using the installed software. |
 | [community/examples/hpc-slurm-sharedvpc.yaml](../community/examples/hpc-slurm-sharedvpc.yaml) | slurm | n2-standard-2, n2-standard-4 | This blueprint demonstrates the use of the Slurm and Filestore modules in the service project of an existing Shared VPC. Before attempting to deploy the blueprint, one must first complete initial setup for provisioning Filestore in a... |
@@ -1755,6 +1757,22 @@ See [README](../community/examples/flux-framework/README.md)
 Creates a Slurm cluster with Customer-Managed Encryption Keys (CMEK) enabled for controller, login, and compute nodesets, as well as the Slurm configuration GCS bucket.
 
 [hpc-slurm-kms.yaml]: ../community/examples/hpc-slurm-kms.yaml
+
+### [hpc-slurm-lldap.yaml] ![community-badge] ![experimental-badge]
+
+Creates a Slurm cluster whose users and groups come from an LLDAP server
+created by the [lldap-server] module. The blueprint declares the users, groups,
+UIDs and GIDs; each new user gets a random initial password in Secret Manager.
+Controller, login and compute nodes are configured as SSSD clients, and login
+nodes accept password SSH for members of the `cluster_users` group. OS Login
+keeps working. The login and controller nodes have no public IP; connect
+through IAP.
+
+The LLDAP VM and its data disk are protected from deletion by default. See the
+[lldap-server] README before running `gcluster destroy`.
+
+[hpc-slurm-lldap.yaml]: ../community/examples/hpc-slurm-lldap.yaml
+[lldap-server]: ../community/modules/security/lldap-server/README.md
 
 ### [kms-key.yaml] ![community-badge] ![experimental-badge]
 

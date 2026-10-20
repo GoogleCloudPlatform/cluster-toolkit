@@ -1,0 +1,149 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: hpc-slurm-lldap
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: slurm-lldap
+  region: us-central1
+  zone: us-central1-a
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+
+  # One service account per Slurm role. Their emails are passed to the LLDAP
+  # module (client_service_accounts) so the nodes can read the LDAPS CA
+  # certificate and the bind password from Secret Manager.
+  - id: controller_sa
+    source: modules/project/service-account
+    settings:
+      name: controller-sa
+      description: Slurm controller service account
+      display_name: Slurm controller SA
+      project_roles:
+      - compute.instanceAdmin.v1
+      - iam.serviceAccountUser
+      - storage.objectViewer
+      - logging.logWriter
+      - monitoring.metricWriter
+
+  - id: login_sa
+    source: modules/project/service-account
+    settings:
+      name: login-sa
+      description: Slurm login node service account
+      display_name: Slurm login SA
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - storage.objectViewer
+
+  - id: compute_sa
+    source: modules/project/service-account
+    settings:
+      name: compute-sa
+      description: Slurm compute node service account
+      display_name: Slurm compute SA
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - storage.objectViewer
+
+  - id: lldap
+    source: community/modules/security/lldap-server
+    use: [network]
+    settings:
+      base_dn: dc=example,dc=com
+      groups:
+        research:
+          gid: 20001
+      users:
+        alice:
+          uid: 30001
+          primary_group: research
+          email: alice@example.com
+          display_name: Alice Example
+        bob:
+          uid: 30002
+          primary_group: research
+          shell: /bin/sh
+      # Every node that uses LDAP reads the CA certificate and bind password
+      # with its own service account. This example gives each Slurm role its
+      # own account, so all of them must be listed; a missing one means that
+      # node cannot join LDAP. Leave client_service_accounts unset only when
+      # every Slurm module runs as the default compute service account.
+      # See "Granting nodes access" in the module README.
+      client_service_accounts:
+      - $(controller_sa.service_account_email)
+      - $(login_sa.service_account_email)
+      - $(compute_sa.service_account_email)
+      # Nodes wait this long for the LLDAP VM's first boot. The wait plus about
+      # 200 seconds (SSSD install, lookup check) must stay below the
+      # *_startup_scripts_timeout values of the controller (900).
+      client_secret_wait_seconds: 600
+      # For a throwaway test deployment, uncomment both lines so that
+      # `gcluster destroy` can delete the VM and the data disk:
+      # deletion_protection: false
+      # data_disk_deletion_policy: DELETE
+
+  # `use: [lldap]` sets startup_script (nodeset, login) and
+  # controller_startup_script (controller) to the LDAP client setup script.
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, lldap]
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      allow_automatic_updates: false
+      service_account_email: $(compute_sa.service_account_email)
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset]
+    settings:
+      partition_name: compute
+      is_default: true
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network, lldap]
+    settings:
+      machine_type: n2-standard-4
+      enable_login_public_ips: false
+      service_account_email: $(login_sa.service_account_email)
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - compute_partition
+    - slurm_login
+    - lldap
+    settings:
+      enable_controller_public_ips: false
+      service_account_email: $(controller_sa.service_account_email)
+      # Installing SSSD and waiting for the LLDAP VM can exceed the
+      # 300 second default.
+      controller_startup_scripts_timeout: 900
+      login_startup_scripts_timeout: 900
+      compute_startup_scripts_timeout: 900
