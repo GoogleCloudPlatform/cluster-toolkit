@@ -30,6 +30,13 @@ vars:
   built_instance_image:
     family: $(vars.built_image_family)
     project: $(vars.project_id)
+  # The following settings are safe to override via `-d deployment.yaml` or
+  # `--vars` without editing the module blocks below. Defaults equal the
+  # values that were previously hardcoded in the modules.
+  # Machine type for the debug partition of the demo cluster.
+  compute_machine_type: n2d-standard-2
+  # Machine type for the controller node of the demo cluster.
+  controller_machine_type: n2d-standard-4
 
 deployment_groups:
 - group: setup
@@ -105,7 +112,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      machine_type: n2d-standard-2
+      machine_type: $(vars.compute_machine_type)
       instance_image: $(vars.built_instance_image)
       allow_automatic_updates: false
 
@@ -121,5 +128,5 @@ deployment_groups:
     - network
     - debug_partition
     settings:
-      machine_type: n2d-standard-4
+      machine_type: $(vars.controller_machine_type)
       instance_image: $(vars.built_instance_image)

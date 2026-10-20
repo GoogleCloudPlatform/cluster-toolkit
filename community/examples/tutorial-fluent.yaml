@@ -21,6 +21,18 @@ vars:
   deployment_name: fluent-wl
   region: us-central1
   zone: us-central1-c
+  # The following settings are safe to override via `-d deployment.yaml` or
+  # `--vars` without editing the module blocks below. Defaults equal the
+  # values that were previously hardcoded in the modules.
+  # Size in GB of the /home and /shared Filestore instances.
+  homefs_size_gb: 1024
+  sharefs_size_gb: 1024
+  # Machine type and number of compute VMs (the placement policy vm_count follows instance_count).
+  compute_machine_type: c2-standard-60
+  compute_instance_count: 4
+  # Machine type and number of login VMs.
+  login_machine_type: c2-standard-8
+  login_instance_count: 1
 
 deployment_groups:
 - group: primary
@@ -114,7 +126,7 @@ deployment_groups:
     source: modules/file-system/filestore
     use: [network1]
     settings:
-      size_gb: 1024
+      size_gb: $(vars.homefs_size_gb)
       filestore_tier: "BASIC_HDD"
       local_mount: /home
 
@@ -122,7 +134,7 @@ deployment_groups:
     source: modules/file-system/filestore
     use: [network1]
     settings:
-      size_gb: 1024
+      size_gb: $(vars.sharefs_size_gb)
       filestore_tier: "BASIC_HDD"
       local_mount: /shared
 
@@ -137,11 +149,11 @@ deployment_groups:
       threads_per_core: 1
       disable_public_ips: false
       bandwidth_tier: "gvnic_enabled"
-      machine_type: c2-standard-60
-      instance_count: 4
+      machine_type: $(vars.compute_machine_type)
+      instance_count: $(vars.compute_instance_count)
       name_prefix: fluent-compute
       placement_policy:
-        vm_count: 4  # Note: should match instance count
+        vm_count: $(vars.compute_instance_count)  # Note: should match instance count
         collocation: "COLLOCATED"
         availability_domain_count: null
       allow_automatic_updates: false
@@ -157,8 +169,8 @@ deployment_groups:
       threads_per_core: 1
       disable_public_ips: false
       bandwidth_tier: "gvnic_enabled"
-      machine_type: c2-standard-8
-      instance_count: 1
+      machine_type: $(vars.login_machine_type)
+      instance_count: $(vars.login_instance_count)
       name_prefix: fluent-login
 
   - id: wait

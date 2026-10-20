@@ -173,10 +173,12 @@ vars:
 
 #### Variable naming & override rules
 
-Customizable vars in `examples/*.yaml` follow
+Customizable vars in `examples/*.yaml` and `community/examples/**/*.yaml` follow
 `<functional_role>_<exact_terraform_input>`; the suffix is the module input
-the var feeds (`_machine_type`, `_node_count_dynamic_max`, `_static_node_count`,
-`_instance_count`, `_size_gb`, `_size_gib`, `_capacity_gb`, `_disk_size_gb`),
+the var feeds (`_machine_type`, `_node_count_dynamic_max`, `_node_count_static`,
+`_static_node_count`, `_initial_node_count`, `_num_instances`, `_instance_count`,
+`_size_gb`, `_size_gib`, `_capacity_gb`, `_capacity_gib`, `_disk_size_gb`,
+`_disk_size`),
 so no translation is needed between the var and the setting. Only settings that
 were already explicit literals in the module block are exposed this way — a
 tracked template never gains a `vars:` key for an input the module block did not
@@ -227,7 +229,14 @@ Rules the agent must respect:
   bare `machine_type` / `reservation_name` (`ml-slurm-g4-vgpu`),
   `compute_node_machine_type` (`pfs-managed-lustre-slurm`), `size_gib`
   (`gke-managed-lustre`), bare `disk_size_gb` in `ml-slurm` (intentionally
-  broadcast to all nodesets, login and controller).
+  broadcast to all nodesets, login and controller); in `community/examples`:
+  bare `node_count_dynamic_max` / `enable_spot_vm` / `enable_placement`
+  (`slurm-high-throughput/*`), `node_count_dynamic_max_per_region`,
+  `gke_nodeset_replicas` (`slurm-gke`), `base_pool_size` / `compute_pool_size`
+  (`hpc-slinky`), bare `machine_type` (`xpk-n2-filestore`), `vm_machine_type`
+  (`apptainer-artifact-registry-openfoam`), `disk_size` (`hpc-slurm6-*`),
+  `image_build_machine_type` reused for login/controller/NFS
+  (`hpc-slurm-google-cloud-dedicated/*`).
 
 If the blueprint does not expose the setting you need in `vars:`, copy the
 tracked template to a new file in the same directory with `ai_assisted: true`

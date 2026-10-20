@@ -22,6 +22,11 @@ vars:
   zone: us-central1-a
 
   existing_bucket_name: replace-with-name-of-existing-bucket
+  # The following settings are safe to override via `-d deployment.yaml` or
+  # `--vars` without editing the module blocks below. Defaults equal the
+  # values that were previously hardcoded in the modules.
+  # Machine type of the workstation VM that mounts the buckets.
+  client_machine_type: n2d-standard-2
 
 deployment_groups:
 - group: primary
@@ -56,7 +61,7 @@ deployment_groups:
     - existing-bucket
     settings:
       name_prefix: workstation
-      machine_type: n2d-standard-2
+      machine_type: $(vars.client_machine_type)
       allow_automatic_updates: false
 
   - id: wait
