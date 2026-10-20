@@ -73,6 +73,14 @@ vars:
   # # Maximum throughput of the lustre instance in MBps per TiB
   # per_unit_storage_throughput: 500
 
+  # The following settings are safe to override via `-d deployment.yaml` or
+  # `--vars` without editing the module blocks below. Defaults equal the
+  # values that were previously hardcoded in the modules.
+  # Machine type for the GKE system node pool.
+  system_node_pool_machine_type: n2d-standard-4
+  # Machine type for the GPU compute node pool.
+  compute_machine_type: a4-highgpu-8g
+
 deployment_groups:
 - group: primary
   modules:
@@ -161,7 +169,7 @@ deployment_groups:
     use: [gke-a4-net-0, workload_service_account]
     settings:
       auto_monitoring_scope: $(vars.auto_monitoring_scope)
-      system_node_pool_machine_type: "n2d-standard-4"
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
@@ -230,7 +238,7 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [a4-cluster, node_pool_service_account]
     settings:
-      machine_type: a4-highgpu-8g
+      machine_type: $(vars.compute_machine_type)
       auto_upgrade: true
       enable_dranet: true
       zones: [$(vars.zone)]

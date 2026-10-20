@@ -32,7 +32,7 @@ vars:
   zone:
 
   # The VM shape. See allowed values here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
-  machine_type:
+  compute_machine_type:
 
   # Number of GPUS in the VM. Can be found here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
   # If the value is fractional (less than 1), it should be set to 1.
@@ -70,3 +70,6 @@ vars:
 
 ## --- Option 5: On-Demand ---
   #static_node_count:
+
+## --- Optional overrides (defaults shown) ---
+  # system_node_pool_machine_type: n2d-standard-16

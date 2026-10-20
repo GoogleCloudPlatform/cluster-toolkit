@@ -69,3 +69,6 @@ vars:
   #static_node_count:
   #placement_policy:
   #  type: COMPACT
+
+## --- Optional overrides (defaults shown) ---
+  # compute_machine_type: a3-megagpu-8g

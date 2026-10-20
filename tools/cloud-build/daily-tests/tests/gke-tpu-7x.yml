@@ -26,7 +26,7 @@ cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
   num_slices: "{{ num_slices }}"
-  machine_type: "{{ machine_type }}"
+  compute_machine_type: "{{ machine_type }}"
   tpu_topology: "{{ tpu_topology }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   user_namespace: ai-workloads

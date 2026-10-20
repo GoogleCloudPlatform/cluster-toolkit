@@ -57,6 +57,12 @@ vars:
   version_prefix: "1.35."
   nccl_tcpxo_version: v1.0.15
 
+  # The following settings are safe to override via `-d deployment.yaml` or
+  # `--vars` without editing the module blocks below. Defaults equal the
+  # values that were previously hardcoded in the modules.
+  # Machine type for the GPU compute node pool.
+  compute_machine_type: a3-megagpu-8g
+
 deployment_groups:
 - group: primary
   modules:
@@ -132,7 +138,7 @@ deployment_groups:
     settings:
       install_gpu_direct_manifests: false
       run_workload_script: false
-      machine_type: a3-megagpu-8g
+      machine_type: $(vars.compute_machine_type)
       static_node_count: $(vars.static_node_count)
       zones: [$(vars.zone)]
       guest_accelerator:

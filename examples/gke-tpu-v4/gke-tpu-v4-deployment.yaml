@@ -38,7 +38,7 @@ vars:
 
   # Machine type
   # TPU v4 options: ct4p-hightpu-4t
-  machine_type:
+  compute_machine_type:
 
   # The TPU placement topology for pod slice node pool.
   # TPU v4 options: 2x2x2 (8 chips)
@@ -54,3 +54,6 @@ vars:
 
   # The namespace to be configured for running workloads
   user_namespace: default
+
+# Optional overrides (defaults shown):
+  # system_node_pool_machine_type: n2-standard-8

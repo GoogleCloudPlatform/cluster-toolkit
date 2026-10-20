@@ -39,6 +39,12 @@ vars:
   hostname_prefix: $(vars.deployment_name)
   local_ssd_mountpoint: /mnt/localssd
 
+  # The following settings are safe to override via `-d deployment.yaml` or
+  # `--vars` without editing the module blocks below. Defaults equal the
+  # values that were previously hardcoded in the modules.
+  # Size in GB of the /home Filestore instance.
+  homefs_size_gb: 10240
+
 deployment_groups:
 - group: primary
   modules:
@@ -94,7 +100,7 @@ deployment_groups:
     use: [a4high-net-0]
     settings:
       filestore_tier: HIGH_SCALE_SSD
-      size_gb: 10240
+      size_gb: $(vars.homefs_size_gb)
       local_mount: /home
       reserved_ip_range: $(vars.filestore_ip_range)
     outputs:

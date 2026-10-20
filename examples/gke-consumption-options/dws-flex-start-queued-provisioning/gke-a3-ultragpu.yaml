@@ -37,6 +37,14 @@ vars:
   system_node_pool_disk_size_gb: 100
   a3ultra_node_pool_disk_size_gb: 100
 
+  # The following settings are safe to override via `-d deployment.yaml` or
+  # `--vars` without editing the module blocks below. Defaults equal the
+  # values that were previously hardcoded in the modules.
+  # Machine type for the GKE system node pool.
+  system_node_pool_machine_type: n2d-standard-16
+  # Machine type for the GPU compute node pool.
+  compute_machine_type: a3-ultragpu-8g
+
 
 deployment_groups:
 - group: primary
@@ -124,7 +132,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-a3-ultra-net-0, workload_service_account]
     settings:
-      system_node_pool_machine_type: "n2d-standard-16"
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
@@ -159,7 +167,7 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [a3-ultragpu-cluster, node_pool_service_account]
     settings:
-      machine_type: a3-ultragpu-8g
+      machine_type: $(vars.compute_machine_type)
       enable_flex_start: $(vars.enable_flex_start) # dws flex-start
       auto_repair: false # dws flex-start requirement
       enable_queued_provisioning: $(vars.enable_queued_provisioning) # queued provisioning

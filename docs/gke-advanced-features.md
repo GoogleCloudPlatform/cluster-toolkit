@@ -14,7 +14,7 @@ To deploy a GKE cluster configured for TPU Dynamic Slicing, configure your TPU v
 
 ```yaml
 vars:
-  machine_type: tpu7x-standard-4t
+  compute_machine_type: tpu7x-standard-4t
   accelerator_type: tpu7x
   enable_dynamic_slicing_for_tpus: true
 ```

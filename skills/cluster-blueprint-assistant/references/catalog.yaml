@@ -2265,6 +2265,7 @@ blueprints:
     authorized_cidr: null
     auto_repair: true
     autoscaling_total_min_nodes: 0
+    compute_machine_type: a3-highgpu-8g
     deployment_name: gke-a3-high
     enable_flex_start: false
     enable_queued_provisioning: false
@@ -2323,6 +2324,7 @@ blueprints:
     authorized_cidr: null
     auto_repair: true
     autoscaling_total_min_nodes: 0
+    compute_machine_type: a3-megagpu-8g
     deployment_name: gke-a3-mega
     enable_flex_start: false
     enable_queued_provisioning: false
@@ -2373,13 +2375,14 @@ blueprints:
   blueprint_name: gke-a3-ultra
   scheduler: gke
   description: "Refer to AI Hypercomputer Documentation for instructions."
-  machine_types: [a3-ultragpu-8g]
+  machine_types: [a3-ultragpu-8g, n2d-standard-16]
   vars:
     a3ultra_node_pool_disk_size_gb: 100
     accelerator_type: nvidia-h200-141gb
     authorized_cidr: null
     auto_repair: true
     autoscaling_total_min_nodes: 0
+    compute_machine_type: a3-ultragpu-8g
     deployment_name: null
     enable_flex_start: false
     enable_queued_provisioning: false
@@ -2396,6 +2399,7 @@ blueprints:
     spot: false
     static_node_count: null
     system_node_pool_disk_size_gb: 200
+    system_node_pool_machine_type: n2d-standard-16
     version_prefix: "1.35."
     zone: null
   modules:
@@ -2447,7 +2451,7 @@ blueprints:
   blueprint_name: gke-a4
   scheduler: gke
   description: "This blueprint uses GKE to provision Kubernetes cluster and a A4 node pool, along with networks and service accounts. Information about a4 machines can be found here. The deployment instructions can be found in the README."
-  machine_types: [a4-highgpu-8g]
+  machine_types: [a4-highgpu-8g, n2d-standard-4]
   vars:
     a4_node_pool_disk_size_gb: 100
     accelerator_type: nvidia-b200
@@ -2455,6 +2459,7 @@ blueprints:
     auto_monitoring_scope: NONE
     auto_repair: true
     autoscaling_total_min_nodes: 0
+    compute_machine_type: a4-highgpu-8g
     deployment_name: gke-a4
     enable_flex_start: false
     enable_inference_gateway: false
@@ -2472,6 +2477,7 @@ blueprints:
     spot: false
     static_node_count: null
     system_node_pool_disk_size_gb: 200
+    system_node_pool_machine_type: n2d-standard-4
     version_prefix: "1.35."
     zone: null
   modules:
@@ -2670,15 +2676,17 @@ blueprints:
   blueprint_name: gke-h4d
   scheduler: gke
   description: "Dynamic Workload Scheduler (DWS) is a resource management and job scheduling platform designed for AI Hypercomputer. Dynamic Workload Scheduler improves your access to AI/ML resources, helps you optimize your spend, and can improve the..."
-  machine_types: [h4d-standard-192]
+  machine_types: [h4d-standard-192, n2d-standard-16]
   vars:
     authorized_cidr: null
+    compute_machine_type: h4d-standard-192
     deployment_name: null
     enable_flex_start: true
     h4d_node_pool_disk_size_gb: 100
     project_id: null
     region: null
     system_node_pool_disk_size_gb: 100
+    system_node_pool_machine_type: n2d-standard-16
     zone: null
   modules:
   - id: gke-h4d-net
@@ -2713,10 +2721,11 @@ blueprints:
   blueprint_name: gke-a3-ultra
   scheduler: gke
   description: "Dynamic Workload Scheduler (DWS) is a resource management and job scheduling platform designed for AI Hypercomputer. Dynamic Workload Scheduler improves your access to AI/ML resources, helps you optimize your spend, and can improve the..."
-  machine_types: [a3-ultragpu-8g]
+  machine_types: [a3-ultragpu-8g, n2d-standard-16]
   vars:
     a3ultra_node_pool_disk_size_gb: 100
     authorized_cidr: null
+    compute_machine_type: a3-ultragpu-8g
     deployment_name: gke-a3u-dws-fs-qp
     enable_flex_start: true
     enable_queued_provisioning: true
@@ -2727,6 +2736,7 @@ blueprints:
     project_id: null
     region: null
     system_node_pool_disk_size_gb: 100
+    system_node_pool_machine_type: n2d-standard-16
     zone: null
   modules:
   - id: gke-a3-ultra-net-0
@@ -2761,21 +2771,22 @@ blueprints:
   blueprint_name: gke-tpu-7x-qp
   scheduler: gke
   description: "This example demonstrates how to deploy a GKE cluster with TPU 7x nodes using Dynamic Workload Scheduler (DWS) with Queued Provisioning."
-  machine_types: [tpu7x-standard-4t]
+  machine_types: [tpu7x-standard-4t, n2-standard-8]
   vars:
     accelerator_type: tpu7x
     authorized_cidr: null
     autoscaling_max_node_count: 2
     autoscaling_min_node_count: 0
+    compute_machine_type: tpu7x-standard-4t
     deployment_name: gke-tpu-7x-qp
     enable_flex_start: true
     enable_pathways_for_tpus: true
     enable_queued_provisioning: true
     kueue_configuration_path: "$(ghpc_stage(\"../tpu-dws-queues.yaml.tftpl\"))"
-    machine_type: tpu7x-standard-4t
     num_slices: 1
     project_id: null
     region: null
+    system_node_pool_machine_type: n2-standard-8
     tpu_topology: 2x2x2
     zone: null
   modules:
@@ -2825,22 +2836,23 @@ blueprints:
   blueprint_name: gke-tpu-v6e-qp
   scheduler: gke
   description: "This example demonstrates how to deploy a GKE cluster with TPU v6e nodes using Dynamic Workload Scheduler (DWS) with Queued Provisioning."
-  machine_types: [ct6e-standard-4t]
+  machine_types: [ct6e-standard-4t, n2-standard-8]
   vars:
     accelerator_type: tpu-v6e-slice
     authorized_cidr: null
     autoscaling_max_node_count: 4
     autoscaling_min_node_count: 0
+    compute_machine_type: ct6e-standard-4t
     deployment_name: gke-tpu-v6e-qp
     enable_flex_start: true
     enable_pathways_for_tpus: true
     enable_queued_provisioning: true
     kueue_configuration_path: "$(ghpc_stage(\"../tpu-dws-queues.yaml.tftpl\"))"
-    machine_type: ct6e-standard-4t
     num_slices: 1
     project_id: null
     region: null
     system_node_pool_disk_size_gb: 200
+    system_node_pool_machine_type: n2-standard-8
     tpu_topology: 4x4
     v6e_node_pool_disk_size_gb: 100
     version_prefix: "1.35."
@@ -2889,16 +2901,18 @@ blueprints:
   blueprint_name: gke-a3-ultra
   scheduler: gke
   description: "Dynamic Workload Scheduler (DWS) is a resource management and job scheduling platform designed for AI Hypercomputer. Dynamic Workload Scheduler improves your access to AI/ML resources, helps you optimize your spend, and can improve the..."
-  machine_types: [a3-ultragpu-8g]
+  machine_types: [a3-ultragpu-8g, n2d-standard-16]
   vars:
     a3ultra_node_pool_disk_size_gb: 100
     authorized_cidr: null
+    compute_machine_type: a3-ultragpu-8g
     deployment_name: gke-a3u-dws-fs
     enable_flex_start: true
     nccl_installer_path: "$(ghpc_stage(\"./nccl-installer.yaml\"))"
     project_id: null
     region: null
     system_node_pool_disk_size_gb: 100
+    system_node_pool_machine_type: n2d-standard-16
     zone: null
   modules:
   - id: gke-a3-ultra-net-0
@@ -2933,20 +2947,21 @@ blueprints:
   blueprint_name: gke-tpu-7x
   scheduler: gke
   description: "These steps guide you through the cluster creation process for TPUs using DWS Flex Start."
-  machine_types: [tpu7x-standard-4t]
+  machine_types: [tpu7x-standard-4t, n2-standard-8]
   vars:
     accelerator_type: tpu7x
     authorized_cidr: null
     autoscaling_max_node_count: 2
     autoscaling_min_node_count: 0
+    compute_machine_type: tpu7x-standard-4t
     deployment_name: gke-tpu-7x-flex
     enable_flex_start: true
     enable_pathways_for_tpus: true
     kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
-    machine_type: tpu7x-standard-4t
     num_slices: 1
     project_id: null
     region: null
+    system_node_pool_machine_type: n2-standard-8
     tpu_topology: 2x2x2
     zone: null
   modules:
@@ -3000,21 +3015,22 @@ blueprints:
   blueprint_name: gke-tpu-v6e-flex
   scheduler: gke
   description: "These steps guide you through the cluster creation process for TPUs using DWS Flex Start."
-  machine_types: [ct6e-standard-4t]
+  machine_types: [ct6e-standard-4t, n2-standard-8]
   vars:
     accelerator_type: tpu-v6e-slice
     authorized_cidr: null
     autoscaling_max_node_count: 4
     autoscaling_min_node_count: 0
+    compute_machine_type: ct6e-standard-4t
     deployment_name: gke-tpu-v6e-flex
     enable_flex_start: true
     enable_pathways_for_tpus: true
     kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
-    machine_type: ct6e-standard-4t
     num_slices: 1
     project_id: null
     region: null
     system_node_pool_disk_size_gb: 200
+    system_node_pool_machine_type: n2-standard-8
     tpu_topology: 4x4
     v6e_node_pool_disk_size_gb: 100
     version_prefix: "1.35."
@@ -3067,13 +3083,14 @@ blueprints:
   blueprint_name: gke-g4-confidential
   scheduler: gke
   description: "This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV-SNP) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure..."
-  machine_types: [g4-standard-48]
+  machine_types: [g4-standard-48, n2d-standard-16]
   vars:
     authorized_cidr: null
+    compute_machine_type: g4-standard-48
+    confidential_storage_capacity_gb: 100
     deployment_name: gke-g4-cvm
     disk_encryption_kms_key: ""
     enable_confidential_storage: false
-    machine_type: g4-standard-48
     network_name_0: "$(\"${vars.deployment_name}-net-0\")"
     network_name_1: "$(\"${vars.deployment_name}-net-1\")"
     num_gpus: 1
@@ -3083,6 +3100,8 @@ blueprints:
     static_node_count: 1
     subnetwork_name_0: "$(\"${vars.deployment_name}-sub-0\")"
     subnetwork_name_1: "$(\"${vars.deployment_name}-sub-1\")"
+    system_node_pool_disk_size_gb: 100
+    system_node_pool_machine_type: n2d-standard-16
     zone: null
   modules:
   - id: gke-g4-net-0
@@ -3122,15 +3141,16 @@ blueprints:
   blueprint_name: gke-g4
   scheduler: gke
   description: "This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found here. The deployment instructions can be found in the README."
+  machine_types: [n2d-standard-16]
   vars:
     authorized_cidr: null
     auto_repair: true
     autoscaling_total_min_nodes: 0
+    compute_machine_type: null
     deployment_name: gke-g4
     enable_flex_start: false
     enable_queued_provisioning: false
     kueue_configuration_path: null
-    machine_type: null
     num_gpus: null
     placement_policy:
       name: null
@@ -3143,6 +3163,7 @@ blueprints:
     spot: false
     static_node_count: null
     system_node_pool_disk_size_gb: 100
+    system_node_pool_machine_type: n2d-standard-16
     version_prefix: "1.35."
     zone: null
   modules:
@@ -3179,11 +3200,12 @@ blueprints:
   blueprint_name: gke-h4d
   scheduler: gke
   description: "This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found here. The deployment instructions can be found in the README."
-  machine_types: [h4d-highmem-192-lssd]
+  machine_types: [h4d-highmem-192-lssd, n2d-standard-16]
   vars:
     authorized_cidr: null
     auto_repair: true
     autoscaling_total_min_nodes: 0
+    compute_machine_type: h4d-highmem-192-lssd
     deployment_name: gke-h4d
     enable_flex_start: false
     enable_queued_provisioning: false
@@ -3200,6 +3222,7 @@ blueprints:
     spot: false
     static_node_count: null
     system_node_pool_disk_size_gb: 100
+    system_node_pool_machine_type: n2d-standard-16
     zone: null
   modules:
   - id: gke-h4d-net
@@ -3344,7 +3367,7 @@ blueprints:
   blueprint_name: gke-tpu-7x
   scheduler: gke
   description: "This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this README."
-  machine_types: [tpu7x-standard-4t]
+  machine_types: [tpu7x-standard-4t, n2-standard-8]
   vars:
     accelerator_type: tpu7x
     authorized_cidr: null
@@ -3352,13 +3375,13 @@ blueprints:
     autoscaling_max_node_count: null
     autoscaling_min_node_count: null
     autoscaling_total_min_nodes: 0
+    compute_machine_type: tpu7x-standard-4t
     deployment_name: gke-tpu-7x
     enable_dynamic_slicing_for_tpus: false
     enable_flex_start: false
     enable_pathways_for_tpus: true
     enable_queued_provisioning: false
     kueue_configuration_path: null
-    machine_type: tpu7x-standard-4t
     num_slices: 1
     project_id: null
     region: null
@@ -3366,6 +3389,7 @@ blueprints:
       consume_reservation_type: NO_RESERVATION
       specific_reservations: []
     spot: false
+    system_node_pool_machine_type: n2-standard-8
     tpu_topology: 2x2x1
     user_namespace: default
     zone: null
@@ -3417,7 +3441,7 @@ blueprints:
   blueprint_name: gke-tpu-7x
   scheduler: gke
   description: "This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this README."
-  machine_types: [tpu7x-standard-4t]
+  machine_types: [tpu7x-standard-4t, n2-standard-8]
   vars:
     accelerator_type: tpu7x
     authorized_cidr: null
@@ -3425,13 +3449,13 @@ blueprints:
     autoscaling_max_node_count: null
     autoscaling_min_node_count: null
     autoscaling_total_min_nodes: 0
+    compute_machine_type: tpu7x-standard-4t
     deployment_name: gke-tpu-7x
     enable_dynamic_slicing_for_tpus: false
     enable_flex_start: false
     enable_pathways_for_tpus: true
     enable_queued_provisioning: false
     kueue_configuration_path: null
-    machine_type: tpu7x-standard-4t
     num_slices: 1
     project_id: null
     region: null
@@ -3439,6 +3463,7 @@ blueprints:
       consume_reservation_type: NO_RESERVATION
       specific_reservations: []
     spot: false
+    system_node_pool_machine_type: n2-standard-8
     tpu_topology: 2x2x1
     user_namespace: default
     zone: null
@@ -3472,18 +3497,19 @@ blueprints:
   blueprint_name: gke-tpu-v4
   scheduler: gke
   description: "This example shows how a TPU v4 cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this README."
-  machine_types: [ct4p-hightpu-4t]
+  machine_types: [ct4p-hightpu-4t, n2-standard-8]
   vars:
     accelerator_type: tpu-v4-podslice
     authorized_cidr: null
+    compute_machine_type: ct4p-hightpu-4t
     deployment_name: gke-tpu-v4
     enable_pathways_for_tpus: true
-    machine_type: ct4p-hightpu-4t
     num_slices: null
     project_id: null
     region: null
     reservation: null
     system_node_pool_disk_size_gb: 200
+    system_node_pool_machine_type: n2-standard-8
     tpu_topology: null
     user_namespace: default
     v4_node_pool_disk_size_gb: 100
@@ -3515,18 +3541,19 @@ blueprints:
   blueprint_name: gke-tpu-v5e
   scheduler: gke
   description: "This example shows how a TPU v5e cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this README."
-  machine_types: [ct5lp-hightpu-4t]
+  machine_types: [ct5lp-hightpu-4t, n2-standard-8]
   vars:
     accelerator_type: tpu-v5-lite-podslice
     authorized_cidr: null
+    compute_machine_type: ct5lp-hightpu-4t
     deployment_name: gke-tpu-v5e
     enable_pathways_for_tpus: true
-    machine_type: ct5lp-hightpu-4t
     num_slices: null
     project_id: null
     region: null
     reservation: null
     system_node_pool_disk_size_gb: 200
+    system_node_pool_machine_type: n2-standard-8
     tpu_topology: null
     user_namespace: default
     v5e_node_pool_disk_size_gb: 100
@@ -3558,7 +3585,7 @@ blueprints:
   blueprint_name: gke-tpu-v5p
   scheduler: gke
   description: "This example shows how a TPU v5p cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this README."
-  machine_types: [ct5p-hightpu-4t]
+  machine_types: [ct5p-hightpu-4t, n2-standard-8]
   vars:
     accelerator_type: tpu-v5p-slice
     authorized_cidr: null
@@ -3566,12 +3593,12 @@ blueprints:
     autoscaling_max_node_count: null
     autoscaling_min_node_count: null
     autoscaling_total_min_nodes: 0
+    compute_machine_type: ct5p-hightpu-4t
     deployment_name: gke-tpu-v5p
     enable_flex_start: false
     enable_pathways_for_tpus: true
     enable_queued_provisioning: false
     kueue_configuration_path: null
-    machine_type: ct5p-hightpu-4t
     num_slices: 1
     project_id: null
     region: null
@@ -3580,6 +3607,7 @@ blueprints:
       specific_reservations: []
     spot: false
     system_node_pool_disk_size_gb: 200
+    system_node_pool_machine_type: n2-standard-8
     tpu_topology: null
     user_namespace: default
     v5p_node_pool_disk_size_gb: 100
@@ -3611,7 +3639,7 @@ blueprints:
   blueprint_name: gke-tpu-v6e
   scheduler: gke
   description: "This example shows how TPU v6e cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this README."
-  machine_types: [ct6e-standard-4t]
+  machine_types: [ct6e-standard-4t, n2-standard-8]
   vars:
     accelerator_type: tpu-v6e-slice
     authorized_cidr: null
@@ -3619,12 +3647,12 @@ blueprints:
     autoscaling_max_node_count: null
     autoscaling_min_node_count: null
     autoscaling_total_min_nodes: 0
+    compute_machine_type: ct6e-standard-4t
     deployment_name: gke-tpu-v6e
     enable_flex_start: false
     enable_pathways_for_tpus: true
     enable_queued_provisioning: false
     kueue_configuration_path: null
-    machine_type: ct6e-standard-4t
     num_slices: 2
     project_id: null
     region: null
@@ -3633,6 +3661,7 @@ blueprints:
       specific_reservations: []
     spot: false
     system_node_pool_disk_size_gb: 200
+    system_node_pool_machine_type: n2-standard-8
     tpu_topology: 4x4
     user_namespace: default
     v6e_node_pool_disk_size_gb: 100
@@ -3683,7 +3712,7 @@ blueprints:
   blueprint_name: gke-tpu-v6e
   scheduler: gke
   description: "This example shows how TPU v6e cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this README."
-  machine_types: [ct6e-standard-4t]
+  machine_types: [ct6e-standard-4t, n2-standard-8]
   vars:
     accelerator_type: tpu-v6e-slice
     authorized_cidr: null
@@ -3691,12 +3720,12 @@ blueprints:
     autoscaling_max_node_count: null
     autoscaling_min_node_count: null
     autoscaling_total_min_nodes: 0
+    compute_machine_type: ct6e-standard-4t
     deployment_name: gke-tpu-v6e
     enable_flex_start: false
     enable_pathways_for_tpus: true
     enable_queued_provisioning: false
     kueue_configuration_path: null
-    machine_type: ct6e-standard-4t
     num_slices: 2
     project_id: null
     region: null
@@ -3705,6 +3734,7 @@ blueprints:
       specific_reservations: []
     spot: false
     system_node_pool_disk_size_gb: 200
+    system_node_pool_machine_type: n2-standard-8
     tpu_topology: 4x4
     user_namespace: default
     v6e_node_pool_disk_size_gb: 100
@@ -4017,10 +4047,13 @@ blueprints:
     h4d_cluster_size: 2
     h4d_dws_flex_enabled: false
     h4d_enable_spot_vm: false
+    h4d_node_count_dynamic_max: 0
     h4d_reservation_name: ""
+    homefs_size_gb: 2560
     instance_image:
       family: aci-cpu-rocky-linux-9-slurm-2605-amd64
       project: advanced-compute-images
+    login_machine_type: n2-standard-4
     project_id: null
     rdma_net_range: 192.168.128.0/18
     region: us-central1
@@ -4165,19 +4198,23 @@ blueprints:
   vars:
     a3_dws_flex_enabled: false
     a3_enable_spot_vm: false
+    a3_node_count_dynamic_max: 0
     a3_partition_name: null
     a3_reservation_name: ""
     a3_static_cluster_size: null
     build_slurm_from_git_ref: 6.13.2
+    controller_machine_type: c2-standard-8
     deployment_name: null
     disk_size_gb: 200
     enable_nvidia_dcgm: true
+    image_build_machine_type: c2d-standard-32
     instance_image:
       family: "$(\"${vars.deployment_name}-tcpx-image\")"
       project: $(vars.project_id)
     keyserver_ubuntu_key: null
     local_mount_homefs: /home
     localssd_mountpoint: /mnt/localssd
+    login_machine_type: c2-standard-4
     lustre_instance_id: "$(\"${vars.deployment_name}-lustre\")"
     lustre_size_gib: 36000
     per_unit_storage_throughput: 500
@@ -4246,12 +4283,17 @@ blueprints:
     a3mega_cluster_size: null
     a3mega_dws_flex_enabled: false
     a3mega_enable_spot_vm: false
+    a3mega_node_count_dynamic_max: 0
     a3mega_partition_name: a3mega
     a3mega_reservation_name: ""
     base_image:
       image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260522
       project: ubuntu-os-accelerator-images
     build_slurm_from_git_ref: 6.13.2
+    controller_machine_type: c2-standard-8
+    debug_machine_type: n2-standard-2
+    debug_node_count_dynamic_max: 4
+    debug_node_count_static: 0
     deployment_name: null
     disk_size_gb: 100
     enable_controller_public_ips: true
@@ -4260,11 +4302,13 @@ blueprints:
     enable_nvidia_persistenced: true
     enable_ops_agent: true
     final_image_family: slurm-a3mega
+    image_build_machine_type: c2-standard-8
     instance_image:
       family: $(vars.final_image_family)
       project: $(vars.project_id)
     local_mount_homefs: /home
     localssd_mountpoint: /mnt/localssd
+    login_machine_type: c2-standard-4
     lustre_instance_id: "$(\"${vars.deployment_name}-lustre\")"
     lustre_size_gib: 36000
     network_name_system: null
@@ -4347,12 +4391,14 @@ blueprints:
     a3mega_dws_flex_enabled: false
     a3mega_enable_spot_vm: false
     a3mega_maintenance_interval: ""
+    a3mega_node_count_dynamic_max: 0
     a3mega_partition_name: a3mega
     a3mega_reservation_name: null
     base_image:
       image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
       project: ubuntu-os-accelerator-images
     build_slurm_from_git_ref: 6.13.2
+    controller_machine_type: c2-standard-8
     controller_runners:
     - content: "$(\"#!/bin/bash\\nSLURM_ROOT=/opt/apps/adm/slurm\\nmkdir -m 0755 -p \\\"$${SLURM_ROOT}/scripts\\\"\\nmkdir -p \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-prolog_slurmd.d\\\"\\nmkdir -p \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-epilog_slurmd.d\\\"\\ncurl -s -o \\\"$${SLURM_ROOT}/scripts/sudo-oslogin\\\" \\\\\\n    https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin\\nchmod 0755 \\\"$${SLURM_ROOT}/scripts/sudo-oslogin\\\"\\nln -s \\\"$${SLURM_ROOT}/scripts/sudo-oslogin\\\" \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-prolog_slurmd.d/sudo-oslogin.prolog_slurmd\\\"\\nln -s \\\"$${SLURM_ROOT}/scripts/sudo-oslogin\\\" \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-epilog_slurmd.d/sudo-oslogin.epilog_slurmd\\\"\\ncurl -s -o \\\"$${SLURM_ROOT}/scripts/rxdm\\\" \\\\\\n    https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/receive-data-path-manager-mega\\nchmod 0755 \\\"$${SLURM_ROOT}/scripts/rxdm\\\"\\nln -s \\\"$${SLURM_ROOT}/scripts/rxdm\\\" \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-prolog_slurmd.d/rxdm.prolog_slurmd\\\"\\nln -s \\\"$${SLURM_ROOT}/scripts/rxdm\\\" \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-epilog_slurmd.d/rxdm.epilog_slurmd\\\"\\n# Uncomment the line below to enable epilog that will check health of GPUs and drain node if problem is detected.\\n# ln -s \\\"/slurm/scripts/tools/gpu-test\\\" \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-epilog_slurmd.d/gpu-test.epilog_slurmd\\\"\\n\")"
       destination: stage_scripts.sh
@@ -4360,6 +4406,9 @@ blueprints:
     - content: "#!/bin/bash\n# reset enroot to defaults of files under /home and running under /run\n# allows basic enroot testing with reduced I/O performance\nrm -f /etc/enroot/enroot.conf\n"
       destination: reset_enroot.sh
       type: shell
+    debug_machine_type: n2-standard-2
+    debug_node_count_dynamic_max: 4
+    debug_node_count_static: 0
     deployment_name: null
     enable_controller_public_ips: true
     enable_login_public_ips: true
@@ -4377,11 +4426,14 @@ blueprints:
     - content: "$(\"---\\n- name: Create LSSD optimized gcsfuse mount\\n  hosts: localhost\\n  become: true\\n  tasks:\\n  - name: Create gcsfuse configuration\\n    ansible.builtin.copy:\\n      dest: /etc/gcsfuse.yml\\n      owner: root\\n      group: root\\n      mode: 0o644\\n      content: |\\n        file-system:\\n          dir-mode: \\\"777\\\"\\n          file-mode: \\\"777\\\"\\n          rename-dir-limit: 0  # Set to 20000 for hierarchical buckets\\n          fuse-options: allow_other\\n        foreground: true\\n\\n  - name: Create gcsfuse systemd service\\n    ansible.builtin.copy:\\n      dest: /etc/systemd/system/gcsfuse.service\\n      owner: root\\n      group: root\\n      mode: 0o644\\n      content: |\\n        [Unit]\\n        Description=gcsfuse mount of all buckets\\n        After=local-fs.target\\n\\n        [Service]\\n        Type=simple\\n        User=root\\n        ExecStartPre=/bin/mkdir -p /gcs\\n        ExecStart=gcsfuse --config-file /etc/gcsfuse.yml ${vars.gcs_bucket} /gcs\\n        ExecStop=fusermount3 -u /gcs\\n\\n        [Install]\\n        WantedBy=slurmd.service multi-user.target\\n\\n  post_tasks:\\n  - name: Enable and restart gcsfuse\\n    ansible.builtin.service:\\n      name: gcsfuse.service\\n      state: restarted\\n      enabled: true\\n\")"
       destination: gcsfuse.yml
       type: ansible-local
+    homefs_size_gb: 10240
+    image_build_machine_type: c2-standard-8
     instance_image:
       family: $(vars.final_image_family)
       project: $(vars.project_id)
     local_mount_homefs: /home
     localssd_mountpoint: /mnt/localssd
+    login_machine_type: c2-standard-4
     login_runners:
     - content: "#!/bin/bash\n# reset enroot to defaults of files under /home and running under /run\n# allows basic enroot testing with reduced I/O performance\nrm -f /etc/enroot/enroot.conf\n"
       destination: reset_enroot.sh
@@ -4460,8 +4512,11 @@ blueprints:
     a3u_cluster_size: null
     a3u_dws_flex_enabled: false
     a3u_enable_spot_vm: false
+    a3u_node_count_dynamic_max: 0
     a3u_reservation_name: ""
     base_network_name: $(vars.deployment_name)
+    controller_disk_size_gb: 300
+    controller_machine_type: n2d-standard-16
     deployment_name: null
     disk_size_gb: 300
     enable_multinic: true
@@ -4469,6 +4524,8 @@ blueprints:
       family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-amd64
       project: advanced-compute-images
     local_ssd_mountpoint: /mnt/localssd
+    login_disk_size_gb: 300
+    login_machine_type: n2d-standard-16
     lustre_instance_id: "$(\"${vars.deployment_name}-lustre\")"
     lustre_size_gib: 36000
     multinic_client_tag: "$(\"${vars.deployment_name}-multinic-client\")"
@@ -4540,6 +4597,7 @@ blueprints:
     base_network_name: $(vars.deployment_name)
     deployment_name: a3ultra-vm-instance
     filestore_ip_range: 192.168.32.0/29
+    homefs_size_gb: 2560
     hostname_prefix: "$(\"${vars.deployment_name}-beowulf\")"
     instance_image:
       name: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
@@ -4585,9 +4643,11 @@ blueprints:
     a4h_cluster_size: null
     a4h_dws_flex_enabled: false
     a4h_enable_spot_vm: false
+    a4h_node_count_dynamic_max: 0
     a4h_reservation_name: ""
     base_network_name: $(vars.deployment_name)
     benchmark_dir: "$(ghpc_stage(\"system_benchmarks\"))"
+    controller_machine_type: n2d-standard-8
     deployment_name: null
     disk_size_gb: 300
     enable_multinic: true
@@ -4595,6 +4655,7 @@ blueprints:
       family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-amd64
       project: advanced-compute-images
     local_ssd_mountpoint: /mnt/localssd
+    login_machine_type: n2d-standard-8
     lustre_instance_id: "$(\"${vars.deployment_name}-lustre\")"
     lustre_size_gib: 36000
     multinic_client_tag: "$(\"${vars.deployment_name}-multinic-client\")"
@@ -4665,6 +4726,7 @@ blueprints:
     a4h_reservation_name: null
     deployment_name: a4high-vm
     filestore_ip_range: 192.168.32.0/24
+    homefs_size_gb: 10240
     hostname_prefix: $(vars.deployment_name)
     instance_image:
       family: ubuntu-2204-lts
@@ -4714,7 +4776,9 @@ blueprints:
     deployment_name: null
     disk_size_gb: 100
     filestore_ip_range: 192.168.32.0/24
+    homefs_size_gb: 10240
     hostname_prefix: $(vars.deployment_name)
+    image_build_machine_type: t2a-standard-16
     image_disk_size_gb: 100
     instance_count: null
     instance_image:
@@ -4763,14 +4827,17 @@ blueprints:
   machine_types: [a4x-highgpu-4g, t2a-standard-2]
   vars:
     a4x_cluster_size: null
+    a4x_node_count_dynamic_max: 0
     a4x_reservation_name: ""
     benchmark_dir: "$(ghpc_stage(\"system_benchmarks\"))"
+    controller_machine_type: t2a-standard-2
     deployment_name: null
     disk_size_gb: 100
     instance_image:
       family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-arm64
       project: advanced-compute-images
     local_ssd_mountpoint: /mnt/localssd
+    login_machine_type: t2a-standard-2
     lustre_instance_id: "$(\"${vars.deployment_name}-lustre\")"
     lustre_size_gib: 36000
     net0_range: 192.168.0.0/19
@@ -4839,12 +4906,14 @@ blueprints:
   machine_types: [c4a-highcpu-16, a4x-maxgpu-4g-metal, c4a-standard-4]
   vars:
     a4x_max_cluster_size: null
+    a4x_max_node_count_dynamic_max: 0
     a4x_max_reservation_name: ""
     benchmark_dir: "$(ghpc_stage(\"system_benchmarks\"))"
     build_from_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-580
     build_from_image_project: ubuntu-os-accelerator-images
     build_slurm_from_git_ref: 6.13.2
     built_image_family: slurm-ubuntu2404-a4x-max-metal
+    controller_machine_type: c4a-highcpu-16
     deployment_name: null
     disk_size_gb: 100
     image_build_disk_type: hyperdisk-balanced
@@ -4854,6 +4923,7 @@ blueprints:
       family: $(vars.built_image_family)
       project: $(vars.project_id)
     local_ssd_mountpoint: /mnt/localssd
+    login_machine_type: c4a-standard-4
     lustre_instance_id: "$(\"${vars.deployment_name}-lustre\")"
     lustre_size_gib: 18000
     nccl_plugin_image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-gib-a4x-max-arm64
@@ -4980,11 +5050,13 @@ blueprints:
   description: "This directory provides a Cluster Toolkit blueprint (tpu7x-slurm-blueprint.yaml) and deployment configuration (tpu7x-slurm-deployment.yaml) for provisioning a Slurm cluster with TPU 7x (tpu7x-standard-4t) compute nodes. It sets up a..."
   machine_types: [tpu7x-standard-4t, n2d-standard-4]
   vars:
+    controller_machine_type: n2d-standard-4
     deployment_name: null
     disk_size_gb: 100
     instance_image:
       family: aci-tpu-tpu7x-u2404-slurm-2605-amd64
       project: advanced-compute-images
+    login_machine_type: n2d-standard-4
     lustre_instance_id: "$(\"${vars.deployment_name}-lustre\")"
     lustre_size_gib: 36000
     per_unit_storage_throughput: 500
@@ -5470,6 +5542,7 @@ blueprints:
       family: aci-cpu-rocky-linux-9-slurm-2605-amd64
       project: advanced-compute-images
     conformer_max_iterations: ""
+    controller_machine_type: c2-standard-8
     controller_runners:
     - args: "$(\"-e modelweights_bucket=${vars.modelweights_bucket} -e model_dir=${vars.model_dir} -e sif_dir=${vars.sif_dir}\")"
       destination: controller.yml
@@ -5526,6 +5599,7 @@ blueprints:
       family: "$(\"${vars.deployment_name}-slurm-apptainer\")"
       project: $(vars.project_id)
     jax_compilation_cache_path: ""
+    login_machine_type: n2-standard-4
     login_runners:
     - args: "$(\"-e database_bucket=${vars.database_bucket} -e datapipeline_partition=${vars.default_datapipeline_partition.name}\")"
       destination: onetime_prepare_databasebucket.yml

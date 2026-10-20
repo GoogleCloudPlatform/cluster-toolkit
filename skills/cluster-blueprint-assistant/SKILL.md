@@ -173,12 +173,12 @@ vars:
 
 #### Variable naming & override rules
 
-Customizable vars in `examples/*.yaml` and `community/examples/**/*.yaml` follow
+Customizable vars in `examples/**/*.yaml` and `community/examples/**/*.yaml` follow
 `<functional_role>_<exact_terraform_input>`; the suffix is the module input
 the var feeds (`_machine_type`, `_node_count_dynamic_max`, `_node_count_static`,
 `_static_node_count`, `_initial_node_count`, `_num_instances`, `_instance_count`,
-`_size_gb`, `_size_gib`, `_capacity_gb`, `_capacity_gib`, `_disk_size_gb`,
-`_disk_size`),
+`_autoscaling_total_min_nodes` / `_autoscaling_total_max_nodes`, `_size_gb`,
+`_size_gib`, `_capacity_gb`, `_capacity_gib`, `_disk_size_gb`, `_disk_size`),
 so no translation is needed between the var and the setting. Only settings that
 were already explicit literals in the module block are exposed this way — a
 tracked template never gains a `vars:` key for an input the module block did not
@@ -236,7 +236,26 @@ Rules the agent must respect:
   (`hpc-slinky`), bare `machine_type` (`xpk-n2-filestore`), `vm_machine_type`
   (`apptainer-artifact-registry-openfoam`), `disk_size` (`hpc-slurm6-*`),
   `image_build_machine_type` reused for login/controller/NFS
-  (`hpc-slurm-google-cloud-dedicated/*`).
+  (`hpc-slurm-google-cloud-dedicated/*`); in the subfolder examples that ship a
+  companion `*-deployment.yaml`: bare `static_node_count`, `spot`,
+  `reservation_affinity`, `enable_flex_start`, `num_slices`, `tpu_topology`,
+  `autoscaling_total_min_nodes`, `system_node_pool_disk_size_gb`,
+  `<hw>_node_pool_disk_size_gb`, `<hw>_cluster_size` / `*_static_cluster_size`
+  / `number_of_vms`, `compute_nodepool_machine_type` /
+  `system_nodepool_machine_type` (`gke-a4x*`), bare `machine_type` /
+  `instance_count` / `reservation_name` (`a4x-vm`), `tpu_static_nodes` /
+  `tpu_dynamic_max_nodes` (`tpu7x-slurm`).
+- **Bare `machine_type` is gone from the GKE blueprints in `examples/`** (the
+  only remaining bare `machine_type` vars under `examples/` are the legacy ones
+  in `ml-slurm-g4-vgpu` and `a4x-vm`, kept for compatibility). The GKE
+  blueprints under `examples/gke-g4*`, `examples/gke-tpu-*` and
+  `examples/gke-consumption-options/**` that used to take a bare `machine_type`
+  now take `compute_machine_type` — in the blueprint `vars:`, in the companion
+  `*-deployment.yaml`, and in `--vars`. Every companion `*-deployment.yaml`
+  whose blueprint gained prefixed vars ends with a commented
+  `Optional overrides (defaults shown)` block listing them; uncomment a line to
+  override it (`gke-a4x*` and `alphaevolve` were already fully var-driven and
+  have no such block).
 
 If the blueprint does not expose the setting you need in `vars:`, copy the
 tracked template to a new file in the same directory with `ai_assisted: true`
