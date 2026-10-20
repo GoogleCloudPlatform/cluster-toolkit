@@ -34,9 +34,7 @@ vars:
   hostname_prefix: $(vars.deployment_name)-beowulf
   base_network_name: $(vars.deployment_name)
 
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Size in GB of the /home Filestore instance.
   homefs_size_gb: 2560
 

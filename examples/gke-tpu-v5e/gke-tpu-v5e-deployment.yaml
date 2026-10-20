@@ -56,5 +56,5 @@ vars:
   # The namespace to be configured for running workloads
   user_namespace: default
 
-# Optional overrides (defaults shown):
+## --- Optional overrides (defaults shown) ---
   # system_node_pool_machine_type: n2-standard-8

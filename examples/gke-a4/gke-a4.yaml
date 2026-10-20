@@ -73,9 +73,7 @@ vars:
   # # Maximum throughput of the lustre instance in MBps per TiB
   # per_unit_storage_throughput: 500
 
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Machine type for the GKE system node pool.
   system_node_pool_machine_type: n2d-standard-4
   # Machine type for the GPU compute node pool.

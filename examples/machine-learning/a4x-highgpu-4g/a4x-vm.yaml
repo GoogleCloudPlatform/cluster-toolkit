@@ -35,9 +35,7 @@ vars:
   net0_range: 192.168.0.0/19
   net1_range: 192.168.64.0/19
 
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Machine type of the temporary VM that builds the custom image.
   image_build_machine_type: t2a-standard-16
   # Size in GB of the /home Filestore instance.

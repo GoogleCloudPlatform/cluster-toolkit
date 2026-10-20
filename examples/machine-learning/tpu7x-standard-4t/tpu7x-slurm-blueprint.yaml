@@ -44,9 +44,7 @@ vars:
   tpu_dws_flex_enabled: false
   tpu_enable_spot_vm: false
 
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Machine type for the login node.
   login_machine_type: n2d-standard-4
   # Machine type for the controller node.

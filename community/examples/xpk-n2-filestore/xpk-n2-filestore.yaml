@@ -34,9 +34,7 @@ vars:
   kueue_version: v0.17.1
   jobset_version: 0.10.1
   kjob_version: f775609365df47bdc3e7c10290d8efae7f512464
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Machine type for the GKE system node pool.
   system_node_pool_machine_type: n2d-standard-4
 

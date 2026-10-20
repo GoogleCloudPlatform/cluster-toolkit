@@ -37,8 +37,8 @@ vars:
   per_unit_storage_throughput: 500
   kms_key: ""
   system_node_pool_machine_type: "n2d-standard-4"
-  # Machine type for the Lustre client (compute) node pool. Safe to override via
-  # `-d deployment.yaml` or `--vars`; default equals the previously hardcoded value.
+  # Optional overrides (defaults shown)
+  # Machine type for the Lustre client (compute) node pool.
   compute_machine_type: n2d-standard-4
 
 deployment_groups:

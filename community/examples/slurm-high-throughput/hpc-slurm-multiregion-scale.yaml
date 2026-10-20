@@ -46,9 +46,7 @@ vars:
   - us-west1-a
   - us-west1-b
   - us-west1-c
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Size in GB of the shared /home Filestore instance.
   homefs_size_gb: 1024
   # Number of statically provisioned nodes in each regional nodeset.

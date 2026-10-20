@@ -2162,9 +2162,16 @@ blueprints:
   description: "The Computer Aided Engineering (CAE) blueprint captures a reference architecture where the right cloud components are assembled to optimally cater to the requirements of computationally-intensive CAE workloads. Specifically, it is..."
   machine_types: [h3-standard-88, c3-highmem-176, n2-standard-8, n2-standard-16]
   vars:
+    appsfs_size_gb: 2560
+    c3_node_count_dynamic_max: 10
+    controller_machine_type: n2-standard-16
     deployment_name: cae-slurm-v6
+    h3_node_count_dynamic_max: 10
+    homefs_size_gb: 2560
+    login_machine_type: n2-standard-8
     project_id: null
     region: us-central1
+    scratchfs_size_gb: 10240
     zone: us-central1-a
   modules:
   - id: network

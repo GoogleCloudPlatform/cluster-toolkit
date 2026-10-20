@@ -59,9 +59,7 @@ vars:
   version_prefix: "1.35."
   nccl_tcpx_version: v3.1.9
 
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Machine type for the GPU compute node pool.
   compute_machine_type: a3-highgpu-8g
 

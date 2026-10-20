@@ -193,7 +193,7 @@ because its nodesets never set those inputs; Spot on that cluster is Case 2).
 | `client_` | a plain VM that mounts storage (e.g. `pfs-managed-lustre-vm`) |
 | `image_build_` | the temporary Packer VM that builds a custom image (`ml-slurm`, `ml-slurm-g4`) |
 | `<partition>_` / `<pool>_` (`debug_`, `hp_pool_`, `local_ssd_pool_`, `n2_`, `h3_`, `a2_8_`) | one of several worker pools; the prefix is the partition / pool name the user already addresses |
-| `homefs_`, `lustre_`, `hyperdisk_<type>_`, `data_disk_` | storage, by mount role |
+| `homefs_`, `appsfs_`, `scratchfs_`, `sharefs_`, `lustre_`, `hyperdisk_<type>_`, `data_disk_` | storage, by mount role |
 
 Rules the agent must respect:
 

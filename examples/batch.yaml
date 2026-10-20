@@ -20,9 +20,7 @@ vars:
   deployment_name: hello-workload
   region: us-central1
   zone: us-central1-c
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Machine type of the Batch compute VMs.
   compute_machine_type: n2-standard-4
 

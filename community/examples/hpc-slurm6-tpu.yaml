@@ -21,9 +21,7 @@ vars:
   deployment_name: slurm6-tpu
   region: us-central1
   zone: us-central1-a
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Maximum number of dynamically provisioned TPU nodes in the tpu partition.
   tpu_node_count_dynamic_max: 1
   # Machine type for the login node.

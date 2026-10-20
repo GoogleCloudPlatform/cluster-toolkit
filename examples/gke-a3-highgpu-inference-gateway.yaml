@@ -26,14 +26,14 @@ vars:
   authorized_cidr:  # <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
   gpu_static_node_count: 2
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Machine type for the GPU compute node pool.
   compute_machine_type: a3-highgpu-8g
-  # Machine type and autoscaling bounds for the "default" CPU node pool.
+  # Machine type for the "default" CPU node pool.
   cpu_pool_machine_type: n2d-standard-2
+  # Minimum total node count of the "default" CPU node pool.
   cpu_pool_autoscaling_total_min_nodes: 1
+  # Maximum total node count of the "default" CPU node pool.
   cpu_pool_autoscaling_total_max_nodes: 3
 
 deployment_groups:

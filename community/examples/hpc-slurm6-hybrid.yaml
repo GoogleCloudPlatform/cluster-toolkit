@@ -54,9 +54,7 @@ vars:
   #Never widen it to "0.0.0.0/0", that exposes slurmd to the whole internet.
   controller_ip_range: "192.168.1.0/24"
   slurmd_port: 6818
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Maximum number of dynamically provisioned nodes in the compute partition.
   compute_node_count_dynamic_max: 20
 

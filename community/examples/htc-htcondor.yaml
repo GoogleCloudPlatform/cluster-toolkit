@@ -28,9 +28,7 @@ vars:
     family: htcondor-10x
     project: $(vars.project_id)
   enable_shielded_vm: true
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Size in GB of the access point spool disk (200 GB or more is required for regional HA).
   access_point_spool_disk_size_gb: 200
 

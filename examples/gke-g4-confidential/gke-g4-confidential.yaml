@@ -70,9 +70,7 @@ vars:
   network_name_1: $(vars.deployment_name)-net-1
   subnetwork_name_1: $(vars.deployment_name)-sub-1
 
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Machine type for the GKE system node pool.
   system_node_pool_machine_type: n2d-standard-16
   # Boot disk size in GB of the GKE system node pool nodes.

@@ -51,12 +51,12 @@ vars:
   built_instance_image:
     family: slurm-rocky9
     project: $(vars.project_id)
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
-  # Static and maximum dynamic node counts and machine type for the compute partition.
+  # Optional overrides (defaults shown)
+  # Number of statically provisioned nodes in the compute partition.
   compute_node_count_static: 2
+  # Maximum number of dynamically provisioned nodes in the compute partition.
   compute_node_count_dynamic_max: 0
+  # Machine type for the compute partition.
   compute_machine_type: c3-standard-176
   # Size in GB of the data disk exported by the NFS server (/home, /opt/apps).
   homefs_disk_size: 100

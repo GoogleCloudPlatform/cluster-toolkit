@@ -30,9 +30,7 @@ vars:
   built_instance_image:
     family: $(vars.built_image_family)
     project: $(vars.project_id)
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Machine type for the debug partition of the demo cluster.
   compute_machine_type: n2d-standard-2
   # Machine type for the controller node of the demo cluster.

@@ -85,13 +85,13 @@ vars:
   #   gcloud storage service-agent --project=PROJECT_ID
   #   gcloud beta services identity create --service=file.googleapis.com --project=PROJECT_ID
   #   gcloud beta services identity create --service=compute.googleapis.com --project=PROJECT_ID
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+
+  # Optional overrides (defaults shown)
   # Size in GB of the /home Filestore instance (ZONAL tier minimum).
   homefs_size_gb: 1024
-  # Maximum dynamic node count and machine type for the debug partition.
+  # Maximum number of dynamically provisioned nodes in the debug partition.
   debug_node_count_dynamic_max: 4
+  # Machine type for the debug partition.
   debug_machine_type: n2-standard-2
   # Maximum number of dynamically provisioned nodes in the compute partition.
   compute_node_count_dynamic_max: 20

@@ -24,9 +24,7 @@ vars:
   deployment_name: fsimontecarlo
   region: us-central1
   zone: us-central1-a
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Machine type of the Vertex AI Workbench notebook instance.
   notebook_machine_type: n1-standard-4
 deployment_groups:

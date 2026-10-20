@@ -22,15 +22,15 @@ vars:
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
   authorized_cidr:  # <your-ip-address>/32
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Machine type for the compute node pool.
   # Hyperdisk-extreme requires a C3 machine with 88 or more vCPUs.
   compute_machine_type: c3-standard-88
-  # Capacity in GB of each Hyperdisk persistent volume claim.
+  # Capacity in GB of the Hyperdisk Balanced persistent volume claim.
   hyperdisk_balanced_capacity_gb: 100
+  # Capacity in GB of the Hyperdisk Throughput persistent volume claim.
   hyperdisk_throughput_capacity_gb: 5000
+  # Capacity in GB of the Hyperdisk Extreme persistent volume claim.
   hyperdisk_extreme_capacity_gb: 100
 
 deployment_groups:

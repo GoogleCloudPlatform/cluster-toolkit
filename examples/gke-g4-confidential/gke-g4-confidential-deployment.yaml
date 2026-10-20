@@ -67,7 +67,7 @@ vars:
   # Formats and mounts Local SSDs for GKE ephemeral scratch storage (emptyDir):
   # local_ssd_count_ephemeral_storage: 4
 
-# Optional overrides (defaults shown):
+## --- Optional overrides (defaults shown) ---
   # system_node_pool_machine_type: n2d-standard-16
   # system_node_pool_disk_size_gb: 100
   # confidential_storage_capacity_gb: 100

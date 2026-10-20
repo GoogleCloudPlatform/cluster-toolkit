@@ -26,16 +26,16 @@ vars:
   region: asia-southeast1
   zone: asia-southeast1-b
   bucket_force_destroy: false
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Machine type of the VM that builds the Spack software stack.
   spack_builder_machine_type: c2-standard-16
-  # Maximum dynamic node count and machine type for the compute partition.
+  # Maximum number of dynamically provisioned nodes in the compute partition.
   compute_node_count_dynamic_max: 20
+  # Machine type for the compute partition.
   compute_machine_type: c2-standard-60
-  # Maximum dynamic node count and machine type for the gpu partition.
+  # Maximum number of dynamically provisioned nodes in the gpu partition.
   gpu_node_count_dynamic_max: 20
+  # Machine type for the gpu partition.
   gpu_machine_type: g2-standard-4
 
 deployment_groups:

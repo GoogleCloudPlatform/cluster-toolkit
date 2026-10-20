@@ -25,9 +25,7 @@ vars:
   # Replace 'your-pool-balanced' and 'your-pool-throughput' with your storage pool names.
   hyperdisk_balanced_storage_pool: projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-balanced
   hyperdisk_throughput_storage_pool: projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-throughput
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Machine type of the compute VMs.
   compute_machine_type: c3d-standard-4
   # Number of compute VMs.

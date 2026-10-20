@@ -27,22 +27,24 @@ vars:
   # Replace 'your-pool-balanced' and 'your-pool-throughput' with your storage pool names.
   hyperdisk_balanced_storage_pool: "projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-balanced"
   hyperdisk_throughput_storage_pool: "projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-throughput"
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Machine type for the GKE system node pool.
   system_node_pool_machine_type: n2d-standard-4
-  # Machine type and fixed node count for the "debug" node pool.
+  # Machine type for the "debug" node pool.
   debug_pool_machine_type: n2d-standard-2
+  # Fixed node count for the "debug" node pool.
   debug_pool_static_node_count: 2
-  # Machine type and fixed node count for the "local-ssd" node pool.
+  # Machine type for the "local-ssd" node pool.
   local_ssd_pool_machine_type: n2d-standard-2
+  # Fixed node count for the "local-ssd" node pool.
   local_ssd_pool_static_node_count: 1
-  # Machine type and fixed node count for the "hp-pool" (Hyperdisk storage pool) node pool.
+  # Machine type for the "hp-pool" (Hyperdisk storage pool) node pool.
   hp_pool_machine_type: c3d-standard-8
+  # Fixed node count for the "hp-pool" (Hyperdisk storage pool) node pool.
   hp_pool_static_node_count: 1
-  # Capacity in GB of the Hyperdisk persistent volumes backed by storage pools.
+  # Capacity in GB of the Hyperdisk Balanced persistent volume backed by a storage pool.
   hyperdisk_balanced_capacity_gb: 20
+  # Capacity in GB of the Hyperdisk Throughput persistent volume backed by a storage pool.
   hyperdisk_throughput_capacity_gb: 5000
 
 deployment_groups:

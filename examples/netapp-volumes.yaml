@@ -25,15 +25,14 @@ vars:
   deployment_name: netapp-volumes
   region:     ## Set GCP Region Here ##
   zone:       ## Set GCP Zone Here ##
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Capacity in GiB of the NetApp storage pool.
   netapp_pool_capacity_gib: 6144
   # Capacity in GiB of the /home volume (4800 GiB is the minimum large-capacity volume size).
   homefs_capacity_gib: 4800
-  # Number and machine type of the example client VMs that mount the volume.
+  # Number of example client VMs that mount the volume.
   client_instance_count: 1
+  # Machine type of the example client VMs that mount the volume.
   client_machine_type: n2-standard-2
 
 # Documentation for each of the modules used below can be found at

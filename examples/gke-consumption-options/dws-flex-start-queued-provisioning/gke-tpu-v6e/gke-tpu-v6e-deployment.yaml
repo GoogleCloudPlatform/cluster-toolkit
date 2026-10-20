@@ -58,5 +58,5 @@ vars:
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
 
-# Optional overrides (defaults shown):
+## --- Optional overrides (defaults shown) ---
   # system_node_pool_machine_type: n2-standard-8

@@ -21,17 +21,18 @@ vars:
   deployment_name: hpcslurmha
   region: us-central1
   zone: us-central1-a
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
+  # Optional overrides (defaults shown)
   # Size in GB of the shared /home Filestore instance.
   homefs_size_gb: 1024
-  # Machine type and number of login nodes.
+  # Machine type for the login nodes.
   login_machine_type: n1-standard-2
+  # Number of login nodes.
   login_num_instances: 1
-  # Node counts and machine type for the compute nodeset (debug partition).
+  # Maximum number of dynamically provisioned nodes in the compute nodeset (debug partition).
   compute_node_count_dynamic_max: 4
+  # Number of statically provisioned nodes in the compute nodeset (debug partition).
   compute_node_count_static: 0
+  # Machine type for the compute nodeset (debug partition).
   compute_machine_type: n1-standard-2
   # Size in GB of the Filestore instance that holds the controller state.
   controller_fs_size_gb: 1024

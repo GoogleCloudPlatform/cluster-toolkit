@@ -33,14 +33,14 @@ vars:
   # Stage `community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/*` into the deployment folder.
   # If you move the blueprint, make sure the relative path is correct.
   staged_configs: $(ghpc_stage("../modules/scheduler/schedmd-slurm-gcp-v6-controller/etc"))
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
-  # Maximum dynamic node counts of the c2s60 and c2s30 nodesets (compute partition).
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned nodes in the c2s60 nodeset (compute partition).
   c2s60_node_count_dynamic_max: 200
+  # Maximum number of dynamically provisioned nodes in the c2s30 nodeset (compute partition).
   c2s30_node_count_dynamic_max: 200
-  # Maximum dynamic node counts of the n2s2 and n2s4 nodesets (lowcost partition).
+  # Maximum number of dynamically provisioned nodes in the n2s2 nodeset (lowcost partition).
   n2s2_node_count_dynamic_max: 10
+  # Maximum number of dynamically provisioned nodes in the n2s4 nodeset (lowcost partition).
   n2s4_node_count_dynamic_max: 10
   # Machine type for the login node.
   login_machine_type: n2-standard-4

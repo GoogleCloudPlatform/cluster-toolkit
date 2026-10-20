@@ -33,16 +33,20 @@ vars:
   instance_image_custom: false
   metadata: # Workaround for https://github.com/GoogleCloudPlatform/cluster-toolkit/discussions/3243
     VmDnsSetting: GlobalOnly
-  # The following settings are safe to override via `-d deployment.yaml` or
-  # `--vars` without editing the module blocks below. Defaults equal the
-  # values that were previously hardcoded in the modules.
-  # Maximum number of dynamically provisioned nodes per partition.
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned nodes in the n2 partition.
   n2_node_count_dynamic_max: 4
+  # Maximum number of dynamically provisioned nodes in the c2 partition.
   c2_node_count_dynamic_max: 20
+  # Maximum number of dynamically provisioned nodes in the c2d partition.
   c2d_node_count_dynamic_max: 20
+  # Maximum number of dynamically provisioned nodes in the c3 partition.
   c3_node_count_dynamic_max: 20
+  # Maximum number of dynamically provisioned nodes in the a2_8 partition.
   a2_8_node_count_dynamic_max: 16
+  # Maximum number of dynamically provisioned nodes in the a2_16 partition.
   a2_16_node_count_dynamic_max: 16
+  # Maximum number of dynamically provisioned nodes in the h3 partition.
   h3_node_count_dynamic_max: 16
   # Machine type for the login node.
   login_machine_type: n2-standard-4
