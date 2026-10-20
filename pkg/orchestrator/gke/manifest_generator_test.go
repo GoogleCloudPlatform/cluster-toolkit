@@ -1874,7 +1874,6 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		`memory: "32Gi"`,
 		"restartStrategy: BlockingRecreate",
 		"privileged: true",
-		"alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool",
 		`cpu: "2"`,
 		`memory: "8Gi"`,
 		`kill -TERM -- \"-$child\"`,
@@ -1896,6 +1895,14 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		if !strings.Contains(manifest, substr) {
 			t.Errorf("manifest missing expected substring %q", substr)
 		}
+	}
+
+	gotReplicatedAnnotations := jobSetReplicatedJobAnnotations(t, manifest)
+	if got := gotReplicatedAnnotations["pathways-head"]["alpha.jobset.sigs.k8s.io/exclusive-topology"]; got != "kubernetes.io/hostname" {
+		t.Errorf("pathways-head exclusive-topology = %q, want %q", got, "kubernetes.io/hostname")
+	}
+	if got := gotReplicatedAnnotations["worker"]["alpha.jobset.sigs.k8s.io/exclusive-topology"]; got != "kubernetes.io/hostname" {
+		t.Errorf("single-node worker exclusive-topology = %q, want %q", got, "kubernetes.io/hostname")
 	}
 }
 
@@ -2129,6 +2136,12 @@ func TestGeneratePathwaysManifest_DynamicSlicing(t *testing.T) {
 		if !strings.Contains(manifest, substr) {
 			t.Errorf("manifest missing expected substring %q\nManifest: %s", substr, manifest)
 		}
+	}
+
+	// 3. Worker replicatedJob must NOT set exclusive-topology when dynamic slicing is active
+	gotReplicatedAnnotations := jobSetReplicatedJobAnnotations(t, manifest)
+	if got, exists := gotReplicatedAnnotations["worker"]["alpha.jobset.sigs.k8s.io/exclusive-topology"]; exists {
+		t.Errorf("dynamic-slicing worker exclusive-topology = %q, want omitted", got)
 	}
 }
 
@@ -2421,6 +2434,334 @@ func TestGeneratePathwaysManifest_MaxSliceRestarts(t *testing.T) {
 			}
 			if !strings.Contains(workerManifest, tc.wantBackoffLimitPerIndex) {
 				t.Errorf("worker spec missing %q\nGot:\n%s", tc.wantBackoffLimitPerIndex, workerManifest)
+			}
+		})
+	}
+}
+
+func jobSetTopLevelAnnotations(t *testing.T, manifest string) map[string]string {
+	t.Helper()
+	docs, err := splitYAMLDocuments(manifest)
+	if err != nil {
+		t.Fatalf("failed to split manifest into YAML documents: %v", err)
+	}
+	for _, doc := range docs {
+		var js struct {
+			Kind     string `json:"kind"`
+			Metadata struct {
+				Annotations map[string]string `json:"annotations"`
+			} `json:"metadata"`
+		}
+		if err := k8syaml.Unmarshal([]byte(doc), &js); err != nil {
+			t.Fatalf("failed to unmarshal manifest document: %v\n%s", err, doc)
+		}
+		if js.Kind == "JobSet" {
+			return js.Metadata.Annotations
+		}
+	}
+	t.Fatalf("no JobSet document found in manifest:\n%s", manifest)
+	return nil
+}
+
+func jobSetReplicatedJobAnnotations(t *testing.T, manifest string) map[string]map[string]string {
+	t.Helper()
+	docs, err := splitYAMLDocuments(manifest)
+	if err != nil {
+		t.Fatalf("failed to split manifest into YAML documents: %v", err)
+	}
+	for _, doc := range docs {
+		var js struct {
+			Kind string `json:"kind"`
+			Spec struct {
+				ReplicatedJobs []struct {
+					Name     string `json:"name"`
+					Template struct {
+						Metadata struct {
+							Annotations map[string]string `json:"annotations"`
+						} `json:"metadata"`
+					} `json:"template"`
+				} `json:"replicatedJobs"`
+			} `json:"spec"`
+		}
+		if err := k8syaml.Unmarshal([]byte(doc), &js); err != nil {
+			t.Fatalf("failed to unmarshal manifest document: %v\n%s", err, doc)
+		}
+		if js.Kind != "JobSet" {
+			continue
+		}
+		out := make(map[string]map[string]string, len(js.Spec.ReplicatedJobs))
+		for _, rj := range js.Spec.ReplicatedJobs {
+			out[rj.Name] = rj.Template.Metadata.Annotations
+		}
+		return out
+	}
+	t.Fatalf("no JobSet document found in manifest:\n%s", manifest)
+	return nil
+}
+
+func TestGenerateGKEManifest_ExclusiveTopology(t *testing.T) {
+	setupMockMachineConfig(t)
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+
+	profile := JobProfile{
+		IsCPUMachine:  true,
+		CapacityCount: 4,
+	}
+
+	tests := []struct {
+		name             string
+		nodesPerSlice    int
+		isDynamicSlicing bool
+		isStaticSlicing  bool
+		wantTopology     string
+		wantExists       bool
+	}{
+		{
+			name:          "single node slice (NodesPerSlice=1) uses hostname",
+			nodesPerSlice: 1,
+			wantTopology:  "kubernetes.io/hostname",
+			wantExists:    true,
+		},
+		{
+			name:          "unset nodesPerSlice (NodesPerSlice=0) uses hostname",
+			nodesPerSlice: 0,
+			wantTopology:  "kubernetes.io/hostname",
+			wantExists:    true,
+		},
+		{
+			name:          "multi-node slice (NodesPerSlice=2) uses gke-nodepool",
+			nodesPerSlice: 2,
+			wantTopology:  "cloud.google.com/gke-nodepool",
+			wantExists:    true,
+		},
+		{
+			name:             "dynamic slicing omits exclusive-topology",
+			nodesPerSlice:    16,
+			isDynamicSlicing: true,
+			wantExists:       false,
+		},
+		{
+			name:            "static slicing omits exclusive-topology",
+			nodesPerSlice:   1,
+			isStaticSlicing: true,
+			wantExists:      false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := ManifestOptions{
+				WorkloadName:     "test-exclusive-topo",
+				FullImageName:    "test-image:latest",
+				CommandToRun:     "echo hello",
+				ComputeType:      "n2-standard-4",
+				MachineType:      "n2-standard-4",
+				ClusterLocation:  "us-central1-a",
+				NumSlices:        1,
+				NodesPerSlice:    tc.nodesPerSlice,
+				IsDynamicSlicing: tc.isDynamicSlicing,
+				IsStaticSlicing:  tc.isStaticSlicing,
+			}
+
+			manifest, err := orc.GenerateGKEManifest(opts, profile)
+			if err != nil {
+				t.Fatalf("GenerateGKEManifest failed: %v", err)
+			}
+
+			annotations := jobSetTopLevelAnnotations(t, manifest)
+			got, exists := annotations["alpha.jobset.sigs.k8s.io/exclusive-topology"]
+			if exists != tc.wantExists {
+				t.Fatalf("exclusive-topology exists = %v (val=%q), want %v\nManifest:\n%s", exists, got, tc.wantExists, manifest)
+			}
+			if tc.wantExists && got != tc.wantTopology {
+				t.Errorf("exclusive-topology = %q, want %q\nManifest:\n%s", got, tc.wantTopology, manifest)
+			}
+		})
+	}
+
+	tpuTests := []struct {
+		name         string
+		topology     string
+		wantNodes    int
+		wantTopology string
+	}{
+		{
+			name:         "end-to-end tpu7x-standard-4t 2x2x1 derives NodesPerSlice=1 and uses hostname",
+			topology:     "2x2x1",
+			wantNodes:    1,
+			wantTopology: "kubernetes.io/hostname",
+		},
+		{
+			name:         "end-to-end tpu7x-standard-4t 2x2x2 derives NodesPerSlice=2 and uses gke-nodepool",
+			topology:     "2x2x2",
+			wantNodes:    2,
+			wantTopology: "cloud.google.com/gke-nodepool",
+		},
+	}
+
+	for _, tc := range tpuTests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockResponses := map[string][]shell.CommandResult{
+				"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+				"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
+				"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v7x-slice"}]}`},
+				},
+				"gcloud compute resource-policies describe tpu7x-16-2x2x2-placement-policy --region=us-central1 --project=mock-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"tpu7x-16-2x2x2-placement-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"2x2x2"}}`},
+				},
+			}
+			mockExec := NewMockExecutor(mockResponses)
+			tpuOrc := newTestGKEOrchestrator(mockExec)
+			tpuOrc.projectID = "mock-project"
+			tpuOrc.clusterZones = []string{"us-central1-a"}
+			tpuOrc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
+			tpuOrc.clusterDesc.NodePools = []gkeJobNodePool{
+				{Name: "v7x-pool", Config: gkeNodePoolConfig{MachineType: "tpu7x-standard-4t"}},
+			}
+
+			job := orchestrator.JobDefinition{
+				WorkloadName:    "tpu7x-exclusive-topo",
+				CommandToRun:    "echo hello",
+				ComputeType:     "tpu7x-standard-4t",
+				Topology:        tc.topology,
+				NumSlices:       1,
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "mock-project",
+			}
+
+			tpuProfile, isDyn, isStat, err := tpuOrc.resolveHardwareRequirements(&job)
+			if err != nil {
+				t.Fatalf("resolveHardwareRequirements failed: %v", err)
+			}
+			if job.NodesPerSlice != tc.wantNodes {
+				t.Fatalf("resolveHardwareRequirements derived NodesPerSlice = %d, want %d", job.NodesPerSlice, tc.wantNodes)
+			}
+
+			opts, err := tpuOrc.PrepareManifestOptions(job, "test-image:latest", tpuProfile, isDyn, isStat)
+			if err != nil {
+				t.Fatalf("PrepareManifestOptions failed: %v", err)
+			}
+
+			manifest, err := tpuOrc.GenerateGKEManifest(opts, tpuProfile)
+			if err != nil {
+				t.Fatalf("GenerateGKEManifest failed: %v", err)
+			}
+
+			annotations := jobSetTopLevelAnnotations(t, manifest)
+			if got := annotations["alpha.jobset.sigs.k8s.io/exclusive-topology"]; got != tc.wantTopology {
+				t.Errorf("exclusive-topology = %q, want %q\nManifest:\n%s", got, tc.wantTopology, manifest)
+			}
+		})
+	}
+}
+
+func TestGeneratePathwaysManifest_ExclusiveTopology(t *testing.T) {
+	tests := []struct {
+		name             string
+		topology         string
+		wantNodes        int
+		isDynamicSlicing bool
+		isStaticSlicing  bool
+		wantWorkerTopo   string
+		wantWorkerExists bool
+	}{
+		{
+			name:             "single-host TPU slice (2x2x1, NodesPerSlice=1) uses hostname",
+			topology:         "2x2x1",
+			wantNodes:        1,
+			wantWorkerTopo:   "kubernetes.io/hostname",
+			wantWorkerExists: true,
+		},
+		{
+			name:             "multi-host TPU slice (2x2x2, NodesPerSlice=2) uses gke-nodepool",
+			topology:         "2x2x2",
+			wantNodes:        2,
+			wantWorkerTopo:   "cloud.google.com/gke-nodepool",
+			wantWorkerExists: true,
+		},
+		{
+			name:             "dynamic slicing omits worker exclusive-topology",
+			topology:         "2x2x2",
+			wantNodes:        2,
+			isDynamicSlicing: true,
+			wantWorkerExists: false,
+		},
+		{
+			name:             "static slicing omits worker exclusive-topology",
+			topology:         "2x2x1",
+			wantNodes:        1,
+			isStaticSlicing:  true,
+			wantWorkerExists: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupMockMachineConfig(t)
+			mockResponses := map[string][]shell.CommandResult{
+				"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+				"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
+				"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v7x-slice"}]}`},
+				},
+				"gcloud compute resource-policies describe tpu7x-16-2x2x2-placement-policy --region=us-central1 --project=mock-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"tpu7x-16-2x2x2-placement-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"2x2x2"}}`},
+				},
+			}
+			mockExec := NewMockExecutor(mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.projectID = "mock-project"
+			orc.clusterZones = []string{"us-central1-a"}
+			orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
+			orc.clusterDesc.NodePools = []gkeJobNodePool{
+				{Name: "v7x-pool", Config: gkeNodePoolConfig{MachineType: "tpu7x-standard-4t"}},
+			}
+
+			job := orchestrator.JobDefinition{
+				WorkloadName:    "pathways-topo-test",
+				CommandToRun:    "python3 train.py",
+				NumSlices:       2,
+				ClusterLocation: "us-central1-a",
+				ComputeType:     "tpu7x-standard-4t",
+				Topology:        tc.topology,
+				IsPathwaysJob:   true,
+				Pathways: orchestrator.PathwaysJobDefinition{
+					ProxyServerImage: "proxy:latest",
+					ServerImage:      "server:latest",
+					WorkerImage:      "worker:latest",
+					GCSLocation:      "gs://my-bucket",
+					HeadNodePool:     "pathways-np",
+					MaxSliceRestarts: 4000,
+				},
+			}
+
+			profile, _, _, err := orc.resolveHardwareRequirements(&job)
+			if err != nil {
+				t.Fatalf("resolveHardwareRequirements failed: %v", err)
+			}
+			if job.NodesPerSlice != tc.wantNodes {
+				t.Fatalf("resolveHardwareRequirements derived NodesPerSlice = %d, want %d", job.NodesPerSlice, tc.wantNodes)
+			}
+
+			manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, tc.isDynamicSlicing, tc.isStaticSlicing)
+			if err != nil {
+				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+			}
+
+			replicatedAnnotations := jobSetReplicatedJobAnnotations(t, manifest)
+			if gotHead := replicatedAnnotations["pathways-head"]["alpha.jobset.sigs.k8s.io/exclusive-topology"]; gotHead != "kubernetes.io/hostname" {
+				t.Errorf("pathways-head exclusive-topology = %q, want %q", gotHead, "kubernetes.io/hostname")
+			}
+
+			gotWorker, exists := replicatedAnnotations["worker"]["alpha.jobset.sigs.k8s.io/exclusive-topology"]
+			if exists != tc.wantWorkerExists {
+				t.Fatalf("worker exclusive-topology exists = %v (val=%q), want %v\nManifest:\n%s", exists, gotWorker, tc.wantWorkerExists, manifest)
+			}
+			if tc.wantWorkerExists && gotWorker != tc.wantWorkerTopo {
+				t.Errorf("worker exclusive-topology = %q, want %q\nManifest:\n%s", gotWorker, tc.wantWorkerTopo, manifest)
 			}
 		})
 	}
