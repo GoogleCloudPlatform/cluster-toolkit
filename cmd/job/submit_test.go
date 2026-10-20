@@ -1547,6 +1547,18 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
 			wantElasticSlices:    0,
 			wantMaxSliceRestarts: 5,
 		},
+		{
+			name:                 "defaults to 4000 when pathways-headless is set and max-slice-restarts omitted",
+			extraArgs:            []string{"--pathways-headless"},
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 4000,
+		},
+		{
+			name:                 "honors explicit max-slice-restarts=0 when pathways-headless is set",
+			extraArgs:            []string{"--pathways-headless", "--pathways-max-slice-restarts", "0"},
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 0,
+		},
 	}
 
 	for _, tc := range tests {

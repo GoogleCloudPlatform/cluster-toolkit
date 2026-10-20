@@ -239,7 +239,11 @@ spec:
           spec:
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
+{{- if eq .WorkerBackoffLimitPerIndex 0 }}
+            restartPolicy: Never
+{{- else }}
             restartPolicy: OnFailure
+{{- end }}
 {{- if .ServiceAccountName }}
             serviceAccountName: {{.ServiceAccountName}}
 {{- end }}

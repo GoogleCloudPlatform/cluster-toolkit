@@ -969,8 +969,8 @@ func TestGeneratePathwaysManifest_RestartOnExitCodes(t *testing.T) {
 			if rj.Template.Spec.PodFailurePolicy != nil {
 				t.Errorf("expected worker to NOT have podFailurePolicy, but got %+v", rj.Template.Spec.PodFailurePolicy)
 			}
-			if rj.Template.Spec.Template.Spec.RestartPolicy != "OnFailure" {
-				t.Errorf("expected worker restartPolicy to be OnFailure, got %q", rj.Template.Spec.Template.Spec.RestartPolicy)
+			if rj.Template.Spec.Template.Spec.RestartPolicy != "Never" {
+				t.Errorf("expected worker restartPolicy to be Never, got %q", rj.Template.Spec.Template.Spec.RestartPolicy)
 			}
 		}
 	}
@@ -1015,7 +1015,7 @@ func TestManifestGeneration_Matrix_Pathways_RestartOnExitCodes(t *testing.T) {
 			wantHeadPFP:        false,
 			wantHeadRestart:    "Never",
 			wantWorkerPFP:      false,
-			wantWorkerRestart:  "OnFailure",
+			wantWorkerRestart:  "Never",
 		},
 		{
 			name:               "pathways, with restart-on-exit-codes",
@@ -1024,7 +1024,7 @@ func TestManifestGeneration_Matrix_Pathways_RestartOnExitCodes(t *testing.T) {
 			wantHeadPFP:        true,
 			wantHeadRestart:    "Never",
 			wantWorkerPFP:      false,
-			wantWorkerRestart:  "OnFailure",
+			wantWorkerRestart:  "Never",
 		},
 	}
 
@@ -1836,7 +1836,6 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 			WorkerImage:      "worker:latest",
 			GCSLocation:      "gs://my-bucket",
 			HeadNodePool:     "pathways-np",
-			MaxSliceRestarts: 4000,
 		},
 	}
 
@@ -1886,7 +1885,7 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		"jobset.sigs.k8s.io/hack: \"true\"",
 		"kueue.x-k8s.io/safe-to-forcefully-delete: \"true\"",
 		"cloud.google.com/skip-tpu-webhook-check: \"true\"",
-		"backoffLimitPerIndex: 4000",
+		"backoffLimitPerIndex: 0",
 		"podReplacementPolicy: Failed",
 		"maxFailedIndexes: 0",
 	}
@@ -2351,24 +2350,28 @@ func TestGeneratePathwaysManifest_MaxSliceRestarts(t *testing.T) {
 		maxSliceRestarts         int
 		wantBackoffLimit         string
 		wantBackoffLimitPerIndex string
+		wantRestartPolicy        string
 	}{
 		{
 			name:                     "flag set to 5 on 2 x v6e-32",
 			maxSliceRestarts:         5,
 			wantBackoffLimit:         "backoffLimit: 40",
 			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 5",
+			wantRestartPolicy:        "restartPolicy: OnFailure",
 		},
 		{
 			name:                     "non-elastic default 0 on 2 x v6e-32",
 			maxSliceRestarts:         0,
 			wantBackoffLimit:         "backoffLimit: 0",
 			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 0",
+			wantRestartPolicy:        "restartPolicy: Never",
 		},
 		{
 			name:                     "elastic default 4000 on 2 x v6e-32",
 			maxSliceRestarts:         4000,
 			wantBackoffLimit:         "backoffLimit: 32000",
 			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 4000",
+			wantRestartPolicy:        "restartPolicy: OnFailure",
 		},
 	}
 
@@ -2434,6 +2437,9 @@ func TestGeneratePathwaysManifest_MaxSliceRestarts(t *testing.T) {
 			}
 			if !strings.Contains(workerManifest, tc.wantBackoffLimitPerIndex) {
 				t.Errorf("worker spec missing %q\nGot:\n%s", tc.wantBackoffLimitPerIndex, workerManifest)
+			}
+			if !strings.Contains(workerManifest, tc.wantRestartPolicy) {
+				t.Errorf("worker spec missing %q\nGot:\n%s", tc.wantRestartPolicy, workerManifest)
 			}
 		})
 	}
@@ -2734,7 +2740,6 @@ func TestGeneratePathwaysManifest_ExclusiveTopology(t *testing.T) {
 					WorkerImage:      "worker:latest",
 					GCSLocation:      "gs://my-bucket",
 					HeadNodePool:     "pathways-np",
-					MaxSliceRestarts: 4000,
 				},
 			}
 
