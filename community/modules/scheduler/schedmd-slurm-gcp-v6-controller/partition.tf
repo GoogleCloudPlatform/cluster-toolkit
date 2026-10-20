@@ -51,6 +51,8 @@ module "slurm_nodeset_template" {
   disk_size_gb                        = each.value.disk_size_gb
   disk_type                           = each.value.disk_type
   disk_storage_pool                   = each.value.disk_storage_pool
+  disk_provisioned_iops               = each.value.disk_provisioned_iops
+  disk_provisioned_throughput         = each.value.disk_provisioned_throughput
   enable_confidential_vm              = each.value.enable_confidential_vm
   confidential_instance_type          = each.value.confidential_instance_type
   enable_oslogin                      = each.value.enable_oslogin

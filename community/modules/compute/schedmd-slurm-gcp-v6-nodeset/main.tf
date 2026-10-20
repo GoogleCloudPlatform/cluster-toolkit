@@ -124,6 +124,8 @@ locals {
       device_name                         = ad.device_name
       disk_type                           = ad.disk_type
       disk_storage_pool                   = ad.disk_storage_pool
+      disk_provisioned_iops               = ad.disk_provisioned_iops
+      disk_provisioned_throughput         = ad.disk_provisioned_throughput
       disk_size_gb                        = ad.disk_size_gb
       disk_labels                         = merge(ad.disk_labels, local.labels)
       auto_delete                         = ad.auto_delete
@@ -157,13 +159,15 @@ locals {
     dws_flex               = var.dws_flex
     provisioning_engine    = var.provisioning_engine
 
-    disk_auto_delete           = var.disk_auto_delete
-    disk_labels                = merge(local.labels, var.disk_labels)
-    disk_size_gb               = var.disk_size_gb
-    disk_type                  = var.disk_type
-    disk_storage_pool          = var.disk_storage_pool
-    disk_resource_manager_tags = var.disk_resource_manager_tags
-    additional_disks           = local.additional_disks
+    disk_auto_delete            = var.disk_auto_delete
+    disk_labels                 = merge(local.labels, var.disk_labels)
+    disk_size_gb                = var.disk_size_gb
+    disk_type                   = var.disk_type
+    disk_storage_pool           = var.disk_storage_pool
+    disk_provisioned_iops       = var.disk_provisioned_iops
+    disk_provisioned_throughput = var.disk_provisioned_throughput
+    disk_resource_manager_tags  = var.disk_resource_manager_tags
+    additional_disks            = local.additional_disks
 
     disk_encryption_key                 = var.disk_encryption_key
     disk_encryption_key_service_account = var.disk_encryption_key_service_account
