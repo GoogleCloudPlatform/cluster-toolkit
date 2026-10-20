@@ -1268,7 +1268,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--pathways-worker-image` | `string` | Container image for the Pathways workers. |
 | `--pathways-headless` | `flag` | If present, the user workload container will not be deployed in the `pathways-head` job. |
 | `--pathways-elastic-slices` | `int` | Configures the number of elastic slices for resilient training scaling. |
-| `--pathways-max-slice-restarts` | `int` | Maximum number of times the workers within a single slice can be restarted (Default: `4000`). Maps to `backoffLimitPerIndex: N` and `backoffLimit: N * nodesPerSlice` on the Pathways worker Job. |
+| `--pathways-max-slice-restarts` | `int` | Maximum number of times the workers within a single slice can be restarted (Default: `0`, or `4000` when `--pathways-elastic-slices > 0` or `--pathways-headless` is set). Maps to `backoffLimitPerIndex: N` and `backoffLimit: N * nodesPerSlice` on the Pathways worker Job. |
 | `--pathways-proxy-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-proxy`. |
 | `--pathways-server-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-rm`. |
 | `--pathways-worker-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-worker`. |
