@@ -32,7 +32,7 @@ Also see a full [GKE example blueprint](../../../examples/hpc-gke.yaml).
 
 This module manages the system node pool separately from the cluster, following
 the [Terraform provider's recommended approach](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_node_pool.html).
-This separates node-pool lifecycle management from the cluster control plane.
+This separates node pool lifecycle management from the cluster resource in Terraform.
 
 During creation, GKE requires an initial node pool. The module creates that
 pool with one node per zone, removes it, and then creates the configured system
