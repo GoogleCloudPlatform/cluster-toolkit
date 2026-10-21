@@ -38,6 +38,25 @@ run "derive_network_and_project" {
   }
 }
 
+run "explicit_null_uses_default_lookup" {
+  command = plan
+  variables {
+    use_subnetwork_data = null
+  }
+  assert {
+    condition     = var.use_subnetwork_data == true
+    error_message = "Explicit null must use the default true value."
+  }
+  assert {
+    condition     = length(data.google_compute_subnetwork.subnetwork) == 1 && length(terraform_data.pga_check) == 1
+    error_message = "Explicit null must retain subnet lookup and Private Google Access validation."
+  }
+  assert {
+    condition     = local.effective_project_id == "test-project" && local.effective_network_name == "test-network"
+    error_message = "Explicit null must retain project and network derivation from the subnet."
+  }
+}
+
 run "explicit_network_without_lookup" {
   command = plan
   variables {

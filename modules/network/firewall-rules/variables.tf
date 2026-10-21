@@ -16,7 +16,8 @@ variable "use_subnetwork_data" {
   description = "Look up the subnetwork to derive missing project and network values and check Private Google Access when deriving those values. Set to false when supplying project_id and network_name directly. Must be known at plan time."
   type        = bool
   default     = true
-  nullable    = false
+  # Explicit null uses the default; count conditions require a non-null boolean.
+  nullable = false
 }
 
 variable "subnetwork_self_link" {
