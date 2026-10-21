@@ -120,6 +120,8 @@ class WorkbenchInfo:
         # installs the Slurm client. It writes no completion marker: the
         # wait-for-startup module polls the instance state instead.
         user = self.workbench.trusted_user
+        social_account = user.socialaccount_set.first()
+        uid = social_account.uid if social_account else ""
         home_base = "/home/jupyter"
 
         # pylint: disable=line-too-long
@@ -127,7 +129,7 @@ class WorkbenchInfo:
 OSLOGIN_USER=$(curl -s http://metadata.google.internal/computeMetadata/v1/oslogin/users?pagesize=1024 \
             -H 'Metadata-Flavor: Google' | \
         jq '.[][] | \
-        select ( .name == "{user.socialaccount_set.first().uid}") | \
+        select ( .name == "{uid}") | \
         .posixAccounts | \
         .[].username' 2>&- | tr -d '"')
 """

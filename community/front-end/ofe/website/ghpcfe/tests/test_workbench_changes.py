@@ -19,11 +19,16 @@ choice in the portal would be silently ignored: it must stay out of the form,
 the templates and the generated tfvars, and Terraform must keep rejecting it.
 The data disk size must come from a variable, not a hardcoded number.
 
-These read files as text, so they need neither Django nor Terraform.
+These read files as text, or run the real startup-script writer with
+stand-in objects, so they need neither Django nor Terraform.
 """
 
+import importlib.util
 import pathlib
 import re
+import sys
+import types
+from unittest import mock
 
 OFE = pathlib.Path(__file__).resolve().parents[3]
 GHPCFE = OFE / "website" / "ghpcfe"
@@ -69,3 +74,56 @@ def test_data_disk_size_is_a_variable():
     assert not re.search(r"disk_size_gb\s*=\s*\d+", block)
     variables = (TF_DIR / "variables.tf").read_text()
     assert 'variable "data_disk_size_gb"' in variables
+
+
+def _load_workbenchinfo():
+    """Import cluster_manager/workbenchinfo.py without Django or its packages.
+
+    copy_startup_script uses neither `utils` nor `retry`, so both are stubbed,
+    and the module goes in a throwaway package so `from . import utils`
+    resolves to the stub.
+    """
+    pkg = types.ModuleType("wb_stub")
+    pkg.__path__ = []
+    pkg.utils = types.ModuleType("wb_stub.utils")
+    retry_mod = types.ModuleType("retry")
+    retry_mod.retry = lambda *args, **kwargs: (lambda func: func)
+    stubs = {"wb_stub": pkg, "wb_stub.utils": pkg.utils, "retry": retry_mod}
+    with mock.patch.dict(sys.modules, stubs):
+        spec = importlib.util.spec_from_file_location(
+            "wb_stub.workbenchinfo", GHPCFE / "cluster_manager" / "workbenchinfo.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+    return module
+
+
+def _render_startup_script(tmp_path, social_account):
+    wbinfo = _load_workbenchinfo()
+    template_dir = tmp_path / "infrastructure_files" / "gcs_bucket" / "workbench"
+    template_dir.mkdir(parents=True)
+    (template_dir / "startup_script_template.sh").write_text("# template\n")
+    user = mock.Mock()
+    user.socialaccount_set.first.return_value = social_account
+    workbench = mock.Mock(id=1, trusted_user=user, attached_cluster=None)
+    workbench.mount_points.order_by.return_value = []
+    info = wbinfo.WorkbenchInfo.__new__(wbinfo.WorkbenchInfo)
+    info.config = {"baseDir": tmp_path}
+    info.workbench = workbench
+    info.workbench_dir = tmp_path
+    info.copy_startup_script()
+    return (tmp_path / "startup_script.sh").read_text()
+
+
+def test_startup_script_without_a_linked_google_account(tmp_path):
+    # The OS Login name is only logged, so a trusted user with no social
+    # account must still get a startup script.
+    script = _render_startup_script(tmp_path, None)
+    assert 'select ( .name == "")' in script
+    assert "oslogin user resolved to:" in script
+
+
+def test_startup_script_looks_up_the_linked_google_account(tmp_path):
+    script = _render_startup_script(tmp_path, mock.Mock(uid="1234567890"))
+    assert 'select ( .name == "1234567890")' in script
