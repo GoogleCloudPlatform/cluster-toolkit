@@ -12,8 +12,7 @@ integration run's results.
 ## Updating agentgateway
 
 Set `agentgateway_version` in the blueprint to update both Helm releases and the version
-used by static validation. The default is now v1.6.0; the historical live results
-below do not validate this upgrade. When changing it, review the Gateway API readiness check and
+used by static validation. The default is v1.6.0; see the live validation results below. When changing it, review the Gateway API readiness check and
 the compatibility range documented in the README. Static validation only reads the blueprint
 default (does not read CLI deployment overrides).
 
@@ -103,6 +102,18 @@ Deployment rollout alone does not establish Service reachability. Failures print
 pod, endpoint and backend diagnostics before temporary resources are removed.
 
 ## Recorded provider validation
+
+On October 20, 2026, a fresh deployment with administrator-provisioned identities
+passed using agentgateway v1.6.0, GKE `1.35.8-gke.1626001` and Gateway API v1.5.0.
+Gemini `gemini-2.5-flash` and the synthetic provider passed synchronous, streaming
+and metrics checks through the internal load balancer. The synthetic test also
+verified missing and valid Secret references. Proxy logs appeared in Cloud Logging,
+and a second `gcluster deploy` reported all four groups already applied.
+
+This run included the shared firewall planning fix in
+[PR #6536](https://github.com/GoogleCloudPlatform/cluster-toolkit/pull/6536).
+It did not test managed IAM provisioning or live OpenAI and Anthropic requests;
+credentials for those providers were unavailable.
 
 The following models passed synchronous, streaming and metrics checks through
 the internal load balancer on September 15, 2026, using the default token settings
