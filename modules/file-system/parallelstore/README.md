@@ -42,7 +42,7 @@ For parallelstore instance, Below snippet creates new VPC and configures private
 for this newly created network.
 
 ```yaml
- - id: network
+  - id: network
     source: modules/network/vpc
 
   # Private Service Access (PSA) requires the compute.networkAdmin role which is
@@ -110,9 +110,10 @@ Use `daos_agent_config` to provide additional configuration for `daos_agent`, fo
 - id: parallelstorefs
   source: modules/file-system/pre-existing-network-storage
   settings:
-    daos_agent_config: |
-      credential_config:
-        cache_expiration: 1m
+    parallelstore_options:
+      daos_agent_config: |
+        credential_config:
+          cache_expiration: 1m
 ```
 
 Use `dfuse_environment` to provide additional environment variables for `dfuse` process, for example:

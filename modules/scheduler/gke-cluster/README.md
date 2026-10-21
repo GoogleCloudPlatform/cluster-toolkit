@@ -87,11 +87,9 @@ To [enable Multi-networking](https://cloud.google.com/kubernetes-engine/docs/how
   - id: gke-cluster
     source: modules/scheduler/gke-cluster
     use: [network, multinetwork] ## enables multi networking and Dataplane V2 on cluster
-    settings:
-      cluster_name: $(vars.deployment_name)
 ```
 
-Find an example of multi networking in GKE [here](../../../examples/gke-a3-megagpu.yaml).
+Find an example of multi networking in GKE [here](../../../examples/gke-a3-megagpu/gke-a3-megagpu.yaml).
 
 ### Cluster Limitations
 

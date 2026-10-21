@@ -42,6 +42,7 @@ module as input with:
   source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
   use:
   - network
+  - homefs
   settings:
     node_count_dynamic_max: 200
     machine_type: c2-standard-30
@@ -49,7 +50,6 @@ module as input with:
 - id: compute_partition
   source: community/modules/compute/schedmd-slurm-gcp-v6-partition
   use:
-  - homefs
   - nodeset
   settings:
     partition_name: compute
@@ -135,8 +135,11 @@ deployment variable `vars.zone`:
 vars:
   zone: us-central1-f
 
-- id: zonal-nodeset
-  source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+deployment_groups:
+- group: primary
+  modules:
+  - id: zonal-nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
 ```
 
 In the example below, we enable creation in additional zones:
@@ -145,12 +148,15 @@ In the example below, we enable creation in additional zones:
 vars:
   zone: us-central1-f
 
-- id: multi-zonal-nodeset
-  source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-  settings:
-    zones:
-    - us-central1-a
-    - us-central1-b
+deployment_groups:
+- group: primary
+  modules:
+  - id: multi-zonal-nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    settings:
+      zones:
+      - us-central1-a
+      - us-central1-b
 ```
 
 ## Support

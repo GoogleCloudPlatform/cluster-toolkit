@@ -33,17 +33,18 @@ This module simplifies the following functionality:
   source: modules/management/kubectl-apply
   use: [existing-gke-cluster]
   settings:
-    - content: |
-        apiVersion: v1
-        kind: Namespace
-        metadata:
-          name: my-namespace
-    - source: "https://github.com/kubernetes-sigs/jobset/releases/download/v0.6.0/manifests.yaml"
-    - source: $(ghpc_stage("manifests/configmap1.yaml"))
-    - source: $(ghpc_stage("manifests/configmap2.yaml.tftpl"))
-      template_vars: {name: "dev-config", public: "false"}
-    - source: $(ghpc_stage("manifests"))/
-      template_vars: {name: "dev-config", public: "false"}
+    apply_manifests:
+      - content: |
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: my-namespace
+      - source: "https://github.com/kubernetes-sigs/jobset/releases/download/v0.6.0/manifests.yaml"
+      - source: $(ghpc_stage("manifests/configmap1.yaml"))
+      - source: $(ghpc_stage("manifests/configmap2.yaml.tftpl"))
+        template_vars: {name: "dev-config", public: "false"}
+      - source: $(ghpc_stage("manifests"))/
+        template_vars: {name: "dev-config", public: "false"}
 ```
 
 #### Pre-build infrastructure Example
@@ -190,7 +191,7 @@ The module applies manifests from the `apply_manifests` list in parallel. This c
 
 There is **no guarantee** that the CRD will be applied before the resource that uses it. This can lead to non-deterministic deployment failures with errors like:
 
-```Error: resource [kueue.x-k8s.io/v1beta2/ClusterQueue] isn't valid for cluster```
+`Error: resource [kueue.x-k8s.io/v1beta2/ClusterQueue] isn't valid for cluster`
 
 ##### **Recommended Workaround: Two-Stage Apply**
 

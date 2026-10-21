@@ -56,7 +56,7 @@ install: install-user
 
 endif
 
-tests: warn-terraform-version warn-packer-version test-engine validate_golden_copy validate_configs packer-check
+tests: warn-terraform-version warn-packer-version test-engine validate_golden_copy validate_configs packer-check validate-docs
 
 format: warn-go-version warn-terraform-version warn-packer-version terraform-format packer-format
 	$(info **************** formatting go code *******************)
@@ -258,7 +258,7 @@ endif
 
 ###################################
 # AGENT SKILLS SECTION
-.PHONY: lint-skills test-skills
+.PHONY: lint-skills test-skills validate-docs
 
 lint-skills:
 	$(info **************** linting agent skills ***************)
@@ -268,4 +268,8 @@ test-skills:
 	$(info **************** running skills unit tests and evals ***************)
 	@python3 tools/tests/test_run_eval.py
 	@python3 tools/run_eval.py --all
+
+validate-docs:
+	$(info **************** validating README snippets and links ***************)
+	@python3 tools/validate_readme_snippets.py
 # END OF AGENT SKILLS SECTION
