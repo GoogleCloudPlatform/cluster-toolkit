@@ -59,6 +59,17 @@ def parse_args(argv=None):
     return args
 
 
+def backend_auth_ready(backend, namespace, name, accepted):
+    conditions = (backend.get("status") or {}).get("conditions") or []
+    partial = next((item for item in conditions if item.get("type") == "Accepted"
+                    and item.get("reason") == "PartiallyValid"), None)
+    if accepted == "False" and partial:
+        # v1.6 accepts partially valid backends while reporting missing auth.
+        return (condition(backend, "Accepted")
+                and f"secret {namespace}/{name} not found" in partial.get("message", ""))
+    return condition(backend, "Accepted", expected=accepted) and partial is None
+
+
 def main():
     args = parse_args()
 
@@ -130,7 +141,7 @@ def main():
     def wait_backend(accepted):
         deadline = time.monotonic() + 120
         while time.monotonic() < deadline:
-            if condition(get("agentgatewaybackend", client), "Accepted", expected=accepted):
+            if backend_auth_ready(get("agentgatewaybackend", client), args.namespace, client, accepted):
                 return
             time.sleep(2)
         raise TimeoutError(f"Mock backend did not become Accepted={accepted}")
