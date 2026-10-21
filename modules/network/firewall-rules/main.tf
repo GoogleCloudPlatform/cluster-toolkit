@@ -14,22 +14,18 @@
  * limitations under the License.
  */
 
-locals {
-  use_subnetwork_data = (var.project_id == null || var.network_name == null) && var.subnetwork_self_link != null
-}
-
 # the google_compute_network data source does not allow identification by
 # self_link, which uniquely identifies subnet, project, and network
 data "google_compute_subnetwork" "subnetwork" {
   # Only instantiate this data source if needed
-  count     = local.use_subnetwork_data ? 1 : 0
+  count     = var.use_subnetwork_data ? 1 : 0
   self_link = var.subnetwork_self_link
 }
 
 locals {
   # Derived values from data source, null if data source is not used
-  derived_project_id   = local.use_subnetwork_data ? data.google_compute_subnetwork.subnetwork[0].project : null
-  derived_network_name = local.use_subnetwork_data ? data.google_compute_subnetwork.subnetwork[0].network : null
+  derived_project_id   = var.use_subnetwork_data ? data.google_compute_subnetwork.subnetwork[0].project : null
+  derived_network_name = var.use_subnetwork_data ? data.google_compute_subnetwork.subnetwork[0].network : null
 
   # Effective values: Use var if provided, otherwise use derived value
   effective_project_id   = coalesce(var.project_id, local.derived_project_id)
@@ -37,14 +33,14 @@ locals {
 }
 
 # Module-level check for Private Google Access on the subnetwork.
-# This check is only relevant if subnetwork_self_link was provided and used.
+# Preserve the check only when deriving a missing project or network value.
 resource "terraform_data" "pga_check" {
-  count = local.use_subnetwork_data ? 1 : 0
+  count = var.use_subnetwork_data ? 1 : 0
 
   lifecycle {
     precondition {
-      condition     = data.google_compute_subnetwork.subnetwork[0].private_ip_google_access
-      error_message = "Private Google Access is disabled for subnetwork '${data.google_compute_subnetwork.subnetwork[0].name}'. This may cause connectivity issues for instances without external IPs trying to access Google APIs and services."
+      condition     = var.project_id != null && var.network_name != null ? true : data.google_compute_subnetwork.subnetwork[0].private_ip_google_access
+      error_message = "Private Google Access must be enabled on the subnetwork so instances without external IPs can access Google APIs and services."
     }
   }
 }
