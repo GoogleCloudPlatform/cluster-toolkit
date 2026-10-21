@@ -182,7 +182,7 @@ Before submitting the job to the live GKE cluster, it is highly recommended to p
   --pathways \
   --pathways-gcs-location gs://YOUR_COORDINATION_BUCKET/pathways-scratch \
   --image us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest \
-  --command "pip install -U jax jaxlib pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print(\"JAX Device count:\", jax.device_count())'" \
+  --command "pip install -U jax jaxlib && python -c 'import jax; print(\"JAX Device count:\", jax.device_count())'" \
   --dry-run-out my-manifest.yaml
 ```
 
@@ -197,7 +197,7 @@ This generates a local file `my-manifest.yaml` containing the complete Kubernete
 * `--pathways`: Flags GCluster to generate a Pathways JobSet coordination architecture.
 * `--pathways-gcs-location`: A Cloud Storage bucket URI used by the coordinator and worker pods to synchronize network state and parameters.
 * `--image`: The container image for the workload (using the standard TPU JAX image).
-* `--command`: The entrypoint command. It dynamically installs `pathwaysutils` and executes the python command verifying JAX initialization. Calling `pathwaysutils.initialize()` is required since it registers the virtual `'proxy'` backend inside JAX, allowing it to delegate computations over the network to the TPU workers
+* `--command`: The entrypoint command. `gcluster job submit --pathways` automatically sets `JAX_PLATFORMS=proxy` and `JAX_BACKEND_TARGET=grpc://$(PATHWAYS_HEAD):29000` so JAX delegates computations to the TPU workers via its built-in `'proxy'` backend. `pathwaysutils.initialize()` is only needed for Pathways-specific features (such as Orbax checkpoint persistence or profiling) and, if used, must be called before `jax.devices()`.
 * `--dry-run-out`: Outputs the generated Kubernetes manifests to the file path specified as the argument to this flag (e.g., `my-manifest.yaml` in the example above) instead of submitting them to GKE.
 
 ### 3. Submit the Live Job
@@ -211,7 +211,7 @@ Once you have verified the manifest, submit the job to your live GKE cluster by 
   --pathways \
   --pathways-gcs-location gs://YOUR_COORDINATION_BUCKET/pathways-scratch \
   --image us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest \
-  --command "pip install -U jax jaxlib pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print(\"JAX Device count:\", jax.device_count())'"
+  --command "pip install -U jax jaxlib && python -c 'import jax; print(\"JAX Device count:\", jax.device_count())'"
 ```
 
 ### 4. Monitor and Manage the Job
