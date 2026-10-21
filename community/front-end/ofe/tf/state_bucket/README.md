@@ -7,9 +7,9 @@ applies it before the front end (see "Terraform State" in
 
 The Toolkit's `modules/file-system/cloud-storage-bucket` is not used because it
 cannot carry `prevent_destroy` (Terraform allows no `lifecycle` block on a
-module call), has no authoritative `roles/storage.objectAdmin` binding for the
-writer list, and always creates an authoritative `roles/storage.objectViewer`
-binding.
+module call), grants `roles/storage.objectUser` only per member rather than as an
+authoritative binding for the writer list, and always creates an authoritative
+`roles/storage.objectViewer` binding.
 
 ## License
 
@@ -62,7 +62,7 @@ No modules.
 | <a name="input_noncurrent_version_retention_days"></a> [noncurrent\_version\_retention\_days](#input\_noncurrent\_version\_retention\_days) | Days to retain non-current (superseded) state file versions before deletion. | `number` | `90` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP Project in which to create the Terraform state bucket. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | GCP Region (bucket location) for the Terraform state bucket. | `string` | n/a | yes |
-| <a name="input_state_bucket_writers"></a> [state\_bucket\_writers](#input\_state\_bucket\_writers) | IAM members, in full "serviceAccount:name@project.iam.gserviceaccount.com"<br/>form, granted roles/storage.objectAdmin on the state bucket: the identities<br/>that run Terraform for the front end. Set in admin.auto.tfvars, which<br/>deploy.sh creates once and never overwrites. Add any provisioning<br/>credential from another project here, or it cannot read or write its<br/>resources' state. | `list(string)` | `[]` | no |
+| <a name="input_state_bucket_writers"></a> [state\_bucket\_writers](#input\_state\_bucket\_writers) | IAM members, in full "serviceAccount:name@project.iam.gserviceaccount.com"<br/>form, granted roles/storage.objectUser on the state bucket: the identities<br/>that run Terraform for the front end. Set in admin.auto.tfvars, which<br/>deploy.sh creates once and never overwrites. Add any provisioning<br/>credential from another project here, or it cannot read or write its<br/>resources' state. | `list(string)` | `[]` | no |
 
 ## Outputs
 

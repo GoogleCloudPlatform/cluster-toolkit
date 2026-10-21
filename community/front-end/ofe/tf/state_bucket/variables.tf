@@ -34,7 +34,7 @@ variable "state_bucket_writers" {
   default     = []
   description = <<-EOT
     IAM members, in full "serviceAccount:name@project.iam.gserviceaccount.com"
-    form, granted roles/storage.objectAdmin on the state bucket: the identities
+    form, granted roles/storage.objectUser on the state bucket: the identities
     that run Terraform for the front end. Set in admin.auto.tfvars, which
     deploy.sh creates once and never overwrites. Add any provisioning
     credential from another project here, or it cannot read or write its

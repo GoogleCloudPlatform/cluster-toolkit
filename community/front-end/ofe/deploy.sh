@@ -722,15 +722,18 @@ deploy_state_bucket() {
 			# The writer binding is authoritative, and this machine has no
 			# admin.auto.tfvars recording who was granted access before. Seed
 			# it from the current holders (used only if that file is absent).
+			# Buckets created before writers moved to objectUser hold objectAdmin.
 			local policy live_members member
 			policy=$(gcloud storage buckets get-iam-policy "gs://${bucket}" \
 				--format=json) || return 1
 			live_members=$(python3 -c '
 import json, sys
+seen = set()
 for b in json.load(sys.stdin).get("bindings", []):
-    if b.get("role") == "roles/storage.objectAdmin":
+    if b.get("role") in ("roles/storage.objectUser", "roles/storage.objectAdmin"):
         for m in b.get("members", []):
-            if not m.startswith("deleted:"):
+            if not m.startswith("deleted:") and m not in seen:
+                seen.add(m)
                 print(m)
 ' <<<"${policy}") || return 1
 			while IFS= read -r member; do

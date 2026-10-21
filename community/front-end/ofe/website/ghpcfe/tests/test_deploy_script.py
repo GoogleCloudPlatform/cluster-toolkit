@@ -397,7 +397,7 @@ class DeployStateBucketAdoptionTests(StateBucketSandbox):
 
     def test_existing_bucket_is_imported_and_seeds_admin_file(self):
         policy = (
-            '{"bindings": [{"role": "roles/storage.objectAdmin", "members": ['
+            '{"bindings": [{"role": "roles/storage.objectUser", "members": ['
             f'"{self.FOREIGN}", "{self.DEFAULT_SA}", '
             '"deleted:serviceAccount:gone@p.iam.gserviceaccount.com?uid=1"]},'
             ' {"role": "roles/storage.legacyBucketOwner", "members": ["projectOwner:p"]}]}'
@@ -415,9 +415,24 @@ class DeployStateBucketAdoptionTests(StateBucketSandbox):
         self.assertEqual(self._list(res["tfvars"], "default_writers"), [self.DEFAULT_SA])
         self.assertTrue(self._applied(res))
 
+    def test_adoption_seeds_writers_from_an_earlier_object_admin_binding(self):
+        other = "serviceAccount:other@p.iam.gserviceaccount.com"
+        policy = (
+            '{"bindings": [{"role": "roles/storage.objectAdmin", "members": ['
+            f'"{self.FOREIGN}", "{other}"]}}, '
+            '{"role": "roles/storage.objectUser",'
+            f' "members": ["{self.FOREIGN}"]}}]}}'
+        )
+        res = self._ok(sa_exists=False, bucket="exists", policy=policy)
+        # Buckets created before the move to objectUser hold objectAdmin;
+        # each holder is listed once.
+        self.assertEqual(
+            self._list(res["admin"].decode(), "state_bucket_writers"), [self.FOREIGN, other]
+        )
+
     def test_adoption_does_not_overwrite_an_existing_admin_file(self):
         policy = (
-            '{"bindings": [{"role": "roles/storage.objectAdmin",'
+            '{"bindings": [{"role": "roles/storage.objectUser",'
             f' "members": ["{self.FOREIGN}"]}}]}}'
         )
         admin = b"state_bucket_writers = []  # deliberately empty\n"

@@ -104,12 +104,12 @@ resource "google_storage_bucket" "tfstate" {
 # admin.auto.tfvars.
 #
 # Authoritative, so the listed members are exactly the principals holding the
-# role. objectAdmin on this bucket alone covers Terraform's init, plan, apply,
+# role. objectUser on this bucket alone covers Terraform's init, plan, apply,
 # destroy and state locking; no project-level role is needed.
 resource "google_storage_bucket_iam_binding" "state_writers" {
   count = length(local.writers) > 0 ? 1 : 0
 
   bucket  = google_storage_bucket.tfstate.name
-  role    = "roles/storage.objectAdmin"
+  role    = "roles/storage.objectUser"
   members = local.writers
 }
