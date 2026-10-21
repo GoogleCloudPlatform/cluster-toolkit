@@ -1,0 +1,73 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+#
+#           ****************
+#######  CAE Solution Blueprint #######
+#           ****************
+#
+# This blueprint features a reference design suited for CAE applications on GCP.
+# It sets up the following infrastructure:
+#   * Google's H4D VMs with Cloud RDMA, ideally suited for CAE workloads
+#   * Google's C4D-highmem VM, suited for workloads with 16GB/core requirement
+#   * Google's G4 GPU VMs, suited for GPU-accelerated CAE and visualization workloads
+#   * Google's Filestore NFS-based shared storage
+#   * Google's Managed Lustre parallel file system for /scratch
+#   * Google's Chrome Remote Desktop
+#   * SLURM workload scheduler
+#
+vars:
+  project_id: ai-infra-jrt-1
+  deployment_name: cae-slurm-solutions
+  # check here for other regions with H4D, C4D, and G4 deployments: https://cloud.google.com/compute/docs/regions-zones
+  # For example
+  # region: europe-west4
+  # zone: europe-west4-b
+  region: us-central1
+  zone: us-central1-b
+  # Visit https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
+  # for a list of valid family options with Slurm.
+  slurm_image:
+    # Rocky 8: slurm-gcp-6-12-hpc-rocky-linux-8
+    # Rocky 9: slurm-gcp-6-12-hpc-rocky-linux-9
+    family: slurm-gcp-6-12-hpc-rocky-linux-9
+    project: schedmd-slurm-public
+
+  # H4D & Cloud RDMA settings
+  rdma_net_range: 192.168.128.0/18
+  h4d_cluster_size: 0
+  # Provisioning model, select one, lack of selection will rely on on-demand capacity
+  h4d_reservation_name: ""
+  h4d_dws_flex_enabled: false
+  h4d_enable_spot_vm: true
+
+  # G4 GPU settings
+  g4_cluster_size: 0
+  g4_machine_type: g4-standard-48
+  # To enable Dual NIC, you MUST use g4-standard-384
+  # g4_machine_type: g4-standard-384
+  # net1_range: 192.168.2.0/24 # Uncomment for Dual NIC on g4-standard-384
+  g4_disk_size_gb: 100
+  # Provisioning models (set to true or fill in reservation name, pick only one)
+  g4_reservation_name: "" # To use a reservation, provide its name here.
+  g4_enable_spot_vm: false # To use Spot VMs, set this to true.
+  g4_dws_flex_enabled: true # To use DWS Flex Provisioning
+
+  # Managed Lustre settings for /scratch
+  # The values of lustre_size_gib and per_unit_storage_throughput are co-related
+  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  lustre_instance_id: cae-scratch-lustre
+  lustre_size_gib: 9000
+  per_unit_storage_throughput: 1000
