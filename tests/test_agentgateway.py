@@ -439,6 +439,19 @@ class GatewayReadinessTests(unittest.TestCase):
 
 
 class RunnerLifecycleTests(unittest.TestCase):
+    def test_partially_valid_backend_auth_status(self):
+        accepted = {"type": "Accepted", "status": "True", "reason": "PartiallyValid",
+                    "observedGeneration": 2, "message": "failed to translate backend: secret test/mock not found"}
+        backend = {"metadata": {"generation": 2}, "status": {"conditions": [accepted]}}
+        self.assertTrue(integration.backend_auth_ready(backend, "test", "mock", "False"))
+        self.assertFalse(integration.backend_auth_ready(backend, "test", "mock", "True"))
+        self.assertFalse(integration.backend_auth_ready(backend, "test", "different", "False"))
+        accepted["observedGeneration"] = 1
+        self.assertFalse(integration.backend_auth_ready(backend, "test", "mock", "False"))
+        accepted["observedGeneration"] = 2
+        accepted["reason"] = "Accepted"
+        self.assertTrue(integration.backend_auth_ready(backend, "test", "mock", "True"))
+
     def test_no_running_proxy_has_clear_error(self):
         responses = [
             {"status": {"addresses": [{"value": "10.0.0.1"}]}},
