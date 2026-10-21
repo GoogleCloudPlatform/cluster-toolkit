@@ -106,14 +106,25 @@ class WorkbenchInfo:
             / self.cloud_dir,
             terraform_dir / self.cloud_dir,
         )
+        # point Terraform at the shared state bucket before any init runs
+        utils.write_backend_tf(
+            terraform_dir / self.cloud_dir,
+            utils.terraform_state_prefix("workbench", self.workbench.id),
+        )
         return terraform_dir
 
     def copy_startup_script(self):
+        # Runs as the Vertex AI Workbench Instances post-startup-script. The
+        # managed image owns JupyterLab and its systemd unit, so this only
+        # mounts attached filesystems into the notebook home and optionally
+        # installs the Slurm client. It writes no completion marker: the
+        # wait-for-startup module polls the instance state instead.
         user = self.workbench.trusted_user
+        home_base = "/home/jupyter"
 
         # pylint: disable=line-too-long
         startup_script_vars = f"""
-USER=$(curl -s http://metadata.google.internal/computeMetadata/v1/oslogin/users?pagesize=1024 \
+OSLOGIN_USER=$(curl -s http://metadata.google.internal/computeMetadata/v1/oslogin/users?pagesize=1024 \
             -H 'Metadata-Flavor: Google' | \
         jq '.[][] | \
         select ( .name == "{user.socialaccount_set.first().uid}") | \
@@ -230,24 +241,17 @@ ln -sf /mnt/slurm_configs/slurm.conf /etc/slurm/slurm.conf
             f.write(
                 f"""#!/bin/bash
 echo "starting startup script at `date`" | tee -a /tmp/startup.log
-echo "Getting username..." | tee -a /tmp/startup.log
 {startup_script_vars}
+echo "oslogin user resolved to: ${{OSLOGIN_USER}}" | tee -a /tmp/startup.log
 
 echo "Setting up storage" | tee -a /tmp/startup.log
-sudo apt-get -y update && sudo apt-get install -y nfs-common
+apt-get -y update && apt-get install -y nfs-common
 
 {slurm_config_segment}
 
-mkdir /tmp/jupyterhome
-chown $USER:$USER /tmp/jupyterhome
+mkdir -p {home_base}
 
-mkdir /home/$USER
-chown $USER:$USER /home/$USER
-
-cp /home/jupyter/.jupyter /tmp/jupyterhome/.jupyter -R
-chown $USER:$USER /tmp/jupyterhome/.jupyter -R
-
-cat << EOF > /tmp/jupyterhome/DATA_LOSS_WARNING.txt
+cat << EOF > {home_base}/DATA_LOSS_WARNING.txt
 DATA LOSS WARNING:
 
 The data on this workbench instance is not automatically saved unless it is
@@ -270,12 +274,13 @@ EOF
                     self.workbench.id == mp.workbench.id
                     and mp.export.filesystem.hostname_or_ip
                 ):
-                    f.write("mkdir -p " + mp.mount_path + "\n")
-                    f.write(
-                        "mkdir -p /tmp/jupyterhome`dirname "
-                        + mp.mount_path
-                        + "`\n"
+                    # Symlink the mount into the notebook home so it is
+                    # visible in the managed JupyterLab file browser.
+                    link_name = (
+                        f"{home_base}/"
+                        + mp.mount_path.strip("/").replace("/", "_")
                     )
+                    f.write("mkdir -p " + mp.mount_path + "\n")
                     f.write(
                         "mount "
                         + mp.export.filesystem.hostname_or_ip
@@ -286,13 +291,7 @@ EOF
                         + "\n"
                     )
                     f.write("chmod 777 " + mp.mount_path + "\n")
-                    f.write(
-                        "ln -s "
-                        + mp.mount_path
-                        + " /tmp/jupyterhome`dirname "
-                        + mp.mount_path
-                        + "` \n"
-                    )
+                    f.write(f"ln -sfn {mp.mount_path} {link_name}\n")
                     f.write(
                         'echo "'
                         + mp.export.filesystem.hostname_or_ip
@@ -300,7 +299,9 @@ EOF
                         + mp.export.export_name
                         + " is mounted at "
                         + mp.mount_path
-                        + '" >> /tmp/jupyterhome/DATA_LOSS_WARNING.txt\n'
+                        + '" >> '
+                        + home_base
+                        + "/DATA_LOSS_WARNING.txt\n"
                     )
 
             logger.debug("Writing workbench startup script")
@@ -331,15 +332,12 @@ EOF
 region = "{region}"
 zone = "{zone}"
 project_name = "{project}"
+network_name = "{self.workbench.subnet.vpc.cloud_id}"
 subnet_name = "{subnet}"
 machine_type = "{self.workbench.machine_type}"
 boot_disk_type = "{self.workbench.boot_disk_type}"
 boot_disk_size_gb = "{self.workbench.boot_disk_capacity}"
 trusted_user = "{self.workbench.trusted_user.email}"
-instance_image = {{
-  project = "deeplearning-platform-release"
-  family  = "{self.workbench.image_family}"
-}}
 
 owner_id = ["{self.workbench.trusted_user.email}"]
 wb_startup_script_name   = "workbench/workbench_{self.workbench.id}_startup_script"
@@ -370,7 +368,9 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
         try:
             self.workbench.cloud_state = "cm"
             self.workbench.save()
-            utils.run_terraform(terraform_dir / self.cloud_dir, "init")
+            utils.run_terraform(
+                terraform_dir / self.cloud_dir, "init", extra_env=extra_env
+            )
             utils.run_terraform(
                 terraform_dir / self.cloud_dir, "validate", extra_env=extra_env
             )
@@ -395,32 +395,6 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
             utils.run_terraform(
                 terraform_dir / self.cloud_dir, "apply", extra_env=extra_env
             )
-            # Look for Management Public IP in terraform.tfstate
-            tf_state_file = terraform_dir / self.cloud_dir / "terraform.tfstate"
-            with tf_state_file.open("r") as statefp:
-                outputs = json.load(statefp)["outputs"]
-                wb_name = "UNKNOWN"
-                try:
-                    wb_name = outputs["notebook_instance_name"]["value"]
-                except KeyError:
-                    logger.error(
-                        "Failed to parse workbench instance name from TF state"
-                    )
-                    try:
-                        deployment_id = outputs["deployment_id"]["value"]
-                        wb_name = f"notebooks-instance-{deployment_id}-0"
-                    except KeyError:
-                        logger.error(
-                            "Failed to parse deployment ID from TF state"
-                        )
-                # workbench is now being initialized
-                self.workbench.internal_name = wb_name
-                self.workbench.cloud_state = "m"
-                self.workbench.status = "i"
-
-                self.workbench.save()
-                # Ansible is now running... Probably 15-30 minutes or so
-
         except subprocess.CalledProcessError as err:
             # We can error during provisioning, in which case Terraform
             # doesn't tear things down.  Run a `destroy`, just in case
@@ -436,6 +410,43 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
             logger.error("Attempting to clean up with Terraform destroy")
             self._terraform_destroy()
             raise
+
+        # The apply succeeded, so its resources exist. A failure reading the
+        # state back must not reach the destroy above.
+        try:
+            outputs = utils.get_terraform_state(
+                terraform_dir / self.cloud_dir, extra_env
+            )["outputs"]
+        except (subprocess.CalledProcessError, RuntimeError) as err:
+            logger.error(
+                "Terraform apply succeeded but reading its state failed",
+                exc_info=err,
+            )
+            self.workbench.status = "e"
+            self.workbench.cloud_state = "m"
+            self.workbench.save()
+            raise
+        wb_name = "UNKNOWN"
+        try:
+            wb_name = outputs["notebook_instance_name"]["value"]
+        except KeyError:
+            logger.error(
+                "Failed to parse workbench instance name from TF state"
+            )
+            try:
+                deployment_id = outputs["deployment_id"]["value"]
+                wb_name = f"notebooks-instance-{deployment_id}-0"
+            except KeyError:
+                logger.error(
+                    "Failed to parse deployment ID from TF state"
+                )
+        # workbench is now being initialized
+        self.workbench.internal_name = wb_name
+        self.workbench.cloud_state = "m"
+        self.workbench.status = "i"
+
+        self.workbench.save()
+        # Ansible is now running... Probably 15-30 minutes or so
 
 
     def _terraform_destroy(self):
@@ -490,16 +501,25 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
                 logger.info("TF stderr:\n%s\n", err.stderr.decode("utf-8"))
             raise
 
-        tf_state_file = terraform_dir / self.cloud_dir / "terraform.tfstate"
-        with tf_state_file.open("r") as statefp:
-            outputs = json.load(statefp)["outputs"]
-            try:
-                wb_uri = outputs["notebook_proxy_uri"]["value"]
-            except KeyError:
-                logger.error(
-                    "Failed to get workbench uri from TF output"
-                )
-                raise
+        try:
+            outputs = utils.get_terraform_state(
+                terraform_dir / self.cloud_dir, extra_env
+            )["outputs"]
+        except (subprocess.CalledProcessError, RuntimeError) as err:
+            # Not retried: the backend client already retries transient
+            # errors, so a failure here is not the "URI not ready yet"
+            # condition @retry(ValueError) exists for.
+            logger.error("Failed to read workbench state", exc_info=err)
+            self.workbench.status = "e"
+            self.workbench.save()
+            raise
+        try:
+            wb_uri = outputs["notebook_proxy_uri"]["value"]
+        except KeyError:
+            logger.error(
+                "Failed to get workbench uri from TF output"
+            )
+            raise
 
         if not wb_uri:
             logger.info("Awaiting workbench uri update (got \"%s\")", wb_uri)

@@ -109,3 +109,17 @@ variable "extra_labels" {
   default     = {}
   description = "Extra labels to apply to created GCP resources."
 }
+
+variable "terraform_state_bucket" {
+  type        = string
+  description = <<-EOT
+    Name of the GCS bucket holding Terraform state for resources the front end
+    provisions, created by the separate tf/state_bucket root and passed in by
+    deploy.sh. No default: silently falling back to local state would bring
+    back the risk this bucket exists to remove.
+  EOT
+  validation {
+    condition     = length(trimspace(var.terraform_state_bucket)) > 0
+    error_message = "The variable 'terraform_state_bucket' must not be empty. Apply tf/state_bucket first and pass its bucket_name output."
+  }
+}

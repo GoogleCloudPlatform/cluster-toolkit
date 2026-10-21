@@ -13,6 +13,8 @@
 # limitations under the License.
 """ credentials.py """
 
+import logging
+
 from django.http import HttpResponseRedirect, JsonResponse
 from django.urls import reverse, reverse_lazy
 from django.views import generic
@@ -31,6 +33,22 @@ from ..permissions import CredentialPermission, SuperUserRequiredMixin
 from ..cluster_manager import validate_credential
 from .. import grafana
 from grafana_api.grafana_api import GrafanaClientError
+
+logger = logging.getLogger(__name__)
+
+
+def _warn_on_state_bucket_access(request, detail):
+    """Warn, without blocking, if a credential cannot use the state bucket."""
+    try:
+        warning = validate_credential.check_state_bucket_access(detail)
+    except Exception:  # pylint: disable=broad-except
+        logger.exception("Could not check the credential's state bucket access")
+        warning = (
+            "Could not check whether this credential can use the Terraform "
+            "state bucket; see the server log."
+        )
+    if warning:
+        messages.warning(request, warning)
 
 
 class CredentialListView(SuperUserRequiredMixin, generic.ListView):
@@ -87,6 +105,7 @@ class CredentialCreateView(SuperUserRequiredMixin, CreateView):
             
         self.object.save()
         messages.success(self.request, f"Credential {self.object.name} validated and saved.")
+        _warn_on_state_bucket_access(self.request, self.object.detail)
         return HttpResponseRedirect(self.get_success_url())
 
 class CredentialUpdateView(SuperUserRequiredMixin, UpdateView):
@@ -107,6 +126,11 @@ class CredentialUpdateView(SuperUserRequiredMixin, UpdateView):
         # do not show existing credential details in edit form
         initial[ "detail" ] = ""
         return initial
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        _warn_on_state_bucket_access(self.request, self.object.detail)
+        return response
 
 class CredentialDeleteView(SuperUserRequiredMixin, DeleteView):
     """Custom DeleteView for Credential model"""

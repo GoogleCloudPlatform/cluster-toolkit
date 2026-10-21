@@ -13,6 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Readiness detection for Vertex AI Workbench Instances.
+#
+# Polls the Workbench API for `state == ACTIVE` (JupyterLab up, proxy URI
+# populated) rather than a serial-console marker, which Workbench images
+# never emit. This is independent of the OFE post-startup script, so a
+# slow or failing post-startup step does not block or fail deployment.
+
 if [ -z "${INSTANCE_NAME}" ]; then
 	echo "INSTANCE_NAME is unset"
 	exit 1
@@ -27,26 +34,30 @@ if [ -z "${PROJECT_ID}" ]; then
 fi
 
 CLOUDSDK_CONFIG=$(mktemp -d)
+export CLOUDSDK_CONFIG
 GOOGLE_APPLICATION_CREDENTIALS="../../cloud_credentials"
-gcloud auth activate-service-account --key-file=${GOOGLE_APPLICATION_CREDENTIALS}
-GCLOUD="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
-FINISH_LINE="BRINGUP COMPLETE"
-ERROR_LINE="BRINGUP FAILED"
+gcloud auth activate-service-account --key-file="${GOOGLE_APPLICATION_CREDENTIALS}"
 
+# TIMEOUT: 0 = ready, 1 = timed out, 2 = instance entered a terminal
+# non-ready state (stopped/suspended/deleted) during bring-up.
 TIMEOUT=1
 tries=0
-until [ $tries -ge "${RETRIES}" ]; do
-	STATUS_LINE=$(${GCLOUD} 2>/dev/null | grep -oE "${FINISH_LINE}|${ERROR_LINE}")
-	echo "STATUS_LINE: '${STATUS_LINE}'"
-	if [ "${STATUS_LINE}" == "${FINISH_LINE}" ]; then
+until [ "$tries" -ge "${RETRIES}" ]; do
+	STATE=$(gcloud workbench instances describe "${INSTANCE_NAME}" \
+		--location "${ZONE}" --project "${PROJECT_ID}" \
+		--format="value(state)" 2>/dev/null)
+	echo "workbench state: '${STATE}'"
+	if [ "${STATE}" == "ACTIVE" ]; then
 		TIMEOUT=0
 		break
 	fi
-	if [ "${STATUS_LINE}" == "${ERROR_LINE}" ]; then
+	case "${STATE}" in
+	STOPPED | SUSPENDED | DELETED)
 		TIMEOUT=2
 		break
-	fi
-	echo "could not detect end of startup script. Sleeping."
+		;;
+	esac
+	echo "workbench not ACTIVE yet. Sleeping."
 	sleep 30
 	((tries++))
 done
@@ -54,11 +65,11 @@ done
 rm -r "${CLOUDSDK_CONFIG}"
 
 if [ "${TIMEOUT}" -eq "0" ]; then
-	echo "Startup script completed"
+	echo "Workbench instance is ACTIVE"
 elif [ "${TIMEOUT}" -eq "1" ]; then
-	echo "Startup script timed out" >&2
+	echo "Timed out waiting for workbench instance to become ACTIVE" >&2
 else
-	echo "Node bringup failed - check virtual serial console logs" >&2
+	echo "Workbench instance entered a terminal non-ready state: '${STATE}'" >&2
 fi
 
 exit "${TIMEOUT}"

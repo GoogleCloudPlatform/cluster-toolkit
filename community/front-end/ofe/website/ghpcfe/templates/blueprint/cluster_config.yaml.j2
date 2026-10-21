@@ -16,6 +16,12 @@ limitations under the License.
 
 blueprint_name: {{ cluster.cloud_id }}
 
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: {{ state_bucket }}
+    prefix: {{ state_prefix }}
+
 vars:
   project_id: {{ project_id }}
   deployment_name: {{ cluster.cloud_id }}
