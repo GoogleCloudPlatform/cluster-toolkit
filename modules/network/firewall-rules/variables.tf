@@ -12,6 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+variable "use_subnetwork_data" {
+  description = "Look up the subnetwork to derive missing project and network values and check Private Google Access when deriving those values. Set to false when supplying project_id and network_name directly. Must be known at plan time."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
 variable "subnetwork_self_link" {
   description = "The self link of the subnetwork whose global network firewall rules will be modified."
   type        = string
