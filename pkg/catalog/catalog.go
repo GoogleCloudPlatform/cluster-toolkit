@@ -306,15 +306,15 @@ func isDeploymentFileName(name string) bool {
 	return name == "deployment.yaml" || strings.HasSuffix(name, "-deployment.yaml")
 }
 
-// isExampleSubfolder reports whether dir is a subfolder below examples/ or
-// community/examples/ rather than one of those roots themselves.
+// isExampleSubfolder reports whether dir is strictly below examples/ or
+// community/examples/ (not one of those roots, and not elsewhere in the repo).
 func isExampleSubfolder(repoRoot, dir string) bool {
 	rel, err := filepath.Rel(repoRoot, dir)
 	if err != nil {
 		return false
 	}
 	rel = filepath.ToSlash(rel)
-	return rel != "examples" && rel != "community/examples"
+	return strings.HasPrefix(rel, "examples/") || strings.HasPrefix(rel, "community/examples/")
 }
 
 // matchDeploymentFile selects the deployment file for a blueprint from the

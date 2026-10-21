@@ -131,6 +131,25 @@ func verifyDeploymentPairings(t *testing.T, byPath map[string]BlueprintEntry) {
 	}
 }
 
+func TestIsExampleSubfolder(t *testing.T) {
+	root := "/repo"
+	for dir, want := range map[string]bool{
+		"/repo/examples/gke-a4":                true,
+		"/repo/community/examples/alphaevolve": true,
+		"/repo/examples":                       false,
+		"/repo/community/examples":             false,
+		"/repo":                                false,
+		"/repo/tools/catalog-gen":              false,
+		"/repo/examples-archive/foo":           false,
+		"/repo/community/examples-old/foo":     false,
+		"/elsewhere/examples/foo":              false,
+	} {
+		if got := isExampleSubfolder(root, dir); got != want {
+			t.Errorf("isExampleSubfolder(%q, %q) = %v, want %v", root, dir, got, want)
+		}
+	}
+}
+
 func TestMatchDeploymentFile(t *testing.T) {
 	cases := []struct {
 		name         string
