@@ -3849,6 +3849,7 @@ blueprints:
   - id: compute_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, node_pool_service_account]
+    settings: [best_effort_provisioning, static_node_count]
   - id: job-template
     source: modules/compute/gke-job-template
     use: [compute_pool]

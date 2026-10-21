@@ -77,6 +77,10 @@ deployment_groups:
   - id: compute_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, node_pool_service_account]
+    settings:
+      static_node_count: 2
+      best_effort_provisioning:
+        min_provision_nodes: 1
 
   - id: job-template
     source: modules/compute/gke-job-template
