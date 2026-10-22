@@ -243,7 +243,7 @@ def test_reconcile_reapplies_failed_initial_down(state_files, monkeypatch):
     monkeypatch.setattr(
         capacity_circuit,
         "_structured_slurm_nodes",
-        lambda _: {
+        lambda *_: {
             "c-n-0": {
                 "name": "c-n-0",
                 "reason": None,
@@ -296,7 +296,7 @@ def test_reconcile_recovers_intent_persisted_before_initial_updates(
     monkeypatch.setattr(
         capacity_circuit,
         "_structured_slurm_nodes",
-        lambda _: {
+        lambda *_: {
             node: {
                 "name": node,
                 "reason": None,
@@ -351,7 +351,7 @@ def test_reconcile_retires_pending_intent_for_operator_owned_node(
     monkeypatch.setattr(
         capacity_circuit,
         "_structured_slurm_nodes",
-        lambda _: {
+        lambda *_: {
             "c-n-0": {
                 "name": "c-n-0",
                 "reason": "operator maintenance",
@@ -589,7 +589,7 @@ def test_close_ignores_targets_removed_by_nodeset_resize(monkeypatch):
         ["c-n-0", "c-n-99"], lkp
     ) == ("c-n-0",)
     run.assert_called_once_with(
-        f"{lkp.scontrol} show nodes --json",
+        f"{lkp.scontrol} show nodes c-n-[0,99] --json",
         check=False,
         timeout=capacity_circuit.SCONTROL_TIMEOUT_SECONDS,
     )
@@ -602,7 +602,7 @@ def test_close_retains_circuit_when_show_nodes_fails(monkeypatch):
 
     assert capacity_circuit._circuit_owned_resumable_nodes(["c-n-0"], lkp) is None
     run.assert_called_once_with(
-        f"{lkp.scontrol} show nodes --json",
+        f"{lkp.scontrol} show nodes c-n-0 --json",
         check=False,
         timeout=capacity_circuit.SCONTROL_TIMEOUT_SECONDS,
     )
@@ -643,17 +643,18 @@ def test_trip_waits_for_in_progress_close(state_files, monkeypatch):
             trip_thread = threading.Thread(target=concurrent_trip)
             trip_thread.start()
             assert trip_started.wait(timeout=1)
-            assert not trip_finished.wait(timeout=0.05)
+            assert trip_finished.wait(timeout=1)
         return True
 
     monkeypatch.setattr(capacity_circuit, "_update_nodes", update_nodes)
 
-    assert capacity_circuit._close_nodeset("n", lkp)
+    assert not capacity_circuit._close_nodeset("n", lkp)
     assert trip_thread is not None
     trip_thread.join(timeout=1)
     assert trip_finished.is_set()
     state = json.loads(capacity_circuit.STATE_FILE.read_text())
     assert "n" in state["nodesets"]
+    assert state["nodesets"]["n"]["generation"] == 2
 
 
 def test_stale_close_does_not_close_reopened_circuit(state_files, monkeypatch):
@@ -759,7 +760,7 @@ def test_reconcile_retires_resized_pending_nodes_before_probe_release(
     monkeypatch.setattr(
         capacity_circuit,
         "_structured_slurm_nodes",
-        lambda _: {
+        lambda *_: {
             "c-n-0": {
                 "name": "c-n-0",
                 "reason": trip.reason,
@@ -821,7 +822,7 @@ def test_reconcile_preserves_operator_drain_on_due_probe(state_files, monkeypatc
     capacity_circuit.reconcile(lkp)
 
     show_nodes.assert_called_once_with(
-        f"{lkp.scontrol} show nodes --json",
+        f"{lkp.scontrol} show nodes c-n-0 --json",
         check=False,
         timeout=capacity_circuit.SCONTROL_TIMEOUT_SECONDS,
     )
@@ -984,7 +985,7 @@ def test_reconcile_hard_reset_remains_bounded_when_pending_replay_fails(
     monkeypatch.setattr(
         capacity_circuit,
         "_structured_slurm_nodes",
-        lambda _: {
+        lambda *_: {
             "c-n-0": {
                 "name": "c-n-0",
                 "reason": None,

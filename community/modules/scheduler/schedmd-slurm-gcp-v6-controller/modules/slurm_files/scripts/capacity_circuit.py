@@ -171,14 +171,14 @@ def _write_state_unlocked(state: dict[str, Any]) -> None:
 def _locked_state(write: bool) -> Iterator[dict[str, Any]]:
     LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
     with LOCK_FILE.open("a+", encoding="utf-8") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX if write else fcntl.LOCK_SH)
+        fcntl.lockf(lock, fcntl.LOCK_EX if write else fcntl.LOCK_SH)
         state = _read_state_unlocked()
         try:
             yield state
             if write:
                 _write_state_unlocked(state)
         finally:
-            fcntl.flock(lock, fcntl.LOCK_UN)
+            fcntl.lockf(lock, fcntl.LOCK_UN)
 
 
 def _now() -> datetime:
@@ -230,7 +230,7 @@ def _resume_timeout_seconds(lkp: util.Lookup, nodeset_name: str) -> int:
         partition_nodesets.update(getattr(partition, "partition_nodeset_dyn", []) or [])
         if nodeset_name not in partition_nodesets:
             continue
-        partition_conf = getattr(partition, "partition_conf", {})
+        partition_conf = getattr(partition, "partition_conf", {}) or {}
         timeout: Any = global_timeout
         for key, value in partition_conf.items():
             if str(key).casefold() == "resumetimeout":
@@ -547,9 +547,11 @@ def owns_node(node: str, lkp: Optional[util.Lookup] = None) -> bool:
 
 def _structured_slurm_nodes(
     lkp: util.Lookup,
+    nodes: Optional[Sequence[str]] = None,
 ) -> Optional[dict[str, Mapping[str, Any]]]:
+    nodelist = f" {util.to_hostlist(nodes)}" if nodes else ""
     result = util.run(
-        f"{lkp.scontrol} show nodes --json",
+        f"{lkp.scontrol} show nodes{nodelist} --json",
         check=False,
         timeout=SCONTROL_TIMEOUT_SECONDS,
     )
@@ -581,7 +583,7 @@ def _circuit_owned_resumable_nodes(
 ) -> Optional[tuple[str, ...]]:
     if not nodes:
         return tuple()
-    node_data = _structured_slurm_nodes(lkp)
+    node_data = _structured_slurm_nodes(lkp, nodes)
     if node_data is None:
         return None
     target = set(nodes)
@@ -604,31 +606,43 @@ def _close_nodeset(
     expected_circuit_id: Optional[str] = None,
     expected_generation: Optional[int] = None,
 ) -> bool:
-    with _locked_state(write=True) as state:
+    with _locked_state(write=False) as state:
         record = state["nodesets"].get(nodeset_name)
         if not record:
             return False
+        circuit_id = record.get("circuit_id")
+        generation = int(record.get("generation", 0))
         if (
             expected_circuit_id is not None
-            and record.get("circuit_id") != expected_circuit_id
+            and circuit_id != expected_circuit_id
         ):
             return False
         if (
             expected_generation is not None
-            and int(record.get("generation", 0)) != expected_generation
+            and generation != expected_generation
         ):
             return False
         target = tuple(record.get("target_nodes", []))
-        reason = f"{REASON_PREFIX}{nodeset_name}:closed"
-        resumable = _circuit_owned_resumable_nodes(target, lkp)
-        if resumable is None:
-            log.error(
-                "Unable to inspect capacity circuit nodes for nodeset %s",
-                nodeset_name,
-            )
-            return False
-        if not _update_nodes(resumable, "resume", reason, lkp):
-            log.error("Unable to close capacity circuit for nodeset %s", nodeset_name)
+
+    reason = f"{REASON_PREFIX}{nodeset_name}:closed"
+    resumable = _circuit_owned_resumable_nodes(target, lkp)
+    if resumable is None:
+        log.error(
+            "Unable to inspect capacity circuit nodes for nodeset %s",
+            nodeset_name,
+        )
+        return False
+    if not _update_nodes(resumable, "resume", reason, lkp):
+        log.error("Unable to close capacity circuit for nodeset %s", nodeset_name)
+        return False
+
+    with _locked_state(write=True) as state:
+        record = state["nodesets"].get(nodeset_name)
+        if (
+            not record
+            or record.get("circuit_id") != circuit_id
+            or int(record.get("generation", 0)) != generation
+        ):
             return False
         state["nodesets"].pop(nodeset_name, None)
     log.info("Closed GCE capacity circuit for nodeset %s", nodeset_name)
@@ -771,7 +785,10 @@ def _reapply_pending_transitions(
 
         reason = record.get("reason", REASON_PREFIX)
         reason_prefix = f"{REASON_PREFIX}{nodeset_name}:"
-        node_data = _structured_slurm_nodes(lkp)
+        node_data = _structured_slurm_nodes(
+            lkp,
+            sorted(pending_down.union(pending_drain)),
+        )
         if node_data is None:
             return False
         restricted_states = {"DOWN", "DRAIN", "DRAINING"}
