@@ -18,6 +18,7 @@
 import glob
 import os
 import re
+import subprocess
 import sys
 import urllib.parse
 import yaml
@@ -33,6 +34,95 @@ REMOTE_SOURCE_PREFIXES = (
     "https://",
     "registry.terraform.io/",
 )
+
+
+def _get_non_ignored_repo_files() -> set[str] | None:
+    """Returns absolute paths of all tracked and non-gitignored files in REPO_ROOT, or None if git is unavailable."""
+    try:
+        res = subprocess.run(
+            ["git", "-C", REPO_ROOT, "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="surrogateescape",
+            check=True,
+        )
+        return {
+            os.path.normpath(os.path.join(REPO_ROOT, rel))
+            for rel in res.stdout.split("\0")
+            if rel
+        }
+    except Exception:
+        return None
+
+
+def _get_non_ignored_repo_dirs(non_ignored: set[str] | None) -> set[str] | None:
+    """Returns absolute paths of all directories containing non-ignored repo files."""
+    if non_ignored is None:
+        return None
+    dirs: set[str] = {REPO_ROOT}
+    for fpath in non_ignored:
+        cur = os.path.dirname(fpath)
+        while cur and cur not in dirs and cur.startswith(REPO_ROOT):
+            dirs.add(cur)
+            parent = os.path.dirname(cur)
+            if parent == cur:
+                break
+            cur = parent
+    return dirs
+
+
+def _is_checked_repo_file(abs_path: str, non_ignored: set[str] | None) -> bool:
+    """Returns True if `abs_path` is an existing file that is not excluded by .gitignore."""
+    norm = os.path.normpath(abs_path)
+    if not os.path.isfile(norm) or "node_modules" in norm:
+        return False
+    if non_ignored is not None and norm not in non_ignored:
+        return False
+    return True
+
+
+def _is_checked_repo_path(
+    abs_path: str,
+    non_ignored: set[str] | None,
+    non_ignored_dirs: set[str] | None = None,
+) -> bool:
+    """Returns True if `abs_path` is a non-ignored repo file or a directory containing non-ignored repo files."""
+    norm = os.path.normpath(abs_path)
+    if not os.path.exists(norm) or "node_modules" in norm:
+        return False
+    if os.path.isfile(norm):
+        return _is_checked_repo_file(norm, non_ignored)
+    if os.path.isdir(norm):
+        if non_ignored is None:
+            return True
+        if non_ignored_dirs is None:
+            non_ignored_dirs = _get_non_ignored_repo_dirs(non_ignored)
+        return non_ignored_dirs is None or norm in non_ignored_dirs
+    return False
+
+
+def _find_markdown_files_under(
+    rel_folders: tuple[str, ...], non_ignored: set[str] | None
+) -> list[str]:
+    """Returns sorted absolute paths of non-ignored .md files under `rel_folders` without walking gitignored trees."""
+    if non_ignored is not None:
+        prefixes = tuple(
+            os.path.normpath(os.path.join(REPO_ROOT, folder)) + os.sep for folder in rel_folders
+        )
+        return sorted(
+            p
+            for p in non_ignored
+            if p.endswith(".md") and p.startswith(prefixes) and _is_checked_repo_file(p, non_ignored)
+        )
+    matched: set[str] = set()
+    for folder in rel_folders:
+        matched.update(
+            glob.glob(
+                os.path.join(REPO_ROOT, os.path.normpath(folder), "**", "*.md"), recursive=True
+            )
+        )
+    return sorted(p for p in matched if _is_checked_repo_file(p, non_ignored))
 
 
 def _hcl_block_body(content: str, start: int) -> str:
@@ -108,7 +198,9 @@ def _strip_hcl_comments(content: str) -> str:
     return "".join(out)
 
 
-def get_tf_vars_and_outputs(mod_dir: str) -> tuple[set[str], set[str], set[str]]:
+def get_tf_vars_and_outputs(
+    mod_dir: str, non_ignored: set[str] | None = None
+) -> tuple[set[str], set[str], set[str]]:
     """Extracts active variables, deprecated variables, and outputs from a module directory.
 
     In Cluster Toolkit modules, deprecated tombstone variables are kept in variables.tf with a
@@ -123,6 +215,8 @@ def get_tf_vars_and_outputs(mod_dir: str) -> tuple[set[str], set[str], set[str]]
     ]
     for pattern in patterns:
         for tf_file in glob.glob(pattern):
+            if not _is_checked_repo_file(tf_file, non_ignored):
+                continue
             try:
                 with open(tf_file, encoding="utf-8") as f:
                     content = _strip_hcl_comments(f.read())
@@ -181,6 +275,7 @@ def validate_yaml_block(
     rel_path: str,
     tf_cache: dict[str, tuple[set[str], set[str], set[str]]],
     require_defined_refs: bool = False,
+    non_ignored: set[str] | None = None,
 ) -> list[str]:
     """Validates a YAML block containing Cluster Toolkit module definitions."""
     errors: list[str] = []
@@ -208,10 +303,15 @@ def validate_yaml_block(
             continue
         norm_src = raw_src.lstrip("./")
         abs_src = os.path.join(REPO_ROOT, norm_src)
-        has_hcl = os.path.isdir(abs_src) and bool(
-            glob.glob(os.path.join(abs_src, "*.tf"))
-            or glob.glob(os.path.join(abs_src, "*.pkr.hcl"))
-        )
+        hcl_files = [
+            f
+            for f in (
+                glob.glob(os.path.join(abs_src, "*.tf"))
+                + glob.glob(os.path.join(abs_src, "*.pkr.hcl"))
+            )
+            if _is_checked_repo_file(f, non_ignored)
+        ]
+        has_hcl = os.path.isdir(abs_src) and bool(hcl_files)
         if not has_hcl:
             errors.append(
                 f"{rel_path}: module '{mid}' references non-existent source '{raw_src}'"
@@ -220,7 +320,7 @@ def validate_yaml_block(
         mod_by_id[mid] = norm_src
 
         if norm_src not in tf_cache:
-            tf_cache[norm_src] = get_tf_vars_and_outputs(abs_src)
+            tf_cache[norm_src] = get_tf_vars_and_outputs(abs_src, non_ignored)
         inputs, deprecated_inputs, mod_outputs = tf_cache[norm_src]
 
         settings = mod.get("settings")
@@ -315,21 +415,32 @@ def validate_yaml_block(
     return errors
 
 
-def validate_module_readme_snippets() -> list[str]:
+def validate_module_readme_snippets(non_ignored: set[str] | None = None) -> list[str]:
     """Validates YAML snippets in module/blueprint READMEs, docs/**/*.md, and os_compatibility_tests."""
     errors: list[str] = []
-    readme_paths = [
-        p
-        for p in sorted(
-            glob.glob(os.path.join(REPO_ROOT, "modules", "*", "*", "README.md"))
-            + glob.glob(os.path.join(REPO_ROOT, "community", "modules", "*", "*", "README.md"))
-            + glob.glob(os.path.join(REPO_ROOT, "docs", "**", "*.md"), recursive=True)
-            + glob.glob(os.path.join(REPO_ROOT, "examples", "*", "**", "*.md"), recursive=True)
-            + glob.glob(os.path.join(REPO_ROOT, "community", "examples", "**", "*.md"), recursive=True)
-            + glob.glob(os.path.join(REPO_ROOT, "community", "front-end", "**", "*.md"), recursive=True)
-        )
-        if os.path.isfile(p) and "node_modules" not in p
-    ]
+    if non_ignored is None:
+        non_ignored = _get_non_ignored_repo_files()
+    examples_root_dir = os.path.join(REPO_ROOT, "examples")
+    readme_paths = sorted(
+        {
+            p
+            for p in (
+                glob.glob(os.path.join(REPO_ROOT, "modules", "*", "*", "README.md"))
+                + glob.glob(
+                    os.path.join(REPO_ROOT, "community", "modules", "*", "*", "README.md")
+                )
+            )
+            if _is_checked_repo_file(p, non_ignored)
+        }
+        | {
+            p
+            for p in _find_markdown_files_under(
+                ("docs", "examples", "community/examples", "community/front-end"),
+                non_ignored,
+            )
+            if os.path.dirname(p) != examples_root_dir
+        }
+    )
     tf_cache: dict[str, tuple[set[str], set[str], set[str]]] = {}
 
     for abs_path in readme_paths:
@@ -356,13 +467,21 @@ def validate_module_readme_snippets() -> list[str]:
                 continue
             if "source:" not in block or "id:" not in block:
                 continue
-            errors.extend(validate_yaml_block(block, rel_path, tf_cache, require_defined_refs=False))
+            errors.extend(
+                validate_yaml_block(
+                    block, rel_path, tf_cache, require_defined_refs=False, non_ignored=non_ignored
+                )
+            )
 
-    os_compat_blueprints = sorted(
-        glob.glob(
-            os.path.join(REPO_ROOT, "tools", "validate_configs", "os_compatibility_tests", "*.yaml")
+    os_compat_blueprints = [
+        p
+        for p in sorted(
+            glob.glob(
+                os.path.join(REPO_ROOT, "tools", "validate_configs", "os_compatibility_tests", "*.yaml")
+            )
         )
-    )
+        if _is_checked_repo_file(p, non_ignored)
+    ]
     for abs_path in os_compat_blueprints:
         rel_path = os.path.relpath(abs_path, REPO_ROOT)
         try:
@@ -371,7 +490,11 @@ def validate_module_readme_snippets() -> list[str]:
         except OSError as exc:
             errors.append(f"{rel_path}: failed to read file: {exc}")
             continue
-        errors.extend(validate_yaml_block(text, rel_path, tf_cache, require_defined_refs=True))
+        errors.extend(
+            validate_yaml_block(
+                text, rel_path, tf_cache, require_defined_refs=True, non_ignored=non_ignored
+            )
+        )
 
     return errors
 
@@ -423,18 +546,23 @@ def get_markdown_anchors(abs_md_path: str) -> set[str]:
     return anchors
 
 
-def validate_markdown_links_and_cli() -> list[str]:
+def validate_markdown_links_and_cli(non_ignored: set[str] | None = None) -> list[str]:
     """Validates relative links, heading anchors, Cloud Shell repo paths, and legacy ./ghpc usage."""
     errors: list[str] = []
+    if non_ignored is None:
+        non_ignored = _get_non_ignored_repo_files()
+    non_ignored_dirs = _get_non_ignored_repo_dirs(non_ignored)
     md_files = [
-        os.path.join(REPO_ROOT, root_doc)
-        for root_doc in ("README.md", "AGENTS.md", "CONTRIBUTING.md")
-    ]
-    for folder in ("docs", "examples", "modules", "community", "pkg", "cmd", "tools", "skills"):
-        md_files.extend(
-            sorted(glob.glob(os.path.join(REPO_ROOT, folder, "**", "*.md"), recursive=True))
+        p
+        for p in (
+            os.path.join(REPO_ROOT, root_doc)
+            for root_doc in ("README.md", "AGENTS.md", "CONTRIBUTING.md")
         )
-    md_files = [f for f in md_files if os.path.isfile(f) and "node_modules" not in f]
+        if _is_checked_repo_file(p, non_ignored)
+    ] + _find_markdown_files_under(
+        ("docs", "examples", "modules", "community", "pkg", "cmd", "tools", "skills"),
+        non_ignored,
+    )
     anchor_cache: dict[str, set[str]] = {}
 
     for abs_path in md_files:
@@ -479,7 +607,9 @@ def validate_markdown_links_and_cli() -> list[str]:
                         for param in ("cloudshell_open_in_editor", "cloudshell_tutorial"):
                             for rel_target in qs.get(param, []):
                                 abs_target = os.path.join(REPO_ROOT, rel_target.lstrip("/"))
-                                if not os.path.exists(abs_target):
+                                if not _is_checked_repo_path(
+                                    abs_target, non_ignored, non_ignored_dirs
+                                ):
                                     errors.append(
                                         f"{rel_path}: Cloud Shell link {param}='{rel_target}' "
                                         "points to non-existent file"
@@ -504,9 +634,10 @@ def validate_markdown_links_and_cli() -> list[str]:
             else:
                 abs_target = os.path.normpath(os.path.join(os.path.dirname(abs_path), file_part))
 
-            if (
-                os.path.commonpath([REPO_ROOT, os.path.abspath(abs_target)]) != REPO_ROOT
-                or not os.path.exists(abs_target)
+            if os.path.commonpath(
+                [REPO_ROOT, os.path.abspath(abs_target)]
+            ) != REPO_ROOT or not _is_checked_repo_path(
+                abs_target, non_ignored, non_ignored_dirs
             ):
                 errors.append(f"{rel_path}: broken relative file link '{target}'")
                 continue
@@ -526,8 +657,9 @@ def validate_markdown_links_and_cli() -> list[str]:
 
 
 def main() -> int:
-    snippet_errors = validate_module_readme_snippets()
-    link_errors = validate_markdown_links_and_cli()
+    non_ignored = _get_non_ignored_repo_files()
+    snippet_errors = validate_module_readme_snippets(non_ignored)
+    link_errors = validate_markdown_links_and_cli(non_ignored)
     all_errors = snippet_errors + link_errors
 
     if all_errors:

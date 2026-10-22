@@ -68,6 +68,42 @@ class TestValidateReadmeSnippets(unittest.TestCase):
         self.assertTrue(vrs.is_remote_source("github.com/GoogleCloudPlatform/pb"))
         self.assertFalse(vrs.is_remote_source("modules/network/vpc"))
 
+    def test_is_checked_repo_file_and_path_filter_ignored_targets(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracked_dir = os.path.join(tmpdir, "tracked_dir")
+            ignored_dir = os.path.join(tmpdir, "ignored_dir")
+            os.makedirs(tracked_dir)
+            os.makedirs(ignored_dir)
+            tracked = os.path.join(tracked_dir, "tracked.md")
+            ignored = os.path.join(ignored_dir, "ignored.md")
+            for p in (tracked, ignored):
+                with open(p, "w", encoding="utf-8") as f:
+                    f.write("# test\n")
+            non_ignored = {os.path.normpath(tracked)}
+            non_ignored_dirs = {os.path.normpath(tmpdir), os.path.normpath(tracked_dir)}
+            self.assertTrue(vrs._is_checked_repo_file(tracked, non_ignored))
+            self.assertFalse(vrs._is_checked_repo_file(ignored, non_ignored))
+            self.assertTrue(vrs._is_checked_repo_file(ignored, None))
+            self.assertTrue(vrs._is_checked_repo_path(tracked_dir, non_ignored, non_ignored_dirs))
+            self.assertFalse(vrs._is_checked_repo_path(ignored_dir, non_ignored, non_ignored_dirs))
+
+    def test_get_tf_vars_and_outputs_skips_ignored_tf_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracked_tf = os.path.join(tmpdir, "variables.tf")
+            ignored_tf = os.path.join(tmpdir, "ignored.tf")
+            with open(tracked_tf, "w", encoding="utf-8") as f:
+                f.write('variable "project_id" {\n  type = string\n}\n')
+            with open(ignored_tf, "w", encoding="utf-8") as f:
+                f.write('variable "local_scratch_var" {\n  type = string\n}\n')
+            inputs, _, _ = vrs.get_tf_vars_and_outputs(tmpdir, {os.path.normpath(tracked_tf)})
+            self.assertEqual(inputs, {"project_id"})
+
+    def test_find_markdown_files_under_filters_non_ignored_set(self):
+        readme = os.path.join(vrs.REPO_ROOT, "cmd", "README.md")
+        outside = os.path.join(vrs.REPO_ROOT, "README.md")
+        found = vrs._find_markdown_files_under(("cmd",), {readme, outside})
+        self.assertEqual(found, [readme])
+
 
 if __name__ == "__main__":
     unittest.main()
