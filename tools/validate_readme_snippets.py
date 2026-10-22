@@ -43,6 +43,8 @@ def _get_non_ignored_repo_files() -> set[str] | None:
             ["git", "-C", REPO_ROOT, "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="surrogateescape",
             check=True,
         )
         return {
@@ -50,8 +52,9 @@ def _get_non_ignored_repo_files() -> set[str] | None:
             for rel in res.stdout.split("\0")
             if rel
         }
-    except (OSError, subprocess.SubprocessError):
+    except Exception:
         return None
+
 
 
 def _is_checked_repo_file(abs_path: str, non_ignored: set[str] | None) -> bool:
