@@ -653,7 +653,7 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             )
             down_nodes_notify_jobs(
                 failed_nodes,
-                f"GCP Error: {exc._get_reason()}", # type: ignore
+                f"GCP Error: {exc._get_reason() if hasattr(exc, '_get_reason') else str(exc)}", # type: ignore
                 resume_data,
                 trip,
             )

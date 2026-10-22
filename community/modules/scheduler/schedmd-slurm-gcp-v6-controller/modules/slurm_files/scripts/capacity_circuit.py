@@ -239,7 +239,10 @@ def _resume_timeout_seconds(lkp: util.Lookup, nodeset_name: str) -> int:
         if isinstance(timeout, str) and timeout.strip().casefold() == "infinite":
             timeouts.append(SLURM_INFINITE_TIMEOUT_SECONDS)
         else:
-            timeouts.append(max(1, int(timeout)))
+            try:
+                timeouts.append(max(1, int(timeout)))
+            except (ValueError, TypeError):
+                timeouts.append(global_timeout)
     return max(timeouts)
 
 
