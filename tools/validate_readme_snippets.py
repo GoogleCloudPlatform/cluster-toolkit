@@ -102,6 +102,29 @@ def _is_checked_repo_path(
     return False
 
 
+def _find_markdown_files_under(
+    rel_folders: tuple[str, ...], non_ignored: set[str] | None
+) -> list[str]:
+    """Returns sorted absolute paths of non-ignored .md files under `rel_folders` without walking gitignored trees."""
+    if non_ignored is not None:
+        prefixes = tuple(
+            os.path.normpath(os.path.join(REPO_ROOT, folder)) + os.sep for folder in rel_folders
+        )
+        return sorted(
+            p
+            for p in non_ignored
+            if p.endswith(".md") and p.startswith(prefixes) and _is_checked_repo_file(p, non_ignored)
+        )
+    matched: set[str] = set()
+    for folder in rel_folders:
+        matched.update(
+            glob.glob(
+                os.path.join(REPO_ROOT, os.path.normpath(folder), "**", "*.md"), recursive=True
+            )
+        )
+    return sorted(p for p in matched if _is_checked_repo_file(p, non_ignored))
+
+
 def _hcl_block_body(content: str, start: int) -> str:
     """Returns the body of the HCL block whose opening brace ends at index `start`."""
     depth, i, n = 1, start, len(content)
@@ -397,18 +420,27 @@ def validate_module_readme_snippets(non_ignored: set[str] | None = None) -> list
     errors: list[str] = []
     if non_ignored is None:
         non_ignored = _get_non_ignored_repo_files()
-    readme_paths = [
-        p
-        for p in sorted(
-            glob.glob(os.path.join(REPO_ROOT, "modules", "*", "*", "README.md"))
-            + glob.glob(os.path.join(REPO_ROOT, "community", "modules", "*", "*", "README.md"))
-            + glob.glob(os.path.join(REPO_ROOT, "docs", "**", "*.md"), recursive=True)
-            + glob.glob(os.path.join(REPO_ROOT, "examples", "*", "**", "*.md"), recursive=True)
-            + glob.glob(os.path.join(REPO_ROOT, "community", "examples", "**", "*.md"), recursive=True)
-            + glob.glob(os.path.join(REPO_ROOT, "community", "front-end", "**", "*.md"), recursive=True)
-        )
-        if _is_checked_repo_file(p, non_ignored)
-    ]
+    examples_root_dir = os.path.join(REPO_ROOT, "examples")
+    readme_paths = sorted(
+        {
+            p
+            for p in (
+                glob.glob(os.path.join(REPO_ROOT, "modules", "*", "*", "README.md"))
+                + glob.glob(
+                    os.path.join(REPO_ROOT, "community", "modules", "*", "*", "README.md")
+                )
+            )
+            if _is_checked_repo_file(p, non_ignored)
+        }
+        | {
+            p
+            for p in _find_markdown_files_under(
+                ("docs", "examples", "community/examples", "community/front-end"),
+                non_ignored,
+            )
+            if os.path.dirname(p) != examples_root_dir
+        }
+    )
     tf_cache: dict[str, tuple[set[str], set[str], set[str]]] = {}
 
     for abs_path in readme_paths:
@@ -521,14 +553,16 @@ def validate_markdown_links_and_cli(non_ignored: set[str] | None = None) -> list
         non_ignored = _get_non_ignored_repo_files()
     non_ignored_dirs = _get_non_ignored_repo_dirs(non_ignored)
     md_files = [
-        os.path.join(REPO_ROOT, root_doc)
-        for root_doc in ("README.md", "AGENTS.md", "CONTRIBUTING.md")
-    ]
-    for folder in ("docs", "examples", "modules", "community", "pkg", "cmd", "tools", "skills"):
-        md_files.extend(
-            sorted(glob.glob(os.path.join(REPO_ROOT, folder, "**", "*.md"), recursive=True))
+        p
+        for p in (
+            os.path.join(REPO_ROOT, root_doc)
+            for root_doc in ("README.md", "AGENTS.md", "CONTRIBUTING.md")
         )
-    md_files = [f for f in md_files if _is_checked_repo_file(f, non_ignored)]
+        if _is_checked_repo_file(p, non_ignored)
+    ] + _find_markdown_files_under(
+        ("docs", "examples", "modules", "community", "pkg", "cmd", "tools", "skills"),
+        non_ignored,
+    )
     anchor_cache: dict[str, set[str]] = {}
 
     for abs_path in md_files:
