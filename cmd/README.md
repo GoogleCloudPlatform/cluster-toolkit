@@ -63,6 +63,7 @@ gcluster deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
 * `-w, --overwrite-deployment`: If specified, an existing deployment directory is overwritten by the new deployment.
 * `--parallelism <int>`: Limit the number of concurrent operations in Terraform (default: 10, or `GCLUSTER_TERRAFORM_PARALLELISM`).
 * `--skip <strings>`: Skip groups with the given names (comma-separated).
+* `--skip-gke-security-check`: Skip the GKE security hygiene notice before applying.
 * `--skip-validators <strings>`: Validators to skip (comma-separated).
 * `-l, --validation-level <string>`: Set validation level to one of (`"ERROR"`, `"WARNING"`, `"IGNORE"`) (default `"ERROR"`).
 * `--vars <strings>`: Comma-separated list of `name=value` variables to override YAML configuration. Can be used multiple times.
@@ -172,6 +173,13 @@ gcluster import-inputs DEPLOYMENT_GROUP_DIRECTORY [flags]
 ```bash
 gcluster cluster <list|describe|info|volume> [flags]
 ```
+
+### Subcommands - cluster
+
+* `gcluster cluster list [-p <project>]`: Lists GKE clusters in the project.
+* `gcluster cluster describe -c <cluster> -l <location>`: Prints the full `gcloud container clusters describe` output (YAML) for the cluster.
+* `gcluster cluster info -c <cluster> -l <location>`: Prints a per-node-pool summary (name, machine type, status).
+* `gcluster cluster volume -c <cluster> -l <location>`: Lists Toolkit-managed PVCs (label `ghpc_role=file-system`) across all namespaces, with their module or storage class.
 
 ## gcluster job
 

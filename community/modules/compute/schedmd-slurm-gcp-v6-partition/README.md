@@ -26,6 +26,7 @@ The following code snippet creates a partition module with:
   source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
   use:
   - network
+  - homefs
   settings:
     name: c30
     node_count_dynamic_max: 200
@@ -35,6 +36,7 @@ The following code snippet creates a partition module with:
   source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
   use:
   - network
+  - homefs
   settings:
     name: c60
     node_count_dynamic_max: 200
@@ -43,7 +45,6 @@ The following code snippet creates a partition module with:
 - id: compute_partition
   source: community/modules/compute/schedmd-slurm-gcp-v6-partition
   use:
-  - homefs
   - nodeset_1
   - nodeset_2
   settings:

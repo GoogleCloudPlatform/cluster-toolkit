@@ -6,12 +6,15 @@ This module allows you to run a series of gcloud commands as part of a Cluster T
 
 ```yaml
 - id: my_gcloud_steps
-  source: community/modules/gcloud
+  source: community/modules/scripts/gcloud
   settings:
     commands:
-      - gcloud compute networks create my-network --subnet-mode=custom
-      - gcloud compute networks subnets create my-subnet --network=my-network --range=10.0.0.0/24 --region=us-central1
-      - gcloud compute instances create my-vm --zone=us-central1-a --network=my-network --subnet=my-subnet --machine-type=n2d-standard-2
+      - create: gcloud compute networks create my-network --subnet-mode=custom
+        delete: gcloud compute networks delete my-network --quiet
+      - create: gcloud compute networks subnets create my-subnet --network=my-network --range=10.0.0.0/24 --region=us-central1
+        delete: gcloud compute networks subnets delete my-subnet --region=us-central1 --quiet
+```
+
 ## Dependency Management
 
 This module uses `local-exec` provisioners to run `gcloud` commands. As such, it does not expose any outputs that other Terraform modules can consume to establish dependencies.
@@ -32,11 +35,11 @@ deployment_groups:
   - group: vm_deployment
     modules:
       - id: my_vms
-        source: ./modules/compute/vm
+        source: modules/compute/vm-instance
         settings:
           # This module can assume the network and subnet from the gcloud_setup group exist
-          network: my-network
-          subnet: my-subnet
+          network_self_link: projects/$(vars.project_id)/global/networks/my-network
+          subnetwork_self_link: projects/$(vars.project_id)/regions/$(vars.region)/subnetworks/my-subnet
           # ... other vm settings
 ```
 
