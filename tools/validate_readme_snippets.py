@@ -18,6 +18,7 @@
 import glob
 import os
 import re
+import subprocess
 import sys
 import urllib.parse
 import yaml
@@ -33,6 +34,34 @@ REMOTE_SOURCE_PREFIXES = (
     "https://",
     "registry.terraform.io/",
 )
+
+
+def _get_non_ignored_repo_files() -> set[str] | None:
+    """Returns absolute paths of all tracked and non-gitignored files in REPO_ROOT, or None if git is unavailable."""
+    try:
+        res = subprocess.run(
+            ["git", "-C", REPO_ROOT, "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return {
+            os.path.normpath(os.path.join(REPO_ROOT, rel))
+            for rel in res.stdout.split("\0")
+            if rel
+        }
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _is_checked_repo_file(abs_path: str, non_ignored: set[str] | None) -> bool:
+    """Returns True if `abs_path` is an existing file that is not excluded by .gitignore."""
+    norm = os.path.normpath(abs_path)
+    if not os.path.isfile(norm) or "node_modules" in norm:
+        return False
+    if non_ignored is not None and norm not in non_ignored:
+        return False
+    return True
 
 
 def _hcl_block_body(content: str, start: int) -> str:
@@ -315,9 +344,11 @@ def validate_yaml_block(
     return errors
 
 
-def validate_module_readme_snippets() -> list[str]:
+def validate_module_readme_snippets(non_ignored: set[str] | None = None) -> list[str]:
     """Validates YAML snippets in module/blueprint READMEs, docs/**/*.md, and os_compatibility_tests."""
     errors: list[str] = []
+    if non_ignored is None:
+        non_ignored = _get_non_ignored_repo_files()
     readme_paths = [
         p
         for p in sorted(
@@ -328,7 +359,7 @@ def validate_module_readme_snippets() -> list[str]:
             + glob.glob(os.path.join(REPO_ROOT, "community", "examples", "**", "*.md"), recursive=True)
             + glob.glob(os.path.join(REPO_ROOT, "community", "front-end", "**", "*.md"), recursive=True)
         )
-        if os.path.isfile(p) and "node_modules" not in p
+        if _is_checked_repo_file(p, non_ignored)
     ]
     tf_cache: dict[str, tuple[set[str], set[str], set[str]]] = {}
 
@@ -358,11 +389,15 @@ def validate_module_readme_snippets() -> list[str]:
                 continue
             errors.extend(validate_yaml_block(block, rel_path, tf_cache, require_defined_refs=False))
 
-    os_compat_blueprints = sorted(
-        glob.glob(
-            os.path.join(REPO_ROOT, "tools", "validate_configs", "os_compatibility_tests", "*.yaml")
+    os_compat_blueprints = [
+        p
+        for p in sorted(
+            glob.glob(
+                os.path.join(REPO_ROOT, "tools", "validate_configs", "os_compatibility_tests", "*.yaml")
+            )
         )
-    )
+        if _is_checked_repo_file(p, non_ignored)
+    ]
     for abs_path in os_compat_blueprints:
         rel_path = os.path.relpath(abs_path, REPO_ROOT)
         try:
@@ -423,9 +458,11 @@ def get_markdown_anchors(abs_md_path: str) -> set[str]:
     return anchors
 
 
-def validate_markdown_links_and_cli() -> list[str]:
+def validate_markdown_links_and_cli(non_ignored: set[str] | None = None) -> list[str]:
     """Validates relative links, heading anchors, Cloud Shell repo paths, and legacy ./ghpc usage."""
     errors: list[str] = []
+    if non_ignored is None:
+        non_ignored = _get_non_ignored_repo_files()
     md_files = [
         os.path.join(REPO_ROOT, root_doc)
         for root_doc in ("README.md", "AGENTS.md", "CONTRIBUTING.md")
@@ -434,7 +471,7 @@ def validate_markdown_links_and_cli() -> list[str]:
         md_files.extend(
             sorted(glob.glob(os.path.join(REPO_ROOT, folder, "**", "*.md"), recursive=True))
         )
-    md_files = [f for f in md_files if os.path.isfile(f) and "node_modules" not in f]
+    md_files = [f for f in md_files if _is_checked_repo_file(f, non_ignored)]
     anchor_cache: dict[str, set[str]] = {}
 
     for abs_path in md_files:
@@ -526,8 +563,9 @@ def validate_markdown_links_and_cli() -> list[str]:
 
 
 def main() -> int:
-    snippet_errors = validate_module_readme_snippets()
-    link_errors = validate_markdown_links_and_cli()
+    non_ignored = _get_non_ignored_repo_files()
+    snippet_errors = validate_module_readme_snippets(non_ignored)
+    link_errors = validate_markdown_links_and_cli(non_ignored)
     all_errors = snippet_errors + link_errors
 
     if all_errors:
