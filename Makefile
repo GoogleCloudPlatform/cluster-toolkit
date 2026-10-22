@@ -22,8 +22,10 @@ ifneq (, $(shell which git))
 ## GIT IS PRESENT
 ifneq (,$(wildcard .git))
 ## GIT DIRECTORY EXISTS
-GIT_TAG_VERSION ?= $(or $(_LOUHI_TAG_NAME),$(shell git describe --tags --exact-match 2>/dev/null),$(shell git tag --points-at HEAD 2>/dev/null))
-GIT_BRANCH=$(shell $(SHELL) -c 'git branch --show-current || git rev-parse --abbrev-ref HEAD' 2>/dev/null)
+GIT_TAG_VERSION ?= $(or $(_LOUHI_TAG_NAME),$(shell git describe --tags --exact-match 2>/dev/null))
+GIT_BRANCH ?= $(shell $(SHELL) -c 'git branch --show-current || git rev-parse --abbrev-ref HEAD' 2>/dev/null)
+# Keep GIT_COMMIT_INFO pure `git describe` output: the release pipeline's verify step compares
+# "Commit info: <tag>-0-g<sha>" against the release tag as an independent check of the checkout.
 GIT_COMMIT_INFO ?= $(shell git describe --tags --dirty --long --always 2>/dev/null)
 GIT_COMMIT_HASH=$(shell git rev-parse HEAD)
 GIT_INITIAL_HASH=$(shell git rev-list --max-parents=0 HEAD)
