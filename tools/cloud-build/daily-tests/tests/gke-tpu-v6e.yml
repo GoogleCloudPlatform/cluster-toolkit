@@ -48,7 +48,7 @@ custom_vars:
   mtc_ramdisk_dir: /gke-mtc
   workload_image: "us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest"
   workload_command: >-
-    rm -f /tmp/mtc_verified && pip install -U jax jaxlib pathwaysutils && python -c 'import os, time, pathwaysutils; pathwaysutils.initialize(); import jax; dc = jax.device_count(); print("JAX Device count:", dc); assert dc == 4, f"Expected 4 devices, got {dc}"; a = jax.random.normal(jax.random.PRNGKey(0), (2, 2)); print("JAX TPU Result:", a, flush=True); [time.sleep(1) for _ in range(120) if not os.path.exists("/tmp/mtc_verified")]' && rm -f /tmp/mtc_verified
+    rm -f /tmp/mtc_verified && pip install -U jax jaxlib pathwaysutils && python -c 'import os, time, pathwaysutils; pathwaysutils.initialize(); import jax; dc = jax.device_count(); print("JAX Device count:", dc); assert dc == 4, f"Expected 4 devices, got {dc}"; a = jax.random.normal(jax.random.PRNGKey(0), (2, 2)); print("JAX TPU Result:", a, flush=True); [(time.sleep(1), print("waiting for mtc_verified", flush=True)) for _ in range(120) if not os.path.exists("/tmp/mtc_verified")]' && rm -f /tmp/mtc_verified
   expected_log_output: "JAX TPU Result:"
 instance_type: "tpuv6e"
 scheduler: "gke"
