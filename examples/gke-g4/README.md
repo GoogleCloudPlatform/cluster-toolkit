@@ -12,10 +12,17 @@ This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, al
 1. Install Cluster Toolkit
     1. Install [dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
     1. Set up [Cluster Toolkit](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment).
-1. Switch to the Cluster Toolkit directory
+1. From the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository, enable the required GCP APIs and build `./gcluster` (if not already built):
 
    ```sh
-   cd cluster-toolkit
+   gcloud services enable \
+     compute.googleapis.com \
+     container.googleapis.com \
+     iam.googleapis.com \
+     storage.googleapis.com \
+     --project=<PROJECT_ID>
+
+   test -x ./gcluster || make
    ```
 
 1. Get the IP address for your host machine
@@ -51,12 +58,6 @@ This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, al
 ### Consumption Options
 
 Option 1 (Specific Reservation) is uncommented by default in `gke-g4-deployment.yaml`. To use another consumption model, comment out Option 1 and uncomment the desired option.
-
-1. Build the Cluster Toolkit binary
-
-   ```sh
-   make
-   ```
 
 1. Provision the GKE cluster
 
@@ -168,9 +169,9 @@ As RDMA networking and the Google gIB plugin are not supported for G4 machines, 
 To destroy all resources associated with creating the GKE cluster, run the following command:
 
 ```sh
-./gcluster destroy CLUSTER-NAME
+./gcluster destroy DEPLOYMENT_NAME
 ```
 
-Replace `CLUSTER-NAME` with the name of your cluster. For the clusters created with Cluster Toolkit, the cluster name is based on the `deployment_name` used in vars in deployment file.
+Replace `DEPLOYMENT_NAME` with the `deployment_name` value specified in your deployment file (the deployment directory created by `gcluster`).
 
 **Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

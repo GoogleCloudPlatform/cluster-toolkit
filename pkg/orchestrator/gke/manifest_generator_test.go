@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -30,7 +31,10 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	k8syaml "sigs.k8s.io/yaml"
 )
 
@@ -452,12 +456,110 @@ func TestGenerateGKEManifest_GPU_Placement(t *testing.T) {
 		t.Fatalf("GenerateGKEManifest failed for GPU: %v", err)
 	}
 
-	if !strings.Contains(gpuManifest, "cloud.google.com/gke-placement-group: my-gpu-group") {
-		t.Errorf("Expected cloud.google.com/gke-placement-group for GPU, got:\n%s", gpuManifest)
+	if !strings.Contains(gpuManifest, "cloud.google.com/placement-policy-name: my-gpu-group") {
+		t.Errorf("Expected cloud.google.com/placement-policy-name for static GPU, got:\n%s", gpuManifest)
 	}
-	if strings.Contains(gpuManifest, "cloud.google.com/placement-policy-name") {
-		t.Errorf("Did not expect cloud.google.com/placement-policy-name for GPU, got:\n%s", gpuManifest)
+	if strings.Contains(gpuManifest, "cloud.google.com/gke-placement-group") {
+		t.Errorf("Did not expect cloud.google.com/gke-placement-group for static GPU, got:\n%s", gpuManifest)
 	}
+
+	// Under NAP the same policy is also used as the GKE placement group identifier.
+	orc.napEnabled = true
+	orc.napLimits = map[string]int64{"nvidia.com/gpu": 100}
+	napJob := gpuJob
+	napJob.GKENAPProvisioning = "auto"
+	napProfile, isDyn, isStat, err := orc.resolveHardwareRequirements(&napJob)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed for NAP GPU: %v", err)
+	}
+	napOpts, err := orc.PrepareManifestOptions(napJob, "test-image:latest", napProfile, isDyn, isStat)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed for NAP GPU: %v", err)
+	}
+	napManifest, err := orc.GenerateGKEManifest(napOpts, napProfile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed for NAP GPU: %v", err)
+	}
+	for _, want := range []string{"cloud.google.com/placement-policy-name: my-gpu-group", "cloud.google.com/gke-placement-group: my-gpu-group"} {
+		if !strings.Contains(napManifest, want) {
+			t.Errorf("Expected %q for NAP GPU, got:\n%s", want, napManifest)
+		}
+	}
+}
+
+func TestGenerateGKEManifest_A4X_WorkloadPolicy(t *testing.T) {
+	setupMockMachineConfig(t)
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: ""}},
+		"gcloud compute machine-types describe a4x-highgpu-4g --zone=us-central1-a --format=json":                               {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "nvidia-gb200"}]}`}},
+	}
+	render := func(t *testing.T, orc *GKEOrchestrator, job orchestrator.JobDefinition) string {
+		t.Helper()
+		profile, isDyn, isStat, err := orc.resolveHardwareRequirements(&job)
+		if err != nil {
+			t.Fatalf("resolveHardwareRequirements failed: %v", err)
+		}
+		opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDyn, isStat)
+		if err != nil {
+			t.Fatalf("PrepareManifestOptions failed: %v", err)
+		}
+		manifest, err := orc.GenerateGKEManifest(opts, profile)
+		if err != nil {
+			t.Fatalf("GenerateGKEManifest failed: %v", err)
+		}
+		return manifest
+	}
+	baseJob := orchestrator.JobDefinition{
+		WorkloadName:    "a4x-job",
+		CommandToRun:    "echo hello",
+		ComputeType:     "a4x-highgpu-4g",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "mock-project",
+	}
+
+	t.Run("static cluster inherits node pool policy without flag", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+		orc.projectID = "mock-project"
+		orc.clusterZones = []string{"us-central1-a"}
+		orc.clusterDesc.NodePools = []gkeJobNodePool{{
+			Name:            "a4x-pool",
+			Config:          gkeNodePoolConfig{MachineType: "a4x-highgpu-4g"},
+			PlacementPolicy: &gkePlacementPolicy{PolicyName: "a4x-workload-policy"},
+		}}
+		manifest := render(t, orc, baseJob)
+		if !strings.Contains(manifest, "cloud.google.com/placement-policy-name: a4x-workload-policy") {
+			t.Errorf("Expected node pool workload policy in manifest, got:\n%s", manifest)
+		}
+		if strings.Contains(manifest, "cloud.google.com/gke-placement-group") {
+			t.Errorf("A4X must not carry gke-placement-group, got:\n%s", manifest)
+		}
+	})
+
+	t.Run("NAP resolves canonical policy and never emits placement group", func(t *testing.T) {
+		responses := map[string][]shell.CommandResult{
+			"gcloud compute resource-policies describe gb200-4-1x72-placement-policy --region=us-central1 --project=mock-project --format=json": {
+				{ExitCode: 0, Stdout: `{"name":"gb200-4-1x72-placement-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"1x72"}}`},
+			},
+		}
+		for k, v := range mockResponses {
+			responses[k] = v
+		}
+		orc := newTestGKEOrchestrator(NewMockExecutor(responses))
+		orc.projectID = "mock-project"
+		orc.clusterZones = []string{"us-central1-a"}
+		orc.napEnabled = true
+		orc.napLimits = map[string]int64{"nvidia.com/gpu": 100}
+		napJob := baseJob
+		napJob.GKENAPProvisioning = "auto"
+		manifest := render(t, orc, napJob)
+		if !strings.Contains(manifest, "cloud.google.com/placement-policy-name: gb200-4-1x72-placement-policy") {
+			t.Errorf("Expected canonical workload policy in manifest, got:\n%s", manifest)
+		}
+		if strings.Contains(manifest, "cloud.google.com/gke-placement-group") {
+			t.Errorf("A4X must not carry gke-placement-group under NAP, got:\n%s", manifest)
+		}
+	})
 }
 
 func TestGenerateGKEManifest_DefaultDevShm(t *testing.T) {
@@ -646,13 +748,25 @@ func podContainers(spec *corev1.PodSpec) []*corev1.Container {
 	return containers
 }
 
-// renderPathwaysShmTestManifest renders a Pathways manifest with the given
-// head mode, colocated Python sidecar image and --mount values.
-func renderPathwaysShmTestManifest(t *testing.T, headless bool, sidecarImage string, mounts []string) string {
+// renderPathwaysTestManifest renders a Pathways manifest with the given head
+// mode, colocated Python sidecar image, MTC ramdisk directory (empty disables
+// MTC) and --mount values, failing the test on error.
+func renderPathwaysTestManifest(t *testing.T, headless bool, sidecarImage, ramdiskDir string, mounts []string) string {
+	t.Helper()
+	manifest, err := generatePathwaysTestManifest(t, "", headless, sidecarImage, ramdiskDir, mounts)
+	if err != nil {
+		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+	}
+	return manifest
+}
+
+// generatePathwaysTestManifest is renderPathwaysTestManifest with an optional
+// custom templates directory, returning the GeneratePathwaysManifest error.
+func generatePathwaysTestManifest(t *testing.T, customTemplatesPath string, headless bool, sidecarImage, ramdiskDir string, mounts []string) (string, error) {
 	t.Helper()
 	setupMockMachineConfig(t)
 	job := orchestrator.JobDefinition{
-		WorkloadName:    "pathways-shm-test",
+		WorkloadName:    "pathways-test",
 		NumSlices:       2,
 		ClusterLocation: "us-central1",
 		ComputeType:     "n2-standard-2",
@@ -667,6 +781,8 @@ func renderPathwaysShmTestManifest(t *testing.T, headless bool, sidecarImage str
 			GCSLocation:                 "gs://my-bucket",
 			HeadNodePool:                "pathways-np",
 		},
+		GKEMTCEnabled:          ramdiskDir != "",
+		GKEMTCRamdiskDirectory: ramdiskDir,
 	}
 	image := ""
 	if !headless {
@@ -683,15 +799,12 @@ func renderPathwaysShmTestManifest(t *testing.T, headless bool, sidecarImage str
 	orc.clusterDesc.NodePools = []gkeJobNodePool{
 		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
 	}
+	orc.gkeCustomTemplatesPath = customTemplatesPath
 	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
 	if err != nil {
 		t.Fatalf("resolveHardwareRequirements failed: %v", err)
 	}
-	manifest, err := orc.GeneratePathwaysManifest(job, image, profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
-	}
-	return manifest
+	return orc.GeneratePathwaysManifest(job, image, profile, isDynamicSlicing, isStaticSlicing)
 }
 
 // assertHeadDevShm checks that the head pod declares the in-memory dshm volume
@@ -772,7 +885,7 @@ func TestGeneratePathwaysManifest_HeadDevShm(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			manifest := renderPathwaysShmTestManifest(t, tc.headless, tc.sidecar, tc.mounts)
+			manifest := renderPathwaysTestManifest(t, tc.headless, tc.sidecar, "", tc.mounts)
 			specs := pathwaysPodSpecs(t, manifest)
 			head, ok := specs["pathways-head"]
 			if !ok {
@@ -868,8 +981,8 @@ func TestGeneratePathwaysManifest_RestartOnExitCodes(t *testing.T) {
 			if rj.Template.Spec.PodFailurePolicy != nil {
 				t.Errorf("expected worker to NOT have podFailurePolicy, but got %+v", rj.Template.Spec.PodFailurePolicy)
 			}
-			if rj.Template.Spec.Template.Spec.RestartPolicy != "OnFailure" {
-				t.Errorf("expected worker restartPolicy to be OnFailure, got %q", rj.Template.Spec.Template.Spec.RestartPolicy)
+			if rj.Template.Spec.Template.Spec.RestartPolicy != "Never" {
+				t.Errorf("expected worker restartPolicy to be Never, got %q", rj.Template.Spec.Template.Spec.RestartPolicy)
 			}
 		}
 	}
@@ -914,7 +1027,7 @@ func TestManifestGeneration_Matrix_Pathways_RestartOnExitCodes(t *testing.T) {
 			wantHeadPFP:        false,
 			wantHeadRestart:    "Never",
 			wantWorkerPFP:      false,
-			wantWorkerRestart:  "OnFailure",
+			wantWorkerRestart:  "Never",
 		},
 		{
 			name:               "pathways, with restart-on-exit-codes",
@@ -923,7 +1036,7 @@ func TestManifestGeneration_Matrix_Pathways_RestartOnExitCodes(t *testing.T) {
 			wantHeadPFP:        true,
 			wantHeadRestart:    "Never",
 			wantWorkerPFP:      false,
-			wantWorkerRestart:  "OnFailure",
+			wantWorkerRestart:  "Never",
 		},
 	}
 
@@ -1772,8 +1885,6 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		`memory: "32Gi"`,
 		"restartStrategy: BlockingRecreate",
 		"privileged: true",
-		"alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool",
-		`cpu: "24"`,
 		`cpu: "2"`,
 		`memory: "8Gi"`,
 		`kill -TERM -- \"-$child\"`,
@@ -1786,7 +1897,7 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		"jobset.sigs.k8s.io/hack: \"true\"",
 		"kueue.x-k8s.io/safe-to-forcefully-delete: \"true\"",
 		"cloud.google.com/skip-tpu-webhook-check: \"true\"",
-		"backoffLimitPerIndex: 4000",
+		"backoffLimitPerIndex: 0",
 		"podReplacementPolicy: Failed",
 		"maxFailedIndexes: 0",
 	}
@@ -1796,77 +1907,256 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 			t.Errorf("manifest missing expected substring %q", substr)
 		}
 	}
+
+	gotReplicatedAnnotations := jobSetReplicatedJobAnnotations(t, manifest)
+	if got := gotReplicatedAnnotations["pathways-head"]["alpha.jobset.sigs.k8s.io/exclusive-topology"]; got != "kubernetes.io/hostname" {
+		t.Errorf("pathways-head exclusive-topology = %q, want %q", got, "kubernetes.io/hostname")
+	}
+	if got := gotReplicatedAnnotations["worker"]["alpha.jobset.sigs.k8s.io/exclusive-topology"]; got != "kubernetes.io/hostname" {
+		t.Errorf("single-node worker exclusive-topology = %q, want %q", got, "kubernetes.io/hostname")
+	}
 }
 
-func TestGeneratePathwaysManifest_MTC(t *testing.T) {
-	setupMockMachineConfig(t)
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "pathways-mtc-test",
-		CommandToRun:    "echo hello",
-		NumSlices:       2,
-		ClusterLocation: "us-central1",
-		ComputeType:     "n2-standard-2",
-		Pathways: orchestrator.PathwaysJobDefinition{
-			ProxyServerImage:            "proxy:latest",
-			ServerImage:                 "server:latest",
-			WorkerImage:                 "worker:latest",
-			ColocatedPythonSidecarImage: "sidecar:latest",
-			GCSLocation:                 "gs://my-bucket",
-			HeadNodePool:                "pathways-np",
+func TestGeneratePathwaysManifest_HeadContainerResources(t *testing.T) {
+	type wantResources struct {
+		limits   corev1.ResourceList
+		requests corev1.ResourceList
+	}
+
+	tests := []struct {
+		name           string
+		headless       bool
+		wantContainers map[string]wantResources
+	}{
+		{
+			name:     "default with workload-container",
+			headless: false,
+			wantContainers: map[string]wantResources{
+				"pathways-proxy": {
+					limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("16"),
+						corev1.ResourceMemory: resource.MustParse("100Gi"),
+					},
+					requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("8"),
+						corev1.ResourceMemory: resource.MustParse("32Gi"),
+					},
+				},
+				"pathways-rm": {
+					limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("8"),
+						corev1.ResourceMemory: resource.MustParse("32Gi"),
+					},
+					requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("2"),
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
+					},
+				},
+				"workload-container": {
+					limits: nil,
+					requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("2"),
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
+					},
+				},
+			},
 		},
-		IsPathwaysJob:          true,
-		GKEMTCEnabled:          true,
-		GKEMTCRamdiskDirectory: "/tmp/mtc_checkpoints",
+		{
+			name:     "headless",
+			headless: true,
+			wantContainers: map[string]wantResources{
+				"pathways-proxy": {
+					limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("16"),
+						corev1.ResourceMemory: resource.MustParse("100Gi"),
+					},
+					requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("8"),
+						corev1.ResourceMemory: resource.MustParse("32Gi"),
+					},
+				},
+				"pathways-rm": {
+					limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("8"),
+						corev1.ResourceMemory: resource.MustParse("32Gi"),
+					},
+					requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("2"),
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
+					},
+				},
+			},
+		},
 	}
 
-	mockResponses := map[string][]shell.CommandResult{
-		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
-	}
-	mockExec := NewMockExecutor(mockResponses)
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.projectID = "mock-project"
-	orc.clusterZones = []string{"us-central1-a"}
-	orc.clusterDesc.NodePools = []gkeJobNodePool{
-		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
-	}
-	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
-	if err != nil {
-		t.Fatalf("resolveHardwareRequirements failed: %v", err)
-	}
-	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		t.Fatalf("generatePathwaysManifest failed: %v", err)
-	}
+	quantityOpt := cmp.Comparer(func(x, y resource.Quantity) bool {
+		return x.Cmp(y) == 0
+	})
 
-	expectedSubstrs := []string{
-		"name: pathways-mtc-test",
-		"colocated-python-sidecar",
-		"restartPolicy: Always",
-		"driver: multitier-checkpoint.csi.storage.gke.io",
-		"name: sidecar-shared-memory",
-		"medium: Memory",
-		"--cloud_pathways_sidecar_shm_directory=/tmp/sidecar",
-		"mountPath: /tmp/mtc_checkpoints",
-	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := renderPathwaysTestManifest(t, tc.headless, "", "", nil)
+			specs := pathwaysPodSpecs(t, manifest)
+			head, ok := specs["pathways-head"]
+			if !ok {
+				t.Fatalf("pathways-head replicatedJob not found in manifest:\n%s", manifest)
+			}
 
-	for _, substr := range expectedSubstrs {
-		if !strings.Contains(manifest, substr) {
-			t.Errorf("manifest missing expected substring %q", substr)
+			containers := podContainers(head)
+			if len(containers) != len(tc.wantContainers) {
+				t.Fatalf("pathways-head container count = %d, want %d", len(containers), len(tc.wantContainers))
+			}
+
+			for _, c := range containers {
+				want, ok := tc.wantContainers[c.Name]
+				if !ok {
+					t.Errorf("unexpected container %q in pathways-head", c.Name)
+					continue
+				}
+				if diff := cmp.Diff(want.limits, c.Resources.Limits, quantityOpt, cmpopts.EquateEmpty()); diff != "" {
+					t.Errorf("container %q limits mismatch (-want +got):\n%s", c.Name, diff)
+				}
+				if diff := cmp.Diff(want.requests, c.Resources.Requests, quantityOpt, cmpopts.EquateEmpty()); diff != "" {
+					t.Errorf("container %q requests mismatch (-want +got):\n%s", c.Name, diff)
+				}
+			}
+		})
+	}
+}
+
+// findContainer returns the init or regular container with the given name, or nil.
+func findContainer(spec *corev1.PodSpec, name string) *corev1.Container {
+	for _, c := range podContainers(spec) {
+		if c.Name == name {
+			return c
+		}
+	}
+	return nil
+}
+
+// volumeMountPaths maps each volume a container mounts to its mount path.
+func volumeMountPaths(c *corev1.Container) map[string]string {
+	paths := make(map[string]string, len(c.VolumeMounts))
+	for _, m := range c.VolumeMounts {
+		paths[m.Name] = m.MountPath
+	}
+	return paths
+}
+
+// assertNoPodVolumes checks that a pod neither declares nor mounts the named volumes.
+func assertNoPodVolumes(t *testing.T, podName string, spec *corev1.PodSpec, names ...string) {
+	t.Helper()
+	if spec == nil {
+		t.Fatalf("%s replicatedJob not found in manifest", podName)
+	}
+	for _, name := range names {
+		if v := findPodVolume(spec, name); v != nil {
+			t.Errorf("%s pod declares volume %q (%+v), want none", podName, name, v)
+		}
+		for _, c := range podContainers(spec) {
+			if _, ok := volumeMountPaths(c)[name]; ok {
+				t.Errorf("%s container %q mounts volume %q, want none", podName, c.Name, name)
+			}
+		}
+	}
+}
+
+// expectedWorkerMounts returns the mounts the built-in Pathways worker volumes add to a container.
+func expectedWorkerMounts(ramdiskDir string, sidecarShm bool) map[string]string {
+	want := map[string]string{"shared-tmp": "/tmp"}
+	if ramdiskDir != "" {
+		want["cache"] = ramdiskDir
+	}
+	if sidecarShm {
+		want["sidecar-shared-memory"] = "/tmp/sidecar"
+	}
+	return want
+}
+
+// assertWorkerCacheVolume checks that the worker declares the MTC CSI cache volume only when ramdiskDir is set.
+func assertWorkerCacheVolume(t *testing.T, worker *corev1.PodSpec, ramdiskDir string) {
+	t.Helper()
+	v := findPodVolume(worker, "cache")
+	if ramdiskDir == "" {
+		if v != nil {
+			t.Errorf("worker declares volume cache (%+v) without MTC", v)
+		}
+		return
+	}
+	if v == nil || v.CSI == nil || v.CSI.Driver != multitierCheckpointCSIDriver {
+		t.Errorf("worker volume cache = %+v, want a CSI volume with driver %s", v, multitierCheckpointCSIDriver)
+	}
+}
+
+// assertWorkerMTCVolumes checks the worker's MTC cache and colocated-sidecar volumes, their mounts and the sidecar shm flag.
+func assertWorkerMTCVolumes(t *testing.T, worker *corev1.PodSpec, ramdiskDir string, wantSidecar bool) {
+	t.Helper()
+	if worker == nil {
+		t.Fatalf("worker replicatedJob not found in manifest")
+	}
+	assertWorkerCacheVolume(t, worker, ramdiskDir)
+	if got := isMemoryEmptyDir(findPodVolume(worker, "sidecar-shared-memory")); got != wantSidecar {
+		t.Errorf("worker declares in-memory sidecar-shared-memory volume = %v, want %v", got, wantSidecar)
+	}
+	sidecar := findContainer(worker, "colocated-python-sidecar")
+	if got := sidecar != nil; got != wantSidecar {
+		t.Errorf("worker has colocated-python-sidecar container = %v, want %v", got, wantSidecar)
+	}
+	if sidecar != nil {
+		if diff := cmp.Diff(expectedWorkerMounts(ramdiskDir, true), volumeMountPaths(sidecar)); diff != "" {
+			t.Errorf("colocated-python-sidecar volume mounts mismatch (-want +got):\n%s", diff)
 		}
 	}
 
-	parts := strings.Split(manifest, "name: worker")
-	if len(parts) < 2 {
-		t.Fatalf("failed to split manifest into head and worker parts")
+	pw := findContainer(worker, "pathways-worker")
+	if pw == nil {
+		t.Fatalf("worker pod has no pathways-worker container")
 	}
-	headPart := parts[0]
-	workerPart := parts[1]
+	if diff := cmp.Diff(expectedWorkerMounts(ramdiskDir, wantSidecar), volumeMountPaths(pw)); diff != "" {
+		t.Errorf("pathways-worker volume mounts mismatch (-want +got):\n%s", diff)
+	}
+	const shmFlag = "--cloud_pathways_sidecar_shm_directory=/tmp/sidecar"
+	if got := slices.Contains(pw.Args, shmFlag); got != wantSidecar {
+		t.Errorf("pathways-worker args contain %s = %v, want %v", shmFlag, got, wantSidecar)
+	}
+}
 
-	if strings.Contains(headPart, "colocated-python-sidecar") {
-		t.Errorf("headPart should not contain colocated-python-sidecar container")
+// TestGeneratePathwaysManifest_MTC verifies that MTC volumes are only declared and mounted on Pathways worker pods.
+func TestGeneratePathwaysManifest_MTC(t *testing.T) {
+	tests := []struct {
+		name       string
+		headless   bool
+		sidecar    string
+		ramdiskDir string // empty disables MTC
+	}{
+		{name: "with colocated python sidecar", sidecar: "sidecar:latest", ramdiskDir: "/tmp/mtc_checkpoints"},
+		{name: "without colocated python sidecar", ramdiskDir: "/tmp/mtc_checkpoints"},
+		{name: "headless", headless: true, ramdiskDir: "/tmp/mtc_checkpoints"},
+		{name: "ramdisk path with YAML comment character", sidecar: "sidecar:latest", ramdiskDir: "/tmp/mtc #1"},
+		{name: "MTC disabled with colocated python sidecar", sidecar: "sidecar:latest"},
+		{name: "MTC disabled without colocated python sidecar"},
 	}
-	if !strings.Contains(workerPart, "colocated-python-sidecar") {
-		t.Errorf("workerPart should contain colocated-python-sidecar container")
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			specs := pathwaysPodSpecs(t, renderPathwaysTestManifest(t, tc.headless, tc.sidecar, tc.ramdiskDir, nil))
+			assertNoPodVolumes(t, "pathways-head", specs["pathways-head"], "cache", "sidecar-shared-memory")
+			assertWorkerMTCVolumes(t, specs["worker"], tc.ramdiskDir, tc.sidecar != "")
+			assertUniqueVolumeNames(t, "worker", specs["worker"])
+		})
+	}
+}
+
+func TestGeneratePathwaysManifest_MTCRejectsStaleCustomTemplate(t *testing.T) {
+	dir := t.TempDir()
+	// A custom pathways_jobset.tmpl from an older gcluster version has no MTC volume.
+	stale := "apiVersion: jobset.x-k8s.io/v1alpha2\nkind: JobSet\nmetadata:\n  name: stale\n"
+	if err := os.WriteFile(filepath.Join(dir, "pathways_jobset.tmpl"), []byte(stale), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := generatePathwaysTestManifest(t, dir, false, "", "/tmp/mtc_checkpoints", nil)
+	if err == nil || !strings.Contains(err.Error(), "re-extract pathways_jobset.tmpl") {
+		t.Fatalf("GeneratePathwaysManifest() error = %v, want a hint to re-extract pathways_jobset.tmpl", err)
 	}
 }
 
@@ -1937,6 +2227,12 @@ func TestGeneratePathwaysManifest_DynamicSlicing(t *testing.T) {
 		if !strings.Contains(manifest, substr) {
 			t.Errorf("manifest missing expected substring %q\nManifest: %s", substr, manifest)
 		}
+	}
+
+	// 3. Worker replicatedJob must NOT set exclusive-topology when dynamic slicing is active
+	gotReplicatedAnnotations := jobSetReplicatedJobAnnotations(t, manifest)
+	if got, exists := gotReplicatedAnnotations["worker"]["alpha.jobset.sigs.k8s.io/exclusive-topology"]; exists {
+		t.Errorf("dynamic-slicing worker exclusive-topology = %q, want omitted", got)
 	}
 }
 
@@ -2137,5 +2433,433 @@ func TestGeneratePathwaysManifest_DefaultImages(t *testing.T) {
 	}
 	if !strings.Contains(manifest, defaultPathwaysServerImage) {
 		t.Errorf("manifest missing default server image %q", defaultPathwaysServerImage)
+	}
+}
+
+func TestGeneratePathwaysManifest_MaxSliceRestarts(t *testing.T) {
+	tests := []struct {
+		name                     string
+		maxSliceRestarts         int
+		wantBackoffLimit         string
+		wantBackoffLimitPerIndex string
+		wantRestartPolicy        string
+	}{
+		{
+			name:                     "flag set to 5 on 2 x v6e-32",
+			maxSliceRestarts:         5,
+			wantBackoffLimit:         "backoffLimit: 40",
+			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 5",
+			wantRestartPolicy:        "restartPolicy: OnFailure",
+		},
+		{
+			name:                     "non-elastic default 0 on 2 x v6e-32",
+			maxSliceRestarts:         0,
+			wantBackoffLimit:         "backoffLimit: 0",
+			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 0",
+			wantRestartPolicy:        "restartPolicy: Never",
+		},
+		{
+			name:                     "elastic default 4000 on 2 x v6e-32",
+			maxSliceRestarts:         4000,
+			wantBackoffLimit:         "backoffLimit: 32000",
+			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 4000",
+			wantRestartPolicy:        "restartPolicy: OnFailure",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupMockMachineConfig(t)
+			job := orchestrator.JobDefinition{
+				WorkloadName:    "pathways-restarts-test",
+				CommandToRun:    "python3 train.py",
+				NumSlices:       2,
+				ClusterLocation: "us-central1-a",
+				ComputeType:     "v6e-32",
+				IsPathwaysJob:   true,
+				Pathways: orchestrator.PathwaysJobDefinition{
+					ProxyServerImage: "proxy:latest",
+					ServerImage:      "server:latest",
+					WorkerImage:      "worker:latest",
+					GCSLocation:      "gs://my-bucket",
+					HeadNodePool:     "pathways-np",
+					MaxSliceRestarts: tc.maxSliceRestarts,
+				},
+			}
+
+			mockResponses := map[string][]shell.CommandResult{
+				"kubectl get resourceflavors":                   {{ExitCode: 0, Stdout: ""}},
+				"kubectl get nodes":                             {{ExitCode: 0, Stdout: "4x8\n"}},
+				"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[]}`}},
+				"gcloud compute machine-types describe ct6e-standard-4t --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
+				},
+			}
+			orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+			orc.projectID = "mock-project"
+			orc.clusterZones = []string{"us-central1-a"}
+			orc.clusterDesc.NodePools = []gkeJobNodePool{
+				{
+					Name:            "v6e-pool",
+					Config:          gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+					PlacementPolicy: &gkePlacementPolicy{TpuTopology: "4x8"},
+				},
+			}
+
+			profile, isDynamic, isStatic, err := orc.resolveHardwareRequirements(&job)
+			if err != nil {
+				t.Fatalf("resolveHardwareRequirements failed: %v", err)
+			}
+			if job.NodesPerSlice != 8 {
+				t.Fatalf("expected NodesPerSlice = 8 for v6e-32, got %d", job.NodesPerSlice)
+			}
+
+			manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamic, isStatic)
+			if err != nil {
+				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+			}
+
+			parts := strings.Split(manifest, "name: worker")
+			if len(parts) < 2 {
+				t.Fatalf("worker replicatedJob not found in manifest:\n%s", manifest)
+			}
+			workerManifest := parts[1]
+			if !strings.Contains(workerManifest, tc.wantBackoffLimit) {
+				t.Errorf("worker spec missing %q\nGot:\n%s", tc.wantBackoffLimit, workerManifest)
+			}
+			if !strings.Contains(workerManifest, tc.wantBackoffLimitPerIndex) {
+				t.Errorf("worker spec missing %q\nGot:\n%s", tc.wantBackoffLimitPerIndex, workerManifest)
+			}
+			if !strings.Contains(workerManifest, tc.wantRestartPolicy) {
+				t.Errorf("worker spec missing %q\nGot:\n%s", tc.wantRestartPolicy, workerManifest)
+			}
+		})
+	}
+}
+
+func jobSetTopLevelAnnotations(t *testing.T, manifest string) map[string]string {
+	t.Helper()
+	docs, err := splitYAMLDocuments(manifest)
+	if err != nil {
+		t.Fatalf("failed to split manifest into YAML documents: %v", err)
+	}
+	for _, doc := range docs {
+		var js struct {
+			Kind     string `json:"kind"`
+			Metadata struct {
+				Annotations map[string]string `json:"annotations"`
+			} `json:"metadata"`
+		}
+		if err := k8syaml.Unmarshal([]byte(doc), &js); err != nil {
+			t.Fatalf("failed to unmarshal manifest document: %v\n%s", err, doc)
+		}
+		if js.Kind == "JobSet" {
+			return js.Metadata.Annotations
+		}
+	}
+	t.Fatalf("no JobSet document found in manifest:\n%s", manifest)
+	return nil
+}
+
+func jobSetReplicatedJobAnnotations(t *testing.T, manifest string) map[string]map[string]string {
+	t.Helper()
+	docs, err := splitYAMLDocuments(manifest)
+	if err != nil {
+		t.Fatalf("failed to split manifest into YAML documents: %v", err)
+	}
+	for _, doc := range docs {
+		var js struct {
+			Kind string `json:"kind"`
+			Spec struct {
+				ReplicatedJobs []struct {
+					Name     string `json:"name"`
+					Template struct {
+						Metadata struct {
+							Annotations map[string]string `json:"annotations"`
+						} `json:"metadata"`
+					} `json:"template"`
+				} `json:"replicatedJobs"`
+			} `json:"spec"`
+		}
+		if err := k8syaml.Unmarshal([]byte(doc), &js); err != nil {
+			t.Fatalf("failed to unmarshal manifest document: %v\n%s", err, doc)
+		}
+		if js.Kind != "JobSet" {
+			continue
+		}
+		out := make(map[string]map[string]string, len(js.Spec.ReplicatedJobs))
+		for _, rj := range js.Spec.ReplicatedJobs {
+			out[rj.Name] = rj.Template.Metadata.Annotations
+		}
+		return out
+	}
+	t.Fatalf("no JobSet document found in manifest:\n%s", manifest)
+	return nil
+}
+
+func TestGenerateGKEManifest_ExclusiveTopology(t *testing.T) {
+	setupMockMachineConfig(t)
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+
+	profile := JobProfile{
+		IsCPUMachine:  true,
+		CapacityCount: 4,
+	}
+
+	tests := []struct {
+		name             string
+		nodesPerSlice    int
+		isDynamicSlicing bool
+		isStaticSlicing  bool
+		wantTopology     string
+		wantExists       bool
+	}{
+		{
+			name:          "single node slice (NodesPerSlice=1) uses hostname",
+			nodesPerSlice: 1,
+			wantTopology:  "kubernetes.io/hostname",
+			wantExists:    true,
+		},
+		{
+			name:          "unset nodesPerSlice (NodesPerSlice=0) uses hostname",
+			nodesPerSlice: 0,
+			wantTopology:  "kubernetes.io/hostname",
+			wantExists:    true,
+		},
+		{
+			name:          "multi-node slice (NodesPerSlice=2) uses gke-nodepool",
+			nodesPerSlice: 2,
+			wantTopology:  "cloud.google.com/gke-nodepool",
+			wantExists:    true,
+		},
+		{
+			name:             "dynamic slicing omits exclusive-topology",
+			nodesPerSlice:    16,
+			isDynamicSlicing: true,
+			wantExists:       false,
+		},
+		{
+			name:            "static slicing omits exclusive-topology",
+			nodesPerSlice:   1,
+			isStaticSlicing: true,
+			wantExists:      false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := ManifestOptions{
+				WorkloadName:     "test-exclusive-topo",
+				FullImageName:    "test-image:latest",
+				CommandToRun:     "echo hello",
+				ComputeType:      "n2-standard-4",
+				MachineType:      "n2-standard-4",
+				ClusterLocation:  "us-central1-a",
+				NumSlices:        1,
+				NodesPerSlice:    tc.nodesPerSlice,
+				IsDynamicSlicing: tc.isDynamicSlicing,
+				IsStaticSlicing:  tc.isStaticSlicing,
+			}
+
+			manifest, err := orc.GenerateGKEManifest(opts, profile)
+			if err != nil {
+				t.Fatalf("GenerateGKEManifest failed: %v", err)
+			}
+
+			annotations := jobSetTopLevelAnnotations(t, manifest)
+			got, exists := annotations["alpha.jobset.sigs.k8s.io/exclusive-topology"]
+			if exists != tc.wantExists {
+				t.Fatalf("exclusive-topology exists = %v (val=%q), want %v\nManifest:\n%s", exists, got, tc.wantExists, manifest)
+			}
+			if tc.wantExists && got != tc.wantTopology {
+				t.Errorf("exclusive-topology = %q, want %q\nManifest:\n%s", got, tc.wantTopology, manifest)
+			}
+		})
+	}
+
+	tpuTests := []struct {
+		name         string
+		topology     string
+		wantNodes    int
+		wantTopology string
+	}{
+		{
+			name:         "end-to-end tpu7x-standard-4t 2x2x1 derives NodesPerSlice=1 and uses hostname",
+			topology:     "2x2x1",
+			wantNodes:    1,
+			wantTopology: "kubernetes.io/hostname",
+		},
+		{
+			name:         "end-to-end tpu7x-standard-4t 2x2x2 derives NodesPerSlice=2 and uses gke-nodepool",
+			topology:     "2x2x2",
+			wantNodes:    2,
+			wantTopology: "cloud.google.com/gke-nodepool",
+		},
+	}
+
+	for _, tc := range tpuTests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockResponses := map[string][]shell.CommandResult{
+				"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+				"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
+				"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v7x-slice"}]}`},
+				},
+				"gcloud compute resource-policies describe tpu7x-16-2x2x2-placement-policy --region=us-central1 --project=mock-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"tpu7x-16-2x2x2-placement-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"2x2x2"}}`},
+				},
+			}
+			mockExec := NewMockExecutor(mockResponses)
+			tpuOrc := newTestGKEOrchestrator(mockExec)
+			tpuOrc.projectID = "mock-project"
+			tpuOrc.clusterZones = []string{"us-central1-a"}
+			tpuOrc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
+			tpuOrc.clusterDesc.NodePools = []gkeJobNodePool{
+				{Name: "v7x-pool", Config: gkeNodePoolConfig{MachineType: "tpu7x-standard-4t"}},
+			}
+
+			job := orchestrator.JobDefinition{
+				WorkloadName:    "tpu7x-exclusive-topo",
+				CommandToRun:    "echo hello",
+				ComputeType:     "tpu7x-standard-4t",
+				Topology:        tc.topology,
+				NumSlices:       1,
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "mock-project",
+			}
+
+			tpuProfile, isDyn, isStat, err := tpuOrc.resolveHardwareRequirements(&job)
+			if err != nil {
+				t.Fatalf("resolveHardwareRequirements failed: %v", err)
+			}
+			if job.NodesPerSlice != tc.wantNodes {
+				t.Fatalf("resolveHardwareRequirements derived NodesPerSlice = %d, want %d", job.NodesPerSlice, tc.wantNodes)
+			}
+
+			opts, err := tpuOrc.PrepareManifestOptions(job, "test-image:latest", tpuProfile, isDyn, isStat)
+			if err != nil {
+				t.Fatalf("PrepareManifestOptions failed: %v", err)
+			}
+
+			manifest, err := tpuOrc.GenerateGKEManifest(opts, tpuProfile)
+			if err != nil {
+				t.Fatalf("GenerateGKEManifest failed: %v", err)
+			}
+
+			annotations := jobSetTopLevelAnnotations(t, manifest)
+			if got := annotations["alpha.jobset.sigs.k8s.io/exclusive-topology"]; got != tc.wantTopology {
+				t.Errorf("exclusive-topology = %q, want %q\nManifest:\n%s", got, tc.wantTopology, manifest)
+			}
+		})
+	}
+}
+
+func TestGeneratePathwaysManifest_ExclusiveTopology(t *testing.T) {
+	tests := []struct {
+		name             string
+		topology         string
+		wantNodes        int
+		isDynamicSlicing bool
+		isStaticSlicing  bool
+		wantWorkerTopo   string
+		wantWorkerExists bool
+	}{
+		{
+			name:             "single-host TPU slice (2x2x1, NodesPerSlice=1) uses hostname",
+			topology:         "2x2x1",
+			wantNodes:        1,
+			wantWorkerTopo:   "kubernetes.io/hostname",
+			wantWorkerExists: true,
+		},
+		{
+			name:             "multi-host TPU slice (2x2x2, NodesPerSlice=2) uses gke-nodepool",
+			topology:         "2x2x2",
+			wantNodes:        2,
+			wantWorkerTopo:   "cloud.google.com/gke-nodepool",
+			wantWorkerExists: true,
+		},
+		{
+			name:             "dynamic slicing omits worker exclusive-topology",
+			topology:         "2x2x2",
+			wantNodes:        2,
+			isDynamicSlicing: true,
+			wantWorkerExists: false,
+		},
+		{
+			name:             "static slicing omits worker exclusive-topology",
+			topology:         "2x2x1",
+			wantNodes:        1,
+			isStaticSlicing:  true,
+			wantWorkerExists: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupMockMachineConfig(t)
+			mockResponses := map[string][]shell.CommandResult{
+				"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+				"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
+				"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v7x-slice"}]}`},
+				},
+				"gcloud compute resource-policies describe tpu7x-16-2x2x2-placement-policy --region=us-central1 --project=mock-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"tpu7x-16-2x2x2-placement-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"2x2x2"}}`},
+				},
+			}
+			mockExec := NewMockExecutor(mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.projectID = "mock-project"
+			orc.clusterZones = []string{"us-central1-a"}
+			orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
+			orc.clusterDesc.NodePools = []gkeJobNodePool{
+				{Name: "v7x-pool", Config: gkeNodePoolConfig{MachineType: "tpu7x-standard-4t"}},
+			}
+
+			job := orchestrator.JobDefinition{
+				WorkloadName:    "pathways-topo-test",
+				CommandToRun:    "python3 train.py",
+				NumSlices:       2,
+				ClusterLocation: "us-central1-a",
+				ComputeType:     "tpu7x-standard-4t",
+				Topology:        tc.topology,
+				IsPathwaysJob:   true,
+				Pathways: orchestrator.PathwaysJobDefinition{
+					ProxyServerImage: "proxy:latest",
+					ServerImage:      "server:latest",
+					WorkerImage:      "worker:latest",
+					GCSLocation:      "gs://my-bucket",
+					HeadNodePool:     "pathways-np",
+				},
+			}
+
+			profile, _, _, err := orc.resolveHardwareRequirements(&job)
+			if err != nil {
+				t.Fatalf("resolveHardwareRequirements failed: %v", err)
+			}
+			if job.NodesPerSlice != tc.wantNodes {
+				t.Fatalf("resolveHardwareRequirements derived NodesPerSlice = %d, want %d", job.NodesPerSlice, tc.wantNodes)
+			}
+
+			manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, tc.isDynamicSlicing, tc.isStaticSlicing)
+			if err != nil {
+				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+			}
+
+			replicatedAnnotations := jobSetReplicatedJobAnnotations(t, manifest)
+			if gotHead := replicatedAnnotations["pathways-head"]["alpha.jobset.sigs.k8s.io/exclusive-topology"]; gotHead != "kubernetes.io/hostname" {
+				t.Errorf("pathways-head exclusive-topology = %q, want %q", gotHead, "kubernetes.io/hostname")
+			}
+
+			gotWorker, exists := replicatedAnnotations["worker"]["alpha.jobset.sigs.k8s.io/exclusive-topology"]
+			if exists != tc.wantWorkerExists {
+				t.Fatalf("worker exclusive-topology exists = %v (val=%q), want %v\nManifest:\n%s", exists, gotWorker, tc.wantWorkerExists, manifest)
+			}
+			if tc.wantWorkerExists && gotWorker != tc.wantWorkerTopo {
+				t.Errorf("worker exclusive-topology = %q, want %q\nManifest:\n%s", gotWorker, tc.wantWorkerTopo, manifest)
+			}
+		})
 	}
 }

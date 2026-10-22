@@ -370,8 +370,11 @@ resource "google_container_cluster" "gke_cluster" {
     gcs_fuse_csi_driver_config {
       enabled = var.enable_gcsfuse_csi
     }
-    high_scale_checkpointing_config {
-      enabled = var.enable_multi_tier_checkpointing
+    dynamic "high_scale_checkpointing_config" {
+      for_each = var.enable_multi_tier_checkpointing ? [1] : []
+      content {
+        enabled = true
+      }
     }
     gce_persistent_disk_csi_driver_config {
       enabled = var.enable_persistent_disk_csi
@@ -734,7 +737,7 @@ resource "kubernetes_labels" "workload_namespace_labels" {
 module "workload_identity" {
   count   = var.configure_workload_identity_sa ? 1 : 0
   source  = "terraform-google-modules/kubernetes-engine/google//modules/workload-identity"
-  version = ">= 40.0"
+  version = ">= 46.0"
 
   use_existing_gcp_sa = true
   name                = var.k8s_service_account_name
@@ -813,14 +816,4 @@ resource "terraform_data" "validate_ml_diagnostics_version" {
       error_message = "GKE-managed ML Diagnostics requires a GKE version of ${local.mldiagnostics_minimum_version} or higher. Please update 'version_prefix' or 'min_master_version'."
     }
   }
-}
-
-resource "google_service_account_iam_member" "mtc_node_workload_identity" {
-  count              = var.enable_multi_tier_checkpointing ? 1 : 0
-  service_account_id = "projects/${var.project_id}/serviceAccounts/${local.sa_email}"
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${replace(var.project_id, ":", "/")}.svc.id.goog[gke-managed-checkpointing/gke-checkpointing-multitier-node]"
-  depends_on = [
-    google_container_cluster.gke_cluster
-  ]
 }

@@ -142,19 +142,19 @@ python your_script.py --bucket-name your-bucket  --run-inference='False'
 `--inference-bucket-failed-dir`: bucket directory for failed inferences
 `--inference-bucket-result-dir`: bucket directory for storing inference results
 #### Local Directories (Slurm VM)
-`--local-data-pipeline-dir`: local directory for data pipelines
-`--local-inference-dir`: local directory for inferences
+`--data-pipeline-local-dir`: local directory for data pipelines
+`--inference-local-dir`: local directory for inferences
 `--sif-dir`: local directory for Singularity/Apptainer image (The image should be named as `af3.sif`)
 `--db-dir`: local directory for databases
 `--model-dir`: local directory for model file (model weight)
 `--pdb-database-path`: local directory for data-pipeline pdb database
 #### Slurm Partition
 `--data-pipeline-partition-name`: datapipeline slurm partition name
-`--data-pipeline-partition-memory-size`: data pipeline slurm partition memory size (GB)
-`--data-pipeline-partition-cpu-count`: data pipeline slurm partition cpu count
+`--data-pipeline-job-memory-size`: data pipeline slurm job memory size (GB)
+`--data-pipeline-job-cpu-count`: data pipeline slurm job cpu count
 `--inference-partition-name`: inference slurm partition name
-`--inference-partition-memory-size`: inference slurm partition memory size (GB)
-`--inference-partition-cpu-count`: inference slurm partition cpu count
+`--inference-job-memory-size`: inference slurm job memory size (GB)
+`--inference-job-cpu-count`: inference slurm job cpu count
 `--auto-calculate-resource`: calculate required resource based on input sequence length
 #### Scientific Inference Parameters
 `--inference-max-template-date`: Maximum template release date to consider. Format: YYYY-MM-DD

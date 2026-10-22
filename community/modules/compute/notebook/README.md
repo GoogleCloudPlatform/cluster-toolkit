@@ -4,7 +4,7 @@ This module creates the Vertex AI Notebook, to be used in tutorials.
 
 Primarily used for FSI - MonteCarlo Tutorial: **[fsi-montecarlo-on-batch-tutorial]**.
 
-[fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
+[fsi-montecarlo-on-batch-tutorial]: ../../../../docs/tutorials/fsi-montecarlo-on-batch/README.md
 
 ## Usage
 
@@ -21,7 +21,6 @@ This is a simple usage, using the default network:
     source: community/modules/compute/notebook
     use: [bucket]
     settings:
-      name_prefix: notebook
       machine_type: n1-standard-4
 
 ```
@@ -39,7 +38,6 @@ If the user wants do specify a custom subnetwork, or specific external IP restri
     source: community/modules/compute/notebook
     use: [bucket]
     settings:
-      name_prefix: notebook
       machine_type: n1-standard-4
       network_interfaces:
         - network: "projects/HOST_PROJECT_ID/global/networks/SHARED_VPC_NAME"

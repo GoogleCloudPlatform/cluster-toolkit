@@ -40,22 +40,22 @@ vars:
   project_id: invalid-project
   region: us-central1
   slurm_image:
-    family: slurm-gcp-6-12-hpc-rocky-linux-8
-    project: schedmd-slurm-public
+    family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+    project: advanced-compute-images
   zone: us-central1-a
 deployment_groups:
   - group: primary
     terraform_providers:
       google:
         source: hashicorp/google
-        version: '>= 6.9.0, <= 8.3.0'
+        version: '>= 6.9.0, <= 8.6.0'
         configuration:
           project: ((var.project_id))
           region: ((var.region))
           zone: ((var.zone))
       google-beta:
         source: hashicorp/google-beta
-        version: '>= 6.9.0, <= 8.3.0'
+        version: '>= 6.9.0, <= 8.6.0'
         configuration:
           project: ((var.project_id))
           region: ((var.region))

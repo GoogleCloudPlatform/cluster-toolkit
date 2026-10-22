@@ -242,7 +242,7 @@ resource "google_compute_address" "ap" {
 
 module "access_point_instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
-  version = "~> 14.0"
+  version = "~> 15.4"
 
   name_prefix = local.name_prefix
   project_id  = var.project_id
@@ -280,7 +280,7 @@ module "access_point_instance_template" {
 
 module "htcondor_ap" {
   source  = "terraform-google-modules/vm/google//modules/mig"
-  version = "~> 14.0"
+  version = "~> 15.4"
 
   project_id                       = var.project_id
   region                           = var.region
