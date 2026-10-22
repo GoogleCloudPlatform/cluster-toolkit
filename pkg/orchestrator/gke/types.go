@@ -178,6 +178,7 @@ type GKEOrchestrator struct {
 	machineTypeClient           MachineTypeClient
 	acceleratorToMachineType    map[string]string
 	machineCapCache             map[string]MachineTypeCap
+	nodeFreeCPUCache            map[string]int64 // free CPU (millicores) on a live node per CPU machine type; -1 = no usable node
 	resolvedHeadNodePool        string
 	machineTypeToThreadsPerCore map[string]string
 	napEnabled                  bool
@@ -655,6 +656,47 @@ type kubernetesNodeStatus struct {
 type kubernetesNodeCondition struct {
 	Type   string `json:"type"`
 	Status string `json:"status"`
+}
+
+// nodeCPUList is the subset of `kubectl get nodes -o json` needed to size CPU requests.
+type nodeCPUList struct {
+	Items []struct {
+		Metadata struct {
+			Name string `json:"name"`
+		} `json:"metadata"`
+		Spec struct {
+			Unschedulable bool `json:"unschedulable"`
+		} `json:"spec"`
+		Status struct {
+			Allocatable map[string]string         `json:"allocatable"`
+			Conditions  []kubernetesNodeCondition `json:"conditions"`
+		} `json:"status"`
+	} `json:"items"`
+}
+
+type podOwnerRef struct {
+	Kind string `json:"kind"`
+}
+
+type podContainerCPU struct {
+	// RestartPolicy is "Always" for native sidecar init containers, which keep running and hold their requests.
+	RestartPolicy string `json:"restartPolicy"`
+	Resources     struct {
+		Requests map[string]string `json:"requests"`
+	} `json:"resources"`
+}
+
+// podCPUList is the subset of `kubectl get pods -o json` needed to sum per-node CPU requests.
+type podCPUList struct {
+	Items []struct {
+		Metadata struct {
+			OwnerReferences []podOwnerRef `json:"ownerReferences"`
+		} `json:"metadata"`
+		Spec struct {
+			Containers     []podContainerCPU `json:"containers"`
+			InitContainers []podContainerCPU `json:"initContainers"`
+		} `json:"spec"`
+	} `json:"items"`
 }
 
 type kueueWorkloadCondition struct {

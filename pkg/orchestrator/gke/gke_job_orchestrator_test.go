@@ -1708,9 +1708,10 @@ func TestGenerateGKEManifest_ParallelContainers(t *testing.T) {
 
 	// Verify that resources are split!
 	// Total chips = 4. Parallel containers = 2. So each should get 2 chips!
+	// Each container lists the TPU count in both limits and requests.
 	expectedResources := "google.com/tpu: \"2\""
-	if strings.Count(manifest, expectedResources) != 2 {
-		t.Errorf("expected %d occurrences of %q, got %d\nManifest: %s", 2, expectedResources, strings.Count(manifest, expectedResources), manifest)
+	if strings.Count(manifest, expectedResources) != 4 {
+		t.Errorf("expected %d occurrences of %q, got %d\nManifest: %s", 4, expectedResources, strings.Count(manifest, expectedResources), manifest)
 	}
 }
 

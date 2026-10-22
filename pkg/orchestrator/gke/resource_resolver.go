@@ -25,6 +25,8 @@ import (
 	"path"
 	"strconv"
 	"strings"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 type MachineTypeCap struct {
@@ -422,8 +424,16 @@ func (g *GKEOrchestrator) hasSlicingTopologies() bool {
 
 func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile JobProfile) (cpu, mem, gpu, tpu string, err error) {
 	if profile.IsCPUMachine {
+		if milli, ok := g.nodeAwareCPUMilli(opts.MachineType, opts.GCSFuseEnabled); ok {
+			logging.Info("Sized CPU for machine %s from live node capacity: %dm (gcsfuse sidecar reserved: %t)", opts.MachineType, milli, opts.GCSFuseEnabled)
+			return fmt.Sprintf("%dm", milli), "", "", "", nil
+		}
 		logging.Info("Using cached capacity for CPU machine %s during limits calculation: %d", opts.ComputeType, profile.CapacityCount)
 		offsetVCPUs := max(1, int(float64(profile.CapacityCount)*0.95))
+		if opts.GCSFuseEnabled {
+			// No live node to measure: still leave room for the injected gcsfuse sidecar.
+			return fmt.Sprintf("%dm", int64(offsetVCPUs)*1000-gcsFuseSidecarCPUMilli), "", "", "", nil
+		}
 		return fmt.Sprintf("%d", offsetVCPUs), "", "", "", nil
 	}
 
@@ -806,4 +816,144 @@ func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUM
 	}
 
 	return profile, nil
+}
+
+// gcsFuseSidecarCPUMilli is the default CPU request of the sidecar GKE injects for GCSFuse CSI volumes.
+const gcsFuseSidecarCPUMilli int64 = 250
+
+// nodeAwareCPUMilli returns the CPU (in millicores) a single workload pod can request on a
+// node of machineType: allocatable CPU minus the requests of the per-node pods (DaemonSets and
+// static pods), minus the GCSFuse sidecar request when gcsFuse is true.
+// It returns false when no Ready node of that type exists (e.g. the pool is scaled to zero) or
+// the lookup fails, so callers can fall back to the machine-type based estimate.
+func (g *GKEOrchestrator) nodeAwareCPUMilli(machineType string, gcsFuse bool) (int64, bool) {
+	if machineType == "" || g.executor == nil {
+		return 0, false
+	}
+	if g.nodeFreeCPUCache == nil {
+		g.nodeFreeCPUCache = make(map[string]int64)
+	}
+	free, cached := g.nodeFreeCPUCache[machineType]
+	if !cached {
+		free = g.measureNodeFreeCPUMilli(machineType)
+		g.nodeFreeCPUCache[machineType] = free
+	}
+	if free < 0 {
+		return 0, false
+	}
+	if gcsFuse {
+		free -= gcsFuseSidecarCPUMilli
+	}
+	if free <= 0 {
+		logging.Warn("Warning: no CPU left on %s nodes after system pods and sidecars; falling back to machine-type sizing", machineType)
+		return 0, false
+	}
+	return free, true
+}
+
+// measureNodeFreeCPUMilli queries one Ready node of machineType and returns its allocatable CPU
+// minus the CPU requested by DaemonSet and static pods on it, or -1 if it cannot be determined.
+func (g *GKEOrchestrator) measureNodeFreeCPUMilli(machineType string) int64 {
+	res := g.kubectl("get", "nodes", "-l", "node.kubernetes.io/instance-type="+machineType, "-o", "json")
+	if res.ExitCode != 0 {
+		logging.Info("Could not list %s nodes for CPU sizing (%s); falling back to machine-type sizing", machineType, strings.TrimSpace(res.Stderr))
+		return -1
+	}
+	var nodes nodeCPUList
+	if err := json.Unmarshal([]byte(res.Stdout), &nodes); err != nil {
+		return -1
+	}
+
+	nodeName, allocatable := firstReadyNodeCPU(nodes)
+	if nodeName == "" {
+		logging.Info("No live %s node found (pool may be scaled to zero); falling back to machine-type sizing", machineType)
+		return -1
+	}
+
+	res = g.kubectl("get", "pods", "--all-namespaces", "--field-selector", "spec.nodeName="+nodeName+",status.phase!=Succeeded,status.phase!=Failed", "-o", "json")
+	if res.ExitCode != 0 {
+		logging.Info("Could not list pods on node %s for CPU sizing (%s); falling back to machine-type sizing", nodeName, strings.TrimSpace(res.Stderr))
+		return -1
+	}
+	var pods podCPUList
+	if err := json.Unmarshal([]byte(res.Stdout), &pods); err != nil {
+		return -1
+	}
+
+	systemRequests := perNodePodCPURequests(pods)
+	logging.Info("Node %s (%s): allocatable CPU %dm, DaemonSet/static pod requests %dm", nodeName, machineType, allocatable, systemRequests)
+	return allocatable - systemRequests
+}
+
+// firstReadyNodeCPU returns the name and allocatable CPU (millicores) of the first Ready,
+// schedulable node in the list, or "" if there is none.
+func firstReadyNodeCPU(nodes nodeCPUList) (string, int64) {
+	for _, n := range nodes.Items {
+		if n.Spec.Unschedulable || !isNodeReady(n.Status.Conditions) {
+			continue
+		}
+		q, err := resource.ParseQuantity(n.Status.Allocatable["cpu"])
+		if err != nil {
+			continue
+		}
+		return n.Metadata.Name, q.MilliValue()
+	}
+	return "", 0
+}
+
+// perNodePodCPURequests sums the effective CPU requests (millicores) of DaemonSet and static pods.
+func perNodePodCPURequests(pods podCPUList) int64 {
+	var total int64
+	for _, p := range pods.Items {
+		if isPerNodePod(p.Metadata.OwnerReferences) {
+			total += effectivePodCPURequest(p.Spec.Containers, p.Spec.InitContainers)
+		}
+	}
+	return total
+}
+
+// effectivePodCPURequest mirrors how the scheduler accounts a pod's CPU, even after init has finished:
+// max(app containers + native sidecars, each regular init container + the sidecars started before it).
+func effectivePodCPURequest(containers, initContainers []podContainerCPU) int64 {
+	var sidecars, initPeak int64
+	for _, c := range initContainers {
+		if c.RestartPolicy == "Always" {
+			sidecars += cpuRequestMilli(c)
+			continue
+		}
+		initPeak = max(initPeak, cpuRequestMilli(c)+sidecars)
+	}
+	var app int64
+	for _, c := range containers {
+		app += cpuRequestMilli(c)
+	}
+	return max(app+sidecars, initPeak)
+}
+
+func cpuRequestMilli(c podContainerCPU) int64 {
+	q, err := resource.ParseQuantity(c.Resources.Requests["cpu"])
+	if err != nil {
+		return 0
+	}
+	return q.MilliValue()
+}
+
+func isNodeReady(conds []kubernetesNodeCondition) bool {
+	for _, c := range conds {
+		if c.Type == "Ready" {
+			return c.Status == "True"
+		}
+	}
+	return false
+}
+
+// isPerNodePod reports whether a pod runs on every node: DaemonSet pods, and static pods whose
+// mirror pod is owned by the Node (e.g. kube-proxy on GKE Standard).
+func isPerNodePod(owners []podOwnerRef) bool {
+	for _, o := range owners {
+		if o.Kind == "DaemonSet" || o.Kind == "Node" {
+			return true
+		}
+	}
+	return false
 }
