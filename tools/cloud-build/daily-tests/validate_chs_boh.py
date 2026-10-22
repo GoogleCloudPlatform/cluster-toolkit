@@ -134,13 +134,9 @@ def summarize(report: Dict[str, Any], bucket: str) -> Tuple[List[str], bool]:
             # Show every compared metric so the failing comparison is visible.
             lines += [f"    - {format_criteria(m)}" for m in metrics]
         elif metrics:
-            # Compact view: which criteria were compared and how many passed.
-            names: Dict[str, int] = {}
-            for m in metrics:
-                n = m["validation_criteria"].get("name", "criteria")
-                names[n] = names.get(n, 0) + 1
-            compared = ", ".join(f"{n} x{c}" for n, c in sorted(names.items()))
-            lines.append(f"    - compared: {compared}")
+            # Compact view: which criteria were compared.
+            names = sorted({m["validation_criteria"].get("name", "criteria") for m in metrics})
+            lines.append(f"    - compared: {', '.join(names)}")
 
     lines.append("")
     summary = ", ".join(f"{counts[s]} {short_status(s)}" for s in sorted(counts))

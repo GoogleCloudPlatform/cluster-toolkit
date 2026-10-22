@@ -86,7 +86,7 @@ class SummarizeTest(unittest.TestCase):
         text = "\n".join(lines)
         self.assertFalse(has_failures)
         self.assertIn("[SUCCESS] nccl-pairwise (all-gather) on node-0, node-1", text)
-        self.assertIn("compared: bandwidth x1", text)
+        self.assertIn("compared: bandwidth", text)
         self.assertIn("Summary: 2 SUCCESS", text)
         self.assertIn("gs://chs-results/bills_of_health/20261014-103955_cluster-standard-abcd.json", text)
 
