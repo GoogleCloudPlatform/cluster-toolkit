@@ -25,7 +25,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -84,7 +83,6 @@ type ExplainBlueprintResult struct {
 	Path           string            `json:"path" yaml:"path"`
 	DeploymentPath string            `json:"deployment_path,omitempty" yaml:"deployment_path,omitempty"`
 	BlueprintName  string            `json:"blueprint_name" yaml:"blueprint_name"`
-	Description    string            `json:"description,omitempty" yaml:"description,omitempty"`
 	RequiredAPIs   []string          `json:"required_apis" yaml:"required_apis"`
 	GcloudCommand  string            `json:"gcloud_enable_command" yaml:"gcloud_enable_command"`
 	Variables      []ExplainVariable `json:"variables" yaml:"variables"`
@@ -146,6 +144,7 @@ type ExplainModuleInput struct {
 // ExplainSpecMatchResult is the structured output for Mode 3 (spec matching).
 type ExplainSpecMatchResult struct {
 	ExactMatch     bool                   `json:"exact_match" yaml:"exact_match"`
+	OtherExact     int                    `json:"other_exact_matches,omitempty" yaml:"other_exact_matches,omitempty"`
 	RequestedSpecs []string               `json:"requested_specs" yaml:"requested_specs"`
 	MatchedSpecs   []string               `json:"matched_specs" yaml:"matched_specs"`
 	MissingSpecs   []ExplainMissingSpec   `json:"missing_specs,omitempty" yaml:"missing_specs,omitempty"`
@@ -226,7 +225,11 @@ func parseExplainFormat(raw string) (string, error) {
 }
 
 func tryExplainSingleTarget(out io.Writer, format, repoRoot, target string) (bool, error) {
-	if bpPath, deplPath, ok := resolveBlueprintTarget(repoRoot, target, explainFlags.deploymentFile); ok {
+	bpPath, deplPath, ok, err := resolveBlueprintTarget(repoRoot, target, explainFlags.deploymentFile)
+	if err != nil {
+		return true, err
+	}
+	if ok {
 		res, err := buildExplainBlueprint(repoRoot, bpPath, deplPath)
 		if err != nil {
 			return true, err
@@ -393,7 +396,10 @@ func classifyModuleDirEntries(files []os.DirEntry) string {
 }
 
 func buildExplainIndex(repoRoot string) (ExplainIndexResult, error) {
-	blueprints, _ := catalog.ScanBlueprints(repoRoot, nil)
+	blueprints, err := catalog.ScanBlueprints(repoRoot, nil)
+	if err != nil {
+		return ExplainIndexResult{}, fmt.Errorf("failed to scan blueprints: %w", err)
+	}
 	bpSummaries := make([]ExplainBlueprintSummary, 0, len(blueprints))
 	for _, bp := range blueprints {
 		bpSummaries = append(bpSummaries, ExplainBlueprintSummary{
@@ -486,39 +492,52 @@ func printBlueprintSummaryLine(w io.Writer, bp ExplainBlueprintSummary) {
 	}
 }
 
-func resolveBlueprintTarget(repoRoot, target, explicitDepl string) (string, string, bool) {
+func resolveBlueprintTarget(repoRoot, target, explicitDepl string) (string, string, bool, error) {
 	candidates := []string{target}
 	cleanRel := strings.TrimPrefix(sourcereader.ToSlash(filepath.Clean(target)), "./")
 	if repoRoot != "" {
 		candidates = append(candidates, filepath.Join(repoRoot, filepath.FromSlash(cleanRel)))
 	}
 
+	var firstErr error
 	for _, cand := range candidates {
-		if bpPath, deplPath, ok := inspectCandidateBlueprintFile(cand, explicitDepl); ok {
-			return bpPath, deplPath, true
+		bpPath, deplPath, ok, err := inspectCandidateBlueprintFile(cand, explicitDepl)
+		if ok {
+			return bpPath, deplPath, true, nil
+		}
+		if err != nil && firstErr == nil {
+			firstErr = err
 		}
 	}
-	return "", "", false
+	return "", "", false, firstErr
 }
 
-func inspectCandidateBlueprintFile(cand, explicitDepl string) (string, string, bool) {
+func inspectCandidateBlueprintFile(cand, explicitDepl string) (string, string, bool, error) {
 	info, err := os.Stat(cand)
 	if err != nil || info.IsDir() {
-		return "", "", false
+		return "", "", false, nil
 	}
 	if !strings.HasSuffix(cand, ".yaml") && !strings.HasSuffix(cand, ".yml") {
-		return "", "", false
+		return "", "", false, nil
 	}
-	if strings.HasSuffix(filepath.Base(cand), "-deployment.yaml") || filepath.Base(cand) == "deployment.yaml" {
+	if isDeploymentYAMLName(filepath.Base(cand)) {
 		if siblingBP := findSiblingBlueprintForDeployment(cand); siblingBP != "" {
-			return siblingBP, cand, true
+			return siblingBP, cand, true, nil
 		}
+		return "", "", false, nil
 	}
 	bp, _, err := config.NewBlueprint(cand)
-	if err == nil && len(bp.Groups) > 0 {
-		return cand, explicitDepl, true
+	if err != nil {
+		return "", "", false, fmt.Errorf("failed to parse blueprint %s: %w", cand, err)
 	}
-	return "", "", false
+	if len(bp.Groups) == 0 {
+		return "", "", false, fmt.Errorf("blueprint %s has no deployment_groups", cand)
+	}
+	return cand, explicitDepl, true, nil
+}
+
+func isDeploymentYAMLName(base string) bool {
+	return strings.HasSuffix(base, "-deployment.yaml") || base == "deployment.yaml"
 }
 
 func findSiblingBlueprintForDeployment(deplPath string) string {
@@ -567,7 +586,7 @@ func resolveModuleTarget(target string) (string, string, bool) {
 	if info, err := os.Stat(target); err == nil && info.IsDir() {
 		if kind := detectLocalModuleKind(target); kind != "" {
 			localPath := target
-			if !sourcereader.IsLocalPath(localPath) && !sourcereader.IsEmbeddedPath(localPath) {
+			if !sourcereader.IsLocalPath(localPath) {
 				localPath = "./" + sourcereader.ToSlash(localPath)
 			}
 			return localPath, kind, true
@@ -602,7 +621,10 @@ func buildExplainBlueprint(repoRoot, bpPath, explicitDeplPath string) (ExplainBl
 	}
 
 	displayBPPath := displayRelPath(repoRoot, bpPath)
-	displayDeplPath, ds := loadCompanionDeployment(repoRoot, bpPath, bp.BlueprintName, explicitDeplPath)
+	displayDeplPath, ds, err := loadCompanionDeployment(repoRoot, bpPath, bp.BlueprintName, explicitDeplPath)
+	if err != nil {
+		return ExplainBlueprintResult{}, err
+	}
 	apis, stages := collectBlueprintAPIsAndStages(bp)
 
 	gcloudCmd := ""
@@ -628,19 +650,23 @@ func buildExplainBlueprint(repoRoot, bpPath, explicitDeplPath string) (ExplainBl
 	}, nil
 }
 
-func loadCompanionDeployment(repoRoot, bpPath, blueprintName, explicitDeplPath string) (string, config.DeploymentSettings) {
-	deplPath := explicitDeplPath
+func loadCompanionDeployment(repoRoot, bpPath, blueprintName, explicitDeplPath string) (string, config.DeploymentSettings, error) {
+	deplPath := strings.TrimSpace(explicitDeplPath)
 	if deplPath == "" {
 		deplPath = discoverCompanionDeploymentFile(bpPath, blueprintName)
 	}
 	if deplPath == "" {
-		return "", config.DeploymentSettings{}
+		return "", config.DeploymentSettings{}, nil
 	}
 	displayDeplPath := displayRelPath(repoRoot, deplPath)
-	if parsedDS, _, err := config.NewDeploymentSettings(deplPath); err == nil {
-		return displayDeplPath, parsedDS
+	parsedDS, _, err := config.NewDeploymentSettings(deplPath)
+	if err != nil {
+		if strings.TrimSpace(explicitDeplPath) != "" {
+			return "", config.DeploymentSettings{}, fmt.Errorf("failed to load deployment file %s: %w", deplPath, err)
+		}
+		return displayDeplPath, config.DeploymentSettings{}, nil
 	}
-	return displayDeplPath, config.DeploymentSettings{}
+	return displayDeplPath, parsedDS, nil
 }
 
 func collectBlueprintAPIsAndStages(bp config.Blueprint) ([]string, []ExplainStage) {
@@ -1385,8 +1411,6 @@ type normalizedSpec struct {
 	Aliases      []string
 }
 
-var nonAlphaNumRegex = regexp.MustCompile(`[^a-z0-9]+`)
-
 type specAliasDef struct {
 	Canonical    string
 	Category     string
@@ -1413,7 +1437,8 @@ var knownSpecAliasTable = []specAliasDef{
 	{Canonical: "tpu-v6e", Category: "hardware", Aliases: []string{"tpu-v6e", "v6e", "ct6e"}, Tokens: []string{"tpuv6e", "tpu-v6e", "v6e", "trillium"}},
 	{Canonical: "tpu-v5p", Category: "hardware", Aliases: []string{"tpu-v5p", "v5p", "ct5p"}, Tokens: []string{"tpuv5p", "tpu-v5p", "v5p"}},
 	{Canonical: "tpu-v5e", Category: "hardware", Aliases: []string{"tpu-v5e", "v5e", "ct5lp"}, Tokens: []string{"tpuv5e", "tpu-v5e", "v5e"}},
-	{Canonical: "tpu", Category: "hardware", Aliases: []string{"tpu"}, Tokens: []string{"tpu"}},
+	{Canonical: "tpu-v4", Category: "hardware", Aliases: []string{"tpu-v4", "v4", "ct4p"}, Tokens: []string{"tpuv4", "tpu-v4", "v4"}},
+	{Canonical: "tpu", Category: "hardware", Aliases: []string{"tpu", "tpu7x", "ct6e", "ct5p", "ct5lp", "ct4p"}, Tokens: []string{"tpu"}},
 	{Canonical: "h4d", Category: "hardware", Aliases: []string{"h4d"}, Tokens: []string{"h4d"}},
 	{Canonical: "c3d", Category: "hardware", Aliases: []string{"c3d"}, Tokens: []string{"c3d"}},
 	{Canonical: "c2", Category: "hardware", Aliases: []string{"c2"}, Tokens: []string{"c2"}},
@@ -1480,7 +1505,7 @@ func blueprintMatchesSpec(bp catalog.BlueprintEntry, spec normalizedSpec) bool {
 	case "module":
 		return matchModuleSpec(bp, spec)
 	case "hardware":
-		return matchHardwareSpec(bp, spec)
+		return hardwareMatchStrength(bp, spec) > 0
 	default:
 		return matchKeywordSpec(bp, spec)
 	}
@@ -1502,19 +1527,25 @@ func matchModuleSpec(bp catalog.BlueprintEntry, spec normalizedSpec) bool {
 	return false
 }
 
-func matchHardwareSpec(bp catalog.BlueprintEntry, spec normalizedSpec) bool {
+func hardwareMatchStrength(bp catalog.BlueprintEntry, spec normalizedSpec) int {
 	for _, mt := range bp.MachineTypes {
-		lowerMT := strings.ToLower(mt)
-		for _, al := range spec.Aliases {
-			if lowerMT == al || strings.HasPrefix(lowerMT, al+"-") || strings.Contains(lowerMT, al) {
-				return true
-			}
+		if matchesHardwareMachineType(strings.ToLower(mt), spec.Aliases) {
+			return 2
 		}
 	}
 	lowerPath := strings.ToLower(bp.Path)
 	lowerName := strings.ToLower(bp.BlueprintName)
 	for _, al := range spec.Aliases {
 		if containsSegment(lowerPath, al) || containsSegment(lowerName, al) {
+			return 1
+		}
+	}
+	return 0
+}
+
+func matchesHardwareMachineType(lowerMT string, aliases []string) bool {
+	for _, al := range aliases {
+		if lowerMT == al || strings.HasPrefix(lowerMT, al+"-") {
 			return true
 		}
 	}
@@ -1542,13 +1573,14 @@ func matchKeywordSpec(bp catalog.BlueprintEntry, spec normalizedSpec) bool {
 
 func containsSegment(haystack, needle string) bool {
 	if strings.Contains(haystack, "/"+needle+"/") || strings.Contains(haystack, "/"+needle+".") ||
-		strings.Contains(haystack, "/"+needle+"-") || strings.Contains(haystack, "-"+needle+"-") ||
-		strings.HasSuffix(haystack, "-"+needle+".yaml") {
+		strings.Contains(haystack, "-"+needle+"-") || strings.HasSuffix(haystack, "-"+needle+".yaml") ||
+		strings.HasSuffix(haystack, "-"+needle) {
 		return true
 	}
-	normHaystack := nonAlphaNumRegex.ReplaceAllString(haystack, "")
-	normNeedle := nonAlphaNumRegex.ReplaceAllString(needle, "")
-	return len(normNeedle) >= 4 && strings.Contains(normHaystack, normNeedle)
+	if strings.Contains(haystack, "/"+needle+"-") || strings.HasPrefix(haystack, needle+"-") {
+		return !strings.Contains(haystack, needle+"-max")
+	}
+	return false
 }
 
 type scoredBlueprintCandidate struct {
@@ -1565,30 +1597,49 @@ func buildExplainSpecMatch(repoRoot string, args []string) (ExplainSpecMatchResu
 		return ExplainSpecMatchResult{}, fmt.Errorf("no valid spec keywords provided")
 	}
 
-	blueprints, err := catalog.ScanBlueprints(repoRoot, nil)
-	if err != nil || len(blueprints) == 0 {
-		return ExplainSpecMatchResult{}, fmt.Errorf("no blueprints found under %s/examples; run './gcluster explain <module>' to inspect embedded modules", repoRoot)
+	blueprints, err := scanBlueprintsForSpecMatch(repoRoot)
+	if err != nil {
+		return ExplainSpecMatchResult{}, err
 	}
 
-	best := selectBestBlueprintCandidate(blueprints, specs)
+	best, exactTotal := selectBestBlueprintCandidate(blueprints, specs)
 	if best == nil {
 		return ExplainSpecMatchResult{}, formatUnmatchedSpecsError(specs)
 	}
-	return assembleSpecMatchResult(repoRoot, specs, best)
+	otherExact := 0
+	if len(best.missingSpecs) == 0 && exactTotal > 1 {
+		otherExact = exactTotal - 1
+	}
+	return assembleSpecMatchResult(repoRoot, specs, best, otherExact)
 }
 
-func selectBestBlueprintCandidate(blueprints []catalog.BlueprintEntry, specs []normalizedSpec) *scoredBlueprintCandidate {
+func scanBlueprintsForSpecMatch(repoRoot string) ([]catalog.BlueprintEntry, error) {
+	blueprints, err := catalog.ScanBlueprints(repoRoot, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan blueprints: %w", err)
+	}
+	if len(blueprints) == 0 {
+		return nil, fmt.Errorf("no blueprints found under %s/examples; run './gcluster explain <module>' to inspect embedded modules", repoRoot)
+	}
+	return blueprints, nil
+}
+
+func selectBestBlueprintCandidate(blueprints []catalog.BlueprintEntry, specs []normalizedSpec) (*scoredBlueprintCandidate, int) {
 	var best *scoredBlueprintCandidate
+	exactCount := 0
 	for _, bp := range blueprints {
 		cand := scoreBlueprintAgainstSpecs(bp, specs)
 		if cand.matchedCount == 0 {
 			continue
 		}
+		if len(cand.missingSpecs) == 0 {
+			exactCount++
+		}
 		if isBetterBlueprintCandidate(cand, best) {
 			best = cand
 		}
 	}
-	return best
+	return best, exactCount
 }
 
 func scoreBlueprintAgainstSpecs(bp catalog.BlueprintEntry, specs []normalizedSpec) *scoredBlueprintCandidate {
@@ -1598,7 +1649,7 @@ func scoreBlueprintAgainstSpecs(bp catalog.BlueprintEntry, specs []normalizedSpe
 	for _, sp := range specs {
 		if blueprintMatchesSpec(bp, sp) {
 			matched = append(matched, sp)
-			weight += specCategoryWeight(sp.Category)
+			weight += specMatchWeight(bp, sp)
 		} else {
 			missing = append(missing, sp)
 		}
@@ -1613,6 +1664,14 @@ func scoreBlueprintAgainstSpecs(bp catalog.BlueprintEntry, specs []normalizedSpe
 		matchedSpecs: matched,
 		missingSpecs: missing,
 	}
+}
+
+func specMatchWeight(bp catalog.BlueprintEntry, sp normalizedSpec) int {
+	base := specCategoryWeight(sp.Category)
+	if sp.Category == "hardware" && hardwareMatchStrength(bp, sp) == 2 {
+		return base + 5
+	}
+	return base
 }
 
 func specCategoryWeight(category string) int {
@@ -1665,7 +1724,7 @@ func formatUnmatchedSpecsError(specs []normalizedSpec) error {
 		strings.Join(rawList, ", "))
 }
 
-func assembleSpecMatchResult(repoRoot string, specs []normalizedSpec, best *scoredBlueprintCandidate) (ExplainSpecMatchResult, error) {
+func assembleSpecMatchResult(repoRoot string, specs []normalizedSpec, best *scoredBlueprintCandidate, otherExact int) (ExplainSpecMatchResult, error) {
 	bpAbs := filepath.Join(repoRoot, filepath.FromSlash(best.entry.Path))
 	deplAbs := ""
 	if best.entry.DeploymentPath != "" {
@@ -1701,6 +1760,7 @@ func assembleSpecMatchResult(repoRoot string, specs []normalizedSpec, best *scor
 
 	return ExplainSpecMatchResult{
 		ExactMatch:     len(best.missingSpecs) == 0,
+		OtherExact:     otherExact,
 		RequestedSpecs: reqNames,
 		MatchedSpecs:   matchedNames,
 		MissingSpecs:   missingOut,
@@ -1794,8 +1854,12 @@ func moduleOutputsAll(source string, neededOutputs []string) bool {
 
 func printExplainSpecMatchText(w io.Writer, res ExplainSpecMatchResult) {
 	if res.ExactMatch {
-		writef(w, "Exact Blueprint Match (%d/%d specs matched: %s):\n\n",
+		writef(w, "Exact Blueprint Match (%d/%d specs matched: %s):\n",
 			len(res.MatchedSpecs), len(res.RequestedSpecs), strings.Join(res.MatchedSpecs, ", "))
+		if res.OtherExact > 0 {
+			writef(w, "  Note: %d other blueprint(s) also matched all requested specs; add hardware or storage specs to narrow down.\n", res.OtherExact)
+		}
+		writeln(w, "")
 		printExplainBlueprintText(w, res.Blueprint)
 		return
 	}
@@ -1806,26 +1870,36 @@ func printExplainSpecMatchText(w io.Writer, res ExplainSpecMatchResult) {
 	if res.Blueprint.DeploymentPath != "" {
 		writef(w, "  Companion Deployment File: %s\n", res.Blueprint.DeploymentPath)
 	}
-	missingLabels := make([]string, 0, len(res.MissingSpecs))
-	for _, ms := range res.MissingSpecs {
-		if ms.Module != "" {
-			missingLabels = append(missingLabels, fmt.Sprintf("%s (%s)", ms.Spec, ms.Module))
-		} else {
-			missingLabels = append(missingLabels, ms.Spec)
-		}
-	}
-	writef(w, "  Missing Spec: %s\n", strings.Join(missingLabels, ", "))
+	writef(w, "  Missing Spec: %s\n", strings.Join(formatMissingSpecLabels(res.MissingSpecs), ", "))
 
-	for _, ms := range res.MissingSpecs {
-		if ms.Snippet != "" {
-			writef(w, "\nTo add missing spec (%s -> %s), insert into group [%s]:\n",
-				ms.Spec, ms.Module, ms.TargetGroup)
-			for _, line := range strings.Split(ms.Snippet, "\n") {
-				writef(w, "  %s\n", line)
-			}
-		}
-	}
+	printMissingSpecSnippets(w, res.MissingSpecs)
 
 	writeln(w, "\nBase Blueprint Details:")
 	printExplainBlueprintText(w, res.Blueprint)
+}
+
+func formatMissingSpecLabels(missing []ExplainMissingSpec) []string {
+	labels := make([]string, 0, len(missing))
+	for _, ms := range missing {
+		if ms.Module != "" {
+			labels = append(labels, fmt.Sprintf("%s (%s)", ms.Spec, ms.Module))
+		} else {
+			labels = append(labels, ms.Spec)
+		}
+	}
+	return labels
+}
+
+func printMissingSpecSnippets(w io.Writer, missing []ExplainMissingSpec) {
+	for _, ms := range missing {
+		if ms.Snippet == "" {
+			continue
+		}
+		writef(w, "\nTo add missing spec (%s -> %s), insert into group [%s]:\n",
+			ms.Spec, ms.Module, ms.TargetGroup)
+		for _, line := range strings.Split(ms.Snippet, "\n") {
+			writef(w, "  %s\n", line)
+		}
+		writef(w, "  Note: Also add the new module ID to the 'use:' list of downstream compute/cluster modules that consume its outputs.\n")
+	}
 }

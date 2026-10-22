@@ -192,3 +192,54 @@ func (s *MySuite) TestExplainJSONAndYAMLFormatsAndErrors(c *C) {
 	c.Assert(err, NotNil)
 	c.Check(strings.Contains(err.Error(), "no blueprint matched specs"), Equals, true)
 }
+
+func (s *MySuite) TestExplainSpecMatchingPrefersMachineTypeEvidence(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	// B1: 'gke a4x' must match gke-a4x.yaml (a4x-highgpu-4g), not gke-a4x-max-bm.yaml
+	outA4X, err := runExplainForTest("gke", "a4x")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outA4X, "Blueprint: examples/gke-a4x/gke-a4x.yaml"), Equals, true)
+	c.Check(strings.Contains(outA4X, "other blueprint(s) also matched"), Equals, false)
+
+	// 'gke a4x-max' must match gke-a4x-max-bm.yaml (a4x-maxgpu-4g-metal)
+	outA4XMax, err := runExplainForTest("gke", "a4x-max")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outA4XMax, "Blueprint: examples/gke-a4x-max-bm/gke-a4x-max-bm.yaml"), Equals, true)
+
+	// TPU 7x Slurm & TPU v4 GKE exact match
+	outSlurmTPU7x, err := runExplainForTest("slurm", "tpu", "7x")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outSlurmTPU7x, "Exact Blueprint Match (3/3 specs matched: slurm, tpu, tpu7x-standard-4t):"), Equals, true)
+	c.Check(strings.Contains(outSlurmTPU7x, "Blueprint: examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml"), Equals, true)
+
+	outTPUv4, err := runExplainForTest("gke", "tpu", "v4")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outTPUv4, "Blueprint: examples/gke-tpu-v4/gke-tpu-v4.yaml"), Equals, true)
+
+	// Prefix boundary check: 'c2' must match c2-standard-60, not c2d-standard-112
+	c.Check(matchesHardwareMachineType("c2-standard-60", []string{"c2"}), Equals, true)
+	c.Check(matchesHardwareMachineType("c2d-standard-112", []string{"c2"}), Equals, false)
+	c.Check(matchesHardwareMachineType("n2d-standard-32", []string{"n2"}), Equals, false)
+}
+
+func (s *MySuite) TestExplainRejectsMissingDeploymentFileAndBadBlueprint(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	// B2: Explicitly passed -d / --deployment-file that does not exist must fail fast
+	explainFlags.deploymentFile = "nonexistent-deployment-file.yaml"
+	_, err := runExplainForTest("examples/hpc-slurm.yaml")
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "failed to load deployment file"), Equals, true)
+	explainFlags.deploymentFile = ""
+
+	// N1: Existing .yaml file with invalid blueprint syntax or no deployment_groups must report parse error
+	tmpDir := c.MkDir()
+	badBP := filepath.Join(tmpDir, "broken-blueprint.yaml")
+	c.Assert(os.WriteFile(badBP, []byte("blueprint_name: broken\nvars:\n  project_id: test\n"), 0644), IsNil)
+	_, err = runExplainForTest(badBP)
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "not found"), Equals, false)
+}
