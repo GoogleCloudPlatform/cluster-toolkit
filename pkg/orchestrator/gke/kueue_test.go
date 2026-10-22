@@ -1106,7 +1106,8 @@ func TestHasUserPriorityClasses_Forbidden(t *testing.T) {
 	}
 	orc := &GKEOrchestrator{executor: mock}
 
-	hasUser, err := orc.hasUserPriorityClasses()
+	existing, listErr := orc.getClusterPriorityClasses()
+	hasUser, err := orc.hasUserPriorityClasses(existing, listErr)
 	if err != nil {
 		t.Fatalf("hasUserPriorityClasses should return true and skip on 403 Forbidden, got error: %v", err)
 	}

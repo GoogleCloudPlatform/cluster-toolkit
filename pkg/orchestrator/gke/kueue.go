@@ -785,7 +785,7 @@ func (g *GKEOrchestrator) getClusterPriorityClasses() ([]string, error) {
 	return strings.Fields(res.Stdout), nil
 }
 
-func (g *GKEOrchestrator) hasUserPriorityClassesFromList(existing []string, err error) (bool, error) {
+func (g *GKEOrchestrator) hasUserPriorityClasses(existing []string, err error) (bool, error) {
 	if err != nil {
 		if isForbiddenError(err) {
 			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping default PriorityClass installation.")
@@ -802,11 +802,6 @@ func (g *GKEOrchestrator) hasUserPriorityClassesFromList(existing []string, err 
 		return true, nil
 	}
 	return false, nil
-}
-
-func (g *GKEOrchestrator) hasUserPriorityClasses() (bool, error) {
-	existing, err := g.getClusterPriorityClasses()
-	return g.hasUserPriorityClassesFromList(existing, err)
 }
 
 func (g *GKEOrchestrator) installPriorityClasses() error {
@@ -830,7 +825,7 @@ func (g *GKEOrchestrator) installPriorityClasses() error {
 }
 
 func (g *GKEOrchestrator) ensurePriorityClassesInstalled(existing []string, listErr error) (bool, error) {
-	hasUserClasses, err := g.hasUserPriorityClassesFromList(existing, listErr)
+	hasUserClasses, err := g.hasUserPriorityClasses(existing, listErr)
 	if err != nil {
 		return false, err
 	}
