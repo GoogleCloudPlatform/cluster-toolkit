@@ -3336,13 +3336,43 @@ func TestGetJobLogs_LatePodCreationAndTerminalJobSet(t *testing.T) {
 	})
 }
 
+func TestSubmitJob_PathwaysMountCollisionFailsBeforeClusterCalls(t *testing.T) {
+	tests := []struct {
+		name    string
+		sidecar string
+		mount   string
+		want    string
+	}{
+		{name: "mount at /tmp", mount: "gs://bucket;/tmp", want: `conflicts with built-in Pathways mount "/tmp"`},
+		{name: "mount at /tmp/sidecar with colocated sidecar", sidecar: "sidecar:latest", mount: "gs://bucket;/tmp/sidecar", want: `conflicts with built-in Pathways mount "/tmp/sidecar"`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(nil)
+			orc := newTestGKEOrchestrator(mockExec)
+			err := orc.SubmitJob(orchestrator.JobDefinition{
+				WorkloadName:    "pathways-job",
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "test-project",
+				IsPathwaysJob:   true,
+				RawMounts:       []string{tc.mount},
+				Pathways:        orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: tc.sidecar},
+			})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("SubmitJob() error = %v, want error containing %q", err, tc.want)
+			}
+			if len(mockExec.calls) != 0 || len(mockExec.streamCalls) != 0 {
+				t.Errorf("SubmitJob() ran commands before rejecting the mount: %v %v", mockExec.calls, mockExec.streamCalls)
+			}
+		})
+	}
+}
+
 type mockNamespaceableResource struct {
 	dynamic.NamespaceableResourceInterface
-	getFunc    func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
-	listFunc   func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
-	updateFunc func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error)
-	deleteFunc func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error
-	patchFunc  func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error)
+	getFunc  func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
+	listFunc func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
 }
 
 func (m *mockNamespaceableResource) Get(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
@@ -3363,43 +3393,20 @@ func (m *mockNamespaceableResource) List(ctx context.Context, opts metav1.ListOp
 	return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{}}, nil
 }
 
-func (m *mockNamespaceableResource) Update(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
-	if m.updateFunc != nil {
-		return m.updateFunc(ctx, obj, options, subresources...)
-	}
-	return obj, nil
-}
-
 func (m *mockNamespaceableResource) Delete(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
-	if m.deleteFunc != nil {
-		return m.deleteFunc(ctx, name, options, subresources...)
-	}
 	return nil
-}
-
-func (m *mockNamespaceableResource) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
-	if m.patchFunc != nil {
-		return m.patchFunc(ctx, name, pt, data, options, subresources...)
-	}
-	return &unstructured.Unstructured{}, nil
 }
 
 type mockDynamicClient struct {
 	dynamic.Interface
-	getFunc    func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
-	listFunc   func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
-	updateFunc func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error)
-	deleteFunc func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error
-	patchFunc  func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error)
+	getFunc  func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
+	listFunc func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
 }
 
 func (m *mockDynamicClient) Resource(resource schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
 	return &mockNamespaceableResource{
-		getFunc:    m.getFunc,
-		listFunc:   m.listFunc,
-		updateFunc: m.updateFunc,
-		deleteFunc: m.deleteFunc,
-		patchFunc:  m.patchFunc,
+		getFunc:  m.getFunc,
+		listFunc: m.listFunc,
 	}
 }
 
