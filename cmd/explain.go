@@ -29,6 +29,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
 	"gopkg.in/yaml.v3"
@@ -153,10 +154,11 @@ type ExplainSpecMatchResult struct {
 
 // ExplainMissingSpec describes a requested spec that was not in the closest blueprint.
 type ExplainMissingSpec struct {
-	Spec        string `json:"spec" yaml:"spec"`
-	Module      string `json:"module,omitempty" yaml:"module,omitempty"`
-	TargetGroup string `json:"target_group,omitempty" yaml:"target_group,omitempty"`
-	Snippet     string `json:"snippet,omitempty" yaml:"snippet,omitempty"`
+	Spec                string   `json:"spec" yaml:"spec"`
+	Module              string   `json:"module,omitempty" yaml:"module,omitempty"`
+	TargetGroup         string   `json:"target_group,omitempty" yaml:"target_group,omitempty"`
+	Snippet             string   `json:"snippet,omitempty" yaml:"snippet,omitempty"`
+	ReferenceBlueprints []string `json:"reference_blueprints,omitempty" yaml:"reference_blueprints,omitempty"`
 }
 
 var explainAutoGlobals = map[string]bool{
@@ -192,6 +194,9 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 
 	if len(args) == 0 {
+		if err := rejectUnexpectedDeploymentFlag(); err != nil {
+			return err
+		}
 		res, err := buildExplainIndex(repoRoot)
 		if err != nil {
 			return err
@@ -207,6 +212,9 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if err := rejectUnexpectedDeploymentFlag(); err != nil {
+		return err
+	}
 	res, err := buildExplainSpecMatch(repoRoot, args)
 	if err != nil {
 		return err
@@ -214,6 +222,13 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 	return renderExplainOutput(out, format, res, func(w io.Writer) {
 		printExplainSpecMatchText(w, res)
 	})
+}
+
+func rejectUnexpectedDeploymentFlag() error {
+	if strings.TrimSpace(explainFlags.deploymentFile) != "" {
+		return fmt.Errorf("--deployment-file is only valid when explaining a blueprint file")
+	}
+	return nil
 }
 
 func parseExplainFormat(raw string) (string, error) {
@@ -240,6 +255,9 @@ func tryExplainSingleTarget(out io.Writer, format, repoRoot, target string) (boo
 	}
 
 	if modPath, kind, ok := resolveModuleTarget(target); ok {
+		if err := rejectUnexpectedDeploymentFlag(); err != nil {
+			return true, err
+		}
 		res, err := buildExplainModule(modPath, kind)
 		if err != nil {
 			return true, err
@@ -286,7 +304,7 @@ func findExplainRepoRoot() string {
 	}
 	dir := cwd
 	for {
-		if info, err := os.Stat(filepath.Join(dir, "examples")); err == nil && info.IsDir() {
+		if isExplainRepoRoot(dir) {
 			return dir
 		}
 		parent := filepath.Dir(dir)
@@ -296,6 +314,15 @@ func findExplainRepoRoot() string {
 		dir = parent
 	}
 	return cwd
+}
+
+func isExplainRepoRoot(dir string) bool {
+	for _, sub := range []string{"examples", "modules"} {
+		if info, err := os.Stat(filepath.Join(dir, sub)); err != nil || !info.IsDir() {
+			return false
+		}
+	}
+	return true
 }
 
 type embeddedModEntry struct {
@@ -452,7 +479,7 @@ func extractBlueprintStorageTags(bp catalog.BlueprintEntry) []string {
 func printExplainIndexText(w io.Writer, res ExplainIndexResult) {
 	writef(w, "Available Blueprints (%d):\n", len(res.Blueprints))
 	if len(res.Blueprints) == 0 {
-		writeln(w, "  (no examples/ directory found in current working directory)")
+		writeln(w, "  (no Cluster Toolkit checkout found from current directory; blueprints are read from examples/ in a repo checkout)")
 	} else {
 		for _, bp := range res.Blueprints {
 			printBlueprintSummaryLine(w, bp)
@@ -514,13 +541,19 @@ func resolveBlueprintTarget(repoRoot, target, explicitDepl string) (string, stri
 
 func inspectCandidateBlueprintFile(cand, explicitDepl string) (string, string, bool, error) {
 	info, err := os.Stat(cand)
-	if err != nil || info.IsDir() {
+	if err != nil {
 		return "", "", false, nil
+	}
+	if info.IsDir() {
+		return inspectCandidateBlueprintDir(cand, explicitDepl)
 	}
 	if !strings.HasSuffix(cand, ".yaml") && !strings.HasSuffix(cand, ".yml") {
 		return "", "", false, nil
 	}
 	if isDeploymentYAMLName(filepath.Base(cand)) {
+		if strings.TrimSpace(explicitDepl) != "" {
+			return "", "", false, fmt.Errorf("--deployment-file cannot be used when the target is already a deployment file")
+		}
 		if siblingBP := findSiblingBlueprintForDeployment(cand); siblingBP != "" {
 			return siblingBP, cand, true, nil
 		}
@@ -534,6 +567,39 @@ func inspectCandidateBlueprintFile(cand, explicitDepl string) (string, string, b
 		return "", "", false, fmt.Errorf("blueprint %s has no deployment_groups", cand)
 	}
 	return cand, explicitDepl, true, nil
+}
+
+func inspectCandidateBlueprintDir(dir, explicitDepl string) (string, string, bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", "", false, nil
+	}
+	var matches, names []string
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !isBlueprintCandidateYAML(name) {
+			continue
+		}
+		full := filepath.Join(dir, name)
+		if bp, _, err := config.NewBlueprint(full); err == nil && len(bp.Groups) > 0 {
+			matches = append(matches, full)
+			names = append(names, name)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0], explicitDepl, true, nil
+	}
+	if len(matches) > 1 {
+		return "", "", false, fmt.Errorf("directory %q contains multiple blueprints (%s); specify one", dir, strings.Join(names, ", "))
+	}
+	return "", "", false, nil
+}
+
+func isBlueprintCandidateYAML(name string) bool {
+	if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+		return false
+	}
+	return name != "metadata.yaml" && name != "metadata.display.yaml" && !isDeploymentYAMLName(name)
 }
 
 func isDeploymentYAMLName(base string) bool {
@@ -726,7 +792,7 @@ func extractModuleRequiredServices(mod config.Module, normSrc string) []string {
 }
 
 func nonEmptyStrings(items []string) []string {
-	var out []string
+	out := make([]string, 0, len(items))
 	for _, s := range items {
 		if s != "" {
 			out = append(out, s)
@@ -828,12 +894,11 @@ func inspectCtyVariable(name string, v cty.Value) ExplainVariable {
 }
 
 func inspectExpressionVariable(name string, expr config.Expression) ExplainVariable {
-	raw := strings.TrimSpace(string(expr.Tokenize().Bytes()))
+	raw := strings.TrimSpace(string(hclwrite.Format(expr.Tokenize().Bytes())))
 	if raw == "null" {
 		return ExplainVariable{Name: name, Type: "string", Required: true}
 	}
-	raw = strings.ReplaceAll(raw, "var.", "vars.")
-	return ExplainVariable{Name: name, Type: "expression", Required: false, Default: "$(" + raw + ")"}
+	return ExplainVariable{Name: name, Type: "expression", Required: false, Default: "((" + raw + "))"}
 }
 
 func inspectKnownCtyVariable(name string, v cty.Value) ExplainVariable {
@@ -944,7 +1009,7 @@ func buildExplainModule(modPath, kind string) (ExplainModuleResult, error) {
 		return ExplainModuleResult{}, fmt.Errorf("failed to inspect module %s: %w", modPath, err)
 	}
 
-	apis := append([]string(nil), mi.Metadata.Spec.Requirements.Services...)
+	apis := nonEmptyStrings(mi.Metadata.Spec.Requirements.Services)
 	sort.Strings(apis)
 	gcloudCmd := ""
 	if len(apis) > 0 {
@@ -1197,7 +1262,7 @@ var preferredProviderOrder = []string{
 	"modules/file-system/filestore",
 	"modules/file-system/managed-lustre",
 	"community/modules/compute/schedmd-slurm-gcp-v6-nodeset",
-	"community/modules/slurm/schedmd-slurm-gcp-v6-partition",
+	"community/modules/compute/schedmd-slurm-gcp-v6-partition",
 }
 
 func providerOrderRank(source string) int {
@@ -1398,9 +1463,22 @@ func printExplainModuleText(w io.Writer, res ExplainModuleResult) {
 		}
 	}
 
+	printOptionalModuleInputs(w, res.OptionalInputs)
+
 	if len(res.Outputs) > 0 {
 		writef(w, "\nModule Outputs (%d): %s\n", len(res.Outputs), strings.Join(res.Outputs, ", "))
 	}
+}
+
+func printOptionalModuleInputs(w io.Writer, optInputs []ExplainModuleInput) {
+	if len(optInputs) == 0 {
+		return
+	}
+	names := make([]string, 0, len(optInputs))
+	for _, in := range optInputs {
+		names = append(names, in.Name)
+	}
+	writef(w, "\nOptional Settings (%d): %s\n", len(names), strings.Join(names, ", "))
 }
 
 type normalizedSpec struct {
@@ -1430,9 +1508,9 @@ var knownSpecAliasTable = []specAliasDef{
 	{Canonical: "a3-ultragpu-8g", Category: "hardware", Aliases: []string{"a3-ultragpu-8g", "a3-ultragpu", "a3ultra"}, Tokens: []string{"a3u", "a3-ultra", "a3ultra", "h200", "a3-ultragpu", "a3-ultragpu-8g"}},
 	{Canonical: "a3-megagpu-8g", Category: "hardware", Aliases: []string{"a3-megagpu-8g", "a3-megagpu", "a3mega"}, Tokens: []string{"a3m", "a3-mega", "a3mega", "a3-megagpu", "a3-megagpu-8g"}},
 	{Canonical: "a3-highgpu-8g", Category: "hardware", Aliases: []string{"a3-highgpu-8g", "a3-highgpu", "a3high"}, Tokens: []string{"a3h", "a3-high", "a3high", "h100", "a3-highgpu", "a3-highgpu-8g"}},
-	{Canonical: "a4-highgpu-8g", Category: "hardware", Aliases: []string{"a4-highgpu-8g", "a4-highgpu", "a4high", "gke-a4"}, Tokens: []string{"a4", "a4-high", "a4high", "b200", "a4-highgpu", "a4-highgpu-8g"}},
-	{Canonical: "a4x-highgpu-4g", Category: "hardware", Aliases: []string{"a4x-highgpu-4g", "a4xhigh", "gke-a4x"}, Tokens: []string{"a4x", "a4x-high", "a4xhigh", "gb200", "a4x-highgpu", "a4x-highgpu-4g"}},
-	{Canonical: "a4x-maxgpu-4g-metal", Category: "hardware", Aliases: []string{"a4x-maxgpu-4g-metal", "a4xmax-bm", "gke-a4x-max-bm"}, Tokens: []string{"a4xmax", "a4x-max", "a4x-max-bm", "a4x-maxgpu-4g-metal"}},
+	{Canonical: "a4-highgpu-8g", Category: "hardware", Aliases: []string{"a4-highgpu-8g", "a4-highgpu", "a4high", "gke-a4"}, Tokens: []string{"a4", "a4h", "a4-high", "a4high", "b200", "a4-highgpu", "a4-highgpu-8g"}},
+	{Canonical: "a4x-highgpu-4g", Category: "hardware", Aliases: []string{"a4x-highgpu-4g", "a4xhigh", "gke-a4x"}, Tokens: []string{"a4x", "a4xh", "a4x-high", "a4xhigh", "gb200", "a4x-highgpu", "a4x-highgpu-4g"}},
+	{Canonical: "a4x-maxgpu-4g-metal", Category: "hardware", Aliases: []string{"a4x-maxgpu-4g-metal", "a4xmax-bm", "gke-a4x-max-bm"}, Tokens: []string{"a4xmax", "a4x-max", "a4x-max-bm", "a4xmax-bm", "gb300", "a4x-maxgpu", "a4x-maxgpu-4g-metal"}},
 	{Canonical: "tpu7x-standard-4t", Category: "hardware", Aliases: []string{"tpu7x-standard-4t", "tpu-7x", "tpu7x"}, Tokens: []string{"tpu7x", "tpu-7x", "7x", "ironwood", "tpu7x-standard-4t"}},
 	{Canonical: "tpu-v6e", Category: "hardware", Aliases: []string{"tpu-v6e", "v6e", "ct6e"}, Tokens: []string{"tpuv6e", "tpu-v6e", "v6e", "trillium"}},
 	{Canonical: "tpu-v5p", Category: "hardware", Aliases: []string{"tpu-v5p", "v5p", "ct5p"}, Tokens: []string{"tpuv5p", "tpu-v5p", "v5p"}},
@@ -1440,17 +1518,24 @@ var knownSpecAliasTable = []specAliasDef{
 	{Canonical: "tpu-v4", Category: "hardware", Aliases: []string{"tpu-v4", "v4", "ct4p"}, Tokens: []string{"tpuv4", "tpu-v4", "v4"}},
 	{Canonical: "tpu", Category: "hardware", Aliases: []string{"tpu", "tpu7x", "ct6e", "ct5p", "ct5lp", "ct4p"}, Tokens: []string{"tpu"}},
 	{Canonical: "h4d", Category: "hardware", Aliases: []string{"h4d"}, Tokens: []string{"h4d"}},
+	{Canonical: "h3", Category: "hardware", Aliases: []string{"h3"}, Tokens: []string{"h3"}},
+	{Canonical: "c4a", Category: "hardware", Aliases: []string{"c4a"}, Tokens: []string{"c4a"}},
 	{Canonical: "c3d", Category: "hardware", Aliases: []string{"c3d"}, Tokens: []string{"c3d"}},
+	{Canonical: "c3", Category: "hardware", Aliases: []string{"c3"}, Tokens: []string{"c3"}},
+	{Canonical: "c2d", Category: "hardware", Aliases: []string{"c2d"}, Tokens: []string{"c2d"}},
 	{Canonical: "c2", Category: "hardware", Aliases: []string{"c2"}, Tokens: []string{"c2"}},
 	{Canonical: "g2", Category: "hardware", Aliases: []string{"g2"}, Tokens: []string{"g2"}},
 	{Canonical: "g4", Category: "hardware", Aliases: []string{"g4"}, Tokens: []string{"g4"}},
 	{Canonical: "a2", Category: "hardware", Aliases: []string{"a2"}, Tokens: []string{"a2"}},
+	{Canonical: "n2d", Category: "hardware", Aliases: []string{"n2d"}, Tokens: []string{"n2d"}},
 	{Canonical: "n2", Category: "hardware", Aliases: []string{"n2"}, Tokens: []string{"n2"}},
+	{Canonical: "e2", Category: "hardware", Aliases: []string{"e2"}, Tokens: []string{"e2"}},
+	{Canonical: "t2a", Category: "hardware", Aliases: []string{"t2a"}, Tokens: []string{"t2a"}},
 
 	{Canonical: "managed-lustre", Category: "module", ModuleSource: "modules/file-system/managed-lustre", Aliases: []string{"managed-lustre"}, Tokens: []string{"lustre", "managed-lustre"}},
 	{Canonical: "filestore", Category: "module", ModuleSource: "modules/file-system/filestore", Aliases: []string{"filestore"}, Tokens: []string{"filestore", "nfs"}},
 	{Canonical: "cloud-storage-bucket", Category: "module", ModuleSource: "modules/file-system/cloud-storage-bucket", Aliases: []string{"cloud-storage-bucket"}, Tokens: []string{"gcs", "gcsfuse", "bucket", "cloud-storage", "cloud-storage-bucket"}},
-	{Canonical: "parallelstore", Category: "module", ModuleSource: "community/modules/file-system/parallelstore", Aliases: []string{"parallelstore"}, Tokens: []string{"parallelstore", "daos"}},
+	{Canonical: "parallelstore", Category: "module", ModuleSource: "modules/file-system/parallelstore", Aliases: []string{"parallelstore"}, Tokens: []string{"parallelstore", "daos"}},
 	{Canonical: "netapp-storage-pool", Category: "module", ModuleSource: "modules/file-system/netapp-storage-pool", Aliases: []string{"netapp-storage-pool"}, Tokens: []string{"netapp", "netapp-storage-pool"}},
 }
 
@@ -1466,8 +1551,13 @@ func parseSpecTokens(args []string) []normalizedSpec {
 	}
 
 	out := make([]normalizedSpec, 0, len(rawTokens))
+	seenCanonical := make(map[string]bool, len(rawTokens))
 	for _, tok := range rawTokens {
-		out = append(out, classifySpecToken(tok))
+		sp := classifySpecToken(tok)
+		if !seenCanonical[sp.Canonical] {
+			seenCanonical[sp.Canonical] = true
+			out = append(out, sp)
+		}
 	}
 	return out
 }
@@ -1610,7 +1700,7 @@ func buildExplainSpecMatch(repoRoot string, args []string) (ExplainSpecMatchResu
 	if len(best.missingSpecs) == 0 && exactTotal > 1 {
 		otherExact = exactTotal - 1
 	}
-	return assembleSpecMatchResult(repoRoot, specs, best, otherExact)
+	return assembleSpecMatchResult(repoRoot, specs, best, otherExact, blueprints)
 }
 
 func scanBlueprintsForSpecMatch(repoRoot string) ([]catalog.BlueprintEntry, error) {
@@ -1724,7 +1814,7 @@ func formatUnmatchedSpecsError(specs []normalizedSpec) error {
 		strings.Join(rawList, ", "))
 }
 
-func assembleSpecMatchResult(repoRoot string, specs []normalizedSpec, best *scoredBlueprintCandidate, otherExact int) (ExplainSpecMatchResult, error) {
+func assembleSpecMatchResult(repoRoot string, specs []normalizedSpec, best *scoredBlueprintCandidate, otherExact int, allBlueprints []catalog.BlueprintEntry) (ExplainSpecMatchResult, error) {
 	bpAbs := filepath.Join(repoRoot, filepath.FromSlash(best.entry.Path))
 	deplAbs := ""
 	if best.entry.DeploymentPath != "" {
@@ -1744,16 +1834,13 @@ func assembleSpecMatchResult(repoRoot string, specs []normalizedSpec, best *scor
 		matchedNames = append(matchedNames, s.Canonical)
 	}
 
-	targetGroup := "primary"
-	if len(bpExplain.Stages) > 0 {
-		targetGroup = bpExplain.Stages[0].Group
-	}
 	var missingOut []ExplainMissingSpec
 	for _, ms := range best.missingSpecs {
 		item := ExplainMissingSpec{Spec: ms.Raw, Module: ms.ModuleSource}
 		if ms.ModuleSource != "" {
-			item.TargetGroup = targetGroup
 			item.Snippet = buildMissingModuleSnippetForBlueprint(ms.ModuleSource, best.entry)
+			item.TargetGroup = pickTargetGroupForSnippet(bpExplain.Stages, item.Snippet)
+			item.ReferenceBlueprints = referenceBlueprintsFor(allBlueprints, best.entry.Scheduler, ms.ModuleSource)
 		}
 		missingOut = append(missingOut, item)
 	}
@@ -1768,6 +1855,46 @@ func assembleSpecMatchResult(repoRoot string, specs []normalizedSpec, best *scor
 	}, nil
 }
 
+func pickTargetGroupForSnippet(stages []ExplainStage, snippet string) string {
+	if len(stages) == 0 {
+		return "primary"
+	}
+	target := stages[0].Group
+	matchedDep := false
+	for _, st := range stages {
+		for _, m := range st.Modules {
+			if m.ID != "" && strings.Contains(snippet, m.ID) {
+				target = st.Group
+				matchedDep = true
+			}
+		}
+	}
+	if !matchedDep {
+		for _, st := range stages {
+			if slices.ContainsFunc(st.Modules, func(m ExplainStageModule) bool { return m.ShortSource == "vpc" }) {
+				return st.Group
+			}
+		}
+	}
+	return target
+}
+
+func referenceBlueprintsFor(all []catalog.BlueprintEntry, scheduler, modSource string) []string {
+	var refs []string
+	for _, bp := range all {
+		if bp.Scheduler != scheduler {
+			continue
+		}
+		for _, m := range bp.Modules {
+			if m.Source == modSource {
+				refs = append(refs, bp.Path)
+				break
+			}
+		}
+	}
+	return refs
+}
+
 func buildMissingModuleSnippetForBlueprint(modSource string, bp catalog.BlueprintEntry) string {
 	kind := detectEmbeddedModuleKind(sourcereader.ModuleFS, modSource)
 	if kind == "" {
@@ -1775,7 +1902,7 @@ func buildMissingModuleSnippetForBlueprint(modSource string, bp catalog.Blueprin
 	}
 	mi, err := modulereader.GetModuleInfo(modSource, kind)
 	if err != nil {
-		return fmt.Sprintf("- id: %s\n  source: %s", defaultModuleID(modSource), modSource)
+		return fmt.Sprintf("# could not inspect %s: %v", modSource, err)
 	}
 
 	upstreamGroups, useProvided := findUpstreamCandidateGroups(modSource, mi)
@@ -1900,6 +2027,11 @@ func printMissingSpecSnippets(w io.Writer, missing []ExplainMissingSpec) {
 		for _, line := range strings.Split(ms.Snippet, "\n") {
 			writef(w, "  %s\n", line)
 		}
-		writef(w, "  Note: Also add the new module ID to the 'use:' list of downstream compute/cluster modules that consume its outputs.\n")
+		if len(ms.ReferenceBlueprints) > 0 {
+			writef(w, "  Note: Also wire downstream consumer/CSI/firewall settings for %s; see reference blueprints: %s\n",
+				ms.Module, strings.Join(ms.ReferenceBlueprints, ", "))
+		} else {
+			writef(w, "  Note: Also add the new module ID to the 'use:' list of downstream compute/cluster modules that consume its outputs.\n")
+		}
 	}
 }

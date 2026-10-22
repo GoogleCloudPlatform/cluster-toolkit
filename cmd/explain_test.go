@@ -233,6 +233,14 @@ func (s *MySuite) TestExplainRejectsMissingDeploymentFileAndBadBlueprint(c *C) {
 	_, err := runExplainForTest("examples/hpc-slurm.yaml")
 	c.Assert(err, NotNil)
 	c.Check(strings.Contains(err.Error(), "failed to load deployment file"), Equals, true)
+
+	// N3: -d / --deployment-file outside blueprint mode must be rejected
+	_, err = runExplainForTest("slurm", "a3u")
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "--deployment-file is only valid"), Equals, true)
+	_, err = runExplainForTest("modules/file-system/filestore")
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "--deployment-file is only valid"), Equals, true)
 	explainFlags.deploymentFile = ""
 
 	// N1: Existing .yaml file with invalid blueprint syntax or no deployment_groups must report parse error
@@ -242,4 +250,49 @@ func (s *MySuite) TestExplainRejectsMissingDeploymentFileAndBadBlueprint(c *C) {
 	_, err = runExplainForTest(badBP)
 	c.Assert(err, NotNil)
 	c.Check(strings.Contains(err.Error(), "not found"), Equals, false)
+}
+
+func (s *MySuite) TestExplainHardcodedModuleSourcesExist(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	for _, def := range knownSpecAliasTable {
+		if def.ModuleSource != "" {
+			c.Check(detectEmbeddedModuleKind(sourcereader.ModuleFS, def.ModuleSource), Not(Equals), "",
+				Commentf("knownSpecAliasTable[%s] -> %s", def.Canonical, def.ModuleSource))
+		}
+	}
+	for _, src := range preferredProviderOrder {
+		c.Check(detectEmbeddedModuleKind(sourcereader.ModuleFS, src), Not(Equals), "",
+			Commentf("preferredProviderOrder -> %s", src))
+	}
+
+	// Verify synonym deduplication (N5) and reference blueprints (B2)
+	specs := parseSpecTokens([]string{"slurm", "a3u", "a3ultra", "h200"})
+	c.Check(len(specs), Equals, 2)
+
+	outGkeLustre, err := runExplainForTest("gke", "a3-megagpu", "lustre")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeLustre, "examples/gke-managed-lustre.yaml"), Equals, true)
+
+	// Directory with 1 blueprint resolves automatically; directory with >1 blueprint lists choices
+	outDir, err := runExplainForTest("examples/gke-a3-ultragpu/")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outDir, "examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml"), Equals, true)
+
+	_, err = runExplainForTest("examples/machine-learning/a3-ultragpu-8g/")
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "contains multiple blueprints"), Equals, true)
+	c.Check(strings.Contains(err.Error(), "a3ultra-slurm-blueprint.yaml"), Equals, true)
+
+	// Verify 'a4h' hardware token matches gke-a4.yaml and multi-stage targetGroup picks [setup] over [enable_apis]
+	outGkeA4, err := runExplainForTest("gke", "a4h")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeA4, "Exact Blueprint Match"), Equals, true)
+	c.Check(strings.Contains(outGkeA4, "examples/gke-a4/gke-a4.yaml"), Equals, true)
+
+	outHclsPstore, err := runExplainForTest("slurm", "c2", "parallelstore")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outHclsPstore, "insert into group [setup]:"), Equals, true)
+	c.Check(strings.Contains(outHclsPstore, "use: [network, private_service_access]"), Equals, true)
 }
