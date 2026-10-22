@@ -107,8 +107,8 @@ def check_resource_constraints(schedule: dict[str, int]) -> bool:
 
 
 def crontab(schedule: dict[str, int]) -> dict[str, str]:
-    return { # test: "{minutes} {hours} * * MON,TUE,THU,FRI"
-        k: f"{t % 60} {t // 60} * * MON,TUE,THU,FRI" for k, t in schedule.items()}
+    return { # test: "{minutes} {hours} * * MON-FRI"
+        k: f"{t % 60} {t // 60} * * MON-FRI" for k, t in schedule.items()}
 
 MAX_TRIES = 102000
 if __name__ == "__main__":
