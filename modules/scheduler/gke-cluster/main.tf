@@ -370,8 +370,11 @@ resource "google_container_cluster" "gke_cluster" {
     gcs_fuse_csi_driver_config {
       enabled = var.enable_gcsfuse_csi
     }
-    high_scale_checkpointing_config {
-      enabled = var.enable_multi_tier_checkpointing
+    dynamic "high_scale_checkpointing_config" {
+      for_each = var.enable_multi_tier_checkpointing ? [1] : []
+      content {
+        enabled = true
+      }
     }
     gce_persistent_disk_csi_driver_config {
       enabled = var.enable_persistent_disk_csi
