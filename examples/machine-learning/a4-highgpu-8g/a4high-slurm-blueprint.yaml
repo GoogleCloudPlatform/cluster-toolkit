@@ -357,6 +357,9 @@ deployment_groups:
     use: [a4high-slurm-net-0, a4high_startup]
     settings:
       bandwidth_tier: gvnic_enabled
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a4-highgpu-8g
       tags: [$(vars.multinic_client_tag)]
       enable_public_ips: true

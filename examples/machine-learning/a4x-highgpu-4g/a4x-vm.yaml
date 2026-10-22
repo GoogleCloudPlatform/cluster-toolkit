@@ -21,7 +21,6 @@ vars:
   zone: # supply zone
   instance_count: # supply cluster size
   reservation_name: # supply reservation name
-  machine_type: 'a4x-highgpu-4g'
   hostname_prefix: $(vars.deployment_name)
   base_image:
     project: ubuntu-os-accelerator-images
@@ -315,7 +314,10 @@ deployment_groups:
     source: modules/compute/vm-instance
     use: [homefs]
     settings:
-      machine_type: $(vars.machine_type)
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
+      machine_type: a4x-highgpu-4g
       instance_count: $(vars.instance_count)
       reservation_name: $(vars.reservation_name)
       name_prefix: $(vars.deployment_name)

@@ -677,6 +677,9 @@ deployment_groups:
       node_count_static: $(vars.a3mega_cluster_size)
       node_count_dynamic_max: $(vars.a3mega_node_count_dynamic_max)
       disk_type: pd-ssd
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a3-megagpu-8g
       enable_public_ips: false
       advanced_machine_features:

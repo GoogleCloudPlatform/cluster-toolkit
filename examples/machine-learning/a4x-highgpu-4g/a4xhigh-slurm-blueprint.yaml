@@ -380,6 +380,9 @@ deployment_groups:
     use: [a4x-slurm-net-0, a4x_startup]
     settings:
       bandwidth_tier: gvnic_enabled
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a4x-highgpu-4g
       enable_public_ips: true
       node_count_static: $(vars.a4x_cluster_size)

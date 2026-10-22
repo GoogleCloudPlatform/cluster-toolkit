@@ -117,6 +117,9 @@ deployment_groups:
     source: modules/compute/vm-instance
     use: [startup-script, homefs]
     settings:
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a3-ultragpu-8g
       instance_count: $(vars.number_of_vms)
       name_prefix: $(vars.hostname_prefix)

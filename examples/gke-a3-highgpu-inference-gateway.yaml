@@ -27,8 +27,6 @@ vars:
   gcp_public_cidrs_access_enabled: false
   gpu_static_node_count: 2
   # Optional overrides (defaults shown)
-  # Machine type for the GPU compute node pool.
-  compute_machine_type: a3-highgpu-8g
   # Machine type for the "default" CPU node pool.
   cpu_pool_machine_type: n2d-standard-2
   # Minimum total node count of the "default" CPU node pool.
@@ -114,7 +112,10 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [gke_cluster, gpunets, node_pool_service_account]
     settings:
-      machine_type: $(vars.compute_machine_type)
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
+      machine_type: a3-highgpu-8g
       static_node_count: $(vars.gpu_static_node_count)
       # To use Spot VMs, uncomment the following line:
       # spot: true

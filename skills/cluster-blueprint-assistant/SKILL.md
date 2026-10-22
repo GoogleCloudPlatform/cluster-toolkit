@@ -178,12 +178,15 @@ Customizable vars in `examples/**/*.yaml` and `community/examples/**/*.yaml` fol
 the var feeds (`_machine_type`, `_node_count_dynamic_max`, `_node_count_static`,
 `_static_node_count`, `_initial_node_count`, `_num_instances`, `_instance_count`,
 `_autoscaling_total_min_nodes` / `_autoscaling_total_max_nodes`, `_size_gb`,
-`_size_gib`, `_capacity_gb`, `_capacity_gib`, `_disk_size_gb`, `_disk_size`),
-so no translation is needed between the var and the setting. Only settings that
-were already explicit literals in the module block are exposed this way — a
-tracked template never gains a `vars:` key for an input the module block did not
-set (there is, for example, no Spot or reservation var in `hpc-slurm.yaml`
-because its nodesets never set those inputs; Spot on that cluster is Case 2).
+`_size_gib`, `_capacity_gb`, `_capacity_gib`, `_disk_size_gb`, `_disk_size`,
+`_enable_spot_vm`, `_spot`), so no translation is needed between the var and
+the setting. Every sizing, machine-type, storage-capacity and Spot knob on a
+blueprint's worker compute and storage modules is exposed this way with a
+concrete default equal to what the module would otherwise use (for example
+`compute_enable_spot_vm: false` in `hpc-slurm.yaml`), so a user only ever
+*has* to fill in `project_id`, `deployment_name`, `region` and `zone`.
+Control-plane roles (`login_`, `controller_`, `system_node_pool_`) expose
+machine type and disk size but never Spot: those modules do not accept it.
 
 | Role prefix | Meaning |
 | :--- | :--- |
@@ -197,14 +200,20 @@ because its nodesets never set those inputs; Spot on that cluster is Case 2).
 
 Rules the agent must respect:
 
-- **Hardware-named partitions expose `node_count_dynamic_max` only, never
+- **Hardware-named partitions expose node counts and Spot, never
   `machine_type`** (`h3`, `a2`, `g2`, `n2`, `c2`, `c2d`, `c3`, `a2_8`,
   `a2_16`). The hardware name *is* the partition's identity; "run the `g2`
   partition on g4" is "add a partition" → Case 2/3 (copy the blueprint), not a
   `deployment.yaml` override. Functionally named pools (`compute`, `debug`,
   `hp_pool`, …) do expose `<role>_machine_type`.
+- **Hardware-locked blueprints hardcode `machine_type` in the module.** The
+  GKE and Slurm A3 / A4 / A4X blueprints have multi-NIC RDMA / GPUDirect wiring
+  that only works with one shape, so they expose no compute machine-type var at
+  all (the shape still appears in the catalog's `machine_types`). Multi-shape
+  families (`gke-h4d`, `gke-tpu-*`, `gke-g4*`, all CPU blueprints) expose
+  `compute_machine_type` with an `# Allowed:` comment listing valid shapes.
 - **Three override states.** `""` means "empty string" (e.g.
-  `g4_reservation_name: ""` in `ml-slurm-g4` = no reservation); `$(null)` means
+  `compute_reservation_name: ""` in `ml-slurm-g4` = no reservation); `$(null)` means
   "unset this input" (e.g. `static_node_count` must be unset under flex-start);
   a bare `key:` in YAML or `key=` on `--vars` is **always an error** (`deployment
   variable "key" was not set`). That error means a **null value in your `-d`
@@ -223,39 +232,16 @@ Rules the agent must respect:
   writing the key. Never run `gcluster` with `-l IGNORE` or add
   `test_deployment_variable_not_used` to `--skip-validators`: that validator is
   the only guard against a typo'd key, so if it fails, fix the key.
-- **Legacy names that pre-date the convention** (kept for compatibility, do not
-  rename): `cluster_size`, `g4_machine_type` / `g4_reservation_name` /
-  `g4_enable_spot_vm` / `g4_dws_flex_enabled` / `disk_size_gb` (`ml-slurm-g4`),
-  bare `machine_type` / `reservation_name` (`ml-slurm-g4-vgpu`),
-  `compute_node_machine_type` (`pfs-managed-lustre-slurm`), `size_gib`
-  (`gke-managed-lustre`), bare `disk_size_gb` in `ml-slurm` (intentionally
-  broadcast to all nodesets, login and controller); in `community/examples`:
-  bare `node_count_dynamic_max` / `enable_spot_vm` / `enable_placement`
-  (`slurm-high-throughput/*`), `node_count_dynamic_max_per_region`,
-  `gke_nodeset_replicas` (`slurm-gke`), `base_pool_size` / `compute_pool_size`
-  (`hpc-slinky`), bare `machine_type` (`xpk-n2-filestore`), `vm_machine_type`
-  (`apptainer-artifact-registry-openfoam`), `disk_size` (`hpc-slurm6-*`),
-  `image_build_machine_type` reused for login/controller/NFS
-  (`hpc-slurm-google-cloud-dedicated/*`); in the subfolder examples that ship a
-  companion `*-deployment.yaml`: bare `static_node_count`, `spot`,
-  `reservation_affinity`, `enable_flex_start`, `num_slices`, `tpu_topology`,
-  `autoscaling_total_min_nodes`, `system_node_pool_disk_size_gb`,
-  `<hw>_node_pool_disk_size_gb`, `<hw>_cluster_size` / `*_static_cluster_size`
-  / `number_of_vms`, `compute_nodepool_machine_type` /
-  `system_nodepool_machine_type` (`gke-a4x*`), bare `machine_type` /
-  `instance_count` / `reservation_name` (`a4x-vm`), `tpu_static_nodes` /
-  `tpu_dynamic_max_nodes` (`tpu7x-slurm`).
-- **Bare `machine_type` is gone from the GKE blueprints in `examples/`** (the
-  only remaining bare `machine_type` vars under `examples/` are the legacy ones
-  in `ml-slurm-g4-vgpu` and `a4x-vm`, kept for compatibility). The GKE
-  blueprints under `examples/gke-g4*`, `examples/gke-tpu-*` and
-  `examples/gke-consumption-options/**` that used to take a bare `machine_type`
-  now take `compute_machine_type` — in the blueprint `vars:`, in the companion
-  `*-deployment.yaml`, and in `--vars`. Every companion `*-deployment.yaml`
-  whose blueprint gained prefixed vars ends with a commented
-  `Optional overrides (defaults shown)` block listing them; uncomment a line to
-  override it (`gke-a4x*` and `alphaevolve` were already fully var-driven and
-  have no such block).
+- **The catalog is the contract, not this document.** Official `examples/`
+  follow the `<role>_<terraform_input>` convention; `community/examples/` may
+  still use older names (`cluster_size`, `size_gib`, bare `machine_type`, …).
+  Do not memorise exceptions: always read the chosen blueprint's `vars` list in
+  `catalog.yaml` before writing keys to `deployment.yaml` or `--vars`. If a
+  machine type appears in the catalog's `machine_types` but the entry has no
+  `*_machine_type` var, it is hardware-locked — do not try to override it.
+- Every companion `*-deployment.yaml` whose blueprint exposes prefixed vars
+  ends with a commented `Optional overrides (defaults shown)` block listing
+  them; uncomment a line to override it.
 
 If the blueprint does not expose the setting you need in `vars:`, copy the
 tracked template to a new file in the same directory with `ai_assisted: true`

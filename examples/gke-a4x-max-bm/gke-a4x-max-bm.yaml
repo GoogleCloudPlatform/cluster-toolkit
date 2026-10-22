@@ -49,8 +49,7 @@ vars:
   # The GCP Project ID hosting the reservation. Set to owner project id if using a shared reservation.
   reservation_project_id: $(vars.project_id)
 
-  compute_nodepool_machine_type: a4x-maxgpu-4g-metal
-  system_nodepool_machine_type: n2d-standard-16
+  system_node_pool_machine_type: n2d-standard-16
   system_node_pool_disk_size_gb: 200
   a4x_max_node_pool_disk_size_gb: 100
   k8s_service_account_name: workload-identity-k8s-sa
@@ -138,7 +137,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-a4x-max-net-0, workload_service_account]
     settings:
-      system_node_pool_machine_type: $(vars.system_nodepool_machine_type)
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_dataplane_v2: true
@@ -215,7 +214,10 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [a4x-max-cluster, node_pool_service_account, workload_policy]
     settings:
-      machine_type: $(vars.compute_nodepool_machine_type)
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
+      machine_type: a4x-maxgpu-4g-metal
       auto_upgrade: true
       enable_dranet: true
       zones: [$(vars.zone)]

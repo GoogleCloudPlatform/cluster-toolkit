@@ -25,7 +25,7 @@ cli_deployment_vars:
   test_name: "{{ test_name }}"
   region: "{{ region }}"
   zone: "{{ zone }}"
-  compute_node_machine_type: c2-standard-4
+  compute_machine_type: c2-standard-4
   slurm_cluster_name: "{{ slurm_cluster_name }}"
   lustre_instance_id: "lustre-instance-{{build}}"
   kms_key: "projects/{{ project }}/locations/us-central1/keyRings/lustre-keyring/cryptoKeys/lustre-key"

@@ -825,6 +825,9 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [a4x-max-slurm-net-0, a4x_max_startup]
     settings:
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a4x-maxgpu-4g-metal # *** A4X-Max Bare Metal machine type ***
       enable_public_ips: true
       node_count_static: $(vars.a4x_max_cluster_size)

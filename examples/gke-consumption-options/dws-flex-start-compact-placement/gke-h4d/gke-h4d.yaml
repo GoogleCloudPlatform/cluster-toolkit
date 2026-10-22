@@ -43,6 +43,7 @@ vars:
   # Machine type for the GKE system node pool.
   system_node_pool_machine_type: n2d-standard-16
   # Machine type for the compute node pool.
+  # Allowed: h4d-highmem-192-lssd | h4d-standard-192 (same RDMA network wiring).
   compute_machine_type: h4d-standard-192
 
 deployment_groups:

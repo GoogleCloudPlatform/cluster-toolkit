@@ -76,8 +76,6 @@ vars:
   # Optional overrides (defaults shown)
   # Machine type for the GKE system node pool.
   system_node_pool_machine_type: n2d-standard-4
-  # Machine type for the GPU compute node pool.
-  compute_machine_type: a4-highgpu-8g
 
 deployment_groups:
 - group: primary
@@ -236,7 +234,10 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [a4-cluster, node_pool_service_account]
     settings:
-      machine_type: $(vars.compute_machine_type)
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
+      machine_type: a4-highgpu-8g
       auto_upgrade: true
       enable_dranet: true
       zones: [$(vars.zone)]

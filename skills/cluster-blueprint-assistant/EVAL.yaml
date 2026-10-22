@@ -102,22 +102,25 @@ cases:
   - "gcluster destroy"
   - "rm -rf"
 
-# CUJ 1 (explicit-knob rule): hpc-slurm.yaml exposes no Spot var because its
-# compute nodeset never set enable_spot_vm. A Spot request is therefore Case 2:
-# copy the blueprint with ai_assisted: true, add the knob there, and override it
-# in deployment.yaml. The agent must not drop a bare `enable_spot_vm: true` into
-# deployment.yaml (it would be injected into all three nodesets) and must not
-# edit the tracked template in place.
-- name: case_1e_spot_not_in_vars_requires_copy
-  description: "Agent sees that hpc-slurm.yaml has no Spot var in vars:, copies the blueprint with ai_assisted: true to add one, and never writes the bare module input enable_spot_vm into deployment.yaml or edits examples/hpc-slurm.yaml in place."
+# CUJ 1 (partition-scoped Spot): hpc-slurm.yaml exposes one Spot var per
+# partition (debug_/compute_/h3_enable_spot_vm). A Spot request for one
+# partition is Case 1: set the partition-prefixed var in deployment.yaml. The
+# agent must not drop a bare `enable_spot_vm: true` into deployment.yaml (it
+# would be injected into all three nodesets), must not copy or edit the
+# tracked template, and must leave the other partitions on-demand.
+- name: case_1e_spot_via_partition_prefixed_var
+  description: "Agent sets compute_enable_spot_vm: true in deployment.yaml only; it never writes the bare module input enable_spot_vm, never copies or edits examples/hpc-slurm.yaml, and does not touch debug_/h3_enable_spot_vm."
   prompt: >
     Make the compute partition of examples/hpc-slurm.yaml use Spot VMs,
     project my-proj.
   expect_keywords_all:
-  - "ai_assisted"
+  - "compute_enable_spot_vm"
   - "deployment.yaml"
   forbidden_commands:
   - "enable_spot_vm: true"
+  - "ai_assisted"
+  - "debug_enable_spot_vm: true"
+  - "h3_enable_spot_vm: true"
   - "> examples/hpc-slurm.yaml"
   - ">> examples/hpc-slurm.yaml"
   - "tee examples/hpc-slurm.yaml"

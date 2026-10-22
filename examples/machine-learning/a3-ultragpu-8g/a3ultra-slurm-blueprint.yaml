@@ -363,6 +363,9 @@ deployment_groups:
     settings:
       metadata: $(homefs.lnet_multinic_metadata)
       bandwidth_tier: gvnic_enabled
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a3-ultragpu-8g
       tags: [$(vars.multinic_client_tag)]
       enable_public_ips: true

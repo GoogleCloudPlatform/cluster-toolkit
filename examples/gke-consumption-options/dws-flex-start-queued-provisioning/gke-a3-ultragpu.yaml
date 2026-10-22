@@ -40,8 +40,6 @@ vars:
   # Optional overrides (defaults shown)
   # Machine type for the GKE system node pool.
   system_node_pool_machine_type: n2d-standard-16
-  # Machine type for the GPU compute node pool.
-  compute_machine_type: a3-ultragpu-8g
 
 
 deployment_groups:
@@ -165,7 +163,10 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [a3-ultragpu-cluster, node_pool_service_account]
     settings:
-      machine_type: $(vars.compute_machine_type)
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
+      machine_type: a3-ultragpu-8g
       enable_flex_start: $(vars.enable_flex_start) # dws flex-start
       auto_repair: false # dws flex-start requirement
       enable_queued_provisioning: $(vars.enable_queued_provisioning) # queued provisioning

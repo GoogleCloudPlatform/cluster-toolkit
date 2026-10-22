@@ -35,9 +35,12 @@ vars:
   login_machine_type: c3d-standard-4
   # Machine type for the controller node.
   controller_machine_type: c3d-standard-4
-  # Size in GB of the hyperdisk-throughput data disk attached to the compute,
-  # login and controller nodes.
-  data_disk_size_gb: 2048
+  # Size in GB of the hyperdisk-throughput data disk attached to each compute node.
+  compute_data_disk_size_gb: 2048
+  # Size in GB of the hyperdisk-throughput data disk attached to the login node.
+  login_data_disk_size_gb: 2048
+  # Size in GB of the hyperdisk-throughput data disk attached to the controller node.
+  controller_data_disk_size_gb: 2048
 
 deployment_groups:
 - group: primary
@@ -85,7 +88,7 @@ deployment_groups:
       - disk_name: nodeset-data
         device_name: nodeset-data
         disk_type: hyperdisk-throughput
-        disk_size_gb: $(vars.data_disk_size_gb)
+        disk_size_gb: $(vars.compute_data_disk_size_gb)
         disk_storage_pool: $(vars.hyperdisk_throughput_storage_pool)
         auto_delete: true
         boot: false
@@ -115,7 +118,7 @@ deployment_groups:
       - disk_name: login-data
         device_name: login-data
         disk_type: hyperdisk-throughput
-        disk_size_gb: $(vars.data_disk_size_gb)
+        disk_size_gb: $(vars.login_data_disk_size_gb)
         disk_storage_pool: $(vars.hyperdisk_throughput_storage_pool)
         auto_delete: true
         boot: false
@@ -141,7 +144,7 @@ deployment_groups:
       - disk_name: controller-data
         device_name: controller-data
         disk_type: hyperdisk-throughput
-        disk_size_gb: $(vars.data_disk_size_gb)
+        disk_size_gb: $(vars.controller_data_disk_size_gb)
         disk_storage_pool: $(vars.hyperdisk_throughput_storage_pool)
         auto_delete: true
         boot: false

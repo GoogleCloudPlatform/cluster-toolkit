@@ -343,7 +343,7 @@ blueprints:
   blueprint_name: eda-all-on-cloud
   scheduler: slurm
   description: "Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also creates two new VPC networks, a network called eda-net which connects VMs, Slurm and storage and a RDMA network called eda-rdma-net between the..."
-  machine_types: [h4d-highmem-192-lssd, n2-standard-4]
+  machine_types: [h4d-highmem-192-lssd]
   vars:
     deployment_name: eda-all-on-cloud
     h4d_node_count_dynamic_max: 0
@@ -415,7 +415,7 @@ blueprints:
   blueprint_name: eda-hybrid-cloud
   scheduler: slurm
   description: "Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also connects to one existing user network which connects VMs, Slurm and storage and creates a RDMA network called eda-rdma-net for low latency..."
-  machine_types: [h4d-highmem-192-lssd, n2-standard-4]
+  machine_types: [h4d-highmem-192-lssd]
   vars:
     deployment_name: eda-hybrid-cloud
     gcnv_dns_name: gcnv.internal
@@ -551,7 +551,7 @@ blueprints:
   blueprint_name: hpc-build-slurm-image
   scheduler: slurm
   description: "This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top of an existing image, hpc-rocky-linux-9 in the case of this example."
-  machine_types: [n2d-standard-16, n2d-standard-2, n2d-standard-4]
+  machine_types: [n2d-standard-2]
   vars:
     build_from_git_ref: 6.13.2
     build_from_image_family: hpc-rocky-linux-9
@@ -701,7 +701,7 @@ blueprints:
   blueprint_name: burst-cluster
   scheduler: slurm
   description: "This directory contains the blueprints, playbooks, test scripts, and architecture for demonstrating Multi-Cluster Slurm with Elastic Cloud Bursting between two autonomous projects in Google Cloud Dedicated (GCD) environments (e.g..."
-  machine_types: [c3-standard-176, c3-standard-4]
+  machine_types: [c3-standard-176]
   vars:
     authorized_ssh_ranges: []
     built_instance_image:
@@ -973,7 +973,7 @@ blueprints:
   blueprint_name: hpc-slurm-kms
   scheduler: slurm
   description: "Creates a Slurm cluster with Customer-Managed Encryption Keys (CMEK) enabled for controller, login, and compute nodesets, as well as the Slurm configuration GCS bucket."
-  machine_types: [n2-standard-2, h3-standard-88, n2-standard-4]
+  machine_types: [n2-standard-2, h3-standard-88]
   vars:
     compute_node_count_dynamic_max: 20
     debug_machine_type: n2-standard-2
@@ -1032,7 +1032,7 @@ blueprints:
   blueprint_name: hpc-slurm-local-ssd-v6
   scheduler: slurm
   description: "This blueprint demonstrates the use of Slurm and Filestore, with compute nodes that have local ssd drives deployed."
-  machine_types: [c2-standard-4, n1-standard-4]
+  machine_types: [c2-standard-4]
   vars:
     compute_machine_type: c2-standard-4
     compute_node_count_dynamic_max: 5
@@ -1076,7 +1076,6 @@ blueprints:
   blueprint_name: hpc-slurm-ramble-gromacs
   scheduler: slurm
   description: "Ramble is an experimentation framework which can drive the installation of software with Spack and create, execute, and analyze experiments using the installed software."
-  machine_types: [n2-standard-4]
   vars:
     compute_node_count_dynamic_max: 20
     deployment_name: hpc-slurm-ramble-gromacs
@@ -1128,7 +1127,7 @@ blueprints:
   blueprint_name: hpc-slurm-legacy-sharedvpc
   scheduler: slurm
   description: "This blueprint demonstrates the use of the Slurm and Filestore modules in the service project of an existing Shared VPC. Before attempting to deploy the blueprint, one must first complete initial setup for provisioning Filestore in a..."
-  machine_types: [n2-standard-2, n2-standard-4]
+  machine_types: [n2-standard-2]
   vars:
     compute_node_count_dynamic_max: 20
     debug_machine_type: n2-standard-2
@@ -1175,7 +1174,7 @@ blueprints:
   blueprint_name: hpc-slurm-ubuntu2204-v6
   scheduler: slurm
   description: "Similar to the hpc-slurm.yaml example, but using Ubuntu 22.04 instead of CentOS 7. Other operating systems are supported by SchedMD for the Slurm on GCP project and images are listed here. Only the examples listed on this page have been..."
-  machine_types: [n2-standard-2, n2-standard-4]
+  machine_types: [n2-standard-2]
   vars:
     compute_node_count_dynamic_max: 20
     debug_machine_type: n2-standard-2
@@ -1315,7 +1314,6 @@ blueprints:
   blueprint_name: slurm6-tpu-v4
   scheduler: slurm
   description: "Creates an auto-scaling Slurm cluster with TPU nodes."
-  machine_types: [n2-standard-16]
   vars:
     compute_node_count_dynamic_max: 20
     controller_machine_type: n2-standard-16
@@ -1359,7 +1357,6 @@ blueprints:
   blueprint_name: slurm6-tpu
   scheduler: slurm
   description: "Creates an auto-scaling Slurm cluster with TPU nodes."
-  machine_types: [n2-standard-4]
   vars:
     deployment_name: slurm6-tpu
     login_machine_type: n2-standard-4
@@ -1444,7 +1441,7 @@ blueprints:
   blueprint_name: htc-slurm-v6
   scheduler: slurm
   description: "This blueprint provisions a cluster using the Slurm scheduler in a configuration tuned for the execution of many short-duration, loosely-coupled (non-MPI) jobs."
-  machine_types: [c2-standard-30, n2-standard-2, n2-standard-4, c2-standard-8]
+  machine_types: [c2-standard-30, n2-standard-2, n2-standard-4]
   vars:
     c2s30_node_count_dynamic_max: 200
     c2s60_node_count_dynamic_max: 200
@@ -1506,7 +1503,7 @@ blueprints:
   blueprint_name: kms-key-per-service
   scheduler: slurm
   description: "The same CMEK Slurm cluster as kms-key.yaml, but with one key per class of resource instead of one shared key, each granted only to the service agent that uses it: the Compute Engine agent can decrypt the disks and nothing else, the..."
-  machine_types: [n2-standard-2, n2-standard-4]
+  machine_types: [n2-standard-2]
   vars:
     compute_node_count_dynamic_max: 20
     debug_machine_type: n2-standard-2
@@ -1587,7 +1584,7 @@ blueprints:
   blueprint_name: kms-key
   scheduler: slurm
   description: "An end-to-end CMEK Slurm cluster. The kms-key module creates one Cloud KMS key ring and symmetric CryptoKey, kms-key-iam grants the service agents that encrypt with it, and every encrypted resource picks the key up through use..."
-  machine_types: [n2-standard-2, n2-standard-4]
+  machine_types: [n2-standard-2]
   vars:
     compute_node_count_dynamic_max: 20
     debug_machine_type: n2-standard-2
@@ -1649,7 +1646,7 @@ blueprints:
   blueprint_name: slurm-gke
   scheduler: slurm-on-gke (slinky)
   description: "Deploys a hybrid Slurm cluster with a GCE-based controller, login node, and debug partition alongside a GKE-backed compute partition managed by the Slinky Slurm operator. The blueprint also creates a VPC, a Filestore instance mounted at..."
-  machine_types: [n2d-standard-4, c2-standard-16, n2-standard-2, n2-standard-4]
+  machine_types: [n2d-standard-4, c2-standard-16, n2-standard-2]
   vars:
     authorized_cidr: null
     base_pool_initial_node_count: 1
@@ -1726,7 +1723,7 @@ blueprints:
   blueprint_name: hpc-slurm-multiregion-scale
   scheduler: slurm
   description: "Creates a massive-scale, multi-region Slurm cluster provisioning up to 1,500 dynamic compute nodes (96,000 to 192,000 vCPUs) aggregated under a unified partition across 3 Google Cloud regions and 10 zones."
-  machine_types: [n2d-standard-64, n2-standard-4, n2-standard-16]
+  machine_types: [n2d-standard-64]
   vars:
     central_zones:
     - us-central1-a
@@ -1789,7 +1786,7 @@ blueprints:
   blueprint_name: hpc-slurm-scale
   scheduler: slurm
   description: "Creates a high-performance, single-region auto-scaling Slurm cluster scaled up to 800 dynamic Spot or On-Demand compute nodes (102,400 vCPUs) across 4 zones with multi-zonal dynamic failover and Cloud NAT."
-  machine_types: [n2-standard-128, n2-standard-4, n2-standard-8]
+  machine_types: [n2-standard-128]
   vars:
     compute_machine_type: n2-standard-128
     compute_node_count_static: 0
@@ -1868,7 +1865,7 @@ blueprints:
   blueprint_name: sycomp-storage-slurm
   scheduler: slurm
   description: "Deploys and expands an IBM Storage Scale cluster using the Sycomp Intelligent Data Storage Platform and exposes it to compute clients over NFS."
-  machine_types: [n2-standard-2, n2-standard-4]
+  machine_types: [n2-standard-2]
   vars:
     compute_machine_type: n2-standard-2
     compute_node_count_dynamic_max: 4
@@ -1967,7 +1964,7 @@ blueprints:
   blueprint_name: starccm-on-slurm
   scheduler: slurm
   description: "This blueprint provisions an HPC cluster running Slurm for use with a Simcenter StarCCM+ tutorial."
-  machine_types: [n2-standard-2, c2-standard-60, n2-standard-4]
+  machine_types: [n2-standard-2, c2-standard-60]
   vars:
     compute_machine_type: c2-standard-60
     compute_node_count_dynamic_max: 20
@@ -2047,7 +2044,7 @@ blueprints:
   blueprint_name: xpk-n2
   scheduler: gke
   description: "This example shows how to set up an XPK-compatible GKE cluster - giving researchers a Slurm-like CLI experience but with lightweight Kueue and Kjob resources on the cluster side. The blueprint creates a low-cost, CPU-based XPK cluster..."
-  machine_types: [n2-standard-32, n2d-standard-4]
+  machine_types: [n2-standard-32]
   vars:
     authorized_cidr: "<your-ip-address>/32"
     config_map_path: "$(ghpc_stage(\"./config-map.yaml.tftpl\"))"
@@ -2160,12 +2157,14 @@ blueprints:
   blueprint_name: cae-slurm-v6
   scheduler: slurm
   description: "The Computer Aided Engineering (CAE) blueprint captures a reference architecture where the right cloud components are assembled to optimally cater to the requirements of computationally-intensive CAE workloads. Specifically, it is..."
-  machine_types: [h3-standard-88, c3-highmem-176, n2-standard-8, n2-standard-16]
+  machine_types: [h3-standard-88, c3-highmem-176]
   vars:
     appsfs_size_gb: 2560
+    c3_enable_spot_vm: false
     c3_node_count_dynamic_max: 10
     controller_machine_type: n2-standard-16
     deployment_name: cae-slurm-v6
+    h3_enable_spot_vm: false
     h3_node_count_dynamic_max: 10
     homefs_size_gb: 2560
     login_machine_type: n2-standard-8
@@ -2198,7 +2197,7 @@ blueprints:
   - id: h3_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
-    settings: [allow_automatic_updates, bandwidth_tier, disk_type, machine_type, node_count_dynamic_max]
+    settings: [allow_automatic_updates, bandwidth_tier, disk_type, enable_spot_vm, machine_type, node_count_dynamic_max]
   - id: h3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [h3_nodeset]
@@ -2206,7 +2205,7 @@ blueprints:
   - id: c3_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
-    settings: [allow_automatic_updates, bandwidth_tier, disk_type, machine_type, node_count_dynamic_max]
+    settings: [allow_automatic_updates, bandwidth_tier, disk_type, enable_spot_vm, machine_type, node_count_dynamic_max]
   - id: c3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [c3_nodeset]
@@ -2226,7 +2225,6 @@ blueprints:
   machine_types: [a3-highgpu-8g, n2d-standard-2]
   vars:
     authorized_cidr: null
-    compute_machine_type: a3-highgpu-8g
     cpu_pool_autoscaling_total_max_nodes: 3
     cpu_pool_autoscaling_total_min_nodes: 1
     cpu_pool_machine_type: n2d-standard-2
@@ -2272,7 +2270,6 @@ blueprints:
     authorized_cidr: null
     auto_repair: true
     autoscaling_total_min_nodes: 0
-    compute_machine_type: a3-highgpu-8g
     deployment_name: gke-a3-high
     enable_flex_start: false
     enable_queued_provisioning: false
@@ -2331,7 +2328,6 @@ blueprints:
     authorized_cidr: null
     auto_repair: true
     autoscaling_total_min_nodes: 0
-    compute_machine_type: a3-megagpu-8g
     deployment_name: gke-a3-mega
     enable_flex_start: false
     enable_queued_provisioning: false
@@ -2382,14 +2378,13 @@ blueprints:
   blueprint_name: gke-a3-ultra
   scheduler: gke
   description: "Refer to AI Hypercomputer Documentation for instructions."
-  machine_types: [a3-ultragpu-8g, n2d-standard-16]
+  machine_types: [a3-ultragpu-8g]
   vars:
     a3ultra_node_pool_disk_size_gb: 100
     accelerator_type: nvidia-h200-141gb
     authorized_cidr: null
     auto_repair: true
     autoscaling_total_min_nodes: 0
-    compute_machine_type: a3-ultragpu-8g
     deployment_name: null
     enable_flex_start: false
     enable_queued_provisioning: false
@@ -2458,7 +2453,7 @@ blueprints:
   blueprint_name: gke-a4
   scheduler: gke
   description: "This blueprint uses GKE to provision Kubernetes cluster and a A4 node pool, along with networks and service accounts. Information about a4 machines can be found here. The deployment instructions can be found in the README."
-  machine_types: [a4-highgpu-8g, n2d-standard-4]
+  machine_types: [a4-highgpu-8g]
   vars:
     a4_node_pool_disk_size_gb: 100
     accelerator_type: nvidia-b200
@@ -2466,7 +2461,6 @@ blueprints:
     auto_monitoring_scope: NONE
     auto_repair: true
     autoscaling_total_min_nodes: 0
-    compute_machine_type: a4-highgpu-8g
     deployment_name: gke-a4
     enable_flex_start: false
     enable_inference_gateway: false
@@ -2536,13 +2530,12 @@ blueprints:
   blueprint_name: gke-a4x-max-bm
   scheduler: gke
   description: "This blueprint uses GKE to provision a Kubernetes cluster and a A4X Max node pool, along with networks and service accounts. Information about A4X Max machines can be found here. The deployment instructions can be found in the README."
-  machine_types: [a4x-maxgpu-4g-metal, n2d-standard-16]
+  machine_types: [a4x-maxgpu-4g-metal]
   vars:
     a4x_max_node_pool_disk_size_gb: 100
     accelerator_type: nvidia-gb300
     asapd_lite_installer_path: "$(ghpc_stage(\"./asapd-lite-installer.yaml\"))"
     authorized_cidr: null
-    compute_nodepool_machine_type: a4x-maxgpu-4g-metal
     deployment_name: gke-a4x-max-bm-dep
     gib_installer_path: "$(ghpc_stage(\"./nccl-installer.yaml.tftpl\"))"
     k8s_service_account_name: workload-identity-k8s-sa
@@ -2555,7 +2548,7 @@ blueprints:
     reservation_project_id: $(vars.project_id)
     static_node_count: null
     system_node_pool_disk_size_gb: 200
-    system_nodepool_machine_type: n2d-standard-16
+    system_node_pool_machine_type: n2d-standard-16
     version_prefix: 1.35.5-gke.1057002
     zone: null
   modules:
@@ -2610,12 +2603,11 @@ blueprints:
   blueprint_name: gke-a4x
   scheduler: gke
   description: "This blueprint uses GKE to provision Kubernetes cluster and a A4X node pool, along with networks and service accounts. Information about A4X machines can be found here. The deployment instructions can be found in the README."
-  machine_types: [a4x-highgpu-4g, n2d-standard-16]
+  machine_types: [a4x-highgpu-4g]
   vars:
     a4x_node_pool_disk_size_gb: 100
     accelerator_type: nvidia-gb200
     authorized_cidr: null
-    compute_nodepool_machine_type: a4x-highgpu-4g
     deployment_name: gke-a4x
     gib_installer_path: "$(ghpc_stage(\"./nccl-installer.yaml.tftpl\"))"
     k8s_service_account_name: workload-identity-k8s-sa
@@ -2628,7 +2620,7 @@ blueprints:
     reservation_project_id: $(vars.project_id)
     static_node_count: null
     system_node_pool_disk_size_gb: 200
-    system_nodepool_machine_type: n2d-standard-16
+    system_node_pool_machine_type: n2d-standard-16
     version_prefix: "1.35."
     zone: null
   modules:
@@ -2683,7 +2675,7 @@ blueprints:
   blueprint_name: gke-h4d
   scheduler: gke
   description: "Dynamic Workload Scheduler (DWS) is a resource management and job scheduling platform designed for AI Hypercomputer. Dynamic Workload Scheduler improves your access to AI/ML resources, helps you optimize your spend, and can improve the..."
-  machine_types: [h4d-standard-192, n2d-standard-16]
+  machine_types: [h4d-standard-192]
   vars:
     authorized_cidr: null
     compute_machine_type: h4d-standard-192
@@ -2728,11 +2720,10 @@ blueprints:
   blueprint_name: gke-a3-ultra
   scheduler: gke
   description: "Dynamic Workload Scheduler (DWS) is a resource management and job scheduling platform designed for AI Hypercomputer. Dynamic Workload Scheduler improves your access to AI/ML resources, helps you optimize your spend, and can improve the..."
-  machine_types: [a3-ultragpu-8g, n2d-standard-16]
+  machine_types: [a3-ultragpu-8g]
   vars:
     a3ultra_node_pool_disk_size_gb: 100
     authorized_cidr: null
-    compute_machine_type: a3-ultragpu-8g
     deployment_name: gke-a3u-dws-fs-qp
     enable_flex_start: true
     enable_queued_provisioning: true
@@ -2778,7 +2769,7 @@ blueprints:
   blueprint_name: gke-tpu-7x-qp
   scheduler: gke
   description: "This example demonstrates how to deploy a GKE cluster with TPU 7x nodes using Dynamic Workload Scheduler (DWS) with Queued Provisioning."
-  machine_types: [tpu7x-standard-4t, n2-standard-8]
+  machine_types: [tpu7x-standard-4t]
   vars:
     accelerator_type: tpu7x
     authorized_cidr: null
@@ -2843,7 +2834,7 @@ blueprints:
   blueprint_name: gke-tpu-v6e-qp
   scheduler: gke
   description: "This example demonstrates how to deploy a GKE cluster with TPU v6e nodes using Dynamic Workload Scheduler (DWS) with Queued Provisioning."
-  machine_types: [ct6e-standard-4t, n2-standard-8]
+  machine_types: [ct6e-standard-4t]
   vars:
     accelerator_type: tpu-v6e-slice
     authorized_cidr: null
@@ -2908,11 +2899,10 @@ blueprints:
   blueprint_name: gke-a3-ultra
   scheduler: gke
   description: "Dynamic Workload Scheduler (DWS) is a resource management and job scheduling platform designed for AI Hypercomputer. Dynamic Workload Scheduler improves your access to AI/ML resources, helps you optimize your spend, and can improve the..."
-  machine_types: [a3-ultragpu-8g, n2d-standard-16]
+  machine_types: [a3-ultragpu-8g]
   vars:
     a3ultra_node_pool_disk_size_gb: 100
     authorized_cidr: null
-    compute_machine_type: a3-ultragpu-8g
     deployment_name: gke-a3u-dws-fs
     enable_flex_start: true
     nccl_installer_path: "$(ghpc_stage(\"./nccl-installer.yaml\"))"
@@ -2954,7 +2944,7 @@ blueprints:
   blueprint_name: gke-tpu-7x
   scheduler: gke
   description: "These steps guide you through the cluster creation process for TPUs using DWS Flex Start."
-  machine_types: [tpu7x-standard-4t, n2-standard-8]
+  machine_types: [tpu7x-standard-4t]
   vars:
     accelerator_type: tpu7x
     authorized_cidr: null
@@ -3022,7 +3012,7 @@ blueprints:
   blueprint_name: gke-tpu-v6e-flex
   scheduler: gke
   description: "These steps guide you through the cluster creation process for TPUs using DWS Flex Start."
-  machine_types: [ct6e-standard-4t, n2-standard-8]
+  machine_types: [ct6e-standard-4t]
   vars:
     accelerator_type: tpu-v6e-slice
     authorized_cidr: null
@@ -3090,7 +3080,7 @@ blueprints:
   blueprint_name: gke-g4-confidential
   scheduler: gke
   description: "This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV-SNP) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure..."
-  machine_types: [g4-standard-48, n2d-standard-16]
+  machine_types: [g4-standard-48]
   vars:
     authorized_cidr: null
     compute_machine_type: g4-standard-48
@@ -3148,17 +3138,17 @@ blueprints:
   blueprint_name: gke-g4
   scheduler: gke
   description: "This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found here. The deployment instructions can be found in the README."
-  machine_types: [n2d-standard-16]
+  machine_types: [g4-standard-48]
   vars:
     authorized_cidr: null
     auto_repair: true
     autoscaling_total_min_nodes: 0
-    compute_machine_type: null
+    compute_machine_type: g4-standard-48
     deployment_name: gke-g4
     enable_flex_start: false
     enable_queued_provisioning: false
     kueue_configuration_path: null
-    num_gpus: null
+    num_gpus: 1
     placement_policy:
       name: null
       type: null
@@ -3168,7 +3158,7 @@ blueprints:
       consume_reservation_type: NO_RESERVATION
       specific_reservations: []
     spot: false
-    static_node_count: null
+    static_node_count: 1
     system_node_pool_disk_size_gb: 100
     system_node_pool_machine_type: n2d-standard-16
     version_prefix: "1.35."
@@ -3207,7 +3197,7 @@ blueprints:
   blueprint_name: gke-h4d
   scheduler: gke
   description: "This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found here. The deployment instructions can be found in the README."
-  machine_types: [h4d-highmem-192-lssd, n2d-standard-16]
+  machine_types: [h4d-highmem-192-lssd]
   vars:
     authorized_cidr: null
     auto_repair: true
@@ -3374,7 +3364,7 @@ blueprints:
   blueprint_name: gke-tpu-7x
   scheduler: gke
   description: "This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this README."
-  machine_types: [tpu7x-standard-4t, n2-standard-8]
+  machine_types: [tpu7x-standard-4t]
   vars:
     accelerator_type: tpu7x
     authorized_cidr: null
@@ -3448,7 +3438,7 @@ blueprints:
   blueprint_name: gke-tpu-7x
   scheduler: gke
   description: "This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this README."
-  machine_types: [tpu7x-standard-4t, n2-standard-8]
+  machine_types: [tpu7x-standard-4t]
   vars:
     accelerator_type: tpu7x
     authorized_cidr: null
@@ -3504,7 +3494,7 @@ blueprints:
   blueprint_name: gke-tpu-v4
   scheduler: gke
   description: "This example shows how a TPU v4 cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this README."
-  machine_types: [ct4p-hightpu-4t, n2-standard-8]
+  machine_types: [ct4p-hightpu-4t]
   vars:
     accelerator_type: tpu-v4-podslice
     authorized_cidr: null
@@ -3548,7 +3538,7 @@ blueprints:
   blueprint_name: gke-tpu-v5e
   scheduler: gke
   description: "This example shows how a TPU v5e cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this README."
-  machine_types: [ct5lp-hightpu-4t, n2-standard-8]
+  machine_types: [ct5lp-hightpu-4t]
   vars:
     accelerator_type: tpu-v5-lite-podslice
     authorized_cidr: null
@@ -3592,7 +3582,7 @@ blueprints:
   blueprint_name: gke-tpu-v5p
   scheduler: gke
   description: "This example shows how a TPU v5p cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this README."
-  machine_types: [ct5p-hightpu-4t, n2-standard-8]
+  machine_types: [ct5p-hightpu-4t]
   vars:
     accelerator_type: tpu-v5p-slice
     authorized_cidr: null
@@ -3646,7 +3636,7 @@ blueprints:
   blueprint_name: gke-tpu-v6e
   scheduler: gke
   description: "This example shows how TPU v6e cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this README."
-  machine_types: [ct6e-standard-4t, n2-standard-8]
+  machine_types: [ct6e-standard-4t]
   vars:
     accelerator_type: tpu-v6e-slice
     authorized_cidr: null
@@ -3719,7 +3709,7 @@ blueprints:
   blueprint_name: gke-tpu-v6e
   scheduler: gke
   description: "This example shows how TPU v6e cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this README."
-  machine_types: [ct6e-standard-4t, n2-standard-8]
+  machine_types: [ct6e-standard-4t]
   vars:
     accelerator_type: tpu-v6e-slice
     authorized_cidr: null
@@ -3892,7 +3882,7 @@ blueprints:
   blueprint_name: hpc-enterprise-slurm-v6
   scheduler: slurm
   description: "This advanced blueprint creates a cluster with Slurm with several performance tunings enabled, along with tiered file systems for higher performance. Some of these features come with additional cost and required additional quotas."
-  machine_types: [n2-standard-2, c2-standard-60, c2d-standard-112, c3-highcpu-176, a2-ultragpu-8g, a2-megagpu-16g, h3-standard-88, n2-standard-4]
+  machine_types: [n2-standard-2, c2-standard-60, c2d-standard-112, c3-highcpu-176, a2-ultragpu-8g, a2-megagpu-16g, h3-standard-88]
   vars:
     a2_8_node_count_dynamic_max: 16
     a2_16_node_count_dynamic_max: 16
@@ -4016,8 +4006,13 @@ blueprints:
   blueprint_name: hpc-gke
   scheduler: gke
   description: "This blueprint uses GKE to provision a Kubernetes cluster with a system node pool (included in gke-cluster module) and an autoscaling compute node pool. It creates a VPC configured to be used by a VPC native GKE cluster with subnet..."
+  machine_types: [c2-standard-60]
   vars:
     authorized_cidr: null
+    compute_autoscaling_total_max_nodes: 1000
+    compute_autoscaling_total_min_nodes: 0
+    compute_machine_type: c2-standard-60
+    compute_spot: false
     deployment_name: cluster-01
     gcp_public_cidrs_access_enabled: false
     project_id: null
@@ -4039,6 +4034,7 @@ blueprints:
   - id: compute_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, node_pool_service_account]
+    settings: [autoscaling_total_max_nodes, autoscaling_total_min_nodes, machine_type, spot]
   - id: job-template
     source: modules/compute/gke-job-template
     use: [compute_pool]
@@ -4048,7 +4044,7 @@ blueprints:
   blueprint_name: slurm-h4d
   scheduler: slurm
   description: "Creates a basic auto-scaling Slurm cluster with mostly default settings. The blueprint also creates two new VPC networks, one configured for RDMA networking and the other for non-RDMA networking, along with two filestore instances..."
-  machine_types: [h4d-highmem-192-lssd, n2-standard-4]
+  machine_types: [h4d-highmem-192-lssd]
   vars:
     deployment_name: slurm-h4d
     h4d_cluster_size: 2
@@ -4102,13 +4098,16 @@ blueprints:
   blueprint_name: hpc-slurm
   scheduler: slurm
   description: "Creates a basic auto-scaling Slurm cluster with mostly default settings. The blueprint also creates a new VPC network, and a filestore instance mounted to /home."
-  machine_types: [n2-standard-2, c2-standard-60, h3-standard-88, n2-standard-4]
+  machine_types: [n2-standard-2, c2-standard-60, h3-standard-88]
   vars:
+    compute_enable_spot_vm: false
     compute_machine_type: c2-standard-60
     compute_node_count_dynamic_max: 20
+    debug_enable_spot_vm: false
     debug_machine_type: n2-standard-2
     debug_node_count_dynamic_max: 4
     deployment_name: hpc-slurm
+    h3_enable_spot_vm: false
     h3_node_count_dynamic_max: 20
     login_machine_type: n2-standard-4
     project_id: null
@@ -4127,7 +4126,7 @@ blueprints:
   - id: debug_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
-    settings: [allow_automatic_updates, machine_type, node_count_dynamic_max]
+    settings: [allow_automatic_updates, enable_spot_vm, machine_type, node_count_dynamic_max]
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [debug_nodeset]
@@ -4135,7 +4134,7 @@ blueprints:
   - id: compute_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
-    settings: [allow_automatic_updates, bandwidth_tier, machine_type, node_count_dynamic_max]
+    settings: [allow_automatic_updates, bandwidth_tier, enable_spot_vm, machine_type, node_count_dynamic_max]
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [compute_nodeset]
@@ -4143,7 +4142,7 @@ blueprints:
   - id: h3_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
-    settings: [allow_automatic_updates, bandwidth_tier, disk_type, machine_type, node_count_dynamic_max]
+    settings: [allow_automatic_updates, bandwidth_tier, disk_type, enable_spot_vm, machine_type, node_count_dynamic_max]
   - id: h3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [h3_nodeset]
@@ -4160,7 +4159,9 @@ blueprints:
   blueprint_name: image-builder-v6
   scheduler: slurm
   description: "This blueprint uses the Packer template module to create a custom VM image and uses it to provision an HPC cluster using the Slurm scheduler. By using a custom image, the cluster is able to begin running jobs sooner and more reliably..."
+  machine_types: [c2-standard-60]
   vars:
+    compute_machine_type: c2-standard-60
     compute_node_count_dynamic_max: 20
     custom_image:
       family: my-slurm-image
@@ -4183,7 +4184,7 @@ blueprints:
   - id: compute_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
-    settings: [allow_automatic_updates, bandwidth_tier, disk_size_gb, instance_image, node_count_dynamic_max]
+    settings: [allow_automatic_updates, bandwidth_tier, disk_size_gb, instance_image, machine_type, node_count_dynamic_max]
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [compute_nodeset]
@@ -4201,7 +4202,7 @@ blueprints:
   blueprint_name: a3high-slurm
   scheduler: slurm
   description: "This document will guide you to successfully provisioning a Slurm cluster with a3-highgpu-8g compute nodes running NVIDIA H100 GPUs."
-  machine_types: [c2d-standard-32, a3-highgpu-8g, c2-standard-4, c2-standard-8]
+  machine_types: [a3-highgpu-8g]
   vars:
     a3_dws_flex_enabled: false
     a3_enable_spot_vm: false
@@ -4285,7 +4286,7 @@ blueprints:
   blueprint_name: a3mega-slurm
   scheduler: slurm
   description: "This directory provides a Cluster Toolkit blueprint (a3mega-slurm-blueprint.yaml) and deployment configuration (a3mega-slurm-deployment.yaml) for provisioning a Slurm cluster with a3-megagpu-8g (8x NVIDIA H100) compute nodes..."
-  machine_types: [c2-standard-8, n2-standard-2, a3-megagpu-8g, c2-standard-4]
+  machine_types: [n2-standard-2, a3-megagpu-8g]
   vars:
     a3mega_cluster_size: null
     a3mega_dws_flex_enabled: false
@@ -4385,7 +4386,7 @@ blueprints:
   blueprint_name: a3mega-slurm
   scheduler: slurm
   description: "GCSFuse with Local SSD Cache (a3mega-slurm-gcsfuse-lssd-blueprint.yaml): Reflects best practices for using GCSFuse for ML workloads. It is configured to mount GCS buckets on two mountpoints on a3-mega nodes. Use the gcs_bucket variable..."
-  machine_types: [c2-standard-8, n2-standard-2, a3-megagpu-8g, c2-standard-4]
+  machine_types: [n2-standard-2, a3-megagpu-8g]
   vars:
     a3m_runners:
     - content: "---\n- name: Configure Slurm to depend upon aperture devices\n  hosts: all\n  become: true\n  vars: {}\n  tasks:\n  - name: Ensure slurmd starts after aperture devices are ready\n    ansible.builtin.copy:\n      dest: /etc/systemd/system/slurmd.service.d/aperture.conf\n      owner: root\n      group: root\n      mode: 0o644\n      content: |\n        [Service]\n        ExecCondition=/usr/bin/test -d /dev/aperture_devices/\n    notify: Reload SystemD\n  handlers:\n  - name: Reload SystemD\n    ansible.builtin.systemd:\n      daemon_reload: true\n"
@@ -4514,7 +4515,7 @@ blueprints:
   blueprint_name: a3ultra-slurm
   scheduler: slurm
   description: "This blueprint provisions an A3 Ultra (a3-ultragpu-8g, 8x NVIDIA H200) Slurm cluster with multi-NIC RoCE GPUDirect RDMA networking (gpu-rdma-vpc), a 36 TiB Google Cloud Managed Lustre filesystem (modules/file-system/managed-lustre)..."
-  machine_types: [a3-ultragpu-8g, n2d-standard-16]
+  machine_types: [a3-ultragpu-8g]
   vars:
     a3u_cluster_size: null
     a3u_dws_flex_enabled: false
@@ -4645,7 +4646,7 @@ blueprints:
   blueprint_name: a4high-slurm
   scheduler: slurm
   description: "This blueprint provisions an A4 High (a4-highgpu-8g, 8x NVIDIA B200) Slurm cluster with multi-NIC RoCE GPUDirect RDMA networking (gpu-rdma-vpc), a 36 TiB Google Cloud Managed Lustre filesystem (modules/file-system/managed-lustre)..."
-  machine_types: [a4-highgpu-8g, n2d-standard-8]
+  machine_types: [a4-highgpu-8g]
   vars:
     a4h_cluster_size: null
     a4h_dws_flex_enabled: false
@@ -4775,7 +4776,7 @@ blueprints:
   blueprint_name: a4x-jbvm
   scheduler: none
   description: "This section covers deploying A4X High VMs as a standalone group, which is suitable for workloads that do not require the Slurm scheduler."
-  machine_types: [t2a-standard-16, a4x-highgpu-4g]
+  machine_types: [a4x-highgpu-4g]
   vars:
     base_image:
       image: ubuntu-accelerator-2404-arm64-with-nvidia-580-v20260218
@@ -4791,7 +4792,6 @@ blueprints:
     instance_image:
       family: jbvm-ubuntu2404-accelerator-arm64
       project: $(vars.project_id)
-    machine_type: a4x-highgpu-4g
     net0_range: 192.168.0.0/19
     net1_range: 192.168.64.0/19
     project_id: null
@@ -4831,7 +4831,7 @@ blueprints:
   blueprint_name: a4xhigh-slurm
   scheduler: slurm
   description: "This document outlines the deployment steps for provisioning A4X High a4x-highgpu-4g VMs using either Slurm as an orchestrator or as a standalone VM group."
-  machine_types: [a4x-highgpu-4g, t2a-standard-2]
+  machine_types: [a4x-highgpu-4g]
   vars:
     a4x_cluster_size: null
     a4x_node_count_dynamic_max: 0
@@ -4910,7 +4910,7 @@ blueprints:
   blueprint_name: a4xmax-bm-slurm
   scheduler: slurm
   description: "This document outlines the deployment steps for provisioning A4X Max a4x-maxgpu-4g-metal VMs using Slurm as an orchestrator."
-  machine_types: [c4a-highcpu-16, a4x-maxgpu-4g-metal, c4a-standard-4]
+  machine_types: [a4x-maxgpu-4g-metal]
   vars:
     a4x_max_cluster_size: null
     a4x_max_node_count_dynamic_max: 0
@@ -5009,7 +5009,6 @@ blueprints:
   blueprint_name: roll-a3m-image
   scheduler: none
   description: "Cluster Toolkit blueprint (examples/machine-learning/build-service-images/a3m/blueprint.yaml)."
-  machine_types: [c2-standard-8]
   modules:
   - id: image-net
     source: modules/network/vpc
@@ -5024,7 +5023,6 @@ blueprints:
   blueprint_name: roll-a4x-image
   scheduler: none
   description: "Cluster Toolkit blueprint (examples/machine-learning/build-service-images/a4x/blueprint.yaml)."
-  machine_types: [c4a-highcpu-16]
   modules:
   - id: image-net
     source: modules/network/vpc
@@ -5039,7 +5037,6 @@ blueprints:
   blueprint_name: roll-common-image
   scheduler: none
   description: "Cluster Toolkit blueprint (examples/machine-learning/build-service-images/common/blueprint.yaml)."
-  machine_types: [n2-standard-16]
   modules:
   - id: image-net
     source: modules/network/vpc
@@ -5055,7 +5052,7 @@ blueprints:
   blueprint_name: tpu7x-slurm
   scheduler: slurm
   description: "This directory provides a Cluster Toolkit blueprint (tpu7x-slurm-blueprint.yaml) and deployment configuration (tpu7x-slurm-deployment.yaml) for provisioning a Slurm cluster with TPU 7x (tpu7x-standard-4t) compute nodes. It sets up a..."
-  machine_types: [tpu7x-standard-4t, n2d-standard-4]
+  machine_types: [tpu7x-standard-4t]
   vars:
     controller_machine_type: n2d-standard-4
     deployment_name: null
@@ -5119,6 +5116,7 @@ blueprints:
   vars:
     authorized_cidr: null
     compute_machine_type: g2-standard-4
+    compute_spot: false
     compute_static_node_count: 1
     deployment_name: ml-01
     gcp_public_cidrs_access_enabled: false
@@ -5143,7 +5141,7 @@ blueprints:
   - id: g2_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, node_pool_service_account]
-    settings: [disk_type, machine_type, static_node_count]
+    settings: [disk_type, machine_type, spot, static_node_count]
   - id: nvidia_smi_job_template
     source: modules/compute/gke-job-template
     use: [g2_pool]
@@ -5152,24 +5150,26 @@ blueprints:
   blueprint_name: ml-slurm-g4-vgpu
   scheduler: slurm
   description: "This blueprint creates a Slurm cluster on Google Cloud optimized for machine learning workloads using NVIDIA G4 vGPUs (Fractional GPUs). It automates the installation of the necessary NVIDIA GRID drivers and configures Slurm to..."
-  machine_types: [n2-standard-4, g4-standard-12]
+  machine_types: [g4-standard-12]
   vars:
     build_slurm_from_git_ref: 6.13.2
     built_image_family: slurm-vgpu-ubuntu2404
-    cluster_size: 2
+    compute_disk_size_gb: 100
+    compute_machine_type: g4-standard-12
+    compute_node_count_static: 2
+    compute_reservation_name: ""
+    controller_disk_size_gb: 100
     controller_machine_type: n2-standard-4
     deployment_name: g4-vgpu
-    disk_size_gb: 100
     filestore_ip_range: 192.168.1.0/29
     homefs_size_gb: 2560
     image_build_machine_type: n2-standard-4
     image_disk_size_gb: 50
+    login_disk_size_gb: 100
     login_machine_type: n2-standard-4
-    machine_type: g4-standard-12
     net0_range: 192.168.0.0/24
     project_id: null
     region: us-central1
-    reservation_name: ""
     source_image_family: ubuntu-2404-lts-amd64
     source_image_project: ubuntu-os-cloud
     zone: us-central1-b
@@ -5205,31 +5205,33 @@ blueprints:
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
-    settings: [enable_login_public_ips, instance_image, instance_image_custom, machine_type]
+    settings: [disk_size_gb, enable_login_public_ips, instance_image, instance_image_custom, machine_type]
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [network, vgpu_partition, homefs, slurm_login]
-    settings: [enable_controller_public_ips, instance_image, instance_image_custom, machine_type]
+    settings: [disk_size_gb, enable_controller_public_ips, instance_image, instance_image_custom, machine_type]
 - path: examples/ml-slurm-g4.yaml
   blueprint_name: ml-slurm-g4
   scheduler: slurm
   description: "This blueprint deploys a high-performance computing (HPC) cluster featuring a Slurm scheduler, optimized for machine learning workloads."
-  machine_types: [n2-standard-4, g4-standard-48]
+  machine_types: [g4-standard-48]
   vars:
     build_slurm_from_git_ref: 6.13.2
     built_image_family: slurm-g4-ubuntu2404
-    cluster_size: 2
+    compute_disk_size_gb: 100
+    compute_dws_flex_enabled: false
+    compute_enable_spot_vm: false
+    compute_machine_type: g4-standard-48
+    compute_node_count_static: 2
+    compute_reservation_name: ""
+    controller_disk_size_gb: 100
     controller_machine_type: n2-standard-4
     deployment_name: g4-ml-example
-    disk_size_gb: 100
     filestore_ip_range: 192.168.1.0/29
-    g4_dws_flex_enabled: false
-    g4_enable_spot_vm: false
-    g4_machine_type: g4-standard-48
-    g4_reservation_name: ""
     homefs_size_gb: 2560
     image_build_machine_type: n2-standard-4
     image_disk_size_gb: 50
+    login_disk_size_gb: 100
     login_machine_type: n2-standard-4
     net0_range: 192.168.0.0/24
     project_id: null
@@ -5269,20 +5271,22 @@ blueprints:
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [net0]
-    settings: [enable_login_public_ips, instance_image, instance_image_custom, machine_type]
+    settings: [disk_size_gb, enable_login_public_ips, instance_image, instance_image_custom, machine_type]
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [g4_partition, net0, homefs, slurm_login]
-    settings: [enable_controller_public_ips, instance_image, instance_image_custom, machine_type]
+    settings: [disk_size_gb, enable_controller_public_ips, instance_image, instance_image_custom, machine_type]
 - path: examples/ml-slurm.yaml
   blueprint_name: ml-slurm-v6
   scheduler: slurm
   description: "This blueprint provisions an HPC cluster running the Slurm scheduler with the machine learning frameworks PyTorch and TensorFlow pre-installed on every VM. The cluster has 2 partitions:"
-  machine_types: [c2-standard-4, a2-highgpu-1g, g2-standard-4]
+  machine_types: [a2-highgpu-1g, g2-standard-4]
   vars:
+    a2_enable_spot_vm: false
     a2_node_count_dynamic_max: 20
     deployment_name: ml-example-v6
     disk_size_gb: 200
+    g2_enable_spot_vm: false
     g2_node_count_dynamic_max: 20
     homefs_size_gb: 2560
     image_build_machine_type: c2-standard-4
@@ -5321,7 +5325,7 @@ blueprints:
   - id: a2_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
-    settings: [bandwidth_tier, instance_image, machine_type, node_count_dynamic_max]
+    settings: [bandwidth_tier, enable_spot_vm, instance_image, machine_type, node_count_dynamic_max]
   - id: a2_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [a2_nodeset]
@@ -5329,7 +5333,7 @@ blueprints:
   - id: g2_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
-    settings: [bandwidth_tier, instance_image, machine_type, node_count_dynamic_max]
+    settings: [bandwidth_tier, enable_spot_vm, instance_image, machine_type, node_count_dynamic_max]
   - id: g2_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [g2_nodeset]
@@ -5433,10 +5437,10 @@ blueprints:
   blueprint_name: managed-lustre-slurm
   scheduler: slurm
   description: "This blueprint, managed-lustre-slurm, is a specialized configuration designed to deploy a high-performance compute cluster on Google Cloud. It integrates the Slurm Workload Manager with Google Cloud Managed Service for Lustre, a fully..."
-  machine_types: [c2-standard-4, n2-standard-4]
+  machine_types: [c2-standard-4]
   vars:
+    compute_machine_type: c2-standard-4
     compute_node_count_dynamic_max: 2
-    compute_node_machine_type: c2-standard-4
     controller_machine_type: n2-standard-4
     deployment_name: managed-lustre-slurm
     kms_key: ""
@@ -5510,7 +5514,6 @@ blueprints:
   blueprint_name: af3-slurm
   scheduler: slurm
   description: "This blueprint lets you create a high-throughput execution environment for Google Deepmind's AlphaFold 3 in your own GCP project. It uses the unmodified AlphaFold 3 package, and provides a best-practices mapping of it to Google Cloud..."
-  machine_types: [n2-standard-16, n2-standard-4, c2-standard-8]
   vars:
     af3service_activate: false
     af3service_jobbucket: ""
@@ -5698,7 +5701,7 @@ blueprints:
   blueprint_name: storage-gke
   scheduler: gke
   description: "This blueprint showcases the integration of several storage solutions:"
-  machine_types: [n2d-standard-2, c3d-standard-8, n2d-standard-4]
+  machine_types: [n2d-standard-2, c3d-standard-8]
   vars:
     authorized_cidr: null
     debug_pool_machine_type: n2d-standard-2
@@ -5794,14 +5797,16 @@ blueprints:
   description: "This blueprint showcases the integration of several storage solutions:"
   machine_types: [c3d-standard-4]
   vars:
+    compute_data_disk_size_gb: 2048
     compute_machine_type: c3d-standard-4
     compute_node_count_dynamic_max: 2
+    controller_data_disk_size_gb: 2048
     controller_machine_type: c3d-standard-4
-    data_disk_size_gb: 2048
     deployment_name: storage-slurm
     gcs_bucket_local_mount: /data
     hyperdisk_balanced_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-balanced\")"
     hyperdisk_throughput_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-throughput\")"
+    login_data_disk_size_gb: 2048
     login_machine_type: c3d-standard-4
     project_id: null
     region: us-central1
@@ -5838,9 +5843,9 @@ blueprints:
   description: "Creates a standalone VM instance and securely attaches persistent disks that are provisioned directly into specified hyperdisk-balanced and hyperdisk-throughput Storage Pools. This allows the VM to share IOPS and throughput capacity..."
   machine_types: [c3d-standard-4]
   vars:
+    compute_data_disk_size_gb: 2048
     compute_instance_count: 1
     compute_machine_type: c3d-standard-4
-    data_disk_size_gb: 2048
     deployment_name: vm-storage
     hyperdisk_balanced_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-balanced\")"
     hyperdisk_throughput_storage_pool: "$(\"projects/${vars.project_id}/zones/${vars.zone}/storagePools/your-pool-throughput\")"
