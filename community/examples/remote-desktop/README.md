@@ -65,8 +65,14 @@ Before you start, make sure your prerequisites and dependencies are set up:
 Set the following blueprint variables:
 
 - `project_id`, `region` and `zone`
-- `desktop_proxy_secret`, generated with `openssl rand -base64 48`. The brokers
-  will not start without it.
+
+Then create the Secret Manager secret the desktop hosts read the proxy secret
+from. The brokers will not start without it:
+
+```bash
+openssl rand -base64 48 | gcloud secrets create ghpc-desktop-proxy-secret \
+  --project PROJECT_ID --replication-policy automatic --data-file=-
+```
 
 ## Deployment Instructions
 

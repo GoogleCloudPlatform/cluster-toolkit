@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 
 from ..errors import BrokerError
+from ..oslogin import ProfileNotFound
 
 LOG = logging.getLogger("ghpc-desktop-broker")
 
@@ -179,14 +180,28 @@ class SessionManager:
     def ensure_sync(self, identity):
         email = identity["email"]
         session = self.store.load(email)
+        # Resolved on every hand-off, including a reconnect to a live session,
+        # so revoking OS Login access revokes the desktop (see oslogin.py). The
+        # directory caches profiles, so this is not a metadata call per request.
+        try:
+            profile = self.oslogin.resolve(
+                identity.get("login_uid"), identity.get("username_hint")
+            )
+        except ProfileNotFound:
+            if session:
+                self.stop(session)
+            raise
+        if session and session.get("username") != profile["username"]:
+            # The identity now maps to another POSIX account: never hand over
+            # a desktop running as the old one.
+            self.stop(session)
+            session = None
+
         if self.is_ready(session):
             session["last_accessed"] = int(time.time())
             self.store.save(session)
             return session
 
-        profile = self.oslogin.resolve(
-            identity.get("login_uid"), identity.get("username_hint")
-        )
         passwd_entry = self.passwd_lookup(profile["username"])
         home_dir = (
             passwd_entry.pw_dir

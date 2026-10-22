@@ -39,6 +39,10 @@ USERS_URL = (
 CACHE_SECONDS = 60
 
 
+class ProfileNotFound(BrokerError):
+    """OS Login has no profile for the identity: access is revoked or never granted."""
+
+
 class Directory:
     """OS Login profiles for this instance, indexed for lookup."""
 
@@ -173,7 +177,7 @@ class Directory:
                 if account:
                     return account
 
-        raise BrokerError(
+        raise ProfileNotFound(
             403, "No OS Login profile was found for this Google identity."
         )
 

@@ -41,8 +41,9 @@ last_exit_code=1
 for attempt in $(seq 1 ${retry_attempts}); do
   if "$runner_path" ${runner_args}; then
     exit 0
+  else
+    last_exit_code=$?
   fi
-  last_exit_code=$?
   if [ "$attempt" -lt ${retry_attempts} ]; then
     echo "Mount runner attempt $attempt/${retry_attempts} failed; retrying in ${retry_seconds}s"
     sleep ${retry_seconds}

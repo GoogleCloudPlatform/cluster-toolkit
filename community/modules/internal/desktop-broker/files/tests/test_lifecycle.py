@@ -20,12 +20,17 @@ from collections import namedtuple
 
 import pytest
 
+from desktop_broker.errors import BrokerError
+from desktop_broker.oslogin import ProfileNotFound
 from desktop_broker.sessions import lifecycle
 from desktop_broker.sessions.lifecycle import SessionManager
 from desktop_broker.sessions.store import SessionStore
 
 Passwd = namedtuple("Passwd", "pw_name pw_uid pw_gid pw_dir")
 ALICE = Passwd("alice", 1001, 1001, "/home/alice")
+BOB = Passwd("bob", 1002, 1002, "/home/bob")
+USERS = {"alice": ALICE, "bob": BOB}
+IDENTITY = {"email": "alice@example.com", "login_uid": "1001"}
 TIMEOUT = 3600
 
 
@@ -74,9 +79,16 @@ class _Backend:
 
 
 class _OsLogin:
-    @staticmethod
-    def resolve(login_uid, username_hint=None):
-        return {"username": "alice"}
+    """Answers as alice unless a test sets another username or an error."""
+
+    def __init__(self):
+        self.username = "alice"
+        self.error = None
+
+    def resolve(self, login_uid, username_hint=None):
+        if self.error:
+            raise self.error
+        return {"username": self.username}
 
 
 async def run_blocking(func, *args):
@@ -91,7 +103,7 @@ def manager(tmp_path, monkeypatch):
         user_environment=_UserEnvironment(tmp_path / "run"),
         oslogin_directory=_OsLogin(),
         vnc_backend=_Backend(),
-        passwd_lookup=lambda username: ALICE,
+        passwd_lookup=lambda username: USERS[username],
     )
     # No real display: the socket counts as ready once a start was attempted.
     monkeypatch.setattr(manager, "_endpoint_ready", lambda session: started(manager))
@@ -122,6 +134,61 @@ def session_for(manager, email="alice@example.com", age=0):
 
 def reap(manager):
     asyncio.run(manager.reap_idle(run_blocking, TIMEOUT))
+
+
+def killed(manager):
+    return any(cmd[1:2] == ["-kill"] for cmd in manager.user_environment.commands)
+
+
+# -- reusing a live session -------------------------------------------------
+
+
+def test_live_session_is_reused_while_still_authorised(manager, monkeypatch):
+    session_for(manager)
+    monkeypatch.setattr(manager, "_endpoint_ready", lambda session: True)
+    session = manager.ensure_sync(IDENTITY)
+    assert session["username"] == "alice"
+    assert not started(manager) and not killed(manager)
+
+
+def test_live_session_is_stopped_once_os_login_access_is_revoked(manager, monkeypatch):
+    session_for(manager)
+    monkeypatch.setattr(manager, "_endpoint_ready", lambda session: True)
+    manager.oslogin.error = ProfileNotFound(403, "No OS Login profile")
+    with pytest.raises(BrokerError) as excinfo:
+        manager.ensure_sync(IDENTITY)
+    assert excinfo.value.status == 403
+    assert killed(manager)
+    assert manager.store.load("alice@example.com") is None
+
+
+def test_live_session_is_replaced_when_the_account_changes(manager, monkeypatch):
+    session_for(manager)
+    # alice's desktop is up until killed; bob's only once started.
+    monkeypatch.setattr(
+        manager,
+        "_endpoint_ready",
+        lambda session: started(manager)
+        if session["username"] == "bob"
+        else not killed(manager),
+    )
+    manager.oslogin.username = "bob"
+    session = manager.ensure_sync(IDENTITY)
+    # The desktop running as alice is never handed to the new account.
+    assert killed(manager) and started(manager)
+    assert session["username"] == "bob"
+    assert manager.store.load("alice@example.com")["username"] == "bob"
+
+
+def test_metadata_failure_refuses_but_keeps_the_session(manager, monkeypatch):
+    session_for(manager)
+    monkeypatch.setattr(manager, "_endpoint_ready", lambda session: True)
+    manager.oslogin.error = BrokerError(502, "OS Login metadata lookup failed")
+    with pytest.raises(BrokerError) as excinfo:
+        manager.ensure_sync(IDENTITY)
+    assert excinfo.value.status == 502
+    assert not killed(manager)
+    assert manager.store.load("alice@example.com") is not None
 
 
 # -- idle reaping -----------------------------------------------------------

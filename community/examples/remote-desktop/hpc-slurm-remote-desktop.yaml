@@ -74,7 +74,7 @@ deployment_groups:
     settings:
       project_id: $(vars.project_id)
       deployment_name: $(vars.deployment_name)
-      name: desktop
+      name: vnc
       project_roles:
       - storage.objectViewer
       - secretmanager.secretAccessor
