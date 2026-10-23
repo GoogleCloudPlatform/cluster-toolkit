@@ -251,6 +251,9 @@ Modules that are still in development and less stable are labeled with the
 
 ### Project
 
+* **[vertex-ai-prediction](../community/modules/project/vertex-ai-prediction/README.md)** ![community-badge] ![experimental-badge]:
+  Creates a custom role granting only Agent Platform prediction access to a service account.
+
 * **[service-account]** ![core-badge] : Creates [service
   accounts](https://cloud.google.com/iam/docs/service-accounts) for a GCP
   project.

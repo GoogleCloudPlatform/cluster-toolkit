@@ -16,6 +16,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
+  * [Multi-provider agentgateway on GKE](#multi-provider-agentgateway-on-gke--) ![community-badge] ![experimental-badge]
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-slurm-ha.yaml](#hpc-slurm-hayaml-) ![community-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
@@ -199,6 +200,7 @@ the experimental badge (![experimental-badge]).
 | Blueprint | Scheduler | Machine Types | Description |
 | :--- | :--- | :--- | :--- |
 | [community/examples/AMD/hpc-amd-slurm.yaml](../community/examples/AMD/hpc-amd-slurm.yaml) | slurm | c2d-standard-16, c2d-standard-4, c2d-standard-112 | This example provisions a Slurm cluster using AMD VM machine types. It automates the initial setup of Spack, including a script that can be used to install the AMD Optimizing C/C++ Compiler (AOCC) and compile OpenMPI with AOCC. It is... |
+| [community/examples/agentgateway-gke/agentgateway-gke.yaml](../community/examples/agentgateway-gke/agentgateway-gke.yaml) | gke | - | This blueprint deploys a private generative AI gateway powered by agentgateway on a regional, CPU-only GKE Standard cluster. |
 | [community/examples/alphaevolve/alpha-evolve-experiment.yaml](../community/examples/alphaevolve/alpha-evolve-experiment.yaml) | none | n2-standard-4 | Deploys the Google Cloud infrastructure and per-experiment software environments required to run scalable AlphaEvolve evolutionary code optimization experiments on Cloud Batch and Vertex AI Colab Enterprise. |
 | [community/examples/alphaevolve/alpha-evolve-infra.yaml](../community/examples/alphaevolve/alpha-evolve-infra.yaml) | none | n2-standard-4 | Deploys the Google Cloud infrastructure and per-experiment software environments required to run scalable AlphaEvolve evolutionary code optimization experiments on Cloud Batch and Vertex AI Colab Enterprise. |
 | [community/examples/apptainer-artifact-registry-openfoam.yaml](../community/examples/apptainer-artifact-registry-openfoam.yaml) | none | e2-standard-4 | This blueprint demonstrates staging and running an Apptainer SIF image through the apptainer-runtime and apptainer-app modules, backed by an artifact-registry repository configured as a REMOTE_REPOSITORY pull-through cache mirroring... |
@@ -305,6 +307,13 @@ the experimental badge (![experimental-badge]).
 | [examples/storage-vm.yaml](./storage-vm.yaml) | none | c3d-standard-4 | Creates a standalone VM instance and securely attaches persistent disks that are provisioned directly into specified hyperdisk-balanced and hyperdisk-throughput Storage Pools. This allows the VM to share IOPS and throughput capacity... |
 
 <!-- END_BLUEPRINT_CATALOG -->
+
+### Multi-provider agentgateway on GKE ![community-badge] ![experimental-badge]
+
+The [agentgateway community blueprint](../community/examples/agentgateway-gke/README.md)
+deploys a CPU-only regional GKE cluster with internal application load balancing,
+Workload Identity authentication to Gemini Enterprise Agent Platform, and optional
+OpenAI/Anthropic secret references.
 
 ### [hpc-slurm.yaml] ![core-badge]
 
