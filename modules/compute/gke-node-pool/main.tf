@@ -80,6 +80,10 @@ locals {
   static_node_set  = var.static_node_count != null
   initial_node_set = try(var.initial_node_count > 0, false)
 
+  best_effort_enabled = try(var.best_effort_provisioning.enabled, false)
+  # The provider doesn't send min_provision_nodes when it's unset, so no minimum applies.
+  best_effort_min_nodes = coalesce(try(var.best_effort_provisioning.min_provision_nodes, null), 0)
+
   module_unique_id = replace(lower(var.internal_ghpc_module_id), "/[^a-z0-9\\-]/", "")
   pool_name_prefix = coalesce(var.name, join("-", [var.machine_type, local.module_unique_id]))
 
@@ -168,6 +172,16 @@ resource "google_container_node_pool" "node_pool" {
     for_each = var.enable_queued_provisioning ? [1] : []
     content {
       enabled = true
+    }
+  }
+
+  # Only rendered when enabled: every field in this block forces replacement,
+  # so an always-present block would recreate existing node pools.
+  dynamic "best_effort_provisioning" {
+    for_each = local.best_effort_enabled ? [1] : []
+    content {
+      enabled             = true
+      min_provision_nodes = try(var.best_effort_provisioning.min_provision_nodes, null)
     }
   }
 
@@ -345,6 +359,9 @@ resource "google_container_node_pool" "node_pool" {
       # Ignore local/ephemeral ssd configs as they are tied to machine types.
       node_config[0].ephemeral_storage_local_ssd_config,
       node_config[0].local_nvme_ssd_block_config,
+      # Best-effort provisioning only applies at creation and forces replacement,
+      # so changing it must never recreate an existing node pool.
+      best_effort_provisioning,
       # Suppress GKE API read drift where type="COMPACT" is omitted on GET
       placement_policy[0].type,
     ]
@@ -506,6 +523,18 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = !var.enable_confidential_storage || (var.disk_type != null && can(regex("^hyperdisk", var.disk_type)))
       error_message = "Confidential Storage (enable_confidential_storage = true) is only supported on Hyperdisks. Please set disk_type to 'hyperdisk-balanced' or another hyperdisk type."
+    }
+    precondition {
+      condition     = !(local.best_effort_enabled && module.tpu.is_tpu)
+      error_message = "best_effort_provisioning is not supported for TPU node pools."
+    }
+    precondition {
+      condition     = !(local.best_effort_enabled && try(var.placement_policy.type, null) != null)
+      error_message = "best_effort_provisioning cannot be used with placement_policy. GKE does not support best-effort provisioning on node pools that use a placement policy, including workload policies."
+    }
+    precondition {
+      condition     = !local.best_effort_enabled || local.best_effort_min_nodes <= coalesce(var.static_node_count, var.initial_node_count, 0)
+      error_message = "best_effort_provisioning.min_provision_nodes cannot be larger than the per-zone node count the node pool is created with: static_node_count, or initial_node_count for autoscaling node pools (0 if neither is set)."
     }
   }
 }
