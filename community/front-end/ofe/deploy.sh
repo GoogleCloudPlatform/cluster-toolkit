@@ -495,11 +495,368 @@ create_service_account() {
 }
 
 #
+# Check the state bucket name is a valid Cloud Storage bucket name.
+#  - A safety net: tf/state_bucket/main.tf derives and shortens the name from
+#    the deployment name; this stops before anything is created or imported
+#    if that ever yields an invalid name.
+#  - '.' is not allowed, as such names need domain verification.
+#  - Prints the reason to stderr and returns 1 if the name is invalid.
+#
+BUCKET_NAME_MAX_LENGTH=63
+
+validate_bucket_name() {
+
+	local name=${1}
+	local validname='^[a-z0-9][a-z0-9_-]*[a-z0-9]$'
+
+	if [[ ${#name} -lt 3 || ${#name} -gt ${BUCKET_NAME_MAX_LENGTH} || ! ${name} =~ ${validname} ]]; then
+		error "    Error: State bucket name '${name}' is invalid. It must:"
+		error "              - Be 3 to ${BUCKET_NAME_MAX_LENGTH} characters long"
+		error "              - Only contain characters a-z (lowercase), 0-9, '-' and '_'"
+		error "              - Start and end with a letter or digit"
+		return 1
+	fi
+}
+
+#
+# Prepare this deployment's state bucket working directory
+#  - Each deployment name has its own tf/state_bucket/deployments/<name>/
+#    holding its local state, terraform.tfvars and admin.auto.tfvars, so
+#    deployments from one checkout never collide or need files moved by hand.
+#  - Symlinks the tracked .tf files rather than copying them, so it never
+#    runs a stale copy.
+#  - Moves files an earlier release left in tf/state_bucket/ (which held a
+#    single deployment) into the owning deployment's directory.
+#  - Sets ${state_bucket_dir}.
+#
+STATE_BUCKET_ROOT=tf/state_bucket
+
+prepare_state_bucket_dir() {
+
+	if [[ -z ${deployment_name} || ${deployment_name} == . ||
+		${deployment_name} == .. || ${deployment_name} == */* ]]; then
+		echo "Error: invalid deployment name '${deployment_name}'."
+		return 1
+	fi
+
+	# -- The owner is the deployment named in the terraform.tfvars deploy.sh
+	#    wrote. If it is unknown, or its directory already holds any of these
+	#    files, stop rather than guess: a wrong move could make a later deploy
+	#    create a second bucket and orphan the state in the first.
+	local -a legacy_files=(terraform.tfstate terraform.tfstate.backup terraform.tfvars admin.auto.tfvars)
+	local f found=0
+	for f in "${legacy_files[@]}"; do
+		[[ -e ${STATE_BUCKET_ROOT}/${f} ]] && found=1
+	done
+	if [[ ${found} -eq 1 ]]; then
+		local owner="" owner_dir
+		if [[ -f ${STATE_BUCKET_ROOT}/terraform.tfvars ]]; then
+			owner=$(sed -n 's|^deployment_name = "\([^"/]*\)"$|\1|p' \
+				"${STATE_BUCKET_ROOT}/terraform.tfvars")
+		fi
+		# The bucket in the state must carry the same deployment label: an
+		# earlier release rewrote terraform.tfvars before applying, so after a
+		# failed deploy under another name it can name the wrong deployment.
+		if [[ -n ${owner} && -f ${STATE_BUCKET_ROOT}/terraform.tfstate ]]; then
+			local label
+			label=$(python3 -c '
+import json, sys
+for r in json.load(open(sys.argv[1])).get("resources", []):
+    if r.get("type") == "google_storage_bucket" and r.get("name") == "tfstate":
+        for i in r.get("instances", []):
+            print(i["attributes"]["labels"]["ghpcfe_id"])
+' "${STATE_BUCKET_ROOT}/terraform.tfstate" 2>/dev/null) || label="?"
+			[[ -n ${label} && ${label} != "${owner}" ]] && owner=""
+		fi
+		owner_dir=${STATE_BUCKET_ROOT}/deployments/${owner}
+		for f in "${legacy_files[@]}"; do
+			[[ -n ${owner} && -e ${owner_dir}/${f} ]] && owner=""
+		done
+		if [[ -z ${owner} ]]; then
+			echo "Error: ${STATE_BUCKET_ROOT}/ holds state bucket files from an earlier"
+			echo "       release, and deploy.sh cannot tell which deployment they belong to"
+			echo "       or that deployment's directory already has its own. Move"
+			echo "       terraform.tfstate*, terraform.tfvars and admin.auto.tfvars from"
+			echo "       ${STATE_BUCKET_ROOT}/ into ${STATE_BUCKET_ROOT}/deployments/<deployment name>/"
+			echo "       for the deployment they belong to (or aside, if none), and rerun."
+			return 1
+		fi
+		echo "    Moving deployment ${owner}'s state bucket files to ${owner_dir}/"
+		mkdir -p "${owner_dir}" || return 1
+		for f in "${legacy_files[@]}"; do
+			if [[ -e ${STATE_BUCKET_ROOT}/${f} ]]; then
+				mv "${STATE_BUCKET_ROOT}/${f}" "${owner_dir}/${f}" || return 1
+			fi
+		done
+	fi
+
+	state_bucket_dir=${STATE_BUCKET_ROOT}/deployments/${deployment_name}
+	mkdir -p "${state_bucket_dir}" || return 1
+	# Relinked on every deploy, so a .tf file added or removed upstream is
+	# picked up.
+	find "${state_bucket_dir}" -maxdepth 1 -name '*.tf' -type l -delete || return 1
+	local tf_file
+	for tf_file in "${STATE_BUCKET_ROOT}"/*.tf; do
+		ln -s "../../${tf_file##*/}" "${state_bucket_dir}/" || return 1
+	done
+}
+
+#
+# Deploy the Terraform state bucket
+#  - A separate Terraform root from tf/, applied first. It holds the state of
+#    every cluster, filesystem, network, image and workbench the FrontEnd
+#    provisions; if that state were lost, Terraform could no longer destroy
+#    them and they would keep running and billing. So teardown.sh keeps it
+#    unless given --delete-state-bucket, and then only if it is empty.
+#  - Works in this deployment's own directory (prepare_state_bucket_dir).
+#  - Sets ${state_bucket_name} for the main deployment to consume.
+#
+deploy_state_bucket() {
+
+	local sa="${deployment_name}-tkfe-sa@${project_id}.iam.gserviceaccount.com"
+	local -a tfvar_args=(
+		-var="project_id=${project_id}"
+		-var="region=${region}"
+		-var="deployment_name=${deployment_name}"
+	)
+
+	echo ""
+	echo "Creating the Terraform state bucket..."
+
+	prepare_state_bucket_dir || return 1
+
+	# The writer list is split by owner so deploy.sh never rebuilds an
+	# authoritative IAM member list from a file an administrator edits:
+	# terraform.tfvars is deploy.sh's and is regenerated on every deploy
+	# (default_writers); admin.auto.tfvars is the administrator's
+	# (state_bucket_writers) and is created once and never read or rewritten.
+	local admin_file=${state_bucket_dir}/admin.auto.tfvars
+	if [[ ! -f ${admin_file} && -f ${state_bucket_dir}/terraform.tfvars ]] &&
+		grep -q '^[[:space:]]*state_bucket_writers' "${state_bucket_dir}/terraform.tfvars"; then
+		echo "Error: state_bucket_writers is set in ${state_bucket_dir}/terraform.tfvars, which"
+		echo "       deploy.sh regenerates. Move that line into ${admin_file},"
+		echo "       which deploy.sh never overwrites, and rerun."
+		return 1
+	fi
+	local -a seed_members=()
+
+	# -- Adopt an existing bucket. Its name is a pure function of project and
+	#    deployment name (tf/state_bucket/main.tf), so a deploy from a machine
+	#    without this root's local state must import it, not create a second,
+	#    empty one and orphan the state the first one holds.
+	#    -upgrade: init rejects a lock file from an earlier provider pin unless
+	#    it is re-resolved within versions.tf's range, as on a new machine.
+	terraform -chdir="${state_bucket_dir}" init -upgrade -input=false || return 1
+	local bucket
+	bucket=$(echo 'local.bucket_name' |
+		terraform -chdir="${state_bucket_dir}" console "${tfvar_args[@]}") || return 1
+	bucket=${bucket//\"/}
+	if [[ -z ${bucket} ]]; then
+		echo "Error: could not compute the Terraform state bucket name."
+		return 1
+	fi
+	if ! validate_bucket_name "${bucket}"; then
+		return 1
+	fi
+
+	# -- No local state is normal on a new machine. State that exists but
+	#    cannot be read must stop the deploy with Terraform's own error, not be
+	#    mistaken for "no state" and lead to a confusing failed import.
+	local state_file=${state_bucket_dir}/terraform.tfstate
+	local resources=""
+	# 1 once the bucket is in this machine's state (already there, or imported
+	# below); the apply-failure diagnosis depends on it.
+	local managed=0
+	if [[ -f ${state_file} ]] &&
+		! resources=$(terraform -chdir="${state_bucket_dir}" state list 2>&1); then
+		echo "Error: could not read ${state_file}:"
+		echo "  ${resources//$'\n'/$'\n'  }"
+		echo "       It records only the state bucket itself, not any provisioned"
+		echo "       resource. Fix it, or move it aside and rerun to adopt the bucket:"
+		echo "         mv ${state_file} ${state_file}.unreadable"
+		return 1
+	fi
+
+	if grep -qx 'google_storage_bucket.tfstate' <<<"${resources}"; then
+		# Local state from a different deployment name or project, or from a
+		# bucket named before the deterministic naming, would make Terraform
+		# try to replace a prevent_destroy bucket. Stop with a remedy instead.
+		# An adoption whose apply failed leaves the bucket in state but no
+		# outputs, so the name is then read from the state.
+		local local_bucket
+		local_bucket=$(terraform -chdir="${state_bucket_dir}" output -raw bucket_name 2>/dev/null) ||
+			local_bucket=$(terraform -chdir="${state_bucket_dir}" state show -no-color \
+				google_storage_bucket.tfstate 2>/dev/null |
+				sed -n 's/^[[:space:]]*name[[:space:]]*=[[:space:]]*"\(.*\)"$/\1/p' | head -n 1)
+		if [[ ${local_bucket} != "${bucket}" ]]; then
+			echo "Error: ${state_bucket_dir}/terraform.tfstate on this machine belongs to"
+			echo "       gs://${local_bucket:-<unknown bucket>}, but this deployment's state bucket"
+			echo "       is gs://${bucket}. Move the old local files aside and rerun:"
+			echo "         mv ${state_bucket_dir}/terraform.tfstate ${state_bucket_dir}/terraform.tfstate.old"
+			echo "         mv ${state_bucket_dir}/terraform.tfvars ${state_bucket_dir}/terraform.tfvars.old"
+			echo "         mv ${state_bucket_dir}/admin.auto.tfvars ${state_bucket_dir}/admin.auto.tfvars.old"
+			echo "       The old bucket and the state it holds are not touched."
+			return 1
+		fi
+		managed=1
+	else
+		# -- Is the bucket already in this project? Decided from the exit
+		#    status and the listed names, never from gcloud's error wording:
+		#    a failed listing (auth, permission, network) stops the deploy,
+		#    a successful listing without the bucket means it is absent.
+		#    Bucket names are global; if another project owns the name, the
+		#    create below fails with a 409, reported before the server is built.
+		local listed
+		if ! listed=$(gcloud storage buckets list --project="${project_id}" \
+			--filter="name=${bucket}" --format='value(name)' 2>&1); then
+			echo "Error: could not determine whether gs://${bucket} already exists:"
+			echo "  ${listed}"
+			return 1
+		fi
+		if grep -qxF "${bucket}" <<<"${listed}"; then
+			echo "    Found existing state bucket gs://${bucket}; adopting it."
+			terraform -chdir="${state_bucket_dir}" import -input=false "${tfvar_args[@]}" \
+				google_storage_bucket.tfstate "${project_id}/${bucket}" || return 1
+			managed=1
+
+			# The writer binding is authoritative, and this machine has no
+			# admin.auto.tfvars recording who was granted access before. Seed
+			# it from the current holders (used only if that file is absent).
+			# Buckets created before writers moved to objectUser hold objectAdmin.
+			local policy live_members member
+			policy=$(gcloud storage buckets get-iam-policy "gs://${bucket}" \
+				--format=json) || return 1
+			live_members=$(python3 -c '
+import json, sys
+seen = set()
+for b in json.load(sys.stdin).get("bindings", []):
+    if b.get("role") in ("roles/storage.objectUser", "roles/storage.objectAdmin"):
+        for m in b.get("members", []):
+            if not m.startswith("deleted:") and m not in seen:
+                seen.add(m)
+                print(m)
+' <<<"${policy}") || return 1
+			while IFS= read -r member; do
+				[[ -z ${member} || ${member} == "serviceAccount:${sa}" ]] && continue
+				seed_members+=("${member}")
+			done <<<"${live_members}"
+		fi
+	fi
+
+	if [[ ! -f ${admin_file} ]]; then
+		{
+			echo "# Administrator-maintained settings for the state bucket. deploy.sh creates"
+			echo "# this file once and never reads or overwrites it. Add the service account of"
+			echo "# any provisioning credential registered from another project here, then"
+			echo "# run: terraform -chdir=${state_bucket_dir} apply"
+			echo "state_bucket_writers = ["
+			local m
+			for m in "${seed_members[@]}"; do echo "  \"${m}\","; done
+			echo "]"
+		} >"${admin_file}" || return 1
+	fi
+
+	# The default provisioning service account is optional (an administrator
+	# may register a different or pre-existing credential instead; see
+	# AdvancedAdmin.md), and GCS rejects an IAM binding that names a
+	# nonexistent service account, so grant it only if it exists.
+	local default_writers="[]"
+	if bash "${SCRIPT_DIR}/script/service_account.sh" check \
+		"${project_id}" "${deployment_name}-tkfe-sa" &>/dev/null; then
+		default_writers="[\"serviceAccount:${sa}\"]"
+	else
+		echo "    Note: ${sa} does not exist yet, so the state bucket grants it no"
+		echo "          writer access. Once it exists, rerun deploy.sh, or add it to"
+		echo "          state_bucket_writers in ${admin_file} and run:"
+		echo "            terraform -chdir=${state_bucket_dir} apply"
+	fi
+
+	cat >"${state_bucket_dir}/terraform.tfvars" <<TFVARS || return 1
+project_id = "${project_id}"
+region = "${region}"
+
+deployment_name = "${deployment_name}"
+
+# Regenerated by deploy.sh on every deploy; do not edit. Add writers and any
+# other overrides to admin.auto.tfvars instead.
+default_writers = ${default_writers}
+
+extra_labels = {
+    creator = "${USER}"
+}
+TFVARS
+
+	if ! terraform -chdir="${state_bucket_dir}" apply -auto-approve; then
+		echo "Error: failed to create or update the Terraform state bucket gs://${bucket}."
+		# -- If the bucket was already in this machine's state, this was an
+		#    update and the name cannot be the problem. Otherwise a 409 means
+		#    the name is taken: say by whom, from the exit status and the
+		#    owning project number, not error wording.
+		local owner this_project
+		if [[ ${managed} -eq 1 ]]; then
+			echo "       The bucket is already managed by this deployment; see Terraform's"
+			echo "       error above (for example missing IAM permission or quota)."
+		elif owner=$(gcloud storage buckets describe "gs://${bucket}" --raw \
+			--format='value(projectNumber)' 2>/dev/null) && [[ -n ${owner} ]]; then
+			this_project=$(gcloud projects describe "${project_id}" \
+				--format='value(projectNumber)' 2>/dev/null) || this_project=""
+			if [[ ${owner} == "${this_project}" ]]; then
+				echo "       gs://${bucket} already exists in ${project_id}; the lookup"
+				echo "       above did not list it. Rerun deploy.sh to adopt it."
+			else
+				echo "       gs://${bucket} already exists in another project (number"
+				echo "       ${owner}). Bucket names are global, so this deployment name"
+				echo "       cannot be used in ${project_id}; choose another."
+			fi
+		else
+			echo "       If the error above is a 409, gs://${bucket} exists in a project"
+			echo "       this account cannot see. Choose another deployment name."
+		fi
+		echo "       The FrontEnd will not be deployed without it."
+		return 1
+	fi
+
+	state_bucket_name=$(terraform -chdir="${state_bucket_dir}" output -raw bucket_name)
+	if [[ -z ${state_bucket_name} ]]; then
+		echo "Error: the state bucket was applied but reported no name."
+		return 1
+	fi
+
+	echo "    Terraform state bucket: ${state_bucket_name}"
+	echo "    Note: this bucket is versioned and is kept by teardown.sh unless"
+	echo "          --delete-state-bucket is given."
+	echo "          Provisioning credentials for other projects must be added to"
+	echo "          state_bucket_writers in ${admin_file}."
+	echo ""
+}
+
+#
 # Deploy the FrontEnd
 #  - All deployments parameters have been obtained, so can now construct the
 #    terraform recipes and initiate the deployment.
 #
 deploy() {
+
+	# -- Confirm before anything is created: the state bucket below is
+	#    protected from deletion, so declining after it exists would leave it
+	#    behind.
+	#
+	if [ -z "$config_file" ]; then
+		case $(ask "    Proceed to deploy? [y/N] ") in
+		[Yy]*) ;;
+		*)
+			echo "Exiting."
+			exit 0
+			;;
+		esac
+	fi
+
+	# -- The state bucket must exist before the server is created, because the
+	#    server's configuration carries its name.
+	#
+	if ! deploy_state_bucket; then
+		exit 1
+	fi
 
 	# -- Collect deployment files
 	#
@@ -550,6 +907,8 @@ django_su_email    = "${django_superuser_email}"
 deployment_mode = "${deployment_mode}"
 subnet = "${subnet_name}"
 
+terraform_state_bucket = "${state_bucket_name}"
+
 extra_labels = {
     creator = "${USER}"
 }
@@ -577,17 +936,6 @@ TFVARS
 
 		# TODO - upload terraform files to the FE server, so that they can be recovered if ever
 		#        needed
-
-		if [ -z "$config_file" ]; then
-			# Ask for user confirmation before deploying
-			case $(ask "    Proceed to deploy? [y/N] ") in
-			[Yy]*) ;;
-			*)
-				echo "Exiting."
-				exit 0
-				;;
-			esac
-		fi
 
 		# -- Start the deployment using Terraform.
 		#    Note: Extract $? for terraform using PIPESTATUS, as $? below is
@@ -958,6 +1306,7 @@ deploy_from_config() {
 	deployment_name=${yaml_array[deployment_name]}
 	project_id=${yaml_array[project_id]}
 	zone=${yaml_array[zone]}
+	region=${zone%-*}
 	subnet_name=${yaml_array[subnet_name]}
 	dns_hostname=${yaml_array[dns_hostname]}
 	ip_address=${yaml_array[ip_address]}

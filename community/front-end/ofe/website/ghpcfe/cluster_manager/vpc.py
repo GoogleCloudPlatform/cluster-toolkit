@@ -35,6 +35,11 @@ def create_vpc(vpc: VirtualNetwork) -> None:
         target_dir.parent.mkdir(parents=True)
     shutil.copytree(_tf_source_dir_for_vpc("GCP"), target_dir)
 
+    # point Terraform at the shared state bucket before any init runs
+    utils.write_backend_tf(
+        target_dir, utils.terraform_state_prefix("vpc", vpc.id)
+    )
+
     # create credential file
     with open(target_dir / "cloud_credentials", "w", encoding="utf-8") as fp:
         fp.write(vpc.cloud_credential.detail)
@@ -64,7 +69,7 @@ project = "{project_id}"
         generate_vpc_tf_datablock(vpc, target_dir)
 
     try:
-        utils.run_terraform(target_dir, "init")
+        utils.run_terraform(target_dir, "init", extra_env=extra_env)
         utils.run_terraform(target_dir, "validate", extra_env=extra_env)
         utils.run_terraform(target_dir, "plan", extra_env=extra_env)
 
@@ -87,19 +92,17 @@ def start_vpc(vpc: VirtualNetwork) -> None:
             ).as_posix()
         }
         utils.run_terraform(target_dir, "apply", extra_env=extra_env)
-        tf_state_file = target_dir / "terraform.tfstate"
-        with tf_state_file.open("r") as statefp:
-            state = json.load(statefp)
-            if vpc.is_managed:
-                vpc.cloud_id = state["outputs"]["vpc_id"]["value"]
-                vpc.save()
-            for subnet in vpc.subnets.all():
-                if subnet.is_managed:
-                    subnet.cloud_id = state["outputs"][f"subnet-{subnet.id}"][
-                        "value"
-                    ]
-                    subnet.cloud_state = "m"
-                    subnet.save()
+        state = utils.get_terraform_state(target_dir, extra_env)
+        if vpc.is_managed:
+            vpc.cloud_id = state["outputs"]["vpc_id"]["value"]
+            vpc.save()
+        for subnet in vpc.subnets.all():
+            if subnet.is_managed:
+                subnet.cloud_id = state["outputs"][f"subnet-{subnet.id}"][
+                    "value"
+                ]
+                subnet.cloud_state = "m"
+                subnet.save()
     except subprocess.CalledProcessError as err:
         logger.error("Terraform apply failed", exc_info=err)
         if err.stdout:

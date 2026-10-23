@@ -184,6 +184,16 @@ TKFE can also be deployed automatically using a YAML configuration file with all
 
 If the DJANGO_SUPERUSER_PASSWORD environment variable is set, the script will use it to set the Django superuser password instead of the value in the YAML file. This is a more secure way of handling passwords.
 
+A configuration-file deployment does not create the provisioning service
+account (`<deployment_name>-tkfe-sa`), so no account is granted access to the
+Terraform state bucket. A credential whose service account has project-level
+Cloud Storage access, such as one created with `script/service_account.sh`,
+can still use the bucket. Add any other provisioning credential, including one
+from another project, to `state_bucket_writers` in
+`tf/state_bucket/deployments/<deployment_name>/admin.auto.tfvars`, then run
+`terraform -chdir=tf/state_bucket/deployments/<deployment_name> apply`. See
+[Terraform State](#terraform-state).
+
 To use this configuration file for automated deployment, follow these steps:
 
 1. Create a file called `config.yaml` (do not place inline `#` comments on value lines — `deploy.sh` parses values directly):
@@ -472,6 +482,343 @@ Please see the [application installation guide](Applications.md).
 
 Please see the [Workbench Admin Guide](WorkbenchAdmin.md).
 
+## Terraform State
+
+Every resource TKFE provisions (clusters, filesystems, networks, image builder
+environments and workbenches) is created with Terraform, which records what it
+created in a *state* file. Terraform needs that state to modify or destroy the
+resource later. **A resource whose state has been
+lost cannot be destroyed by Terraform**: it keeps running, keeps accruing cost,
+and has to be removed by hand in the Cloud Console.
+
+TKFE therefore stores this state in a dedicated Cloud Storage bucket,
+`<deployment_name>-tfstate-<suffix>`, rather than on the service machine's
+local disk. `deploy.sh` creates the bucket from the Terraform files in
+`tf/state_bucket/`, before the FrontEnd itself, and prints its name. The
+suffix is derived from the project and deployment name, so running
+`deploy.sh` again from any machine finds and reuses the existing bucket rather
+than creating a second one.
+
+To make a valid bucket name, the deployment name is lowercased, any character
+other than a-z, 0-9, '-' and '_' becomes '-', it is shortened to 46 characters
+(bucket names are limited to 63), and leading and trailing '-' and '_' are
+removed. A typical deployment name is used unchanged, and the suffix still
+distinguishes deployments whose names clean or shorten to the same text.
+
+On the client machine, each deployment has its own working directory for
+these files, `tf/state_bucket/deployments/<deployment_name>/`, holding that
+deployment's local state and variables, so deployments with different names
+can be deployed from the same directory one after another. Files that an
+earlier release kept directly in `tf/state_bucket/` are moved into the
+directory of the deployment they belong to on the next deploy. If `deploy.sh`
+cannot tell which deployment that is, it stops and says how to move them.
+
+The bucket has three properties that matter to an administrator:
+
+- **It is versioned.** Every previous copy of a state file is retained (by
+  default for 90 days), so a state file corrupted by a crash part-way through
+  an operation can be rolled back.
+- **It survives teardown.** It is a separate Terraform deployment from the
+  FrontEnd, so destroying the FrontEnd cannot destroy the state of the
+  resources it created, and it is protected against accidental deletion.
+- **Access is limited.** The bucket itself grants access only to the
+  provisioning service account `deploy.sh` creates and to the accounts listed
+  in `state_bucket_writers` in the deployment's `admin.auto.tfvars`. Accounts
+  with a project-level Cloud Storage role can also reach it, including the
+  `storage.admin` role `script/service_account.sh` gives the provisioning
+  account. State contains full resource detail and can contain generated
+  passwords, so keep project-level storage roles to accounts you trust.
+
+State is filed under a namespace belonging to the TKFE database, then one
+prefix per resource matching the run-time directory names on the service
+machine: `gs://<bucket>/20261015-3f2a9c1e/clusters/cluster_3/` holds the
+state for the cluster with ID 3. The namespace is created with the database,
+so a new database (for example after rebuilding the service machine) gets a
+new namespace, and its resources can never be confused with those of an
+earlier database. On the service machine, `python manage.py tfstate_namespace`
+prints the current namespace.
+
+The state bucket is separate from the support bucket
+(`<deployment_name>-storage-<suffix>`), which holds startup scripts, Ansible
+configuration and job output.
+
+### Registering a credential for another project
+
+If you register a service account credential from a **different project** to
+the one TKFE was deployed into (see
+[Advanced Administration](AdvancedAdmin.md#multi-project-configuration)), that
+service account also needs access to the state bucket, or provisioning with it
+fails when Terraform tries to write state.
+
+Add it to the `state_bucket_writers` list in
+`tf/state_bucket/deployments/<deployment_name>/admin.auto.tfvars` on the client
+machine and re-apply that directory:
+
+```shell
+terraform -chdir=tf/state_bucket/deployments/<deployment_name> apply
+```
+
+`deploy.sh` creates `admin.auto.tfvars` on the first deploy and never reads or
+overwrites it afterwards, so entries there survive redeploys, and any valid
+list layout is accepted. Do not add writers to `terraform.tfvars` in the same
+directory: `deploy.sh` regenerates that file on every deploy.
+
+When a credential is registered or updated in the portal, TKFE uses it to
+check whether its service account can read and write state in the bucket. If
+it cannot, the portal shows a warning naming the account, with the line to add
+to `admin.auto.tfvars` and the command above. Registration still succeeds;
+TKFE never grants the access itself.
+
+### Recovering resources after losing the service machine
+
+This is the situation the state bucket exists for. If the service machine is
+lost or rebuilt, its local disk goes with it, including the TKFE database
+(`db.sqlite3`), which is what the portal knows about your resources, and the
+per-resource run-time directories. The state bucket is unaffected, so every
+resource TKFE created can still be destroyed with Terraform.
+
+Only the **state** is recovered, from the bucket. The **portal's records** are
+not: a rebuilt TKFE will not list the old clusters, because they were in the
+lost database. Recovery is therefore done from the command line, not through
+the web interface.
+
+Old resources are under the old database's namespace. List the namespaces with
+`gcloud storage ls gs://<bucket>/`; the date at the start of each shows when
+that database was created.
+
+To destroy a resource whose service machine is gone, create an empty directory
+on any machine with a `gcloud` login that has access to the state bucket, and
+write a single `main.tf` containing only a backend and a provider:
+
+```hcl
+terraform {
+  backend "gcs" {
+    bucket = "<deployment_name>-tfstate-<suffix>"
+    prefix = "<namespace>/clusters/cluster_3"
+  }
+}
+
+provider "google" {
+  project = "<your project>"
+  region  = "<the resource's region>"
+}
+```
+
+Use the prefix of the resource you want to remove;
+`gcloud storage ls gs://<bucket>/<namespace>/` lists them, and they match the
+run-time directory names (`clusters/cluster_<id>`, `fs/fs_<id>`,
+`vpcs/vpc_<id>`, `images/image_<id>`, `workbenches/workbench_<id>`). Then:
+
+```shell
+terraform init
+terraform plan
+terraform destroy
+```
+
+The resources are in the recovered state but not in this configuration, so
+Terraform plans to destroy all of them. Check that the plan lists what you
+expect before approving it.
+
+The state alone is enough, so this works even for clusters, filesystems and
+image builder environments, whose Terraform configuration was generated by the
+Cluster Toolkit and cannot be regenerated once the database is gone. For
+networks and workbenches you can instead copy the template from
+`infrastructure_files/` into a new directory and add the same backend block;
+`terraform init` then adopts the existing state, allowing a normal plan and
+destroy.
+
+**Clusters: remove compute nodes before destroying the network.** Slurm creates
+compute nodes directly through the Compute Engine API when jobs are scheduled,
+so they are not in Terraform state and `terraform destroy` leaves them running.
+After destroying a cluster, find them by the cluster's Slurm name, which is the
+part before `-controller` in the controller instance's name in the plan above:
+
+```shell
+gcloud compute instances list --project=<your project> \
+  --filter="name~^<slurm_cluster_name>-" --format="value(name,zone)"
+gcloud compute instances delete <name> --zone=<zone> --project=<your project>
+```
+
+Do this before destroying the cluster's network: a network still used by
+running instances cannot be deleted. In general, destroy clusters,
+filesystems, workbenches and image builders before the networks they use.
+
+### A resource reports a stale state lock
+
+While Terraform works on a resource it holds a lock on that resource's state
+(a `default.tflock` object beside `default.tfstate` in the state bucket). A
+second operation on the same resource waits for the lock, for up to 45
+minutes, instead of interfering with the first. Terraform releases the lock
+when it finishes, including when it fails. A lock is left behind, or *stale*,
+only if Terraform is killed outright while holding it: for example by a
+service machine reboot, the out-of-memory killer, or `kill -9`.
+
+Before each Terraform operation, TKFE checks the resource's lock. If the lock
+was taken on the service machine and no Terraform process there is running
+for that resource, the operation fails at once instead of waiting. The
+resource goes into an error state, and the log (see
+[Finding Log Files](#finding-log-files)) contains a message starting
+`Terraform state for <directory> is locked.` It gives the lock ID, the
+operation and host that took the lock, its age, and the command to clear it.
+An operation that gives up after waiting 45 minutes for a lock reports the
+same message.
+
+Before clearing the lock, confirm on the service machine that no Terraform
+process is working in that resource's directory (with `sudo`, so processes run
+by any user are shown):
+
+```shell
+for pid in $(pgrep -x terraform); do echo "$pid $(sudo readlink /proc/$pid/cwd)"; done
+```
+
+If any line shows the directory from the message, an operation is still
+running: wait for it to finish. If the lock's holder is a different host,
+check that machine instead.
+
+When nothing is running, clear the lock as the `gcluster` user with the
+command from the message:
+
+```shell
+sudo -u gcluster bash -c 'cd <directory> && GOOGLE_APPLICATION_CREDENTIALS=<credential file> terraform force-unlock -force <lock ID>'
+```
+
+The lock ID is the number in the message (the lock object's generation), not
+the `ID` field inside the lock object. Then repeat the operation in the portal.
+
+**Never force-unlock while an operation is running.** The lock is the only
+thing that stops two Terraform runs writing the same state at once, and
+removing it during an operation can corrupt the state. If state is damaged,
+earlier versions are kept in the versioned bucket.
+
+### Upgrading an existing TKFE to Cloud Storage state
+
+A TKFE deployed before state was held in Cloud Storage keeps each resource's
+state on the service machine's disk, and TKFE has no in-place upgrade command.
+Until the steps below are done, creating or reconfiguring a resource fails:
+the new code refuses to provision without a state bucket.
+
+These steps assume the new release's code is already in place under
+`/opt/gcluster/cluster-toolkit` on the service machine. The support bucket
+must also hold the new release's cluster and workbench files, or new clusters
+still start with the old release's setup scripts. To copy them, run this from
+the new release's `community/front-end/ofe` directory on the client machine:
+
+```shell
+gcloud storage cp --recursive infrastructure_files/gcs_bucket/* gs://<deployment_name>-storage-<suffix>/
+```
+
+1. On the client machine, create the state bucket from the deployment's own
+   directory, linking the Terraform files as `deploy.sh` does:
+
+   ```shell
+   D=tf/state_bucket/deployments/<deployment_name>
+   mkdir -p "$D"
+   for f in tf/state_bucket/*.tf; do ln -s "../../${f##*/}" "$D/"; done
+   ```
+
+   Write `$D/terraform.tfvars` with `project_id`, `region` and
+   `deployment_name` matching the deployment, and set `default_writers` to the
+   provisioning service account if it exists:
+
+   ```hcl
+   default_writers = ["serviceAccount:<deployment_name>-tkfe-sa@<project>.iam.gserviceaccount.com"]
+   ```
+
+   Put any other provisioning accounts, including those for other projects,
+   in `state_bucket_writers` in `$D/admin.auto.tfvars`. Then:
+
+   ```shell
+   terraform -chdir="$D" init
+   terraform -chdir="$D" apply
+   terraform -chdir="$D" output -raw bucket_name
+   ```
+
+2. On the service machine, add the bucket name under `config.server` in
+   `/opt/gcluster/cluster-toolkit/community/front-end/ofe/configuration.yaml`:
+
+   ```yaml
+   terraform_state_bucket: "<bucket name>"
+   ```
+
+   On the client machine, add the same value to the FrontEnd's own
+   `tf/terraform.tfvars`, which an older `deploy.sh` wrote without it:
+
+   ```hcl
+   terraform_state_bucket = "<bucket name>"
+   ```
+
+   Without it, `teardown.sh` cannot destroy the FrontEnd ("No value for
+   required variable").
+
+3. As the `gcluster` user, create the new database table and restart TKFE:
+
+   ```shell
+   cd /opt/gcluster/cluster-toolkit/community/front-end/ofe/website
+   /opt/gcluster/django-env/bin/python3 manage.py makemigrations ghpcfe
+   /opt/gcluster/django-env/bin/python3 manage.py migrate
+   sudo supervisorctl restart 'gcluster-uvicorn-background:*'
+   ```
+
+4. Move existing state into the bucket, first as a preview:
+
+   ```shell
+   cd /opt/gcluster/cluster-toolkit/community/front-end/ofe
+   ./script/migrate_tf_state_to_gcs.sh --dry-run
+   ./script/migrate_tf_state_to_gcs.sh --yes
+   ```
+
+   The script reports each directory as migrated, skipped or failed and exits
+   non-zero if any failed. It keeps the original of each migrated state file
+   as `terraform.tfstate.premigration` in the resource's run-time directory,
+   beside its `cloud_credentials` (for example `clusters/cluster_<id>/` or
+   `vpcs/vpc_<id>/`), not in the Terraform working directory, which the
+   Cluster Toolkit replaces whenever a cluster, filesystem or image builder is
+   reconfigured.
+
+5. Reconfigure or start resources only after the script reports no failures.
+   Reconfiguring a cluster whose state has not been migrated fails at
+   `terraform init` rather than moving its state, because the backend has
+   changed.
+
+The script only finds working directories that hold a local state file. A
+network or workbench that was defined but never created, or a filesystem that
+was defined but never started, has none, so it is not migrated. A
+filesystem's blueprint would also still lack the state backend, and starting
+it would keep its state on the service machine's disk. Delete such a resource
+in the portal and create it again.
+
+### Reverting to an older TKFE release
+
+A TKFE release from before state was held in Cloud Storage expects state on
+local disk. There is no automated way back. To revert, move each resource's
+state back to its run-time directory **before** installing the older release;
+an older release that finds a GCS backend block in a working directory will
+not find the resource's state.
+
+For each resource, in its Terraform working directory on the service machine
+(for example `vpcs/vpc_<id>`, `workbenches/workbench_<id>/terraform/google`, or
+`clusters/cluster_<id>/<cloud id>/primary`):
+
+1. Remove the `backend "gcs"` block. If the directory has a `backend.tf`,
+   delete that file: networks and workbenches have one, and so does any
+   resource that `script/migrate_tf_state_to_gcs.sh` migrated from an older
+   release. Otherwise, for clusters, filesystems and image builders created by
+   this release, delete the `backend "gcs"` block from the generated `main.tf`.
+2. Copy the state back to local disk, using the resource's own credential:
+
+   ```shell
+   GOOGLE_APPLICATION_CREDENTIALS=<run-time directory>/cloud_credentials \
+     terraform init -migrate-state -force-copy
+   ```
+
+3. Confirm `terraform.tfstate` lists the resources and `terraform plan`
+   reports no changes.
+
+If you later move these resources to Cloud Storage again, first move each
+resource's existing `terraform.tfstate.premigration` out of its run-time
+directory, or rename it. The migration script refuses to overwrite a backup
+that differs from the current state.
+
 ## Teardown Process
 
 The TKFE package contains a `teardown.sh` script that will destroy the running
@@ -484,6 +831,30 @@ destroying it. These resources will otherwise persist and accrue costs.**
 To tear down the web interface and its hosting infrastructure, run
 directory `./teardown.sh` on the original client machine
 in the same directory that was used to deploy TKFE.
+
+The Terraform state bucket is deliberately **not** removed by the teardown
+script, so that any resource still running can still be destroyed with
+Terraform. The script prints the bucket name when it finishes. Once you are
+certain every resource TKFE created is gone, remove it with:
+
+```shell
+./teardown.sh --delete-state-bucket
+```
+
+This tears down the FrontEnd too if it is still deployed. Before destroying
+anything, the script reads every state file in the bucket, under every
+namespace, and stops if any still records resources, cannot be read or is
+locked, listing them. It then asks you to type the bucket name to confirm,
+unless `-y` is also given. The bucket's deletion protection is lifted only in a
+temporary copy of `tf/state_bucket/`; the files in the repository are not
+changed. If Terraform would change the bucket in any other way, for example
+replace it after a change of region, the script stops and deletes nothing.
+
+To remove the bucket of an earlier deployment made from the same directory,
+name it: `./teardown.sh --delete-state-bucket <deployment_name>`. This touches
+only that bucket. If that deployment's FrontEnd is, or may still be, deployed
+from this directory (its lock file exists or its state cannot be read), the
+script refuses; run it without a name to tear the FrontEnd down first.
 
 Note: If the -y flag is passed to the script, all user questions will be answered with "yes". This is intended for automated deployments where user input is not possible.
 
