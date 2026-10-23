@@ -298,10 +298,12 @@ practice:
 - A value wrapped in matching single or double quotes is unquoted. Otherwise a
   `#` that starts the value or follows whitespace starts a comment, so
   `key: value # note` yields `value`. Quote a value to keep a `#` that follows a space.
-- Quote escapes are not interpreted: a value with `''` or any `\` inside
-  quotes, or with text after the closing quote, is kept as written, quotes
-  included. `"`, `\` and `${` in a value can break the generated
-  `terraform.tfvars`.
+- Backslash escapes inside double quotes are copied to `terraform.tfvars` as
+  written, and Terraform decodes them, so `"a\"b"` gives `a"b`. Use escapes
+  Terraform understands, such as `\"` and `\\`. A single-quoted value with
+  `''`, or a value with text after the closing quote, is kept as written,
+  quotes included. `"` or `\` in an unquoted value, and `${` in any value,
+  can break the generated `terraform.tfvars`.
 - Leading and trailing spaces around an unquoted value are dropped; spaces
   inside quotes are kept.
 - Lists, nesting and multi-line values are not supported. An indented key is
