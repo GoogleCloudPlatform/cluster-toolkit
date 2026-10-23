@@ -266,8 +266,10 @@ ask() {
 # Print the Terraform version constraint from tf/versions.tf, e.g. '>= 1.12.2'
 #
 tf_required_version() {
-	sed -nE 's/^[[:space:]]*required_version[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/p' \
-		"${SCRIPT_DIR}/tf/versions.tf"
+	local version
+	version=$(sed -nE 's/^[[:space:]]*required_version[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/p' \
+		"${SCRIPT_DIR}/tf/versions.tf" 2>/dev/null)
+	echo "${version:-0.13 or higher}"
 }
 
 # Set and check a lock file.
