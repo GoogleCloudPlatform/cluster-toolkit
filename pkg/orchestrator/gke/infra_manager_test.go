@@ -925,3 +925,77 @@ func TestVerifyCheckpointConfigurationCR(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateClusterState_DedupesReadinessReads(t *testing.T) {
+	versionProbeCalls := 0
+	getDepCalls := 0
+	rolloutCalls := 0
+	priorityClassListCalls := 0
+
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			if strings.Contains(fullCmd, "/version") {
+				versionProbeCalls++
+				return shell.CommandResult{ExitCode: 0}
+			}
+			if strings.Contains(fullCmd, "kubectl get crd") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "found"}
+			}
+			if strings.Contains(fullCmd, "kubectl get deployment kueue-controller-manager") {
+				getDepCalls++
+				return shell.CommandResult{
+					ExitCode: 0,
+					Stdout:   `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.16.1"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`,
+				}
+			}
+			if strings.Contains(fullCmd, "kubectl rollout status") {
+				rolloutCalls++
+				return shell.CommandResult{ExitCode: 0}
+			}
+			if strings.Contains(fullCmd, "kubectl get endpointslice") {
+				return shell.CommandResult{
+					ExitCode: 0,
+					Stdout:   `{"items":[{"endpoints":[{"addresses":["10.4.1.3"],"conditions":{"ready":true}}]}]}`,
+				}
+			}
+			if strings.HasPrefix(fullCmd, "kubectl get priorityclass") {
+				priorityClassListCalls++
+				return shell.CommandResult{
+					ExitCode: 0,
+					Stdout:   "system-node-critical high medium",
+				}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+
+	orc := newTestGKEOrchestrator(mock)
+	orc.namespace = "default"
+	orc.dynClient = &mockDynamicClient{
+		getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+			return &unstructured.Unstructured{}, nil
+		},
+	}
+	job := &orchestrator.JobDefinition{
+		ClusterName:       "test-cluster",
+		ClusterLocation:   "us-central1-a",
+		ProjectID:         "test-project",
+		PriorityClassName: "high",
+	}
+	if err := orc.ValidateClusterState(job); err != nil {
+		t.Fatalf("ValidateClusterState failed: %v", err)
+	}
+	if versionProbeCalls != 0 {
+		t.Errorf("ValidateClusterState /version probe calls = %d, want 0 (already probed in configureKubectl)", versionProbeCalls)
+	}
+	if getDepCalls != 1 {
+		t.Errorf("ValidateClusterState kueue deployment get calls = %d, want 1", getDepCalls)
+	}
+	if rolloutCalls != 0 {
+		t.Errorf("ValidateClusterState kueue rollout status calls = %d, want 0 when healthy", rolloutCalls)
+	}
+	if priorityClassListCalls != 1 {
+		t.Errorf("ValidateClusterState priorityclass list calls = %d, want 1", priorityClassListCalls)
+	}
+}
