@@ -391,7 +391,8 @@ following info gathered by the OFE during the workbench creation process:
 - boot_disk_type (`PD_STANDARD`, `PD_BALANCED` or `PD_SSD`)
 - boot_disk_size_gb
 - trusted_user (the email address of the trusted user)
-- image_family
+- instance_image (an object with `project = "deeplearning-platform-release"`
+  and `family` set to the selected image family)
 - owner_id (a list holding the same email address)
 - wb_startup_script_name
 - wb_startup_script_bucket

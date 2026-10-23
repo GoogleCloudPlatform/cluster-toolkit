@@ -89,9 +89,12 @@ A typical workflow for installing a new Spack application is as follows:
    be switched on manually. Advanced users may supply additional specs using
    the optional *Spack spec* field.
    - For a guide to the Spack spec syntax see the [Spack documentation](https://spack.readthedocs.io/en/latest/basic_usage.html#building-a-specific-version)
-   - The OFE does not select a compiler. Spack uses whichever compiler
-     it detects on the cluster (a system compiler on the Slurm image) unless
-     you add a `%` compiler specifier.
+   - The OFE does not select a compiler. On login and compute nodes, Spack
+     has the base OS GCC plus the gcc-toolset compilers that the cluster
+     setup installs and registers: gcc-toolset 9 and 11 on Rocky Linux 8,
+     gcc-toolset 13 on Rocky Linux 9. The default shell `PATH` enables
+     gcc-toolset 11 (Rocky Linux 8) or 13 (Rocky Linux 9). Select a specific
+     compiler with a `%` compiler specifier, e.g. `%gcc@13`.
    - Other compilers may be specified with the `%` compiler specifier and an
      optional version number using the `@` version specifier (e.g.,
      `%intel@19.1.1.217`). Obviously, admin users are responsible for

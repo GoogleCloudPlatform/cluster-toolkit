@@ -35,9 +35,9 @@ workbench. This is a 1:1 relationship as each workbench has a single
 instance owner that is set by the trusted user value. The user is
 selected from the OFE's users, and their email address is passed to
 Terraform as `trusted_user` and `owner_id`. The workbench
-is then configured to run the jupyter notebook as the users OSLogin
+is then configured to run the Jupyter notebook as the user's OS Login
 account (found from their Google social account ID). Access to the notebook is controlled by a proxy that
-requires the user to be logged into their google account to gain
+requires the user to be logged into their Google account to gain
 access.
 
 Workbench instances have a limited number of configurations:
