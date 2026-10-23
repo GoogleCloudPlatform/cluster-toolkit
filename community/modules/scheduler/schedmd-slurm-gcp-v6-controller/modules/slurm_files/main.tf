@@ -74,6 +74,7 @@ locals {
     task_prolog_scripts            = [for k, v in google_storage_bucket_object.task_prolog_scripts : k]
     task_epilog_scripts            = [for k, v in google_storage_bucket_object.task_epilog_scripts : k]
     cloud_parameters               = var.cloud_parameters
+    capacity_circuit_breaker       = var.capacity_circuit_breaker
     experimental                   = var.experimental
     enable_expedited_requeue       = var.enable_expedited_requeue
     enable_health_check_start_only = var.enable_health_check_start_only
@@ -204,6 +205,7 @@ locals {
     "tools/gpu-test",
     "tools/task-epilog",
     "tools/task-prolog",
+    "capacity_circuit.py",
     "conf.py",
     "conf_v2411.py",
     "conf_v2511.py",
@@ -234,6 +236,7 @@ locals {
     "tools/gpu-test",
     "tools/task-epilog",
     "tools/task-prolog",
+    "capacity_circuit.py",
     "conf.py",
     "conf_v2411.py",
     "conf_v2511.py",
