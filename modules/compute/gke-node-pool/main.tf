@@ -343,7 +343,7 @@ resource "google_container_node_pool" "node_pool" {
       node_config[0].labels,
       # Ignore resource_labels to prevent node pool replacement on blueprint/metadata renames
       node_config[0].resource_labels,
-      # Ignore version to prevent out-of-band rollouts when GKE auto-upgrades nodes
+      # Ignore version to prevent failed Day-2 deploys when GKE auto-upgrades nodes or release channels advance (GKE rejects downgrades)
       version,
       initial_node_count,
       # Ignore local/ephemeral ssd configs as they are tied to machine types.
