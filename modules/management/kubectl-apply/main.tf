@@ -551,10 +551,28 @@ module "install_slice_controller" {
   depends_on = [var.gke_cluster_exists, module.configure_kueue, module.install_jobset]
 }
 
+locals {
+  checkpoint_configuration_manifest = !local.install_checkpoint_configuration ? "" : yamlencode({
+    apiVersion = "checkpointing.gke.io/v1"
+    kind       = "CheckpointConfiguration"
+    metadata   = { name = coalesce(var.checkpoint_configuration.name, "default") }
+    # Unset and empty optional fields are left out of the spec.
+    spec = { for k, v in {
+      cloudStorageBucketName = var.checkpoint_configuration.cloud_storage_bucket_name
+      inMemoryVolumeSize     = var.checkpoint_configuration.in_memory_volume_size
+      nodeSelector           = var.checkpoint_configuration.node_selector
+      tolerations            = var.checkpoint_configuration.tolerations == null ? null : [for t in var.checkpoint_configuration.tolerations : { for tk, tv in t : tk => tv if tv != null }]
+      gcsFuseMountOptions    = var.checkpoint_configuration.gcs_fuse_mount_options
+    } : k => v if v != null && length(v) > 0 }
+  })
+}
+
+# The manifest hash in release_name replaces the release on any spec change, so the
+# CheckpointConfiguration is re-created: GKE does not apply in-place updates to the driver.
 module "install_checkpoint_configuration" {
   source        = "./helm_install"
   count         = local.install_checkpoint_configuration ? 1 : 0
-  release_name  = "checkpoint-configuration"
+  release_name  = "checkpoint-configuration-${substr(sha256(local.checkpoint_configuration_manifest), 0, 8)}"
   chart_name    = "${path.module}/raw-config-chart"
   chart_version = "0.1.0"
   wait          = true
@@ -562,19 +580,7 @@ module "install_checkpoint_configuration" {
 
   values_yaml = [
     yamlencode({
-      manifests = [yamlencode({
-        apiVersion = "checkpointing.gke.io/v1"
-        kind       = "CheckpointConfiguration"
-        metadata   = { name = coalesce(var.checkpoint_configuration.name, "default") }
-        # Unset and empty optional fields are left out of the spec.
-        spec = { for k, v in {
-          cloudStorageBucketName = var.checkpoint_configuration.cloud_storage_bucket_name
-          inMemoryVolumeSize     = var.checkpoint_configuration.in_memory_volume_size
-          nodeSelector           = var.checkpoint_configuration.node_selector
-          tolerations            = var.checkpoint_configuration.tolerations == null ? null : [for t in var.checkpoint_configuration.tolerations : { for tk, tv in t : tk => tv if tv != null }]
-          gcsFuseMountOptions    = var.checkpoint_configuration.gcs_fuse_mount_options
-        } : k => v if v != null && length(v) > 0 }
-      })]
+      manifests = [local.checkpoint_configuration_manifest]
     })
   ]
 }
