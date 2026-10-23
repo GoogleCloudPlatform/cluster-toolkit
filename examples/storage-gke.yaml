@@ -131,7 +131,6 @@ deployment_groups:
     use: [gke_cluster]
     settings:
       checkpoint_configuration:
-        install: true
         in_memory_volume_size: "50Gi"
         cloud_storage_bucket_name: $(data-bucket.gcs_bucket_name)
 

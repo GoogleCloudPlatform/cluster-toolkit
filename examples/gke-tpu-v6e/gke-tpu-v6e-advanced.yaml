@@ -278,7 +278,6 @@ deployment_groups:
       cert_manager:
         install: true
       checkpoint_configuration:
-        install: true
         in_memory_volume_size: "50Gi"
         cloud_storage_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
         node_selector:

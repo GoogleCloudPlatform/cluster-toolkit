@@ -175,3 +175,8 @@ output "mtc_service_account_member" {
   # wait for the cluster, which creates the pool in a new project.
   value = "principal://iam.googleapis.com/projects/${data.google_project.project.number}/locations/global/workloadIdentityPools/${google_container_cluster.gke_cluster.workload_identity_config[0].workload_pool}/subject/ns/gke-managed-checkpointing/sa/gke-checkpointing-multitier-node"
 }
+
+output "enable_multi_tier_checkpointing" {
+  description = "Indicates whether High Scale Checkpointing (Multi-Tier Checkpointing) is enabled."
+  value       = var.enable_multi_tier_checkpointing
+}
