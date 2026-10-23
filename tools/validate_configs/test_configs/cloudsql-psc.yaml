@@ -1,0 +1,55 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: cloudsql-psc
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: cloudsql-psc
+  region: us-central1
+  zone: us-central1-a
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/vpc
+
+  - id: sql
+    source: community/modules/database/cloudsql
+    outputs:
+    - connection_name
+    - private_ip_address
+    settings:
+      database_name: appdb
+      sql_instance_name: $(vars.deployment_name)-db
+      tier: "db-f1-micro"
+      use_psc_connection: true
+      subnetwork_self_link: $(network1.subnetwork_self_link)
+      enable_backups: true
+      backup_start_time: "03:00"
+      retained_backups: 14
+      final_backup_retention_days: 30
+      deletion_protection: true
+      api_deletion_protection: true
+      availability_type: REGIONAL
+      ssl_mode: ENCRYPTED_ONLY
+      psc_allowed_consumer_projects:
+      - $(vars.project_id)
+      maintenance_window:
+        day: 7
+        hour: 3
+        update_track: stable
