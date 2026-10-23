@@ -41,6 +41,16 @@ vars:
   a3_dws_flex_enabled: false
   a3_enable_spot_vm: false
 
+  # Optional overrides (defaults shown)
+  # Machine type of the temporary VM that builds the custom image.
+  image_build_machine_type: c2d-standard-32
+  # Maximum number of dynamically provisioned nodes in the a3 partition.
+  a3_node_count_dynamic_max: 0
+  # Machine type for the login node.
+  login_machine_type: c2-standard-4
+  # Machine type for the controller node.
+  controller_machine_type: c2-standard-8
+
 deployment_groups:
 - group: base
   modules:
@@ -488,7 +498,7 @@ deployment_groups:
     settings:
       # building this image does not require a GPU-enabled VM but must *not* be
       # run on a N-series VM otherwise, the "open" drivers will not install
-      machine_type: c2d-standard-32
+      machine_type: $(vars.image_build_machine_type)
       source_image_project_id: [$(vars.source_image_project_id)]
       source_image_family: $(vars.source_image_family)
       image_family: $(vars.instance_image.family)
@@ -604,8 +614,11 @@ deployment_groups:
       dws_flex:
         enabled: $(vars.a3_dws_flex_enabled)
       node_count_static: $(vars.a3_static_cluster_size)
-      node_count_dynamic_max: 0
+      node_count_dynamic_max: $(vars.a3_node_count_dynamic_max)
       disk_type: pd-ssd
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a3-highgpu-8g
       enable_public_ips: false
       advanced_machine_features:
@@ -670,7 +683,7 @@ deployment_groups:
     settings:
       name_prefix: login
       disk_type: pd-balanced
-      machine_type: c2-standard-4
+      machine_type: $(vars.login_machine_type)
       enable_login_public_ips: true
 
   - id: slurm_controller
@@ -688,7 +701,7 @@ deployment_groups:
         suspend_timeout: 600
         no_comma_params: false
         tree_width: $(vars.a3_static_cluster_size)
-      machine_type: c2-standard-8
+      machine_type: $(vars.controller_machine_type)
       disk_type: pd-balanced
       slurm_conf_tpl: ../_modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl
       enable_controller_public_ips: true

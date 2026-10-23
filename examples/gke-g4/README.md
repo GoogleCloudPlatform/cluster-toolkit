@@ -51,7 +51,7 @@ This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, al
     1. `deployment_name`: Name of the deployment.
     1. `region`: Compute region used for the deployment.
     1. `zone`: Compute zone used for the deployment.
-    1. `machine_type`: The VM shape. See allowed values at https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus.
+    1. `compute_machine_type`: The VM shape. See allowed values at https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus.
     1. `num_gpus`: Number of GPUS in the VM. Can be found at https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus.
     1. `authorized_cidr`: update the IP address in `<your-ip-address>/32`.
 

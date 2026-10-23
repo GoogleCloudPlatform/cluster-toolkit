@@ -33,6 +33,19 @@ vars:
   # Stage `community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/*` into the deployment folder.
   # If you move the blueprint, make sure the relative path is correct.
   staged_configs: $(ghpc_stage("../modules/scheduler/schedmd-slurm-gcp-v6-controller/etc"))
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned nodes in the c2s60 nodeset (compute partition).
+  c2s60_node_count_dynamic_max: 200
+  # Maximum number of dynamically provisioned nodes in the c2s30 nodeset (compute partition).
+  c2s30_node_count_dynamic_max: 200
+  # Maximum number of dynamically provisioned nodes in the n2s2 nodeset (lowcost partition).
+  n2s2_node_count_dynamic_max: 10
+  # Maximum number of dynamically provisioned nodes in the n2s4 nodeset (lowcost partition).
+  n2s4_node_count_dynamic_max: 10
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
+  # Machine type for the controller node.
+  controller_machine_type: c2-standard-8
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -70,7 +83,7 @@ deployment_groups:
     use: [network]
     settings:
       name: c2s60
-      node_count_dynamic_max: 200
+      node_count_dynamic_max: $(vars.c2s60_node_count_dynamic_max)
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
 
@@ -78,7 +91,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      node_count_dynamic_max: 200
+      node_count_dynamic_max: $(vars.c2s30_node_count_dynamic_max)
       machine_type: c2-standard-30
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
@@ -102,7 +115,7 @@ deployment_groups:
     settings:
       name: n2s2
       machine_type: n2-standard-2
-      node_count_dynamic_max: 10
+      node_count_dynamic_max: $(vars.n2s2_node_count_dynamic_max)
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
 
@@ -112,7 +125,7 @@ deployment_groups:
     settings:
       name: n2s4
       machine_type: n2-standard-4
-      node_count_dynamic_max: 10
+      node_count_dynamic_max: $(vars.n2s4_node_count_dynamic_max)
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
 
@@ -130,7 +143,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       enable_login_public_ips: $(vars.enable_public_ips)
 
   - id: slurm_controller
@@ -142,7 +155,7 @@ deployment_groups:
     - compute_partition
     - slurm_login
     settings:
-      machine_type: c2-standard-8
+      machine_type: $(vars.controller_machine_type)
       enable_controller_public_ips: $(vars.enable_public_ips)
       slurm_conf_tpl: $(vars.staged_configs)/htc-slurm.conf.tpl
       slurmdbd_conf_tpl: $(vars.staged_configs)/htc-slurmdbd.conf.tpl

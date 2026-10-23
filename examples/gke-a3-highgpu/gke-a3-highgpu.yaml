@@ -59,6 +59,7 @@ vars:
   version_prefix: "1.35."
   nccl_tcpx_version: v3.1.9
 
+
 deployment_groups:
 - group: primary
   modules:
@@ -141,6 +142,9 @@ deployment_groups:
     settings:
       install_gpu_direct_manifests: false
       run_workload_script: false
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a3-highgpu-8g
       auto_upgrade: true
       static_node_count: $(vars.static_node_count)

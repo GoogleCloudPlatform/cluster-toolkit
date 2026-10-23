@@ -26,3 +26,6 @@ vars:
   a3u_reservation_name: # supply a3-ultragpu-8g reservation name
   a3u_provisioning_model: RESERVATION_BOUND # if you have a reservation, keep RESERVATION_BOUND. IF you do NOT have a reservation,set this to SPOT
   number_of_vms: # supply number of vms desired
+
+## --- Optional overrides (defaults shown) ---
+  # homefs_size_gb: 2560

@@ -25,6 +25,13 @@ vars:
   # Replace 'your-pool-balanced' and 'your-pool-throughput' with your storage pool names.
   hyperdisk_balanced_storage_pool: projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-balanced
   hyperdisk_throughput_storage_pool: projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-throughput
+  # Optional overrides (defaults shown)
+  # Machine type of the compute VMs.
+  compute_machine_type: c3d-standard-4
+  # Number of compute VMs.
+  compute_instance_count: 1
+  # Size in GB of the hyperdisk-throughput data disk attached to each VM.
+  compute_data_disk_size_gb: 2048
 
 deployment_groups:
 - group: primary
@@ -39,12 +46,12 @@ deployment_groups:
     use:
     - network
     settings:
-      machine_type: c3d-standard-4
-      instance_count: 1
+      machine_type: $(vars.compute_machine_type)
+      instance_count: $(vars.compute_instance_count)
       disk_type: hyperdisk-balanced
       disk_storage_pool: $(vars.hyperdisk_balanced_storage_pool)
       additional_persistent_disks:
         count: 1
         type: hyperdisk-throughput
-        size: 2048
+        size: $(vars.compute_data_disk_size_gb)
         storage_pool: $(vars.hyperdisk_throughput_storage_pool)

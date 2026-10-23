@@ -65,13 +65,13 @@ This section guides you through the cluster creation process, ensuring that your
    * `region`: the compute region for the cluster.
    * `zone`: the compute zone for the TPUs.
    * `num_slices`: the number of TPU slices to create.
-   * `machine_type`: the machine type of the TPU (e.g.,`ct5lp-hightpu-1t`, `ct5lp-hightpu-4t`, `ct5lp-hightpu-8t`).
+   * `compute_machine_type`: the machine type of the TPU (e.g.,`ct5lp-hightpu-1t`, `ct5lp-hightpu-4t`, `ct5lp-hightpu-8t`).
    * `tpu_topology`: the TPU placement topology for the pod slice node pool (e.g., `2x4`).
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine running Terraform.
    * `reservation`: the name of the Compute Engine reservation of TPU v5e nodes (if any).
    * `user_namespace`: The Kubernetes service account namespace where your TPU workloads will run (defaults to `default`).
 
-    > **Note:** The `static_node_count` is automatically calculated from `machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`.
+    > **Note:** The `static_node_count` is automatically calculated from `compute_machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`.
 
    To modify advanced settings, edit `examples/gke-tpu-v5e/gke-tpu-v5e.yaml`.
 
@@ -103,7 +103,7 @@ By default, the toolkit dynamically applies an embedded kueue configuration base
   * If you want to override the default embedded configurations, or apply configuration in the scenario above, you can uncomment and set `config_path` in the `kueue` section of the `workload-manager-install` module in the blueprint.
   * For more details on default configurations and variables, see the [`kubectl-apply` documentation](https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/management/kubectl-apply#inputs).
 
-* **Quota Allocation:** The blueprint automatically calculates and sets a `google.com/tpu` quota in Kueue's `ClusterQueue`. The node count is derived from your `machine_type` and `tpu_topology`, and the quota is calculated using the formula: `num_slices` × `(total_chips_in_topology / chips_per_machine)` × `chips_per_machine`.
+* **Quota Allocation:** The blueprint automatically calculates and sets a `google.com/tpu` quota in Kueue's `ClusterQueue`. The node count is derived from your `compute_machine_type` and `tpu_topology`, and the quota is calculated using the formula: `num_slices` × `(total_chips_in_topology / chips_per_machine)` × `chips_per_machine`.
 
 1. **Connect to your cluster:**
 
