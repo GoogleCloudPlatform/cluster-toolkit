@@ -280,30 +280,42 @@ func TestCheckAndInstallJobSetCRD_ExistingInstallWaitsWithoutModifying(t *testin
 		name              string
 		crd, service      shell.CommandResult
 		endpoints         []shell.CommandResult
+		wantServiceCalls  int
 		wantEndpointCalls int
 	}{
 		{
-			name: "webhook ready on first read",
+			name: "webhook ready on first read skips Service read",
 			crd:  objectPresent, service: objectPresent,
 			endpoints:         []shell.CommandResult{readyEndpoints},
+			wantServiceCalls:  0,
 			wantEndpointCalls: 1,
 		},
 		{
 			name: "controller pod replacement: no ready endpoint until the third read",
 			crd:  objectPresent, service: objectPresent,
 			endpoints:         []shell.CommandResult{notReadyEndpoints, {ExitCode: 0, Stdout: `{"items":[]}`}, readyEndpoints},
+			wantServiceCalls:  1,
 			wantEndpointCalls: 3,
 		},
 		{
 			name: "transient endpoint read failure, then ready",
 			crd:  objectPresent, service: objectPresent,
 			endpoints:         []shell.CommandResult{readUnreachable, readyEndpoints},
+			wantServiceCalls:  1,
 			wantEndpointCalls: 2,
 		},
 		{
 			name: "forbidden reads count as installed and healthy",
 			crd:  readForbidden, service: readForbidden,
 			endpoints:         []shell.CommandResult{readForbidden},
+			wantServiceCalls:  1,
+			wantEndpointCalls: 1,
+		},
+		{
+			name: "present CRD with forbidden endpoint read verifies Service once",
+			crd:  objectPresent, service: objectPresent,
+			endpoints:         []shell.CommandResult{readForbidden},
+			wantServiceCalls:  1,
 			wantEndpointCalls: 1,
 		},
 	}
@@ -317,6 +329,9 @@ func TestCheckAndInstallJobSetCRD_ExistingInstallWaitsWithoutModifying(t *testin
 
 			if err := orc.checkAndInstallJobSetCRD(); err != nil {
 				t.Fatalf("checkAndInstallJobSetCRD() error = %v, want nil", err)
+			}
+			if got := callsWithPrefix(mockExec, jobSetServiceGetCmd); got != tc.wantServiceCalls {
+				t.Errorf("Service reads = %d, want %d", got, tc.wantServiceCalls)
 			}
 			if got := callsWithPrefix(mockExec, jobSetEndpointsCmd); got != tc.wantEndpointCalls {
 				t.Errorf("EndpointSlice reads = %d, want %d", got, tc.wantEndpointCalls)
@@ -461,18 +476,21 @@ func TestCheckAndInstallJobSetCRD_PartialInstallNeverModifies(t *testing.T) {
 	tests := []struct {
 		name         string
 		crd, service shell.CommandResult
+		endpoints    []shell.CommandResult
+		wantCalls    int
 		want         []string
 	}{
-		{name: "CRD without webhook Service", crd: objectPresent, service: objectAbsent, want: crdOnly},
-		{name: "unreadable CRD and missing Service", crd: readForbidden, service: objectAbsent, want: crdOnly},
-		{name: "webhook Service without CRD", crd: objectAbsent, service: objectPresent, want: serviceOnly},
-		{name: "missing CRD and unreadable Service", crd: objectAbsent, service: readForbidden, want: serviceOnly},
+		{name: "CRD without webhook Service", crd: objectPresent, service: objectAbsent, endpoints: []shell.CommandResult{noPods}, wantCalls: 3, want: crdOnly},
+		{name: "unreadable CRD and missing Service", crd: readForbidden, service: objectAbsent, wantCalls: 2, want: crdOnly},
+		{name: "webhook Service without CRD", crd: objectAbsent, service: objectPresent, wantCalls: 2, want: serviceOnly},
+		{name: "missing CRD and unreadable Service", crd: objectAbsent, service: readForbidden, wantCalls: 2, want: serviceOnly},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			orc, mockExec := newJobSetTestOrchestrator(t, map[string][]shell.CommandResult{
 				jobSetCRDGetCmd:     {tc.crd},
 				jobSetServiceGetCmd: {tc.service},
+				jobSetEndpointsCmd:  tc.endpoints,
 			})
 
 			err := orc.checkAndInstallJobSetCRD()
@@ -480,8 +498,8 @@ func TestCheckAndInstallJobSetCRD_PartialInstallNeverModifies(t *testing.T) {
 				t.Fatal("checkAndInstallJobSetCRD() error = nil, want partial installation error")
 			}
 			assertContainsAll(t, err.Error(), tc.want, never)
-			if got := len(mockExec.calls); got != 2 {
-				t.Errorf("kubectl calls = %d, want only the 2 existence reads; calls: %v", got, mockExec.calls)
+			if got := len(mockExec.calls); got != tc.wantCalls {
+				t.Errorf("kubectl calls = %d, want %d; calls: %v", got, tc.wantCalls, mockExec.calls)
 			}
 			assertNoJobSetMutation(t, mockExec)
 			assertEveryKubectlCallPinned(t, mockExec, jobSetTestKubeContext)
@@ -501,8 +519,13 @@ func TestCheckAndInstallJobSetCRD_ReadErrorsNeverModify(t *testing.T) {
 			wantErr:   "failed to check for the JobSet CRD",
 		},
 		{
-			name:      "Service read fails",
+			name:      "Service read fails when CRD is absent",
 			responses: map[string][]shell.CommandResult{jobSetCRDGetCmd: {objectAbsent}, jobSetServiceGetCmd: {readUnreachable}},
+			wantErr:   "failed to check for the JobSet webhook Service",
+		},
+		{
+			name:      "Service read fails when CRD exists and endpoints are not ready",
+			responses: map[string][]shell.CommandResult{jobSetCRDGetCmd: {objectPresent}, jobSetEndpointsCmd: {noPods}, jobSetServiceGetCmd: {readUnreachable}},
 			wantErr:   "failed to check for the JobSet webhook Service",
 		},
 	}
@@ -851,6 +874,12 @@ func TestDescribeJobSetPods(t *testing.T) {
 		Image: "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
 		State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"}},
 	}}
+	initFailing := pod("ctrl-init", selector, corev1.PodPending, false)
+	initFailing.Status.InitContainerStatuses = []corev1.ContainerStatus{{
+		Name:  "cert-init",
+		Image: "registry.k8s.io/jobset/cert-init:v0.10.1",
+		State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff", Message: "Back-off pulling image"}},
+	}}
 	unschedulable := pod("ctrl-3", selector, corev1.PodPending, false)
 	unschedulable.Status.Conditions = append(unschedulable.Status.Conditions, corev1.PodCondition{
 		Type: corev1.PodScheduled, Status: corev1.ConditionFalse, Reason: "Unschedulable", Message: "0/3 nodes are available: 3 node(s) had untolerated taint {dedicated: gpu}.",
@@ -875,6 +904,11 @@ func TestDescribeJobSetPods(t *testing.T) {
 			name: "image pull failure without a message",
 			pods: []corev1.Pod{pullFailing},
 			want: []string{"ctrl-2: ImagePullBackOff (container kube-rbac-proxy, image gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1); phase=Pending"},
+		},
+		{
+			name: "waiting init container is named",
+			pods: []corev1.Pod{initFailing},
+			want: []string{"ctrl-init: ImagePullBackOff (init container cert-init, image registry.k8s.io/jobset/cert-init:v0.10.1: Back-off pulling image); phase=Pending"},
 		},
 		{
 			name: "unschedulable pod says why",

@@ -79,11 +79,14 @@ var jobSetInstallPermissionChecks = []permissionCheck{
 // installation: re-applying manifests over one can leave the webhook without endpoints, which blocks
 // every JobSet in the cluster.
 func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
-	crdExists, err := g.resourceExists("crd", jobSetCRDName, "")
+	crdExists, crdForbidden, err := g.checkResourceExists("crd", jobSetCRDName, "")
 	if err != nil {
 		return fmt.Errorf("failed to check for the JobSet CRD: %w", err)
 	}
-	serviceExists, err := g.resourceExists("service", jobSetWebhookServiceName, jobSetNamespace)
+	if crdExists && !crdForbidden {
+		return g.verifyOrWaitForJobSetWithCRD()
+	}
+	serviceExists, _, err := g.checkResourceExists("service", jobSetWebhookServiceName, jobSetNamespace)
 	if err != nil {
 		return fmt.Errorf("failed to check for the JobSet webhook Service: %w", err)
 	}
@@ -100,22 +103,57 @@ func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
 	}
 }
 
+// verifyOrWaitForJobSetWithCRD handles the common case where the JobSet CRD is confirmed present.
+// It checks the webhook EndpointSlice first so a healthy cluster requires only two kubectl reads
+// (CRD + EndpointSlice) and skips the separate Service existence read.
+func (g *GKEOrchestrator) verifyOrWaitForJobSetWithCRD() error {
+	start := time.Now()
+	ready, epForbidden, epErr := g.checkServiceEndpointsReady(jobSetNamespace, jobSetWebhookServiceName)
+	if epErr != nil && !errors.Is(epErr, errEndpointsUnreadable) {
+		return epErr
+	}
+	if ready && !epForbidden {
+		return nil
+	}
+	serviceExists, _, err := g.checkResourceExists("service", jobSetWebhookServiceName, jobSetNamespace)
+	if err != nil {
+		return fmt.Errorf("failed to check for the JobSet webhook Service: %w", err)
+	}
+	if !serviceExists {
+		return g.partialJobSetInstallError(true)
+	}
+	if ready {
+		return nil
+	}
+	logging.Info("Service %s/%s has no ready endpoint yet; the JobSet controller may be starting or restarting. Waiting up to %s...",
+		jobSetNamespace, jobSetWebhookServiceName, jobSetWebhookWaitTimeout)
+	if err := g.pollJobSetWebhookEndpoints(1, start, epErr == nil, epErr); err != nil {
+		return fmt.Errorf("JobSet is installed but its webhook is not ready, and gcluster did not modify the existing JobSet installation: %w", err)
+	}
+	return nil
+}
+
 // resourceExists reports whether a Kubernetes object exists. A Forbidden read counts as existing, so a
 // user who cannot read the object never triggers an installation.
 func (g *GKEOrchestrator) resourceExists(kind, name, namespace string) (bool, error) {
+	exists, _, err := g.checkResourceExists(kind, name, namespace)
+	return exists, err
+}
+
+func (g *GKEOrchestrator) checkResourceExists(kind, name, namespace string) (exists, forbidden bool, err error) {
 	args := []string{"get", kind, name}
 	if namespace != "" {
 		args = append(args, "-n", namespace)
 	}
 	res := g.kubectl(append(args, "--ignore-not-found", "-o", "name")...)
 	if res.ExitCode == 0 {
-		return strings.TrimSpace(res.Stdout) != "", nil
+		return strings.TrimSpace(res.Stdout) != "", false, nil
 	}
 	if strings.Contains(strings.ToLower(res.Stderr), "forbidden") {
 		logging.Warn("Insufficient RBAC permissions to read %s %s (403 Forbidden). Assuming it exists.", kind, name)
-		return true, nil
+		return true, true, nil
 	}
-	return false, fmt.Errorf("kubectl get %s %s failed: %s", kind, name, strings.TrimSpace(res.Stderr+"\n"+res.Stdout))
+	return false, false, fmt.Errorf("kubectl get %s %s failed: %s", kind, name, strings.TrimSpace(res.Stderr+"\n"+res.Stdout))
 }
 
 func (g *GKEOrchestrator) installJobSetOnFreshCluster() error {
@@ -219,11 +257,12 @@ func (g *GKEOrchestrator) waitForJobSetWebhook() error {
 // waitForJobSetWebhookEndpoints polls the JobSet webhook Service until it has a ready endpoint. It works
 // for any installation method because it does not depend on the controller Deployment's name.
 func (g *GKEOrchestrator) waitForJobSetWebhookEndpoints() error {
-	start := time.Now()
+	return g.pollJobSetWebhookEndpoints(0, time.Now(), false, nil)
+}
+
+func (g *GKEOrchestrator) pollJobSetWebhookEndpoints(startAttempt int, start time.Time, everRead bool, lastErr error) error {
 	lastLog := start
-	var lastErr error
-	everRead := false
-	for attempt := 0; attempt < jobSetWebhookPollAttempts; attempt++ {
+	for attempt := startAttempt; attempt < jobSetWebhookPollAttempts; attempt++ {
 		if attempt > 0 {
 			if time.Since(start)+jobSetWebhookPollInterval >= jobSetWebhookWaitTimeout {
 				break
@@ -277,19 +316,24 @@ func lastReadFailure(err error) string {
 // serviceEndpointsReady reports whether a Service has a ready endpoint. A Forbidden read counts as
 // ready, like the other RBAC-tolerant checks; other failed reads wrap errEndpointsUnreadable.
 func (g *GKEOrchestrator) serviceEndpointsReady(namespace, service string) (bool, error) {
+	ready, _, err := g.checkServiceEndpointsReady(namespace, service)
+	return ready, err
+}
+
+func (g *GKEOrchestrator) checkServiceEndpointsReady(namespace, service string) (ready, forbidden bool, err error) {
 	res := g.kubectl("get", "endpointslice", "-l", "kubernetes.io/service-name="+service, "-n", namespace, "-o", "json", kubectlReadTimeout)
 	if res.ExitCode != 0 {
 		if strings.Contains(strings.ToLower(res.Stderr), "forbidden") {
 			logging.Warn("Insufficient RBAC permissions to read %s endpoints in %s (403 Forbidden). Skipping endpoint readiness check.", service, namespace)
-			return true, nil
+			return true, true, nil
 		}
-		return false, fmt.Errorf("%w: %s", errEndpointsUnreadable, strings.TrimSpace(res.Stderr))
+		return false, false, fmt.Errorf("%w: %s", errEndpointsUnreadable, strings.TrimSpace(res.Stderr))
 	}
 	var eps k8sEndpointSliceList
 	if err := json.Unmarshal([]byte(res.Stdout), &eps); err != nil {
-		return false, fmt.Errorf("failed to parse EndpointSlices of Service %s/%s: %w", namespace, service, err)
+		return false, false, fmt.Errorf("failed to parse EndpointSlices of Service %s/%s: %w", namespace, service, err)
 	}
-	return eps.HasReadyEndpoint(), nil
+	return eps.HasReadyEndpoint(), false, nil
 }
 
 // diagnoseJobSetWebhook explains, on a best-effort basis, why the JobSet webhook Service has no ready endpoint.
@@ -358,20 +402,30 @@ func podReady(p corev1.Pod) bool {
 	return false
 }
 
-// podProblem names the first waiting container with its image, or else why the pod is not scheduled.
+// podProblem names the first waiting init or app container with its image, or else why the pod is not scheduled.
 func podProblem(p corev1.Pod) string {
-	for _, cs := range p.Status.ContainerStatuses {
-		if w := cs.State.Waiting; w != nil && w.Reason != "" {
-			detail := fmt.Sprintf("container %s, image %s", cs.Name, cs.Image)
-			if w.Message != "" {
-				detail += ": " + w.Message
-			}
-			return fmt.Sprintf("%s (%s)", w.Reason, detail)
-		}
+	if msg := waitingContainerProblem("init container", p.Status.InitContainerStatuses); msg != "" {
+		return msg
+	}
+	if msg := waitingContainerProblem("container", p.Status.ContainerStatuses); msg != "" {
+		return msg
 	}
 	for _, c := range p.Status.Conditions {
 		if c.Type == corev1.PodScheduled && c.Status == corev1.ConditionFalse {
 			return fmt.Sprintf("%s (%s)", c.Reason, c.Message)
+		}
+	}
+	return ""
+}
+
+func waitingContainerProblem(kind string, statuses []corev1.ContainerStatus) string {
+	for _, cs := range statuses {
+		if w := cs.State.Waiting; w != nil && w.Reason != "" {
+			detail := fmt.Sprintf("%s %s, image %s", kind, cs.Name, cs.Image)
+			if w.Message != "" {
+				detail += ": " + w.Message
+			}
+			return fmt.Sprintf("%s (%s)", w.Reason, detail)
 		}
 	}
 	return ""
