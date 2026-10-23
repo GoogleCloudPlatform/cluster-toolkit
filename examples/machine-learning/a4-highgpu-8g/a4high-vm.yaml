@@ -39,6 +39,10 @@ vars:
   hostname_prefix: $(vars.deployment_name)
   local_ssd_mountpoint: /mnt/localssd
 
+  # Optional overrides (defaults shown)
+  # Size in GB of the /home Filestore instance.
+  homefs_size_gb: 10240
+
 deployment_groups:
 - group: primary
   modules:
@@ -94,7 +98,7 @@ deployment_groups:
     use: [a4high-net-0]
     settings:
       filestore_tier: HIGH_SCALE_SSD
-      size_gb: 10240
+      size_gb: $(vars.homefs_size_gb)
       local_mount: /home
       reserved_ip_range: $(vars.filestore_ip_range)
     outputs:
@@ -320,6 +324,9 @@ deployment_groups:
     source: modules/compute/vm-instance
     use: [startup-script, homefs]
     settings:
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a4-highgpu-8g
       instance_count: $(vars.number_of_vms)
       name_prefix: $(vars.hostname_prefix)

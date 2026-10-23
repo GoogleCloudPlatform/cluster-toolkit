@@ -26,6 +26,15 @@ vars:
     # https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
     family: aci-gpu-u2204-slurm-2511-cuda-130-nvidia-580-amd64
     project: advanced-compute-images
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned nodes in the debug partition.
+  debug_node_count_dynamic_max: 4
+  # Machine type for the debug partition.
+  debug_machine_type: n2-standard-2
+  # Maximum number of dynamically provisioned nodes in the compute partition.
+  compute_node_count_dynamic_max: 20
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
 
 deployment_groups:
 - group: primary
@@ -56,8 +65,8 @@ deployment_groups:
     use: [network]
     settings:
       instance_image: $(vars.slurm_image)
-      node_count_dynamic_max: 4
-      machine_type: n2-standard-2
+      node_count_dynamic_max: $(vars.debug_node_count_dynamic_max)
+      machine_type: $(vars.debug_machine_type)
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -72,7 +81,7 @@ deployment_groups:
     use: [network]
     settings:
       instance_image: $(vars.slurm_image)
-      node_count_dynamic_max: 20
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
       bandwidth_tier: gvnic_enabled
 
   - id: compute_partition
@@ -98,5 +107,5 @@ deployment_groups:
     use: [network]
     settings:
       instance_image: $(vars.slurm_image)
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       enable_login_public_ips: true

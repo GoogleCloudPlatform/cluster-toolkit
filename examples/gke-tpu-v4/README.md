@@ -65,16 +65,17 @@ This section guides you through the cluster creation process, ensuring that your
    * `region`: the compute region for the cluster (e.g., `us-central2`).
    * `zone`: the compute zone for the TPUs (e.g., `us-central2-b`).
    * `num_slices`: the number of TPU slices to create.
-   * `machine_type`: the machine type of the TPU (e.g., `ct4p-hightpu-4t`).
+   * `compute_machine_type`: the machine type of the TPU (e.g., `ct4p-hightpu-4t`).
    * `tpu_topology`: the TPU placement topology for the pod slice node pool (e.g., `2x2x2`).
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine running Terraform.
+   * `reservation`: The name of the Compute Engine reservation for the TPU v4 nodes.
    * `user_namespace`: The Kubernetes service account namespace where your TPU workloads will run (defaults to `default`).
 
-    > **Note:** The `static_node_count` is automatically calculated from `machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`. For `2x2x2` (8 chips) on `ct4p-hightpu-4t` (4 chips/node), it will create 2 nodes.
+    > **Note:** The `static_node_count` is automatically calculated from `compute_machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`. For `2x2x2` (8 chips) on `ct4p-hightpu-4t` (4 chips/node), it will create 2 nodes.
 
    To modify advanced settings, edit `examples/gke-tpu-v4/gke-tpu-v4.yaml`.
 
-1. To utilize spot instances, add `spot: true` in `gke-tpu-v4-deployment.yaml`.
+1. To utilize Spot VMs instead of a reservation, add `spot: true` under `gke-tpu-v4-pool.settings` in `examples/gke-tpu-v4/gke-tpu-v4.yaml` and comment out or remove the `reservation_affinity` block (as well as `reservation:` in `vars:`).
 
 1. Generate [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp) to provide access to Terraform.
 

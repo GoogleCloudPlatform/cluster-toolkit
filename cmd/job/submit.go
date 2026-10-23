@@ -31,6 +31,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var (
@@ -109,11 +110,11 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			return err
 		}
 
-		if err := validatePathwaysFlags(); err != nil {
+		if err := validatePathwaysFlags(cmd); err != nil {
 			return err
 		}
-		if !skipPrereqs {
-			if err := ensurePrerequisites(cmd, projectID, location); err != nil {
+		if !skipPrereqs && buildContext != "" {
+			if err := ensureBuildPrerequisites(cmd, projectID, location); err != nil {
 				return err
 			}
 		}
@@ -182,14 +183,14 @@ func init() {
 	SubmitCmd.Flags().BoolVar(&pathways.Headless, "pathways-headless", false, "If present, the user's workload container will not be deployed within the `pathways-head` job.")
 	SubmitCmd.Flags().StringVar(&pathways.GCSLocation, "pathways-gcs-location", "", "Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.")
 	SubmitCmd.Flags().IntVar(&pathways.ElasticSlices, "pathways-elastic-slices", 0, "Configures the number of elastic slices, potentially allowing for more flexible resource allocation.")
-	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 4000, "Maximum times the workers in a slice can be restarted. Maps to backoffLimitPerIndex=N and backoffLimit=N*nodesPerSlice on the worker Job. Used with --pathways-elastic-slices.")
+	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 0, "Maximum times the workers in a slice can be restarted (defaults to 0, or 4000 when --pathways-elastic-slices>0 or --pathways-headless is set). Maps to backoffLimitPerIndex=N and backoffLimit=N*nodesPerSlice on the worker Job.")
 	SubmitCmd.Flags().StringVar(&pathways.ProxyArgs, "pathways-proxy-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-proxy` executable.")
 	SubmitCmd.Flags().StringVar(&pathways.ServerArgs, "pathways-server-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-rm` (resource manager) executable.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerArgs, "pathways-worker-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-worker` executable.")
 	SubmitCmd.Flags().StringArrayVar(&pathwaysProxyEnv, "pathways-proxy-env", []string{}, "Custom environment variables for the Pathways proxy container in KEY=VALUE format. Can be specified multiple times.")
 	SubmitCmd.Flags().StringArrayVar(&pathwaysServerEnv, "pathways-server-env", []string{}, "Custom environment variables for the Pathways server container in KEY=VALUE format. Can be specified multiple times.")
 	SubmitCmd.Flags().StringArrayVar(&pathwaysWorkerEnv, "pathways-worker-env", []string{}, "Custom environment variables for the Pathways worker container in KEY=VALUE format. Can be specified multiple times.")
-	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional Python-based sidecar container to run alongside the Pathways head components.")
+	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional colocated Python sidecar that runs in each Pathways worker pod and shares memory with the worker at /tmp/sidecar.")
 	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
 
 	SubmitCmd.Flags().BoolVar(&gkeMtcEnabled, "gke-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC).")
@@ -233,6 +234,9 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 
 	jobTopology := strings.ToLower(strings.TrimSpace(topology))
 
+	if (pathways.ElasticSlices > 0 || pathways.Headless) && !cmd.Flags().Changed("pathways-max-slice-restarts") {
+		pathways.MaxSliceRestarts = defaultElasticMaxSliceRestarts
+	}
 	pathways.ProxyEnv = parseEnvFlags(pathwaysProxyEnv)
 	pathways.ServerEnv = parseEnvFlags(pathwaysServerEnv)
 	pathways.WorkerEnv = parseEnvFlags(pathwaysWorkerEnv)
@@ -335,7 +339,8 @@ const (
 	// JobSet labels Pathways pods with jobset.sigs.k8s.io/coordinator=<name>-pathways-head-0-0.<name>.
 	pathwaysCoordinatorSuffix = "-pathways-head-0-0."
 	// Longest Pathways name whose coordinator label still fits in a label value.
-	maxPathwaysWorkloadNameLen = (maxLabelValueLen - len(pathwaysCoordinatorSuffix)) / 2
+	maxPathwaysWorkloadNameLen     = (maxLabelValueLen - len(pathwaysCoordinatorSuffix)) / 2
+	defaultElasticMaxSliceRestarts = 4000
 )
 
 func validateWorkloadNameLength(name string, isPathways bool) error {
@@ -352,18 +357,36 @@ func validateWorkloadNameLength(name string, isPathways bool) error {
 	return nil
 }
 
-func validatePathwaysFlags() error {
+func validatePathwaysFlags(cmd *cobra.Command) error {
 	if isPathwaysJob {
 		if pathways.GCSLocation == "" {
 			return fmt.Errorf("pathways-gcs-location is required when using --pathways")
 		}
-	} else {
-		// Check if any pathways-specific flag is set without --pathways
-		if !reflect.DeepEqual(pathways, orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 4000}) || len(pathwaysProxyEnv) > 0 || len(pathwaysServerEnv) > 0 || len(pathwaysWorkerEnv) > 0 {
-			return fmt.Errorf("pathways flags specified but --pathways flag is missing")
+		if pathways.ElasticSlices < 0 {
+			return fmt.Errorf("--pathways-elastic-slices must be non-negative")
 		}
+		if pathways.MaxSliceRestarts < 0 {
+			return fmt.Errorf("--pathways-max-slice-restarts must be non-negative")
+		}
+		return nil
+	}
+	if !reflect.DeepEqual(pathways, orchestrator.PathwaysJobDefinition{}) || len(pathwaysProxyEnv) > 0 || len(pathwaysServerEnv) > 0 || len(pathwaysWorkerEnv) > 0 || hasChangedPathwaysFlags(cmd) {
+		return fmt.Errorf("pathways flags specified but --pathways flag is missing")
 	}
 	return nil
+}
+
+func hasChangedPathwaysFlags(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	changed := false
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if f.Changed && strings.HasPrefix(f.Name, "pathways-") {
+			changed = true
+		}
+	})
+	return changed
 }
 
 func validateImageFlags(ctx context.Context, projectID, location string) error {

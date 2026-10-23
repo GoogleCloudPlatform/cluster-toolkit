@@ -21,10 +21,8 @@ Also see a full [GKE example blueprint](../../../examples/hpc-gke.yaml).
 
 ### Taints and Tolerations
 
-By default node pools created with this module will be tainted with
-`user-workload=true:NoSchedule` to prevent system pods from being scheduled.
-User jobs targeting the node pool should include this toleration. This behavior
-can be overridden using the `taints` setting. See
+Custom node taints can be configured on node pools created with this module
+using the `taints` setting (which defaults to `[]`). See
 [docs](https://cloud.google.com/kubernetes-engine/docs/how-to/node-taints) for
 more info.
 
@@ -172,7 +170,7 @@ The following is an example of using a GPU (with sharing config) attached to an 
 
 ```yaml
   - id: n1-t4-pool
-    source: community/modules/compute/gke-node-pool
+    source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       name: n1-t4-pool
@@ -212,15 +210,12 @@ Finally, the following is adding multivpc to a node pool:
   - id: gke-cluster
     source: modules/scheduler/gke-cluster
     use: [network, multinetwork]
-    settings:
-      cluster_name: $(vars.deployment_name)
 
   - id: a3-megagpu_pool
     source: modules/compute/gke-node-pool
     use: [gke-cluster, multinetwork]
     settings:
       machine_type: a3-megagpu-8g
-      ...
 ```
 
 ## Using GCE Reservations
@@ -292,16 +287,16 @@ limitations under the License.
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.24.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.44.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.44.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.24.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.44.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.44.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
@@ -364,7 +359,8 @@ limitations under the License.
 | <a name="input_gke_version"></a> [gke\_version](#input\_gke\_version) | GKE version | `string` | n/a | yes |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = optional(string)<br/>    count = optional(number, 0)<br/>    gpu_driver_installation_config = optional(object({<br/>      gpu_driver_version = string<br/>    }), { gpu_driver_version = "DEFAULT" })<br/>    gpu_partition_size = optional(string)<br/>    gpu_sharing_config = optional(object({<br/>      gpu_sharing_strategy       = string<br/>      max_shared_clients_per_gpu = number<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_host_maintenance_interval"></a> [host\_maintenance\_interval](#input\_host\_maintenance\_interval) | Specifies the frequency of planned maintenance events. | `string` | `""` | no |
-| <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
+| <a name="input_ignore_node_count_changes"></a> [ignore\_node\_count\_changes](#input\_ignore\_node\_count\_changes) | Whether to ignore external changes (drift) to the node count (e.g. from out-of-band resizes using gcloud). Setting this to true allows node pool size changes made outside Terraform to be preserved instead of reverted on subsequent applies. | `bool` | `false` | no |
+| <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. Use CUSTOM\_CONTAINERD together with var.node\_image\_config to run a custom node image. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_initial_node_count"></a> [initial\_node\_count](#input\_initial\_node\_count) | The initial number of nodes for the pool. In regional clusters, this is the number of nodes per zone. Changing this setting after node pool creation will not make any effect. It cannot be set with static\_node\_count and must be set to a value between autoscaling\_total\_min\_nodes and autoscaling\_total\_max\_nodes. | `number` | `null` | no |
 | <a name="input_install_dranet_template"></a> [install\_dranet\_template](#input\_install\_dranet\_template) | If true, automatically deploys the DRANET ResourceClaimTemplate. The compiler automatically overrides this to false for subsequent node pools in the same cluster if they use the same device class. | `bool` | `true` | no |
 | <a name="input_install_gpu_direct_manifests"></a> [install\_gpu\_direct\_manifests](#input\_install\_gpu\_direct\_manifests) | If true, automatically downloads and applies GPUDirect (NCCL and NRI) manifests from GitHub for A3 High/Mega GPUs. Set to false if you are applying these manifests manually. | `bool` | `true` | no |
@@ -380,6 +376,7 @@ limitations under the License.
 | <a name="input_max_pods_per_node"></a> [max\_pods\_per\_node](#input\_max\_pods\_per\_node) | The maximum number of pods per node in this node pool. This will force replacement. | `number` | `null` | no |
 | <a name="input_max_run_duration"></a> [max\_run\_duration](#input\_max\_run\_duration) | The duration (in whole seconds) of the instance. Instance will run and be terminated after then. | `number` | `null` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the node pool. If not set, automatically populated by machine type and module id (unique blueprint-wide) as suffix.<br/>If setting manually, ensure a unique value across all gke-node-pools. | `string` | `null` | no |
+| <a name="input_node_image_config"></a> [node\_image\_config](#input\_node\_image\_config) | Custom OS image for the nodes. Requires var.image\_type = "CUSTOM\_CONTAINERD".<br/>The GKE service agent of the project needs roles/compute.imageUser on image\_project. | <pre>object({<br/>    image         = optional(string)<br/>    image_project = optional(string)<br/>  })</pre> | `null` | no |
 | <a name="input_num_node_pools"></a> [num\_node\_pools](#input\_num\_node\_pools) | Number of node pools to create. This is same as num\_slices. | `number` | `1` | no |
 | <a name="input_num_slices"></a> [num\_slices](#input\_num\_slices) | Number of TPUs slices to create. This is same as num\_node\_pools. | `number` | `1` | no |
 | <a name="input_placement_policy"></a> [placement\_policy](#input\_placement\_policy) | Group placement policy to use for the node pool's nodes. `COMPACT` is the only supported value for `type` currently. `name` is the name of the placement policy. `tpu_topology` is the TPU placement topology for pod slice node pool.<br/>It is assumed that the specified policy exists. To create a placement policy refer to https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement.<br/>Note: Placement policies have the [following](https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies) restrictions. | <pre>object({<br/>    type         = string<br/>    name         = optional(string)<br/>    tpu_topology = optional(string)<br/>  })</pre> | <pre>{<br/>  "name": null,<br/>  "tpu_topology": null,<br/>  "type": null<br/>}</pre> | no |

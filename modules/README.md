@@ -6,7 +6,7 @@ module are listed in more detail [below](#module-fields). Blueprints can be
 extended in functionality by incorporating [modules from GitHub
 repositories][ghmods].
 
-[ghmods]: #github-modules
+[ghmods]: #github-hosted-modules-and-packages
 
 ## All Modules
 
@@ -402,7 +402,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 ### ID (Required)
 
 The `id` field is used to uniquely identify and reference a defined module.
-ID's are used in [variables](../examples/README.md#variables) and become the
+ID's are used in [variables](../examples/README.md#variables-expressions-and-functions) and become the
 name of each module when writing the terraform `main.tf` file. They are also
 used in the [use](#use-optional) and [outputs](#outputs-optional) lists
 described below.
@@ -458,7 +458,7 @@ following module definition refers the local pre-existing-vpc modules.
 
 ```yaml
   - id: network1
-    source: modules/network/pre-existing-vpc
+    source: ./modules/network/pre-existing-vpc
 ```
 
 > **_NOTE:_** Relative paths (beginning with `.` or `..` must be relative to the
@@ -546,7 +546,7 @@ gitlab, set the source to a path starting `git::`. Two Standard git protocols
 are supported, `git::https://` for HTTPS or `git::git@github.com` for SSH.
 
 Additional formatting and features after `git::` are identical to that of the
-[GitHub Modules](#github-modules) described above.
+[GitHub Modules](#github-hosted-modules-and-packages) described above.
 
 #### Google Cloud Storage Modules
 
@@ -600,7 +600,7 @@ In this snippet, the VM instance `workstation` uses the outputs of vpc
 In this case both `network_self_link` and `subnetwork_self_link` in the
 [workstation settings](compute/vm-instance/README.md#Inputs) will be set
 to `$(network1.network_self_link)` and `$(network1.subnetwork_self_link)` which
-refer to the [network1 outputs](network/vpc/README#Outputs)
+refer to the [network1 outputs](network/vpc/README.md#Outputs)
 of the same names.
 
 The order of precedence that `gcluster` uses in determining when to infer a setting
@@ -651,8 +651,8 @@ Apply complete! Resources: 7 added, 0 changed, 0 destroyed.
 
 Outputs:
 
-external_ip_simplevm = <sensitive>
-internal_ip_simplevm = [
+external_ip_vm = <sensitive>
+internal_ip_vm = [
   "10.128.0.19",
 ]
 ```

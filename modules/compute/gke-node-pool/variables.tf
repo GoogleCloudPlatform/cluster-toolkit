@@ -123,9 +123,26 @@ variable "guest_accelerator" {
 }
 
 variable "image_type" {
-  description = "The default image type used by NAP once a new node pool is being created. Use either COS_CONTAINERD or UBUNTU_CONTAINERD."
+  description = "The default image type used by NAP once a new node pool is being created. Use either COS_CONTAINERD or UBUNTU_CONTAINERD. Use CUSTOM_CONTAINERD together with var.node_image_config to run a custom node image."
   type        = string
   default     = "COS_CONTAINERD"
+}
+
+variable "node_image_config" {
+  description = <<-EOT
+  Custom OS image for the nodes. Requires var.image_type = "CUSTOM_CONTAINERD".
+  The GKE service agent of the project needs roles/compute.imageUser on image_project.
+  EOT
+  type = object({
+    image         = optional(string)
+    image_project = optional(string)
+  })
+  default  = null
+  nullable = true
+  validation {
+    condition     = var.node_image_config == null || try(length(var.node_image_config.image) > 0, false)
+    error_message = "The 'image' attribute must be specified when 'node_image_config' is provided."
+  }
 }
 
 variable "local_ssd_count_ephemeral_storage" {
@@ -177,6 +194,12 @@ variable "static_node_count" {
   description = "The static number of nodes in the node pool. If set, autoscaling will be disabled."
   type        = number
   default     = null
+}
+
+variable "ignore_node_count_changes" {
+  description = "Whether to ignore external changes (drift) to the node count (e.g. from out-of-band resizes using gcloud). Setting this to true allows node pool size changes made outside Terraform to be preserved instead of reverted on subsequent applies."
+  type        = bool
+  default     = false
 }
 
 variable "is_reservation_active" {

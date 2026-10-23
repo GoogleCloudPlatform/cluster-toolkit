@@ -143,7 +143,7 @@ bindings:
 `service_agents` at all, to prove the custom-SA path works standalone:
 
 ```console
-$ ./ghpc deploy DEPLOYMENT_DIR --auto-approve
+$ ./gcluster deploy DEPLOYMENT_DIR --auto-approve
 ...
 Apply complete! Resources: 38 added, 0 changed, 0 destroyed.
 
@@ -181,7 +181,7 @@ independently grantable and independently usable -- granting two SAs on one
 key, then pointing two different resources at two different SAs:
 
 ```console
-$ ./ghpc deploy DEPLOYMENT_DIR --auto-approve
+$ ./gcluster deploy DEPLOYMENT_DIR --auto-approve
 ...
 Apply complete! Resources: 39 added, 0 changed, 0 destroyed.
 
@@ -220,7 +220,7 @@ applied entirely by hand (`gcloud kms keys add-iam-policy-binding`),
 simulating a security team managing permissions out-of-band:
 
 ```console
-$ ./ghpc deploy DEPLOYMENT_DIR --auto-approve
+$ ./gcluster deploy DEPLOYMENT_DIR --auto-approve
 ...
 Apply complete! Resources: 28 added, 0 changed, 0 destroyed.
 
@@ -278,7 +278,7 @@ Setting `skip_iam_role_grants: true` together with a non-empty
 validation error, before any resource is created:
 
 ```console
-$ ./ghpc deploy DEPLOYMENT_DIR --auto-approve
+$ ./gcluster deploy DEPLOYMENT_DIR --auto-approve
 ...
 Error: Invalid value for variable
 

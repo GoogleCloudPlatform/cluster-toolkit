@@ -28,10 +28,12 @@ In particular, the detailed structure of input variables can be found for:
 [cft-network]: https://github.com/terraform-google-modules/terraform-google-network/tree/v5.1.0
 [cft-network-submodules]: https://github.com/terraform-google-modules/terraform-google-network/tree/v5.1.0/modules
 
-Additionally, [Google Private Access][gpa] is enabled by default on all
-subnetworks unless it is explicitly disabled. This setting ensures that all VMs
-can use Google services such as [Cloud Storage][gcs] even if they do not have
-public IP addresses or Cloud NAT is disabled.
+Additionally, [Google Private Access][gpa] is enabled by default on the
+default primary subnetwork (when `var.subnetworks` is not overridden). When
+providing custom entries in `var.subnetworks`, set `subnet_private_access: true`
+explicitly on each subnetwork entry that requires Private Google Access so VMs
+can use Google services such as [Cloud Storage][gcs] without public IP
+addresses or Cloud NAT.
 
 [gpa]: https://cloud.google.com/vpc/docs/private-google-access
 [gcs]: https://cloud.google.com/storage
@@ -49,12 +51,12 @@ This creates a new VPC network named `cluster-net`.
 
 ### Deprecation warning
 
-The variables listed below have been deprecated and will be removed in a future
-release. Until they are removed,You may continue to use them in Toolkit
-blueprints with the same functionality as documented in the [Toolkit 1.0
-release][vpc1.0].
+The variables listed below are deprecated and rejected by variable validation
+(`var.<name> == null`). Blueprints must migrate to `var.subnetworks` and
+`var.default_primary_subnetwork_size` as documented below (see [Toolkit 1.0
+release][vpc1.0] for legacy definitions).
 
-* Deprecated variables
+* Deprecated variables (no longer accepted)
   * `var.primary_subnetwork`
   * `var.additional_subnetworks`
   * `var.subnetwork_size`
@@ -175,9 +177,9 @@ limitations under the License.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
-| <a name="module_cloud_router"></a> [cloud\_router](#module\_cloud\_router) | terraform-google-modules/cloud-router/google | ~> 7.3 |
-| <a name="module_nat_ip_addresses"></a> [nat\_ip\_addresses](#module\_nat\_ip\_addresses) | terraform-google-modules/address/google | ~> 4.1 |
-| <a name="module_vpc"></a> [vpc](#module\_vpc) | terraform-google-modules/network/google | ~> 13.0 |
+| <a name="module_cloud_router"></a> [cloud\_router](#module\_cloud\_router) | terraform-google-modules/cloud-router/google | ~> 9.1 |
+| <a name="module_nat_ip_addresses"></a> [nat\_ip\_addresses](#module\_nat\_ip\_addresses) | terraform-google-modules/address/google | ~> 5.1 |
+| <a name="module_vpc"></a> [vpc](#module\_vpc) | terraform-google-modules/network/google | ~> 18.3 |
 
 ## Resources
 

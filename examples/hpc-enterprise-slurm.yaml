@@ -33,6 +33,25 @@ vars:
   instance_image_custom: false
   metadata: # Workaround for https://github.com/GoogleCloudPlatform/cluster-toolkit/discussions/3243
     VmDnsSetting: GlobalOnly
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned nodes in the n2 partition.
+  n2_node_count_dynamic_max: 4
+  # Maximum number of dynamically provisioned nodes in the c2 partition.
+  c2_node_count_dynamic_max: 20
+  # Maximum number of dynamically provisioned nodes in the c2d partition.
+  c2d_node_count_dynamic_max: 20
+  # Maximum number of dynamically provisioned nodes in the c3 partition.
+  c3_node_count_dynamic_max: 20
+  # Maximum number of dynamically provisioned nodes in the a2_8 partition.
+  a2_8_node_count_dynamic_max: 16
+  # Maximum number of dynamically provisioned nodes in the a2_16 partition.
+  a2_16_node_count_dynamic_max: 16
+  # Maximum number of dynamically provisioned nodes in the h3 partition.
+  h3_node_count_dynamic_max: 16
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
+  # Size in GiB of the /lustre Managed Lustre instance.
+  lustre_size_gib: 36000
 
 # Recommended to use GCS backend for Terraform state
 # See https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#optional-setting-up-a-remote-terraform-state
@@ -112,13 +131,13 @@ deployment_groups:
       name: $(vars.lustre_instance_id)
       local_mount: /lustre
       remote_mount: lustrefs
-      size_gib: 36000
+      size_gib: $(vars.lustre_size_gib)
 
   - id: n2_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, compute_sa]
     settings:
-      node_count_dynamic_max: 4
+      node_count_dynamic_max: $(vars.n2_node_count_dynamic_max)
       machine_type: n2-standard-2
       instance_image: $(vars.slurm_image)
       allow_automatic_updates: false
@@ -137,7 +156,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, compute_sa]
     settings:
-      node_count_dynamic_max: 20
+      node_count_dynamic_max: $(vars.c2_node_count_dynamic_max)
       machine_type: c2-standard-60  # this is the default
       bandwidth_tier: tier_1_enabled
       instance_image: $(vars.slurm_image)
@@ -159,7 +178,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, compute_sa]
     settings:
-      node_count_dynamic_max: 20
+      node_count_dynamic_max: $(vars.c2d_node_count_dynamic_max)
       machine_type: c2d-standard-112
       instance_image: $(vars.slurm_image)
       bandwidth_tier: tier_1_enabled
@@ -177,7 +196,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, compute_sa]
     settings:
-      node_count_dynamic_max: 20
+      node_count_dynamic_max: $(vars.c3_node_count_dynamic_max)
       machine_type: c3-highcpu-176
       instance_image: $(vars.slurm_image)
       bandwidth_tier: tier_1_enabled
@@ -195,7 +214,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, compute_sa]
     settings:
-      node_count_dynamic_max: 16
+      node_count_dynamic_max: $(vars.a2_8_node_count_dynamic_max)
       machine_type: a2-ultragpu-8g
       # This makes this nodeset look for machines in any of the following zones
       # https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/community/modules/compute/schedmd-slurm-gcp-v6-nodeset#compute-vm-zone-policies
@@ -225,7 +244,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, compute_sa]
     settings:
-      node_count_dynamic_max: 16
+      node_count_dynamic_max: $(vars.a2_16_node_count_dynamic_max)
       machine_type: a2-megagpu-16g
       # This makes this nodeset look for machines in any of the following zones
       # https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/community/modules/compute/schedmd-slurm-gcp-v6-nodeset#compute-vm-zone-policies // !!!
@@ -255,7 +274,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, compute_sa]
     settings:
-      node_count_dynamic_max: 16
+      node_count_dynamic_max: $(vars.h3_node_count_dynamic_max)
       # Note that H3 is available in only specific zones. https://cloud.google.com/compute/docs/regions-zones
       machine_type: h3-standard-88
       bandwidth_tier: gvnic_enabled  # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_network
@@ -279,7 +298,7 @@ deployment_groups:
     use: [network, login_sa]
     settings:
       instance_image: $(vars.slurm_image)
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       # we recommend disabling public IPs if possible
       # but that requires your network to have a NAT or
       # private access configured

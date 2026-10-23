@@ -44,6 +44,12 @@ vars:
   tpu_dws_flex_enabled: false
   tpu_enable_spot_vm: false
 
+  # Optional overrides (defaults shown)
+  # Machine type for the login node.
+  login_machine_type: n2d-standard-4
+  # Machine type for the controller node.
+  controller_machine_type: n2d-standard-4
+
 deployment_groups:
 - group: cluster-env
   modules:
@@ -138,7 +144,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [slurm-network]
     settings:
-      machine_type: n2d-standard-4
+      machine_type: $(vars.login_machine_type)
       enable_login_public_ips: true
 
   - id: slurm_controller
@@ -150,5 +156,5 @@ deployment_groups:
     - slurm-network
     - homefs
     settings:
-      machine_type: n2d-standard-4
+      machine_type: $(vars.controller_machine_type)
       enable_controller_public_ips: true

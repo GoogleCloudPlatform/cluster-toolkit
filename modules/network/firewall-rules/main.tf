@@ -51,7 +51,7 @@ resource "terraform_data" "pga_check" {
 
 module "firewall_rule" {
   source       = "terraform-google-modules/network/google//modules/firewall-rules"
-  version      = "~> 13.0"
+  version      = "~> 18.3"
   project_id   = local.effective_project_id
   network_name = local.effective_network_name
 

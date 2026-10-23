@@ -16,7 +16,7 @@
 test_name: gke-tpu-v6e
 deployment_name: gke-tpu-v6e-{{ build }}
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/gke-tpu-v6e/gke-tpu-v6e.yaml"
+blueprint_yaml: "{{ workspace }}/examples/gke-tpu-v6e/gke-tpu-v6e-advanced.yaml"
 network: "{{ deployment_name }}-net-0"
 remote_node: "{{ deployment_name }}-remote-node-0"
 machine_type: ct6e-standard-4t
@@ -26,7 +26,7 @@ cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
   num_slices: "{{ num_slices }}"
-  machine_type: "{{ machine_type }}"
+  compute_machine_type: "{{ machine_type }}"
   tpu_topology: "{{ tpu_topology }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   spot: "{{ enable_spot | default(true) }}"
@@ -42,6 +42,14 @@ custom_vars:
   tpu_topology: 2x2
   k8s_service_account: workload-identity-k8s-sa
   jobset_name: sample-tpu-jobset
+  tpu_type: v6e-4
+  num_slices: 1
+  enable_mtc: true
+  mtc_ramdisk_dir: /gke-mtc
+  workload_image: "us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest"
+  workload_command: >-
+    rm -f /tmp/mtc_verified && pip install -U jax jaxlib pathwaysutils && python -c 'import os, time, pathwaysutils; pathwaysutils.initialize(); import jax; dc = jax.device_count(); print("JAX Device count:", dc); assert dc == 4, f"Expected 4 devices, got {dc}"; a = jax.random.normal(jax.random.PRNGKey(0), (2, 2)); print("JAX TPU Result:", a, flush=True); [(time.sleep(1), print("waiting for mtc_verified", flush=True)) for _ in range(120) if not os.path.exists("/tmp/mtc_verified")]' && rm -f /tmp/mtc_verified
+  expected_log_output: "JAX TPU Result:"
 instance_type: "tpuv6e"
 scheduler: "gke"
 chs_nodepools: "gke-tpu-v6e-pool"
@@ -50,5 +58,6 @@ chs_suites:
 - standard
 post_deploy_tests:
 - test-validation/test-gke-tpu.yml
+- test-validation/test-gcluster-job-pathways.yml
 - test-validation/test-gke-ml-diagnostics.yml
 - test-validation/test-chs.yml

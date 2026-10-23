@@ -10,9 +10,9 @@
 
 ## Overview
 
-This module creates a [compute instance](../../../../docs/glossary.md#vm) from
-[instance template](../../../../docs/glossary.md#instance-template) for a
-[Slurm cluster](../slurm_cluster/README.md).
+This module creates a compute instance from an
+[instance template](../instance_template/README.md) for a
+[Slurm cluster](../../../scheduler/schedmd-slurm-gcp-v6-controller/README.md).
 
 > **NOTE:** This module is only intended to be used by Slurm modules. For
 > general usage, please consider using:
@@ -23,8 +23,7 @@ This module creates a [compute instance](../../../../docs/glossary.md#vm) from
 
 ## Module API
 
-For the terraform module API reference, please see
-[README_TF.md](./README_TF.md).
+For the terraform module API reference, please see the [Inputs](#inputs) and [Outputs](#outputs) sections below.
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright (C) SchedMD LLC.
