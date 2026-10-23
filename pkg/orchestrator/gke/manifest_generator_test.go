@@ -2863,3 +2863,179 @@ func TestGeneratePathwaysManifest_ExclusiveTopology(t *testing.T) {
 		})
 	}
 }
+
+func assertContainerEnvMap(t *testing.T, c corev1.Container, want map[string]string) {
+	t.Helper()
+	got := make(map[string]string, len(c.Env))
+	for _, e := range c.Env {
+		if _, dup := got[e.Name]; dup {
+			t.Errorf("container %q has duplicate env var %q", c.Name, e.Name)
+		}
+		got[e.Name] = e.Value
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("container %q env mismatch (-want +got):\n%s", c.Name, diff)
+	}
+}
+
+func TestGenerateGKEManifest_CoordinatorEnv(t *testing.T) {
+	setupMockMachineConfig(t)
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	profile := JobProfile{IsCPUMachine: true, CapacityCount: 4}
+
+	tests := []struct {
+		name         string
+		workloadName string
+		userEnv      map[string]string
+		wantEnv      map[string]string
+	}{
+		{
+			name:         "injects default MASTER_ADDR and WORKERS_0_HOSTNAME when unset",
+			workloadName: "torch-job",
+			userEnv:      nil,
+			wantEnv: map[string]string{
+				"MASTER_ADDR":        "torch-job-main-job-0-0.torch-job",
+				"WORKERS_0_HOSTNAME": "torch-job-main-job-0-0.torch-job",
+			},
+		},
+		{
+			name:         "supports 28-character workload name without label truncation",
+			workloadName: "max-len-28-char-workload-nam",
+			userEnv:      map[string]string{"CUSTOM_KEY": "val"},
+			wantEnv: map[string]string{
+				"CUSTOM_KEY":         "val",
+				"MASTER_ADDR":        "max-len-28-char-workload-nam-main-job-0-0.max-len-28-char-workload-nam",
+				"WORKERS_0_HOSTNAME": "max-len-28-char-workload-nam-main-job-0-0.max-len-28-char-workload-nam",
+			},
+		},
+		{
+			name:         "user override for WORKERS_0_HOSTNAME preserves default MASTER_ADDR",
+			workloadName: "torch-job",
+			userEnv: map[string]string{
+				"WORKERS_0_HOSTNAME": "custom-worker-0.custom-svc",
+			},
+			wantEnv: map[string]string{
+				"MASTER_ADDR":        "torch-job-main-job-0-0.torch-job",
+				"WORKERS_0_HOSTNAME": "custom-worker-0.custom-svc",
+			},
+		},
+		{
+			name:         "user override for both MASTER_ADDR and WORKERS_0_HOSTNAME",
+			workloadName: "torch-job",
+			userEnv: map[string]string{
+				"MASTER_ADDR":        "10.0.0.1",
+				"WORKERS_0_HOSTNAME": "rank0.local",
+			},
+			wantEnv: map[string]string{
+				"MASTER_ADDR":        "10.0.0.1",
+				"WORKERS_0_HOSTNAME": "rank0.local",
+			},
+		},
+		{
+			name:         "empty workload name does not inject coordinator env",
+			workloadName: "",
+			userEnv:      nil,
+			wantEnv:      map[string]string{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			origLen := len(tc.userEnv)
+			opts := ManifestOptions{
+				WorkloadName:    tc.workloadName,
+				FullImageName:   "test-image:latest",
+				CommandToRun:    "torchrun train.py",
+				ComputeType:     "n2-standard-4",
+				MachineType:     "n2-standard-4",
+				ClusterLocation: "us-central1-a",
+				NumSlices:       1,
+				NodesPerSlice:   2,
+				Env:             tc.userEnv,
+			}
+			manifest, err := orc.GenerateGKEManifest(opts, profile)
+			if err != nil {
+				t.Fatalf("GenerateGKEManifest failed: %v", err)
+			}
+			if len(tc.userEnv) != origLen {
+				t.Errorf("caller Env map was mutated: got len %d, want %d", len(tc.userEnv), origLen)
+			}
+			podSpec := pathwaysPodSpecs(t, manifest)["main-job"]
+			if podSpec == nil || len(podSpec.Containers) != 1 {
+				t.Fatalf("expected 1 container in main-job podSpec, got %+v", podSpec)
+			}
+			assertContainerEnvMap(t, podSpec.Containers[0], tc.wantEnv)
+		})
+	}
+
+	t.Run("pathways manifest does not inject main-job coordinator env", func(t *testing.T) {
+		manifest := renderPathwaysShmTestManifest(t, false, "", nil)
+		if strings.Contains(manifest, "WORKERS_0_HOSTNAME") || strings.Contains(manifest, "MASTER_ADDR") {
+			t.Errorf("Pathways manifest should not contain WORKERS_0_HOSTNAME or MASTER_ADDR, got:\n%s", manifest)
+		}
+	})
+}
+
+func TestGenerateGKEManifest_CoordinatorEnv_TPU7xParallelContainers(t *testing.T) {
+	setupMockMachineConfig(t)
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
+		"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v7x-slice"}]}`},
+		},
+		"gcloud compute resource-policies describe tpu7x-16-2x2x2-placement-policy --region=us-central1 --project=mock-project --format=json": {
+			{ExitCode: 0, Stdout: `{"name":"tpu7x-16-2x2x2-placement-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"2x2x2"}}`},
+		},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "v7x-pool", Config: gkeNodePoolConfig{MachineType: "tpu7x-standard-4t"}},
+	}
+
+	job := orchestrator.JobDefinition{
+		WorkloadName:          "tpu7x-torchrun",
+		CommandToRun:          "torchrun train.py",
+		ComputeType:           "tpu7x-standard-4t",
+		Topology:              "2x2x2",
+		NumSlices:             1,
+		ClusterLocation:       "us-central1-a",
+		ProjectID:             "mock-project",
+		UseParallelContainers: true,
+		Verbose:               true,
+	}
+	profile, isDyn, isStat, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDyn, isStat)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	podSpec := pathwaysPodSpecs(t, manifest)["main-job"]
+	if podSpec == nil || len(podSpec.Containers) != 2 {
+		t.Fatalf("expected 2 parallel containers in main-job podSpec, got %+v", podSpec)
+	}
+	wantEnv := map[string]string{
+		"MASTER_ADDR":          "tpu7x-torchrun-main-job-0-0.tpu7x-torchrun",
+		"WORKERS_0_HOSTNAME":   "tpu7x-torchrun-main-job-0-0.tpu7x-torchrun",
+		"TPU_STDERR_LOG_LEVEL": "0",
+		"TPU_MIN_LOG_LEVEL":    "0",
+		"TF_CPP_MIN_LOG_LEVEL": "0",
+		"TPU_VMODULE":          "real_program_continuator=1",
+	}
+	for _, c := range podSpec.Containers {
+		assertContainerEnvMap(t, c, wantEnv)
+	}
+}

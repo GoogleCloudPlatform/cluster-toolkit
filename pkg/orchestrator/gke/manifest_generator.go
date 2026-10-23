@@ -22,6 +22,7 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"io"
+	"maps"
 	"slices"
 	"strings"
 
@@ -102,6 +103,7 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 
 	isTPU := tpuLimit != ""
 	isGPU := gpuLimit != ""
+	opts.Env = withDefaultCoordinatorEnv(opts.WorkloadName, opts.Env)
 	data := g.prepareJobSetTemplateData(opts, cmdSlice, resourcesString, isTPU, isGPU)
 
 	var buf bytes.Buffer
@@ -648,6 +650,23 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		GKEMTCEnabled:                 opts.GKEMTCEnabled,
 		GKEMTCRamdiskDirectory:        opts.GKEMTCRamdiskDirectory,
 	}
+}
+
+// withDefaultCoordinatorEnv injects default MASTER_ADDR and WORKERS_0_HOSTNAME
+// pointing to the rank-0 pod of the JobSet. We populate these directly in the
+// container env instead of setting spec.coordinator to avoid generating the
+// jobset.sigs.k8s.io/coordinator label, which would exceed the 63-character
+// limit for workload names up to 28 characters.
+func withDefaultCoordinatorEnv(workloadName string, userEnv map[string]string) map[string]string {
+	if workloadName == "" {
+		return userEnv
+	}
+	coordinatorHost := fmt.Sprintf("%s-main-job-0-0.%s", workloadName, workloadName)
+	merged := make(map[string]string, len(userEnv)+2)
+	merged["MASTER_ADDR"] = coordinatorHost
+	merged["WORKERS_0_HOSTNAME"] = coordinatorHost
+	maps.Copy(merged, userEnv)
+	return merged
 }
 
 func sortedEnvVars(envMap map[string]string) []EnvVar {
