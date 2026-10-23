@@ -94,7 +94,7 @@ locals {
     htcondor_role       = "get_htcondor_execute",
     central_manager_ips = var.central_manager_ips,
     guest_accelerator   = local.guest_accelerator,
-    is_windows          = local.is_windows,
+    is_windows          = local.is_windows_image,
   })
 
   execute_object = "gs://${var.htcondor_bucket_name}/${google_storage_bucket_object.execute_config.output_name}"
