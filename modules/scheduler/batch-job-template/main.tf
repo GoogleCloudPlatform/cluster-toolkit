@@ -92,10 +92,11 @@ locals {
 
 module "instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
-  version = "~> 12.1"
+  version = "~> 15.4"
 
   name_prefix        = var.instance_template == null ? "${var.job_id}-instance-template" : "unused-template"
   project_id         = var.project_id
+  region             = var.region
   subnetwork         = local.subnetwork_name
   subnetwork_project = local.subnetwork_project
   service_account    = var.service_account

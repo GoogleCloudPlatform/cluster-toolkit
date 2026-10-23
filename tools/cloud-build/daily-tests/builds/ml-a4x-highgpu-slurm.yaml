@@ -121,10 +121,12 @@ steps:
               cd /workspace
 
               DEPLOYMENT_NAME="a4x-$$BUILD_ID_SHORT"
+              BLUEPRINT="/workspace/examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml"
+              BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$BLUEPRINT" 2>/dev/null | awk '{print \$$2}')
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/\$${BP_NAME:-*}/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
@@ -134,7 +136,6 @@ steps:
               REGION=us-central1
               ZONE=us-central1-b
 
-              BLUEPRINT="/workspace/examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml"
 
               bash tools/add_ttl_label.sh \$$BLUEPRINT
               python3 tools/fix_vpc_name.py \$$BLUEPRINT "${_TEST_PREFIX}"

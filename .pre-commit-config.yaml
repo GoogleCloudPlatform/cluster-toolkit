@@ -101,6 +101,22 @@ repos:
     files: '^(skills/.*|tools/run_eval\.py|tools/tests/test_run_eval\.py)$'
     pass_filenames: false
     require_serial: true
+  - id: catalog-gen
+    name: catalog-gen
+    entry: go run ./tools/catalog-gen
+    language: system
+    files: '^(examples/.*\.(yaml|md)|community/examples/.*\.(yaml|md)|modules/.*\.(tf|hcl|yaml)|community/modules/.*\.(tf|hcl|yaml)|pkg/catalog/.*\.go|tools/catalog-gen/.*\.go|skills/cluster-blueprint-assistant/references/catalog\.yaml)$'
+    pass_filenames: false
+    require_serial: true
+  - id: validate-readme-snippets
+    name: validate-readme-snippets
+    entry: python3 tools/validate_readme_snippets.py
+    language: python
+    language_version: python3
+    additional_dependencies: ['pyyaml>=6.0.1']
+    files: '^((README|AGENTS|CONTRIBUTING)\.md|(docs|examples|modules|community|pkg|cmd|tools|skills)/.*\.(md|tf|pkr\.hcl)|tools/validate_configs/os_compatibility_tests/.*\.yaml|tools/validate_readme_snippets\.py)$'
+    pass_filenames: false
+    require_serial: true
   - id: pytest-check
     name: pytest-check
     entry: pytest

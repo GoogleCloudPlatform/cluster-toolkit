@@ -26,10 +26,21 @@ This blueprint provisions a secure, isolated high-performance computing environm
 1. **Cluster Toolkit:** Ensure you have installed all the dependencies required in cluster toolkit and followed the setup instructions.
     1. Install [dependencies](https://docs.cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
     2. Set up [Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment). For building the `gcluster` binary, see [Install Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment#install).
-2. **Quota:** Ensure you have sufficient quota for `g4-standard-48` machines in your chosen region/zone. An active zonal reservation is optional but highly recommended to guarantee capacity.
-3. **IP Address:** You will need the public IP address of the machine where you run `gcluster` to configure the cluster's authorized networks.
-4. **Terraform State Bucket:** Create a Cloud Storage bucket to store the state of the Terraform deployment. See [Saving Terraform state](#saving-terraform-state) for instructions.
-5. **GKE Version:** G4 VM Confidential Nodes with Blackwell GPUs require GKE cluster version **`1.35.3-gke.1389000`** or later. The blueprint is pre-configured to target version `1.36.` to satisfy this constraint.
+2. **Enable Required GCP APIs:**
+
+    ```bash
+    gcloud services enable \
+      compute.googleapis.com \
+      container.googleapis.com \
+      iam.googleapis.com \
+      storage.googleapis.com \
+      --project=<PROJECT_ID>
+    ```
+
+3. **Quota:** Ensure you have sufficient quota for `g4-standard-48` machines in your chosen region/zone. An active zonal reservation is optional but highly recommended to guarantee capacity.
+4. **IP Address:** You will need the public IP address of the machine where you run `gcluster` to configure the cluster's authorized networks.
+5. **Terraform State Bucket:** Create a Cloud Storage bucket to store the state of the Terraform deployment. See [Saving Terraform state](#saving-terraform-state) for instructions.
+6. **GKE Version:** G4 VM Confidential Nodes with Blackwell GPUs require GKE cluster version **`1.35.3-gke.1389000`** or later. The blueprint is pre-configured to target version `1.36.` to satisfy this constraint.
 
 ---
 
@@ -151,7 +162,7 @@ If you want to use **Spot VMs** or **DWS Flex Start (Queued Provisioning)** inst
 #### Option 1: Using Spot VMs
 Spot VMs are preemptible instances suitable for fault-tolerant workloads. For more details, refer to the [GKE Spot VMs documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/spot-vms). To configure the cluster to use Spot VMs:
 1. Open [`gke-g4-confidential.yaml`](./gke-g4-confidential.yaml) and locate the `g4-pool` module settings block.
-2. Comment out or remove the `reservation_affinity` block.
+2. Comment out or remove the `reservation_affinity` block (and comment out or remove `reservation:` from the `vars:` block in both `gke-g4-confidential.yaml` and `gke-g4-confidential-deployment.yaml` so `gcluster`'s unused-variable validator passes).
 3. Add `spot: true` to the settings block.
 
 ```yaml
@@ -172,9 +183,8 @@ Spot VMs are preemptible instances suitable for fault-tolerant workloads. For mo
 #### Option 2: Using DWS Flex Start (Queued Provisioning)
 DWS Flex Start is a queued provisioning model that allocates all requested GPU resources at the same time, once the entire capacity becomes available. For more details, refer to the [GKE DWS Flex Start documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training). To configure the cluster for DWS Flex Start:
 1. Open [`gke-g4-confidential.yaml`](./gke-g4-confidential.yaml) and locate the `g4-pool` module settings block.
-2. Comment out or remove the `static_node_count` setting.
-3. Comment out or remove the `reservation_affinity` block.
-4. Add the following DWS parameters to the settings block:
+2. Comment out or remove the `static_node_count` setting and the `reservation_affinity` block in `g4-pool` (and comment out or remove `reservation:` from the `vars:` block in both `gke-g4-confidential.yaml` and `gke-g4-confidential-deployment.yaml` so `gcluster`'s unused-variable validator passes; keep `static_node_count:` in `vars:` as it is still referenced by `nvidia_smi_job_template`).
+3. Add the following DWS parameters to the settings block:
 
 ```yaml
   - id: g4-pool
@@ -205,11 +215,10 @@ DWS Flex Start is a queued provisioning model that allocates all requested GPU r
 
 ## Deploy the Cluster
 
-1. Switch to the toolkit directory and build:
+1. From the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository, build `./gcluster` (if not already built):
 
    ```bash
-   cd ~/cluster-toolkit
-   make
+   test -x ./gcluster || make
    ```
 
 2. Deploy the infrastructure in a single step:

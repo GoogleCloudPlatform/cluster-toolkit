@@ -15,8 +15,8 @@ with a network storage device that is already set up. The
 `pre-existing-network-storage` module supports the following file systems types:
 
 - nfs
+- lustre / managed_lustre
 - daos
-- managed-lustre
 - gcsfuse
 
 ## NetApp Volumes (Default mode)
@@ -69,7 +69,6 @@ The simplest way to mount a network storage device is by using the `use` field,
 as shown below:
 
 ```yaml
-...
   - id: network1
     source: modules/network/vpc
 
@@ -111,7 +110,6 @@ needed.
 The following is an example setting up a filestore using startup script:
 
 ```yaml
-...
   - id: network1
     source: modules/network/vpc
 

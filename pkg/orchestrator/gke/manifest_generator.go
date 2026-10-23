@@ -173,7 +173,9 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		Scheduler:          job.GKEScheduler,
 		IsDynamicSlicing:   isDynamicSlicing,
 		IsStaticSlicing:    isStaticSlicing,
+		MachineType:        job.MachineType,
 		IsTPU:              config.IsTPU(job.MachineType) || config.IsTPU(originalAccelType),
+		IsNAP:              job.GKENAPProvisioning != "",
 	}
 
 	// Reuse GCluster's existing GKE accelerator label mapping and algorithmically
@@ -535,6 +537,9 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
 	}
+	if err := requirePathwaysMTCVolume(buf.String(), opts.GKEMTCEnabled); err != nil {
+		return "", err
+	}
 
 	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
 	if err := ValidateJobSetManifest(manifest); err != nil {
@@ -543,13 +548,27 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 	return manifest, nil
 }
 
+// requirePathwaysMTCVolume fails when MTC is enabled but the rendered Pathways
+// JobSet has no MTC CSI volume, as with a pathways_jobset.tmpl extracted from
+// an older gcluster version.
+func requirePathwaysMTCVolume(jobSet string, mtcEnabled bool) error {
+	if !mtcEnabled || strings.Contains(jobSet, multitierCheckpointCSIDriver) {
+		return nil
+	}
+	return fmt.Errorf("--gke-mtc-enabled is set but the Pathways manifest has no %s volume. If you use --gke-custom-templates-path, re-extract pathways_jobset.tmpl with 'gcluster job gke-template-extract' and re-apply your changes", multitierCheckpointCSIDriver)
+}
+
 func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
 	exclusiveTopology := ""
 	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
-		exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
+		if opts.NodesPerSlice <= 1 {
+			exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: kubernetes.io/hostname"
+		} else {
+			exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
+		}
 	}
 
-	workerBackoffLimit := 2048000
+	workerBackoffLimit := opts.Pathways.MaxSliceRestarts * opts.NodesPerSlice
 
 	var proxyArgsList []string
 	if opts.Pathways.ProxyArgs != "" {
@@ -591,6 +610,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		NumSlices:                     opts.NumSlices,
 		NodesPerSlice:                 opts.NodesPerSlice,
 		WorkerBackoffLimit:            workerBackoffLimit,
+		WorkerBackoffLimitPerIndex:    opts.Pathways.MaxSliceRestarts,
 		ProxyArgsList:                 proxyArgsList,
 		ServerArgsList:                serverArgsList,
 		WorkerArgsList:                workerArgsList,

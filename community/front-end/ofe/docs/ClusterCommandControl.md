@@ -73,7 +73,7 @@ During startup of a cluster, a Daemon is installed which creates a Streaming Pul
 
 The C2 topic and the OFE's subscription are created at deployment time. The OFE creates one subscription per cluster.
 
-When a cluster is created, the OFE grants the cluster's controller service account `roles/pubsub.subscriber` on **that cluster's own subscription**, and `roles/pubsub.publisher` on the **C2 topic** (`setup_service_account` in `c2.py`). These are the only Pub/Sub IAM bindings the OFE adds for a cluster.
+When a cluster is created, the OFE grants the cluster's controller service account `roles/pubsub.subscriber` on **that cluster's own subscription**, and `roles/pubsub.publisher` on the **C2 topic** (`setup_service_account` in `c2.py`). These are the only resource-level Pub/Sub bindings the OFE adds. Separately, the cluster blueprint template creates a service account with project-level roles, including `pubsub.admin` and `resourcemanager.projectIamAdmin` (`hpc_service_account` in `website/ghpcfe/templates/blueprint/cluster_config.yaml.j2`).
 
 Sadly, the OFE's Service Account must have either the role of `pubsub.admin` or a custom role, set at the project level.  This is because creating subscriptions and setting IAM Policy Bindings are actions done at the project level, rather than attached to the topic.
 

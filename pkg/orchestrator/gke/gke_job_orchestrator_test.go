@@ -3336,13 +3336,43 @@ func TestGetJobLogs_LatePodCreationAndTerminalJobSet(t *testing.T) {
 	})
 }
 
+func TestSubmitJob_PathwaysMountCollisionFailsBeforeClusterCalls(t *testing.T) {
+	tests := []struct {
+		name    string
+		sidecar string
+		mount   string
+		want    string
+	}{
+		{name: "mount at /tmp", mount: "gs://bucket;/tmp", want: `conflicts with built-in Pathways mount "/tmp"`},
+		{name: "mount at /tmp/sidecar with colocated sidecar", sidecar: "sidecar:latest", mount: "gs://bucket;/tmp/sidecar", want: `conflicts with built-in Pathways mount "/tmp/sidecar"`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(nil)
+			orc := newTestGKEOrchestrator(mockExec)
+			err := orc.SubmitJob(orchestrator.JobDefinition{
+				WorkloadName:    "pathways-job",
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "test-project",
+				IsPathwaysJob:   true,
+				RawMounts:       []string{tc.mount},
+				Pathways:        orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: tc.sidecar},
+			})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("SubmitJob() error = %v, want error containing %q", err, tc.want)
+			}
+			if len(mockExec.calls) != 0 || len(mockExec.streamCalls) != 0 {
+				t.Errorf("SubmitJob() ran commands before rejecting the mount: %v %v", mockExec.calls, mockExec.streamCalls)
+			}
+		})
+	}
+}
+
 type mockNamespaceableResource struct {
 	dynamic.NamespaceableResourceInterface
-	getFunc    func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
-	listFunc   func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
-	updateFunc func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error)
-	deleteFunc func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error
-	patchFunc  func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error)
+	getFunc  func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
+	listFunc func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
 }
 
 func (m *mockNamespaceableResource) Get(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
@@ -3363,43 +3393,20 @@ func (m *mockNamespaceableResource) List(ctx context.Context, opts metav1.ListOp
 	return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{}}, nil
 }
 
-func (m *mockNamespaceableResource) Update(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
-	if m.updateFunc != nil {
-		return m.updateFunc(ctx, obj, options, subresources...)
-	}
-	return obj, nil
-}
-
 func (m *mockNamespaceableResource) Delete(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
-	if m.deleteFunc != nil {
-		return m.deleteFunc(ctx, name, options, subresources...)
-	}
 	return nil
-}
-
-func (m *mockNamespaceableResource) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
-	if m.patchFunc != nil {
-		return m.patchFunc(ctx, name, pt, data, options, subresources...)
-	}
-	return &unstructured.Unstructured{}, nil
 }
 
 type mockDynamicClient struct {
 	dynamic.Interface
-	getFunc    func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
-	listFunc   func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
-	updateFunc func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error)
-	deleteFunc func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error
-	patchFunc  func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error)
+	getFunc  func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
+	listFunc func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
 }
 
 func (m *mockDynamicClient) Resource(resource schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
 	return &mockNamespaceableResource{
-		getFunc:    m.getFunc,
-		listFunc:   m.listFunc,
-		updateFunc: m.updateFunc,
-		deleteFunc: m.deleteFunc,
-		patchFunc:  m.patchFunc,
+		getFunc:  m.getFunc,
+		listFunc: m.listFunc,
 	}
 }
 
@@ -3814,4 +3821,142 @@ func TestGetJobLogs_FollowProbesContainersBeforeStreaming(t *testing.T) {
 			mockExec.assertAllKubectlPinned(t, "gke_test-project_us-central1-a_test-cluster")
 		})
 	}
+}
+
+func TestSubmitJob_SkipsConflictCheckOnDryRun(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	existingJobSet := unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "jobset.x-k8s.io/v1alpha2",
+			"kind":       "JobSet",
+			"metadata": map[string]interface{}{
+				"name":      "existing-job",
+				"namespace": "default",
+				"uid":       "uid-123",
+			},
+			"status": map[string]interface{}{
+				"conditions": []interface{}{
+					map[string]interface{}{
+						"type":               "Failed",
+						"status":             "True",
+						"lastTransitionTime": "2026-10-19T00:00:00Z",
+					},
+				},
+			},
+		},
+	}
+
+	newOrchestratorWithExistingJob := func(t *testing.T) *GKEOrchestrator {
+		t.Helper()
+		mockResponses := map[string][]shell.CommandResult{
+			"gcloud container clusters describe": {
+				{ExitCode: 0, Stdout: `{"locations":["us-central1-a"],"nodePools":[{"name":"gpu-pool","initialNodeCount":1,"config":{"machineType":"g2-standard-48","accelerators":[{"acceleratorCount":4,"acceleratorType":"nvidia-l4"}]}}]}`},
+			},
+			"gcloud container clusters get-credentials": {
+				{ExitCode: 0},
+			},
+			"kubectl get --raw /version": {
+				{ExitCode: 0, Stdout: `{}`},
+				{ExitCode: 0, Stdout: `{}`},
+			},
+			"kubectl get crd": {
+				{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+				{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+			},
+			"kubectl get deployment": {
+				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
+				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
+				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
+				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
+			},
+			"kubectl rollout status": {
+				{ExitCode: 0, Stdout: "successfully rolled out"},
+				{ExitCode: 0, Stdout: "successfully rolled out"},
+			},
+			"kubectl get endpointslice": {
+				{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`},
+				{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`},
+			},
+			"kubectl get clusterqueue": {
+				{ExitCode: 0, Stdout: "cluster-queue\n"},
+			},
+			"kubectl get localqueue": {
+				{ExitCode: 0, Stdout: "multislice-queue\n"},
+				{ExitCode: 0, Stdout: "multislice-queue\n"},
+			},
+			"kubectl get resourceflavors": {
+				{ExitCode: 0, Stdout: ""},
+				{ExitCode: 0, Stdout: ""},
+			},
+			"gcloud compute machine-types describe g2-standard-48": {
+				{ExitCode: 0, Stdout: `{"guestCpus": 48, "memoryMb": 192000, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "nvidia-l4"}]}`},
+			},
+		}
+		orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+		orc.SetDynamicClient(&mockDynamicClient{
+			getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": name},
+					},
+				}, nil
+			},
+			listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				if strings.Contains(opts.FieldSelector, "metadata.name=existing-job") {
+					return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{existingJobSet}}, nil
+				}
+				return &unstructured.UnstructuredList{}, nil
+			},
+		})
+		return orc
+	}
+
+	t.Run("dry-run succeeds when job with same name already exists", func(t *testing.T) {
+		orc := newOrchestratorWithExistingJob(t)
+		dryRunPath := filepath.Join(t.TempDir(), "manifest.yaml")
+		job := orchestrator.JobDefinition{
+			WorkloadName:    "existing-job",
+			ClusterName:     "test-cluster",
+			ClusterLocation: "us-central1-a",
+			ProjectID:       "test-project",
+			GKENamespace:    "default",
+			ComputeType:     "g2-standard-48",
+			ImageName:       "gcr.io/test-project/test-image:latest",
+			CommandToRun:    "echo hello",
+			KueueQueueName:  "multislice-queue",
+			DryRunManifest:  dryRunPath,
+		}
+
+		if err := orc.SubmitJob(job); err != nil {
+			t.Fatalf("SubmitJob() with DryRunManifest failed unexpectedly: %v", err)
+		}
+		content, err := os.ReadFile(dryRunPath)
+		if err != nil {
+			t.Fatalf("failed to read generated dry-run manifest: %v", err)
+		}
+		if !strings.Contains(string(content), "name: existing-job") {
+			t.Errorf("dry-run manifest missing workload name; got:\n%s", string(content))
+		}
+	})
+
+	t.Run("normal submit fails when job with same name already exists", func(t *testing.T) {
+		orc := newOrchestratorWithExistingJob(t)
+		job := orchestrator.JobDefinition{
+			WorkloadName:    "existing-job",
+			ClusterName:     "test-cluster",
+			ClusterLocation: "us-central1-a",
+			ProjectID:       "test-project",
+			GKENamespace:    "default",
+			ComputeType:     "g2-standard-48",
+			ImageName:       "gcr.io/test-project/test-image:latest",
+			CommandToRun:    "echo hello",
+			KueueQueueName:  "multislice-queue",
+		}
+
+		err := orc.SubmitJob(job)
+		if err == nil || !strings.Contains(err.Error(), "job with name 'existing-job' already exists in state 'Failed'") {
+			t.Fatalf("SubmitJob() without DryRunManifest error = %v, want job conflict error", err)
+		}
+	})
 }

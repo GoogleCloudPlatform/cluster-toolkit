@@ -26,7 +26,17 @@ This guide also includes a `gke-tpu-7x-job.yaml` that creates a Kubernetes Pod a
 
 Before you start, make sure you have performed the following tasks:
 
-1. Enable the Google Kubernetes Engine API.
+1. Enable the required Google Cloud APIs (`compute.googleapis.com`, `container.googleapis.com`, `iam.googleapis.com`, `storage.googleapis.com`):
+
+   ```bash
+   gcloud services enable \
+     compute.googleapis.com \
+     container.googleapis.com \
+     iam.googleapis.com \
+     storage.googleapis.com \
+     --project=<PROJECT_ID>
+   ```
+
 2. If you want to use the Google Cloud CLI for this task, [install](https://cloud.google.com/sdk/docs/install) and then [initialize](https://cloud.google.com/sdk/docs/initializing) the gcloud CLI. If you previously installed the gcloud CLI, get the latest version by running `gcloud components update`.
    - **NOTE**: For existing gcloud CLI installations, make sure to set the compute/region and compute/zone properties. By setting default locations, you can avoid errors in gcloud CLI like the following: One of [--zone, --region] must be supplied: Please specify location.
 3. Ensure that you have enough quota for **TPU 7x** in the specified region.
@@ -43,20 +53,13 @@ Before you start, make sure you have performed the following tasks:
 This section guides you through the cluster creation process.
 
 1. [Launch Cloud Shell](https://cloud.google.com/shell/docs/launching-cloud-shell). You can use a different environment; however, we recommend Cloud Shell because the dependencies are already pre-installed for Cluster Toolkit. If you don't want to use Cloud Shell, follow the instructions to [install dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies) to prepare a different environment.
-2. Clone the Cluster Toolkit from the git repository:
+2. From the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository, build `./gcluster` (if not already built):
 
     ```bash
-    cd ~
-    git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
+    test -x ./gcluster || make
     ```
 
-3. Install the Cluster Toolkit:
-
-    ```bash
-    cd cluster-toolkit && git checkout main && make
-    ```
-
-4. Create a Cloud Storage bucket to store the state of the Terraform deployment:
+3. Create a Cloud Storage bucket to store the state of the Terraform deployment:
 
     ```bash
     gcloud storage buckets create gs://BUCKET_NAME \
@@ -70,7 +73,7 @@ This section guides you through the cluster creation process.
    - `BUCKET_NAME`: the name of the new Cloud Storage bucket (e.g., `tpu-7x-bucket`).
    - `COMPUTE_REGION`: the compute region for the cluster (e.g., `us-central1`).
 
-5. In the `examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml` file, replace the following variables in the `terraform_backend_defaults` and `vars` sections to match the specific values for your deployment:
+4. In the `examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml` file, replace the following variables in the `terraform_backend_defaults` and `vars` sections to match the specific values for your deployment:
    - `bucket`: the name of the Cloud Storage bucket you created in the previous step.
    - `project_id`: your Google Cloud project ID.
    - `region`: the compute region for the cluster.
@@ -83,23 +86,22 @@ This section guides you through the cluster creation process.
 
     > **Note:** The `static_node_count` is now automatically calculated from `machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`. For further details, please refer [appendix](#node-count-calculation)
 
-6. To modify advanced settings, edit `examples/gke-tpu-7x/gke-tpu-7x.yaml`.
+5. To modify advanced settings, edit `examples/gke-tpu-7x/gke-tpu-7x.yaml`.
 
     > **Note:** Queued provisioning (Option 3) is only supported on multi-host TPU slices. For more information, see [About flex-start provisioning mode](https://cloud.google.com/kubernetes-engine/docs/concepts/dws).
 
-7. Generate [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp) to provide access to Terraform.
+6. Generate [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp) to provide access to Terraform.
 
     ```bash
     gcloud auth application-default login
     ```
 
-8. Deploy the blueprint to provision the GKE infrastructure:
+7. Deploy the blueprint to provision the GKE infrastructure:
 
     ```bash
-     cd ~/cluster-toolkit
-     ./gcluster deploy -d \
-     examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml \
-     examples/gke-tpu-7x/gke-tpu-7x.yaml
+    ./gcluster deploy -d \
+    examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml \
+    examples/gke-tpu-7x/gke-tpu-7x.yaml
     ```
 
    This process will take several minutes.
@@ -119,11 +121,10 @@ This repository also includes an advanced blueprint, `gke-tpu-7x-advanced.yaml`,
 
 The process is nearly identical to the basic deployment.
 
-1. Ensure you have completed steps 1-7 from the "Create a cluster" section above. The same `gke-tpu-7x-deployment.yaml` file can be used.
+1. Ensure you have completed steps 1-6 from the "Create a cluster" section above. The same `gke-tpu-7x-deployment.yaml` file can be used.
 2. In the final deploy command, simply point to the `gke-tpu-7x-advanced.yaml` blueprint instead.
 
     ```sh
-    cd ~/cluster-toolkit
     ./gcluster deploy -d \
     examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml \
     examples/gke-tpu-7x/gke-tpu-7x-advanced.yaml
@@ -150,7 +151,7 @@ By default, the toolkit dynamically applies an embedded kueue configuration base
     A sample job file is provided: `kueue-job-sample.yaml`.
 
     ```sh
-    kubectl create -f ~/cluster-toolkit/examples/gke-tpu-7x/kueue-job-sample.yaml
+    kubectl create -f examples/gke-tpu-7x/kueue-job-sample.yaml
     ```
 
 4. **Validation:** Check the status of your workload.
@@ -199,7 +200,7 @@ The `gke-tpu-7x-job.yaml` file creates a Pod resource in Kubernetes. The workloa
    The sample job file already contains the correct node selectors for the example deployment.
 
     ```bash
-    kubectl create -f ~/cluster-toolkit/examples/gke-tpu-7x/gke-tpu-7x-job.yaml
+    kubectl create -f examples/gke-tpu-7x/gke-tpu-7x-job.yaml
     ```
 
    This command returns a Pod name.

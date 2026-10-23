@@ -145,10 +145,12 @@ steps:
               cd /workspace
 
               DEPLOYMENT_NAME="a3h-onspot-$$BUILD_ID_SHORT"
+              BLUEPRINT="/workspace/examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"
+              BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$BLUEPRINT" 2>/dev/null | awk '{print \$$2}')
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/\$${BP_NAME:-*}/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
@@ -165,7 +167,6 @@ steps:
               REGION="\$${ZONE%-*}"
               BUILD_ID_SHORT="\$${BUILD_ID:0:6}"
 
-              BLUEPRINT="/workspace/examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"
 
               ENABLE_SPOT="true"
               SLURM_VARS_FILE="tools/cloud-build/daily-tests/tests/ml-a3-highgpu-onspot-slurm.yml"

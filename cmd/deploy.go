@@ -34,12 +34,13 @@ import (
 )
 
 func addDeployFlags(c *cobra.Command) *cobra.Command {
-	return addJsonOutputFlag(
-		addGroupSelectionFlags(
-			addAutoApproveFlag(
-				addArtifactsDirFlag(
-					addParallelismFlag(
-						addCreateFlags(c))))))
+	return addGkeVulnerabilitiesCheckFlag(
+		addJsonOutputFlag(
+			addGroupSelectionFlags(
+				addAutoApproveFlag(
+					addArtifactsDirFlag(
+						addParallelismFlag(
+							addCreateFlags(c)))))))
 }
 
 func init() {
