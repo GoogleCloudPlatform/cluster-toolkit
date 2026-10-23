@@ -19,6 +19,7 @@ import argparse
 from itertools import chain
 import logging
 import os
+import shlex
 import shutil
 import subprocess
 import stat
@@ -429,6 +430,28 @@ innodb_lock_wait_timeout=900
         run(f"""{cmd} "grant all on {db_name}.* TO 'slurm'@'{host}'";""", timeout=30)
 
 
+def widen_event_cluster_nodes(lkp: util.Lookup) -> None:
+    """Store the full cluster node list in the slurmdbd event table."""
+    # slurmdbd keeps the cluster hostlist in a TEXT column. Past 64 KiB it is truncated, never
+    # matches on the next registration and slurmdbd re-logs every node every 5 minutes.
+    table = f"{lkp.cfg.slurm_cluster_name}_event_table"
+    query = (
+        "select data_type from information_schema.columns where table_schema='slurm_acct_db'"
+        f" and table_name='{table}' and column_name='cluster_nodes'"
+    )
+    alter = f"alter table `{table}` modify `cluster_nodes` mediumtext not null default ''"
+    # Best effort, a failed ALTER must not keep slurmctld from starting.
+    try:
+        data_type = run(f"mysql -N -u root -e {shlex.quote(query)}", timeout=30).stdout.strip()
+        if data_type != "text":
+            log.info(f"{table}.cluster_nodes is '{data_type or 'missing'}', not widening")
+            return
+        log.info(f"Widening {table}.cluster_nodes to mediumtext")
+        run(f"mysql -u root slurm_acct_db -e {shlex.quote(alter)}", timeout=600)
+    except Exception:
+        log.exception(f"Failed to widen {table}.cluster_nodes")
+
+
 def configure_dirs():
     for p in dirs.values():
         util.mkdirp(p)
@@ -618,6 +641,9 @@ def setup_controller(is_primary: bool):
         log.info(result.stdout)
     elif result.returncode > 1:
         result.check_returncode()  # will raise error
+
+    if not lkp.cfg.cloudsql_secret and is_primary:
+        widen_event_cluster_nodes(lkp)
 
     # Remove clustername file to prevent CLUSTER ID MISMATCH errors when
     # controller is recreated but slurmdbd retains state from previous cluster.
