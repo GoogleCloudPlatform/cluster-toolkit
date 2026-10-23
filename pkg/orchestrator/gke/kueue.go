@@ -17,6 +17,7 @@ package gke
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -59,10 +60,7 @@ const (
 	kueueControllerRolloutTimeout = "--timeout=600s"
 )
 
-var kueuePermissionChecks = []struct {
-	verb     string
-	resource string
-}{
+var kueuePermissionChecks = []permissionCheck{
 	{"create", "namespaces"},
 	{"create", "customresourcedefinitions.apiextensions.k8s.io"},
 	{"create", "clusterroles.rbac.authorization.k8s.io"},
@@ -433,14 +431,7 @@ func (g *GKEOrchestrator) installKueue(version string) error {
 
 func (g *GKEOrchestrator) checkKueueInstallPermissions(version string) error {
 	logging.Info("Verifying cluster permissions for Kueue installation...")
-	var missing []string
-	for _, c := range kueuePermissionChecks {
-		res := g.kubectl("auth", "can-i", c.verb, c.resource)
-		if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) != "yes" {
-			missing = append(missing, fmt.Sprintf("'%s %s'", c.verb, c.resource))
-		}
-	}
-	if len(missing) > 0 {
+	if missing := g.missingPermissions(kueuePermissionChecks); len(missing) > 0 {
 		return fmt.Errorf("unable to re-install Kueue to version %s: missing required RBAC permissions: [%s]. Please contact your cluster administrator", version, strings.Join(missing, ", "))
 	}
 	return nil
@@ -668,13 +659,15 @@ func (g *GKEOrchestrator) getKueuePodDetails() string {
 }
 
 func (g *GKEOrchestrator) checkKueueEndpoints(useEndpointSlice bool) (bool, error) {
-	var cmdEndpoints shell.CommandResult
 	if useEndpointSlice {
-		cmdEndpoints = g.kubectl("get", "endpointslice", "-l", "kubernetes.io/service-name=kueue-webhook-service", "-n", "kueue-system", "-o", "json")
-	} else {
-		cmdEndpoints = g.kubectl("get", "endpoints", "kueue-webhook-service", "-n", "kueue-system", "-o", "json")
+		ready, err := g.serviceEndpointsReady("kueue-system", "kueue-webhook-service")
+		if errors.Is(err, errEndpointsUnreadable) {
+			return false, nil
+		}
+		return ready, err
 	}
 
+	cmdEndpoints := g.kubectl("get", "endpoints", "kueue-webhook-service", "-n", "kueue-system", "-o", "json")
 	if cmdEndpoints.ExitCode != 0 {
 		errStr := strings.ToLower(cmdEndpoints.Stderr)
 		if strings.Contains(errStr, "forbidden") {
@@ -684,29 +677,19 @@ func (g *GKEOrchestrator) checkKueueEndpoints(useEndpointSlice bool) (bool, erro
 		return false, nil
 	}
 
-	if useEndpointSlice {
-		var eps k8sEndpointSliceList
-		if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
-			return false, fmt.Errorf("failed to unmarshal endpointslice json: %w", err)
-		}
-		if eps.HasReadyEndpoint() {
+	var eps struct {
+		Subsets []struct {
+			Addresses []struct {
+				Ip string `json:"ip"`
+			} `json:"addresses"`
+		} `json:"subsets"`
+	}
+	if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
+		return false, fmt.Errorf("failed to unmarshal endpoints json: %w", err)
+	}
+	for _, subset := range eps.Subsets {
+		if len(subset.Addresses) > 0 {
 			return true, nil
-		}
-	} else {
-		var eps struct {
-			Subsets []struct {
-				Addresses []struct {
-					Ip string `json:"ip"`
-				} `json:"addresses"`
-			} `json:"subsets"`
-		}
-		if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
-			return false, fmt.Errorf("failed to unmarshal endpoints json: %w", err)
-		}
-		for _, subset := range eps.Subsets {
-			if len(subset.Addresses) > 0 {
-				return true, nil
-			}
 		}
 	}
 	return false, nil
