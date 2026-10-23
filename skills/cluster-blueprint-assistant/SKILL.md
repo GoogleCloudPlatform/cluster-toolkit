@@ -24,11 +24,13 @@ metadata:
   author: GoogleCloudPlatform
   status: experimental
   domain: blueprints
-allowed-tools: Bash(make) Bash(./gcluster expand:*) Bash(./gcluster create:*) Bash(gcluster expand:*) Bash(gcluster create:*)
+allowed-tools: Bash(make) Bash(./gcluster explain:*) Bash(./gcluster expand:*) Bash(./gcluster create:*) Bash(gcluster explain:*) Bash(gcluster expand:*) Bash(gcluster create:*)
 allowed_read_only_commands:
   - "make"
+  - "./gcluster explain"
   - "./gcluster expand"
   - "./gcluster create"
+  - "gcluster explain"
   - "gcluster expand"
   - "gcluster create"
 ---
@@ -40,14 +42,16 @@ allowed_read_only_commands:
 
 ## Core rules (read before touching any YAML)
 
-1. **Start from the catalog, never from scratch.** Read
-   [`references/catalog.yaml`](references/catalog.yaml) to find an existing
+1. **Start from the catalog or `./gcluster explain`, never from scratch.** Run
+   `./gcluster explain <specs...>` (e.g. `./gcluster explain slurm a3u lustre`) or
+   read [`references/catalog.yaml`](references/catalog.yaml) to find an existing
    blueprint under `examples/` or `community/examples/` that already matches the
-   request. Do not grep `.tf` files to discover modules; the catalog's
-   `module_wiring` section lists a module's `required_inputs`, which module
-   sources satisfy them (`recommended_use`), and which modules consume its
-   outputs (`consumed_by`). If the request is a question ("do we
-   have…", "can I get…", "what's in…"), answer it from the catalog and
+   request. Do not grep `.tf` files to discover modules; run
+   `./gcluster explain <module>` (e.g. `./gcluster explain modules/file-system/managed-lustre`)
+   or check the catalog's `module_wiring` section for a module's `required_inputs`,
+   which module sources satisfy them (`recommended_use`), and which modules consume
+   its outputs (`consumed_by`). If the request is a question ("do we
+   have…", "can I get…", "what's in…"), answer it using `./gcluster explain` / the catalog and
    `examples/README.md` and confirm the approach with the user **before**
    editing anything.
 2. **Customize through a `deployment.yaml`, not module blocks.** If the request
@@ -76,9 +80,10 @@ allowed_read_only_commands:
    `examples/` or `community/examples/` in place (once a custom copy
    exists—identifiable by `ai_assisted: true` or untracked `git status`—edit
    that copy directly in place for follow-ups rather than copying it a second
-   time). Copy the module block from a blueprint in the catalog that already has
-   it, keep its `use:` list, and check `module_wiring.<source>.required_inputs`
-   to confirm every required input is satisfied by a module in `use:`.
+   time). Copy the module block from `./gcluster explain <module>` or a blueprint
+   in the catalog that already has it, keep its `use:` list, and check
+   `module_wiring.<source>.required_inputs` to confirm every required input is
+   satisfied by a module in `use:`.
 4. **Mark agent-authored blueprints.** Add `ai_assisted: true` at the top level
    of any blueprint you create, copy, or repair/fix (if an existing custom
    blueprint you are fixing lacks `ai_assisted: true`, add it).
@@ -115,8 +120,20 @@ test -x ./gcluster || make
 
 ### 1. Find the right template
 
+Use `./gcluster explain` or search `references/catalog.yaml`:
+
 ```bash
-# Search the catalog by scheduler, machine type, storage, or module source.
+# Find the exact or closest blueprint for given specs (plus missing module snippets):
+./gcluster explain slurm a3u lustre
+./gcluster explain gke a3-megagpu lustre
+
+# Inspect a specific blueprint's required GCP APIs, customizable vars, and stages:
+./gcluster explain examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml
+
+# Inspect a module's required APIs, auto-injected inputs, and ready-to-copy 'use:' snippet:
+./gcluster explain modules/file-system/managed-lustre
+
+# Or search the catalog directly by scheduler, machine type, storage, or module source:
 grep -n "scheduler: slurm" skills/cluster-blueprint-assistant/references/catalog.yaml
 grep -n "managed-lustre" skills/cluster-blueprint-assistant/references/catalog.yaml
 ```
