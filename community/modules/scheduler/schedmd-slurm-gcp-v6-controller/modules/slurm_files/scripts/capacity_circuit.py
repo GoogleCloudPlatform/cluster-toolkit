@@ -153,18 +153,25 @@ def _read_state_unlocked() -> dict[str, Any]:
 
 
 def _write_state_unlocked(state: dict[str, Any]) -> None:
-    global _owned_nodes_cache
+    global _owned_nodes_cache, _state_version_cache
     _owned_nodes_cache = None
+    _state_version_cache = None
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     if not state.get("nodesets"):
         STATE_FILE.unlink(missing_ok=True)
         return
     temporary = STATE_FILE.with_name(f"{STATE_FILE.name}.{os.getpid()}.tmp")
-    with temporary.open("w", encoding="utf-8") as stream:
-        json.dump(state, stream, indent=2, sort_keys=True)
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(temporary, STATE_FILE)
+    try:
+        with temporary.open("w", encoding="utf-8") as stream:
+            json.dump(state, stream, indent=2, sort_keys=True)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, STATE_FILE)
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 @contextmanager
@@ -286,7 +293,9 @@ def trip(
     if len(nodeset_names) != 1:
         raise ValueError("capacity circuit trip must contain exactly one nodeset")
     nodeset_name = next(iter(nodeset_names))
-    nodeset = lkp.cfg.nodeset[nodeset_name]
+    nodeset = lkp.cfg.nodeset.get(nodeset_name)
+    if nodeset is None:
+        return None
     powered_down = _powered_down_nodes(nodeset, lkp)
     now = _now()
 
@@ -501,18 +510,33 @@ def finish_failed_nodes(
         )
 
 
-def _state_version() -> Optional[tuple[int, int, int, int, int]]:
+_state_version_cache: Optional[
+    tuple[float, Optional[tuple[int, int, int, int, int]]]
+] = None
+
+
+def _state_version(refresh: bool = False) -> Optional[tuple[int, int, int, int, int]]:
+    global _state_version_cache
+    now = _now().timestamp()
+    if (
+        not refresh
+        and _state_version_cache is not None
+        and now - _state_version_cache[0] < 1.0
+    ):
+        return _state_version_cache[1]
     try:
         stat = STATE_FILE.stat()
-    except FileNotFoundError:
-        return None
-    return (
-        stat.st_dev,
-        stat.st_ino,
-        stat.st_size,
-        stat.st_mtime_ns,
-        stat.st_ctime_ns,
-    )
+        val = (
+            stat.st_dev,
+            stat.st_ino,
+            stat.st_size,
+            stat.st_mtime_ns,
+            stat.st_ctime_ns,
+        )
+    except OSError:
+        val = None
+    _state_version_cache = (now, val)
+    return val
 
 
 def _owned_nodes_by_nodeset() -> dict[str, frozenset[str]]:
@@ -531,7 +555,7 @@ def _owned_nodes_by_nodeset() -> dict[str, frozenset[str]]:
         }
         # Writers replace the state file atomically while holding the same lock,
         # so this version describes the state that was just parsed.
-        version = _state_version()
+        version = _state_version(refresh=True)
     _owned_nodes_cache = (version, owned)
     return owned
 
@@ -867,6 +891,7 @@ def _probe_is_in_flight(probes: Sequence[str], lkp: util.Lookup) -> bool:
 def reconcile(lkp: Optional[util.Lookup] = None) -> None:
     """Recover circuit state and release probes whose cooldown has elapsed."""
     lkp = lkp or util.lookup()
+    lkp.slurm_nodes.cache_clear()
     if not STATE_FILE.exists():
         return
     with _locked_state(write=False) as state:

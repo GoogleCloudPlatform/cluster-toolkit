@@ -31,6 +31,7 @@ def state_files(tmp_path, monkeypatch):
     monkeypatch.setattr(capacity_circuit, "STATE_FILE", tmp_path / "state.json")
     monkeypatch.setattr(capacity_circuit, "LOCK_FILE", tmp_path / "state.lock")
     monkeypatch.setattr(capacity_circuit, "_owned_nodes_cache", None)
+    monkeypatch.setattr(capacity_circuit, "_state_version_cache", None)
 
 
 def make_lookup() -> util.Lookup:
@@ -1054,6 +1055,8 @@ def test_owns_node_reuses_unchanged_state(state_files, monkeypatch):
 
 def test_owns_node_reloads_state_written_by_another_process(state_files, monkeypatch):
     lkp = make_lookup()
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(capacity_circuit, "_now", lambda: now)
     monkeypatch.setattr(capacity_circuit, "_update_nodes", mock.Mock(return_value=True))
     capacity_circuit.trip(["c-n-0"], {"ZONE_RESOURCE_POOL_EXHAUSTED"}, lkp)
     assert capacity_circuit.owns_node("c-n-0", lkp)
@@ -1061,6 +1064,7 @@ def test_owns_node_reloads_state_written_by_another_process(state_files, monkeyp
     replacement = capacity_circuit.STATE_FILE.with_suffix(".replacement")
     replacement.write_text(json.dumps({"nodesets": {}}))
     replacement.replace(capacity_circuit.STATE_FILE)
+    monkeypatch.setattr(capacity_circuit, "_now", lambda: now + timedelta(seconds=2))
 
     assert not capacity_circuit.owns_node("c-n-0", lkp)
 
