@@ -948,13 +948,14 @@ SERVICEACC
 deploy_from_config() {
 	# Read the flat 'key: value' YAML file as an associative array
 	#   - Skips blank lines and comment lines
-	#   - A value wrapped in matching single or double quotes is unquoted
-	#     (quotes are kept as they are if the value uses escapes)
+	#   - A value wrapped in matching single or double quotes is unquoted;
+	#     escapes in double quotes (\" and \\) are passed on to terraform.tfvars,
+	#     a single-quoted value containing '' is kept as it is
 	#   - Otherwise a comment ('#' at the start or after whitespace) is removed
 	declare -A yaml_array
 	local line key value
 	local keyval_re='^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*:[[:space:]]*(.*)$'
-	local dquote_re='^"([^"\\]*)"[[:space:]]*(#.*)?$'
+	local dquote_re='^"((\\.|[^"\\])*)"[[:space:]]*(#.*)?$'
 	local squote_re="^'([^']*)'[[:space:]]*(#.*)?$"
 	while IFS='' read -r line || [[ -n ${line} ]]; do
 		[[ ${line} =~ ${keyval_re} ]] || continue
