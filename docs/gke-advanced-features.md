@@ -86,7 +86,7 @@ Pathways cluster configuration requires the following components:
 When you specify the `--pathways` flag during job submission, Cluster Toolkit automatically refactors the Kubernetes JobSet manifest to deploy and coordinate three distinct functional roles:
 
 1. **Pathways ResourceManager server (`pathways-rm`):** Deployed within the coordinator job to manage dynamic TPU worker allocations and host mappings.
-2. **Pathways Proxy (`pathways-proxy`):** Handles execution requests and acts as the entry point for the client workload.
+2. **Pathways Proxy (`pathways-proxy`):** Handles execution requests and acts as the entry point for the client workload. For in-cluster workloads, `gcluster job submit --pathways` automatically sets `JAX_PLATFORMS=proxy` and `JAX_BACKEND_TARGET=grpc://$(PATHWAYS_HEAD):29000` so JAX connects via its built-in `'proxy'` backend without requiring `pathwaysutils.initialize()` (which is only needed for Pathways-specific features like Orbax checkpoint persistence or profiling, and must be called before `jax.devices()`).
 3. **Co-located JAX workers and sidecars:** Deployed as worker pods hosting JAX and PJRT runtimes across independent TPU slices, with optional Python sidecar containers injected by using the `--pathways-colocated-python-sidecar-image` flag.
 
 #### Headless Pathways mode (`--pathways-headless`)
@@ -102,7 +102,7 @@ When you enable the `--pathways-headless` flag, Cluster Toolkit deploys the Path
   kubectl port-forward PATHWAYS_HEAD_POD 29000:29000
   ```
 
-  Then initialize your JAX/Pathways client against `grpc://127.0.0.1:29000`.
+  Then initialize your JAX client against `grpc://127.0.0.1:29000` (with `JAX_PLATFORMS=proxy` and `JAX_BACKEND_TARGET=grpc://127.0.0.1:29000`).
 
 #### Example CLI commands
 
