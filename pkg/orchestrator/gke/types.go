@@ -128,6 +128,12 @@ var pvGVR = schema.GroupVersionResource{
 	Resource: "persistentvolumes",
 }
 
+var serviceGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "services",
+}
+
 // HTTPClient abstracts HTTP GET calls for testability and thread safety.
 type HTTPClient interface {
 	Get(url string) (*http.Response, error)

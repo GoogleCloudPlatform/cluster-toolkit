@@ -950,6 +950,172 @@ func TestDiagnoseJobSetWebhook(t *testing.T) {
 	}
 }
 
+// recordingKubeClient wraps MockKubeClient with per-object GetResource errors and records every object read.
+type recordingKubeClient struct {
+	MockKubeClient
+	getErrs map[string]error // keyed like reads
+	reads   []string         // "<resource>.<group>/<version> <namespace>/<name>"
+}
+
+func (c *recordingKubeClient) GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
+	key := fmt.Sprintf("%s/%s %s/%s", gvr.GroupResource(), gvr.Version, namespace, name)
+	c.reads = append(c.reads, key)
+	if err := c.getErrs[key]; err != nil {
+		return nil, err
+	}
+	return c.MockKubeClient.GetResource(gvr, namespace, name)
+}
+
+const (
+	liveDeploymentRead     = "deployments.apps/v1 jobset-system/jobset-controller-manager"
+	liveHelmDeploymentRead = "deployments.apps/v1 jobset-system/jobset-controller"
+	liveWebhookServiceRead = "services/v1 jobset-system/jobset-webhook-service"
+	liveMetricsServiceRead = "services/v1 jobset-system/jobset-controller-manager-metrics-service"
+)
+
+func liveJobSetUnstructured(kind, name string) unstructured.Unstructured {
+	return unstructured.Unstructured{Object: map[string]interface{}{
+		"kind":     kind,
+		"metadata": map[string]interface{}{"name": name, "namespace": "jobset-system"},
+	}}
+}
+
+func TestCheckNoLiveJobSetObjects(t *testing.T) {
+	t.Run("all absent", func(t *testing.T) {
+		kube := &recordingKubeClient{}
+		orc := &GKEOrchestrator{kubeClient: kube, kubeContext: jobSetTestKubeContext}
+		if err := orc.checkNoLiveJobSetObjects(); err != nil {
+			t.Fatalf("checkNoLiveJobSetObjects() error = %v, want nil", err)
+		}
+		want := []string{liveDeploymentRead, liveHelmDeploymentRead, liveWebhookServiceRead, liveMetricsServiceRead}
+		if !slices.Equal(kube.reads, want) {
+			t.Errorf("reads = %v, want %v", kube.reads, want)
+		}
+	})
+
+	for _, existing := range []struct {
+		resource, kind, name string
+	}{
+		{"deployments", "Deployment", "jobset-controller-manager"},
+		{"deployments", "Deployment", "jobset-controller"},
+		{"services", "Service", "jobset-webhook-service"},
+		{"services", "Service", "jobset-controller-manager-metrics-service"},
+	} {
+		t.Run("existing "+existing.kind+" "+existing.name, func(t *testing.T) {
+			kube := &recordingKubeClient{MockKubeClient: MockKubeClient{Objects: map[string][]unstructured.Unstructured{
+				existing.resource: {liveJobSetUnstructured(existing.kind, existing.name)},
+			}}}
+			orc := &GKEOrchestrator{kubeClient: kube, kubeContext: jobSetTestKubeContext}
+			err := orc.checkNoLiveJobSetObjects()
+			if err == nil {
+				t.Fatal("checkNoLiveJobSetObjects() error = nil, want existing-object error")
+			}
+			assertContainsAll(t, err.Error(), []string{
+				existing.kind + " jobset-system/" + existing.name + " already exists",
+				"gcluster made no changes",
+				jobSetPinnedKubectl + " delete namespace jobset-system",
+			}, nil)
+		})
+	}
+
+	readErrs := map[string]error{
+		"forbidden": apierrors.NewForbidden(schema.GroupResource{Resource: "services"}, "jobset", errors.New("RBAC: access denied")),
+		"timeout":   apierrors.NewServerTimeout(schema.GroupResource{Resource: "services"}, "get", 1),
+		"transport": errors.New("dial tcp 10.0.0.1:443: connect: connection refused"),
+	}
+	for _, read := range []string{liveDeploymentRead, liveHelmDeploymentRead, liveWebhookServiceRead, liveMetricsServiceRead} {
+		for errName, readErr := range readErrs {
+			t.Run(read+" "+errName, func(t *testing.T) {
+				kube := &recordingKubeClient{getErrs: map[string]error{read: readErr}}
+				orc := &GKEOrchestrator{kubeClient: kube, kubeContext: jobSetTestKubeContext}
+				err := orc.checkNoLiveJobSetObjects()
+				if !errors.Is(err, readErr) {
+					t.Fatalf("checkNoLiveJobSetObjects() error = %v, want it to wrap %v", err, readErr)
+				}
+				name := read[strings.LastIndex(read, "/")+1:]
+				assertContainsAll(t, err.Error(), []string{name, "gcluster made no changes"}, nil)
+			})
+		}
+	}
+
+	t.Run("client init failure fails closed", func(t *testing.T) {
+		orc := &GKEOrchestrator{kubeconfigLoader: staticLoader(clientcmdapi.NewConfig())}
+		if err := orc.checkNoLiveJobSetObjects(); err == nil {
+			t.Fatal("checkNoLiveJobSetObjects() error = nil, want the Kubernetes client error")
+		}
+	})
+}
+
+func TestCheckAndInstallJobSetCRD_AbortsWhenNamespaceHasJobSetObjects(t *testing.T) {
+	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "deployments"}, "jobset-controller-manager", errors.New("RBAC: access denied"))
+	tests := []struct {
+		name    string
+		kube    KubeClient
+		wantErr string
+	}{
+		{
+			name: "leftover Kustomize Deployment",
+			kube: &MockKubeClient{Objects: map[string][]unstructured.Unstructured{
+				"deployments": {liveJobSetUnstructured("Deployment", "jobset-controller-manager")},
+			}},
+			wantErr: "Deployment jobset-system/jobset-controller-manager already exists",
+		},
+		{
+			name: "leftover Helm Deployment",
+			kube: &MockKubeClient{Objects: map[string][]unstructured.Unstructured{
+				"deployments": {liveJobSetUnstructured("Deployment", "jobset-controller")},
+			}},
+			wantErr: "Deployment jobset-system/jobset-controller already exists",
+		},
+		{
+			name: "webhook Service created concurrently",
+			kube: &MockKubeClient{Objects: map[string][]unstructured.Unstructured{
+				"services": {liveJobSetUnstructured("Service", "jobset-webhook-service")},
+			}},
+			wantErr: "Service jobset-system/jobset-webhook-service already exists",
+		},
+		{
+			name: "leftover metrics Service",
+			kube: &MockKubeClient{Objects: map[string][]unstructured.Unstructured{
+				"services": {liveJobSetUnstructured("Service", "jobset-controller-manager-metrics-service")},
+			}},
+			wantErr: "Service jobset-system/jobset-controller-manager-metrics-service already exists",
+		},
+		{
+			name:    "Deployment read forbidden",
+			kube:    &recordingKubeClient{getErrs: map[string]error{liveDeploymentRead: forbidden}},
+			wantErr: "failed to check whether JobSet Deployment jobset-system/jobset-controller-manager already exists",
+		},
+		{
+			name:    "metrics Service read fails",
+			kube:    &recordingKubeClient{getErrs: map[string]error{liveMetricsServiceRead: errors.New("connection reset by peer")}},
+			wantErr: "failed to check whether JobSet Service jobset-system/jobset-controller-manager-metrics-service already exists",
+		},
+		{
+			name:    "Kubernetes client cannot be created",
+			kube:    nil,
+			wantErr: "kubeconfig",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orc, mockExec := newJobSetTestOrchestrator(t, freshJobSetResponses())
+			orc.kubeClient = tc.kube
+
+			err := orc.checkAndInstallJobSetCRD()
+			if err == nil {
+				t.Fatal("checkAndInstallJobSetCRD() error = nil, want an error")
+			}
+			assertContainsAll(t, err.Error(), []string{"failed to install JobSet: ", tc.wantErr}, []string{"apply -f"})
+			assertNoJobSetMutation(t, mockExec, authCanICreateCmd)
+			assertEveryKubectlCallPinned(t, mockExec, jobSetTestKubeContext)
+			if _, statErr := os.Stat(generatedJobSetManifest()); !os.IsNotExist(statErr) {
+				t.Errorf("os.Stat(%s) error = %v, want the manifest not to be written", generatedJobSetManifest(), statErr)
+			}
+		})
+	}
+}
+
 func TestInitialize_LocationFallback(t *testing.T) {
 	setupMockMachineConfig(t)
 

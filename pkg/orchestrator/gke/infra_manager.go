@@ -36,15 +36,19 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // Keep in sync with the jobset.version default in modules/management/kubectl-apply/variables.tf (no 'v' prefix there).
 const defaultJobSetVersion = "v0.12.0"
 
 const (
-	jobSetNamespace          = "jobset-system"
-	jobSetWebhookServiceName = "jobset-webhook-service"
-	jobSetCRDName            = "jobsets.jobset.x-k8s.io"
+	jobSetNamespace             = "jobset-system"
+	jobSetControllerManagerName = "jobset-controller-manager"
+	jobSetHelmControllerName    = "jobset-controller"
+	jobSetWebhookServiceName    = "jobset-webhook-service"
+	jobSetMetricsServiceName    = "jobset-controller-manager-metrics-service"
+	jobSetCRDName               = "jobsets.jobset.x-k8s.io"
 	// jobSetWebhookPollAttempts caps the endpoint reads, so the wait also ends when tests remove the poll interval.
 	jobSetWebhookPollAttempts = 100
 	// jobSetWaitLogInterval is how often the endpoint wait reports that it is still waiting.
@@ -72,6 +76,19 @@ var jobSetInstallPermissionChecks = []permissionCheck{
 	{"create", "clusterrolebindings.rbac.authorization.k8s.io"},
 	{"create", "mutatingwebhookconfigurations.admissionregistration.k8s.io"},
 	{"create", "validatingwebhookconfigurations.admissionregistration.k8s.io"},
+}
+
+// jobSetObjectsWithSelectors are the controller Deployments and Services in jobset-system whose
+// selectors or pods an install would collide with if any of them already existed.
+var jobSetObjectsWithSelectors = []struct {
+	kind string
+	gvr  schema.GroupVersionResource
+	name string
+}{
+	{"Deployment", deploymentGVR, jobSetControllerManagerName},
+	{"Deployment", deploymentGVR, jobSetHelmControllerName},
+	{"Service", serviceGVR, jobSetWebhookServiceName},
+	{"Service", serviceGVR, jobSetMetricsServiceName},
 }
 
 // checkAndInstallJobSetCRD installs JobSet only when neither its CRD nor its webhook Service exists.
@@ -164,6 +181,10 @@ func (g *GKEOrchestrator) partialJobSetInstallError(crdExists bool) error {
 }
 
 func (g *GKEOrchestrator) installJobSetCRD(jobSetManifestsURL string) error {
+	if err := g.checkNoLiveJobSetObjects(); err != nil {
+		return err
+	}
+
 	manifestBytes, err := g.downloadManifests(jobSetManifestsURL)
 	if err != nil {
 		return err
@@ -192,6 +213,30 @@ func (g *GKEOrchestrator) installJobSetCRD(jobSetManifestsURL string) error {
 	return nil
 }
 
+// checkNoLiveJobSetObjects fails unless every JobSet controller Deployment and Service in jobset-system is
+// NotFound, so gcluster never applies manifests over leftover or concurrently created objects whose
+// selectors could differ.
+func (g *GKEOrchestrator) checkNoLiveJobSetObjects() error {
+	if g.needsDynamicClientInit() {
+		if _, err := g.getDynamicClient(); err != nil {
+			return err
+		}
+	}
+	for _, o := range jobSetObjectsWithSelectors {
+		_, err := g.kubeClient.GetResource(o.gvr, jobSetNamespace, o.name)
+		switch {
+		case apierrors.IsNotFound(err):
+		case err == nil:
+			return fmt.Errorf("JobSet is only partly installed: %s %s/%s already exists, so applying the JobSet manifest could change existing selectors or controller pods. gcluster made no changes. "+
+				"Remove the remaining objects in namespace %s (for example with '%s', or by uninstalling its Helm release) before re-running, or ask your cluster administrator",
+				o.kind, jobSetNamespace, o.name, jobSetNamespace, kubectlCommandLine(g.kubeContext, "delete", "namespace", jobSetNamespace))
+		default:
+			return fmt.Errorf("failed to check whether JobSet %s %s/%s already exists (gcluster made no changes): %w", o.kind, jobSetNamespace, o.name, err)
+		}
+	}
+	return nil
+}
+
 // jobSetManifestFile names the generated JobSet manifest after the kube context, so an install on another
 // cluster cannot overwrite the file that the recovery command of a failed install applies.
 func jobSetManifestFile(kubeContext string) string {
@@ -209,7 +254,7 @@ func jobSetManifestFile(kubeContext string) string {
 // waitForJobSetWebhook waits for the controller that installJobSetCRD applied, then for a ready webhook endpoint.
 func (g *GKEOrchestrator) waitForJobSetWebhook() error {
 	logging.Info("Waiting up to 10 minutes for the JobSet controller to roll out...")
-	res := g.kubectl("rollout", "status", "deployment/jobset-controller-manager", "-n", jobSetNamespace, "--timeout=600s")
+	res := g.kubectl("rollout", "status", "deployment/"+jobSetControllerManagerName, "-n", jobSetNamespace, "--timeout=600s")
 	if res.ExitCode != 0 {
 		return fmt.Errorf("the JobSet controller did not become ready: %s\n%s", strings.TrimSpace(res.Stderr+"\n"+res.Stdout), g.diagnoseJobSetWebhook())
 	}
@@ -487,7 +532,7 @@ func (g *GKEOrchestrator) injectTolerationsAndLabels(data map[interface{}]interf
 		return
 	}
 	name, ok := meta["name"].(string)
-	if !ok || (name != "jobset-controller-manager" && name != "jobset-controller") {
+	if !ok || (name != jobSetControllerManagerName && name != jobSetHelmControllerName) {
 		return
 	}
 
