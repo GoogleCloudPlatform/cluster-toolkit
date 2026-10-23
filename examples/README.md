@@ -38,6 +38,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ubuntu2204.yaml](#hpc-slurm-ubuntu2204yaml-) ![community-badge]
+  * [hpc-slurm-remote-desktop.yaml](#hpc-slurm-remote-desktopyaml--) ![community-badge] ![experimental-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
   * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
@@ -229,6 +230,7 @@ the experimental badge (![experimental-badge]).
 | [community/examples/htc-slurm.yaml](../community/examples/htc-slurm.yaml) | slurm | c2-standard-30, n2-standard-2, n2-standard-4, c2-standard-8 | This blueprint provisions a cluster using the Slurm scheduler in a configuration tuned for the execution of many short-duration, loosely-coupled (non-MPI) jobs. |
 | [community/examples/kms-key-per-service.yaml](../community/examples/kms-key-per-service.yaml) | slurm | n2-standard-2, n2-standard-4 | The same CMEK Slurm cluster as kms-key.yaml, but with one key per class of resource instead of one shared key, each granted only to the service agent that uses it: the Compute Engine agent can decrypt the disks and nothing else, the... |
 | [community/examples/kms-key.yaml](../community/examples/kms-key.yaml) | slurm | n2-standard-2, n2-standard-4 | An end-to-end CMEK Slurm cluster. The kms-key module creates one Cloud KMS key ring and symmetric CryptoKey, kms-key-iam grants the service agents that encrypt with it, and every encrypted resource picks the key up through use... |
+| [community/examples/remote-desktop/hpc-slurm-remote-desktop.yaml](../community/examples/remote-desktop/hpc-slurm-remote-desktop.yaml) | slurm | n2-standard-4, e2-standard-4, n2-standard-8 | This example provisions a Slurm cluster whose login node also serves browser based Linux desktops, alongside a dedicated visualisation node for heavier graphical work. |
 | [community/examples/slurm-gke/slurm-gke.yaml](../community/examples/slurm-gke/slurm-gke.yaml) | slurm-on-gke (slinky) | n2d-standard-4, c2-standard-16, n2-standard-2, n2-standard-4 | Deploys a hybrid Slurm cluster with a GCE-based controller, login node, and debug partition alongside a GKE-backed compute partition managed by the Slinky Slurm operator. The blueprint also creates a VPC, a Filestore instance mounted at... |
 | [community/examples/slurm-high-throughput/hpc-slurm-multiregion-scale.yaml](../community/examples/slurm-high-throughput/hpc-slurm-multiregion-scale.yaml) | slurm | n2d-standard-64, n2-standard-4, n2-standard-16 | Creates a massive-scale, multi-region Slurm cluster provisioning up to 1,500 dynamic compute nodes (96,000 to 192,000 vCPUs) aggregated under a unified partition across 3 Google Cloud regions and 10 zones. |
 | [community/examples/slurm-high-throughput/hpc-slurm-scale.yaml](../community/examples/slurm-high-throughput/hpc-slurm-scale.yaml) | slurm | n2-standard-128, n2-standard-4, n2-standard-8 | Creates a high-performance, single-region auto-scaling Slurm cluster scaled up to 800 dynamic Spot or On-Demand compute nodes (102,400 vCPUs) across 4 zones with multi-zonal dynamic failover and Cloud NAT. |
@@ -1072,6 +1074,25 @@ For this example the following is needed in the selected region:
   needed for `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
+
+### [hpc-slurm-remote-desktop.yaml] ![community-badge] ![experimental-badge]
+
+This example provisions a Slurm cluster whose login node also serves browser
+based Linux desktops, alongside a dedicated visualisation node for heavier
+graphical work.
+
+Each user gets their own XFCE session, reached over
+[noVNC] in a browser. Sessions on the login node can see the scheduler, so a
+user can run `sbatch` and `squeue` from a terminal inside the desktop.
+
+The desktop broker takes the user's identity from request headers and requires
+a shared secret, so it must only be reached through a proxy that authenticates
+the user. The blueprint does not expose it publicly: see the
+[remote desktop README] for how to reach a desktop over an IAP tunnel.
+
+[hpc-slurm-remote-desktop.yaml]: ../community/examples/remote-desktop/hpc-slurm-remote-desktop.yaml
+[remote desktop README]: ../community/examples/remote-desktop/README.md
+[noVNC]: https://novnc.com/
 
 ### [hpc-amd-slurm.yaml] ![community-badge]
 

@@ -1546,6 +1546,84 @@ blueprints:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [network, debug_partition, compute_partition, homefs, slurm_login, kms_key_iam]
     settings: [enable_controller_public_ips]
+- path: community/examples/remote-desktop/hpc-slurm-remote-desktop.yaml
+  blueprint_name: hpc-slurm-remote-desktop
+  scheduler: slurm
+  description: "This example provisions a Slurm cluster whose login node also serves browser based Linux desktops, alongside a dedicated visualisation node for heavier graphical work."
+  machine_types: [n2-standard-4, e2-standard-4, n2-standard-8]
+  vars:
+    compute_machine_type: n2-standard-4
+    compute_startup_scripts_timeout: 1800
+    controller_machine_type: e2-standard-4
+    controller_startup_scripts_timeout: 1800
+    deployment_name: hpc-slurm-remote-desktop
+    desktop_allowed_ingress_cidrs:
+    - 35.235.240.0/20
+    desktop_endpoint_dir: /shared/ghpc-remote-desktop/endpoints
+    desktop_proxy_secret_id: ghpc-desktop-proxy-secret
+    enable_slurm_auth: true
+    homefs_name: "$(\"${vars.deployment_name}-homefs\")"
+    login_machine_type: n2-standard-4
+    login_startup_scripts_timeout: 1800
+    project_id: null
+    region: us-central1
+    secret_project_id: $(vars.project_id)
+    shared_root: /shared
+    sharedfs_name: "$(\"${vars.deployment_name}-sharedfs\")"
+    slurm_cluster_name: slurmdesktop
+    slurm_image:
+      family: slurm-gcp-6-12-hpc-rocky-linux-9
+      project: schedmd-slurm-public
+    viz_machine_type: n2-standard-8
+    zone: us-central1-a
+  modules:
+  - id: services-api
+    source: community/modules/project/service-enablement
+    settings: [gcp_service_list]
+  - id: desktop-service-account
+    source: modules/project/service-account
+    settings: [deployment_name, name, project_id, project_roles]
+  - id: network
+    source: modules/network/vpc
+    settings: [network_name, subnetwork_name]
+  - id: homefs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    settings: [local_mounts, metadata, name]
+  - id: sharedfs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    settings: [local_mounts, metadata, name]
+  - id: desktop-firewall
+    source: modules/network/firewall-rules
+    use: [network]
+    settings: [ingress_rules]
+  - id: compute-nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, homefs, sharedfs]
+    settings: [advanced_machine_features, allow_automatic_updates, instance_image, machine_type, node_count_dynamic_max, node_count_static, on_host_maintenance]
+  - id: compute-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute-nodeset]
+    settings: [exclusive, is_default, partition_name]
+  - id: login-desktop-runtime
+    source: community/modules/remote-desktop/novnc-runtime
+    settings: [desktop_endpoint_dir, desktop_endpoint_name, novnc_identity_mode, novnc_proxy_secret_id, secret_project_id, slurm_auth_mode, vnc_backend]
+  - id: login-desktop-startup
+    source: modules/scripts/startup-script
+    settings: [runners]
+  - id: slurm-login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings: [allow_automatic_updates, enable_login_public_ips, instance_image, machine_type, service_account_email, service_account_scopes, tags]
+  - id: slurm-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, homefs, sharedfs, slurm-login, compute-partition]
+    settings: [allow_automatic_updates, compute_startup_scripts_timeout, controller_startup_scripts_timeout, enable_controller_public_ips, enable_slurm_auth, instance_image, login_network_storage, login_startup_script, login_startup_scripts_timeout, machine_type, slurm_cluster_name]
+  - id: viz-desktop
+    source: community/modules/remote-desktop/novnc-desktop
+    use: [network, homefs, sharedfs]
+    settings: [allowed_ingress_cidrs, desktop_endpoint_dir, desktop_endpoint_name, enable_public_ips, instance_image, machine_type, novnc_identity_mode, novnc_proxy_secret_id, secret_project_id, service_account_email, service_account_scopes, vnc_backend]
 - path: community/examples/slurm-gke/slurm-gke.yaml
   blueprint_name: slurm-gke
   scheduler: slurm-on-gke (slinky)
@@ -5692,6 +5770,8 @@ module_wiring:
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -5747,6 +5827,8 @@ module_wiring:
     - community/modules/pubsub/bigquery-sub
   community/modules/remote-desktop/chrome-remote-desktop:
     required_inputs: [install_nvidia_driver]
+  community/modules/remote-desktop/novnc-desktop: {}
+  community/modules/remote-desktop/novnc-runtime: {}
   community/modules/scheduler/htcondor-access-point:
     required_inputs: [access_point_service_account_email, central_manager_ips, htcondor_bucket_name, instance_image]
     recommended_use:
@@ -5831,6 +5913,8 @@ module_wiring:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
     - modules/compute/vm-instance
@@ -5842,6 +5926,8 @@ module_wiring:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
     - community/modules/scripts/ramble-execute
@@ -5860,6 +5946,8 @@ module_wiring:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
     - modules/compute/vm-instance
@@ -5871,6 +5959,8 @@ module_wiring:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
     - community/modules/scripts/ramble-execute
@@ -5939,6 +6029,8 @@ module_wiring:
     - community/modules/container/apptainer-runtime
     - community/modules/files/fsi-montecarlo-on-batch
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -5965,6 +6057,8 @@ module_wiring:
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -6012,6 +6106,8 @@ module_wiring:
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -6043,6 +6139,8 @@ module_wiring:
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -6068,6 +6166,8 @@ module_wiring:
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -6088,6 +6188,8 @@ module_wiring:
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -6195,6 +6297,7 @@ module_wiring:
     - community/modules/file-system/nfs-server
     - community/modules/network/int-app-lb
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/htcondor-setup
@@ -6274,6 +6377,8 @@ module_wiring:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
     - modules/compute/vm-instance
