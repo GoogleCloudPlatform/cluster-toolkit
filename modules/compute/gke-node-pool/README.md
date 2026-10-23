@@ -287,16 +287,16 @@ limitations under the License.
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.41.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.44.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.44.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.41.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.44.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.44.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
@@ -359,6 +359,7 @@ limitations under the License.
 | <a name="input_gke_version"></a> [gke\_version](#input\_gke\_version) | GKE version | `string` | n/a | yes |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = optional(string)<br/>    count = optional(number, 0)<br/>    gpu_driver_installation_config = optional(object({<br/>      gpu_driver_version = string<br/>    }), { gpu_driver_version = "DEFAULT" })<br/>    gpu_partition_size = optional(string)<br/>    gpu_sharing_config = optional(object({<br/>      gpu_sharing_strategy       = string<br/>      max_shared_clients_per_gpu = number<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_host_maintenance_interval"></a> [host\_maintenance\_interval](#input\_host\_maintenance\_interval) | Specifies the frequency of planned maintenance events. | `string` | `""` | no |
+| <a name="input_ignore_node_count_changes"></a> [ignore\_node\_count\_changes](#input\_ignore\_node\_count\_changes) | Whether to ignore external changes (drift) to the node count (e.g. from out-of-band resizes using gcloud). Setting this to true allows node pool size changes made outside Terraform to be preserved instead of reverted on subsequent applies. | `bool` | `false` | no |
 | <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. Use CUSTOM\_CONTAINERD together with var.node\_image\_config to run a custom node image. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_initial_node_count"></a> [initial\_node\_count](#input\_initial\_node\_count) | The initial number of nodes for the pool. In regional clusters, this is the number of nodes per zone. Changing this setting after node pool creation will not make any effect. It cannot be set with static\_node\_count and must be set to a value between autoscaling\_total\_min\_nodes and autoscaling\_total\_max\_nodes. | `number` | `null` | no |
 | <a name="input_install_dranet_template"></a> [install\_dranet\_template](#input\_install\_dranet\_template) | If true, automatically deploys the DRANET ResourceClaimTemplate. The compiler automatically overrides this to false for subsequent node pools in the same cluster if they use the same device class. | `bool` | `true` | no |
