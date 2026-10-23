@@ -32,11 +32,7 @@ import (
 // machine type: a control-plane var's value may only appear in machine_types
 // when a workload var (any other *machine_type key) carries the same value.
 func TestMachineTypesExcludeControlPlane(t *testing.T) {
-	root := testRepoRoot(t)
-	blueprints, err := ScanBlueprints(root, nil)
-	if err != nil {
-		t.Fatalf("ScanBlueprints failed: %v", err)
-	}
+	_, blueprints := cachedScan(t)
 	byPath := make(map[string]BlueprintEntry, len(blueprints))
 	for _, bp := range blueprints {
 		byPath[bp.Path] = bp
@@ -100,11 +96,7 @@ func verifyPinnedMachineTypes(t *testing.T, byPath map[string]BlueprintEntry) {
 // official examples: no legacy machine-type var names, and no bare shared
 // inputs that applyGlobalVarsInModule would broadcast to every module.
 func TestRolePrefixedVarsInOfficialExamples(t *testing.T) {
-	root := testRepoRoot(t)
-	blueprints, err := ScanBlueprints(root, nil)
-	if err != nil {
-		t.Fatalf("ScanBlueprints failed: %v", err)
-	}
+	_, blueprints := cachedScan(t)
 	legacy := map[string]bool{
 		"compute_node_machine_type":     true,
 		"compute_nodepool_machine_type": true,
@@ -160,11 +152,7 @@ var hardwareLockedPaths = []string{
 // blueprints advertise their shape in machine_types but offer no overridable
 // compute machine-type var (control-plane vars are still allowed).
 func TestHardwareLockedBlueprintsHideMachineType(t *testing.T) {
-	root := testRepoRoot(t)
-	blueprints, err := ScanBlueprints(root, nil)
-	if err != nil {
-		t.Fatalf("ScanBlueprints failed: %v", err)
-	}
+	_, blueprints := cachedScan(t)
 	matched := 0
 	for _, bp := range blueprints {
 		locked := false
@@ -198,11 +186,7 @@ func TestHardwareLockedBlueprintsHideMachineType(t *testing.T) {
 // shown)" block of a companion *-deployment.yaml matches the paired
 // blueprint's vars[key] default, so the comments cannot drift.
 func TestOptionalOverrideCommentsMatchBlueprintDefaults(t *testing.T) {
-	root := testRepoRoot(t)
-	blueprints, err := ScanBlueprints(root, nil)
-	if err != nil {
-		t.Fatalf("ScanBlueprints failed: %v", err)
-	}
+	root, blueprints := cachedScan(t)
 	checked := 0
 	for _, bp := range blueprints {
 		if bp.DeploymentPath == "" {
