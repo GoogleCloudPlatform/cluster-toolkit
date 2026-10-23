@@ -319,6 +319,13 @@ func findExplainRepoRoot() string {
 }
 
 func isExplainRepoRoot(dir string) bool {
+	if filepath.Base(dir) == "community" && hasExamplesAndModules(filepath.Dir(dir)) {
+		return false
+	}
+	return hasExamplesAndModules(dir)
+}
+
+func hasExamplesAndModules(dir string) bool {
 	for _, sub := range []string{"examples", "modules"} {
 		if info, err := os.Stat(filepath.Join(dir, sub)); err != nil || !info.IsDir() {
 			return false
@@ -345,6 +352,9 @@ var (
 
 func scanBlueprintsCached(repoRoot string) ([]catalog.BlueprintEntry, error) {
 	key := filepath.Clean(repoRoot)
+	if abs, err := filepath.Abs(repoRoot); err == nil {
+		key = abs
+	}
 	explainCacheMu.Lock()
 	if cached, ok := explainBlueprintCache[key]; ok {
 		explainCacheMu.Unlock()
@@ -899,10 +909,9 @@ func mergeAndFormatBlueprintVars(bpVars, dsVars config.Dict) []ExplainVariable {
 	for k, v := range bpVars.Items() {
 		merged[k] = v
 	}
+	// Mirror cmd/create.go:mergeDeploymentSettings: deployment values (including null) always win.
 	for k, v := range dsVars.Items() {
-		if existing, exists := merged[k]; !exists || !v.IsNull() || existing.IsNull() {
-			merged[k] = v
-		}
+		merged[k] = v
 	}
 
 	orderedKeys := orderBlueprintVarKeys(merged)
@@ -950,7 +959,8 @@ func inspectCtyVariable(name string, v cty.Value) ExplainVariable {
 func inspectExpressionVariable(name string, expr config.Expression) ExplainVariable {
 	raw := strings.TrimSpace(string(hclwrite.Format(expr.Tokenize().Bytes())))
 	if raw == "null" {
-		return ExplainVariable{Name: name, Type: "string", Required: true}
+		// $(null) is the idiomatic "optional, unset by default" marker; validateVars accepts it.
+		return ExplainVariable{Name: name, Type: "expression", Required: false, Default: "null"}
 	}
 	return ExplainVariable{Name: name, Type: "expression", Required: false, Default: "((" + raw + "))"}
 }
@@ -1395,6 +1405,9 @@ func renderModuleYAMLBlock(id, source string, useIDs []string, reqInputs, optInp
 	var sb strings.Builder
 	writef(&sb, "- id: %s\n", id)
 	writef(&sb, "  source: %s\n", source)
+	if detectEmbeddedModuleKind(sourcereader.ModuleFS, source) == "packer" || detectLocalModuleKind(source) == "packer" {
+		sb.WriteString("  kind: packer\n")
+	}
 	if len(useIDs) > 0 {
 		writef(&sb, "  use: [%s]\n", strings.Join(useIDs, ", "))
 	}
@@ -1918,6 +1931,9 @@ func assembleSpecMatchResult(repoRoot string, specs []normalizedSpec, best *scor
 		if ms.ModuleSource != "" {
 			item.Snippet = buildMissingModuleSnippetForBlueprint(ms.ModuleSource, best.entry)
 			item.TargetGroup = pickTargetGroupForSnippet(bpExplain.Stages, item.Snippet)
+			if detectEmbeddedModuleKind(sourcereader.ModuleFS, ms.ModuleSource) == "packer" {
+				item.TargetGroup = "" // packer modules must be the only module in their own group
+			}
 			item.ReferenceBlueprints = referenceBlueprintsFor(allBlueprints, best.entry.Scheduler, ms.ModuleSource)
 		}
 		missingOut = append(missingOut, item)
@@ -1937,11 +1953,12 @@ func pickTargetGroupForSnippet(stages []ExplainStage, snippet string) string {
 	if len(stages) == 0 {
 		return "primary"
 	}
+	deps := snippetExternalUseIDs(snippet)
 	target := stages[0].Group
 	matchedDep := false
 	for _, st := range stages {
 		for _, m := range st.Modules {
-			if m.ID != "" && strings.Contains(snippet, m.ID) {
+			if deps[m.ID] {
 				target = st.Group
 				matchedDep = true
 			}
@@ -1955,6 +1972,26 @@ func pickTargetGroupForSnippet(stages []ExplainStage, snippet string) string {
 		}
 	}
 	return target
+}
+
+func snippetExternalUseIDs(snippet string) map[string]bool {
+	var blocks []struct {
+		ID  string   `yaml:"id"`
+		Use []string `yaml:"use"`
+	}
+	_ = yaml.Unmarshal([]byte(snippet), &blocks)
+	defined, deps := map[string]bool{}, map[string]bool{}
+	for _, b := range blocks {
+		defined[b.ID] = true
+	}
+	for _, b := range blocks {
+		for _, u := range b.Use {
+			if !defined[u] {
+				deps[u] = true
+			}
+		}
+	}
+	return deps
 }
 
 func referenceBlueprintsFor(all []catalog.BlueprintEntry, scheduler, modSource string) []string {
@@ -2023,17 +2060,27 @@ func resolvePrereqUpstreamUseIDs(bp catalog.BlueprintEntry, prereqSource string)
 }
 
 func findMatchingModuleIDInBlueprint(bp catalog.BlueprintEntry, preferredSource string, neededOutputs []string) string {
+	useCount := make(map[string]int)
 	for _, m := range bp.Modules {
-		if m.Source == preferredSource {
-			return m.ID
+		for _, u := range m.Use {
+			useCount[u]++
 		}
 	}
-	for _, m := range bp.Modules {
-		if moduleOutputsAll(m.Source, neededOutputs) {
-			return m.ID
+	// Prefer the candidate consumed by the most modules (e.g. the cluster VPC over a
+	// Packer image-builder VPC declared earlier); ties keep declaration order.
+	pick := func(match func(catalog.ModuleSummary) bool) string {
+		best, bestN := "", -1
+		for _, m := range bp.Modules {
+			if match(m) && useCount[m.ID] > bestN {
+				best, bestN = m.ID, useCount[m.ID]
+			}
 		}
+		return best
 	}
-	return ""
+	if id := pick(func(m catalog.ModuleSummary) bool { return m.Source == preferredSource }); id != "" {
+		return id
+	}
+	return pick(func(m catalog.ModuleSummary) bool { return moduleOutputsAll(m.Source, neededOutputs) })
 }
 
 func moduleOutputsAll(source string, neededOutputs []string) bool {
@@ -2100,8 +2147,13 @@ func printMissingSpecSnippets(w io.Writer, missing []ExplainMissingSpec) {
 		if ms.Snippet == "" {
 			continue
 		}
-		writef(w, "\nTo add missing spec (%s -> %s), insert into group [%s]:\n",
-			ms.Spec, ms.Module, ms.TargetGroup)
+		if ms.TargetGroup == "" {
+			writef(w, "\nTo add missing spec (%s -> %s), add it as a NEW deployment group (packer modules cannot share a group):\n",
+				ms.Spec, ms.Module)
+		} else {
+			writef(w, "\nTo add missing spec (%s -> %s), insert into group [%s]:\n",
+				ms.Spec, ms.Module, ms.TargetGroup)
+		}
 		for _, line := range strings.Split(ms.Snippet, "\n") {
 			writef(w, "  %s\n", line)
 		}

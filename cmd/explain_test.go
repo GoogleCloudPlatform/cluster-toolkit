@@ -296,3 +296,61 @@ func (s *MySuite) TestExplainHardcodedModuleSourcesExist(c *C) {
 	c.Check(strings.Contains(outHclsPstore, "insert into group [setup]:"), Equals, true)
 	c.Check(strings.Contains(outHclsPstore, "use: [network, private_service_access]"), Equals, true)
 }
+
+func (s *MySuite) TestExplainVarsMirrorDeploymentMergeSemantics(c *C) {
+	repoRoot, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	dir := c.MkDir()
+	bp := filepath.Join(dir, "t-blueprint.yaml")
+	c.Assert(os.WriteFile(bp, []byte(`blueprint_name: t
+vars:
+  project_id: p
+  deployment_name: from-blueprint
+  zone: us-central1-a
+  optional_thing: $(null)
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+`), 0644), IsNil)
+	c.Assert(os.WriteFile(filepath.Join(dir, "t-deployment.yaml"), []byte(`vars:
+  deployment_name:
+  zone: us-east1-b
+`), 0644), IsNil)
+
+	explainFlags.format = "json"
+	out, err := runExplainForTest(bp)
+	c.Assert(err, IsNil)
+	var res ExplainBlueprintResult
+	c.Assert(json.Unmarshal([]byte(out), &res), IsNil)
+	got := map[string]ExplainVariable{}
+	for _, v := range res.Variables {
+		got[v.Name] = v
+	}
+	// cmd/create.go:mergeDeploymentSettings: a deployment-file null overrides the
+	// blueprint default, so `gcluster deploy -d` rejects it as unset.
+	c.Check(got["deployment_name"].Required, Equals, true)
+	c.Check(got["zone"].Default, Equals, `"us-east1-b"`)
+	// $(null) is the intentional "optional, unset by default" marker; validateVars accepts it.
+	c.Check(got["optional_thing"].Required, Equals, false)
+
+	// B2: Packer module snippet includes 'kind: packer' and instructs adding a new group
+	explainFlags.format = "text"
+	outPackerSpec, err := runExplainForTest("a4x", "custom-image", "lustre")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outPackerSpec, "kind: packer"), Equals, true)
+	c.Check(strings.Contains(outPackerSpec, "NEW deployment group"), Equals, true)
+
+	// B3: Multi-VPC blueprint prefers cluster VPC ('network') over Packer image-builder VPC ('builder-net')
+	outG4Lustre, err := runExplainForTest("slurm", "g4", "lustre")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outG4Lustre, "use: [network]"), Equals, true)
+	c.Check(strings.Contains(outG4Lustre, "use: [network, private_service_access]"), Equals, true)
+	c.Check(strings.Contains(outG4Lustre, "use: [builder-net"), Equals, false)
+
+	// B4: Running from inside community/examples still resolves the top-level repo root
+	c.Assert(os.Chdir(filepath.Join(repoRoot, "community", "examples")), IsNil)
+	c.Check(findExplainRepoRoot(), Equals, repoRoot)
+}
