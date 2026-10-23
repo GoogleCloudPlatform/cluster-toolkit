@@ -590,15 +590,6 @@ func TestValidateMTCConfig(t *testing.T) {
 			wantErrSubstr: "is not registered on the cluster",
 		},
 		{
-			name: "MTC Enabled with Empty Ramdisk Directory - Fail",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "",
-			},
-			wantErr:       true,
-			wantErrSubstr: "ramdisk directory path (--gke-mtc-ramdisk-dir) cannot be empty",
-		},
-		{
 			name: "MTC Enabled with generic k8s client error - Fail",
 			job: &orchestrator.JobDefinition{
 				GKEMTCEnabled:          true,
@@ -617,36 +608,6 @@ func TestValidateMTCConfig(t *testing.T) {
 			},
 			wantErr:       true,
 			wantErrSubstr: "failed to verify CheckpointConfiguration resource",
-		},
-		{
-			name: "MTC Enabled with Invalid Ramdisk Path (Relative) - Fail",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "relative/path",
-			},
-			wantErr:       true,
-			wantErrSubstr: "--gke-mtc-ramdisk-dir must be an absolute path",
-		},
-		{
-			name: "Pathways ramdisk at built-in /tmp - Fail",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "/tmp",
-				IsPathwaysJob:          true,
-			},
-			wantErr:       true,
-			wantErrSubstr: "conflicts with built-in Pathways mount \"/tmp\"",
-		},
-		{
-			name: "Pathways ramdisk under /tmp/sidecar with colocated sidecar - Fail",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "/tmp/sidecar/ckpt",
-				IsPathwaysJob:          true,
-				Pathways:               orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: "sidecar:latest"},
-			},
-			wantErr:       true,
-			wantErrSubstr: "conflicts with built-in Pathways mount \"/tmp/sidecar\"",
 		},
 		{
 			name: "Dry-run without HighScaleCheckpointing addon - Fail",

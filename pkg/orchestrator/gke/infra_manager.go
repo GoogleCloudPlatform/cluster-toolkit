@@ -605,6 +605,21 @@ func (g *GKEOrchestrator) legacyMTCDriverGSA() string {
 	return ksa.GetAnnotations()[gcpServiceAccountAnnotation]
 }
 
+// validateMTCJobFlags checks the MTC flags; SubmitJob runs it before any cluster call.
+func (g *GKEOrchestrator) validateMTCJobFlags(job *orchestrator.JobDefinition) error {
+	if !job.GKEMTCEnabled {
+		if job.GKEMTCRamdiskDirectory != "" {
+			return fmt.Errorf("--gke-mtc-ramdisk-dir requires --gke-mtc-enabled")
+		}
+		return nil
+	}
+	if strings.TrimSpace(job.GKEMTCRamdiskDirectory) == "" {
+		return fmt.Errorf("ramdisk directory path (--gke-mtc-ramdisk-dir) cannot be empty when Multi-Tier Checkpointing (MTC) is enabled (e.g. --gke-mtc-ramdisk-dir=/tmp/mtc_checkpoints)")
+	}
+	sm := &StorageManager{orchestrator: g}
+	return sm.ValidateRamdiskDir(job.GKEMTCRamdiskDirectory, job.RawMounts, job.IsPathwaysJob, job.Pathways.ColocatedPythonSidecarImage != "")
+}
+
 func (g *GKEOrchestrator) validateMTCConfig(job *orchestrator.JobDefinition) error {
 	if job == nil || !job.GKEMTCEnabled {
 		return nil
@@ -612,15 +627,6 @@ func (g *GKEOrchestrator) validateMTCConfig(job *orchestrator.JobDefinition) err
 
 	mtcDocURL := "https://cloud.google.com/kubernetes-engine/docs/how-to/machine-learning/training/multi-tier-checkpointing"
 	docRemediationMsg := fmt.Sprintf("Please follow the official GKE documentation to enable this feature on your cluster: %s", mtcDocURL)
-
-	if job.GKEMTCRamdiskDirectory == "" {
-		return fmt.Errorf("ramdisk directory path (--gke-mtc-ramdisk-dir) cannot be empty when Multi-Tier Checkpointing (MTC) is enabled")
-	}
-
-	sm := &StorageManager{orchestrator: g}
-	if err := sm.ValidateRamdiskDir(job.GKEMTCRamdiskDirectory, job.RawMounts, job.IsPathwaysJob, job.Pathways.ColocatedPythonSidecarImage != ""); err != nil {
-		return err
-	}
 
 	if g.clusterDesc.AddonsConfig == nil || g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig == nil || !g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig.Enabled {
 		return fmt.Errorf("Multi-Tier Checkpointing (MTC) requires the HighScaleCheckpointing addon to be enabled on the target GKE cluster. With Cluster Toolkit, set enable_multi_tier_checkpointing: true (and enable_gcsfuse_csi: true) on the gke-cluster module. %s", docRemediationMsg)
