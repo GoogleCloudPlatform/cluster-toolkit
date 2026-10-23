@@ -25,9 +25,11 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/spf13/cobra"
@@ -332,10 +334,56 @@ type embeddedModEntry struct {
 	Kind     string
 }
 
+var (
+	explainCacheMu        sync.Mutex
+	explainBlueprintCache = make(map[string][]catalog.BlueprintEntry)
+	explainModFSCacheKey  sourcereader.BaseFS
+	explainModListCache   []embeddedModEntry
+	explainProviderFSKey  sourcereader.BaseFS
+	explainProviderCache  []candidateProvider
+)
+
+func scanBlueprintsCached(repoRoot string) ([]catalog.BlueprintEntry, error) {
+	key := filepath.Clean(repoRoot)
+	explainCacheMu.Lock()
+	if cached, ok := explainBlueprintCache[key]; ok {
+		explainCacheMu.Unlock()
+		return slices.Clone(cached), nil
+	}
+	explainCacheMu.Unlock()
+
+	bps, err := catalog.ScanBlueprints(repoRoot, nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(bps) > 0 {
+		explainCacheMu.Lock()
+		explainBlueprintCache[key] = bps
+		explainCacheMu.Unlock()
+	}
+	return bps, nil
+}
+
+func sameBaseFS(a, b sourcereader.BaseFS) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	ra, rb := reflect.TypeOf(a), reflect.TypeOf(b)
+	return ra == rb && ra.Comparable() && a == b
+}
+
 func listTopLevelEmbeddedModules(bfs sourcereader.BaseFS) []embeddedModEntry {
 	if bfs == nil {
 		return nil
 	}
+	explainCacheMu.Lock()
+	if sameBaseFS(explainModFSCacheKey, bfs) && len(explainModListCache) > 0 {
+		cached := slices.Clone(explainModListCache)
+		explainCacheMu.Unlock()
+		return cached
+	}
+	explainCacheMu.Unlock()
+
 	var result []embeddedModEntry
 	for _, root := range []string{"modules", "community/modules"} {
 		result = append(result, scanEmbeddedModuleRoot(bfs, root)...)
@@ -343,6 +391,12 @@ func listTopLevelEmbeddedModules(bfs sourcereader.BaseFS) []embeddedModEntry {
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Path < result[j].Path
 	})
+	if len(result) > 0 {
+		explainCacheMu.Lock()
+		explainModFSCacheKey = bfs
+		explainModListCache = result
+		explainCacheMu.Unlock()
+	}
 	return result
 }
 
@@ -423,7 +477,7 @@ func classifyModuleDirEntries(files []os.DirEntry) string {
 }
 
 func buildExplainIndex(repoRoot string) (ExplainIndexResult, error) {
-	blueprints, err := catalog.ScanBlueprints(repoRoot, nil)
+	blueprints, err := scanBlueprintsCached(repoRoot)
 	if err != nil {
 		return ExplainIndexResult{}, fmt.Errorf("failed to scan blueprints: %w", err)
 	}
@@ -1130,14 +1184,38 @@ func classifyTargetModuleInputs(targetInfo modulereader.ModuleInfo) (map[string]
 }
 
 func discoverCandidateProviders(targetSource string) []candidateProvider {
+	all := allCandidateProviders(sourcereader.ModuleFS)
+	providers := make([]candidateProvider, 0, len(all))
+	for _, p := range all {
+		if p.source != targetSource {
+			providers = append(providers, p)
+		}
+	}
+	return providers
+}
+
+func allCandidateProviders(bfs sourcereader.BaseFS) []candidateProvider {
+	explainCacheMu.Lock()
+	if sameBaseFS(explainProviderFSKey, bfs) && len(explainProviderCache) > 0 {
+		cached := slices.Clone(explainProviderCache)
+		explainCacheMu.Unlock()
+		return cached
+	}
+	explainCacheMu.Unlock()
+
 	var providers []candidateProvider
-	for _, m := range listTopLevelEmbeddedModules(sourcereader.ModuleFS) {
-		if m.Path == targetSource || m.Kind != "terraform" {
-			continue
+	for _, m := range listTopLevelEmbeddedModules(bfs) {
+		if m.Kind == "terraform" {
+			if outs := extractProviderTrueOutputs(m); len(outs) > 0 {
+				providers = append(providers, candidateProvider{source: m.Path, outputs: outs})
+			}
 		}
-		if outs := extractProviderTrueOutputs(m); len(outs) > 0 {
-			providers = append(providers, candidateProvider{source: m.Path, outputs: outs})
-		}
+	}
+	if len(providers) > 0 {
+		explainCacheMu.Lock()
+		explainProviderFSKey = bfs
+		explainProviderCache = providers
+		explainCacheMu.Unlock()
 	}
 	return providers
 }
@@ -1704,7 +1782,7 @@ func buildExplainSpecMatch(repoRoot string, args []string) (ExplainSpecMatchResu
 }
 
 func scanBlueprintsForSpecMatch(repoRoot string) ([]catalog.BlueprintEntry, error) {
-	blueprints, err := catalog.ScanBlueprints(repoRoot, nil)
+	blueprints, err := scanBlueprintsCached(repoRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan blueprints: %w", err)
 	}
