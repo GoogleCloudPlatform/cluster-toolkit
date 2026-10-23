@@ -48,7 +48,6 @@ PRJ_API['compute.googleapis.com']='Compute Engine API'
 PRJ_API['pubsub.googleapis.com']='Cloud Pub/Sub API'
 PRJ_API['file.googleapis.com']='Cloud Filestore API'
 PRJ_API['cloudresourcemanager.googleapis.com']='Cloud Resource Manager API'
-PRJ_API['pubsub.googleapis.com']='Cloud Pub/Sub API'
 PRJ_API['iam.googleapis.com']='Identity and Access Management (IAM) API'
 PRJ_API['oslogin.googleapis.com']='Cloud OS Login API'
 PRJ_API['cloudbilling.googleapis.com']='Cloud Billing API'
@@ -263,6 +262,14 @@ ask() {
 	printf '%s\n' "${reply}"
 }
 
+#
+# Print the Terraform version constraint from tf/versions.tf, e.g. '>= 1.12.2'
+#
+tf_required_version() {
+	sed -nE 's/^[[:space:]]*required_version[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/p' \
+		"${SCRIPT_DIR}/tf/versions.tf"
+}
+
 # Set and check a lock file.
 #   - Ensures only one instance of FE is deployed from this location.
 #
@@ -360,7 +367,7 @@ check_apis() {
 	# Get all currently enabled APIs for this project
 	#
 	local enabled_apis
-	enabled_apis=$(gcloud services list)
+	enabled_apis=$(gcloud services list --project="${project}")
 
 	# Check all required APIs are present, prompt and enable for any missing
 	#
@@ -703,7 +710,7 @@ LINE
 	#
 	if ! command -v terraform &>/dev/null; then
 		error "Error:"
-		error "    Please ensure terraform (version 0.13 or higher) is in your \$PATH"
+		error "    Please ensure terraform (version $(tf_required_version)) is in your \$PATH"
 		exit 1
 	fi
 	if ! command -v gcloud &>/dev/null || ! gcloud storage --help &>/dev/null; then
@@ -896,11 +903,11 @@ SERVICEACC
 	echo "Please select deployment method of server software:"
 	echo "  1) Clone the git repo when server deploys"
 	echo "  2) Use a copy of the code from this computer"
-	deploy_choice=$(ask "  Please choose one of the above options", "1")
+	deploy_choice=$(ask "  Please choose one of the above options" "1")
 	if [ "${deploy_choice}" == "1" ]; then
 		deployment_mode="git"
-		repo_fork=$(ask "Please specify the forked repo owner (or just press Enter)", "GoogleCloudPlatform")
-		repo_branch=$(ask "Please specify the forked repo branch (or just press Enter)", "main")
+		repo_fork=$(ask "Please specify the forked repo owner (or just press Enter)" "GoogleCloudPlatform")
+		repo_branch=$(ask "Please specify the forked repo branch (or just press Enter)" "main")
 	elif [ "${deploy_choice}" == "2" ]; then
 		deployment_mode="tarball"
 	else
@@ -913,7 +920,7 @@ SERVICEACC
 	echo ""
 	echo "***  Deployment summary:  ***"
 	echo ""
-	echo "    Deploymnet mode:  ${deployment_mode}"
+	echo "    Deployment mode:  ${deployment_mode}"
 	echo "    Deployment name:  ${deployment_name}"
 	echo "    GCP project ID:   ${project_id}"
 	echo "    GCP zone:         ${zone}"
@@ -939,11 +946,30 @@ SERVICEACC
 }
 
 deploy_from_config() {
-	# Read the YAML file as an associative array
+	# Read the flat 'key: value' YAML file as an associative array
+	#   - Skips blank lines and comment lines
+	#   - A value wrapped in matching single or double quotes is unquoted
+	#     (quotes are kept as they are if the value uses escapes)
+	#   - Otherwise a comment ('#' at the start or after whitespace) is removed
 	declare -A yaml_array
-	while IFS='=: ' read -r key value; do
-		[[ -n $key ]] && yaml_array[$key]=$value
-	done < <(grep -vE '^#|^\s*$' "$config_file" | sed -n '/:/p')
+	local line key value
+	local keyval_re='^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*:[[:space:]]*(.*)$'
+	local dquote_re='^"([^"\\]*)"[[:space:]]*(#.*)?$'
+	local squote_re="^'([^']*)'[[:space:]]*(#.*)?$"
+	while IFS='' read -r line || [[ -n ${line} ]]; do
+		[[ ${line} =~ ${keyval_re} ]] || continue
+		key=${BASH_REMATCH[1]}
+		value=${BASH_REMATCH[2]}
+		if [[ ${value} =~ ${dquote_re} || ${value} =~ ${squote_re} ]]; then
+			value=${BASH_REMATCH[1]}
+		elif [[ ${value} == '#'* ]]; then
+			value=''
+		else
+			value=${value%%[[:space:]]#*}
+			value=${value%"${value##*[![:space:]]}"}
+		fi
+		yaml_array[${key}]=${value}
+	done <"${config_file}"
 
 	local required_params=("deployment_name" "project_id" "zone" "django_superuser_username" "django_superuser_email")
 	# Check that all required parameters are present in the YAML file
@@ -958,6 +984,8 @@ deploy_from_config() {
 	deployment_name=${yaml_array[deployment_name]}
 	project_id=${yaml_array[project_id]}
 	zone=${yaml_array[zone]}
+	# -- Region: use the 'region' key if given, else clip the zone suffix
+	region=${yaml_array[region]:-${zone%-*}}
 	subnet_name=${yaml_array[subnet_name]}
 	dns_hostname=${yaml_array[dns_hostname]}
 	ip_address=${yaml_array[ip_address]}
@@ -985,7 +1013,7 @@ deploy_from_config() {
 	echo ""
 	echo "***  Deployment summary:  ***"
 	echo ""
-	echo "    Deploymnet mode:  ${deployment_mode}"
+	echo "    Deployment mode:  ${deployment_mode}"
 	echo "    Deployment name:  ${deployment_name}"
 	echo "    GCP project ID:   ${project_id}"
 	echo "    GCP zone:         ${zone}"

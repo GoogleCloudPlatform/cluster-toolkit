@@ -28,6 +28,7 @@ delete_service_account() {
 
 	local project=${1}
 	local server_name=${2}
+	local assume_yes=${3}
 	local service_account="${server_name}-tkfe-sa"
 	local ready
 
@@ -38,7 +39,12 @@ delete_service_account() {
 	fi
 
 	echo "  Service account found: ${service_account}"
-	read -r -p "           Delete [y/N] > " ready
+	if [[ ${assume_yes} == "-y" ]]; then
+		echo "           -y flag passed. Deleting."
+		ready=y
+	else
+		read -r -p "           Delete [y/N] > " ready
+	fi
 	case "$ready" in
 	[Yy]*)
 		if ! bash "${SCRIPT_DIR}/script/service_account.sh" delete \
@@ -121,7 +127,9 @@ HEADER
 #
 if ! command -v terraform &>/dev/null; then
 	echo "  Error:"
-	echo "      Please ensure terraform (version 0.13 or higher) is in your \$PATH"
+	tf_version=$(sed -nE 's/^[[:space:]]*required_version[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/p' \
+		"${SCRIPT_DIR}/tf/versions.tf")
+	echo "      Please ensure terraform (version ${tf_version}) is in your \$PATH"
 	echo "Exiting."
 	exit 1
 fi
@@ -177,7 +185,7 @@ dname=$(awk '$1 ~ /deployment_name/ {v=substr($3,2,length($3)-2); print v}' \
 # -- The tf directory can exist, but TKFE deployment was aborted
 #    If this happened, the service account may still need removing.
 #
-delete_service_account "${project}" "${dname}"
+delete_service_account "${project}" "${dname}" "${1}"
 
 # -- Now check TKFE was deployed - get server name from terraform
 #

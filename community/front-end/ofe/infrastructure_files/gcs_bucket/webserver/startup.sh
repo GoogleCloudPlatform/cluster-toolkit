@@ -16,7 +16,7 @@
 # Startup script to prepare a new VM to host the web application for the
 # Multi-platform HPC Application System
 
-# based on a CentOS 8 system
+# based on a Rocky Linux 8 system
 
 #set -v
 
