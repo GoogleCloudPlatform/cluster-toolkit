@@ -362,6 +362,8 @@ resource "google_container_node_pool" "node_pool" {
       # Best-effort provisioning only applies at creation and forces replacement,
       # so changing it must never recreate an existing node pool.
       best_effort_provisioning,
+      # Suppress GKE API read drift where type="COMPACT" is omitted on GET
+      placement_policy[0].type,
     ]
     precondition {
       condition     = !(length(compact(local.input_reservation_suffixes)) > 0 && length((var.zones != null ? var.zones : [])) == 0)

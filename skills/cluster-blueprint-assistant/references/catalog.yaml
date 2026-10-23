@@ -3344,7 +3344,6 @@ blueprints:
     project_id: null
     region: null
     reservation: null
-    spot: null
     system_node_pool_disk_size_gb: 200
     tpu_topology: null
     user_namespace: default
@@ -3515,11 +3514,11 @@ blueprints:
     settings: [enable_hierarchical_namespace, force_destroy, local_mount, name_prefix, random_suffix]
   - id: checkpoint_bucket
     source: modules/file-system/cloud-storage-bucket
-    settings: [enable_hierarchical_namespace, force_destroy, local_mount, name_prefix, random_suffix]
+    settings: [enable_hierarchical_namespace, force_destroy, local_mount, name_prefix, object_users, random_suffix]
   - id: gke-tpu-v6e-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-v6e-net-0, workload_service_account]
-    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_filestore_csi, enable_gcsfuse_csi, enable_managed_lustre_csi, enable_ml_diagnostics, enable_pathways_for_tpus, enable_persistent_disk_csi, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, namespace, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_filestore_csi, enable_gcsfuse_csi, enable_managed_lustre_csi, enable_ml_diagnostics, enable_multi_tier_checkpointing, enable_pathways_for_tpus, enable_persistent_disk_csi, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, namespace, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: gke-tpu-v6e-pool
     source: modules/compute/gke-node-pool
     use: [gke-tpu-v6e-cluster, node_pool_service_account]
@@ -3527,7 +3526,7 @@ blueprints:
   - id: workload-manager-install
     source: modules/management/kubectl-apply
     use: [gke-tpu-v6e-cluster]
-    settings: [cert_manager, jobset, kueue]
+    settings: [cert_manager, checkpoint_configuration, jobset, kueue]
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
     use: [training_bucket, gke-tpu-v6e-cluster]
@@ -3539,7 +3538,7 @@ blueprints:
   - id: fio-bench-job-template
     source: modules/compute/gke-job-template
     use: [checkpointing-pv, training-pv, gke-tpu-v6e-pool]
-    settings: [command, image, k8s_service_account_name, node_count, requested_cpu_per_pod, security_context]
+    settings: [command, image, k8s_service_account_name, name, node_count, requested_cpu_per_pod, security_context]
 - path: examples/gke-tpu-v6e/gke-tpu-v6e.yaml
   deployment_path: examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml
   blueprint_name: gke-tpu-v6e
@@ -5464,7 +5463,7 @@ blueprints:
     settings: [machine_type, name, static_node_count, threads_per_core, zones]
   - id: data-bucket
     source: modules/file-system/cloud-storage-bucket
-    settings: [anywhere_cache, force_destroy, local_mount, object_users, random_suffix]
+    settings: [anywhere_cache, enable_hierarchical_namespace, force_destroy, local_mount, object_users, random_suffix]
   - id: workload-manager-install
     source: modules/management/kubectl-apply
     use: [gke_cluster]
@@ -5472,7 +5471,7 @@ blueprints:
   - id: apply_mtc_config
     source: modules/management/kubectl-apply
     use: [gke_cluster]
-    settings: [apply_manifests]
+    settings: [checkpoint_configuration]
   - id: data-bucket-pv
     source: modules/file-system/gke-persistent-volume
     use: [gke_cluster, data-bucket]

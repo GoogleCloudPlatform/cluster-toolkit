@@ -36,6 +36,36 @@
     job_name: "pw-{{ build | default('test') }}"
     dry_run_file: "/tmp/{{ deployment_name }}-pw-dry-run.yaml"
     templated_command: "{{ custom_vars.workload_command | replace('GCS_BUCKET', custom_vars.gcs_bucket) }}"
+    enable_mtc: "{{ custom_vars.enable_mtc | default(false) | bool }}"
+    mtc_ramdisk_dir: "{{ custom_vars.mtc_ramdisk_dir | default('/gke-mtc') }}"
+
+- name: Verify MTC CheckpointConfiguration and CSI Driver DaemonSet Readiness
+  when: enable_mtc | bool
+  block:
+  - name: Verify CheckpointConfiguration CR exists and specifies a backing GCS bucket
+    delegate_to: localhost
+    ansible.builtin.command: >
+      kubectl get checkpointconfigurations.checkpointing.gke.io
+      -o jsonpath='{.items[0].spec.cloudStorageBucketName}'
+    register: mtc_config_bucket
+    changed_when: false
+    failed_when: mtc_config_bucket.rc != 0 or (mtc_config_bucket.stdout | trim | length == 0)
+
+  - name: Wait for MTC multitier-driver DaemonSet to become Ready on TPU nodes
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      set -eo pipefail
+      DESIRED=$(kubectl get ds -n gke-managed-checkpointing -l k8s-app=high-scale-checkpointing -o jsonpath='{.items[0].status.desiredNumberScheduled}' 2>/dev/null || echo 0)
+      READY=$(kubectl get ds -n gke-managed-checkpointing -l k8s-app=high-scale-checkpointing -o jsonpath='{.items[0].status.numberReady}' 2>/dev/null || echo 0)
+      echo "desired=${DESIRED} ready=${READY}"
+      [ "${DESIRED:-0}" -gt 0 ] && [ "${READY:-0}" -eq "${DESIRED}" ]
+    args:
+      executable: /bin/bash
+    register: mtc_ds_ready
+    until: mtc_ds_ready.rc == 0
+    retries: 60
+    delay: 10
+    changed_when: false
 
 - name: Check if ML Diagnostics GCS bucket exists
   delegate_to: localhost
@@ -63,42 +93,33 @@
   ansible.builtin.command: gcloud auth configure-docker {{ region }}-docker.pkg.dev --quiet
   changed_when: false
 
+- name: Build GCluster Job Submit Dry-Run command arguments
+  ansible.builtin.set_fact:
+    dry_run_argv: >-
+      {{
+        [
+          workspace ~ '/gcluster', 'job', 'submit', '--pathways',
+          '--name', job_name,
+          '--num-slices', (custom_vars.num_slices | string),
+          '--compute-type', custom_vars.tpu_type,
+          '--project', custom_vars.project,
+          '--location', region,
+          '--cluster', deployment_name,
+          '--image', custom_vars.workload_image,
+          '--pathways-gcs-location', 'gs://' ~ custom_vars.gcs_bucket ~ '/pathways-tests-' ~ deployment_name,
+          '--command', templated_command,
+          '--pathways-proxy-env', 'TEST_PROXY_VAR=proxy_val',
+          '--pathways-server-env', 'TEST_SERVER_VAR=server_val',
+          '--pathways-worker-env', 'TEST_WORKER_VAR=worker_val',
+          '--pathways-max-slice-restarts', '5',
+          '--dry-run-out', dry_run_file
+        ] + (['--gke-mtc-enabled', '--gke-mtc-ramdisk-dir', mtc_ramdisk_dir] if (enable_mtc | bool) else [])
+      }}
+
 - name: Execute GCluster Job Submit Dry-Run
   delegate_to: localhost
   ansible.builtin.command:
-    argv:
-    - "{{ workspace }}/gcluster"
-    - "job"
-    - "submit"
-    - "--pathways"
-    - "--name"
-    - "{{ job_name }}"
-    - "--num-slices"
-    - "{{ custom_vars.num_slices }}"
-    - "--compute-type"
-    - "{{ custom_vars.tpu_type }}"
-    - "--project"
-    - "{{ custom_vars.project }}"
-    - "--location"
-    - "{{ region }}"
-    - "--cluster"
-    - "{{ deployment_name }}"
-    - "--image"
-    - "{{ custom_vars.workload_image }}"
-    - "--pathways-gcs-location"
-    - "gs://{{ custom_vars.gcs_bucket }}/pathways-tests-{{ deployment_name }}"
-    - "--command"
-    - "{{ templated_command }}"
-    - "--pathways-proxy-env"
-    - "TEST_PROXY_VAR=proxy_val"
-    - "--pathways-server-env"
-    - "TEST_SERVER_VAR=server_val"
-    - "--pathways-worker-env"
-    - "TEST_WORKER_VAR=worker_val"
-    - "--pathways-max-slice-restarts"
-    - "5"
-    - "--dry-run-out"
-    - "{{ dry_run_file }}"
+    argv: "{{ dry_run_argv }}"
   changed_when: false
 
 - name: Read generated Dry-Run manifest
@@ -150,36 +171,51 @@
       | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec') | first).parallelism
     fail_msg: "Environment variables or slice restart limits failed to inject properly in dry-run output"
 
+- name: Validate MTC CSI volume injection in dry-run manifest
+  when: enable_mtc | bool
+  ansible.builtin.assert:
+    that:
+    - >
+      dry_run_yaml.spec.replicatedJobs
+      | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec.template.spec.volumes') | flatten
+      | selectattr('name', 'equalto', 'cache') | selectattr('csi.driver', 'equalto', 'multitier-checkpoint.csi.storage.gke.io') | list | length == 1
+    - >
+      dry_run_yaml.spec.replicatedJobs
+      | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec.template.spec.containers') | flatten
+      | selectattr('name', 'equalto', 'pathways-worker') | map(attribute='volumeMounts') | flatten
+      | selectattr('name', 'equalto', 'cache') | selectattr('mountPath', 'equalto', mtc_ramdisk_dir) | list | length == 1
+    - >
+      dry_run_yaml.spec.replicatedJobs
+      | selectattr('name', 'equalto', 'pathways-head') | map(attribute='template.spec.template.spec.volumes') | flatten
+      | selectattr('name', 'equalto', 'cache') | list | length == 0
+    fail_msg: "MTC CSI volume was not properly injected onto worker (or was unexpectedly injected onto pathways-head) in dry-run output"
+
 # ==========================================
 # WORKFLOW 2: Submit & Environment Verification
 # ==========================================
 
+- name: Build GCluster Job Submit command arguments
+  ansible.builtin.set_fact:
+    submit_argv: >-
+      {{
+        [
+          workspace ~ '/gcluster', 'job', 'submit', '--pathways',
+          '--name', job_name,
+          '--num-slices', (custom_vars.num_slices | string),
+          '--compute-type', custom_vars.tpu_type,
+          '--project', custom_vars.project,
+          '--location', region,
+          '--cluster', deployment_name,
+          '--image', custom_vars.workload_image,
+          '--pathways-gcs-location', 'gs://' ~ custom_vars.gcs_bucket ~ '/pathways-tests-' ~ deployment_name,
+          '--command', templated_command
+        ] + (['--gke-mtc-enabled', '--gke-mtc-ramdisk-dir', mtc_ramdisk_dir] if (enable_mtc | bool) else [])
+      }}
+
 - name: Submit the actual Pathways job to GKE
   delegate_to: localhost
   ansible.builtin.command:
-    argv:
-    - "{{ workspace }}/gcluster"
-    - "job"
-    - "submit"
-    - "--pathways"
-    - "--name"
-    - "{{ job_name }}"
-    - "--num-slices"
-    - "{{ custom_vars.num_slices }}"
-    - "--compute-type"
-    - "{{ custom_vars.tpu_type }}"
-    - "--project"
-    - "{{ custom_vars.project }}"
-    - "--location"
-    - "{{ region }}"
-    - "--cluster"
-    - "{{ deployment_name }}"
-    - "--image"
-    - "{{ custom_vars.workload_image }}"
-    - "--pathways-gcs-location"
-    - "gs://{{ custom_vars.gcs_bucket }}/pathways-tests-{{ deployment_name }}"
-    - "--command"
-    - "{{ templated_command }}"
+    argv: "{{ submit_argv }}"
   register: submission_output
   changed_when: false
 
@@ -199,6 +235,19 @@
     ansible.builtin.command: kubectl wait --for=condition=Initialized pod -l jobset.sigs.k8s.io/jobset-name={{ job_name }} --timeout=600s
     register: wait_result
     until: wait_result.rc == 0
+    retries: 20
+    delay: 5
+    changed_when: false
+
+  - name: Wait for Pathways Worker pod to reach Ready state with MTC CSI volume mounted
+    when: enable_mtc | bool
+    delegate_to: localhost
+    ansible.builtin.command: >
+      kubectl wait --for=condition=Ready pod
+      -l jobset.sigs.k8s.io/jobset-name={{ job_name }},jobset.sigs.k8s.io/replicatedjob-name=worker
+      --timeout=600s
+    register: worker_ready_result
+    until: worker_ready_result.rc == 0
     retries: 20
     delay: 5
     changed_when: false
@@ -253,6 +302,78 @@
       - streaming_logs.stdout is search("JAX TPU Result")
       - streaming_logs.stdout is search(custom_vars.expected_log_output)
       fail_msg: "Failed to find expected JAX output in streaming logs."
+
+  - name: Verify MTC RAM disk mount, checkpoint I/O, and Replicator handshake on Pathways TPU Worker
+    when: enable_mtc | bool
+    block:
+    - name: Get Pathways Worker pod name
+      delegate_to: localhost
+      ansible.builtin.command: >
+        kubectl get pod
+        -l jobset.sigs.k8s.io/jobset-name={{ job_name }},jobset.sigs.k8s.io/replicatedjob-name=worker
+        -o jsonpath='{.items[0].metadata.name}'
+      register: worker_pod_name
+      changed_when: false
+
+    - name: Execute MTC checkpoint write/read and Replicator initialization on TPU Worker
+      delegate_to: localhost
+      ansible.builtin.command:
+        argv:
+        - kubectl
+        - exec
+        - "{{ worker_pod_name.stdout }}"
+        - -c
+        - pathways-worker
+        - --
+        - /bin/sh
+        - -c
+        - |
+          if [ -x /toybox ]; then TB=/toybox; else TB=""; fi
+          grep -E "\s{{ mtc_ramdisk_dir }}\s+tmpfs\s" /proc/mounts || exit 1
+          $TB df -h "{{ mtc_ramdisk_dir }}" || exit 1
+          rm -f "{{ mtc_ramdisk_dir }}/replicator.yaml" || exit 1
+          cat <<'EOF' > "{{ mtc_ramdisk_dir }}/replicator.yaml" || exit 1
+          job-name: {{ job_name }}
+          framework: orbax
+          assume-data-parallelism: 1
+          node-rank: 0
+          nodes: 1
+          peers-per-node: 1
+          backup-interval-minutes: 1
+          EOF
+          for i in $($TB seq 1 30); do
+            if [ ! -f "{{ mtc_ramdisk_dir }}/replicator.yaml" ]; then
+              echo "MTC_REPLICATOR_INITIALIZED"
+              break
+            fi
+            sleep 2
+          done
+          test ! -f "{{ mtc_ramdisk_dir }}/replicator.yaml" || exit 1
+          mkdir -p "{{ mtc_ramdisk_dir }}/step-1" || exit 1
+          $TB dd if=/dev/urandom of="{{ mtc_ramdisk_dir }}/step-1/checkpoint.bin" bs=1M count=4 status=none || exit 1
+          $TB sha256sum "{{ mtc_ramdisk_dir }}/step-1/checkpoint.bin" > "{{ mtc_ramdisk_dir }}/step-1/checkpoint.bin.sha256" || exit 1
+          $TB sha256sum -c "{{ mtc_ramdisk_dir }}/step-1/checkpoint.bin.sha256" || exit 1
+          rm -rf "{{ mtc_ramdisk_dir }}/step-1" || exit 1
+      register: worker_mtc_check
+      changed_when: false
+
+    - name: Assert MTC Replicator initialized and checkpoint I/O succeeded on TPU Worker
+      ansible.builtin.assert:
+        that:
+        - "'MTC_REPLICATOR_INITIALIZED' in worker_mtc_check.stdout"
+        fail_msg: "MTC Replicator did not consume replicator.yaml on TPU worker: {{ worker_mtc_check.stdout }} {{ worker_mtc_check.stderr }}"
+
+    - name: Signal Pathways Workload container that MTC verification completed
+      delegate_to: localhost
+      ansible.builtin.shell: |
+        HEAD_POD=$(kubectl get pod -l jobset.sigs.k8s.io/jobset-name={{ job_name }},jobset.sigs.k8s.io/replicatedjob-name=pathways-head -o jsonpath='{.items[0].metadata.name}')
+        kubectl exec "${HEAD_POD}" -c workload-container -- touch /tmp/mtc_verified
+      register: signal_mtc_verified
+      retries: 5
+      delay: 2
+      until: signal_mtc_verified.rc == 0
+      changed_when: false
+      ignore_errors: true
 
   rescue:
   - name: "FAILURE: Job failed execution. Gathering GCluster diagnostic inspection."

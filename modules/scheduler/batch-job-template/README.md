@@ -32,7 +32,7 @@ user will modify the template after running the Cluster Toolkit.
 ```
 
 See the
-[Google Cloud Batch Example](../../../../examples/README.md#batchyaml-)
+[Google Cloud Batch Example](../../../examples/README.md#batchyaml-)
 for how to use the `batch-job-template` module with other Cluster Toolkit modules such
 as `filestore` and `startup-script`.
 
@@ -146,7 +146,7 @@ limitations under the License.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
-| <a name="module_instance_template"></a> [instance\_template](#module\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 12.1 |
+| <a name="module_instance_template"></a> [instance\_template](#module\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 15.4 |
 | <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | ../../scripts/startup-script | n/a |
 
 ## Resources

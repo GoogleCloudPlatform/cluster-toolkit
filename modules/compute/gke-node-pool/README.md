@@ -21,10 +21,8 @@ Also see a full [GKE example blueprint](../../../examples/hpc-gke.yaml).
 
 ### Taints and Tolerations
 
-By default node pools created with this module will be tainted with
-`user-workload=true:NoSchedule` to prevent system pods from being scheduled.
-User jobs targeting the node pool should include this toleration. This behavior
-can be overridden using the `taints` setting. See
+Custom node taints can be configured on node pools created with this module
+using the `taints` setting (which defaults to `[]`). See
 [docs](https://cloud.google.com/kubernetes-engine/docs/how-to/node-taints) for
 more info.
 
@@ -172,7 +170,7 @@ The following is an example of using a GPU (with sharing config) attached to an 
 
 ```yaml
   - id: n1-t4-pool
-    source: community/modules/compute/gke-node-pool
+    source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       name: n1-t4-pool
@@ -212,15 +210,12 @@ Finally, the following is adding multivpc to a node pool:
   - id: gke-cluster
     source: modules/scheduler/gke-cluster
     use: [network, multinetwork]
-    settings:
-      cluster_name: $(vars.deployment_name)
 
   - id: a3-megagpu_pool
     source: modules/compute/gke-node-pool
     use: [gke-cluster, multinetwork]
     settings:
       machine_type: a3-megagpu-8g
-      ...
 ```
 
 ## Using GCE Reservations
