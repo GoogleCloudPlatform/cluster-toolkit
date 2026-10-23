@@ -391,11 +391,15 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 * **[pre-existing-kms-key]** ![community-badge] ![experimental-badge] : Looks up
   a CryptoKey that already exists, for keys owned by a security team or created
   outside Terraform. Interchangeable with kms-key downstream.
+* **[lldap-server]** ![community-badge] ![experimental-badge] : Creates an
+  LLDAP server VM with users and groups from the blueprint, and outputs an SSSD
+  client setup script for Slurm v6 nodes.
 
 [kubernetes-secret]: security/kubernetes-secret/README.md
 [kms-key]: ../community/modules/security/kms-key/README.md
 [kms-key-iam]: ../community/modules/security/kms-key-iam/README.md
 [pre-existing-kms-key]: ../community/modules/security/pre-existing-kms-key/README.md
+[lldap-server]: ../community/modules/security/lldap-server/README.md
 
 ## Module Fields
 

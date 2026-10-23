@@ -1,0 +1,297 @@
+#!/bin/bash
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# LLDAP server startup script. Runs on every boot and is idempotent.
+set -euo pipefail
+
+PROJECT='${project_id}'
+BASE_DN='${base_dn}'
+LLDAP_IMAGE='${lldap_image}'
+ADMIN_USER='${admin_user}'
+BIND_USER='${bind_user}'
+ADMIN_SECRET='${admin_secret}'
+BIND_SECRET='${bind_secret}'
+CA_SECRET='${ca_secret}'
+STATIC_IP='${static_ip}'
+DATA_DEVICE='/dev/disk/by-id/google-${data_device_name}'
+ENABLE_BACKUPS='${enable_backups}'
+BACKUP_BUCKET='${backup_bucket}'
+BACKUP_SCHEDULE='${backup_schedule}'
+
+BASE=/var/lib/lldap
+TLS=$BASE/tls
+LIB=/usr/local/lib/lldap
+GCP="$LIB/lldap_gcp.py"
+
+log() { echo "lldap-startup: $*"; }
+
+# retry ATTEMPTS DELAY COMMAND...
+retry() {
+	local attempts=$1 delay=$2 i
+	shift 2
+	for ((i = 1; i <= attempts; i++)); do
+		if "$@"; then
+			return 0
+		fi
+		log "attempt $i/$attempts failed: $*"
+		sleep "$delay"
+	done
+	return 1
+}
+
+# --- Packages ---------------------------------------------------------------
+missing=()
+for pkg in podman python3 sqlite3 openssl curl ca-certificates; do
+	dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+done
+if [ "$${#missing[@]}" -gt 0 ]; then
+	log "installing $${missing[*]}"
+	export DEBIAN_FRONTEND=noninteractive
+	retry 10 15 apt-get -o DPkg::Lock::Timeout=300 update
+	retry 5 15 apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends "$${missing[@]}"
+fi
+
+# --- Data disk --------------------------------------------------------------
+for _ in $(seq 1 60); do
+	[ -e "$DATA_DEVICE" ] && break
+	sleep 2
+done
+if [ ! -e "$DATA_DEVICE" ]; then
+	log "data disk $DATA_DEVICE not found"
+	exit 1
+fi
+# blkid -p exits 2 when the device has no filesystem signature. Format only
+# then; any other error stops the script so a disk is never wiped by mistake.
+set +e
+blkid -p "$DATA_DEVICE" >/dev/null 2>&1
+rc=$?
+set -e
+if [ "$rc" -eq 2 ]; then
+	log "formatting blank data disk $DATA_DEVICE"
+	mkfs.ext4 -q -m 0 -L lldap-data "$DATA_DEVICE"
+elif [ "$rc" -ne 0 ]; then
+	log "blkid failed on $DATA_DEVICE (exit $rc); not formatting"
+	exit 1
+fi
+uuid=$(blkid -s UUID -o value "$DATA_DEVICE")
+mkdir -p "$BASE"
+if ! grep -q "^UUID=$uuid " /etc/fstab; then
+	echo "UUID=$uuid $BASE ext4 defaults,nofail,discard 0 2" >>/etc/fstab
+	systemctl daemon-reload
+fi
+mountpoint -q "$BASE" || mount "$BASE"
+resize2fs "$DATA_DEVICE" >/dev/null 2>&1 || true
+chmod 0700 "$BASE"
+install -d -m 0700 "$BASE/secrets" "$TLS" "$BASE/state" "$BASE/backup"
+install -d -m 0755 "$BASE/data"
+
+# --- Helper scripts ---------------------------------------------------------
+install -d -m 0755 "$LIB" /etc/lldap
+cat >"$LIB/lldap_gcp.py" <<'LLDAP_FILE_EOF'
+${gcp_helper_py}
+LLDAP_FILE_EOF
+cat >"$LIB/lldap_sync.py" <<'LLDAP_FILE_EOF'
+${sync_py}
+LLDAP_FILE_EOF
+cat >"$LIB/lldap-backup.sh" <<'LLDAP_FILE_EOF'
+${backup_sh}
+LLDAP_FILE_EOF
+chmod 0644 "$LIB/lldap_gcp.py" "$LIB/lldap_sync.py"
+chmod 0755 "$LIB/lldap-backup.sh"
+
+# --- Secrets ----------------------------------------------------------------
+# Admin and bind passwords live in Secret Manager: read them, or generate and
+# store them on first boot. IAM bindings can take a while to propagate.
+retry 30 10 python3 "$GCP" secret-ensure "$PROJECT" "$ADMIN_SECRET" "$BASE/secrets/admin_password"
+
+# The bind password is read by every client, so it is published only once the
+# bind user works: until then it lives in a 0600 file on the data disk and
+# lldap-sync publishes it after the bind user exists, is in
+# lldap_strict_readonly and can log in. If the secret already has a version,
+# that value is used (later boots).
+BIND_PENDING="$BASE/state/bind-password-unpublished"
+ensure_bind_password() {
+	local rc=0
+	python3 "$GCP" secret-get "$PROJECT" "$BIND_SECRET" "$BASE/secrets/bind_password.tmp" || rc=$?
+	if [ "$rc" -eq 0 ]; then
+		mv -f "$BASE/secrets/bind_password.tmp" "$BASE/secrets/bind_password"
+		rm -f "$BIND_PENDING"
+		return 0
+	fi
+	rm -f "$BASE/secrets/bind_password.tmp"
+	if [ "$rc" -ne 3 ]; then
+		return "$rc"
+	fi
+	# No version yet: keep a password from an earlier boot, or create one.
+	if [ ! -s "$BASE/secrets/bind_password" ]; then
+		(umask 077 && python3 -c 'import secrets, string; a = string.ascii_letters + string.digits; print("".join(secrets.choice(a) for _ in range(32)), end="")' >"$BASE/secrets/bind_password")
+		log "generated a new bind password (published after the bind user is ready)"
+	fi
+	touch "$BIND_PENDING"
+	chmod 0600 "$BIND_PENDING"
+}
+retry 30 10 ensure_bind_password
+# The JWT secret and the key seed (which protects stored password hashes) stay
+# on the data disk.
+for name in jwt_secret key_seed; do
+	if [ ! -s "$BASE/secrets/$name" ]; then
+		(umask 077 && python3 -c 'import secrets; print(secrets.token_urlsafe(48))' >"$BASE/secrets/$name")
+	fi
+done
+(
+	umask 077
+	{
+		echo "LLDAP_JWT_SECRET=$(cat "$BASE/secrets/jwt_secret")"
+		echo "LLDAP_KEY_SEED=$(cat "$BASE/secrets/key_seed")"
+		echo "LLDAP_LDAP_USER_PASS=$(cat "$BASE/secrets/admin_password")"
+	} >"$BASE/secrets/lldap.env"
+)
+
+# --- TLS --------------------------------------------------------------------
+if [ ! -s "$TLS/ca.key" ] || [ ! -s "$TLS/ca.crt" ]; then
+	log "generating the LDAPS CA"
+	(umask 077 && openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "$TLS/ca.key")
+	openssl req -x509 -new -key "$TLS/ca.key" -sha256 -days 3650 \
+		-subj "/CN=LLDAP CA $(hostname -s)" \
+		-addext "basicConstraints=critical,CA:TRUE" \
+		-addext "keyUsage=critical,keyCertSign,cRLSign" \
+		-out "$TLS/ca.crt"
+	rm -f "$TLS/server.crt"
+fi
+fqdn=$(python3 "$GCP" metadata instance/hostname)
+san="IP:$STATIC_IP,DNS:$fqdn,DNS:$(hostname -s)"
+regen=false
+if [ ! -s "$TLS/server.crt" ] || [ ! -s "$TLS/server.key" ]; then
+	regen=true
+elif ! openssl x509 -in "$TLS/server.crt" -noout -checkend 2592000 >/dev/null; then
+	regen=true
+elif [ "$(cat "$TLS/server.san" 2>/dev/null)" != "$san" ]; then
+	regen=true
+elif ! openssl verify -CAfile "$TLS/ca.crt" "$TLS/server.crt" >/dev/null; then
+	regen=true
+fi
+if [ "$regen" = true ]; then
+	log "issuing the LDAPS server certificate for $san"
+	(umask 077 && openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "$TLS/server.key")
+	openssl req -new -key "$TLS/server.key" -subj "/CN=$fqdn" -out "$TLS/server.csr"
+	printf '%s\n' "basicConstraints=critical,CA:FALSE" \
+		"keyUsage=critical,digitalSignature,keyEncipherment" \
+		"extendedKeyUsage=serverAuth" \
+		"subjectAltName=$san" >"$TLS/server.ext"
+	openssl x509 -req -in "$TLS/server.csr" -CA "$TLS/ca.crt" -CAkey "$TLS/ca.key" \
+		-CAcreateserial -sha256 -days 3650 -extfile "$TLS/server.ext" -out "$TLS/server.crt"
+	echo "$san" >"$TLS/server.san"
+fi
+install -d -m 0750 "$BASE/data/tls"
+install -m 0644 "$TLS/server.crt" "$BASE/data/tls/server.crt"
+install -m 0600 "$TLS/server.key" "$BASE/data/tls/server.key"
+
+# --- LLDAP configuration ----------------------------------------------------
+# Our own config file, so the image's template (which has a sample key_seed)
+# is never copied. Secrets come from lldap.env.
+cat >"$BASE/data/lldap_config.toml" <<EOF
+# Managed by the lldap-server startup script. Changes are overwritten at boot.
+ldap_base_dn = "$BASE_DN"
+ldap_user_dn = "$ADMIN_USER"
+database_url = "sqlite:///data/users.db?mode=rwc"
+key_file = ""
+# Reset the admin password to the Secret Manager value on every start.
+force_ldap_user_pass_reset = "always"
+
+[ldaps_options]
+enabled = true
+port = 6360
+cert_file = "/data/tls/server.crt"
+key_file = "/data/tls/server.key"
+EOF
+echo "LLDAP_IMAGE=$LLDAP_IMAGE" >/etc/lldap/image.env
+
+retry 10 15 podman pull "$LLDAP_IMAGE"
+
+cat >/etc/systemd/system/lldap.service <<'LLDAP_FILE_EOF'
+${lldap_service_unit}
+LLDAP_FILE_EOF
+systemctl daemon-reload
+systemctl enable lldap.service
+systemctl restart lldap.service
+
+log "waiting for LLDAP"
+if ! retry 60 5 curl -fsS -o /dev/null http://127.0.0.1:17170/; then
+	log "LLDAP did not start; see: journalctl -u lldap"
+	exit 1
+fi
+
+retry 30 10 python3 "$GCP" secret-sync "$PROJECT" "$CA_SECRET" "$TLS/ca.crt"
+
+# --- User and group sync ----------------------------------------------------
+cat >/etc/lldap/sync.env <<EOF
+LLDAP_PROJECT=$PROJECT
+LLDAP_ADMIN_USER=$ADMIN_USER
+LLDAP_BIND_USER=$BIND_USER
+LLDAP_BIND_SECRET=$BIND_SECRET
+EOF
+cat >/etc/systemd/system/lldap-sync.service <<'EOF'
+[Unit]
+Description=Sync LLDAP users and groups from the lldap-config metadata
+Wants=lldap.service
+After=lldap.service
+
+[Service]
+EnvironmentFile=/etc/lldap/sync.env
+ExecStart=/usr/bin/python3 /usr/local/lib/lldap/lldap_sync.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# --- Backups ----------------------------------------------------------------
+if [ "$ENABLE_BACKUPS" = true ]; then
+	echo "LLDAP_BACKUP_BUCKET=$BACKUP_BUCKET" >/etc/lldap/backup.env
+	cat >/etc/systemd/system/lldap-backup.service <<'EOF'
+[Unit]
+Description=Back up the LLDAP database to GCS
+Requires=lldap.service
+After=lldap.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/lldap/backup.env
+ExecStart=/bin/bash /usr/local/lib/lldap/lldap-backup.sh
+EOF
+	cat >/etc/systemd/system/lldap-backup.timer <<EOF
+[Unit]
+Description=Scheduled LLDAP backup to GCS
+
+[Timer]
+OnCalendar=$BACKUP_SCHEDULE
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
+EOF
+	systemctl daemon-reload
+	systemctl enable --now lldap-backup.timer
+else
+	systemctl disable --now lldap-backup.timer >/dev/null 2>&1 || true
+	rm -f /etc/systemd/system/lldap-backup.timer /etc/systemd/system/lldap-backup.service
+fi
+
+systemctl daemon-reload
+systemctl enable lldap-sync.service
+systemctl restart lldap-sync.service
+log "done"

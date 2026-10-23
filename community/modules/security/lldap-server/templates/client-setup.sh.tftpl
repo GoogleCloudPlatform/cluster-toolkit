@@ -1,0 +1,478 @@
+#!/bin/bash
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# LDAP client (SSSD) setup for the lldap-server module. Runs as root on every
+# boot of Slurm controller, login and compute nodes, and is idempotent.
+# Supported: Rocky Linux 8/9, Debian 12, Ubuntu 22.04/24.04.
+set -euo pipefail
+
+PROJECT='${project_id}'
+LDAP_URI='${ldap_uri}'
+BASE_DN='${base_dn}'
+BIND_DN='${bind_dn}'
+ACCESS_GROUP='${access_group}'
+CA_SECRET='${ca_secret}'
+BIND_SECRET='${bind_secret}'
+SECRET_WAIT_SECONDS='${secret_wait_seconds}'
+
+CA_FILE=/etc/sssd/lldap-ca.crt
+SSSD_CONF=/etc/sssd/sssd.conf
+SSHD_DROPIN=/etc/ssh/sshd_config.d/00-lldap.conf
+SSHD_MARKER="# Managed by lldap-client-setup"
+
+log() { echo "lldap-client-setup: $*"; }
+die() {
+	echo "lldap-client-setup: ERROR: $*" >&2
+	exit 1
+}
+
+# --- OS check ---------------------------------------------------------------
+[ -r /etc/os-release ] || die "/etc/os-release not found"
+# shellcheck source=/dev/null
+. /etc/os-release
+os_major=$(echo "$VERSION_ID" | cut -d. -f1)
+case "$ID:$os_major:$VERSION_ID" in
+rocky:8:* | rocky:9:*) family=rhel ;;
+debian:12:*) family=debian ;;
+ubuntu:22:22.04 | ubuntu:24:24.04) family=debian ;;
+*) die "unsupported OS '$PRETTY_NAME'. Supported: Rocky Linux 8/9, Debian 12, Ubuntu 22.04/24.04." ;;
+esac
+log "configuring SSSD on $PRETTY_NAME"
+
+workdir=$(mktemp -d)
+chmod 0700 "$workdir"
+trap 'rm -rf "$workdir"' EXIT
+
+# --- Secrets ----------------------------------------------------------------
+# fetch_secret SECRET OUTFILE: exit 0 on success, 3 if the secret has no version
+# yet or is not readable, other codes on errors.
+fetch_secret() {
+	python3 - "$PROJECT" "$1" "$2" <<'PYEOF'
+import base64, json, os, sys, urllib.error, urllib.request
+project, secret, out = sys.argv[1:4]
+md = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"
+req = urllib.request.Request(md, headers={"Metadata-Flavor": "Google"})
+token = json.load(urllib.request.urlopen(req, timeout=10))["access_token"]
+url = ("https://secretmanager.googleapis.com/v1/projects/%s/secrets/%s/versions/latest:access"
+       % (project, secret))
+req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token})
+try:
+    data = json.load(urllib.request.urlopen(req, timeout=30))
+except urllib.error.HTTPError as err:
+    print("secret %s: HTTP %d" % (secret, err.code), file=sys.stderr)
+    sys.exit(3)
+fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+with os.fdopen(fd, "wb") as f:
+    f.write(base64.b64decode(data["payload"]["data"]))
+PYEOF
+}
+
+# The LLDAP VM writes the first versions on its first boot, which may finish
+# after this node boots.
+deadline=$((SECONDS + SECRET_WAIT_SECONDS))
+until fetch_secret "$CA_SECRET" "$workdir/ca.crt" && fetch_secret "$BIND_SECRET" "$workdir/bind"; do
+	if [ "$SECONDS" -ge "$deadline" ]; then
+		die "could not read secrets $CA_SECRET and $BIND_SECRET within $SECRET_WAIT_SECONDS seconds. Check that the LLDAP VM finished its first boot and that this VM's service account is in client_service_accounts."
+	fi
+	log "waiting for the LLDAP secrets"
+	sleep 10
+done
+grep -q "BEGIN CERTIFICATE" "$workdir/ca.crt" || die "secret $CA_SECRET does not hold a PEM certificate"
+bind_password=$(cat "$workdir/bind")
+
+# --- Packages ---------------------------------------------------------------
+if [ "$family" = rhel ]; then
+	if ! rpm -q sssd sssd-ldap oddjob-mkhomedir authselect >/dev/null 2>&1; then
+		log "installing sssd packages"
+		dnf install -y sssd sssd-ldap oddjob-mkhomedir authselect
+	fi
+else
+	pkgs=(sssd sssd-ldap libnss-sss libpam-sss ca-certificates)
+	if ! dpkg -s "$${pkgs[@]}" >/dev/null 2>&1; then
+		log "installing sssd packages"
+		export DEBIAN_FRONTEND=noninteractive
+		apt-get -o DPkg::Lock::Timeout=300 update
+		apt-get -o DPkg::Lock::Timeout=300 install -y "$${pkgs[@]}"
+	fi
+fi
+
+# --- nsswitch ---------------------------------------------------------------
+# Keep every source already on the passwd and group lines (slurm from Slurm's
+# setup_nss_slurm, cache_oslogin/oslogin from the guest agent) and add sss.
+nss_before="$workdir/nsswitch.before"
+cat /etc/nsswitch.conf >"$nss_before"
+
+merge_nsswitch() {
+	python3 - "$nss_before" <<'PYEOF'
+import os, re, sys
+
+LINE = re.compile(r"^(\s*)(passwd|group)(\s*:\s*)([^#\n]*?)(\s*(#.*)?)$")
+
+def units(spec):
+    # "files [SUCCESS=merge] sss" -> [("files", "files [SUCCESS=merge]"), ("sss", "sss")]
+    out = []
+    for tok in spec.split():
+        if tok.startswith("[") and out:
+            out[-1] = (out[-1][0], out[-1][1] + " " + tok)
+        else:
+            out.append((tok, tok))
+    return out
+
+def sources(text):
+    found = {}
+    for line in text.splitlines():
+        m = LINE.match(line)
+        if m and m.group(2) not in found:
+            found[m.group(2)] = units(m.group(4))
+    return found
+
+before = sources(open(sys.argv[1]).read())
+target = os.path.realpath("/etc/nsswitch.conf")
+lines = open(target).read().splitlines()
+seen = set()
+for i, line in enumerate(lines):
+    m = LINE.match(line)
+    if not m or m.group(2) in seen:
+        continue
+    db = m.group(2)
+    seen.add(db)
+    cur = units(m.group(4))
+    names = [u[0] for u in cur]
+    prev = None
+    for unit in before.get(db, []):
+        if unit[0] in names:
+            # Keep an earlier "[...]" action if the rewritten line dropped it;
+            # an action set by the new line wins.
+            idx = names.index(unit[0])
+            if unit[1] != unit[0] and cur[idx][1] == cur[idx][0]:
+                cur[idx] = unit
+            prev = unit[0]
+            continue
+        pos = 0 if prev is None else names.index(prev) + 1
+        cur.insert(pos, unit)
+        names.insert(pos, unit[0])
+        prev = unit[0]
+    if "sss" not in names:
+        cur.append(("sss", "sss"))
+    lines[i] = m.group(1) + db + m.group(3) + " ".join(u[1] for u in cur) + m.group(5)
+for db in ("passwd", "group"):
+    if db not in seen:
+        lines.append(db + ": " + " ".join(u[1] for u in before.get(db, [("files", "files")])) + " sss")
+new = "\n".join(lines) + "\n"
+if new != open(target).read():
+    with open(target, "w") as f:
+        f.write(new)
+    print("updated " + target)
+
+# Verify: every earlier source and sss are present.
+after = sources(new)
+for db in ("passwd", "group"):
+    have = {u[0] for u in after.get(db, [])}
+    missing = ({u[0] for u in before.get(db, [])} | {"sss"}) - have
+    if missing:
+        sys.exit("nsswitch %s is missing %s" % (db, sorted(missing)))
+PYEOF
+}
+
+# --- PAM / authselect -------------------------------------------------------
+# pam_sss's account control gets authinfo_unavail=ignore, so OS Login and other
+# non-LDAP users can still log in while sssd is down. LDAP users cannot then
+# resolve (memcache_timeout = 0 in sssd.conf), so they stay locked out.
+PAM_SSS_NEW='[default=bad success=ok user_unknown=ignore authinfo_unavail=ignore]'
+PAM_SSS_OLD_RE='\[default=bad success=ok user_unknown=ignore\]'
+PAM_SSS_NEW_RE='\[default=bad success=ok user_unknown=ignore authinfo_unavail=ignore\]'
+
+# patch_authselect_profile DIR: rewrite the pam_sss account control in every
+# PAM file of a custom authselect profile. Idempotent.
+patch_authselect_profile() {
+	local dir=$1 f
+	for f in system-auth password-auth smartcard-auth fingerprint-auth; do
+		[ -f "$dir/$f" ] || continue
+		sed -i -E "s/^(account[[:space:]]+)$${PAM_SSS_OLD_RE}([[:space:]]+pam_sss\.so)/\1$${PAM_SSS_NEW}\2/" "$dir/$f"
+		if grep -Eq "^account[[:space:]]+$${PAM_SSS_OLD_RE}[[:space:]]+pam_sss\.so" "$dir/$f"; then
+			die "$dir/$f still has the old pam_sss account control"
+		fi
+	done
+	for f in system-auth password-auth; do
+		grep -Eq "^account[[:space:]]+$${PAM_SSS_NEW_RE}[[:space:]]+pam_sss\.so" "$dir/$f" ||
+			die "pam_sss account line not found in $dir/$f"
+	done
+}
+
+# make_mkhomedir_config SRC DST: write DST, a copy of the stock "mkhomedir"
+# pam-auth-update profile whose pam_mkhomedir line uses umask=0077, so new home
+# directories are 0700 (pam_mkhomedir derives the mode from umask=), with a
+# conflict with "mkhomedir". Idempotent.
+make_mkhomedir_config() {
+	local src=$1 dst=$2 tmp
+	tmp=$(mktemp)
+	if [ -r "$src" ]; then
+		cat "$src" >"$tmp"
+	else
+		# Same content as Debian 12's and Ubuntu 24.04's stock profile.
+		printf '%s\n' "Name: Create home directory on login" "Default: no" "Priority: 0" \
+			"Session-Type: Additional" "Session-Interactive-Only: yes" "Session:" \
+			"	optional			pam_mkhomedir.so" >"$tmp"
+	fi
+	sed -i -E -e 's/^Name:.*/Name: Create home directory on login, mode 0700 (lldap-server)/' \
+		-e '/pam_mkhomedir\.so/{s/[[:space:]]+umask=[0-7]+//;s/pam_mkhomedir\.so/pam_mkhomedir.so umask=0077/}' \
+		-e '/^Priority:/a Conflicts: mkhomedir' "$tmp"
+	if [ "$(grep -c 'pam_mkhomedir\.so umask=0077' "$tmp")" -ne 1 ]; then
+		rm -f "$tmp"
+		die "could not derive $dst: pam_mkhomedir line not found"
+	fi
+	if ! cmp -s "$tmp" "$dst"; then
+		install -m 0644 "$tmp" "$dst"
+	fi
+	rm -f "$tmp"
+}
+
+# make_pam_config SRC DST: write DST, a copy of Debian's "sss" pam-auth-update
+# profile with its own Name, the extended account control, and a conflict
+# with "sss" so both are never enabled together. Idempotent.
+make_pam_config() {
+	local src=$1 dst=$2 tmp
+	[ -r "$src" ] || die "$src not found; is libpam-sss installed?"
+	tmp=$(mktemp)
+	sed -E -e 's/^Name:.*/Name: SSS authentication (lldap-server: authinfo_unavail=ignore)/' \
+		-e "s/$${PAM_SSS_OLD_RE}([[:space:]]+pam_sss\.so)/$${PAM_SSS_NEW}\1/" \
+		-e '/^Priority:/a Conflicts: sss' \
+		"$src" >"$tmp"
+	if [ "$(grep -Ec "$${PAM_SSS_NEW_RE}[[:space:]]+pam_sss\.so" "$tmp")" -ne 1 ]; then
+		rm -f "$tmp"
+		die "could not derive $dst from $src: pam_sss account line not found"
+	fi
+	if ! cmp -s "$tmp" "$dst"; then
+		install -m 0644 "$tmp" "$dst"
+	fi
+	rm -f "$tmp"
+}
+
+if [ "$family" = rhel ]; then
+	profile=custom/lldap
+	profile_dir=/etc/authselect/custom/lldap
+	if [ ! -d "$profile_dir" ]; then
+		authselect create-profile lldap -b sssd
+	fi
+	patch_authselect_profile "$profile_dir"
+
+	current=$(authselect current --raw 2>/dev/null || true)
+	read -r -a current_words <<<"$current"
+	need_select=false
+	if [ "$${current_words[0]:-}" != "$profile" ] || [[ " $current " != *" with-mkhomedir "* ]]; then
+		need_select=true
+	fi
+	for f in /etc/pam.d/system-auth /etc/pam.d/password-auth; do
+		grep -Eq "^account[[:space:]]+$${PAM_SSS_NEW_RE}[[:space:]]+pam_sss\.so" "$f" 2>/dev/null || need_select=true
+	done
+	if [ "$need_select" = true ]; then
+		features=()
+		if [ "$${current_words[0]:-}" = sssd ] || [ "$${current_words[0]:-}" = "$profile" ]; then
+			for w in "$${current_words[@]:1}"; do
+				[ "$w" = with-mkhomedir ] || features+=("$w")
+			done
+		fi
+		log "selecting authselect profile: $(printf '%s ' "$profile" "$${features[@]}")with-mkhomedir"
+		# authselect rewrites nsswitch.conf; merge_nsswitch restores the sources.
+		authselect select "$profile" "$${features[@]}" with-mkhomedir --force
+	fi
+	for f in /etc/pam.d/system-auth /etc/pam.d/password-auth; do
+		grep -Eq "^account[[:space:]]+$${PAM_SSS_NEW_RE}[[:space:]]+pam_sss\.so" "$f" ||
+			die "$f lacks the pam_sss account line with authinfo_unavail=ignore"
+	done
+	systemctl enable --now oddjobd.service
+	# oddjob-mkhomedir creates home directories with HOME_MODE from
+	# /etc/login.defs (0700 on Rocky 8 and 9).
+	home_mode=$(awk '$1 == "HOME_MODE" {print $2}' /etc/login.defs 2>/dev/null || true)
+	if [ "$home_mode" != 0700 ]; then
+		log "WARNING: HOME_MODE in /etc/login.defs is '$home_mode', not 0700; new home directories will use it"
+	fi
+	if command -v selinuxenabled >/dev/null 2>&1 && selinuxenabled; then
+		if ! getsebool use_nfs_home_dirs | grep -q -- '--> on'; then
+			setsebool -P use_nfs_home_dirs 1
+		fi
+	fi
+else
+	make_pam_config /usr/share/pam-configs/sss /usr/share/pam-configs/lldap-sss
+	make_mkhomedir_config /usr/share/pam-configs/mkhomedir /usr/share/pam-configs/lldap-mkhomedir
+	pam-auth-update --disable sss mkhomedir --enable lldap-sss lldap-mkhomedir
+	session=/etc/pam.d/common-session
+	if [ "$(grep -c 'pam_mkhomedir\.so' "$session")" -ne 1 ] ||
+		! grep -Eq '^session[[:space:]]+optional[[:space:]]+pam_mkhomedir\.so umask=0077' "$session"; then
+		die "$session must contain exactly one pam_mkhomedir line with umask=0077; check for local changes (pam-auth-update does not overwrite them)"
+	fi
+	account=/etc/pam.d/common-account
+	if [ "$(grep -c 'pam_sss\.so' "$account")" -ne 1 ] ||
+		! grep -Eq "^account[[:space:]]+$${PAM_SSS_NEW_RE}[[:space:]]+pam_sss\.so" "$account"; then
+		die "$account must contain exactly one pam_sss line with authinfo_unavail=ignore; check for local changes (pam-auth-update does not overwrite them)"
+	fi
+fi
+merge_nsswitch || die "could not update /etc/nsswitch.conf"
+
+# --- CA certificate ---------------------------------------------------------
+install -d -m 0755 /etc/sssd
+changed=false
+if ! cmp -s "$workdir/ca.crt" "$CA_FILE"; then
+	install -m 0644 "$workdir/ca.crt" "$CA_FILE"
+	changed=true
+fi
+if [ "$family" = rhel ]; then
+	trust_file=/etc/pki/ca-trust/source/anchors/lldap-ca.crt
+	if ! cmp -s "$workdir/ca.crt" "$trust_file"; then
+		install -m 0644 "$workdir/ca.crt" "$trust_file"
+		update-ca-trust extract
+	fi
+else
+	trust_file=/usr/local/share/ca-certificates/lldap-ca.crt
+	if ! cmp -s "$workdir/ca.crt" "$trust_file"; then
+		install -m 0644 "$workdir/ca.crt" "$trust_file"
+		update-ca-certificates
+	fi
+fi
+
+# --- sssd.conf --------------------------------------------------------------
+cat >"$workdir/sssd.conf" <<EOF
+# Managed by lldap-client-setup (lldap-server module). Changes are overwritten at boot.
+[sssd]
+config_file_version = 2
+services = nss, pam
+domains = lldap
+
+[nss]
+filter_users = root
+filter_groups = root
+# No in-memory cache: LDAP users stop resolving as soon as sssd stops, which PAM's authinfo_unavail=ignore relies on.
+memcache_timeout = 0
+
+[pam]
+offline_failed_login_attempts = 3
+offline_failed_login_delay = 5
+
+[domain/lldap]
+id_provider = ldap
+auth_provider = ldap
+chpass_provider = ldap
+access_provider = ldap
+ldap_access_order = filter
+ldap_access_filter = memberOf=cn=$ACCESS_GROUP,ou=groups,$BASE_DN
+
+ldap_uri = $LDAP_URI
+ldap_schema = rfc2307bis
+ldap_search_base = $BASE_DN
+ldap_default_bind_dn = $BIND_DN
+ldap_default_authtok_type = password
+ldap_default_authtok = $bind_password
+ldap_tls_reqcert = demand
+ldap_tls_cacert = $CA_FILE
+ldap_network_timeout = 5
+ldap_opt_timeout = 10
+
+# LLDAP's posixAccount custom attributes, see LLDAP example_configs/pam.
+ldap_user_search_base = ou=people,$BASE_DN?subtree?(uidNumber=*)
+ldap_user_object_class = posixAccount
+ldap_user_name = uid
+ldap_user_gecos = cn
+ldap_user_uid_number = uidNumber
+ldap_user_gid_number = gidNumber
+ldap_user_home_directory = homeDirectory
+ldap_user_shell = unixShell
+
+ldap_group_search_base = ou=groups,$BASE_DN?subtree?(gidNumber=*)
+ldap_group_object_class = groupOfUniqueNames
+ldap_group_name = cn
+ldap_group_gid_number = gidNumber
+ldap_group_member = uniqueMember
+
+# Only LLDAP IDs (>= 10000, enforced by the module) are served.
+min_id = 10000
+cache_credentials = true
+entry_cache_timeout = 600
+enumerate = false
+EOF
+if ! cmp -s "$workdir/sssd.conf" "$SSSD_CONF"; then
+	install -m 0600 -o root -g root "$workdir/sssd.conf" "$SSSD_CONF"
+	changed=true
+fi
+chmod 0600 "$SSSD_CONF"
+
+# The responders are started by sssd itself (services = nss, pam). Socket
+# activation of the same responders conflicts with that, so turn it off.
+for unit in sssd-nss.socket sssd-pam.socket sssd-pam-priv.socket; do
+	systemctl disable --now "$unit" >/dev/null 2>&1 || true
+done
+systemctl enable sssd.service
+if [ "$changed" = true ] || ! systemctl is-active --quiet sssd.service; then
+	systemctl restart sssd.service
+	sss_cache -E >/dev/null 2>&1 || true
+fi
+
+# Check that lookups work. sssd can start while LLDAP is still being set up
+# and then not recover by itself, so restart it a few times before giving up.
+restarts=0
+until timeout 5 getent group "$ACCESS_GROUP" >/dev/null; do
+	if [ "$restarts" -ge 5 ]; then
+		die "LDAP lookups through sssd failed after 5 restarts; the cluster's LLDAP integration is not working"
+	fi
+	restarts=$((restarts + 1))
+	log "LDAP group $ACCESS_GROUP does not resolve; restarting sssd ($restarts/5)"
+	systemctl restart sssd.service
+	sss_cache -E >/dev/null 2>&1 || true
+	sleep 10
+done
+log "LDAP group $ACCESS_GROUP resolves"
+
+# --- Password SSH on login nodes only ---------------------------------------
+role=$(python3 -c '
+import urllib.request
+url = "http://metadata.google.internal/computeMetadata/v1/instance/attributes/slurm_instance_role"
+req = urllib.request.Request(url, headers={"Metadata-Flavor": "Google"})
+try:
+    print(urllib.request.urlopen(req, timeout=10).read().decode())
+except Exception:
+    print("")
+')
+if [ "$role" = login ]; then
+	sshd_conf=/etc/ssh/sshd_config
+	include_line=$(grep -nE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf' "$sshd_conf" | head -n1 | cut -d: -f1 || true)
+	first_setting=$(grep -niE '^[[:space:]]*(PasswordAuthentication|Match)[[:space:]]' "$sshd_conf" | head -n1 | cut -d: -f1 || true)
+	cp -p "$sshd_conf" "$workdir/sshd_config.bak"
+	# sshd uses the first value it reads. The drop-in works only when the
+	# Include comes before any PasswordAuthentication or Match line in
+	# sshd_config (Debian, Ubuntu, Rocky 9). Otherwise (Rocky 8) prepend.
+	if [ -n "$include_line" ] && { [ -z "$first_setting" ] || [ "$include_line" -lt "$first_setting" ]; }; then
+		install -d -m 0755 /etc/ssh/sshd_config.d
+		printf '%s\nPasswordAuthentication yes\n' "$SSHD_MARKER" >"$SSHD_DROPIN"
+		chmod 0644 "$SSHD_DROPIN"
+	elif ! grep -qF "$SSHD_MARKER" "$sshd_conf"; then
+		{
+			printf '%s\nPasswordAuthentication yes\n' "$SSHD_MARKER"
+			cat "$workdir/sshd_config.bak"
+		} >"$sshd_conf"
+	fi
+	if ! sshd -t; then
+		cp -p "$workdir/sshd_config.bak" "$sshd_conf"
+		rm -f "$SSHD_DROPIN"
+		die "sshd configuration test failed; password SSH was not enabled"
+	fi
+	effective=$(sshd -T -C user=lldap-check,host=localhost,addr=127.0.0.1 2>/dev/null | grep -i '^passwordauthentication ' || true)
+	if [ "$effective" != "passwordauthentication yes" ]; then
+		log "WARNING: sshd reports '$effective' after the change; check Match blocks in $sshd_conf"
+	fi
+	systemctl try-reload-or-restart sshd.service >/dev/null 2>&1 || true
+	systemctl try-reload-or-restart ssh.service >/dev/null 2>&1 || true
+	log "password SSH enabled for LDAP users (login node)"
+fi
+
+log "done"
