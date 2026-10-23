@@ -330,6 +330,18 @@ func withKubeContext(kubeContext string, args []string) []string {
 	return append([]string{"--context", kubeContext}, args...)
 }
 
+// kubectlCommandLine renders a kubectl command, pinned like the ones gcluster runs, for users to copy.
+// Arguments that contain whitespace, such as Windows paths, are double-quoted.
+func kubectlCommandLine(kubeContext string, args ...string) string {
+	parts := append([]string{"kubectl"}, withKubeContext(kubeContext, args)...)
+	for i, p := range parts {
+		if strings.ContainsAny(p, " \t") {
+			parts[i] = `"` + p + `"`
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
 // kubectl runs kubectl against the context chosen by configureKubectl.
 func (g *GKEOrchestrator) kubectl(args ...string) shell.CommandResult {
 	return g.executor.ExecuteCommand("kubectl", withKubeContext(g.kubeContext, args)...)

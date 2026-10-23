@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"io"
@@ -31,41 +32,138 @@ import (
 	"hpc-toolkit/pkg/shell"
 
 	"gopkg.in/yaml.v2"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 // Keep in sync with the jobset.version default in modules/management/kubectl-apply/variables.tf (no 'v' prefix there).
 const defaultJobSetVersion = "v0.12.0"
 
-func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
-	if installed, err := g.isJobSetCRDInstalled(); err != nil {
-		return err
-	} else if installed {
-		logging.Info("JobSet CRD found. Verifying Webhook health...")
-		cmdEndpoints := g.kubectl("get", "endpointslice", "-l", "kubernetes.io/service-name=jobset-webhook-service", "-n", "jobset-system", "-o", "json")
-		if cmdEndpoints.ExitCode == 0 {
-			var eps k8sEndpointSliceList
-			if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
-				logging.Warn("Failed to parse JobSet endpointslice JSON: %v", err)
-			} else if eps.HasReadyEndpoint() {
-				logging.Info("JobSet Webhook is healthy.")
-				return nil
-			}
-		} else if strings.Contains(strings.ToLower(cmdEndpoints.Stderr), "forbidden") {
-			logging.Warn("Insufficient RBAC permissions to read JobSet webhook endpoints (403 Forbidden). Assuming JobSet is healthy in shared cluster.")
-			return nil
-		}
-		logging.Info("JobSet Webhook endpoints not found. Proceeding with re-installation/fix...")
-	}
+const (
+	jobSetNamespace          = "jobset-system"
+	jobSetWebhookServiceName = "jobset-webhook-service"
+	jobSetCRDName            = "jobsets.jobset.x-k8s.io"
+	// jobSetWebhookPollAttempts caps the endpoint reads, so the wait also ends when tests remove the poll interval.
+	jobSetWebhookPollAttempts = 100
+	// jobSetWaitLogInterval is how often the endpoint wait reports that it is still waiting.
+	jobSetWaitLogInterval = 30 * time.Second
+	// kubectlReadTimeout bounds one kubectl read made while waiting for, or diagnosing, a webhook.
+	kubectlReadTimeout = "--request-timeout=10s"
+)
 
-	jobSetManifestsURL := fmt.Sprintf("https://github.com/kubernetes-sigs/jobset/releases/download/%s/manifests.yaml", defaultJobSetVersion)
-	return g.installJobSetCRD(jobSetManifestsURL)
+var (
+	// jobSetWebhookWaitTimeout bounds the whole wait for a ready JobSet webhook endpoint, including slow
+	// kubectl reads; tests shorten it.
+	jobSetWebhookWaitTimeout = 5 * time.Minute
+	// jobSetWebhookPollInterval is the pause between JobSet webhook endpoint reads; tests shorten it.
+	jobSetWebhookPollInterval = 3 * time.Second
+)
+
+// errEndpointsUnreadable marks a failed endpoint read that callers may retry.
+var errEndpointsUnreadable = errors.New("endpoints could not be read")
+
+// jobSetInstallPermissionChecks are the cluster-scoped permissions needed to install JobSet.
+var jobSetInstallPermissionChecks = []permissionCheck{
+	{"create", "namespaces"},
+	{"create", "customresourcedefinitions.apiextensions.k8s.io"},
+	{"create", "clusterroles.rbac.authorization.k8s.io"},
+	{"create", "clusterrolebindings.rbac.authorization.k8s.io"},
+	{"create", "mutatingwebhookconfigurations.admissionregistration.k8s.io"},
+	{"create", "validatingwebhookconfigurations.admissionregistration.k8s.io"},
+}
+
+// checkAndInstallJobSetCRD installs JobSet only when neither its CRD nor its webhook Service exists.
+// When both exist it waits for the webhook to become ready. It never modifies an existing or partial
+// installation: re-applying manifests over one can leave the webhook without endpoints, which blocks
+// every JobSet in the cluster.
+func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
+	crdExists, err := g.resourceExists("crd", jobSetCRDName, "")
+	if err != nil {
+		return fmt.Errorf("failed to check for the JobSet CRD: %w", err)
+	}
+	serviceExists, err := g.resourceExists("service", jobSetWebhookServiceName, jobSetNamespace)
+	if err != nil {
+		return fmt.Errorf("failed to check for the JobSet webhook Service: %w", err)
+	}
+	switch {
+	case crdExists && serviceExists:
+		if err := g.waitForJobSetWebhookEndpoints(); err != nil {
+			return fmt.Errorf("JobSet is installed but its webhook is not ready, and gcluster did not modify the existing JobSet installation: %w", err)
+		}
+		return nil
+	case !crdExists && !serviceExists:
+		return g.installJobSetOnFreshCluster()
+	default:
+		return g.partialJobSetInstallError(crdExists)
+	}
+}
+
+// resourceExists reports whether a Kubernetes object exists. A Forbidden read counts as existing, so a
+// user who cannot read the object never triggers an installation.
+func (g *GKEOrchestrator) resourceExists(kind, name, namespace string) (bool, error) {
+	args := []string{"get", kind, name}
+	if namespace != "" {
+		args = append(args, "-n", namespace)
+	}
+	res := g.kubectl(append(args, "--ignore-not-found", "-o", "name")...)
+	if res.ExitCode == 0 {
+		return strings.TrimSpace(res.Stdout) != "", nil
+	}
+	if strings.Contains(strings.ToLower(res.Stderr), "forbidden") {
+		logging.Warn("Insufficient RBAC permissions to read %s %s (403 Forbidden). Assuming it exists.", kind, name)
+		return true, nil
+	}
+	return false, fmt.Errorf("kubectl get %s %s failed: %s", kind, name, strings.TrimSpace(res.Stderr+"\n"+res.Stdout))
+}
+
+func (g *GKEOrchestrator) installJobSetOnFreshCluster() error {
+	logging.Info("JobSet CRD %s and Service %s/%s not found. Checking the permissions needed to install JobSet...", jobSetCRDName, jobSetNamespace, jobSetWebhookServiceName)
+	if missing := g.missingPermissions(jobSetInstallPermissionChecks); len(missing) > 0 {
+		return fmt.Errorf("JobSet is not installed, and your account cannot install it: missing RBAC permissions [%s]. gcluster made no changes. "+
+			"Ask your cluster administrator to install JobSet (for example with jobset.install: true in the kubectl-apply module) or to run this command once", strings.Join(missing, ", "))
+	}
+	logging.Info("Installing JobSet %s cluster-wide in namespace %s...", defaultJobSetVersion, jobSetNamespace)
+	if err := g.installJobSetCRD(fmt.Sprintf("https://github.com/kubernetes-sigs/jobset/releases/download/%s/manifests.yaml", defaultJobSetVersion)); err != nil {
+		return fmt.Errorf("failed to install JobSet: %w", err)
+	}
+	logging.Info("JobSet %s is installed.", defaultJobSetVersion)
+	return nil
+}
+
+// partialJobSetInstallError explains a JobSet installation that has only one of its CRD and webhook
+// Service. Its fixes never re-apply a JobSet release older than the installed one, or over a
+// controller Deployment of another release: either can leave the webhook without endpoints.
+func (g *GKEOrchestrator) partialJobSetInstallError(crdExists bool) error {
+	kubectl := func(args ...string) string { return kubectlCommandLine(g.kubeContext, args...) }
+	if !crdExists {
+		return fmt.Errorf("JobSet is only partly installed: Service %s/%s exists (or could not be read; see the warning above), but CRD %s was not found. gcluster made no changes.\n"+
+			"No JobSet can exist without its CRD, so reinstalling JobSet loses nothing: remove what is left with '%s' (or uninstall its Helm release), "+
+			"then re-run this command, or re-run gcluster deploy if JobSet is installed with jobset.install: true in the kubectl-apply module.\n"+
+			"If the warning above says your account cannot read the Service, ask your cluster administrator to check the JobSet installation",
+			jobSetNamespace, jobSetWebhookServiceName, jobSetCRDName, kubectl("delete", "namespace", jobSetNamespace))
+	}
+	return fmt.Errorf("JobSet is only partly installed: CRD %[1]s exists (or could not be read; see the warning above), but Service %[2]s/%[3]s was not found. gcluster made no changes.\n"+
+		"While that Service is missing, any remaining JobSet webhook configurations reject every JobSet create in the cluster. Find the case that applies:\n"+
+		"  - If the warning above says your account cannot read the CRD, JobSet may simply not be installed: ask your cluster administrator to install it, for example with jobset.install: true in the kubectl-apply module.\n"+
+		"  - If JobSet is being installed right now, wait a minute and re-run this command.\n"+
+		"  - If JobSet was installed with Helm (for example with jobset.install: true) and then uninstalled, which keeps the CRD, re-run gcluster deploy or reinstall the Helm release.\n"+
+		"  - If JobSet was installed with kubectl or by gcluster and its namespace or Service was deleted, re-apply the same JobSet release with server-side apply (Helm cannot take over the objects that are left):\n"+
+		"      %[4]s\n"+
+		"    If Deployment jobset-controller-manager still exists, use the version of its image (%[5]s); otherwise use the installed version or a newer one (this gcluster installs %[6]s), never an older one.\n"+
+		"  - If a gcluster run was interrupted while installing JobSet, run the command it printed to finish. If that output is lost and '%[7]s' lists no JobSets, "+
+		"run '%[8]s' and re-run this command to install JobSet from scratch. Never delete the CRD while JobSets exist: that deletes them.\n"+
+		"  - If JobSet runs in another namespace: gcluster job submit currently requires JobSet in namespace %[2]s",
+		jobSetCRDName, jobSetNamespace, jobSetWebhookServiceName,
+		kubectl("apply", "--server-side", "--force-conflicts", "-f", "https://github.com/kubernetes-sigs/jobset/releases/download/<version>/manifests.yaml"),
+		kubectl("-n", jobSetNamespace, "get", "deployments", "-o", "wide"),
+		defaultJobSetVersion,
+		kubectl("get", "jobsets", "-A"),
+		kubectl("delete", "crd", jobSetCRDName))
 }
 
 func (g *GKEOrchestrator) installJobSetCRD(jobSetManifestsURL string) error {
-	logging.Info("Installing/Fixing JobSet CRD and Webhook...")
-
 	manifestBytes, err := g.downloadManifests(jobSetManifestsURL)
 	if err != nil {
 		return err
@@ -76,78 +174,221 @@ func (g *GKEOrchestrator) installJobSetCRD(jobSetManifestsURL string) error {
 		return err
 	}
 
-	if err := g.applyManifests(cleanedManifests, "jobset.yaml"); err != nil {
+	manifestPath, err := writeGeneratedManifest(cleanedManifests, jobSetManifestFile(g.kubeContext))
+	if err != nil {
 		return err
+	}
+	if err := g.applyManifestFile(manifestPath); err != nil {
+		return fmt.Errorf("%w\nJobSet may now be partly installed, and later runs of gcluster will not modify it. To finish the installation, run:\n  %s",
+			err, kubectlCommandLine(g.kubeContext, "apply", "-f", manifestPath))
 	}
 
 	logging.Info("JobSet components applied successfully.")
 
-	return g.waitForJobSetWebhook()
+	if err := g.waitForJobSetWebhook(); err != nil {
+		return fmt.Errorf("%w\nThe JobSet manifests were applied. Later runs of gcluster will wait for the JobSet controller and will not apply the manifests again; "+
+			"re-run this command once the pods in namespace %s are ready", err, jobSetNamespace)
+	}
+	return nil
 }
 
-type k8sEndpointSliceList struct {
-	Items []struct {
-		Endpoints []struct {
-			Addresses  []string `json:"addresses"`
-			Conditions struct {
-				Ready bool `json:"ready"`
-			} `json:"conditions"`
-		} `json:"endpoints"`
-	} `json:"items"`
+// jobSetManifestFile names the generated JobSet manifest after the kube context, so an install on another
+// cluster cannot overwrite the file that the recovery command of a failed install applies.
+func jobSetManifestFile(kubeContext string) string {
+	if kubeContext == "" {
+		return "jobset.yaml"
+	}
+	return "jobset-" + strings.Map(func(r rune) rune {
+		if r == '.' || r == '-' || r == '_' || ('a' <= r && r <= 'z') || ('A' <= r && r <= 'Z') || ('0' <= r && r <= '9') {
+			return r
+		}
+		return '_'
+	}, kubeContext) + ".yaml"
 }
 
-func (eps *k8sEndpointSliceList) HasReadyEndpoint() bool {
-	for _, item := range eps.Items {
-		for _, ep := range item.Endpoints {
-			if ep.Conditions.Ready && len(ep.Addresses) > 0 {
-				return true
+// waitForJobSetWebhook waits for the controller that installJobSetCRD applied, then for a ready webhook endpoint.
+func (g *GKEOrchestrator) waitForJobSetWebhook() error {
+	logging.Info("Waiting up to 10 minutes for the JobSet controller to roll out...")
+	res := g.kubectl("rollout", "status", "deployment/jobset-controller-manager", "-n", jobSetNamespace, "--timeout=600s")
+	if res.ExitCode != 0 {
+		return fmt.Errorf("the JobSet controller did not become ready: %s\n%s", strings.TrimSpace(res.Stderr+"\n"+res.Stdout), g.diagnoseJobSetWebhook())
+	}
+	return g.waitForJobSetWebhookEndpoints()
+}
+
+// waitForJobSetWebhookEndpoints polls the JobSet webhook Service until it has a ready endpoint. It works
+// for any installation method because it does not depend on the controller Deployment's name.
+func (g *GKEOrchestrator) waitForJobSetWebhookEndpoints() error {
+	start := time.Now()
+	lastLog := start
+	var lastErr error
+	everRead := false
+	for attempt := 0; attempt < jobSetWebhookPollAttempts; attempt++ {
+		if attempt > 0 {
+			if time.Since(start)+jobSetWebhookPollInterval >= jobSetWebhookWaitTimeout {
+				break
 			}
+			time.Sleep(jobSetWebhookPollInterval)
+		}
+		ready, err := g.serviceEndpointsReady(jobSetNamespace, jobSetWebhookServiceName)
+		if err != nil && !errors.Is(err, errEndpointsUnreadable) {
+			return err
+		}
+		if ready {
+			if attempt > 0 {
+				logging.Info("JobSet webhook is ready after %s.", time.Since(start).Round(time.Second))
+			}
+			return nil
+		}
+		everRead = everRead || err == nil
+		lastErr = err
+		if attempt == 0 {
+			logging.Info("Service %s/%s has no ready endpoint yet; the JobSet controller may be starting or restarting. Waiting up to %s...",
+				jobSetNamespace, jobSetWebhookServiceName, jobSetWebhookWaitTimeout)
+		} else if time.Since(lastLog) >= jobSetWaitLogInterval {
+			lastLog = time.Now()
+			logging.Info("Still waiting for a ready endpoint on Service %s/%s (%s elapsed)%s",
+				jobSetNamespace, jobSetWebhookServiceName, time.Since(start).Round(time.Second), lastReadFailure(err))
+		}
+	}
+	return g.jobSetWebhookTimeoutError(time.Since(start), everRead, lastErr)
+}
+
+// jobSetWebhookTimeoutError explains why the wait for a ready JobSet webhook endpoint ended. When no read
+// ever succeeded, it skips the diagnosis, whose reads would most likely fail the same way.
+func (g *GKEOrchestrator) jobSetWebhookTimeoutError(elapsed time.Duration, everRead bool, lastErr error) error {
+	elapsed = elapsed.Round(time.Second)
+	if !everRead {
+		return fmt.Errorf("could not read the endpoints of Service %s/%s for %s (last error: %v). Check your connection to the cluster and your credentials, then re-run the command",
+			jobSetNamespace, jobSetWebhookServiceName, elapsed, lastErr)
+	}
+	return fmt.Errorf("the JobSet webhook Service %s/%s has no ready endpoint after %s%s. Until it has one, the JobSet admission webhooks (failurePolicy: Fail) "+
+		"reject every JobSet create or update and every JobSet pod creation in the cluster, including restarts of running JobSets.\n%s",
+		jobSetNamespace, jobSetWebhookServiceName, elapsed, lastReadFailure(lastErr), g.diagnoseJobSetWebhook())
+}
+
+func lastReadFailure(err error) string {
+	if err == nil {
+		return ""
+	}
+	return fmt.Sprintf("; the last read failed: %v", err)
+}
+
+// serviceEndpointsReady reports whether a Service has a ready endpoint. A Forbidden read counts as
+// ready, like the other RBAC-tolerant checks; other failed reads wrap errEndpointsUnreadable.
+func (g *GKEOrchestrator) serviceEndpointsReady(namespace, service string) (bool, error) {
+	res := g.kubectl("get", "endpointslice", "-l", "kubernetes.io/service-name="+service, "-n", namespace, "-o", "json", kubectlReadTimeout)
+	if res.ExitCode != 0 {
+		if strings.Contains(strings.ToLower(res.Stderr), "forbidden") {
+			logging.Warn("Insufficient RBAC permissions to read %s endpoints in %s (403 Forbidden). Skipping endpoint readiness check.", service, namespace)
+			return true, nil
+		}
+		return false, fmt.Errorf("%w: %s", errEndpointsUnreadable, strings.TrimSpace(res.Stderr))
+	}
+	var eps k8sEndpointSliceList
+	if err := json.Unmarshal([]byte(res.Stdout), &eps); err != nil {
+		return false, fmt.Errorf("failed to parse EndpointSlices of Service %s/%s: %w", namespace, service, err)
+	}
+	return eps.HasReadyEndpoint(), nil
+}
+
+// diagnoseJobSetWebhook explains, on a best-effort basis, why the JobSet webhook Service has no ready endpoint.
+func (g *GKEOrchestrator) diagnoseJobSetWebhook() string {
+	res := g.kubectl("get", "service", jobSetWebhookServiceName, "-n", jobSetNamespace, "-o", "jsonpath={.spec.selector}", kubectlReadTimeout)
+	if res.ExitCode != 0 {
+		return fmt.Sprintf("(diagnostics unavailable: %s)", strings.TrimSpace(res.Stderr))
+	}
+	selector := map[string]string{}
+	if out := strings.TrimSpace(res.Stdout); out != "" {
+		if err := json.Unmarshal([]byte(out), &selector); err != nil {
+			return fmt.Sprintf("(diagnostics unavailable: %v)", err)
+		}
+	}
+	if len(selector) == 0 {
+		return fmt.Sprintf("Diagnostics: Service %s/%s has no selector.", jobSetNamespace, jobSetWebhookServiceName)
+	}
+	res = g.kubectl("get", "pods", "-n", jobSetNamespace, "-o", "json", kubectlReadTimeout)
+	if res.ExitCode != 0 {
+		return fmt.Sprintf("(diagnostics unavailable: %s)", strings.TrimSpace(res.Stderr))
+	}
+	var pods corev1.PodList
+	if err := json.Unmarshal([]byte(res.Stdout), &pods); err != nil {
+		return fmt.Sprintf("(diagnostics unavailable: %v)", err)
+	}
+	return fmt.Sprintf("%s\nTo investigate, run:\n  %s\n  %s", describeJobSetPods(selector, pods.Items),
+		kubectlCommandLine(g.kubeContext, "-n", jobSetNamespace, "get", "deployments,services,pods", "-o", "wide", "--show-labels"),
+		kubectlCommandLine(g.kubeContext, "-n", jobSetNamespace, "describe", "pods"))
+}
+
+// describeJobSetPods reports which pods in the JobSet namespace match the webhook Service selector.
+func describeJobSetPods(selector map[string]string, pods []corev1.Pod) string {
+	sel := labels.SelectorFromSet(selector)
+	matched := 0
+	for _, p := range pods {
+		if sel.Matches(labels.Set(p.Labels)) {
+			matched++
+		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Diagnostics: Service %s/%s selects %s; %d of %d pods in %s match.", jobSetNamespace, jobSetWebhookServiceName, sel, matched, len(pods), jobSetNamespace)
+	for _, p := range pods {
+		podLabels := labels.Set(p.Labels)
+		problem := podProblem(p)
+		if problem != "" {
+			problem += "; "
+		}
+		fmt.Fprintf(&b, "\n  - %s: %sphase=%s, ready=%t, matches selector=%t, labels=%s", p.Name, problem, p.Status.Phase, podReady(p), sel.Matches(podLabels), podLabels)
+	}
+	switch {
+	case len(pods) == 0:
+		fmt.Fprintf(&b, "\nNo pods are running in namespace %s.", jobSetNamespace)
+	case matched == 0:
+		b.WriteString("\nNo pod matches the Service selector. This usually means a JobSet manifest was only partly applied (the Service selector changed but the controller Deployment did not). " +
+			"A cluster administrator can restore the webhook by setting the selector of the JobSet Services to the controller Deployment's selector.")
+	}
+	return b.String()
+}
+
+func podReady(p corev1.Pod) bool {
+	for _, c := range p.Status.Conditions {
+		if c.Type == corev1.PodReady {
+			return c.Status == corev1.ConditionTrue
 		}
 	}
 	return false
 }
 
-func (g *GKEOrchestrator) waitForJobSetWebhook() error {
-	logging.Info("Waiting for JobSet webhook service to be ready...")
-	res := g.kubectl("rollout", "status", "deployment/jobset-controller-manager", "-n", "jobset-system", "--timeout=600s")
-	if res.ExitCode != 0 {
-		return fmt.Errorf("jobset controller manager failed to become ready: %s\n%s", res.Stderr, res.Stdout)
-	}
-
-	logging.Info("Verifying JobSet webhook service endpoints...")
-	for i := 0; i < 40; i++ {
-		cmdEndpoints := g.kubectl("get", "endpointslice", "-l", "kubernetes.io/service-name=jobset-webhook-service", "-n", "jobset-system", "-o", "json")
-		if cmdEndpoints.ExitCode == 0 {
-			var eps k8sEndpointSliceList
-			if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
-				return fmt.Errorf("failed to unmarshal jobset endpointslice json: %w", err)
+// podProblem names the first waiting container with its image, or else why the pod is not scheduled.
+func podProblem(p corev1.Pod) string {
+	for _, cs := range p.Status.ContainerStatuses {
+		if w := cs.State.Waiting; w != nil && w.Reason != "" {
+			detail := fmt.Sprintf("container %s, image %s", cs.Name, cs.Image)
+			if w.Message != "" {
+				detail += ": " + w.Message
 			}
-			if eps.HasReadyEndpoint() {
-				logging.Info("JobSet webhook service endpoints are available.")
-				return nil
-			}
+			return fmt.Sprintf("%s (%s)", w.Reason, detail)
 		}
-		time.Sleep(3 * time.Second)
 	}
-
-	return fmt.Errorf("timed out waiting for jobset-webhook-service endpoints to be available")
+	for _, c := range p.Status.Conditions {
+		if c.Type == corev1.PodScheduled && c.Status == corev1.ConditionFalse {
+			return fmt.Sprintf("%s (%s)", c.Reason, c.Message)
+		}
+	}
+	return ""
 }
 
-func (g *GKEOrchestrator) isJobSetCRDInstalled() (bool, error) {
-	res := g.kubectl("get", "crd", "jobsets.jobset.x-k8s.io")
-	if res.ExitCode == 0 {
-		return true, nil
+// missingPermissions returns the checks that `kubectl auth can-i` denies, formatted as 'verb resource'.
+// The checked resources are cluster-scoped, so the checks ask about all namespaces: otherwise a
+// RoleBinding in the current namespace would wrongly count as permission to create them.
+func (g *GKEOrchestrator) missingPermissions(checks []permissionCheck) []string {
+	var missing []string
+	for _, c := range checks {
+		res := g.kubectl("auth", "can-i", c.verb, c.resource, "--all-namespaces")
+		if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) != "yes" {
+			missing = append(missing, fmt.Sprintf("'%s %s'", c.verb, c.resource))
+		}
 	}
-	errStr := strings.ToLower(res.Stderr + " " + res.Stdout)
-	if strings.Contains(errStr, "not found") || strings.Contains(errStr, "notfound") {
-		logging.Info("JobSet CRD not found.")
-		return false, nil
-	}
-	if strings.Contains(errStr, "forbidden") {
-		logging.Warn("Insufficient RBAC permissions to read JobSet CRD (403 Forbidden). Assuming JobSet is installed in shared cluster.")
-		return true, nil
-	}
-	return false, fmt.Errorf("failed to check for JobSet CRD: %s\n%s", res.Stderr, res.Stdout)
+	return missing
 }
 
 func (g *GKEOrchestrator) getHTTPClient() HTTPClient {
@@ -285,25 +526,37 @@ func (g *GKEOrchestrator) injectTolerationsAndLabels(data map[interface{}]interf
 	}
 }
 
+// applyManifests saves manifests under ~/.gcluster/generated and applies them.
 func (g *GKEOrchestrator) applyManifests(manifests []byte, filename string) error {
 	logging.Info("Applying manifests for %s...", filename)
+	filePath, err := writeGeneratedManifest(manifests, filename)
+	if err != nil {
+		return err
+	}
+	return g.applyManifestFile(filePath)
+}
 
+// writeGeneratedManifest saves manifests as ~/.gcluster/generated/<filename> and returns the file's path.
+func writeGeneratedManifest(manifests []byte, filename string) (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("failed to get user home directory: %w", err)
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
 	}
 
 	stateDir := filepath.Join(homeDir, ".gcluster", "generated")
 	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory for generated manifests at %q. Please check your file system permissions for this path: %w", stateDir, err)
+		return "", fmt.Errorf("failed to create directory for generated manifests at %q. Please check your file system permissions for this path: %w", stateDir, err)
 	}
 
 	filePath := filepath.Join(stateDir, filename)
 	if err := os.WriteFile(filePath, manifests, 0644); err != nil {
-		return fmt.Errorf("failed to write manifests to %s: %w", filePath, err)
+		return "", fmt.Errorf("failed to write manifests to %s: %w", filePath, err)
 	}
 	logging.Info("Manifests saved to %s", filePath)
+	return filePath, nil
+}
 
+func (g *GKEOrchestrator) applyManifestFile(filePath string) error {
 	res := g.kubectl("apply", "-f", filePath)
 	if res.ExitCode != 0 {
 		return fmt.Errorf("kubectl apply failed with exit code %d: %s\n%s", res.ExitCode, res.Stderr, res.Stdout)
