@@ -20,8 +20,6 @@ set -e
 
 echo "Starting generic auto-mount for GCS bucket: ${mount_gcs_bucket}"
 
-mkdir -p "${mount_path}"
-
 # Ensure gcsfuse is installed (use POSIX >/dev/null 2>&1 since pss.py invokes /bin/sh)
 if ! command -v gcsfuse >/dev/null 2>&1; then
   echo "Installing gcsfuse..."
@@ -47,6 +45,7 @@ if mountpoint -q "${mount_path}"; then
   echo "${mount_path} is already mounted."
 else
   sudo fusermount3 -uz "${mount_path}" 2>/dev/null || sudo fusermount -uz "${mount_path}" 2>/dev/null || sudo umount -l "${mount_path}" 2>/dev/null || true
+  mkdir -p "${mount_path}"
   echo "Mounting ${mount_gcs_bucket} to ${mount_path}..."
   sudo gcsfuse --implicit-dirs -o allow_other --file-mode 777 --dir-mode 777 "${mount_gcs_bucket}" "${mount_path}"
   echo "Mount successful."
