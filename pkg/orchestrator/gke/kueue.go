@@ -378,9 +378,13 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName strin
 	if errDep != nil {
 		return fmt.Errorf("failed to verify Kueue deployment status: %w", errDep)
 	}
-	currentVersion, errVer := g.getKueueVersion(dep)
-	if errVer != nil && dep != nil {
-		logging.Info("Warning: Unable to determine installed Kueue version: %v", errVer)
+	var currentVersion string
+	if dep != nil {
+		logging.Info("Kueue deployment found.")
+		var errVer error
+		if currentVersion, errVer = g.getKueueVersion(dep); errVer != nil {
+			logging.Info("Warning: Unable to determine installed Kueue version: %v", errVer)
+		}
 	}
 
 	if version == "" {
@@ -499,7 +503,6 @@ func (g *GKEOrchestrator) isKueueInstalled() (bool, error) {
 func (g *GKEOrchestrator) getKueueDeployment() (*kueueDeployment, bool, error) {
 	res := g.kubectl("get", "deployment", "kueue-controller-manager", "-n", "kueue-system", "-o", "json")
 	if res.ExitCode == 0 {
-		logging.Info("Kueue deployment found.")
 		var dep kueueDeployment
 		if err := json.Unmarshal([]byte(res.Stdout), &dep); err != nil {
 			return nil, true, fmt.Errorf("failed to unmarshal kueue deployment: %w", err)
@@ -785,23 +788,15 @@ func (g *GKEOrchestrator) getClusterPriorityClasses() ([]string, error) {
 	return strings.Fields(res.Stdout), nil
 }
 
-func (g *GKEOrchestrator) hasUserPriorityClasses(existing []string, err error) (bool, error) {
-	if err != nil {
-		if isForbiddenError(err) {
-			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping default PriorityClass installation.")
-			return true, nil
-		}
-		return false, err
-	}
-
+func hasUserPriorityClasses(existing []string) bool {
 	for _, name := range existing {
 		if strings.HasPrefix(name, "system-") || strings.HasPrefix(name, "gke-") {
 			continue
 		}
 		logging.Info("Pre-existing PriorityClass '%s' found. Skipping default PriorityClass installation.", name)
-		return true, nil
+		return true
 	}
-	return false, nil
+	return false
 }
 
 func (g *GKEOrchestrator) installPriorityClasses() error {
@@ -824,60 +819,46 @@ func (g *GKEOrchestrator) installPriorityClasses() error {
 	return nil
 }
 
-func (g *GKEOrchestrator) ensurePriorityClassesInstalled(existing []string, listErr error) (bool, error) {
-	hasUserClasses, err := g.hasUserPriorityClasses(existing, listErr)
-	if err != nil {
-		return false, err
-	}
-
-	if hasUserClasses {
-		return false, nil
-	}
-
-	logging.Info("No user-defined PriorityClasses found. Installing defaults...")
-	if err := g.installPriorityClasses(); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
 // EnsurePriorityClassesInstalled ensures default priority classes are applied if no custom ones exist.
 func (g *GKEOrchestrator) EnsurePriorityClassesInstalled() error {
 	existing, err := g.getClusterPriorityClasses()
-	_, err = g.ensurePriorityClassesInstalled(existing, err)
-	return err
-}
-
-func (g *GKEOrchestrator) ensureAndValidatePriorityClass(requestedPriority string) error {
-	if requestedPriority == "" {
-		return nil
-	}
-	existing, listErr := g.getClusterPriorityClasses()
-	installed, err := g.ensurePriorityClassesInstalled(existing, listErr)
 	if err != nil {
-		return err
-	}
-	if installed {
-		existing, listErr = g.getClusterPriorityClasses()
-	}
-	return g.validatePriorityClass(requestedPriority, existing, listErr)
-}
-
-func (g *GKEOrchestrator) validatePriorityClass(requestedPriority string, existing []string, listErr error) error {
-	if requestedPriority == "" {
-		return nil
-	}
-
-	if listErr != nil {
-		if isForbiddenError(listErr) {
-			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping PriorityClass validation for %q.", requestedPriority)
+		if isForbiddenError(err) {
+			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping default PriorityClass installation.")
 			return nil
 		}
-		return listErr
+		return err
 	}
+	if hasUserPriorityClasses(existing) {
+		return nil
+	}
+	logging.Info("No user-defined PriorityClasses found. Installing defaults...")
+	return g.installPriorityClasses()
+}
 
-	if !slices.Contains(existing, requestedPriority) {
-		return fmt.Errorf("priority class %q does not exist in the cluster. Available priority classes are: %v", requestedPriority, existing)
+func (g *GKEOrchestrator) ensureAndValidatePriorityClass(requested string) error {
+	if requested == "" {
+		return nil
+	}
+	existing, err := g.getClusterPriorityClasses()
+	if err != nil {
+		if isForbiddenError(err) {
+			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping PriorityClass install/validation for %q.", requested)
+			return nil
+		}
+		return err
+	}
+	if !hasUserPriorityClasses(existing) {
+		logging.Info("No user-defined PriorityClasses found. Installing defaults...")
+		if err := g.installPriorityClasses(); err != nil {
+			return err
+		}
+		if existing, err = g.getClusterPriorityClasses(); err != nil {
+			return err
+		}
+	}
+	if !slices.Contains(existing, requested) {
+		return fmt.Errorf("priority class %q does not exist in the cluster. Available priority classes are: %v", requested, existing)
 	}
 	return nil
 }

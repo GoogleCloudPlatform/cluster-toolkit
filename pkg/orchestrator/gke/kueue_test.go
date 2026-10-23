@@ -851,7 +851,7 @@ func TestCheckAndInstallKueue_PermissionGranted(t *testing.T) {
 
 func TestValidatePriorityClass_Empty(t *testing.T) {
 	orc := &GKEOrchestrator{}
-	err := orc.validatePriorityClass("", nil, nil)
+	err := orc.ensureAndValidatePriorityClass("")
 	if err != nil {
 		t.Fatalf("expected no error for empty priority, got %v", err)
 	}
@@ -867,8 +867,7 @@ func TestValidatePriorityClass_Exists(t *testing.T) {
 		},
 	}
 	orc := &GKEOrchestrator{executor: mock}
-	existing, listErr := orc.getClusterPriorityClasses()
-	err := orc.validatePriorityClass("medium", existing, listErr)
+	err := orc.ensureAndValidatePriorityClass("medium")
 	if err != nil {
 		t.Fatalf("expected no error for existing priority, got %v", err)
 	}
@@ -884,8 +883,7 @@ func TestValidatePriorityClass_NotExist(t *testing.T) {
 		},
 	}
 	orc := &GKEOrchestrator{executor: mock}
-	existing, listErr := orc.getClusterPriorityClasses()
-	err := orc.validatePriorityClass("medium", existing, listErr)
+	err := orc.ensureAndValidatePriorityClass("medium")
 	if err == nil {
 		t.Fatal("expected error for non-existing priority, got nil")
 	}
@@ -1091,14 +1089,13 @@ func TestValidatePriorityClass_Forbidden(t *testing.T) {
 	}
 	orc := &GKEOrchestrator{executor: mock}
 
-	existing, listErr := orc.getClusterPriorityClasses()
-	err := orc.validatePriorityClass("high", existing, listErr)
+	err := orc.ensureAndValidatePriorityClass("high")
 	if err != nil {
-		t.Fatalf("validatePriorityClass should succeed and skip on 403 Forbidden, got: %v", err)
+		t.Fatalf("ensureAndValidatePriorityClass should succeed and skip on 403 Forbidden, got: %v", err)
 	}
 }
 
-func TestHasUserPriorityClasses_Forbidden(t *testing.T) {
+func TestEnsurePriorityClassesInstalled_Forbidden(t *testing.T) {
 	mock := &mockExecutor{
 		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
 			return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): priorityclasses.scheduling.k8s.io is forbidden"}
@@ -1106,13 +1103,8 @@ func TestHasUserPriorityClasses_Forbidden(t *testing.T) {
 	}
 	orc := &GKEOrchestrator{executor: mock}
 
-	existing, listErr := orc.getClusterPriorityClasses()
-	hasUser, err := orc.hasUserPriorityClasses(existing, listErr)
-	if err != nil {
-		t.Fatalf("hasUserPriorityClasses should return true and skip on 403 Forbidden, got error: %v", err)
-	}
-	if !hasUser {
-		t.Errorf("expected hasUserPriorityClasses to return true on 403 Forbidden to skip installation")
+	if err := orc.EnsurePriorityClassesInstalled(); err != nil {
+		t.Fatalf("EnsurePriorityClassesInstalled should skip and succeed on 403 Forbidden, got error: %v", err)
 	}
 }
 
