@@ -18,14 +18,13 @@ List build files in `tools/cloud-build/daily-tests/builds/`
 and creates a cron-schedule-string for each of them.
 E.g.:
 ```
-$ ./list_tests.py | jq
+$ ./list_tests.py 30 510 | jq
 {
-  "batch-mpi": "30 0 * * *",
-  "chrome-remote-desktop": "48 0 * * *",
-  "cloud-batch": "6 1 * * *",
-  "hpc-high-io-v4": "24 1 * * *",
-  "hpc-high-io-v5": "42 1 * * *",
+  "batch-mpi": "15 7 * * MON-FRI",
+  "chrome-remote-desktop": "22 3 * * MON-FRI",
+  "cloud-batch": "30 3 * * MON-FRI",
 ...
+
 ```
 """
 
@@ -39,10 +38,7 @@ import itertools
 # not run on a nightly basis. Refer tools/cloud-build/provision/pr-ofe-test.tf
 # for the configuration.
 TO_SKIP = frozenset([
-    "ofe-deployment",
-    "ml-a3-ultragpu-slurm",
-    "gke-a3-ultragpu",
-    "ml-a3-ultragpu-jbvms"
+    "ofe-deployment"
 ])
 
 # Seed for deterministic order of tests, change to other value to shuffle tests
@@ -62,14 +58,8 @@ TEMPORAL_CONSTRAINTS = [
         "gke-a3-ultragpu-onspot"
     ), 2*60),
     ((
-        "ml-a3-megagpu-slurm-ubuntu",
-        "gke-a3-megagpu",
         "ml-a3-megagpu-onspot-slurm-ubuntu",
         "gke-a3-megagpu-onspot"
-    ), 1*60),
-    ((
-        "ml-a3-highgpu-slurm",
-        "gke-a3-highgpu"
     ), 1*60),
     ((
         "ml-a3-highgpu-onspot-slurm",
