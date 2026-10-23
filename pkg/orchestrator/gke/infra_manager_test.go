@@ -851,6 +851,12 @@ func TestDescribeJobSetPods(t *testing.T) {
 		Image: "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
 		State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"}},
 	}}
+	initFailing := pod("ctrl-init", selector, corev1.PodPending, false)
+	initFailing.Status.InitContainerStatuses = []corev1.ContainerStatus{{
+		Name:  "cert-init",
+		Image: "registry.k8s.io/jobset/cert-init:v0.10.1",
+		State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff", Message: "Back-off pulling image"}},
+	}}
 	unschedulable := pod("ctrl-3", selector, corev1.PodPending, false)
 	unschedulable.Status.Conditions = append(unschedulable.Status.Conditions, corev1.PodCondition{
 		Type: corev1.PodScheduled, Status: corev1.ConditionFalse, Reason: "Unschedulable", Message: "0/3 nodes are available: 3 node(s) had untolerated taint {dedicated: gpu}.",
@@ -875,6 +881,11 @@ func TestDescribeJobSetPods(t *testing.T) {
 			name: "image pull failure without a message",
 			pods: []corev1.Pod{pullFailing},
 			want: []string{"ctrl-2: ImagePullBackOff (container kube-rbac-proxy, image gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1); phase=Pending"},
+		},
+		{
+			name: "waiting init container is named",
+			pods: []corev1.Pod{initFailing},
+			want: []string{"ctrl-init: ImagePullBackOff (init container cert-init, image registry.k8s.io/jobset/cert-init:v0.10.1: Back-off pulling image); phase=Pending"},
 		},
 		{
 			name: "unschedulable pod says why",

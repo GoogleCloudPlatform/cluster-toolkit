@@ -358,20 +358,30 @@ func podReady(p corev1.Pod) bool {
 	return false
 }
 
-// podProblem names the first waiting container with its image, or else why the pod is not scheduled.
+// podProblem names the first waiting init or app container with its image, or else why the pod is not scheduled.
 func podProblem(p corev1.Pod) string {
-	for _, cs := range p.Status.ContainerStatuses {
-		if w := cs.State.Waiting; w != nil && w.Reason != "" {
-			detail := fmt.Sprintf("container %s, image %s", cs.Name, cs.Image)
-			if w.Message != "" {
-				detail += ": " + w.Message
-			}
-			return fmt.Sprintf("%s (%s)", w.Reason, detail)
-		}
+	if msg := waitingContainerProblem("init container", p.Status.InitContainerStatuses); msg != "" {
+		return msg
+	}
+	if msg := waitingContainerProblem("container", p.Status.ContainerStatuses); msg != "" {
+		return msg
 	}
 	for _, c := range p.Status.Conditions {
 		if c.Type == corev1.PodScheduled && c.Status == corev1.ConditionFalse {
 			return fmt.Sprintf("%s (%s)", c.Reason, c.Message)
+		}
+	}
+	return ""
+}
+
+func waitingContainerProblem(kind string, statuses []corev1.ContainerStatus) string {
+	for _, cs := range statuses {
+		if w := cs.State.Waiting; w != nil && w.Reason != "" {
+			detail := fmt.Sprintf("%s %s, image %s", kind, cs.Name, cs.Image)
+			if w.Message != "" {
+				detail += ": " + w.Message
+			}
+			return fmt.Sprintf("%s (%s)", w.Reason, detail)
 		}
 	}
 	return ""
