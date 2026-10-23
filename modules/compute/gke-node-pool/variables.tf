@@ -139,6 +139,10 @@ variable "node_image_config" {
   })
   default  = null
   nullable = true
+  validation {
+    condition     = var.node_image_config == null || try(length(var.node_image_config.image) > 0, false)
+    error_message = "The 'image' attribute must be specified when 'node_image_config' is provided."
+  }
 }
 
 variable "local_ssd_count_ephemeral_storage" {

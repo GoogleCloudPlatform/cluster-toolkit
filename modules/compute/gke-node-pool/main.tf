@@ -66,7 +66,7 @@ locals {
   )
 
   # Custom node image (image_type = CUSTOM_CONTAINERD).
-  use_node_image_config = try(var.node_image_config.image, null) != null
+  use_node_image_config = var.node_image_config != null
 
   dranet_device_class_name_default = local.is_mellanox_rdma_machine ? "mrdma.google.com" : "netdev.google.com"
   dranet_device_class_name_actual  = coalesce(var.dranet_device_class_name, local.dranet_device_class_name_default)
@@ -362,7 +362,7 @@ resource "google_container_node_pool" "node_pool" {
     }
     precondition {
       condition     = local.use_node_image_config == (upper(var.image_type) == "CUSTOM_CONTAINERD")
-      error_message = "node_image_config.image must be set if and only if image_type is CUSTOM_CONTAINERD."
+      error_message = "node_image_config must be set only if image_type is CUSTOM_CONTAINERD."
     }
     precondition {
       condition     = var.disk_storage_pool == null || var.disk_storage_pool == "" || can(regex("^hyperdisk-", lower(var.disk_type)))
