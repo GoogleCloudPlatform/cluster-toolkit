@@ -534,6 +534,162 @@ blueprints:
   - id: bq_subscription
     source: community/modules/pubsub/bigquery-sub
     use: [bq-table, pubsub_topic]
+- path: community/examples/fsi/ibm-symphony-on-gce/symphony.yaml
+  blueprint_name: ibm-symphony
+  scheduler: none
+  description: "This project provides a blueprint for deploying an IBM Spectrum Symphony cluster on Google Cloud Platform using the Google Cloud Cluster Toolkit. The blueprint automates infrastructure provisioning, custom base image creation via..."
+  machine_types: [c2-standard-4, c2-standard-30]
+  vars:
+    admin_password_secret: "$(\"${vars.deployment_name}-admin-password\")"
+    base_image:
+      family: rocky-linux-9-optimized-gcp
+      project: rocky-linux-cloud
+    deployment_name: symphony1
+    disk_size_gb: 200
+    metadata:
+      VmDnsSetting: GlobalOnly
+    new_image:
+      family: $(vars.deployment_name)
+      project: $(vars.project_id)
+    project_id: null
+    pubsub_subscription: hf-gce-vm-events-sub
+    pubsub_topic: hf-gce-vm-events
+    region: us-central1
+    service_account_email: null
+    sink_name: hf-gce-vm-events-sink
+    sym_entitlement: sym_adv_entitlement.dat
+    sym_fixpack: sym-7.3.2.0_x86_64_build601711.tar.gz
+    sym_installer: sym-7.3.2.0_x86_64.bin
+    sym_source_bucket: "<YOUR_GCS_BUCKET_NAME>"
+    symphony_install_dir: /opt/ibm/spectrumcomputing
+    zone: us-central1-a
+  modules:
+  - id: verify_admin_password_secret
+    source: community/modules/scripts/gcloud
+    settings: [commands]
+  - id: network
+    source: modules/network/vpc
+  - id: destination_pubsub
+    source: "git::https://github.com/terraform-google-modules/terraform-google-log-export.git//modules/pubsub?ref=v11.1.0"
+    settings: [log_sink_writer_identity, project_id, topic_name]
+  - id: sink
+    source: "git::https://github.com/terraform-google-modules/terraform-google-log-export.git?ref=v11.1.0"
+    settings: [destination_uri, filter, log_sink_name, parent_resource_id, parent_resource_type, unique_writer_identity]
+  - id: pubsub
+    source: "git::https://github.com/terraform-google-modules/terraform-google-pubsub.git?ref=v8.8.0"
+    settings: [create_topic, project_id, pull_subscriptions, topic]
+  - id: sa_roles
+    source: "git::https://github.com/terraform-google-modules/terraform-google-iam.git//modules/member_iam?ref=v8.3.0"
+    settings: [project_id, project_roles, service_account_address]
+  - id: script
+    source: modules/scripts/startup-script
+    settings: [install_cloud_ops_agent, runners]
+  - id: sym-compute-script
+    source: modules/scripts/startup-script
+    settings: [install_cloud_ops_agent, runners]
+  - id: custom-image
+    source: modules/packer/custom-image
+    use: [network, script]
+    settings: [disk_size, disk_type, image_family, machine_type, omit_external_ip, source_image_family, source_image_project_id, state_timeout]
+  - id: sym-mig-c2-30
+    source: "git::https://github.com/terraform-google-modules/terraform-google-vm.git//modules/instance_template?ref=v15.3.0"
+    use: [sym-compute-script]
+    settings: [machine_type, name_prefix, service_account, source_image_family, source_image_project, subnetwork, threads_per_core]
+  - id: sym-mig-c2-4
+    source: "git::https://github.com/terraform-google-modules/terraform-google-vm.git//modules/instance_template?ref=v15.3.0"
+    use: [sym-compute-script]
+    settings: [machine_type, name_prefix, service_account, source_image_family, source_image_project, subnetwork, threads_per_core]
+  - id: sym-mig-4
+    source: community/modules/compute/mig
+    settings: [base_instance_name, name, target_size, versions]
+  - id: sym-mig-30
+    source: community/modules/compute/mig
+    settings: [base_instance_name, name, target_size, versions]
+  - id: sym-master-script
+    source: modules/scripts/startup-script
+    settings: [install_cloud_ops_agent, runners]
+  - id: sym-master-vm
+    source: modules/compute/vm-instance
+    use: [sym-master-script, network]
+    settings: [instance_image, machine_type, name_prefix]
+  - id: sym-compute-vm
+    source: modules/compute/vm-instance
+    use: [sym-compute-script, network]
+    settings: [instance_count, instance_image, machine_type, name_prefix]
+- path: community/examples/fsi/ibm-symphony-on-gke/symphony.yaml
+  blueprint_name: ibm-symphony-gke
+  scheduler: gke
+  description: "This project provides a blueprint for deploying an IBM Spectrum Symphony cluster on Google Cloud Platform using the Google Cloud Cluster Toolkit and Google Kubernetes Engine (GKE). The blueprint automates infrastructure provisioning..."
+  machine_types: [c2-standard-4, c2-standard-16]
+  vars:
+    admin_password_secret: "$(\"${vars.deployment_name}-admin-password\")"
+    authorized_cidr: 0.0.0.0/0
+    base_image:
+      family: rocky-linux-9-optimized-gcp
+      project: rocky-linux-cloud
+    deployment_name: symphony-gke
+    disk_size_gb: 200
+    gke_max_node_count: 100
+    gke_min_node_count: 3
+    gke_node_machine_type: c2-standard-16
+    metadata:
+      VmDnsSetting: GlobalOnly
+    new_image:
+      family: $(vars.deployment_name)
+      project: $(vars.project_id)
+    project_id: null
+    region: us-central1
+    sym_entitlement: sym_adv_entitlement.dat
+    sym_fixpack: sym-7.3.2.0_x86_64_build601711.tar.gz
+    sym_installer: sym-7.3.2.0_x86_64.bin
+    sym_source_bucket: "<YOUR_GCS_BUCKET_NAME>"
+    symphony_install_dir: /opt/ibm/spectrumcomputing
+    zone: us-central1-c
+  modules:
+  - id: verify_admin_password_secret
+    source: community/modules/scripts/gcloud
+    settings: [commands]
+  - id: enable_apis
+    source: community/modules/project/service-enablement
+    settings: [gcp_service_list]
+  - id: network
+    source: modules/network/vpc
+    settings: [secondary_ranges_list, subnetwork_name]
+  - id: sym_master_sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: registry
+    source: community/modules/container/artifact-registry
+    settings: [format, project_id, region, repo_mode]
+  - id: packer-script
+    source: modules/scripts/startup-script
+    settings: [runners]
+  - id: custom-image
+    source: modules/packer/custom-image
+    use: [network, packer-script]
+    settings: [disk_size, disk_type, image_family, machine_type, omit_external_ip, service_account_email, source_image_family, source_image_project_id, state_timeout]
+  - id: gke_node_pool_sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network, gke_node_pool_sa]
+    settings: [enable_private_endpoint, master_authorized_networks, system_node_pool_machine_type]
+  - id: gke_compute_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, gke_node_pool_sa]
+    settings: [autoscaling_total_max_nodes, autoscaling_total_min_nodes, machine_type, name, taints]
+  - id: symphony_operator_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings: [apply_manifests]
+  - id: sym-master-script
+    source: modules/scripts/startup-script
+    settings: [install_cloud_ops_agent, runners]
+  - id: sym-master-vm
+    source: modules/compute/vm-instance
+    use: [sym-master-script, network, sym_master_sa]
+    settings: [instance_image, machine_type, name_prefix, service_account_scopes]
 - path: community/examples/gcloud-example.yaml
   blueprint_name: gcloud-example
   scheduler: none

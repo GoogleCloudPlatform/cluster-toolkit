@@ -1,0 +1,31 @@
+{
+    "version": 2,
+    "requestors":[
+        {
+            "name": "symAinst",
+            "enabled": 0,
+            "plugin": "symA",
+            "confPath": "${HF_CONFDIR}/requestors/symAinst/",
+            "workPath": "${HF_WORKDIR}/requestors/symAinst/",
+            "logPath": "${HF_LOGDIR}/",
+            "providers": ["awsinst"],
+            "requestMode": "POLL"
+        },
+        {
+            "name": "admin",
+            "enabled": 1,
+            "providers": ["gcpgceinst","awsinst","azureinst","ibmcloudinst","openshiftinst"],
+            "requestMode": "REST_MANUAL"
+        },
+        {
+            "name": "cwsinst",
+            "enabled": 0,
+            "plugin": "cws",
+            "confPath": "${HF_CONFDIR}/requestors/cwsinst/",
+            "workPath": "${HF_WORKDIR}/requestors/cwsinst/",
+            "logPath": "${HF_LOGDIR}/",
+            "providers": ["awsinst"],
+            "requestMode": "POLL"
+        }
+    ]
+}
