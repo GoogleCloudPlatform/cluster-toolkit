@@ -196,6 +196,12 @@ variable "static_node_count" {
   default     = null
 }
 
+variable "ignore_node_count_changes" {
+  description = "Whether to ignore external changes (drift) to the node count (e.g. from out-of-band resizes using gcloud). Setting this to true allows node pool size changes made outside Terraform to be preserved instead of reverted on subsequent applies."
+  type        = bool
+  default     = false
+}
+
 variable "is_reservation_active" {
   description = "Whether the specified reservation is already created. When is_reservation_active is set to false, static_node_count, autoscaling_min_node_count, autoscaling_max_node_count, and initial_node_count must all be either null or 0."
   type        = bool

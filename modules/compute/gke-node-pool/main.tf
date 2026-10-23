@@ -129,7 +129,8 @@ resource "google_container_node_pool" "node_pool" {
   node_locations = var.zones
   version        = var.gke_version
 
-  node_count = var.static_node_count
+  node_count                = var.static_node_count
+  ignore_node_count_changes = var.ignore_node_count_changes
   # Per-zone limits (min_node_count/max_node_count) are required to workaround a
   # Terraform provider bug when using TPU Flex Start.
   dynamic "autoscaling" {
