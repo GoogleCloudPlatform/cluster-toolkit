@@ -156,7 +156,7 @@ HELP1
   so that it can be used by the script.
 
   Example YAML file:
-  deployment_name: MyDeployment
+  deployment_name: my-deployment
   project_id: my-project-id
   zone: us-west1-a
   subnet_name: my-subnet (optional)
@@ -289,6 +289,28 @@ checklock() {
 		error "    lock file: tf/.tkfe.lock"
 		error ""
 		exit 1
+	fi
+}
+
+#
+# Check the deployment name can be used in every resource name derived from it.
+#   - The tightest limit is the service account ID "<name>-tkfe-sa", which GCP
+#     caps at 30 characters, leaving 22 for the name.
+#   - Service account IDs, VM names and label values do not allow '.'.
+#   - Prints the reason to stderr and returns 1 if the name is invalid.
+#
+DEPLOYMENT_NAME_MAX_LENGTH=22
+
+validate_deployment_name() {
+	local name=$1
+	local validname='^[a-z][a-z0-9-]*[a-z0-9]$'
+
+	if [[ ${#name} -lt 3 || ${#name} -gt ${DEPLOYMENT_NAME_MAX_LENGTH} || ! ${name} =~ ${validname} ]]; then
+		error "    Error: Deployment name '${name}' is invalid. It must:"
+		error "              - Be 3 to ${DEPLOYMENT_NAME_MAX_LENGTH} characters long"
+		error "              - Only contain characters a-z (lowercase), 0-9 and '-'"
+		error "              - Start with a letter and end with a letter or digit"
+		return 1
 	fi
 }
 
@@ -720,26 +742,20 @@ LINE
     project and zone.  The project must have authorization and quota to use
     resources in the zone.
     
-    The deployment name must contain only lowercase letters and numbers
-    (no spaces)
+    The deployment name must be 3 to ${DEPLOYMENT_NAME_MAX_LENGTH} characters long, contain only
+    lowercase letters, numbers and '-', start with a letter and end with a
+    letter or number.
 
 FUNDAMENTALS
 
 	# -- Name to use for this FrontEnd deployment
-	#    This will be the name of the server VM
-	#    TODO: check name is valid - i.e. right length, lowercase,...
+	#    This prefixes the server VM, service accounts, bucket and network
 	while [ -z "${deployment_name}" ]; do
 		deployment_name=$(ask "    Deployment name")
+		echo
 		if [ -z "${deployment_name}" ]; then
 			echo "    Error: This cannot be left blank"
-		fi
-		echo
-		validname='^[a-z][\.a-z0-9\-]+[a-z0-9]+$'
-		if [[ ! "${deployment_name}" =~ ${validname} ]]; then
-			echo "    Error: Name is invalid"
-			echo "              Name must have a minimum 3 characters in length"
-			echo "              Only contain characters a-z (lowercase), 0-9, '-' and '.'"
-			echo "              End with an alphanumeric."
+		elif ! validate_deployment_name "${deployment_name}"; then
 			deployment_name=""
 		fi
 	done
@@ -956,6 +972,9 @@ deploy_from_config() {
 
 	# Set variables based on keys in the array
 	deployment_name=${yaml_array[deployment_name]}
+	if ! validate_deployment_name "${deployment_name}"; then
+		exit 1
+	fi
 	project_id=${yaml_array[project_id]}
 	zone=${yaml_array[zone]}
 	subnet_name=${yaml_array[subnet_name]}

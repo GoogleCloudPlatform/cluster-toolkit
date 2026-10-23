@@ -67,7 +67,7 @@ def RESTRICT_IF_CLOUD_ACTIVE(
 # What else would I call it?
 def RFC1035Validator(maxLength, message):  # pylint: disable=invalid-name
     if not maxLength:
-        regex = re.compile("^[a-z][-a-z0-9]*[a-z0-9])$")
+        regex = re.compile("^[a-z][-a-z0-9]*[a-z0-9]$")
     elif maxLength < 2:
         raise ValueError("Max Length must be >= 2")
     # regex = re.compile(f'[a-z]([-a-z0-9]{{0,{maxLength-2}}}[a-z0-9])')
