@@ -128,7 +128,8 @@ HEADER
 if ! command -v terraform &>/dev/null; then
 	echo "  Error:"
 	tf_version=$(sed -nE 's/^[[:space:]]*required_version[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/p' \
-		"${SCRIPT_DIR}/tf/versions.tf")
+		"${SCRIPT_DIR}/tf/versions.tf" 2>/dev/null)
+	tf_version=${tf_version:-0.13 or higher}
 	echo "      Please ensure terraform (version ${tf_version}) is in your \$PATH"
 	echo "Exiting."
 	exit 1
