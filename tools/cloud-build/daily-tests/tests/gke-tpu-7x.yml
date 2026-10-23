@@ -47,8 +47,8 @@ custom_vars:
 instance_type: "tpu7x"
 scheduler: "gke"
 chs_nodepools: "gke-tpu-7x-pool"
+chs_version: "refs/changes/80/16480/1"
 chs_suites:
-- lite
 - standard
 post_deploy_tests:
 - test-validation/test-gke-tpu.yml
