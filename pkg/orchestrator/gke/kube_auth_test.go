@@ -930,6 +930,27 @@ func TestWithKubeContext(t *testing.T) {
 	}
 }
 
+func TestKubectlCommandLine(t *testing.T) {
+	const path = `C:\Users\Jane Doe\.gcluster\generated\jobset.yaml`
+	args := []string{"apply", "-f", path}
+	tests := []struct {
+		name, kubeContext, want string
+	}{
+		{name: "no context", want: `kubectl apply -f "` + path + `"`},
+		{name: "pinned context", kubeContext: testContext, want: `kubectl --context ` + testContext + ` apply -f "` + path + `"`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := kubectlCommandLine(tc.kubeContext, args...); got != tc.want {
+				t.Errorf("kubectlCommandLine() = %s, want %s", got, tc.want)
+			}
+			if !slices.Equal(args, []string{"apply", "-f", path}) {
+				t.Errorf("kubectlCommandLine() modified its arguments: %q", args)
+			}
+		})
+	}
+}
+
 func TestKubectlHelpers_PinContext(t *testing.T) {
 	rec := &streamRecorder{exactExecutor: *newExactExecutor(map[string][]shell.CommandResult{
 		"kubectl --context " + testContext + " get pods": {{ExitCode: 0}},

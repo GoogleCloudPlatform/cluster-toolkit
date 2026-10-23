@@ -1188,6 +1188,39 @@ func TestCheckKueueInstallPermissions_MissingPermission(t *testing.T) {
 	}
 }
 
+func TestCheckKueueEndpoints_EndpointSlice(t *testing.T) {
+	tests := []struct {
+		name      string
+		result    shell.CommandResult
+		wantReady bool
+		wantErr   bool
+	}{
+		{name: "ready endpoint", result: shell.CommandResult{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`}, wantReady: true},
+		{name: "no ready endpoint", result: shell.CommandResult{ExitCode: 0, Stdout: `{"items":[]}`}},
+		{name: "forbidden skips the check", result: shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): endpointslices is forbidden"}, wantReady: true},
+		{name: "failed read is retried by the caller", result: shell.CommandResult{ExitCode: 1, Stderr: "Unable to connect to the server"}},
+		{name: "malformed response is an error", result: shell.CommandResult{ExitCode: 0, Stdout: "not json"}, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{executor: &mockExecutor{executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+				if got, want := strings.Join(args, " "), "get endpointslice -l kubernetes.io/service-name=kueue-webhook-service -n kueue-system -o json --request-timeout=10s"; got != want {
+					t.Errorf("kubectl args = %q, want %q", got, want)
+				}
+				return tc.result
+			}}}
+
+			ready, err := orc.checkKueueEndpoints(true)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("checkKueueEndpoints(true) error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if ready != tc.wantReady {
+				t.Errorf("checkKueueEndpoints(true) = %v, want %v", ready, tc.wantReady)
+			}
+		})
+	}
+}
+
 func TestParseKueueQueueName(t *testing.T) {
 	tests := []struct {
 		name      string
