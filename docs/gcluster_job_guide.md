@@ -37,6 +37,17 @@ If you use `--build-context` to build images on-the-fly, you must set:
 >
 > **Bypassing Checks:** If you are running `gcluster` in a complex environment (such as an automated CI/CD pipeline without a human `gcloud` session, a system with custom Docker credential helpers, or an environment with strict least-privilege IAM limits), you can completely bypass these validations by appending the `--skip-prereqs` flag.
 
+### Confirmation Prompts
+
+Some `gcluster job` commands ask for confirmation before certain changes, for example before creating default Kueue queues or re-installing Kueue on the cluster. Each prompt reads one line from standard input:
+
+* Enter (an empty line), `y` or `yes` means yes; `n` or `no` means no (case-insensitive). Any other answer is rejected, and the prompt asks again and reads the next line.
+* If standard input is closed or ends before an answer (for example, `</dev/null`, or `<NUL` on Windows), the answer is no and the command stops with an error. If standard input stays open but sends nothing, the prompt waits.
+* A heredoc or file can answer several prompts, one line each, but which prompts appear, and in what order, depends on the cluster's state and the `gcluster` version (`--skip-prereqs` skips only local prerequisite checks, not these cluster prompts). For example, when Kueue is outdated, a Kueue re-installation prompt appears before the queue prompt, so an answer meant for the queue prompt can approve the re-installation.
+
+> [!WARNING]
+> Any `y` or empty line on standard input can approve the Kueue re-installation prompt, which deletes all Kueue resources and all queued or suspended workloads in the cluster. Piping `yes` approves every prompt. For unattended runs, redirect standard input from `/dev/null` so unexpected prompts are declined, and pass `--queue` with an existing LocalQueue so the queue prompt does not appear.
+
 ### 1.1 Multi-Tier Checkpointing (MTC) Prerequisites
 
 If you plan to use Multi-Tier Checkpointing (`--gke-mtc-enabled` flag), ensure that the Multi-Tier Checkpointing feature is enabled on your GKE cluster.
