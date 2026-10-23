@@ -96,7 +96,7 @@ variable "max_retry_count" {
 }
 
 variable "lifecycle_policies" {
-  description = "List of lifecycle policies defining task retry or fail actions for specific exit codes (e.g., 50001 for Spot preemption). Note: Cloud Batch currently supports at most 1 lifecycle policy."
+  description = "List of lifecycle policies defining task retry or fail actions for specific exit codes (e.g., 50001 for Spot preemption; note that Spot VMs require a custom instance_template). Note: Cloud Batch currently supports at most 1 lifecycle policy."
   type = list(object({
     action     = string
     exit_codes = list(number)
@@ -111,9 +111,10 @@ variable "lifecycle_policies" {
   validation {
     condition = alltrue([
       for p in var.lifecycle_policies :
+      contains(["RETRY_TASK", "FAIL_TASK"], p.action) && length(p.exit_codes) > 0 &&
       alltrue([for code in p.exit_codes : code >= 0 && floor(code) == code])
     ])
-    error_message = "All exit codes in lifecycle_policies must be non-negative integers."
+    error_message = "Each lifecycle_policies entry must set action to 'RETRY_TASK' or 'FAIL_TASK' and a non-empty list of non-negative integer exit_codes."
   }
 }
 
