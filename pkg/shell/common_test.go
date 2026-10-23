@@ -248,6 +248,32 @@ type zeroReader struct{}
 
 func (zeroReader) Read([]byte) (int, error) { return 0, nil }
 
+// transientZeroReader returns zerosBeforeByte (0, nil) reads before each byte in data, so
+// readLine must both tolerate transient empty reads and reset its retry counter after a byte.
+type transientZeroReader struct {
+	data            string
+	zerosBeforeByte int
+	zerosRemaining  int
+	hangAtEnd       bool
+}
+
+func (r *transientZeroReader) Read(p []byte) (int, error) {
+	if r.data == "" {
+		if r.hangAtEnd {
+			return 0, nil
+		}
+		return 0, io.EOF
+	}
+	if r.zerosRemaining > 0 {
+		r.zerosRemaining--
+		return 0, nil
+	}
+	p[0] = r.data[0]
+	r.data = r.data[1:]
+	r.zerosRemaining = r.zerosBeforeByte
+	return 1, nil
+}
+
 func (s *MySuite) TestReadLine(c *C) {
 	errBoom := errors.New("boom")
 	tests := []struct {
@@ -266,6 +292,8 @@ func (s *MySuite) TestReadLine(c *C) {
 		{"newline with eof", iotest.DataErrReader(strings.NewReader("y\n")), "y", nil},
 		{"read error", iotest.ErrReader(errBoom), "", errBoom},
 		{"data then read error", io.MultiReader(strings.NewReader("y"), iotest.ErrReader(errBoom)), "y", errBoom},
+		{"transient zero reads reset after progress", &transientZeroReader{data: "y\n", zerosBeforeByte: 99, zerosRemaining: 99}, "y", nil},
+		{"data then no progress", &transientZeroReader{data: "y", zerosBeforeByte: 5, zerosRemaining: 5, hangAtEnd: true}, "y", io.ErrNoProgress},
 		{"no progress", zeroReader{}, "", io.ErrNoProgress},
 	}
 	for _, tc := range tests {

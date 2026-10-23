@@ -267,9 +267,10 @@ func promptYesNo(in io.Reader, prompt string) bool {
 func readLine(r io.Reader) (string, error) {
 	var line []byte
 	b := make([]byte, 1)
-	for {
+	for i := 0; i < 100; {
 		n, err := r.Read(b)
 		if n == 1 {
+			i = 0 // reset retry counter on successful read
 			if b[0] == '\n' {
 				return string(line), nil
 			}
@@ -279,9 +280,10 @@ func readLine(r io.Reader) (string, error) {
 			return string(line), err
 		}
 		if n == 0 {
-			return string(line), io.ErrNoProgress
+			i++
 		}
 	}
+	return string(line), io.ErrNoProgress
 }
 
 // ExtractRegion extracts the region from a location (region or zone).
