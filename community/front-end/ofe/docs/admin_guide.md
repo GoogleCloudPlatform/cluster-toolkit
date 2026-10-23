@@ -281,8 +281,7 @@ does *not*:
   that the required APIs are enabled, or that your account has suitable roles;
 - validate the deployment name (use lower-case letters, digits and `-`, as in
   interactive mode);
-- create a service account or write `credential.json`;
-- set the `region` variable (see below).
+- create a service account or write `credential.json`.
 
 The script does not "validate everything and then deploy": if Terraform fails
 part-way, some resources may already exist. See
@@ -290,18 +289,23 @@ part-way, some resources may already exist. See
 
 ##### Config file format
 
-The file is not parsed as real YAML. `deploy.sh` removes lines that start with
-`#` in column 0 and blank lines, keeps lines containing `:`, and splits each on
-the first `:`, `=` or space. Everything after that separator is the value.
-What this means in practice:
+The file is read as flat `key: value` lines, not full YAML. What this means in
+practice:
 
-- Put comments on their own line, starting in column 0. An inline comment
-  (`key: value # note`) becomes **part of the value**.
-- Do not quote values. Quotes are kept literally, and `"`, `\` and `${` in a
-  value can break the generated `terraform.tfvars`.
-- Leading and trailing spaces in a value are dropped. A value may contain `:`,
-  `=` and spaces after the first character, but avoid them where you can.
-- Lists, nesting and multi-line values are not supported.
+- Blank lines and comment lines are skipped, as are lines that are not
+  `key: value` with a key of letters, digits and `_` (not starting with a
+  digit). Indentation before a key is ignored.
+- A value wrapped in matching single or double quotes is unquoted. Otherwise a
+  `#` that starts the value or follows whitespace starts a comment, so
+  `key: value # note` yields `value`. Quote a value to keep a `#` that follows a space.
+- Quote escapes are not interpreted: a value with `''` or any `\` inside
+  quotes, or with text after the closing quote, is kept as written, quotes
+  included. `"`, `\` and `${` in a value can break the generated
+  `terraform.tfvars`.
+- Leading and trailing spaces around an unquoted value are dropped; spaces
+  inside quotes are kept.
+- Lists, nesting and multi-line values are not supported. An indented key is
+  read as a top-level key, and a later duplicate key wins.
 
 ```yaml
 # Required
@@ -312,6 +316,8 @@ django_superuser_username: sysadm
 django_superuser_email: sysadmin@example.com
 # Not needed if the DJANGO_SUPERUSER_PASSWORD environment variable is set
 django_superuser_password: CHANGE_ME
+# Optional. Default is the zone without its last -<letter>
+region: us-west1
 # Optional
 subnet_name: my-subnet
 dns_hostname: myhostname.com
@@ -333,18 +339,10 @@ git checkout of the repository.
 
 ##### Setting the region
 
-`deploy_from_config` never sets `region`, so `tf/terraform.tfvars` is written
-with `region = ""`. The region is used for the Google provider, the storage
-bucket location and the VPC created when no subnet is given. As a workaround,
-export `region` (the zone without its last `-<letter>`) before running the
-script, since `deploy.sh` reads it as a shell variable:
-
-```bash
-export region=us-west1
-./deploy.sh --config config.yaml
-```
-
-Alternatively use the interactive mode, which derives the region from the zone.
+The region is derived from the zone (the zone without its last `-<letter>`),
+as in interactive mode. To use a different region, add `region: <REGION>` to
+the config file. The region is used for the Google provider, the storage
+bucket location and the VPC created when no subnet is given.
 
 ##### Creating the service account manually
 
@@ -653,12 +651,14 @@ If `tf/terraform.tfvars` does not exist, the script exits with status 1 before
 asking anything.
 
 Note: if the `-y` flag is passed, the script answers "yes" to its own
-"No lock file found - proceed anyway?" and "Proceed?" questions. It does **not**
-answer the service account question: if a `<deployment name>-tkfe-sa` service
-account still exists, `./teardown.sh -y` still prompts `Delete [y/N]`
-(reading from standard input), so it is not fully unattended. Answer `n` to keep
-that service account and its credential. A leftover `<deployment name>-fe-sa`
-account (created by Terraform) is removed without a prompt.
+"No lock file found - proceed anyway?" and "Proceed?" questions. With `-y`, the
+script also deletes the `<deployment name>-tkfe-sa` service account without
+asking, so `./teardown.sh -y` runs without prompts. `-y` must be the first
+argument. The service account is handled before the `Proceed?` question, so it
+is deleted even if the teardown then stops. Without `-y` it asks
+`Delete [y/N]`; answer `n` to keep that service account and its credential.
+A leftover `<deployment name>-fe-sa` account (created by Terraform) is removed
+without a prompt.
 
 ## Troubleshooting
 
