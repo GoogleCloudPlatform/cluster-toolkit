@@ -261,6 +261,15 @@ When performing manual upgrades, following aspects need to be considered:
 * **Disruption and Reboots**:
   * Upgrading GKE node pools requires node replacement or restarts. Whether triggered via blueprint redeployment, `gcloud` CLI, or the Cloud Console, upgrading a node pool initiates a rolling update. This process replaces old nodes with new ones running the updated version, which is disruptive as pods will be evicted and rescheduled.
   * Standard rolling upgrades are disruptive to tightly-coupled distributed workloads (e.g., multi-node training jobs using `JobSet`). Losing a single node in a distributed job usually causes the entire job to fail. For these workloads, operators should gracefully pause or drain their jobs (e.g., scaling JobSets/deployments to 0) and verify that a successful checkpoint has been saved to persistent storage before initiating a node pool upgrade.
+* **Node Pool Label Updates (GCE Resource Labels vs. Kubernetes Labels)**:
+  * **GCE Resource Labels (`resource_labels` / `local.labels`)**: Applied to the underlying GCE Compute Engine VM instances and disks (used for billing, organization tracking, and Toolkit metadata such as `ghpc_blueprint`). Updating `resource_labels` on a node pool forces GKE to initiate a **rolling recreation of all nodes** in the pool to apply the new GCE metadata, which is disruptive to running workloads. Because of this, Cluster Toolkit places `node_config[0].resource_labels` in `lifecycle.ignore_changes` to prevent inadvertent metadata updates (such as renaming a blueprint) from rolling production node pools. If GCE resource labels must be updated on an existing node pool, perform the update deliberately during a scheduled maintenance window using the `gcloud` CLI:
+    ```shell
+    gcloud container node-pools update <pool-name> \
+      --cluster <cluster-name> \
+      --region <region> \
+      --resource-labels key1=val1,key2=val2
+    ```
+  * **Kubernetes Node Labels (`kubernetes_labels` / `node_config[0].labels`)**: Applied to Kubernetes Node API objects (`kubectl get nodes`) for pod scheduling and affinity. Unlike GCE resource labels, GKE can update Kubernetes labels in place without restarting or recreating the underlying VMs.
 * **Pod Disruption Budgets (PDBs)**: GKE respects PDBs during upgrades. If a PDB is overly restrictive, it can block or slow down the upgrade process. Conversely, ensure PDBs are configured correctly to maintain application availability during the rolling update.  
 * **Storage Persistence**: Temporary storage volumes (like `emptyDir`) are deleted when nodes are replaced. Persistent disks (PVs) are unaffected.  
 * **Channel Changes**:  
