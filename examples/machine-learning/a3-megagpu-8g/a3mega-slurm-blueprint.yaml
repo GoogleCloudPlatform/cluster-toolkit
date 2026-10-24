@@ -200,9 +200,9 @@ deployment_groups:
               nvidia_packages:
                 - cuda-toolkit-13-0
                 - nvidia-container-toolkit
-                - datacenter-gpu-manager-4-cuda13=1:4.6.0-1
-                - datacenter-gpu-manager-4-dev=1:4.6.0-1
-                - datacenter-gpu-manager-4-core=1:4.6.0-1
+                - datacenter-gpu-manager-4-cuda13=1:4.7.0-2
+                - datacenter-gpu-manager-4-dev=1:4.7.0-2
+                - datacenter-gpu-manager-4-core=1:4.7.0-2
 
             tasks:
               - name: Install NVIDIA repository keyring
