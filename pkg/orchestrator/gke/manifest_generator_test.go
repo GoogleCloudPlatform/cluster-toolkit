@@ -3452,3 +3452,144 @@ spec:
 		t.Fatalf("ValidateJobSetManifest() error = %v, want duplicate volumeMount path error", err)
 	}
 }
+
+func TestGeneratePathwaysManifest_DeploySPS(t *testing.T) {
+	tests := []struct {
+		name       string
+		sidecar    string
+		ramdiskDir string // empty disables MTC
+	}{
+		{name: "without sidecar"},
+		{name: "with sidecar", sidecar: "sidecar:20260831-jax0.11.1"},
+		{name: "MTC without sidecar", ramdiskDir: "/tmp/mtc_checkpoints"},
+		{name: "MTC with sidecar", sidecar: "sidecar:20260831-jax0.11.1", ramdiskDir: "/tmp/mtc_checkpoints"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupMockMachineConfig(t)
+			mockResponses := map[string][]shell.CommandResult{
+				"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+				"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
+				"gcloud compute machine-types describe ct5p-hightpu-4t --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v5p-slice"}]}`},
+				},
+			}
+			mockExec := NewMockExecutor(mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.projectID = "mock-project"
+			orc.clusterZones = []string{"us-central1-a"}
+			orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
+			orc.clusterDesc.NodePools = []gkeJobNodePool{
+				{
+					Name:            "v5p-pool",
+					Config:          gkeNodePoolConfig{MachineType: "ct5p-hightpu-4t"},
+					PlacementPolicy: &gkePlacementPolicy{TpuTopology: "2x2x2"},
+				},
+			}
+
+			job := orchestrator.JobDefinition{
+				WorkloadName:           "sps-v5p",
+				NumSlices:              4,
+				MaxRestarts:            30,
+				ClusterLocation:        "us-central1-a",
+				ComputeType:            "ct5p-hightpu-4t",
+				Topology:               "2x2x2",
+				IsPathwaysJob:          true,
+				GKEMTCEnabled:          tc.ramdiskDir != "",
+				GKEMTCRamdiskDirectory: tc.ramdiskDir,
+				Pathways: orchestrator.PathwaysJobDefinition{
+					DeploySPS:                   true,
+					MaxSliceRestarts:            1000000,
+					ServerImage:                 "server:jax-0.11.1",
+					WorkerImage:                 "server:jax-0.11.1",
+					ColocatedPythonSidecarImage: tc.sidecar,
+					GCSLocation:                 "gs://my-bucket/sps",
+					HeadNodePool:                "cpu-np",
+				},
+			}
+
+			img, err := orc.BuildContainerImage(job)
+			if err != nil || img != "" {
+				t.Fatalf("BuildContainerImage() = (%q, %v), want (\"\", nil)", img, err)
+			}
+
+			profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+			if err != nil {
+				t.Fatalf("resolveHardwareRequirements failed: %v", err)
+			}
+			manifest, err := orc.GeneratePathwaysManifest(job, "", profile, isDynamicSlicing, isStaticSlicing)
+			if err != nil {
+				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+			}
+			assertSPSManifest(t, manifest, tc.sidecar, tc.ramdiskDir)
+			if got := spsEndpoint(job.WorkloadName); got != "sps-v5p-pathways-head-0-0.sps-v5p:29001" {
+				t.Errorf("spsEndpoint() = %q, want sps-v5p-pathways-head-0-0.sps-v5p:29001", got)
+			}
+		})
+	}
+}
+
+func assertSPSManifest(t *testing.T, manifest, sidecarImage, ramdiskDir string) {
+	t.Helper()
+	specs := pathwaysPodSpecs(t, manifest)
+	head, ok := specs["pathways-head"]
+	if !ok {
+		t.Fatalf("pathways-head replicatedJob not found in manifest:\n%s", manifest)
+	}
+	worker, ok := specs["pathways-worker"]
+	if !ok {
+		t.Fatalf("pathways-worker replicatedJob not found in manifest:\n%s", manifest)
+	}
+
+	if len(head.InitContainers) != 0 {
+		t.Errorf("pathways-head initContainers = %d, want 0", len(head.InitContainers))
+	}
+	if len(head.Containers) != 1 || head.Containers[0].Name != "pathways-rm" {
+		t.Fatalf("pathways-head containers = %+v, want only [pathways-rm]", head.Containers)
+	}
+	if strings.Contains(manifest, "pathways-proxy") || strings.Contains(manifest, "workload-container") || strings.Contains(manifest, "successPolicy:") {
+		t.Errorf("SPS manifest should not contain pathways-proxy, workload-container, or successPolicy:\n%s", manifest)
+	}
+	assertNoDevShm(t, "pathways-head", head)
+	assertNoPodVolumes(t, "pathways-head", head, "cache", "sidecar-shared-memory")
+	assertUniqueVolumeNames(t, "pathways-head", head)
+	assertUniqueVolumeNames(t, "pathways-worker", worker)
+	assertWorkerMTCVolumes(t, worker, ramdiskDir, sidecarImage != "")
+
+	for _, want := range []string{
+		"maxRestarts: 30",
+		"restartStrategy: Recreate",
+		"--instance_count=4",
+		"--instance_type=tpuv5:2x2x2",
+		"backoffLimit: 2000000",
+		"backoffLimitPerIndex: 1000000",
+	} {
+		if !strings.Contains(manifest, want) {
+			t.Errorf("SPS manifest missing %q:\n%s", want, manifest)
+		}
+	}
+}
+
+func TestValidatePathwaysMTCManifest_SPSWorkerAndHint(t *testing.T) {
+	manifest := `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+spec:
+  replicatedJobs:
+  - name: pathways-worker
+    template:
+      spec:
+        template:
+          spec:
+            containers:
+            - name: pathways-worker
+`
+	opts := ManifestOptions{
+		GKEMTCEnabled:          true,
+		GKEMTCRamdiskDirectory: "/tmp/mtc_checkpoints",
+		Pathways:               orchestrator.PathwaysJobDefinition{DeploySPS: true},
+	}
+	err := validatePathwaysMTCManifest(manifest, opts)
+	if err == nil || !strings.Contains(err.Error(), "volume on worker pods") || !strings.Contains(err.Error(), "re-extract pathways_sps_jobset.tmpl") {
+		t.Fatalf("validatePathwaysMTCManifest() error = %v, want missing worker volume error with a hint to re-extract pathways_sps_jobset.tmpl", err)
+	}
+}

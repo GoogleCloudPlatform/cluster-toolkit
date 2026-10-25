@@ -467,6 +467,13 @@ func (g *GKEOrchestrator) printConsoleLinks(job orchestrator.JobDefinition) {
 
 	logsLink := getCloudConsoleLogsURL(job.ProjectID, job.ClusterLocation, job.ClusterName, ns, jobName)
 	logging.Info("View your workload logs in real-time here: %s or use gcluster job logs [job-name] to view logs using kubectl", logsLink)
+	if job.Pathways.DeploySPS {
+		logging.Info("SPS instance %s submitted. Endpoint: %s", job.WorkloadName, spsEndpoint(job.WorkloadName))
+	}
+}
+
+func spsEndpoint(workloadName string) string {
+	return fmt.Sprintf("%s-pathways-head-0-0.%s:29001", workloadName, workloadName)
 }
 
 func (g *GKEOrchestrator) validateJobConflicts(job orchestrator.JobDefinition) error {
@@ -1013,7 +1020,7 @@ func (g *GKEOrchestrator) queryDiscoveredTopologies(accelLabel string, machineTy
 }
 
 func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (string, error) {
-	if job.Pathways.Headless {
+	if job.Pathways.Headless || job.Pathways.DeploySPS {
 		return "", nil
 	}
 	if job.DryRunManifest != "" {

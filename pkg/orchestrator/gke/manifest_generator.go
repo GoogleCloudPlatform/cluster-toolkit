@@ -526,10 +526,17 @@ func ValidateJobSetManifest(manifestContent string) error {
 }
 
 const (
-	defaultPathwaysProxyImage   = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
-	defaultPathwaysServerImage  = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
-	pathwaysTemplateExtractHint = "If you use --gke-custom-templates-path, re-extract pathways_jobset.tmpl with 'gcluster job gke-template-extract' and re-apply your changes"
+	defaultPathwaysProxyImage      = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
+	defaultPathwaysServerImage     = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
+	pathwaysTemplateExtractHintFmt = "If you use --gke-custom-templates-path, re-extract %s with 'gcluster job gke-template-extract' and re-apply your changes"
 )
+
+func pathwaysTemplateName(p orchestrator.PathwaysJobDefinition) string {
+	if p.DeploySPS {
+		return "pathways_sps_jobset.tmpl"
+	}
+	return "pathways_jobset.tmpl"
+}
 
 // GeneratePathwaysManifest generates the Kubernetes JobSet manifest for a Pathways job.
 func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) (string, error) {
@@ -545,7 +552,7 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		job.Pathways.WorkerImage = job.Pathways.ServerImage
 	}
 
-	tmpl, err := g.parseGKETemplate("pathways_jobset.tmpl")
+	tmpl, err := g.parseGKETemplate(pathwaysTemplateName(job.Pathways))
 	if err != nil {
 		return "", fmt.Errorf("failed to parse pathways jobset template: %w", err)
 	}
@@ -627,7 +634,7 @@ func extractPathwaysPodSpecs(jobSet string) (workerSpec, headSpec *corev1.PodSpe
 		for i := range jsDoc.Spec.ReplicatedJobs {
 			rj := &jsDoc.Spec.ReplicatedJobs[i]
 			switch rj.Name {
-			case "worker":
+			case "worker", "pathways-worker":
 				workerSpec = &rj.Template.Spec.Template.Spec
 			case "pathways-head":
 				headSpec = &rj.Template.Spec.Template.Spec
@@ -642,25 +649,26 @@ func validatePathwaysMTCManifest(jobSet string, opts ManifestOptions) error {
 	if !opts.GKEMTCEnabled {
 		return nil
 	}
+	hint := fmt.Sprintf(pathwaysTemplateExtractHintFmt, pathwaysTemplateName(opts.Pathways))
 	workerSpec, headSpec, err := extractPathwaysPodSpecs(jobSet)
 	if err != nil {
 		return err
 	}
 	if headSpec != nil && findCSIVolumeName(headSpec, multitierCheckpointCSIDriver) != "" {
-		return fmt.Errorf("--gke-mtc-enabled is set but pathways-head declares a %s volume; the MTC volume must only be declared on worker pods. %s", multitierCheckpointCSIDriver, pathwaysTemplateExtractHint)
+		return fmt.Errorf("--gke-mtc-enabled is set but pathways-head declares a %s volume; the MTC volume must only be declared on worker pods. %s", multitierCheckpointCSIDriver, hint)
 	}
 	if workerSpec == nil {
-		return fmt.Errorf("--gke-mtc-enabled is set but the Pathways manifest has no worker replicatedJob. %s", pathwaysTemplateExtractHint)
+		return fmt.Errorf("--gke-mtc-enabled is set but the Pathways manifest has no worker replicatedJob. %s", hint)
 	}
 	mtcVolName := findCSIVolumeName(workerSpec, multitierCheckpointCSIDriver)
 	if mtcVolName == "" {
-		return fmt.Errorf("--gke-mtc-enabled is set but the Pathways manifest has no %s volume on worker pods. %s", multitierCheckpointCSIDriver, pathwaysTemplateExtractHint)
+		return fmt.Errorf("--gke-mtc-enabled is set but the Pathways manifest has no %s volume on worker pods. %s", multitierCheckpointCSIDriver, hint)
 	}
 	if !containerMountsVolumeAt(workerSpec, "pathways-worker", mtcVolName, opts.GKEMTCRamdiskDirectory) {
-		return fmt.Errorf("--gke-mtc-enabled is set but container \"pathways-worker\" does not mount %s volume %q at %q. %s", multitierCheckpointCSIDriver, mtcVolName, opts.GKEMTCRamdiskDirectory, pathwaysTemplateExtractHint)
+		return fmt.Errorf("--gke-mtc-enabled is set but container \"pathways-worker\" does not mount %s volume %q at %q. %s", multitierCheckpointCSIDriver, mtcVolName, opts.GKEMTCRamdiskDirectory, hint)
 	}
 	if opts.Pathways.ColocatedPythonSidecarImage != "" && !containerMountsVolumeAt(workerSpec, "colocated-python-sidecar", mtcVolName, opts.GKEMTCRamdiskDirectory) {
-		return fmt.Errorf("--gke-mtc-enabled is set with --pathways-colocated-python-sidecar-image, but container \"colocated-python-sidecar\" does not mount %s volume %q at %q. %s", multitierCheckpointCSIDriver, mtcVolName, opts.GKEMTCRamdiskDirectory, pathwaysTemplateExtractHint)
+		return fmt.Errorf("--gke-mtc-enabled is set with --pathways-colocated-python-sidecar-image, but container \"colocated-python-sidecar\" does not mount %s volume %q at %q. %s", multitierCheckpointCSIDriver, mtcVolName, opts.GKEMTCRamdiskDirectory, hint)
 	}
 	return nil
 }

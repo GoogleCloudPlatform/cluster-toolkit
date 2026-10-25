@@ -24,9 +24,10 @@ type PathwaysJobDefinition struct {
 
 	// Pathways specific configurations
 	Headless         bool   // Default: false
+	DeploySPS        bool   // Default: false
 	GCSLocation      string // Required for Pathways jobs.
 	ElasticSlices    int    // Default: 0
-	MaxSliceRestarts int    // Default: 0 (or 4000 when ElasticSlices > 0 or Headless is true)
+	MaxSliceRestarts int    // Default: 0 (4000 for ElasticSlices > 0 or Headless; 1000000 for DeploySPS)
 
 	// Custom Arguments for Pathways components
 	ProxyArgs  string // Default: ""
