@@ -267,5 +267,7 @@ lint-skills:
 test-skills:
 	$(info **************** running skills unit tests and evals ***************)
 	@python3 tools/tests/test_run_eval.py
+	@python3 tools/tests/test_diff_scan.py
+	@python3 tools/tests/test_breaking_check_scripts.py
 	@python3 tools/run_eval.py --all
 # END OF AGENT SKILLS SECTION
