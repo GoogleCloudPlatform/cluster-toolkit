@@ -42,40 +42,6 @@ const (
 	EndCatalogMarker = "<!-- END_BLUEPRINT_CATALOG -->"
 )
 
-// autoInjectedGlobals are top-level vars automatically passed by gcluster to
-// every module that declares them as inputs.
-var autoInjectedGlobals = map[string]bool{
-	"project_id":      true,
-	"deployment_name": true,
-	"region":          true,
-	"zone":            true,
-	"labels":          true,
-}
-
-// genericOutputNames are output names that are too generic for blind
-// name-based output-to-input matching unless backed by an observed blueprint use edge.
-var genericOutputNames = map[string]bool{
-	"id":            true,
-	"instance_name": true,
-	"name":          true,
-	"self_link":     true,
-}
-
-// integrationInputNames are optional module inputs that commonly wire modules
-// together via `use:` in Cluster Toolkit blueprints.
-var integrationInputNames = map[string]bool{
-	"network_storage":           true,
-	"partitions":                true,
-	"nodeset":                   true,
-	"nodeset_dyn":               true,
-	"nodeset_tpu":               true,
-	"login_nodes":               true,
-	"runners":                   true,
-	"startup_script":            true,
-	"compute_startup_script":    true,
-	"controller_startup_script": true,
-}
-
 // Catalog is the top-level structure serialized to references/catalog.yaml.
 type Catalog struct {
 	Blueprints   []BlueprintEntry             `yaml:"blueprints"`
@@ -990,26 +956,16 @@ func buildParsedModule(source string, info modulereader.ModuleInfo) parsedModule
 	var reqInputs []string
 	for _, in := range info.Inputs {
 		allInputs[in.Name] = true
-		if in.Required && !autoInjectedGlobals[in.Name] && in.Name != injectedID {
+		if in.Required && !config.IsAutoInjectedGlobal(in.Name) && in.Name != injectedID {
 			reqInputs = append(reqInputs, in.Name)
 		}
 	}
 	sort.Strings(reqInputs)
 
-	// Echo variable suppression: exclude outputs that share a name with an input
-	// on the same module, unless the module is a root provider (no required inputs)
-	// whose outputs also accept optional name-override inputs.
 	trueOutputs := make(map[string]bool, len(info.Outputs))
 	for _, out := range info.Outputs {
-		if !allInputs[out.Name] && !genericOutputNames[out.Name] {
+		if config.IsTrueProviderOutput(info, out.Name) {
 			trueOutputs[out.Name] = true
-		}
-	}
-	if len(reqInputs) == 0 {
-		for _, out := range info.Outputs {
-			if !genericOutputNames[out.Name] && !integrationInputNames[out.Name] {
-				trueOutputs[out.Name] = true
-			}
 		}
 	}
 	return parsedModule{
@@ -1080,7 +1036,7 @@ func findConsumedBy(provider parsedModule, allMods []parsedModule, observed map[
 			if cand.source == provider.source {
 				continue
 			}
-			if slices.Contains(cand.requiredInputs, outName) || (integrationInputNames[outName] && cand.allInputs[outName]) {
+			if slices.Contains(cand.requiredInputs, outName) || (config.IsIntegrationInputName(outName) && cand.allInputs[outName]) {
 				consumers[cand.source] = true
 			}
 		}
