@@ -122,7 +122,7 @@ HELP1
   
   The following deployment variables are required:
   
-    deployment_name:             Name of the deployment
+    deployment_name:             Name of the deployment (3-${DEPLOYMENT_NAME_MAX_LENGTH} chars: lowercase letters, digits, '-')
     project_id:                  ID of the Google Cloud project
     zone:                        Zone where the deployment will be created
     django_superuser_username:   Username for the Django superuser
@@ -312,6 +312,7 @@ validate_deployment_name() {
 		error "              - Start with a letter and end with a letter or digit"
 		return 1
 	fi
+	return 0
 }
 
 #
