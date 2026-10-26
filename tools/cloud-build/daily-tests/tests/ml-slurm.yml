@@ -13,7 +13,6 @@
 # limitations under the License.
 
 ---
-
 test_name: ml-slurm-v6
 deployment_name: ml-slurm-v6-{{ build }}
 network: "{{ test_name }}-net"
@@ -23,3 +22,22 @@ packer_group_name: packer
 packer_module_id: custom-image
 cli_deployment_vars:
   test_name: "{{ test_name }}"
+
+zone: asia-southeast1-b
+slurm_cluster_name: "{{ (deployment_name | replace('-', ''))[:10] }}"
+login_node: "{{ slurm_cluster_name }}-slurm-login-*"
+controller_node: "{{ slurm_cluster_name }}-controller"
+post_destroy_tasks:
+  - post-destroy-tasks/delete-image.yml
+
+post_deploy_tests:
+  - test-validation/test-mounts.yml
+  - test-validation/test-partitions.yml
+
+custom_vars:
+  partitions:
+    - a2
+    - g2
+  mounts:
+    - /home
+  num_slurm_nodes: 1
