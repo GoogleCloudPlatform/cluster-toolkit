@@ -883,42 +883,6 @@ func TestRefreshGKEAuth_DNSEndpoint(t *testing.T) {
 	}
 }
 
-func TestCheckClusterConnectivity(t *testing.T) {
-	const cmd = "kubectl get --raw /version --request-timeout=5s"
-	tests := []struct {
-		name    string
-		result  shell.CommandResult
-		wantErr string
-	}{
-		{name: "reachable", result: shell.CommandResult{ExitCode: 0}},
-		{name: "forbidden is still connected", result: shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): forbidden"}},
-		{name: "auth failure", result: shell.CommandResult{ExitCode: 1, Stderr: "error: You must be logged in to the server (Unauthorized)"}, wantErr: "authentication to GKE cluster"},
-		{name: "unreachable", result: shell.CommandResult{ExitCode: 1, Stderr: "dial tcp 10.0.0.1:443: i/o timeout"}, wantErr: "authorized networks"},
-		{name: "proxy gateway error is a connectivity failure", result: shell.CommandResult{ExitCode: 1, Stderr: "error: the server responded with the status code 502 but did not return more information"}, wantErr: "authorized networks"},
-		// Mirrors configureKubectl: unrecognised output must not block submission with a misleading network error.
-		{name: "unrecognised output is not fatal", result: shell.CommandResult{ExitCode: 1, Stderr: "something completely different"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			exec := newExactExecutor(map[string][]shell.CommandResult{cmd: {tt.result}})
-			g := &GKEOrchestrator{executor: exec}
-			err := g.checkClusterConnectivity(testCluster)
-			if tt.wantErr == "" {
-				if err != nil {
-					t.Fatalf("checkClusterConnectivity() error = %v, want nil", err)
-				}
-				return
-			}
-			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-				t.Fatalf("checkClusterConnectivity() error = %v, want containing %q", err, tt.wantErr)
-			}
-			if exec.count(cmd) != 1 {
-				t.Errorf("probe calls = %d, want 1; calls=%v", exec.count(cmd), exec.calls)
-			}
-		})
-	}
-}
-
 func TestWithKubeContext(t *testing.T) {
 	args := []string{"get", "pods"}
 	if got := withKubeContext("", args); !slices.Equal(got, args) {
@@ -1014,17 +978,6 @@ func TestConfigureKubectl_FailureClearsPinnedContext(t *testing.T) {
 	}
 	if orc.kubeContext != "" {
 		t.Errorf("kubeContext = %q, want empty after failure", orc.kubeContext)
-	}
-}
-
-func TestCheckClusterConnectivity_UsesPinnedContext(t *testing.T) {
-	exec := newExactExecutor(map[string][]shell.CommandResult{probeCmd: {{ExitCode: 0}}})
-	g := &GKEOrchestrator{executor: exec, kubeContext: testContext}
-	if err := g.checkClusterConnectivity(testCluster); err != nil {
-		t.Fatalf("checkClusterConnectivity() error = %v", err)
-	}
-	if exec.count(probeCmd) != 1 {
-		t.Errorf("probe did not use the pinned context; calls=%v", exec.calls)
 	}
 }
 

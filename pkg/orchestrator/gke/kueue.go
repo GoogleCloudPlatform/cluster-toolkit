@@ -106,49 +106,51 @@ func parseKueueQueueName(raw string) (string, error) {
 }
 
 // resolveKueueQueue resolves which Kueue LocalQueue to use for job submission.
+// The returned bool is true when the queue name was auto-discovered from an
+// existing LocalQueue list in the namespace (so callers don't need to re-fetch it).
 // Precedence rules:
 // 1. If requestedQueueName is specified explicitly by the user, validate and return it directly.
 // 2. If 0 LocalQueues are found in the namespace, fall back to defaultLocalQueue ("default").
 // 3. If exactly 1 LocalQueue is found, auto-discover and return it.
 // 4. If multiple LocalQueues exist, check for standard "default", then "multislice-queue".
 // 5. If multiple non-standard LocalQueues exist, return an error asking the user to specify --queue.
-func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName, ns string) (string, error) {
+func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName, ns string) (string, bool, error) {
 	if requestedQueueName != "" {
 		cleanName, err := parseKueueQueueName(requestedQueueName)
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
 		logging.Info("Using provided Kueue LocalQueue: %s", cleanName)
-		return cleanName, nil
+		return cleanName, false, nil
 	}
 
 	res := g.kubectl("get", "localqueue", "-n", ns, "-o", "jsonpath={.items[*].metadata.name}")
 	if res.ExitCode != 0 {
-		return "", fmt.Errorf("failed to query LocalQueues in namespace %s: %s", ns, res.Stderr)
+		return "", false, fmt.Errorf("failed to query LocalQueues in namespace %s: %s", ns, res.Stderr)
 	}
 
 	output := strings.TrimSpace(res.Stdout)
 	if output == "" {
 		logging.Info("No LocalQueues found. Defaulting to '%s'.", defaultLocalQueue)
-		return defaultLocalQueue, nil
+		return defaultLocalQueue, false, nil
 	}
 
 	queues := strings.Fields(output)
 	if len(queues) == 1 {
 		logging.Info("Auto-discovered Kueue LocalQueue: %s", queues[0])
-		return queues[0], nil
+		return queues[0], true, nil
 	}
 
 	if slices.Contains(queues, defaultLocalQueue) {
 		logging.Info("Multiple LocalQueues found %v. Defaulting to standard LocalQueue '%s'.", queues, defaultLocalQueue)
-		return defaultLocalQueue, nil
+		return defaultLocalQueue, true, nil
 	}
 	if slices.Contains(queues, multisliceLocalQueue) {
 		logging.Info("Multiple LocalQueues found %v. Defaulting to '%s'.", queues, multisliceLocalQueue)
-		return multisliceLocalQueue, nil
+		return multisliceLocalQueue, true, nil
 	}
 
-	return "", fmt.Errorf("multiple LocalQueues found (%v) and no standard '%s' or '%s' present. Please specify which one to use using --queue flag", queues, defaultLocalQueue, multisliceLocalQueue)
+	return "", false, fmt.Errorf("multiple LocalQueues found (%v) and no standard '%s' or '%s' present. Please specify which one to use using --queue flag", queues, defaultLocalQueue, multisliceLocalQueue)
 }
 
 // listLocalQueues returns a slice of existing LocalQueue names in the given namespace.
@@ -337,19 +339,52 @@ func (g *GKEOrchestrator) hasRequiredResources(rgList []interface{}) bool {
 // 3. Kueue Installation & Cluster Lifecycle Management (Cluster-Level)
 // -----------------------------------------------------------------------------
 
+// hasFailedDeploymentCondition checks if any of the deployment conditions indicate a failure.
+func hasFailedDeploymentCondition(dep *kueueDeployment) bool {
+	for _, cond := range dep.Status.Conditions {
+		if cond.Type == "Progressing" && (cond.Reason == "ProgressDeadlineExceeded" || cond.Status == "False") {
+			return true
+		}
+		if cond.Type == "Available" && cond.Status == "False" {
+			return true
+		}
+	}
+	return false
+}
+
+// isKueueDeploymentRolledOut checks if the Kueue deployment has been fully rolled out and is healthy.
+func isKueueDeploymentRolledOut(dep *kueueDeployment) bool {
+	if dep == nil || dep.Spec.Paused || hasFailedDeploymentCondition(dep) {
+		return false
+	}
+	desired := int32(1)
+	if dep.Spec.Replicas != nil {
+		desired = *dep.Spec.Replicas
+	}
+	return desired > 0 &&
+		dep.Metadata.Generation <= dep.Status.ObservedGeneration &&
+		dep.Status.UpdatedReplicas >= desired &&
+		dep.Status.Replicas <= dep.Status.UpdatedReplicas &&
+		dep.Status.AvailableReplicas >= dep.Status.UpdatedReplicas
+}
+
 // CheckAndInstallKueue verifies if Kueue is installed on the GKE cluster, installing or updating it if required.
 func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName string, clusterLocation string) error {
 	kueueCRDInstalled, errCRD := g.isKueueInstalled()
 	if errCRD != nil {
 		return fmt.Errorf("failed to verify Kueue CRD status: %w", errCRD)
 	}
-	kueueDeploymentInstalled, errDep := g.isKueueDeploymentInstalled()
+	dep, kueueDeploymentInstalled, errDep := g.getKueueDeployment()
 	if errDep != nil {
 		return fmt.Errorf("failed to verify Kueue deployment status: %w", errDep)
 	}
-	currentVersion, errVer := g.GetKueueVersion()
-	if errVer != nil && (kueueCRDInstalled && kueueDeploymentInstalled) {
-		logging.Info("Warning: Unable to determine installed Kueue version: %v", errVer)
+	var currentVersion string
+	if dep != nil {
+		logging.Info("Kueue deployment found.")
+		var errVer error
+		if currentVersion, errVer = g.getKueueVersion(dep); errVer != nil {
+			logging.Info("Warning: Unable to determine installed Kueue version: %v", errVer)
+		}
 	}
 
 	if version == "" {
@@ -372,7 +407,7 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName strin
 			return err
 		}
 	} else {
-		if err := g.waitForKueueWebhookFast(); err != nil {
+		if err := g.waitForKueueWebhookFast(dep); err != nil {
 			return fmt.Errorf("kueue is installed but currently unhealthy. Please check deployment health with 'kubectl get deployment kueue-controller-manager -n kueue-system': %w", err)
 		}
 	}
@@ -464,31 +499,47 @@ func (g *GKEOrchestrator) isKueueInstalled() (bool, error) {
 	return false, fmt.Errorf("failed to check for Kueue CRD: %s\n%s", res.Stderr, res.Stdout)
 }
 
-func (g *GKEOrchestrator) isKueueDeploymentInstalled() (bool, error) {
-	res := g.kubectl("get", "deployment", "kueue-controller-manager", "-n", "kueue-system")
+// getKueueDeployment retrieves the Kueue controller manager deployment from the cluster.
+func (g *GKEOrchestrator) getKueueDeployment() (*kueueDeployment, bool, error) {
+	res := g.kubectl("get", "deployment", "kueue-controller-manager", "-n", "kueue-system", "-o", "json")
 	if res.ExitCode == 0 {
-		logging.Info("Kueue deployment found.")
-		return true, nil
+		var dep kueueDeployment
+		if err := json.Unmarshal([]byte(res.Stdout), &dep); err != nil {
+			return nil, true, fmt.Errorf("failed to unmarshal kueue deployment: %w", err)
+		}
+		return &dep, true, nil
 	}
 	errStr := strings.ToLower(res.Stderr + " " + res.Stdout)
 	if strings.Contains(errStr, "notfound") || strings.Contains(errStr, "not found") {
 		logging.Info("Kueue deployment not found.")
-		return false, nil
+		return nil, false, nil
 	}
 	if strings.Contains(errStr, "forbidden") {
 		logging.Warn("Insufficient RBAC permissions to read Kueue deployment in kueue-system (403 Forbidden). Assuming Kueue deployment is installed in shared cluster.")
-		return true, nil
+		return nil, true, nil
 	}
-	return false, fmt.Errorf("failed to check for Kueue deployment: %s\n%s", res.Stderr, res.Stdout)
+	return nil, false, fmt.Errorf("failed to check for Kueue deployment: %s\n%s", res.Stderr, res.Stdout)
 }
 
-// GetKueueVersion queries the cluster for the deployed version of the Kueue controller.
-func (g *GKEOrchestrator) GetKueueVersion() (string, error) {
-	res := g.kubectl("get", "deployment", "kueue-controller-manager", "-n", "kueue-system", "-o", "jsonpath={.spec.template.spec.containers[0].image}")
-	if res.ExitCode != 0 {
-		return "", fmt.Errorf("failed to get Kueue version: %s\n%s", res.Stderr, res.Stdout)
+// getKueueVersion extracts the deployed version of the Kueue controller from its Deployment object.
+func (g *GKEOrchestrator) getKueueVersion(dep *kueueDeployment) (string, error) {
+	if dep == nil {
+		return "", fmt.Errorf("kueue deployment object is nil")
 	}
-	image := strings.TrimSpace(res.Stdout)
+	containers := dep.Spec.Template.Spec.Containers
+	if len(containers) == 0 {
+		return "", fmt.Errorf("no containers found in Kueue deployment")
+	}
+	image := strings.TrimSpace(containers[0].Image)
+	for _, c := range containers {
+		if c.Name == "manager" {
+			image = strings.TrimSpace(c.Image)
+			break
+		}
+		if strings.Contains(c.Image, "kueue") {
+			image = strings.TrimSpace(c.Image)
+		}
+	}
 	if idx := strings.Index(image, "@"); idx != -1 {
 		image = image[:idx]
 	}
@@ -557,14 +608,27 @@ func (g *GKEOrchestrator) DeleteAllKueueResources() error {
 	return g.DeleteKueueDeployment()
 }
 
-func (g *GKEOrchestrator) waitForKueueWebhookFast() error {
-	res := g.kubectl("rollout", "status", "deployment/kueue-controller-manager", "-n", "kueue-system", kueueControllerRolloutTimeout)
-	if res.ExitCode != 0 {
-		podDetails := g.getKueuePodDetails()
-		return fmt.Errorf("kueue controller manager failed to become ready: %s\n%s%s", res.Stderr, res.Stdout, podDetails)
+func (g *GKEOrchestrator) waitForKueueWebhookFast(dep *kueueDeployment) error {
+	if !isKueueDeploymentRolledOut(dep) {
+		res := g.kubectl("rollout", "status", "deployment/kueue-controller-manager", "-n", "kueue-system", kueueControllerRolloutTimeout)
+		if res.ExitCode != 0 {
+			if strings.Contains(strings.ToLower(res.Stderr+" "+res.Stdout), "forbidden") {
+				logging.Warn("Insufficient RBAC permissions to check Kueue deployment rollout status in kueue-system (403 Forbidden). Skipping rollout status check.")
+				return g.waitForKueueEndpoints(true)
+			}
+			podDetails := g.getKueuePodDetails()
+			return fmt.Errorf("kueue controller manager failed to become ready: %s\n%s%s", res.Stderr, res.Stdout, podDetails)
+		}
+		if dep == nil {
+			var err error
+			dep, _, err = g.getKueueDeployment()
+			if err != nil {
+				logging.Warn("Failed to read Kueue deployment after rollout: %v", err)
+			}
+		}
 	}
 
-	version, err := g.GetKueueVersion()
+	version, err := g.getKueueVersion(dep)
 	if err != nil {
 		logging.Warn("Failed to get Kueue version, defaulting to Endpoints check: %v", err)
 		version = defaultKueueVersion
@@ -577,7 +641,7 @@ func (g *GKEOrchestrator) waitForKueueWebhookFast() error {
 }
 
 func (g *GKEOrchestrator) waitForKueueWebhook() error {
-	if err := g.waitForKueueWebhookFast(); err != nil {
+	if err := g.waitForKueueWebhookFast(nil); err != nil {
 		return err
 	}
 	return g.probeKueueWebhookReadiness()
@@ -724,24 +788,15 @@ func (g *GKEOrchestrator) getClusterPriorityClasses() ([]string, error) {
 	return strings.Fields(res.Stdout), nil
 }
 
-func (g *GKEOrchestrator) hasUserPriorityClasses() (bool, error) {
-	existing, err := g.getClusterPriorityClasses()
-	if err != nil {
-		if isForbiddenError(err) {
-			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping default PriorityClass installation.")
-			return true, nil
-		}
-		return false, err
-	}
-
+func hasUserPriorityClasses(existing []string) bool {
 	for _, name := range existing {
 		if strings.HasPrefix(name, "system-") || strings.HasPrefix(name, "gke-") {
 			continue
 		}
 		logging.Info("Pre-existing PriorityClass '%s' found. Skipping default PriorityClass installation.", name)
-		return true, nil
+		return true
 	}
-	return false, nil
+	return false
 }
 
 func (g *GKEOrchestrator) installPriorityClasses() error {
@@ -764,41 +819,46 @@ func (g *GKEOrchestrator) installPriorityClasses() error {
 	return nil
 }
 
-func (g *GKEOrchestrator) ensurePriorityClassesInstalled() error {
-	hasUserClasses, err := g.hasUserPriorityClasses()
-	if err != nil {
-		return err
-	}
-
-	if hasUserClasses {
-		return nil
-	}
-
-	logging.Info("No user-defined PriorityClasses found. Installing defaults...")
-	return g.installPriorityClasses()
-}
-
 // EnsurePriorityClassesInstalled ensures default priority classes are applied if no custom ones exist.
 func (g *GKEOrchestrator) EnsurePriorityClassesInstalled() error {
-	return g.ensurePriorityClassesInstalled()
-}
-
-func (g *GKEOrchestrator) validatePriorityClass(requestedPriority string) error {
-	if requestedPriority == "" {
-		return nil
-	}
-
 	existing, err := g.getClusterPriorityClasses()
 	if err != nil {
 		if isForbiddenError(err) {
-			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping PriorityClass validation for %q.", requestedPriority)
+			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping default PriorityClass installation.")
 			return nil
 		}
 		return err
 	}
+	if hasUserPriorityClasses(existing) {
+		return nil
+	}
+	logging.Info("No user-defined PriorityClasses found. Installing defaults...")
+	return g.installPriorityClasses()
+}
 
-	if !slices.Contains(existing, requestedPriority) {
-		return fmt.Errorf("priority class %q does not exist in the cluster. Available priority classes are: %v", requestedPriority, existing)
+func (g *GKEOrchestrator) ensureAndValidatePriorityClass(requested string) error {
+	if requested == "" {
+		return nil
+	}
+	existing, err := g.getClusterPriorityClasses()
+	if err != nil {
+		if isForbiddenError(err) {
+			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping PriorityClass install/validation for %q.", requested)
+			return nil
+		}
+		return err
+	}
+	if !hasUserPriorityClasses(existing) {
+		logging.Info("No user-defined PriorityClasses found. Installing defaults...")
+		if err := g.installPriorityClasses(); err != nil {
+			return err
+		}
+		if existing, err = g.getClusterPriorityClasses(); err != nil {
+			return err
+		}
+	}
+	if !slices.Contains(existing, requested) {
+		return fmt.Errorf("priority class %q does not exist in the cluster. Available priority classes are: %v", requested, existing)
 	}
 	return nil
 }
@@ -881,14 +941,8 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 		return err
 	}
 
-	hasUserClasses, err := g.hasUserPriorityClasses()
-	if err != nil {
+	if err := g.EnsurePriorityClassesInstalled(); err != nil {
 		return err
-	}
-	if !hasUserClasses {
-		if err := g.installPriorityClasses(); err != nil {
-			return err
-		}
 	}
 
 	// Install ClusterQueue
