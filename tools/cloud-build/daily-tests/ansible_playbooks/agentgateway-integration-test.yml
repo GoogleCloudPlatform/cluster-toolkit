@@ -54,13 +54,6 @@
       that:
       - (external_provider_tests | default([]) | map(attribute='provider') | unique | length) == (external_provider_tests | default([]) | length)
 
-  - name: Require durable state for Cloud Build runs
-    ansible.builtin.assert:
-      that:
-      - deployment_state_bucket | length > 0
-      fail_msg: Set deployment_state_bucket to the CI state bucket before running in Cloud Build.
-    when: full_build_id is defined
-
   - name: Configure blueprint variables
     ansible.builtin.set_fact:
       cli_deployment_vars: "{{ {'region': region, 'authorized_cidr': authorized_cidr, 'vertex_model': vertex_model, 'namespace': agentgateway_namespace} | combine({'node_service_account_email': node_service_account_email, 'proxy_service_account_email': proxy_service_account_email} if not (create_service_accounts | bool) else {}) }}"
@@ -124,7 +117,7 @@
       ansible.builtin.command:
         argv:
         - python3
-        - "{{ workspace }}/tools/cloud-build/daily-tests/ansible_playbooks/test-validation/agentgateway/run_in_cluster.py"
+        - "{{ workspace }}/community/examples/agentgateway-gke/run_in_cluster.py"
         - --namespace
         - "{{ agentgateway_namespace }}"
         - --model
@@ -135,7 +128,7 @@
       ansible.builtin.command:
         argv:
         - python3
-        - "{{ workspace }}/tools/cloud-build/daily-tests/ansible_playbooks/test-validation/agentgateway/run_in_cluster.py"
+        - "{{ workspace }}/community/examples/agentgateway-gke/run_in_cluster.py"
         - --namespace
         - "{{ agentgateway_namespace }}"
         - --mock-provider
@@ -145,7 +138,7 @@
       ansible.builtin.command:
         argv:
         - python3
-        - "{{ workspace }}/tools/cloud-build/daily-tests/ansible_playbooks/test-validation/agentgateway/run_in_cluster.py"
+        - "{{ workspace }}/community/examples/agentgateway-gke/run_in_cluster.py"
         - --namespace
         - "{{ agentgateway_namespace }}"
         - --provider

@@ -92,7 +92,10 @@ and model inference requests. Destroy the deployment when finished.
 Choose whether the blueprint should [create service accounts](#create-service-accounts)
 or [use accounts provisioned by an administrator](#use-existing-service-accounts).
 
-Run commands from the repository root.
+Run commands from the repository root. Edit
+[`agentgateway-gke-deployment.yaml`](agentgateway-gke-deployment.yaml) to set your
+project, deployment name, and authorized client CIDR. Keep this file for updates;
+it contains configuration, not provider credentials.
 
 Choose a unique deployment name of at most 20 characters. Note that the deployment
 name is also used for IAM and firewall names.
@@ -103,7 +106,7 @@ By default, the blueprint creates the node
 and proxy service accounts, the prediction role, and their IAM bindings.
 
 By default, the blueprint assigns the proxy's Google service account a
-[custom IAM role](../../modules/project/vertex-ai-prediction/README.md) containing
+[custom IAM role](../../modules/project/aiplatform-predict-iam/README.md) containing
 only the [aiplatform.endpoints.predict permission](https://docs.cloud.google.com/iam/docs/roles-permissions/aiplatform#aiplatform.endpoints.predict),
 which allows it to make model prediction requests. The proxy authenticates
 through Workload Identity, so the blueprint creates no service-account key.
@@ -111,7 +114,7 @@ Node logging/monitoring permissions are assigned to a separate service account.
 
 ```sh
 ./gcluster create community/examples/agentgateway-gke/agentgateway-gke.yaml \
-  --vars project_id=YOUR_PROJECT,deployment_name=agw-demo,authorized_cidr=YOUR_IP/32
+  -d community/examples/agentgateway-gke/agentgateway-gke-deployment.yaml
 ./gcluster deploy agw-demo
 ```
 
@@ -123,7 +126,8 @@ to `agentgateway-existing.yaml` in the same directory so its relative file paths
 continue to work. Make these edits to the copy:
 
 1. Add `node_service_account_email` and `proxy_service_account_email` to `vars`,
-   setting them to the administrator-provisioned account emails.
+   then set their administrator-provisioned account emails in the deployment file.
+   Add `ai_assisted: true` at the top level if you customize the copy with an AI assistant.
 2. Remove the `node_sa`, `proxy_sa`, `proxy_wi`, and `vertex_permissions` modules
    from the `infrastructure` group.
 3. Replace every `$(node_sa.service_account_email)` reference with
@@ -137,7 +141,7 @@ otherwise Terraform plans to delete the accounts, role, and bindings it managed.
 
 ```sh
 ./gcluster create community/examples/agentgateway-gke/agentgateway-existing.yaml \
-  --vars project_id=YOUR_PROJECT,deployment_name=agw-demo,authorized_cidr=YOUR_IP/32
+  -d community/examples/agentgateway-gke/agentgateway-gke-deployment.yaml
 ./gcluster deploy agw-demo
 ```
 
@@ -163,7 +167,7 @@ and proxy accounts in the deployment project:
 | Deploying identity | `iam.serviceAccounts.actAs` on the node account, for example through `roles/iam.serviceAccountUser`, in addition to the usual GKE and network deployment permissions |
 
 The administrator can use the
-[Prediction IAM module](../../modules/project/vertex-ai-prediction/README.md)
+[Prediction IAM module](../../modules/project/aiplatform-predict-iam/README.md)
 to provision the narrow prediction role separately. A role ID is not a blueprint
 input: the role must already be assigned to the proxy account. Existing roles may
 grant more permissions than the blueprint's default custom role.
@@ -208,7 +212,7 @@ From your local machine, run the Kubernetes runner to create a temporary client 
 the cluster:
 
 ```sh
-python3 tools/cloud-build/daily-tests/ansible_playbooks/test-validation/agentgateway/run_in_cluster.py \
+python3 community/examples/agentgateway-gke/run_in_cluster.py \
   --namespace agentgateway-system \
   --model gemini-2.5-flash
 ```
@@ -305,12 +309,10 @@ provider:
      --from-file=Authorization=/secure/path/openai-key
    ```
 
-3. Repeat your original `gcluster create` command with all its configuration
-   overrides, adding `--overwrite-deployment` and
-   `--vars openai_secret_name=openai-credentials`. Preserve your identity mode,
-   account emails, project, deployment name, CIDR, region, namespace, and model
-   settings. For Anthropic, create a separate Secret and use
-   `--vars anthropic_secret_name=YOUR_ANTHROPIC_SECRET_NAME`.
+3. Set `openai_secret_name: openai-credentials` and/or
+   `anthropic_secret_name: YOUR_ANTHROPIC_SECRET_NAME` in your deployment file.
+   Repeat your original `gcluster create` command with the same blueprint and
+   `-d` file, adding `--overwrite-deployment`. Retain your other deployment values.
 4. Deploy the updated configuration, replacing `agw-demo` with your deployment name:
 
    ```sh
@@ -348,12 +350,12 @@ Replace the model placeholders with IDs available to your provider accounts and
 use your configured namespace if it differs from the default:
 
 ```sh
-python3 tools/cloud-build/daily-tests/ansible_playbooks/test-validation/agentgateway/run_in_cluster.py \
+python3 community/examples/agentgateway-gke/run_in_cluster.py \
   --namespace agentgateway-system \
   --provider openai \
   --model OPENAI_MODEL_ID
 
-python3 tools/cloud-build/daily-tests/ansible_playbooks/test-validation/agentgateway/run_in_cluster.py \
+python3 community/examples/agentgateway-gke/run_in_cluster.py \
   --namespace agentgateway-system \
   --provider anthropic \
   --model ANTHROPIC_MODEL_ID
@@ -380,7 +382,7 @@ Both smoke-test commands accept `--max-output-tokens`
 requires `max_completion_tokens`, for example, run:
 
 ```sh
-python3 tools/cloud-build/daily-tests/ansible_playbooks/test-validation/agentgateway/run_in_cluster.py \
+python3 community/examples/agentgateway-gke/run_in_cluster.py \
   --provider openai --model OPENAI_MODEL_ID \
   --token-parameter max_completion_tokens --max-output-tokens 2048
 ```

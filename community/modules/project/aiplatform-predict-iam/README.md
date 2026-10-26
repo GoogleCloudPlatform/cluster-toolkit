@@ -8,13 +8,10 @@ Creating the custom role requires `iam.roles.create` on the deploying identity
 `roles/aiplatform.user` role avoids custom-role creation, but assigning either
 role still requires permission to update the project's IAM policy.
 
-The module path retains `vertex-ai` because the API and agentgateway provider
-still use Vertex AI identifiers.
-
-It creates no keys and does not manage provider credentials. Set `enabled: false`
-to create no IAM resources when an administrator has already granted prediction
-access. Choose this before deployment; disabling an existing managed instance
-plans deletion of its role and binding.
+It creates no keys and does not manage provider credentials. Omit this module
+when an administrator has already granted prediction access. Choose this before
+deployment; removing an existing managed instance plans deletion of its role
+and binding.
 
 ## Example
 
@@ -28,7 +25,7 @@ Add the following modules to a blueprint deployment group:
     project_roles: []
 
 - id: vertex_permissions
-  source: community/modules/project/vertex-ai-prediction
+  source: community/modules/project/aiplatform-predict-iam
   use: [model_identity]
 ```
 
@@ -86,7 +83,6 @@ No modules.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Unique deployment name, used to name the custom role. | `string` | n/a | yes |
-| <a name="input_enabled"></a> [enabled](#input\_enabled) | Create the prediction role and binding. Disable when access is provisioned by an administrator. | `bool` | `true` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project containing the Agent Platform publisher model usage. | `string` | n/a | yes |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | Google service account granted prediction access. | `string` | n/a | yes |
 

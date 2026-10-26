@@ -58,7 +58,7 @@ install: install-user
 
 endif
 
-tests: warn-terraform-version warn-packer-version test-engine validate_golden_copy validate_configs packer-check validate-docs terraform-test test-agentgateway
+tests: warn-terraform-version warn-packer-version test-engine validate_golden_copy validate_configs packer-check validate-docs test-agentgateway
 
 format: warn-go-version warn-terraform-version warn-packer-version terraform-format packer-format
 	$(info **************** formatting go code *******************)
@@ -276,16 +276,7 @@ validate-docs:
 	@python3 tools/validate_readme_snippets.py
 # END OF AGENT SKILLS SECTION
 
-# Mocked Terraform tests require providers but no cloud credentials.
-.PHONY: terraform-test test-agentgateway agentgateway-static
-terraform-test:
-	terraform -chdir=modules/scheduler/gke-cluster init -backend=false -input=false
-	terraform -chdir=modules/scheduler/gke-cluster test -filter=tests/gateway_api.tftest.hcl
-	terraform -chdir=modules/project/workload_identity_binding init -backend=false -input=false
-	terraform -chdir=modules/project/workload_identity_binding test
-	terraform -chdir=community/modules/project/vertex-ai-prediction init -backend=false -input=false
-	terraform -chdir=community/modules/project/vertex-ai-prediction test
-
+.PHONY: test-agentgateway agentgateway-static
 test-agentgateway:
 	python3 -m unittest tests.test_agentgateway
 

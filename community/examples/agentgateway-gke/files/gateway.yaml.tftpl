@@ -17,7 +17,7 @@ apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayParameters
 metadata:
   name: agentgateway-proxy
-  namespace: ${namespace}
+  namespace: ${jsonencode(namespace)}
 spec:
   service:
     spec:
@@ -25,13 +25,13 @@ spec:
   serviceAccount:
     metadata:
       annotations:
-        iam.gke.io/gcp-service-account: ${service_account}
+        iam.gke.io/gcp-service-account: ${jsonencode(service_account)}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: agentgateway-proxy
-  namespace: ${namespace}
+  namespace: ${jsonencode(namespace)}
 spec:
   gatewayClassName: agentgateway
   infrastructure:
@@ -51,7 +51,7 @@ apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayBackend
 metadata:
   name: vertex-ai
-  namespace: ${namespace}
+  namespace: ${jsonencode(namespace)}
 spec:
   ai:
     provider:
@@ -68,7 +68,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: vertex-ai
-  namespace: ${namespace}
+  namespace: ${jsonencode(namespace)}
 spec:
   parentRefs:
   - name: agentgateway-proxy
@@ -91,7 +91,7 @@ apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayBackend
 metadata:
   name: ${provider}
-  namespace: ${namespace}
+  namespace: ${jsonencode(namespace)}
 spec:
   ai:
     provider:
@@ -105,7 +105,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: ${provider}
-  namespace: ${namespace}
+  namespace: ${jsonencode(namespace)}
 spec:
   parentRefs:
   - name: agentgateway-proxy
@@ -136,7 +136,7 @@ apiVersion: monitoring.googleapis.com/v1
 kind: PodMonitoring
 metadata:
   name: agentgateway-proxy
-  namespace: ${namespace}
+  namespace: ${jsonencode(namespace)}
 spec:
   selector:
     matchLabels:
@@ -145,3 +145,5 @@ spec:
   - port: 15020
     path: /metrics
     interval: 30s
+
+${templatefile(readiness_template, {namespace = namespace, stage = "gateway", script = script})}

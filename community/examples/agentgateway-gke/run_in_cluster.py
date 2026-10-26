@@ -24,12 +24,10 @@ import sys
 import uuid
 
 
-EXAMPLE_PATH = Path(__file__).resolve().parents[6] / "community/examples/agentgateway-gke"
+EXAMPLE_PATH = Path(__file__).resolve().parent
 SMOKE_PATH = EXAMPLE_PATH / "smoke_test.py"
-sys.path.insert(0, str(EXAMPLE_PATH))
 from smoke_test import add_client_arguments, validate_client_arguments
-sys.path.insert(0, str(EXAMPLE_PATH / "files"))
-from readiness import condition
+from files.readiness import condition, backend_auth_ready
 
 
 def parse_args(argv=None):
@@ -58,16 +56,6 @@ def parse_args(argv=None):
         args.client_arguments += ["--api-format", "anthropic"]
     return args
 
-
-def backend_auth_ready(backend, namespace, name, accepted):
-    conditions = (backend.get("status") or {}).get("conditions") or []
-    partial = next((item for item in conditions if item.get("type") == "Accepted"
-                    and item.get("reason") == "PartiallyValid"), None)
-    if accepted == "False" and partial:
-        # v1.6 accepts partially valid backends while reporting missing auth.
-        return (condition(backend, "Accepted")
-                and f"secret {namespace}/{name} not found" in partial.get("message", ""))
-    return condition(backend, "Accepted", expected=accepted) and partial is None
 
 
 def main():
@@ -235,11 +223,21 @@ def main():
                     print(error.output.decode(), file=sys.stderr)
         raise
     finally:
-        kubectl("delete", "job", client, "--ignore-not-found", "--wait=true")
-        kubectl("delete", "configmap", client + "-client", "--ignore-not-found")
+        cleanup_failed = []
+        original_error = sys.exc_info()[0] is not None
+        deletes = [(("delete", "job", client, "--ignore-not-found", "--wait=false"), None),
+                   (("delete", "configmap", client + "-client", "--ignore-not-found", "--wait=false"), None)]
         if mock_resources:
-            kubectl("delete", "-f", "-", "--ignore-not-found", document={
-                "apiVersion": "v1", "kind": "List", "items": list(reversed(mock_resources))})
+            deletes.append((("delete", "-f", "-", "--ignore-not-found", "--wait=false"), {
+                "apiVersion": "v1", "kind": "List", "items": list(reversed(mock_resources))}))
+        for arguments, document in deletes:
+            try:
+                kubectl(*arguments, document=document)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+                cleanup_failed.append(str(error))
+                print(f"Cleanup failed: {error}", file=sys.stderr)
+        if cleanup_failed and not original_error:
+            raise RuntimeError("Smoke test cleanup failed: " + "; ".join(cleanup_failed))
 
 
 if __name__ == "__main__":

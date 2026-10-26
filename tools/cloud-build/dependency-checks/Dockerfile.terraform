@@ -41,4 +41,5 @@ RUN curl -fsSLo /tmp/tflint_linux_amd64.zip \
 
 # Chart/schema validation runs separately from pre-commit.
 COPY --from=alpine/helm:3.19.0 /usr/bin/helm /usr/local/bin/helm
-RUN /opt/venv/bin/pip install --no-cache-dir PyYAML jsonschema
+COPY tools/cloud-build/requirements.txt /tmp/requirements.txt
+RUN /opt/venv/bin/pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt

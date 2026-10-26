@@ -15,21 +15,21 @@
 variable "project_id" {
   description = "Project containing the Agent Platform publisher model usage."
   type        = string
+  nullable    = false
 }
 
 variable "deployment_name" {
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9_.-]{1,56}$", var.deployment_name))
+    error_message = "deployment_name must contain 1–56 letters, digits, underscores, periods or hyphens; the generated role ID adds _predict and replaces hyphens with underscores."
+  }
   description = "Unique deployment name, used to name the custom role."
   type        = string
+  nullable    = false
 }
 
 variable "service_account_email" {
   description = "Google service account granted prediction access."
   type        = string
-}
-
-variable "enabled" {
-  description = "Create the prediction role and binding. Disable when access is provisioned by an administrator."
-  type        = bool
-  default     = true
   nullable    = false
 }

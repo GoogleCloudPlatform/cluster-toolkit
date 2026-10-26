@@ -27,14 +27,6 @@ locals {
   # Inference Gateway retains its existing prerequisites.
   enable_gateway_api = var.enable_gateway_api || var.enable_inference_gateway
 
-  inference_gateway_manifests = var.enable_inference_gateway ? [
-    {
-      name          = "inference-gateway"
-      source        = "https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.0/manifests.yaml",
-      template_vars = {}
-    }
-  ] : []
-
   upgrade_settings = {
     strategy        = var.upgrade_settings.strategy
     max_surge       = coalesce(var.upgrade_settings.max_surge, 0)
@@ -810,7 +802,13 @@ module "kubectl_apply" {
       }
     ]
     ]),
-    local.inference_gateway_manifests
+    var.enable_inference_gateway ? [
+      {
+        name          = "inference-gateway"
+        source        = "https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.0/manifests.yaml",
+        template_vars = {}
+      }
+    ] : []
   )
 }
 

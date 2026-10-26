@@ -87,18 +87,19 @@ blueprints:
     use: [network, homefs, swfs, low_cost_partition, compute_partition, slurm_login]
     settings: [login_startup_script, login_startup_scripts_timeout, machine_type]
 - path: community/examples/agentgateway-gke/agentgateway-gke.yaml
+  deployment_path: community/examples/agentgateway-gke/agentgateway-gke-deployment.yaml
   blueprint_name: agentgateway-gke
   scheduler: gke
   description: "This blueprint deploys a private generative AI gateway powered by agentgateway on a regional, CPU-only GKE Standard cluster."
   vars:
     agentgateway_version: v1.6.0
     anthropic_secret_name: ""
-    authorized_cidr: null
-    deployment_name: null
+    authorized_cidr: YOUR_IP/32
+    deployment_name: agw-gke
     gke_version_prefix: "1.35."
     namespace: agentgateway-system
     openai_secret_name: ""
-    project_id: null
+    project_id: YOUR_PROJECT
     region: us-central1
     vertex_location: global
     vertex_model: gemini-2.5-flash
@@ -116,12 +117,12 @@ blueprints:
     source: modules/project/workload_identity_binding
     settings: [k8s_service_account_name, namespace, service_account_email]
   - id: vertex_permissions
-    source: community/modules/project/vertex-ai-prediction
+    source: community/modules/project/aiplatform-predict-iam
     settings: [service_account_email]
   - id: cluster
     source: modules/scheduler/gke-cluster
     use: [network]
-    settings: [enable_dcgm_monitoring, enable_gateway_api, enable_inference_gateway, enable_private_endpoint, enable_private_nodes, gcp_public_cidrs_access_enabled, master_authorized_networks, monitoring_components, release_channel, service_account_email, system_node_pool_disk_size_gb, system_node_pool_disk_type, system_node_pool_machine_type, system_node_pool_node_count, system_node_pool_taints, version_prefix]
+    settings: [enable_dcgm_monitoring, enable_gateway_api, enable_inference_gateway, enable_private_endpoint, enable_private_nodes, gcp_public_cidrs_access_enabled, master_authorized_networks, release_channel, service_account_email, system_node_pool_disk_size_gb, system_node_pool_disk_type, system_node_pool_machine_type, system_node_pool_node_count, system_node_pool_taints, version_prefix]
   - id: load_balancer_firewall
     source: modules/network/firewall-rules
     use: [network]
@@ -6139,6 +6140,10 @@ module_wiring:
     - modules/network/pre-existing-subnetwork
     - modules/network/pre-existing-vpc
     - modules/network/vpc
+  community/modules/project/aiplatform-predict-iam:
+    required_inputs: [service_account_email]
+    recommended_use:
+    - modules/project/service-account
   community/modules/project/pre-existing-project: {}
   community/modules/project/project-metadata:
     required_inputs: [metadata]
@@ -6148,10 +6153,6 @@ module_wiring:
     required_inputs: [gcp_service_list]
     recommended_use:
     - community/modules/scripts/htcondor-install
-  community/modules/project/vertex-ai-prediction:
-    required_inputs: [service_account_email]
-    recommended_use:
-    - modules/project/service-account
   community/modules/pubsub/bigquery-sub:
     required_inputs: [dataset_id, table_id, topic_id]
     recommended_use:
@@ -6636,7 +6637,7 @@ module_wiring:
     required_inputs: [name, project_roles]
     consumed_by:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    - community/modules/project/vertex-ai-prediction
+    - community/modules/project/aiplatform-predict-iam
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
     - modules/compute/gke-node-pool

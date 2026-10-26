@@ -16,25 +16,39 @@
 blueprint_name: agentgateway-gke
 
 vars:
-  project_id: # Set your project ID.
-  deployment_name: # Use a unique name of at most 20 characters.
+  # The following variables should be over-written in the deployment.yaml file.
+  # Google Cloud project ID.
+  project_id:
+
+  # Unique deployment name of at most 20 characters.
+  deployment_name: agw-gke
+
   # Google Cloud region for the cluster, subnets and internal load balancer.
   region: us-central1
-  authorized_cidr: # Deployment runner public IP, for example 203.0.113.1/32.
+
+  # Deployment runner public IP, for example 203.0.113.1/32.
+  authorized_cidr:
+
   # Select a GKE version matching this prefix in the REGULAR release channel.
   gke_version_prefix: "1.35."
+
   # Helm chart version shared by agentgateway-crds and agentgateway.
   agentgateway_version: v1.6.0
+
   # Model inference endpoint location that is independent of the cluster's region.
   vertex_location: global
+
   # Gemini model used by the gateway, overriding the request's model field.
   vertex_model: gemini-2.5-flash
+
   # Kubernetes namespace for the controller, proxy, routes and provider secrets.
   namespace: agentgateway-system
 
   # Existing Opaque secrets in namespace, each with an Authorization key.
   # Supply secret names, not API keys; leave empty to disable that provider.
   openai_secret_name: ""
+
+  # Existing Anthropic Secret; leave empty to disable Anthropic.
   anthropic_secret_name: ""
 
 deployment_groups:
@@ -89,7 +103,7 @@ deployment_groups:
       k8s_service_account_name: agentgateway-proxy
 
   - id: vertex_permissions
-    source: community/modules/project/vertex-ai-prediction
+    source: community/modules/project/aiplatform-predict-iam
     settings:
       service_account_email: $(proxy_sa.service_account_email)
 
@@ -104,21 +118,6 @@ deployment_groups:
       enable_inference_gateway: false
       # This CPU-only cluster does not need GPU metrics.
       enable_dcgm_monitoring: false
-      # Match GKE's observed order while dependencies require Google provider 7.x.
-      # Provider 8.0.0 fixes ordering diffs. Remove this override after upgrading
-      # dependencies and verifying an empty plan.
-      # https://github.com/GoogleCloudPlatform/cluster-toolkit/issues/6331
-      monitoring_components:
-      - SYSTEM_COMPONENTS
-      - STORAGE
-      - HPA
-      - POD
-      - DAEMONSET
-      - DEPLOYMENT
-      - STATEFULSET
-      - CADVISOR
-      - KUBELET
-      - JOBSET
       enable_private_nodes: true
       enable_private_endpoint: false
       gcp_public_cidrs_access_enabled: false
@@ -208,12 +207,7 @@ deployment_groups:
           vertex_model: $(vars.vertex_model)
           openai_secret_name: $(vars.openai_secret_name)
           anthropic_secret_name: $(vars.anthropic_secret_name)
-      - source: $(ghpc_stage("./files/readiness.yaml.tftpl"))
-        name: agentgateway-ready
-        namespace: $(vars.namespace)
-        template_vars:
-          namespace: $(vars.namespace)
-          stage: gateway
+          readiness_template: $(ghpc_stage("./files/readiness.yaml.tftpl"))
           script: $(file(ghpc_stage("./files/readiness.py")))
 
 - group: ingress
@@ -228,10 +222,5 @@ deployment_groups:
         namespace: $(vars.namespace)
         template_vars:
           namespace: $(vars.namespace)
-      - source: $(ghpc_stage("./files/readiness.yaml.tftpl"))
-        name: ingress-ready
-        namespace: $(vars.namespace)
-        template_vars:
-          namespace: $(vars.namespace)
-          stage: ingress
+          readiness_template: $(ghpc_stage("./files/readiness.yaml.tftpl"))
           script: $(file(ghpc_stage("./files/readiness.py")))
