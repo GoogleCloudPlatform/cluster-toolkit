@@ -262,9 +262,9 @@ deployment_groups:
               cuda_installer_url: "https://developer.download.nvidia.com/compute/cuda/13.2.2/local_installers/cuda_13.2.2_595.71.05_linux.run"
               cuda_installer_file: "/tmp/cuda_13.2.2_595.71.05_linux.run"
               nvidia_packages:
-                - datacenter-gpu-manager-4-core=1:4.6.1-1
-                - datacenter-gpu-manager-4-dev=1:4.6.1-1
-                - datacenter-gpu-manager-4-cuda13=1:4.6.1-1
+                - datacenter-gpu-manager-4-core=1:4.7.0-2
+                - datacenter-gpu-manager-4-dev=1:4.7.0-2
+                - datacenter-gpu-manager-4-cuda13=1:4.7.0-2
             tasks:
               - name: Download CUDA runfile
                 ansible.builtin.get_url:
