@@ -39,7 +39,7 @@ vars:
 
   # Machine type
   # TPU v5e options: ct5lp-hightpu-1t, ct5lp-hightpu-4t, ct5lp-hightpu-8t
-  machine_type:
+  compute_machine_type:
 
   # The TPU placement topology for pod slice node pool.
   # ct5lp-hightpu-8t is exactly 8 chips (2x4 topology).
@@ -55,3 +55,6 @@ vars:
 
   # The namespace to be configured for running workloads
   user_namespace: default
+
+## --- Optional overrides (defaults shown) ---
+  # system_node_pool_machine_type: n2-standard-8

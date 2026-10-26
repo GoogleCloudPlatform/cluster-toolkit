@@ -21,6 +21,25 @@ vars:
   deployment_name: hpcslurmha
   region: us-central1
   zone: us-central1-a
+  # Optional overrides (defaults shown)
+  # Size in GB of the shared /home Filestore instance. BASIC_SSD, the
+  # filestore module's default tier, requires at least 2560 GiB.
+  homefs_size_gb: 2560
+  # Machine type for the login nodes.
+  login_machine_type: n1-standard-2
+  # Number of login nodes.
+  login_num_instances: 1
+  # Maximum number of dynamically provisioned nodes in the compute nodeset (debug partition).
+  compute_node_count_dynamic_max: 4
+  # Number of statically provisioned nodes in the compute nodeset (debug partition).
+  compute_node_count_static: 0
+  # Machine type for the compute nodeset (debug partition).
+  compute_machine_type: n1-standard-2
+  # Size in GB of the Filestore instance that holds the controller state.
+  # At least 2560 GiB for the same reason as homefs_size_gb.
+  controller_fs_size_gb: 2560
+  # Machine type for the controller node.
+  controller_machine_type: n1-standard-2
 
 terraform_backend_defaults:
   type: gcs
@@ -137,13 +156,11 @@ deployment_groups:
         subnet_ip: 10.80.0.0/24
 
   # Filestore (Shared /home)
-  #
-  # BASIC_SSD, the module's default tier, requires at least 2560 GiB.
   - id: home_fs
     source: modules/file-system/filestore
     settings:
       network_id: $(network.network_id)
-      size_gb: 2560
+      size_gb: $(vars.homefs_size_gb)
       zone: $(vars.zone)
 
   # Debug Logic (Define Login Node properties, does not create VM directly)
@@ -151,8 +168,8 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     settings:
       name_prefix: debug
-      num_instances: 1
-      machine_type: n1-standard-2
+      num_instances: $(vars.login_num_instances)
+      machine_type: $(vars.login_machine_type)
       service_account_email: $(login_profile.service_account_email)
       service_account_scopes: ["https://www.googleapis.com/auth/cloud-platform"]
       enable_oslogin: true
@@ -164,9 +181,9 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     settings:
       name: a2-nodes
-      node_count_dynamic_max: 4
-      node_count_static: 0
-      machine_type: n1-standard-2
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
+      node_count_static: $(vars.compute_node_count_static)
+      machine_type: $(vars.compute_machine_type)
       service_account_email: $(compute_profile.service_account_email)
       service_account_scopes: ["https://www.googleapis.com/auth/cloud-platform"]
       enable_oslogin: true
@@ -188,13 +205,11 @@ deployment_groups:
       is_default: true
 
   # Filestore (Dedicated State for Controller)
-  #
-  # size_gb: 2560 for the same reason as home_fs above.
   - id: controller_fs
     source: modules/file-system/filestore
     settings:
       network_id: $(network.network_id)
-      size_gb: 2560
+      size_gb: $(vars.controller_fs_size_gb)
       zone: $(vars.zone)
 
   # Cloud SQL (External DB)
@@ -227,7 +242,7 @@ deployment_groups:
         password: $(slurm_db.cloudsql.password)
         db_name: $(slurm_db.cloudsql.db_name)
       enable_controller_public_ips: false # NO EXTERNAL IP
-      machine_type: n1-standard-2
+      machine_type: $(vars.controller_machine_type)
       zone: $(vars.zone)
       service_account_email: $(controller_profile.service_account_email)
       service_account_scopes: ["https://www.googleapis.com/auth/cloud-platform"]

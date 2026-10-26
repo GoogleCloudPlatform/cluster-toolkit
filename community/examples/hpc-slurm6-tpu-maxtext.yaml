@@ -21,6 +21,15 @@ vars:
   deployment_name: slurm6-tpu-v4
   region: us-central2
   zone: us-central2-b
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned TPU nodes in the tpu partition.
+  tpu_node_count_dynamic_max: 1
+  # Maximum number of dynamically provisioned nodes in the compute partition.
+  compute_node_count_dynamic_max: 20
+  # Machine type for the login node.
+  login_machine_type: n2-standard-16
+  # Machine type for the controller node.
+  controller_machine_type: n2-standard-16
 
 deployment_groups:
 - group: primary
@@ -85,7 +94,7 @@ deployment_groups:
       # If set to true, suspended VM will be stopped.
       # If set to false, suspended VM will be deleted.
       preserve_tpu: false
-      node_count_dynamic_max: 1
+      node_count_dynamic_max: $(vars.tpu_node_count_dynamic_max)
 
   - id: tpu_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -98,7 +107,7 @@ deployment_groups:
     use: [network]
     settings:
       name: ns2
-      node_count_dynamic_max: 20
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
 
@@ -114,7 +123,7 @@ deployment_groups:
     use: [network]
     settings:
       enable_login_public_ips: true
-      machine_type: n2-standard-16
+      machine_type: $(vars.login_machine_type)
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -125,5 +134,5 @@ deployment_groups:
     - network
     settings:
       enable_controller_public_ips: true
-      machine_type: n2-standard-16
+      machine_type: $(vars.controller_machine_type)
       login_startup_script: $(script.startup_script)

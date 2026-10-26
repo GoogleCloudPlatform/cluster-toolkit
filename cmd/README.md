@@ -14,16 +14,24 @@ gcluster [SUBCOMMAND]
 
 ### Subcommands - gcluster
 
+* [`explain`](#gcluster-explain): Discover and inspect blueprints, embedded modules, and cluster specs
 * [`deploy`](#gcluster-deploy): Deploy an AI/ML or HPC cluster on Google Cloud
 * [`create`](#gcluster-create): Create a new deployment
 * [`expand`](#gcluster-expand): Expand the blueprint without creating a new deployment
+* [`destroy`](#gcluster-destroy): Destroys all resources in a Toolkit deployment directory
+* [`export-outputs`](#gcluster-export-outputs): Export outputs from deployment group
+* [`import-inputs`](#gcluster-import-inputs): Import input values from previous deployment groups
+* [`cluster`](#gcluster-cluster): Discover, list, and inspect target clusters and environments (`list`, `describe`, `info`, `volume`)
+* [`job`](#gcluster-job): Manage workloads on GKE clusters (`submit`, `list`, `logs`, `cancel`, `config`, `inspect`, `gke-template-extract`)
+* [`telemetry`](#gcluster-telemetry): Enable or disable telemetry
 * [`completion`](#gcluster-completion): Generate completion script
 * [`help`](#gcluster-help): Display help information for any command
-* [`destroy`](#gcluster-destroy): Destroys all resources in a Toolkit deployment directory
 
 ### Flags - gcluster
 
+* `--download-dependencies`: Automatically download missing dependencies (Terraform and Packer). Pass `--download-dependencies=false` to fail if missing.
 * `-h, --help`: displays detailed help for the gcluster command.
+* `--no-color`: Disable colorized output.
 * `-v, --version`: displays the version of gcluster being used.
 
 ### Example - gcluster
@@ -32,9 +40,39 @@ gcluster [SUBCOMMAND]
 gcluster --version
 ```
 
+## gcluster explain
+
+`gcluster explain` lists available blueprints and embedded modules, inspects a specific blueprint or module (showing required GCP APIs, customizable variables, deployment stages, and ready-to-copy `use:` YAML blocks), or matches cluster specs (e.g., `slurm a3u lustre` or `gke a3-megagpu lustre`) to the exact or closest blueprint.
+
+### Usage - explain
+
+```bash
+gcluster explain [MODULE | BLUEPRINT | SPECS...] [flags]
+```
+
+### Flags - explain
+
+* `-d, --deployment-file <string>`: Optional companion deployment YAML file when explaining a blueprint.
+* `-f, --format <string>`: Output format: `text`, `yaml`, or `json` (default `"text"`).
+
+### Examples - explain
+
+```bash
+# List all available blueprints and top-level embedded modules
+./gcluster explain
+
+# Find the exact or closest blueprint for given specs
+./gcluster explain slurm a3u lustre
+./gcluster explain gke a3-megagpu lustre
+
+# Inspect a specific blueprint or module
+./gcluster explain examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml
+./gcluster explain modules/file-system/managed-lustre --format=json
+```
+
 ## gcluster deploy
 
-`gcluster deploy` deploys a cluster on Google Cloud using the deployment directory created by `gcluster create` or creates one from supplied blueprint file.
+`gcluster deploy` deploys a cluster on Google Cloud using the deployment directory created by `gcluster create` or creates one from a supplied blueprint file.
 
 ### Usage - deploy
 
@@ -44,10 +82,22 @@ gcluster deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
 
 ### Flags - deploy
 
-* `--only <strings>`: Only apply to groups with the given names (comma-separated).
-* `--skip <strings>`: Skip groups with the given names (comma-separated).
+* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. Defaults to `true` for `@google.com` accounts.
+* `-a, --artifacts <string>`: Artifacts directory (automatically configured if unset).
 * `--auto-approve`: Automatically approve proposed changes without prompting.
+* `--backend-config <strings>`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
+* `-d, --deployment-file <string>`: Deployment file to override blueprint variables and backend configuration.
+* `--force`: Forces overwrite of existing deployment directory. If set, `--overwrite-deployment` is implied and no validation is performed on the existing deployment directory.
+* `--json-output`: Write Terraform output to JSON file (instead of default English text to console).
+* `--only <strings>`: Only apply to groups with the given names (comma-separated).
+* `-o, --out <string>`: Sets the output directory where the deployment directory will be created.
+* `-w, --overwrite-deployment`: If specified, an existing deployment directory is overwritten by the new deployment.
 * `--parallelism <int>`: Limit the number of concurrent operations in Terraform (default: 10, or `GCLUSTER_TERRAFORM_PARALLELISM`).
+* `--skip <strings>`: Skip groups with the given names (comma-separated).
+* `--skip-gke-security-check`: Skip the GKE security hygiene notice before applying.
+* `--skip-validators <strings>`: Validators to skip (comma-separated).
+* `-l, --validation-level <string>`: Set validation level to one of (`"ERROR"`, `"WARNING"`, `"IGNORE"`) (default `"ERROR"`).
+* `--vars <strings>`: Comma-separated list of `name=value` variables to override YAML configuration. Can be used multiple times.
 
 Refer to the [Selective Deployment and Exclusion Guide](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/machine-learning/README.md#selective-deployment-and-destruction-using---only-and---skip-flags) for more information on managing or skipping specific group deployments.
 
@@ -58,7 +108,7 @@ Refer to the [Selective Deployment and Exclusion Guide](https://github.com/Googl
 ### Usage - create
 
 ```sh
-gcluster create BLUEPRINT_FILE [FLAGS]
+gcluster create <BLUEPRINT_FILE> [flags]
 ```
 
 ### Positional arguments - create
@@ -67,7 +117,10 @@ gcluster create BLUEPRINT_FILE [FLAGS]
 
 ### Flags - create
 
-* `--backend-config strings`: Comma-separated list of name=value variables to set Terraform backend configuration. Can be used multiple times.
+* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. Defaults to `true` for `@google.com` accounts.
+* `--backend-config strings`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
+* `-d, --deployment-file string`: Deployment file to override blueprint variables and backend configuration.
+* `--force`: Forces overwrite of existing deployment directory. If set, `--overwrite-deployment` is implied and no validation is performed on the existing deployment directory.
 * `-h, --help`: display detailed help for the create command.
 * `-o, --out string`: sets the output directory where the AI/ML or HPC deployment directory will be created.
 * `-w, --overwrite-deployment`: If specified, an existing deployment directory is overwritten by the new deployment.
@@ -76,7 +129,8 @@ gcluster create BLUEPRINT_FILE [FLAGS]
   * Terraform workspaces are NOT supported (behavior undefined).
   * Packer is NOT supported.
 
-* `-l, --validation-level string`: sets validation level to one of ("ERROR", "WARNING", "IGNORE") (default "WARNING").
+* `--skip-validators strings`: Validators to skip (comma-separated).
+* `-l, --validation-level string`: sets validation level to one of (`"ERROR"`, `"WARNING"`, `"IGNORE"`) (default `"ERROR"`).
 * `--vars strings`: comma-separated list of name=value variables to override YAML configuration. Can be used multiple times. Arrays or maps containing comma-separated values must be enclosed in double quotes. The double quotes may require escaping depending on the shell used. Examples below have been tested using a `bash` shell:
 
   * `--vars foo=bar,baz=2`
@@ -105,14 +159,87 @@ necessary to create a deployment without actually creating the deployment
 directory. It outputs an expanded blueprint, which can be used for debugging
 purposes and can be used as input to `gcluster create`.
 
-For detailed usage information, run `gcluster help create`.
+### Usage - expand
+
+```bash
+gcluster expand BLUEPRINT_NAME [flags]
+```
+
+### Flags - expand
+
+* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. Defaults to `true` for `@google.com` accounts.
+* `--backend-config strings`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
+* `-d, --deployment-file string`: Deployment file to override blueprint variables and backend configuration.
+* `-o, --out string`: Output file for the expanded HPC Environment Definition (default `"expanded.yaml"`).
+* `--skip-validators strings`: Validators to skip (comma-separated).
+* `-l, --validation-level string`: Set validation level to one of (`"ERROR"`, `"WARNING"`, `"IGNORE"`) (default `"ERROR"`).
+* `--vars strings`: Comma-separated list of `name=value` variables to override YAML configuration. Can be used multiple times.
+
+## gcluster export-outputs
+
+`gcluster export-outputs` exports Terraform output values from a deployment group for consumption by subsequent deployment groups (e.g., `gcluster export-outputs a3ultra-slurm/cluster-env`).
+
+### Usage - export-outputs
+
+```bash
+gcluster export-outputs DEPLOYMENT_GROUP_DIRECTORY [flags]
+```
+
+## gcluster import-inputs
+
+`gcluster import-inputs` imports output values exported by previous deployment groups as input `.tfvars` for subsequent deployment groups (e.g., `gcluster import-inputs a3ultra-slurm/cluster`).
+
+### Usage - import-inputs
+
+```bash
+gcluster import-inputs DEPLOYMENT_GROUP_DIRECTORY [flags]
+```
+
+## gcluster cluster
+
+`gcluster cluster` discovers, lists, and inspects target clusters and storage volumes in a Google Cloud project (`list`, `describe`, `info`, `volume`).
+
+### Usage - cluster
+
+```bash
+gcluster cluster <list|describe|info|volume> [flags]
+```
+
+### Subcommands - cluster
+
+* `gcluster cluster list [-p <project>]`: Lists GKE clusters in the project.
+* `gcluster cluster describe -c <cluster> -l <location>`: Prints the full `gcloud container clusters describe` output (YAML) for the cluster.
+* `gcluster cluster info -c <cluster> -l <location>`: Prints a per-node-pool summary (name, machine type, status).
+* `gcluster cluster volume -c <cluster> -l <location>`: Lists Toolkit-managed PVCs (label `ghpc_role=file-system`) across all namespaces, with their module or storage class.
+
+## gcluster job
+
+`gcluster job` submits, monitors, and manages batch and distributed workloads on GKE clusters (`submit`, `list`, `logs`, `cancel`, `config`, `inspect`, `gke-template-extract`). For detailed usage, see [`docs/gcluster_job_guide.md`](../docs/gcluster_job_guide.md).
+
+### Usage - job
+
+```bash
+gcluster job <submit|list|logs|cancel|config|inspect|gke-template-extract> [flags]
+```
+
+## gcluster telemetry
+
+`gcluster telemetry` enables or disables anonymous usage telemetry (`on` or `off`).
+
+### Usage - telemetry
+
+```bash
+gcluster telemetry [on|off] [flags]
+```
 
 ## gcluster completion
+
 Generates a script that enables command completion for `gcluster` for a given shell.
 
 For detailed usage information, run `gcluster help completion`
 
 ## gcluster help
+
 `gcluster help` prints the usage information for `gcluster` and subcommands of `gcluster`.
 
 To generate usage details for `gcluster`, run `gcluster help`. To generate usage
@@ -134,6 +261,8 @@ gcluster destroy DEPLOYMENT_DIRECTORY [flags]
 
 ### Flags - destroy
 
+* `-a, --artifacts <string>`: Artifacts directory (automatically configured if unset).
+* `--auto-approve`: Automatically approve proposed changes without prompting.
 * `--only <strings>`: Only destroy groups with the given names (comma-separated).
 * `--skip <strings>`: Skip destroying groups with the given names (comma-separated).
 * `--robust`: Perform a robust destroy, including firewall rule cleanup.

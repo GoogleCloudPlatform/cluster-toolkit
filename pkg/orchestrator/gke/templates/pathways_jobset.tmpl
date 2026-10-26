@@ -110,6 +110,9 @@ spec:
                 limits:
                   cpu: "16"
                   memory: "100Gi"
+                requests:
+                  cpu: "8"
+                  memory: "32Gi"
             - name: pathways-rm
               image: {{.Pathways.ServerImage}}
               imagePullPolicy: Always
@@ -153,6 +156,9 @@ spec:
                 limits:
                   cpu: "8"
                   memory: "32Gi"
+                requests:
+                  cpu: "2"
+                  memory: "8Gi"
             {{- if not .Pathways.Headless}}
             containers:
             - name: workload-container
@@ -161,9 +167,6 @@ spec:
               securityContext:
                 privileged: true
               resources:
-                limits:
-                  cpu: "24"
-                  memory: "100Gi"
                 requests:
                   cpu: "2"
                   memory: "8Gi"
@@ -191,6 +194,8 @@ spec:
               volumeMounts:
                 - name: shared-tmp
                   mountPath: /tmp
+                - name: dshm
+                  mountPath: /dev/shm
 {{- if .VolumeMountsYAML }}
 {{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
@@ -200,21 +205,28 @@ spec:
                 hostPath:
                   path: /tmp
                   type: DirectoryOrCreate
+{{- if not .Pathways.Headless }}
+              - name: dshm
+                emptyDir:
+                  medium: Memory
+{{- end }}
 {{- if .VolumesYAML }}
 {{(StructuralData .VolumesYAML)}}
 {{- end }}
   - name: worker
     replicas: {{.NumSlices}}
     template:
+{{- if .ExclusiveTopologyAnnotation }}
       metadata:
         annotations:
-          alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool
+          {{(StructuralData .ExclusiveTopologyAnnotation)}}
+{{- end }}
       spec:
         completionMode: Indexed
         parallelism: {{.NodesPerSlice}}
         completions: {{.NodesPerSlice}}
         backoffLimit: {{.WorkerBackoffLimit}}
-        backoffLimitPerIndex: 4000
+        backoffLimitPerIndex: {{.WorkerBackoffLimitPerIndex}}
         podReplacementPolicy: Failed
         maxFailedIndexes: 0
         template:
@@ -233,7 +245,11 @@ spec:
           spec:
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
+{{- if eq .WorkerBackoffLimitPerIndex 0 }}
+            restartPolicy: Never
+{{- else }}
             restartPolicy: OnFailure
+{{- end }}
 {{- if .ServiceAccountName }}
             serviceAccountName: {{.ServiceAccountName}}
 {{- end }}
@@ -271,7 +287,7 @@ spec:
                 mountPath: /tmp/sidecar
               {{- if .GKEMTCEnabled}}
               - name: cache
-                mountPath: {{.GKEMTCRamdiskDirectory}}
+                mountPath: {{ printf "%q" .GKEMTCRamdiskDirectory }}
               {{- end}}
             {{- end}}
             containers:
@@ -287,7 +303,7 @@ spec:
                 - --server_port=29005
                 - --resource_manager_address=$(PATHWAYS_HEAD):29001
                 - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
-                {{- if .GKEMTCEnabled}}
+                {{- if .Pathways.ColocatedPythonSidecarImage}}
                 - --cloud_pathways_sidecar_shm_directory=/tmp/sidecar
                 {{- end}}
                 {{- range .WorkerArgsList }}
@@ -338,6 +354,14 @@ spec:
               volumeMounts:
                 - name: shared-tmp
                   mountPath: /tmp
+                {{- if .Pathways.ColocatedPythonSidecarImage}}
+                - name: sidecar-shared-memory
+                  mountPath: /tmp/sidecar
+                {{- end}}
+                {{- if .GKEMTCEnabled}}
+                - name: cache
+                  mountPath: {{ printf "%q" .GKEMTCRamdiskDirectory }}
+                {{- end}}
 {{- if .VolumeMountsYAML }}
 {{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
@@ -346,6 +370,16 @@ spec:
                 hostPath:
                   path: /tmp
                   type: DirectoryOrCreate
+              {{- if .Pathways.ColocatedPythonSidecarImage}}
+              - name: sidecar-shared-memory
+                emptyDir:
+                  medium: Memory
+              {{- end}}
+              {{- if .GKEMTCEnabled}}
+              - name: cache
+                csi:
+                  driver: multitier-checkpoint.csi.storage.gke.io
+              {{- end}}
 {{- if .VolumesYAML }}
 {{(StructuralData .VolumesYAML)}}
 {{- end }}

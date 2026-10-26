@@ -17,8 +17,24 @@ Key variables to update in `vars`:
 * `deployment_name`: A unique name for this deployment (e.g., `slurm-h4d-test`).
 * `region`: The Google Cloud region for deployment (e.g., `us-central1`).
 * `zone`: The Google Cloud zone for deployment (e.g., `us-central1-a`).
-* `h4d_cluster_size`:The number of static nodes in the cluster.
-* `h4d_reservation_name`: Reservation name if using reserved instances  
+* `h4d_cluster_size`: The number of static nodes in the cluster.
+* `h4d_reservation_name`: Reservation name if using reserved instances.
+
+```yaml
+---
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: <BUCKET_NAME>
+
+vars:
+  project_id: <PROJECT_ID>
+  deployment_name: slurm-h4d-test
+  region: us-central1
+  zone: us-central1-a
+  h4d_cluster_size: 2
+  h4d_reservation_name: <RESERVATION_NAME>
+```
 
 ### Additional ways to provision
 Cluster toolkit also supports DWS Flex-Start, Spot VMs, as well as reservations as ways to provision instances.
@@ -36,7 +52,19 @@ deployment file with the variable of choice below.
 
 ## Deployment Steps
 
-1. Navigate to the root directory of your Cluster Toolkit checkout or the directory containing the `hpc-slurm-h4d` folder.
+1. Enable the required GCP APIs, navigate to the root directory of your [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) checkout, and ensure `./gcluster` is built:
+
+    ```bash
+    gcloud services enable \
+      compute.googleapis.com \
+      file.googleapis.com \
+      iam.googleapis.com \
+      storage.googleapis.com \
+      --project=<PROJECT_ID>
+
+    test -x ./gcluster || make
+    ```
+
 2. Run the `./gcluster deploy` command, providing the `hpc-slurm-h4d-deployment.yaml` as the deployment file. The `gcluster` tool will use this file to resolve variables in the `hpc-slurm-h4d.yaml` located in the same directory.
 
     ```bash

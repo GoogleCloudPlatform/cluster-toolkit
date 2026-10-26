@@ -33,10 +33,9 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"gopkg.in/yaml.v2"
@@ -44,13 +43,23 @@ import (
 )
 
 const (
-	// maxLogRequests is the maximum concurrent log streams allowed by the GKE logs CLI.
+	// maxLogRequests caps the number of pods from which gcluster fetches logs in the terminal before
+	// redirecting to Cloud Logging, and serves as the floor for kubectl's --max-log-requests flag.
 	maxLogRequests = 10
 
-	workloadContainerPrefix      = "workload-container"
-	pathwaysContainerPrefix      = "pathways-"
-	jobSetContainerNamesJSONPath = "{.spec.replicatedJobs[0].template.spec.template.spec.containers[*].name}"
+	// jobSetInfoJSONPath reads terminalState, the Suspended condition status, and the first replicated job's
+	// name on line 1 (tab-separated), followed by "<replicas> <parallelism>" per replicated job.
+	jobSetInfoJSONPath = `{.status.terminalState}{"\t"}{.status.conditions[?(@.type=="Suspended")].status}{"\t"}{.spec.replicatedJobs[0].name}{"\n"}{range .spec.replicatedJobs[*]}{.replicas}{" "}{.template.spec.parallelism}{"\n"}{end}`
+
+	// podContainersJSONPath prints one line per pod with all container names for pod and stream counting.
+	podContainersJSONPath = `{range .items[*]}{.spec.initContainers[*].name}{" "}{.spec.containers[*].name}{" "}{.spec.ephemeralContainers[*].name}{"\n"}{end}`
 )
+
+// logsRetryInterval is the wait between waitForJobPods and fetchLogsWithRetry attempts; tests shorten it.
+var logsRetryInterval = 5 * time.Second
+
+// logsMaxAttempts bounds both wait loops: 12 attempts 5s apart (~1 minute plus kubectl latency).
+const logsMaxAttempts = 12
 
 func NewGKEOrchestrator() *GKEOrchestrator {
 	return &GKEOrchestrator{
@@ -86,7 +95,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	g.gkeCustomTemplatesPath = job.GkeCustomTemplatesPath
 
 	sm := &StorageManager{orchestrator: g}
-	if err := sm.ValidateMounts(job.RawMounts); err != nil {
+	if err := sm.validateJobMounts(job.RawMounts, job.IsPathwaysJob, job.Pathways.ColocatedPythonSidecarImage != ""); err != nil {
 		return err
 	}
 
@@ -108,7 +117,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err != nil {
 		return err
 	}
-	if err := g.validateJobConflicts(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
+	if err := g.validateJobConflicts(job); err != nil {
 		return err
 	}
 
@@ -123,12 +132,10 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 
 	if job.DryRunManifest == "" {
 		g.printConsoleLinks(job)
-	}
-
-	if job.AwaitJobCompletion && job.DryRunManifest == "" {
-		err = g.awaitJobCompletion(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, job.Timeout)
-		if err != nil {
-			return err
+		if job.AwaitJobCompletion {
+			if err := g.awaitJobCompletion(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, job.Timeout); err != nil {
+				return err
+			}
 		}
 	}
 	logging.Info("gcluster job submit workflow completed.")
@@ -183,176 +190,228 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 		return "", err
 	}
 
-	ns, err := g.getCurrentNamespace(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
-	if err != nil {
-		return "", err
-	}
-	foundNamespace := ns
-
-	selector, mainOnly, podCountForNotice := g.resolveLogsSelector(name, foundNamespace, opts.MainOnly)
-
-	if opts.MainOnly == nil && mainOnly {
-		logging.Info("Job has %d pods (> 5). Defaulting to --main-only logs. To fetch logs from all pods, run with --main-only=false.", podCountForNotice)
-	}
-
-	// Proactively check pod count against GKE logs limits
-	if podCountForNotice > maxLogRequests && !mainOnly {
-		consoleURL := getCloudConsoleLogsURL(opts.ProjectID, opts.ClusterLocation, opts.ClusterName, foundNamespace, name)
-		return "", fmt.Errorf("job '%s' has %d pods matching logs query, which exceeds the max fetch limit (%d). Please view logs directly in the Google Cloud Console:\n%s", name, podCountForNotice, maxLogRequests, consoleURL)
-	}
-
-	var containerName string
-	if mainOnly {
-		containerName = g.getFirstContainerName(foundNamespace, selector)
-		if containerName == "" {
-			logging.Info("Could not determine specific workload container from JobSet; streaming all containers...")
-		}
-	}
-
-	if opts.Follow {
-		logging.Info("Streaming logs for job '%s'...", name)
-		args := g.buildKubectlLogsArgs(foundNamespace, selector, containerName, true)
-		err = g.executor.ExecuteCommandStream("kubectl", args...)
-		return "", err
-	}
-
-	res, err := g.fetchLogsWithRetry(foundNamespace, selector, containerName)
+	foundNamespace, err := g.getCurrentNamespace(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
 	if err != nil {
 		return "", err
 	}
 
-	if strings.TrimSpace(res.Stdout) == "" {
+	podCount, streamCount, jsInfo, err := g.waitForJobPods(foundNamespace, name)
+	if err != nil {
+		return "", err
+	}
+	if podCount == 0 {
 		return "Job exists but has no live logs available (it may have finished or failed to start pods)", nil
 	}
 
+	// Pods appear in batches (and after the leader with InOrder startup), so size decisions on the spec.
+	jsInfo = g.ensureJobSetInfo(foundNamespace, name, jsInfo)
+	podCount = max(podCount, jsInfo.expectedPods)
+	consoleURL := getCloudConsoleLogsURL(opts.ProjectID, opts.ClusterLocation, opts.ClusterName, foundNamespace, name)
+	selector, mainOnly := g.resolveLogsSelector(name, opts.MainOnly, podCount, jsInfo.firstJob, consoleURL)
+	if podCount > maxLogRequests && !mainOnly {
+		return "", fmt.Errorf("job '%s' has %d pods matching logs query, which exceeds the max fetch limit (%d). Please view logs directly in the Google Cloud Console:\n%s", name, podCount, maxLogRequests, consoleURL)
+	}
+
+	allContainers := !mainOnly
+	if opts.Follow {
+		logging.Info("Streaming logs for job '%s'...", name)
+		if _, err := g.fetchLogsWithRetry(foundNamespace, name, selector, allContainers, streamCount, 1); err != nil {
+			return "", err
+		}
+		if _, fresh, err := g.getJobPodStreams(foundNamespace, selector); err == nil {
+			streamCount = max(streamCount, fresh) // pods created while the probe waited
+		}
+		args := g.buildKubectlLogsArgs(foundNamespace, selector, allContainers, true, streamCount, -1)
+		return "", g.kubectlStream(args...)
+	}
+	res, err := g.fetchLogsWithRetry(foundNamespace, name, selector, allContainers, streamCount, -1)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(res.Stdout) == "" {
+		return "Job exists but has no live logs available (it may have finished or failed to start pods)", nil
+	}
 	return res.Stdout, nil
 }
 
-func (g *GKEOrchestrator) buildKubectlLogsArgs(ns, selector, containerName string, follow bool) []string {
+// buildKubectlLogsArgs leaves the container to kubectl unless allContainers is set. kubectl (1.24+) then reads the
+// pod's kubectl.kubernetes.io/default-container, else spec.containers[0]; native sidecars are never picked.
+func (g *GKEOrchestrator) buildKubectlLogsArgs(ns, selector string, allContainers, follow bool, streamCount, tail int) []string {
 	args := []string{"logs", "-n", ns, "-l", selector}
-	if containerName != "" {
-		args = append(args, "-c", containerName)
-	} else {
+	if allContainers {
 		args = append(args, "--all-containers")
 	}
 	if follow {
 		args = append(args, "-f")
 	}
-	args = append(args, fmt.Sprintf("--max-log-requests=%d", maxLogRequests), "--tail=-1")
+	maxReqs := maxLogRequests
+	if allContainers && streamCount > maxReqs {
+		maxReqs = streamCount
+	}
+	args = append(args, fmt.Sprintf("--max-log-requests=%d", maxReqs), fmt.Sprintf("--tail=%d", tail))
 	return args
 }
 
-func (g *GKEOrchestrator) fetchLogsWithRetry(ns, selector, containerName string) (shell.CommandResult, error) {
-	maxRetries := 12 // 12 * 5s = 1 minute timeout
+func (g *GKEOrchestrator) fetchLogsWithRetry(ns, jobsetName, selector string, allContainers bool, streamCount, tail int) (shell.CommandResult, error) {
 	var res shell.CommandResult
-	cmdArgs := g.buildKubectlLogsArgs(ns, selector, containerName, false)
-	for i := 0; i < maxRetries; i++ {
-		res = g.executor.ExecuteCommand("kubectl", cmdArgs...)
+	cmdArgs := g.buildKubectlLogsArgs(ns, selector, allContainers, false, streamCount, tail)
+	for i := 0; i < logsMaxAttempts; i++ {
+		if i > 0 {
+			time.Sleep(logsRetryInterval)
+		}
+		res = g.kubectl(cmdArgs...)
 		if res.ExitCode == 0 {
 			return res, nil
 		}
 
-		if strings.Contains(res.Stderr, "is waiting to start") || strings.Contains(res.Stderr, "No resources found") {
+		if strings.Contains(res.Stderr, "is waiting to start") {
 			if i == 0 {
 				logging.Info("Job containers are waiting to start (likely pulling images). Waiting...")
 			}
-			time.Sleep(5 * time.Second)
 			continue
 		}
 
 		return res, fmt.Errorf("failed to get logs: %s\n%s", res.Stderr, res.Stdout)
 	}
 
-	jobsetName := extractJobSetNameFromSelector(selector)
-	if jobsetName != "" {
-		warnEvents := g.checkJobSetWarningEvents(ns, jobsetName)
-		if warnEvents != "" {
-			return res, fmt.Errorf("timed out waiting for job to start; JobSet reported warning events:\n%s\nlatest error: %s\n%s", warnEvents, res.Stderr, res.Stdout)
-		}
+	if warnEvents := g.checkJobSetWarningEvents(ns, jobsetName); warnEvents != "" {
+		return res, fmt.Errorf("timed out waiting for job to start; JobSet reported warning events:\n%s\nlatest error: %s\n%s", warnEvents, res.Stderr, res.Stdout)
 	}
 	return res, fmt.Errorf("timed out waiting for job to start; latest error: %s\n%s", res.Stderr, res.Stdout)
 }
 
-func extractJobSetNameFromSelector(selector string) string {
-	sel, err := labels.Parse(selector)
-	if err != nil {
-		return ""
-	}
-	reqs, _ := sel.Requirements()
-	for _, req := range reqs {
-		if req.Key() == "jobset.sigs.k8s.io/jobset-name" && (req.Operator() == selection.Equals || req.Operator() == selection.DoubleEquals || req.Operator() == selection.In) {
-			if vals := req.Values().List(); len(vals) == 1 {
-				return vals[0]
-			}
+// waitForJobPods polls until the JobSet has at least one pod, or returns 0 pods if the JobSet already finished.
+// If it queries the JobSet while waiting, it returns the parsed jobSetInfo so the caller does not re-query it.
+func (g *GKEOrchestrator) waitForJobPods(ns, jobsetName string) (int, int, jobSetInfo, error) {
+	selector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", jobsetName)
+	var info jobSetInfo
+	for i := 0; i < logsMaxAttempts; i++ {
+		if i > 0 {
+			time.Sleep(logsRetryInterval)
+		}
+		pods, streams, err := g.getJobPodStreams(ns, selector)
+		if err != nil || pods > 0 {
+			return pods, streams, info, err
+		}
+		info, err = g.getJobSetInfo(ns, jobsetName)
+		if err != nil {
+			return 0, 0, jobSetInfo{}, err
+		}
+		if info.terminal() {
+			return 0, 0, info, nil
+		}
+		if i == 0 {
+			logging.Info("Waiting for job '%s' pods to be created...", jobsetName)
 		}
 	}
-	return ""
+	if warnEvents := g.checkJobSetWarningEvents(ns, jobsetName); warnEvents != "" {
+		return 0, 0, jobSetInfo{}, fmt.Errorf("timed out waiting for job to start; JobSet reported warning events:\n%s", warnEvents)
+	}
+	if info.suspended {
+		return 0, 0, jobSetInfo{}, fmt.Errorf("timed out waiting for job '%s' to start: job is still queued (JobSet suspended, waiting for Kueue admission); re-run once admitted or check gcluster job inspect", jobsetName)
+	}
+	return 0, 0, jobSetInfo{}, fmt.Errorf("timed out waiting for job to start: no pods created for job '%s'", jobsetName)
 }
 
-func findWorkloadContainer(containers []string) string {
-	for _, c := range containers {
-		if strings.HasPrefix(c, workloadContainerPrefix) || strings.HasPrefix(c, pathwaysContainerPrefix) {
-			return c
-		}
-	}
-	if len(containers) > 0 {
-		return containers[0]
-	}
-	return ""
-}
-
-func (g *GKEOrchestrator) getFirstContainerName(ns, selector string) string {
-	jobsetName := extractJobSetNameFromSelector(selector)
-	if jobsetName != "" {
-		res := g.executor.ExecuteCommand("kubectl", "get", "jobsets.jobset.x-k8s.io", jobsetName, "-n", ns, "-o", "jsonpath="+jobSetContainerNamesJSONPath)
-		if res.ExitCode == 0 && strings.TrimSpace(res.Stdout) != "" {
-			if name := findWorkloadContainer(strings.Fields(res.Stdout)); name != "" {
-				return name
-			}
-		} else if res.ExitCode != 0 {
-			logging.Warn("Failed to query JobSet '%s' for container names: %s", jobsetName, strings.TrimSpace(res.Stderr))
-		} else {
-			logging.Warn("Could not determine a primary workload container for JobSet '%s' from output: %s", jobsetName, strings.TrimSpace(res.Stdout))
-		}
-	}
-	return ""
-}
-
-func (g *GKEOrchestrator) getJobPodCount(ns, selector string) (int, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "pods", "-n", ns, "-l", selector, "--no-headers")
+func (g *GKEOrchestrator) getJobSetInfo(ns, jobsetName string) (jobSetInfo, error) {
+	res := g.kubectl("get", "jobsets.jobset.x-k8s.io", jobsetName, "-n", ns, "-o", "jsonpath="+jobSetInfoJSONPath)
 	if res.ExitCode != 0 {
-		return 0, fmt.Errorf("failed to query pods: %s", res.Stderr)
+		if strings.Contains(res.Stderr, "NotFound") {
+			return jobSetInfo{}, fmt.Errorf("job '%s' not found in namespace '%s' (run 'gcluster job list' or check --gke-namespace)", jobsetName, ns)
+		}
+		return jobSetInfo{}, fmt.Errorf("failed to read status of job '%s': %s", jobsetName, strings.TrimSpace(res.Stderr))
+	}
+	info := parseJobSetInfo(res.Stdout)
+	info.queried = true
+	return info, nil
+}
+
+func (g *GKEOrchestrator) ensureJobSetInfo(ns, jobsetName string, info jobSetInfo) jobSetInfo {
+	if info.queried {
+		return info
+	}
+	queried, err := g.getJobSetInfo(ns, jobsetName)
+	if err != nil {
+		logging.Warn("Failed to query JobSet: %v", err)
+		return info
+	}
+	return queried
+}
+
+// parseJobSetInfo parses the output of jobSetInfoJSONPath. Each line after the tab-separated header is one
+// replicated job; a missing replicas or parallelism field defaults to 1 (the API default), so a blank line
+// still counts as one pod, while an explicit 0 counts as zero.
+func parseJobSetInfo(stdout string) jobSetInfo {
+	stdout = strings.ReplaceAll(stdout, "\r\n", "\n")
+	header, rest, _ := strings.Cut(stdout, "\n")
+	var info jobSetInfo
+	if parts := strings.Split(header, "\t"); len(parts) == 3 {
+		info.terminalState = strings.TrimSpace(parts[0])
+		info.suspended = strings.Contains(parts[1], "True")
+		info.firstJob = strings.TrimSpace(parts[2])
+	}
+	rest = strings.TrimRight(rest, "\n")
+	if rest == "" {
+		return info
+	}
+	for _, line := range strings.Split(rest, "\n") {
+		pods := 1
+		for _, f := range strings.Fields(line) {
+			if n, err := strconv.Atoi(f); err == nil && n >= 0 {
+				pods *= n
+			}
+		}
+		info.expectedPods += pods
+	}
+	return info
+}
+
+func (g *GKEOrchestrator) getJobPodStreams(ns, selector string) (int, int, error) {
+	res := g.kubectl("get", "pods", "-n", ns, "-l", selector, "-o", "jsonpath="+podContainersJSONPath)
+	if res.ExitCode != 0 {
+		return 0, 0, fmt.Errorf("failed to query pods: %s", res.Stderr)
 	}
 	stdout := strings.TrimSpace(res.Stdout)
 	if stdout == "" {
-		return 0, nil
+		return 0, 0, nil
 	}
-	return len(strings.Split(stdout, "\n")), nil
+	pods, streams := 0, 0
+	for _, line := range strings.Split(stdout, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		pods++
+		streams += len(fields)
+	}
+	return pods, streams, nil
 }
 
-func (g *GKEOrchestrator) resolveLogsSelector(name, ns string, optsMainOnly *bool) (string, bool, int) {
-	mainOnly := false
-	podCount := 0
+// resolveLogsSelector returns the pod selector and whether logs are main-only. Main-only selects rank-0 of the
+// first replicated job: job-index and job-completion-index alone are per replicated job and would also match
+// e.g. a Pathways worker-0-0.
+func (g *GKEOrchestrator) resolveLogsSelector(name string, optsMainOnly *bool, podCount int, firstJob, consoleURL string) (string, bool) {
 	selector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name)
-
+	mainOnly := podCount > 5
 	if optsMainOnly != nil {
 		mainOnly = *optsMainOnly
-	}
-
-	if !mainOnly {
-		var err error
-		podCount, err = g.getJobPodCount(ns, selector)
-
-		if optsMainOnly == nil && err == nil && podCount > 5 {
-			mainOnly = true
+	} else if mainOnly {
+		if podCount > maxLogRequests {
+			logging.Info("Job has %d pods (> %d). Defaulting to --main-only logs. To view logs from all pods, use the Google Cloud Console:\n%s", podCount, maxLogRequests, consoleURL)
+		} else {
+			logging.Info("Job has %d pods (> 5). Defaulting to --main-only logs. To fetch logs from all pods, run with --main-only=false.", podCount)
 		}
 	}
-
 	if mainOnly {
+		if firstJob != "" {
+			selector += ",jobset.sigs.k8s.io/replicatedjob-name=" + firstJob
+		} else {
+			logging.Info("Falling back to the rank-0 pod of every replicated job in '%s'.", name)
+		}
 		selector = fmt.Sprintf("%s,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0", selector)
 	}
 
-	return selector, mainOnly, podCount
+	return selector, mainOnly
 }
 
 func (g *GKEOrchestrator) generateAndSubmitManifests(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) error {
@@ -407,13 +466,16 @@ func (g *GKEOrchestrator) printConsoleLinks(job orchestrator.JobDefinition) {
 	logging.Info("View your workload logs in real-time here: %s or use gcluster job logs [job-name] to view logs using kubectl", logsLink)
 }
 
-func (g *GKEOrchestrator) validateJobConflicts(workloadName string, clusterName string, clusterLocation string, projectID string) error {
-	status, err := g.getJobStatus(workloadName)
+func (g *GKEOrchestrator) validateJobConflicts(job orchestrator.JobDefinition) error {
+	if job.DryRunManifest != "" {
+		return nil
+	}
+	status, err := g.getJobStatus(job.WorkloadName)
 	if err != nil {
 		return err
 	}
 	if status != "" {
-		return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s --cluster %s --location %s --project %s' or resubmit this workload with a different name using '--name'", workloadName, status, workloadName, clusterName, clusterLocation, projectID)
+		return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s --cluster %s --location %s --project %s' or resubmit this workload with a different name using '--name'", job.WorkloadName, status, job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID)
 	}
 	return nil
 }
@@ -487,6 +549,9 @@ func (g *GKEOrchestrator) isSystemPool(np gkeJobNodePool) bool {
 }
 
 func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinition) error {
+	if err := g.validateMTCJobFlags(job); err != nil {
+		return err
+	}
 	if err := g.populateClusterMetadata(job); err != nil {
 		return err
 	}
@@ -931,11 +996,11 @@ func (g *GKEOrchestrator) queryDiscoveredTopologies(accelLabel string, machineTy
 		}
 	}
 
-	res := g.executor.ExecuteCommand("kubectl", "get", "resourceflavors.kueue.x-k8s.io", "-o", "jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
+	res := g.kubectl("get", "resourceflavors.kueue.x-k8s.io", "-o", "jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
 	output := strings.TrimSpace(res.Stdout)
 
 	if output == "" {
-		res = g.executor.ExecuteCommand("kubectl", "get", "nodes", "-o", "jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
+		res = g.kubectl("get", "nodes", "-o", "jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
 		if res.ExitCode != 0 {
 			return "", fmt.Errorf("failed to query Nodes for topology: %s", res.Stderr)
 		}
@@ -1336,15 +1401,14 @@ func (g *GKEOrchestrator) needsDynamicClientInit() bool {
 	return false
 }
 
+// getDynamicClient builds the client once, for the context set by configureKubectl,
+// and caches it; configureKubectl must run first and is not re-run within a command.
 func (g *GKEOrchestrator) getDynamicClient() (dynamic.Interface, error) {
 	if g.dynClient != nil {
 		g.syncKubeClient()
 		return g.dynClient, nil
 	}
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	configOverrides := &clientcmd.ConfigOverrides{}
-	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
-	config, err := kubeConfig.ClientConfig()
+	config, err := g.restConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
 	}
@@ -1354,6 +1418,16 @@ func (g *GKEOrchestrator) getDynamicClient() (dynamic.Interface, error) {
 	}
 	g.syncKubeClient()
 	return g.dynClient, nil
+}
+
+// restConfig builds a client-go config for the pinned context from the same kubeconfig
+// loader the rest of the orchestrator uses; an empty context means current-context.
+func (g *GKEOrchestrator) restConfig() (*rest.Config, error) {
+	cfg, err := g.loadKubeconfig()
+	if err != nil {
+		return nil, err
+	}
+	return clientcmd.NewNonInteractiveClientConfig(*cfg, g.kubeContext, &clientcmd.ConfigOverrides{}, nil).ClientConfig()
 }
 
 func (g *GKEOrchestrator) awaitJobCompletion(workloadName, clusterName, clusterLocation, projectID, timeout string) error {
@@ -1398,7 +1472,7 @@ func (g *GKEOrchestrator) awaitJobCompletion(workloadName, clusterName, clusterL
 }
 
 func (g *GKEOrchestrator) getJobSetStatus(workloadName, ns string) (string, error) {
-	statusRes := g.executor.ExecuteCommand("kubectl", "get", "jobset", workloadName, "-n", ns, "-o", "json")
+	statusRes := g.kubectl("get", "jobset", workloadName, "-n", ns, "-o", "json")
 	if statusRes.ExitCode != 0 {
 		return "", fmt.Errorf("failed to get final job status: %s\n%s", statusRes.Stderr, statusRes.Stdout)
 	}
@@ -1518,7 +1592,7 @@ func (g *GKEOrchestrator) checkJobSetWarningEvents(ns, workloadName string) stri
 	if workloadName == "" {
 		return ""
 	}
-	res := g.executor.ExecuteCommand("kubectl", "get", "events", "-n", ns,
+	res := g.kubectl("get", "events", "-n", ns,
 		fmt.Sprintf("--field-selector=involvedObject.name=%s,involvedObject.kind=JobSet,type=Warning", workloadName),
 		"--request-timeout=10s",
 		"--no-headers")
@@ -1530,7 +1604,7 @@ func (g *GKEOrchestrator) checkJobSetWarningEvents(ns, workloadName string) stri
 
 func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, jobConsoleLink, workloadName string) error {
 	logging.Info("Waiting for Kueue workload '%s' to be Finished...", targetWorkloadName)
-	waitRes := g.executor.ExecuteCommand("kubectl", "wait", "--for=condition=Finished",
+	waitRes := g.kubectl("wait", "--for=condition=Finished",
 		"workload", targetWorkloadName, "-n", ns, "--timeout="+timeout)
 
 	if waitRes.ExitCode != 0 {
@@ -1790,6 +1864,10 @@ func (d *DefaultKubeClient) ListJobSets(namespace string, labelSelector string) 
 
 func (d *DefaultExecutor) ExecuteCommand(name string, args ...string) shell.CommandResult {
 	return shell.ExecuteCommand(name, args...)
+}
+
+func (d *DefaultExecutor) ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...string) shell.CommandResult {
+	return shell.ExecuteCommandWithTimeout(timeout, name, args...)
 }
 
 func (d *DefaultExecutor) ExecuteCommandStream(name string, args ...string) error {

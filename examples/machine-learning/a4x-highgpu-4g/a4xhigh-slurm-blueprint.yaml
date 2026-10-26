@@ -33,7 +33,7 @@ vars:
   local_ssd_mountpoint: /mnt/localssd
   instance_image:
     project: advanced-compute-images
-    family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-arm64
+    family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-arm64
   a4x_reservation_name: "" # supply reservation name
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
 
@@ -52,6 +52,14 @@ vars:
 
   # Maximum throughput of the lustre instance in MBps per TiB
   per_unit_storage_throughput: 500
+
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned nodes in the a4x partition.
+  a4x_node_count_dynamic_max: 0
+  # Machine type for the login node.
+  login_machine_type: t2a-standard-2
+  # Machine type for the controller node.
+  controller_machine_type: t2a-standard-2
 
 deployment_groups:
 
@@ -223,6 +231,7 @@ deployment_groups:
   - id: a4x_startup
     source: modules/scripts/startup-script
     settings:
+      install_ansible: false
       local_ssd_filesystem:
         mountpoint: $(vars.local_ssd_mountpoint)
         permissions: "1777"  # must quote numeric filesystem permissions!
@@ -271,8 +280,8 @@ deployment_groups:
             hosts: all
             become: true
             vars:
-              cuda_installer_url: "https://developer.download.nvidia.com/compute/cuda/13.0.0/local_installers/cuda_13.0.0_580.65.06_linux_sbsa.run"
-              cuda_installer_file: "/tmp/cuda_13.0.0_580.65.06_linux_sbsa.run"
+              cuda_installer_url: "https://developer.download.nvidia.com/compute/cuda/13.2.2/local_installers/cuda_13.2.2_595.71.05_linux_sbsa.run"
+              cuda_installer_file: "/tmp/cuda_13.2.2_595.71.05_linux_sbsa.run"
               nvidia_packages:
                 - datacenter-gpu-manager-4-core=1:4.6.1-1
                 - datacenter-gpu-manager-4-dev=1:4.6.1-1
@@ -371,10 +380,13 @@ deployment_groups:
     use: [a4x-slurm-net-0, a4x_startup]
     settings:
       bandwidth_tier: gvnic_enabled
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a4x-highgpu-4g
       enable_public_ips: true
       node_count_static: $(vars.a4x_cluster_size)
-      node_count_dynamic_max: 0
+      node_count_dynamic_max: $(vars.a4x_node_count_dynamic_max)
       enable_placement: true
       accelerator_topology: 1x72
       disk_type: hyperdisk-balanced
@@ -418,7 +430,7 @@ deployment_groups:
       instance_image_custom: true
       disk_type: pd-balanced
       disk_size_gb: $(vars.disk_size_gb)
-      machine_type: t2a-standard-2
+      machine_type: $(vars.login_machine_type)
 
   - id: controller_startup
     source: modules/scripts/startup-script
@@ -484,7 +496,7 @@ deployment_groups:
     - slurm_login
     settings:
       enable_controller_public_ips: true
-      machine_type: t2a-standard-2
+      machine_type: $(vars.controller_machine_type)
       zone: $(vars.zone)
       disk_type: pd-balanced
       disk_size_gb: $(vars.disk_size_gb)

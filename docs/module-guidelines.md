@@ -74,11 +74,22 @@ variable "labels" {
 }
 ```
 
-If the module creates its own labels, then we recommend merging user-provided labels into the module’s labels:
+If the module creates its own labels, merge user-provided labels with `ghpc_module` and `ghpc_role` (preceded by a comment line as required by `tools/label-check.py`):
 
 ```hcl
 locals {
-  labels = merge(var.labels, { ghpc_module = "my-module" })
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "my-module", ghpc_role = "compute" })
+}
+```
+
+And include the `provider_meta "google"` block in `versions.tf`:
+
+```hcl
+terraform {
+  provider_meta "google" {
+    module_name = "blueprints/terraform/hpc-toolkit:my-module/v1.0.0"
+  }
 }
 ```
 

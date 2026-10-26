@@ -1041,6 +1041,44 @@ func TestExclusiveValidator(t *testing.T) {
 			t.Fatalf("unexpected error message: %q", err.Error())
 		}
 	})
+	t.Run("fails_when_enable_flex_start_and_spot_both_true", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"enable_flex_start": cty.True,
+			"spot":              cty.True,
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "exclusive",
+			ErrorMessage: "Both enable_flex_start and spot consumption option cannot be set to true at the same time.",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"enable_flex_start", "spot"},
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error when both enable_flex_start and spot are true, got nil")
+		}
+		if !strings.Contains(err.Error(), "Both enable_flex_start and spot consumption option cannot be set to true at the same time.") {
+			t.Fatalf("unexpected error message: %q", err.Error())
+		}
+	})
+	t.Run("passes_when_spot_true_and_enable_flex_start_false", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"enable_flex_start": cty.False,
+			"spot":              cty.True,
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "exclusive",
+			ErrorMessage: "Both enable_flex_start and spot consumption option cannot be set to true at the same time.",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"enable_flex_start", "spot"},
+			},
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
 }
 
 func TestConditionalValidator_Triggers(t *testing.T) {
@@ -1693,6 +1731,90 @@ func TestConditionalRegexValidator(t *testing.T) {
 	})
 }
 
+func TestConditionalRegexValidator_ReservationAffinity(t *testing.T) {
+	baseBP := config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:       "test-module",
+						Source:   "test/module",
+						Kind:     config.TerraformKind,
+						Settings: config.NewDict(map[string]cty.Value{}),
+					},
+				},
+			},
+		},
+	}
+
+	validator := ConditionalRegexValidator{}
+	rule := modulereader.ValidationRule{
+		Validator:    "conditional_regex",
+		ErrorMessage: "Spot consumption option only works with reservation_affinity consume_reservation_type NO_RESERVATION.",
+		Inputs: map[string]interface{}{
+			"trigger":       "spot",
+			"trigger_value": true,
+			"dependent":     "reservation_affinity.consume_reservation_type",
+			"pattern":       "^NO_RESERVATION$",
+		},
+	}
+
+	t.Run("fails_when_spot_true_and_reservation_specific", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"spot": cty.True,
+			"reservation_affinity": cty.ObjectVal(map[string]cty.Value{
+				"consume_reservation_type": cty.StringVal("SPECIFIC_RESERVATION"),
+			}),
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected error when spot is true and reservation is SPECIFIC_RESERVATION, got nil")
+		}
+		if !strings.Contains(err.Error(), "Spot consumption option only works with reservation_affinity consume_reservation_type NO_RESERVATION.") {
+			t.Fatalf("unexpected error message: %q", err.Error())
+		}
+	})
+
+	t.Run("passes_when_spot_true_and_reservation_none", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"spot": cty.True,
+			"reservation_affinity": cty.ObjectVal(map[string]cty.Value{
+				"consume_reservation_type": cty.StringVal("NO_RESERVATION"),
+			}),
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+
+	t.Run("passes_when_spot_true_and_reservation_omitted", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"spot": cty.True,
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+
+	t.Run("passes_when_spot_false_and_reservation_specific", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"spot": cty.False,
+			"reservation_affinity": cty.ObjectVal(map[string]cty.Value{
+				"consume_reservation_type": cty.StringVal("SPECIFIC_RESERVATION"),
+			}),
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+}
+
 func createBaseTestBlueprint() config.Blueprint {
 	return config.Blueprint{
 		BlueprintName: "test-bp",
@@ -1750,6 +1872,49 @@ func TestCIDRValidator(t *testing.T) {
 		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("scalar_cidr_allows_null_when_configured", func(t *testing.T) {
+		scalarRule := modulereader.ValidationRule{
+			Validator:    "cidr",
+			ErrorMessage: "master_ipv4_cidr_block must be null or a valid CIDR block (e.g. 1.2.3.0/28).",
+			Inputs: map[string]interface{}{
+				"vars":       []interface{}{"master_ipv4_cidr_block"},
+				"allow_null": true,
+			},
+		}
+		disallowNullRule := modulereader.ValidationRule{
+			Validator:    "cidr",
+			ErrorMessage: "master_ipv4_cidr_block must be a valid CIDR block (e.g. 1.2.3.0/28).",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"master_ipv4_cidr_block"},
+			},
+		}
+
+		bp := createBaseTestBlueprint()
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"master_ipv4_cidr_block": cty.NullVal(cty.String),
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], scalarRule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("expected null master_ipv4_cidr_block to pass when allow_null is true, got: %v", err)
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], disallowNullRule, bp.Groups[0], 0); err == nil {
+			t.Fatal("expected null master_ipv4_cidr_block to fail when allow_null is not enabled, got nil")
+		}
+
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"master_ipv4_cidr_block": cty.StringVal("1.2.3.0/28"),
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], scalarRule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("expected valid CIDR master_ipv4_cidr_block to pass, got: %v", err)
+		}
+
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"master_ipv4_cidr_block": cty.StringVal("invalid-cidr"),
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], scalarRule, bp.Groups[0], 0); err == nil {
+			t.Fatal("expected invalid CIDR master_ipv4_cidr_block to fail, got nil")
 		}
 	})
 }

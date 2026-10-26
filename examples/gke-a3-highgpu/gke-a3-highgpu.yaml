@@ -37,7 +37,8 @@ vars:
 
   gcp_public_cidrs_access_enabled: false
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
-  nccl_tcpxo_installer_path: $(ghpc_stage("./nccl-tcpxo-installer.yaml.tftpl"))
+  nccl_tcpx_installer_path: $(ghpc_stage("./nccl-tcpx-installer.yaml.tftpl"))
+  nccl_config_path: $(ghpc_stage("./nccl-config.yaml"))
   nri_device_injector_path: $(ghpc_stage("./nri-device-injector.yaml"))
 
   network_name: $(vars.deployment_name)-net
@@ -56,7 +57,8 @@ vars:
 
   accelerator_type: nvidia-h100-80gb
   version_prefix: "1.35."
-  nccl_tcpxo_version: v1.0.15
+  nccl_tcpx_version: v3.1.9
+
 
 deployment_groups:
 - group: primary
@@ -140,6 +142,9 @@ deployment_groups:
     settings:
       install_gpu_direct_manifests: false
       run_workload_script: false
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a3-highgpu-8g
       auto_upgrade: true
       static_node_count: $(vars.static_node_count)
@@ -161,13 +166,15 @@ deployment_groups:
     use: [gke_cluster]
     settings:
       apply_manifests:
+      - name: nccl-config
+        source: $(vars.nccl_config_path)
       - name: nri-device-injector
         source: $(vars.nri_device_injector_path)
-      - name: nccl-tcpxo-installer
-        source: $(vars.nccl_tcpxo_installer_path)
+      - name: nccl-tcpx-installer
+        source: $(vars.nccl_tcpx_installer_path)
         template_vars:
           accelerator_type: $(vars.accelerator_type)
-          version: $(vars.nccl_tcpxo_version)
+          version: $(vars.nccl_tcpx_version)
       kueue:
         install: true
         config_path: $(vars.kueue_configuration_path)

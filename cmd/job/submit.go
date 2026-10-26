@@ -31,6 +31,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var (
@@ -97,8 +98,8 @@ It accepts parameters for the container image, command to execute, accelerator t
 and JobSet/Kueue specific configurations like workload name, queue, nodes, and restarts.`,
 	RunE: runSubmitCmd,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		if len(workloadName) > 28 {
-			return fmt.Errorf("workload name cannot exceed 28 characters due to Kubernetes/GCE resource name limits. The provided name %q has %d characters", workloadName, len(workloadName))
+		if err := validateWorkloadNameLength(workloadName, isPathwaysJob); err != nil {
+			return err
 		}
 
 		if !pathways.Headless && commandToRun == "" {
@@ -109,11 +110,11 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			return err
 		}
 
-		if err := validatePathwaysFlags(); err != nil {
+		if err := validatePathwaysFlags(cmd); err != nil {
 			return err
 		}
-		if !skipPrereqs {
-			if err := ensurePrerequisites(cmd, projectID, location); err != nil {
+		if !skipPrereqs && buildContext != "" {
+			if err := ensureBuildPrerequisites(cmd, projectID, location); err != nil {
 				return err
 			}
 		}
@@ -160,7 +161,7 @@ func init() {
 	SubmitCmd.Flags().StringVar(&gracePeriodStr, "grace-period", "30s", "Time to wait before forcefully terminating a pod (e.g. 30s, 2m). Gives the workload time to save checkpoints or clean up distributed state during cancellation or preemption events (like Spot VM evictions).")
 	SubmitCmd.Flags().BoolVar(&gkeDisableParallelContainers, "gke-disable-parallel-containers", false, "Disable parallel containers for TPU7x on GKE.")
 
-	SubmitCmd.Flags().StringVar(&placementPolicy, "placement-policy", "", "Name of the GKE placement policy to use.")
+	SubmitCmd.Flags().StringVar(&placementPolicy, "placement-policy", "", "Name of an existing GCE compact placement or workload policy attached to the target node pool. Under NAP on machines that support compact placement it is also used as the GKE placement group identifier.")
 	SubmitCmd.Flags().StringToStringVar(&nodeConstraint, "node-constraint", nil, "Key=value pairs for node labels to target specific nodes. Maps to nodeSelector in GKE, and to SLURM's --constraint.")
 	SubmitCmd.Flags().StringVar(&cpuAffinityStr, "cpu-affinity", "", "CPU affinity rules (e.g., 'numa').")
 	SubmitCmd.Flags().IntSliceVar(&restartOnExitCodes, "restart-on-exit-codes", nil, "List of exit codes that should not trigger a job failure.")
@@ -182,14 +183,14 @@ func init() {
 	SubmitCmd.Flags().BoolVar(&pathways.Headless, "pathways-headless", false, "If present, the user's workload container will not be deployed within the `pathways-head` job.")
 	SubmitCmd.Flags().StringVar(&pathways.GCSLocation, "pathways-gcs-location", "", "Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.")
 	SubmitCmd.Flags().IntVar(&pathways.ElasticSlices, "pathways-elastic-slices", 0, "Configures the number of elastic slices, potentially allowing for more flexible resource allocation.")
-	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 1, "Maximum times the workers in a slice can be restarted. Used with --pathways-elastic-slices.")
+	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 0, "Maximum times the workers in a slice can be restarted (defaults to 0, or 4000 when --pathways-elastic-slices>0 or --pathways-headless is set). Maps to backoffLimitPerIndex=N and backoffLimit=N*nodesPerSlice on the worker Job.")
 	SubmitCmd.Flags().StringVar(&pathways.ProxyArgs, "pathways-proxy-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-proxy` executable.")
 	SubmitCmd.Flags().StringVar(&pathways.ServerArgs, "pathways-server-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-rm` (resource manager) executable.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerArgs, "pathways-worker-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-worker` executable.")
 	SubmitCmd.Flags().StringArrayVar(&pathwaysProxyEnv, "pathways-proxy-env", []string{}, "Custom environment variables for the Pathways proxy container in KEY=VALUE format. Can be specified multiple times.")
 	SubmitCmd.Flags().StringArrayVar(&pathwaysServerEnv, "pathways-server-env", []string{}, "Custom environment variables for the Pathways server container in KEY=VALUE format. Can be specified multiple times.")
 	SubmitCmd.Flags().StringArrayVar(&pathwaysWorkerEnv, "pathways-worker-env", []string{}, "Custom environment variables for the Pathways worker container in KEY=VALUE format. Can be specified multiple times.")
-	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional Python-based sidecar container to run alongside the Pathways head components.")
+	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional colocated Python sidecar that runs in each Pathways worker pod and shares memory with the worker at /tmp/sidecar.")
 	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
 
 	SubmitCmd.Flags().BoolVar(&gkeMtcEnabled, "gke-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC).")
@@ -233,6 +234,9 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 
 	jobTopology := strings.ToLower(strings.TrimSpace(topology))
 
+	if (pathways.ElasticSlices > 0 || pathways.Headless) && !cmd.Flags().Changed("pathways-max-slice-restarts") {
+		pathways.MaxSliceRestarts = defaultElasticMaxSliceRestarts
+	}
 	pathways.ProxyEnv = parseEnvFlags(pathwaysProxyEnv)
 	pathways.ServerEnv = parseEnvFlags(pathwaysServerEnv)
 	pathways.WorkerEnv = parseEnvFlags(pathwaysWorkerEnv)
@@ -329,18 +333,60 @@ func parseDurationToSeconds(dStr string, flagName string) (int, error) {
 	return 0, fmt.Errorf("invalid duration format for %s: %s. Expected formats: 1h, 30m, 3600", flagName, dStr)
 }
 
-func validatePathwaysFlags() error {
+const (
+	maxWorkloadNameLen = 28
+	maxLabelValueLen   = 63
+	// JobSet labels Pathways pods with jobset.sigs.k8s.io/coordinator=<name>-pathways-head-0-0.<name>.
+	pathwaysCoordinatorSuffix = "-pathways-head-0-0."
+	// Longest Pathways name whose coordinator label still fits in a label value.
+	maxPathwaysWorkloadNameLen     = (maxLabelValueLen - len(pathwaysCoordinatorSuffix)) / 2
+	defaultElasticMaxSliceRestarts = 4000
+)
+
+func validateWorkloadNameLength(name string, isPathways bool) error {
+	if isPathways {
+		if len(name) > maxPathwaysWorkloadNameLen {
+			return fmt.Errorf("workload name cannot exceed %d characters for Pathways jobs: JobSet sets the label jobset.sigs.k8s.io/coordinator=%s%s%s (the name twice plus %q), and label values are limited to %d characters. The provided name %q has %d characters",
+				maxPathwaysWorkloadNameLen, name, pathwaysCoordinatorSuffix, name, pathwaysCoordinatorSuffix, maxLabelValueLen, name, len(name))
+		}
+		return nil
+	}
+	if len(name) > maxWorkloadNameLen {
+		return fmt.Errorf("workload name cannot exceed %d characters due to Kubernetes/GCE resource name limits. The provided name %q has %d characters", maxWorkloadNameLen, name, len(name))
+	}
+	return nil
+}
+
+func validatePathwaysFlags(cmd *cobra.Command) error {
 	if isPathwaysJob {
 		if pathways.GCSLocation == "" {
 			return fmt.Errorf("pathways-gcs-location is required when using --pathways")
 		}
-	} else {
-		// Check if any pathways-specific flag is set without --pathways
-		if !reflect.DeepEqual(pathways, orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}) || len(pathwaysProxyEnv) > 0 || len(pathwaysServerEnv) > 0 || len(pathwaysWorkerEnv) > 0 {
-			return fmt.Errorf("pathways flags specified but --pathways flag is missing")
+		if pathways.ElasticSlices < 0 {
+			return fmt.Errorf("--pathways-elastic-slices must be non-negative")
 		}
+		if pathways.MaxSliceRestarts < 0 {
+			return fmt.Errorf("--pathways-max-slice-restarts must be non-negative")
+		}
+		return nil
+	}
+	if !reflect.DeepEqual(pathways, orchestrator.PathwaysJobDefinition{}) || len(pathwaysProxyEnv) > 0 || len(pathwaysServerEnv) > 0 || len(pathwaysWorkerEnv) > 0 || hasChangedPathwaysFlags(cmd) {
+		return fmt.Errorf("pathways flags specified but --pathways flag is missing")
 	}
 	return nil
+}
+
+func hasChangedPathwaysFlags(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	changed := false
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if f.Changed && strings.HasPrefix(f.Name, "pathways-") {
+			changed = true
+		}
+	})
+	return changed
 }
 
 func validateImageFlags(ctx context.Context, projectID, location string) error {

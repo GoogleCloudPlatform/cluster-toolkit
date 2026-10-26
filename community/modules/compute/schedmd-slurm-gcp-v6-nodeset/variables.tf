@@ -88,8 +88,8 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-12-hpc-rocky-linux-9"
-    project = "schedmd-slurm-public"
+    family  = "aci-cpu-rocky-linux-9-slurm-2605-amd64"
+    project = "advanced-compute-images"
   }
 
   validation {
@@ -148,6 +148,18 @@ variable "disk_storage_pool" {
   default     = null
 }
 
+variable "disk_provisioned_iops" {
+  description = "Indicates how many IOPS to provision for the boot disk. This sets the number of I/O operations per second that the disk can handle."
+  type        = number
+  default     = null
+}
+
+variable "disk_provisioned_throughput" {
+  description = "Indicates how much throughput to provision for the boot disk, in MB/s. This sets the amount of data that can be read or written from the disk per second."
+  type        = number
+  default     = null
+}
+
 variable "disk_size_gb" {
   description = "Size of boot disk to create for the partition compute nodes."
   type        = number
@@ -199,6 +211,8 @@ variable "additional_disks" {
     disk_size_gb                        = optional(number)
     disk_type                           = optional(string)
     disk_storage_pool                   = optional(string)
+    disk_provisioned_iops               = optional(number)
+    disk_provisioned_throughput         = optional(number)
     disk_labels                         = optional(map(string))
     auto_delete                         = optional(bool)
     boot                                = optional(bool)

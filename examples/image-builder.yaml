@@ -28,6 +28,11 @@ vars:
     family: my-slurm-image
     project: $(vars.project_id)
   disk_size: 50
+  # Optional overrides (defaults shown)
+  # Machine type for the compute partition.
+  compute_machine_type: c2-standard-60
+  # Maximum number of dynamically provisioned nodes in the compute partition.
+  compute_node_count_dynamic_max: 20
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -83,13 +88,12 @@ deployment_groups:
     - scripts_for_image
     - image_builder_profile
     settings:
-      source_image_project_id: [schedmd-slurm-public]
+      source_image_project_id: [advanced-compute-images]
       # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
-      # Rocky 8: slurm-gcp-6-12-hpc-rocky-linux-8
-      # Rocky 9: slurm-gcp-6-12-hpc-rocky-linux-9
-      source_image_family: slurm-gcp-6-12-hpc-rocky-linux-9
+      # Rocky 9: aci-cpu-rocky-linux-9-slurm-2605-amd64
+      source_image_family: aci-cpu-rocky-linux-9-slurm-2605-amd64
       # You can find size of source image by using following command
-      # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
+      # gcloud compute images describe-from-family <source_image_family> --project advanced-compute-images
       disk_size: $(vars.disk_size)
       image_family: $(vars.custom_image.family)
       state_timeout: 15m
@@ -144,7 +148,8 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, compute_profile]
     settings:
-      node_count_dynamic_max: 20
+      machine_type: $(vars.compute_machine_type)
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
       disk_size_gb: $(vars.disk_size)
       instance_image: $(vars.custom_image)
       bandwidth_tier: gvnic_enabled

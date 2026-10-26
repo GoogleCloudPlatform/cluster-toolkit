@@ -174,7 +174,7 @@ locals {
 
   output_subnets_gke = [
     {
-      network            = module.vpc.network_name
+      network            = local.network_name
       subnetwork         = local.output_primary_subnetwork_name
       subnetwork_project = var.project_id
       nic_type           = var.nic_type
@@ -199,7 +199,7 @@ resource "terraform_data" "network_profile_firewall_validation" {
 
 module "vpc" {
   source  = "terraform-google-modules/network/google"
-  version = "~> 13.0"
+  version = "~> 18.3"
 
   depends_on = [terraform_data.network_profile_firewall_validation]
 
@@ -244,7 +244,7 @@ locals {
 # https://github.com/terraform-google-modules/terraform-google-address/blob/v3.1.1/outputs.tf
 module "nat_ip_addresses" {
   source  = "terraform-google-modules/address/google"
-  version = "~> 4.1"
+  version = "~> 5.1"
 
   depends_on = [terraform_data.cloud_nat_validation]
 
@@ -261,16 +261,16 @@ module "nat_ip_addresses" {
 
 module "cloud_router" {
   source  = "terraform-google-modules/cloud-router/google"
-  version = "~> 7.3"
+  version = "~> 9.1"
 
   depends_on = [terraform_data.cloud_nat_validation]
 
   for_each = toset(local.cloud_router_regions)
 
-  project = var.project_id
-  name    = "${local.network_name}-router"
-  region  = each.value
-  network = module.vpc.network_name
+  project_id = var.project_id
+  name       = "${local.network_name}-router"
+  region     = each.value
+  network    = module.vpc.network_name
   # Create Cloud NAT when enabled and either ips_per_nat > 0 or nat_ip_allocate_option is AUTO_ONLY
   nats = !local.create_nat ? [] : [
     {

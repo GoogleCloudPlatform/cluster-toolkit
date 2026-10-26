@@ -26,6 +26,13 @@ vars:
   authorized_cidr:  # <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
   gpu_static_node_count: 2
+  # Optional overrides (defaults shown)
+  # Machine type for the "default" CPU node pool.
+  cpu_pool_machine_type: n2d-standard-2
+  # Minimum total node count of the "default" CPU node pool.
+  cpu_pool_autoscaling_total_min_nodes: 1
+  # Maximum total node count of the "default" CPU node pool.
+  cpu_pool_autoscaling_total_max_nodes: 3
 
 deployment_groups:
 - group: primary
@@ -105,6 +112,9 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [gke_cluster, gpunets, node_pool_service_account]
     settings:
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a3-highgpu-8g
       static_node_count: $(vars.gpu_static_node_count)
       # To use Spot VMs, uncomment the following line:
@@ -122,7 +132,7 @@ deployment_groups:
     use: [gke_cluster, node_pool_service_account]
     settings:
       name: "default"
-      machine_type: "n2d-standard-2"
-      autoscaling_total_min_nodes: 1
-      autoscaling_total_max_nodes: 3
+      machine_type: $(vars.cpu_pool_machine_type)
+      autoscaling_total_min_nodes: $(vars.cpu_pool_autoscaling_total_min_nodes)
+      autoscaling_total_max_nodes: $(vars.cpu_pool_autoscaling_total_max_nodes)
       zones: [$(vars.zone)]
