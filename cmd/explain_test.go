@@ -353,4 +353,32 @@ deployment_groups:
 	// B4: Running from inside community/examples still resolves the top-level repo root
 	c.Assert(os.Chdir(filepath.Join(repoRoot, "community", "examples")), IsNil)
 	c.Check(findExplainRepoRoot(), Equals, repoRoot)
+	c.Assert(os.Chdir(repoRoot), IsNil)
+
+	// Generic outputs (capacity_gb, gcp_service_list) must not trigger false upstream use:
+	outGkeStorage, err := runExplainForTest("modules/file-system/gke-storage")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeStorage, "netapp_storage_pool"), Equals, false)
+	c.Check(strings.Contains(outGkeStorage, "capacity_gb:"), Equals, true)
+
+	outSvcEnable, err := runExplainForTest("community/modules/project/service-enablement")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outSvcEnable, "htcondor_install"), Equals, false)
+	c.Check(strings.Contains(outSvcEnable, "gcp_service_list"), Equals, true)
+
+	// Mode 1 advertised 'gcs-bucket' tag resolves to cloud-storage-bucket in spec mode
+	outGkeGcsBucket, err := runExplainForTest("gke", "gcs-bucket")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeGcsBucket, "cloud-storage-bucket"), Equals, true)
+
+	// Multi-input provider selection prefers already-selected provider (spack_setup)
+	outSpackExec, err := runExplainForTest("community/modules/scripts/spack-execute")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outSpackExec, "use: [spack_setup]"), Equals, true)
+
+	// Invalid auto-discovered companion deployment file fails fast
+	c.Assert(os.WriteFile(filepath.Join(dir, "t-deployment.yaml"), []byte("vars: [\ninvalid yaml"), 0644), IsNil)
+	_, err = runExplainForTest(bp)
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "failed to load deployment file"), Equals, true)
 }

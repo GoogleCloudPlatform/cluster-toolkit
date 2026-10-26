@@ -172,10 +172,12 @@ var explainAutoGlobals = map[string]bool{
 }
 
 var explainGenericOutputs = map[string]bool{
-	"id":            true,
-	"instance_name": true,
-	"name":          true,
-	"self_link":     true,
+	"capacity_gb":      true,
+	"gcp_service_list": true,
+	"id":               true,
+	"instance_name":    true,
+	"name":             true,
+	"self_link":        true,
 }
 
 func writef(w io.Writer, format string, args ...interface{}) {
@@ -791,10 +793,7 @@ func loadCompanionDeployment(repoRoot, bpPath, blueprintName, explicitDeplPath s
 	displayDeplPath := displayRelPath(repoRoot, deplPath)
 	parsedDS, _, err := config.NewDeploymentSettings(deplPath)
 	if err != nil {
-		if strings.TrimSpace(explicitDeplPath) != "" {
-			return "", config.DeploymentSettings{}, fmt.Errorf("failed to load deployment file %s: %w", deplPath, err)
-		}
-		return displayDeplPath, config.DeploymentSettings{}, nil
+		return "", config.DeploymentSettings{}, fmt.Errorf("failed to load deployment file %s: %w", deplPath, err)
 	}
 	return displayDeplPath, parsedDS, nil
 }
@@ -1273,18 +1272,12 @@ func selectPrimaryProviders(
 	primaryToAlts := make(map[string]map[string]bool)
 	useProvided := make(map[string]bool)
 
-	reqKeys := make([]string, 0, len(inputToProviders))
-	for k := range inputToProviders {
-		reqKeys = append(reqKeys, k)
-	}
-	sort.Strings(reqKeys)
-
-	for _, reqIn := range reqKeys {
+	for _, reqIn := range sortedRequiredInputKeys(inputToProviders) {
 		cands := inputToProviders[reqIn]
 		if len(cands) == 0 {
 			continue
 		}
-		primary := pickPreferredProvider(cands)
+		primary := chooseProviderForInput(cands, primaryToInputs)
 		primaryToInputs[primary] = append(primaryToInputs[primary], reqIn)
 		useProvided[reqIn] = true
 		if primaryToAlts[primary] == nil {
@@ -1309,6 +1302,34 @@ func selectPrimaryProviders(
 		}
 	}
 	return primaryToInputs, primaryToAlts, useProvided
+}
+
+func sortedRequiredInputKeys(inputToProviders map[string][]string) []string {
+	reqKeys := make([]string, 0, len(inputToProviders))
+	for k := range inputToProviders {
+		reqKeys = append(reqKeys, k)
+	}
+	sort.Slice(reqKeys, func(i, j int) bool {
+		li, lj := len(inputToProviders[reqKeys[i]]), len(inputToProviders[reqKeys[j]])
+		if li != lj {
+			return li < lj
+		}
+		return reqKeys[i] < reqKeys[j]
+	})
+	return reqKeys
+}
+
+func chooseProviderForInput(cands []string, selected map[string][]string) string {
+	var active []string
+	for _, c := range cands {
+		if _, ok := selected[c]; ok {
+			active = append(active, c)
+		}
+	}
+	if len(active) > 0 {
+		return pickPreferredProvider(active)
+	}
+	return pickPreferredProvider(cands)
 }
 
 func buildSortedUpstreamGroups(primaryToInputs map[string][]string, primaryToAlts map[string]map[string]bool) []upstreamCandidateGroup {
@@ -1625,7 +1646,7 @@ var knownSpecAliasTable = []specAliasDef{
 
 	{Canonical: "managed-lustre", Category: "module", ModuleSource: "modules/file-system/managed-lustre", Aliases: []string{"managed-lustre"}, Tokens: []string{"lustre", "managed-lustre"}},
 	{Canonical: "filestore", Category: "module", ModuleSource: "modules/file-system/filestore", Aliases: []string{"filestore"}, Tokens: []string{"filestore", "nfs"}},
-	{Canonical: "cloud-storage-bucket", Category: "module", ModuleSource: "modules/file-system/cloud-storage-bucket", Aliases: []string{"cloud-storage-bucket"}, Tokens: []string{"gcs", "gcsfuse", "bucket", "cloud-storage", "cloud-storage-bucket"}},
+	{Canonical: "cloud-storage-bucket", Category: "module", ModuleSource: "modules/file-system/cloud-storage-bucket", Aliases: []string{"cloud-storage-bucket"}, Tokens: []string{"gcs", "gcs-bucket", "gcsfuse", "bucket", "cloud-storage", "cloud-storage-bucket"}},
 	{Canonical: "parallelstore", Category: "module", ModuleSource: "modules/file-system/parallelstore", Aliases: []string{"parallelstore"}, Tokens: []string{"parallelstore", "daos"}},
 	{Canonical: "netapp-storage-pool", Category: "module", ModuleSource: "modules/file-system/netapp-storage-pool", Aliases: []string{"netapp-storage-pool"}, Tokens: []string{"netapp", "netapp-storage-pool"}},
 }
