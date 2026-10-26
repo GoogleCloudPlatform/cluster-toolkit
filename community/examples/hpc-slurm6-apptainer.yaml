@@ -28,6 +28,9 @@ vars:
     family: apptainer-enabled
     project: $(vars.project_id)
   disk_size: 64
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned nodes in the compute partition.
+  compute_node_count_dynamic_max: 20
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -74,7 +77,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      node_count_dynamic_max: 20
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
       disk_size_gb: $(vars.disk_size)
       instance_image: $(vars.custom_image)
       bandwidth_tier: gvnic_enabled

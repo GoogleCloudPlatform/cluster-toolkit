@@ -58,6 +58,18 @@ vars:
   # Maximum throughput of the lustre instance in MBps per TiB
   per_unit_storage_throughput: 500
 
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned nodes in the a3ultra partition.
+  a3u_node_count_dynamic_max: 0
+  # Machine type for the login node.
+  login_machine_type: n2d-standard-16
+  # Boot disk size in GB for the login node.
+  login_disk_size_gb: 300
+  # Machine type for the controller node.
+  controller_machine_type: n2d-standard-16
+  # Boot disk size in GB for the controller node.
+  controller_disk_size_gb: 300
+
 deployment_groups:
 
 - group: cluster-env
@@ -351,11 +363,14 @@ deployment_groups:
     settings:
       metadata: $(homefs.lnet_multinic_metadata)
       bandwidth_tier: gvnic_enabled
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a3-ultragpu-8g
       tags: [$(vars.multinic_client_tag)]
       enable_public_ips: true
       node_count_static: $(vars.a3u_cluster_size)
-      node_count_dynamic_max: 0
+      node_count_dynamic_max: $(vars.a3u_node_count_dynamic_max)
       enable_placement: false
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
@@ -406,9 +421,9 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [a3ultra-slurm-net-0]
     settings:
-      disk_size_gb: 300
+      disk_size_gb: $(vars.login_disk_size_gb)
       enable_login_public_ips: true
-      machine_type: n2d-standard-16
+      machine_type: $(vars.login_machine_type)
 
   - id: controller_startup
     source: modules/scripts/startup-script
@@ -466,8 +481,8 @@ deployment_groups:
     settings:
       enable_controller_public_ips: true
       disk_type: pd-extreme
-      disk_size_gb: 300
-      machine_type: n2d-standard-16
+      disk_size_gb: $(vars.controller_disk_size_gb)
+      machine_type: $(vars.controller_machine_type)
       controller_startup_script: $(controller_startup.startup_script)
       enable_external_prolog_epilog: true
       compute_startup_scripts_timeout: 1800

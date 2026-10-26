@@ -549,6 +549,9 @@ func (g *GKEOrchestrator) isSystemPool(np gkeJobNodePool) bool {
 }
 
 func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinition) error {
+	if err := g.validateMTCJobFlags(job); err != nil {
+		return err
+	}
 	if err := g.populateClusterMetadata(job); err != nil {
 		return err
 	}

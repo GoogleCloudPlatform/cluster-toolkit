@@ -308,17 +308,17 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.44.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 8.7.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
-| ---- | ------- |
-| <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
+|------|---------|
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.44.0 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 8.7.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
@@ -326,7 +326,7 @@ limitations under the License.
 ## Modules
 
 | Name | Source | Version |
-| ---- | ------ | ------- |
+|------|--------|---------|
 | <a name="module_dranet_template_apply"></a> [dranet\_template\_apply](#module\_dranet\_template\_apply) | ../../management/kubectl-apply | n/a |
 | <a name="module_dranet_version_compare"></a> [dranet\_version\_compare](#module\_dranet\_version\_compare) | ../../internal/semver_compare | n/a |
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../internal/gpu-definition | n/a |
@@ -337,7 +337,7 @@ limitations under the License.
 ## Resources
 
 | Name | Type |
-| ---- | ---- |
+|------|------|
 | [google-beta_google_container_node_pool.node_pool](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
 | [null_resource.enable_tcpx_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.enable_tcpxo_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
@@ -351,7 +351,7 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | :------: |
+|------|-------------|------|---------|:--------:|
 | <a name="input_accelerator_topology_mode"></a> [accelerator\_topology\_mode](#input\_accelerator\_topology\_mode) | The accelerator topology mode for the resource policy. It accepts values like `PROVISION_ONLY` or `AUTO_CONNECT`. Note that `enable_queued_provisioning` (DWS) is not supported when `accelerator_topology_mode` is set to `PROVISION_ONLY`. | `string` | `null` | no |
 | <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GKE, if any. Providing additional networks adds additional node networks to the node pool | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = string<br/>    subnetwork_project = string<br/>    network_ip         = string<br/>    nic_type           = string<br/>    stack_type         = string<br/>    queue_count        = number<br/>    access_config = list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    }))<br/>    ipv6_access_config = list(object({<br/>      network_tier = string<br/>    }))<br/>    alias_ip_range = list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_auto_repair"></a> [auto\_repair](#input\_auto\_repair) | Whether the nodes will be automatically repaired. | `bool` | `true` | no |
@@ -383,7 +383,8 @@ limitations under the License.
 | <a name="input_gke_version"></a> [gke\_version](#input\_gke\_version) | GKE version | `string` | n/a | yes |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = optional(string)<br/>    count = optional(number, 0)<br/>    gpu_driver_installation_config = optional(object({<br/>      gpu_driver_version = string<br/>    }), { gpu_driver_version = "DEFAULT" })<br/>    gpu_partition_size = optional(string)<br/>    gpu_sharing_config = optional(object({<br/>      gpu_sharing_strategy       = string<br/>      max_shared_clients_per_gpu = number<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_host_maintenance_interval"></a> [host\_maintenance\_interval](#input\_host\_maintenance\_interval) | Specifies the frequency of planned maintenance events. | `string` | `""` | no |
-| <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
+| <a name="input_ignore_node_count_changes"></a> [ignore\_node\_count\_changes](#input\_ignore\_node\_count\_changes) | Whether to ignore external changes (drift) to the node count (e.g. from out-of-band resizes using gcloud). Setting this to true allows node pool size changes made outside Terraform to be preserved instead of reverted on subsequent applies. | `bool` | `false` | no |
+| <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. Use CUSTOM\_CONTAINERD together with var.node\_image\_config to run a custom node image. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_initial_node_count"></a> [initial\_node\_count](#input\_initial\_node\_count) | The initial number of nodes for the pool. In regional clusters, this is the number of nodes per zone. Changing this setting after node pool creation will not make any effect. It cannot be set with static\_node\_count and must be set to a value between autoscaling\_total\_min\_nodes and autoscaling\_total\_max\_nodes. | `number` | `null` | no |
 | <a name="input_install_dranet_template"></a> [install\_dranet\_template](#input\_install\_dranet\_template) | If true, automatically deploys the DRANET ResourceClaimTemplate. The compiler automatically overrides this to false for subsequent node pools in the same cluster if they use the same device class. | `bool` | `true` | no |
 | <a name="input_install_gpu_direct_manifests"></a> [install\_gpu\_direct\_manifests](#input\_install\_gpu\_direct\_manifests) | If true, automatically downloads and applies GPUDirect (NCCL and NRI) manifests from GitHub for A3 High/Mega GPUs. Set to false if you are applying these manifests manually. | `bool` | `true` | no |
@@ -399,6 +400,7 @@ limitations under the License.
 | <a name="input_max_pods_per_node"></a> [max\_pods\_per\_node](#input\_max\_pods\_per\_node) | The maximum number of pods per node in this node pool. This will force replacement. | `number` | `null` | no |
 | <a name="input_max_run_duration"></a> [max\_run\_duration](#input\_max\_run\_duration) | The duration (in whole seconds) of the instance. Instance will run and be terminated after then. | `number` | `null` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the node pool. If not set, automatically populated by machine type and module id (unique blueprint-wide) as suffix.<br/>If setting manually, ensure a unique value across all gke-node-pools. | `string` | `null` | no |
+| <a name="input_node_image_config"></a> [node\_image\_config](#input\_node\_image\_config) | Custom OS image for the nodes. Requires var.image\_type = "CUSTOM\_CONTAINERD".<br/>The GKE service agent of the project needs roles/compute.imageUser on image\_project. | <pre>object({<br/>    image         = optional(string)<br/>    image_project = optional(string)<br/>  })</pre> | `null` | no |
 | <a name="input_num_node_pools"></a> [num\_node\_pools](#input\_num\_node\_pools) | Number of node pools to create. This is same as num\_slices. | `number` | `1` | no |
 | <a name="input_num_slices"></a> [num\_slices](#input\_num\_slices) | Number of TPUs slices to create. This is same as num\_node\_pools. | `number` | `1` | no |
 | <a name="input_placement_policy"></a> [placement\_policy](#input\_placement\_policy) | Group placement policy to use for the node pool's nodes. `COMPACT` is the only supported value for `type` currently. `name` is the name of the placement policy. `tpu_topology` is the TPU placement topology for pod slice node pool.<br/>It is assumed that the specified policy exists. To create a placement policy refer to https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement.<br/>Note: Placement policies have the [following](https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies) restrictions. | <pre>object({<br/>    type         = string<br/>    name         = optional(string)<br/>    tpu_topology = optional(string)<br/>  })</pre> | <pre>{<br/>  "name": null,<br/>  "tpu_topology": null,<br/>  "type": null<br/>}</pre> | no |
@@ -423,7 +425,7 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-| ---- | ----------- |
+|------|-------------|
 | <a name="output_accelerator_topology_mode"></a> [accelerator\_topology\_mode](#output\_accelerator\_topology\_mode) | The accelerator topology mode for the resource policy. |
 | <a name="output_allocatable_cpu_per_node"></a> [allocatable\_cpu\_per\_node](#output\_allocatable\_cpu\_per\_node) | Number of CPUs available for scheduling pods on each node. |
 | <a name="output_allocatable_gpu_per_node"></a> [allocatable\_gpu\_per\_node](#output\_allocatable\_gpu\_per\_node) | Number of GPUs available for scheduling pods on each node. |

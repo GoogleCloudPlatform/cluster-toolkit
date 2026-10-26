@@ -171,6 +171,8 @@ storage intact and b) you can build software before you deploy your cluster.
 
    This deployment group contains the Slurm cluster and compute partitions.
 
+   Once the cluster is up, you can try the example front-end (Verilator/RTLMeter) and back-end (OpenROAD) EDA workloads from the [GCD EDA example](../hpc-slurm-google-cloud-dedicated/eda/README.md#3-front-end-rtl-verification-example-verilator--rtlmeter-nvdla). Because `eda-all-on-cloud.yaml` does not pre-install Apptainer or automatically build the Verilator image, first install `apptainer` on the nodes, build and copy `/tools/containers/verilator-nvdla.sif` from [`verilator-nvdla.def`](../hpc-slurm-google-cloud-dedicated/eda/verilator-nvdla.def) (or pull `/tools/containers/openroad-orfs.sif`), and change `--partition=compute` in the job scripts to `--partition=h4d`.
+
 ## Teardown Instructions
 
 > [!NOTE]

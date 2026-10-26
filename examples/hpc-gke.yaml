@@ -22,6 +22,13 @@ vars:
   region: us-central1
   gcp_public_cidrs_access_enabled: false
   authorized_cidr:  # <your-ip-address>/32
+  # Optional overrides (defaults shown)
+  # Machine type for the compute node pool.
+  compute_machine_type: c2-standard-60
+  # Static number of nodes in the compute node pool.
+  compute_static_node_count: 2
+  # Use Spot VMs for the compute node pool.
+  compute_spot: false
 
 deployment_groups:
 - group: primary
@@ -78,7 +85,9 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [gke_cluster, node_pool_service_account]
     settings:
-      static_node_count: 2
+      machine_type: $(vars.compute_machine_type)
+      static_node_count: $(vars.compute_static_node_count)
+      spot: $(vars.compute_spot)
       best_effort_provisioning:
         min_provision_nodes: 1
 

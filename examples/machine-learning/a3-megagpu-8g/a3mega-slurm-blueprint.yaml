@@ -52,6 +52,22 @@ vars:
   # Maximum throughput of the lustre instance in MBps per TiB
   per_unit_storage_throughput: 500
 
+  # Optional overrides (defaults shown)
+  # Machine type of the temporary VM that builds the custom image.
+  image_build_machine_type: c2-standard-8
+  # Number of statically provisioned nodes in the debug partition.
+  debug_node_count_static: 0
+  # Maximum number of dynamically provisioned nodes in the debug partition.
+  debug_node_count_dynamic_max: 4
+  # Machine type for the debug partition.
+  debug_machine_type: n2-standard-2
+  # Maximum number of dynamically provisioned nodes in the a3mega partition.
+  a3mega_node_count_dynamic_max: 0
+  # Machine type for the login node.
+  login_machine_type: c2-standard-4
+  # Machine type for the controller node.
+  controller_machine_type: c2-standard-8
+
 deployment_groups:
 - group: primary
   modules:
@@ -454,7 +470,7 @@ deployment_groups:
     settings:
       # building this image does not require a GPU-enabled VM but must *not* be
       # run on a N-series VM otherwise, the "open" drivers will not install
-      machine_type: c2-standard-8
+      machine_type: $(vars.image_build_machine_type)
       source_image: $(vars.base_image.image)
       source_image_project_id: [$(vars.base_image.project)]
       image_family: $(vars.final_image_family)
@@ -529,9 +545,9 @@ deployment_groups:
     use: [sysnet]
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     settings:
-      node_count_static: 0
-      node_count_dynamic_max: 4
-      machine_type: n2-standard-2
+      node_count_static: $(vars.debug_node_count_static)
+      node_count_dynamic_max: $(vars.debug_node_count_dynamic_max)
+      machine_type: $(vars.debug_machine_type)
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -659,8 +675,11 @@ deployment_groups:
     - gpunets
     settings:
       node_count_static: $(vars.a3mega_cluster_size)
-      node_count_dynamic_max: 0
+      node_count_dynamic_max: $(vars.a3mega_node_count_dynamic_max)
       disk_type: pd-ssd
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a3-megagpu-8g
       enable_public_ips: false
       advanced_machine_features:
@@ -734,7 +753,7 @@ deployment_groups:
       enable_login_public_ips: $(vars.enable_login_public_ips)
       name_prefix: login
       disk_type: pd-balanced
-      machine_type: c2-standard-4
+      machine_type: $(vars.login_machine_type)
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -747,7 +766,7 @@ deployment_groups:
     - data-bucket
     settings:
       enable_controller_public_ips: $(vars.enable_controller_public_ips)
-      machine_type: c2-standard-8
+      machine_type: $(vars.controller_machine_type)
       enable_cleanup_compute: true
       enable_external_prolog_epilog: true
       slurm_conf_tpl: ../_modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl

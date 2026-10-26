@@ -21,7 +21,17 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+)
+
+var (
+	cachedScanOnce       sync.Once
+	cachedRoot           string
+	cachedBlueprints     []BlueprintEntry
+	cachedBlueprintsErr  error
+	cachedModuleWiring   map[string]ModuleWiringEntry
+	cachedModuleWiringEr error
 )
 
 func testRepoRoot(t *testing.T) string {
@@ -34,13 +44,22 @@ func testRepoRoot(t *testing.T) string {
 	return root
 }
 
-func TestScanBlueprintsAndPairing(t *testing.T) {
+func cachedScan(t *testing.T) (string, []BlueprintEntry) {
+	t.Helper()
 	root := testRepoRoot(t)
-	descs := parseReadmeDescriptions(filepath.Join(root, "examples", "README.md"))
-	blueprints, err := ScanBlueprints(root, descs)
-	if err != nil {
-		t.Fatalf("ScanBlueprints failed: %v", err)
+	cachedScanOnce.Do(func() {
+		cachedRoot = root
+		descs := parseReadmeDescriptions(filepath.Join(root, "examples", "README.md"))
+		cachedBlueprints, cachedBlueprintsErr = ScanBlueprints(root, descs)
+	})
+	if cachedBlueprintsErr != nil {
+		t.Fatalf("ScanBlueprints failed: %v", cachedBlueprintsErr)
 	}
+	return cachedRoot, cachedBlueprints
+}
+
+func TestScanBlueprintsAndPairing(t *testing.T) {
+	root, blueprints := cachedScan(t)
 	if len(blueprints) < 40 {
 		t.Fatalf("expected at least 40 blueprints across examples/ and community/examples/, got %d", len(blueprints))
 	}
@@ -310,20 +329,19 @@ func TestSkipAIAssistedAndYAMLQuoting(t *testing.T) {
 	}
 }
 
+var cachedWiringOnce sync.Once
+
 func TestScanModuleWiringAndEchoSuppression(t *testing.T) {
-	root := testRepoRoot(t)
-	descs := parseReadmeDescriptions(filepath.Join(root, "examples", "README.md"))
-	blueprints, err := ScanBlueprints(root, descs)
-	if err != nil {
-		t.Fatalf("ScanBlueprints failed: %v", err)
-	}
-	wiring, err := ScanModuleWiring(root, blueprints)
-	if err != nil {
-		t.Fatalf("ScanModuleWiring failed: %v", err)
+	root, blueprints := cachedScan(t)
+	cachedWiringOnce.Do(func() {
+		cachedModuleWiring, cachedModuleWiringEr = ScanModuleWiring(root, blueprints)
+	})
+	if cachedModuleWiringEr != nil {
+		t.Fatalf("ScanModuleWiring failed: %v", cachedModuleWiringEr)
 	}
 
-	verifyLustreWiring(t, wiring)
-	verifyEchoAndInjectedIDSuppression(t, wiring)
+	verifyLustreWiring(t, cachedModuleWiring)
+	verifyEchoAndInjectedIDSuppression(t, cachedModuleWiring)
 }
 
 func verifyLustreWiring(t *testing.T, wiring map[string]ModuleWiringEntry) {
@@ -381,11 +399,14 @@ func verifyEchoAndInjectedIDSuppression(t *testing.T, wiring map[string]ModuleWi
 }
 
 func TestMarshalCatalogDeterminismAndUpdateReadme(t *testing.T) {
-	root := testRepoRoot(t)
-	cat, err := BuildCatalog(root)
-	if err != nil {
-		t.Fatalf("BuildCatalog failed: %v", err)
+	root, blueprints := cachedScan(t)
+	cachedWiringOnce.Do(func() {
+		cachedModuleWiring, cachedModuleWiringEr = ScanModuleWiring(root, blueprints)
+	})
+	if cachedModuleWiringEr != nil {
+		t.Fatalf("ScanModuleWiring failed: %v", cachedModuleWiringEr)
 	}
+	cat := Catalog{Blueprints: blueprints, ModuleWiring: cachedModuleWiring}
 	b1, err := MarshalCatalog(cat)
 	if err != nil {
 		t.Fatalf("MarshalCatalog 1 failed: %v", err)

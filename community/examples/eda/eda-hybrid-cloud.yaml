@@ -31,6 +31,13 @@ vars:
   libraryfs_server_ips: ## Set list of NFS server IPs here ##
   homefs_server_ips:    ## Set list of NFS server IPs here ##
   scratchfs_server_ips: ## Set list of NFS server IPs here ##
+  # Optional overrides (defaults shown)
+  # Number of statically provisioned nodes in the h4d partition.
+  h4d_node_count_static: 1
+  # Maximum number of dynamically provisioned nodes in the h4d partition.
+  h4d_node_count_dynamic_max: 0
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
 
 deployment_groups:
 
@@ -213,8 +220,8 @@ deployment_groups:
     settings:
       bandwidth_tier: gvnic_enabled
       machine_type: h4d-highmem-192-lssd
-      node_count_static: 1        # Adjust as needed
-      node_count_dynamic_max: 0   # Adjust as needed
+      node_count_static: $(vars.h4d_node_count_static)        # Adjust as needed
+      node_count_dynamic_max: $(vars.h4d_node_count_dynamic_max)   # Adjust as needed
       enable_placement: false
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
@@ -250,7 +257,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [eda-net]
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       enable_login_public_ips: true
 
   - id: slurm_controller

@@ -273,6 +273,7 @@ limitations under the License.
 | <a name="output_confidential_instance_type"></a> [confidential\_instance\_type](#output\_confidential\_instance\_type) | The type of technology used by the confidential nodes. |
 | <a name="output_enable_confidential_nodes"></a> [enable\_confidential\_nodes](#output\_enable\_confidential\_nodes) | Indicates whether Confidential Nodes are enabled at the cluster level. |
 | <a name="output_enable_confidential_storage"></a> [enable\_confidential\_storage](#output\_enable\_confidential\_storage) | Indicates whether Confidential Storage is enabled at the cluster level. |
+| <a name="output_enable_multi_tier_checkpointing"></a> [enable\_multi\_tier\_checkpointing](#output\_enable\_multi\_tier\_checkpointing) | Indicates whether High Scale Checkpointing (Multi-Tier Checkpointing) is enabled. |
 | <a name="output_enable_pathways_for_tpus"></a> [enable\_pathways\_for\_tpus](#output\_enable\_pathways\_for\_tpus) | Indicates whether Pathways for TPUs is enabled. |
 | <a name="output_enable_slice_controller"></a> [enable\_slice\_controller](#output\_enable\_slice\_controller) | Indicates whether the GKE Slice Controller is enabled. |
 | <a name="output_gke_cluster_exists"></a> [gke\_cluster\_exists](#output\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. |
