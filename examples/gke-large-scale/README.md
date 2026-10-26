@@ -89,7 +89,7 @@ Open your chosen blueprint (`.yaml`) and edit the `vars` block at the top of the
 | `authorized_cidr` | **Yes** | — | CIDR block allowed to reach the GKE control plane (e.g., `<your-ip>/32`, or `0.0.0.0/0`). |
 | `deployment_name` | No | `gke-scale-5k` / `scale-mnic-250` | Cluster and deployment folder name (keep ≤ 16–20 characters). |
 | `region` / `zone` | No | `us-central1` / `us-central1-a` | Target GCP region and zone (plus `lustre_zone` in `gke-scale-multinic-lustre.yaml`). |
-| `machine_type` | No | `e2-standard-2` / `c3-standard-8` | Worker VM machine type (e.g., `e2-standard-2`, `a3-megagpu-8g`, `ct6e-standard-4t`). |
+| `machine_type` | No | `e2-standard-2` / `c3-standard-8` | CPU worker VM machine type (e.g., `e2-standard-2`, `n2-standard-4`, `c3-standard-8`). For GPU or multi-host TPU clusters, start from the dedicated accelerator blueprints (such as [`gke-a3-megagpu`](../gke-a3-megagpu/README.md), [`gke-a4`](../gke-a4/README.md), [`gke-tpu-v6e`](../gke-tpu-v6e/README.md), or [`gke-tpu-7x`](../gke-tpu-7x/README.md)) and apply the scaling settings in Section 2. |
 | `num_node_pools` | No | `49` / `25` | Number of worker node pools (or TPU slices). |
 | `node_disk_size_gb` | No | `100` | Boot disk size in GB per node (can be lowered to `20–30` with Image Streaming to reduce `SSD_TOTAL_GB` quota usage). |
 | `terraform_backend_defaults` | No | Commented out (local state) | Uncomment and set `bucket: <your-tf-state-bucket>` to store Terraform state in GCS. |
@@ -181,8 +181,8 @@ Submit a multi-slice JobSet across the cluster (passing `--service-account workl
   --num-nodes 100 \
   --service-account workload-identity-k8s-sa \
   --mount "gs://<project_id>-gcs-gke-scale-5k;/mnt/gcs;rw;options=implicit-dirs" \
-  --image us-docker.pkg.dev/gke-release/gke-release/gke-distroless/bash:latest \
-  --command 'echo "Hello from $(hostname)" && ls -la /mnt/gcs' \
+  --image gke.gcr.io/gke-distroless/bash:latest \
+  --command 'echo "Hello from ${HOSTNAME}" && ls -la /mnt/gcs' \
   --await-job-completion
 ```
 

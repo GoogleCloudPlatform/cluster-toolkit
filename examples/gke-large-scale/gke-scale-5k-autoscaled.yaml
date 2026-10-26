@@ -29,7 +29,7 @@ vars:
   version_prefix: "1.36."
 
   # 49 pools x 100 max nodes = 4,900 worker nodes
-  machine_type: e2-standard-2  # Or a3-megagpu-8g, ct6e-standard-4t, etc.
+  machine_type: e2-standard-2
   num_node_pools: 49
   initial_node_count: 0
   autoscaling_total_min_nodes: 0  # Set to 100 in Step 2 to keep 4,900 nodes running 24/7
