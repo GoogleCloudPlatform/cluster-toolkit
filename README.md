@@ -176,6 +176,7 @@ After installing `gcluster`, you can deploy, manage, and destroy infrastructure 
 
 | Command | Description |
 | :--- | :--- |
+| `./gcluster explain [MODULE \| BLUEPRINT \| SPECS...] [-f text\|yaml\|json]` | List available blueprints/modules, inspect required APIs, variables, and `use:` wiring, or match specs to the closest blueprint. |
 | `./gcluster deploy (<DEPLOYMENT_DIR> \| <BLUEPRINT_FILE>) [-d <DEPLOYMENT_FILE>]` | Create (if given a blueprint) and deploy all resources in a deployment directory. |
 | `./gcluster create <BLUEPRINT_FILE> [-d <DEPLOYMENT_FILE>]` | Generate a self-contained Terraform/Packer deployment directory from a blueprint. |
 | `./gcluster expand <BLUEPRINT_FILE> [-d <DEPLOYMENT_FILE>]` | Expand and validate a blueprint without writing the deployment directory. |
