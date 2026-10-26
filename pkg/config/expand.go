@@ -135,6 +135,9 @@ func (bp *Blueprint) expandGroups() error {
 	if err := checkModulesAndGroups(*bp); err != nil {
 		return err
 	}
+	if err := bp.resolveReservationSubblocks(); err != nil {
+		return err
+	}
 
 	var errs Errors
 	for ig := range bp.Groups {
