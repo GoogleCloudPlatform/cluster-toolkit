@@ -519,6 +519,38 @@ variable "enable_flex_start" {
   default     = false
 }
 
+variable "best_effort_provisioning" {
+  description = <<-EOT
+  Enables GKE best-effort provisioning when the node pool is created, similar to
+  `gcloud container node-pools create --enable-best-effort-provision --min-provision-nodes`.
+  Creation succeeds once `min_provision_nodes` nodes per zone are running (no minimum is sent if unset),
+  and GKE keeps creating the remaining nodes as capacity becomes available. `enabled` defaults to true.
+  Only applies at creation; later changes are ignored. Not supported for TPU node pools or with
+  `placement_policy`. See the module README for details.
+  EOT
+  type = object({
+    enabled             = optional(bool, true)
+    min_provision_nodes = optional(number)
+  })
+  default = null
+
+  validation {
+    condition = (
+      try(var.best_effort_provisioning.min_provision_nodes, null) == null ||
+      try(var.best_effort_provisioning.min_provision_nodes >= 0 && floor(var.best_effort_provisioning.min_provision_nodes) == var.best_effort_provisioning.min_provision_nodes, false)
+    )
+    error_message = "best_effort_provisioning.min_provision_nodes must be a whole number greater than or equal to 0."
+  }
+
+  validation {
+    condition = (
+      try(var.best_effort_provisioning.min_provision_nodes, null) == null ||
+      try(var.best_effort_provisioning.enabled, false)
+    )
+    error_message = "best_effort_provisioning.min_provision_nodes can only be set when best_effort_provisioning.enabled is true."
+  }
+}
+
 variable "max_run_duration" {
   description = "The duration (in whole seconds) of the instance. Instance will run and be terminated after then."
   type        = number

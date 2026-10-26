@@ -4073,10 +4073,9 @@ blueprints:
   machine_types: [c2-standard-60]
   vars:
     authorized_cidr: null
-    compute_autoscaling_total_max_nodes: 1000
-    compute_autoscaling_total_min_nodes: 0
     compute_machine_type: c2-standard-60
     compute_spot: false
+    compute_static_node_count: 2
     deployment_name: cluster-01
     gcp_public_cidrs_access_enabled: false
     project_id: null
@@ -4098,7 +4097,7 @@ blueprints:
   - id: compute_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, node_pool_service_account]
-    settings: [autoscaling_total_max_nodes, autoscaling_total_min_nodes, machine_type, spot]
+    settings: [best_effort_provisioning, machine_type, spot, static_node_count]
   - id: job-template
     source: modules/compute/gke-job-template
     use: [compute_pool]
