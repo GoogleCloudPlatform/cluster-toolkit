@@ -77,42 +77,6 @@ spec:
 {{- else }}
             containers:
 {{- end }}
-            - name: pathways-proxy
-              image: {{.Pathways.ProxyServerImage}}
-              imagePullPolicy: Always
-              ports:
-              - containerPort: 29000
-              args:
-              - --server_port=29000
-              - --resource_manager_address=$(PATHWAYS_HEAD):29001
-              - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
-              {{- if gt .Pathways.ElasticSlices 0}}
-              - --num_elastic_slices={{.Pathways.ElasticSlices}}
-              {{- end}}
-              {{- range .ProxyArgsList }}
-              - {{.}}
-              {{- end }}
-              env:
-              - name: PATHWAYS_HEAD
-                valueFrom:
-                  fieldRef:
-                    fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
-              - name: ABSL_FLAGS
-                value: "--pathways_pipe_unreachable_timeout=60s"
-              {{- range $.PathwaysProxyEnv }}
-              - name: {{ .Name }}
-                value: {{ printf "%q" .Value }}
-              {{- end }}
-              {{- if not .Pathways.Headless}}
-              restartPolicy: Always
-              {{- end }}
-              resources:
-                limits:
-                  cpu: "16"
-                  memory: "100Gi"
-                requests:
-                  cpu: "8"
-                  memory: "32Gi"
             - name: pathways-rm
               image: {{.Pathways.ServerImage}}
               imagePullPolicy: Always
@@ -159,6 +123,44 @@ spec:
                 requests:
                   cpu: "2"
                   memory: "8Gi"
+            - name: pathways-proxy
+              image: {{.Pathways.ProxyServerImage}}
+              imagePullPolicy: Always
+              ports:
+              - containerPort: 29000
+              args:
+              - --server_port=29000
+              - --resource_manager_address=$(PATHWAYS_HEAD):29001
+              - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
+              {{- if gt .Pathways.ElasticSlices 0}}
+              - --num_elastic_slices={{.Pathways.ElasticSlices}}
+              {{- end}}
+              {{- range .ProxyArgsList }}
+              - {{.}}
+              {{- end }}
+              env:
+              - name: PATHWAYS_HEAD
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              - name: ABSL_FLAGS
+                value: "--pathways_pipe_unreachable_timeout=60s"
+              - name: IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS
+                value: "true"
+              {{- range $.PathwaysProxyEnv }}
+              - name: {{ .Name }}
+                value: {{ printf "%q" .Value }}
+              {{- end }}
+              {{- if not .Pathways.Headless}}
+              restartPolicy: Always
+              {{- end }}
+              resources:
+                limits:
+                  cpu: "16"
+                  memory: "100Gi"
+                requests:
+                  cpu: "8"
+                  memory: "32Gi"
             {{- if not .Pathways.Headless}}
             containers:
             - name: workload-container
@@ -180,7 +182,9 @@ spec:
               - name: XCLOUD_ENVIRONMENT
                 value: GCP
               - name: JAX_BACKEND_TARGET
-                value: grpc://$(PATHWAYS_HEAD):29000
+                value: grpc://localhost:29000
+              - name: IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS
+                value: "true"
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
               {{- range $.Env }}
@@ -346,6 +350,10 @@ spec:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- if .Pathways.ColocatedPythonSidecarImage}}
+              - name: CLOUD_PATHWAYS_SIDECAR_SHM_DIRECTORY
+                value: /tmp/sidecar
+              {{- end}}
               {{- range $.PathwaysWorkerEnv }}
               - name: {{ .Name }}
                 value: {{ printf "%q" .Value }}

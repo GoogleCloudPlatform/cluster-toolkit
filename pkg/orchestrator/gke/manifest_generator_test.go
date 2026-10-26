@@ -2034,6 +2034,80 @@ func findContainer(spec *corev1.PodSpec, name string) *corev1.Container {
 	return nil
 }
 
+// envValues returns every value set for the named env var on a container, in
+// order, so callers can also detect duplicates.
+func envValues(c *corev1.Container, name string) []string {
+	var values []string
+	for _, e := range c.Env {
+		if e.Name == name {
+			values = append(values, e.Value)
+		}
+	}
+	return values
+}
+
+// TestGeneratePathwaysManifest_GoldenYAMLAlignment covers the fields aligned
+// with the Cloud Pathways golden JobSet YAMLs (pathwaysutils PathwaysJobSet).
+func TestGeneratePathwaysManifest_GoldenYAMLAlignment(t *testing.T) {
+	tests := []struct {
+		name     string
+		headless bool
+		sidecar  string
+	}{
+		{name: "batch"},
+		{name: "headless", headless: true},
+		{name: "colocated python sidecar", sidecar: "sidecar:latest"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := renderPathwaysTestManifest(t, tc.headless, tc.sidecar, "", nil)
+			specs := pathwaysPodSpecs(t, manifest)
+			head, worker := specs["pathways-head"], specs["worker"]
+			if head == nil || worker == nil {
+				t.Fatalf("pathways-head or worker replicatedJob not found in manifest:\n%s", manifest)
+			}
+
+			// The resource manager starts before the proxy that connects to it.
+			headContainers := head.InitContainers
+			if tc.headless {
+				headContainers = head.Containers
+			}
+			var names []string
+			for _, c := range headContainers {
+				names = append(names, c.Name)
+			}
+			if want := []string{"pathways-rm", "pathways-proxy"}; !reflect.DeepEqual(names, want) {
+				t.Errorf("pathways-head system containers = %v, want %v", names, want)
+			}
+
+			proxy := findContainer(head, "pathways-proxy")
+			if got := envValues(proxy, "IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS"); !reflect.DeepEqual(got, []string{"true"}) {
+				t.Errorf("pathways-proxy IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS = %v, want [true]", got)
+			}
+
+			if !tc.headless {
+				workload := findContainer(head, "workload-container")
+				if got := envValues(workload, "IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS"); !reflect.DeepEqual(got, []string{"true"}) {
+					t.Errorf("workload-container IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS = %v, want [true]", got)
+				}
+				if got := envValues(workload, "JAX_BACKEND_TARGET"); !reflect.DeepEqual(got, []string{"grpc://localhost:29000"}) {
+					t.Errorf("workload-container JAX_BACKEND_TARGET = %v, want [grpc://localhost:29000]", got)
+				}
+			}
+
+			var wantShm []string
+			if tc.sidecar != "" {
+				wantShm = []string{"/tmp/sidecar"}
+			}
+			pathwaysWorker := findContainer(worker, "pathways-worker")
+			if got := envValues(pathwaysWorker, "CLOUD_PATHWAYS_SIDECAR_SHM_DIRECTORY"); !reflect.DeepEqual(got, wantShm) {
+				t.Errorf("pathways-worker CLOUD_PATHWAYS_SIDECAR_SHM_DIRECTORY = %v, want %v", got, wantShm)
+			}
+		})
+	}
+}
+
 // volumeMountPaths maps each volume a container mounts to its mount path.
 func volumeMountPaths(c *corev1.Container) map[string]string {
 	paths := make(map[string]string, len(c.VolumeMounts))
