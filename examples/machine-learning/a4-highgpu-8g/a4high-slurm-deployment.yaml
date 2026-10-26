@@ -35,3 +35,8 @@ vars:
 # a4h_enable_spot_vm: true
 #
 # To make use of spot VMs, for more info visit: https://cloud.google.com/compute/docs/instances/spot
+
+## --- Optional overrides (defaults shown) ---
+  # a4h_node_count_dynamic_max: 0
+  # login_machine_type: n2d-standard-8
+  # controller_machine_type: n2d-standard-8

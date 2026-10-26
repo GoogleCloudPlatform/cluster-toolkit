@@ -59,8 +59,7 @@ vars:
   system_node_pool_disk_size_gb: 200
   a4x_node_pool_disk_size_gb: 100
   k8s_service_account_name: workload-identity-k8s-sa
-  compute_nodepool_machine_type: a4x-highgpu-4g
-  system_nodepool_machine_type: n2d-standard-16
+  system_node_pool_machine_type: n2d-standard-16
 
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
@@ -153,7 +152,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-a4x-net-0, workload_service_account]
     settings:
-      system_node_pool_machine_type: $(vars.system_nodepool_machine_type)
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
@@ -235,7 +234,10 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [a4x-cluster, node_pool_service_account, workload_policy]
     settings:
-      machine_type: $(vars.compute_nodepool_machine_type)
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
+      machine_type: a4x-highgpu-4g
       auto_upgrade: true
       zones: [$(vars.zone)]
       disk_size_gb: $(vars.a4x_node_pool_disk_size_gb)

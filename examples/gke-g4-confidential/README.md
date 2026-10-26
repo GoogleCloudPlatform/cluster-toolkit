@@ -79,7 +79,7 @@ Before deploying, fill out the `gke-g4-confidential-deployment.yaml` file with y
 | `project_id` | Your Google Cloud Project ID. |
 | `deployment_name` | A unique name for this Cluster Toolkit deployment (e.g., `gke-g4-cvm`). |
 | `region` / `zone` | The GCP region and zone (e.g., `us-south1`, `us-south1-a`). |
-| `machine_type` | The GCE machine type used for G4 GPU nodes. Must be `g4-standard-48` for RTX 6000 GPU Confidential nodes. Defaults to `g4-standard-48`. |
+| `compute_machine_type` | The GCE machine type used for G4 GPU nodes. Must be `g4-standard-48` for RTX 6000 GPU Confidential nodes. Defaults to `g4-standard-48`. |
 | `num_gpus` | The number of GPUs to attach to each G4 node. Must be `1` for the `g4-standard-48` shape. Defaults to `1`. |
 | `static_node_count` | The exact number of G4 GPU nodes to provision in the pool. Defaults to `1`. |
 | `authorized_cidr` | Your public IP address in CIDR notation (e.g., `1.2.3.4/32`). |

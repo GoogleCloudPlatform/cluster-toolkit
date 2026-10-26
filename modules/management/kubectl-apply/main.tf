@@ -167,7 +167,7 @@ locals {
   install_nvidia_dra_driver        = try(var.nvidia_dra_driver.install, false)
   install_gib                      = try(var.gib.install, false)
   install_asapd_lite               = try(var.asapd_lite.install, false)
-  install_checkpoint_configuration = try(var.checkpoint_configuration.install, false)
+  install_checkpoint_configuration = var.enable_multi_tier_checkpointing && var.checkpoint_configuration != null
 
   jobset_controller_cpu    = try(var.jobset.controller_cpu, null) != null ? var.jobset.controller_cpu : (local.enable_slicing ? "4" : null)
   jobset_controller_memory = try(var.jobset.controller_memory, null) != null ? var.jobset.controller_memory : (local.enable_slicing ? "16Gi" : null)

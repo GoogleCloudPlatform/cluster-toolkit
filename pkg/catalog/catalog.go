@@ -406,6 +406,39 @@ func inferScheduler(modules []ModuleSummary) string {
 
 var varRefRegex = regexp.MustCompile(`^\$\(vars?\.([a-zA-Z0-9_]+)\)$`)
 
+// controlPlaneModuleSources are module sources whose machine_type describes a
+// control-plane or helper VM (login, controller, image builder) rather than
+// workload compute. They are excluded from the catalog's machine_types.
+var controlPlaneModuleSources = []string{
+	"schedmd-slurm-gcp-v6-login",
+	"schedmd-slurm-gcp-v6-controller",
+	"schedmd-slurm-gcp-v5-login",
+	"schedmd-slurm-gcp-v5-controller",
+	"modules/packer/",
+}
+
+// controlPlaneMachineTypeVars are blueprint vars that size control-plane or
+// helper VMs. They stay in vars (so deployment.yaml can override them) but are
+// excluded from the catalog's machine_types.
+var controlPlaneMachineTypeVars = map[string]bool{
+	"system_node_pool_machine_type": true,
+	"login_machine_type":            true,
+	"controller_machine_type":       true,
+	"image_build_machine_type":      true,
+}
+
+func isControlPlaneModule(source string) bool {
+	for _, s := range controlPlaneModuleSources {
+		if strings.Contains(source, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// extractMachineTypes returns the workload compute machine types advertised by
+// a blueprint: machine_type settings on non-control-plane modules plus any
+// *machine_type var that is not a control-plane var.
 func extractMachineTypes(bp config.Blueprint, varsMap map[string]interface{}) []string {
 	var result []string
 	addMT := func(val string) {
@@ -417,6 +450,9 @@ func extractMachineTypes(bp config.Blueprint, varsMap map[string]interface{}) []
 
 	for _, grp := range bp.Groups {
 		for _, mod := range grp.Modules {
+			if isControlPlaneModule(mod.Source) {
+				continue
+			}
 			plainSettings := dictToPlainMap(mod.Settings)
 			if s, ok := plainSettings["machine_type"].(string); ok {
 				addMT(s)
@@ -429,7 +465,7 @@ func extractMachineTypes(bp config.Blueprint, varsMap map[string]interface{}) []
 	}
 	sort.Strings(varKeys)
 	for _, k := range varKeys {
-		if strings.HasSuffix(k, "machine_type") {
+		if strings.HasSuffix(k, "machine_type") && !controlPlaneMachineTypeVars[k] {
 			if s, ok := varsMap[k].(string); ok {
 				addMT(s)
 			}

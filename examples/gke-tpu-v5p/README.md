@@ -65,13 +65,13 @@ This section guides you through the cluster creation process, ensuring that your
    * `region`: the compute region for the cluster.
    * `zone`: the compute zone for the TPUs.
    * `num_slices`: the number of TPU slices to create.
-   * `machine_type`: the machine type of the TPU (e.g., `ct5p-hightpu-4t`).
+   * `compute_machine_type`: the machine type of the TPU (e.g., `ct5p-hightpu-4t`).
    * `tpu_topology`: the TPU placement topology for the pod slice node pool (e.g., `2x2x2`).
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine running Terraform.
    * `reservation_affinity`: the reservation settings (by default, specify the reservation name under Option 1, or uncomment an alternative consumption model such as DWS Flex Start, DWS Flex Start + Queued Provisioning, Spot, or On-Demand).
    * `user_namespace`: The Kubernetes service account namespace where your TPU workloads will run (defaults to `default`).
 
-    > **Note:** The `static_node_count` is automatically calculated from `machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`.
+    > **Note:** The `static_node_count` is automatically calculated from `compute_machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`.
 
    To modify advanced settings, edit `examples/gke-tpu-v5p/gke-tpu-v5p.yaml`.
 
@@ -99,7 +99,7 @@ By default, the toolkit dynamically applies an embedded kueue configuration base
   * If you want to override the default embedded configurations, or apply configuration in the scenario above, you can uncomment and set `config_path` in the `kueue` section of the `workload-manager-install` module in the blueprint.
   * For more details on default configurations and variables, see the [`kubectl-apply` documentation](https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/management/kubectl-apply#inputs).
 
-* **Quota Allocation:** The blueprint automatically calculates and sets a `google.com/tpu` quota in Kueue's `ClusterQueue`. The node count is derived from your `machine_type` and `tpu_topology`, and the quota is calculated using the formula: `num_slices` × `(total_chips_in_topology / chips_per_machine)` × `chips_per_machine`.
+* **Quota Allocation:** The blueprint automatically calculates and sets a `google.com/tpu` quota in Kueue's `ClusterQueue`. The node count is derived from your `compute_machine_type` and `tpu_topology`, and the quota is calculated using the formula: `num_slices` × `(total_chips_in_topology / chips_per_machine)` × `chips_per_machine`.
 
 1. **Connect to your cluster:**
 
@@ -178,7 +178,7 @@ Before submitting the job to the live GKE cluster, it is highly recommended to p
   --pathways \
   --pathways-gcs-location gs://YOUR_COORDINATION_BUCKET/pathways-scratch \
   --image us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest \
-  --command "pip install -U jax jaxlib pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print(\"JAX Device count:\", jax.device_count())'" \
+  --command "pip install -U jax jaxlib && python -c 'import jax; print(\"JAX Device count:\", jax.device_count())'" \
   --dry-run-out my-manifest.yaml
 ```
 
@@ -193,7 +193,7 @@ This generates a local file `my-manifest.yaml` containing the complete Kubernete
 * `--pathways`: Flags GCluster to generate a Pathways JobSet coordination architecture.
 * `--pathways-gcs-location`: A Cloud Storage bucket URI used by the coordinator and worker pods to synchronize network state and parameters.
 * `--image`: The container image for the workload (using the standard TPU JAX image).
-* `--command`: The entrypoint command. It dynamically installs `pathwaysutils` and executes the python command verifying JAX initialization. Calling `pathwaysutils.initialize()` is required since it registers the virtual `'proxy'` backend inside JAX, allowing it to delegate computations over the network to the TPU workers
+* `--command`: The entrypoint command. `gcluster job submit --pathways` automatically sets `JAX_PLATFORMS=proxy` and `JAX_BACKEND_TARGET=grpc://$(PATHWAYS_HEAD):29000` so JAX delegates computations to the TPU workers via its built-in `'proxy'` backend. `pathwaysutils.initialize()` is only needed for Pathways-specific features (such as Orbax checkpoint persistence or profiling) and, if used, must be called before `jax.devices()`.
 * `--dry-run-out`: Outputs the generated Kubernetes manifests to the file path specified as the argument to this flag (e.g., `my-manifest.yaml` in the example above) instead of submitting them to GKE.
 
 ### 3. Submit the Live Job
@@ -207,7 +207,7 @@ Once you have verified the manifest, submit the job to your live GKE cluster by 
   --pathways \
   --pathways-gcs-location gs://YOUR_COORDINATION_BUCKET/pathways-scratch \
   --image us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest \
-  --command "pip install -U jax jaxlib pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print(\"JAX Device count:\", jax.device_count())'"
+  --command "pip install -U jax jaxlib && python -c 'import jax; print(\"JAX Device count:\", jax.device_count())'"
 ```
 
 ### 4. Monitor and Manage the Job

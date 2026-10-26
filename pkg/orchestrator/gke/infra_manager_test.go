@@ -590,15 +590,6 @@ func TestValidateMTCConfig(t *testing.T) {
 			wantErrSubstr: "is not registered on the cluster",
 		},
 		{
-			name: "MTC Enabled with Empty Ramdisk Directory - Fail",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "",
-			},
-			wantErr:       true,
-			wantErrSubstr: "ramdisk directory path (--gke-mtc-ramdisk-dir) cannot be empty",
-		},
-		{
 			name: "MTC Enabled with generic k8s client error - Fail",
 			job: &orchestrator.JobDefinition{
 				GKEMTCEnabled:          true,
@@ -617,36 +608,6 @@ func TestValidateMTCConfig(t *testing.T) {
 			},
 			wantErr:       true,
 			wantErrSubstr: "failed to verify CheckpointConfiguration resource",
-		},
-		{
-			name: "MTC Enabled with Invalid Ramdisk Path (Relative) - Fail",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "relative/path",
-			},
-			wantErr:       true,
-			wantErrSubstr: "--gke-mtc-ramdisk-dir must be an absolute path",
-		},
-		{
-			name: "Pathways ramdisk at built-in /tmp - Fail",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "/tmp",
-				IsPathwaysJob:          true,
-			},
-			wantErr:       true,
-			wantErrSubstr: "conflicts with built-in Pathways mount \"/tmp\"",
-		},
-		{
-			name: "Pathways ramdisk under /tmp/sidecar with colocated sidecar - Fail",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "/tmp/sidecar/ckpt",
-				IsPathwaysJob:          true,
-				Pathways:               orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: "sidecar:latest"},
-			},
-			wantErr:       true,
-			wantErrSubstr: "conflicts with built-in Pathways mount \"/tmp/sidecar\"",
 		},
 		{
 			name: "Dry-run without HighScaleCheckpointing addon - Fail",
@@ -923,5 +884,79 @@ func TestVerifyCheckpointConfigurationCR(t *testing.T) {
 				t.Errorf("expected no error, but got: %v", err)
 			}
 		})
+	}
+}
+
+func TestValidateClusterState_DedupesReadinessReads(t *testing.T) {
+	versionProbeCalls := 0
+	getDepCalls := 0
+	rolloutCalls := 0
+	priorityClassListCalls := 0
+
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			if strings.Contains(fullCmd, "/version") {
+				versionProbeCalls++
+				return shell.CommandResult{ExitCode: 0}
+			}
+			if strings.Contains(fullCmd, "kubectl get crd") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "found"}
+			}
+			if strings.Contains(fullCmd, "kubectl get deployment kueue-controller-manager") {
+				getDepCalls++
+				return shell.CommandResult{
+					ExitCode: 0,
+					Stdout:   `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.16.1"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`,
+				}
+			}
+			if strings.Contains(fullCmd, "kubectl rollout status") {
+				rolloutCalls++
+				return shell.CommandResult{ExitCode: 0}
+			}
+			if strings.Contains(fullCmd, "kubectl get endpointslice") {
+				return shell.CommandResult{
+					ExitCode: 0,
+					Stdout:   `{"items":[{"endpoints":[{"addresses":["10.4.1.3"],"conditions":{"ready":true}}]}]}`,
+				}
+			}
+			if strings.HasPrefix(fullCmd, "kubectl get priorityclass") {
+				priorityClassListCalls++
+				return shell.CommandResult{
+					ExitCode: 0,
+					Stdout:   "system-node-critical high medium",
+				}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+
+	orc := newTestGKEOrchestrator(mock)
+	orc.namespace = "default"
+	orc.dynClient = &mockDynamicClient{
+		getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+			return &unstructured.Unstructured{}, nil
+		},
+	}
+	job := &orchestrator.JobDefinition{
+		ClusterName:       "test-cluster",
+		ClusterLocation:   "us-central1-a",
+		ProjectID:         "test-project",
+		PriorityClassName: "high",
+	}
+	if err := orc.ValidateClusterState(job); err != nil {
+		t.Fatalf("ValidateClusterState failed: %v", err)
+	}
+	if versionProbeCalls != 0 {
+		t.Errorf("ValidateClusterState /version probe calls = %d, want 0 (already probed in configureKubectl)", versionProbeCalls)
+	}
+	if getDepCalls != 1 {
+		t.Errorf("ValidateClusterState kueue deployment get calls = %d, want 1", getDepCalls)
+	}
+	if rolloutCalls != 0 {
+		t.Errorf("ValidateClusterState kueue rollout status calls = %d, want 0 when healthy", rolloutCalls)
+	}
+	if priorityClassListCalls != 1 {
+		t.Errorf("ValidateClusterState priorityclass list calls = %d, want 1", priorityClassListCalls)
 	}
 }

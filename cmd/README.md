@@ -14,6 +14,7 @@ gcluster [SUBCOMMAND]
 
 ### Subcommands - gcluster
 
+* [`explain`](#gcluster-explain): Discover and inspect blueprints, embedded modules, and cluster specs
 * [`deploy`](#gcluster-deploy): Deploy an AI/ML or HPC cluster on Google Cloud
 * [`create`](#gcluster-create): Create a new deployment
 * [`expand`](#gcluster-expand): Expand the blueprint without creating a new deployment
@@ -37,6 +38,36 @@ gcluster [SUBCOMMAND]
 
 ```bash
 gcluster --version
+```
+
+## gcluster explain
+
+`gcluster explain` lists available blueprints and embedded modules, inspects a specific blueprint or module (showing required GCP APIs, customizable variables, deployment stages, and ready-to-copy `use:` YAML blocks), or matches cluster specs (e.g., `slurm a3u lustre` or `gke a3-megagpu lustre`) to the exact or closest blueprint.
+
+### Usage - explain
+
+```bash
+gcluster explain [MODULE | BLUEPRINT | SPECS...] [flags]
+```
+
+### Flags - explain
+
+* `-d, --deployment-file <string>`: Optional companion deployment YAML file when explaining a blueprint.
+* `-f, --format <string>`: Output format: `text`, `yaml`, or `json` (default `"text"`).
+
+### Examples - explain
+
+```bash
+# List all available blueprints and top-level embedded modules
+./gcluster explain
+
+# Find the exact or closest blueprint for given specs
+./gcluster explain slurm a3u lustre
+./gcluster explain gke a3-megagpu lustre
+
+# Inspect a specific blueprint or module
+./gcluster explain examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml
+./gcluster explain modules/file-system/managed-lustre --format=json
 ```
 
 ## gcluster deploy

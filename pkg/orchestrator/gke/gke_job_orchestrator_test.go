@@ -3865,14 +3865,7 @@ func TestSubmitJob_SkipsConflictCheckOnDryRun(t *testing.T) {
 				{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
 			},
 			"kubectl get deployment": {
-				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
-				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
-				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
-				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
-			},
-			"kubectl rollout status": {
-				{ExitCode: 0, Stdout: "successfully rolled out"},
-				{ExitCode: 0, Stdout: "successfully rolled out"},
+				{ExitCode: 0, Stdout: `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"image":"registry.k8s.io/kueue/kueue:v0.15.2"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`},
 			},
 			"kubectl get endpointslice": {
 				{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`},
@@ -3959,4 +3952,87 @@ func TestSubmitJob_SkipsConflictCheckOnDryRun(t *testing.T) {
 			t.Fatalf("SubmitJob() without DryRunManifest error = %v, want job conflict error", err)
 		}
 	})
+}
+
+func TestSubmitJob_MTCFastFailBeforeClusterCalls(t *testing.T) {
+	tests := []struct {
+		name    string
+		job     orchestrator.JobDefinition
+		wantErr string
+	}{
+		{
+			name: "ramdisk dir without mtc enabled",
+			job: orchestrator.JobDefinition{
+				WorkloadName:           "mtc-fast-fail",
+				GKEMTCEnabled:          false,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+			},
+			wantErr: "--gke-mtc-ramdisk-dir requires --gke-mtc-enabled",
+		},
+		{
+			name: "mtc enabled with empty ramdisk dir",
+			job: orchestrator.JobDefinition{
+				WorkloadName:  "mtc-fast-fail",
+				GKEMTCEnabled: true,
+			},
+			wantErr: "ramdisk directory path (--gke-mtc-ramdisk-dir) cannot be empty",
+		},
+		{
+			name: "mtc enabled with relative ramdisk dir",
+			job: orchestrator.JobDefinition{
+				WorkloadName:           "mtc-fast-fail",
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "relative/ramdisk",
+			},
+			wantErr: "--gke-mtc-ramdisk-dir must be an absolute path",
+		},
+		{
+			name: "mtc ramdisk conflicts with pathways /tmp mount",
+			job: orchestrator.JobDefinition{
+				WorkloadName:           "mtc-fast-fail",
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/tmp",
+				IsPathwaysJob:          true,
+			},
+			wantErr: "conflicts with built-in Pathways mount \"/tmp\"",
+		},
+		{
+			name: "mtc ramdisk under pathways /tmp/sidecar mount with colocated sidecar",
+			job: orchestrator.JobDefinition{
+				WorkloadName:           "mtc-fast-fail",
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/tmp/sidecar/ckpt",
+				IsPathwaysJob:          true,
+				Pathways:               orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: "sidecar:latest"},
+			},
+			wantErr: "conflicts with built-in Pathways mount \"/tmp/sidecar\"",
+		},
+		{
+			name: "mtc ramdisk conflicts with user mount",
+			job: orchestrator.JobDefinition{
+				WorkloadName:           "mtc-fast-fail",
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/mnt/data",
+				RawMounts:              []string{"gs://my-bucket;/mnt/data;rw"},
+			},
+			wantErr: "conflicts with duplicate mount destination in --mount flag",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{})
+			orc := newTestGKEOrchestrator(mockExec)
+			err := orc.SubmitJob(tt.job)
+			if err == nil {
+				t.Fatalf("SubmitJob() expected error containing %q, got nil", tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("SubmitJob() error = %v, want substring %q", err, tt.wantErr)
+			}
+			if len(mockExec.calls) > 0 {
+				t.Errorf("SubmitJob() executed external commands before failing fast: %v", mockExec.calls)
+			}
+		})
+	}
 }
