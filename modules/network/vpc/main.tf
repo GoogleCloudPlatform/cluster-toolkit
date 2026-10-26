@@ -174,7 +174,7 @@ locals {
 
   output_subnets_gke = [
     {
-      network            = module.vpc.network_name
+      network            = local.network_name
       subnetwork         = local.output_primary_subnetwork_name
       subnetwork_project = var.project_id
       nic_type           = var.nic_type
