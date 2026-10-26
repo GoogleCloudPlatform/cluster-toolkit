@@ -15,7 +15,6 @@
  */
 
 resource "google_project_iam_custom_role" "predict" {
-  count       = var.enabled ? 1 : 0
   project     = var.project_id
   role_id     = "${replace(var.deployment_name, "-", "_")}_predict"
   title       = "${var.deployment_name} model prediction"
@@ -24,8 +23,7 @@ resource "google_project_iam_custom_role" "predict" {
 }
 
 resource "google_project_iam_member" "predict" {
-  count   = var.enabled ? 1 : 0
   project = var.project_id
-  role    = google_project_iam_custom_role.predict[0].name
+  role    = google_project_iam_custom_role.predict.name
   member  = "serviceAccount:${var.service_account_email}"
 }

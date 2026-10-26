@@ -16,6 +16,7 @@
 
 from email.message import Message
 import io
+import copy
 import json
 import sys
 from pathlib import Path
@@ -30,13 +31,13 @@ import urllib.error
 ROOT = Path(__file__).resolve().parents[1] / "community/examples/agentgateway-gke"
 
 
-RUNNER = Path(__file__).resolve().parents[1] / "tools/cloud-build/daily-tests/ansible_playbooks/test-validation/agentgateway"
-sys.path[:0] = [str(ROOT), str(ROOT / "files"), str(RUNNER)]
+sys.path[:0] = [str(ROOT), str(ROOT.parents[2] / "tools/validate_configs/agentgateway")]
 import smoke_test as smoke
-import readiness
+from files import readiness
 import wait_for_http as http_readiness
 import run_in_cluster as integration
 import mock_provider as provider
+import validate_static as static
 
 
 class ProviderSelectionTests(unittest.TestCase):
@@ -377,6 +378,10 @@ class GatewayReadinessTests(unittest.TestCase):
                     "parentRef": {"name": gateway}, "conditions": self.conditions("Accepted", "ResolvedRefs")} ]}}]},
             "agentgatewaybackends": {"items": [{"metadata": {"generation": 1},
                 "status": {"conditions": self.conditions("Accepted")}}]},
+            "healthcheckpolicies/agentgateway-proxy": {"metadata": {"generation": 1},
+                "status": {"conditions": self.conditions("Attached")}},
+            "gcpbackendpolicies/agentgateway-proxy": {"metadata": {"generation": 1},
+                "status": {"conditions": self.conditions("Attached")}},
             "deployments/agentgateway-proxy": {"metadata": {"generation": 1},
                 "status": {"observedGeneration": 1, "availableReplicas": 1}},
         }
@@ -416,15 +421,49 @@ class GatewayReadinessTests(unittest.TestCase):
                 self.assertFalse(readiness.ready(lambda path: next(value for key, value in objects.items()
                                                                   if path.endswith('/' + key)), "test", "gateway"))
 
-    def test_gateway_api_requires_established_crds(self):
+    def test_gateway_api_requires_established_crds_and_accepted_class(self):
         crd = {"metadata": {"annotations": {"gateway.networking.k8s.io/bundle-version": "v1.5.0"}},
-               "status": {"conditions": self.conditions("Established", "Accepted")}}
-        self.assertTrue(readiness.ready(lambda _: crd, "test", "gateway-api"))
+               "status": {"conditions": self.conditions("Established")}}
+        gateway_class = {"status": {"conditions": self.conditions("Accepted")}}
+        get = lambda path: gateway_class if "/gatewayclasses/" in path else crd
+        self.assertTrue(readiness.ready(get, "test", "gateway-api"))
+        gateway_class["status"]["conditions"] = []
+        self.assertFalse(readiness.ready(get, "test", "gateway-api"))
+        gateway_class["status"]["conditions"] = self.conditions("Accepted")
         crd["status"]["conditions"] = []
-        self.assertFalse(readiness.ready(lambda _: crd, "test", "gateway-api"))
+        self.assertFalse(readiness.ready(get, "test", "gateway-api"))
+
+    def test_ingress_requires_address_and_attached_policies(self):
+        for key in ("gateways/agentgateway-internal", "healthcheckpolicies/agentgateway-proxy",
+                    "gcpbackendpolicies/agentgateway-proxy"):
+            for failure in ("missing", "false", "stale"):
+                with self.subTest(resource=key, failure=failure):
+                    objects = self.objects("ingress")
+                    if key.startswith("gateways/"):
+                        objects[key]["status"]["addresses"] = []
+                    else:
+                        conditions = objects[key]["status"]["conditions"]
+                        if failure == "missing":
+                            conditions.clear()
+                        elif failure == "false":
+                            conditions[0]["status"] = "False"
+                        else:
+                            conditions[0]["observedGeneration"] = 0
+                    self.assertFalse(readiness.ready(lambda path: next(v for k, v in objects.items()
+                        if path.endswith('/' + k)), "test", "ingress"))
+
+    def test_partial_backend_blocks_deployment_and_reports_message(self):
+        objects = self.objects("gateway")
+        accepted = objects["agentgatewaybackends"]["items"][0]["status"]["conditions"][0]
+        accepted.update(reason="PartiallyValid", message="secret test/missing not found")
+        with mock.patch("sys.stdout", io.StringIO()) as output:
+            self.assertFalse(readiness.ready(lambda path: next(v for k, v in objects.items()
+                if path.endswith('/' + k)), "test", "gateway"))
+        self.assertIn("secret test/missing not found", output.getvalue())
 
     def test_readiness_job_retries_transient_api_failure(self):
         result = io.BytesIO(b'{"status":{"conditions":[]}}')
+        error_body = io.BytesIO(b"unavailable")
         def ready(get, namespace, stage):
             get('/test')
             return True
@@ -433,9 +472,10 @@ class GatewayReadinessTests(unittest.TestCase):
                 mock.patch.dict(readiness.os.environ, {"STAGE": "gateway", "NAMESPACE": "test"}), \
                 mock.patch.object(readiness, "ready", side_effect=ready), \
                 mock.patch.object(readiness.urllib.request, "urlopen", side_effect=[
-                    urllib.error.HTTPError("http://api", 503, "unavailable", {}, None), result]), \
+                    urllib.error.HTTPError("http://api", 503, "unavailable", {}, error_body), result]), \
                 mock.patch.object(readiness.time, "sleep"):
             readiness.main()
+        self.assertTrue(error_body.closed)
 
 
 class RunnerLifecycleTests(unittest.TestCase):
@@ -465,7 +505,7 @@ class RunnerLifecycleTests(unittest.TestCase):
                 integration.main()
 
     def test_synthetic_success_and_failed_job_cleanup(self):
-        for failed in (False, True):
+        for failed, cleanup_failure in ((False, False), (True, False), (False, True), (True, True)):
             documents, deleted, backend_checks = [], [], []
 
             def kubectl(command, input=None, **kwargs):
@@ -478,6 +518,8 @@ class RunnerLifecycleTests(unittest.TestCase):
                     return b"created"
                 if args[0] == "delete":
                     deleted.append((args, json.loads(input) if input else None))
+                    if cleanup_failure and len(deleted) == 1:
+                        raise integration.subprocess.TimeoutExpired(command, 60)
                     return b"deleted"
                 if args[0] == "logs":
                     if "--all-containers" in args:
@@ -504,7 +546,7 @@ class RunnerLifecycleTests(unittest.TestCase):
                 }
                 return json.dumps(data[kind]).encode()
 
-            with self.subTest(failed=failed), \
+            with self.subTest(failed=failed, cleanup_failure=cleanup_failure), \
                     mock.patch.object(sys, "argv", ["run_in_cluster.py", "--mock-provider"]), \
                     mock.patch.object(integration.subprocess, "check_output", side_effect=kubectl), \
                     mock.patch.object(integration.time, "sleep"), \
@@ -513,6 +555,9 @@ class RunnerLifecycleTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "Smoke client failed"):
                         integration.main()
                     self.assertIn("logs unavailable", diagnostics.getvalue())
+                elif cleanup_failure:
+                    with self.assertRaisesRegex(RuntimeError, "cleanup failed"):
+                        integration.main()
                 else:
                     integration.main()
             self.assertEqual(len(backend_checks), 2)
@@ -520,6 +565,77 @@ class RunnerLifecycleTests(unittest.TestCase):
             self.assertEqual(deleted[-1][1]["items"][0]["kind"], "Secret")
             job = next(item for item in documents if item["kind"] == "Job")
             self.assertEqual(job["spec"]["template"]["spec"]["initContainers"][0]["name"], "wait-for-provider")
+
+
+class ExposureTests(unittest.TestCase):
+    def test_unsafe_configuration_fails_before_job_creation(self):
+        safe = {
+            "gateway": {"status": {"addresses": [{"value": "10.1.0.5"}]}},
+            "services": {"items": []}, "service": {"spec": {"type": "ClusterIP"}},
+            "pods": {"items": [{"spec": {"serviceAccountName": "agentgateway-proxy"},
+                "status": {"phase": "Running", "podIP": "10.4.0.5"}}]},
+            "serviceaccount": {"metadata": {"annotations": {"iam.gke.io/gcp-service-account": "proxy@example.com"}}},
+            "job": {"status": {"succeeded": 1}},
+        }
+        cases = [
+            ("gateway", {"status": {"addresses": [{"value": "8.8.8.8"}]}}, "internal load-balancer"),
+            ("services", {"items": [{"spec": {"type": "LoadBalancer"}}]}, "externally exposed"),
+            ("services", {"items": [{"spec": {"type": "ClusterIP", "externalIPs": ["8.8.8.8"]}}]}, "externally exposed"),
+            ("service", {"spec": {"type": "NodePort"}}, "ClusterIP"),
+            ("pods", {"items": [{"spec": {"serviceAccountName": "default"}, "status": {"phase": "Running"}}]}, "service account"),
+            ("serviceaccount", {"metadata": {}}, "Workload Identity"),
+        ]
+        for kind, invalid, message in cases:
+            objects = dict(safe, **{kind: invalid})
+            def kubectl(command, **kwargs):
+                args = command[3:]
+                if args[0] == "create":
+                    self.fail("Unsafe configuration created a client Job")
+                return json.dumps(objects[args[1]]).encode() if args[0] == "get" else b""
+            with self.subTest(kind=kind, message=message), \
+                    mock.patch.object(sys, "argv", ["runner", "--model", "model"]), \
+                    mock.patch.object(integration.subprocess, "check_output", side_effect=kubectl):
+                with self.assertRaisesRegex(ValueError, message):
+                    integration.main()
+
+
+class StaticValidationTests(unittest.TestCase):
+    def test_missing_chart_schemas_fail(self):
+        schemas = {("agentgateway.dev/v1alpha1", kind): {}
+                   for kind in ("AgentgatewayBackend", "AgentgatewayParameters")}
+        static.require_schemas(schemas)
+        for missing in schemas:
+            with self.subTest(missing=missing), self.assertRaisesRegex(ValueError, "missing required CRD"):
+                static.require_schemas({k: v for k, v in schemas.items() if k != missing})
+        with self.assertRaisesRegex(ValueError, "missing required CRD"):
+            static.require_schemas({})
+
+    def test_empty_chart_render_fails_before_template_rendering(self):
+        with mock.patch.object(static.subprocess, "check_output", return_value=b""), \
+                mock.patch.object(static, "render") as render:
+            with self.assertRaisesRegex(ValueError, "missing required CRD"):
+                static.main()
+            render.assert_not_called()
+
+    def test_ingress_requires_resources_and_correct_wiring(self):
+        # Only scalar namespace interpolation is needed to inspect the ingress resources;
+        # the nested readiness template is validated separately by the chart check.
+        text = (ROOT / "files/ingress.yaml.tftpl").read_text().split("${templatefile")[0]
+        import yaml
+        resources = [r for r in yaml.safe_load_all(text.replace('${jsonencode(namespace)}', 'test')) if r]
+        static.validate_ingress(resources)
+        for i in range(len(resources)):
+            with self.subTest(missing=resources[i]["kind"]), self.assertRaisesRegex(ValueError, "missing expected"):
+                static.validate_ingress(resources[:i] + resources[i+1:])
+        broken = copy.deepcopy(resources)
+        broken[0]["spec"]["gatewayClassName"] = "gke-l7-global-external-managed"
+        with self.assertRaisesRegex(ValueError, "internal GatewayClass"):
+            static.validate_ingress(broken)
+        broken = copy.deepcopy(resources)
+        broken[1]["spec"]["rules"][0]["backendRefs"][0]["port"] = 80
+        with self.assertRaisesRegex(ValueError, "proxy backend"):
+            static.validate_ingress(broken)
+
 
 
 class AnthropicMessagesTests(unittest.TestCase):

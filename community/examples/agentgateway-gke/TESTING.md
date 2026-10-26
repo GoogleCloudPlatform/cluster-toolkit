@@ -27,8 +27,8 @@ your system or Homebrew Python installation, then run the local checks (no clust
 ```sh
 python3 -m venv venv-agentgateway
 source venv-agentgateway/bin/activate
-python -m pip install PyYAML jsonschema
-make agentgateway-static test-agentgateway terraform-test
+python -m pip install --require-hashes -r tools/cloud-build/requirements.txt
+make agentgateway-static test-agentgateway
 ```
 
 Run `deactivate` when finished. In subsequent sessions, run
@@ -46,9 +46,8 @@ To measure unit-test coverage of the readiness and smoke-test helpers, use the
 same virtual environment:
 
 ```sh
-python -m pip install coverage
 python -m coverage run --data-file=/tmp/agentgateway.coverage \
-  --source=community/examples/agentgateway-gke,tools/cloud-build/daily-tests/ansible_playbooks/test-validation/agentgateway \
+  --source=community/examples/agentgateway-gke \
   -m unittest discover -s tests -p test_agentgateway.py
 python -m coverage report --data-file=/tmp/agentgateway.coverage --fail-under=80
 ```
@@ -61,7 +60,7 @@ are enforced separately by `make tests` using `tools/enforce_coverage.pl`.
 The blueprint's `files/readiness.py` runs in Helm hook Jobs during deployment.
 It checks Gateway API compatibility and waits for current Gateway, HTTPRoute and
 backend conditions, the controller-created proxy Deployment, and an ingress
-address. Helm's chart resource waits do not cover all of these resources and
+address and attached ingress policies. Helm's chart resource waits do not cover all of these resources and
 conditions. Network exposure assertions belong to the Kubernetes runner below.
 
 ## Validate an existing deployment
@@ -83,7 +82,7 @@ To test a synthetic provider without
 making real model requests, run from the repository root:
 
 ```sh
-python3 tools/cloud-build/daily-tests/ansible_playbooks/test-validation/agentgateway/run_in_cluster.py \
+python3 community/examples/agentgateway-gke/run_in_cluster.py \
   --namespace agentgateway-system \
   --mock-provider
 ```
@@ -100,6 +99,21 @@ the Job reuses the example's `smoke_test.py` client. Its init container first
 waits up to 120 seconds for the synthetic Service to accept HTTP connections;
 Deployment rollout alone does not establish Service reachability. Failures print
 pod, endpoint and backend diagnostics before temporary resources are removed.
+
+## Testing configuration updates
+
+Test a fresh deployment and an update that changes `vertex_model` or a provider
+Secret name. Each configuration release contains its readiness hook, so Helm
+must run the hook after applying the updated resources. A missing provider Secret
+must prevent readiness; create the Secret and retry to verify recovery. Confirm
+that an unchanged reapplication produces no changes with Google provider 8.x.
+An older deployment's lock file can retain provider 7.x; upgrading dependencies
+requires separate validation.
+
+These changes consolidate Helm releases and remove conditional IAM resource
+addresses from the unpublished example. Recreate disposable deployments made
+from earlier PR revisions. Do not apply this revision over an existing deployment
+without planning the Helm ownership and Terraform state migration.
 
 ## Recorded provider validation
 
@@ -133,28 +147,6 @@ models.
 
 ## Integration testing
 
-### Monitoring ordering workaround
-
-The blueprint orders monitoring components to match observed GKE responses while
-dependencies require Google provider 7.x. Provider
-[8.0.0](https://github.com/hashicorp/terraform-provider-google/releases/tag/v8.0.0)
-changes the monitoring and logging `enable_components` fields from lists to sets,
-eliminating ordering-only diffs. Track dependency adoption in
-[issue #6331](https://github.com/GoogleCloudPlatform/cluster-toolkit/issues/6331).
-
-Before removing the `monitoring_components` override, verify that all module
-constraints permit the fixed provider and explicitly upgrade the test deployment's
-dependencies. New module releases alone do not update an existing provider lock
-file. Record the resolved module and provider versions with the test results.
-
-Test an upgrade from a deployment using provider 7.x as well as a fresh deployment.
-After removing the override, reapply and confirm that `terraform plan
--detailed-exitcode` exits with `0`. Verify that adding or removing an optional
-monitoring component still produces the expected plan, and restore the test
-configuration afterward. Retain the integration playbook's empty-plan check.
-Keep `enable_dcgm_monitoring: false`: GPU metrics are unnecessary for this CPU-only
-blueprint, independently of the ordering workaround.
-
 ### Run the integration playbook
 
 This playbook is **manual-only**: no upstream daily-test build currently schedules
@@ -173,7 +165,7 @@ the virtual environment used above:
 
 ```sh
 source venv-agentgateway/bin/activate
-python -m pip install ansible-core
+python -m pip install --require-hashes -r tools/cloud-build/requirements.txt
 ```
 
 The integration playbook deploys, reapplies, checks Gemini synchronous/streaming

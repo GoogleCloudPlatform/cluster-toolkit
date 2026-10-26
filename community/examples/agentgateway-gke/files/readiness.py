@@ -35,6 +35,17 @@ def condition(obj, name, expected="True"):
     )
 
 
+def backend_auth_ready(backend, namespace, name, accepted):
+    conditions = (backend.get("status") or {}).get("conditions") or []
+    partial = next((item for item in conditions if item.get("type") == "Accepted"
+                    and item.get("reason") == "PartiallyValid"), None)
+    if accepted == "False" and partial:
+        # v1.6 accepts partially valid backends while reporting missing auth.
+        return (condition(backend, "Accepted")
+                and f"secret {namespace}/{name} not found" in partial.get("message", ""))
+    return condition(backend, "Accepted", expected=accepted) and partial is None
+
+
 def ready(get, namespace, stage):
     base = f"/apis/gateway.networking.k8s.io/v1/namespaces/{namespace}"
     if stage == "gateway-api":
@@ -79,12 +90,25 @@ def ready(get, namespace, stage):
         return False
     if stage == "gateway":
         backends = get(f"/apis/agentgateway.dev/v1alpha1/namespaces/{namespace}/agentgatewaybackends")["items"]
-        if not backends or not all(condition(backend, "Accepted") for backend in backends):
+        for backend in backends:
+            if not backend_auth_ready(backend, namespace, "", "True"):
+                if condition(backend, "Accepted"):
+                    message = next((c.get("message", "Partially valid backend")
+                                    for c in (backend.get("status") or {}).get("conditions", [])
+                                    if c.get("type") == "Accepted" and c.get("reason") == "PartiallyValid"), "")
+                    if message:
+                        print(f"Backend {backend.get('metadata', {}).get('name', '?')}: {message}", flush=True)
+                return False
+        if not backends:
             return False
         deployment = get(f"/apis/apps/v1/namespaces/{namespace}/deployments/agentgateway-proxy")
         status = deployment.get("status") or {}
         return ((status.get("observedGeneration") or 0) >= deployment["metadata"]["generation"]
                 and (status.get("availableReplicas") or 0) >= 1)
+    for kind in ("healthcheckpolicies", "gcpbackendpolicies"):
+        policy = get(f"/apis/networking.gke.io/v1/namespaces/{namespace}/{kind}/agentgateway-proxy")
+        if not condition(policy, "Attached"):
+            return False
     return bool((gateway.get("status") or {}).get("addresses"))
 
 
@@ -108,8 +132,11 @@ def main():
                 print(f"{stage}: ready")
                 return
         except urllib.error.HTTPError as error:
-            if error.code not in (404, 429, 500, 502, 503, 504):
-                raise
+            try:
+                if error.code not in (404, 429, 500, 502, 503, 504):
+                    raise
+            finally:
+                error.close()
         except (urllib.error.URLError, TimeoutError):
             pass
         print(f"Waiting for {stage}", flush=True)

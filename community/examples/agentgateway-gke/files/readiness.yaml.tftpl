@@ -17,13 +17,13 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: readiness-${stage}
-  namespace: ${namespace}
+  namespace: ${jsonencode(namespace)}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: readiness-${stage}
-  namespace: ${namespace}
+  namespace: ${jsonencode(namespace)}
 rules:
 - apiGroups: ["gateway.networking.k8s.io"]
   resources: [gateways, httproutes]
@@ -31,6 +31,9 @@ rules:
 - apiGroups: [agentgateway.dev]
   resources: [agentgatewaybackends]
   verbs: [get, list]
+- apiGroups: [networking.gke.io]
+  resources: [healthcheckpolicies, gcpbackendpolicies]
+  verbs: [get]
 - apiGroups: [apps]
   resources: [deployments]
   verbs: [get]
@@ -39,11 +42,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: readiness-${stage}
-  namespace: ${namespace}
+  namespace: ${jsonencode(namespace)}
 subjects:
 - kind: ServiceAccount
   name: readiness-${stage}
-  namespace: ${namespace}
+  namespace: ${jsonencode(namespace)}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -74,7 +77,7 @@ metadata:
 subjects:
 - kind: ServiceAccount
   name: readiness-gateway-api
-  namespace: ${namespace}
+  namespace: ${jsonencode(namespace)}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -85,13 +88,13 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: readiness-${stage}
-  namespace: ${namespace}
+  namespace: ${jsonencode(namespace)}
   annotations:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 spec:
   activeDeadlineSeconds: 900
-  backoffLimit: 0
+  backoffLimit: 2
   template:
     spec:
       serviceAccountName: readiness-${stage}
@@ -105,9 +108,9 @@ spec:
           ${indent(10, script)}
         env:
         - name: NAMESPACE
-          value: ${namespace}
+          value: ${jsonencode(namespace)}
         - name: STAGE
-          value: ${stage}
+          value: ${jsonencode(stage)}
         resources:
           requests:
             cpu: 50m

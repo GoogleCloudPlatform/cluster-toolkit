@@ -25,6 +25,13 @@
   ansible.builtin.set_fact:
     state_bucket: "{{ deployment_state_bucket | default('daily-tests-tf-state') }}"
 
+- name: Require durable state for Cloud Build runs
+  ansible.builtin.assert:
+    that:
+    - state_bucket | trim | length > 0
+    fail_msg: Set deployment_state_bucket to the CI state bucket before running in Cloud Build.
+  when: full_build_id is defined
+
 - name: Create cli flag for extra deployment variables
   ansible.builtin.set_fact:
     deployment_vars_str: "--vars \"\\\"{{ cli_deployment_vars.items() | map('join', '=') | join('\\\"\" --vars \"\\\"') }}\\\"\""
