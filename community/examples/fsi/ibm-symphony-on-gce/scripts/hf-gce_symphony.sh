@@ -19,7 +19,7 @@ set -x          # verbose
 
 export EGO_TOP=$1
 
-git clone https://github.com/google/symphony-gcp.git
+git clone --branch v1.0.4 --depth 1 https://github.com/google/symphony-gcp.git
 cd symphony-gcp/hf-provider || exit 1
 
 curl -LsSf https://astral.sh/uv/0.11.26/install.sh | sh
