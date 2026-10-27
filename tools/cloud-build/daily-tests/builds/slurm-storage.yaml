@@ -118,12 +118,9 @@ steps:
               DEPLOYMENT_NAME="slurm-storage-$$BUILD_ID_SHORT"
               BLUEPRINT="examples/storage-slurm.yaml"
               BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$BLUEPRINT" 2>/dev/null | awk '{print \$$2}')
-
-              # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
-              echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/\$${BP_NAME:-*}/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
-
-              RUN_CLEANUP=true
+              # Register the SIGTERM handler FIRST. bash is PID 1 here and ignores
+              # SIGTERM until a trap is installed. RUN_CLEANUP=false => just exit.
+              RUN_CLEANUP=false
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
               cleanup() {
                 echo "Cleaning up storage pools..."
@@ -131,6 +128,11 @@ steps:
               }
               trap cleanup EXIT SIGTERM SIGINT
 
+              # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
+              echo "Checking for and clearing leaked Terraform state locks..."
+              bash tools/cloud-build/clear_tf_state_locks.sh tools/cloud-build/daily-tests/tests/slurm-storage.yml "\$$DEPLOYMENT_NAME" || true
+
+              RUN_CLEANUP=true
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
               bash tools/add_ttl_label.sh \$$BLUEPRINT

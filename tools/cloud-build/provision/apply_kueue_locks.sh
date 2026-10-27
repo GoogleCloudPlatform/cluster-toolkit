@@ -54,6 +54,20 @@ for PROJECT in "${PROJECTS[@]}"; do
 
 			echo "Applying kueue-setup..."
 			kubectl apply -f "$CONFIGS_DIR/kueue-setup.yaml" || ERRORS=1
+			# The reaper's KSA (with Workload Identity) is created by the
+			# test-infra-kueue blueprint. Only apply the reaper where that KSA exists.
+			if kubectl get serviceaccount kueue-reaper-ksa -n default &>/dev/null; then
+				echo "Applying kueue-reaper..."
+				if kubectl apply -f "$CONFIGS_DIR/kueue-reaper-pod.yaml"; then
+					# reaper.sh runs in an infinite loop, so a ConfigMap update alone is not picked up.
+					kubectl rollout restart deployment/kueue-reaper -n default || ERRORS=1
+					kubectl rollout status deployment/kueue-reaper -n default --timeout=180s || ERRORS=1
+				else
+					ERRORS=1
+				fi
+			else
+				echo "kueue-reaper-ksa not found in $PROJECT; skipping kueue-reaper."
+			fi
 		else
 			echo "Failed to get credentials for $CLUSTER_NAME in $PROJECT."
 			ERRORS=1
