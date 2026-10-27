@@ -29,7 +29,7 @@
 #   * SLURM workload scheduler
 #
 vars:
-  project_id: ai-infra-jrt-1
+  project_id: ## Set GCP Project ID Here ##
   deployment_name: cae-slurm-solutions
   # check here for other regions with H4D, C4D, and G4 deployments: https://cloud.google.com/compute/docs/regions-zones
   # For example
