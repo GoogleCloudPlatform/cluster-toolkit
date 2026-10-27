@@ -57,12 +57,15 @@ type Reservation struct {
 
 // SubBlock is one reservation sub-block.
 type SubBlock struct {
-	Block   string
-	Name    string
-	Path    string // RESERVATION/reservationBlocks/BLOCK/reservationSubBlocks/SUBBLOCK
-	Count   int64
-	InUse   int64
-	Healthy bool
+	Block string
+	Name  string
+	Path  string // RESERVATION/reservationBlocks/BLOCK/reservationSubBlocks/SUBBLOCK
+	Count int64
+	InUse int64
+	// Healthy reports whether the sub-block can be used: status READY and health
+	// HEALTHY or DEGRADED. Degraded is set for DEGRADED.
+	Healthy  bool
+	Degraded bool
 }
 
 // Free reports whether no host of the sub-block is in use.
@@ -153,12 +156,13 @@ func ListSubBlocks(ctx context.Context, l Lister, r Reservation) ([]SubBlock, er
 				status = "READY"
 			}
 			out = append(out, SubBlock{
-				Block:   b,
-				Name:    sb.Name,
-				Path:    fmt.Sprintf("%s/reservationBlocks/%s/reservationSubBlocks/%s", r.Name, b, sb.Name),
-				Count:   sb.Count,
-				InUse:   sb.InUseCount,
-				Healthy: status == "READY" && health == "HEALTHY",
+				Block:    b,
+				Name:     sb.Name,
+				Path:     fmt.Sprintf("%s/reservationBlocks/%s/reservationSubBlocks/%s", r.Name, b, sb.Name),
+				Count:    sb.Count,
+				InUse:    sb.InUseCount,
+				Healthy:  status == "READY" && (health == "HEALTHY" || health == "DEGRADED"),
+				Degraded: health == "DEGRADED",
 			})
 		}
 	}
@@ -200,8 +204,9 @@ type Selection struct {
 //
 // Entries of previous (the saved map) are kept, so existing node pools don't move.
 // If previous has more than n entries, the highest keys are dropped. If it has
-// fewer, list is called and the free, healthy sub-blocks with the lowest keys are
-// added, skipping paths in exclude (sub-blocks used by other node pool modules).
+// fewer, list is called and free sub-blocks are added, skipping paths in exclude
+// (sub-blocks used by other node pool modules): HEALTHY ones with the lowest keys
+// first, then DEGRADED ones (with a warning).
 // A previous entry is never dropped because its sub-block is busy or unhealthy:
 // its node pool is the one using it.
 func Select(previous map[string]string, n int, reservation string, exclude map[string]bool, list func() ([]SubBlock, error)) (Selection, error) {
@@ -226,15 +231,18 @@ func Select(previous map[string]string, n int, reservation string, exclude map[s
 	for _, p := range sel.Map {
 		used[p] = true
 	}
-	added, err := addFree(sel.Map, subs, used, n-len(sel.Map))
+	added, degraded, err := addFree(sel.Map, subs, used, n-len(sel.Map))
 	if err != nil {
 		return Selection{}, err
 	}
 	if len(sel.Map) < n {
 		return Selection{}, fmt.Errorf("not enough free sub-blocks in reservation %q: %d more needed (num_node_pools: %d, entries in reservation_subblocks: %d), %d available.\n"+
-			"A sub-block is available only if it is healthy and none of its hosts are in use, so sub-blocks used by existing node pools don't count.\n"+
+			"A sub-block is available only if it is READY, HEALTHY or DEGRADED, and none of its hosts are in use, so sub-blocks used by existing node pools don't count.\n"+
 			"Lower num_node_pools, or run again when a sub-block is free",
 			reservation, n-len(sel.Kept), n, len(sel.Kept), len(added))
+	}
+	for _, k := range degraded {
+		sel.Warnings = append(sel.Warnings, fmt.Sprintf("proposed sub-block (%q: %s) is DEGRADED: some of its hosts may be unhealthy, so fewer nodes may be created than requested", k, sel.Map[k]))
 	}
 	sel.Added = added
 	return sel, nil
@@ -285,34 +293,43 @@ func keptWarnings(sel Selection, subs []SubBlock, reservation string) []string {
 			warnings = append(warnings, fmt.Sprintf("saved sub-block (%q: %s) is no longer in reservation %q; kept in the map", k, sel.Map[k], reservation))
 		case !s.Healthy:
 			warnings = append(warnings, fmt.Sprintf("saved sub-block (%q: %s) is not healthy; kept in the map", k, sel.Map[k]))
+		case s.Degraded:
+			warnings = append(warnings, fmt.Sprintf("saved sub-block (%q: %s) is DEGRADED; kept in the map", k, sel.Map[k]))
 		}
 	}
 	return warnings
 }
 
-// addFree adds up to need free, healthy sub-blocks not in used to m, in list order
-// (lowest keys first), and returns their keys sorted.
-func addFree(m map[string]string, subs []SubBlock, used map[string]bool, need int) ([]string, error) {
-	var added []string
-	for _, s := range subs {
-		if len(added) == need {
-			break
+// addFree adds up to need free, usable sub-blocks not in used to m: HEALTHY ones
+// in list order (lowest keys first), then DEGRADED ones. It returns the keys of
+// all added sub-blocks and of the DEGRADED ones among them, both sorted.
+func addFree(m map[string]string, subs []SubBlock, used map[string]bool, need int) ([]string, []string, error) {
+	var added, degraded []string
+	for _, wantDegraded := range []bool{false, true} {
+		for _, s := range subs {
+			if len(added) == need {
+				break
+			}
+			if used[s.Path] || !s.Healthy || !s.Free() || s.Degraded != wantDegraded {
+				continue
+			}
+			key, err := Key(s.Block, s.Name)
+			if err != nil {
+				return nil, nil, err
+			}
+			if cur, ok := m[key]; ok {
+				return nil, nil, fmt.Errorf("sub-blocks %s and %s both get key %q", cur, s.Path, key)
+			}
+			m[key] = s.Path
+			added = append(added, key)
+			if s.Degraded {
+				degraded = append(degraded, key)
+			}
 		}
-		if used[s.Path] || !s.Healthy || !s.Free() {
-			continue
-		}
-		key, err := Key(s.Block, s.Name)
-		if err != nil {
-			return nil, err
-		}
-		if cur, ok := m[key]; ok {
-			return nil, fmt.Errorf("sub-blocks %s and %s both get key %q", cur, s.Path, key)
-		}
-		m[key] = s.Path
-		added = append(added, key)
 	}
 	sort.Strings(added)
-	return added, nil
+	sort.Strings(degraded)
+	return added, degraded, nil
 }
 
 func sortedKeys(m map[string]string) []string {

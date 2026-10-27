@@ -300,10 +300,12 @@ With `pin_to_subblocks: true`, `gcluster create` and `gcluster deploy` compare t
 
 | Map | What gcluster does |
 |---|---|
-| Has `num_node_pools` entries | Uses it as is, without a prompt. It also checks (read-only) that the saved sub-blocks still exist: a missing one gives a warning and a "continue?" prompt, an unhealthy one a warning. |
-| Empty | Lists the reservation's sub-blocks and proposes the `num_node_pools` with the lowest keys that are healthy and have no hosts in use |
-| Fewer entries than `num_node_pools` | Keeps all entries and proposes free, healthy sub-blocks for the rest |
+| Has `num_node_pools` entries | Uses it as is, without a prompt. It also checks (read-only) that the saved sub-blocks still exist: a missing one gives a warning and a "continue?" prompt, an unhealthy or `DEGRADED` one a warning. |
+| Empty | Lists the reservation's sub-blocks and proposes the `num_node_pools` free ones (no hosts in use): `HEALTHY` ones with the lowest keys first, then `DEGRADED` ones, each with a warning |
+| Fewer entries than `num_node_pools` | Keeps all entries and proposes free sub-blocks for the rest, in the same order |
 | More entries than `num_node_pools` | Proposes dropping the entries with the highest keys (their node pools are deleted) |
+
+A `DEGRADED` sub-block has some unhealthy hosts, so its node pool may get fewer nodes than `static_node_count`. Sub-blocks that are not `READY`, or whose health is neither `HEALTHY` nor `DEGRADED`, are never proposed.
 
 gcluster prints the proposed sub-block map as YAML (new entries marked `# new`) and asks before saving it to the deployment file (or to the blueprint's `vars:` if there is no deployment file). It keeps a timestamped backup and prints the diff. Answering no stops without changes. `gcluster deploy --auto-approve` approves; without a terminal, `gcluster create` stops with the proposed YAML. `gcluster expand` never prompts or edits files.
 

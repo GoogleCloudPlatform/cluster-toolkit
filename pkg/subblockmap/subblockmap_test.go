@@ -343,3 +343,66 @@ func TestDiff(t *testing.T) {
 		t.Error("identical input must give an empty diff")
 	}
 }
+
+func degraded(block string, n int) *compute.ReservationSubBlock {
+	return sb(block, n, "READY", "DEGRADED")
+}
+
+func TestListSubBlocksHealth(t *testing.T) {
+	l := &fakeLister{blocks: map[string][]*compute.ReservationSubBlock{b1: {
+		ok(b1, 1), degraded(b1, 2), sb(b1, 3, "READY", "HEALTH_STATUS_UNSPECIFIED"), sb(b1, 4, "CREATING", "DEGRADED"),
+	}}}
+	subs, err := ListSubBlocks(context.Background(), l, rsv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []struct{ healthy, degraded bool }{{true, false}, {true, true}, {false, false}, {false, true}}
+	for i, w := range want {
+		if subs[i].Healthy != w.healthy || subs[i].Degraded != w.degraded {
+			t.Errorf("sub-block %d: Healthy=%v Degraded=%v, want %v %v", i+1, subs[i].Healthy, subs[i].Degraded, w.healthy, w.degraded)
+		}
+	}
+}
+
+func TestDegradedIsUsedAfterHealthyWithWarning(t *testing.T) {
+	l := &fakeLister{blocks: map[string][]*compute.ReservationSubBlock{b1: {degraded(b1, 1), ok(b1, 2)}}}
+
+	// One needed: the HEALTHY sub-block is taken although its key is higher.
+	sel, err := Select(nil, 1, res, nil, list(t, l))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if keysOf(sel.Map) != "01-0002" || len(sel.Warnings) != 0 {
+		t.Errorf("unexpected selection %+v", sel)
+	}
+
+	// Two needed: the DEGRADED one is added too, with a warning.
+	sel, err = Select(nil, 2, res, nil, list(t, l))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if keysOf(sel.Map) != "01-0001,01-0002" || strings.Join(sel.Added, ",") != "01-0001,01-0002" ||
+		len(sel.Warnings) != 1 || !strings.Contains(sel.Warnings[0], "01-0001") || !strings.Contains(sel.Warnings[0], "DEGRADED") {
+		t.Errorf("unexpected selection %+v", sel)
+	}
+}
+
+func TestOnlyDegradedSubBlockIsAccepted(t *testing.T) {
+	l := &fakeLister{blocks: map[string][]*compute.ReservationSubBlock{b1: {degraded(b1, 1)}}}
+	sel, err := Select(nil, 1, res, nil, list(t, l))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sel.Map["01-0001"] != path(b1, 1) || len(sel.Warnings) != 1 {
+		t.Errorf("unexpected selection %+v", sel)
+	}
+}
+
+func TestBusyDegradedSubBlockIsNotAvailable(t *testing.T) {
+	busy := degraded(b1, 1)
+	busy.InUseCount = 1
+	l := &fakeLister{blocks: map[string][]*compute.ReservationSubBlock{b1: {busy}}}
+	if _, err := Select(nil, 1, res, nil, list(t, l)); err == nil || !strings.Contains(err.Error(), "0 available") {
+		t.Errorf("want not-enough error, got %v", err)
+	}
+}

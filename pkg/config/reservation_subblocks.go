@@ -37,7 +37,7 @@ const (
 	reservationSubblocksAttr   = "reservation_subblocks"
 	pinToSubblocksAttr         = "pin_to_subblocks"
 	// mockReservationSubblocksEnv holds a JSON list of "BLOCK/SUBBLOCK" names, each
-	// optionally followed by "=used" or "=unhealthy", used instead of the Compute
+	// optionally followed by "=used", "=degraded" or "=unhealthy", used instead of the Compute
 	// Engine API (for tests).
 	mockReservationSubblocksEnv = "GHPC_MOCK_RESERVATION_SUBBLOCKS"
 )
@@ -87,7 +87,7 @@ func mockSubBlocks(r subblockmap.Reservation, mock string) ([]subblockmap.SubBlo
 			return nil, fmt.Errorf("%s: %q must be BLOCK/SUBBLOCK", mockReservationSubblocksEnv, n)
 		}
 		s := subblockmap.SubBlock{
-			Block: block, Name: sub, Count: 18, Healthy: state != "unhealthy",
+			Block: block, Name: sub, Count: 18, Healthy: state != "unhealthy", Degraded: state == "degraded",
 			Path: fmt.Sprintf("%s/reservationBlocks/%s/reservationSubBlocks/%s", r.Name, block, sub),
 		}
 		if state == "used" {
@@ -395,6 +395,8 @@ func (bp *Blueprint) checkSavedSubblocks(pm *pinnedModule, list func() ([]subblo
 			logging.Info("WARNING: module %q: saved sub-block (%q: %s) is no longer in reservation %q", pm.mod.ID, k, pm.current[k], pm.reservation.Name)
 		case !s.Healthy:
 			logging.Info("WARNING: module %q: saved sub-block (%q: %s) is not healthy", pm.mod.ID, k, pm.current[k])
+		case s.Degraded:
+			logging.Info("WARNING: module %q: saved sub-block (%q: %s) is DEGRADED: some of its hosts may be unhealthy, so fewer nodes may be created than requested", pm.mod.ID, k, pm.current[k])
 		}
 	}
 	if len(missing) == 0 || bp.subblockIO == nil {
