@@ -42,3 +42,72 @@
   position: absolute;
   top: 50%;
 }
+
+/*
+ * The slider switch and its label grid. Defined here rather than inline in
+ * cluster/update_form.html, which is where they used to live: the encryption
+ * panel is included by the Filestore and image forms too, and without these
+ * rules its toggle fell back to a bare checkbox on those pages.
+ */
+/* Hide the default checkbox input */
+.slider-switch input {
+    display: none;
+}
+
+/* Style the slider container */
+.slider-switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+}
+
+/* Style the slider itself */
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+    border-radius: 34px;
+}
+
+/* Style the slider's "on" state */
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    -webkit-transition: .4s;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+/* When the checkbox is checked, change the background color of the slider */
+.slider-switch input:checked+.slider {
+    background-color: #2196F3;
+}
+
+/* When the checkbox is checked, move the slider to the right */
+.slider-switch input:checked+.slider:before {
+    -webkit-transform: translateX(26px);
+    -ms-transform: translateX(26px);
+    transform: translateX(26px);
+}
+
+.grid-container {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    /* Adjust column widths as needed */
+    align-items: left;
+    gap: 10px;
+    /* Adjust the gap as needed */
+    width: 100%;
+}

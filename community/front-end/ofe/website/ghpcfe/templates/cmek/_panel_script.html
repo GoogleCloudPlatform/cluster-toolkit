@@ -1,0 +1,47 @@
+{% comment %}
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+
+ Show/hide for the encryption panel. Finds its controls by id, so it works
+ whether the template renders fields explicitly or loops over the form.
+ Nothing here validates or submits: the form does that server-side.
+{% endcomment %}
+<script>
+(function () {
+  var enabled = document.getElementById("id_cmek_enabled");
+  if (!enabled) { return; }   // deployment has encryption disabled
+
+  var panel = document.getElementById("cmek-panel");
+  var advanced = document.getElementById("cmek-advanced");
+  var caret = document.getElementById("cmek-advanced-caret");
+  var toggle = document.getElementById("cmek-advanced-toggle");
+
+  function sync() {
+    if (panel) { panel.style.display = enabled.checked ? "" : "none"; }
+  }
+
+  enabled.addEventListener("change", sync);
+
+  if (toggle) {
+    toggle.addEventListener("click", function (event) {
+      event.preventDefault();
+      var open = advanced.style.display === "none";
+      advanced.style.display = open ? "" : "none";
+      if (caret) { caret.innerHTML = open ? "&#9662;" : "&#9656;"; }
+    });
+  }
+
+  sync();
+})();
+</script>

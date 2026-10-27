@@ -73,6 +73,11 @@ class UserAdmin(BaseUserAdmin):
     )
 
 
+# Set only by a successful deploy and by revoking a key. Changing either by
+# hand would let a deployed resource's encryption change, or un-revoke a key.
+CMEK_FLAGS = ("cmek_applied", "cmek_revoked")
+
+
 class ContainerRegistryInline(admin.TabularInline):
     model = ContainerRegistry
     extra = 1
@@ -196,6 +201,7 @@ class ClusterAdmin(admin.ModelAdmin):
     """ Custom ModelAdmin for Cluster model """
     inlines = (MountPointInline, ClusterPartitionInline, ContainerRegistryInline)
     list_display = ("id", "name", "cloud_zone", "_controller_node", "status")
+    readonly_fields = CMEK_FLAGS
 
     def _controller_node(self, obj):
         if obj.controller_node:
@@ -206,6 +212,16 @@ class ClusterAdmin(admin.ModelAdmin):
             return "<none>"
 
     _controller_node.short_description = "Controller Node IP"
+
+
+class GCPFilestoreFilesystemAdmin(admin.ModelAdmin):
+    """ Custom ModelAdmin for GCPFilestoreFilesystem model """
+    readonly_fields = CMEK_FLAGS
+
+
+class ImageAdmin(admin.ModelAdmin):
+    """ Custom ModelAdmin for Image model """
+    readonly_fields = CMEK_FLAGS
 
 
 class ApplicationAdmin(admin.ModelAdmin):
@@ -246,7 +262,7 @@ admin.site.register(Benchmark)
 admin.site.register(Role)
 admin.site.register(User, UserAdmin)
 admin.site.register(Filesystem, FilesystemAdmin)
-admin.site.register(GCPFilestoreFilesystem)
+admin.site.register(GCPFilestoreFilesystem, GCPFilestoreFilesystemAdmin)
 admin.site.register(FilesystemExport)
 admin.site.register(MountPoint)
 admin.site.register(Workbench)
@@ -254,6 +270,6 @@ admin.site.register(WorkbenchPreset)
 admin.site.register(AuthorisedUser)
 admin.site.register(WorkbenchMountPoint)
 admin.site.register(StartupScript)
-admin.site.register(Image)
+admin.site.register(Image, ImageAdmin)
 admin.site.register(ContainerRegistry, ContainerRegistryAdmin)
 admin.site.register(ContainerApplication)

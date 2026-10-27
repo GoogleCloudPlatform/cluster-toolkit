@@ -17,7 +17,7 @@ limitations under the License.
 - source: community/modules/database/slurm-cloudsql-federation
   kind: terraform
   id: slurm-sql
-  use: [hpc_network]
+  use: [hpc_network{% if cmek %}, cmek_key_iam{% endif %}]
   settings:
     sql_instance_name: sql-{{ cluster_id }}
     tier: "db-g1-small"

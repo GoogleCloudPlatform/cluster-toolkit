@@ -167,7 +167,11 @@ document.addEventListener("DOMContentLoaded", function() {
               if (response.import) {
               window.alert("Imported image has been deleted from OFE, but not from GCP. Please delete the imported image manually if needed.")
               }
+            } else if (response.success === false) {
+              window.alert(response.error || "The delete failed.");
             }
+          } else {
+            window.alert("The delete failed (HTTP " + xhr.status + ").");
           }
         };
         xhr.send(new FormData(form));

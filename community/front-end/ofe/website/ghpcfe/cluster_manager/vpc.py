@@ -106,7 +106,13 @@ def start_vpc(vpc: VirtualNetwork) -> None:
             logger.info("TF stdout:\n%s\n", err.stdout.decode("utf-8"))
         if err.stderr:
             logger.info("TF stderr:\n%s\n", err.stderr.decode("utf-8"))
-        vpc.status = "e"
+        # VirtualNetwork/CloudResource has no "status" field, only
+        # cloud_state, so `vpc.status = "e"` silently discarded on a plain
+        # Python attribute and never persisted -- a failed apply left
+        # cloud_state stuck at "cm" (Creating) forever with no visible
+        # error. "um" ("Unknown, following error") is the state this
+        # project's own status choices already define for exactly this.
+        vpc.cloud_state = "um"
         vpc.save()
         raise
 

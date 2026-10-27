@@ -27,6 +27,22 @@ steps:
     source /opt/ofe/bin/activate
     pip install --upgrade pip
     pip install --dry-run --no-cache-dir -r community/front-end/ofe/requirements.txt
+# The OFE Django unit tests, with settings that need no cloud project,
+# network, Pub/Sub or server paths (website/website/ci_settings.py).
+- id: ofe-unit-tests
+  name: python:3.12
+  waitFor: ['-']
+  entrypoint: /bin/bash
+  args:
+  - '-c'
+  - |
+    set -ex
+    python3 -m venv ../ofe-unit-tests-venv
+    source ../ofe-unit-tests-venv/bin/activate
+    pip install --upgrade pip
+    pip install --no-cache-dir --require-hashes -r community/front-end/ofe/requirements.txt
+    cd community/front-end/ofe/website
+    python manage.py test ghpcfe --settings=website.ci_settings
 timeout: "1200s"
 options:
   machineType: N1_HIGHCPU_8

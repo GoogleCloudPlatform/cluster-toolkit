@@ -23,6 +23,11 @@ from . import views
 from .views.credentials import *
 from .views.images import *
 from .views.clusters import *
+from .views.cmek import (
+    CmekKeyDestroyView,
+    CmekKeysView,
+    CmekSettingsView,
+)
 from .views.applications import *
 from .views.jobs import *
 from .views.benchmarks import *
@@ -77,6 +82,13 @@ urlpatterns = [
         name="benchmark-detail",
     ),
     path("account/", AccountUpdateView.as_view(), name="account"),
+    # Superusers only, and deliberately absent from the sidebar: encryption is
+    # part of creating a resource, not a section of its own. A key is revoked
+    # through the resource that uses it, since its short name is not unique.
+    path("cmek/", CmekSettingsView.as_view(), name="cmek-settings"),
+    path("cmek/keys/", CmekKeysView.as_view(), name="cmek-keys"),
+    path("cmek/keys/<str:kind>/<int:pk>/destroy",
+         CmekKeyDestroyView.as_view(), name="cmek-key-destroy"),
     path("workbench/", WorkbenchListView.as_view(), name="workbench"),
     path(
         "workbench/<int:pk>",

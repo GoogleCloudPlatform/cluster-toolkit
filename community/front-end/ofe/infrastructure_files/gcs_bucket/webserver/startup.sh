@@ -51,7 +51,10 @@ dnf update -y --security
 dnf update -y expat
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
 
-dnf install -y terraform
+# The Cluster Toolkit modules require Terraform >= 1.12.2. Install 1.12.2 from
+# the HashiCorp repo, falling back to the latest version the repo offers if
+# that package is unavailable.
+dnf install -y terraform-1.12.2-1 || dnf install -y terraform
 dnf install --best -y google-cloud-cli nano make gcc python3.12-devel unzip git \
 	rsync wget nginx bind-utils policycoreutils-python-utils \
 	packer supervisor python3-certbot-nginx jq
@@ -235,7 +238,6 @@ sudo su - gcluster -c /bin/bash <<EOF
   echo "    gcs_bucket: \"${config_bucket}\"" >> configuration.yaml
   echo "    c2_topic: \"${c2_topic}\"" >> configuration.yaml
   echo "    deployment_name: \"${deployment_name}\"" >> configuration.yaml
-
   printf "\nInitalising Django environments...\n"
   mkdir /opt/gcluster/run
   pushd website

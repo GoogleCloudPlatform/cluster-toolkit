@@ -17,7 +17,7 @@
 {% extends "base_generic.html" %}
 
 {% block content %}
-  <h2>Destroy cluster</h2>
+  <h2>Destroy filesystem</h2>
 
   <form method="get" action="{% url 'backend-filesystem-destroy' filesystem.id %}">
 
@@ -44,13 +44,29 @@
       </tr>
     {% endfor %}
     </table>
+    {% if workbench_mounts %}
+    <table class="table align-middle">
+      <tr>
+        <th>Workbench Name</th>
+      </tr>
+    {% for mount in workbench_mounts %}
+      <tr>
+        <td>{{ mount.workbench.name }} </td>
+      </tr>
+    {% endfor %}
+    </table>
+    {% endif %}
     </div>
 
 
     <hr>
+    {% if in_use %}
+    <div class="alert alert-warning">Cannot destroy while the uses above exist. Destroy or unmount them first.</div>
+    {% else %}
     <p>Are you sure you want to continue?</p>
     <input type="submit" value="Confirm" class="btn btn-danger">
-    <a href="javascript:history.go(-1)" class="btn btn-outline-secondary">Cancel</a>    
+    {% endif %}
+    <a href="javascript:history.go(-1)" class="btn btn-outline-secondary">Cancel</a>
   </form>
 
 {% endblock %}

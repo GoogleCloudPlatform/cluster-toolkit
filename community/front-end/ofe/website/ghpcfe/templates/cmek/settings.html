@@ -1,0 +1,50 @@
+{% extends "base_generic.html" %}
+
+{% comment %}
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+{% endcomment %}
+
+{% block content %}
+<h2>Encryption defaults</h2>
+
+<p class="text-muted" style="max-width:52rem;">
+  Defaults for the customer-managed encryption keys OFE creates. Everything else
+  about a key is chosen on the resource that uses it, or left to the
+  <code>kms-key</code> module's own defaults.
+</p>
+
+{% if form.non_field_errors %}
+<div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
+{% endif %}
+
+<form action="" method="post" style="max-width:44rem;">
+  {% csrf_token %}
+  {% for field in form %}
+  <div class="form-group">
+    {{ field.errors }}
+    {{ field.label_tag }}
+    {{ field }}
+    <small class="form-text text-muted">{{ field.help_text }}</small>
+  </div>
+  {% endfor %}
+
+  <input type="submit" value="Save" class="btn btn-primary" />
+</form>
+
+<p class="text-muted mt-4" style="font-size:.85rem;">
+  Written to <code>{{ config_path }}</code>. Existing resources keep the key
+  they were created with; encryption cannot be changed after creation.
+</p>
+{% endblock %}

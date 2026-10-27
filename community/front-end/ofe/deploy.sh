@@ -45,6 +45,7 @@ declare -A PRJ_API
 PRJ_API['monitoring.googleapis.com']='Cloud Monitoring API'
 PRJ_API['logging.googleapis.com']='Cloud Logging API'
 PRJ_API['compute.googleapis.com']='Compute Engine API'
+PRJ_API['cloudkms.googleapis.com']='Cloud Key Management Service API'
 PRJ_API['pubsub.googleapis.com']='Cloud Pub/Sub API'
 PRJ_API['file.googleapis.com']='Cloud Filestore API'
 PRJ_API['cloudresourcemanager.googleapis.com']='Cloud Resource Manager API'
@@ -360,7 +361,7 @@ check_apis() {
 	# Get all currently enabled APIs for this project
 	#
 	local enabled_apis
-	enabled_apis=$(gcloud services list)
+	enabled_apis=$(gcloud services list --project="${project}")
 
 	# Check all required APIs are present, prompt and enable for any missing
 	#
@@ -410,7 +411,67 @@ check_apis() {
 }
 
 #
+# Enable any required APIs that are missing from the project, without asking
+# - Used for --config deployments, where there is no user to ask.
+# - Enabling an API needs serviceusage.services.enable even when the API is
+#   already enabled, so only the missing ones are enabled.
+# - If the enabled APIs cannot be listed, try to enable all of them.
+#
+enable_required_apis() {
+
+	local project=$1
+
+	# Find the required APIs that are not enabled on this project
+	#
+	local enabled_apis
+	local missing_apis=()
+	local id
+	if enabled_apis=$(gcloud services list --enabled \
+		--project="${project}" --format='value(config.name)'); then
+		for id in "${!PRJ_API[@]}"; do
+			if ! echo "${enabled_apis}" | grep -qxF "${id}"; then
+				missing_apis+=("${id}")
+			fi
+		done
+	else
+		echo "Unable to list the enabled APIs on project ${project}."
+		echo "Trying to enable all required APIs."
+		missing_apis=("${!PRJ_API[@]}")
+	fi
+
+	if [[ ${#missing_apis[@]} -eq 0 ]]; then
+		echo "All required APIs are already enabled on project ${project}."
+		return 0
+	fi
+
+	echo "Enabling required APIs: ${missing_apis[*]}"
+	echo "This may take a few minutes..."
+	if ! gcloud services enable "${missing_apis[@]}" \
+		--project="${project}"; then
+		error ""
+		error "  Error: Unable to enable required APIs on project ${project}:"
+		for id in "${missing_apis[@]}"; do
+			error "           ${id}"
+		done
+		error "         A project owner, or a user with the"
+		error "         serviceusage.services.enable permission (for example"
+		error "         roles/serviceusage.serviceUsageAdmin), must enable them."
+		error ""
+		error "Exiting."
+		exit 1
+	fi
+}
+
+#
 # Create a service account with required roles to run TKFE operations
+#
+# NOTE (revisit): this service account handling, and the SA_ROLES list in
+# script/service_account.sh, are expected to be replaced once the Cluster
+# Toolkit service-account-profiles module
+# (community/modules/iam/service-account-profiles, not yet in this
+# repository) is merged. When it is, update this section so the credential
+# account and its roles come from that module's profiles, and drop the
+# hard-coded role list and the role re-application in the reuse path below.
 #
 create_service_account() {
 
@@ -454,6 +515,21 @@ create_service_account() {
 			verbose "assuming reuse of account"
 			echo ""
 			echo "    Using existing service account: ${service_account}"
+			echo ""
+			echo "    An account made by an earlier version may lack roles added since"
+			echo "    (for example cloudkms.admin, needed for customer-managed encryption keys)."
+			case $(ask "    Grant any missing required roles to it? [Y/n] ") in
+			[Nn]*)
+				echo "    Skipping. Encrypted resources will fail to deploy if a role is missing."
+				;;
+			*)
+				if ! bash "${SCRIPT_DIR}/script/service_account.sh" update \
+					"${project}" "${service_account}"; then
+					echo "Exiting."
+					exit 1
+				fi
+				;;
+			esac
 			case $(ask "    Do you want to regenerate a credential? [y/N] ") in
 			[Yy]*)
 				getcred=1
@@ -518,10 +594,16 @@ deploy() {
 		(
 			cd ${tdir}
 
+			# Exclude any locally built ghpc/gcluster binaries: tar preserves
+			# their mtime, which `make` sees as newer than the Go sources it
+			# depends on, so it skips rebuilding and the server ends up
+			# running a binary linked against the wrong glibc/architecture.
 			tar -zcf "${SCRIPT_DIR}"/tf/deployment.tar.gz \
 				--exclude=.terraform \
 				--exclude=.terraform.lock.hcl \
 				--exclude=tf \
+				--exclude=ghpc \
+				--exclude=gcluster \
 				--directory=/tmp \
 				./cluster-toolkit 2>/dev/null
 		)
@@ -958,6 +1040,7 @@ deploy_from_config() {
 	deployment_name=${yaml_array[deployment_name]}
 	project_id=${yaml_array[project_id]}
 	zone=${yaml_array[zone]}
+	region=${zone%-*}
 	subnet_name=${yaml_array[subnet_name]}
 	dns_hostname=${yaml_array[dns_hostname]}
 	ip_address=${yaml_array[ip_address]}
@@ -1008,6 +1091,10 @@ deploy_from_config() {
 	echo "    Admin username:   ${django_superuser_username}"
 	echo "    Admin email:      ${django_superuser_email}"
 	echo ""
+
+	# Enable any missing required APIs without prompting, as there is no user
+	# to ask.
+	enable_required_apis "${project_id}"
 
 	deploy
 }
