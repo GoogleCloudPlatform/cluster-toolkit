@@ -235,7 +235,7 @@ deployment_groups:
       - type: shell
         destination: gcpgceinstprov_templates_json.sh
         source: $(ghpc_stage("scripts/gcpgceinstprov_templates_json.sh"))
-        args: $(vars.symphony_install_dir) "sym-mig-c2-4,10,X86_64,4,4,32768,$(vars.zone),sym-mig-c2-4__sym-mig-c2-30,10,X86_64,30,30,122880,$(vars.zone),sym-mig-c2-30"
+        args: $(vars.symphony_install_dir) "sym-mig-c2-4,10,X86_64,4,4,16384,$(vars.zone),sym-mig-c2-4__sym-mig-c2-30,10,X86_64,30,30,122880,$(vars.zone),sym-mig-c2-30"
 
       - type: shell
         destination: sym_master.sh
