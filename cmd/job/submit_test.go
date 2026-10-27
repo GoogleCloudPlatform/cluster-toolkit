@@ -337,9 +337,11 @@ func TestSubmitCmd_PathwaysLongWorkloadName_Fails(t *testing.T) {
 
 func resetCommandFlags(cmd *cobra.Command) {
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		_ = f.Value.Set(f.DefValue)
 		f.Changed = false
 	})
 	cmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+		_ = f.Value.Set(f.DefValue)
 		f.Changed = false
 	})
 	for _, sub := range cmd.Commands() {
@@ -348,6 +350,8 @@ func resetCommandFlags(cmd *cobra.Command) {
 }
 
 func resetJobFlags() {
+	resetCommandFlags(JobCmd)
+
 	imageName = ""
 	baseImage = ""
 	buildContext = ""
@@ -404,8 +408,6 @@ func resetJobFlags() {
 	inspectWorkloadName = ""
 	inspectOutputPath = ""
 	inspectShow = false
-
-	resetCommandFlags(JobCmd)
 }
 
 func setupSubmitTestEnv(t *testing.T) {

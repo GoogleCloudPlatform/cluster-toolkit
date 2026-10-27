@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"hpc-toolkit/pkg/dependencies"
@@ -68,6 +69,10 @@ func getterClient(source string, dst string) getter.Client {
 	}
 }
 
+// gitEnvMu protects against concurrent modification of environment variables.
+var gitEnvMu sync.Mutex
+
+// gitLocalEnvVars lists repository-local Git environment variables that must not leak into child git processes.
 var gitLocalEnvVars = []string{
 	"GIT_ALTERNATE_OBJECT_DIRECTORIES",
 	"GIT_COMMON_DIR",
@@ -136,8 +141,12 @@ func (r GoGetterSourceReader) GetModule(source string, dst string) error {
 	}
 
 	if isGit {
+		gitEnvMu.Lock()
 		restoreEnv := unsetGitLocalEnvVars()
-		defer restoreEnv()
+		defer func() {
+			restoreEnv()
+			gitEnvMu.Unlock()
+		}()
 	}
 
 	tmp, err := os.MkdirTemp("", "get-module-*")
