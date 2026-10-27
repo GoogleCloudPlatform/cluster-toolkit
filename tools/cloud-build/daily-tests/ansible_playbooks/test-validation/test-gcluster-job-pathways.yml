@@ -105,6 +105,7 @@
           '--project', custom_vars.project,
           '--location', region,
           '--cluster', deployment_name,
+          '--service-account', custom_vars.k8s_service_account,
           '--image', custom_vars.workload_image,
           '--pathways-gcs-location', 'gs://' ~ custom_vars.gcs_bucket ~ '/pathways-tests-' ~ deployment_name,
           '--command', templated_command,
@@ -169,6 +170,13 @@
       | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec') | first).backoffLimit
       == 5 * (dry_run_yaml.spec.replicatedJobs
       | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec') | first).parallelism
+    # 5. Assert serviceAccountName on pathways-head and worker pod specs matches --service-account
+    - >
+      (dry_run_yaml.spec.replicatedJobs
+      | selectattr('name', 'equalto', 'pathways-head') | map(attribute='template.spec.template.spec') | first).serviceAccountName == custom_vars.k8s_service_account
+    - >
+      (dry_run_yaml.spec.replicatedJobs
+      | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec.template.spec') | first).serviceAccountName == custom_vars.k8s_service_account
     fail_msg: "Environment variables or slice restart limits failed to inject properly in dry-run output"
 
 - name: Validate MTC CSI volume injection in dry-run manifest
@@ -206,6 +214,7 @@
           '--project', custom_vars.project,
           '--location', region,
           '--cluster', deployment_name,
+          '--service-account', custom_vars.k8s_service_account,
           '--image', custom_vars.workload_image,
           '--pathways-gcs-location', 'gs://' ~ custom_vars.gcs_bucket ~ '/pathways-tests-' ~ deployment_name,
           '--command', templated_command

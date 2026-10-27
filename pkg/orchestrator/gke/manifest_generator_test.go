@@ -5618,3 +5618,283 @@ func TestGenerateManifests_RenderResolvedNamespace(t *testing.T) {
 		})
 	}
 }
+
+func assertPodHostNetworkAndSA(t *testing.T, jobName string, spec *corev1.PodSpec, wantHostNetwork bool, wantDNSPolicy corev1.DNSPolicy, wantSA string) {
+	t.Helper()
+	if spec == nil {
+		t.Fatalf("%s replicatedJob not found in manifest", jobName)
+	}
+	if spec.HostNetwork != wantHostNetwork {
+		t.Errorf("%s HostNetwork = %v, want %v", jobName, spec.HostNetwork, wantHostNetwork)
+	}
+	if spec.DNSPolicy != wantDNSPolicy {
+		t.Errorf("%s DNSPolicy = %q, want %q", jobName, spec.DNSPolicy, wantDNSPolicy)
+	}
+	if spec.ServiceAccountName != wantSA {
+		t.Errorf("%s ServiceAccountName = %q, want %q", jobName, spec.ServiceAccountName, wantSA)
+	}
+}
+
+func TestGenerateGKEManifest_ServiceAccountHostNetwork(t *testing.T) {
+	tests := []struct {
+		name               string
+		computeType        string
+		machineType        string
+		accelResponse      string
+		serviceAccountName string
+		wantHostNetwork    bool
+		wantDNSPolicy      corev1.DNSPolicy
+	}{
+		{
+			name:               "TPU without service account enables hostNetwork",
+			computeType:        "v5e-8",
+			machineType:        "ct5lp-hightpu-4t",
+			accelResponse:      `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v5-lite-podslice"}]}`,
+			serviceAccountName: "",
+			wantHostNetwork:    true,
+			wantDNSPolicy:      corev1.DNSClusterFirstWithHostNet,
+		},
+		{
+			name:               "TPU with service account disables hostNetwork for Workload Identity",
+			computeType:        "v5e-8",
+			machineType:        "ct5lp-hightpu-4t",
+			accelResponse:      `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v5-lite-podslice"}]}`,
+			serviceAccountName: "workload-identity-k8s-sa",
+			wantHostNetwork:    false,
+			wantDNSPolicy:      "",
+		},
+		{
+			name:               "GPU with service account retains hostNetwork",
+			computeType:        "nvidia-l4",
+			machineType:        "g2-standard-4",
+			accelResponse:      `{"accelerators": [{"guestAcceleratorCount": 1, "guestAcceleratorType": "nvidia-l4"}]}`,
+			serviceAccountName: "workload-identity-k8s-sa",
+			wantHostNetwork:    true,
+			wantDNSPolicy:      corev1.DNSClusterFirstWithHostNet,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupMockMachineConfig(t)
+			mockResponses := map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe " + tc.machineType + " --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: tc.accelResponse},
+				},
+			}
+			orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+			orc.projectID = "mock-project"
+			orc.clusterDesc.NodePools = []gkeJobNodePool{
+				{Config: gkeNodePoolConfig{MachineType: tc.machineType}},
+			}
+
+			manifest, err := orc.GenerateGKEManifest(ManifestOptions{
+				WorkloadName:       "test-sa-workload",
+				FullImageName:      "test-image:latest",
+				CommandToRun:       "python3 train.py",
+				ComputeType:        tc.computeType,
+				MachineType:        tc.machineType,
+				ClusterLocation:    "us-central1-a",
+				NumSlices:          1,
+				NodesPerSlice:      1,
+				ServiceAccountName: tc.serviceAccountName,
+			}, JobProfile{})
+			if err != nil {
+				t.Fatalf("GenerateGKEManifest failed: %v", err)
+			}
+
+			specs := pathwaysPodSpecs(t, manifest)
+			assertPodHostNetworkAndSA(t, "main-job", specs["main-job"], tc.wantHostNetwork, tc.wantDNSPolicy, tc.serviceAccountName)
+		})
+	}
+}
+
+func TestGeneratePathwaysManifest_HostNetworkAndCredentials(t *testing.T) {
+	tests := []struct {
+		name               string
+		headless           bool
+		deploySPS          bool
+		mtcEnabled         bool
+		serviceAccountName string
+		proxyEnv           map[string]string
+		workloadEnv        map[string]string
+		wantHostNetwork    bool
+		wantDNSPolicy      corev1.DNSPolicy
+		wantProxyCreds     []string
+		wantWorkloadCreds  []string
+	}{
+		{
+			name:            "default without service account enables hostNetwork",
+			wantHostNetwork: true,
+			wantDNSPolicy:   corev1.DNSClusterFirstWithHostNet,
+		},
+		{
+			name:               "with service account disables hostNetwork and sets insecure IFRT proxy credentials",
+			serviceAccountName: "workload-identity-k8s-sa",
+			wantProxyCreds:     []string{"true"},
+			wantWorkloadCreds:  []string{"true"},
+		},
+		{
+			name:               "with service account and MTC enabled disables hostNetwork and sets insecure IFRT proxy credentials",
+			mtcEnabled:         true,
+			serviceAccountName: "workload-identity-k8s-sa",
+			wantProxyCreds:     []string{"true"},
+			wantWorkloadCreds:  []string{"true"},
+		},
+		{
+			name:            "headless without service account enables hostNetwork",
+			headless:        true,
+			wantHostNetwork: true,
+			wantDNSPolicy:   corev1.DNSClusterFirstWithHostNet,
+		},
+		{
+			name:               "headless with service account disables hostNetwork and sets proxy insecure credentials",
+			headless:           true,
+			serviceAccountName: "workload-identity-k8s-sa",
+			wantProxyCreds:     []string{"true"},
+		},
+		{
+			name:               "headless with service account ignores workload env credential override",
+			headless:           true,
+			serviceAccountName: "workload-identity-k8s-sa",
+			workloadEnv:        map[string]string{"IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS": "false"},
+			wantProxyCreds:     []string{"true"},
+		},
+		{
+			name:               "deploySPS with service account disables hostNetwork and omits proxy and workload containers",
+			deploySPS:          true,
+			serviceAccountName: "workload-identity-k8s-sa",
+		},
+		{
+			name:               "respects explicit user credential overrides without duplicates",
+			serviceAccountName: "workload-identity-k8s-sa",
+			proxyEnv:           map[string]string{"IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS": "false"},
+			workloadEnv:        map[string]string{"IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS": "false"},
+			wantProxyCreds:     []string{"false"},
+			wantWorkloadCreds:  []string{"false"},
+		},
+		{
+			name:               "preserves conflicting explicit user credential overrides on both sides",
+			serviceAccountName: "workload-identity-k8s-sa",
+			proxyEnv:           map[string]string{"IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS": "true"},
+			workloadEnv:        map[string]string{"IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS": "false"},
+			wantProxyCreds:     []string{"true"},
+			wantWorkloadCreds:  []string{"false"},
+		},
+		{
+			name:               "propagates single-sided proxy credential override to workload",
+			serviceAccountName: "workload-identity-k8s-sa",
+			proxyEnv:           map[string]string{"IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS": "false"},
+			wantProxyCreds:     []string{"false"},
+			wantWorkloadCreds:  []string{"false"},
+		},
+		{
+			name:               "propagates single-sided workload credential override to proxy",
+			serviceAccountName: "workload-identity-k8s-sa",
+			workloadEnv:        map[string]string{"IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS": "false"},
+			wantProxyCreds:     []string{"false"},
+			wantWorkloadCreds:  []string{"false"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupMockMachineConfig(t)
+			job := orchestrator.JobDefinition{
+				WorkloadName:           "pathways-sa-test",
+				CommandToRun:           "python3 train.py",
+				NumSlices:              1,
+				ClusterLocation:        "us-central1",
+				ComputeType:            "n2-standard-2",
+				ServiceAccountName:     tc.serviceAccountName,
+				IsPathwaysJob:          true,
+				GKEMTCEnabled:          tc.mtcEnabled,
+				GKEMTCRamdiskDirectory: "/tmp/mtc",
+				Env:                    tc.workloadEnv,
+				Pathways: orchestrator.PathwaysJobDefinition{
+					Headless:         tc.headless,
+					DeploySPS:        tc.deploySPS,
+					ProxyServerImage: "proxy:latest",
+					ServerImage:      "server:latest",
+					WorkerImage:      "worker:latest",
+					GCSLocation:      "gs://my-bucket",
+					HeadNodePool:     "pathways-np",
+					ProxyEnv:         tc.proxyEnv,
+				},
+			}
+
+			mockResponses := map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+			}
+			orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+			orc.projectID = "mock-project"
+			orc.clusterZones = []string{"us-central1-a"}
+			orc.clusterDesc.NodePools = []gkeJobNodePool{
+				{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+			}
+			profile, isDyn, isStat, err := orc.resolveHardwareRequirements(&job)
+			if err != nil {
+				t.Fatalf("resolveHardwareRequirements failed: %v", err)
+			}
+
+			manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDyn, isStat)
+			if err != nil {
+				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+			}
+
+			specs := pathwaysPodSpecs(t, manifest)
+			for _, jobName := range []string{"pathways-head", "worker"} {
+				assertPodHostNetworkAndSA(t, jobName, specs[jobName], tc.wantHostNetwork, tc.wantDNSPolicy, tc.serviceAccountName)
+			}
+
+			const credEnv = "IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS"
+			head := specs["pathways-head"]
+			if tc.deploySPS {
+				if findContainer(head, "pathways-proxy") != nil || findContainer(head, "workload-container") != nil {
+					t.Fatalf("deploySPS pathways-head should not contain pathways-proxy or workload-container")
+				}
+				if got := envValues(findContainer(head, "pathways-rm"), credEnv); got != nil {
+					t.Errorf("pathways-rm %s = %v, want nil", credEnv, got)
+				}
+				return
+			}
+			if got := envValues(findContainer(head, "pathways-proxy"), credEnv); !reflect.DeepEqual(got, tc.wantProxyCreds) {
+				t.Errorf("pathways-proxy %s = %v, want %v", credEnv, got, tc.wantProxyCreds)
+			}
+			if !tc.headless {
+				if got := envValues(findContainer(head, "workload-container"), credEnv); !reflect.DeepEqual(got, tc.wantWorkloadCreds) {
+					t.Errorf("workload-container %s = %v, want %v", credEnv, got, tc.wantWorkloadCreds)
+				}
+			}
+		})
+	}
+}
+
+func TestWarnPathwaysHostNetworkManifest(t *testing.T) {
+	withJob := func(jobName string, hostNetwork bool) string {
+		hn := ""
+		if hostNetwork {
+			hn = "            hostNetwork: true\n"
+		}
+		return "apiVersion: jobset.x-k8s.io/v1alpha2\nkind: JobSet\nspec:\n  replicatedJobs:\n  - name: " + jobName + "\n    template:\n      spec:\n        template:\n          spec:\n" + hn + "            containers:\n            - name: c\n"
+	}
+	opts := ManifestOptions{ServiceAccountName: "workload-identity-k8s-sa"}
+	tests := []struct {
+		name               string
+		hostNetworkEnabled bool
+		manifest           string
+		wantWarn           bool
+	}{
+		{name: "hostNetwork disabled in manifest", manifest: withJob("pathways-head", false), wantWarn: false},
+		{name: "stale template sets hostNetwork on pathways-head", manifest: withJob("pathways-head", true), wantWarn: true},
+		{name: "stale template sets hostNetwork on worker", manifest: withJob("worker", true), wantWarn: true},
+		{name: "hostNetwork expected when no service account", hostNetworkEnabled: true, manifest: withJob("pathways-head", true), wantWarn: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := warnPathwaysHostNetworkManifest(tc.manifest, opts, tc.hostNetworkEnabled); got != tc.wantWarn {
+				t.Errorf("warnPathwaysHostNetworkManifest() = %v, want %v", got, tc.wantWarn)
+			}
+		})
+	}
+}
