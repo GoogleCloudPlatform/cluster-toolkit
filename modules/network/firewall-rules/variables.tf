@@ -15,6 +15,7 @@
 variable "subnetwork_self_link" {
   description = "The self link of the subnetwork whose global network firewall rules will be modified."
   type        = string
+  nullable    = false
 }
 
 variable "project_id" {

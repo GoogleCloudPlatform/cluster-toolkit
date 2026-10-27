@@ -15,7 +15,7 @@
  */
 
 locals {
-  use_subnetwork_data = (var.project_id == null || var.network_name == null) && var.subnetwork_self_link != null
+  use_subnetwork_data = (var.project_id == null || var.network_name == null) ? var.subnetwork_self_link != null : false
 }
 
 # the google_compute_network data source does not allow identification by
