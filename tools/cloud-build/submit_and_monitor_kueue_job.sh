@@ -124,7 +124,7 @@ while true; do
 	FAILED_ZONE=$(sed -n 's/.*resource exhausted: not enough resources available to fulfill the request in \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
 	if [ -z "$FAILED_ZONE" ]; then
 		# Only fall back to deployed zone if the logs confirm a VM/Lustre capacity or stockout error
-		if grep -q -i -E "ZONE_RESOURCE_POOL_EXHAUSTED|not enough resources available|resource exhausted|stockout" "$JOB_LOGS"; then
+		if grep -q -i -E "ZONE_RESOURCE_POOL_EXHAUSTED|does not have enough resources available|not enough resources available|resource exhausted|stockout" "$JOB_LOGS"; then
 			FAILED_ZONE=$(sed -n 's/.*Deploying in ZONE: \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
 		fi
 	fi
