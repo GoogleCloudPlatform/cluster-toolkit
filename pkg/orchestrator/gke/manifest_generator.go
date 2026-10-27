@@ -533,6 +533,7 @@ const (
 
 // GeneratePathwaysManifest generates the Kubernetes JobSet manifest for a Pathways job.
 func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) (string, error) {
+	job.IsPathwaysJob = true
 	// Set default values for Pathways-specific fields if not provided
 	if job.Pathways.ProxyServerImage == "" {
 		job.Pathways.ProxyServerImage = defaultPathwaysProxyImage
@@ -732,6 +733,9 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		})
 	}
 
+	proxyEnv, workloadEnv := resolvePathwaysEnv(opts)
+	hostNetworkEnabled := resolveHostNetwork(opts, isTPU, isGPU)
+
 	return jobSetTemplateData{
 		WorkloadName:                  opts.WorkloadName,
 		ClusterName:                   opts.ClusterName,
@@ -768,14 +772,14 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		VolumesYAML:                   opts.VolumesYAML,
 		VolumeMountsYAML:              opts.VolumeMountsYAML,
 		GCSFuseEnabled:                opts.GCSFuseEnabled,
-		HostNetworkEnabled:            isTPU || isGPU,
+		HostNetworkEnabled:            hostNetworkEnabled,
 		Pathways:                      opts.Pathways,
 		PathwaysProxyEnabled:          !opts.Pathways.DeploySPS,
 		PathwaysWorkloadEnabled:       !opts.Pathways.Headless && !opts.Pathways.DeploySPS,
 		ExclusiveTopologyAnnotation:   exclusiveTopology,
 		Verbose:                       opts.Verbose,
-		Env:                           sortedEnvVars(opts.Env),
-		PathwaysProxyEnv:              sortedEnvVars(opts.Pathways.ProxyEnv),
+		Env:                           sortedEnvVars(workloadEnv),
+		PathwaysProxyEnv:              sortedEnvVars(proxyEnv),
 		PathwaysServerEnv:             sortedEnvVars(opts.Pathways.ServerEnv),
 		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
 		IsTPU:                         isTPU,
@@ -817,6 +821,57 @@ func withSidecarNameArg(proxyArgs []string) []string {
 		}
 	}
 	return append(proxyArgs, "--sidecar_name=external")
+}
+
+func resolveHostNetwork(opts ManifestOptions, isTPU, isGPU bool) bool {
+	if opts.IsPathwaysJob {
+		return false
+	}
+	if isGPU && opts.ServiceAccountName != "" {
+		logging.Warn("--service-account %q is set on a GPU workload, which requires hostNetwork: true for GPUDirect networking. Pods with hostNetwork: true bypass GKE Workload Identity and authenticate to Google Cloud APIs as the node pool IAM service account unless GCS FUSE CSI with hostNetworkPodKSA is used.", opts.ServiceAccountName)
+	}
+	return isGPU || (isTPU && opts.ServiceAccountName == "")
+}
+
+func resolvePathwaysEnv(opts ManifestOptions) (map[string]string, map[string]string) {
+	proxyEnv := opts.Pathways.ProxyEnv
+	workloadEnv := opts.Env
+	if !opts.IsPathwaysJob || opts.Pathways.DeploySPS {
+		return proxyEnv, workloadEnv
+	}
+	// Pathways pods do not use hostNetwork so they can authenticate via GKE
+	// Workload Identity (gke-metadata-server). Because gke-metadata-server does
+	// not expose the GCE VM ALTS handshaker on port 8080, default IFRT proxy gRPC
+	// credentials to insecure unless explicitly overridden by the user. If the
+	// user sets IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS on only one side,
+	// propagate that value to the other side so client and proxy credentials
+	// remain matched.
+	const ifrtInsecureEnv = "IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS"
+	defaultVal := "true"
+	if val, ok := proxyEnv[ifrtInsecureEnv]; ok {
+		defaultVal = val
+	} else if !opts.Pathways.Headless {
+		if val, ok := workloadEnv[ifrtInsecureEnv]; ok {
+			defaultVal = val
+		}
+	}
+	proxyEnv = withDefaultEnvVar(proxyEnv, ifrtInsecureEnv, defaultVal)
+	if !opts.Pathways.Headless {
+		workloadEnv = withDefaultEnvVar(workloadEnv, ifrtInsecureEnv, defaultVal)
+	}
+	return proxyEnv, workloadEnv
+}
+
+func withDefaultEnvVar(env map[string]string, key, defaultVal string) map[string]string {
+	if _, ok := env[key]; ok {
+		return env
+	}
+	cloned := maps.Clone(env)
+	if cloned == nil {
+		cloned = make(map[string]string)
+	}
+	cloned[key] = defaultVal
+	return cloned
 }
 
 func sortedEnvVars(envMap map[string]string) []EnvVar {
