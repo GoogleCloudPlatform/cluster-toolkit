@@ -99,6 +99,9 @@ the Job reuses the example's `smoke_test.py` client. Its init container first
 waits up to 120 seconds for the synthetic Service to accept HTTP connections;
 Deployment rollout alone does not establish Service reachability. Failures print
 pod, endpoint and backend diagnostics before temporary resources are removed.
+The client retries connection failures and HTTP 502/503/504 responses for up to
+five minutes while load-balancer backend health propagates. Authentication errors
+fail immediately.
 
 ## Testing configuration updates
 
@@ -117,6 +120,27 @@ without planning the Helm ownership and Terraform state migration.
 
 ## Recorded provider validation
 
+On October 26, 2026, the full Linux `make tests` suite and the standard
+Terraform-console/Helm static checks passed. The 55 agentgateway helper tests
+provide 93% runtime-helper coverage. Live testing found and fixed a nested
+`templatefile` call rejected by Terraform and an overly short retry window during
+initial load-balancer backend propagation.
+
+The fresh deployment used administrator-provisioned identities, agentgateway
+v1.6.0, GKE `1.35.8-gke.1919000`, Gateway API v1.5.0 and Google provider 8.6.0.
+Gemini `gemini-2.5-flash` and the synthetic provider passed synchronous, streaming
+and metrics checks through the internal load balancer. A model change reran the
+gateway readiness hook. The alternate model `gemini-2.5-flash-lite` returned a
+provider 404 (unavailable or inaccessible in the test project), so request tests
+use `gemini-2.5-flash`.
+
+A missing provider Secret blocked the upgrade with a `PartiallyValid` diagnostic;
+adding a dummy Secret and retrying passed. The negative test shortened the hook
+Job's deadline after observing rejection to exercise Helm rollback. It made no
+external-provider requests. An ingress backend-policy change also reran its
+readiness hook successfully. After restoring the original configuration,
+`gcluster deploy` reported all four groups already applied.
+
 On October 20, 2026, a fresh deployment with administrator-provisioned identities
 passed using agentgateway v1.6.0, GKE `1.35.8-gke.1626001` and Gateway API v1.5.0.
 Gemini `gemini-2.5-flash` and the synthetic provider passed synchronous, streaming
@@ -124,9 +148,9 @@ and metrics checks through the internal load balancer. The synthetic test also
 verified missing and valid Secret references. Proxy logs appeared in Cloud Logging,
 and a second `gcluster deploy` reported all four groups already applied.
 
-This run included the shared firewall planning fix in
+Both October runs included the shared firewall planning fix in
 [PR #6536](https://github.com/GoogleCloudPlatform/cluster-toolkit/pull/6536).
-It did not test managed IAM provisioning or live OpenAI and Anthropic requests;
+Neither run tested managed IAM provisioning or live OpenAI and Anthropic requests;
 credentials for those providers were unavailable.
 
 The following models passed synchronous, streaming and metrics checks through

@@ -81,4 +81,4 @@ spec:
     kind: Service
     name: agentgateway-proxy
 
-${templatefile(readiness_template, {namespace = namespace, stage = "ingress", script = script})}
+${readiness_manifest}

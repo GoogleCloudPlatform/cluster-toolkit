@@ -329,12 +329,23 @@ class MockProviderTests(unittest.TestCase):
 class SmokeFailureTests(unittest.TestCase):
     def test_availability_retry_then_success(self):
         result = io.BytesIO(b"ok")
-        errors = [urllib.error.HTTPError("http://gateway", 503, "unavailable", {}, None),
-                  urllib.error.URLError("connection refused"), TimeoutError("socket timeout"), result]
+        errors = [urllib.error.HTTPError("http://gateway", 503, "unavailable", {}, None)
+                  for _ in range(7)]
+        errors += [urllib.error.URLError("connection refused"), TimeoutError("socket timeout"), result]
         with mock.patch.object(smoke.urllib.request, "urlopen", side_effect=errors) as request, \
                 mock.patch.object(smoke.time, "sleep"):
             self.assertIs(smoke.open_response("http://gateway"), result)
-        self.assertEqual(request.call_count, 4)
+        self.assertEqual(request.call_count, 10)
+
+    def test_availability_retry_stops_at_deadline(self):
+        body = io.BytesIO(b"unavailable")
+        error = urllib.error.HTTPError("http://gateway", 503, "unavailable", {}, body)
+        with mock.patch.object(smoke.urllib.request, "urlopen", side_effect=error) as request, \
+                mock.patch.object(smoke.time, "monotonic", side_effect=[0, 0, 301]):
+            with self.assertRaises(urllib.error.HTTPError):
+                smoke.open_response("http://gateway")
+        self.assertEqual(request.call_count, 1)
+        self.assertTrue(body.closed)
 
     def test_auth_failure_is_not_retried_or_logged(self):
         error = urllib.error.HTTPError("http://gateway", 403, "forbidden", {}, io.BytesIO(b"sensitive"))
@@ -619,8 +630,8 @@ class StaticValidationTests(unittest.TestCase):
 
     def test_ingress_requires_resources_and_correct_wiring(self):
         # Only scalar namespace interpolation is needed to inspect the ingress resources;
-        # the nested readiness template is validated separately by the chart check.
-        text = (ROOT / "files/ingress.yaml.tftpl").read_text().split("${templatefile")[0]
+        # the readiness manifest is validated separately by the chart check.
+        text = (ROOT / "files/ingress.yaml.tftpl").read_text().split("${readiness_manifest}")[0]
         import yaml
         resources = [r for r in yaml.safe_load_all(text.replace('${jsonencode(namespace)}', 'test')) if r]
         static.validate_ingress(resources)

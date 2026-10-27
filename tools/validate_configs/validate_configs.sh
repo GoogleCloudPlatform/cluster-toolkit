@@ -171,6 +171,6 @@ done
 
 run_test "examples/science/af3-slurm/af3-slurm.yaml" "examples/science/af3-slurm/af3-slurm-deployment.yaml"
 
-echo "All configs have been validated successfully (passed)."
-
 run_test "community/examples/agentgateway-gke/agentgateway-gke.yaml" "community/examples/agentgateway-gke/agentgateway-gke-deployment.yaml"
+
+echo "All configs have been validated successfully (passed)."

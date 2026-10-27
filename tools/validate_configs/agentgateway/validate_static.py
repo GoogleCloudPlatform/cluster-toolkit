@@ -28,10 +28,14 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3] / "community/examples/agentgateway-gke"
 
 
-def render(name, variables, cwd):
+def render_text(name, variables, cwd):
     expression = f'templatefile({json.dumps(str(ROOT / "files" / name))}, jsondecode({json.dumps(json.dumps(variables))}))'
     output = subprocess.check_output(["terraform", "console"], input=("jsonencode(" + expression + ")\n").encode(), cwd=cwd)
-    return [resource for resource in yaml.safe_load_all(json.loads(json.loads(output))) if resource]
+    return json.loads(json.loads(output))
+
+
+def render(name, variables, cwd):
+    return [resource for resource in yaml.safe_load_all(render_text(name, variables, cwd)) if resource]
 
 
 def strict(schema):
@@ -107,10 +111,10 @@ def main():
         import jsonschema
 
         common = {"namespace": "agentgateway-system",
-                  "readiness_template": str(ROOT / "files/readiness.yaml.tftpl"),
                   "script": (ROOT / "files/readiness.py").read_text()}
+        gateway_hook = render_text("readiness.yaml.tftpl", dict(common, stage="gateway"), directory)
         for optional in (False, True):
-            resources = render("gateway.yaml.tftpl", dict(common,
+            resources = render("gateway.yaml.tftpl", dict(common, readiness_manifest=gateway_hook,
                 service_account="proxy@test-project.iam.gserviceaccount.com",
                 project_id="test-project", vertex_location="global", vertex_model="gemini-2.5-flash",
                 openai_secret_name="existing-openai" if optional else "",
@@ -138,7 +142,8 @@ def main():
                     require(schema is not None, f"Missing schema for {resource['kind']}")
                 if schema is not None:
                     jsonschema.validate(resource, schema)
-        ingress = render("ingress.yaml.tftpl", common, directory)
+        ingress_hook = render_text("readiness.yaml.tftpl", dict(common, stage="ingress"), directory)
+        ingress = render("ingress.yaml.tftpl", dict(common, readiness_manifest=ingress_hook), directory)
         validate_ingress(ingress)
         validate_hook(ingress)
         for stage in ("gateway-api", "gateway", "ingress"):
