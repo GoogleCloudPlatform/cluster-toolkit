@@ -2243,7 +2243,7 @@ func TestGeneratePathwaysManifest_Headless(t *testing.T) {
 	}
 
 	// In headless mode, the command template block must NOT be present.
-	if strings.Contains(manifest, "JAX_PLATFORMS") || strings.Contains(manifest, "kill -SIGTERM") {
+	if strings.Contains(manifest, "JAX_PLATFORMS") || strings.Contains(manifest, "kill -TERM") {
 		t.Errorf("manifest contains workload command envs/traps, which is unexpected in headless mode")
 	}
 }

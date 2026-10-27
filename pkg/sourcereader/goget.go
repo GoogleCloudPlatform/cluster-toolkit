@@ -68,6 +68,40 @@ func getterClient(source string, dst string) getter.Client {
 	}
 }
 
+var gitLocalEnvVars = []string{
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES",
+	"GIT_COMMON_DIR",
+	"GIT_DIR",
+	"GIT_GRAFT_FILE",
+	"GIT_IMPLICIT_WORK_TREE",
+	"GIT_INDEX_FILE",
+	"GIT_NO_REPLACE_OBJECTS",
+	"GIT_OBJECT_DIRECTORY",
+	"GIT_PREFIX",
+	"GIT_REPLACE_REF_BASE",
+	"GIT_SHALLOW_FILE",
+	"GIT_WORK_TREE",
+}
+
+func unsetGitLocalEnvVars() func() {
+	type envState struct {
+		key string
+		val string
+	}
+	var saved []envState
+	for _, key := range gitLocalEnvVars {
+		if val, ok := os.LookupEnv(key); ok {
+			saved = append(saved, envState{key: key, val: val})
+			_ = os.Unsetenv(key)
+		}
+	}
+	return func() {
+		for _, s := range saved {
+			_ = os.Setenv(s.key, s.val)
+		}
+	}
+}
+
 // GetModule copies the git source to a provided destination (the deployment directory)
 func (r GoGetterSourceReader) GetModule(source string, dst string) error {
 	pwd, err := os.Getwd()
@@ -99,6 +133,11 @@ func (r GoGetterSourceReader) GetModule(source string, dst string) error {
 
 	if isGit && !dependencies.HasBinary("git") {
 		return GitMissingError{Source: source}
+	}
+
+	if isGit {
+		restoreEnv := unsetGitLocalEnvVars()
+		defer restoreEnv()
 	}
 
 	tmp, err := os.MkdirTemp("", "get-module-*")
