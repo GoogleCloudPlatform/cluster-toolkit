@@ -207,8 +207,10 @@ deployment_groups:
           vertex_model: $(vars.vertex_model)
           openai_secret_name: $(vars.openai_secret_name)
           anthropic_secret_name: $(vars.anthropic_secret_name)
-          readiness_template: $(ghpc_stage("./files/readiness.yaml.tftpl"))
-          script: $(file(ghpc_stage("./files/readiness.py")))
+          readiness_manifest: >-
+            $(templatefile(ghpc_stage("./files/readiness.yaml.tftpl"),
+            {namespace = vars.namespace, stage = "gateway",
+            script = file(ghpc_stage("./files/readiness.py"))}))
 
 - group: ingress
   modules:
@@ -222,5 +224,7 @@ deployment_groups:
         namespace: $(vars.namespace)
         template_vars:
           namespace: $(vars.namespace)
-          readiness_template: $(ghpc_stage("./files/readiness.yaml.tftpl"))
-          script: $(file(ghpc_stage("./files/readiness.py")))
+          readiness_manifest: >-
+            $(templatefile(ghpc_stage("./files/readiness.yaml.tftpl"),
+            {namespace = vars.namespace, stage = "ingress",
+            script = file(ghpc_stage("./files/readiness.py"))}))

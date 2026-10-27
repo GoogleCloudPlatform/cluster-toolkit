@@ -146,4 +146,4 @@ spec:
     path: /metrics
     interval: 30s
 
-${templatefile(readiness_template, {namespace = namespace, stage = "gateway", script = script})}
+${readiness_manifest}

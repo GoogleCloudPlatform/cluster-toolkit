@@ -278,6 +278,7 @@ validate-docs:
 
 .PHONY: test-agentgateway agentgateway-static
 test-agentgateway:
+	go test ./tests
 	python3 -m unittest tests.test_agentgateway
 
 # Requires Helm >= 3.12 and Python packages PyYAML and jsonschema.

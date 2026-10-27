@@ -64,18 +64,20 @@ def check_stream(response, api_format="openai"):
 def open_response(request):
     # A programmed load balancer can still be propagating backend health.
     # Retry only availability errors before receiving a successful response.
-    for attempt in range(6):
+    deadline = time.monotonic() + 300
+    while True:
         try:
-            return urllib.request.urlopen(request, timeout=60)
+            return urllib.request.urlopen(request, timeout=min(60, max(0.001, deadline - time.monotonic())))
         except urllib.error.HTTPError as error:
-            if error.code not in (502, 503, 504) or attempt == 5:
-                raise
-            error.close()
+            try:
+                if error.code not in (502, 503, 504) or time.monotonic() >= deadline:
+                    raise
+            finally:
+                error.close()
         except (urllib.error.URLError, TimeoutError):
-            if attempt == 5:
+            if time.monotonic() >= deadline:
                 raise
-        time.sleep(5)
-    raise AssertionError("unreachable")
+        time.sleep(min(5, max(0, deadline - time.monotonic())))
 
 
 def smoke(endpoint, model, token_parameter="max_tokens", max_output_tokens=128, api_format="openai"):
