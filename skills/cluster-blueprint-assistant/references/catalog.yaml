@@ -3321,6 +3321,174 @@ blueprints:
     source: modules/compute/gke-job-template
     use: [h4d-cluster, h4d-pool, shared-filestore-pv]
     settings: [command, image, node_count]
+- path: examples/gke-large-scale/gke-scale-5k-autoscaled.yaml
+  blueprint_name: gke-scale-5k-autoscaled
+  scheduler: gke
+  description: "Provides blueprints for deploying large-scale GKE Standard clusters (1,000–5,000 nodes) with Kueue, JobSet, Cloud Storage FUSE, Multi-NIC multivpc, and Google Cloud Managed Service for Lustre."
+  machine_types: [e2-standard-2]
+  vars:
+    authorized_cidr: null
+    autoscaling_total_max_nodes: 100
+    autoscaling_total_min_nodes: 0
+    deployment_name: gke-scale-5k
+    initial_node_count: 0
+    jobset_controller_cpu: "4"
+    jobset_controller_memory: 8Gi
+    kueue_controller_cpu: "4"
+    kueue_controller_memory: 8Gi
+    machine_type: e2-standard-2
+    max_pods_per_node: 32
+    node_disk_size_gb: 100
+    node_disk_type: pd-balanced
+    num_node_pools: 49
+    project_id: null
+    region: us-central1
+    system_node_pool_machine_type: e2-standard-16
+    version_prefix: "1.36."
+    zone: us-central1-a
+  modules:
+  - id: network1
+    source: modules/network/vpc
+    settings: [default_primary_subnetwork_size, ips_per_nat, network_address_range, network_name, secondary_ranges_list, subnetwork_name]
+  - id: node_pool_service_account
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: workload_service_account
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: scale_gcs_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings: [force_destroy, name_prefix, object_users, random_suffix, storage_class, use_deployment_name_in_bucket_name]
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network1, workload_service_account]
+    settings: [configure_workload_identity_sa, default_max_pods_per_node, deletion_protection, enable_dataplane_v2, enable_dcgm_monitoring, enable_gcfs, enable_gcsfuse_csi, enable_node_local_dns_cache, enable_private_endpoint, gcp_public_cidrs_access_enabled, master_authorized_networks, system_node_pool_disk_size_gb, system_node_pool_disk_type, system_node_pool_machine_type, system_node_pool_node_count, system_node_pool_zones, timeout_create, timeout_delete, timeout_update, version_prefix]
+  - id: compute_pools
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, node_pool_service_account]
+    settings: [auto_repair, auto_upgrade, autoscaling_total_max_nodes, autoscaling_total_min_nodes, disk_size_gb, disk_type, enable_gcfs, enable_private_nodes, initial_node_count, machine_type, max_pods_per_node, num_node_pools, static_node_count, taints, threads_per_core, timeout_create, timeout_delete, timeout_update, zones]
+  - id: workload_manager_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings: [jobset, kueue]
+- path: examples/gke-large-scale/gke-scale-5k-static.yaml
+  blueprint_name: gke-scale-5k-static
+  scheduler: gke
+  description: "Provides blueprints for deploying large-scale GKE Standard clusters (1,000–5,000 nodes) with Kueue, JobSet, Cloud Storage FUSE, Multi-NIC multivpc, and Google Cloud Managed Service for Lustre."
+  machine_types: [e2-standard-2]
+  vars:
+    authorized_cidr: null
+    deployment_name: gke-scale-5k
+    jobset_controller_cpu: "4"
+    jobset_controller_memory: 8Gi
+    kueue_controller_cpu: "4"
+    kueue_controller_memory: 8Gi
+    machine_type: e2-standard-2
+    max_pods_per_node: 32
+    node_disk_size_gb: 100
+    node_disk_type: pd-balanced
+    num_node_pools: 49
+    project_id: null
+    region: us-central1
+    static_node_count: 2
+    system_node_pool_machine_type: e2-standard-16
+    version_prefix: "1.36."
+    zone: us-central1-a
+  modules:
+  - id: network1
+    source: modules/network/vpc
+    settings: [default_primary_subnetwork_size, ips_per_nat, network_address_range, network_name, secondary_ranges_list, subnetwork_name]
+  - id: node_pool_service_account
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: workload_service_account
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: scale_gcs_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings: [force_destroy, name_prefix, object_users, random_suffix, storage_class, use_deployment_name_in_bucket_name]
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network1, workload_service_account]
+    settings: [configure_workload_identity_sa, default_max_pods_per_node, deletion_protection, enable_dataplane_v2, enable_dcgm_monitoring, enable_gcfs, enable_gcsfuse_csi, enable_node_local_dns_cache, enable_private_endpoint, gcp_public_cidrs_access_enabled, master_authorized_networks, system_node_pool_disk_size_gb, system_node_pool_disk_type, system_node_pool_machine_type, system_node_pool_node_count, system_node_pool_zones, timeout_create, timeout_delete, timeout_update, version_prefix]
+  - id: compute_pools
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, node_pool_service_account]
+    settings: [auto_repair, auto_upgrade, disk_size_gb, disk_type, enable_gcfs, enable_private_nodes, machine_type, max_pods_per_node, num_node_pools, static_node_count, taints, threads_per_core, timeout_create, timeout_delete, timeout_update, zones]
+  - id: workload_manager_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings: [jobset, kueue]
+- path: examples/gke-large-scale/gke-scale-multinic-lustre.yaml
+  blueprint_name: gke-scale-multinic-lustre
+  scheduler: gke
+  description: "Provides blueprints for deploying large-scale GKE Standard clusters (1,000–5,000 nodes) with Kueue, JobSet, Cloud Storage FUSE, Multi-NIC multivpc, and Google Cloud Managed Service for Lustre."
+  machine_types: [c3-standard-8]
+  vars:
+    authorized_cidr: null
+    deployment_name: scale-mnic-250
+    jobset_controller_cpu: "4"
+    jobset_controller_memory: 8Gi
+    kueue_controller_cpu: "4"
+    kueue_controller_memory: 8Gi
+    lustre_pvc_name: lustre-scale-pvc
+    lustre_size_gib: 18000
+    lustre_throughput: 1000
+    lustre_zone: us-central1-a
+    machine_type: c3-standard-8
+    max_pods_per_node: 32
+    node_disk_size_gb: 100
+    node_disk_type: pd-balanced
+    num_node_pools: 25
+    project_id: null
+    region: us-central1
+    secondary_network_count: 7
+    secondary_subnet_cidr_suffix: 20
+    static_node_count: 2
+    system_node_pool_machine_type: e2-standard-16
+    version_prefix: "1.36."
+    zone: us-central1-a
+  modules:
+  - id: network1
+    source: modules/network/vpc
+    settings: [default_primary_subnetwork_size, ips_per_nat, network_address_range, network_name, secondary_ranges_list, subnetwork_name]
+  - id: secondary_vpcs
+    source: modules/network/multivpc
+    settings: [enable_cloud_nat, enable_cloud_router, enable_iap_ssh_ingress, global_ip_address_range, ips_per_nat, mtu, network_count, network_name_prefix, subnetwork_cidr_suffix]
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [network1]
+    settings: [address, prefix_length]
+  - id: lustre_firewall_rule
+    source: modules/network/firewall-rules
+    use: [network1]
+    settings: [ingress_rules]
+  - id: managed_lustre
+    source: modules/file-system/managed-lustre
+    use: [network1, private_service_access]
+    settings: [local_mount, name, per_unit_storage_throughput, remote_mount, size_gib, zone]
+  - id: node_pool_service_account
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: workload_service_account
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network1, secondary_vpcs, workload_service_account]
+    settings: [configure_workload_identity_sa, default_max_pods_per_node, deletion_protection, enable_dataplane_v2, enable_dcgm_monitoring, enable_gcfs, enable_gcsfuse_csi, enable_managed_lustre_csi, enable_node_local_dns_cache, enable_private_endpoint, gcp_public_cidrs_access_enabled, master_authorized_networks, system_node_pool_disk_size_gb, system_node_pool_disk_type, system_node_pool_machine_type, system_node_pool_node_count, system_node_pool_zones, timeout_create, timeout_delete, timeout_update, version_prefix]
+  - id: lustre_pvc
+    source: modules/file-system/gke-persistent-volume
+    use: [managed_lustre, gke_cluster]
+    settings: [capacity_gib, pvc_name]
+  - id: compute_pools
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, node_pool_service_account, secondary_vpcs]
+    settings: [auto_repair, auto_upgrade, disk_size_gb, disk_type, enable_gcfs, enable_private_nodes, machine_type, max_pods_per_node, num_node_pools, static_node_count, taints, threads_per_core, timeout_create, timeout_delete, timeout_update, zones]
+  - id: workload_manager_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings: [jobset, kueue]
 - path: examples/gke-managed-hyperdisk.yaml
   blueprint_name: gke-managed-hyperdisk
   scheduler: gke

@@ -96,6 +96,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [slurm-gke.yaml](#slurm-gkeyaml--) ![community-badge] ![experimental-badge]
   * [sycomp](#sycomp--) ![community-badge] ![experimental-badge]
   * [alphaevolve](#alphaevolve-) ![community-badge]
+  * [gke-large-scale](#gke-large-scale-) ![core-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -262,6 +263,9 @@ the experimental badge (![experimental-badge]).
 | [examples/gke-g4-confidential/gke-g4-confidential.yaml](./gke-g4-confidential/gke-g4-confidential.yaml) | gke | g4-standard-48 | This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV-SNP) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure... |
 | [examples/gke-g4/gke-g4.yaml](./gke-g4/gke-g4.yaml) | gke | g4-standard-48 | This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found here. The deployment instructions can be found in the README. |
 | [examples/gke-h4d/gke-h4d.yaml](./gke-h4d/gke-h4d.yaml) | gke | h4d-highmem-192-lssd | This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found here. The deployment instructions can be found in the README. |
+| [examples/gke-large-scale/gke-scale-5k-autoscaled.yaml](./gke-large-scale/gke-scale-5k-autoscaled.yaml) | gke | e2-standard-2 | Provides blueprints for deploying large-scale GKE Standard clusters (1,000–5,000 nodes) with Kueue, JobSet, Cloud Storage FUSE, Multi-NIC multivpc, and Google Cloud Managed Service for Lustre. |
+| [examples/gke-large-scale/gke-scale-5k-static.yaml](./gke-large-scale/gke-scale-5k-static.yaml) | gke | e2-standard-2 | Provides blueprints for deploying large-scale GKE Standard clusters (1,000–5,000 nodes) with Kueue, JobSet, Cloud Storage FUSE, Multi-NIC multivpc, and Google Cloud Managed Service for Lustre. |
+| [examples/gke-large-scale/gke-scale-multinic-lustre.yaml](./gke-large-scale/gke-scale-multinic-lustre.yaml) | gke | c3-standard-8 | Provides blueprints for deploying large-scale GKE Standard clusters (1,000–5,000 nodes) with Kueue, JobSet, Cloud Storage FUSE, Multi-NIC multivpc, and Google Cloud Managed Service for Lustre. |
 | [examples/gke-managed-hyperdisk.yaml](./gke-managed-hyperdisk.yaml) | gke | c3-standard-88 | This blueprint shows how to use managed hyperdisk storage options with GKE in the toolkit. |
 | [examples/gke-managed-lustre.yaml](./gke-managed-lustre.yaml) | gke | n2d-standard-4 | This Cluster Toolkit blueprint deploys a Google Kubernetes Engine (GKE) cluster integrated with Google Cloud Managed Lustre, providing a high-performance file system for demanding workloads. |
 | [examples/gke-tpu-7x/gke-tpu-7x-advanced.yaml](./gke-tpu-7x/gke-tpu-7x-advanced.yaml) | gke | tpu7x-standard-4t | This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this README. |
@@ -2153,6 +2157,19 @@ This directory includes the following blueprints and configuration files:
 The deployment instructions can be found in the [README](../community/examples/alphaevolve/README.md).
 
 [alphaevolve]: ../community/examples/alphaevolve
+
+### [gke-large-scale] ![core-badge]
+
+Provides blueprints for deploying large-scale GKE Standard clusters (1,000–5,000 nodes) with Kueue, JobSet, Cloud Storage FUSE, Multi-NIC `multivpc`, and Google Cloud Managed Service for Lustre.
+
+This directory includes the following blueprints:
+* [`gke-scale-5k-autoscaled.yaml`](./gke-large-scale/gke-scale-5k-autoscaled.yaml): Deploys up to 4,900 worker nodes across 49 autoscaled node pools (`initial_node_count: 0`) with Cloud Storage FUSE, Kueue, and JobSet.
+* [`gke-scale-5k-static.yaml`](./gke-large-scale/gke-scale-5k-static.yaml): Deploys up to 4,900 worker nodes across 49 fixed-size node pools (`static_node_count`) using a two-step bootstrap workflow with Cloud Storage FUSE, Kueue, and JobSet.
+* [`gke-scale-multinic-lustre.yaml`](./gke-large-scale/gke-scale-multinic-lustre.yaml): Deploys up to 250 Multi-NIC nodes across 8 NICs (`1` primary VPC + `7` secondary `multivpc` networks at MTU `8896`) with an 18 TiB Managed Lustre filesystem, Kueue, and JobSet.
+
+The deployment, scaling, and teardown instructions can be found in the [README](./gke-large-scale/README.md).
+
+[gke-large-scale]: ./gke-large-scale
 
 ## Blueprint Schema
 
