@@ -426,12 +426,17 @@ variable "reservation_affinity" {
   It is assumed that the specified reservation exists and has available capacity.
   For a shared reservation, specify the project_id as well in which it was created.
   To create a reservation refer to https://cloud.google.com/compute/docs/instances/reservations-single-project and https://cloud.google.com/compute/docs/instances/reservations-shared
+  To pin each of the num_node_pools node pools to its own reservation sub-block, set reservation_subblocks (map of key,
+  e.g. "02-0001", to RESERVATION/reservationBlocks/BLOCK/reservationSubBlocks/SUBBLOCK). With pin_to_subblocks = true,
+  gcluster create/deploy proposes free sub-blocks and saves the map to the deployment file; see README.
   EOT
   type = object({
     consume_reservation_type = string
     specific_reservations = optional(list(object({
-      name    = string
-      project = optional(string)
+      name                  = string
+      project               = optional(string)
+      reservation_subblocks = optional(map(string))
+      pin_to_subblocks      = optional(bool)
     })))
   })
   default = {
@@ -441,6 +446,46 @@ variable "reservation_affinity" {
   validation {
     condition     = contains(["NO_RESERVATION", "ANY_RESERVATION", "SPECIFIC_RESERVATION"], var.reservation_affinity.consume_reservation_type)
     error_message = "Accepted values are: {NO_RESERVATION, ANY_RESERVATION, SPECIFIC_RESERVATION}"
+  }
+  validation {
+    condition = alltrue([
+      for k in keys(coalesce(try(var.reservation_affinity.specific_reservations[0].reservation_subblocks, null), {})) :
+      can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", k))
+    ])
+    error_message = "reservation_subblocks keys must contain only lowercase letters, digits and hyphens, and must start and end with a letter or digit."
+  }
+  validation {
+    condition = alltrue([
+      for p in values(coalesce(try(var.reservation_affinity.specific_reservations[0].reservation_subblocks, null), {})) :
+      can(regex("^[a-z0-9-]+/reservationBlocks/[a-z0-9-]+/reservationSubBlocks/[a-z0-9-]+$", p))
+    ])
+    error_message = "Each reservation_subblocks value must have the format RESERVATION/reservationBlocks/BLOCK/reservationSubBlocks/SUBBLOCK."
+  }
+  validation {
+    condition = (
+      length(distinct(values(coalesce(try(var.reservation_affinity.specific_reservations[0].reservation_subblocks, null), {})))) ==
+      length(coalesce(try(var.reservation_affinity.specific_reservations[0].reservation_subblocks, null), {}))
+    )
+    error_message = "reservation_subblocks must not map two keys to the same sub-block."
+  }
+  validation {
+    condition = alltrue([
+      for r in coalesce(var.reservation_affinity.specific_reservations, []) :
+      (length(coalesce(r.reservation_subblocks, {})) == 0 && !coalesce(r.pin_to_subblocks, false)) || (
+        var.reservation_affinity.consume_reservation_type == "SPECIFIC_RESERVATION" &&
+        length(var.reservation_affinity.specific_reservations) == 1 &&
+        !strcontains(r.name, "/") &&
+        alltrue([for p in values(coalesce(r.reservation_subblocks, {})) : startswith(p, "${r.name}/reservationBlocks/")])
+      )
+    ])
+    error_message = "reservation_subblocks and pin_to_subblocks require consume_reservation_type = SPECIFIC_RESERVATION, exactly one specific reservation whose name is the bare reservation name (no '/'), and every reservation_subblocks value must start with '<that name>/reservationBlocks/'."
+  }
+  validation {
+    condition = alltrue([
+      for r in coalesce(var.reservation_affinity.specific_reservations, []) :
+      !coalesce(r.pin_to_subblocks, false) || length(coalesce(r.reservation_subblocks, {})) > 0
+    ])
+    error_message = "pin_to_subblocks requires a non-empty reservation_subblocks. gcluster create/deploy proposes and saves it; when using Terraform without gcluster, set reservation_subblocks yourself."
   }
 }
 
