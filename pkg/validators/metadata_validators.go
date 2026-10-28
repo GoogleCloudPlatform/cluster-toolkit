@@ -557,7 +557,11 @@ func (e *ExclusiveValidator) Validate(
 		return err
 	}
 	if len(setVarNames) > 1 {
-		return config.BpError{Err: fmt.Errorf("%s: the following are set: %s", rule.ErrorMessage, strings.Join(setVarNames, ", ")), Path: modPath}
+		msg := rule.ErrorMessage
+		if msg == "" {
+			msg = "exclusive fields conflict"
+		}
+		return config.BpError{Err: fmt.Errorf("%s: the following are set: %s", msg, strings.Join(setVarNames, ", ")), Path: modPath}
 	}
 	if minSet != nil && len(setVarNames) < *minSet {
 		msg := rule.ErrorMessage
