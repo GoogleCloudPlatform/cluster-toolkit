@@ -352,7 +352,27 @@ resource "google_container_node_pool" "node_pool" {
 
   lifecycle {
     ignore_changes = [
-      node_config[0].labels,
+      # NOTE on node_config[0].labels:
+      # Kubernetes node labels are intentionally NOT ignored so that declarative
+      # updates to var.kubernetes_labels apply in-place without node recreation.
+      # UPGRADE CAUTION: Removing labels from ignore_changes means the first apply
+      # on existing pools will reset the label map to the blueprint's kubernetes_labels.
+      # Anyone who worked around the old behaviour with `gcloud container node-pools update --node-labels`
+      # and didn't mirror it in the blueprint will have those labels removed (in place,
+      # but nodeSelectors will break). Users must audit live labels and move out-of-band
+      # labels into kubernetes_labels before applying.
+
+      # NOTE on version:
+      # Node pool GKE version is ignored in Terraform to prevent unintended rolling
+      # restarts of compute nodes during Day-2 blueprint updates. In tightly-coupled
+      # AI/HPC distributed training workloads (e.g. JobSet, NCCL/RoCE), rolling a
+      # single node abruptly crashes the entire distributed job.
+      # UPGRADE CAUTION: Changing `var.gke_version` in a blueprint will NO LONGER
+      # upgrade existing node pools. Operators must execute node upgrades intentionally
+      # via Blue-Green node pool rotation (recommended for zero workload disruption)
+      # or via `gcloud container node-pools upgrade` during a scheduled maintenance window.
+      version,
+
       # Ignore resource_labels to prevent node pool replacement on blueprint/metadata renames
       node_config[0].resource_labels,
       initial_node_count,
