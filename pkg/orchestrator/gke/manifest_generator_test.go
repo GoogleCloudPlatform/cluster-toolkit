@@ -2388,6 +2388,25 @@ spec:
 `,
 			wantErr: `invalid Job manifest: container "workload-container" mounts undefined volume "missing" at "/data"`,
 		},
+		{
+			name: "JobSet initContainer mounts undefined volume",
+			manifest: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+spec:
+  replicatedJobs:
+  - name: slice-job
+    template:
+      spec:
+        template:
+          spec:
+            initContainers:
+            - name: init-setup
+              volumeMounts:
+              - name: missing-init-vol
+                mountPath: /init
+`,
+			wantErr: `replicatedJob "slice-job" container "init-setup" mounts undefined volume "missing-init-vol" at "/init"`,
+		},
 	}
 
 	for _, tc := range tests {

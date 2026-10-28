@@ -453,10 +453,7 @@ func validatePodSpecVolumes(contextPrefix string, podSpec *corev1.PodSpec) error
 		definedVolumes[v.Name] = true
 	}
 
-	containers := make([]corev1.Container, 0, len(podSpec.InitContainers)+len(podSpec.Containers))
-	containers = append(containers, podSpec.InitContainers...)
-	containers = append(containers, podSpec.Containers...)
-	for _, c := range containers {
+	for _, c := range slices.Concat(podSpec.InitContainers, podSpec.Containers) {
 		seenMountPaths := make(map[string]bool, len(c.VolumeMounts))
 		for _, m := range c.VolumeMounts {
 			if !definedVolumes[m.Name] {
@@ -593,10 +590,7 @@ func findCSIVolumeName(podSpec *corev1.PodSpec, driver string) string {
 }
 
 func containerMountsVolumeAt(podSpec *corev1.PodSpec, containerName, volumeName, mountPath string) bool {
-	containers := make([]corev1.Container, 0, len(podSpec.InitContainers)+len(podSpec.Containers))
-	containers = append(containers, podSpec.InitContainers...)
-	containers = append(containers, podSpec.Containers...)
-	for _, c := range containers {
+	for _, c := range slices.Concat(podSpec.InitContainers, podSpec.Containers) {
 		if c.Name != containerName {
 			continue
 		}
