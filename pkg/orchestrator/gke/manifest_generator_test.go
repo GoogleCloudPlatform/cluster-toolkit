@@ -2878,6 +2878,35 @@ func assertContainerEnvMap(t *testing.T, c corev1.Container, want map[string]str
 	}
 }
 
+func assertJobSetDNSAndIndexed(t *testing.T, manifest string) {
+	t.Helper()
+	var js struct {
+		Spec struct {
+			Network struct {
+				EnableDNSHostnames       bool `json:"enableDNSHostnames"`
+				PublishNotReadyAddresses bool `json:"publishNotReadyAddresses"`
+			} `json:"network"`
+			ReplicatedJobs []struct {
+				Name     string `json:"name"`
+				Template struct {
+					Spec struct {
+						CompletionMode string `json:"completionMode"`
+					} `json:"spec"`
+				} `json:"template"`
+			} `json:"replicatedJobs"`
+		} `json:"spec"`
+	}
+	if err := k8syaml.Unmarshal([]byte(manifest), &js); err != nil {
+		t.Fatalf("failed to unmarshal JobSet manifest: %v\n%s", err, manifest)
+	}
+	if !js.Spec.Network.EnableDNSHostnames || !js.Spec.Network.PublishNotReadyAddresses {
+		t.Errorf("JobSet spec.network = %+v, want enableDNSHostnames=true and publishNotReadyAddresses=true", js.Spec.Network)
+	}
+	if len(js.Spec.ReplicatedJobs) != 1 || js.Spec.ReplicatedJobs[0].Template.Spec.CompletionMode != "Indexed" {
+		t.Errorf("main-job completionMode = %+v, want Indexed", js.Spec.ReplicatedJobs)
+	}
+}
+
 func TestGenerateGKEManifest_CoordinatorEnv(t *testing.T) {
 	setupMockMachineConfig(t)
 	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
@@ -2962,6 +2991,7 @@ func TestGenerateGKEManifest_CoordinatorEnv(t *testing.T) {
 			if len(tc.userEnv) != origLen {
 				t.Errorf("caller Env map was mutated: got len %d, want %d", len(tc.userEnv), origLen)
 			}
+			assertJobSetDNSAndIndexed(t, manifest)
 			podSpec := pathwaysPodSpecs(t, manifest)["main-job"]
 			if podSpec == nil || len(podSpec.Containers) != 1 {
 				t.Fatalf("expected 1 container in main-job podSpec, got %+v", podSpec)
