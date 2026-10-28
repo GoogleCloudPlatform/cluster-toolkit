@@ -642,11 +642,18 @@ type jobSetTemplateData struct {
 	PathwaysProxyEnv              []EnvVar
 	PathwaysServerEnv             []EnvVar
 	PathwaysWorkerEnv             []EnvVar
-	IsTPU                         bool
-	IsGPU                         bool
-	GKEMTCEnabled                 bool
-	GKEMTCRamdiskDirectory        string
-	MLDiagnosticsEnabled          bool
+	// The *EnvNames sets hold the user-provided env var names for each
+	// container, so templates can skip a built-in default that the user
+	// overrides instead of emitting the same name twice.
+	EnvNames               map[string]bool
+	PathwaysProxyEnvNames  map[string]bool
+	PathwaysServerEnvNames map[string]bool
+	PathwaysWorkerEnvNames map[string]bool
+	IsTPU                  bool
+	IsGPU                  bool
+	GKEMTCEnabled          bool
+	GKEMTCRamdiskDirectory string
+	MLDiagnosticsEnabled   bool
 }
 
 // Types for parsing kubectl get nodes -o json

@@ -743,6 +743,10 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		PathwaysProxyEnv:              sortedEnvVars(opts.Pathways.ProxyEnv),
 		PathwaysServerEnv:             sortedEnvVars(opts.Pathways.ServerEnv),
 		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
+		EnvNames:                      envNames(opts.Env),
+		PathwaysProxyEnvNames:         envNames(opts.Pathways.ProxyEnv),
+		PathwaysServerEnvNames:        envNames(opts.Pathways.ServerEnv),
+		PathwaysWorkerEnvNames:        envNames(opts.Pathways.WorkerEnv),
 		IsTPU:                         isTPU,
 		IsGPU:                         isGPU,
 		MLDiagnosticsEnabled:          opts.MLDiagnosticsEnabled,
@@ -782,4 +786,13 @@ func sortedEnvVars(envMap map[string]string) []EnvVar {
 		res[i] = EnvVar{Name: k, Value: envMap[k]}
 	}
 	return res
+}
+
+// envNames returns the set of env var names in envMap.
+func envNames(envMap map[string]string) map[string]bool {
+	names := make(map[string]bool, len(envMap))
+	for k := range envMap {
+		names[k] = true
+	}
+	return names
 }

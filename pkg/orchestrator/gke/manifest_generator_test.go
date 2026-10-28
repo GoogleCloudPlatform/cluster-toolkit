@@ -3395,3 +3395,146 @@ spec:
 		t.Fatalf("ValidateJobSetManifest() error = %v, want duplicate volumeMount path error", err)
 	}
 }
+
+// pathwaysContainerEnvValues returns every value set for the named env var on
+// a container, in order, so callers can also detect duplicates.
+func pathwaysContainerEnvValues(c *corev1.Container, name string) []string {
+	var values []string
+	for _, e := range c.Env {
+		if e.Name == name {
+			values = append(values, e.Value)
+		}
+	}
+	return values
+}
+
+// TestGeneratePathwaysManifest_EnvOverridesReplaceDefaults verifies that a
+// user-provided env var with the same name as a built-in default replaces the
+// default instead of appearing twice in the container's env list.
+func TestGeneratePathwaysManifest_EnvOverridesReplaceDefaults(t *testing.T) {
+	defaults := map[string][]string{
+		"workload-container": {"PATHWAYS_HEAD", "JAX_PLATFORMS", "XCLOUD_ENVIRONMENT", "JAX_BACKEND_TARGET", "ABSL_FLAGS"},
+		"pathways-proxy":     {"PATHWAYS_HEAD", "ABSL_FLAGS"},
+		"pathways-rm":        {"REPLICATED_JOB_NAME", "JOBSET_NAME", "HOST_ADDRESS", "TPU_SKIP_MDS_QUERY", "ABSL_FLAGS"},
+		"pathways-worker": {
+			"TPU_MIN_LOG_LEVEL", "TF_CPP_MIN_LOG_LEVEL", "XCLOUD_ENVIRONMENT", "MEGASCALE_GRPC_ENABLE_XOR_TRACER",
+			"MEGASCALE_NUM_SLICES", "JOBSET_NAME", "REPLICATED_JOB_NAME", "MEGASCALE_SLICE_ID", "PATHWAYS_HEAD",
+			"MEGASCALE_COORDINATOR_ADDRESS", "ABSL_FLAGS",
+		},
+	}
+	overrides := func(container string) map[string]string {
+		m := make(map[string]string)
+		for _, name := range defaults[container] {
+			m[name] = "user-" + name
+		}
+		return m
+	}
+
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pathways-test",
+		CommandToRun:    "python3 train.py",
+		NumSlices:       2,
+		ClusterLocation: "us-central1",
+		ComputeType:     "n2-standard-2",
+		IsPathwaysJob:   true,
+		Verbose:         true,
+		Env:             overrides("workload-container"),
+		Pathways: orchestrator.PathwaysJobDefinition{
+			ProxyServerImage: "proxy:latest",
+			ServerImage:      "server:latest",
+			WorkerImage:      "worker:latest",
+			GCSLocation:      "gs://my-bucket",
+			HeadNodePool:     "pathways-np",
+			ProxyEnv:         overrides("pathways-proxy"),
+			ServerEnv:        overrides("pathways-rm"),
+			WorkerEnv:        overrides("pathways-worker"),
+		},
+	}
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+	}
+
+	specs := pathwaysPodSpecs(t, manifest)
+	podFor := map[string]*corev1.PodSpec{
+		"workload-container": specs["pathways-head"],
+		"pathways-proxy":     specs["pathways-head"],
+		"pathways-rm":        specs["pathways-head"],
+		"pathways-worker":    specs["worker"],
+	}
+	for container, names := range defaults {
+		c := findContainer(podFor[container], container)
+		if c == nil {
+			t.Fatalf("container %q not found in manifest:\n%s", container, manifest)
+		}
+		for _, name := range names {
+			want := []string{"user-" + name}
+			if got := pathwaysContainerEnvValues(c, name); !reflect.DeepEqual(got, want) {
+				t.Errorf("%s env %s = %v, want %v", container, name, got, want)
+			}
+		}
+	}
+}
+
+// TestGeneratePathwaysManifest_UserMountsInAllContainers verifies that --mount
+// volumes are mounted into the Pathways system containers and the colocated
+// Python sidecar, not only into the workload and worker containers. In
+// headless mode there is no workload-container, so without this the head pod
+// would declare the volumes but mount them nowhere.
+func TestGeneratePathwaysManifest_UserMountsInAllContainers(t *testing.T) {
+	const mountPath = "/host"
+	tests := []struct {
+		name     string
+		headless bool
+	}{
+		{name: "batch"},
+		{name: "headless", headless: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := renderPathwaysTestManifest(t, tc.headless, "sidecar:latest", "", []string{"/host/path;" + mountPath})
+			specs := pathwaysPodSpecs(t, manifest)
+			containers := map[string]*corev1.PodSpec{
+				"pathways-rm":              specs["pathways-head"],
+				"pathways-proxy":           specs["pathways-head"],
+				"colocated-python-sidecar": specs["worker"],
+				"pathways-worker":          specs["worker"],
+			}
+			if !tc.headless {
+				containers["workload-container"] = specs["pathways-head"]
+			}
+			for name, spec := range containers {
+				c := findContainer(spec, name)
+				if c == nil {
+					t.Fatalf("container %q not found in manifest:\n%s", name, manifest)
+				}
+				found := false
+				for _, path := range volumeMountPaths(c) {
+					if path == mountPath {
+						found = true
+					}
+				}
+				if !found {
+					t.Errorf("container %q mounts %v, want a mount at %q", name, volumeMountPaths(c), mountPath)
+				}
+			}
+			if err := ValidateJobSetManifest(manifest); err != nil {
+				t.Errorf("ValidateJobSetManifest() error = %v", err)
+			}
+		})
+	}
+}
