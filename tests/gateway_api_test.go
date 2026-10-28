@@ -76,10 +76,14 @@ func readGatewayExpressions(t *testing.T) (hcl.Expression, hcl.Expression, hcl.E
 	balancing := findAttribute(t, blocks, "dynamic", "http_load_balancing", "for_each")
 	manifests := findAttribute(t, blocks, "module", "kubectl_apply", "apply_manifests")
 	call, ok := manifests.(*hclsyntax.FunctionCallExpr)
-	if !ok {
+	if !ok || call.Name != "concat" {
 		t.Fatal("expected concatenated manifests")
 	}
-	return enabled, gateway, balancing, call.Args[len(call.Args)-1]
+	inference, err := inferenceArgument(call.Args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return enabled, gateway, balancing, inference
 }
 
 func flattenBlocks(body *hclsyntax.Body) []*hclsyntax.Block {
@@ -105,4 +109,47 @@ func findAttribute(t *testing.T, blocks []*hclsyntax.Block, kind, label, attribu
 	}
 	t.Fatalf("missing %s %s attribute %s", kind, label, attribute)
 	return nil
+}
+
+func inferenceArgument(args []hclsyntax.Expression) (hcl.Expression, error) {
+	var matches []hcl.Expression
+	for _, arg := range args {
+		for _, variable := range arg.Variables() {
+			if len(variable) != 2 || variable.RootName() != "var" {
+				continue
+			}
+			if attr, ok := variable[1].(hcl.TraverseAttr); ok && attr.Name == "enable_inference_gateway" {
+				matches = append(matches, arg)
+				break
+			}
+		}
+	}
+	if len(matches) != 1 {
+		return nil, fmt.Errorf("expected one manifest argument referencing var.enable_inference_gateway, got %d", len(matches))
+	}
+	return matches[0], nil
+}
+
+func TestInferenceArgumentSelection(t *testing.T) {
+	parse := func(source string) hclsyntax.Expression {
+		t.Helper()
+		expr, diagnostics := hclsyntax.ParseExpression([]byte(source), "test.hcl", hcl.InitialPos)
+		if diagnostics.HasErrors() {
+			t.Fatal(diagnostics)
+		}
+		return expr
+	}
+	inference := parse("var.enable_inference_gateway ? [1] : []")
+	other := parse("var.other_manifests")
+	for _, args := range [][]hclsyntax.Expression{{inference, other}, {other, inference}} {
+		got, err := inferenceArgument(args)
+		if err != nil || got != inference {
+			t.Fatalf("selected %v, error %v", got, err)
+		}
+	}
+	for _, args := range [][]hclsyntax.Expression{{other}, {inference, other, inference}} {
+		if _, err := inferenceArgument(args); err == nil {
+			t.Fatal("missing or ambiguous inference argument must fail")
+		}
+	}
 }

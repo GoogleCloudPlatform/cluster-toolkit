@@ -89,6 +89,24 @@ def validate_hook(resources):
     compile(job["spec"]["template"]["spec"]["containers"][0]["args"][0], "readiness", "exec")
 
 
+def validate_gateway(resources, optional):
+    require(sum(r["kind"] == "AgentgatewayBackend" for r in resources) == (3 if optional else 1), "Unexpected number of agentgateway backends")
+    require(not any(r["kind"] == "Secret" for r in resources), "Gateway template must not create Secrets")
+    routes = {r["metadata"]["name"]: r["spec"]["rules"][0]
+              for r in resources if r["kind"] == "HTTPRoute"}
+    expected = {"vertex-ai": "/v1/chat/completions"}
+    if optional:
+        expected.update(openai="/openai/v1/chat/completions", anthropic="/v1/messages")
+    require(set(routes) == set(expected), "Unexpected gateway route names")
+    for name, path in expected.items():
+        require(routes[name].get("matches") == [{"path": {"type": "Exact", "value": path}}], f"Incorrect path match for route {name}")
+        if name == "openai":
+            require(routes[name].get("filters") == [{"type": "URLRewrite", "urlRewrite": {
+                "path": {"type": "ReplaceFullPath", "replaceFullPath": "/v1/chat/completions"}}}], "Incorrect OpenAI path rewrite")
+        else:
+            require("filters" not in routes[name], f"Unexpected rewrite filter on route {name}")
+
+
 def main():
     blueprint = yaml.safe_load((ROOT / "agentgateway-gke.yaml").read_text())
     agentgateway_version = blueprint["vars"]["agentgateway_version"]
@@ -120,21 +138,7 @@ def main():
                 openai_secret_name="existing-openai" if optional else "",
                 anthropic_secret_name="existing-anthropic" if optional else "",
             ), directory)
-            require(sum(r["kind"] == "AgentgatewayBackend" for r in resources) == (3 if optional else 1), "Invalid rendered gateway configuration")
-            require(not any(r["kind"] == "Secret" for r in resources), "Invalid rendered gateway configuration")
-            routes = {r["metadata"]["name"]: r["spec"]["rules"][0]
-                      for r in resources if r["kind"] == "HTTPRoute"}
-            expected = {"vertex-ai": "/v1/chat/completions"}
-            if optional:
-                expected.update(openai="/openai/v1/chat/completions", anthropic="/v1/messages")
-            require(set(routes) == set(expected), "Invalid rendered gateway configuration")
-            for name, path in expected.items():
-                require(routes[name]["matches"] == [{"path": {"type": "Exact", "value": path}}], "Invalid rendered gateway configuration")
-                if name == "openai":
-                    require(routes[name]["filters"] == [{"type": "URLRewrite", "urlRewrite": {
-                        "path": {"type": "ReplaceFullPath", "replaceFullPath": "/v1/chat/completions"}}}], "Invalid rendered gateway configuration")
-                else:
-                    require("filters" not in routes[name], "Invalid rendered gateway configuration")
+            validate_gateway(resources, optional)
             validate_hook(resources)
             for resource in resources:
                 schema = schemas.get((resource["apiVersion"], resource["kind"]))

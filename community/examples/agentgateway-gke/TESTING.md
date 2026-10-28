@@ -99,6 +99,10 @@ the Job reuses the example's `smoke_test.py` client. Its init container first
 waits up to 120 seconds for the synthetic Service to accept HTTP connections;
 Deployment rollout alone does not establish Service reachability. Failures print
 pod, endpoint and backend diagnostics before temporary resources are removed.
+Synthetic backend cleanup uses foreground deletion with a 120-second timeout
+and waits for the server pods before the runner returns successfully. Client Job
+and ConfigMap deletion is asynchronous. Cleanup failures cause a failed run
+without hiding an earlier smoke-test failure.
 The client retries connection failures and HTTP 502/503/504 responses for up to
 five minutes while load-balancer backend health propagates. Authentication errors
 fail immediately.
@@ -119,6 +123,15 @@ from earlier PR revisions. Do not apply this revision over an existing deploymen
 without planning the Helm ownership and Terraform state migration.
 
 ## Recorded provider validation
+
+On October 28, 2026, the review follow-ups passed Linux
+`make test-agentgateway agentgateway-static`, applicable pre-commit checks and
+59 Python helper tests with 93% runtime-helper coverage. A fresh deployment using
+the October 26 versions below passed Gemini and synthetic synchronous, streaming
+and metrics checks. The synthetic runner left no backend resources or server
+pods after exit. A missing provider Secret blocked readiness with a
+`PartiallyValid` diagnostic; adding a dummy Secret allowed the upgrade to finish.
+Restoring the base configuration and reapplying required no infrastructure changes.
 
 On October 26, 2026, the full Linux `make tests` suite and the standard
 Terraform-console/Helm static checks passed. The 55 agentgateway helper tests
@@ -148,9 +161,9 @@ and metrics checks through the internal load balancer. The synthetic test also
 verified missing and valid Secret references. Proxy logs appeared in Cloud Logging,
 and a second `gcluster deploy` reported all four groups already applied.
 
-Both October runs included the shared firewall planning fix in
+These October runs included the shared firewall planning fix in
 [PR #6536](https://github.com/GoogleCloudPlatform/cluster-toolkit/pull/6536).
-Neither run tested managed IAM provisioning or live OpenAI and Anthropic requests;
+These runs did not test managed IAM provisioning or live OpenAI and Anthropic requests;
 credentials for those providers were unavailable.
 
 The following models passed synchronous, streaming and metrics checks through
