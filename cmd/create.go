@@ -337,18 +337,22 @@ func getModifiedIgnoredSettingsWarnings(prev, curr config.Blueprint) []string {
 	return warnings
 }
 
+func isNilOrNull(v cty.Value) bool {
+	return v == cty.NilVal || v.IsNull()
+}
+
 func getSettingVal(settings config.Dict, key string, aliases []string, nestedKey string) cty.Value {
 	val := settings.Get(key)
-	if val == cty.NilVal {
+	if isNilOrNull(val) {
 		for _, alias := range aliases {
-			if v := settings.Get(alias); v != cty.NilVal {
+			if v := settings.Get(alias); !isNilOrNull(v) {
 				val = v
 				break
 			}
 		}
 	}
 
-	if nestedKey != "" && val != cty.NilVal && !val.IsNull() && val.IsKnown() {
+	if nestedKey != "" && !isNilOrNull(val) && val.IsKnown() {
 		if val.Type().IsObjectType() || val.Type().IsMapType() {
 			m := val.AsValueMap()
 			if v, ok := m[nestedKey]; ok {
@@ -390,10 +394,10 @@ func formatWarning(mod config.Module, rule modulereader.Day2IgnoredSetting) stri
 }
 
 func settingChanged(prev, curr cty.Value) bool {
-	if prev == cty.NilVal && curr == cty.NilVal {
+	if isNilOrNull(prev) && isNilOrNull(curr) {
 		return false
 	}
-	if prev == cty.NilVal || curr == cty.NilVal {
+	if isNilOrNull(prev) || isNilOrNull(curr) {
 		return true
 	}
 	return !prev.RawEquals(curr)

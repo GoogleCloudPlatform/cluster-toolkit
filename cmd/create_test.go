@@ -409,4 +409,77 @@ func (s *MySuite) TestGetModifiedIgnoredSettingsWarnings(c *C) {
 	slurmWarns := getModifiedIgnoredSettingsWarnings(bpSlurmPrev, bpSlurmCurr)
 	c.Assert(slurmWarns, HasLen, 1)
 	c.Check(slurmWarns[0], Matches, "(?s).*module \"slurm-controller\".*partition or nodeset definitions were modified.*target_size.*")
+
+	// Case 11: Explicit null vs absent setting produces no warning
+	bpNullPrev := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "np-null",
+						Source: "modules/compute/gke-node-pool",
+						Settings: config.NewDict(map[string]cty.Value{
+							"initial_node_count": cty.NullVal(cty.Number),
+						}),
+					},
+				},
+			},
+		},
+	}
+	bpNullCurr := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:       "np-null",
+						Source:   "modules/compute/gke-node-pool",
+						Settings: config.NewDict(map[string]cty.Value{}),
+					},
+				},
+			},
+		},
+	}
+	c.Check(getModifiedIgnoredSettingsWarnings(bpNullPrev, bpNullCurr), HasLen, 0)
+	c.Check(getModifiedIgnoredSettingsWarnings(bpNullCurr, bpNullPrev), HasLen, 0)
+
+	// Case 12: Explicit null on primary setting falls back to alias
+	bpAliasPrev := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "cluster-alias",
+						Source: "modules/scheduler/gke-cluster",
+						Settings: config.NewDict(map[string]cty.Value{
+							"version_prefix":     cty.NullVal(cty.String),
+							"min_master_version": cty.StringVal("1.35."),
+						}),
+					},
+				},
+			},
+		},
+	}
+	bpAliasCurr := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "cluster-alias",
+						Source: "modules/scheduler/gke-cluster",
+						Settings: config.NewDict(map[string]cty.Value{
+							"version_prefix":     cty.NullVal(cty.String),
+							"min_master_version": cty.StringVal("1.36."),
+						}),
+					},
+				},
+			},
+		},
+	}
+	aliasWarns := getModifiedIgnoredSettingsWarnings(bpAliasPrev, bpAliasCurr)
+	c.Assert(aliasWarns, HasLen, 1)
+	c.Check(aliasWarns[0], Matches, "(?s).*module \"cluster-alias\".*control-plane version setting was modified.*gcloud container clusters upgrade.*")
 }
