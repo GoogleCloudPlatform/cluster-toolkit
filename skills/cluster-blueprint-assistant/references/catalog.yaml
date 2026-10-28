@@ -3388,6 +3388,7 @@ blueprints:
   scheduler: gke
   description: "Provides blueprints for deploying large-scale GKE Standard clusters (1,000–5,000 nodes) with Kueue, JobSet, Cloud Storage FUSE, Multi-NIC multivpc, and Google Cloud Managed Service for Lustre."
   machine_types: [e2-standard-2]
+  required_services: [compute.googleapis.com, container.googleapis.com, iam.googleapis.com, storage.googleapis.com]
   vars:
     authorized_cidr: null
     autoscaling_total_max_nodes: 100
@@ -3438,6 +3439,7 @@ blueprints:
   scheduler: gke
   description: "Provides blueprints for deploying large-scale GKE Standard clusters (1,000–5,000 nodes) with Kueue, JobSet, Cloud Storage FUSE, Multi-NIC multivpc, and Google Cloud Managed Service for Lustre."
   machine_types: [e2-standard-2]
+  required_services: [compute.googleapis.com, container.googleapis.com, iam.googleapis.com, storage.googleapis.com]
   vars:
     authorized_cidr: null
     deployment_name: gke-scale-5k
@@ -3486,6 +3488,7 @@ blueprints:
   scheduler: gke
   description: "Provides blueprints for deploying large-scale GKE Standard clusters (1,000–5,000 nodes) with Kueue, JobSet, Cloud Storage FUSE, Multi-NIC multivpc, and Google Cloud Managed Service for Lustre."
   machine_types: [c3-standard-8]
+  required_services: [compute.googleapis.com, container.googleapis.com, iam.googleapis.com, lustre.googleapis.com, servicenetworking.googleapis.com]
   vars:
     authorized_cidr: null
     deployment_name: scale-mnic-250

@@ -86,27 +86,27 @@ const llmsTxtMatrixAndDocsSection = `
 
 | Hardware | Machine Type | Orchestrator | Official Blueprint Path | Companion Deployment File | Storage / Key Features |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **A3 High (8x H100)** | ` + "`a3-highgpu-8g`" + ` | **Slurm** | [examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml](examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml) | [examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml](examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml) | 36 TiB Managed Lustre + 4 GPUDirect-TCPX NICs |
+| **A3 High (8x H100)** | ` + "`a3-highgpu-8g`" + ` | **Slurm** | [examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml](examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml) | [examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml](examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml) | 36,000 GiB Managed Lustre + 4 GPUDirect-TCPX NICs |
 | **A3 High (8x H100)** | ` + "`a3-highgpu-8g`" + ` | **GKE** | [examples/gke-a3-highgpu/gke-a3-highgpu.yaml](examples/gke-a3-highgpu/gke-a3-highgpu.yaml) | [examples/gke-a3-highgpu/gke-a3-highgpu-deployment.yaml](examples/gke-a3-highgpu/gke-a3-highgpu-deployment.yaml) | GPUDirect-TCPX + Kueue/JobSet |
-| **A3 Mega (8x H100)** | ` + "`a3-megagpu-8g`" + ` | **Slurm** | [examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml](examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml) | [examples/machine-learning/a3-megagpu-8g/a3mega-slurm-deployment.yaml](examples/machine-learning/a3-megagpu-8g/a3mega-slurm-deployment.yaml) | 36 TiB Managed Lustre + GCS FUSE + 8 GPUDirect-TCPXO NICs |
+| **A3 Mega (8x H100)** | ` + "`a3-megagpu-8g`" + ` | **Slurm** | [examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml](examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml) | [examples/machine-learning/a3-megagpu-8g/a3mega-slurm-deployment.yaml](examples/machine-learning/a3-megagpu-8g/a3mega-slurm-deployment.yaml) | 36,000 GiB Managed Lustre + GCS FUSE + 8 GPUDirect-TCPXO NICs |
 | **A3 Mega (8x H100)** | ` + "`a3-megagpu-8g`" + ` | **GKE** | [examples/gke-a3-megagpu/gke-a3-megagpu.yaml](examples/gke-a3-megagpu/gke-a3-megagpu.yaml) | [examples/gke-a3-megagpu/gke-a3-megagpu-deployment.yaml](examples/gke-a3-megagpu/gke-a3-megagpu-deployment.yaml) | GCS FUSE CSI + 8 GPUDirect-TCPXO NICs + Kueue/JobSet |
-| **A3 Ultra (8x H200)** | ` + "`a3-ultragpu-8g`" + ` | **Slurm** | [examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml](examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml) | [examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml](examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml) | 36 TiB Managed Lustre + 4 GCS FUSE mounts + 8 RoCE RDMA NICs |
+| **A3 Ultra (8x H200)** | ` + "`a3-ultragpu-8g`" + ` | **Slurm** | [examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml](examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml) | [examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml](examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml) | 36,000 GiB Managed Lustre + 4 GCS FUSE mounts + 8 RoCE RDMA NICs |
 | **A3 Ultra (8x H200)** | ` + "`a3-ultragpu-8g`" + ` | **GKE** | [examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml](examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml) | [examples/gke-a3-ultragpu/gke-a3-ultragpu-deployment.yaml](examples/gke-a3-ultragpu/gke-a3-ultragpu-deployment.yaml) | GCS FUSE + Managed Lustre CSI + 8 RoCE RDMA NICs + Kueue TAS |
-| **A4 High (8x B200)** | ` + "`a4-highgpu-8g`" + ` | **Slurm** | [examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml](examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml) | [examples/machine-learning/a4-highgpu-8g/a4high-slurm-deployment.yaml](examples/machine-learning/a4-highgpu-8g/a4high-slurm-deployment.yaml) | 36 TiB Managed Lustre + 4 GCS FUSE mounts + 8 RoCE RDMA NICs |
+| **A4 High (8x B200)** | ` + "`a4-highgpu-8g`" + ` | **Slurm** | [examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml](examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml) | [examples/machine-learning/a4-highgpu-8g/a4high-slurm-deployment.yaml](examples/machine-learning/a4-highgpu-8g/a4high-slurm-deployment.yaml) | 36,000 GiB Managed Lustre + 4 GCS FUSE mounts + 8 RoCE RDMA NICs |
 | **A4 High (8x B200)** | ` + "`a4-highgpu-8g`" + ` | **GKE** | [examples/gke-a4/gke-a4.yaml](examples/gke-a4/gke-a4.yaml) | [examples/gke-a4/gke-a4-deployment.yaml](examples/gke-a4/gke-a4-deployment.yaml) | GCS FUSE + Managed Lustre CSI + 8 RoCE RDMA NICs + Kueue TAS |
-| **A4X High (4x GB200)** | ` + "`a4x-highgpu-4g`" + ` | **Slurm** | [examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml](examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml) | [examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-deployment.yaml](examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-deployment.yaml) | 36 TiB Managed Lustre + 4 GCS FUSE mounts + 4 RoCE RDMA NICs |
+| **A4X High (4x GB200)** | ` + "`a4x-highgpu-4g`" + ` | **Slurm** | [examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml](examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml) | [examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-deployment.yaml](examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-deployment.yaml) | 36,000 GiB Managed Lustre + 4 GCS FUSE mounts + 4 RoCE RDMA NICs |
 | **A4X High (4x GB200)** | ` + "`a4x-highgpu-4g`" + ` | **GKE** | [examples/gke-a4x/gke-a4x.yaml](examples/gke-a4x/gke-a4x.yaml) | [examples/gke-a4x/gke-a4x-deployment.yaml](examples/gke-a4x/gke-a4x-deployment.yaml) | GCS FUSE + Managed Lustre CSI + DRANET RDMA + Kueue TAS |
-| **A4X Max Bare Metal** | ` + "`a4x-maxgpu-4g-metal`" + ` | **Slurm** | [examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml](examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml) | [examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml](examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml) | 18 TiB Managed Lustre + 4 GCS FUSE mounts + 8 RoCE RDMA NICs |
+| **A4X Max Bare Metal** | ` + "`a4x-maxgpu-4g-metal`" + ` | **Slurm** | [examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml](examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml) | [examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml](examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml) | 18,000 GiB Managed Lustre + 4 GCS FUSE mounts + 8 RoCE RDMA NICs |
 | **A4X Max Bare Metal** | ` + "`a4x-maxgpu-4g-metal`" + ` | **GKE** | [examples/gke-a4x-max-bm/gke-a4x-max-bm.yaml](examples/gke-a4x-max-bm/gke-a4x-max-bm.yaml) | [examples/gke-a4x-max-bm/gke-a4x-max-bm-deployment.yaml](examples/gke-a4x-max-bm/gke-a4x-max-bm-deployment.yaml) | GCS FUSE + Managed Lustre CSI + DRANET RDMA + Kueue TAS |
 | **G4 (NVIDIA RTX PRO 6000)** | ` + "`g4-standard-48`" + ` / ` + "`g4-standard-384`" + ` | **Slurm** | [examples/ml-slurm-g4.yaml](examples/ml-slurm-g4.yaml) | Inline ` + "`--vars project_id=<PROJECT_ID>`" + ` | Filestore + Slurm v6 auto-scaling |
 | **G4 (NVIDIA RTX PRO 6000)** | ` + "`g4-standard-48`" + ` | **GKE** | [examples/gke-g4/gke-g4.yaml](examples/gke-g4/gke-g4.yaml) | [examples/gke-g4/gke-g4-deployment.yaml](examples/gke-g4/gke-g4-deployment.yaml) | Kueue/JobSet + gke-job-template |
 | **H4D (Cloud RDMA HPC)** | ` + "`h4d-highmem-192-lssd`" + ` | **Slurm** | [examples/hpc-slurm-h4d/hpc-slurm-h4d.yaml](examples/hpc-slurm-h4d/hpc-slurm-h4d.yaml) | [examples/hpc-slurm-h4d/hpc-slurm-h4d-deployment.yaml](examples/hpc-slurm-h4d/hpc-slurm-h4d-deployment.yaml) | Filestore + Cloud RDMA Falcon VPC |
-| **H4D (Cloud RDMA HPC)** | ` + "`h4d-highmem-192-lssd`" + ` | **GKE** | [examples/gke-h4d/gke-h4d.yaml](examples/gke-h4d/gke-h4d.yaml) | [examples/gke-h4d/gke-h4d-deployment.yaml](examples/gke-h4d/gke-h4d-deployment.yaml) | Cloud RDMA Falcon VPC + Kueue TAS |
-| **TPU 7x (Ironwood)** | ` + "`tpu7x-standard-4t`" + ` | **Slurm** | [examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml](examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml) | [examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml](examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml) | 36 TiB Managed Lustre |
-| **TPU 7x (Ironwood)** | ` + "`tpu7x-standard-4t`" + ` | **GKE** | [examples/gke-tpu-7x/gke-tpu-7x.yaml](examples/gke-tpu-7x/gke-tpu-7x.yaml) | [examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml](examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml) | Kueue TAS + Pathways (MTC & GCS FUSE in ` + "`gke-tpu-7x-advanced.yaml`" + `) |
-| **TPU v6e (Trillium)** | ` + "`ct6e-standard-4t`" + ` | **GKE** | [examples/gke-tpu-v6e/gke-tpu-v6e.yaml](examples/gke-tpu-v6e/gke-tpu-v6e.yaml) | [examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml](examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml) | Kueue TAS + Pathways + ` + "`./gcluster job submit`" + ` |
-| **TPU v5p** | ` + "`ct5p-hightpu-4t`" + ` | **GKE** | [examples/gke-tpu-v5p/gke-tpu-v5p.yaml](examples/gke-tpu-v5p/gke-tpu-v5p.yaml) | [examples/gke-tpu-v5p/gke-tpu-v5p-deployment.yaml](examples/gke-tpu-v5p/gke-tpu-v5p-deployment.yaml) | Kueue TAS + ` + "`./gcluster job submit`" + ` |
-| **TPU v5e** | ` + "`ct5lp-hightpu-4t`" + ` | **GKE** | [examples/gke-tpu-v5e/gke-tpu-v5e.yaml](examples/gke-tpu-v5e/gke-tpu-v5e.yaml) | [examples/gke-tpu-v5e/gke-tpu-v5e-deployment.yaml](examples/gke-tpu-v5e/gke-tpu-v5e-deployment.yaml) | Kueue TAS + ` + "`./gcluster job submit`" + ` |
+| **H4D (Cloud RDMA HPC)** | ` + "`h4d-highmem-192-lssd`" + ` | **GKE** | [examples/gke-h4d/gke-h4d.yaml](examples/gke-h4d/gke-h4d.yaml) | [examples/gke-h4d/gke-h4d-deployment.yaml](examples/gke-h4d/gke-h4d-deployment.yaml) | Cloud RDMA Falcon VPC + Kueue |
+| **TPU 7x (Ironwood)** | ` + "`tpu7x-standard-4t`" + ` | **Slurm** | [examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml](examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml) | [examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml](examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml) | 36,000 GiB Managed Lustre |
+| **TPU 7x (Ironwood)** | ` + "`tpu7x-standard-4t`" + ` | **GKE** | [examples/gke-tpu-7x/gke-tpu-7x.yaml](examples/gke-tpu-7x/gke-tpu-7x.yaml) | [examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml](examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml) | Kueue + Pathways (TAS via ` + "`enable_dynamic_slicing_for_tpus: true`" + `; MTC & GCS FUSE in ` + "`gke-tpu-7x-advanced.yaml`" + `) |
+| **TPU v6e (Trillium)** | ` + "`ct6e-standard-4t`" + ` | **GKE** | [examples/gke-tpu-v6e/gke-tpu-v6e.yaml](examples/gke-tpu-v6e/gke-tpu-v6e.yaml) | [examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml](examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml) | Kueue + Pathways + ` + "`./gcluster job submit`" + ` |
+| **TPU v5p** | ` + "`ct5p-hightpu-4t`" + ` | **GKE** | [examples/gke-tpu-v5p/gke-tpu-v5p.yaml](examples/gke-tpu-v5p/gke-tpu-v5p.yaml) | [examples/gke-tpu-v5p/gke-tpu-v5p-deployment.yaml](examples/gke-tpu-v5p/gke-tpu-v5p-deployment.yaml) | Kueue + ` + "`./gcluster job submit`" + ` |
+| **TPU v5e** | ` + "`ct5lp-hightpu-4t`" + ` | **GKE** | [examples/gke-tpu-v5e/gke-tpu-v5e.yaml](examples/gke-tpu-v5e/gke-tpu-v5e.yaml) | [examples/gke-tpu-v5e/gke-tpu-v5e-deployment.yaml](examples/gke-tpu-v5e/gke-tpu-v5e-deployment.yaml) | Kueue + ` + "`./gcluster job submit`" + ` |
 
 ## Key Documentation & Agent References
 
@@ -140,19 +140,20 @@ func renderReservationVars(sb *strings.Builder, bps []BlueprintEntry, indent str
 		sort.Strings(byVar[k])
 	}
 	if paths, ok := byVar["reservation_affinity"]; ok {
+		joined := joinItemsWithLimit(paths, maxLLMsFullLineContentChars)
 		if multilineYAML {
-			fmt.Fprintf(sb, "%s- **GKE blueprints using `reservation_affinity` (%s):**\n", indent, strings.Join(paths, ", "))
+			fmt.Fprintf(sb, "%s- **GKE blueprints using `reservation_affinity` (%s):**\n", indent, joined)
 			fmt.Fprintf(sb, "%s  ```yaml\n%s  reservation_affinity:\n%s    consume_reservation_type: SPECIFIC_RESERVATION\n%s    specific_reservations:\n%s      - name: <RESERVATION_NAME>\n%s  ```\n",
 				indent, indent, indent, indent, indent, indent)
 		} else {
 			fmt.Fprintf(sb, "%s- **GKE (`reservation_affinity` in %s):** `reservation_affinity: {consume_reservation_type: SPECIFIC_RESERVATION, specific_reservations: [{name: <RESERVATION_NAME>}]}`\n",
-				indent, strings.Join(paths, ", "))
+				indent, joined)
 		}
 		delete(byVar, "reservation_affinity")
 	}
 	if paths, ok := byVar["reservation"]; ok {
 		fmt.Fprintf(sb, "%s- **GKE blueprints using `reservation` (%s):** `reservation: <RESERVATION_NAME>`\n",
-			indent, strings.Join(paths, ", "))
+			indent, joinItemsWithLimit(paths, maxLLMsFullLineContentChars))
 		delete(byVar, "reservation")
 	}
 	otherKeys := make([]string, 0, len(byVar))
@@ -163,10 +164,10 @@ func renderReservationVars(sb *strings.Builder, bps []BlueprintEntry, indent str
 	if len(otherKeys) > 0 {
 		pairs := make([]string, 0, len(otherKeys))
 		for _, k := range otherKeys {
-			pairs = append(pairs, fmt.Sprintf("`%s` (%s)", k, strings.Join(byVar[k], ", ")))
+			pairs = append(pairs, fmt.Sprintf("`%s` (%s)", k, joinItemsWithLimit(byVar[k], 400)))
 		}
 		fmt.Fprintf(sb, "%s- **Slurm / VM reservation variables (`<VAR>: <RESERVATION_NAME>`):** %s\n",
-			indent, strings.Join(pairs, "; "))
+			indent, joinItemsWithLimit(pairs, maxLLMsFullLineContentChars))
 	}
 }
 
@@ -383,22 +384,21 @@ func renderBlueprintModulesCompact(sb *strings.Builder, mods []ModuleSummary) {
 	fmt.Fprintf(sb, "- **Modules (`id: source [use]`):** %s\n", joinItemsWithLimit(items, maxLLMsFullLineContentChars))
 }
 
+func codeList(items []string, emptyVal string, maxChars int) string {
+	if len(items) == 0 {
+		return emptyVal
+	}
+	quoted := make([]string, len(items))
+	for i, s := range items {
+		quoted[i] = "`" + s + "`"
+	}
+	return joinItemsWithLimit(quoted, maxChars)
+}
+
 func renderModuleFullRow(sb *strings.Builder, source string, entry ModuleWiringEntry) {
-	apis := "-"
-	if len(entry.RequiredServices) > 0 {
-		apis = "`" + strings.Join(entry.RequiredServices, "`, `") + "`"
-	}
-	inputs := "none"
-	if len(entry.RequiredInputs) > 0 {
-		inputs = "`" + strings.Join(entry.RequiredInputs, "`, `") + "`"
-	}
-	rec := "-"
-	if len(entry.RecommendedUse) > 0 {
-		rec = "`" + strings.Join(entry.RecommendedUse, "`, `") + "`"
-	}
-	con := "-"
-	if len(entry.ConsumedBy) > 0 {
-		con = "`" + strings.Join(entry.ConsumedBy, "`, `") + "`"
-	}
+	apis := codeList(entry.RequiredServices, "-", 400)
+	inputs := codeList(entry.RequiredInputs, "none", 400)
+	rec := codeList(entry.RecommendedUse, "-", 400)
+	con := codeList(entry.ConsumedBy, "-", 600)
 	fmt.Fprintf(sb, "| `%s` | %s | %s | %s | %s |\n", source, apis, inputs, rec, con)
 }

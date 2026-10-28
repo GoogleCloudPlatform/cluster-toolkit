@@ -30,6 +30,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/zclconf/go-cty/cty"
 	"gopkg.in/yaml.v3"
@@ -262,7 +263,7 @@ func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string
 	modules := extractModuleSummaries(bp)
 	scheduler := inferScheduler(modules)
 	machineTypes := extractMachineTypes(bp, varsMap)
-	reqServices := extractBlueprintServices(repoRoot, filepath.Dir(absPath), bp)
+	reqServices := ExtractBlueprintServices(repoRoot, filepath.Dir(absPath), bp)
 	desc := lookupDescription(repoRoot, absPath, relPath, readmeDescs)
 	if len(varsMap) == 0 {
 		varsMap = nil
@@ -281,10 +282,16 @@ func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string
 	}, true
 }
 
-func extractBlueprintServices(repoRoot, bpDir string, bp config.Blueprint) []string {
+// ExtractBlueprintServices returns the sorted list of unique GCP service APIs
+// required by all modules in bp.
+func ExtractBlueprintServices(repoRoot, bpDir string, bp config.Blueprint) []string {
 	svcSet := make(map[string]bool)
 	for _, grp := range bp.Groups {
 		for _, mod := range grp.Modules {
+			kind := mod.Kind.String()
+			if kind != "" && kind != "terraform" && kind != "packer" {
+				continue
+			}
 			for _, svc := range moduleServicesForSource(repoRoot, bpDir, mod.Source) {
 				svcSet[svc] = true
 			}
@@ -293,17 +300,41 @@ func extractBlueprintServices(repoRoot, bpDir string, bp config.Blueprint) []str
 	return sortedKeys(svcSet)
 }
 
+var moduleServicesCache sync.Map
+
+func cachedMetadataServices(key, source string) ([]string, bool) {
+	if cached, ok := moduleServicesCache.Load(key); ok {
+		if svcs, valid := cached.([]string); valid {
+			return svcs, true
+		}
+		return nil, false
+	}
+	mtd, err := modulereader.GetMetadata(source)
+	if err != nil {
+		moduleServicesCache.Store(key, false)
+		return nil, false
+	}
+	svcs := cleanServiceList(mtd.Spec.Requirements.Services)
+	moduleServicesCache.Store(key, svcs)
+	return svcs, true
+}
+
 func moduleServicesForSource(repoRoot, bpDir, rawSrc string) []string {
 	normSrc := normalizeModuleSource(rawSrc)
-	modAbs := filepath.Join(repoRoot, filepath.FromSlash(normSrc))
-	if kind := detectModuleKind(modAbs); kind != "" {
-		if info, err := modulereader.GetModuleInfo(normSrc, kind); err == nil {
-			return cleanServiceList(info.Metadata.Spec.Requirements.Services)
+	if repoRoot != "" {
+		modAbs := filepath.Join(repoRoot, filepath.FromSlash(normSrc))
+		if svcs, ok := cachedMetadataServices("abs:"+modAbs, modAbs); ok {
+			return svcs
 		}
 	}
-	localAbs := filepath.Clean(filepath.Join(bpDir, filepath.FromSlash(strings.TrimSpace(rawSrc))))
-	if mtd, err := modulereader.GetMetadata(localAbs); err == nil {
-		return cleanServiceList(mtd.Spec.Requirements.Services)
+	if svcs, ok := cachedMetadataServices("emb:"+normSrc, normSrc); ok {
+		return svcs
+	}
+	if bpDir != "" {
+		localAbs := filepath.Clean(filepath.Join(bpDir, filepath.FromSlash(strings.TrimSpace(rawSrc))))
+		if svcs, ok := cachedMetadataServices("loc:"+localAbs, localAbs); ok {
+			return svcs
+		}
 	}
 	return nil
 }
