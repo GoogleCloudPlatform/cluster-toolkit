@@ -27,7 +27,7 @@ import uuid
 EXAMPLE_PATH = Path(__file__).resolve().parent
 SMOKE_PATH = EXAMPLE_PATH / "smoke_test.py"
 from smoke_test import add_client_arguments, validate_client_arguments
-from files.readiness import condition, backend_auth_ready
+from files.readiness import route_ready, backend_auth_status
 
 
 def parse_args(argv=None):
@@ -61,18 +61,21 @@ def parse_args(argv=None):
 def main():
     args = parse_args()
 
-    def kubectl(*arguments, document=None):
+    def kubectl(*arguments, document=None, timeout=60):
         return subprocess.check_output(
             ["kubectl", "-n", args.namespace, *arguments],
             input=json.dumps(document).encode() if document is not None else None,
-            timeout=60,
+            timeout=timeout,
         ).decode()
 
     def get(kind, name):
         return json.loads(kubectl("get", kind, name, "-o", "json"))
 
     gateway = get("gateway", "agentgateway-internal")
-    address = gateway["status"]["addresses"][0]["value"]
+    addresses = (gateway.get("status") or {}).get("addresses") or []
+    address = next((a.get("value") for a in addresses if a.get("value")), None)
+    if address is None:
+        raise ValueError("Internal Gateway has no address; complete the ingress deployment before running the smoke test")
     if not ipaddress.ip_address(address).is_private:
         raise ValueError("Expected an internal load-balancer address")
     services = json.loads(kubectl("get", "services", "-o", "json"))["items"]
@@ -81,9 +84,13 @@ def main():
     if get("service", "agentgateway-proxy")["spec"]["type"] != "ClusterIP":
         raise ValueError("Expected a ClusterIP proxy Service")
     pods = json.loads(kubectl("get", "pods", "-l", "gateway.networking.k8s.io/gateway-name=agentgateway-proxy", "-o", "json"))["items"]
-    pod = next((p for p in pods if (p.get("status") or {}).get("phase") == "Running"), None)
+    pod = next((p for p in pods if not (p.get("metadata") or {}).get("deletionTimestamp")
+                and (p.get("status") or {}).get("phase") == "Running"
+                and (p.get("status") or {}).get("podIP")
+                and any(c.get("type") == "Ready" and c.get("status") == "True"
+                        for c in (p.get("status") or {}).get("conditions") or [])), None)
     if pod is None:
-        raise ValueError("No running agentgateway-proxy pod found")
+        raise ValueError("No ready, non-terminating agentgateway-proxy pod with an IP found")
     if pod["spec"]["serviceAccountName"] != "agentgateway-proxy":
         raise ValueError("Proxy is using an unexpected Kubernetes service account")
     sa = get("serviceaccount", "agentgateway-proxy")
@@ -129,7 +136,8 @@ def main():
     def wait_backend(accepted):
         deadline = time.monotonic() + 120
         while time.monotonic() < deadline:
-            if backend_auth_ready(get("agentgatewaybackend", client), args.namespace, client, accepted):
+            if backend_auth_status(get("agentgatewaybackend", client),
+                                   f"{args.namespace}/{client}" if accepted == "False" else None)[0]:
                 return
             time.sleep(2)
         raise TimeoutError(f"Mock backend did not become Accepted={accepted}")
@@ -183,9 +191,7 @@ def main():
             deadline = time.monotonic() + 120
             while time.monotonic() < deadline:
                 route = get("httproute", client)
-                parents = (route.get("status") or {}).get("parents") or []
-                if any(all(condition({"metadata": route.get("metadata", {}), "status": parent}, kind)
-                           for kind in ("Accepted", "ResolvedRefs")) for parent in parents):
+                if route_ready(route, "agentgateway-proxy"):
                     break
                 time.sleep(2)
             else:
@@ -228,11 +234,11 @@ def main():
         deletes = [(("delete", "job", client, "--ignore-not-found", "--wait=false"), None),
                    (("delete", "configmap", client + "-client", "--ignore-not-found", "--wait=false"), None)]
         if mock_resources:
-            deletes.append((("delete", "-f", "-", "--ignore-not-found", "--wait=false"), {
+            deletes.append((("delete", "-f", "-", "--ignore-not-found", "--wait=true", "--cascade=foreground", "--timeout=120s"), {
                 "apiVersion": "v1", "kind": "List", "items": list(reversed(mock_resources))}))
         for arguments, document in deletes:
             try:
-                kubectl(*arguments, document=document)
+                kubectl(*arguments, document=document, timeout=150 if document else 60)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
                 cleanup_failed.append(str(error))
                 print(f"Cleanup failed: {error}", file=sys.stderr)

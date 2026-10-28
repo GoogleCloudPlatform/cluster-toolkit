@@ -24,26 +24,42 @@ import urllib.error
 import urllib.request
 
 
-def condition(obj, name, expected="True"):
-    """Ignore stale conditions from an earlier generation."""
+def current_condition(obj, name):
+    """Return a condition only when it reflects the current generation."""
     generation = obj.get("metadata", {}).get("generation", 0)
-    return any(
-        c.get("type") == name
-        and c.get("status") == expected
-        and c.get("observedGeneration", generation) >= generation
-        for c in (obj.get("status") or {}).get("conditions") or []
-    )
+    return next((c for c in (obj.get("status") or {}).get("conditions") or []
+                 if c.get("type") == name
+                 and c.get("observedGeneration", generation) >= generation), {})
 
 
-def backend_auth_ready(backend, namespace, name, accepted):
-    conditions = (backend.get("status") or {}).get("conditions") or []
-    partial = next((item for item in conditions if item.get("type") == "Accepted"
-                    and item.get("reason") == "PartiallyValid"), None)
-    if accepted == "False" and partial:
+def condition(obj, name, expected="True"):
+    return current_condition(obj, name).get("status") == expected
+
+
+def backend_auth_status(backend, missing_secret=None):
+    """Return readiness and a diagnostic; optionally expect a missing Secret."""
+    accepted = current_condition(backend, "Accepted")
+    partial = accepted.get("reason") == "PartiallyValid"
+    message = accepted.get("message", "Partially valid backend" if partial else "")
+    if missing_secret is not None:
         # v1.6 accepts partially valid backends while reporting missing auth.
-        return (condition(backend, "Accepted")
-                and f"secret {namespace}/{name} not found" in partial.get("message", ""))
-    return condition(backend, "Accepted", expected=accepted) and partial is None
+        ready = ((accepted.get("status") == "False" and not partial) or
+                 (accepted.get("status") == "True" and partial
+                  and f"secret {missing_secret} not found" in message))
+    else:
+        ready = accepted.get("status") == "True" and not partial
+    return ready, message
+
+
+def route_ready(route, gateway_name):
+    """Require current successful conditions for the specified Gateway parent."""
+    namespace = route.get("metadata", {}).get("namespace")
+    parents = [p for p in (route.get("status") or {}).get("parents") or []
+               if (p.get("parentRef") or {}).get("name") == gateway_name
+               and (p.get("parentRef") or {}).get("namespace", namespace) == namespace]
+    return bool(parents) and all(
+        all(condition({"metadata": route.get("metadata", {}), "status": parent}, name)
+            for name in ("Accepted", "ResolvedRefs")) for parent in parents)
 
 
 def ready(get, namespace, stage):
@@ -76,14 +92,8 @@ def ready(get, namespace, stage):
     for route in routes:
         if not any(p["name"] == gateway_name for p in route["spec"]["parentRefs"]):
             continue
-        parents = [p for p in (route.get("status") or {}).get("parents") or []
-                   if (p.get("parentRef") or {}).get("name") == gateway_name]
-        if not parents:
+        if not route_ready(route, gateway_name):
             return False
-        for parent in parents:
-            status = {"metadata": route["metadata"], "status": parent}
-            if not all(condition(status, name) for name in ("Accepted", "ResolvedRefs")):
-                return False
         matched.append(route["metadata"]["name"])
     required = "vertex-ai" if stage == "gateway" else "agentgateway-ingress"
     if required not in matched:
@@ -91,13 +101,10 @@ def ready(get, namespace, stage):
     if stage == "gateway":
         backends = get(f"/apis/agentgateway.dev/v1alpha1/namespaces/{namespace}/agentgatewaybackends")["items"]
         for backend in backends:
-            if not backend_auth_ready(backend, namespace, "", "True"):
-                if condition(backend, "Accepted"):
-                    message = next((c.get("message", "Partially valid backend")
-                                    for c in (backend.get("status") or {}).get("conditions", [])
-                                    if c.get("type") == "Accepted" and c.get("reason") == "PartiallyValid"), "")
-                    if message:
-                        print(f"Backend {backend.get('metadata', {}).get('name', '?')}: {message}", flush=True)
+            accepted, message = backend_auth_status(backend)
+            if not accepted:
+                if message:
+                    print(f"Backend {backend.get('metadata', {}).get('name', '?')}: {message}", flush=True)
                 return False
         if not backends:
             return False

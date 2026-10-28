@@ -109,7 +109,8 @@ class ProviderSelectionTests(unittest.TestCase):
                         "services": {"items": []},
                         "service": {"spec": {"type": "ClusterIP"}},
                         "pods": {"items": [{"spec": {"serviceAccountName": "agentgateway-proxy"},
-                                              "status": {"phase": "Running", "podIP": "10.4.0.5"}}]},
+                                              "status": {"phase": "Running", "podIP": "10.4.0.5",
+                        "conditions": [{"type": "Ready", "status": "True"}]}}]},
                         "serviceaccount": {"metadata": {"annotations": {"iam.gke.io/gcp-service-account": "proxy@example.com"}}},
                         "job": {"status": {"succeeded": 1}},
                     }
@@ -407,6 +408,29 @@ class GatewayReadinessTests(unittest.TestCase):
             self.assertFalse(readiness.ready(lambda path: next(value for key, value in objects.items()
                                                               if path.endswith('/' + key)), "test", "gateway"))
 
+    def test_route_readiness_requires_current_matching_parent(self):
+        route = self.objects("gateway")["httproutes"]["items"][0]
+        parent = route["status"]["parents"][0]
+        self.assertTrue(readiness.route_ready(route, "agentgateway-proxy"))
+        for failure in ("missing", "other", "stale", "false", "namespace"):
+            broken = copy.deepcopy(route)
+            target = broken["status"]["parents"][0]
+            if failure == "missing":
+                target["conditions"] = []
+            elif failure == "other":
+                target["parentRef"]["name"] = "other-gateway"
+            elif failure == "namespace":
+                target["parentRef"]["namespace"] = "other-namespace"
+            elif failure == "stale":
+                target["conditions"][0]["observedGeneration"] = 0
+            else:
+                target["conditions"][0]["status"] = "False"
+                unrelated = copy.deepcopy(parent)
+                unrelated["parentRef"]["name"] = "other-gateway"
+                broken["status"]["parents"].append(unrelated)
+            with self.subTest(failure=failure):
+                self.assertFalse(readiness.route_ready(broken, "agentgateway-proxy"))
+
     def test_ready_gateway_and_ingress(self):
         for stage in ("gateway", "ingress"):
             objects = self.objects(stage)
@@ -494,14 +518,56 @@ class RunnerLifecycleTests(unittest.TestCase):
         accepted = {"type": "Accepted", "status": "True", "reason": "PartiallyValid",
                     "observedGeneration": 2, "message": "failed to translate backend: secret test/mock not found"}
         backend = {"metadata": {"generation": 2}, "status": {"conditions": [accepted]}}
-        self.assertTrue(integration.backend_auth_ready(backend, "test", "mock", "False"))
-        self.assertFalse(integration.backend_auth_ready(backend, "test", "mock", "True"))
-        self.assertFalse(integration.backend_auth_ready(backend, "test", "different", "False"))
+        self.assertTrue(integration.backend_auth_status(backend, "test/mock")[0])
+        self.assertFalse(integration.backend_auth_status(backend)[0])
+        self.assertFalse(integration.backend_auth_status(backend, "test/different")[0])
         accepted["observedGeneration"] = 1
-        self.assertFalse(integration.backend_auth_ready(backend, "test", "mock", "False"))
+        self.assertEqual(integration.backend_auth_status(backend, "test/mock"), (False, ""))
         accepted["observedGeneration"] = 2
         accepted["reason"] = "Accepted"
-        self.assertTrue(integration.backend_auth_ready(backend, "test", "mock", "True"))
+        self.assertTrue(integration.backend_auth_status(backend)[0])
+
+    def test_missing_gateway_address_has_clear_error(self):
+        for gateway in ({}, {"status": None}, {"status": {"addresses": []}},
+                        {"status": {"addresses": [{}]}}, {"status": {"addresses": [{"value": ""}]}}):
+            with self.subTest(gateway=gateway), \
+                    mock.patch.object(sys, "argv", ["runner", "--model", "model"]), \
+                    mock.patch.object(integration.subprocess, "check_output", return_value=json.dumps(gateway).encode()) as request:
+                with self.assertRaisesRegex(ValueError, "complete the ingress deployment"):
+                    integration.main()
+                self.assertEqual(request.call_count, 1)
+
+    def test_skips_terminating_unready_and_addressless_proxy_pods(self):
+        healthy = {"spec": {"serviceAccountName": "agentgateway-proxy"}, "status": {
+            "phase": "Running", "podIP": "10.4.0.9", "conditions": [{"type": "Ready", "status": "True"}]}}
+        terminating, addressless, unready = [copy.deepcopy(healthy) for _ in range(3)]
+        terminating["metadata"] = {"deletionTimestamp": "2026-10-28T00:00:00Z"}
+        addressless["status"].pop("podIP")
+        unready["status"]["conditions"] = []
+        for usable in (True, False):
+            responses = [
+                {"status": {"addresses": [{"value": "10.0.0.1"}]}}, {"items": []}, {"spec": {"type": "ClusterIP"}},
+                {"items": [terminating, addressless, unready] + ([healthy] if usable else [])},
+                {"metadata": {"annotations": {"iam.gke.io/gcp-service-account": "proxy@example.com"}}},
+            ]
+            jobs = []
+            def kubectl(command, input=None, **kwargs):
+                if command[3] == "get":
+                    return json.dumps(responses.pop(0) if responses else {"status": {"succeeded": 1}}).encode()
+                if command[3] == "create":
+                    doc = json.loads(input)
+                    if doc["kind"] == "Job":
+                        jobs.append(doc)
+                return b""
+            with self.subTest(usable=usable), mock.patch.object(sys, "argv", ["runner", "--model", "model"]), \
+                    mock.patch.object(integration.subprocess, "check_output", side_effect=kubectl):
+                if usable:
+                    integration.main()
+                    self.assertIn("http://10.4.0.9:15020/metrics", jobs[0]["spec"]["template"]["spec"]["containers"][0]["args"])
+                else:
+                    with self.assertRaisesRegex(ValueError, "No ready, non-terminating"):
+                        integration.main()
+                    self.assertEqual(jobs, [])
 
     def test_no_running_proxy_has_clear_error(self):
         responses = [
@@ -512,11 +578,11 @@ class RunnerLifecycleTests(unittest.TestCase):
         with mock.patch.object(sys, "argv", ["runner", "--model", "model"]), \
                 mock.patch.object(integration.subprocess, "check_output",
                                   side_effect=[json.dumps(item).encode() for item in responses]):
-            with self.assertRaisesRegex(ValueError, "No running agentgateway-proxy"):
+            with self.assertRaisesRegex(ValueError, "No ready, non-terminating agentgateway-proxy"):
                 integration.main()
 
     def test_synthetic_success_and_failed_job_cleanup(self):
-        for failed, cleanup_failure in ((False, False), (True, False), (False, True), (True, True)):
+        for failed, cleanup_failure in ((False, 0), (True, 0), (False, 1), (True, 1), (False, 3), (True, 3)):
             documents, deleted, backend_checks = [], [], []
 
             def kubectl(command, input=None, **kwargs):
@@ -529,7 +595,14 @@ class RunnerLifecycleTests(unittest.TestCase):
                     return b"created"
                 if args[0] == "delete":
                     deleted.append((args, json.loads(input) if input else None))
-                    if cleanup_failure and len(deleted) == 1:
+                    if args[1] == "-f":
+                        self.assertIn("--wait=true", args)
+                        self.assertIn("--cascade=foreground", args)
+                        self.assertIn("--timeout=120s", args)
+                        self.assertEqual(kwargs["timeout"], 150)
+                    else:
+                        self.assertIn("--wait=false", args)
+                    if cleanup_failure and len(deleted) == cleanup_failure:
                         raise integration.subprocess.TimeoutExpired(command, 60)
                     return b"deleted"
                 if args[0] == "logs":
@@ -548,9 +621,11 @@ class RunnerLifecycleTests(unittest.TestCase):
                     "gateway": {"status": {"addresses": [{"value": "10.1.0.5"}]}},
                     "services": {"items": []}, "service": {"spec": {"type": "ClusterIP"}},
                     "pods": {"items": [{"spec": {"serviceAccountName": "agentgateway-proxy"},
-                        "status": {"phase": "Running", "podIP": "10.4.0.5"}}]},
+                        "status": {"phase": "Running", "podIP": "10.4.0.5",
+                        "conditions": [{"type": "Ready", "status": "True"}]}}]},
                     "serviceaccount": {"metadata": {"annotations": {"iam.gke.io/gcp-service-account": "proxy@example.com"}}},
                     "httproute": {"metadata": {"generation": 1}, "status": {"parents": [{
+                        "parentRef": {"name": "agentgateway-proxy"},
                         "conditions": GatewayReadinessTests.conditions("Accepted", "ResolvedRefs")}]}},
                     "job": {"status": {"failed" if failed else "succeeded": 1}},
                     "endpointslices": {"items": []},
@@ -584,7 +659,8 @@ class ExposureTests(unittest.TestCase):
             "gateway": {"status": {"addresses": [{"value": "10.1.0.5"}]}},
             "services": {"items": []}, "service": {"spec": {"type": "ClusterIP"}},
             "pods": {"items": [{"spec": {"serviceAccountName": "agentgateway-proxy"},
-                "status": {"phase": "Running", "podIP": "10.4.0.5"}}]},
+                "status": {"phase": "Running", "podIP": "10.4.0.5",
+                        "conditions": [{"type": "Ready", "status": "True"}]}}]},
             "serviceaccount": {"metadata": {"annotations": {"iam.gke.io/gcp-service-account": "proxy@example.com"}}},
             "job": {"status": {"succeeded": 1}},
         }
@@ -593,7 +669,8 @@ class ExposureTests(unittest.TestCase):
             ("services", {"items": [{"spec": {"type": "LoadBalancer"}}]}, "externally exposed"),
             ("services", {"items": [{"spec": {"type": "ClusterIP", "externalIPs": ["8.8.8.8"]}}]}, "externally exposed"),
             ("service", {"spec": {"type": "NodePort"}}, "ClusterIP"),
-            ("pods", {"items": [{"spec": {"serviceAccountName": "default"}, "status": {"phase": "Running"}}]}, "service account"),
+            ("pods", {"items": [{"spec": {"serviceAccountName": "default"}, "status": {"phase": "Running", "podIP": "10.4.0.5",
+                "conditions": [{"type": "Ready", "status": "True"}]}}]}, "service account"),
             ("serviceaccount", {"metadata": {}}, "Workload Identity"),
         ]
         for kind, invalid, message in cases:
@@ -628,6 +705,36 @@ class StaticValidationTests(unittest.TestCase):
                 static.main()
             render.assert_not_called()
 
+    def test_gateway_checks_have_specific_diagnostics(self):
+        for optional in (False, True):
+            paths = {"vertex-ai": "/v1/chat/completions"}
+            if optional:
+                paths.update(openai="/openai/v1/chat/completions", anthropic="/v1/messages")
+            resources = [{"kind": "AgentgatewayBackend", "metadata": {"name": name}} for name in paths]
+            for name, path in paths.items():
+                rule = {"matches": [{"path": {"type": "Exact", "value": path}}]}
+                if name == "openai":
+                    rule["filters"] = [{"type": "URLRewrite", "urlRewrite": {"path": {
+                        "type": "ReplaceFullPath", "replaceFullPath": "/v1/chat/completions"}}}]
+                resources.append({"kind": "HTTPRoute", "metadata": {"name": name}, "spec": {"rules": [rule]}})
+            static.validate_gateway(list(reversed(resources)), optional)
+            def route(items, name):
+                return next(r for r in items if r["kind"] == "HTTPRoute" and r["metadata"]["name"] == name)["spec"]["rules"][0]
+            cases = [
+                ("number of agentgateway backends", lambda items: items.append({"kind": "AgentgatewayBackend"})),
+                ("must not create Secrets", lambda items: items.append({"kind": "Secret"})),
+                ("route names", lambda items: items.append({"kind": "HTTPRoute", "metadata": {"name": "extra"}, "spec": {"rules": [{}]}})),
+                ("path match for route vertex-ai", lambda items: route(items, "vertex-ai").update(matches=[])),
+                ("rewrite filter on route vertex-ai", lambda items: route(items, "vertex-ai").update(filters=[])),
+            ]
+            if optional:
+                cases.append(("OpenAI path rewrite", lambda items: route(items, "openai").update(filters=[])))
+            for message, mutate in cases:
+                broken = copy.deepcopy(resources)
+                mutate(broken)
+                with self.subTest(optional=optional, failure=message), self.assertRaisesRegex(ValueError, message):
+                    static.validate_gateway(broken, optional)
+
     def test_ingress_requires_resources_and_correct_wiring(self):
         # Only scalar namespace interpolation is needed to inspect the ingress resources;
         # the readiness manifest is validated separately by the chart check.
@@ -639,11 +746,11 @@ class StaticValidationTests(unittest.TestCase):
             with self.subTest(missing=resources[i]["kind"]), self.assertRaisesRegex(ValueError, "missing expected"):
                 static.validate_ingress(resources[:i] + resources[i+1:])
         broken = copy.deepcopy(resources)
-        broken[0]["spec"]["gatewayClassName"] = "gke-l7-global-external-managed"
+        next(r for r in broken if r["kind"] == "Gateway")["spec"]["gatewayClassName"] = "gke-l7-global-external-managed"
         with self.assertRaisesRegex(ValueError, "internal GatewayClass"):
             static.validate_ingress(broken)
         broken = copy.deepcopy(resources)
-        broken[1]["spec"]["rules"][0]["backendRefs"][0]["port"] = 80
+        next(r for r in broken if r["kind"] == "HTTPRoute")["spec"]["rules"][0]["backendRefs"][0]["port"] = 80
         with self.assertRaisesRegex(ValueError, "proxy backend"):
             static.validate_ingress(broken)
 
