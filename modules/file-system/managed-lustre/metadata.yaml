@@ -26,3 +26,19 @@ ghpc:
       dependent: per_unit_storage_throughput
       dependent_value: null
     error_message: "per_unit_storage_throughput must not be set when enable_dynamic_tier is enabled."
+  - validator: allowed_enum
+    inputs:
+      vars: [per_unit_storage_throughput]
+      allowed: [125, 250, 500, 1000]
+      allow_null: true
+    error_message: "per_unit_storage_throughput must be one of 125, 250, 500, 1000, or null."
+  - validator: regex
+    inputs:
+      vars: [import_gcs_bucket_uri]
+      pattern: "^gs://"
+    error_message: "import_gcs_bucket_uri must be a valid GCS URI starting with gs://."
+  - validator: regex
+    inputs:
+      vars: [network_id]
+      pattern: "^projects/[^/]+/global/networks/[^/]+$"
+    error_message: "network_id must be in the format projects/{project}/global/networks/{network}."

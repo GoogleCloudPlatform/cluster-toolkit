@@ -318,6 +318,17 @@ func (v *AllowedEnumValidator) normalizeAllowed(allowedRaw interface{}) ([]strin
 	return allowedList, nil
 }
 
+func enumValueToString(val cty.Value) (string, bool) {
+	switch val.Type() {
+	case cty.String:
+		return val.AsString(), true
+	case cty.Number:
+		return val.AsBigFloat().Text('f', -1), true
+	default:
+		return "", false
+	}
+}
+
 // checkValues iterates through cty.Values to ensure they exist within the allowed set, handling nulls and casing.
 func (v *AllowedEnumValidator) checkValues(values []cty.Value, path config.Path, allowedSet map[string]struct{}, allowedList []string, caseSensitive bool, allowNull bool, errMsg string) error {
 	for _, val := range values {
@@ -335,11 +346,10 @@ func (v *AllowedEnumValidator) checkValues(values []cty.Value, path config.Path,
 			return config.BpError{Err: fmt.Errorf("%s", msg), Path: path}
 		}
 
-		if val.Type() != cty.String {
+		str, ok := enumValueToString(val)
+		if !ok {
 			continue
 		}
-
-		str := val.AsString()
 		key := str
 		if !caseSensitive {
 			key = strings.ToLower(str)
@@ -522,13 +532,20 @@ func (r *RangeValidator) Validate(
 // ExclusiveValidator implements the RuleValidator interface for the 'exclusive' validation type.
 type ExclusiveValidator struct{}
 
-// Validate returns an error if more than one of the variables specified in the rule are "set" within the module configuration.
+// Validate returns an error if more than one of the variables specified in the rule are "set" within the module configuration,
+// or if fewer than min_set variables are set when min_set is specified.
 func (e *ExclusiveValidator) Validate(
 	bp config.Blueprint,
 	mod config.Module,
 	rule modulereader.ValidationRule,
 	group config.Group,
 	modIdx int) error {
+	modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
+	minSet, err := parseIntInput(rule.Inputs, "min_set")
+	if err != nil {
+		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
+	}
+
 	var setVarNames []string
 	handler := func(t Target) error {
 		if isVarSet(t.Values) {
@@ -540,8 +557,15 @@ func (e *ExclusiveValidator) Validate(
 		return err
 	}
 	if len(setVarNames) > 1 {
-		modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
 		return config.BpError{Err: fmt.Errorf("%s: the following are set: %s", rule.ErrorMessage, strings.Join(setVarNames, ", ")), Path: modPath}
+	}
+	if minSet != nil && len(setVarNames) < *minSet {
+		msg := rule.ErrorMessage
+		if msg == "" {
+			varsList, _ := parseStringList(rule.Inputs["vars"])
+			msg = fmt.Sprintf("at least %d of %v must be set", *minSet, varsList)
+		}
+		return config.BpError{Err: fmt.Errorf("%s", msg), Path: modPath}
 	}
 	return nil
 }
