@@ -92,7 +92,7 @@ blueprints:
   scheduler: gke
   description: "This blueprint deploys a private generative AI gateway powered by agentgateway on a regional, CPU-only GKE Standard cluster."
   vars:
-    agentgateway_version: v1.6.0
+    agentgateway_version: v1.7.0
     anthropic_secret_name: ""
     authorized_cidr: YOUR_IP/32
     deployment_name: agw-gke
