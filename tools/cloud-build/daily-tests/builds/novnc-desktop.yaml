@@ -15,7 +15,6 @@
 ---
 tags:
 - m.novnc-desktop
-- m.service-account
 - m.vpc
 - m.wait-for-startup
 - vm

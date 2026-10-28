@@ -29,85 +29,69 @@ def store(tmp_path):
 
 
 def test_state_directory_is_root_only(store):
-    mode = stat.S_IMODE(os.stat(store.state_dir).st_mode)
-    # Records name uids and, on the tcp transport, RFB passwords.
-    assert mode == 0o700
+    assert stat.S_IMODE(os.stat(store.state_dir).st_mode) == 0o700
 
 
 def test_records_round_trip(store):
-    store.save({"email": "a@b.com", "slot": 0, "username": "a_b_com"})
-    assert store.load("a@b.com")["username"] == "a_b_com"
+    store.save({"username": "alice", "slot": 0, "uid": 1001})
+    assert store.load("alice")["uid"] == 1001
 
 
 def test_record_files_are_not_group_readable(store):
-    store.save({"email": "a@b.com", "slot": 0})
-    mode = stat.S_IMODE(os.stat(store.path_for("a@b.com")).st_mode)
+    store.save({"username": "a", "slot": 0})
+    mode = stat.S_IMODE(os.stat(store.path_for("a")).st_mode)
     assert mode == 0o600
 
 
-def test_email_lookup_is_case_insensitive(store):
-    store.save({"email": "User@Example.com", "slot": 0})
-    assert store.path_for("user@example.com") == store.path_for("User@Example.com")
-
-
 def test_missing_record_is_none(store):
-    assert store.load("nobody@example.com") is None
+    assert store.load("nobody") is None
 
 
-def test_corrupt_record_does_not_raise(store):
-    path = store.path_for("a@b.com")
-    path.write_text("{not json", encoding="utf-8")
-    assert store.load("a@b.com") is None
+@pytest.mark.parametrize("contents", ["{not json", "[]", "null"], ids=["corrupt", "list", "null"])
+def test_a_file_that_is_not_a_record_is_skipped(store, contents):
+    store.save({"username": "b", "slot": 1})
+    store.path_for("a").write_text(contents, encoding="utf-8")
+    assert store.load("a") is None
+    assert [record["username"] for record in store.list()] == ["b"]
 
 
 def test_delete_is_idempotent(store):
-    store.delete("never@existed.com")
+    store.delete("never")
 
 
 def test_slots_are_allocated_lowest_first(store):
-    assert store.allocate_slot("a@b.com") == 0
-    store.save({"email": "a@b.com", "slot": 0})
-    assert store.allocate_slot("c@d.com") == 1
+    assert store.allocate_slot("a") == 0
+    store.save({"username": "a", "slot": 0})
+    assert store.allocate_slot("c") == 1
 
 
 def test_a_user_does_not_block_their_own_slot(store):
-    store.save({"email": "a@b.com", "slot": 2})
+    store.save({"username": "a", "slot": 2})
     # Reconnecting must not consume a second slot.
-    assert store.allocate_slot("a@b.com") == 0
+    assert store.allocate_slot("a") == 0
 
 
 def test_gaps_are_reused(store):
-    for slot, email in enumerate(["a@b.com", "c@d.com", "e@f.com"]):
-        store.save({"email": email, "slot": slot})
-    store.delete("c@d.com")
-    assert store.allocate_slot("new@example.com") == 1
+    for slot, username in enumerate(["a", "c", "e"]):
+        store.save({"username": username, "slot": slot})
+    store.delete("c")
+    assert store.allocate_slot("newcomer") == 1
 
 
 def test_capacity_is_enforced(store):
     for slot in range(4):
-        store.save({"email": f"u{slot}@example.com", "slot": slot})
+        store.save({"username": f"u{slot}", "slot": slot})
     with pytest.raises(BrokerError, match="user-session capacity") as excinfo:
-        store.allocate_slot("one.too.many@example.com")
+        store.allocate_slot("one_too_many")
     assert excinfo.value.status == 503
 
 
-def test_user_lock_is_case_insensitive(store):
-    assert store.user_lock("User@Example.com") is store.user_lock("user@example.com")
-
-
-def test_slot_exclusion_is_case_insensitive(store):
-    store.save({"email": "User@Example.com", "slot": 2})
-    # The same user, differently capitalised, must not be counted as a
-    # neighbour holding slot 2 - nor be handed a second display.
-    assert store.allocate_slot("user@example.com") == 0
-
-
 def test_touch_refreshes_last_accessed(store):
-    store.save({"email": "a@b.com", "slot": 0, "last_accessed": 1})
-    store.touch("A@B.com")
-    assert store.load("a@b.com")["last_accessed"] > 1
+    store.save({"username": "a", "slot": 0, "last_accessed": 1})
+    store.touch("a")
+    assert store.load("a")["last_accessed"] > 1
 
 
 def test_touch_does_not_resurrect_a_deleted_record(store):
-    store.touch("gone@example.com")
-    assert store.load("gone@example.com") is None
+    store.touch("gone")
+    assert store.load("gone") is None

@@ -1717,17 +1717,12 @@ blueprints:
     controller_machine_type: e2-standard-4
     controller_startup_scripts_timeout: 1800
     deployment_name: hpc-slurm-remote-desktop
-    desktop_allowed_ingress_cidrs:
-    - 35.235.240.0/20
-    desktop_endpoint_dir: /shared/ghpc-remote-desktop/endpoints
-    desktop_proxy_secret_id: ghpc-desktop-proxy-secret
     enable_slurm_auth: true
     homefs_name: "$(\"${vars.deployment_name}-homefs\")"
     login_machine_type: n2-standard-4
     login_startup_scripts_timeout: 1800
     project_id: null
     region: us-central1
-    secret_project_id: $(vars.project_id)
     shared_root: /shared
     sharedfs_name: "$(\"${vars.deployment_name}-sharedfs\")"
     slurm_cluster_name: slurmdesktop
@@ -1737,12 +1732,6 @@ blueprints:
     viz_machine_type: n2-standard-8
     zone: us-central1-a
   modules:
-  - id: services-api
-    source: community/modules/project/service-enablement
-    settings: [gcp_service_list]
-  - id: desktop-service-account
-    source: modules/project/service-account
-    settings: [deployment_name, name, project_id, project_roles]
   - id: network
     source: modules/network/vpc
     settings: [network_name, subnetwork_name]
@@ -1754,10 +1743,6 @@ blueprints:
     source: community/modules/file-system/nfs-server
     use: [network]
     settings: [local_mounts, metadata, name]
-  - id: desktop-firewall
-    source: modules/network/firewall-rules
-    use: [network]
-    settings: [ingress_rules]
   - id: compute-nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, homefs, sharedfs]
@@ -1768,14 +1753,14 @@ blueprints:
     settings: [exclusive, is_default, partition_name]
   - id: login-desktop-runtime
     source: community/modules/remote-desktop/novnc-runtime
-    settings: [desktop_endpoint_dir, desktop_endpoint_name, novnc_identity_mode, novnc_proxy_secret_id, secret_project_id, slurm_auth_mode, vnc_backend]
+    settings: [slurm_auth_mode, vnc_backend]
   - id: login-desktop-startup
     source: modules/scripts/startup-script
     settings: [runners]
   - id: slurm-login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
-    settings: [allow_automatic_updates, enable_login_public_ips, instance_image, machine_type, service_account_email, service_account_scopes, tags]
+    settings: [allow_automatic_updates, enable_login_public_ips, instance_image, machine_type]
   - id: slurm-controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [network, homefs, sharedfs, slurm-login, compute-partition]
@@ -1783,7 +1768,7 @@ blueprints:
   - id: viz-desktop
     source: community/modules/remote-desktop/novnc-desktop
     use: [network, homefs, sharedfs]
-    settings: [allowed_ingress_cidrs, desktop_endpoint_dir, desktop_endpoint_name, enable_public_ips, instance_image, machine_type, novnc_identity_mode, novnc_proxy_secret_id, secret_project_id, service_account_email, service_account_scopes, vnc_backend]
+    settings: [enable_public_ips, instance_image, machine_type, vnc_backend]
 - path: community/examples/slurm-gke/slurm-gke.yaml
   blueprint_name: slurm-gke
   scheduler: slurm-on-gke (slinky)

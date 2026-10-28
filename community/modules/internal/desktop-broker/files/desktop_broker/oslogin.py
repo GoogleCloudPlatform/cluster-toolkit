@@ -12,17 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Joining a Google identity to a POSIX account through OS Login.
+"""Whether OS Login grants an account, and its POSIX details.
 
-This is the authorisation decision: a user gets a desktop as the account OS
-Login says they are, and gets none if OS Login does not know them. It is
-re-evaluated on every hand-off rather than cached in a database, so revoking
-access in IAM revokes it here.
+This is the authorisation decision: a user gets a desktop only as an account
+OS Login knows and currently allows to log in to this instance. It is asked
+per user, the same two questions the guest agent asks when someone signs in
+over SSH, and re-asked on every hand-off once a short cache expires, so
+revoking access in IAM revokes it here.
 """
 
 import json
 import logging
 import pwd
+import socket
 import subprocess
 import time
 import urllib.error
@@ -33,64 +35,35 @@ from .errors import BrokerError
 
 LOG = logging.getLogger("ghpc-desktop-broker")
 
-USERS_URL = (
-    "http://metadata.google.internal/computeMetadata/v1/oslogin/users"
-)
+METADATA_ROOT = "http://metadata.google.internal/computeMetadata/v1/oslogin"
 CACHE_SECONDS = 60
 
 
 class ProfileNotFound(BrokerError):
-    """OS Login has no profile for the identity: access is revoked or never granted."""
+    """OS Login has no profile for the account, or no longer grants it access."""
 
 
 class Directory:
-    """OS Login profiles for this instance, indexed for lookup."""
+    """Per-user OS Login lookups, with successful answers cached briefly."""
 
-    def __init__(self, users_url=USERS_URL, cache_seconds=CACHE_SECONDS):
-        self.users_url = users_url
+    def __init__(self, metadata_root=METADATA_ROOT, cache_seconds=CACHE_SECONDS):
+        self.metadata_root = metadata_root
         self.cache_seconds = cache_seconds
-        self._cache = {"by_subject": {}, "by_username": {}, "expires_at": 0}
+        self._cache = {}
 
-    def _fetch(self):
-        """Every login profile, following the metadata server's paging.
-
-        The users endpoint pages on "pagetoken" and marks the last page with
-        a nextPageToken of the literal "0" (google-guest-oslogin's NSS cache
-        does the same). Stopping after the first page would turn every user
-        beyond it into "No OS Login profile was found".
-        """
-        profiles = []
-        seen_tokens = set()
-        page_token = None
-        while True:
-            params = {"pagesize": 1024}
-            if page_token:
-                params["pagetoken"] = page_token
-            payload = self._fetch_page(params)
-            profiles.extend(payload.get("loginProfiles") or [])
-            page_token = payload.get("nextPageToken")
-            if not page_token or page_token == "0":
-                return {"loginProfiles": profiles}
-            if page_token in seen_tokens:
-                LOG.warning(
-                    "OS Login metadata repeated page token %r; stopping with "
-                    "%d profiles.",
-                    page_token,
-                    len(profiles),
-                )
-                return {"loginProfiles": profiles}
-            seen_tokens.add(page_token)
-
-    def _fetch_page(self, params):
+    def _get(self, path, params):
+        """JSON from an OS Login metadata endpoint, or None if it answers 404."""
         query = urllib.parse.urlencode(params)
         request = urllib.request.Request(
-            f"{self.users_url}?{query}",
+            f"{self.metadata_root}/{path}?{query}",
             headers={"Metadata-Flavor": "Google"},
         )
         try:
             with urllib.request.urlopen(request, timeout=20) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as err:
+            if err.code == 404:
+                return None
             if err.code == 403:
                 raise BrokerError(
                     502,
@@ -104,82 +77,61 @@ class Directory:
             raise BrokerError(
                 502, f"OS Login metadata lookup failed: {err.reason}"
             ) from err
-
-    def load(self, refresh=False):
-        if (
-            not refresh
-            and time.time() < self._cache["expires_at"]
-            and (self._cache["by_subject"] or self._cache["by_username"])
-        ):
-            return self._cache
-
-        payload = self._fetch()
-        by_subject = {}
-        by_username = {}
-        for profile in payload.get("loginProfiles", []):
-            profile_name = profile.get("name")
-            if not profile_name:
-                continue
-
-            accounts = [
-                account
-                for account in profile.get("posixAccounts", [])
-                if account.get("operatingSystemType") in [None, "", "LINUX"]
-            ]
-            if not accounts:
-                continue
-
-            primary = [a for a in accounts if a.get("primary")]
-            account = dict(primary[0] if primary else accounts[0])
-            username = account.get("username")
-            if not username:
-                continue
-
-            account["profile_name"] = profile_name
-            # "name" on a login profile is the Google account's numeric
-            # subject, which is exactly the "sub" claim on a verified ID token.
-            # That makes it the only authoritative join between a Google
-            # identity and a POSIX account: login profiles carry no email or
-            # userName field of their own.
-            by_subject[str(profile_name)] = account
-            by_username[username] = account
-
-        self._cache = {
-            "by_subject": by_subject,
-            "by_username": by_username,
-            "expires_at": time.time() + self.cache_seconds,
-        }
-        return self._cache
-
-    def resolve(self, login_uid, username_hint=None):
-        """Find the POSIX account for an identity.
-
-        Tries the numeric subject first because it is authoritative, then the
-        username hint, which is only as trustworthy as the mode that supplied
-        it. Refreshes once before giving up, so a user who has just been granted
-        access does not have to wait out the cache.
-        """
-        if not login_uid and not username_hint:
+        except (TimeoutError, socket.timeout) as err:
+            # A read that stalls after the connection opened is not a URLError.
+            # socket.timeout is TimeoutError only from Python 3.10.
+            raise BrokerError(502, "OS Login metadata lookup timed out.") from err
+        except ValueError as err:
+            # JSONDecodeError and UnicodeDecodeError both: an HTML error page
+            # from an intercepting proxy, say, or a truncated response.
             raise BrokerError(
-                403,
-                "Missing desktop OS Login identity. Sign in with Google and "
-                "try again.",
+                502, "OS Login metadata returned an unreadable response."
+            ) from err
+
+    def _lookup(self, username):
+        # Asked by name rather than read from the full profile listing: the
+        # listing can lag behind, and miss an account that has just signed in.
+        payload = self._get("users", {"username": username}) or {}
+        for profile in payload.get("loginProfiles") or []:
+            for account in profile.get("posixAccounts") or []:
+                if account.get("username") == username and account.get(
+                    "operatingSystemType"
+                ) in (None, "", "LINUX"):
+                    subject = profile.get("name")
+                    break
+            else:
+                continue
+            break
+        else:
+            raise ProfileNotFound(
+                403, "No OS Login profile was found for this account."
             )
 
-        for refresh in (False, True):
-            profiles = self.load(refresh=refresh)
-            if login_uid:
-                account = profiles["by_subject"].get(str(login_uid))
-                if account:
-                    return account
-            if username_hint:
-                account = profiles["by_username"].get(username_hint)
-                if account:
-                    return account
+        # A profile outlives the IAM grant that lets it log in, so having one
+        # is not enough. "email" takes the numeric subject, as the guest agent
+        # passes it.
+        verdict = self._get("authorize", {"email": subject, "policy": "login"})
+        if not (verdict or {}).get("success"):
+            raise ProfileNotFound(
+                403, "OS Login does not allow this account to log in here."
+            )
+        return dict(account)
 
-        raise ProfileNotFound(
-            403, "No OS Login profile was found for this Google identity."
-        )
+    def resolve(self, username):
+        """The OS Login POSIX account for a username, if it may log in.
+
+        Only a granted answer is cached, so a refusal is re-checked on the next
+        request and a user just granted access need not wait.
+        """
+        cached = self._cache.get(username)
+        if cached and time.time() < cached["expires_at"]:
+            return cached["account"]
+        account = self._lookup(username)
+        self._cache[username] = {
+            "account": account,
+            "expires_at": time.time() + self.cache_seconds,
+        }
+        return account
 
 
 def lookup_passwd(username):

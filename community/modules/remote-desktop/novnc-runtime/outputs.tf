@@ -17,17 +17,12 @@ output "startup_runners" {
   value       = module.desktop_broker.startup_runners
 }
 
-output "novnc_listen_port" {
-  description = "Port exposed by the desktop broker for noVNC browser access."
-  value       = module.desktop_broker.broker_listen_port
+output "broker_socket_path" {
+  description = "Unix socket the desktop broker serves on. Forward a local port to it over SSH to reach a desktop."
+  value       = module.desktop_broker.broker_socket_path
 }
 
 output "vnc_backend" {
   description = "VNC backend used by the noVNC desktop runtime."
   value       = module.desktop_broker.vnc_backend
-}
-
-output "healthcheck_path" {
-  description = "Unauthenticated broker path that responds once the broker is running."
-  value       = module.desktop_broker.healthcheck_path
 }

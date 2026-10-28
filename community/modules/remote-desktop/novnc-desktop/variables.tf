@@ -87,18 +87,9 @@ variable "auto_delete_boot_disk" {
 }
 
 variable "name_prefix" {
-  description = <<-EOT
-    Name prefix for VM resources. Also distinguishes this module's firewall
-    rule and network tag from those of other novnc-desktop modules in the same
-    deployment, so it must be unique among them.
-    EOT
+  description = "Optional name prefix for VM resources."
   type        = string
   default     = "desktop"
-
-  validation {
-    condition     = can(regex("^[a-z]([-a-z0-9]*[a-z0-9])?$", var.name_prefix)) && length(var.name_prefix) <= 44
-    error_message = "name_prefix must be 1-44 characters of lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen, as it forms part of a network tag and a firewall rule name."
-  }
 }
 
 variable "add_deployment_name_before_prefix" {
@@ -241,16 +232,6 @@ variable "enable_oslogin" {
   default     = "ENABLE"
 }
 
-variable "allowed_ingress_cidrs" {
-  description = "Private CIDR ranges allowed to reach the noVNC desktop broker listener."
-  type        = list(string)
-  default = [
-    "10.0.0.0/8",
-    "172.16.0.0/12",
-    "192.168.0.0/16",
-  ]
-}
-
 variable "install_root" {
   description = "Directory under which noVNC assets are installed."
   type        = string
@@ -275,93 +256,15 @@ variable "session_resolution" {
 }
 
 variable "vnc_display_number" {
-  description = "First X display number reserved for per-user VNC sessions."
+  description = "First X display number reserved for per-user VNC sessions. Starts high to stay clear of users' own X servers on a shared host."
   type        = number
-  default     = 1
-}
-
-variable "novnc_listen_port" {
-  description = "Port exposed by the desktop broker for browser access to noVNC."
-  type        = number
-  default     = 6080
+  default     = 50
 }
 
 variable "novnc_version" {
   description = "noVNC release version to install."
   type        = string
   default     = "1.7.0"
-}
-
-variable "secret_project_id" {
-  description = "Project holding the Secret Manager secrets below. Defaults to the deployment project."
-  type        = string
-  default     = null
-}
-
-variable "novnc_proxy_secret" {
-  description = <<-EOT
-    Shared secret the desktop broker requires in the X-Cluster-Desktop-Secret
-    header, supplied directly. Mutually exclusive with novnc_proxy_secret_id.
-
-    Use this where the caller already owns the value and must hold the plaintext
-    anyway - a front end that sends the header on every request gains nothing
-    from a round trip through Secret Manager. Otherwise prefer the _id form: a
-    literal is carried in the startup script staged in Cloud Storage and appears
-    in Terraform state.
-    EOT
-  type        = string
-  sensitive   = true
-  default     = null
-}
-
-variable "novnc_proxy_secret_id" {
-  description = <<-EOT
-    Secret Manager secret ID holding the shared secret the desktop broker
-    requires in the X-Cluster-Desktop-Secret header. Fetched on the instance at
-    boot, so the value never enters Terraform state.
-
-    Create it with:
-      openssl rand -base64 48 | gcloud secrets create SECRET_ID --data-file=-
-
-    The instance service account needs roles/secretmanager.secretAccessor.
-    Mutually exclusive with novnc_proxy_secret.
-    EOT
-  type        = string
-  default     = null
-}
-
-variable "novnc_proxy_secret_version" {
-  description = "Version of novnc_proxy_secret_id to read."
-  type        = string
-  default     = "latest"
-}
-
-variable "novnc_identity_mode" {
-  description = <<-EOT
-    How the desktop broker establishes which user a request belongs to. Only
-    "trusted_proxy" is supported: the identity is taken from request headers
-    with no verification, so it is only safe where an authenticating proxy is
-    the sole route to the broker.
-    EOT
-  type        = string
-  default     = "trusted_proxy"
-
-  validation {
-    condition     = contains(["trusted_proxy"], lower(trimspace(var.novnc_identity_mode)))
-    error_message = "novnc_identity_mode must be trusted_proxy."
-  }
-}
-
-variable "desktop_endpoint_dir" {
-  description = "Optional directory where the runtime publishes DESKTOP_* endpoint metadata for service discovery."
-  type        = string
-  default     = null
-}
-
-variable "desktop_endpoint_name" {
-  description = "Endpoint metadata file name used when desktop_endpoint_dir is set."
-  type        = string
-  default     = "desktop"
 }
 
 variable "max_user_sessions" {
@@ -371,7 +274,7 @@ variable "max_user_sessions" {
 }
 
 variable "session_idle_timeout_seconds" {
-  description = "Idle timeout after which a per-user desktop session is cleaned up. Set to 0 to disable cleanup."
+  description = "Idle timeout after which a per-user desktop session is cleaned up. Set to 0 to keep idle sessions; a session whose desktop has exited is still cleaned up."
   type        = number
   default     = 43200
 }

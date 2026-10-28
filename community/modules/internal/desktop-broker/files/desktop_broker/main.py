@@ -21,6 +21,8 @@ names, so a file called __main__.py would never reach a deployed host.
 
 import argparse
 import logging
+import os
+import socket
 
 from aiohttp import web
 
@@ -28,6 +30,23 @@ from . import app as broker_app
 from . import config as broker_config
 
 LOG = logging.getLogger("ghpc-desktop-broker")
+
+
+def bind_socket(path):
+    """The broker's only listener, open to every local user.
+
+    Reaching the socket grants nothing by itself: the broker asks the kernel
+    who connected (see identity.py) and starts a desktop only for that account.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    listener.bind(str(path))
+    os.chmod(path, 0o666)
+    return listener
 
 
 def main(argv=None):
@@ -51,12 +70,7 @@ def main(argv=None):
         LOG.error("Desktop broker configuration is invalid: %s", err)
         raise SystemExit(1) from err
 
-    web.run_app(
-        app,
-        host=config.listen_host,
-        port=config.listen_port,
-        access_log=LOG,
-    )
+    web.run_app(app, sock=bind_socket(config.socket_path), access_log=LOG)
 
 
 if __name__ == "__main__":

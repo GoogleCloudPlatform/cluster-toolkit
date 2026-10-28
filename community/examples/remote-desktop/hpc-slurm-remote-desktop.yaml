@@ -41,46 +41,10 @@ vars:
   homefs_name: $(vars.deployment_name)-homefs
   sharedfs_name: $(vars.deployment_name)-sharedfs
   shared_root: /shared
-  desktop_endpoint_dir: /shared/ghpc-remote-desktop/endpoints
-
-  # Read from Secret Manager by each instance at boot, so no secret value
-  # appears in this blueprint or in Terraform state. Create it with:
-  #   openssl rand -base64 48 | gcloud secrets create ghpc-desktop-proxy-secret \
-  #     --project PROJECT_ID --replication-policy automatic --data-file=-
-  secret_project_id: $(vars.project_id)
-  desktop_proxy_secret_id: ghpc-desktop-proxy-secret
-
-  # IAP's TCP-forwarding range only. This blueprint runs the brokers in 'trusted_proxy' mode.
-  # Do not widen this to RFC1918 without putting an authenticating proxy in front.
-  # (hpc-slurm-remote-desktop-gateway.yaml may be more suitable for this)
-  desktop_allowed_ingress_cidrs:
-  - 35.235.240.0/20
 
 deployment_groups:
 - group: primary
   modules:
-  - id: services-api
-    source: community/modules/project/service-enablement
-    settings:
-      gcp_service_list:
-      - secretmanager.googleapis.com
-
-  # Both desktop hosts read the proxy secret through this account. Attaching a
-  # service account replaces the default compute account, so everything the
-  # instances rely on has to be granted here - including reading the
-  # startup-script bucket, which is easy to miss.
-  - id: desktop-service-account
-    source: modules/project/service-account
-    settings:
-      project_id: $(vars.project_id)
-      deployment_name: $(vars.deployment_name)
-      name: vnc
-      project_roles:
-      - storage.objectViewer
-      - secretmanager.secretAccessor
-      - logging.logWriter
-      - monitoring.metricWriter
-
   - id: network
     source: modules/network/vpc
     settings:
@@ -111,21 +75,6 @@ deployment_groups:
       local_mounts:
       - $(vars.shared_root)
 
-  - id: desktop-firewall
-    source: modules/network/firewall-rules
-    use: [network]
-    settings:
-      ingress_rules:
-      - name: $(vars.deployment_name)-desktop-brokers
-        description: Allow IAP-tunnelled noVNC access to desktop brokers
-        source_ranges: $(vars.desktop_allowed_ingress_cidrs)
-        target_tags:
-        - ghpc-novnc-desktop
-        allow:
-        - protocol: tcp
-          ports:
-          - "6080"
-
   - id: compute-nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, homefs, sharedfs]
@@ -150,11 +99,6 @@ deployment_groups:
   - id: login-desktop-runtime
     source: community/modules/remote-desktop/novnc-runtime
     settings:
-      secret_project_id: $(vars.secret_project_id)
-      novnc_proxy_secret_id: $(vars.desktop_proxy_secret_id)
-      novnc_identity_mode: trusted_proxy
-      desktop_endpoint_dir: $(vars.desktop_endpoint_dir)
-      desktop_endpoint_name: login
       slurm_auth_mode: auto
       vnc_backend: tigervnc
 
@@ -171,11 +115,6 @@ deployment_groups:
       machine_type: $(vars.login_machine_type)
       allow_automatic_updates: false
       enable_login_public_ips: false
-      service_account_email: $(desktop-service-account.service_account_email)
-      service_account_scopes:
-      - https://www.googleapis.com/auth/cloud-platform
-      tags:
-      - ghpc-novnc-desktop
 
   - id: slurm-controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -209,14 +148,5 @@ deployment_groups:
     settings:
       instance_image: $(vars.slurm_image)
       machine_type: $(vars.viz_machine_type)
-      allowed_ingress_cidrs: []
       enable_public_ips: false
-      service_account_email: $(desktop-service-account.service_account_email)
-      service_account_scopes:
-      - https://www.googleapis.com/auth/cloud-platform
-      desktop_endpoint_dir: $(vars.desktop_endpoint_dir)
-      desktop_endpoint_name: viz
-      secret_project_id: $(vars.secret_project_id)
-      novnc_proxy_secret_id: $(vars.desktop_proxy_secret_id)
-      novnc_identity_mode: trusted_proxy
       vnc_backend: turbovnc

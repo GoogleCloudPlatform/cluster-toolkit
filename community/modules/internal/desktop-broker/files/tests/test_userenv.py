@@ -51,14 +51,11 @@ def test_per_user_runtime_dir_is_private(env, tmp_path):
     assert created.parent == env.runtime_dir
 
 
-def test_xstartup_sources_the_login_profile(xstartup):
+def test_xstartup_sources_the_login_profile_non_fatally(xstartup):
     # Without this a login-node desktop has no sbatch and no environment
-    # modules: runuser is a non-login invocation and inherits neither.
+    # modules: runuser is a non-login invocation and inherits neither. A
+    # profile script exiting non-zero must not stop the desktop starting.
     assert ". /etc/profile" in xstartup
-
-
-def test_xstartup_is_non_fatal_about_the_profile(xstartup):
-    # A profile script exiting non-zero must not stop the desktop starting.
     assert "|| true" in xstartup
     assert "[ -r /etc/profile ]" in xstartup
 
@@ -140,7 +137,7 @@ def test_xstartup_is_written_to_the_node_local_session_dir(env, tmp_path, record
     assert "chmod 0755" in call["args"][2]
 
 
-def test_ensure_home_no_longer_writes_into_home(env, tmp_path, recorded_run_as):
+def test_ensure_home_writes_no_xstartup_into_home(env, tmp_path, recorded_run_as):
     home = tmp_path / "home" / "alice"
     env.ensure_home("alice", str(home), os.getuid(), os.getgid())
     (call,) = recorded_run_as

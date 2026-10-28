@@ -16,7 +16,6 @@ locals {
   install_root    = trimsuffix(var.install_root, "/")
   slurm_auth_mode = lower(trimspace(var.slurm_auth_mode))
   vnc_backend     = lower(trimspace(var.vnc_backend))
-  identity_mode   = lower(trimspace(var.identity_mode))
 
 
   broker_dir          = "/etc/ghpc-desktop-broker"
@@ -26,6 +25,7 @@ locals {
   broker_state_dir    = "/var/lib/ghpc-remote-desktop"
   broker_log_dir      = "/var/log/ghpc-remote-desktop"
   broker_runtime_dir  = "/run/ghpc-remote-desktop"
+  broker_socket_path  = "${local.broker_runtime_dir}/broker.sock"
   broker_service_path = "/etc/systemd/system/ghpc-desktop-broker.service"
   broker_venv_dir     = "${local.install_root}/desktop-broker-venv"
   broker_python_path  = "${local.broker_venv_dir}/bin/python3"
@@ -39,10 +39,6 @@ locals {
 
   mount_retry_attempts = 30
   mount_retry_seconds  = 10
-
-  read_secret_sh = templatefile("${path.module}/templates/read-secret.sh.tftpl", {
-    secret_project_id = var.secret_project_id == null ? "" : var.secret_project_id
-  })
 
   # Nothing else on the host has to be up before the broker.
   requires_units = ""
@@ -213,24 +209,17 @@ locals {
   broker_config = {
     base_display_number          = var.vnc_display_number
     gpu_acceleration             = var.enable_gpu_acceleration
-    identity_mode                = local.identity_mode
-    listen_host                  = "0.0.0.0"
-    listen_port                  = var.broker_listen_port
     log_dir                      = local.broker_log_dir
     max_user_sessions            = var.max_user_sessions
     runtime_dir                  = local.broker_runtime_dir
     session_dir                  = local.broker_session_dir
     session_idle_timeout_seconds = var.session_idle_timeout_seconds
     session_resolution           = var.session_resolution
+    socket_path                  = local.broker_socket_path
     state_dir                    = local.broker_state_dir
     vnc_backend                  = local.vnc_backend
 
     novnc_dir = local.novnc_dir
-
-    # proxy_secret and json_secret_key are deliberately absent: the install
-    # runner fetches them on the instance and merges them in before the broker
-    # starts. Putting them here would place them in Terraform state and in the
-    # startup script staged in Cloud Storage.
   }
 
   broker_runners = concat(
@@ -256,53 +245,15 @@ locals {
           broker_venv_dir     = local.broker_venv_dir
           broker_python_path  = local.broker_python_path
           broker_pip_path     = local.broker_pip_path
-          broker_listen_port  = var.broker_listen_port
+          broker_socket_path  = local.broker_socket_path
           requires_units      = local.requires_units
-          read_secret_sh      = local.read_secret_sh
-
-          proxy_secret_id      = var.proxy_secret_id == null ? "" : var.proxy_secret_id
-          proxy_secret_version = var.proxy_secret_version
-
-          # Literals travel base64-encoded. A secret is arbitrary bytes, and
-          # embedding one in a double-quoted shell assignment would let a value
-          # containing $(...) or a backtick execute during install.
-          proxy_secret_b64 = var.proxy_secret == null ? "" : base64encode(var.proxy_secret)
         })
       },
     ],
   )
 }
 
-# ------------------------------------------------------ service discovery
 locals {
-  endpoint_publish_runners = var.desktop_endpoint_dir == null ? [] : [
-    {
-      type        = "shell"
-      destination = "publish-desktop-endpoint.sh"
-      content     = <<-EOT
-        #!/bin/bash
-        set -euo pipefail
-
-        endpoint_dir=${jsonencode(var.desktop_endpoint_dir)}
-        endpoint_name=${jsonencode(var.desktop_endpoint_name)}
-        endpoint_port=${jsonencode(var.broker_listen_port)}
-
-        install -d -m 0755 "$endpoint_dir"
-
-        instance_name=$(curl -fsS --retry 3 --retry-delay 2 -H "Metadata-Flavor: Google" \
-          "http://metadata.google.internal/computeMetadata/v1/instance/name")
-        instance_ip=$(curl -fsS --retry 3 --retry-delay 2 -H "Metadata-Flavor: Google" \
-          "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip")
-
-        cat > "$${endpoint_dir}/$${endpoint_name}.env" <<EOF_ENDPOINT
-        DESKTOP_NAME=$${instance_name}
-        DESKTOP_HOST=$${instance_ip}
-        DESKTOP_PORT=$${endpoint_port}
-        EOF_ENDPOINT
-      EOT
-    },
-  ]
-
   startup_runners = concat(
     local.network_storage_client_install_runners,
     local.network_storage_mount_runners,
@@ -311,26 +262,11 @@ locals {
     local.desktop_runtime_runners,
     local.novnc_runners,
     local.broker_runners,
-    local.endpoint_publish_runners,
   )
 }
 
 resource "terraform_data" "input_validation" {
-  input = {
-    identity_mode = local.identity_mode
-  }
-
   lifecycle {
-    precondition {
-      condition     = (var.proxy_secret == null) != (var.proxy_secret_id == null)
-      error_message = "Set exactly one of proxy_secret or proxy_secret_id. Prefer proxy_secret_id, which keeps the value out of Terraform state and out of the startup script staged in Cloud Storage; use proxy_secret where the caller already holds the plaintext anyway."
-    }
-
-
-
-
-
-
     precondition {
       condition     = var.vnc_display_number >= 1
       error_message = "vnc_display_number must be at least 1. Display :0 is reserved for a physical console."

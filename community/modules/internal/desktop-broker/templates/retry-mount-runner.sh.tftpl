@@ -35,11 +35,14 @@ if [ -n "${runner_args}" ]; then
       exit 0
     fi
   fi
+else
+  set --
 fi
 
 last_exit_code=1
 for attempt in $(seq 1 ${retry_attempts}); do
-  if "$runner_path" ${runner_args}; then
+  # The parsed arguments, so one containing a space reaches the helper whole.
+  if "$runner_path" "$@"; then
     exit 0
   else
     last_exit_code=$?

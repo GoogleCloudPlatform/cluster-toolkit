@@ -24,23 +24,10 @@ from conftest import base_config
 from desktop_broker.config import Config, ConfigError
 
 
-
-def test_proxy_secret_required(tmp_path):
-    with pytest.raises(ConfigError, match="proxy_secret is required"):
-        Config(base_config(tmp_path, proxy_secret=""))
-
-
-
-def test_unknown_identity_mode_rejected(tmp_path):
-    with pytest.raises(ConfigError, match="Unsupported identity_mode"):
-        Config(base_config(tmp_path, identity_mode="password"))
-
-
-
-
-
-
-
+@pytest.mark.parametrize("key", ["socket_path", "novnc_dir"])
+def test_paths_required(tmp_path, key):
+    with pytest.raises(ConfigError, match=f"{key} is required"):
+        Config(base_config(tmp_path, **{key: ""}))
 
 
 def test_display_zero_rejected(tmp_path):
@@ -51,19 +38,6 @@ def test_display_zero_rejected(tmp_path):
 def test_zero_sessions_rejected(tmp_path):
     with pytest.raises(ConfigError, match="max_user_sessions"):
         Config(base_config(tmp_path, max_user_sessions=0))
-
-
-def test_defaults(tmp_path):
-    config = Config(base_config(tmp_path))
-    assert config.identity_mode == "trusted_proxy"
-    assert config.vnc_backend == "tigervnc"
-
-
-def test_novnc_dir_required(tmp_path):
-    raw = base_config(tmp_path)
-    del raw["novnc_dir"]
-    with pytest.raises(ConfigError, match="novnc_dir is required"):
-        Config(raw)
 
 
 def test_display_number_follows_the_slot(tmp_path):

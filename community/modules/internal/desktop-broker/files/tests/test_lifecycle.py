@@ -15,8 +15,13 @@
 """Starting, stopping and reaping sessions, with every privileged piece faked."""
 
 import asyncio
+import os
+import socket
+import subprocess
+import tempfile
 import time
 from collections import namedtuple
+from pathlib import Path
 
 import pytest
 
@@ -30,7 +35,6 @@ Passwd = namedtuple("Passwd", "pw_name pw_uid pw_gid pw_dir")
 ALICE = Passwd("alice", 1001, 1001, "/home/alice")
 BOB = Passwd("bob", 1002, 1002, "/home/bob")
 USERS = {"alice": ALICE, "bob": BOB}
-IDENTITY = {"email": "alice@example.com", "login_uid": "1001"}
 TIMEOUT = 3600
 
 
@@ -40,6 +44,13 @@ class _Config:
     @staticmethod
     def display_number(slot):
         return 1 + slot
+
+    @staticmethod
+    def display_candidates(slot):
+        return [1 + slot] + SPARES
+
+
+SPARES = [10, 11]
 
 
 class _UserEnvironment:
@@ -79,20 +90,32 @@ class _Backend:
 
 
 class _OsLogin:
-    """Answers as alice unless a test sets another username or an error."""
+    """Knows every account it is asked about unless a test sets an error."""
 
     def __init__(self):
-        self.username = "alice"
         self.error = None
+        self.asked = []
 
-    def resolve(self, login_uid, username_hint=None):
+    def resolve(self, username):
+        self.asked.append(username)
         if self.error:
             raise self.error
-        return {"username": self.username}
+        return {"username": username}
 
 
 async def run_blocking(func, *args):
     return func(*args)
+
+
+@pytest.fixture(autouse=True)
+def x11_tmp(monkeypatch):
+    # Never the real /tmp, and short: a unix socket path is limited to about
+    # 100 bytes, which tmp_path can exceed.
+    with tempfile.TemporaryDirectory(dir="/tmp") as short:
+        tmp = Path(short)
+        (tmp / ".X11-unix").mkdir()
+        monkeypatch.setattr(lifecycle, "X11_TMP_DIR", tmp)
+        yield tmp
 
 
 @pytest.fixture
@@ -106,20 +129,23 @@ def manager(tmp_path, monkeypatch):
         passwd_lookup=lambda username: USERS[username],
     )
     # No real display: the socket counts as ready once a start was attempted.
-    monkeypatch.setattr(manager, "_endpoint_ready", lambda session: started(manager))
+    monkeypatch.setattr(manager, "_endpoint_ready", lambda session: bool(started_on(manager)))
     return manager
 
 
-def started(manager):
-    return any(cmd[:1] == ["vncserver"] and cmd[1:2] != ["-kill"]
-               for cmd in manager.user_environment.commands)
+def started_on(manager):
+    return [cmd[1] for cmd in manager.user_environment.commands
+            if cmd[:1] == ["vncserver"] and cmd[1:2] != ["-kill"]]
 
 
-def session_for(manager, email="alice@example.com", age=0):
+def killed(manager):
+    return any(cmd[1:2] == ["-kill"] for cmd in manager.user_environment.commands)
+
+
+def session_for(manager, username="alice", age=0):
     record = {
-        "email": email,
         "slot": 0,
-        "username": "alice",
+        "username": username,
         "uid": 1001,
         "gid": 1001,
         "home_dir": "/home/alice",
@@ -132,86 +158,70 @@ def session_for(manager, email="alice@example.com", age=0):
     return record
 
 
-def reap(manager):
-    asyncio.run(manager.reap_idle(run_blocking, TIMEOUT))
+def reap(manager, timeout=TIMEOUT):
+    asyncio.run(manager.reap_idle(run_blocking, timeout))
 
 
-def killed(manager):
-    return any(cmd[1:2] == ["-kill"] for cmd in manager.user_environment.commands)
-
-
-# -- reusing a live session -------------------------------------------------
+# -- reusing a session ----------------------------------------------------------
 
 
 def test_live_session_is_reused_while_still_authorised(manager, monkeypatch):
     session_for(manager)
     monkeypatch.setattr(manager, "_endpoint_ready", lambda session: True)
-    session = manager.ensure_sync(IDENTITY)
-    assert session["username"] == "alice"
-    assert not started(manager) and not killed(manager)
+    assert manager.ensure_sync("alice")["username"] == "alice"
+    assert manager.oslogin.asked == ["alice"]
+    assert not started_on(manager) and not killed(manager)
 
 
-def test_live_session_is_stopped_once_os_login_access_is_revoked(manager, monkeypatch):
+@pytest.mark.parametrize(
+    "error, stopped",
+    [(ProfileNotFound(403, "revoked"), True), (BrokerError(502, "metadata down"), False)],
+    ids=["revoked-stops-it", "lookup-failure-keeps-it"],
+)
+def test_a_refused_lookup_fails_and_only_revocation_stops_the_session(manager, monkeypatch, error, stopped):
     session_for(manager)
     monkeypatch.setattr(manager, "_endpoint_ready", lambda session: True)
-    manager.oslogin.error = ProfileNotFound(403, "No OS Login profile")
+    manager.oslogin.error = error
     with pytest.raises(BrokerError) as excinfo:
-        manager.ensure_sync(IDENTITY)
-    assert excinfo.value.status == 403
-    assert killed(manager)
-    assert manager.store.load("alice@example.com") is None
+        manager.ensure_sync("alice")
+    assert excinfo.value.status == error.status
+    assert killed(manager) is stopped
+    assert (manager.store.load("alice") is None) is stopped
 
 
-def test_live_session_is_replaced_when_the_account_changes(manager, monkeypatch):
-    session_for(manager)
-    # alice's desktop is up until killed; bob's only once started.
-    monkeypatch.setattr(
-        manager,
-        "_endpoint_ready",
-        lambda session: started(manager)
-        if session["username"] == "bob"
-        else not killed(manager),
-    )
-    manager.oslogin.username = "bob"
-    session = manager.ensure_sync(IDENTITY)
-    # The desktop running as alice is never handed to the new account.
-    assert killed(manager) and started(manager)
-    assert session["username"] == "bob"
-    assert manager.store.load("alice@example.com")["username"] == "bob"
+def test_new_session_records_its_node_local_xstartup(manager):
+    session = manager.ensure_sync("alice")
+    expected = manager.user_environment.runtime_dir.parent / "sessions" / "1001" / "xstartup"
+    assert session["xstartup"] == str(expected)
+    assert manager.store.load("alice")["xstartup"] == str(expected)
 
 
-def test_metadata_failure_refuses_but_keeps_the_session(manager, monkeypatch):
-    session_for(manager)
-    monkeypatch.setattr(manager, "_endpoint_ready", lambda session: True)
-    manager.oslogin.error = BrokerError(502, "OS Login metadata lookup failed")
-    with pytest.raises(BrokerError) as excinfo:
-        manager.ensure_sync(IDENTITY)
-    assert excinfo.value.status == 502
-    assert not killed(manager)
-    assert manager.store.load("alice@example.com") is not None
+# -- reaping ------------------------------------------------------------------
 
 
-# -- idle reaping -----------------------------------------------------------
-
-
-def test_idle_session_is_reaped(manager):
-    session_for(manager, age=TIMEOUT + 1)
+@pytest.mark.parametrize("age, kept", [(TIMEOUT + 1, False), (TIMEOUT - 60, True)])
+def test_only_idle_sessions_are_reaped(manager, age, kept):
+    session_for(manager, age=age)
     reap(manager)
-    assert manager.store.load("alice@example.com") is None
-
-
-def test_recent_session_is_kept(manager):
-    session_for(manager, age=TIMEOUT - 60)
-    reap(manager)
-    assert manager.store.load("alice@example.com") is not None
+    assert (manager.store.load("alice") is not None) is kept
 
 
 def test_session_with_a_live_relay_is_never_reaped(manager):
     # The relay never touches the record, so by age alone this looks idle.
     session_for(manager, age=TIMEOUT * 10)
-    manager.connection_opened("Alice@Example.com")
+    manager.connection_opened("alice")
     reap(manager)
-    assert manager.store.load("alice@example.com") is not None
+    assert manager.store.load("alice") is not None
+
+
+def test_connection_count_never_goes_negative(manager):
+    manager.connection_opened("alice")
+    manager.connection_closed("alice")
+    assert not manager.has_connections("alice")
+    # A spurious close must not mask the next open.
+    manager.connection_closed("alice")
+    manager.connection_opened("alice")
+    assert manager.has_connections("alice")
 
 
 def test_reaper_rechecks_the_record_under_the_lock(manager):
@@ -225,68 +235,134 @@ def test_reaper_rechecks_the_record_under_the_lock(manager):
         return func(*args)
 
     asyncio.run(manager.reap_idle(reconnect_during, TIMEOUT))
-    assert manager.store.load("alice@example.com") is not None
+    assert manager.store.load("alice") is not None
 
 
-def test_connection_count_is_balanced(manager):
-    manager.connection_opened("alice@example.com")
-    manager.connection_opened("ALICE@example.com")
-    manager.connection_closed("alice@example.com")
-    assert manager.has_connections("alice@example.com")
-    manager.connection_closed("alice@example.com")
-    assert not manager.has_connections("alice@example.com")
-    # Never negative, so one spurious close cannot mask a later open.
-    manager.connection_closed("alice@example.com")
-    manager.connection_opened("alice@example.com")
-    assert manager.has_connections("alice@example.com")
+@pytest.mark.parametrize("ready", [True, False], ids=["live-kept", "dead-freed"])
+def test_no_timeout_still_frees_only_dead_sessions(manager, monkeypatch, ready):
+    session_for(manager, age=TIMEOUT * 10)
+    monkeypatch.setattr(manager, "_endpoint_ready", lambda session: ready)
+    reap(manager, timeout=0)
+    assert (manager.store.load("alice") is not None) is ready
 
 
-# -- stale X11 files ----------------------------------------------------------
+def test_cleanup_loop_survives_a_failed_pass(manager, monkeypatch):
+    monkeypatch.setattr(lifecycle, "CLEANUP_INTERVAL_SECONDS", 0)
+    passes = []
+
+    async def flaky(run_blocking, timeout):
+        passes.append(timeout)
+        if len(passes) == 1:
+            raise OSError("state directory unreadable")
+        if len(passes) == 3:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(manager, "reap_idle", flaky)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(manager._cleanup_loop(run_blocking))
+    assert len(passes) == 3
 
 
-@pytest.fixture
-def x11_tmp(tmp_path, monkeypatch):
-    tmp = tmp_path / "x11tmp"
-    (tmp / ".X11-unix").mkdir(parents=True)
-    monkeypatch.setattr(lifecycle, "X11_TMP_DIR", tmp)
-    return tmp
+# -- X11 files left in /tmp -------------------------------------------------------
 
 
-def leave_stale_files(x11_tmp, display):
+def dead_pid():
+    child = subprocess.Popen(["true"])
+    child.wait()
+    return child.pid
+
+
+def leave_x11_files(x11_tmp, display, pid):
     lock = x11_tmp / f".X{display}-lock"
     sock = x11_tmp / ".X11-unix" / f"X{display}"
-    lock.write_text("12345\n")
+    # Padded as Xorg writes it.
+    lock.write_text(f"{pid:>10}\n")
     sock.write_text("")
     return lock, sock
 
 
-def test_start_clears_what_a_previous_owner_left(manager, x11_tmp):
+@pytest.mark.parametrize("contents", ["dead-pid", "not a pid"])
+def test_start_clears_what_a_previous_owner_left(manager, x11_tmp, contents):
     # "vncserver -kill" as the new user cannot remove these in sticky /tmp.
-    lock, sock = leave_stale_files(x11_tmp, 1)
+    lock, sock = leave_x11_files(x11_tmp, 1, dead_pid())
+    if contents != "dead-pid":
+        lock.write_text(f"{contents}\n")
     manager._start(session_for(manager))
-    assert not lock.exists()
-    assert not sock.exists()
-    assert started(manager)
+    assert not lock.exists() and not sock.exists()
+    assert started_on(manager) == [":1"]
 
 
-def test_start_tolerates_absent_x11_files(manager, x11_tmp):
+def test_start_moves_off_a_live_x_server_and_back_once_free(manager, x11_tmp):
+    # A user's own vncserver on :1 of a shared login node.
+    lock, _ = leave_x11_files(x11_tmp, 1, os.getpid())
+    session = session_for(manager)
+    manager._start(session)
+    assert lock.exists()
+    assert manager.store.load("alice")["display_number"] == 10
+
+    lock.unlink()
+    manager._start(session)
+    assert started_on(manager) == [":10", ":1"]
+    assert session["display_number"] == 1
+
+
+@pytest.mark.parametrize("listening", [True, False])
+def test_an_x11_socket_holds_the_display_only_while_listening(manager, x11_tmp, listening):
+    path = x11_tmp / ".X11-unix" / "X1"
+    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    listener.bind(str(path))
+    if listening:
+        listener.listen(1)
+    else:
+        listener.close()
+    try:
+        manager._start(session_for(manager))
+    finally:
+        listener.close()
+    assert path.exists() is listening
+    assert started_on(manager) == [":10" if listening else ":1"]
+
+
+def test_a_directory_at_the_lock_is_never_removed(manager, x11_tmp):
+    planted = x11_tmp / ".X1-lock"
+    planted.mkdir()
+    (planted / "keep").write_text("")
     manager._start(session_for(manager))
-    assert started(manager)
+    assert (planted / "keep").exists()
+    assert started_on(manager) == [":10"]
 
 
-def test_stop_clears_x11_files_and_the_record(manager, x11_tmp):
-    lock, sock = leave_stale_files(x11_tmp, 1)
+def test_a_symlink_at_the_lock_is_removed_not_followed(manager, x11_tmp, tmp_path):
+    target = tmp_path / "victim"
+    target.write_text(f"{os.getpid()}\n")
+    (x11_tmp / ".X1-lock").symlink_to(target)
+    manager._start(session_for(manager))
+    assert not (x11_tmp / ".X1-lock").is_symlink()
+    assert target.read_text() == f"{os.getpid()}\n"
+    assert started_on(manager) == [":1"]
+
+
+def test_a_display_held_by_another_session_is_skipped(manager, x11_tmp):
+    leave_x11_files(x11_tmp, 1, os.getpid())
+    other = session_for(manager, username="bob")
+    other.update(slot=1, display_number=10)
+    manager.store.save(other)
+    manager._start(session_for(manager))
+    assert started_on(manager) == [":11"]
+
+
+def test_no_free_display_is_a_clear_refusal(manager, x11_tmp):
+    for display in [1] + SPARES:
+        leave_x11_files(x11_tmp, display, os.getpid())
+    with pytest.raises(BrokerError) as excinfo:
+        manager._start(session_for(manager))
+    assert excinfo.value.status == 503
+    assert not started_on(manager)
+
+
+@pytest.mark.parametrize("live", [True, False])
+def test_stop_clears_only_stale_x11_files(manager, x11_tmp, live):
+    lock, _ = leave_x11_files(x11_tmp, 1, os.getpid() if live else dead_pid())
     manager.stop(session_for(manager))
-    assert not lock.exists()
-    assert not sock.exists()
-    assert manager.store.load("alice@example.com") is None
-
-
-# -- xstartup -----------------------------------------------------------------
-
-
-def test_session_records_its_node_local_xstartup(manager, x11_tmp):
-    session = manager.ensure_sync({"email": "alice@example.com", "login_uid": "1"})
-    expected = manager.user_environment.runtime_dir.parent / "sessions" / "1001" / "xstartup"
-    assert session["xstartup"] == str(expected)
-    assert manager.store.load("alice@example.com")["xstartup"] == str(expected)
+    assert lock.exists() is live
+    assert manager.store.load("alice") is None

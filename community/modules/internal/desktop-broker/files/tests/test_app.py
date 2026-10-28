@@ -46,14 +46,14 @@ class _Sessions:
         self.opened = 0
         self.closed = 0
 
-    def ensure_sync(self, resolved):
+    def ensure_sync(self, username):
         self.ensured += 1
-        return {"email": resolved["email"]}
+        return {"username": username}
 
-    def connection_opened(self, email):
+    def connection_opened(self, username):
         self.opened += 1
 
-    def connection_closed(self, email):
+    def connection_closed(self, username):
         self.closed += 1
 
 
@@ -61,11 +61,11 @@ class _Store:
     def __init__(self):
         self.touched = []
 
-    def user_lock(self, email):
+    def user_lock(self, username):
         return asyncio.Lock()
 
-    def touch(self, email):
-        self.touched.append(email)
+    def touch(self, username):
+        self.touched.append(username)
 
 
 @pytest.fixture
@@ -77,7 +77,7 @@ def broker():
     broker.store = _Store()
 
     async def authenticate(request):
-        return {"email": "alice@example.com"}
+        return "alice"
 
     broker.authenticate = authenticate
     return broker
@@ -91,7 +91,7 @@ def handle(broker, request):
 def test_entry_documents_get_a_session(broker, path):
     handle(broker, _Request(path))
     assert broker.sessions.ensured == 1
-    assert broker.frontend.served == [(path, {"email": "alice@example.com"})]
+    assert broker.frontend.served == [(path, {"username": "alice"})]
 
 
 @pytest.mark.parametrize("path", ["/app/ui.js", "/app/styles/base.css", "/app/images/icons/novnc.png"])
@@ -116,7 +116,7 @@ def test_websocket_is_counted_for_its_whole_life(broker):
     assert seen["open_during"] == 1
     assert broker.sessions.opened == broker.sessions.closed == 1
     # Closing is when the record last learns the desktop was in use.
-    assert broker.store.touched == ["alice@example.com"]
+    assert broker.store.touched == ["alice"]
 
 
 def test_websocket_count_is_released_when_the_relay_fails(broker):
@@ -127,7 +127,7 @@ def test_websocket_count_is_released_when_the_relay_fails(broker):
     response = handle(broker, _Request("/websockify", upgrade="websocket"))
     assert response.status == 500
     assert broker.sessions.opened == broker.sessions.closed == 1
-    assert broker.store.touched == ["alice@example.com"]
+    assert broker.store.touched == ["alice"]
 
 
 def test_needs_session_ignores_the_query_string():

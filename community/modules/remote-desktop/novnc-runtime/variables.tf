@@ -85,24 +85,13 @@ variable "session_resolution" {
 }
 
 variable "vnc_display_number" {
-  description = "First X display number reserved for per-user VNC sessions."
+  description = "First X display number reserved for per-user VNC sessions. Starts high to stay clear of users' own X servers on a shared host."
   type        = number
-  default     = 1
+  default     = 50
 
   validation {
     condition     = var.vnc_display_number >= 1
     error_message = "vnc_display_number must be greater than or equal to 1."
-  }
-}
-
-variable "novnc_listen_port" {
-  description = "Port exposed by the desktop broker for browser access to noVNC."
-  type        = number
-  default     = 6080
-
-  validation {
-    condition     = var.novnc_listen_port >= 1 && var.novnc_listen_port <= 65535
-    error_message = "novnc_listen_port must be between 1 and 65535."
   }
 }
 
@@ -114,89 +103,6 @@ variable "novnc_version" {
   validation {
     condition     = trimspace(var.novnc_version) != ""
     error_message = "novnc_version must be a non-empty string."
-  }
-}
-
-variable "secret_project_id" {
-  description = "Project holding the Secret Manager secrets below. Defaults to the instance's own project."
-  type        = string
-  default     = null
-}
-
-variable "novnc_proxy_secret" {
-  description = <<-EOT
-    Shared secret the desktop broker requires in the X-Cluster-Desktop-Secret
-    header, supplied directly. Mutually exclusive with novnc_proxy_secret_id.
-
-    Use this where the caller already owns the value and must hold the plaintext
-    anyway - a front end that sends the header on every request gains nothing
-    from a round trip through Secret Manager. Otherwise prefer the _id form: a
-    literal is carried in the startup script staged in Cloud Storage and appears
-    in Terraform state.
-    EOT
-  type        = string
-  sensitive   = true
-  default     = null
-}
-
-variable "novnc_proxy_secret_id" {
-  description = <<-EOT
-    Secret Manager secret ID holding the shared secret the desktop broker
-    requires in the X-Cluster-Desktop-Secret header. Fetched on the instance at
-    boot, so the value never enters Terraform state or the startup script staged
-    in Cloud Storage.
-
-    Create it with:
-      openssl rand -base64 48 | gcloud secrets create SECRET_ID --data-file=-
-
-    The instance service account needs roles/secretmanager.secretAccessor.
-    Mutually exclusive with novnc_proxy_secret.
-    EOT
-  type        = string
-  default     = null
-}
-
-variable "novnc_proxy_secret_version" {
-  description = "Version of novnc_proxy_secret_id to read."
-  type        = string
-  default     = "latest"
-}
-
-variable "novnc_identity_mode" {
-  description = <<-EOT
-    How the desktop broker establishes which user a request belongs to. Only
-    "trusted_proxy" is supported: the identity is taken from request headers
-    with no verification, so it is only safe where an authenticating proxy is
-    the sole route to the broker.
-    EOT
-  type        = string
-  default     = "trusted_proxy"
-
-  validation {
-    condition     = contains(["trusted_proxy"], lower(trimspace(var.novnc_identity_mode)))
-    error_message = "novnc_identity_mode must be trusted_proxy."
-  }
-}
-
-variable "desktop_endpoint_dir" {
-  description = "Optional directory where the runtime publishes DESKTOP_* endpoint metadata for service discovery."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.desktop_endpoint_dir == null || (trimspace(var.desktop_endpoint_dir) != "" && can(regex("^/", trimspace(var.desktop_endpoint_dir))))
-    error_message = "desktop_endpoint_dir must be null or a non-empty absolute path."
-  }
-}
-
-variable "desktop_endpoint_name" {
-  description = "Endpoint metadata file name used when desktop_endpoint_dir is set."
-  type        = string
-  default     = "desktop"
-
-  validation {
-    condition     = trimspace(var.desktop_endpoint_name) != "" && can(regex("^[A-Za-z0-9][A-Za-z0-9._-]*$", trimspace(var.desktop_endpoint_name)))
-    error_message = "desktop_endpoint_name must be a non-empty file-safe name."
   }
 }
 
@@ -212,7 +118,7 @@ variable "max_user_sessions" {
 }
 
 variable "session_idle_timeout_seconds" {
-  description = "Idle timeout after which a per-user desktop session is cleaned up. Set to 0 to disable cleanup."
+  description = "Idle timeout after which a per-user desktop session is cleaned up. Set to 0 to keep idle sessions; a session whose desktop has exited is still cleaned up."
   type        = number
   default     = 43200
 

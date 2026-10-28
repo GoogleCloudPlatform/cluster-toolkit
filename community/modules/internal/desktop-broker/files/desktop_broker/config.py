@@ -22,7 +22,9 @@ user tries to open a desktop.
 import json
 from pathlib import Path
 
-IDENTITY_MODES = frozenset({"trusted_proxy"})
+# Displays tried when a slot's own is held by an X server the broker did not
+# start, such as a user's own vncserver on a shared login node.
+SPARE_DISPLAY_NUMBERS = 32
 
 
 class ConfigError(ValueError):
@@ -51,19 +53,8 @@ class Config:
         self.runtime_dir = Path(raw["runtime_dir"])
         self.session_dir = Path(raw["session_dir"])
 
-        self.proxy_secret = _require(raw.get("proxy_secret"), "proxy_secret")
-
-        self.identity_mode = (
-            str(raw.get("identity_mode") or "trusted_proxy").strip().lower()
-        )
-        if self.identity_mode not in IDENTITY_MODES:
-            raise ConfigError(
-                f"Unsupported identity_mode: {self.identity_mode!r}. Expected "
-                f"one of: {', '.join(sorted(IDENTITY_MODES))}."
-            )
-
-        self.listen_host = raw.get("listen_host", "0.0.0.0")
-        self.listen_port = int(raw["listen_port"])
+        # The broker's only listener. See identity.py for why a unix socket.
+        self.socket_path = Path(_require(raw.get("socket_path"), "socket_path"))
 
         self.base_display_number = int(raw["base_display_number"])
         if self.base_display_number < 1:
@@ -88,6 +79,17 @@ class Config:
 
     def display_number(self, slot):
         return self.base_display_number + int(slot)
+
+    def display_candidates(self, slot):
+        """A slot's own display, then the spares above every slot's range.
+
+        Spares come after all the slots so that a session displaced from its
+        own display never lands on another slot's.
+        """
+        first_spare = self.base_display_number + self.max_user_sessions
+        return [self.display_number(slot)] + list(
+            range(first_spare, first_spare + SPARE_DISPLAY_NUMBERS)
+        )
 
 
 def load(config_path):

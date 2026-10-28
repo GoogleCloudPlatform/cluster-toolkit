@@ -47,80 +47,74 @@ class SessionStore:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         os.chmod(self.state_dir, 0o700)
 
-    @staticmethod
-    def key(email):
-        """One user however their address is capitalised.
-
-        Everything keyed on a user - the record file, the lock, the slot
-        exclusion - must agree on this, or two spellings of one address get
-        two displays and no mutual exclusion.
-        """
-        return (email or "").lower()
-
-    def path_for(self, email):
-        digest = hashlib.sha256(self.key(email).encode("utf-8")).hexdigest()
+    def path_for(self, username):
+        digest = hashlib.sha256(username.encode("utf-8")).hexdigest()
         return self.state_dir / f"{digest}.json"
 
-    def load(self, email):
-        path = self.path_for(email)
+    def load(self, username):
+        path = self.path_for(username)
         if not path.exists():
             return None
+        return self._read(path)
+
+    @staticmethod
+    def _read(path):
+        """The record at path, or None if it is unreadable or not a record."""
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            record = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as err:
             LOG.warning("Failed to read session file %s: %s", path, err)
             return None
+        # Valid JSON is not enough: every caller reads the record as a mapping,
+        # and one stray file must not stop the reaper for every user.
+        if not isinstance(record, dict):
+            LOG.warning("Ignoring session file %s: not a JSON object", path)
+            return None
+        return record
 
     def save(self, session):
-        path = self.path_for(session["email"])
+        path = self.path_for(session["username"])
         payload = json.dumps(session, sort_keys=True, indent=2)
         temp_path = path.with_suffix(".tmp")
         temp_path.write_text(payload, encoding="utf-8")
         os.chmod(temp_path, 0o600)
         temp_path.replace(path)
 
-    def touch(self, email):
+    def touch(self, username):
         """Mark the record as used now, if it still exists."""
-        session = self.load(email)
+        session = self.load(username)
         if session is None:
             return
         session["last_accessed"] = int(time.time())
         self.save(session)
 
-    def delete(self, email):
+    def delete(self, username):
         try:
-            self.path_for(email).unlink()
+            self.path_for(username).unlink()
         except FileNotFoundError:
             pass
 
     def list(self):
-        sessions = []
-        for path in self.state_dir.glob("*.json"):
-            try:
-                sessions.append(json.loads(path.read_text(encoding="utf-8")))
-            except (OSError, json.JSONDecodeError) as err:
-                LOG.warning("Failed to parse desktop session state %s: %s", path, err)
-        return sessions
+        records = (self._read(path) for path in self.state_dir.glob("*.json"))
+        return [record for record in records if record is not None]
 
-    def user_lock(self, email):
-        key = self.key(email)
-        lock = self._user_locks.get(key)
+    def user_lock(self, username):
+        lock = self._user_locks.get(username)
         if lock is None:
             lock = asyncio.Lock()
-            self._user_locks[key] = lock
+            self._user_locks[username] = lock
         return lock
 
     @property
     def allocation_lock(self):
         return self._allocation_lock
 
-    def allocate_slot(self, email):
+    def allocate_slot(self, username):
         """Lowest free display slot, ignoring this user's own existing one."""
-        own = self.key(email)
         used = {
             int(session["slot"])
             for session in self.list()
-            if self.key(session.get("email")) != own
+            if session.get("username") != username
             and session.get("slot") is not None
         }
         for slot in range(self.max_user_sessions):

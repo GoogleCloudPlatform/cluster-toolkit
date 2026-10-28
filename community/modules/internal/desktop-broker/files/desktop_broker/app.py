@@ -23,10 +23,9 @@ import logging
 
 from aiohttp import web
 
-from . import oslogin
+from . import identity, oslogin
 from .backends import registry as backends
 from .errors import BrokerError
-from .identity import resolver as identity
 from .novnc import NoVncFrontend
 from .sessions.lifecycle import SessionManager
 from .sessions.store import SessionStore
@@ -57,7 +56,6 @@ class Broker:
             config.session_resolution,
             gpu_acceleration=config.gpu_acceleration,
         )
-        self.identity = identity.Resolver(config)
         self.store = SessionStore(config.state_dir, config.max_user_sessions)
         self.user_environment = UserEnvironment(
             config.runtime_dir, config.session_dir, self.vnc_backend
@@ -98,19 +96,20 @@ class Broker:
         await self.sessions.stop_cleanup()
 
     async def authenticate(self, request):
-        presented = identity.presented_from_headers(request.headers)
-        # Verification may fetch signing certificates, so keep it off the loop.
-        return await run_blocking(self.identity.resolve, presented)
+        uid = identity.peer_uid(request.transport)
+        # The passwd lookup can go through the OS Login NSS module, so keep it
+        # off the loop.
+        return await run_blocking(identity.resolve, uid)
 
-    async def ensure_session(self, resolved):
-        async with self.store.user_lock(resolved["email"]):
-            return await run_blocking(self.sessions.ensure_sync, resolved)
+    async def ensure_session(self, username):
+        async with self.store.user_lock(username):
+            return await run_blocking(self.sessions.ensure_sync, username)
 
-    async def touch_session(self, email):
-        async with self.store.user_lock(email):
-            await run_blocking(self.store.touch, email)
+    async def touch_session(self, username):
+        async with self.store.user_lock(username):
+            await run_blocking(self.store.touch, username)
 
-    async def relay(self, request, session, email):
+    async def relay(self, request, session, username):
         """Run the websocket relay, counted as a live connection throughout.
 
         The relay never writes the session record, so without this the idle
@@ -119,31 +118,31 @@ class Broker:
         end because frontend.handle only returns once the relay has ended,
         which brackets the connection exactly.
         """
-        self.sessions.connection_opened(email)
+        self.sessions.connection_opened(username)
         try:
             return await self.frontend.handle(request, session)
         finally:
-            self.sessions.connection_closed(email)
+            self.sessions.connection_closed(username)
             try:
-                await self.touch_session(email)
+                await self.touch_session(username)
             except Exception:
-                LOG.exception("Failed to record desktop use for %s", email)
+                LOG.exception("Failed to record desktop use for %s", username)
 
     async def handle_health(self, request):
-        # Deliberately unauthenticated and free of detail: a fronting proxy
-        # needs to know the broker is up without holding the proxy secret.
+        # Deliberately unauthenticated and free of detail, so the install
+        # script and monitoring can check the broker is up as any user.
         return web.Response(text="ok\n")
 
     async def handle(self, request):
         try:
-            resolved = await self.authenticate(request)
+            username = await self.authenticate(request)
             if not self.frontend.needs_session(request):
                 # Authenticated, but a static asset: no lock, no record write
                 # and no probe of the display.
                 return await self.frontend.handle(request, None)
-            session = await self.ensure_session(resolved)
+            session = await self.ensure_session(username)
             if self.frontend.is_websocket(request):
-                return await self.relay(request, session, resolved["email"])
+                return await self.relay(request, session, username)
             return await self.frontend.handle(request, session)
         except BrokerError as err:
             return web.Response(status=err.status, text=f"{err.message}\n")

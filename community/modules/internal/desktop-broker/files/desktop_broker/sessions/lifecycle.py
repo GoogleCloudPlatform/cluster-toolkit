@@ -16,7 +16,9 @@
 
 import asyncio
 import logging
+import os
 import socket
+import stat
 import time
 from pathlib import Path
 
@@ -29,6 +31,39 @@ START_TIMEOUT_SECONDS = 15
 CLEANUP_INTERVAL_SECONDS = 300
 # Where the X server leaves its per-display lock and socket.
 X11_TMP_DIR = Path("/tmp")
+X11_ABSENT, X11_STALE, X11_LIVE = "absent", "stale", "live"
+
+
+def _read_lock_pid(path):
+    """The PID an X lock file names, or 0 if it names none.
+
+    Opened without following a symlink or blocking on a FIFO: /tmp is
+    world-writable, and the broker reads this as root.
+    """
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return 0
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            return 0
+        return int(os.read(descriptor, 32).decode("ascii", "replace").strip())
+    except (OSError, ValueError):
+        return 0
+    finally:
+        os.close(descriptor)
+
+
+def _pid_alive(pid):
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 class SessionManager:
@@ -61,20 +96,20 @@ class SessionManager:
 
     # -- live connections --------------------------------------------------
 
-    def connection_opened(self, email):
-        key = self.store.key(email)
-        self.active_connections[key] = self.active_connections.get(key, 0) + 1
+    def connection_opened(self, username):
+        self.active_connections[username] = (
+            self.active_connections.get(username, 0) + 1
+        )
 
-    def connection_closed(self, email):
-        key = self.store.key(email)
-        remaining = self.active_connections.get(key, 0) - 1
+    def connection_closed(self, username):
+        remaining = self.active_connections.get(username, 0) - 1
         if remaining > 0:
-            self.active_connections[key] = remaining
+            self.active_connections[username] = remaining
         else:
-            self.active_connections.pop(key, None)
+            self.active_connections.pop(username, None)
 
-    def has_connections(self, email):
-        return self.active_connections.get(self.store.key(email), 0) > 0
+    def has_connections(self, username):
+        return self.active_connections.get(username, 0) > 0
 
     # -- readiness ---------------------------------------------------------
 
@@ -115,30 +150,86 @@ class SessionManager:
             check=False,
         )
 
-    def _remove_stale_x11_files(self, display_number):
-        """Clear the lock and socket a dead Xvnc leaves in /tmp.
+    def _x11_file_state(self, path):
+        try:
+            mode = os.lstat(path).st_mode
+        except FileNotFoundError:
+            return X11_ABSENT
+        if stat.S_ISDIR(mode):
+            # Nothing an X server leaves, and not safe to remove as root in a
+            # world-writable directory. Treated as occupying the display.
+            return X11_LIVE
+        if stat.S_ISSOCK(mode):
+            return X11_LIVE if self._socket_ready(path) else X11_STALE
+        if stat.S_ISREG(mode):
+            return X11_LIVE if _pid_alive(_read_lock_pid(path)) else X11_STALE
+        # A symlink or anything else: unlink() removes the entry itself and
+        # never follows it.
+        return X11_STALE
 
-        "vncserver -kill" runs as the session's user and /tmp is sticky, so
-        it cannot remove what a previous owner of this display left: after
-        an Xvnc crash, or once the slot has passed to another user. Xvnc then
-        refuses to start. The broker is root and can.
+    def _clear_display(self, display_number):
+        """Free a display of what a dead X server left, if nothing holds it.
+
+        "vncserver -kill" runs as the session's user and /tmp is sticky, so it
+        cannot remove what a previous owner of this display left: after an
+        Xvnc crash, or once the slot has passed to another user. The broker is
+        root and can, but on a shared login node the display may equally be a
+        user's own live vncserver or Xvfb, so a file goes only once the process
+        or socket behind it is shown to be dead.
+
+        Returns whether the display is free to start on.
         """
-        for stale_path in (
+        paths = (
             X11_TMP_DIR / f".X{display_number}-lock",
             X11_TMP_DIR / ".X11-unix" / f"X{display_number}",
-        ):
+        )
+        states = [self._x11_file_state(path) for path in paths]
+        if X11_LIVE in states:
+            return False
+        for path, state in zip(paths, states):
+            if state != X11_STALE:
+                continue
             try:
-                stale_path.unlink()
+                path.unlink()
             except FileNotFoundError:
                 pass
             except OSError as err:
-                raise BrokerError(
-                    502, f"Failed to clear stale X11 file {stale_path}: {err}"
-                ) from err
+                LOG.warning("Cannot clear stale X11 file %s: %s", path, err)
+                return False
+        return True
+
+    def _claim_display(self, session):
+        """Settle the session on a free display, preferring its slot's own."""
+        with self.store.allocation_lock:
+            taken = {
+                int(other["display_number"])
+                for other in self.store.list()
+                if other.get("username") != session["username"]
+                and other.get("display_number") is not None
+            }
+            for display_number in self.config.display_candidates(session["slot"]):
+                if display_number in taken or not self._clear_display(display_number):
+                    continue
+                if display_number != self.config.display_number(session["slot"]):
+                    LOG.warning(
+                        "Display :%d is held by a process the broker did not "
+                        "start; using :%d for %s instead.",
+                        self.config.display_number(session["slot"]),
+                        display_number,
+                        session["username"],
+                    )
+                session["display_number"] = display_number
+                self.store.save(session)
+                return
+        raise BrokerError(
+            503,
+            "No free X display is available for a desktop session on this "
+            "host. Ask an administrator to check for stray X servers.",
+        )
 
     def _start(self, session):
         self._kill(session)
-        self._remove_stale_x11_files(session["display_number"])
+        self._claim_display(session)
 
         # A crashed Xvnc leaves its socket behind and the next bind fails.
         try:
@@ -168,41 +259,31 @@ class SessionManager:
                 Path(socket_path).unlink()
             except OSError:
                 pass
-        try:
-            self._remove_stale_x11_files(session["display_number"])
-        except BrokerError as err:
-            # The record still has to go; _start clears these again anyway.
-            LOG.warning("%s", err.message)
-        self.store.delete(session["email"])
+        # Only what is shown to be dead goes; _start checks again anyway.
+        self._clear_display(session["display_number"])
+        self.store.delete(session["username"])
 
     # -- ensure ------------------------------------------------------------
 
-    def ensure_sync(self, identity):
-        email = identity["email"]
-        session = self.store.load(email)
-        # Resolved on every hand-off, including a reconnect to a live session,
-        # so revoking OS Login access revokes the desktop (see oslogin.py). The
+    def ensure_sync(self, username):
+        session = self.store.load(username)
+        # Checked on every hand-off, including a reconnect to a live session,
+        # so revoking OS Login access revokes the desktop (see oslogin.py), and
+        # a local account OS Login does not manage never gets one. The
         # directory caches profiles, so this is not a metadata call per request.
         try:
-            profile = self.oslogin.resolve(
-                identity.get("login_uid"), identity.get("username_hint")
-            )
+            profile = self.oslogin.resolve(username)
         except ProfileNotFound:
             if session:
                 self.stop(session)
             raise
-        if session and session.get("username") != profile["username"]:
-            # The identity now maps to another POSIX account: never hand over
-            # a desktop running as the old one.
-            self.stop(session)
-            session = None
 
         if self.is_ready(session):
             session["last_accessed"] = int(time.time())
             self.store.save(session)
             return session
 
-        passwd_entry = self.passwd_lookup(profile["username"])
+        passwd_entry = self.passwd_lookup(username)
         home_dir = (
             passwd_entry.pw_dir
             or profile.get("homeDirectory")
@@ -227,17 +308,16 @@ class SessionManager:
         # Reserve the slot and persist the record before starting anything, so
         # two users arriving together cannot claim one display.
         with self.store.allocation_lock:
-            existing = self.store.load(email)
+            existing = self.store.load(username)
             slot = (
                 existing["slot"]
                 if existing and existing.get("slot") is not None
-                else self.store.allocate_slot(email)
+                else self.store.allocate_slot(username)
             )
             display_number = self.config.display_number(slot)
             session = {
-                "email": email,
                 "slot": int(slot),
-                "username": passwd_entry.pw_name,
+                "username": username,
                 "uid": passwd_entry.pw_uid,
                 "gid": passwd_entry.pw_gid,
                 "home_dir": home_dir,
@@ -274,36 +354,47 @@ class SessionManager:
                 pass
 
     async def _cleanup_loop(self, run_blocking):
+        # Runs even with no idle timeout: a session whose desktop has died
+        # still holds a slot, and records survive a reboot, so without this a
+        # host would run out of slots for good.
         timeout = self.config.session_idle_timeout_seconds
-        if timeout <= 0:
-            return
         while True:
             await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
-            await self.reap_idle(run_blocking, timeout)
+            try:
+                await self.reap_idle(run_blocking, timeout)
+            except Exception:
+                # An escaped error would end this task, and with it all reaping
+                # until the broker restarts.
+                LOG.exception("Desktop session cleanup pass failed")
+
+    async def _reapable(self, run_blocking, session, timeout):
+        """Idle past the timeout or, with no timeout, desktop gone."""
+        if timeout > 0:
+            idle = int(time.time()) - int(session.get("last_accessed", 0))
+            return idle >= timeout
+        return not await run_blocking(self.is_ready, session)
 
     async def reap_idle(self, run_blocking, timeout):
-        now = int(time.time())
         # Off the event loop: listing sessions globs the state directory
         # and reads every file in it.
         sessions = await run_blocking(self.store.list)
         for session in sessions:
-            email = session.get("email")
-            if not email or self.has_connections(email):
-                continue
-            if now - int(session.get("last_accessed", 0)) < timeout:
+            username = session.get("username")
+            if not username or self.has_connections(username):
                 continue
             try:
-                async with self.store.user_lock(email):
+                if not await self._reapable(run_blocking, session, timeout):
+                    continue
+                async with self.store.user_lock(username):
                     # That record was read before the lock was taken. The user
                     # may have come back while this waited for it.
-                    current = await run_blocking(self.store.load, email)
-                    if not current or self.has_connections(email):
+                    current = await run_blocking(self.store.load, username)
+                    if not current or self.has_connections(username):
                         continue
-                    idle = int(time.time()) - int(current.get("last_accessed", 0))
-                    if idle < timeout:
+                    if not await self._reapable(run_blocking, current, timeout):
                         continue
                     await run_blocking(self.stop, current)
             except Exception:
                 LOG.exception(
-                    "Failed to clean up idle desktop session for %s", email
+                    "Failed to clean up idle desktop session for %s", username
                 )

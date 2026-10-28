@@ -17,13 +17,9 @@
 import sys
 from pathlib import Path
 
-import pytest
-
 FILES_DIR = Path(__file__).resolve().parent.parent
 if str(FILES_DIR) not in sys.path:
     sys.path.insert(0, str(FILES_DIR))
-
-
 
 
 def base_config(tmp_path, **overrides):
@@ -34,9 +30,7 @@ def base_config(tmp_path, **overrides):
         "runtime_dir": str(tmp_path / "run"),
         "session_dir": str(tmp_path / "sessions"),
         "novnc_dir": str(tmp_path / "novnc"),
-        "proxy_secret": "test-proxy-secret",
-        "identity_mode": "trusted_proxy",
-        "listen_port": 6080,
+        "socket_path": str(tmp_path / "run" / "broker.sock"),
         "base_display_number": 1,
         "max_user_sessions": 32,
         "session_idle_timeout_seconds": 43200,
@@ -45,10 +39,3 @@ def base_config(tmp_path, **overrides):
     }
     raw.update(overrides)
     return raw
-
-
-
-
-@pytest.fixture
-def novnc_raw(tmp_path):
-    return base_config(tmp_path)

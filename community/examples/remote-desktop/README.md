@@ -15,20 +15,19 @@ Each blueprint deploys a Slurm cluster with one or both desktop types:
 - **Visualization desktop**: `novnc-desktop` on a dedicated VM, using TurboVNC.
   Suited to 3D, and the only backend supporting GPU acceleration on GCE.
 
-Both hosts run a per-user broker that publishes endpoint metadata into
-`/shared/ghpc-remote-desktop/endpoints`. Each display listens on a `0700`
-per-user unix socket with no TCP port, so it is not reachable by other local
-users on a shared login node.
+Both hosts run a per-user broker that listens only on a unix socket,
+`/run/ghpc-remote-desktop/broker.sock`, with no TCP port. You reach it by
+forwarding a local port to that socket over SSH. The broker asks the kernel
+which account opened the connection, and sshd opens it as the user who logged
+in through OS Login, so you always get your own desktop. No shared secret or
+identity header is involved, and on a shared login node another user who
+connects to the socket gets their own desktop, not yours. Each display likewise
+listens on a `0700` per-user unix socket, so other local users cannot reach it.
 
 ## Blueprints
 
 - [hpc-slurm-remote-desktop.yaml](./hpc-slurm-remote-desktop.yaml): login and
-  visualization desktops, reached over an IAP tunnel.
-
-Both blueprints use `novnc_identity_mode: trusted_proxy`: the broker trusts an
-unverified identity header and the shared secret is the only control. Reached
-over an SSH tunnel with no proxy in front, the identity headers must be supplied
-by hand. Treat these as validation blueprints, not a production posture.
+  visualization desktops, reached over SSH through IAP.
 
 ## GPU desktops
 
@@ -66,13 +65,8 @@ Set the following blueprint variables:
 
 - `project_id`, `region` and `zone`
 
-Then create the Secret Manager secret the desktop hosts read the proxy secret
-from. The brokers will not start without it:
-
-```bash
-openssl rand -base64 48 | gcloud secrets create ghpc-desktop-proxy-secret \
-  --project PROJECT_ID --replication-policy automatic --data-file=-
-```
+Each desktop user needs `roles/compute.osLogin` on the project to SSH in, and
+`roles/iap.tunnelResourceAccessor` to do so through IAP.
 
 ## Deployment Instructions
 
@@ -92,58 +86,30 @@ block - for `hpc-slurm-remote-desktop.yaml` that is `hpc-slurm-remote-desktop`:
 
 ## Verify
 
-On each desktop host, confirm the broker is running and has published its
-endpoint:
+On each desktop host, confirm the broker is running:
 
 ```bash
 systemctl status ghpc-desktop-broker
 sudo journalctl -u ghpc-desktop-broker --no-pager
-ls /shared/ghpc-remote-desktop/endpoints/
-```
-
-Reach a desktop through an IAP tunnel and
-browse to `http://localhost:6080/vnc.html`:
-
-```bash
-gcloud compute start-iap-tunnel LOGIN-NODE 6080 --local-host-port=localhost:6080 --zone ZONE
+curl -s --unix-socket /run/ghpc-remote-desktop/broker.sock http://localhost/healthz   # -> ok
 ```
 
 ## Reaching a desktop in a browser
 
-The broker requires the identity headers on every request, including the
-websocket upgrade, so browsing straight to the tunnelled port returns 403. That
-is the cost of `trusted_proxy` with no proxy in front, and it is deliberate.
-
-To confirm the broker itself works, `curl` is enough:
+Forward a local port to the broker's socket on the host you want: the Slurm
+login node for the login desktop, or the visualization VM:
 
 ```bash
-SECRET=$(gcloud secrets versions access latest \
-  --secret ghpc-desktop-proxy-secret --project PROJECT_ID)
-
-curl -s http://localhost:6080/healthz          # -> ok
-
-curl -s -o /dev/null -w '%{http_code}\n' \
-  -H "X-Cluster-Desktop-Secret: $SECRET" \
-  -H "X-Cluster-Desktop-Email: you@example.com" \
-  -H "X-Cluster-Desktop-Username: YOUR_OSLOGIN_NAME" \
-  http://localhost:6080/vnc.html               # -> 200, and starts your session
+gcloud compute ssh HOST --project PROJECT_ID --zone ZONE --tunnel-through-iap \
+  -- -N -L 6080:/run/ghpc-remote-desktop/broker.sock
 ```
 
-For an actual desktop in a browser, run
-[local-desktop-proxy.conf](./local-desktop-proxy.conf) on your own machine in
-front of the tunnel; it injects the headers, including on the websocket. Fill in
-the three `CHANGEME` values, then:
+Then browse to `http://localhost:6080/vnc.html`. Your desktop starts on the
+first visit and is reused when you reconnect. The visualization desktop module
+prints this command for its VM as the `iap_tunnel_command` output.
 
-```bash
-nginx -c /full/path/to/local-desktop-proxy.conf
-# browse to http://localhost:8888/vnc.html
-```
-
-That proxy is deliberately local rather than a VM in the blueprint. A proxy
-deployed in the cluster would have to assert a fixed identity - making anyone who
-can reach its port that user - and would hold the shared secret, so the secret
-would stop being a control. An authenticating proxy that verifies who the user
-is belongs with a verified identity mode, not with `trusted_proxy`.
+There is nothing else to set up on your machine: no proxy and no headers. The
+connection is yours because sshd opened it as your OS Login account.
 
 ## Teardown Instructions
 

@@ -17,31 +17,13 @@ locals {
   labels = merge(var.labels, { ghpc_module = "novnc-desktop", ghpc_role = "remote-desktop" })
 }
 
-locals {
-  # Carried by every noVNC desktop in a deployment, so blueprint-level firewall
-  # rules (see community/examples/remote-desktop) can target all of them.
-  remote_desktop_tag = "ghpc-novnc-desktop"
-  # Carried only by this module's VMs, so its own ingress rule reaches nothing
-  # else and two novnc-desktop modules in one deployment do not collide. The
-  # suffix keeps it distinct from the shared tag for the default name_prefix.
-  instance_remote_desktop_tag = "ghpc-novnc-${var.name_prefix}-ingress"
-}
-
 module "novnc_runtime" {
   source = "../novnc-runtime"
 
   network_storage              = var.network_storage
   enable_gpu_acceleration      = var.enable_gpu_acceleration
-  desktop_endpoint_dir         = var.desktop_endpoint_dir
-  desktop_endpoint_name        = var.desktop_endpoint_name
   install_root                 = var.install_root
   max_user_sessions            = var.max_user_sessions
-  novnc_identity_mode          = var.novnc_identity_mode
-  novnc_listen_port            = var.novnc_listen_port
-  secret_project_id            = var.secret_project_id
-  novnc_proxy_secret           = var.novnc_proxy_secret
-  novnc_proxy_secret_id        = var.novnc_proxy_secret_id
-  novnc_proxy_secret_version   = var.novnc_proxy_secret_version
   novnc_version                = var.novnc_version
   session_idle_timeout_seconds = var.session_idle_timeout_seconds
   session_resolution           = var.session_resolution
@@ -82,7 +64,7 @@ module "instances" {
   subnetwork_self_link = var.subnetwork_self_link
   network_interfaces   = var.network_interfaces
   bandwidth_tier       = var.bandwidth_tier
-  tags                 = distinct(concat(var.tags, [local.remote_desktop_tag, local.instance_remote_desktop_tag]))
+  tags                 = var.tags
 
   threads_per_core    = var.threads_per_core
   guest_accelerator   = var.guest_accelerator
@@ -100,21 +82,4 @@ module "client_startup_script" {
   labels          = local.labels
 
   runners = module.novnc_runtime.startup_runners
-}
-
-resource "google_compute_firewall" "novnc_ingress" {
-  count = length(var.allowed_ingress_cidrs) > 0 && length(var.network_interfaces) == 0 ? 1 : 0
-
-  project = var.project_id
-  name    = "${substr("${var.deployment_name}-${var.name_prefix}", 0, 50)}-novnc"
-  network = var.network_self_link
-
-  direction     = "INGRESS"
-  source_ranges = var.allowed_ingress_cidrs
-  target_tags   = [local.instance_remote_desktop_tag]
-
-  allow {
-    protocol = "tcp"
-    ports    = [tostring(var.novnc_listen_port)]
-  }
 }

@@ -17,17 +17,12 @@ output "startup_runners" {
   value       = local.startup_runners
 }
 
-output "broker_listen_port" {
-  description = "Port on which the broker accepts requests from the fronting proxy."
-  value       = var.broker_listen_port
+output "broker_socket_path" {
+  description = "Unix socket the broker serves on. Forward a local port to it over SSH to reach a desktop."
+  value       = local.broker_socket_path
 }
 
 output "vnc_backend" {
   description = "VNC backend used for per-user desktop sessions."
   value       = local.vnc_backend
-}
-
-output "healthcheck_path" {
-  description = "Unauthenticated broker path that responds once the broker is running."
-  value       = "/healthz"
 }

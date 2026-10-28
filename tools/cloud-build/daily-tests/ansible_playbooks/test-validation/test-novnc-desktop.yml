@@ -22,14 +22,45 @@
   delay: 15
   until: broker_state.rc == 0
 
-- name: Check the broker answers its health check
-  ansible.builtin.uri:
-    url: http://127.0.0.1:6080/healthz
-    return_content: true
+- name: Check the broker answers its health check on its socket
+  ansible.builtin.command: >-
+    curl -fsS --unix-socket /run/ghpc-remote-desktop/broker.sock
+    http://localhost/healthz
+  changed_when: false
   register: broker_health
   retries: 20
   delay: 15
-  until: broker_health.status == 200 and 'ok' in broker_health.content
+  until: broker_health.rc == 0 and 'ok' in broker_health.stdout
+
+- name: Check the broker socket
+  become: true
+  ansible.builtin.stat:
+    path: /run/ghpc-remote-desktop/broker.sock
+  register: broker_socket
+
+- name: Assert the broker socket is open to every local user
+  ansible.builtin.assert:
+    that:
+    - broker_socket.stat.issock
+    - broker_socket.stat.mode == '0666'
+    fail_msg: >-
+      Expected a 0666 unix socket at /run/ghpc-remote-desktop/broker.sock. Any
+      local user must be able to connect; the broker decides who they are.
+
+- name: Look for a broker TCP listener
+  become: true
+  ansible.builtin.shell: |
+    set -o pipefail
+    ss -ltn | grep -E ':6080\b' || true
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: broker_tcp
+
+- name: Assert the broker does not listen on TCP
+  ansible.builtin.assert:
+    that: broker_tcp.stdout | length == 0
+    fail_msg: "The broker is listening on TCP ({{ broker_tcp.stdout }}); it must serve only its unix socket."
 
 - name: Check noVNC was installed
   become: true
@@ -42,50 +73,14 @@
     that: novnc_page.stat.exists
     fail_msg: noVNC was not installed under the install root.
 
-# The secret is fetched on the instance, so the staged config starts without it
-# and the install runner merges it in. Confirm that happened, without printing
-# the value.
-- name: Read the shape of the injected proxy secret
-  become: true
-  ansible.builtin.command: >-
-    python3 -c "import json;print(len(json.load(open('/etc/ghpc-desktop-broker/config.json')).get('proxy_secret','')))"
-  changed_when: false
-  register: secret_length
-
-- name: Check the secret was fetched from Secret Manager
-  ansible.builtin.assert:
-    that: secret_length.stdout | int > 0
-    fail_msg: >-
-      The broker config has no proxy secret; the Secret Manager fetch in the
-      install runner did not complete.
-
-- name: Check the broker config is not world readable
-  become: true
-  ansible.builtin.stat:
-    path: /etc/ghpc-desktop-broker/config.json
-  register: broker_config_stat
-
-- name: Assert the broker config mode is 0600
-  ansible.builtin.assert:
-    that: broker_config_stat.stat.mode == '0600'
-    fail_msg: "Expected the broker config to be 0600, got {{ broker_config_stat.stat.mode }}"
-
 # End to end: ask the broker for a session as this OS Login account and confirm
-# it starts one and serves the noVNC client. The username header is passed
-# explicitly because a service account's OS Login name is not derivable from its
-# email.
+# it starts one and serves the noVNC client. Nothing in the request says who is
+# asking; the broker learns that from the socket's peer credentials.
 - name: Request a desktop session from the broker
-  become: true
-  ansible.builtin.shell: |
-    set -o pipefail
-    secret="$(python3 -c "import json;print(json.load(open('/etc/ghpc-desktop-broker/config.json'))['proxy_secret'])")"
-    curl -sS -o /tmp/novnc-page.html -w '%{http_code}' \
-      -H "X-Cluster-Desktop-Secret: ${secret}" \
-      -H "X-Cluster-Desktop-Email: {{ ansible_user_id }}@test.invalid" \
-      -H "X-Cluster-Desktop-Username: {{ ansible_user_id }}" \
-      http://127.0.0.1:6080/vnc.html
-  args:
-    executable: /bin/bash
+  ansible.builtin.command: >-
+    curl -sS -o /tmp/novnc-page.html -w '%{http_code}'
+    --unix-socket /run/ghpc-remote-desktop/broker.sock
+    http://localhost/vnc.html
   changed_when: false
   register: session_request
   retries: 10
@@ -93,9 +88,37 @@
   until: session_request.stdout == '200'
 
 - name: Check the broker served the noVNC client
-  become: true
   ansible.builtin.command: grep -qi novnc /tmp/novnc-page.html
   changed_when: false
+
+- name: Check the session belongs to the connecting account
+  become: true
+  ansible.builtin.shell: |
+    set -o pipefail
+    python3 -c "import glob, json; print(' '.join(json.load(open(p))['username'] for p in glob.glob('/var/lib/ghpc-remote-desktop/*.json')))"
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: session_owners
+
+- name: Assert the desktop was started for the connecting account
+  ansible.builtin.assert:
+    that: ansible_user_id in session_owners.stdout.split()
+    fail_msg: "Expected a session for {{ ansible_user_id }}, found: {{ session_owners.stdout }}"
+
+- name: Request a desktop session as root
+  become: true
+  ansible.builtin.command: >-
+    curl -sS -o /dev/null -w '%{http_code}'
+    --unix-socket /run/ghpc-remote-desktop/broker.sock
+    http://localhost/vnc.html
+  changed_when: false
+  register: root_request
+
+- name: Assert root is refused a desktop
+  ansible.builtin.assert:
+    that: root_request.stdout == '403'
+    fail_msg: "Expected 403 for a connection from root, got {{ root_request.stdout }}"
 
 - name: Check a per-user display socket was created
   become: true

@@ -32,9 +32,9 @@ output "external_ip" {
   value       = module.instances.external_ip
 }
 
-output "novnc_listen_port" {
-  description = "Port exposed by the desktop broker for noVNC browser access."
-  value       = module.novnc_runtime.novnc_listen_port
+output "broker_socket_path" {
+  description = "Unix socket the desktop broker serves on. Forward a local port to it over SSH to reach a desktop."
+  value       = module.novnc_runtime.broker_socket_path
 }
 
 output "vnc_backend" {
@@ -42,20 +42,15 @@ output "vnc_backend" {
   value       = module.novnc_runtime.vnc_backend
 }
 
-output "healthcheck_path" {
-  description = "Relative noVNC path that should respond when the broker is healthy."
-  value       = module.novnc_runtime.healthcheck_path
-}
-
 output "iap_tunnel_command" {
-  description = "Example SSH tunnel command for low-level broker access through IAP."
+  description = "SSH command that forwards localhost:6080 to the desktop broker through IAP. Run it, then browse to http://localhost:6080/vnc.html."
   value = var.instance_count > 0 ? join(" ", [
     "gcloud", "compute", "ssh",
     module.instances.name[0],
     "--project", var.project_id,
     "--zone", var.zone,
     "--tunnel-through-iap",
-    "--",
-    "-L", "${var.novnc_listen_port}:localhost:${var.novnc_listen_port}",
+    "--", "-N",
+    "-L", "6080:${module.novnc_runtime.broker_socket_path}",
   ]) : null
 }

@@ -73,9 +73,9 @@ variable "session_resolution" {
 }
 
 variable "vnc_display_number" {
-  description = "First X display number reserved for per-user sessions."
+  description = "First X display number reserved for per-user VNC sessions. Starts high to stay clear of users' own X servers on a shared host."
   type        = number
-  default     = 1
+  default     = 50
 }
 
 variable "max_user_sessions" {
@@ -85,88 +85,13 @@ variable "max_user_sessions" {
 }
 
 variable "session_idle_timeout_seconds" {
-  description = "Idle timeout after which a session is cleaned up. 0 disables cleanup."
+  description = "Idle timeout after which a per-user desktop session is cleaned up. Set to 0 to keep idle sessions; a session whose desktop has exited is still cleaned up."
   type        = number
   default     = 43200
-}
-
-variable "broker_listen_port" {
-  description = "Port on which the broker accepts requests from the fronting proxy."
-  type        = number
-  default     = 6080
-}
-
-variable "identity_mode" {
-  description = <<-EOT
-    How the broker establishes which user a request belongs to. Only
-    "trusted_proxy" is supported: the identity is taken from request headers
-    with no verification, so it is only safe where an authenticating proxy is
-    the sole route to the broker.
-    EOT
-  type        = string
-  default     = "trusted_proxy"
-
-  validation {
-    condition     = contains(["trusted_proxy"], lower(trimspace(var.identity_mode)))
-    error_message = "identity_mode must be trusted_proxy."
-  }
-}
-
-variable "secret_project_id" {
-  description = "Project holding the Secret Manager secrets. Defaults to the instance's own project."
-  type        = string
-  default     = null
-}
-
-variable "proxy_secret" {
-  description = <<-EOT
-    Shared secret the broker requires in the X-Cluster-Desktop-Secret header,
-    supplied directly. Mutually exclusive with proxy_secret_id.
-
-    Use this where the caller already owns the value and has to hold the
-    plaintext anyway - a front end that sends the header on every request, for
-    instance, gains nothing from a round trip through Secret Manager. Otherwise
-    prefer proxy_secret_id: a literal is carried in the startup script staged in
-    Cloud Storage and appears in Terraform state.
-    EOT
-  type        = string
-  sensitive   = true
-  default     = null
-}
-
-variable "proxy_secret_id" {
-  description = <<-EOT
-    Secret Manager secret ID holding the shared secret the broker requires in
-    the X-Cluster-Desktop-Secret header. Mutually exclusive with proxy_secret.
-
-    Fetched on the instance at boot, so the value never enters Terraform state
-    or the startup script staged in Cloud Storage. The instance service account
-    needs roles/secretmanager.secretAccessor.
-    EOT
-  type        = string
-  default     = null
-}
-
-variable "proxy_secret_version" {
-  description = "Version of proxy_secret_id to read."
-  type        = string
-  default     = "latest"
 }
 
 variable "novnc_version" {
   description = "noVNC release version to install. Only used when front_end is novnc."
   type        = string
   default     = "1.7.0"
-}
-
-variable "desktop_endpoint_dir" {
-  description = "Optional directory where the runtime publishes DESKTOP_* endpoint metadata."
-  type        = string
-  default     = null
-}
-
-variable "desktop_endpoint_name" {
-  description = "Endpoint metadata file name used when desktop_endpoint_dir is set."
-  type        = string
-  default     = "desktop"
 }
