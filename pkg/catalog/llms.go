@@ -17,6 +17,7 @@ package catalog
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -103,7 +104,7 @@ const llmsTxtMatrixAndDocsSection = `
 | **H4D (Cloud RDMA HPC)** | ` + "`h4d-highmem-192-lssd`" + ` | **Slurm** | [examples/hpc-slurm-h4d/hpc-slurm-h4d.yaml](examples/hpc-slurm-h4d/hpc-slurm-h4d.yaml) | [examples/hpc-slurm-h4d/hpc-slurm-h4d-deployment.yaml](examples/hpc-slurm-h4d/hpc-slurm-h4d-deployment.yaml) | Filestore + Cloud RDMA Falcon VPC |
 | **H4D (Cloud RDMA HPC)** | ` + "`h4d-highmem-192-lssd`" + ` | **GKE** | [examples/gke-h4d/gke-h4d.yaml](examples/gke-h4d/gke-h4d.yaml) | [examples/gke-h4d/gke-h4d-deployment.yaml](examples/gke-h4d/gke-h4d-deployment.yaml) | Cloud RDMA Falcon VPC + Kueue |
 | **TPU 7x (Ironwood)** | ` + "`tpu7x-standard-4t`" + ` | **Slurm** | [examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml](examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml) | [examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml](examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml) | 36,000 GiB Managed Lustre |
-| **TPU 7x (Ironwood)** | ` + "`tpu7x-standard-4t`" + ` | **GKE** | [examples/gke-tpu-7x/gke-tpu-7x.yaml](examples/gke-tpu-7x/gke-tpu-7x.yaml) | [examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml](examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml) | Kueue + Pathways (TAS via ` + "`enable_dynamic_slicing_for_tpus: true`" + `; MTC & GCS FUSE in ` + "`gke-tpu-7x-advanced.yaml`" + `) |
+| **TPU 7x (Ironwood)** | ` + "`tpu7x-standard-4t`" + ` | **GKE** | [examples/gke-tpu-7x/gke-tpu-7x.yaml](examples/gke-tpu-7x/gke-tpu-7x.yaml) | [examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml](examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml) | Kueue + Pathways (MTC & GCS FUSE in ` + "`gke-tpu-7x-advanced.yaml`" + `) |
 | **TPU v6e (Trillium)** | ` + "`ct6e-standard-4t`" + ` | **GKE** | [examples/gke-tpu-v6e/gke-tpu-v6e.yaml](examples/gke-tpu-v6e/gke-tpu-v6e.yaml) | [examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml](examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml) | Kueue + Pathways + ` + "`./gcluster job submit`" + ` |
 | **TPU v5p** | ` + "`ct5p-hightpu-4t`" + ` | **GKE** | [examples/gke-tpu-v5p/gke-tpu-v5p.yaml](examples/gke-tpu-v5p/gke-tpu-v5p.yaml) | [examples/gke-tpu-v5p/gke-tpu-v5p-deployment.yaml](examples/gke-tpu-v5p/gke-tpu-v5p-deployment.yaml) | Kueue + ` + "`./gcluster job submit`" + ` |
 | **TPU v5e** | ` + "`ct5lp-hightpu-4t`" + ` | **GKE** | [examples/gke-tpu-v5e/gke-tpu-v5e.yaml](examples/gke-tpu-v5e/gke-tpu-v5e.yaml) | [examples/gke-tpu-v5e/gke-tpu-v5e-deployment.yaml](examples/gke-tpu-v5e/gke-tpu-v5e-deployment.yaml) | Kueue + ` + "`./gcluster job submit`" + ` |
@@ -125,13 +126,13 @@ const llmsTxtMatrixAndDocsSection = `
 - [Network Storage Guide](docs/network_storage.md): Managed Lustre, Filestore, Cloud Storage FUSE, and NetApp Volumes.
 `
 
-// renderReservationVars dynamically groups blueprints by their reservation top-level variable
-// so the reservation reference in llms.txt and llms-full.txt never drifts from catalog.yaml.
-func renderReservationVars(sb *strings.Builder, bps []BlueprintEntry, indent string, multilineYAML bool) {
+var reservationVarKeyRe = regexp.MustCompile(`^(.*_)?reservation(_name|_affinity)?$`)
+
+func groupBlueprintsByReservationVar(bps []BlueprintEntry) map[string][]string {
 	byVar := make(map[string][]string)
 	for _, bp := range bps {
 		for k := range bp.Vars {
-			if k == "reservation" || k == "reservation_affinity" || strings.HasSuffix(k, "reservation_name") {
+			if reservationVarKeyRe.MatchString(k) {
 				byVar[k] = append(byVar[k], fmt.Sprintf("`%s`", bp.Path))
 			}
 		}
@@ -139,6 +140,13 @@ func renderReservationVars(sb *strings.Builder, bps []BlueprintEntry, indent str
 	for k := range byVar {
 		sort.Strings(byVar[k])
 	}
+	return byVar
+}
+
+// renderReservationVars dynamically groups blueprints by their reservation top-level variable
+// so the reservation reference in llms.txt and llms-full.txt never drifts from catalog.yaml.
+func renderReservationVars(sb *strings.Builder, bps []BlueprintEntry, indent string, multilineYAML bool) {
+	byVar := groupBlueprintsByReservationVar(bps)
 	if paths, ok := byVar["reservation_affinity"]; ok {
 		joined := joinItemsWithLimit(paths, maxLLMsFullLineContentChars)
 		if multilineYAML {

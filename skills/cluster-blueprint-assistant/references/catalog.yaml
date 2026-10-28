@@ -2381,7 +2381,7 @@ blueprints:
     authorized_cidr: null
     auto_repair: true
     autoscaling_total_min_nodes: 0
-    deployment_name: gke-a3-high
+    deployment_name: null
     enable_flex_start: false
     enable_queued_provisioning: false
     gcp_public_cidrs_access_enabled: false
@@ -2395,14 +2395,15 @@ blueprints:
       name: null
       type: null
     project_id: null
-    region: us-central1
+    region: null
     reservation_affinity:
-      consume_reservation_type: NO_RESERVATION
-      specific_reservations: []
+      consume_reservation_type: SPECIFIC_RESERVATION
+      specific_reservations:
+      - name: null
     spot: false
-    static_node_count: 2
+    static_node_count: null
     version_prefix: "1.35."
-    zone: us-central1-c
+    zone: null
   modules:
   - id: network1
     source: modules/network/vpc
@@ -2440,7 +2441,7 @@ blueprints:
     authorized_cidr: null
     auto_repair: true
     autoscaling_total_min_nodes: 0
-    deployment_name: gke-a3-mega
+    deployment_name: null
     enable_flex_start: false
     enable_queued_provisioning: false
     gcp_public_cidrs_access_enabled: false
@@ -2454,8 +2455,9 @@ blueprints:
     project_id: null
     region: null
     reservation_affinity:
-      consume_reservation_type: NO_RESERVATION
-      specific_reservations: []
+      consume_reservation_type: SPECIFIC_RESERVATION
+      specific_reservations:
+      - name: null
     spot: false
     static_node_count: null
     version_prefix: "1.35."
@@ -2509,8 +2511,9 @@ blueprints:
     project_id: null
     region: null
     reservation_affinity:
-      consume_reservation_type: NO_RESERVATION
-      specific_reservations: []
+      consume_reservation_type: SPECIFIC_RESERVATION
+      specific_reservations:
+      - name: null
     spot: false
     static_node_count: null
     system_node_pool_disk_size_gb: 200
@@ -2575,7 +2578,7 @@ blueprints:
     auto_monitoring_scope: NONE
     auto_repair: true
     autoscaling_total_min_nodes: 0
-    deployment_name: gke-a4
+    deployment_name: null
     enable_flex_start: false
     enable_inference_gateway: false
     enable_queued_provisioning: false
@@ -2587,8 +2590,9 @@ blueprints:
     project_id: null
     region: null
     reservation_affinity:
-      consume_reservation_type: NO_RESERVATION
-      specific_reservations: []
+      consume_reservation_type: SPECIFIC_RESERVATION
+      specific_reservations:
+      - name: null
     spot: false
     static_node_count: null
     system_node_pool_disk_size_gb: 200
@@ -2651,7 +2655,7 @@ blueprints:
     accelerator_type: nvidia-gb300
     asapd_lite_installer_path: "$(ghpc_stage(\"./asapd-lite-installer.yaml\"))"
     authorized_cidr: null
-    deployment_name: gke-a4x-max-bm-dep
+    deployment_name: null
     gib_installer_path: "$(ghpc_stage(\"./nccl-installer.yaml.tftpl\"))"
     k8s_service_account_name: workload-identity-k8s-sa
     kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
@@ -2660,7 +2664,7 @@ blueprints:
     project_id: null
     region: null
     reservation: null
-    reservation_project_id: $(vars.project_id)
+    reservation_project_id: null
     static_node_count: null
     system_node_pool_disk_size_gb: 200
     system_node_pool_machine_type: n2d-standard-16
@@ -2724,7 +2728,7 @@ blueprints:
     a4x_node_pool_disk_size_gb: 100
     accelerator_type: nvidia-gb200
     authorized_cidr: null
-    deployment_name: gke-a4x
+    deployment_name: null
     gib_installer_path: "$(ghpc_stage(\"./nccl-installer.yaml.tftpl\"))"
     k8s_service_account_name: workload-identity-k8s-sa
     kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
@@ -2733,7 +2737,7 @@ blueprints:
     project_id: null
     region: null
     reservation: null
-    reservation_project_id: $(vars.project_id)
+    reservation_project_id: null
     static_node_count: null
     system_node_pool_disk_size_gb: 200
     system_node_pool_machine_type: n2d-standard-16
@@ -2842,7 +2846,7 @@ blueprints:
   vars:
     a3ultra_node_pool_disk_size_gb: 100
     authorized_cidr: null
-    deployment_name: gke-a3u-dws-fs-qp
+    deployment_name: null
     enable_flex_start: true
     enable_queued_provisioning: true
     gcp_public_cidrs_access_enabled: false
@@ -3024,7 +3028,7 @@ blueprints:
   vars:
     a3ultra_node_pool_disk_size_gb: 100
     authorized_cidr: null
-    deployment_name: gke-a3u-dws-fs
+    deployment_name: null
     enable_flex_start: true
     nccl_installer_path: "$(ghpc_stage(\"./nccl-installer.yaml\"))"
     project_id: null
@@ -3142,7 +3146,7 @@ blueprints:
     autoscaling_max_node_count: 4
     autoscaling_min_node_count: 0
     compute_machine_type: ct6e-standard-4t
-    deployment_name: gke-tpu-v6e-flex
+    deployment_name: gke-tpu-v6-flex
     enable_flex_start: true
     enable_pathways_for_tpus: true
     kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
@@ -3269,7 +3273,7 @@ blueprints:
     auto_repair: true
     autoscaling_total_min_nodes: 0
     compute_machine_type: g4-standard-48
-    deployment_name: gke-g4
+    deployment_name: null
     enable_flex_start: false
     enable_queued_provisioning: false
     kueue_configuration_path: null
@@ -3280,10 +3284,11 @@ blueprints:
     project_id: null
     region: null
     reservation_affinity:
-      consume_reservation_type: NO_RESERVATION
-      specific_reservations: []
+      consume_reservation_type: SPECIFIC_RESERVATION
+      specific_reservations:
+      - name: null
     spot: false
-    static_node_count: 1
+    static_node_count: null
     system_node_pool_disk_size_gb: 100
     system_node_pool_machine_type: n2d-standard-16
     version_prefix: "1.35."
@@ -3329,19 +3334,19 @@ blueprints:
     auto_repair: true
     autoscaling_total_min_nodes: 0
     compute_machine_type: h4d-highmem-192-lssd
-    deployment_name: gke-h4d
+    deployment_name: null
     enable_flex_start: false
     enable_queued_provisioning: false
     h4d_node_pool_disk_size_gb: 100
     kueue_configuration_path: null
     placement_policy:
-      name: null
-      type: null
+      type: COMPACT
     project_id: null
     region: null
     reservation_affinity:
-      consume_reservation_type: NO_RESERVATION
-      specific_reservations: []
+      consume_reservation_type: SPECIFIC_RESERVATION
+      specific_reservations:
+      - name: null
     spot: false
     static_node_count: null
     system_node_pool_disk_size_gb: 100
@@ -3683,8 +3688,9 @@ blueprints:
     project_id: null
     region: null
     reservation_affinity:
-      consume_reservation_type: NO_RESERVATION
-      specific_reservations: []
+      consume_reservation_type: SPECIFIC_RESERVATION
+      specific_reservations:
+      - name: null
     spot: false
     system_node_pool_machine_type: n2-standard-8
     tpu_topology: 2x2x1
@@ -3758,8 +3764,9 @@ blueprints:
     project_id: null
     region: null
     reservation_affinity:
-      consume_reservation_type: NO_RESERVATION
-      specific_reservations: []
+      consume_reservation_type: SPECIFIC_RESERVATION
+      specific_reservations:
+      - name: null
     spot: false
     system_node_pool_machine_type: n2-standard-8
     tpu_topology: 2x2x1
@@ -3800,8 +3807,8 @@ blueprints:
   vars:
     accelerator_type: tpu-v4-podslice
     authorized_cidr: null
-    compute_machine_type: ct4p-hightpu-4t
-    deployment_name: gke-tpu-v4
+    compute_machine_type: null
+    deployment_name: null
     enable_pathways_for_tpus: true
     num_slices: null
     project_id: null
@@ -3845,7 +3852,7 @@ blueprints:
   vars:
     accelerator_type: tpu-v5-lite-podslice
     authorized_cidr: null
-    compute_machine_type: ct5lp-hightpu-4t
+    compute_machine_type: null
     deployment_name: gke-tpu-v5e
     enable_pathways_for_tpus: true
     num_slices: null
@@ -3894,8 +3901,8 @@ blueprints:
     autoscaling_max_node_count: null
     autoscaling_min_node_count: null
     autoscaling_total_min_nodes: 0
-    compute_machine_type: ct5p-hightpu-4t
-    deployment_name: gke-tpu-v5p
+    compute_machine_type: null
+    deployment_name: null
     enable_flex_start: false
     enable_pathways_for_tpus: true
     enable_queued_provisioning: false
@@ -3904,8 +3911,9 @@ blueprints:
     project_id: null
     region: null
     reservation_affinity:
-      consume_reservation_type: NO_RESERVATION
-      specific_reservations: []
+      consume_reservation_type: SPECIFIC_RESERVATION
+      specific_reservations:
+      - name: null
     spot: false
     system_node_pool_disk_size_gb: 200
     system_node_pool_machine_type: n2-standard-8
@@ -3959,8 +3967,9 @@ blueprints:
     project_id: null
     region: null
     reservation_affinity:
-      consume_reservation_type: NO_RESERVATION
-      specific_reservations: []
+      consume_reservation_type: SPECIFIC_RESERVATION
+      specific_reservations:
+      - name: null
     spot: false
     system_node_pool_disk_size_gb: 200
     system_node_pool_machine_type: n2-standard-8
@@ -4033,8 +4042,9 @@ blueprints:
     project_id: null
     region: null
     reservation_affinity:
-      consume_reservation_type: NO_RESERVATION
-      specific_reservations: []
+      consume_reservation_type: SPECIFIC_RESERVATION
+      specific_reservations:
+      - name: null
     spot: false
     system_node_pool_disk_size_gb: 200
     system_node_pool_machine_type: n2-standard-8
@@ -4357,12 +4367,12 @@ blueprints:
   machine_types: [h4d-highmem-192-lssd]
   required_services: [compute.googleapis.com, file.googleapis.com, iam.googleapis.com, storage.googleapis.com]
   vars:
-    deployment_name: slurm-h4d
-    h4d_cluster_size: 2
+    deployment_name: null
+    h4d_cluster_size: null
     h4d_dws_flex_enabled: false
     h4d_enable_spot_vm: false
     h4d_node_count_dynamic_max: 0
-    h4d_reservation_name: ""
+    h4d_reservation_name: null
     homefs_size_gb: 2560
     instance_image:
       family: aci-cpu-rocky-linux-9-slurm-2605-amd64
@@ -4370,8 +4380,8 @@ blueprints:
     login_machine_type: n2-standard-4
     project_id: null
     rdma_net_range: 192.168.128.0/18
-    region: us-central1
-    zone: us-central1-a
+    region: null
+    zone: null
   modules:
   - id: h4d-slurm-net-0
     source: modules/network/vpc
@@ -4522,7 +4532,7 @@ blueprints:
     a3_enable_spot_vm: false
     a3_node_count_dynamic_max: 0
     a3_partition_name: null
-    a3_reservation_name: ""
+    a3_reservation_name: null
     a3_static_cluster_size: null
     build_slurm_from_git_ref: 6.13.2
     controller_machine_type: c2-standard-8
@@ -4608,7 +4618,7 @@ blueprints:
     a3mega_enable_spot_vm: false
     a3mega_node_count_dynamic_max: 0
     a3mega_partition_name: a3mega
-    a3mega_reservation_name: ""
+    a3mega_reservation_name: null
     base_image:
       image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260522
       project: ubuntu-os-accelerator-images
@@ -4838,7 +4848,7 @@ blueprints:
     a3u_dws_flex_enabled: false
     a3u_enable_spot_vm: false
     a3u_node_count_dynamic_max: 0
-    a3u_reservation_name: ""
+    a3u_reservation_name: null
     base_network_name: $(vars.deployment_name)
     controller_disk_size_gb: 300
     controller_machine_type: n2d-standard-16
@@ -4921,7 +4931,7 @@ blueprints:
     a3u_provisioning_model: RESERVATION_BOUND
     a3u_reservation_name: null
     base_network_name: $(vars.deployment_name)
-    deployment_name: a3ultra-vm-instance
+    deployment_name: a3-ultra-vm
     filestore_ip_range: 192.168.32.0/29
     homefs_size_gb: 2560
     hostname_prefix: "$(\"${vars.deployment_name}-beowulf\")"
@@ -4930,7 +4940,7 @@ blueprints:
       project: ubuntu-os-accelerator-images
     net0_range: 192.168.0.0/19
     net1_range: 192.168.64.0/18
-    number_of_vms: 2
+    number_of_vms: null
     project_id: null
     rdma_net_range: 192.168.128.0/18
     region: null
@@ -4971,7 +4981,7 @@ blueprints:
     a4h_dws_flex_enabled: false
     a4h_enable_spot_vm: false
     a4h_node_count_dynamic_max: 0
-    a4h_reservation_name: ""
+    a4h_reservation_name: null
     base_network_name: $(vars.deployment_name)
     benchmark_dir: "$(ghpc_stage(\"system_benchmarks\"))"
     controller_machine_type: n2d-standard-8
@@ -5052,7 +5062,7 @@ blueprints:
   vars:
     a4h_provisioning_model: RESERVATION_BOUND
     a4h_reservation_name: null
-    deployment_name: a4high-vm
+    deployment_name: a4-high-vm
     filestore_ip_range: 192.168.32.0/24
     homefs_size_gb: 10240
     hostname_prefix: $(vars.deployment_name)
@@ -5062,7 +5072,7 @@ blueprints:
     local_ssd_mountpoint: /mnt/localssd
     net0_range: 192.168.0.0/19
     net1_range: 192.168.64.0/18
-    number_of_vms: 2
+    number_of_vms: null
     project_id: null
     rdma_net_range: 192.168.128.0/18
     region: null
@@ -5157,7 +5167,7 @@ blueprints:
   vars:
     a4x_cluster_size: null
     a4x_node_count_dynamic_max: 0
-    a4x_reservation_name: ""
+    a4x_reservation_name: null
     benchmark_dir: "$(ghpc_stage(\"system_benchmarks\"))"
     controller_machine_type: t2a-standard-2
     deployment_name: null
@@ -5237,7 +5247,7 @@ blueprints:
   vars:
     a4x_max_cluster_size: null
     a4x_max_node_count_dynamic_max: 0
-    a4x_max_reservation_name: ""
+    a4x_max_reservation_name: null
     benchmark_dir: "$(ghpc_stage(\"system_benchmarks\"))"
     build_from_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-580
     build_from_image_project: ubuntu-os-accelerator-images
@@ -5397,7 +5407,7 @@ blueprints:
     tpu_dws_flex_enabled: false
     tpu_dynamic_max_nodes: null
     tpu_enable_spot_vm: false
-    tpu_reservation_name: ""
+    tpu_reservation_name: null
     tpu_static_nodes: null
     zone: null
   modules:

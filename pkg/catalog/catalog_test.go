@@ -208,8 +208,8 @@ func verifyExpressionVarDefaults(t *testing.T, byPath map[string]BlueprintEntry)
 		t.Errorf("expected gke-a4 kueue_configuration_path expression preserved, got %v", got)
 	}
 	gkeA4x := byPath["examples/gke-a4x/gke-a4x.yaml"]
-	if got := gkeA4x.Vars["reservation_project_id"]; got != "$(vars.project_id)" {
-		t.Errorf("expected gke-a4x reservation_project_id=$(vars.project_id), got %v", got)
+	if got, exists := gkeA4x.Vars["reservation_project_id"]; !exists || got != nil {
+		t.Errorf("expected gke-a4x reservation_project_id=nil (overridden by companion deployment file), got %v (exists=%v)", got, exists)
 	}
 	tpuV6e := byPath["examples/gke-tpu-v6e/gke-tpu-v6e.yaml"]
 	if got, exists := tpuV6e.Vars["authorized_cidr"]; !exists || got != nil {
@@ -519,7 +519,11 @@ func verifyLLMsRenderOutputs(t *testing.T, cat Catalog) {
 	if strings.Contains(llms1, "a4xm_reservation_name") {
 		t.Errorf("RenderLLMsTxt must not contain non-existent variable name a4xm_reservation_name")
 	}
+	verifyLLMsFullOutput(t, cat)
+}
 
+func verifyLLMsFullOutput(t *testing.T, cat Catalog) {
+	t.Helper()
 	full1 := RenderLLMsFullTxt(cat)
 	if full1 != RenderLLMsFullTxt(cat) {
 		t.Errorf("RenderLLMsFullTxt is not deterministic")

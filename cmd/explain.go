@@ -757,7 +757,10 @@ func buildExplainBlueprint(repoRoot, bpPath, explicitDeplPath string) (ExplainBl
 	if err != nil {
 		return ExplainBlueprintResult{}, err
 	}
-	apis := catalog.ExtractBlueprintServices(repoRoot, filepath.Dir(bpPath), bp)
+	apis := catalog.ExtractBlueprintServices("", filepath.Dir(bpPath), bp)
+	if apis == nil {
+		apis = []string{}
+	}
 	stages := collectBlueprintStages(bp)
 
 	gcloudCmd := ""

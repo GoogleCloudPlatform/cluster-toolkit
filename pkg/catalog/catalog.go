@@ -259,10 +259,14 @@ func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string
 	if varsMap == nil {
 		varsMap = make(map[string]interface{})
 	}
-	deployRel := findCompanionDeployment(repoRoot, absPath, bp.BlueprintName, varsMap, tracked)
+	machineVarsMap := make(map[string]interface{}, len(varsMap))
+	for k, v := range varsMap {
+		machineVarsMap[k] = v
+	}
+	deployRel := findCompanionDeployment(repoRoot, absPath, bp.BlueprintName, varsMap, machineVarsMap, tracked)
 	modules := extractModuleSummaries(bp)
 	scheduler := inferScheduler(modules)
-	machineTypes := extractMachineTypes(bp, varsMap)
+	machineTypes := extractMachineTypes(bp, machineVarsMap)
 	reqServices := ExtractBlueprintServices(repoRoot, filepath.Dir(absPath), bp)
 	desc := lookupDescription(repoRoot, absPath, relPath, readmeDescs)
 	if len(varsMap) == 0 {
@@ -350,10 +354,11 @@ func cleanServiceList(services []string) []string {
 }
 
 // findCompanionDeployment pairs a blueprint with a git-tracked deployment file
-// in the same directory and merges the deployment file's vars into varsMap for
-// keys that are missing or null in the blueprint. It returns the repo-relative
+// in the same directory and merges the deployment file's vars into varsMap,
+// mirroring cmd/create.go mergeDeploymentSettings (deployment keys, including
+// explicit null, override blueprint defaults). It returns the repo-relative
 // path of the matched deployment file, or "" when none matches.
-func findCompanionDeployment(repoRoot, bpAbsPath, blueprintName string, varsMap map[string]interface{}, tracked map[string]bool) string {
+func findCompanionDeployment(repoRoot, bpAbsPath, blueprintName string, varsMap, machineVarsMap map[string]interface{}, tracked map[string]bool) string {
 	dir := filepath.Dir(bpAbsPath)
 	candidates := trackedDeploymentFiles(repoRoot, dir, tracked)
 	match := matchDeploymentFile(filepath.Base(bpAbsPath), blueprintName, candidates, isExampleSubfolder(repoRoot, dir))
@@ -363,8 +368,9 @@ func findCompanionDeployment(repoRoot, bpAbsPath, blueprintName string, varsMap 
 	cand := filepath.Join(dir, match)
 	if ds, _, err := config.NewDeploymentSettings(cand); err == nil {
 		for k, v := range dictToPlainMap(ds.Vars) {
-			if _, exists := varsMap[k]; !exists || varsMap[k] == nil {
-				varsMap[k] = v
+			varsMap[k] = v
+			if machineVarsMap[k] == nil && v != nil {
+				machineVarsMap[k] = v
 			}
 		}
 	}
