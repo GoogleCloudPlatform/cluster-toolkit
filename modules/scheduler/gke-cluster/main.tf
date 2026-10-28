@@ -454,6 +454,10 @@ resource "google_container_cluster" "gke_cluster" {
     ignore_changes = [
       node_config,
       min_master_version,
+      # Ignore unmanaged Fleet membership added out-of-band (e.g. Connect Gateway)
+      fleet,
+      # Ignore cluster-level node_locations on regional clusters to prevent fighting GKE regional zone defaults
+      node_locations,
     ]
     precondition {
       condition     = var.default_max_pods_per_node == null || var.networking_mode == "VPC_NATIVE"
@@ -605,6 +609,8 @@ resource "google_container_node_pool" "system_node_pools" {
   lifecycle {
     ignore_changes = [
       node_config[0].labels,
+      # Ignore resource_labels to prevent node pool replacement on blueprint/metadata renames
+      node_config[0].resource_labels,
       node_config[0].taint,
       version,
     ]
@@ -698,6 +704,8 @@ resource "google_container_node_pool" "cpu_np" {
 
   lifecycle {
     ignore_changes = [
+      # Ignore resource_labels to prevent node pool replacement on blueprint/metadata renames
+      node_config[0].resource_labels,
       version,
     ]
   }
