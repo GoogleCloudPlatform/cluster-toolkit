@@ -352,14 +352,14 @@ func getSettingVal(settings config.Dict, key string, aliases []string, nestedKey
 		}
 	}
 
-	if nestedKey != "" && !isNilOrNull(val) && val.IsKnown() {
-		if val.Type().IsObjectType() || val.Type().IsMapType() {
+	if nestedKey != "" {
+		if !isNilOrNull(val) && val.IsKnown() && (val.Type().IsObjectType() || val.Type().IsMapType()) {
 			m := val.AsValueMap()
 			if v, ok := m[nestedKey]; ok {
 				return v
 			}
-			return cty.NilVal
 		}
+		return cty.NilVal
 	}
 	return val
 }
@@ -383,7 +383,7 @@ func formatWarning(mod config.Module, rule modulereader.Day2IgnoredSetting) stri
 
 	if rule.Remediation != "" {
 		resName := string(mod.ID)
-		if n := mod.Settings.Get("name"); !n.IsNull() && n.IsKnown() && n.Type() == cty.String && n.AsString() != "" {
+		if n := mod.Settings.Get("name"); !isNilOrNull(n) && n.IsKnown() && n.Type() == cty.String && n.AsString() != "" {
 			resName = n.AsString()
 		}
 		remediation := strings.ReplaceAll(rule.Remediation, "{module_id}", string(mod.ID))

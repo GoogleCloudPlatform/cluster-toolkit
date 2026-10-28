@@ -482,4 +482,39 @@ func (s *MySuite) TestGetModifiedIgnoredSettingsWarnings(c *C) {
 	aliasWarns := getModifiedIgnoredSettingsWarnings(bpAliasPrev, bpAliasCurr)
 	c.Assert(aliasWarns, HasLen, 1)
 	c.Check(aliasWarns[0], Matches, "(?s).*module \"cluster-alias\".*control-plane version setting was modified.*gcloud container clusters upgrade.*")
+
+	// Case 13: Non-map parent with nestedKey returns nil and produces no false warning
+	bpNonMapPrev := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "vm-nonmap",
+						Source: "modules/compute/vm-instance",
+						Settings: config.NewDict(map[string]cty.Value{
+							"metadata": cty.NullVal(cty.DynamicVal.Type()),
+						}),
+					},
+				},
+			},
+		},
+	}
+	bpNonMapCurr := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "vm-nonmap",
+						Source: "modules/compute/vm-instance",
+						Settings: config.NewDict(map[string]cty.Value{
+							"metadata": cty.StringVal("not-a-map"),
+						}),
+					},
+				},
+			},
+		},
+	}
+	c.Check(getModifiedIgnoredSettingsWarnings(bpNonMapPrev, bpNonMapCurr), HasLen, 0)
 }
