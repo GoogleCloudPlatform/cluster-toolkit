@@ -113,6 +113,19 @@ class ExampleTests(unittest.TestCase):
         self.assertEqual(r["severity_hint"], "medium")
         self.assertIn("examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml", r["touched_examples"])
 
+    def test_duplicate_keys_in_one_hunk_are_not_masked(self):
+        # Two modules touched in one hunk: homefs swaps filestore->lustre while a second
+        # module is added with the OLD source. A last-value-wins parser would see
+        # old == new for `source` and miss the swap.
+        d = _diff("examples/x.yaml",
+                  removed=["    source: modules/file-system/filestore"],
+                  added=["    source: modules/file-system/managed-lustre",
+                         "    source: modules/file-system/filestore"])
+        r = diff_scan.scan(d)
+        self.assertIn("example_module_id_or_source_changed", _ids(r))
+        detail = next(s["detail"] for s in r["signals"] if s["id"] == "example_module_id_or_source_changed")
+        self.assertIn("managed-lustre", detail)
+
     def test_var_removed(self):
         d = _diff("examples/gke-a4/gke-a4.yaml", removed=["  reservation: my-res"])
         self.assertIn("example_var_or_setting_removed", _ids(diff_scan.scan(d)))

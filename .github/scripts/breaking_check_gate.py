@@ -58,8 +58,11 @@ def section_text(body: str, heading: str) -> str:
 
 def load_maintainers(path: str) -> Set[str]:
     try:
-        data = json.load(open(path))
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
     except (OSError, ValueError):
+        return set()
+    if not isinstance(data, list):
         return set()
     return {str(e.get("login", "")).lower() for e in data if isinstance(e, dict)}
 
@@ -119,18 +122,32 @@ def evaluate(verdict: Optional[Dict], labels: List[str], body: str, overrides: D
     return failures, notes
 
 
+def parse_concatenated_json_arrays(text: str) -> List[Dict]:
+    """Parse `gh api --paginate` output, which concatenates one JSON array per page."""
+    decoder = json.JSONDecoder()
+    items: List[Dict] = []
+    pos = 0
+    while pos < len(text):
+        while pos < len(text) and text[pos].isspace():
+            pos += 1
+        if pos >= len(text):
+            break
+        try:
+            obj, consumed = decoder.raw_decode(text, pos)
+        except ValueError:
+            break
+        if isinstance(obj, list):
+            items.extend(o for o in obj if isinstance(o, dict))
+        pos = consumed
+    return items
+
+
 def fetch_label_events(repo: str, pr_number: int) -> List[Dict]:
     out = subprocess.run(
         ["gh", "api", "--paginate", "-H", "Accept: application/vnd.github+json",
          f"repos/{repo}/issues/{pr_number}/timeline?per_page=100"],
         capture_output=True, text=True, check=True).stdout
-    # --paginate may concatenate arrays; normalise.
-    events: List[Dict] = []
-    for chunk in re.findall(r"\[.*?\](?=\s*\[|\s*$)", out, flags=re.DOTALL) or [out]:
-        try:
-            events.extend(json.loads(chunk))
-        except ValueError:
-            continue
+    events = parse_concatenated_json_arrays(out)
     return [e for e in events if e.get("event") in ("labeled", "unlabeled")]
 
 

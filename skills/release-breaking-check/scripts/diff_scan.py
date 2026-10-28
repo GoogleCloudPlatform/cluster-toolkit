@@ -30,7 +30,7 @@ import json
 import re
 import subprocess
 import sys
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set
 
 SEVERITY_THRESHOLDS = (("high", 6), ("medium", 3), ("low", 1))
 
@@ -133,14 +133,22 @@ def _tf_blocks(lines: List[str], kind: str) -> Dict[str, str]:
     return out
 
 
-def _yaml_keys(lines: List[str]) -> Dict[str, str]:
-    """Very small YAML line reader: `key: value` -> value (ignores nesting)."""
-    out = {}
+def _yaml_keys(lines: List[str]) -> Dict[str, Set[str]]:
+    """Very small YAML line reader: `key: value` -> set of values seen (ignores nesting).
+
+    A set is used because one hunk can touch the same key in several modules
+    (e.g. two `source:` lines); a plain dict would keep only the last one.
+    """
+    out: Dict[str, Set[str]] = {}
     for ln in lines:
         m = re.match(r"^\s*([A-Za-z_][\w-]*):\s*(.*?)\s*$", ln)
         if m:
-            out[m.group(1)] = m.group(2)
+            out.setdefault(m.group(1), set()).add(m.group(2))
     return out
+
+
+def _vals(values: Set[str]) -> str:
+    return ", ".join(sorted(values))
 
 
 def scan_terraform(h: Hunk) -> List[Dict]:
@@ -212,18 +220,17 @@ def scan_example(h: Hunk) -> List[Dict]:
     # module id / source changed
     for k in ("id", "source"):
         if k in old_k and k in new_k and old_k[k] != new_k[k]:
-            sigs.append(_signal("example_module_id_or_source_changed", p, f"{k}: {old_k[k]} -> {new_k[k]}", 5))
-    if "use" in old_k or any(ln.strip().startswith("- ") and "use" in "".join(h.removed[:3]) for ln in h.removed):
-        if any(re.match(r"^\s*use:\s*", ln) for ln in h.removed + h.added):
-            sigs.append(_signal("example_use_changed", p, "use: list changed", 2))
+            sigs.append(_signal("example_module_id_or_source_changed", p, f"{k}: {_vals(old_k[k])} -> {_vals(new_k[k])}", 5))
+    if any(re.match(r"^\s*use:\s*", ln) for ln in h.removed + h.added):
+        sigs.append(_signal("example_use_changed", p, "use: list changed", 2))
 
     # impactful settings changed in place, or newly added (overrides a module default)
     for k in old_k:
         if k in new_k and old_k[k] != new_k[k] and k not in ("id", "source") and _impact_key(k):
-            sigs.append(_signal("example_setting_changed", p, f"{k}: {old_k[k]} -> {new_k[k]}", 3))
+            sigs.append(_signal("example_setting_changed", p, f"{k}: {_vals(old_k[k])} -> {_vals(new_k[k])}", 3))
     for k in new_k:
-        if k not in old_k and _impact_key(k) and new_k[k] != "":
-            sigs.append(_signal("example_setting_added", p, f"{k}: {new_k[k]}", 2))
+        if k not in old_k and _impact_key(k) and any(v != "" for v in new_k[k]):
+            sigs.append(_signal("example_setting_added", p, f"{k}: {_vals(new_k[k])}", 2))
 
     # new var without default (heuristic: added `  foo:` under vars with empty value)
     for ln in h.added:

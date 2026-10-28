@@ -174,6 +174,25 @@ class GateTests(unittest.TestCase):
         self.assertEqual(gate.section_text(EMPTY_BODY, "Upgrade steps"), "")
         self.assertEqual(gate.section_text(FILLED_BODY, "Redeploy impact"), "DestroystheFilestore.")
 
+    def test_paginated_json_with_nested_arrays(self):
+        # gh api --paginate concatenates one array per page; events contain nested arrays.
+        page1 = json.dumps([{"event": "labeled", "label": {"name": "breaking-check/not-breaking"},
+                             "actor": {"login": "alice"}, "nested": [[1, 2], [3]]}])
+        page2 = json.dumps([{"event": "commented"}, {"event": "unlabeled", "label": {"name": "x"}, "actor": {"login": "bob"}}])
+        events = gate.parse_concatenated_json_arrays(page1 + "\n" + page2)
+        self.assertEqual([e["event"] for e in events], ["labeled", "commented", "unlabeled"])
+        self.assertEqual(gate.parse_concatenated_json_arrays(""), [])
+        self.assertEqual(gate.parse_concatenated_json_arrays("not json"), [])
+
+    def test_load_maintainers_rejects_non_list_and_bad_entries(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "m.json")
+            json.dump({"login": "alice"}, open(p, "w"))
+            self.assertEqual(gate.load_maintainers(p), set())
+            json.dump([{"login": "Alice"}, "bob", {"nologin": 1}], open(p, "w"))
+            self.assertEqual(gate.load_maintainers(p), {"alice", ""})
+            self.assertEqual(gate.load_maintainers(os.path.join(d, "missing.json")), set())
+
     def test_cli_modes(self):
         with tempfile.TemporaryDirectory() as d:
             pr = {"number": 1, "labels": [{"name": "release-improvements"}], "author": {"login": "carol"}, "body": ""}
