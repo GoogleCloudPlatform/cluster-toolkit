@@ -2095,8 +2095,14 @@ func assertWorkerMTCVolumes(t *testing.T, worker *corev1.PodSpec, ramdiskDir str
 		t.Fatalf("worker replicatedJob not found in manifest")
 	}
 	assertWorkerCacheVolume(t, worker, ramdiskDir)
-	if got := isMemoryEmptyDir(findPodVolume(worker, "sidecar-shared-memory")); got != wantSidecar {
-		t.Errorf("worker declares in-memory sidecar-shared-memory volume = %v, want %v", got, wantSidecar)
+	// With MTC, checkpoints pass through the sidecar's shared folder, so it is
+	// disk-backed; otherwise it is RAM-backed.
+	shm := findPodVolume(worker, "sidecar-shared-memory")
+	if got := shm != nil && shm.EmptyDir != nil; got != wantSidecar {
+		t.Errorf("worker declares emptyDir sidecar-shared-memory volume = %v, want %v", got, wantSidecar)
+	}
+	if wantInMemory := wantSidecar && ramdiskDir == ""; isMemoryEmptyDir(shm) != wantInMemory {
+		t.Errorf("worker sidecar-shared-memory medium Memory = %v, want %v", isMemoryEmptyDir(shm), wantInMemory)
 	}
 	sidecar := findContainer(worker, "colocated-python-sidecar")
 	if got := sidecar != nil; got != wantSidecar {
@@ -3534,6 +3540,33 @@ func TestGeneratePathwaysManifest_UserMountsInAllContainers(t *testing.T) {
 			}
 			if err := ValidateJobSetManifest(manifest); err != nil {
 				t.Errorf("ValidateJobSetManifest() error = %v", err)
+			}
+		})
+	}
+}
+
+// TestGeneratePathwaysManifest_SidecarSharedMemoryMedium verifies that the
+// colocated Python sidecar's shared folder is RAM-backed by default, but
+// disk-backed with MTC, where checkpoints pass through it and the MTC cache
+// already uses RAM.
+func TestGeneratePathwaysManifest_SidecarSharedMemoryMedium(t *testing.T) {
+	tests := []struct {
+		name       string
+		ramdiskDir string
+		wantMemory bool
+	}{
+		{name: "without MTC", wantMemory: true},
+		{name: "with MTC", ramdiskDir: "/local", wantMemory: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := renderPathwaysTestManifest(t, false, "sidecar:latest", tc.ramdiskDir, nil)
+			v := findPodVolume(pathwaysPodSpecs(t, manifest)["worker"], "sidecar-shared-memory")
+			if v == nil || v.EmptyDir == nil {
+				t.Fatalf("worker volume sidecar-shared-memory = %+v, want an emptyDir", v)
+			}
+			if got := isMemoryEmptyDir(v); got != tc.wantMemory {
+				t.Errorf("sidecar-shared-memory medium Memory = %v, want %v", got, tc.wantMemory)
 			}
 		})
 	}

@@ -2228,6 +2228,7 @@ func TestPrepareManifestOptions_PathwaysPlatform(t *testing.T) {
 	setupMockMachineConfig(t)
 	tests := []struct {
 		computeType  string
+		machineType  string // resolved machine type for aliases; defaults to computeType
 		topology     string
 		wantPlatform string
 	}{
@@ -2261,6 +2262,33 @@ func TestPrepareManifestOptions_PathwaysPlatform(t *testing.T) {
 			topology:     "2x2x2",
 			wantPlatform: "tpuv5:2x2x2",
 		},
+		{
+			computeType:  "ct6e-standard-4t",
+			topology:     "2x4",
+			wantPlatform: "tpuv6e:2x4",
+		},
+		{
+			computeType:  "ct6e-standard-8t",
+			topology:     "2x4",
+			wantPlatform: "tpuv6e1t:2x4",
+		},
+		{
+			computeType:  "v6e-8",
+			machineType:  "ct6e-standard-8t",
+			topology:     "2x4",
+			wantPlatform: "tpuv6e1t:2x4",
+		},
+		{
+			computeType:  "ct5lp-hightpu-8t",
+			topology:     "2x4",
+			wantPlatform: "tpuv5e1t:2x4",
+		},
+		{
+			computeType:  "v5e-8",
+			machineType:  "ct5lp-hightpu-8t",
+			topology:     "2x4",
+			wantPlatform: "tpuv5e1t:2x4",
+		},
 	}
 
 	for _, tc := range tests {
@@ -2278,6 +2306,9 @@ func TestPrepareManifestOptions_PathwaysPlatform(t *testing.T) {
 				"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
 				"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: tc.topology}},
 				"gcloud compute machine-types describe " + tc.computeType + " --zone=us-central1-a --format=json":                       {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "` + tc.computeType + `"}]}`}},
+			}
+			if tc.machineType != "" {
+				mockResponses["gcloud compute machine-types describe "+tc.machineType+" --zone=us-central1-a --format=json"] = []shell.CommandResult{{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "` + tc.computeType + `"}]}`}}
 			}
 
 			mockExec := NewMockExecutor(mockResponses)

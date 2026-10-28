@@ -429,8 +429,12 @@ spec:
                   type: DirectoryOrCreate
               {{- if .Pathways.ColocatedPythonSidecarImage}}
               - name: sidecar-shared-memory
+                {{- if .GKEMTCEnabled}}
+                emptyDir: {}
+                {{- else}}
                 emptyDir:
                   medium: Memory
+                {{- end}}
               {{- end}}
               {{- if .GKEMTCEnabled}}
               - name: cache
