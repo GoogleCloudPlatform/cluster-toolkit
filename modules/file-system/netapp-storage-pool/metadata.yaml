@@ -18,3 +18,12 @@ spec:
     services:
     - netapp.googleapis.com
     - servicenetworking.googleapis.com
+
+ghpc:
+  day2_ignored_settings:
+  - setting: scale_type
+    setting_aliases: [type, mode]
+    display_name: "setting \"scale_type\""
+    attribute: scale_type
+    reason: "Google Cloud NetApp Volumes does not support in-place modifications of storage pool type or scale type."
+    remediation: "Deploy a new storage pool with the desired scale type/service level and migrate volumes."

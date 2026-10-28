@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/modulewriter"
 	"os"
 	"os/exec"
@@ -34,6 +35,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/spf13/cobra"
+	"github.com/zclconf/go-cty/cty"
 )
 
 func addCreateFlags(c *cobra.Command) *cobra.Command {
@@ -280,7 +282,121 @@ func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag boo
 		}
 	}
 
+	for _, w := range getModifiedIgnoredSettingsWarnings(prev, bp) {
+		logging.Warn("%s", w)
+	}
+
 	return nil
+}
+
+// getModifiedIgnoredSettingsWarnings compares an existing deployment's expanded blueprint
+// against the incoming blueprint and returns user-facing warnings for any modified settings
+// that correspond to attributes protected by Terraform's lifecycle.ignore_changes.
+func getModifiedIgnoredSettingsWarnings(prev, curr config.Blueprint) []string {
+	var warnings []string
+
+	prevModules := make(map[config.ModuleID]config.Module)
+	for _, g := range prev.Groups {
+		for _, m := range g.Modules {
+			prevModules[m.ID] = m
+		}
+	}
+
+	metadataCache := make(map[string]modulereader.Metadata)
+	seenWarnings := make(map[string]bool)
+
+	for _, g := range curr.Groups {
+		for _, currMod := range g.Modules {
+			prevMod, exists := prevModules[currMod.ID]
+			if !exists {
+				continue // New module being added; ignore_changes only affects existing resources.
+			}
+
+			meta, ok := metadataCache[currMod.Source]
+			if !ok {
+				meta = modulereader.GetMetadataSafe(currMod.Source)
+				metadataCache[currMod.Source] = meta
+			}
+
+			for _, rule := range meta.Ghpc.Day2IgnoredSettings {
+				prevVal := getSettingVal(prevMod.Settings, rule.SettingKey, rule.SettingAliases, rule.NestedKey)
+				currVal := getSettingVal(currMod.Settings, rule.SettingKey, rule.SettingAliases, rule.NestedKey)
+
+				if settingChanged(prevVal, currVal) {
+					dedupKey := fmt.Sprintf("%s:%s", currMod.ID, rule.Attribute)
+					if seenWarnings[dedupKey] {
+						continue
+					}
+					seenWarnings[dedupKey] = true
+					warnings = append(warnings, formatWarning(currMod, rule))
+				}
+			}
+		}
+	}
+
+	return warnings
+}
+
+func getSettingVal(settings config.Dict, key string, aliases []string, nestedKey string) cty.Value {
+	val := settings.Get(key)
+	if val == cty.NilVal {
+		for _, alias := range aliases {
+			if v := settings.Get(alias); v != cty.NilVal {
+				val = v
+				break
+			}
+		}
+	}
+
+	if nestedKey != "" && val != cty.NilVal && !val.IsNull() && val.IsKnown() {
+		if val.Type().IsObjectType() || val.Type().IsMapType() {
+			m := val.AsValueMap()
+			if v, ok := m[nestedKey]; ok {
+				return v
+			}
+			return cty.NilVal
+		}
+	}
+	return val
+}
+
+func formatWarning(mod config.Module, rule modulereader.Day2IgnoredSetting) string {
+	var settingPhrase string
+	if rule.DisplayName != "" {
+		if strings.Contains(rule.DisplayName, "modified") {
+			settingPhrase = rule.DisplayName
+		} else {
+			settingPhrase = fmt.Sprintf("%s was modified", rule.DisplayName)
+		}
+	} else {
+		settingPhrase = fmt.Sprintf("setting '%s' was modified", rule.SettingKey)
+	}
+
+	msg := fmt.Sprintf("In module %q (%s): %s from the previous deployment.\n",
+		mod.ID, filepath.Base(mod.Source), settingPhrase)
+	msg += fmt.Sprintf("Note: %s\n", rule.Reason)
+	msg += "This change will NOT be applied to existing resources via Terraform."
+
+	if rule.Remediation != "" {
+		resName := string(mod.ID)
+		if n := mod.Settings.Get("name"); !n.IsNull() && n.IsKnown() && n.Type() == cty.String && n.AsString() != "" {
+			resName = n.AsString()
+		}
+		remediation := strings.ReplaceAll(rule.Remediation, "{module_id}", string(mod.ID))
+		remediation = strings.ReplaceAll(remediation, "{name}", resName)
+		msg += fmt.Sprintf("\nTo update safely: %s", remediation)
+	}
+	return msg
+}
+
+func settingChanged(prev, curr cty.Value) bool {
+	if prev == cty.NilVal && curr == cty.NilVal {
+		return false
+	}
+	if prev == cty.NilVal || curr == cty.NilVal {
+		return true
+	}
+	return !prev.RawEquals(curr)
 }
 
 // Reads an expanded blueprint from the artifacts directory

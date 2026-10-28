@@ -27,6 +27,7 @@ import (
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/sourcereader"
 
 	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5"
@@ -50,6 +51,9 @@ func Test(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	wd, _ := os.Getwd()
+	if root, err := filepath.Abs(filepath.Join("..")); err == nil {
+		sourcereader.ModuleFS = os.DirFS(root).(sourcereader.BaseFS)
+	}
 	code := m.Run()
 	os.Chdir(wd)
 	os.Exit(code)

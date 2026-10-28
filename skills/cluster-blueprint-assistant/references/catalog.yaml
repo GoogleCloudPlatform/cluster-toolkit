@@ -640,6 +640,70 @@ blueprints:
     source: modules/management/kubectl-apply
     use: [gke_cluster]
     settings: [apply_manifests]
+- path: community/examples/hpc-slurm-google-cloud-dedicated/eda/eda-gcd-cluster.yaml
+  blueprint_name: eda-gcd-cluster
+  scheduler: slurm
+  description: "This directory provides a Cluster Toolkit (gcluster) blueprint (eda-gcd-cluster.yaml) and end-to-end Electronic Design Automation (EDA) workload examples for Google Cloud Dedicated (GCD) environments (*.apis-<location>.goog):"
+  machine_types: [c3-standard-8, c3-standard-176]
+  vars:
+    authorized_ssh_ranges: []
+    build_slurm_from_git_ref: 6.12.3
+    built_instance_image:
+      family: slurm-rocky9-eda
+      project: $(vars.project_id)
+    compute_machine_type: c3-standard-176
+    deployment_name: eda-gcd-cluster
+    image_build_machine_type: c3-standard-4
+    nfs_disk_size_gb: 2048
+    nfs_machine_type: c3-standard-8
+    nfs_provisioned_iops: 10000
+    nfs_provisioned_throughput: 400
+    node_count_dynamic_max: 16
+    node_count_static: 0
+    project_id: null
+    region: us-central1
+    service_account_email: null
+    source_image_family: rocky-linux-9-optimized-gcp
+    source_image_project: rocky-linux-cloud
+    universe_domain: googleapis.com
+    zone: us-central1-a
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings: [allowed_ssh_ip_ranges, enable_iap_ssh_ingress, network_address_range, network_name, subnetworks]
+  - id: slurm_build_script
+    source: modules/scripts/startup-script
+    settings: [install_ansible, runners]
+  - id: custom_slurm_image
+    source: modules/packer/custom-image
+    use: [network, slurm_build_script]
+    settings: [disk_type, image_family, image_licenses, machine_type, source_image_family, source_image_project_id, state_timeout, zone]
+  - id: homefs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    settings: [boot_disk_type, disk_size, instance_image, local_mounts, machine_type, provisioned_iops, provisioned_throughput, service_account, type]
+  - id: ssh_config
+    source: modules/scripts/startup-script
+    settings: [install_ansible, runners]
+  - id: login_startup
+    source: modules/scripts/startup-script
+    settings: [install_ansible, runners]
+  - id: c3_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, ssh_config]
+    settings: [allow_automatic_updates, bandwidth_tier, disk_size_gb, disk_type, enable_oslogin, instance_image, instance_image_custom, machine_type, node_count_dynamic_max, node_count_static, service_account_email]
+  - id: c3_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [c3_nodeset]
+    settings: [exclusive, is_default, partition_name]
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network, login_startup]
+    settings: [disk_type, enable_login_public_ips, enable_oslogin, instance_image, instance_image_custom, machine_type, service_account_email]
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, c3_partition, homefs, slurm_login]
+    settings: [controller_startup_script, controller_state_disk, disk_type, enable_controller_public_ips, enable_oslogin, enable_slurm_auth, instance_image, instance_image_custom, machine_type, service_account_email]
 - path: community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml
   blueprint_name: hpc-c3-slurm-google-cloud-dedicated
   scheduler: slurm

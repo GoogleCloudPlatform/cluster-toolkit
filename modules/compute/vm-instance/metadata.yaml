@@ -42,3 +42,10 @@ ghpc:
     inputs:
       vars: [instance_image.name, instance_image.family]
     error_message: "In 'instance_image', at most one of the \"family\" or \"name\" fields can be set."
+  day2_ignored_settings:
+  - setting: metadata
+    nested_key: ssh-keys
+    display_name: "'ssh-keys' within 'metadata'"
+    attribute: metadata["ssh-keys"]
+    reason: "'metadata[\"ssh-keys\"]' is in lifecycle.ignore_changes to avoid conflicting with OS Login and Compute Engine SSH key rotation."
+    remediation: "Update project-wide SSH keys or manage user access via OS Login."

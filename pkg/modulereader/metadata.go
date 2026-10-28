@@ -55,6 +55,19 @@ type MetadataGhpc struct {
 	DeprecationDate string `yaml:"deprecation_date,omitempty"`
 	// The recommended replacement for a deprecated module.
 	AlternativeModule string `yaml:"alternative_module,omitempty"`
+	// Day-2 drift warning rules for ignored Terraform attributes.
+	Day2IgnoredSettings []Day2IgnoredSetting `yaml:"day2_ignored_settings,omitempty"`
+}
+
+// Day2IgnoredSetting defines a Day-2 drift warning rule for an ignored Terraform attribute.
+type Day2IgnoredSetting struct {
+	SettingKey     string   `yaml:"setting"`                   // Primary blueprint setting key
+	SettingAliases []string `yaml:"setting_aliases,omitempty"` // Fallback setting keys (mutually exclusive aliases)
+	NestedKey      string   `yaml:"nested_key,omitempty"`      // Key within a map setting (e.g. "ssh-keys" in metadata)
+	DisplayName    string   `yaml:"display_name,omitempty"`    // Custom label for warning text (e.g. "'ssh-keys' within 'metadata'")
+	Attribute      string   `yaml:"attribute"`                 // Target Terraform resource attribute
+	Reason         string   `yaml:"reason"`                    // Operational explanation of ignore_changes
+	Remediation    string   `yaml:"remediation,omitempty"`     // Safe alternative command or runbook guidance
 }
 
 // NEW: Define the struct for a single validation rule
@@ -75,6 +88,9 @@ func GetMetadata(source string) (Metadata, error) {
 
 	switch {
 	case sourcereader.IsEmbeddedPath(source):
+		if sourcereader.ModuleFS == nil {
+			return Metadata{}, errors.New("sourcereader.ModuleFS is not initialized")
+		}
 		data, err = sourcereader.ModuleFS.ReadFile(sourcereader.ToSlash(filePath))
 	case sourcereader.IsLocalPath(source):
 		var absPath string
