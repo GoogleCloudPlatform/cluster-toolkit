@@ -353,6 +353,8 @@ resource "google_container_node_pool" "node_pool" {
   lifecycle {
     ignore_changes = [
       node_config[0].labels,
+      # Ignore resource_labels to prevent node pool replacement on blueprint/metadata renames
+      node_config[0].resource_labels,
       initial_node_count,
       # Ignore local/ephemeral ssd configs as they are tied to machine types.
       node_config[0].ephemeral_storage_local_ssd_config,
