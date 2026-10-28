@@ -439,4 +439,86 @@ func TestMarshalCatalogDeterminismAndUpdateReadme(t *testing.T) {
 	if !strings.Contains(updated, "| Blueprint | Scheduler | Machine Types | Description |") {
 		t.Errorf("expected markdown table in updated README, got: %s", updated)
 	}
+
+	verifyRequiredServicesPopulated(t, cat)
+	verifyCommunityReadmeUpdate(t, cat)
+	verifyLLMsRenderOutputs(t, cat)
+}
+
+func verifyRequiredServicesPopulated(t *testing.T, cat Catalog) {
+	t.Helper()
+	var foundA3U bool
+	for _, bp := range cat.Blueprints {
+		if bp.Path == "examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml" {
+			foundA3U = true
+			if !slices.Contains(bp.RequiredServices, "lustre.googleapis.com") || !slices.Contains(bp.RequiredServices, "compute.googleapis.com") {
+				t.Errorf("expected lustre and compute APIs in a3ultra-slurm-blueprint RequiredServices, got %v", bp.RequiredServices)
+			}
+		}
+	}
+	if !foundA3U {
+		t.Errorf("expected a3ultra-slurm-blueprint.yaml in catalog")
+	}
+	lustreMod := cat.ModuleWiring["modules/file-system/managed-lustre"]
+	if !slices.Contains(lustreMod.RequiredServices, "lustre.googleapis.com") {
+		t.Errorf("expected lustre.googleapis.com in managed-lustre RequiredServices, got %v", lustreMod.RequiredServices)
+	}
+}
+
+func verifyCommunityReadmeUpdate(t *testing.T, cat Catalog) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	commTmp := filepath.Join(tmpDir, "README.md")
+	commInitial := "# Community\n\n" + BeginCommunityCatalogMarker + "\n" + EndCommunityCatalogMarker + "\n"
+	if err := os.WriteFile(commTmp, []byte(commInitial), 0644); err != nil {
+		t.Fatalf("failed to write temp community README: %v", err)
+	}
+	if err := UpdateCommunityExamplesReadme(commTmp, cat.Blueprints); err != nil {
+		t.Fatalf("UpdateCommunityExamplesReadme failed: %v", err)
+	}
+	commBytes, err := os.ReadFile(commTmp)
+	if err != nil {
+		t.Fatalf("failed to read updated community README: %v", err)
+	}
+	commStr := string(commBytes)
+	if !strings.Contains(commStr, "[community/examples/hpc-slurm-ha.yaml](./hpc-slurm-ha.yaml)") {
+		t.Errorf("expected relative ./hpc-slurm-ha.yaml link in community README, got: %s", commStr)
+	}
+	if strings.Contains(commStr, "| [examples/hpc-slurm.yaml]") {
+		t.Errorf("core examples/hpc-slurm.yaml must not appear in community/examples/README.md table")
+	}
+}
+
+func verifyLLMsRenderOutputs(t *testing.T, cat Catalog) {
+	t.Helper()
+	llms1 := RenderLLMsTxt(cat)
+	if llms1 != RenderLLMsTxt(cat) {
+		t.Errorf("RenderLLMsTxt is not deterministic")
+	}
+	for _, want := range []string{"./gcluster explain", "a3ultra-slurm-blueprint.yaml", "gke-tpu-7x.yaml", "gke-tpu-v6e.yaml"} {
+		if !strings.Contains(llms1, want) {
+			t.Errorf("RenderLLMsTxt missing %q", want)
+		}
+	}
+
+	full1 := RenderLLMsFullTxt(cat)
+	if full1 != RenderLLMsFullTxt(cat) {
+		t.Errorf("RenderLLMsFullTxt is not deterministic")
+	}
+	for _, want := range []string{
+		"### examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml",
+		"gcloud services enable",
+		"lustre.googleapis.com",
+		"| `modules/file-system/managed-lustre` |",
+	} {
+		if !strings.Contains(full1, want) {
+			t.Errorf("RenderLLMsFullTxt missing %q", want)
+		}
+	}
+	if lines := strings.Count(full1, "\n"); lines > 800 {
+		t.Errorf("RenderLLMsFullTxt should stay <= 800 lines for single-view agent ingestion, got %d", lines)
+	}
+	if strings.Contains(full1, "<nil>") {
+		t.Errorf("RenderLLMsFullTxt must format nil values as null, found <nil>")
+	}
 }

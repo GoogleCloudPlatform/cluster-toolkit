@@ -104,6 +104,14 @@ class TestValidateReadmeSnippets(unittest.TestCase):
         found = vrs._find_markdown_files_under(("cmd",), {readme, outside})
         self.assertEqual(found, [readme])
 
+    def test_validate_markdown_links_checks_llms_files(self):
+        llms_txt = os.path.join(vrs.REPO_ROOT, "llms.txt")
+        llms_full = os.path.join(vrs.REPO_ROOT, "llms-full.txt")
+        errs = vrs.validate_markdown_links_and_cli(
+            vrs._get_non_ignored_repo_files() | {llms_txt, llms_full}
+        )
+        self.assertEqual(errs, [])
+
 
 if __name__ == "__main__":
     unittest.main()

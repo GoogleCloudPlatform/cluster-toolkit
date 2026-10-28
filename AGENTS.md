@@ -9,8 +9,9 @@ This file is read by coding agents (Gemini CLI, Claude Code, Codex, Cursor, Copi
    test -x ./gcluster || make
    ```
 2. Read [`skills/cluster-blueprint-assistant/SKILL.md`](skills/cluster-blueprint-assistant/SKILL.md).
-3. Use `./gcluster explain` (e.g. `./gcluster explain`, `./gcluster explain <specs...>`, `./gcluster explain <blueprint.yaml>`, or `./gcluster explain <module>`) and
-   [`skills/cluster-blueprint-assistant/references/catalog.yaml`](skills/cluster-blueprint-assistant/references/catalog.yaml)
+3. Use `./gcluster explain` (e.g. `./gcluster explain`, `./gcluster explain <specs...>`, `./gcluster explain <blueprint.yaml>`, or `./gcluster explain <module>`),
+   [`skills/cluster-blueprint-assistant/references/catalog.yaml`](skills/cluster-blueprint-assistant/references/catalog.yaml),
+   and [`llms.txt`](llms.txt) / [`llms-full.txt`](llms-full.txt)
    to discover templates, required GCP APIs, customizable `vars:`, and `use:` module wiring instead of grepping `.tf` files.
 
 ## Hard rules

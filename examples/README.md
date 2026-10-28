@@ -2,11 +2,13 @@
 
 ## AI Hypercomputer
 
-Additional blueprints optimized for AI workloads on modern GPUs is available at [Google Cloud AI Hypercomputer][aihc]. Documentation is available for [GKE][aihc-gke] and for [Slurm][aihc-slurm].
+Blueprints optimized for AI Hypercomputer GPU and TPU workloads are available directly in this repository:
 
-[aihc]: https://cloud.google.com/ai-hypercomputer/docs
-[aihc-gke]: https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute
-[aihc-slurm]: https://cloud.google.com/ai-hypercomputer/docs/create/create-slurm-cluster
+* **Slurm GPU & TPU Blueprints (`A3 High`, `A3 Mega`, `A3 Ultra`, `A4`, `A4X`, `A4X Max`, `TPU 7x`):** [`./machine-learning/`](./machine-learning/README.md)
+* **GKE GPU & TPU Blueprints (`A3 High`, `A3 Mega`, `A3 Ultra`, `A4`, `A4X`, `A4X Max`, `G4`, `H4D`, `TPU v5e/v5p/v6e/7x`):** [`./gke-a3-ultragpu`](./gke-a3-ultragpu/README.md), [`./gke-a4`](./gke-a4/README.md), [`./gke-a4x`](./gke-a4x/README.md), [`./gke-tpu-v6e`](./gke-tpu-v6e/README.md), [`./gke-tpu-7x`](./gke-tpu-7x/README.md)
+* **Quick Lookup & CLI Discovery:** See [`../llms.txt`](../llms.txt) for the Hardware x Orchestrator matrix, or run `./gcluster explain <specs...>` (e.g. `./gcluster explain slurm a3u lustre`). Official Google Cloud Cluster Toolkit documentation is available at [Cluster Toolkit Docs][ctk-docs].
+
+[ctk-docs]: https://cloud.google.com/cluster-toolkit/docs/overview
 
 <!-- TOC generated with some manual tweaking of the following command output:
 md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
@@ -18,6 +20,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-slurm-ha.yaml](#hpc-slurm-hayaml-) ![community-badge]
+  * [hpc-slurm-ha-lb.yaml](#hpc-slurm-ha-lbyaml-) ![community-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
@@ -217,7 +220,7 @@ the experimental badge (![experimental-badge]).
 | [community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml) | slurm | c3-standard-176 | This directory contains the blueprints, playbooks, test scripts, and architecture for demonstrating Multi-Cluster Slurm with Elastic Cloud Bursting between two autonomous projects in Google Cloud Dedicated (GCD) environments (e.g... |
 | [community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml) | slurm | c3-standard-4, c3-standard-176 | This directory contains the blueprints, playbooks, test scripts, and architecture for demonstrating Multi-Cluster Slurm with Elastic Cloud Bursting between two autonomous projects in Google Cloud Dedicated (GCD) environments (e.g... |
 | [community/examples/hpc-slurm-gromacs.yaml](../community/examples/hpc-slurm-gromacs.yaml) | slurm | - | Spack is an HPC software package manager. This example creates a small Slurm cluster with software installed using the spack-setup and spack-execute modules. The controller will install and configure spack, and install gromacs using... |
-| [community/examples/hpc-slurm-ha-lb.yaml](../community/examples/hpc-slurm-ha-lb.yaml) | slurm | n1-standard-2 | Cluster Toolkit blueprint (community/examples/hpc-slurm-ha-lb.yaml). |
+| [community/examples/hpc-slurm-ha-lb.yaml](../community/examples/hpc-slurm-ha-lb.yaml) | slurm | n1-standard-2 | Creates a highly available (HA) Slurm cluster fronted by an internal regional Application Load Balancer (community/modules/network/int-app-lb) for the Slurm REST API (slurmrestd), alongside a Cloud SQL accounting database and shared... |
 | [community/examples/hpc-slurm-ha.yaml](../community/examples/hpc-slurm-ha.yaml) | slurm | n1-standard-2 | Creates a highly available (HA) Slurm cluster. This setup includes a primary controller and a backup controller to ensure control plane resilience. If the primary controller instance fails, the Slurm services can be failed over to the... |
 | [community/examples/hpc-slurm-kms.yaml](../community/examples/hpc-slurm-kms.yaml) | slurm | n2-standard-2, h3-standard-88 | Creates a Slurm cluster with Customer-Managed Encryption Keys (CMEK) enabled for controller, login, and compute nodesets, as well as the Slurm configuration GCS bucket. |
 | [community/examples/hpc-slurm-local-ssd.yaml](../community/examples/hpc-slurm-local-ssd.yaml) | slurm | c2-standard-4 | This blueprint demonstrates the use of Slurm and Filestore, with compute nodes that have local ssd drives deployed. |
@@ -249,7 +252,7 @@ the experimental badge (![experimental-badge]).
 | [examples/gke-a3-highgpu-inference-gateway.yaml](./gke-a3-highgpu-inference-gateway.yaml) | gke | a3-highgpu-8g, n2d-standard-2 | This blueprint provisions a GKE cluster with A3 High machines, pre-configured to support the GKE Inference Gateway. It automates the setup of necessary networking components, such as a proxy-only subnet, and installs the required Custom... |
 | [examples/gke-a3-highgpu/gke-a3-highgpu.yaml](./gke-a3-highgpu/gke-a3-highgpu.yaml) | gke | a3-highgpu-8g | This blueprint provisions a GKE cluster with A3 High nodes (a3-highgpu-8g). Refer to the A3 High Deployment Guide for detailed instructions. |
 | [examples/gke-a3-megagpu/gke-a3-megagpu.yaml](./gke-a3-megagpu/gke-a3-megagpu.yaml) | gke | a3-megagpu-8g | This blueprint shows how to provision a GKE cluster with A3 Mega machines in the toolkit. Deploy an A3 Mega GKE cluster for ML training has the steps documented. |
-| [examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml](./gke-a3-ultragpu/gke-a3-ultragpu.yaml) | gke | a3-ultragpu-8g | Refer to AI Hypercomputer Documentation for instructions. |
+| [examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml](./gke-a3-ultragpu/gke-a3-ultragpu.yaml) | gke | a3-ultragpu-8g | This blueprint provisions an AI-optimized Google Kubernetes Engine (GKE) cluster with a3-ultragpu-8g (8x NVIDIA H200) GPU nodes, multi-NIC RoCE GPUDirect RDMA networking (enable_dranet: true), Kueue + JobSet workload management, NCCL... |
 | [examples/gke-a4/gke-a4.yaml](./gke-a4/gke-a4.yaml) | gke | a4-highgpu-8g | This blueprint uses GKE to provision Kubernetes cluster and a A4 node pool, along with networks and service accounts. Information about a4 machines can be found here. The deployment instructions can be found in the README. |
 | [examples/gke-a4x-max-bm/gke-a4x-max-bm.yaml](./gke-a4x-max-bm/gke-a4x-max-bm.yaml) | gke | a4x-maxgpu-4g-metal | This blueprint uses GKE to provision a Kubernetes cluster and a A4X Max node pool, along with networks and service accounts. Information about A4X Max machines can be found here. The deployment instructions can be found in the README. |
 | [examples/gke-a4x/gke-a4x.yaml](./gke-a4x/gke-a4x.yaml) | gke | a4x-highgpu-4g | This blueprint uses GKE to provision Kubernetes cluster and a A4X node pool, along with networks and service accounts. Information about A4X machines can be found here. The deployment instructions can be found in the README. |
@@ -292,9 +295,9 @@ the experimental badge (![experimental-badge]).
 | [examples/machine-learning/a4x-highgpu-4g/a4x-vm.yaml](./machine-learning/a4x-highgpu-4g/a4x-vm.yaml) | none | a4x-highgpu-4g | This section covers deploying A4X High VMs as a standalone group, which is suitable for workloads that do not require the Slurm scheduler. |
 | [examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml](./machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml) | slurm | a4x-highgpu-4g | This document outlines the deployment steps for provisioning A4X High a4x-highgpu-4g VMs using either Slurm as an orchestrator or as a standalone VM group. |
 | [examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml](./machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml) | slurm | a4x-maxgpu-4g-metal | This document outlines the deployment steps for provisioning A4X Max a4x-maxgpu-4g-metal VMs using Slurm as an orchestrator. |
-| [examples/machine-learning/build-service-images/a3m/blueprint.yaml](./machine-learning/build-service-images/a3m/blueprint.yaml) | none | - | Cluster Toolkit blueprint (examples/machine-learning/build-service-images/a3m/blueprint.yaml). |
-| [examples/machine-learning/build-service-images/a4x/blueprint.yaml](./machine-learning/build-service-images/a4x/blueprint.yaml) | none | - | Cluster Toolkit blueprint (examples/machine-learning/build-service-images/a4x/blueprint.yaml). |
-| [examples/machine-learning/build-service-images/common/blueprint.yaml](./machine-learning/build-service-images/common/blueprint.yaml) | none | - | Cluster Toolkit blueprint (examples/machine-learning/build-service-images/common/blueprint.yaml). |
+| [examples/machine-learning/build-service-images/a3m/blueprint.yaml](./machine-learning/build-service-images/a3m/blueprint.yaml) | none | - | This process will build 2 images. One for a3-megagpu-8g and another one that can be used for all other machines. Each image it may take up to ~60 min to build. You may choose to run the two commands in parallel in 2 separate shells. |
+| [examples/machine-learning/build-service-images/a4x/blueprint.yaml](./machine-learning/build-service-images/a4x/blueprint.yaml) | none | - | This process will build 2 images. One for a3-megagpu-8g and another one that can be used for all other machines. Each image it may take up to ~60 min to build. You may choose to run the two commands in parallel in 2 separate shells. |
+| [examples/machine-learning/build-service-images/common/blueprint.yaml](./machine-learning/build-service-images/common/blueprint.yaml) | none | - | This process will build 2 images. One for a3-megagpu-8g and another one that can be used for all other machines. Each image it may take up to ~60 min to build. You may choose to run the two commands in parallel in 2 separate shells. |
 | [examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml](./machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml) | slurm | tpu7x-standard-4t | This directory provides a Cluster Toolkit blueprint (tpu7x-slurm-blueprint.yaml) and deployment configuration (tpu7x-slurm-deployment.yaml) for provisioning a Slurm cluster with TPU 7x (tpu7x-standard-4t) compute nodes. It sets up a... |
 | [examples/ml-gke.yaml](./ml-gke.yaml) | gke | g2-standard-4 | This blueprint demonstrates how to set up a GPU GKE cluster using the Cluster Toolkit. It includes: |
 | [examples/ml-slurm-g4-vgpu.yaml](./ml-slurm-g4-vgpu.yaml) | slurm | g4-standard-12 | This blueprint creates a Slurm cluster on Google Cloud optimized for machine learning workloads using NVIDIA G4 vGPUs (Fractional GPUs). It automates the installation of the necessary NVIDIA GRID drivers and configures Slurm to... |
@@ -370,6 +373,12 @@ downtime. This blueprint configures the necessary shared storage and network set
 support the HA configuration.
 
 [hpc-slurm-ha.yaml]: ../community/examples/hpc-slurm-ha.yaml
+
+### [hpc-slurm-ha-lb.yaml] ![community-badge]
+
+Creates a highly available (HA) Slurm cluster fronted by an internal regional Application Load Balancer (`community/modules/network/int-app-lb`) for the Slurm REST API (`slurmrestd`), alongside a Cloud SQL accounting database and shared Filestore storage.
+
+[hpc-slurm-ha-lb.yaml]: ../community/examples/hpc-slurm-ha-lb.yaml
 
 ### [hpc-enterprise-slurm.yaml] ![core-badge]
 
@@ -1579,7 +1588,7 @@ Replace `CLUSTER-NAME` with the `deployment_name` used in blueprint vars block.
 
 ### [gke-a3-ultragpu.yaml] ![core-badge]
 
-Refer to [AI Hypercomputer Documentation](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#create-cluster) for instructions.
+This blueprint provisions an AI-optimized Google Kubernetes Engine (GKE) cluster with `a3-ultragpu-8g` (8x NVIDIA H200) GPU nodes, multi-NIC RoCE GPUDirect RDMA networking (`enable_dranet: true`), Kueue + JobSet workload management, NCCL gIB installer, and Cloud Storage FUSE / Managed Lustre CSI support. The deployment instructions can be found in the [README](gke-a3-ultragpu/README.md).
 
 [gke-a3-ultragpu.yaml]: ../examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml
 
