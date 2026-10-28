@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
@@ -873,7 +874,7 @@ func TestVerifyCheckpointConfigurationCR(t *testing.T) {
 			orc := &GKEOrchestrator{
 				dynClient: tt.dynClient,
 			}
-			err := orc.verifyCheckpointConfigurationCR(docRemediation)
+			err := orc.verifyCheckpointConfigurationCR(&orchestrator.JobDefinition{}, docRemediation)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("expected an error, but got nil")
@@ -958,5 +959,741 @@ func TestValidateClusterState_DedupesReadinessReads(t *testing.T) {
 	}
 	if priorityClassListCalls != 1 {
 		t.Errorf("ValidateClusterState priorityclass list calls = %d, want 1", priorityClassListCalls)
+	}
+}
+
+func TestValidateCheckpointConfigurationCompatibility(t *testing.T) {
+	oldInterval := mtcDaemonSetPollInterval
+	oldTimeout := mtcDaemonSetPollTimeout
+	mtcDaemonSetPollInterval = time.Millisecond
+	mtcDaemonSetPollTimeout = 200 * time.Millisecond
+	defer func() {
+		mtcDaemonSetPollInterval = oldInterval
+		mtcDaemonSetPollTimeout = oldTimeout
+	}()
+
+	tpuToleration := map[string]interface{}{
+		"key":      "google.com/tpu",
+		"operator": "Exists",
+		"effect":   "NoSchedule",
+	}
+	gpuToleration := map[string]interface{}{
+		"key":      "nvidia.com/gpu",
+		"operator": "Equal",
+		"value":    "present",
+		"effect":   "NoSchedule",
+	}
+	gpuPool := gkeJobNodePool{
+		Name: "gpu-np",
+		Config: gkeNodePoolConfig{
+			MachineType:  "a3-highgpu-8g",
+			Accelerators: []gkeAccelerator{{AcceleratorType: "nvidia-h100-80gb", AcceleratorCount: "8"}},
+		},
+	}
+	a3Caps := MachineTypeCap{Accelerators: []struct {
+		Count int    `json:"guestAcceleratorCount"`
+		Type  string `json:"guestAcceleratorType"`
+	}{{Count: 8, Type: "nvidia-h100-80gb"}}}
+	readyDaemonSet := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"metadata": map[string]interface{}{"name": "multitier-driver-uid-123"},
+			"status": map[string]interface{}{
+				"desiredNumberScheduled": int64(4),
+				"numberReady":            int64(4),
+			},
+		},
+	}
+
+	var transientCallCount int
+	var transientAPICallCount int
+	var obsGenCallCount int
+	var unauthorizedCallCount int
+	var noStatusCallCount int
+
+	tests := []struct {
+		name          string
+		job           *orchestrator.JobDefinition
+		clusterDesc   gkeCluster
+		machineCaps   map[string]MachineTypeCap
+		cr            *unstructured.Unstructured
+		getDS         func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
+		checkCalls    func(t *testing.T)
+		wantErr       bool
+		wantErrSubstr string
+	}{
+		{
+			name: "nodeSelector instance-type mismatch fails",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "default"},
+					"spec": map[string]interface{}{
+						"nodeSelector": map[string]interface{}{
+							"node.kubernetes.io/instance-type": "ct5lp-hightpu-4t",
+						},
+						"tolerations": []interface{}{tpuToleration},
+					},
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: `targets node.kubernetes.io/instance-type="ct5lp-hightpu-4t" in spec.nodeSelector, which does not match the job's machine type "ct6e-standard-4t"`,
+		},
+		{
+			name: "nodeSelector gke-nodepool mismatch fails",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			clusterDesc: gkeCluster{
+				NodePools: []gkeJobNodePool{
+					{
+						Name:   "tpu-np-0",
+						Config: gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+					},
+				},
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "default"},
+					"spec": map[string]interface{}{
+						"nodeSelector": map[string]interface{}{
+							"cloud.google.com/gke-nodepool": "other-pool",
+						},
+						"tolerations": []interface{}{tpuToleration},
+					},
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: `targets cloud.google.com/gke-nodepool="other-pool" in spec.nodeSelector, which does not match the job's node pool "tpu-np-0"`,
+		},
+		{
+			name: "missing TPU toleration fails",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "default"},
+					"spec":     map[string]interface{}{},
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: `is missing a toleration for taint "google.com/tpu=present:NoSchedule"`,
+		},
+		{
+			name: "missing GPU toleration on a GPU node pool fails",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "a3-highgpu-8g",
+			},
+			clusterDesc: gkeCluster{NodePools: []gkeJobNodePool{gpuPool}},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "default"},
+					"spec": map[string]interface{}{
+						"tolerations": []interface{}{tpuToleration},
+					},
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: `is missing a toleration for taint "nvidia.com/gpu=present:NoSchedule"`,
+		},
+		{
+			name: "missing GPU toleration for a machine type with accelerators and no node pool fails",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "a3-highgpu-8g",
+			},
+			machineCaps: map[string]MachineTypeCap{"a3-highgpu-8g:": a3Caps},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "default"},
+					"spec":     map[string]interface{}{},
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: `is missing a toleration for taint "nvidia.com/gpu=present:NoSchedule"`,
+		},
+		{
+			name: "missing custom node pool taint toleration fails",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			clusterDesc: gkeCluster{
+				NodePools: []gkeJobNodePool{
+					{
+						Name: "tpu-np-0",
+						Config: gkeNodePoolConfig{
+							MachineType: "ct6e-standard-4t",
+							Taints: []gkeTaint{
+								{Key: "dedicated", Value: "ml-team", Effect: "NoSchedule"},
+							},
+						},
+					},
+				},
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "default"},
+					"spec": map[string]interface{}{
+						"tolerations": []interface{}{tpuToleration},
+					},
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: `is missing a toleration for taint "dedicated=ml-team:NoSchedule"`,
+		},
+		{
+			name: "multitier-driver DaemonSet not found fails after polling timeout",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "default",
+						"uid":  "uid-123",
+					},
+					"spec": map[string]interface{}{
+						"tolerations": []interface{}{tpuToleration},
+					},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
+			},
+			wantErr:       true,
+			wantErrSubstr: `the MTC CSI driver DaemonSet "multitier-driver-uid-123" was not found`,
+		},
+		{
+			name: "multitier-driver DaemonSet desired=0 on static pool fails after polling timeout",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			clusterDesc: gkeCluster{
+				NodePools: []gkeJobNodePool{
+					{
+						Name:             "tpu-np-0",
+						InitialNodeCount: 4,
+						Config:           gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+					},
+				},
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "default",
+						"uid":  "uid-123",
+					},
+					"spec": map[string]interface{}{
+						"tolerations": []interface{}{tpuToleration},
+					},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": name},
+						"status": map[string]interface{}{
+							"desiredNumberScheduled": int64(0),
+							"numberReady":            int64(0),
+						},
+					},
+				}, nil
+			},
+			wantErr:       true,
+			wantErrSubstr: "has 0 desired pods (desiredNumberScheduled=0)",
+		},
+		{
+			name: "multitier-driver DaemonSet desired>0 and ready=0 fails after polling timeout",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "default",
+						"uid":  "uid-123",
+					},
+					"spec": map[string]interface{}{
+						"tolerations": []interface{}{tpuToleration},
+					},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": name},
+						"status": map[string]interface{}{
+							"desiredNumberScheduled": int64(4),
+							"numberReady":            int64(0),
+						},
+					},
+				}, nil
+			},
+			wantErr:       true,
+			wantErrSubstr: "has 0 of 4 pods ready",
+		},
+		{
+			name: "multitier-driver DaemonSet with 3 of 4 pods ready fails after polling timeout",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "default", "uid": "uid-123"},
+					"spec":     map[string]interface{}{"tolerations": []interface{}{tpuToleration}},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": name},
+						"status":   map[string]interface{}{"desiredNumberScheduled": int64(4), "numberReady": int64(3)},
+					},
+				}, nil
+			},
+			wantErr:       true,
+			wantErrSubstr: "has 3 of 4 pods ready",
+		},
+		{
+			name: "multitier-driver DaemonSet desired=0 on autoscaling pool scaled to zero passes",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			clusterDesc: gkeCluster{
+				NodePools: []gkeJobNodePool{{
+					Name:             "tpu-np-0",
+					InitialNodeCount: 1,
+					Autoscaling:      gkeAutoscaling{Enabled: true, MinNodeCount: 0, MaxNodeCount: 4},
+					Config:           gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+				}},
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "default", "uid": "uid-123"},
+					"spec":     map[string]interface{}{"tolerations": []interface{}{tpuToleration}},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": name},
+						"status":   map[string]interface{}{"desiredNumberScheduled": int64(0), "numberReady": int64(0)},
+					},
+				}, nil
+			},
+			wantErr: false,
+		},
+		{
+			name: "multitier-driver DaemonSet whose status is never populated fails after polling timeout",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "default", "uid": "uid-123"},
+					"spec":     map[string]interface{}{"tolerations": []interface{}{tpuToleration}},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				noStatusCallCount++
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{"metadata": map[string]interface{}{"name": name, "generation": int64(1)}},
+				}, nil
+			},
+			checkCalls: func(t *testing.T) {
+				if noStatusCallCount < 2 {
+					t.Errorf("expected polling while the DaemonSet status is missing, got %d calls", noStatusCallCount)
+				}
+			},
+			wantErr:       true,
+			wantErrSubstr: "is still reconciling generation 1 (observedGeneration=0)",
+		},
+		{
+			name: "multitier-driver DaemonSet becomes ready during polling passes",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "default",
+						"uid":  "uid-123",
+					},
+					"spec": map[string]interface{}{
+						"tolerations": []interface{}{tpuToleration},
+					},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				transientCallCount++
+				if transientCallCount == 1 {
+					return &unstructured.Unstructured{
+						Object: map[string]interface{}{
+							"metadata": map[string]interface{}{"name": name},
+							"status": map[string]interface{}{
+								"desiredNumberScheduled": int64(4),
+								"numberReady":            int64(0),
+							},
+						},
+					}, nil
+				}
+				return readyDaemonSet, nil
+			},
+			wantErr: false,
+		},
+		{
+			name: "non-NotFound error on DaemonSet Get is retried and returned after the polling timeout",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "default",
+						"uid":  "uid-123",
+					},
+					"spec": map[string]interface{}{
+						"tolerations": []interface{}{tpuToleration},
+					},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				unauthorizedCallCount++
+				return nil, apierrors.NewUnauthorized("token expired")
+			},
+			checkCalls: func(t *testing.T) {
+				if unauthorizedCallCount < 2 {
+					t.Errorf("expected the error to be retried, got %d calls", unauthorizedCallCount)
+				}
+			},
+			wantErr:       true,
+			wantErrSubstr: "failed to verify MTC driver DaemonSet gke-managed-checkpointing/multitier-driver-uid-123: token expired",
+		},
+		{
+			name: "retryable 503 ServiceUnavailable on DaemonSet Get polls and recovers",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "default",
+						"uid":  "uid-123",
+					},
+					"spec": map[string]interface{}{
+						"tolerations": []interface{}{tpuToleration},
+					},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				transientAPICallCount++
+				if transientAPICallCount == 1 {
+					return nil, apierrors.NewServiceUnavailable("apiserver temporarily unavailable")
+				}
+				return readyDaemonSet, nil
+			},
+			wantErr: false,
+		},
+		{
+			name: "observedGeneration < generation polls until generation is observed",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "default",
+						"uid":  "uid-123",
+					},
+					"spec": map[string]interface{}{
+						"tolerations": []interface{}{tpuToleration},
+					},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				obsGenCallCount++
+				obsGen := int64(1)
+				if obsGenCallCount > 1 {
+					obsGen = 2
+				}
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{
+							"name":       name,
+							"generation": int64(2),
+						},
+						"status": map[string]interface{}{
+							"observedGeneration":     obsGen,
+							"desiredNumberScheduled": int64(4),
+							"numberReady":            int64(4),
+						},
+					},
+				}, nil
+			},
+			wantErr: false,
+		},
+		{
+			name: "matching GPU toleration and ready DaemonSet passes",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "a3-highgpu-8g",
+			},
+			clusterDesc: gkeCluster{NodePools: []gkeJobNodePool{gpuPool}},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "default",
+						"uid":  "uid-123",
+					},
+					"spec": map[string]interface{}{
+						"nodeSelector": map[string]interface{}{
+							"node.kubernetes.io/instance-type": "a3-highgpu-8g",
+						},
+						"tolerations": []interface{}{gpuToleration},
+					},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return readyDaemonSet, nil
+			},
+			wantErr: false,
+		},
+		{
+			name: "CheckpointConfiguration pinned to the second node pool with the job's machine type passes",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			clusterDesc: gkeCluster{
+				NodePools: []gkeJobNodePool{
+					{Name: "tpu-np-0", Config: gkeNodePoolConfig{MachineType: "ct6e-standard-4t"}},
+					{Name: "tpu-np-1", Config: gkeNodePoolConfig{MachineType: "ct6e-standard-4t"}},
+				},
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "default", "uid": "uid-123"},
+					"spec": map[string]interface{}{
+						"nodeSelector": map[string]interface{}{"cloud.google.com/gke-nodepool": "tpu-np-1"},
+						"tolerations":  []interface{}{tpuToleration},
+					},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return readyDaemonSet, nil
+			},
+			wantErr: false,
+		},
+		{
+			name: "multi-pool: surfaces missing toleration error from pool matching nodeSelector instead of nodeSelector error from second pool",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			clusterDesc: gkeCluster{
+				NodePools: []gkeJobNodePool{
+					{Name: "tpu-np-0", Config: gkeNodePoolConfig{MachineType: "ct6e-standard-4t"}},
+					{Name: "tpu-np-1", Config: gkeNodePoolConfig{MachineType: "ct6e-standard-4t"}},
+				},
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "default", "uid": "uid-123"},
+					"spec": map[string]interface{}{
+						"nodeSelector": map[string]interface{}{"cloud.google.com/gke-nodepool": "tpu-np-0"},
+					},
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: `missing a toleration for taint "google.com/tpu=present:NoSchedule"`,
+		},
+		{
+			name: "multi-pool: desired=0 fails when covered pool is fixed-size even if uncovered pool scales from zero",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			clusterDesc: gkeCluster{
+				NodePools: []gkeJobNodePool{
+					{
+						Name:        "tpu-np-0",
+						Config:      gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+						Autoscaling: gkeAutoscaling{Enabled: true, MinNodeCount: 0},
+					},
+					{
+						Name:        "tpu-np-1",
+						Config:      gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+						Autoscaling: gkeAutoscaling{Enabled: false},
+					},
+				},
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "default", "uid": "uid-123"},
+					"spec": map[string]interface{}{
+						"nodeSelector": map[string]interface{}{"cloud.google.com/gke-nodepool": "tpu-np-1"},
+						"tolerations":  []interface{}{tpuToleration},
+					},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": name},
+						"status": map[string]interface{}{
+							"desiredNumberScheduled": int64(0),
+							"numberReady":            int64(0),
+						},
+					},
+				}, nil
+			},
+			wantErr:       true,
+			wantErrSubstr: "has 0 desired pods (desiredNumberScheduled=0)",
+		},
+		{
+			name: "403 Forbidden on DaemonSet Get proceeds with warning",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "default",
+						"uid":  "uid-123",
+					},
+					"spec": map[string]interface{}{
+						"tolerations": []interface{}{tpuToleration},
+					},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return nil, apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name, fmt.Errorf("forbidden"))
+			},
+			wantErr: false,
+		},
+		{
+			name: "updatedNumberScheduled < desiredNumberScheduled fails after timeout",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "default",
+						"uid":  "uid-123",
+					},
+					"spec": map[string]interface{}{
+						"tolerations": []interface{}{tpuToleration},
+					},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": name},
+						"status": map[string]interface{}{
+							"desiredNumberScheduled": int64(4),
+							"numberReady":            int64(4),
+							"updatedNumberScheduled": int64(2),
+						},
+					},
+				}, nil
+			},
+			wantErr:       true,
+			wantErrSubstr: "has only 2 of 4 pods updated to the latest version; wait for the rollout to finish",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clusterDesc := tt.clusterDesc
+			clusterDesc.AddonsConfig = &gkeAddonsConfig{
+				HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{Enabled: true},
+			}
+			orc := &GKEOrchestrator{
+				clusterDesc:      clusterDesc,
+				machineCapCache:  tt.machineCaps,
+				dynClient:        newMTCTestDynamicClient(tt.cr, tt.getDS),
+				kubeconfigLoader: staticLoader(clientcmdapi.NewConfig()),
+			}
+
+			err := orc.validateMTCConfig(tt.job)
+			if tt.checkCalls != nil {
+				tt.checkCalls(t)
+			}
+			assertWantErrSubstr(t, err, tt.wantErr, tt.wantErrSubstr)
+		})
+	}
+}
+
+func newMTCTestDynamicClient(
+	cr *unstructured.Unstructured,
+	getDS func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error),
+) dynamic.Interface {
+	return &mockDynamicClient{
+		listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+			return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{*cr}}, nil
+		},
+		getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+			if strings.HasPrefix(name, "multitier-driver") && getDS != nil {
+				return getDS(ctx, name, options, subresources...)
+			}
+			return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "serviceaccounts"}, name)
+		},
+	}
+}
+
+func assertWantErrSubstr(t *testing.T, err error, wantErr bool, wantErrSubstr string) {
+	t.Helper()
+	if wantErr {
+		if err == nil {
+			t.Fatalf("expected error containing %q, got nil", wantErrSubstr)
+		}
+		if !strings.Contains(err.Error(), wantErrSubstr) {
+			t.Errorf("expected error containing %q, got: %v", wantErrSubstr, err)
+		}
+	} else if err != nil {
+		t.Errorf("expected no error, got: %v", err)
 	}
 }

@@ -24,15 +24,19 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 
 	"gopkg.in/yaml.v2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
 )
 
 // Keep in sync with the jobset.version default in modules/management/kubectl-apply/variables.tf (no 'v' prefix there).
@@ -558,7 +562,7 @@ func isForbiddenError(err error) bool {
 	return apierrors.IsForbidden(err) || strings.Contains(strings.ToLower(err.Error()), "forbidden")
 }
 
-func (g *GKEOrchestrator) verifyCheckpointConfigurationCR(docRemediationMsg string) error {
+func (g *GKEOrchestrator) verifyCheckpointConfigurationCR(job *orchestrator.JobDefinition, docRemediationMsg string) error {
 	client, err := g.getDynamicClient()
 	if err != nil {
 		return fmt.Errorf("failed to initialize dynamic client to verify CheckpointConfiguration: %w", err)
@@ -582,7 +586,228 @@ func (g *GKEOrchestrator) verifyCheckpointConfigurationCR(docRemediationMsg stri
 		return fmt.Errorf("Multi-Tier Checkpointing (MTC) requires a CheckpointConfiguration resource to be deployed on the cluster. With Cluster Toolkit, set checkpoint_configuration on the kubectl-apply module. %s", docRemediationMsg)
 	}
 
+	return g.validateCheckpointConfigurationCompatibility(client, &checkpointConfigList.Items[0], job)
+}
+
+// mtcCandidateNodePools returns the node pools pinned with --node-constraint cloud.google.com/gke-nodepool,
+// or else the non-system node pools with the job's machine type.
+func (g *GKEOrchestrator) mtcCandidateNodePools(nodePoolConstraint, machineType string) []*gkeJobNodePool {
+	var pinned []string
+	if nodePoolConstraint != "" {
+		for _, name := range strings.Split(nodePoolConstraint, "|") {
+			pinned = append(pinned, strings.TrimSpace(name))
+		}
+	}
+	var pools []*gkeJobNodePool
+	for i := range g.clusterDesc.NodePools {
+		np := &g.clusterDesc.NodePools[i]
+		match := slices.Contains(pinned, np.Name)
+		if len(pinned) == 0 {
+			match = machineType != "" && !g.isSystemPool(*np) && strings.EqualFold(np.Config.MachineType, machineType)
+		}
+		if match {
+			pools = append(pools, np)
+		}
+	}
+	return pools
+}
+
+// hasAccelerators reports whether the node pool or machine type has accelerators attached.
+func (g *GKEOrchestrator) hasAccelerators(np *gkeJobNodePool, machineType, location string) bool {
+	if np != nil && len(np.Config.Accelerators) > 0 {
+		return true
+	}
+	if machineType == "" {
+		return false
+	}
+	cap, err := g.FetchMachineCapabilities(machineType, location)
+	return err == nil && len(cap.Accelerators) > 0
+}
+
+func tolerationMatchesTaint(tol map[string]interface{}, taint gkeTaint) bool {
+	effect, _ := tol["effect"].(string)
+	if effect != "" && effect != taint.Effect {
+		return false
+	}
+	op, _ := tol["operator"].(string)
+	key, _ := tol["key"].(string)
+	val, _ := tol["value"].(string)
+
+	switch op {
+	case "Exists":
+		return key == "" || key == taint.Key
+	case "", "Equal":
+		return key == taint.Key && val == taint.Value
+	default:
+		return false
+	}
+}
+
+func tolerationsCoverTaint(rawTolerations []interface{}, taint gkeTaint) bool {
+	for _, item := range rawTolerations {
+		if tol, ok := item.(map[string]interface{}); ok && tolerationMatchesTaint(tol, taint) {
+			return true
+		}
+	}
+	return false
+}
+
+func nodeSelectorMatchesPool(crName string, nodeSelector map[string]string, np *gkeJobNodePool) error {
+	if want := nodeSelector[nodePoolLabel]; want != "" && want != np.Name {
+		return fmt.Errorf("CheckpointConfiguration %q targets %s=%q in spec.nodeSelector, which does not match the job's node pool %q; the multitier-driver DaemonSet will not run on the job's nodes", crName, nodePoolLabel, want, np.Name)
+	}
+	for k, v := range nodeSelector {
+		if actual, ok := np.Config.Labels[k]; ok && actual != v {
+			return fmt.Errorf("CheckpointConfiguration %q targets %s=%q in spec.nodeSelector, which does not match label %s=%q on node pool %q; the multitier-driver DaemonSet will not run on the job's nodes", crName, k, v, k, actual, np.Name)
+		}
+	}
 	return nil
+}
+
+// checkpointConfigCoversPool returns an error if the CheckpointConfiguration's nodeSelector or
+// tolerations keep the multitier driver off the node pool (np is nil when no pool is known).
+func (g *GKEOrchestrator) checkpointConfigCoversPool(crName string, nodeSelector map[string]string, tolerations []interface{}, np *gkeJobNodePool, machineType, location string) error {
+	var taints []gkeTaint
+	if np != nil {
+		machineType = np.Config.MachineType
+		if err := nodeSelectorMatchesPool(crName, nodeSelector, np); err != nil {
+			return err
+		}
+		for _, t := range np.Config.Taints {
+			if t.Effect == "NoSchedule" || t.Effect == "NoExecute" {
+				taints = append(taints, t)
+			}
+		}
+	}
+	// GKE taints accelerator nodes without listing the taint in the node pool config;
+	// as elsewhere in gcluster, a non-TPU machine with accelerators is a GPU machine.
+	if config.IsTPU(machineType) {
+		taints = append(taints, gkeTaint{Key: "google.com/tpu", Value: "present", Effect: "NoSchedule"})
+	} else if g.hasAccelerators(np, machineType, location) {
+		taints = append(taints, gkeTaint{Key: "nvidia.com/gpu", Value: "present", Effect: "NoSchedule"})
+	}
+	for _, t := range taints {
+		if !tolerationsCoverTaint(tolerations, t) {
+			return fmt.Errorf("CheckpointConfiguration %q is missing a toleration for taint \"%s=%s:%s\" on the target nodes; the multitier-driver DaemonSet will not schedule on those nodes. Add a matching toleration to your CheckpointConfiguration (e.g. under checkpoint_configuration.tolerations in your blueprint) and redeploy", crName, t.Key, t.Value, t.Effect)
+		}
+	}
+	return nil
+}
+
+// coveredCheckpointPools returns the candidate pools the CheckpointConfiguration covers. When it covers
+// none, the error is from the pool its nodeSelector targets, so it names the missing toleration or label.
+func (g *GKEOrchestrator) coveredCheckpointPools(crName string, nodeSelector map[string]string, tolerations []interface{}, pools []*gkeJobNodePool, location string) ([]*gkeJobNodePool, error) {
+	var covered []*gkeJobNodePool
+	var bestErr error
+	for _, np := range pools {
+		err := g.checkpointConfigCoversPool(crName, nodeSelector, tolerations, np, np.Config.MachineType, location)
+		if err == nil {
+			covered = append(covered, np)
+		} else if bestErr == nil || nodeSelectorMatchesPool(crName, nodeSelector, np) == nil {
+			bestErr = err
+		}
+	}
+	if len(pools) > 0 && len(covered) == 0 {
+		return nil, bestErr
+	}
+	return covered, nil
+}
+
+func (g *GKEOrchestrator) validateCheckpointConfigurationCompatibility(client dynamic.Interface, cr *unstructured.Unstructured, job *orchestrator.JobDefinition) error {
+	crName := cr.GetName()
+	machineType := job.MachineType
+	nodeSelector, _, _ := unstructured.NestedStringMap(cr.Object, "spec", "nodeSelector")
+	tolerations, _, _ := unstructured.NestedSlice(cr.Object, "spec", "tolerations")
+
+	if instType := nodeSelector["node.kubernetes.io/instance-type"]; instType != "" && machineType != "" && !strings.EqualFold(instType, machineType) {
+		return fmt.Errorf("CheckpointConfiguration %q targets node.kubernetes.io/instance-type=%q in spec.nodeSelector, which does not match the job's machine type %q; the multitier-driver DaemonSet will not run on the job's nodes. Update checkpoint_configuration.node_selector in your blueprint and redeploy", crName, instType, machineType)
+	}
+
+	// The job can land on any candidate pool, so one pool the driver covers is enough.
+	pools := g.mtcCandidateNodePools(job.NodeConstraint[nodePoolLabel], machineType)
+	if len(pools) == 0 {
+		if err := g.checkpointConfigCoversPool(crName, nodeSelector, tolerations, nil, machineType, job.ClusterLocation); err != nil {
+			return err
+		}
+	}
+	coveredPools, err := g.coveredCheckpointPools(crName, nodeSelector, tolerations, pools, job.ClusterLocation)
+	if err != nil {
+		return err
+	}
+
+	uid := string(cr.GetUID())
+	if uid == "" {
+		return nil
+	}
+	canScaleFromZero := g.napEnabled || slices.ContainsFunc(coveredPools, func(np *gkeJobNodePool) bool {
+		return np.Autoscaling.Enabled && np.Autoscaling.MinNodeCount == 0
+	})
+	return waitForMTCDaemonSetReady(client, crName, uid, canScaleFromZero)
+}
+
+var (
+	mtcDaemonSetPollInterval = 5 * time.Second
+	mtcDaemonSetPollTimeout  = 2 * time.Minute
+)
+
+// mtcDaemonSetNotReady returns why the multitier driver DaemonSet is not ready, or nil if it is.
+func mtcDaemonSetNotReady(ds *unstructured.Unstructured, crName string, canScaleFromZero bool) error {
+	gen, _, _ := unstructured.NestedInt64(ds.Object, "metadata", "generation")
+	obsGen, _, _ := unstructured.NestedInt64(ds.Object, "status", "observedGeneration")
+	desired, _, _ := unstructured.NestedInt64(ds.Object, "status", "desiredNumberScheduled")
+	ready, _, _ := unstructured.NestedInt64(ds.Object, "status", "numberReady")
+	updated, hasUpdated, _ := unstructured.NestedInt64(ds.Object, "status", "updatedNumberScheduled")
+	switch {
+	case obsGen < gen: // Also true while the status is not populated yet.
+		return fmt.Errorf("the MTC CSI driver DaemonSet %s/%s is still reconciling generation %d (observedGeneration=%d)", mtcDriverNamespace, ds.GetName(), gen, obsGen)
+	case desired == 0 && canScaleFromZero:
+		return nil
+	case desired == 0:
+		return fmt.Errorf("the MTC CSI driver DaemonSet %s/%s has 0 desired pods (desiredNumberScheduled=0); verify that CheckpointConfiguration %q nodeSelector and tolerations match your target nodes", mtcDriverNamespace, ds.GetName(), crName)
+	case hasUpdated && updated < desired:
+		return fmt.Errorf("the MTC CSI driver DaemonSet %s/%s has only %d of %d pods updated to the latest version; wait for the rollout to finish or check 'kubectl describe pods -n %s'", mtcDriverNamespace, ds.GetName(), updated, desired, mtcDriverNamespace)
+	case ready < desired:
+		return fmt.Errorf("the MTC CSI driver DaemonSet %s/%s has %d of %d pods ready; wait for the driver pods to become Ready or check 'kubectl describe pods -n %s' (common causes: missing bucket IAM permissions or disabled Hierarchical Namespace on the checkpoint bucket)", mtcDriverNamespace, ds.GetName(), ready, desired, mtcDriverNamespace)
+	}
+	return nil
+}
+
+// waitForMTCDaemonSetReady polls until all multitier driver pods are ready. As in the other
+// gcluster wait loops, a 403 skips the check and any other error is retried until the deadline.
+func waitForMTCDaemonSetReady(client dynamic.Interface, crName, uid string, canScaleFromZero bool) error {
+	dsName := "multitier-driver-" + uid
+	dsClient := client.Resource(daemonsetGVR).Namespace(mtcDriverNamespace)
+	deadline := time.Now().Add(mtcDaemonSetPollTimeout)
+	loggedWait := false
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ds, err := dsClient.Get(ctx, dsName, metav1.GetOptions{})
+		cancel()
+
+		var lastErr error
+		switch {
+		case isForbiddenError(err):
+			logging.Warn("Insufficient RBAC permissions to verify MTC driver DaemonSet %s/%s (403 Forbidden). Proceeding with job submission.", mtcDriverNamespace, dsName)
+			return nil
+		case apierrors.IsNotFound(err):
+			lastErr = fmt.Errorf("the MTC CSI driver DaemonSet %q was not found in namespace %q for CheckpointConfiguration %q (uid %s); verify that the HighScaleCheckpointing controller is healthy (`kubectl get daemonset -n %s`)", dsName, mtcDriverNamespace, crName, uid, mtcDriverNamespace)
+		case err != nil:
+			lastErr = fmt.Errorf("failed to verify MTC driver DaemonSet %s/%s: %w", mtcDriverNamespace, dsName, err)
+		default:
+			if lastErr = mtcDaemonSetNotReady(ds, crName, canScaleFromZero); lastErr == nil {
+				return nil
+			}
+		}
+
+		if time.Now().Add(mtcDaemonSetPollInterval).After(deadline) {
+			return lastErr
+		}
+		if !loggedWait {
+			logging.Info("Waiting up to %s for MTC driver DaemonSet %s/%s to become ready...", mtcDaemonSetPollTimeout, mtcDriverNamespace, dsName)
+			loggedWait = true
+		}
+		time.Sleep(mtcDaemonSetPollInterval)
+	}
 }
 
 // The GKE-managed MTC driver runs as this Kubernetes service account.
@@ -643,7 +868,7 @@ func (g *GKEOrchestrator) validateMTCConfig(job *orchestrator.JobDefinition) err
 		return nil
 	}
 
-	if err := g.verifyCheckpointConfigurationCR(docRemediationMsg); err != nil {
+	if err := g.verifyCheckpointConfigurationCR(job, docRemediationMsg); err != nil {
 		return err
 	}
 	if gsa := g.legacyMTCDriverGSA(); gsa != "" {
