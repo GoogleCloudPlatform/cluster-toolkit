@@ -273,6 +273,16 @@ func TestNoBlocksIsError(t *testing.T) {
 	}
 }
 
+// Block-only dense reservations (blocks without sub-blocks) get a clear error
+// instead of "0 available".
+func TestBlocksWithoutSubBlocksIsError(t *testing.T) {
+	l := &fakeLister{blocks: map[string][]*compute.ReservationSubBlock{b1: {}, b2: nil}}
+	_, err := Select(nil, 1, res, nil, list(t, l))
+	if err == nil || !strings.Contains(err.Error(), "has 2 blocks but no sub-blocks") || strings.Contains(err.Error(), "available") {
+		t.Errorf("want blocks-without-sub-blocks error, got %v", err)
+	}
+}
+
 func TestExcludeSkipsOtherModulesSubBlocks(t *testing.T) {
 	l := &fakeLister{blocks: map[string][]*compute.ReservationSubBlock{b1: {ok(b1, 1), ok(b1, 2), ok(b1, 3)}}}
 	sel, err := Select(nil, 2, res, map[string]bool{path(b1, 1): true}, list(t, l))

@@ -267,7 +267,7 @@ Once the future reservation is active or the reservation is fulfilled, set the `
 
 ### One node pool per reservation sub-block
 
-Dense reservations (for example A4X, A3 Ultra, A4) are divided into blocks and sub-blocks. One module block can create `num_node_pools` node pools, each pinned to its own sub-block. The sub-block of each pool comes from a map, `reservation_subblocks`, on the reservation in `reservation_affinity.specific_reservations[0]`. Each node pool is named `{name}-{key}`. All node pools share the other settings, including `static_node_count` and `placement_policy`.
+Some dense reservations (for example A4X) are divided into blocks and sub-blocks. Sub-block pinning needs such a reservation. One module block can create `num_node_pools` node pools, each pinned to its own sub-block. The sub-block of each pool comes from a map, `reservation_subblocks`, on the reservation in `reservation_affinity.specific_reservations[0]`. Each node pool is named `{name}-{key}`. All node pools share the other settings, including `static_node_count` and `placement_policy`.
 
 **Standard setup.** The blueprint refers to a deployment variable, and the deployment file holds the map:
 

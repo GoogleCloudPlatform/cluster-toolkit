@@ -260,9 +260,10 @@ func (bp *Blueprint) pinnedReservation(m *Module, first cty.Value) (subblockmap.
 	return subblockmap.Reservation{Project: project, Zone: zone, Name: name}, nil
 }
 
-// mapSource inspects the unevaluated reservation_subblocks setting. varName is the
-// variable it refers to if it is exactly $(vars.X), so gcluster can save to X.
-func mapSource(raw cty.Value) (varName string, hasSetting bool) {
+// mapSource inspects the unevaluated reservation_subblocks setting. It returns the
+// variable the setting refers to if it is exactly $(vars.X), so gcluster can save
+// to X, and whether the setting is present at all.
+func mapSource(raw cty.Value) (string, bool) {
 	first, ok := firstSpecificReservation(raw, false)
 	if !ok || !first.Type().HasAttribute(reservationSubblocksAttr) {
 		return "", false

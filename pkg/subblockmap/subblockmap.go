@@ -147,24 +147,12 @@ func ListSubBlocks(ctx context.Context, l Lister, r Reservation) ([]SubBlock, er
 			return nil, wrap(err)
 		}
 		for _, sb := range items {
-			health := "HEALTHY"
-			if sb.HealthInfo != nil && sb.HealthInfo.HealthStatus != "" {
-				health = sb.HealthInfo.HealthStatus
-			}
-			status := sb.Status
-			if status == "" {
-				status = "READY"
-			}
-			out = append(out, SubBlock{
-				Block:    b,
-				Name:     sb.Name,
-				Path:     fmt.Sprintf("%s/reservationBlocks/%s/reservationSubBlocks/%s", r.Name, b, sb.Name),
-				Count:    sb.Count,
-				InUse:    sb.InUseCount,
-				Healthy:  status == "READY" && (health == "HEALTHY" || health == "DEGRADED"),
-				Degraded: health == "DEGRADED",
-			})
+			out = append(out, toSubBlock(r, b, sb))
 		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("reservation %q (project %q, zone %q) has %d blocks but no sub-blocks; sub-block pinning needs a reservation with sub-blocks (for example A4X)",
+			r.Name, r.Project, r.Zone, len(blocks))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Block != out[j].Block {
@@ -175,6 +163,28 @@ func ListSubBlocks(ctx context.Context, l Lister, r Reservation) ([]SubBlock, er
 	return out, nil
 }
 
+// toSubBlock converts a Compute Engine sub-block of block b. A missing status or
+// health counts as READY or HEALTHY.
+func toSubBlock(r Reservation, b string, sb *compute.ReservationSubBlock) SubBlock {
+	health := "HEALTHY"
+	if sb.HealthInfo != nil && sb.HealthInfo.HealthStatus != "" {
+		health = sb.HealthInfo.HealthStatus
+	}
+	status := sb.Status
+	if status == "" {
+		status = "READY"
+	}
+	return SubBlock{
+		Block:    b,
+		Name:     sb.Name,
+		Path:     fmt.Sprintf("%s/reservationBlocks/%s/reservationSubBlocks/%s", r.Name, b, sb.Name),
+		Count:    sb.Count,
+		InUse:    sb.InUseCount,
+		Healthy:  status == "READY" && (health == "HEALTHY" || health == "DEGRADED"),
+		Degraded: health == "DEGRADED",
+	}
+}
+
 // Key returns the map key "BB-SSSS" for a block and sub-block name.
 func Key(block, subBlock string) (string, error) {
 	b := blockNumRe.FindStringSubmatch(block)
@@ -182,8 +192,14 @@ func Key(block, subBlock string) (string, error) {
 	if b == nil || sb == nil {
 		return "", fmt.Errorf("cannot build a key for sub-block %q in block %q: names must end in '-block-<number>' and '-subblock-<number>'", subBlock, block)
 	}
-	bn, _ := strconv.Atoi(b[1])
-	sn, _ := strconv.Atoi(sb[1])
+	bn, err := strconv.Atoi(b[1])
+	if err != nil {
+		return "", fmt.Errorf("invalid block number %q in block %q: %w", b[1], block, err)
+	}
+	sn, err := strconv.Atoi(sb[1])
+	if err != nil {
+		return "", fmt.Errorf("invalid sub-block number %q in sub-block %q: %w", sb[1], subBlock, err)
+	}
 	if bn > maxBlock || sn > maxSubBlock {
 		return "", fmt.Errorf("sub-block %q: block number %d or sub-block number %d is too large for the key format BB-SSSS (max block %d, max sub-block %d)",
 			subBlock, bn, sn, maxBlock, maxSubBlock)
