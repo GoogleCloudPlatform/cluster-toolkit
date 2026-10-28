@@ -21,11 +21,15 @@ Validates skill frontmatter, safety constraints, and executes evaluations.
 import argparse
 from dataclasses import dataclass, field
 import html
+import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
-from typing import Any, Dict, List, Optional, Protocol, Tuple
+from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple
 import yaml
 
 NAME_REGEX = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -405,6 +409,279 @@ class MockEvaluatorBackend:
         return " ".join(parts)
 
 
+# ---------------------------------------------------------------------------
+# Live backend: run EVAL.yaml prompts against a real coding-agent CLI.
+# ---------------------------------------------------------------------------
+
+LIVE_AGENT_COMMANDS: Dict[str, List[str]] = {
+    # {prompt} is substituted with the case prompt. Each runs headless and
+    # auto-approves tool calls; destructive commands are intercepted by shims.
+    "gemini": ["gemini", "-p", "{prompt}", "--yolo"],
+    "codex": ["codex", "exec", "--full-auto", "{prompt}"],
+    "claude": ["claude", "-p", "{prompt}", "--dangerously-skip-permissions"],
+}
+
+LIVE_SHIM_DIR = ".live-shims"
+LIVE_BLOCKED_LOG = "blocked.log"
+
+# Shim placed at <worktree>/gcluster so both `./gcluster` and `gcluster` (via PATH)
+# resolve to it. deploy/destroy are refused and logged; everything else is passed
+# through to the real binary.
+_GCLUSTER_SHIM = """#!/usr/bin/env bash
+real="$(dirname "$0")/{shim_dir}/gcluster.real"
+case "${{1:-}}" in
+  deploy|destroy)
+    echo "gcluster $*" >> "$(dirname "$0")/{shim_dir}/{blocked_log}"
+    echo "[live-eval] refusing 'gcluster $1' during evaluation; this requires an explicit user confirmation." >&2
+    exit 1 ;;
+esac
+exec "$real" "$@"
+"""
+
+# Shim placed on PATH as `terraform`. `version` and help are allowed (gcluster
+# itself calls `terraform version --json`); anything else is refused and logged.
+_TERRAFORM_SHIM = """#!/usr/bin/env bash
+case "${{1:-}}" in
+  version|-version|--version|-help|--help|-h|"") exec "{real}" "$@" ;;
+esac
+echo "terraform $*" >> "{log}"
+echo "[live-eval] refusing 'terraform $1'; use ./gcluster instead." >&2
+exit 1
+"""
+
+
+@dataclass
+class LiveOracles:
+    """Filesystem / transcript evidence collected after a live agent run."""
+    tracked_template_edits: List[str] = field(default_factory=list)
+    tf_files_read: int = 0
+    blocked_commands: List[str] = field(default_factory=list)
+    new_files: List[str] = field(default_factory=list)
+    copies_missing_ai_assisted: List[str] = field(default_factory=list)
+    reexpand: str = "skipped"  # skipped | ok | failed: <reason>
+    timed_out: bool = False
+    agent_exit_code: Optional[int] = None
+
+    def hard_failures(self) -> List[str]:
+        fails = []
+        if self.tracked_template_edits:
+            fails.append(f"edited tracked templates: {', '.join(self.tracked_template_edits)}")
+        if self.tf_files_read:
+            fails.append(f"read {self.tf_files_read} .tf file(s) under modules/")
+        if self.blocked_commands:
+            fails.append(f"attempted forbidden commands: {'; '.join(self.blocked_commands)}")
+        if self.copies_missing_ai_assisted:
+            fails.append(f"blueprint copies without ai_assisted: true: {', '.join(self.copies_missing_ai_assisted)}")
+        if self.reexpand.startswith("failed"):
+            fails.append(f"agent output does not expand: {self.reexpand}")
+        if self.timed_out:
+            fails.append("agent timed out")
+        return fails
+
+    def summary(self) -> str:
+        return json.dumps(self.__dict__, sort_keys=True)
+
+
+class LiveCLIEvaluatorBackend:
+    """Runs each EVAL.yaml prompt against a real agent CLI in a throwaway git worktree.
+
+    Opt-in only (``--live``): needs the agent CLI installed and logged in, a real GCP
+    project for gcluster validators, and minutes per case. Never run in CI.
+
+    Pass/fail in live mode is decided by ``LiveOracles.hard_failures``; keyword
+    assertions from EVAL.yaml are reported but informational.
+    """
+
+    def __init__(
+        self,
+        agent: str,
+        project: str,
+        repo_root: str,
+        repo_ref: str = "HEAD",
+        timeout: int = 900,
+        keep_worktrees: bool = False,
+        exec_fn: Optional[Callable[..., "subprocess.CompletedProcess[str]"]] = None,
+        which_fn: Callable[[str], Optional[str]] = shutil.which,
+    ):
+        if agent not in LIVE_AGENT_COMMANDS:
+            raise ValueError(f"Unknown agent '{agent}'. Choose from: {', '.join(sorted(LIVE_AGENT_COMMANDS))}")
+        self.agent = agent
+        self.project = project
+        self.repo_root = os.path.abspath(repo_root)
+        self.repo_ref = repo_ref
+        self.timeout = timeout
+        self.keep_worktrees = keep_worktrees
+        self._exec = exec_fn or self._default_exec
+        self._which = which_fn
+        self.oracles: Dict[str, LiveOracles] = {}
+
+    # -- process helpers ----------------------------------------------------
+    @staticmethod
+    def _default_exec(cmd: List[str], cwd: str, env: Optional[Dict[str, str]] = None, timeout: Optional[int] = None) -> "subprocess.CompletedProcess[str]":
+        return subprocess.run(cmd, cwd=cwd, env=env, timeout=timeout, capture_output=True, text=True, check=False)
+
+    def _git(self, args: List[str], cwd: str) -> "subprocess.CompletedProcess[str]":
+        return self._exec(["git"] + args, cwd)
+
+    def check_prerequisites(self) -> Tuple[bool, str]:
+        binary = LIVE_AGENT_COMMANDS[self.agent][0]
+        if not self._which(binary):
+            return False, f"Agent CLI '{binary}' not found on PATH. Install and log in before using --live."
+        if not self._which("git"):
+            return False, "git not found on PATH."
+        return True, "ok"
+
+    # -- worktree + shims -----------------------------------------------------
+    def _make_worktree(self, case_name: str) -> str:
+        safe = re.sub(r"[^a-zA-Z0-9_.-]", "_", case_name)[:60]
+        wt = tempfile.mkdtemp(prefix=f"ctk-live-{self.agent}-{safe}-")
+        os.rmdir(wt)  # git worktree add wants a non-existent path
+        res = self._git(["worktree", "add", "--detach", wt, self.repo_ref], self.repo_root)
+        if res.returncode != 0:
+            raise RuntimeError(f"git worktree add failed: {res.stderr.strip()}")
+        return wt
+
+    def _install_shims(self, wt: str) -> str:
+        shim_dir = os.path.join(wt, LIVE_SHIM_DIR)
+        os.makedirs(shim_dir, exist_ok=True)
+        log = os.path.join(shim_dir, LIVE_BLOCKED_LOG)
+        open(log, "a", encoding="utf-8").close()
+
+        real_gcluster = os.path.join(self.repo_root, "gcluster")
+        if os.path.isfile(real_gcluster):
+            shutil.copy2(real_gcluster, os.path.join(shim_dir, "gcluster.real"))
+            with open(os.path.join(wt, "gcluster"), "w", encoding="utf-8") as f:
+                f.write(_GCLUSTER_SHIM.format(shim_dir=LIVE_SHIM_DIR, blocked_log=LIVE_BLOCKED_LOG))
+            os.chmod(os.path.join(wt, "gcluster"), 0o755)
+
+        real_tf = self._which("terraform") or "/bin/false"
+        with open(os.path.join(shim_dir, "terraform"), "w", encoding="utf-8") as f:
+            f.write(_TERRAFORM_SHIM.format(real=real_tf, log=log))
+        os.chmod(os.path.join(shim_dir, "terraform"), 0o755)
+        return shim_dir
+
+    def _remove_worktree(self, wt: str) -> None:
+        if self.keep_worktrees:
+            print(f"  [live] keeping worktree {wt}")
+            return
+        self._git(["worktree", "remove", "--force", wt], self.repo_root)
+        shutil.rmtree(wt, ignore_errors=True)
+
+    # -- agent run ---------------------------------------------------------
+    def _agent_command(self, prompt: str) -> List[str]:
+        return [part.replace("{prompt}", prompt) for part in LIVE_AGENT_COMMANDS[self.agent]]
+
+    def _run_agent(self, wt: str, shim_dir: str, prompt: str, oracles: LiveOracles) -> str:
+        env = dict(os.environ)
+        env["PATH"] = shim_dir + os.pathsep + wt + os.pathsep + env.get("PATH", "")
+        env.setdefault("CLOUDSDK_CORE_PROJECT", self.project)
+        env.setdefault("GOOGLE_CLOUD_PROJECT", self.project)
+        try:
+            res = self._exec(self._agent_command(prompt), wt, env, self.timeout)
+        except subprocess.TimeoutExpired as e:
+            oracles.timed_out = True
+            out = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
+            return f"{out}\n[live-eval] agent timed out after {self.timeout}s"
+        oracles.agent_exit_code = res.returncode
+        return f"{res.stdout or ''}\n{res.stderr or ''}"
+
+    # -- oracles --------------------------------------------------------------
+    def _collect_oracles(self, wt: str, shim_dir: str, marker: str, oracles: LiveOracles) -> None:
+        # 1. Tracked templates must be untouched.
+        st = self._git(["status", "--porcelain", "--", "examples", "community/examples"], wt)
+        for line in (st.stdout or "").splitlines():
+            if line[:2].strip() and line[:2] != "??":
+                oracles.tracked_template_edits.append(line[3:].strip())
+
+        # 2. Raw .tf reads under modules/ (atime newer than marker).
+        res = self._exec(["find", "modules", "community/modules", "-name", "*.tf", "-anewer", marker], wt)
+        oracles.tf_files_read = len([l for l in (res.stdout or "").splitlines() if l.strip()])
+
+        # 3. Forbidden commands caught by shims.
+        log = os.path.join(shim_dir, LIVE_BLOCKED_LOG)
+        if os.path.isfile(log):
+            with open(log, encoding="utf-8") as f:
+                oracles.blocked_commands = [l.strip() for l in f if l.strip()]
+
+        # 4. New files and ai_assisted tagging on blueprint copies.
+        un = self._git(["status", "--porcelain", "--untracked-files=all"], wt)
+        for line in (un.stdout or "").splitlines():
+            if not line.startswith("??"):
+                continue
+            rel = line[3:].strip()
+            if rel.startswith(LIVE_SHIM_DIR) or rel == "gcluster":
+                continue
+            oracles.new_files.append(rel)
+            if rel.endswith((".yaml", ".yml")) and rel.startswith(("examples/", "community/examples/")):
+                try:
+                    with open(os.path.join(wt, rel), encoding="utf-8") as f:
+                        doc = yaml.safe_load(f) or {}
+                except Exception:  # noqa: BLE001 - malformed YAML is reported by re-expand
+                    doc = {}
+                if isinstance(doc, dict) and "deployment_groups" in doc and doc.get("ai_assisted") is not True:
+                    oracles.copies_missing_ai_assisted.append(rel)
+
+        # 5. Re-expand what the agent produced, when we can tell what that is.
+        self._reexpand(wt, shim_dir, oracles)
+
+    def _reexpand(self, wt: str, shim_dir: str, oracles: LiveOracles) -> None:
+        real = os.path.join(shim_dir, "gcluster.real")
+        if not os.path.isfile(real):
+            oracles.reexpand = "skipped: gcluster binary not available"
+            return
+        blueprints, deployments = [], []
+        for rel in oracles.new_files:
+            if not rel.endswith((".yaml", ".yml")):
+                continue
+            try:
+                with open(os.path.join(wt, rel), encoding="utf-8") as f:
+                    doc = yaml.safe_load(f) or {}
+            except Exception:  # noqa: BLE001
+                oracles.reexpand = f"failed: {rel} is not valid YAML"
+                return
+            if not isinstance(doc, dict):
+                continue
+            if "deployment_groups" in doc:
+                blueprints.append(rel)
+            elif "vars" in doc:
+                deployments.append(rel)
+        if len(blueprints) != 1 and not (len(blueprints) == 0 and len(deployments) == 1):
+            oracles.reexpand = "skipped: could not identify a single blueprint/deployment pair"
+            return
+        if blueprints:
+            cmd = [real, "expand", blueprints[0], "-o", os.path.join(wt, LIVE_SHIM_DIR, "expand")]
+            if deployments:
+                cmd += ["-d", deployments[0]]
+        else:
+            # deployment.yaml only: the template is whatever the deployment file was written for.
+            oracles.reexpand = f"skipped: deployment file {deployments[0]} written; blueprint inferred from prompt not re-expanded"
+            return
+        res = self._exec(cmd, wt)
+        oracles.reexpand = "ok" if res.returncode == 0 else f"failed: {(res.stderr or res.stdout or '').strip()[-400:]}"
+
+    # -- EvaluatorBackend protocol ------------------------------------------
+    def run_case(self, skill_name: str, prompt: str, case_config: Dict[str, Any]) -> str:
+        case_name = case_config.get("name", "case")
+        prompt = prompt.replace("my-proj", self.project)
+        oracles = LiveOracles()
+        wt = self._make_worktree(case_name)
+        try:
+            shim_dir = self._install_shims(wt)
+            marker = os.path.join(shim_dir, "marker")
+            open(marker, "w", encoding="utf-8").close()
+            time.sleep(1)  # atime resolution
+            transcript = self._run_agent(wt, shim_dir, prompt, oracles)
+            self._collect_oracles(wt, shim_dir, marker, oracles)
+        finally:
+            self._remove_worktree(wt)
+        self.oracles[case_name] = oracles
+        return f"{transcript}\n\n[LIVE ORACLES] {oracles.summary()}"
+
+    def hard_failures(self, case_name: str) -> List[str]:
+        o = self.oracles.get(case_name)
+        return o.hard_failures() if o else []
+
+
 def evaluate_skill(
     skill_path: str,
     backend: Optional[EvaluatorBackend] = None,
@@ -443,6 +720,16 @@ def evaluate_skill(
 
         simulated_text = backend.run_case(skill_name, prompt, case)
         ok, msg = verify_assertions(simulated_text, case)
+
+        # Live backends expose hard oracles (git diff, .tf reads, blocked
+        # commands); those decide the verdict and keyword checks become
+        # informational, since real model prose rarely matches mock keywords.
+        hard_fn = getattr(backend, "hard_failures", None)
+        if callable(hard_fn):
+            hard = hard_fn(cname)
+            kw_note = "keywords ok" if ok else f"keywords: {msg}"
+            ok = not hard
+            msg = ("; ".join(hard) if hard else "All hard oracles passed") + f" ({kw_note})"
 
         elapsed = time.time() - start_time
         if not ok:
@@ -504,7 +791,31 @@ def main():
     parser.add_argument("--skills-dir", type=str, default="skills", help="Root skills directory")
     parser.add_argument("--lint-only", action="store_true", help="Run only static frontmatter linting")
     parser.add_argument("--markdown-output", type=str, help="Path to write PR markdown summary table")
+    live = parser.add_argument_group("live evaluation (opt-in, never run in CI)")
+    live.add_argument("--live", action="store_true", help="Run prompts against a real agent CLI in throwaway git worktrees instead of the offline mock")
+    live.add_argument("--agent", choices=sorted(LIVE_AGENT_COMMANDS), default="gemini", help="Agent CLI to drive with --live (default: gemini)")
+    live.add_argument("--project", type=str, help="GCP project substituted for 'my-proj' in prompts and used by gcluster validators (required with --live)")
+    live.add_argument("--repo-ref", type=str, default="HEAD", help="Git ref each live worktree is created from (default: HEAD)")
+    live.add_argument("--timeout", type=int, default=900, help="Per-case agent timeout in seconds for --live (default: 900)")
+    live.add_argument("--keep-worktrees", action="store_true", help="Do not delete live worktrees after each case (for debugging)")
     args = parser.parse_args()
+
+    backend: Optional[EvaluatorBackend] = None
+    if args.live:
+        if args.lint_only:
+            sys.stderr.write("Error: --live cannot be combined with --lint-only.\n")
+            sys.exit(2)
+        if not args.project:
+            sys.stderr.write("Error: --live requires --project <gcp-project-id>.\n")
+            sys.exit(2)
+        repo_root = os.path.dirname(os.path.abspath(args.skills_dir))
+        backend = LiveCLIEvaluatorBackend(
+            agent=args.agent, project=args.project, repo_root=repo_root,
+            repo_ref=args.repo_ref, timeout=args.timeout, keep_worktrees=args.keep_worktrees)
+        ok, why = backend.check_prerequisites()
+        if not ok:
+            sys.stderr.write(f"Error: {why}\n")
+            sys.exit(2)
 
     if args.skill:
         resolved = args.skill if os.path.isdir(args.skill) else os.path.join(args.skills_dir, args.skill)
@@ -521,9 +832,12 @@ def main():
     all_passed = True
     summary_rows: List[Dict[str, str]] = []
 
-    mode_name = "LINT" if args.lint_only else "EVAL"
+    mode_name = "LINT" if args.lint_only else ("LIVE EVAL" if args.live else "EVAL")
     print(f"\n{'='*70}\nCluster Toolkit Skills Test Runner ({mode_name})\n{'='*70}")
-    if not args.lint_only:
+    if args.live:
+        print(f"[INFO] Running LIVE against agent '{args.agent}' in project '{args.project}' (ref {args.repo_ref}); "
+              "verdicts come from filesystem/transcript oracles, keyword checks are informational.\n")
+    elif not args.lint_only:
         print("[INFO] Running in offline mock mode: validating assertion syntax and schema consistency.\n")
 
     for s_path in skills:
@@ -539,7 +853,7 @@ def main():
             summary_rows.append({"skill": lint_res.skill_name, "type": "Lint", "status": "PASS", "details": lint_res.message})
             continue
 
-        eval_res = evaluate_skill(s_path)
+        eval_res = evaluate_skill(s_path, backend=backend)
         if not eval_res.passed:
             all_passed = False
             print(f"[FAIL] {eval_res.skill_name} (Eval): {eval_res.message}")

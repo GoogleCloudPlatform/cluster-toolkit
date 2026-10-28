@@ -39,6 +39,11 @@ from tools.run_eval import (
     normalize_case,
     build_command_pattern,
     write_markdown_report,
+    LiveCLIEvaluatorBackend,
+    LiveOracles,
+    LIVE_AGENT_COMMANDS,
+    LIVE_SHIM_DIR,
+    LIVE_BLOCKED_LOG,
 )
 
 
@@ -881,6 +886,171 @@ scancel 9999
             content = f.read()
         self.assertIn("Cluster Toolkit Skills Evaluation Results", content)
         self.assertIn("test-skill", content)
+
+
+class _FakeProc:
+    def __init__(self, returncode=0, stdout="", stderr=""):
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+
+class TestLiveBackend(unittest.TestCase):
+    """Live backend tests with subprocess fully mocked (no agent, no git, no network)."""
+
+    def setUp(self):
+        self.repo = tempfile.mkdtemp()
+        self.calls = []
+
+    def tearDown(self):
+        shutil.rmtree(self.repo, ignore_errors=True)
+
+    def _backend(self, exec_fn, which=lambda b: f"/usr/bin/{b}", **kw):
+        return LiveCLIEvaluatorBackend(agent=kw.pop("agent", "gemini"), project="test-proj",
+                                       repo_root=self.repo, exec_fn=exec_fn, which_fn=which, **kw)
+
+    def _fake_exec(self, status_examples="", status_all="", find_out="", agent_rc=0, agent_out="done"):
+        """Build an exec_fn that simulates git worktree, agent run, find, and git status."""
+        def exec_fn(cmd, cwd, env=None, timeout=None):
+            self.calls.append((cmd, cwd, env, timeout))
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(cmd[4], exist_ok=True)
+                return _FakeProc(0)
+            if cmd[:3] == ["git", "worktree", "remove"]:
+                return _FakeProc(0)
+            if cmd[:2] == ["git", "status"]:
+                return _FakeProc(0, status_all if "--untracked-files=all" in cmd else status_examples)
+            if cmd[0] == "find":
+                return _FakeProc(0, find_out)
+            if cmd[0] in ("gemini", "codex", "claude"):
+                return _FakeProc(agent_rc, agent_out)
+            return _FakeProc(0)
+        return exec_fn
+
+    def test_unknown_agent_rejected(self):
+        with self.assertRaises(ValueError):
+            LiveCLIEvaluatorBackend(agent="nope", project="p", repo_root=self.repo)
+
+    def test_agent_command_templating(self):
+        for agent, tmpl in LIVE_AGENT_COMMANDS.items():
+            b = self._backend(self._fake_exec(), agent=agent)
+            cmd = b._agent_command("do the thing")
+            self.assertEqual(cmd[0], tmpl[0])
+            self.assertIn("do the thing", cmd)
+            self.assertNotIn("{prompt}", " ".join(cmd))
+
+    def test_prerequisites_missing_agent_binary(self):
+        b = self._backend(self._fake_exec(), which=lambda name: None if name == "gemini" else "/usr/bin/x")
+        ok, msg = b.check_prerequisites()
+        self.assertFalse(ok)
+        self.assertIn("gemini", msg)
+
+    def test_clean_run_passes_and_substitutes_project(self):
+        b = self._backend(self._fake_exec(agent_out="Created deployment.yaml and ran ./gcluster expand"))
+        case = {"name": "c1", "expect_keywords_all": ["deployment.yaml"]}
+        text = b.run_case("skill", "Set up hpc-slurm for project my-proj", case)
+        agent_calls = [c for c in self.calls if c[0][0] == "gemini"]
+        self.assertEqual(len(agent_calls), 1)
+        self.assertIn("test-proj", " ".join(agent_calls[0][0]))
+        self.assertNotIn("my-proj", " ".join(agent_calls[0][0]))
+        # shim dir is first on PATH and project is pinned for gcloud
+        env = agent_calls[0][2]
+        self.assertTrue(env["PATH"].split(os.pathsep)[0].endswith(LIVE_SHIM_DIR))
+        self.assertEqual(env["CLOUDSDK_CORE_PROJECT"], "test-proj")
+        self.assertIn("[LIVE ORACLES]", text)
+        self.assertEqual(b.hard_failures("c1"), [])
+
+    def test_tracked_template_edit_is_hard_failure(self):
+        b = self._backend(self._fake_exec(status_examples=" M examples/hpc-slurm.yaml\n"))
+        b.run_case("skill", "p", {"name": "c2"})
+        fails = b.hard_failures("c2")
+        self.assertEqual(len(fails), 1)
+        self.assertIn("examples/hpc-slurm.yaml", fails[0])
+
+    def test_tf_reads_counted(self):
+        b = self._backend(self._fake_exec(find_out="modules/a/main.tf\nmodules/b/variables.tf\n"))
+        b.run_case("skill", "p", {"name": "c3"})
+        self.assertEqual(b.oracles["c3"].tf_files_read, 2)
+        self.assertTrue(any("2 .tf" in f for f in b.hard_failures("c3")))
+
+    def test_blocked_commands_read_from_shim_log(self):
+        def exec_fn(cmd, cwd, env=None, timeout=None):
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(cmd[4], exist_ok=True)
+                return _FakeProc(0)
+            if cmd[0] == "gemini":
+                # simulate the shim having refused a terraform apply during the run
+                with open(os.path.join(cwd, LIVE_SHIM_DIR, LIVE_BLOCKED_LOG), "a", encoding="utf-8") as f:
+                    f.write("terraform apply\n")
+                return _FakeProc(0, "tried terraform")
+            return _FakeProc(0)
+        b = self._backend(exec_fn)
+        b.run_case("skill", "p", {"name": "c4"})
+        self.assertEqual(b.oracles["c4"].blocked_commands, ["terraform apply"])
+        self.assertTrue(any("terraform apply" in f for f in b.hard_failures("c4")))
+
+    def test_blueprint_copy_without_ai_assisted_flagged(self):
+        def exec_fn(cmd, cwd, env=None, timeout=None):
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(os.path.join(cmd[4], "examples"), exist_ok=True)
+                with open(os.path.join(cmd[4], "examples", "custom.yaml"), "w", encoding="utf-8") as f:
+                    f.write("blueprint_name: custom\ndeployment_groups:\n- group: primary\n  modules: []\n")
+                return _FakeProc(0)
+            if cmd[:2] == ["git", "status"] and "--untracked-files=all" in cmd:
+                return _FakeProc(0, "?? examples/custom.yaml\n")
+            return _FakeProc(0)
+        b = self._backend(exec_fn)
+        b.run_case("skill", "p", {"name": "c5"})
+        self.assertEqual(b.oracles["c5"].copies_missing_ai_assisted, ["examples/custom.yaml"])
+        self.assertTrue(b.hard_failures("c5"))
+
+    def test_shims_installed_in_worktree(self):
+        gcluster = os.path.join(self.repo, "gcluster")
+        with open(gcluster, "w", encoding="utf-8") as f:
+            f.write("#!/bin/sh\necho real\n")
+        os.chmod(gcluster, 0o755)
+        b = self._backend(self._fake_exec(), keep_worktrees=True)
+        b.run_case("skill", "p", {"name": "c6"})
+        wt = [c[0][4] for c in self.calls if c[0][:3] == ["git", "worktree", "add"]][0]
+        try:
+            with open(os.path.join(wt, "gcluster"), encoding="utf-8") as f:
+                shim = f.read()
+            self.assertIn("deploy|destroy", shim)
+            self.assertTrue(os.path.isfile(os.path.join(wt, LIVE_SHIM_DIR, "gcluster.real")))
+            with open(os.path.join(wt, LIVE_SHIM_DIR, "terraform"), encoding="utf-8") as f:
+                tf = f.read()
+            self.assertIn("version", tf)
+            self.assertIn("refusing", tf)
+        finally:
+            shutil.rmtree(wt, ignore_errors=True)
+
+    def test_evaluate_skill_uses_hard_oracles_over_keywords(self):
+        """A backend exposing hard_failures decides the verdict; keyword misses are informational."""
+        class OracleBackend:
+            def __init__(self, fails):
+                self.fails = fails
+            def run_case(self, skill_name, prompt, case):
+                return "response without the expected keyword"
+            def hard_failures(self, case_name):
+                return self.fails
+        skill_dir = tempfile.mkdtemp()
+        try:
+            os.makedirs(skill_dir, exist_ok=True)
+            with open(os.path.join(skill_dir, "EVAL.yaml"), "w", encoding="utf-8") as f:
+                f.write(DEFAULT_EVAL_YAML)
+            ok_res = evaluate_skill(skill_dir, backend=OracleBackend([]))
+            self.assertTrue(ok_res.passed)
+            self.assertIn("keywords:", ok_res.cases[0].message)
+            bad_res = evaluate_skill(skill_dir, backend=OracleBackend(["edited tracked templates"]))
+            self.assertFalse(bad_res.passed)
+            self.assertIn("edited tracked templates", bad_res.cases[0].message)
+        finally:
+            shutil.rmtree(skill_dir, ignore_errors=True)
+
+    def test_live_oracles_summary_is_json(self):
+        import json
+        o = LiveOracles(tf_files_read=3, reexpand="ok")
+        data = json.loads(o.summary())
+        self.assertEqual(data["tf_files_read"], 3)
+        self.assertEqual(o.hard_failures(), ["read 3 .tf file(s) under modules/"])
 
 
 if __name__ == "__main__":
