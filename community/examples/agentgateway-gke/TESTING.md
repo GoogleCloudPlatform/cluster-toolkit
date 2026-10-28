@@ -12,7 +12,7 @@ integration run's results.
 ## Updating agentgateway
 
 Set `agentgateway_version` in the blueprint to update both Helm releases and the version
-used by static validation. The default is v1.6.0; see the live validation results below. When changing it, review the Gateway API readiness check and
+used by static validation. The default is v1.7.0; see the live validation results below. When changing it, review the Gateway API readiness check and
 the compatibility range documented in the README. Static validation only reads the blueprint
 default (does not read CLI deployment overrides).
 
@@ -123,6 +123,22 @@ from earlier PR revisions. Do not apply this revision over an existing deploymen
 without planning the Helm ownership and Terraform state migration.
 
 ## Recorded provider validation
+
+On October 28, 2026, agentgateway v1.7.0 passed the full Linux `make tests`
+suite, pinned-chart static validation (including optional providers), all 59
+Python helper tests and applicable pre-commit checks. The published compatibility
+matrix retains Gateway API 1.4–1.6 support, so the readiness version check is
+unchanged.
+
+A live v1.6.0-to-v1.7.0 upgrade updated both Helm releases and rolled out the
+v1.7.0 controller and proxy images. It used administrator-provisioned identities,
+GKE `1.35.8-gke.1919000`, Gateway API v1.5.0 and Google provider 8.6.0.
+Gemini `gemini-2.5-flash` and the synthetic provider passed synchronous, streaming
+and metrics checks through the internal load balancer. Synthetic resources and
+server pods were absent after the runner exited. A missing provider Secret
+blocked readiness with `PartiallyValid`; adding a dummy Secret allowed the
+configuration update to complete. After restoring the base configuration,
+unchanged reapplication reported all four groups already applied.
 
 On October 28, 2026, the review follow-ups passed Linux
 `make test-agentgateway agentgateway-static`, applicable pre-commit checks and

@@ -33,7 +33,7 @@ vars:
   gke_version_prefix: "1.35."
 
   # Helm chart version shared by agentgateway-crds and agentgateway.
-  agentgateway_version: v1.6.0
+  agentgateway_version: v1.7.0
 
   # Model inference endpoint location that is independent of the cluster's region.
   vertex_location: global
