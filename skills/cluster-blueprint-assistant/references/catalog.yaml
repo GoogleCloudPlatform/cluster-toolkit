@@ -5328,7 +5328,7 @@ blueprints:
 - path: examples/machine-learning/build-service-images/a3m/blueprint.yaml
   blueprint_name: roll-a3m-image
   scheduler: none
-  description: "This process will build 2 images. One for a3-megagpu-8g and another one that can be used for all other machines. Each image it may take up to ~60 min to build. You may choose to run the two commands in parallel in 2 separate shells."
+  description: "Cluster Toolkit blueprint (examples/machine-learning/build-service-images/a3m/blueprint.yaml)."
   required_services: [compute.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   modules:
   - id: image-net
@@ -5343,7 +5343,7 @@ blueprints:
 - path: examples/machine-learning/build-service-images/a4x/blueprint.yaml
   blueprint_name: roll-a4x-image
   scheduler: none
-  description: "This process will build 2 images. One for a3-megagpu-8g and another one that can be used for all other machines. Each image it may take up to ~60 min to build. You may choose to run the two commands in parallel in 2 separate shells."
+  description: "Cluster Toolkit blueprint (examples/machine-learning/build-service-images/a4x/blueprint.yaml)."
   required_services: [compute.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   modules:
   - id: image-net
@@ -5358,7 +5358,7 @@ blueprints:
 - path: examples/machine-learning/build-service-images/common/blueprint.yaml
   blueprint_name: roll-common-image
   scheduler: none
-  description: "This process will build 2 images. One for a3-megagpu-8g and another one that can be used for all other machines. Each image it may take up to ~60 min to build. You may choose to run the two commands in parallel in 2 separate shells."
+  description: "Cluster Toolkit blueprint (examples/machine-learning/build-service-images/common/blueprint.yaml)."
   required_services: [compute.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   modules:
   - id: image-net

@@ -71,30 +71,23 @@ Always run ` + "`test -x ./gcluster || make`" + ` at the repository root before 
 - **Find matching or closest blueprint by hardware/orchestrator/storage specs:** ` + "`./gcluster explain <specs...>`" + ` (e.g. ` + "`./gcluster explain slurm a3u lustre`" + `, ` + "`./gcluster explain gke a3-megagpu lustre`" + `, ` + "`./gcluster explain gke tpu-7x`" + `)
 - **Inspect a blueprint's required GCP APIs, customizable ` + "`vars:`" + `, stages, and deploy command:** ` + "`./gcluster explain <blueprint.yaml>`" + `
 - **Inspect an embedded module's required APIs, ` + "`use:`" + ` snippet, and auto-injected inputs:** ` + "`./gcluster explain <module>`" + ` (e.g. ` + "`./gcluster explain modules/file-system/managed-lustre`" + `)
-- **Validate and expand a blueprint (dry-run):** ` + "`./gcluster create <blueprint.yaml> -d <deployment.yaml> -w`" + `
+- **Validate and expand a blueprint (dry-run):** ` + "`./gcluster expand <blueprint.yaml> -d <deployment.yaml> -o expanded.yaml`" + `
+- **Generate a Terraform deployment folder (without deploying):** ` + "`./gcluster create <blueprint.yaml> -d <deployment.yaml> -w`" + `
 - **Deploy a blueprint:** ` + "`./gcluster deploy <blueprint.yaml> -d <deployment.yaml>`" + `
 - **Submit a GKE workload (GPU or TPU):** ` + "`./gcluster job submit --project <PROJECT_ID> --cluster <CLUSTER_NAME> --location <ZONE> --name <JOB_NAME> --image <IMAGE> --compute-type <MACHINE_OR_TPU_TYPE> --command \"<CMD>\"`" + `
 
 ## Customization & Reservation Syntax in ` + "`deployment.yaml`" + `
 
 Pass user overrides (` + "`project_id`" + `, ` + "`deployment_name`" + `, ` + "`region`" + `, ` + "`zone`" + `, node counts, reservations) via ` + "`-d <deployment.yaml>`" + `. Never edit generated ` + "`.tf`" + ` files inside the deployment directory:
+`
 
-- **GKE blueprints using ` + "`reservation_affinity`" + ` (` + "`gke-a3-ultragpu`" + `, ` + "`gke-a4`" + `, ` + "`gke-a3-megagpu`" + `, ` + "`gke-a3-highgpu`" + `, ` + "`gke-tpu-7x`" + `, ` + "`gke-tpu-v6e`" + `, ` + "`gke-h4d`" + `, ` + "`gke-g4`" + `):**
-  ` + "```yaml" + `
-  reservation_affinity:
-    consume_reservation_type: SPECIFIC_RESERVATION
-    specific_reservations:
-      - name: <RESERVATION_NAME>
-  ` + "```" + `
-- **GKE blueprints using ` + "`reservation`" + ` (` + "`gke-a4x`" + `, ` + "`gke-a4x-max-bm`" + `, ` + "`gke-tpu-v5p`" + `, ` + "`gke-tpu-v5e`" + `, ` + "`gke-tpu-v4`" + `):** ` + "`reservation: <RESERVATION_NAME>`" + `
-- **Slurm GPU blueprints:** ` + "`a3u_reservation_name`" + ` / ` + "`a4h_reservation_name`" + ` / ` + "`a4x_reservation_name`" + ` / ` + "`a4xm_reservation_name: <RESERVATION_NAME>`" + `
-
+const llmsTxtMatrixAndDocsSection = `
 ## AI Hypercomputer Hardware x Orchestrator Official Blueprints
 
 | Hardware | Machine Type | Orchestrator | Official Blueprint Path | Companion Deployment File | Storage / Key Features |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **A3 High (8x H100)** | ` + "`a3-highgpu-8g`" + ` | **Slurm** | [examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml](examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml) | [examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml](examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml) | Filestore + GCS FUSE + 4 GPUDirect-TCPX NICs |
-| **A3 High (8x H100)** | ` + "`a3-highgpu-8g`" + ` | **GKE** | [examples/gke-a3-highgpu/gke-a3-highgpu.yaml](examples/gke-a3-highgpu/gke-a3-highgpu.yaml) | [examples/gke-a3-highgpu/gke-a3-highgpu-deployment.yaml](examples/gke-a3-highgpu/gke-a3-highgpu-deployment.yaml) | GCS FUSE CSI + GPUDirect-TCPX + Kueue/JobSet |
+| **A3 High (8x H100)** | ` + "`a3-highgpu-8g`" + ` | **Slurm** | [examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml](examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml) | [examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml](examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml) | 36 TiB Managed Lustre + 4 GPUDirect-TCPX NICs |
+| **A3 High (8x H100)** | ` + "`a3-highgpu-8g`" + ` | **GKE** | [examples/gke-a3-highgpu/gke-a3-highgpu.yaml](examples/gke-a3-highgpu/gke-a3-highgpu.yaml) | [examples/gke-a3-highgpu/gke-a3-highgpu-deployment.yaml](examples/gke-a3-highgpu/gke-a3-highgpu-deployment.yaml) | GPUDirect-TCPX + Kueue/JobSet |
 | **A3 Mega (8x H100)** | ` + "`a3-megagpu-8g`" + ` | **Slurm** | [examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml](examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml) | [examples/machine-learning/a3-megagpu-8g/a3mega-slurm-deployment.yaml](examples/machine-learning/a3-megagpu-8g/a3mega-slurm-deployment.yaml) | 36 TiB Managed Lustre + GCS FUSE + 8 GPUDirect-TCPXO NICs |
 | **A3 Mega (8x H100)** | ` + "`a3-megagpu-8g`" + ` | **GKE** | [examples/gke-a3-megagpu/gke-a3-megagpu.yaml](examples/gke-a3-megagpu/gke-a3-megagpu.yaml) | [examples/gke-a3-megagpu/gke-a3-megagpu-deployment.yaml](examples/gke-a3-megagpu/gke-a3-megagpu-deployment.yaml) | GCS FUSE CSI + 8 GPUDirect-TCPXO NICs + Kueue/JobSet |
 | **A3 Ultra (8x H200)** | ` + "`a3-ultragpu-8g`" + ` | **Slurm** | [examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml](examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml) | [examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml](examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml) | 36 TiB Managed Lustre + 4 GCS FUSE mounts + 8 RoCE RDMA NICs |
@@ -103,17 +96,17 @@ Pass user overrides (` + "`project_id`" + `, ` + "`deployment_name`" + `, ` + "`
 | **A4 High (8x B200)** | ` + "`a4-highgpu-8g`" + ` | **GKE** | [examples/gke-a4/gke-a4.yaml](examples/gke-a4/gke-a4.yaml) | [examples/gke-a4/gke-a4-deployment.yaml](examples/gke-a4/gke-a4-deployment.yaml) | GCS FUSE + Managed Lustre CSI + 8 RoCE RDMA NICs + Kueue TAS |
 | **A4X High (4x GB200)** | ` + "`a4x-highgpu-4g`" + ` | **Slurm** | [examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml](examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml) | [examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-deployment.yaml](examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-deployment.yaml) | 36 TiB Managed Lustre + 4 GCS FUSE mounts + 4 RoCE RDMA NICs |
 | **A4X High (4x GB200)** | ` + "`a4x-highgpu-4g`" + ` | **GKE** | [examples/gke-a4x/gke-a4x.yaml](examples/gke-a4x/gke-a4x.yaml) | [examples/gke-a4x/gke-a4x-deployment.yaml](examples/gke-a4x/gke-a4x-deployment.yaml) | GCS FUSE + Managed Lustre CSI + DRANET RDMA + Kueue TAS |
-| **A4X Max Bare Metal** | ` + "`a4x-maxgpu-4g-metal`" + ` | **Slurm** | [examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml](examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml) | [examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml](examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml) | 36 TiB Managed Lustre + 4 GCS FUSE mounts + 8 RoCE RDMA NICs |
+| **A4X Max Bare Metal** | ` + "`a4x-maxgpu-4g-metal`" + ` | **Slurm** | [examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml](examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml) | [examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml](examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml) | 18 TiB Managed Lustre + 4 GCS FUSE mounts + 8 RoCE RDMA NICs |
 | **A4X Max Bare Metal** | ` + "`a4x-maxgpu-4g-metal`" + ` | **GKE** | [examples/gke-a4x-max-bm/gke-a4x-max-bm.yaml](examples/gke-a4x-max-bm/gke-a4x-max-bm.yaml) | [examples/gke-a4x-max-bm/gke-a4x-max-bm-deployment.yaml](examples/gke-a4x-max-bm/gke-a4x-max-bm-deployment.yaml) | GCS FUSE + Managed Lustre CSI + DRANET RDMA + Kueue TAS |
-| **G4 (NVIDIA RTX PRO 6000)** | ` + "`g4-standard-48`" + ` / ` + "`g4-standard-384`" + ` | **Slurm** | [examples/ml-slurm-g4.yaml](examples/ml-slurm-g4.yaml) | Inline ` + "`-v project_id=<PROJECT_ID>`" + ` | Filestore + Slurm v6 auto-scaling |
-| **G4 (NVIDIA RTX PRO 6000)** | ` + "`g4-standard-48`" + ` | **GKE** | [examples/gke-g4/gke-g4.yaml](examples/gke-g4/gke-g4.yaml) | [examples/gke-g4/gke-g4-deployment.yaml](examples/gke-g4/gke-g4-deployment.yaml) | GCS FUSE CSI + Kueue/JobSet |
+| **G4 (NVIDIA RTX PRO 6000)** | ` + "`g4-standard-48`" + ` / ` + "`g4-standard-384`" + ` | **Slurm** | [examples/ml-slurm-g4.yaml](examples/ml-slurm-g4.yaml) | Inline ` + "`--vars project_id=<PROJECT_ID>`" + ` | Filestore + Slurm v6 auto-scaling |
+| **G4 (NVIDIA RTX PRO 6000)** | ` + "`g4-standard-48`" + ` | **GKE** | [examples/gke-g4/gke-g4.yaml](examples/gke-g4/gke-g4.yaml) | [examples/gke-g4/gke-g4-deployment.yaml](examples/gke-g4/gke-g4-deployment.yaml) | Kueue/JobSet + gke-job-template |
 | **H4D (Cloud RDMA HPC)** | ` + "`h4d-highmem-192-lssd`" + ` | **Slurm** | [examples/hpc-slurm-h4d/hpc-slurm-h4d.yaml](examples/hpc-slurm-h4d/hpc-slurm-h4d.yaml) | [examples/hpc-slurm-h4d/hpc-slurm-h4d-deployment.yaml](examples/hpc-slurm-h4d/hpc-slurm-h4d-deployment.yaml) | Filestore + Cloud RDMA Falcon VPC |
 | **H4D (Cloud RDMA HPC)** | ` + "`h4d-highmem-192-lssd`" + ` | **GKE** | [examples/gke-h4d/gke-h4d.yaml](examples/gke-h4d/gke-h4d.yaml) | [examples/gke-h4d/gke-h4d-deployment.yaml](examples/gke-h4d/gke-h4d-deployment.yaml) | Cloud RDMA Falcon VPC + Kueue TAS |
-| **TPU 7x (Ironwood)** | ` + "`tpu7x-standard-4t`" + ` | **Slurm** | [examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml](examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml) | [examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml](examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml) | Filestore + Managed Lustre + GCS FUSE |
-| **TPU 7x (Ironwood)** | ` + "`tpu7x-standard-4t`" + ` | **GKE** | [examples/gke-tpu-7x/gke-tpu-7x.yaml](examples/gke-tpu-7x/gke-tpu-7x.yaml) | [examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml](examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml) | GCS FUSE + Kueue TAS + Pathways & MTC |
-| **TPU v6e (Trillium)** | ` + "`ct6e-standard-4t`" + ` | **GKE** | [examples/gke-tpu-v6e/gke-tpu-v6e.yaml](examples/gke-tpu-v6e/gke-tpu-v6e.yaml) | [examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml](examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml) | GCS FUSE + Kueue TAS + ` + "`./gcluster job submit`" + ` |
-| **TPU v5p** | ` + "`ct5p-hightpu-4t`" + ` | **GKE** | [examples/gke-tpu-v5p/gke-tpu-v5p.yaml](examples/gke-tpu-v5p/gke-tpu-v5p.yaml) | [examples/gke-tpu-v5p/gke-tpu-v5p-deployment.yaml](examples/gke-tpu-v5p/gke-tpu-v5p-deployment.yaml) | GCS FUSE + Kueue TAS + ` + "`./gcluster job submit`" + ` |
-| **TPU v5e** | ` + "`ct5lp-hightpu-4t`" + ` | **GKE** | [examples/gke-tpu-v5e/gke-tpu-v5e.yaml](examples/gke-tpu-v5e/gke-tpu-v5e.yaml) | [examples/gke-tpu-v5e/gke-tpu-v5e-deployment.yaml](examples/gke-tpu-v5e/gke-tpu-v5e-deployment.yaml) | GCS FUSE + Kueue TAS + ` + "`./gcluster job submit`" + ` |
+| **TPU 7x (Ironwood)** | ` + "`tpu7x-standard-4t`" + ` | **Slurm** | [examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml](examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml) | [examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml](examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml) | 36 TiB Managed Lustre |
+| **TPU 7x (Ironwood)** | ` + "`tpu7x-standard-4t`" + ` | **GKE** | [examples/gke-tpu-7x/gke-tpu-7x.yaml](examples/gke-tpu-7x/gke-tpu-7x.yaml) | [examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml](examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml) | Kueue TAS + Pathways (MTC & GCS FUSE in ` + "`gke-tpu-7x-advanced.yaml`" + `) |
+| **TPU v6e (Trillium)** | ` + "`ct6e-standard-4t`" + ` | **GKE** | [examples/gke-tpu-v6e/gke-tpu-v6e.yaml](examples/gke-tpu-v6e/gke-tpu-v6e.yaml) | [examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml](examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml) | Kueue TAS + Pathways + ` + "`./gcluster job submit`" + ` |
+| **TPU v5p** | ` + "`ct5p-hightpu-4t`" + ` | **GKE** | [examples/gke-tpu-v5p/gke-tpu-v5p.yaml](examples/gke-tpu-v5p/gke-tpu-v5p.yaml) | [examples/gke-tpu-v5p/gke-tpu-v5p-deployment.yaml](examples/gke-tpu-v5p/gke-tpu-v5p-deployment.yaml) | Kueue TAS + ` + "`./gcluster job submit`" + ` |
+| **TPU v5e** | ` + "`ct5lp-hightpu-4t`" + ` | **GKE** | [examples/gke-tpu-v5e/gke-tpu-v5e.yaml](examples/gke-tpu-v5e/gke-tpu-v5e.yaml) | [examples/gke-tpu-v5e/gke-tpu-v5e-deployment.yaml](examples/gke-tpu-v5e/gke-tpu-v5e-deployment.yaml) | Kueue TAS + ` + "`./gcluster job submit`" + ` |
 
 ## Key Documentation & Agent References
 
@@ -132,10 +125,58 @@ Pass user overrides (` + "`project_id`" + `, ` + "`deployment_name`" + `, ` + "`
 - [Network Storage Guide](docs/network_storage.md): Managed Lustre, Filestore, Cloud Storage FUSE, and NetApp Volumes.
 `
 
+// renderReservationVars dynamically groups blueprints by their reservation top-level variable
+// so the reservation reference in llms.txt and llms-full.txt never drifts from catalog.yaml.
+func renderReservationVars(sb *strings.Builder, bps []BlueprintEntry, indent string, multilineYAML bool) {
+	byVar := make(map[string][]string)
+	for _, bp := range bps {
+		for k := range bp.Vars {
+			if k == "reservation" || k == "reservation_affinity" || strings.HasSuffix(k, "reservation_name") {
+				byVar[k] = append(byVar[k], fmt.Sprintf("`%s`", bp.Path))
+			}
+		}
+	}
+	for k := range byVar {
+		sort.Strings(byVar[k])
+	}
+	if paths, ok := byVar["reservation_affinity"]; ok {
+		if multilineYAML {
+			fmt.Fprintf(sb, "%s- **GKE blueprints using `reservation_affinity` (%s):**\n", indent, strings.Join(paths, ", "))
+			fmt.Fprintf(sb, "%s  ```yaml\n%s  reservation_affinity:\n%s    consume_reservation_type: SPECIFIC_RESERVATION\n%s    specific_reservations:\n%s      - name: <RESERVATION_NAME>\n%s  ```\n",
+				indent, indent, indent, indent, indent, indent)
+		} else {
+			fmt.Fprintf(sb, "%s- **GKE (`reservation_affinity` in %s):** `reservation_affinity: {consume_reservation_type: SPECIFIC_RESERVATION, specific_reservations: [{name: <RESERVATION_NAME>}]}`\n",
+				indent, strings.Join(paths, ", "))
+		}
+		delete(byVar, "reservation_affinity")
+	}
+	if paths, ok := byVar["reservation"]; ok {
+		fmt.Fprintf(sb, "%s- **GKE blueprints using `reservation` (%s):** `reservation: <RESERVATION_NAME>`\n",
+			indent, strings.Join(paths, ", "))
+		delete(byVar, "reservation")
+	}
+	otherKeys := make([]string, 0, len(byVar))
+	for k := range byVar {
+		otherKeys = append(otherKeys, k)
+	}
+	sort.Strings(otherKeys)
+	if len(otherKeys) > 0 {
+		pairs := make([]string, 0, len(otherKeys))
+		for _, k := range otherKeys {
+			pairs = append(pairs, fmt.Sprintf("`%s` (%s)", k, strings.Join(byVar[k], ", ")))
+		}
+		fmt.Fprintf(sb, "%s- **Slurm / VM reservation variables (`<VAR>: <RESERVATION_NAME>`):** %s\n",
+			indent, strings.Join(pairs, "; "))
+	}
+}
+
 // RenderLLMsTxt renders the concise root llms.txt index from the Catalog.
 func RenderLLMsTxt(cat Catalog) string {
 	var sb strings.Builder
 	sb.WriteString(llmsTxtHeader)
+	sb.WriteString("\n")
+	renderReservationVars(&sb, cat.Blueprints, "", true)
+	sb.WriteString(llmsTxtMatrixAndDocsSection)
 	sb.WriteString("\n## All Official & Community Blueprints\n\n")
 	for _, bp := range cat.Blueprints {
 		mt := "unspecified"
@@ -175,17 +216,15 @@ const llmsFullTxtHeader = `# Google Cloud Cluster Toolkit (gcluster) — Full Bl
    - Pre-built bundle (includes ` + "`./gcluster`" + ` and ` + "`examples/`" + `): ` + "`mkdir -p cluster-toolkit && curl -L https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/latest/download/gcluster_bundle_linux_amd64.tgz | tar -xz -C cluster-toolkit && cd cluster-toolkit`" + `
    - Source checkout: ` + "`git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git && cd cluster-toolkit && make`" + `
 2. **CLI Inspection (` + "`./gcluster explain`" + `):** ` + "`./gcluster explain`" + `, ` + "`./gcluster explain <specs...>`" + ` (e.g. ` + "`./gcluster explain slurm a3u lustre`" + `), or ` + "`./gcluster explain <blueprint_or_module_path>`" + `.
-3. **Customize via ` + "`deployment.yaml`" + ` (` + "`-d`" + `):** Pass overrides (` + "`project_id`" + `, ` + "`deployment_name`" + `, ` + "`region`" + `, ` + "`zone`" + `, node counts, reservations) via ` + "`./gcluster deploy -d <deployment.yaml> <blueprint.yaml>`" + `. Never edit generated ` + "`.tf`" + ` files.
+3. **Customize via ` + "`deployment.yaml`" + ` (` + "`-d`" + `):** Pass overrides (` + "`project_id`" + `, ` + "`deployment_name`" + `, ` + "`region`" + `, ` + "`zone`" + `, node counts, reservations) via ` + "`./gcluster deploy -d <deployment.yaml> <blueprint.yaml>`" + `. Validate/expand without deploying via ` + "`./gcluster expand <blueprint.yaml> -d <deployment.yaml> -o expanded.yaml`" + `. Never edit generated ` + "`.tf`" + ` files.
 4. **Reservation Syntax in ` + "`deployment.yaml`" + `:**
-   - **GKE (` + "`gke-a3-ultragpu`" + `, ` + "`gke-a4`" + `, ` + "`gke-a3-megagpu`" + `, ` + "`gke-a3-highgpu`" + `, ` + "`gke-tpu-7x`" + `, ` + "`gke-tpu-v6e`" + `, ` + "`gke-h4d`" + `, ` + "`gke-g4`" + `):** ` + "`reservation_affinity: {consume_reservation_type: SPECIFIC_RESERVATION, specific_reservations: [{name: <RESERVATION_NAME>}]}`" + `
-   - **GKE (` + "`gke-a4x`" + `, ` + "`gke-a4x-max-bm`" + `, ` + "`gke-tpu-v5p`" + `, ` + "`gke-tpu-v5e`" + `, ` + "`gke-tpu-v4`" + `):** ` + "`reservation: <RESERVATION_NAME>`" + `
-   - **Slurm GPU blueprints:** ` + "`a3u_reservation_name`" + ` / ` + "`a4h_reservation_name`" + ` / ` + "`a4x_reservation_name`" + ` / ` + "`a4xm_reservation_name: <RESERVATION_NAME>`" + `
 `
 
 // RenderLLMsFullTxt renders the compact, single-view root llms-full.txt reference from the Catalog.
 func RenderLLMsFullTxt(cat Catalog) string {
 	var sb strings.Builder
 	sb.WriteString(llmsFullTxtHeader)
+	renderReservationVars(&sb, cat.Blueprints, "   ", false)
 	sb.WriteString("\n## 1. Blueprints Reference\n")
 	for _, bp := range cat.Blueprints {
 		renderBlueprintFullSection(&sb, bp)
@@ -230,6 +269,25 @@ func renderBlueprintFullSection(sb *strings.Builder, bp BlueprintEntry) {
 	renderBlueprintModulesCompact(sb, bp.Modules)
 }
 
+const maxLLMsFullLineContentChars = 1600
+
+func joinItemsWithLimit(items []string, maxChars int) string {
+	var b strings.Builder
+	for i, item := range items {
+		sep := ""
+		if i > 0 {
+			sep = ", "
+		}
+		if b.Len()+len(sep)+len(item) > maxChars && i > 0 {
+			b.WriteString(", ... (see catalog.yaml)")
+			break
+		}
+		b.WriteString(sep)
+		b.WriteString(item)
+	}
+	return b.String()
+}
+
 func renderBlueprintVarsCompact(sb *strings.Builder, varsMap map[string]interface{}) {
 	if len(varsMap) == 0 {
 		return
@@ -258,10 +316,17 @@ func renderBlueprintVarsCompact(sb *strings.Builder, varsMap map[string]interfac
 	}
 	var parts []string
 	if len(req) > 0 {
-		parts = append(parts, "**required/unset:** "+strings.Join(req, ", "))
+		parts = append(parts, "**required/unset:** "+joinItemsWithLimit(req, 400))
 	}
 	if len(defs) > 0 {
-		parts = append(parts, "**defaults:** "+strings.Join(defs, ", "))
+		budget := maxLLMsFullLineContentChars
+		if len(parts) > 0 {
+			budget -= len(parts[0])
+		}
+		if budget < 400 {
+			budget = 400
+		}
+		parts = append(parts, "**defaults:** "+joinItemsWithLimit(defs, budget))
 	}
 	fmt.Fprintf(sb, "- **Vars (`vars:`):** %s\n", strings.Join(parts, " | "))
 }
@@ -315,7 +380,7 @@ func renderBlueprintModulesCompact(sb *strings.Builder, mods []ModuleSummary) {
 			items = append(items, fmt.Sprintf("`%s: %s`", m.ID, m.Source))
 		}
 	}
-	fmt.Fprintf(sb, "- **Modules (`id: source [use]`):** %s\n", strings.Join(items, ", "))
+	fmt.Fprintf(sb, "- **Modules (`id: source [use]`):** %s\n", joinItemsWithLimit(items, maxLLMsFullLineContentChars))
 }
 
 func renderModuleFullRow(sb *strings.Builder, source string, entry ModuleWiringEntry) {

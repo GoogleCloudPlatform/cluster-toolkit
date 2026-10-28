@@ -739,7 +739,7 @@ func lookupDescription(repoRoot, absPath, relPath string, readmeDescs map[string
 		}
 		grandParentDir := filepath.Dir(filepath.Dir(absPath))
 		if gpBase := filepath.Base(grandParentDir); gpBase != "examples" && gpBase != "." {
-			if d := extractSiblingReadmeDescription(grandParentDir, parentDir); d != "" {
+			if d := extractNamedReadmeDescription(grandParentDir, parentDir); d != "" {
 				return d
 			}
 		}
@@ -748,6 +748,18 @@ func lookupDescription(repoRoot, absPath, relPath string, readmeDescs map[string
 		return d
 	}
 	return fmt.Sprintf("Cluster Toolkit blueprint (%s).", relPath)
+}
+
+func extractNamedReadmeDescription(dir, key string) string {
+	data, err := os.ReadFile(filepath.Join(dir, "README.md"))
+	if err != nil {
+		return ""
+	}
+	text := string(data)
+	if d := extractHeadingParagraphForBlueprint(text, key); d != "" {
+		return d
+	}
+	return extractSectionParagraphMentioning(strings.Split(text, "\n"), key)
 }
 
 func extractSiblingReadmeDescription(dir, base string) string {

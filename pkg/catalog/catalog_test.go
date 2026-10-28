@@ -447,7 +447,7 @@ func TestMarshalCatalogDeterminismAndUpdateReadme(t *testing.T) {
 
 func verifyRequiredServicesPopulated(t *testing.T, cat Catalog) {
 	t.Helper()
-	var foundA3U bool
+	var foundA3U, foundA4XImage bool
 	for _, bp := range cat.Blueprints {
 		if bp.Path == "examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml" {
 			foundA3U = true
@@ -455,9 +455,18 @@ func verifyRequiredServicesPopulated(t *testing.T, cat Catalog) {
 				t.Errorf("expected lustre and compute APIs in a3ultra-slurm-blueprint RequiredServices, got %v", bp.RequiredServices)
 			}
 		}
+		if bp.Path == "examples/machine-learning/build-service-images/a4x/blueprint.yaml" {
+			foundA4XImage = true
+			if strings.Contains(bp.Description, "a3-megagpu-8g") {
+				t.Errorf("a4x image blueprint description must not inherit unrelated grandparent intro about a3-megagpu-8g, got %q", bp.Description)
+			}
+		}
 	}
 	if !foundA3U {
 		t.Errorf("expected a3ultra-slurm-blueprint.yaml in catalog")
+	}
+	if !foundA4XImage {
+		t.Errorf("expected examples/machine-learning/build-service-images/a4x/blueprint.yaml in catalog")
 	}
 	lustreMod := cat.ModuleWiring["modules/file-system/managed-lustre"]
 	if !slices.Contains(lustreMod.RequiredServices, "lustre.googleapis.com") {
@@ -495,10 +504,20 @@ func verifyLLMsRenderOutputs(t *testing.T, cat Catalog) {
 	if llms1 != RenderLLMsTxt(cat) {
 		t.Errorf("RenderLLMsTxt is not deterministic")
 	}
-	for _, want := range []string{"./gcluster explain", "a3ultra-slurm-blueprint.yaml", "gke-tpu-7x.yaml", "gke-tpu-v6e.yaml"} {
+	for _, want := range []string{
+		"./gcluster explain",
+		"./gcluster expand <blueprint.yaml> -d <deployment.yaml> -o expanded.yaml",
+		"a3ultra-slurm-blueprint.yaml",
+		"a4x_max_reservation_name",
+		"gke-tpu-7x.yaml",
+		"gke-tpu-v6e.yaml",
+	} {
 		if !strings.Contains(llms1, want) {
 			t.Errorf("RenderLLMsTxt missing %q", want)
 		}
+	}
+	if strings.Contains(llms1, "a4xm_reservation_name") {
+		t.Errorf("RenderLLMsTxt must not contain non-existent variable name a4xm_reservation_name")
 	}
 
 	full1 := RenderLLMsFullTxt(cat)
@@ -515,8 +534,17 @@ func verifyLLMsRenderOutputs(t *testing.T, cat Catalog) {
 			t.Errorf("RenderLLMsFullTxt missing %q", want)
 		}
 	}
-	if lines := strings.Count(full1, "\n"); lines > 800 {
-		t.Errorf("RenderLLMsFullTxt should stay <= 800 lines for single-view agent ingestion, got %d", lines)
+	if gotH3 := strings.Count(full1, "\n### "); gotH3 != len(cat.Blueprints) {
+		t.Errorf("RenderLLMsFullTxt H3 section count = %d, want %d (len(cat.Blueprints))", gotH3, len(cat.Blueprints))
+	}
+	maxExpectedLines := 6*len(cat.Blueprints) + len(cat.ModuleWiring) + 60
+	if lines := strings.Count(full1, "\n"); lines > maxExpectedLines {
+		t.Errorf("RenderLLMsFullTxt line count = %d, exceeds per-entry compact budget %d", lines, maxExpectedLines)
+	}
+	for i, line := range strings.Split(full1, "\n") {
+		if len(line) >= 2000 {
+			t.Errorf("RenderLLMsFullTxt line %d has %d chars (>= 2000 agent read-tool truncation threshold)", i+1, len(line))
+		}
 	}
 	if strings.Contains(full1, "<nil>") {
 		t.Errorf("RenderLLMsFullTxt must format nil values as null, found <nil>")
