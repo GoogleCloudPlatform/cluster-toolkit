@@ -27,23 +27,17 @@ type goGetSuite struct {
 
 var _ = Suite(&goGetSuite{})
 
-func (s *goGetSuite) TestGetModule_GoGet(c *C) {
-	destDir := c.MkDir()
+// Set GIT_INDEX_FILE during package variable initialization (which runs before init())
+// to verify that init() in goget.go unsets repository-local Git environment variables.
+var _ = os.Setenv("GIT_INDEX_FILE", "should-be-unset-by-init")
 
-	// Ensure GIT_INDEX_FILE (set by git commit during pre-commit hooks) is not
-	// modified by child git processes spawned by go-getter.
-	fakeIndex := filepath.Join(destDir, "fake-git-index")
-	sentinel := []byte("original-index-content")
-	c.Assert(os.WriteFile(fakeIndex, sentinel, 0600), IsNil)
-	origIndex, hadIndex := os.LookupEnv("GIT_INDEX_FILE")
-	c.Assert(os.Setenv("GIT_INDEX_FILE", fakeIndex), IsNil)
-	defer func() {
-		if hadIndex {
-			_ = os.Setenv("GIT_INDEX_FILE", origIndex)
-		} else {
-			_ = os.Unsetenv("GIT_INDEX_FILE")
-		}
-	}()
+func (s *goGetSuite) TestGetModule_GoGet(c *C) {
+	for _, key := range gitLocalEnvVars {
+		_, ok := os.LookupEnv(key)
+		c.Assert(ok, Equals, false)
+	}
+
+	destDir := c.MkDir()
 
 	// Success via HTTPS
 	destDirForHTTPS := filepath.Join(destDir, "https")
@@ -54,11 +48,6 @@ func (s *goGetSuite) TestGetModule_GoGet(c *C) {
 	c.Assert(fInfo.Name(), Equals, "terraform_validate")
 	c.Assert(fInfo.Size() > 0, Equals, true)
 	c.Assert(fInfo.IsDir(), Equals, false)
-
-	gotIndex, err := os.ReadFile(fakeIndex)
-	c.Assert(err, IsNil)
-	c.Assert(string(gotIndex), Equals, string(sentinel))
-	c.Assert(os.Getenv("GIT_INDEX_FILE"), Equals, fakeIndex)
 
 	// Success via HTTPS (Root directory)
 	destDirForHTTPSRootDir := filepath.Join(destDir, "https-rootdir")
