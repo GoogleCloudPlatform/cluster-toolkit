@@ -694,13 +694,28 @@ func (g *GKEOrchestrator) checkpointConfigCoversPool(crName string, nodeSelector
 	return nil
 }
 
+// coveredCheckpointPools returns the candidate pools the CheckpointConfiguration covers. When it covers
+// none, the error is from the pool its nodeSelector targets, so it names the missing toleration or label.
+func (g *GKEOrchestrator) coveredCheckpointPools(crName string, nodeSelector map[string]string, tolerations []interface{}, pools []*gkeJobNodePool, location string) ([]*gkeJobNodePool, error) {
+	var covered []*gkeJobNodePool
+	var bestErr error
+	for _, np := range pools {
+		err := g.checkpointConfigCoversPool(crName, nodeSelector, tolerations, np, np.Config.MachineType, location)
+		if err == nil {
+			covered = append(covered, np)
+		} else if bestErr == nil || nodeSelectorMatchesPool(crName, nodeSelector, np) == nil {
+			bestErr = err
+		}
+	}
+	if len(pools) > 0 && len(covered) == 0 {
+		return nil, bestErr
+	}
+	return covered, nil
+}
+
 func (g *GKEOrchestrator) validateCheckpointConfigurationCompatibility(client dynamic.Interface, cr *unstructured.Unstructured, job *orchestrator.JobDefinition) error {
 	crName := cr.GetName()
 	machineType := job.MachineType
-	if machineType == "" && job.ComputeType != "" {
-		// Best effort: resolveHardwareRequirements reports compute types that do not resolve.
-		machineType, _ = g.resolveJobMachineType(job.ComputeType)
-	}
 	nodeSelector, _, _ := unstructured.NestedStringMap(cr.Object, "spec", "nodeSelector")
 	tolerations, _, _ := unstructured.NestedSlice(cr.Object, "spec", "tolerations")
 
@@ -710,15 +725,12 @@ func (g *GKEOrchestrator) validateCheckpointConfigurationCompatibility(client dy
 
 	// The job can land on any candidate pool, so one pool the driver covers is enough.
 	pools := g.mtcCandidateNodePools(job.NodeConstraint[nodePoolLabel], machineType)
-	var err error
 	if len(pools) == 0 {
-		err = g.checkpointConfigCoversPool(crName, nodeSelector, tolerations, nil, machineType, job.ClusterLocation)
-	}
-	for _, np := range pools {
-		if err = g.checkpointConfigCoversPool(crName, nodeSelector, tolerations, np, machineType, job.ClusterLocation); err == nil {
-			break
+		if err := g.checkpointConfigCoversPool(crName, nodeSelector, tolerations, nil, machineType, job.ClusterLocation); err != nil {
+			return err
 		}
 	}
+	coveredPools, err := g.coveredCheckpointPools(crName, nodeSelector, tolerations, pools, job.ClusterLocation)
 	if err != nil {
 		return err
 	}
@@ -727,7 +739,7 @@ func (g *GKEOrchestrator) validateCheckpointConfigurationCompatibility(client dy
 	if uid == "" {
 		return nil
 	}
-	canScaleFromZero := g.napEnabled || slices.ContainsFunc(pools, func(np *gkeJobNodePool) bool {
+	canScaleFromZero := g.napEnabled || slices.ContainsFunc(coveredPools, func(np *gkeJobNodePool) bool {
 		return np.Autoscaling.Enabled && np.Autoscaling.MinNodeCount == 0
 	})
 	return waitForMTCDaemonSetReady(client, crName, uid, canScaleFromZero)
@@ -737,37 +749,6 @@ var (
 	mtcDaemonSetPollInterval = 5 * time.Second
 	mtcDaemonSetPollTimeout  = 2 * time.Minute
 )
-
-// daemonSetOwnedByOtherCR reports whether ds has a CheckpointConfiguration ownerReference with a different UID.
-func daemonSetOwnedByOtherCR(ds *unstructured.Unstructured, uid string) bool {
-	for _, ref := range ds.GetOwnerReferences() {
-		if ref.Kind == "CheckpointConfiguration" && string(ref.UID) != "" && string(ref.UID) != uid {
-			return true
-		}
-	}
-	return false
-}
-
-// lookupMTCDaemonSet finds the multitier driver DaemonSet of the CheckpointConfiguration with the given UID.
-func lookupMTCDaemonSet(ctx context.Context, client dynamic.Interface, uid string) (*unstructured.Unstructured, error) {
-	dsClient := client.Resource(daemonsetGVR).Namespace(mtcDriverNamespace)
-	for _, name := range []string{"multitier-driver-" + uid, "multitier-driver"} {
-		ds, err := dsClient.Get(ctx, name, metav1.GetOptions{})
-		if !apierrors.IsNotFound(err) {
-			return ds, err
-		}
-	}
-	dsList, err := dsClient.List(ctx, metav1.ListOptions{LabelSelector: "k8s-app=high-scale-checkpointing"})
-	if err != nil {
-		return nil, err
-	}
-	for i := range dsList.Items {
-		if dsList.Items[i].GetDeletionTimestamp() == nil && !daemonSetOwnedByOtherCR(&dsList.Items[i], uid) {
-			return &dsList.Items[i], nil
-		}
-	}
-	return nil, apierrors.NewNotFound(daemonsetGVR.GroupResource(), "multitier-driver-"+uid)
-}
 
 // mtcDaemonSetNotReady returns why the multitier driver DaemonSet is not ready, or nil if it is.
 func mtcDaemonSetNotReady(ds *unstructured.Unstructured, crName string, canScaleFromZero bool) error {
@@ -783,7 +764,9 @@ func mtcDaemonSetNotReady(ds *unstructured.Unstructured, crName string, canScale
 		return nil
 	case desired == 0:
 		return fmt.Errorf("the MTC CSI driver DaemonSet %s/%s has 0 desired pods (desiredNumberScheduled=0); verify that CheckpointConfiguration %q nodeSelector and tolerations match your target nodes", mtcDriverNamespace, ds.GetName(), crName)
-	case ready < desired || (hasUpdated && updated < desired):
+	case hasUpdated && updated < desired:
+		return fmt.Errorf("the MTC CSI driver DaemonSet %s/%s has only %d of %d pods updated to the latest version; wait for the rollout to finish or check 'kubectl describe pods -n %s'", mtcDriverNamespace, ds.GetName(), updated, desired, mtcDriverNamespace)
+	case ready < desired:
 		return fmt.Errorf("the MTC CSI driver DaemonSet %s/%s has %d of %d pods ready; wait for the driver pods to become Ready or check 'kubectl describe pods -n %s' (common causes: missing bucket IAM permissions or disabled Hierarchical Namespace on the checkpoint bucket)", mtcDriverNamespace, ds.GetName(), ready, desired, mtcDriverNamespace)
 	}
 	return nil
@@ -793,11 +776,12 @@ func mtcDaemonSetNotReady(ds *unstructured.Unstructured, crName string, canScale
 // gcluster wait loops, a 403 skips the check and any other error is retried until the deadline.
 func waitForMTCDaemonSetReady(client dynamic.Interface, crName, uid string, canScaleFromZero bool) error {
 	dsName := "multitier-driver-" + uid
+	dsClient := client.Resource(daemonsetGVR).Namespace(mtcDriverNamespace)
 	deadline := time.Now().Add(mtcDaemonSetPollTimeout)
 	loggedWait := false
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		ds, err := lookupMTCDaemonSet(ctx, client, uid)
+		ds, err := dsClient.Get(ctx, dsName, metav1.GetOptions{})
 		cancel()
 
 		var lastErr error

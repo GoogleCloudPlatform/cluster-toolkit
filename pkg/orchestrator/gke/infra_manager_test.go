@@ -1017,7 +1017,6 @@ func TestValidateCheckpointConfigurationCompatibility(t *testing.T) {
 		machineCaps   map[string]MachineTypeCap
 		cr            *unstructured.Unstructured
 		getDS         func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
-		listDS        func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
 		checkCalls    func(t *testing.T)
 		wantErr       bool
 		wantErrSubstr string
@@ -1427,81 +1426,6 @@ func TestValidateCheckpointConfigurationCompatibility(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "cross-version fallback: static multitier-driver DaemonSet name",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "/local/ramdisk",
-				MachineType:            "ct6e-standard-4t",
-			},
-			cr: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"name": "default",
-						"uid":  "uid-123",
-					},
-					"spec": map[string]interface{}{
-						"tolerations": []interface{}{tpuToleration},
-					},
-				},
-			},
-			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				if name == "multitier-driver" {
-					return &unstructured.Unstructured{
-						Object: map[string]interface{}{
-							"metadata": map[string]interface{}{"name": "multitier-driver"},
-							"status": map[string]interface{}{
-								"desiredNumberScheduled": int64(4),
-								"numberReady":            int64(4),
-							},
-						},
-					}, nil
-				}
-				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
-			},
-			wantErr: false,
-		},
-		{
-			name: "cross-version fallback: List k8s-app=high-scale-checkpointing DaemonSet when handle differs from UID",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "/local/ramdisk",
-				MachineType:            "ct6e-standard-4t",
-			},
-			cr: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"name": "default",
-						"uid":  "uid-123",
-					},
-					"spec": map[string]interface{}{
-						"tolerations": []interface{}{tpuToleration},
-					},
-				},
-			},
-			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
-			},
-			listDS: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-				return &unstructured.UnstructuredList{
-					Items: []unstructured.Unstructured{
-						{
-							Object: map[string]interface{}{
-								"metadata": map[string]interface{}{
-									"name":   "multitier-driver-custom-handle",
-									"labels": map[string]interface{}{"k8s-app": "high-scale-checkpointing"},
-								},
-								"status": map[string]interface{}{
-									"desiredNumberScheduled": int64(4),
-									"numberReady":            int64(4),
-								},
-							},
-						},
-					},
-				}, nil
-			},
-			wantErr: false,
-		},
-		{
 			name: "observedGeneration < generation polls until generation is observed",
 			job: &orchestrator.JobDefinition{
 				GKEMTCEnabled:          true,
@@ -1596,6 +1520,74 @@ func TestValidateCheckpointConfigurationCompatibility(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "multi-pool: surfaces missing toleration error from pool matching nodeSelector instead of nodeSelector error from second pool",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			clusterDesc: gkeCluster{
+				NodePools: []gkeJobNodePool{
+					{Name: "tpu-np-0", Config: gkeNodePoolConfig{MachineType: "ct6e-standard-4t"}},
+					{Name: "tpu-np-1", Config: gkeNodePoolConfig{MachineType: "ct6e-standard-4t"}},
+				},
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "default", "uid": "uid-123"},
+					"spec": map[string]interface{}{
+						"nodeSelector": map[string]interface{}{"cloud.google.com/gke-nodepool": "tpu-np-0"},
+					},
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: `missing a toleration for taint "google.com/tpu=present:NoSchedule"`,
+		},
+		{
+			name: "multi-pool: desired=0 fails when covered pool is fixed-size even if uncovered pool scales from zero",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+				MachineType:            "ct6e-standard-4t",
+			},
+			clusterDesc: gkeCluster{
+				NodePools: []gkeJobNodePool{
+					{
+						Name:        "tpu-np-0",
+						Config:      gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+						Autoscaling: gkeAutoscaling{Enabled: true, MinNodeCount: 0},
+					},
+					{
+						Name:        "tpu-np-1",
+						Config:      gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+						Autoscaling: gkeAutoscaling{Enabled: false},
+					},
+				},
+			},
+			cr: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "default", "uid": "uid-123"},
+					"spec": map[string]interface{}{
+						"nodeSelector": map[string]interface{}{"cloud.google.com/gke-nodepool": "tpu-np-1"},
+						"tolerations":  []interface{}{tpuToleration},
+					},
+				},
+			},
+			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": name},
+						"status": map[string]interface{}{
+							"desiredNumberScheduled": int64(0),
+							"numberReady":            int64(0),
+						},
+					},
+				}, nil
+			},
+			wantErr:       true,
+			wantErrSubstr: "has 0 desired pods (desiredNumberScheduled=0)",
+		},
+		{
 			name: "403 Forbidden on DaemonSet Get proceeds with warning",
 			job: &orchestrator.JobDefinition{
 				GKEMTCEnabled:          true,
@@ -1617,56 +1609,6 @@ func TestValidateCheckpointConfigurationCompatibility(t *testing.T) {
 				return nil, apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name, fmt.Errorf("forbidden"))
 			},
 			wantErr: false,
-		},
-		{
-			name: "fallback label List ignores DaemonSet owned by previous CheckpointConfiguration UID",
-			job: &orchestrator.JobDefinition{
-				GKEMTCEnabled:          true,
-				GKEMTCRamdiskDirectory: "/local/ramdisk",
-				MachineType:            "ct6e-standard-4t",
-			},
-			cr: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"name": "default",
-						"uid":  "uid-new-456",
-					},
-					"spec": map[string]interface{}{
-						"tolerations": []interface{}{tpuToleration},
-					},
-				},
-			},
-			getDS: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
-				return nil, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "daemonsets"}, name)
-			},
-			listDS: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-				return &unstructured.UnstructuredList{
-					Items: []unstructured.Unstructured{
-						{
-							Object: map[string]interface{}{
-								"metadata": map[string]interface{}{
-									"name":   "multitier-driver-uid-old-111",
-									"labels": map[string]interface{}{"k8s-app": "high-scale-checkpointing"},
-									"ownerReferences": []interface{}{
-										map[string]interface{}{
-											"apiVersion": "checkpointing.gke.io/v1",
-											"kind":       "CheckpointConfiguration",
-											"name":       "default",
-											"uid":        "uid-old-111",
-										},
-									},
-								},
-								"status": map[string]interface{}{
-									"desiredNumberScheduled": int64(4),
-									"numberReady":            int64(4),
-								},
-							},
-						},
-					},
-				}, nil
-			},
-			wantErr:       true,
-			wantErrSubstr: `the MTC CSI driver DaemonSet "multitier-driver-uid-new-456" was not found`,
 		},
 		{
 			name: "updatedNumberScheduled < desiredNumberScheduled fails after timeout",
@@ -1699,7 +1641,7 @@ func TestValidateCheckpointConfigurationCompatibility(t *testing.T) {
 				}, nil
 			},
 			wantErr:       true,
-			wantErrSubstr: "has 4 of 4 pods ready; wait for the driver pods to become Ready",
+			wantErrSubstr: "has only 2 of 4 pods updated to the latest version; wait for the rollout to finish",
 		},
 	}
 
@@ -1712,7 +1654,7 @@ func TestValidateCheckpointConfigurationCompatibility(t *testing.T) {
 			orc := &GKEOrchestrator{
 				clusterDesc:      clusterDesc,
 				machineCapCache:  tt.machineCaps,
-				dynClient:        newMTCTestDynamicClient(tt.cr, tt.getDS, tt.listDS),
+				dynClient:        newMTCTestDynamicClient(tt.cr, tt.getDS),
 				kubeconfigLoader: staticLoader(clientcmdapi.NewConfig()),
 			}
 
@@ -1728,16 +1670,9 @@ func TestValidateCheckpointConfigurationCompatibility(t *testing.T) {
 func newMTCTestDynamicClient(
 	cr *unstructured.Unstructured,
 	getDS func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error),
-	listDS func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error),
 ) dynamic.Interface {
 	return &mockDynamicClient{
 		listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-			if opts.LabelSelector == "k8s-app=high-scale-checkpointing" {
-				if listDS != nil {
-					return listDS(ctx, opts)
-				}
-				return &unstructured.UnstructuredList{}, nil
-			}
 			return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{*cr}}, nil
 		},
 		getFunc: func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
