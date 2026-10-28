@@ -302,8 +302,8 @@ func isEmbeddedTerraformModule(modPath string) bool {
 }
 
 func isSameModuleSource(consumerSource string, modPath string, bp Blueprint) bool {
-	clean := sourcereader.ToSlash(consumerSource)
-	return clean == modPath || clean == sourcereader.ToSlash(bp.transformSource(modPath))
+	clean := strings.TrimPrefix(sourcereader.ToSlash(consumerSource), "./")
+	return clean == modPath || clean == strings.TrimPrefix(sourcereader.ToSlash(bp.transformSource(modPath)), "./")
 }
 
 func formatEmbeddedProvidersHint(sources []string, m Module) string {

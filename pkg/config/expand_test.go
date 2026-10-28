@@ -1048,9 +1048,9 @@ func (s *zeroSuite) TestValidateModuleInputs_EmbeddedUseHints(c *C) {
 	c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), solo, bpLateOnly)).Hint,
 		Equals, `"unique_tok" description: desc Module source "modules/testcat/prov-a" provides this output; add it to an earlier or same deployment group and reference its id in the "use" list of module "solo".`)
 
-	// Self-source exclusion (exact, backslash, and transformSource-rewritten) vs third-party colliding subpath
+	// Self-source exclusion (exact, ./ prefix, backslash, and transformSource-rewritten) vs third-party colliding subpath
 	bpRewritten := Blueprint{ToolkitModulesURL: "https://github.com/my-fork/cluster-toolkit", ToolkitModulesVersion: "v1.0.0"}
-	for _, selfSrc := range []string{"modules/testcat/prov-a", `modules\testcat\prov-a`, bpRewritten.transformSource("modules/testcat/prov-a")} {
+	for _, selfSrc := range []string{"modules/testcat/prov-a", "./modules/testcat/prov-a", `modules\testcat\prov-a`, bpRewritten.transformSource("modules/testcat/prov-a")} {
 		c.Check(findEmbeddedProviders("unique_tok", Module{ID: "self_m", Source: selfSrc}, bpRewritten), HasLen, 0)
 	}
 	c.Check(findEmbeddedProviders("unique_tok", Module{ID: "third_party", Source: "github.com/my-org/custom//modules/testcat/prov-a?ref=main"}, bpRewritten),
