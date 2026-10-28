@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
@@ -388,6 +389,27 @@ provider "zebra" {
 }
 `)
 	}
+}
+
+func (s *zeroSuite) TestWriteHclFileGeneratedNotice(c *C) {
+	// Every generated HCL file must open with the license followed by the
+	// DO NOT EDIT notice so agents never mistake output for source.
+	dir := c.MkDir()
+	path := filepath.Join(dir, "main.tf")
+	f := hclwrite.NewEmptyFile()
+	f.Body().SetAttributeValue("x", cty.NumberIntVal(1))
+	c.Assert(writeHclFile(path, f), IsNil)
+
+	b, err := os.ReadFile(path)
+	c.Assert(err, IsNil)
+	got := string(b)
+	c.Check(strings.HasPrefix(got, license), Equals, true)
+	c.Check(strings.Contains(license, GeneratedFileNotice), Equals, true)
+	c.Check(strings.Contains(got, "Edit the blueprint YAML or deployment.yaml"), Equals, true)
+	c.Check(strings.Contains(got, "x = 1"), Equals, true)
+	// The notice is an HCL comment, so the file must still parse.
+	_, diags := hclwrite.ParseConfig(b, path, hcl.InitialPos)
+	c.Check(diags.HasErrors(), Equals, false)
 }
 
 func (s *zeroSuite) TestWriteVersions(c *C) {
