@@ -164,7 +164,7 @@ A TPU shorthand names a slice size, not a host shape. GKE can run the same slice
 *Note: Please ensure that you replace all placeholders enclosed in angle brackets (such as `<PROJECT_ID>`, `<CLUSTER_NAME>`, and `<REGION/ZONE>`) with your actual environment values before executing the command.*
 
 This command will:
-1. Verify/install the JobSet CRD on your cluster.
+1. Verify that JobSet is installed and its webhook is ready (waiting up to 5 minutes, for example while its controller pod restarts). JobSet is installed only when neither the JobSet CRD nor Service `jobset-system/jobset-webhook-service` exists (requires cluster-admin permissions); `gcluster` never modifies an existing or partial JobSet installation.
 2. Auto-discover the Kueue LocalQueue name from the cluster.
 3. Use the compute type installed on the cluster nodes and map the necessary resource requests.
 4. Build a container image from the job_details directory using python:3.9-slim as the base, and push it to Artifact Registry.
