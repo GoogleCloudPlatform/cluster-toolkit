@@ -280,10 +280,11 @@ generate-docs:
 # GCP project for gcluster validators. Example:
 #   make test-skills-live LIVE_PROJECT=my-sandbox LIVE_AGENT=gemini
 LIVE_AGENT ?= gemini
+LIVE_SKILL ?= cluster-blueprint-assistant
 test-skills-live: gcluster
-	$(info **************** running LIVE skills evals against $(LIVE_AGENT) ***************)
+	$(info **************** running LIVE skills evals ($(LIVE_SKILL)) against $(LIVE_AGENT) ***************)
 	@test -n "$(LIVE_PROJECT)" || { echo "LIVE_PROJECT=<gcp-project> is required"; exit 2; }
-	@python3 tools/run_eval.py --all --live --agent $(LIVE_AGENT) --project $(LIVE_PROJECT) --markdown-output live-eval-report.md
+	@python3 tools/run_eval.py --skill $(LIVE_SKILL) --live --agent $(LIVE_AGENT) --project $(LIVE_PROJECT) --markdown-output live-eval-report.md
 
 validate-docs:
 	$(info **************** validating README snippets and links ***************)

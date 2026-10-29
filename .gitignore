@@ -79,3 +79,5 @@ GEMINI.md
 
 # Ignore Antigravity agents customizations
 .agents/
+live-logs/
+live-eval-report.md

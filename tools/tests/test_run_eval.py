@@ -980,6 +980,10 @@ class TestLiveBackend(unittest.TestCase):
         b2 = self._backend(self._fake_exec(agent_rc=3, agent_out="boom"))
         b2.run_case("skill", "p", {"name": "n2"})
         self.assertTrue(any("exited with code 3" in f for f in b2.hard_failures("n2")))
+        # Normal prose mentioning gcloud login must not be mistaken for a CLI auth failure.
+        b3 = self._backend(self._fake_exec(agent_out="First run gcloud auth application-default login"))
+        b3.run_case("skill", "p", {"name": "n3"})
+        self.assertEqual(b3.hard_failures("n3"), [])
 
     def test_case_log_written(self):
         logs = os.path.join(self.repo, "logs")
@@ -996,9 +1000,11 @@ class TestLiveBackend(unittest.TestCase):
         b = self._backend(self._fake_exec())
         b.run_case("skill", "p", {"name": "c0"})
         cmds = [c[0] for c in self.calls]
+        refresh_idx = next(i for i, c in enumerate(cmds) if c[:3] == ["git", "update-index", "--refresh"])
         touch_idx = next(i for i, c in enumerate(cmds) if c[0] == "find" and "touch" in c)
         agent_idx = next(i for i, c in enumerate(cmds) if c[0] == "gemini")
         anewer_idx = next(i for i, c in enumerate(cmds) if c[0] == "find" and "-anewer" in c)
+        self.assertLess(refresh_idx, touch_idx)
         self.assertLess(touch_idx, agent_idx)
         self.assertLess(agent_idx, anewer_idx)
 
@@ -1041,15 +1047,17 @@ class TestLiveBackend(unittest.TestCase):
     def test_clean_run_passes_and_substitutes_project(self):
         b = self._backend(self._fake_exec(agent_out="Created deployment.yaml and ran ./gcluster expand"))
         case = {"name": "c1", "expect_keywords_all": ["deployment.yaml"]}
-        text = b.run_case("skill", "Set up hpc-slurm for project my-proj", case)
+        text = b.run_case("skill", "Set up hpc-slurm for project my-project or my-proj", case)
         agent_calls = [c for c in self.calls if c[0][0] == "gemini"]
         self.assertEqual(len(agent_calls), 1)
         self.assertIn("test-proj", " ".join(agent_calls[0][0]))
         self.assertNotIn("my-proj", " ".join(agent_calls[0][0]))
+        self.assertNotIn("test-project", " ".join(agent_calls[0][0]))
         # shim dir is first on PATH and project is pinned for gcloud
         env = agent_calls[0][2]
         self.assertTrue(env["PATH"].split(os.pathsep)[0].endswith(LIVE_SHIM_DIR))
         self.assertEqual(env["CLOUDSDK_CORE_PROJECT"], "test-proj")
+        self.assertEqual(env["GEMINI_CLI_TRUST_WORKSPACE"], "true")
         self.assertIn("Created deployment.yaml", text)
         self.assertNotIn("[LIVE ORACLES]", text)  # oracles are not part of keyword-checked text
         self.assertEqual(b.hard_failures("c1"), [])
@@ -1323,6 +1331,45 @@ class TestLiveBackend(unittest.TestCase):
         self.assertEqual(b.hard_failures("w1"), [])  # warning only, not a hard failure
         with open(os.path.join(logs, "w1.log"), encoding="utf-8") as f:
             self.assertIn("# warning:", f.read())
+
+    def test_ignored_tfvars_edit_and_expand_only_not_excused(self):
+        """gitignored .tfvars edits are caught, and `gcluster expand` alone does not excuse hand-edits."""
+        def exec_fn(cmd, cwd, env=None, timeout=None):
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(cmd[4], exist_ok=True)
+                return _FakeProc(0)
+            if cmd[0] == "bash":
+                os.makedirs(os.path.join(cwd, "depl", "primary"), exist_ok=True)
+                with open(os.path.join(cwd, "depl", "primary", "terraform.tfvars"), "w", encoding="utf-8") as f:
+                    f.write("zone = \"us-central1-a\"\n")
+                return _FakeProc(0)
+            if cmd[:2] == ["git", "status"] and "--ignored" in cmd:
+                return _FakeProc(0, "!! depl/primary/terraform.tfvars\n")
+            if cmd[0] == "gemini":
+                with open(os.path.join(cwd, "depl", "primary", "terraform.tfvars"), "w", encoding="utf-8") as f:
+                    f.write("zone = \"us-central1-f\"\n")
+                with open(os.path.join(cwd, LIVE_SHIM_DIR, "invocations.log"), "a", encoding="utf-8") as f:
+                    f.write("gcluster expand examples/hpc-slurm.yaml\n")
+                return _FakeProc(0, "edited tfvars")
+            return _FakeProc(0)
+        b = self._backend(exec_fn)
+        b.run_case("skill", "p", {"name": "tfv", "live_setup": ["./gcluster create x"]})
+        self.assertEqual(b.oracles["tfv"].generated_file_edits, ["depl/primary/terraform.tfvars"])
+        self.assertTrue(b.hard_failures("tfv"))
+
+    def test_ref_build_failure_is_hard_failure(self):
+        def exec_fn(cmd, cwd, env=None, timeout=None):
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(cmd[4], exist_ok=True)
+                return _FakeProc(0)
+            if cmd[:2] == ["git", "rev-parse"]:
+                return _FakeProc(0, "headheadhead\n" if cmd[2] == "HEAD" else "deadbeefdeadbeef\n")
+            if cmd[:2] == ["make", "gcluster"]:
+                return _FakeProc(2, "", "compile error")
+            return _FakeProc(0)
+        b = self._backend(exec_fn, repo_ref="brokenref")
+        b.run_case("skill", "p", {"name": "bf"})
+        self.assertTrue(any("agent did not run" in f for f in b.hard_failures("bf")))
 
 
 if __name__ == "__main__":

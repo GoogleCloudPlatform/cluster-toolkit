@@ -428,7 +428,7 @@ LIVE_AGENT_COMMANDS: Dict[str, List[str]] = {
 # problems). A case whose transcript matches is a hard failure, never a PASS.
 LIVE_AGENT_NOT_RUN_PATTERNS = [
     re.compile(r"Please set an Auth method", re.IGNORECASE),
-    re.compile(r"not logged in|login required|run .*login", re.IGNORECASE),
+    re.compile(r"not logged in|login required", re.IGNORECASE),
     re.compile(r"(invalid|missing) api key|API key not valid", re.IGNORECASE),
     re.compile(r"^Usage: codex", re.IGNORECASE | re.MULTILINE),
     re.compile(r"error: unexpected argument|unrecognized option", re.IGNORECASE),
@@ -557,7 +557,11 @@ class LiveCLIEvaluatorBackend:
     @staticmethod
     def _default_exec(cmd: List[str], cwd: str, env: Optional[Dict[str, str]] = None, timeout: Optional[int] = None) -> "subprocess.CompletedProcess[str]":
         # stdin must be closed: codex (and others) otherwise wait for extra input on a pipe.
-        return subprocess.run(cmd, cwd=cwd, env=env, timeout=timeout, capture_output=True, text=True,
+        run_env = dict(os.environ if env is None else env)
+        run_env.setdefault("GIT_CONFIG_COUNT", "1")
+        run_env.setdefault("GIT_CONFIG_KEY_0", "core.trustctime")
+        run_env.setdefault("GIT_CONFIG_VALUE_0", "false")
+        return subprocess.run(cmd, cwd=cwd, env=run_env, timeout=timeout, capture_output=True, text=True,
                               check=False, stdin=subprocess.DEVNULL)
 
     def _git(self, args: List[str], cwd: str) -> "subprocess.CompletedProcess[str]":
@@ -667,6 +671,10 @@ class LiveCLIEvaluatorBackend:
         env["PATH"] = shim_dir + os.pathsep + wt + os.pathsep + env.get("PATH", "")
         env.setdefault("CLOUDSDK_CORE_PROJECT", self.project)
         env.setdefault("GOOGLE_CLOUD_PROJECT", self.project)
+        env.setdefault("GEMINI_CLI_TRUST_WORKSPACE", "true")
+        env.setdefault("GIT_CONFIG_COUNT", "1")
+        env.setdefault("GIT_CONFIG_KEY_0", "core.trustctime")
+        env.setdefault("GIT_CONFIG_VALUE_0", "false")
         try:
             res = self._exec(self._agent_command(prompt), wt, env, self.timeout)
         except subprocess.TimeoutExpired as e:
@@ -742,7 +750,7 @@ class LiveCLIEvaluatorBackend:
         #    are legitimately regenerated, so only flag changes with no create call.
         if setup:
             invocations = oracles.gcluster_invocations
-            regenerated = any(re.match(r"gcluster\s+(create|expand)\b", i) for i in invocations)
+            regenerated = any(re.match(r"gcluster\s+create\b", i) for i in invocations)
             after = self._hash_untracked(wt)
             changed = [rel for rel, digest in setup.items() if after.get(rel) != digest]
             if changed and not regenerated:
@@ -792,12 +800,12 @@ class LiveCLIEvaluatorBackend:
 
     # -- EvaluatorBackend protocol ------------------------------------------
     def _hash_untracked(self, wt: str) -> Dict[str, str]:
-        """Return {relpath: sha256} for every untracked file (excluding shims)."""
+        """Return {relpath: sha256} for every untracked/ignored file (excluding shims)."""
         import hashlib
         out: Dict[str, str] = {}
-        res = self._git(["status", "--porcelain", "--untracked-files=all"], wt)
+        res = self._git(["status", "--porcelain", "--untracked-files=all", "--ignored"], wt)
         for line in (res.stdout or "").splitlines():
-            if not line.startswith("??"):
+            if not line.startswith(("??", "!!")):
                 continue
             rel = line[3:].strip()
             if rel.startswith(LIVE_SHIM_DIR) or rel == "gcluster":
@@ -832,7 +840,7 @@ class LiveCLIEvaluatorBackend:
 
     def run_case(self, skill_name: str, prompt: str, case_config: Dict[str, Any]) -> str:
         case_name = case_config.get("name", "case")
-        prompt = prompt.replace("my-proj", self.project)
+        prompt = re.sub(r"\b(my-project|my-proj)\b", self.project, prompt)
         oracles = LiveOracles()
         wt = self._make_worktree(case_name)
         try:
@@ -841,25 +849,24 @@ class LiveCLIEvaluatorBackend:
             # Snapshot files created by setup (e.g. a generated deployment dir) so
             # they are not reported as agent output, and so edits to them are caught.
             self._setup_hashes = self._hash_untracked(wt)
-            # Linux relatime only bumps atime on read when atime < mtime. A fresh
-            # worktree has atime == mtime for every file, so backdate .tf atimes
-            # first; otherwise the first read would not be visible to -anewer.
-            self._exec(["find", "modules", "community/modules", "-name", "*.tf",
-                        "-exec", "touch", "-a", "-t", "200001010000", "{}", "+"], wt)
-            # touch also changes ctime, which invalidates git's stat cache; the
-            # next `git status` would then re-read every .tf and bump its atime,
-            # counting as agent reads. Refresh the index now, before the marker.
+            # Refresh git's stat cache first (after 1s so the worktree checkout is
+            # not racy-clean), then backdate .tf atimes: Linux relatime only bumps
+            # atime on read when atime < mtime, and running update-index after
+            # touch -a would re-read every .tf file and reset atime back to now.
+            time.sleep(1)
             self._git(["update-index", "--refresh"], wt)
             self._git(["status", "--porcelain"], wt)
+            self._exec(["find", "modules", "community/modules", "-name", "*.tf",
+                        "-exec", "touch", "-a", "-t", "200001010000", "{}", "+"], wt)
             marker = os.path.join(shim_dir, "marker")
             open(marker, "w", encoding="utf-8").close()
-            time.sleep(1)  # atime resolution
             transcript = self._run_agent(wt, shim_dir, prompt, oracles)
             self._collect_oracles(wt, shim_dir, marker, oracles)
             if oracles.shim_replaced:
                 print(f"  [live] warning ({case_name}): {oracles.shim_replaced}")
         except RuntimeError as e:
             transcript = f"[live-eval] {e}"
+            oracles.agent_not_run = oracles.agent_not_run or str(e)[:200]
         finally:
             self._remove_worktree(wt)
         self.oracles[case_name] = oracles
