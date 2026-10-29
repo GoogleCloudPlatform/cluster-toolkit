@@ -1894,7 +1894,6 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		"path: /tmp",
 		"type: DirectoryOrCreate",
 		"mountPath: /tmp",
-		"jobset.sigs.k8s.io/hack: \"true\"",
 		"kueue.x-k8s.io/safe-to-forcefully-delete: \"true\"",
 		"cloud.google.com/skip-tpu-webhook-check: \"true\"",
 		"backoffLimitPerIndex: 0",
