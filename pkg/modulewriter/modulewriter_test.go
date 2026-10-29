@@ -909,3 +909,46 @@ func TestCheckLocalModuleIgnoresConflict(t *testing.T) {
 		t.Fatalf("unexpected error for matching local module ignores: %v", err)
 	}
 }
+
+func TestWriteModuleReconfigureOverrides_IgnoreChangesAll(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mainTf := `
+resource "google_compute_disk" "disk" {
+  name = "disk"
+  lifecycle {
+    ignore_changes = all
+  }
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte(mainTf), 0644); err != nil {
+		t.Fatalf("failed to write main.tf: %v", err)
+	}
+
+	reconfigIgnores := map[string][]string{
+		"google_compute_disk": {
+			"labels",
+		},
+	}
+
+	if err := writeModuleReconfigureOverrides(tmpDir, reconfigIgnores); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Because resource already ignores all changes, no conflicting list override should be emitted
+	overrideFile := filepath.Join(tmpDir, "override.tf.json")
+	if _, err := os.Stat(overrideFile); !os.IsNotExist(err) {
+		t.Errorf("expected override.tf.json to not be created for ignore_changes = all, but it was")
+	}
+}
+
+func TestFormatTargetNotFoundError(t *testing.T) {
+	discovered := map[string][]string{
+		"google_compute_disk": {"disk_a", "disk_b"},
+	}
+	err := formatTargetNotFoundError("google_compute_disk.wrong", "/path/to/mod", discovered)
+	expectedSub := "Available resources in this module: google_compute_disk.disk_a, google_compute_disk.disk_b"
+	if !strings.Contains(err.Error(), expectedSub) {
+		t.Errorf("got error %q, want substring %q", err.Error(), expectedSub)
+	}
+}

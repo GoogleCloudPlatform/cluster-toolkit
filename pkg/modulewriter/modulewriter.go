@@ -32,6 +32,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/go-getter"
@@ -440,36 +441,63 @@ func parseExistingModuleIgnores(moduleDir string) (map[string]map[string][]strin
 	return existing, nil
 }
 
-func extractBodyIgnores(body *hclsyntax.Body, src []byte, existing map[string]map[string][]string) {
-	for _, block := range body.Blocks {
-		if block.Type != "resource" || len(block.Labels) < 2 {
+func parseLifecycleAttribute(attr *hclsyntax.Attribute, src []byte) []string {
+	if scope, ok := attr.Expr.(*hclsyntax.ScopeTraversalExpr); ok && scope.Traversal.RootName() == "all" {
+		return []string{"all"}
+	}
+	tuple, ok := attr.Expr.(*hclsyntax.TupleConsExpr)
+	if !ok {
+		return nil
+	}
+	var list []string
+	for _, elem := range tuple.Exprs {
+		list = append(list, string(elem.Range().SliceBytes(src)))
+	}
+	return list
+}
+
+func extractResourceIgnores(block *hclsyntax.Block, src []byte, existing map[string]map[string][]string) {
+	if block.Type != "resource" || len(block.Labels) < 2 {
+		return
+	}
+	rType, rName := block.Labels[0], block.Labels[1]
+	for _, sub := range block.Body.Blocks {
+		if sub.Type != "lifecycle" {
 			continue
 		}
-		rType, rName := block.Labels[0], block.Labels[1]
-		for _, sub := range block.Body.Blocks {
-			if sub.Type != "lifecycle" {
-				continue
+		attr, ok := sub.Body.Attributes["ignore_changes"]
+		if !ok {
+			continue
+		}
+		list := parseLifecycleAttribute(attr, src)
+		if len(list) > 0 {
+			if existing[rType] == nil {
+				existing[rType] = make(map[string][]string)
 			}
-			attr, ok := sub.Body.Attributes["ignore_changes"]
-			if !ok {
-				continue
-			}
-			tuple, ok := attr.Expr.(*hclsyntax.TupleConsExpr)
-			if !ok {
-				continue
-			}
-			var list []string
-			for _, elem := range tuple.Exprs {
-				list = append(list, string(elem.Range().SliceBytes(src)))
-			}
-			if len(list) > 0 {
-				if existing[rType] == nil {
-					existing[rType] = make(map[string][]string)
-				}
-				existing[rType][rName] = list
-			}
+			existing[rType][rName] = list
 		}
 	}
+}
+
+func extractBodyIgnores(body *hclsyntax.Body, src []byte, existing map[string]map[string][]string) {
+	for _, block := range body.Blocks {
+		extractResourceIgnores(block, src, existing)
+	}
+}
+
+func formatTargetNotFoundError(target, moduleDir string, discovered map[string][]string) error {
+	var available []string
+	for rType, names := range discovered {
+		for _, rName := range names {
+			available = append(available, fmt.Sprintf("%s.%s", rType, rName))
+		}
+	}
+	sort.Strings(available)
+	if len(available) > 0 {
+		return fmt.Errorf("reconfigure_ignores target %q was not found in module %s. Available resources in this module: %s",
+			target, moduleDir, strings.Join(available, ", "))
+	}
+	return fmt.Errorf("reconfigure_ignores target %q was not found in module %s", target, moduleDir)
 }
 
 func applyTargetOverrides(override tfOverrideFile, discovered map[string][]string, existingIgnores map[string]map[string][]string, target string, ignores []string, moduleDir string) error {
@@ -482,7 +510,10 @@ func applyTargetOverrides(override tfOverrideFile, discovered map[string][]strin
 		rType, rName := parts[0], parts[1]
 		names, ok := discovered[rType]
 		if !ok || !contains(names, rName) {
-			return fmt.Errorf("reconfigure_ignores target %q was not found in module %s", target, moduleDir)
+			return formatTargetNotFoundError(target, moduleDir, discovered)
+		}
+		if contains(existingIgnores[rType][rName], "all") {
+			return nil
 		}
 		if override.Resource[rType] == nil {
 			override.Resource[rType] = make(map[string]tfResourceOverride)
@@ -497,12 +528,15 @@ func applyTargetOverrides(override tfOverrideFile, discovered map[string][]strin
 	rType := target
 	names, ok := discovered[rType]
 	if !ok || len(names) == 0 {
-		return fmt.Errorf("reconfigure_ignores target %q was not found in module %s", target, moduleDir)
-	}
-	if override.Resource[rType] == nil {
-		override.Resource[rType] = make(map[string]tfResourceOverride)
+		return formatTargetNotFoundError(target, moduleDir, discovered)
 	}
 	for _, rName := range names {
+		if contains(existingIgnores[rType][rName], "all") {
+			continue
+		}
+		if override.Resource[rType] == nil {
+			override.Resource[rType] = make(map[string]tfResourceOverride)
+		}
 		finalIgnores := mergeIgnores(existingIgnores[rType][rName], ignores)
 		override.Resource[rType][rName] = tfResourceOverride{
 			Lifecycle: tfLifecycleOverride{IgnoreChanges: finalIgnores},
