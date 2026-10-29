@@ -2279,6 +2279,14 @@ func TestPrepareManifestOptions_PathwaysPlatform(t *testing.T) {
 			wantPlatform: "tpuv6e1t:2x4",
 		},
 		{
+			// On a cluster with 4-chip node pools, v6e-8 resolves to two
+			// ct6e-standard-4t VMs and keeps the plain tpuv6e platform.
+			computeType:  "v6e-8",
+			machineType:  "ct6e-standard-4t",
+			topology:     "2x4",
+			wantPlatform: "tpuv6e:2x4",
+		},
+		{
 			computeType:  "ct5lp-hightpu-8t",
 			topology:     "2x4",
 			wantPlatform: "tpuv5e1t:2x4",
@@ -2307,15 +2315,23 @@ func TestPrepareManifestOptions_PathwaysPlatform(t *testing.T) {
 				"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: tc.topology}},
 				"gcloud compute machine-types describe " + tc.computeType + " --zone=us-central1-a --format=json":                       {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "` + tc.computeType + `"}]}`}},
 			}
-			if tc.machineType != "" {
-				mockResponses["gcloud compute machine-types describe "+tc.machineType+" --zone=us-central1-a --format=json"] = []shell.CommandResult{{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "` + tc.computeType + `"}]}`}}
+			machineType := tc.machineType
+			if machineType == "" {
+				machineType = tc.computeType
+			}
+			if machineType != tc.computeType {
+				chips := 4
+				if strings.HasSuffix(machineType, "-8t") {
+					chips = 8
+				}
+				mockResponses["gcloud compute machine-types describe "+machineType+" --zone=us-central1-a --format=json"] = []shell.CommandResult{{ExitCode: 0, Stdout: fmt.Sprintf(`{"accelerators": [{"guestAcceleratorCount": %d, "guestAcceleratorType": "%s"}]}`, chips, tc.computeType)}}
 			}
 
 			mockExec := NewMockExecutor(mockResponses)
 			orc := newTestGKEOrchestrator(mockExec)
 			orc.projectID = "mock-project"
 			orc.clusterDesc.NodePools = []gkeJobNodePool{
-				{Config: gkeNodePoolConfig{MachineType: tc.computeType}},
+				{Config: gkeNodePoolConfig{MachineType: machineType}},
 			}
 
 			profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
