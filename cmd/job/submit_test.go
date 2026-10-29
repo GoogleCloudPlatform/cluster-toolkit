@@ -336,7 +336,7 @@ func TestSubmitCmd_PathwaysLongWorkloadName_Fails(t *testing.T) {
 }
 
 func resetCommandFlags(cmd *cobra.Command) {
-	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
 		_ = f.Value.Set(f.DefValue)
 		f.Changed = false
 	})
