@@ -557,21 +557,28 @@ func verifyLLMsFullOutput(t *testing.T, cat Catalog) {
 }
 
 func TestModuleServicesForSourceRelativeLocalDir(t *testing.T) {
-	root := testRepoRoot(t)
-	origWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("os.Getwd: %v", err)
+	tmp := t.TempDir()
+	bpModDir := filepath.Join(tmp, "bp", "local-mod")
+	if err := os.MkdirAll(bpModDir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if err := os.Chdir(root); err != nil {
-		t.Fatalf("os.Chdir(%s): %v", root, err)
+	mtd := "spec:\n  requirements:\n    services:\n    - example.googleapis.com\n"
+	if err := os.WriteFile(filepath.Join(bpModDir, "metadata.yaml"), []byte(mtd), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	defer func() { _ = os.Chdir(origWD) }()
-
-	// Relative bpDir ("examples/machine-learning/a3-ultragpu-8g") + relative local source ("../../../modules/file-system/managed-lustre")
-	// with repoRoot == "" exercises the filepath.Abs fallback in moduleServicesForSource.
-	svcs := moduleServicesForSource("", "examples/machine-learning/a3-ultragpu-8g", "../../../modules/file-system/managed-lustre")
-	if !slices.Contains(svcs, "lustre.googleapis.com") {
-		t.Errorf("expected lustre.googleapis.com from relative local module path, got %v", svcs)
+	cwdModDir := filepath.Join(tmp, "cwd-mod")
+	if err := os.MkdirAll(cwdModDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cwdMtd := "spec:\n  requirements:\n    services:\n    - cwd.googleapis.com\n"
+	if err := os.WriteFile(filepath.Join(cwdModDir, "metadata.yaml"), []byte(cwdMtd), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(tmp)
+	if svcs := moduleServicesForSource("", "bp", "./local-mod"); !slices.Contains(svcs, "example.googleapis.com") {
+		t.Errorf("expected example.googleapis.com from bpDir-relative module, got %v", svcs)
+	}
+	if svcs := moduleServicesForSource("", "bp", "./cwd-mod"); !slices.Contains(svcs, "cwd.googleapis.com") {
+		t.Errorf("expected cwd.googleapis.com from cwd-relative module, got %v", svcs)
 	}
 }
-

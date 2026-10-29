@@ -176,10 +176,8 @@ var explainGenericOutputs = map[string]bool{
 	"gcp_service_list": true,
 	"id":               true,
 	"instance_name":    true,
-	"mode":             true,
 	"name":             true,
 	"self_link":        true,
-	"type":             true,
 }
 
 func writef(w io.Writer, format string, args ...interface{}) {

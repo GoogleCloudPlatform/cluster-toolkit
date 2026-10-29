@@ -347,6 +347,11 @@ func moduleServicesForSource(repoRoot, bpDir, rawSrc string) []string {
 			}
 		}
 	}
+	if localAbs, err := filepath.Abs(filepath.FromSlash(strings.TrimSpace(rawSrc))); err == nil {
+		if svcs, ok := cachedMetadataServices("loc:"+localAbs, localAbs); ok {
+			return svcs
+		}
+	}
 	return nil
 }
 
