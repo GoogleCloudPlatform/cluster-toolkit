@@ -784,3 +784,36 @@ resource "null_resource" "dummy" {
 		t.Errorf("got %v for dummy null_resource, want %v", nr.Lifecycle.IgnoreChanges, expectedNR)
 	}
 }
+
+func TestWriteModuleReconfigureOverrides_Validation(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mainTf := `
+resource "google_container_node_pool" "node_pool" {
+  name = "np1"
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte(mainTf), 0644); err != nil {
+		t.Fatalf("failed to write main.tf: %v", err)
+	}
+
+	// Target with invalid resource name or type should be safely skipped with warning
+	reconfigIgnores := map[string][]string{
+		"google_container_node_pool.nonexistent": {
+			"node_config[0].labels",
+		},
+		"invalid_resource_type": {
+			"foo",
+		},
+	}
+
+	if err := writeModuleReconfigureOverrides(tmpDir, reconfigIgnores); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Since all targets were invalid, no override.tf.json should be written
+	overrideFile := filepath.Join(tmpDir, "override.tf.json")
+	if _, err := os.Stat(overrideFile); !os.IsNotExist(err) {
+		t.Errorf("expected override.tf.json to not exist for invalid targets, but found it")
+	}
+}

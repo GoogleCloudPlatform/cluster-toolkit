@@ -32,12 +32,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/hashicorp/go-getter"
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/otiai10/copy"
 	"github.com/zclconf/go-cty/cty"
+	"golang.org/x/exp/slices"
 )
 
 // strings that get re-used throughout this package and others
@@ -153,17 +154,41 @@ func copySharedEmbeddedModules(bp config.Blueprint, deploymentDir string) error 
 		}
 	}
 
+	// Validate and write reconfigure_ignores for shared embedded modules
+	embeddedIgnores := make(map[string]map[string][]string)
 	for _, g := range bp.Groups {
 		for _, mod := range g.Modules {
 			if mod.Kind == config.TerraformKind && sourcereader.IsEmbeddedPath(mod.Source) && len(mod.ReconfigureIgnores) > 0 {
-				dst := filepath.Join(deploymentDir, config.SharedModulesDirName, "embedded", mod.Source)
-				if err := writeModuleReconfigureOverrides(dst, mod.ReconfigureIgnores); err != nil {
-					return err
+				existing, ok := embeddedIgnores[mod.Source]
+				if ok && !reconfigIgnoresEqual(existing, mod.ReconfigureIgnores) {
+					logging.Error("WARNING: conflicting reconfigure_ignores found for shared embedded module %q across instances; "+
+						"shared embedded modules share a single deployment directory", mod.Source)
 				}
+				embeddedIgnores[mod.Source] = mod.ReconfigureIgnores
 			}
 		}
 	}
+
+	for source, ignores := range embeddedIgnores {
+		dst := filepath.Join(deploymentDir, config.SharedModulesDirName, "embedded", source)
+		if err := writeModuleReconfigureOverrides(dst, ignores); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func reconfigIgnoresEqual(a, b map[string][]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, va := range a {
+		vb, ok := b[k]
+		if !ok || !slices.Equal(va, vb) {
+			return false
+		}
+	}
+	return true
 }
 
 func stageFiles(bp config.Blueprint, deplPath string) error {
@@ -332,30 +357,15 @@ func copyModuleSource(src, dst string) error {
 	return nil
 }
 
-var resourceDeclRegex = regexp.MustCompile(`resource\s+"([^"]+)"\s+"([^"]+)"`)
-
 func findModuleResources(moduleDir string) (map[string][]string, error) {
 	resources := make(map[string][]string)
-	entries, err := os.ReadDir(moduleDir)
-	if err != nil {
-		return nil, err
+	mod, diags := tfconfig.LoadModule(moduleDir)
+	if diags.HasErrors() {
+		return nil, fmt.Errorf("failed to load terraform module at %s: %v", moduleDir, diags)
 	}
 
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tf") || strings.HasSuffix(entry.Name(), "_override.tf") || entry.Name() == "override.tf" {
-			continue
-		}
-		filePath := filepath.Join(moduleDir, entry.Name())
-		content, err := os.ReadFile(filePath)
-		if err != nil {
-			return nil, err
-		}
-		matches := resourceDeclRegex.FindAllStringSubmatch(string(content), -1)
-		for _, m := range matches {
-			resType := m[1]
-			resName := m[2]
-			resources[resType] = append(resources[resType], resName)
-		}
+	for _, res := range mod.ManagedResources {
+		resources[res.Type] = append(resources[res.Type], res.Name)
 	}
 	return resources, nil
 }
@@ -394,6 +404,11 @@ func writeModuleReconfigureOverrides(moduleDir string, reconfigIgnores map[strin
 		if strings.Contains(target, ".") {
 			parts := strings.SplitN(target, ".", 2)
 			rType, rName := parts[0], parts[1]
+			names, ok := discovered[rType]
+			if !ok || !slices.Contains(names, rName) {
+				logging.Error("WARNING: reconfigure_ignores target %q was not found in module %s", target, moduleDir)
+				continue
+			}
 			if override.Resource[rType] == nil {
 				override.Resource[rType] = make(map[string]tfResourceOverride)
 			}
@@ -463,8 +478,10 @@ func copyNonEmbeddedModules(gPath string, modules []config.Module) error {
 		if err := copyModuleSource(src, dst); err != nil {
 			return err
 		}
-		if err := writeModuleReconfigureOverrides(dst, mod.ReconfigureIgnores); err != nil {
-			return err
+		if mod.Kind == config.TerraformKind {
+			if err := writeModuleReconfigureOverrides(dst, mod.ReconfigureIgnores); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
