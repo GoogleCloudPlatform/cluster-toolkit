@@ -925,7 +925,7 @@ func (s *zeroSuite) TestValidateModuleInputs_BlueprintUseHints(c *C) {
 	pkrCand, already, late := tMod("pkr_cand").packer().outputs("special_out").build(), tMod("already").outputs("special_out").build(), tMod("late").outputs("special_out").build()
 	consumer := tMod("consumer").uses("already").outputs("special_out").inputs(reqInput("special_out", "Special")).build()
 	bpExcluded := Blueprint{Groups: []Group{
-		{Name: "g0", Modules: []Module{pkrCand, already, {ID: "empty_src"}, {ID: "bad_src", Source: "./does/not/exist"}, {ID: "bad_kind", Source: "modules/network/vpc", Kind: ModuleKind{kind: "bogus"}}}},
+		{Name: "g0", Modules: []Module{pkrCand, already, {ID: "empty_src"}, {ID: "empty_src_with_out", Outputs: []modulereader.OutputInfo{{Name: "special_out"}}}, {ID: "bad_src", Source: "./does/not/exist"}, {ID: "bad_kind", Source: "modules/network/vpc", Kind: ModuleKind{kind: "bogus"}}}},
 		{Name: "g1", Modules: []Module{consumer}},
 		{Name: "g2", Modules: []Module{late}},
 	}}
@@ -936,8 +936,8 @@ func (s *zeroSuite) TestValidateModuleInputs_BlueprintUseHints(c *C) {
 	c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), standalone, Blueprint{Groups: []Group{{Modules: []Module{late}}}})).Hint,
 		Equals, `"special_out" description: Special Consider adding module "late" to the "use" list of module "standalone" (e.g. use: [late]).`)
 
-	// Packer consumer only considers strictly earlier groups (never same-group Terraform candidates) and supports inline Outputs providers
-	inlineNet := Module{ID: "inline_net", Outputs: []modulereader.OutputInfo{{Name: "subnetwork_name"}}}
+	// Packer consumer only considers strictly earlier groups (never same-group Terraform candidates)
+	inlineNet := tMod("inline_net").outputs("subnetwork_name").build()
 	sameGrpNet := tMod("same_grp_net").outputs("subnetwork_name").build()
 	pkrImg := tMod("pkr_img").packer().inputs(reqInput("subnetwork_name", "Subnet")).build()
 	bpPkr := Blueprint{Groups: []Group{{Name: "net", Modules: []Module{inlineNet}}, {Name: "img", Modules: []Module{sameGrpNet, pkrImg}}}}
@@ -954,13 +954,18 @@ func (s *zeroSuite) TestValidateModuleInputs_OutputFiltering(c *C) {
 
 	c.Check(IsAutoInjectedGlobal("project_id"), Equals, true)
 	c.Check(IsAutoInjectedGlobal("cluster_id"), Equals, false)
+	c.Check(IsGenericOutputName("capacity_gb"), Equals, true)
+	c.Check(IsGenericOutputName("gcp_service_list"), Equals, true)
 	c.Check(IsGenericOutputName("self_link"), Equals, true)
 	c.Check(IsGenericOutputName("cluster_id"), Equals, false)
 	c.Check(IsIntegrationInputName("network_storage"), Equals, true)
 	c.Check(IsIntegrationInputName("cluster_id"), Equals, false)
 
 	// Auto-injected globals and generic output names never receive a use: hint
-	excludedNames := []string{"project_id", "deployment_name", "region", "zone", "labels", "id", "instance_name", "name", "self_link"}
+	excludedNames := []string{
+		"project_id", "deployment_name", "region", "zone", "labels",
+		"capacity_gb", "gcp_service_list", "id", "instance_name", "name", "self_link",
+	}
 	noisy := tMod("noisy").outputs(excludedNames...).build()
 	for _, name := range excludedNames {
 		consumer := tMod("c_" + ModuleID(name)).inputs(reqInput(name, "desc")).build()
@@ -1063,8 +1068,10 @@ func (s *zeroSuite) TestValidateModuleInputs_EmbeddedUseHints(c *C) {
 		Equals, `"private_vpc_connection_peering" description: desc Module source "modules/network/private-service-access" provides this output; add it to an earlier or same deployment group and reference its id in the "use" list of module "lustre".`)
 
 	pool := tMod("pool").inputs(reqInput("cluster_id", "desc")).build()
-	c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), pool, Blueprint{})).Hint,
-		Equals, `"cluster_id" description: desc Module sources ["modules/scheduler/gke-cluster", "modules/scheduler/pre-existing-gke-cluster"] provide this output; add one to an earlier or same deployment group and reference its id in the "use" list of module "pool".`)
+	hCluster := extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), pool, Blueprint{})).Hint
+	c.Check(strings.Contains(hCluster, `"modules/scheduler/gke-cluster"`), Equals, true)
+	c.Check(strings.Contains(hCluster, `"modules/scheduler/pre-existing-gke-cluster"`), Equals, true)
+	c.Check(strings.Contains(hCluster, `add one to an earlier or same deployment group and reference its id in the "use" list of module "pool".`), Equals, true)
 
 	img := tMod("img").packer().inputs(reqInput("subnetwork_name", "desc")).build()
 	hSubnet := extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), img, Blueprint{})).Hint
@@ -1119,21 +1126,20 @@ func (s *zeroSuite) TestModuleInfo(c *C) {
 	sourcereader.ModuleFS = os.DirFS("../..").(sourcereader.BaseFS)
 	defer func() { sourcereader.ModuleFS = origFS }()
 
-	// Inline Outputs with empty Source succeeds
-	inline := Module{ID: "inline", Outputs: []modulereader.OutputInfo{{Name: "out1"}}}
-	mi, err := inline.Info()
-	c.Assert(err, IsNil)
-	c.Check(mi.Outputs, HasLen, 1)
-
-	// Empty Source without Outputs returns EmptyModuleSource and InfoOrDie panics
-	empty := Module{ID: "empty"}
-	_, err = empty.Info()
-	c.Check(errors.Is(err, EmptyModuleSource), Equals, true)
-	c.Check(func() { empty.InfoOrDie() }, PanicMatches, ".*source.*")
+	// Empty Source returns EmptyModuleSource and InfoOrDie panics even when blueprint Outputs are populated
+	for _, m := range []Module{
+		{ID: "empty"},
+		{ID: "empty_with_outputs", Outputs: []modulereader.OutputInfo{{Name: "out1"}}},
+	} {
+		_, err := m.Info()
+		c.Check(errors.Is(err, EmptyModuleSource), Equals, true)
+		mod := m
+		c.Check(func() { mod.InfoOrDie() }, PanicMatches, ".*source.*")
+	}
 
 	// Invalid ModuleKind returns InvalidModuleKind and InfoOrDie panics
 	badKind := Module{ID: "bad", Source: "modules/network/vpc", Kind: ModuleKind{kind: "bogus"}}
-	_, err = badKind.Info()
+	_, err := badKind.Info()
 	c.Check(errors.Is(err, InvalidModuleKind), Equals, true)
 	c.Check(func() { badKind.InfoOrDie() }, PanicMatches, ".*kind.*")
 

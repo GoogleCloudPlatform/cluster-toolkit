@@ -163,23 +163,6 @@ type ExplainMissingSpec struct {
 	ReferenceBlueprints []string `json:"reference_blueprints,omitempty" yaml:"reference_blueprints,omitempty"`
 }
 
-var explainAutoGlobals = map[string]bool{
-	"project_id":      true,
-	"deployment_name": true,
-	"region":          true,
-	"zone":            true,
-	"labels":          true,
-}
-
-var explainGenericOutputs = map[string]bool{
-	"capacity_gb":      true,
-	"gcp_service_list": true,
-	"id":               true,
-	"instance_name":    true,
-	"name":             true,
-	"self_link":        true,
-}
-
 func writef(w io.Writer, format string, args ...interface{}) {
 	_, _ = fmt.Fprintf(w, format, args...)
 }
@@ -1121,7 +1104,7 @@ func buildModuleAutoInputs(mi modulereader.ModuleInfo, upstreamGroups []upstream
 
 	var globalInjected []string
 	for _, in := range mi.Inputs {
-		if explainAutoGlobals[in.Name] {
+		if config.IsAutoInjectedGlobal(in.Name) {
 			globalInjected = append(globalInjected, in.Name)
 		}
 	}
@@ -1146,7 +1129,7 @@ func partitionModuleInputs(mi modulereader.ModuleInfo, useProvidedInputs map[str
 	var reqInputs []ExplainModuleInput
 	var optInputs []ExplainModuleInput
 	for _, in := range mi.Inputs {
-		if explainAutoGlobals[in.Name] || in.Name == injectedID || useProvidedInputs[in.Name] || in.Name == "machine_configs" {
+		if config.IsAutoInjectedGlobal(in.Name) || in.Name == injectedID || useProvidedInputs[in.Name] || in.Name == "machine_configs" {
 			continue
 		}
 		entry := ExplainModuleInput{
@@ -1185,7 +1168,7 @@ func classifyTargetModuleInputs(targetInfo modulereader.ModuleInfo) (map[string]
 	injectedID := targetInfo.Metadata.Ghpc.InjectModuleId
 	for _, in := range targetInfo.Inputs {
 		targetInputs[in.Name] = true
-		if in.Required && !explainAutoGlobals[in.Name] && in.Name != injectedID {
+		if in.Required && !config.IsAutoInjectedGlobal(in.Name) && in.Name != injectedID {
 			targetReqInputs[in.Name] = true
 		}
 	}
@@ -1238,13 +1221,13 @@ func extractProviderTrueOutputs(m embeddedModEntry) map[string]bool {
 	hasReq := false
 	for _, in := range info.Inputs {
 		inMap[in.Name] = true
-		if in.Required && !explainAutoGlobals[in.Name] && in.Name != info.Metadata.Ghpc.InjectModuleId {
+		if in.Required && !config.IsAutoInjectedGlobal(in.Name) && in.Name != info.Metadata.Ghpc.InjectModuleId {
 			hasReq = true
 		}
 	}
 	outs := make(map[string]bool)
 	for _, o := range info.Outputs {
-		if !explainGenericOutputs[o.Name] && (!inMap[o.Name] || !hasReq) {
+		if !config.IsGenericOutputName(o.Name) && (!inMap[o.Name] || !hasReq) {
 			outs[o.Name] = true
 		}
 	}
@@ -1295,7 +1278,7 @@ func selectPrimaryProviders(
 			continue
 		}
 		for outName := range p.outputs {
-			if targetInputs[outName] && !useProvided[outName] && !explainAutoGlobals[outName] {
+			if targetInputs[outName] && !useProvided[outName] && !config.IsAutoInjectedGlobal(outName) {
 				primaryToInputs[p.source] = append(primaryToInputs[p.source], outName)
 				useProvided[outName] = true
 			}

@@ -48,10 +48,12 @@ var autoInjectedGlobals = map[string]bool{
 }
 
 var genericOutputNames = map[string]bool{
-	"id":            true,
-	"instance_name": true,
-	"name":          true,
-	"self_link":     true,
+	"capacity_gb":      true,
+	"gcp_service_list": true,
+	"id":               true,
+	"instance_name":    true,
+	"name":             true,
+	"self_link":        true,
 }
 
 var integrationInputNames = map[string]bool{

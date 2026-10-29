@@ -282,9 +282,6 @@ func (m *Module) Clone() Module {
 // Info returns the ModuleInfo for the module without panicking.
 func (m Module) Info() (modulereader.ModuleInfo, error) {
 	if m.Source == "" {
-		if len(m.Outputs) > 0 {
-			return modulereader.ModuleInfo{Outputs: m.Outputs}, nil
-		}
 		return modulereader.ModuleInfo{}, EmptyModuleSource
 	}
 	kind := m.Kind.String()
