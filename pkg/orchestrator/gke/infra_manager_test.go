@@ -16,7 +16,13 @@ package gke
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +30,7 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -113,23 +120,1026 @@ func TestValidateClusterState_TargetNamespaceValidation(t *testing.T) {
 	}
 }
 
-func TestIsJobSetCRDInstalled_Forbidden(t *testing.T) {
-	mock := &mockExecutor{
-		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
-			return shell.CommandResult{
-				ExitCode: 1,
-				Stderr:   "Error from server (Forbidden): customresourcedefinitions.apiextensions.k8s.io \"jobsets.jobset.x-k8s.io\" is forbidden",
-			}
+const (
+	jobSetCRDGetCmd       = "kubectl get crd jobsets.jobset.x-k8s.io --ignore-not-found -o name --request-timeout=10s"
+	jobSetServiceGetCmd   = "kubectl get service jobset-webhook-service -n jobset-system --ignore-not-found -o name --request-timeout=10s"
+	jobSetEndpointsCmd    = "kubectl get endpointslice -l kubernetes.io/service-name=jobset-webhook-service -n jobset-system -o json --request-timeout=10s"
+	jobSetSelectorCmd     = "kubectl get service jobset-webhook-service -n jobset-system -o jsonpath={.spec.selector} --request-timeout=10s"
+	jobSetPodsCmd         = "kubectl get pods -n jobset-system -o json --request-timeout=10s"
+	jobSetRolloutCmd      = "kubectl rollout status deployment/jobset-controller-manager -n jobset-system --timeout=600s"
+	jobSetApplyCmd        = "kubectl apply -f"
+	authCanICreateCmd     = "kubectl auth can-i create"
+	readyEndpointsJSON    = `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`
+	notReadyEndpointsJSON = `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":false}}]}]}`
+	jobSetTestKubeContext = "gke_test-project_us-central1_test-cluster"
+	jobSetPinnedKubectl   = "kubectl --context " + jobSetTestKubeContext
+	testJobSetManifest    = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jobset-controller-manager
+  namespace: jobset-system
+spec:
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+    spec:
+      containers:
+      - name: manager
+        image: jobset:test
+`
+)
+
+var (
+	objectPresent     = shell.CommandResult{ExitCode: 0, Stdout: "object/present\n"}
+	objectAbsent      = shell.CommandResult{ExitCode: 0}
+	readForbidden     = shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): access denied"}
+	readUnreachable   = shell.CommandResult{ExitCode: 1, Stderr: "Unable to connect to the server"}
+	readyEndpoints    = shell.CommandResult{ExitCode: 0, Stdout: readyEndpointsJSON}
+	notReadyEndpoints = shell.CommandResult{ExitCode: 0, Stdout: notReadyEndpointsJSON}
+	commandOK         = shell.CommandResult{ExitCode: 0}
+	canIYes           = shell.CommandResult{ExitCode: 0, Stdout: "yes\n"}
+	legacySelector    = shell.CommandResult{ExitCode: 0, Stdout: `{"control-plane":"controller-manager"}`}
+	noPods            = shell.CommandResult{ExitCode: 0, Stdout: `{"items":[]}`}
+)
+
+func repeatResult(r shell.CommandResult, n int) []shell.CommandResult {
+	results := make([]shell.CommandResult, n)
+	for i := range results {
+		results[i] = r
+	}
+	return results
+}
+
+func commandsWithPrefix(m *MockExecutor, prefix string) []string {
+	var cmds []string
+	for _, c := range m.calls {
+		if strings.HasPrefix(c, prefix) {
+			cmds = append(cmds, c)
+		}
+	}
+	return cmds
+}
+
+func callsWithPrefix(m *MockExecutor, prefix string) int {
+	return len(commandsWithPrefix(m, prefix))
+}
+
+// generatedJobSetManifest is where a fresh install in these tests writes the JobSet manifest.
+func generatedJobSetManifest() string {
+	return filepath.Join(os.Getenv("HOME"), ".gcluster", "generated", "jobset-"+jobSetTestKubeContext+".yaml")
+}
+
+// newJobSetTestOrchestrator wires responses into an orchestrator with no poll delay, an isolated
+// home directory, and an HTTP client and prompt that fail the test if JobSet manifests are
+// downloaded or the user is prompted.
+func newJobSetTestOrchestrator(t *testing.T, responses map[string][]shell.CommandResult) (*GKEOrchestrator, *MockExecutor) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	origInterval := jobSetWebhookPollInterval
+	jobSetWebhookPollInterval = 0
+	t.Cleanup(func() { jobSetWebhookPollInterval = origInterval })
+	origPrompt := shell.PromptYesNo
+	shell.PromptYesNo = func(prompt string) bool {
+		t.Fatalf("unexpected prompt: %s", prompt)
+		return false
+	}
+	t.Cleanup(func() { shell.PromptYesNo = origPrompt })
+
+	mockExec := NewMockExecutor(responses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.kubeContext = jobSetTestKubeContext
+	orc.httpClient = &mockHTTPClient{getFunc: func(url string) (*http.Response, error) {
+		t.Fatalf("unexpected download of %s", url)
+		return nil, nil
+	}}
+	return orc, mockExec
+}
+
+func serveJobSetManifest(orc *GKEOrchestrator, status int, body string) {
+	orc.httpClient = &mockHTTPClient{getFunc: func(url string) (*http.Response, error) {
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body))}, nil
+	}}
+}
+
+// assertNoJobSetMutation fails unless every command was a kubectl read (or starts with one of
+// alsoAllowed) and nothing was streamed.
+func assertNoJobSetMutation(t *testing.T, m *MockExecutor, alsoAllowed ...string) {
+	t.Helper()
+	allowed := append([]string{"kubectl get "}, alsoAllowed...)
+	for _, c := range m.calls {
+		if !slices.ContainsFunc(allowed, func(p string) bool { return strings.HasPrefix(c, p) }) {
+			t.Errorf("unexpected command %q; only commands starting with %q are allowed", c, allowed)
+		}
+	}
+	if len(m.streamCalls) != 0 {
+		t.Errorf("unexpected streamed commands: %v", m.streamCalls)
+	}
+}
+
+// assertEveryKubectlCallPinned fails unless every kubectl call, streamed or not, carried --context ctx.
+func assertEveryKubectlCallPinned(t *testing.T, m *MockExecutor, ctx string) {
+	t.Helper()
+	kubectlCalls := 0
+	for _, c := range slices.Concat(m.calls, m.streamCalls) {
+		if strings.HasPrefix(c, "kubectl ") {
+			kubectlCalls++
+		}
+	}
+	if len(m.contexts) != kubectlCalls {
+		t.Errorf("%d of %d kubectl calls carried --context; want all of them", len(m.contexts), kubectlCalls)
+	}
+	m.assertAllKubectlPinned(t, ctx)
+}
+
+func assertContainsAll(t *testing.T, got string, want, notWant []string) {
+	t.Helper()
+	for _, w := range want {
+		if !strings.Contains(got, w) {
+			t.Errorf("missing %q; got:\n%s", w, got)
+		}
+	}
+	for _, w := range notWant {
+		if strings.Contains(got, w) {
+			t.Errorf("unexpectedly contains %q; got:\n%s", w, got)
+		}
+	}
+}
+
+func TestJobSetWebhookWaitBudget(t *testing.T) {
+	if jobSetWebhookWaitTimeout != 5*time.Minute || jobSetWebhookPollInterval != 3*time.Second || jobSetWebhookPollAttempts != 100 {
+		t.Errorf("wait budget = %s, poll interval = %s, attempts = %d; want 5m0s, 3s, 100 (the documented 5-minute wait)",
+			jobSetWebhookWaitTimeout, jobSetWebhookPollInterval, jobSetWebhookPollAttempts)
+	}
+}
+
+func TestCheckAndInstallJobSetCRD_ExistingInstallWaitsWithoutModifying(t *testing.T) {
+	tests := []struct {
+		name              string
+		crd, service      shell.CommandResult
+		endpoints         []shell.CommandResult
+		wantServiceCalls  int
+		wantEndpointCalls int
+	}{
+		{
+			name: "webhook ready on first read skips Service read",
+			crd:  objectPresent, service: objectPresent,
+			endpoints:         []shell.CommandResult{readyEndpoints},
+			wantServiceCalls:  0,
+			wantEndpointCalls: 1,
+		},
+		{
+			name: "controller pod replacement: no ready endpoint until the third read",
+			crd:  objectPresent, service: objectPresent,
+			endpoints:         []shell.CommandResult{notReadyEndpoints, {ExitCode: 0, Stdout: `{"items":[]}`}, readyEndpoints},
+			wantServiceCalls:  1,
+			wantEndpointCalls: 3,
+		},
+		{
+			name: "transient endpoint read failure, then ready",
+			crd:  objectPresent, service: objectPresent,
+			endpoints:         []shell.CommandResult{readUnreachable, readyEndpoints},
+			wantServiceCalls:  1,
+			wantEndpointCalls: 2,
+		},
+		{
+			name: "forbidden reads count as installed and healthy",
+			crd:  readForbidden, service: readForbidden,
+			endpoints:         []shell.CommandResult{readForbidden},
+			wantServiceCalls:  1,
+			wantEndpointCalls: 1,
+		},
+		{
+			name: "present CRD with forbidden endpoint read verifies Service once",
+			crd:  objectPresent, service: objectPresent,
+			endpoints:         []shell.CommandResult{readForbidden},
+			wantServiceCalls:  1,
+			wantEndpointCalls: 1,
 		},
 	}
-	orc := &GKEOrchestrator{executor: mock}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orc, mockExec := newJobSetTestOrchestrator(t, map[string][]shell.CommandResult{
+				jobSetCRDGetCmd:     {tc.crd},
+				jobSetServiceGetCmd: {tc.service},
+				jobSetEndpointsCmd:  tc.endpoints,
+			})
 
-	installed, err := orc.isJobSetCRDInstalled()
-	if err != nil {
-		t.Fatalf("isJobSetCRDInstalled should succeed and return true on 403 Forbidden, got err: %v", err)
+			if err := orc.checkAndInstallJobSetCRD(); err != nil {
+				t.Fatalf("checkAndInstallJobSetCRD() error = %v, want nil", err)
+			}
+			if got := callsWithPrefix(mockExec, jobSetServiceGetCmd); got != tc.wantServiceCalls {
+				t.Errorf("Service reads = %d, want %d", got, tc.wantServiceCalls)
+			}
+			if got := callsWithPrefix(mockExec, jobSetEndpointsCmd); got != tc.wantEndpointCalls {
+				t.Errorf("EndpointSlice reads = %d, want %d", got, tc.wantEndpointCalls)
+			}
+			assertNoJobSetMutation(t, mockExec)
+			assertEveryKubectlCallPinned(t, mockExec, jobSetTestKubeContext)
+		})
 	}
-	if !installed {
-		t.Errorf("isJobSetCRDInstalled on 403 Forbidden = false; want true")
+}
+
+func TestCheckAndInstallJobSetCRD_ExistingInstallNeverReady(t *testing.T) {
+	podsJSON := `{"items":[{"metadata":{"name":"jobset-controller-manager-abc","labels":{"control-plane":"controller-manager"}},"status":{"phase":"Running","conditions":[{"type":"Ready","status":"True"}]}}]}`
+	tests := []struct {
+		name          string
+		endpoints     []shell.CommandResult
+		want, notWant []string
+		wantDiagnosis bool
+	}{
+		{
+			name:      "readable but no ready endpoint",
+			endpoints: repeatResult(notReadyEndpoints, jobSetWebhookPollAttempts),
+			want: []string{
+				"JobSet is installed but its webhook is not ready, and gcluster did not modify the existing JobSet installation: ",
+				"the JobSet webhook Service jobset-system/jobset-webhook-service has no ready endpoint after ",
+				"failurePolicy: Fail",
+				"0 of 1 pods in jobset-system match",
+				"No pod matches the Service selector",
+				jobSetPinnedKubectl + " -n jobset-system get deployments,services,pods -o wide --show-labels",
+			},
+			notWant:       []string{"the last read failed"},
+			wantDiagnosis: true,
+		},
+		{
+			name:          "readable at first, then the last read fails",
+			endpoints:     append([]shell.CommandResult{notReadyEndpoints}, repeatResult(readUnreachable, jobSetWebhookPollAttempts-1)...),
+			want:          []string{"has no ready endpoint after ", "the last read failed: ", "Unable to connect to the server", "failurePolicy: Fail"},
+			wantDiagnosis: true,
+		},
+		{
+			name:      "endpoints never readable",
+			endpoints: repeatResult(readUnreachable, jobSetWebhookPollAttempts),
+			want: []string{
+				"gcluster did not modify the existing JobSet installation",
+				"could not read the endpoints of Service jobset-system/jobset-webhook-service for ",
+				"Unable to connect to the server",
+				"Check your connection to the cluster and your credentials",
+			},
+			notWant: []string{"failurePolicy", "Diagnostics"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orc, mockExec := newJobSetTestOrchestrator(t, map[string][]shell.CommandResult{
+				jobSetCRDGetCmd:     {objectPresent},
+				jobSetServiceGetCmd: {objectPresent},
+				jobSetEndpointsCmd:  tc.endpoints,
+				jobSetSelectorCmd:   {{ExitCode: 0, Stdout: `{"app.kubernetes.io/instance":"jobset","app.kubernetes.io/managed-by":"kustomize","app.kubernetes.io/name":"jobset","control-plane":"controller-manager"}`}},
+				jobSetPodsCmd:       {{ExitCode: 0, Stdout: podsJSON}},
+			})
+
+			err := orc.checkAndInstallJobSetCRD()
+			if err == nil {
+				t.Fatal("checkAndInstallJobSetCRD() error = nil, want timeout error")
+			}
+			assertContainsAll(t, err.Error(), tc.want, tc.notWant)
+			if got := callsWithPrefix(mockExec, jobSetEndpointsCmd); got != jobSetWebhookPollAttempts {
+				t.Errorf("EndpointSlice reads = %d, want %d", got, jobSetWebhookPollAttempts)
+			}
+			wantDiagnosisReads := 0
+			if tc.wantDiagnosis {
+				wantDiagnosisReads = 1
+			}
+			if got := callsWithPrefix(mockExec, jobSetSelectorCmd); got != wantDiagnosisReads {
+				t.Errorf("Service selector reads = %d, want %d", got, wantDiagnosisReads)
+			}
+			assertNoJobSetMutation(t, mockExec)
+		})
+	}
+}
+
+func TestWaitForJobSetWebhookEndpoints_StopsAtDeadline(t *testing.T) {
+	orc, mockExec := newJobSetTestOrchestrator(t, map[string][]shell.CommandResult{
+		jobSetEndpointsCmd: repeatResult(notReadyEndpoints, jobSetWebhookPollAttempts),
+		jobSetSelectorCmd:  {legacySelector},
+		jobSetPodsCmd:      {noPods},
+	})
+	origTimeout := jobSetWebhookWaitTimeout
+	t.Cleanup(func() { jobSetWebhookWaitTimeout = origTimeout })
+	// The first pause already ends past the deadline, so no second read may start.
+	jobSetWebhookWaitTimeout = time.Millisecond
+	jobSetWebhookPollInterval = 50 * time.Millisecond
+
+	err := orc.waitForJobSetWebhookEndpoints()
+	if err == nil || !strings.Contains(err.Error(), "has no ready endpoint after ") {
+		t.Fatalf("waitForJobSetWebhookEndpoints() error = %v, want a no-ready-endpoint timeout", err)
+	}
+	if got := callsWithPrefix(mockExec, jobSetEndpointsCmd); got != 1 {
+		t.Errorf("EndpointSlice reads = %d, want 1", got)
+	}
+}
+
+func TestCheckAndInstallJobSetCRD_MalformedEndpointsIsHardError(t *testing.T) {
+	orc, mockExec := newJobSetTestOrchestrator(t, map[string][]shell.CommandResult{
+		jobSetCRDGetCmd:     {objectPresent},
+		jobSetServiceGetCmd: {objectPresent},
+		jobSetEndpointsCmd:  {{ExitCode: 0, Stdout: "not json"}},
+	})
+
+	err := orc.checkAndInstallJobSetCRD()
+	if err == nil || !strings.Contains(err.Error(), "failed to parse EndpointSlices") {
+		t.Fatalf("checkAndInstallJobSetCRD() error = %v, want parse error", err)
+	}
+	if got := callsWithPrefix(mockExec, jobSetEndpointsCmd); got != 1 {
+		t.Errorf("EndpointSlice reads = %d, want 1", got)
+	}
+	assertNoJobSetMutation(t, mockExec)
+}
+
+func TestCheckAndInstallJobSetCRD_PartialInstallNeverModifies(t *testing.T) {
+	crdOnly := []string{
+		"JobSet is only partly installed: CRD jobsets.jobset.x-k8s.io exists (or could not be read; see the warning above), but Service jobset-system/jobset-webhook-service was not found. gcluster made no changes.",
+		"reject every JobSet create in the cluster",
+		"ask your cluster administrator to install it",
+		"wait a minute and re-run this command",
+		"re-run gcluster deploy",
+		jobSetPinnedKubectl + " apply --server-side --force-conflicts -f https://github.com/kubernetes-sigs/jobset/releases/download/<version>/manifests.yaml",
+		jobSetPinnedKubectl + " -n jobset-system get deployments -o wide",
+		"this gcluster installs " + defaultJobSetVersion,
+		jobSetPinnedKubectl + " get jobsets -A",
+		jobSetPinnedKubectl + " delete crd jobsets.jobset.x-k8s.io",
+		jobSetPinnedKubectl + " delete namespace jobset-system",
+		"Never delete the CRD while JobSets exist",
+		"requires JobSet in namespace jobset-system",
+	}
+	serviceOnly := []string{
+		"JobSet is only partly installed: Service jobset-system/jobset-webhook-service exists (or could not be read; see the warning above), but CRD jobsets.jobset.x-k8s.io was not found. gcluster made no changes.",
+		"No JobSet can exist without its CRD",
+		jobSetPinnedKubectl + " delete namespace jobset-system",
+		"ask your cluster administrator",
+	}
+	// A recovery file on disk may come from another cluster, and the CRD must never be restored from a different release.
+	never := []string{".gcluster", "restore the CRD"}
+	tests := []struct {
+		name         string
+		crd, service shell.CommandResult
+		endpoints    []shell.CommandResult
+		wantCalls    int
+		want         []string
+	}{
+		{name: "CRD without webhook Service", crd: objectPresent, service: objectAbsent, endpoints: []shell.CommandResult{noPods}, wantCalls: 3, want: crdOnly},
+		{name: "unreadable CRD and missing Service", crd: readForbidden, service: objectAbsent, wantCalls: 2, want: crdOnly},
+		{name: "webhook Service without CRD", crd: objectAbsent, service: objectPresent, wantCalls: 2, want: serviceOnly},
+		{name: "missing CRD and unreadable Service", crd: objectAbsent, service: readForbidden, wantCalls: 2, want: serviceOnly},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orc, mockExec := newJobSetTestOrchestrator(t, map[string][]shell.CommandResult{
+				jobSetCRDGetCmd:     {tc.crd},
+				jobSetServiceGetCmd: {tc.service},
+				jobSetEndpointsCmd:  tc.endpoints,
+			})
+
+			err := orc.checkAndInstallJobSetCRD()
+			if err == nil {
+				t.Fatal("checkAndInstallJobSetCRD() error = nil, want partial installation error")
+			}
+			assertContainsAll(t, err.Error(), tc.want, never)
+			if got := len(mockExec.calls); got != tc.wantCalls {
+				t.Errorf("kubectl calls = %d, want %d; calls: %v", got, tc.wantCalls, mockExec.calls)
+			}
+			assertNoJobSetMutation(t, mockExec)
+			assertEveryKubectlCallPinned(t, mockExec, jobSetTestKubeContext)
+		})
+	}
+}
+
+func TestCheckAndInstallJobSetCRD_ReadErrorsNeverModify(t *testing.T) {
+	tests := []struct {
+		name      string
+		responses map[string][]shell.CommandResult
+		wantErr   string
+	}{
+		{
+			name:      "CRD read fails",
+			responses: map[string][]shell.CommandResult{jobSetCRDGetCmd: {readUnreachable}},
+			wantErr:   "failed to check for the JobSet CRD",
+		},
+		{
+			name:      "Service read fails when CRD is absent",
+			responses: map[string][]shell.CommandResult{jobSetCRDGetCmd: {objectAbsent}, jobSetServiceGetCmd: {readUnreachable}},
+			wantErr:   "failed to check for the JobSet webhook Service",
+		},
+		{
+			name:      "Service read fails when CRD exists and endpoints are not ready",
+			responses: map[string][]shell.CommandResult{jobSetCRDGetCmd: {objectPresent}, jobSetEndpointsCmd: {noPods}, jobSetServiceGetCmd: {readUnreachable}},
+			wantErr:   "failed to check for the JobSet webhook Service",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orc, mockExec := newJobSetTestOrchestrator(t, tc.responses)
+
+			err := orc.checkAndInstallJobSetCRD()
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) || !strings.Contains(err.Error(), "Unable to connect to the server") {
+				t.Fatalf("checkAndInstallJobSetCRD() error = %v, want %q with the kubectl error", err, tc.wantErr)
+			}
+			assertNoJobSetMutation(t, mockExec)
+		})
+	}
+}
+
+func freshJobSetResponses() map[string][]shell.CommandResult {
+	return map[string][]shell.CommandResult{
+		jobSetCRDGetCmd:     {objectAbsent},
+		jobSetServiceGetCmd: {objectAbsent},
+		authCanICreateCmd:   repeatResult(canIYes, len(jobSetInstallPermissionChecks)),
+		jobSetApplyCmd:      {commandOK},
+		jobSetRolloutCmd:    {commandOK},
+		jobSetEndpointsCmd:  {readyEndpoints},
+	}
+}
+
+func TestCheckAndInstallJobSetCRD_FreshClusterInstalls(t *testing.T) {
+	orc, mockExec := newJobSetTestOrchestrator(t, freshJobSetResponses())
+	serveJobSetManifest(orc, http.StatusOK, testJobSetManifest)
+
+	if err := orc.checkAndInstallJobSetCRD(); err != nil {
+		t.Fatalf("checkAndInstallJobSetCRD() error = %v, want nil", err)
+	}
+	// Every checked resource is cluster-scoped, so a namespaced RoleBinding must not count.
+	wantChecks := []string{
+		"kubectl auth can-i create namespaces --all-namespaces",
+		"kubectl auth can-i create customresourcedefinitions.apiextensions.k8s.io --all-namespaces",
+		"kubectl auth can-i create clusterroles.rbac.authorization.k8s.io --all-namespaces",
+		"kubectl auth can-i create clusterrolebindings.rbac.authorization.k8s.io --all-namespaces",
+		"kubectl auth can-i create mutatingwebhookconfigurations.admissionregistration.k8s.io --all-namespaces",
+		"kubectl auth can-i create validatingwebhookconfigurations.admissionregistration.k8s.io --all-namespaces",
+	}
+	if got := commandsWithPrefix(mockExec, authCanICreateCmd); !slices.Equal(got, wantChecks) {
+		t.Errorf("permission checks = %q, want %q", got, wantChecks)
+	}
+	manifest := generatedJobSetManifest()
+	if got, want := commandsWithPrefix(mockExec, jobSetApplyCmd), []string{"kubectl apply -f " + manifest}; !slices.Equal(got, want) {
+		t.Errorf("kubectl apply calls = %q, want %q", got, want)
+	}
+	if _, err := os.Stat(manifest); err != nil {
+		t.Errorf("generated JobSet manifest not written: %v", err)
+	}
+	assertEveryKubectlCallPinned(t, mockExec, jobSetTestKubeContext)
+}
+
+func TestCheckAndInstallJobSetCRD_FreshClusterWithoutPermissions(t *testing.T) {
+	responses := freshJobSetResponses()
+	canINo := shell.CommandResult{ExitCode: 1, Stdout: "no\n"}
+	responses[authCanICreateCmd] = []shell.CommandResult{canIYes, canINo, canIYes, canINo, canIYes, canIYes}
+	orc, mockExec := newJobSetTestOrchestrator(t, responses)
+
+	err := orc.checkAndInstallJobSetCRD()
+	if err == nil {
+		t.Fatal("checkAndInstallJobSetCRD() error = nil, want missing permissions error")
+	}
+	assertContainsAll(t, err.Error(), []string{
+		"JobSet is not installed, and your account cannot install it",
+		"'create customresourcedefinitions.apiextensions.k8s.io'",
+		"'create clusterrolebindings.rbac.authorization.k8s.io'",
+		"gcluster made no changes",
+		"jobset.install: true",
+	}, []string{"apply -f"})
+	assertNoJobSetMutation(t, mockExec, authCanICreateCmd)
+}
+
+func TestCheckAndInstallJobSetCRD_FreshInstallFailureHints(t *testing.T) {
+	const waitHint = "Later runs of gcluster will wait for the JobSet controller and will not apply the manifests again"
+	tests := []struct {
+		name          string
+		setup         func(t *testing.T, orc *GKEOrchestrator, responses map[string][]shell.CommandResult)
+		wantErr       string
+		wantApplyHint bool
+		wantWaitHint  bool
+	}{
+		{
+			name: "manifest download fails",
+			setup: func(t *testing.T, orc *GKEOrchestrator, _ map[string][]shell.CommandResult) {
+				serveJobSetManifest(orc, http.StatusInternalServerError, "")
+			},
+			wantErr: "received status code 500",
+		},
+		{
+			name: "manifest is not valid YAML",
+			setup: func(t *testing.T, orc *GKEOrchestrator, _ map[string][]shell.CommandResult) {
+				serveJobSetManifest(orc, http.StatusOK, "kind: [unclosed")
+			},
+			wantErr: "failed to decode YAML document",
+		},
+		{
+			name: "home directory is unknown",
+			setup: func(t *testing.T, orc *GKEOrchestrator, _ map[string][]shell.CommandResult) {
+				t.Setenv("HOME", "")
+				t.Setenv("USERPROFILE", "")
+			},
+			wantErr: "failed to get user home directory",
+		},
+		{
+			name: "generated manifests directory cannot be created",
+			setup: func(t *testing.T, orc *GKEOrchestrator, _ map[string][]shell.CommandResult) {
+				homeFile := filepath.Join(t.TempDir(), "home-is-a-file")
+				if err := os.WriteFile(homeFile, nil, 0644); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("HOME", homeFile)
+				t.Setenv("USERPROFILE", homeFile)
+			},
+			wantErr: "failed to create directory for generated manifests",
+		},
+		{
+			name: "generated manifest cannot be written",
+			setup: func(t *testing.T, orc *GKEOrchestrator, _ map[string][]shell.CommandResult) {
+				if err := os.MkdirAll(generatedJobSetManifest(), 0755); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantErr: "failed to write manifests",
+		},
+		{
+			name: "kubectl apply fails",
+			setup: func(t *testing.T, orc *GKEOrchestrator, responses map[string][]shell.CommandResult) {
+				responses[jobSetApplyCmd] = []shell.CommandResult{{ExitCode: 1, Stderr: "admission webhook denied the request"}}
+			},
+			wantErr:       "admission webhook denied the request",
+			wantApplyHint: true,
+		},
+		{
+			name: "controller rollout fails",
+			setup: func(t *testing.T, orc *GKEOrchestrator, responses map[string][]shell.CommandResult) {
+				responses[jobSetRolloutCmd] = []shell.CommandResult{{ExitCode: 1, Stderr: "deadline exceeded"}}
+				responses[jobSetSelectorCmd] = []shell.CommandResult{legacySelector}
+				responses[jobSetPodsCmd] = []shell.CommandResult{noPods}
+			},
+			wantErr:      "the JobSet controller did not become ready: deadline exceeded\nDiagnostics: Service jobset-system/jobset-webhook-service selects control-plane=controller-manager",
+			wantWaitHint: true,
+		},
+		{
+			name: "webhook never becomes ready",
+			setup: func(t *testing.T, orc *GKEOrchestrator, responses map[string][]shell.CommandResult) {
+				responses[jobSetEndpointsCmd] = repeatResult(notReadyEndpoints, jobSetWebhookPollAttempts)
+				responses[jobSetSelectorCmd] = []shell.CommandResult{legacySelector}
+				responses[jobSetPodsCmd] = []shell.CommandResult{noPods}
+			},
+			wantErr:      "has no ready endpoint after ",
+			wantWaitHint: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			responses := freshJobSetResponses()
+			orc, mockExec := newJobSetTestOrchestrator(t, responses)
+			serveJobSetManifest(orc, http.StatusOK, testJobSetManifest)
+			tc.setup(t, orc, responses)
+
+			err := orc.checkAndInstallJobSetCRD()
+			if err == nil {
+				t.Fatal("checkAndInstallJobSetCRD() error = nil, want installation error")
+			}
+			assertContainsAll(t, err.Error(), []string{"failed to install JobSet: ", tc.wantErr}, nil)
+			applyHint := "JobSet may now be partly installed, and later runs of gcluster will not modify it. To finish the installation, run:\n  " +
+				jobSetPinnedKubectl + " apply -f " + generatedJobSetManifest()
+			if got := strings.Contains(err.Error(), applyHint); got != tc.wantApplyHint {
+				t.Errorf("apply hint present = %v, want %v; err:\n%v", got, tc.wantApplyHint, err)
+			}
+			if got := strings.Contains(err.Error(), waitHint); got != tc.wantWaitHint {
+				t.Errorf("wait hint present = %v, want %v; err:\n%v", got, tc.wantWaitHint, err)
+			}
+			wantApplies := 0
+			if tc.wantApplyHint || tc.wantWaitHint {
+				wantApplies = 1
+			}
+			if got := callsWithPrefix(mockExec, jobSetApplyCmd); got != wantApplies {
+				t.Errorf("kubectl apply calls = %d, want %d", got, wantApplies)
+			}
+		})
+	}
+}
+
+func TestJobSetManifestFile(t *testing.T) {
+	tests := []struct{ kubeContext, want string }{
+		{kubeContext: "", want: "jobset.yaml"},
+		{kubeContext: "gke_my-project_us-central1_my-cluster", want: "jobset-gke_my-project_us-central1_my-cluster.yaml"},
+		{kubeContext: "arn:aws:eks:us-east-1:123:cluster/a b", want: "jobset-arn_aws_eks_us-east-1_123_cluster_a_b.yaml"},
+		{kubeContext: `..\..\x`, want: "jobset-.._.._x.yaml"},
+	}
+	for _, tc := range tests {
+		if got := jobSetManifestFile(tc.kubeContext); got != tc.want {
+			t.Errorf("jobSetManifestFile(%q) = %q, want %q", tc.kubeContext, got, tc.want)
+		}
+	}
+}
+
+func TestWriteGeneratedManifest(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	path, err := writeGeneratedManifest([]byte("kind: ConfigMap\n"), "jobset-ctx.yaml")
+	if err != nil {
+		t.Fatalf("writeGeneratedManifest() error = %v", err)
+	}
+	if want := filepath.Join(home, ".gcluster", "generated", "jobset-ctx.yaml"); path != want {
+		t.Errorf("writeGeneratedManifest() path = %q, want %q", path, want)
+	}
+	if got, err := os.ReadFile(path); err != nil || string(got) != "kind: ConfigMap\n" {
+		t.Errorf("written manifest = %q, %v; want %q", got, err, "kind: ConfigMap\n")
+	}
+}
+
+func TestResourceExists(t *testing.T) {
+	tests := []struct {
+		name            string
+		kind, rname, ns string
+		result          shell.CommandResult
+		wantArgs        string
+		wantExists      bool
+		wantForbidden   bool
+		wantErrContains string
+	}{
+		{
+			name: "cluster-scoped object found", kind: "crd", rname: "jobsets.jobset.x-k8s.io",
+			result:     shell.CommandResult{ExitCode: 0, Stdout: "customresourcedefinition.apiextensions.k8s.io/jobsets.jobset.x-k8s.io\n"},
+			wantArgs:   "get crd jobsets.jobset.x-k8s.io --ignore-not-found -o name --request-timeout=10s",
+			wantExists: true,
+		},
+		{
+			name: "namespaced object absent", kind: "service", rname: "jobset-webhook-service", ns: "jobset-system",
+			result:   shell.CommandResult{ExitCode: 0},
+			wantArgs: "get service jobset-webhook-service -n jobset-system --ignore-not-found -o name --request-timeout=10s",
+		},
+		{
+			name: "forbidden counts as existing", kind: "service", rname: "jobset-webhook-service", ns: "jobset-system",
+			result:        readForbidden,
+			wantArgs:      "get service jobset-webhook-service -n jobset-system --ignore-not-found -o name --request-timeout=10s",
+			wantExists:    true,
+			wantForbidden: true,
+		},
+		{
+			name: "other failure is an error", kind: "crd", rname: "jobsets.jobset.x-k8s.io",
+			result:          readUnreachable,
+			wantArgs:        "get crd jobsets.jobset.x-k8s.io --ignore-not-found -o name --request-timeout=10s",
+			wantErrContains: "Unable to connect to the server",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotArgs string
+			orc := &GKEOrchestrator{executor: &mockExecutor{executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+				gotArgs = strings.Join(args, " ")
+				return tc.result
+			}}}
+
+			exists, forbidden, err := orc.checkResourceExists(tc.kind, tc.rname, tc.ns)
+			if gotArgs != tc.wantArgs {
+				t.Errorf("kubectl args = %q, want %q", gotArgs, tc.wantArgs)
+			}
+			if tc.wantErrContains != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErrContains) {
+					t.Fatalf("checkResourceExists() error = %v, want error containing %q", err, tc.wantErrContains)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("checkResourceExists() error = %v, want nil", err)
+			}
+			if exists != tc.wantExists || forbidden != tc.wantForbidden {
+				t.Errorf("checkResourceExists() = (%v, %v), want (%v, %v)", exists, forbidden, tc.wantExists, tc.wantForbidden)
+			}
+		})
+	}
+}
+
+func TestServiceEndpointsReady(t *testing.T) {
+	tests := []struct {
+		name           string
+		result         shell.CommandResult
+		wantReady      bool
+		wantForbidden  bool
+		wantUnreadable bool
+		wantOtherErr   bool
+	}{
+		{name: "ready endpoint", result: readyEndpoints, wantReady: true},
+		{name: "endpoint without a ready condition counts as ready", result: shell.CommandResult{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{}}]}]}`}, wantReady: true},
+		{name: "ready endpoint without addresses", result: shell.CommandResult{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"conditions":{"ready":true}}]}]}`}},
+		{name: "no ready endpoint", result: notReadyEndpoints},
+		{name: "forbidden counts as ready", result: readForbidden, wantReady: true, wantForbidden: true},
+		{name: "failed read is retryable", result: readUnreachable, wantUnreadable: true},
+		{name: "malformed response is a hard error", result: shell.CommandResult{ExitCode: 0, Stdout: "not json"}, wantOtherErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotArgs string
+			orc := &GKEOrchestrator{executor: &mockExecutor{executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+				gotArgs = strings.Join(args, " ")
+				return tc.result
+			}}}
+
+			ready, forbidden, err := orc.checkServiceEndpointsReady("kueue-system", "kueue-webhook-service")
+			if want := "get endpointslice -l kubernetes.io/service-name=kueue-webhook-service -n kueue-system -o json --request-timeout=10s"; gotArgs != want {
+				t.Errorf("kubectl args = %q, want %q", gotArgs, want)
+			}
+			if ready != tc.wantReady || forbidden != tc.wantForbidden {
+				t.Errorf("(ready, forbidden) = (%v, %v), want (%v, %v)", ready, forbidden, tc.wantReady, tc.wantForbidden)
+			}
+			if got := errors.Is(err, errEndpointsUnreadable); got != tc.wantUnreadable {
+				t.Errorf("errors.Is(err, errEndpointsUnreadable) = %v, want %v (err: %v)", got, tc.wantUnreadable, err)
+			}
+			if got := err != nil && !errors.Is(err, errEndpointsUnreadable); got != tc.wantOtherErr {
+				t.Errorf("hard error = %v, want %v (err: %v)", got, tc.wantOtherErr, err)
+			}
+		})
+	}
+}
+
+func TestDescribeJobSetPods(t *testing.T) {
+	selector := map[string]string{"control-plane": "controller-manager"}
+	pod := func(name string, podLabels map[string]string, phase corev1.PodPhase, ready bool) corev1.Pod {
+		readyStatus := corev1.ConditionFalse
+		if ready {
+			readyStatus = corev1.ConditionTrue
+		}
+		return corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: podLabels},
+			Status:     corev1.PodStatus{Phase: phase, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: readyStatus}}},
+		}
+	}
+	crashLooping := pod("ctrl-1", selector, corev1.PodRunning, false)
+	crashLooping.Status.ContainerStatuses = []corev1.ContainerStatus{
+		{Name: "kube-rbac-proxy", Image: "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1", Ready: true},
+		{
+			Name:  "manager",
+			Image: "registry.k8s.io/jobset/jobset:v0.10.1",
+			State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff", Message: "back-off 5m0s restarting failed container"}},
+		},
+	}
+	pullFailing := pod("ctrl-2", selector, corev1.PodPending, false)
+	pullFailing.Status.ContainerStatuses = []corev1.ContainerStatus{{
+		Name:  "kube-rbac-proxy",
+		Image: "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
+		State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"}},
+	}}
+	initFailing := pod("ctrl-init", selector, corev1.PodPending, false)
+	initFailing.Status.InitContainerStatuses = []corev1.ContainerStatus{{
+		Name:  "cert-init",
+		Image: "registry.k8s.io/jobset/cert-init:v0.10.1",
+		State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff", Message: "Back-off pulling image"}},
+	}}
+	unschedulable := pod("ctrl-3", selector, corev1.PodPending, false)
+	unschedulable.Status.Conditions = append(unschedulable.Status.Conditions, corev1.PodCondition{
+		Type: corev1.PodScheduled, Status: corev1.ConditionFalse, Reason: "Unschedulable", Message: "0/3 nodes are available: 3 node(s) had untolerated taint {dedicated: gpu}.",
+	})
+	tests := []struct {
+		name          string
+		pods          []corev1.Pod
+		want, notWant []string
+	}{
+		{
+			name:    "matching ready pod",
+			pods:    []corev1.Pod{pod("ctrl-1", map[string]string{"control-plane": "controller-manager", "extra": "x"}, corev1.PodRunning, true)},
+			want:    []string{"1 of 1 pods in jobset-system match", "ctrl-1: phase=Running, ready=true, matches selector=true"},
+			notWant: []string{"No pod matches"},
+		},
+		{
+			name: "crash-looping container is named first",
+			pods: []corev1.Pod{crashLooping},
+			want: []string{"ctrl-1: CrashLoopBackOff (container manager, image registry.k8s.io/jobset/jobset:v0.10.1: back-off 5m0s restarting failed container); phase=Running, ready=false"},
+		},
+		{
+			name: "image pull failure without a message",
+			pods: []corev1.Pod{pullFailing},
+			want: []string{"ctrl-2: ImagePullBackOff (container kube-rbac-proxy, image gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1); phase=Pending"},
+		},
+		{
+			name: "waiting init container is named",
+			pods: []corev1.Pod{initFailing},
+			want: []string{"ctrl-init: ImagePullBackOff (init container cert-init, image registry.k8s.io/jobset/cert-init:v0.10.1: Back-off pulling image); phase=Pending"},
+		},
+		{
+			name: "unschedulable pod says why",
+			pods: []corev1.Pod{unschedulable},
+			want: []string{"ctrl-3: Unschedulable (0/3 nodes are available: 3 node(s) had untolerated taint {dedicated: gpu}.); phase=Pending"},
+		},
+		{
+			name: "selector matches no pod",
+			pods: []corev1.Pod{pod("ctrl-1", map[string]string{"app.kubernetes.io/name": "jobset"}, corev1.PodRunning, true)},
+			want: []string{"0 of 1 pods", "labels=app.kubernetes.io/name=jobset", "No pod matches the Service selector", "the controller Deployment's selector"},
+		},
+		{
+			name: "no pods",
+			want: []string{"0 of 0 pods", "No pods are running in namespace jobset-system"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assertContainsAll(t, describeJobSetPods(selector, tc.pods), tc.want, tc.notWant)
+		})
+	}
+}
+
+func TestDiagnoseJobSetWebhook(t *testing.T) {
+	nextSteps := "To investigate, run:\n  " + jobSetPinnedKubectl + " -n jobset-system get deployments,services,pods -o wide --show-labels\n  " +
+		jobSetPinnedKubectl + " -n jobset-system describe pods"
+	tests := []struct {
+		name          string
+		responses     map[string][]shell.CommandResult
+		want, notWant []string
+	}{
+		{
+			name:      "Service without selector",
+			responses: map[string][]shell.CommandResult{jobSetSelectorCmd: {{ExitCode: 0}}},
+			want:      []string{"Service jobset-system/jobset-webhook-service has no selector"},
+		},
+		{
+			name:      "selector unreadable",
+			responses: map[string][]shell.CommandResult{jobSetSelectorCmd: {readForbidden}},
+			want:      []string{"(diagnostics unavailable: "},
+			notWant:   []string{"To investigate"},
+		},
+		{
+			name:      "pods unreadable",
+			responses: map[string][]shell.CommandResult{jobSetSelectorCmd: {legacySelector}, jobSetPodsCmd: {readForbidden}},
+			want:      []string{"(diagnostics unavailable: "},
+			notWant:   []string{"To investigate"},
+		},
+		{
+			name:      "pods listed, with the commands to investigate",
+			responses: map[string][]shell.CommandResult{jobSetSelectorCmd: {legacySelector}, jobSetPodsCmd: {noPods}},
+			want:      []string{"No pods are running in namespace jobset-system", nextSteps},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orc, mockExec := newJobSetTestOrchestrator(t, tc.responses)
+			assertContainsAll(t, orc.diagnoseJobSetWebhook(), tc.want, tc.notWant)
+			assertNoJobSetMutation(t, mockExec)
+			assertEveryKubectlCallPinned(t, mockExec, jobSetTestKubeContext)
+		})
+	}
+}
+
+// recordingKubeClient wraps MockKubeClient with per-object GetResource errors and records every object read.
+type recordingKubeClient struct {
+	MockKubeClient
+	getErrs map[string]error // keyed like reads
+	reads   []string         // "<resource>.<group>/<version> <namespace>/<name>"
+}
+
+func (c *recordingKubeClient) GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
+	key := fmt.Sprintf("%s/%s %s/%s", gvr.GroupResource(), gvr.Version, namespace, name)
+	c.reads = append(c.reads, key)
+	if err := c.getErrs[key]; err != nil {
+		return nil, err
+	}
+	return c.MockKubeClient.GetResource(gvr, namespace, name)
+}
+
+const (
+	liveDeploymentRead     = "deployments.apps/v1 jobset-system/jobset-controller-manager"
+	liveHelmDeploymentRead = "deployments.apps/v1 jobset-system/jobset-controller"
+	liveWebhookServiceRead = "services/v1 jobset-system/jobset-webhook-service"
+	liveMetricsServiceRead = "services/v1 jobset-system/jobset-controller-manager-metrics-service"
+)
+
+func liveJobSetUnstructured(kind, name string) unstructured.Unstructured {
+	return unstructured.Unstructured{Object: map[string]interface{}{
+		"kind":     kind,
+		"metadata": map[string]interface{}{"name": name, "namespace": "jobset-system"},
+	}}
+}
+
+func TestCheckNoLiveJobSetObjects(t *testing.T) {
+	t.Run("all absent", func(t *testing.T) {
+		kube := &recordingKubeClient{}
+		orc := &GKEOrchestrator{kubeClient: kube, kubeContext: jobSetTestKubeContext}
+		if err := orc.checkNoLiveJobSetObjects(); err != nil {
+			t.Fatalf("checkNoLiveJobSetObjects() error = %v, want nil", err)
+		}
+		want := []string{liveDeploymentRead, liveHelmDeploymentRead, liveWebhookServiceRead, liveMetricsServiceRead}
+		if !slices.Equal(kube.reads, want) {
+			t.Errorf("reads = %v, want %v", kube.reads, want)
+		}
+	})
+
+	for _, existing := range []struct {
+		resource, kind, name string
+	}{
+		{"deployments", "Deployment", "jobset-controller-manager"},
+		{"deployments", "Deployment", "jobset-controller"},
+		{"services", "Service", "jobset-webhook-service"},
+		{"services", "Service", "jobset-controller-manager-metrics-service"},
+	} {
+		t.Run("existing "+existing.kind+" "+existing.name, func(t *testing.T) {
+			kube := &recordingKubeClient{MockKubeClient: MockKubeClient{Objects: map[string][]unstructured.Unstructured{
+				existing.resource: {liveJobSetUnstructured(existing.kind, existing.name)},
+			}}}
+			orc := &GKEOrchestrator{kubeClient: kube, kubeContext: jobSetTestKubeContext}
+			err := orc.checkNoLiveJobSetObjects()
+			if err == nil {
+				t.Fatal("checkNoLiveJobSetObjects() error = nil, want existing-object error")
+			}
+			assertContainsAll(t, err.Error(), []string{
+				existing.kind + " jobset-system/" + existing.name + " already exists",
+				"gcluster made no changes",
+				jobSetPinnedKubectl + " delete namespace jobset-system",
+			}, nil)
+		})
+	}
+
+	readErrs := map[string]error{
+		"forbidden": apierrors.NewForbidden(schema.GroupResource{Resource: "services"}, "jobset", errors.New("RBAC: access denied")),
+		"timeout":   apierrors.NewServerTimeout(schema.GroupResource{Resource: "services"}, "get", 1),
+		"transport": errors.New("dial tcp 10.0.0.1:443: connect: connection refused"),
+	}
+	for _, read := range []string{liveDeploymentRead, liveHelmDeploymentRead, liveWebhookServiceRead, liveMetricsServiceRead} {
+		for errName, readErr := range readErrs {
+			t.Run(read+" "+errName, func(t *testing.T) {
+				kube := &recordingKubeClient{getErrs: map[string]error{read: readErr}}
+				orc := &GKEOrchestrator{kubeClient: kube, kubeContext: jobSetTestKubeContext}
+				err := orc.checkNoLiveJobSetObjects()
+				if !errors.Is(err, readErr) {
+					t.Fatalf("checkNoLiveJobSetObjects() error = %v, want it to wrap %v", err, readErr)
+				}
+				name := read[strings.LastIndex(read, "/")+1:]
+				assertContainsAll(t, err.Error(), []string{name, "gcluster made no changes"}, nil)
+			})
+		}
+	}
+
+	t.Run("client init failure fails closed", func(t *testing.T) {
+		orc := &GKEOrchestrator{kubeconfigLoader: staticLoader(clientcmdapi.NewConfig())}
+		if err := orc.checkNoLiveJobSetObjects(); err == nil {
+			t.Fatal("checkNoLiveJobSetObjects() error = nil, want the Kubernetes client error")
+		}
+	})
+}
+
+func TestCheckAndInstallJobSetCRD_AbortsWhenNamespaceHasJobSetObjects(t *testing.T) {
+	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "deployments"}, "jobset-controller-manager", errors.New("RBAC: access denied"))
+	tests := []struct {
+		name    string
+		kube    KubeClient
+		wantErr string
+	}{
+		{
+			name: "leftover Kustomize Deployment",
+			kube: &MockKubeClient{Objects: map[string][]unstructured.Unstructured{
+				"deployments": {liveJobSetUnstructured("Deployment", "jobset-controller-manager")},
+			}},
+			wantErr: "Deployment jobset-system/jobset-controller-manager already exists",
+		},
+		{
+			name: "leftover Helm Deployment",
+			kube: &MockKubeClient{Objects: map[string][]unstructured.Unstructured{
+				"deployments": {liveJobSetUnstructured("Deployment", "jobset-controller")},
+			}},
+			wantErr: "Deployment jobset-system/jobset-controller already exists",
+		},
+		{
+			name: "webhook Service created concurrently",
+			kube: &MockKubeClient{Objects: map[string][]unstructured.Unstructured{
+				"services": {liveJobSetUnstructured("Service", "jobset-webhook-service")},
+			}},
+			wantErr: "Service jobset-system/jobset-webhook-service already exists",
+		},
+		{
+			name: "leftover metrics Service",
+			kube: &MockKubeClient{Objects: map[string][]unstructured.Unstructured{
+				"services": {liveJobSetUnstructured("Service", "jobset-controller-manager-metrics-service")},
+			}},
+			wantErr: "Service jobset-system/jobset-controller-manager-metrics-service already exists",
+		},
+		{
+			name:    "Deployment read forbidden",
+			kube:    &recordingKubeClient{getErrs: map[string]error{liveDeploymentRead: forbidden}},
+			wantErr: "failed to check whether JobSet Deployment jobset-system/jobset-controller-manager already exists",
+		},
+		{
+			name:    "metrics Service read fails",
+			kube:    &recordingKubeClient{getErrs: map[string]error{liveMetricsServiceRead: errors.New("connection reset by peer")}},
+			wantErr: "failed to check whether JobSet Service jobset-system/jobset-controller-manager-metrics-service already exists",
+		},
+		{
+			name:    "Kubernetes client cannot be created",
+			kube:    nil,
+			wantErr: "kubeconfig",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orc, mockExec := newJobSetTestOrchestrator(t, freshJobSetResponses())
+			orc.kubeClient = tc.kube
+
+			err := orc.checkAndInstallJobSetCRD()
+			if err == nil {
+				t.Fatal("checkAndInstallJobSetCRD() error = nil, want an error")
+			}
+			assertContainsAll(t, err.Error(), []string{"failed to install JobSet: ", tc.wantErr}, []string{"apply -f"})
+			assertNoJobSetMutation(t, mockExec, authCanICreateCmd)
+			assertEveryKubectlCallPinned(t, mockExec, jobSetTestKubeContext)
+			if _, statErr := os.Stat(generatedJobSetManifest()); !os.IsNotExist(statErr) {
+				t.Errorf("os.Stat(%s) error = %v, want the manifest not to be written", generatedJobSetManifest(), statErr)
+			}
+		})
 	}
 }
 
