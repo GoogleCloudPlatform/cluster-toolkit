@@ -3536,9 +3536,9 @@ func assertSPSManifest(t *testing.T, manifest, sidecarImage, ramdiskDir string) 
 	if !ok {
 		t.Fatalf("pathways-head replicatedJob not found in manifest:\n%s", manifest)
 	}
-	worker, ok := specs["pathways-worker"]
+	worker, ok := specs["worker"]
 	if !ok {
-		t.Fatalf("pathways-worker replicatedJob not found in manifest:\n%s", manifest)
+		t.Fatalf("worker replicatedJob not found in manifest:\n%s", manifest)
 	}
 
 	if len(head.InitContainers) != 0 {
@@ -3547,18 +3547,21 @@ func assertSPSManifest(t *testing.T, manifest, sidecarImage, ramdiskDir string) 
 	if len(head.Containers) != 1 || head.Containers[0].Name != "pathways-rm" {
 		t.Fatalf("pathways-head containers = %+v, want only [pathways-rm]", head.Containers)
 	}
+	if head.Containers[0].RestartPolicy != nil {
+		t.Errorf("pathways-rm restartPolicy = %v, want unset on a regular container", *head.Containers[0].RestartPolicy)
+	}
 	if strings.Contains(manifest, "pathways-proxy") || strings.Contains(manifest, "workload-container") || strings.Contains(manifest, "successPolicy:") {
 		t.Errorf("SPS manifest should not contain pathways-proxy, workload-container, or successPolicy:\n%s", manifest)
 	}
 	assertNoDevShm(t, "pathways-head", head)
 	assertNoPodVolumes(t, "pathways-head", head, "cache", "sidecar-shared-memory")
 	assertUniqueVolumeNames(t, "pathways-head", head)
-	assertUniqueVolumeNames(t, "pathways-worker", worker)
+	assertUniqueVolumeNames(t, "worker", worker)
 	assertWorkerMTCVolumes(t, worker, ramdiskDir, sidecarImage != "")
 
 	for _, want := range []string{
 		"maxRestarts: 30",
-		"restartStrategy: Recreate",
+		"restartStrategy: BlockingRecreate",
 		"--instance_count=4",
 		"--instance_type=tpuv5:2x2x2",
 		"backoffLimit: 2000000",
@@ -3570,26 +3573,35 @@ func assertSPSManifest(t *testing.T, manifest, sidecarImage, ramdiskDir string) 
 	}
 }
 
-func TestValidatePathwaysMTCManifest_SPSWorkerAndHint(t *testing.T) {
-	manifest := `apiVersion: jobset.x-k8s.io/v1alpha2
-kind: JobSet
-spec:
-  replicatedJobs:
-  - name: pathways-worker
-    template:
-      spec:
-        template:
-          spec:
-            containers:
-            - name: pathways-worker
-`
-	opts := ManifestOptions{
-		GKEMTCEnabled:          true,
-		GKEMTCRamdiskDirectory: "/tmp/mtc_checkpoints",
-		Pathways:               orchestrator.PathwaysJobDefinition{DeploySPS: true},
+func TestValidatePathwaysSPSManifest(t *testing.T) {
+	withHead := func(containers string) string {
+		return "apiVersion: jobset.x-k8s.io/v1alpha2\nkind: JobSet\nspec:\n  replicatedJobs:\n  - name: pathways-head\n    template:\n      spec:\n        template:\n          spec:\n" + containers
 	}
-	err := validatePathwaysMTCManifest(manifest, opts)
-	if err == nil || !strings.Contains(err.Error(), "volume on worker pods") || !strings.Contains(err.Error(), "re-extract pathways_sps_jobset.tmpl") {
-		t.Fatalf("validatePathwaysMTCManifest() error = %v, want missing worker volume error with a hint to re-extract pathways_sps_jobset.tmpl", err)
+	tests := []struct {
+		name      string
+		deploySPS bool
+		manifest  string
+		wantErr   string
+	}{
+		{name: "resource manager only", deploySPS: true, manifest: withHead("            containers:\n            - name: pathways-rm\n")},
+		{name: "stale template keeps the proxy", deploySPS: true, manifest: withHead("            initContainers:\n            - name: pathways-proxy\n            - name: pathways-rm\n"), wantErr: `runs container "pathways-proxy"`},
+		{name: "stale template keeps the workload", deploySPS: true, manifest: withHead("            containers:\n            - name: pathways-rm\n            - name: workload-container-1\n"), wantErr: `runs container "workload-container-1"`},
+		{name: "no pathways-head", deploySPS: true, manifest: "apiVersion: jobset.x-k8s.io/v1alpha2\nkind: JobSet\nmetadata:\n  name: stale\n", wantErr: "no pathways-head replicatedJob"},
+		{name: "not an SPS job", manifest: withHead("            initContainers:\n            - name: pathways-proxy\n")},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := ManifestOptions{Pathways: orchestrator.PathwaysJobDefinition{DeploySPS: tc.deploySPS}}
+			err := validatePathwaysSPSManifest(tc.manifest, opts)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validatePathwaysSPSManifest() error = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) || !strings.Contains(err.Error(), "re-extract pathways_jobset.tmpl") {
+				t.Fatalf("validatePathwaysSPSManifest() error = %v, want %q with a re-extract hint", err, tc.wantErr)
+			}
+		})
 	}
 }
