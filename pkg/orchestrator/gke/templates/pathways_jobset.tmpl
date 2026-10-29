@@ -8,8 +8,6 @@ metadata:
 {{- if .MLDiagnosticsEnabled }}
     managed-mldiagnostics-gke: "true"
 {{- end }}
-  annotations:
-    jobset.sigs.k8s.io/hack: "true"
 spec:
   suspend: false
   ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
