@@ -38,7 +38,7 @@ vars:
 
   # Machine type
   # TPU v5p options: ct5p-hightpu-4t
-  machine_type:
+  compute_machine_type:
 
   # The TPU placement topology for pod slice node pool.
   # ct5p-hightpu-4t is exactly 4 chips (2x2x1 topology) or scales with slice size (e.g. 2x2x2 for 8 chips).
@@ -82,3 +82,6 @@ vars:
 
 ## --- Option 5: On-Demand ---
   ## No variables needed; comment out Option 1 and leave the rest commented.
+
+## --- Optional overrides (defaults shown) ---
+  # system_node_pool_machine_type: n2-standard-8

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sync"
 	"testing"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
@@ -156,4 +157,97 @@ func (s *MySuite) TestRemoveKubernetesResourcesFromState(c *C) {
 		"module.foo.kubectl_manifest.pod",
 	}
 	c.Assert(mockTf.removed, DeepEquals, expectedRemoved)
+}
+
+func (s *MySuite) TestTerraformParallelism(c *C) {
+	origParallelism := getGlobalParallelism()
+	origEnv, envSet := os.LookupEnv("GCLUSTER_TERRAFORM_PARALLELISM")
+	defer func() {
+		SetTerraformParallelism(origParallelism)
+		if envSet {
+			c.Assert(os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", origEnv), IsNil)
+		} else {
+			c.Assert(os.Unsetenv("GCLUSTER_TERRAFORM_PARALLELISM"), IsNil)
+		}
+	}()
+
+	reset := func() {
+		SetTerraformParallelism(0)
+		c.Assert(os.Unsetenv("GCLUSTER_TERRAFORM_PARALLELISM"), IsNil)
+	}
+
+	isWarned := func() bool {
+		parallelismMu.RLock()
+		defer parallelismMu.RUnlock()
+		return warnedInvalidEnv
+	}
+
+	// 1. Zero/default behavior returns 0.
+	reset()
+	c.Assert(GetTerraformParallelism(), Equals, 0)
+
+	// 2. Setting via SetTerraformParallelism(80) returns 80.
+	reset()
+	SetTerraformParallelism(80)
+	c.Assert(GetTerraformParallelism(), Equals, 80)
+
+	// 3. Setting negative SetTerraformParallelism(-5) returns 0 (or fallback to env var if valid).
+	reset()
+	SetTerraformParallelism(-5)
+	c.Assert(GetTerraformParallelism(), Equals, 0)
+	c.Assert(os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", "20"), IsNil)
+	c.Assert(GetTerraformParallelism(), Equals, 20)
+
+	// 4. Serial execution SetTerraformParallelism(1) returns 1.
+	reset()
+	SetTerraformParallelism(1)
+	c.Assert(GetTerraformParallelism(), Equals, 1)
+
+	// 5. Environment variable GCLUSTER_TERRAFORM_PARALLELISM="50" returns 50.
+	reset()
+	c.Assert(os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", "50"), IsNil)
+	c.Assert(GetTerraformParallelism(), Equals, 50)
+
+	// 6. SetTerraformParallelism takes precedence over env var.
+	reset()
+	c.Assert(os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", "50"), IsNil)
+	SetTerraformParallelism(80)
+	c.Assert(GetTerraformParallelism(), Equals, 80)
+
+	// 7. Valid "0" and trimmed whitespace " 80 ", plus malformed env vars ("invalid", "-10").
+	reset()
+	c.Assert(os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", "0"), IsNil)
+	c.Assert(GetTerraformParallelism(), Equals, 0)
+	c.Assert(isWarned(), Equals, false)
+
+	reset()
+	c.Assert(os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", "invalid"), IsNil)
+	c.Assert(GetTerraformParallelism(), Equals, 0)
+	c.Assert(isWarned(), Equals, true)
+
+	reset()
+	c.Assert(os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", "-10"), IsNil)
+	c.Assert(GetTerraformParallelism(), Equals, 0)
+	c.Assert(isWarned(), Equals, true)
+
+	reset()
+	c.Assert(os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", " 80 "), IsNil)
+	c.Assert(GetTerraformParallelism(), Equals, 80)
+
+	// 8. Concurrent calls to SetTerraformParallelism and GetTerraformParallelism are race-free.
+	reset()
+	c.Assert(os.Setenv("GCLUSTER_TERRAFORM_PARALLELISM", "invalid"), IsNil)
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(2)
+		go func(val int) {
+			defer wg.Done()
+			SetTerraformParallelism(val)
+		}(i % 2 * 40)
+		go func() {
+			defer wg.Done()
+			_ = GetTerraformParallelism()
+		}()
+	}
+	wg.Wait()
 }

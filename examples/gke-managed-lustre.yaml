@@ -37,6 +37,9 @@ vars:
   per_unit_storage_throughput: 500
   kms_key: ""
   system_node_pool_machine_type: "n2d-standard-4"
+  # Optional overrides (defaults shown)
+  # Machine type for the Lustre client (compute) node pool.
+  compute_machine_type: n2d-standard-4
 
 deployment_groups:
 - group: primary
@@ -145,5 +148,5 @@ deployment_groups:
     settings:
       name: gke-lustre-pool
       zones: [$(vars.zone)]
-      machine_type: n2d-standard-4
+      machine_type: $(vars.compute_machine_type)
       auto_upgrade: true

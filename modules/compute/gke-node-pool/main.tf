@@ -65,6 +65,9 @@ locals {
     startswith(var.machine_type, "a4x-")
   )
 
+  # Custom node image (image_type = CUSTOM_CONTAINERD).
+  use_node_image_config = var.node_image_config != null
+
   dranet_device_class_name_default = local.is_mellanox_rdma_machine ? "mrdma.google.com" : "netdev.google.com"
   dranet_device_class_name_actual  = coalesce(var.dranet_device_class_name, local.dranet_device_class_name_default)
 
@@ -82,6 +85,12 @@ locals {
 
   module_unique_id = replace(lower(var.internal_ghpc_module_id), "/[^a-z0-9\\-]/", "")
   pool_name_prefix = coalesce(var.name, join("-", [var.machine_type, local.module_unique_id]))
+
+  # When reservation_affinity.specific_reservations[0].reservation_subblocks is set, node pools are
+  # created by subblock_node_pool (one per key) and node_pool creates none. When it is empty,
+  # node_pool behaves exactly as before.
+  reservation_subblocks     = coalesce(try(var.reservation_affinity.specific_reservations[0].reservation_subblocks, null), {})
+  use_reservation_subblocks = length(local.reservation_subblocks) > 0
 
   # Merge all Kubernetes labels
   # Note: cloud.google.com/gke-queued is added manually because while GKE
@@ -116,17 +125,20 @@ data "google_container_cluster" "gke_cluster" {
   location = local.cluster_location
 }
 
+# node_pool and subblock_node_pool must stay identical except for: count / for_each, name,
+# reservation_affinity.values and the sub-block checks. Update both resources together.
 resource "google_container_node_pool" "node_pool" {
   provider = google-beta
 
-  count = max(var.num_node_pools, var.num_slices)
+  count = local.use_reservation_subblocks ? 0 : max(var.num_node_pools, var.num_slices)
 
   name           = (max(var.num_node_pools, var.num_slices) == 1) ? local.pool_name_prefix : join("-", [local.pool_name_prefix, count.index])
   cluster        = var.cluster_id
   node_locations = var.zones
   version        = var.gke_version
 
-  node_count = var.static_node_count
+  node_count                = var.static_node_count
+  ignore_node_count_changes = var.ignore_node_count_changes
   # Per-zone limits (min_node_count/max_node_count) are required to workaround a
   # Terraform provider bug when using TPU Flex Start.
   dynamic "autoscaling" {
@@ -186,6 +198,14 @@ resource "google_container_node_pool" "node_pool" {
     max_run_duration            = var.max_run_duration != null ? "${var.max_run_duration}s" : null
     enable_confidential_storage = var.enable_confidential_storage
     boot_disk_kms_key           = var.boot_disk_kms_key
+
+    dynamic "node_image_config" {
+      for_each = local.use_node_image_config ? [var.node_image_config] : []
+      content {
+        image         = node_image_config.value.image
+        image_project = node_image_config.value.image_project
+      }
+    }
 
     dynamic "guest_accelerator" {
       for_each = local.guest_accelerator
@@ -335,19 +355,28 @@ resource "google_container_node_pool" "node_pool" {
   timeouts {
     create = var.timeout_create
     update = var.timeout_update
+    delete = var.timeout_delete
   }
 
   lifecycle {
     ignore_changes = [
       node_config[0].labels,
+      # Ignore resource_labels to prevent node pool replacement on blueprint/metadata renames
+      node_config[0].resource_labels,
       initial_node_count,
       # Ignore local/ephemeral ssd configs as they are tied to machine types.
       node_config[0].ephemeral_storage_local_ssd_config,
       node_config[0].local_nvme_ssd_block_config,
+      # Suppress GKE API read drift where type="COMPACT" is omitted on GET
+      placement_policy[0].type,
     ]
     precondition {
       condition     = !(length(compact(local.input_reservation_suffixes)) > 0 && length((var.zones != null ? var.zones : [])) == 0)
       error_message = "var.zones must be explicitly provided when using an extended reservation block."
+    }
+    precondition {
+      condition     = local.use_node_image_config == (upper(var.image_type) == "CUSTOM_CONTAINERD")
+      error_message = "node_image_config must be set only if image_type is CUSTOM_CONTAINERD."
     }
     precondition {
       condition     = var.disk_storage_pool == null || var.disk_storage_pool == "" || can(regex("^hyperdisk-", lower(var.disk_type)))
@@ -507,6 +536,449 @@ resource "google_container_node_pool" "node_pool" {
   }
 }
 
+# One node pool per reservation_subblocks entry, keyed by the map key, so adding or removing an
+# entry only creates or deletes that node pool. Must stay identical to node_pool apart from the
+# differences listed above node_pool.
+resource "google_container_node_pool" "subblock_node_pool" {
+  provider = google-beta
+
+  for_each = local.reservation_subblocks
+
+  name           = "${local.pool_name_prefix}-${each.key}"
+  cluster        = var.cluster_id
+  node_locations = var.zones
+  version        = var.gke_version
+
+  node_count                = var.static_node_count
+  ignore_node_count_changes = var.ignore_node_count_changes
+  # Per-zone limits (min_node_count/max_node_count) are required to workaround a
+  # Terraform provider bug when using TPU Flex Start.
+  dynamic "autoscaling" {
+    for_each = local.static_node_set ? [] : [1]
+    content {
+      min_node_count       = var.autoscaling_min_node_count
+      max_node_count       = var.autoscaling_max_node_count
+      total_min_node_count = (var.autoscaling_min_node_count != null || var.autoscaling_max_node_count != null) ? null : var.autoscaling_total_min_nodes
+      total_max_node_count = (var.autoscaling_min_node_count != null || var.autoscaling_max_node_count != null) ? null : var.autoscaling_total_max_nodes
+      location_policy      = "ANY"
+    }
+  }
+
+  initial_node_count = var.initial_node_count
+
+  max_pods_per_node = var.max_pods_per_node
+
+  management {
+    auto_repair  = var.auto_repair
+    auto_upgrade = var.auto_upgrade
+  }
+
+  upgrade_settings {
+    strategy        = local.upgrade_settings.strategy
+    max_surge       = local.upgrade_settings.max_surge
+    max_unavailable = local.upgrade_settings.max_unavailable
+  }
+
+  dynamic "placement_policy" {
+    for_each = var.placement_policy.type != null ? [1] : []
+    content {
+      type         = var.placement_policy.type
+      policy_name  = var.placement_policy.name
+      tpu_topology = module.tpu.is_tpu ? var.placement_policy.tpu_topology : null
+    }
+  }
+
+  dynamic "queued_provisioning" {
+    for_each = var.enable_queued_provisioning ? [1] : []
+    content {
+      enabled = true
+    }
+  }
+
+  node_config {
+    disk_size_gb                = var.disk_size_gb
+    disk_type                   = var.disk_type
+    storage_pools               = (var.disk_storage_pool != null && var.disk_storage_pool != "") ? [var.disk_storage_pool] : null
+    resource_labels             = local.labels
+    labels                      = local.kubernetes_labels
+    service_account             = var.service_account_email
+    oauth_scopes                = var.service_account_scopes
+    machine_type                = var.machine_type
+    spot                        = var.spot
+    image_type                  = var.image_type
+    flex_start                  = var.enable_flex_start
+    max_run_duration            = var.max_run_duration != null ? "${var.max_run_duration}s" : null
+    enable_confidential_storage = var.enable_confidential_storage
+    boot_disk_kms_key           = var.boot_disk_kms_key
+
+    dynamic "node_image_config" {
+      for_each = local.use_node_image_config ? [var.node_image_config] : []
+      content {
+        image         = node_image_config.value.image
+        image_project = node_image_config.value.image_project
+      }
+    }
+
+    dynamic "guest_accelerator" {
+      for_each = local.guest_accelerator
+      iterator = ga
+      content {
+        type  = coalesce(ga.value.type, try(local.generated_guest_accelerator[0].type, ""))
+        count = coalesce(try(ga.value.count, 0) > 0 ? ga.value.count : try(local.generated_guest_accelerator[0].count, "0"))
+
+        gpu_partition_size = try(ga.value.gpu_partition_size, null)
+
+        dynamic "gpu_driver_installation_config" {
+          # in case user did not specify guest_accelerator settings, we need a try to default to []
+          for_each = try([ga.value.gpu_driver_installation_config], [{ gpu_driver_version = "DEFAULT" }])
+          iterator = gdic
+          content {
+            gpu_driver_version = gdic.value.gpu_driver_version
+          }
+        }
+
+        dynamic "gpu_sharing_config" {
+          for_each = try(ga.value.gpu_sharing_config == null, true) ? [] : [ga.value.gpu_sharing_config]
+          iterator = gsc
+          content {
+            gpu_sharing_strategy       = gsc.value.gpu_sharing_strategy
+            max_shared_clients_per_gpu = gsc.value.max_shared_clients_per_gpu
+          }
+        }
+      }
+    }
+
+    dynamic "taint" {
+      for_each = concat(var.taints, local.gpu_taint, module.tpu.tpu_taint)
+      content {
+        key    = taint.value.key
+        value  = taint.value.value
+        effect = taint.value.effect
+      }
+    }
+
+    dynamic "ephemeral_storage_local_ssd_config" {
+      for_each = local.local_ssd_config.local_ssd_count_ephemeral_storage != null ? [1] : []
+      content {
+        local_ssd_count = local.local_ssd_config.local_ssd_count_ephemeral_storage
+      }
+    }
+
+    dynamic "local_nvme_ssd_block_config" {
+      for_each = local.local_ssd_config.local_ssd_count_nvme_block != null ? [1] : []
+      content {
+        local_ssd_count = local.local_ssd_config.local_ssd_count_nvme_block
+      }
+    }
+
+    shielded_instance_config {
+      enable_secure_boot          = var.enable_secure_boot
+      enable_integrity_monitoring = true
+    }
+
+    dynamic "confidential_nodes" {
+      for_each = var.enable_confidential_nodes ? [1] : []
+      content {
+        enabled                    = true
+        confidential_instance_type = var.confidential_instance_type
+      }
+    }
+
+
+    dynamic "gcfs_config" {
+      for_each = var.enable_gcfs ? [1] : []
+      content {
+        enabled = true
+      }
+    }
+
+    gvnic {
+      enabled = var.image_type == "COS_CONTAINERD"
+    }
+
+    dynamic "advanced_machine_features" {
+      for_each = local.set_threads_per_core ? [1] : []
+      content {
+        threads_per_core = local.threads_per_core # relies on threads_per_core_calc.tf
+      }
+    }
+
+    # Implied by Workload Identity
+    workload_metadata_config {
+      mode = "GKE_METADATA"
+    }
+    # Implied by workload identity.
+    metadata = {
+      "disable-legacy-endpoints" = "true"
+    }
+
+    linux_node_config {
+      sysctls = var.linux_node_config.sysctls
+      hugepages_config {
+        hugepage_size_2m = try(var.linux_node_config.hugepages_config.hugepage_size_2m, null)
+        hugepage_size_1g = try(var.linux_node_config.hugepages_config.hugepage_size_1g, null)
+      }
+    }
+
+    reservation_affinity {
+      consume_reservation_type = var.reservation_affinity.consume_reservation_type
+      key                      = local.is_valid_reservation ? local.reservation_resource_api_label : null
+      values                   = local.is_valid_reservation ? ["projects/${try(local.input_reservation_projects[0], var.project_id)}/reservations/${each.value}"] : null
+    }
+
+    dynamic "host_maintenance_policy" {
+      for_each = var.host_maintenance_interval != "" ? [1] : []
+      content {
+        maintenance_interval = var.host_maintenance_interval
+      }
+    }
+
+    kubelet_config {
+      cpu_manager_policy = var.enable_numa_aware_scheduling ? "static" : null
+      dynamic "topology_manager" {
+        for_each = var.enable_numa_aware_scheduling ? [1] : []
+        content {
+          policy = "restricted"
+        }
+      }
+      dynamic "memory_manager" {
+        for_each = var.enable_numa_aware_scheduling ? [1] : []
+        content {
+          policy = "Static"
+        }
+      }
+    }
+  }
+
+  network_config {
+    accelerator_network_profile = local.enable_dranet_actual ? "auto" : null
+    dynamic "additional_node_network_configs" {
+      for_each = var.additional_networks
+
+      content {
+        network    = additional_node_network_configs.value.network
+        subnetwork = additional_node_network_configs.value.subnetwork
+      }
+    }
+
+    enable_private_nodes = var.enable_private_nodes
+  }
+
+  timeouts {
+    create = var.timeout_create
+    update = var.timeout_update
+    delete = var.timeout_delete
+  }
+
+  lifecycle {
+    ignore_changes = [
+      node_config[0].labels,
+      initial_node_count,
+      # Ignore local/ephemeral ssd configs as they are tied to machine types.
+      node_config[0].ephemeral_storage_local_ssd_config,
+      node_config[0].local_nvme_ssd_block_config,
+      # Suppress GKE API read drift where type="COMPACT" is omitted on GET
+      placement_policy[0].type,
+    ]
+    precondition {
+      condition     = !(length(compact(local.input_reservation_suffixes)) > 0 && length((var.zones != null ? var.zones : [])) == 0)
+      error_message = "var.zones must be explicitly provided when using an extended reservation block."
+    }
+    precondition {
+      condition     = local.use_node_image_config == (upper(var.image_type) == "CUSTOM_CONTAINERD")
+      error_message = "node_image_config must be set only if image_type is CUSTOM_CONTAINERD."
+    }
+    precondition {
+      condition     = var.disk_storage_pool == null || var.disk_storage_pool == "" || can(regex("^hyperdisk-", lower(var.disk_type)))
+      error_message = "Storage pools are only supported with Hyperdisks. You must specify a valid hyperdisk disk_type."
+    }
+    precondition {
+      condition     = var.disk_type == null || !startswith(lower(var.disk_type), "hyperdisk-") || lower(var.disk_type) == "hyperdisk-balanced"
+      error_message = "When using Hyperdisks for boot disks, only hyperdisk-balanced is supported."
+    }
+    precondition {
+      condition     = var.disk_type == null || lower(var.disk_type) != "hyperdisk-balanced" || var.disk_size_gb == null || var.disk_size_gb >= 4
+      error_message = "The minimum capacity for hyperdisk-balanced is 4 GB."
+    }
+    precondition {
+      condition     = (var.max_pods_per_node == null) || (data.google_container_cluster.gke_cluster.networking_mode == "VPC_NATIVE")
+      error_message = "max_pods_per_node does not work on `routes-based` clusters, that don't have IP Aliasing enabled."
+    }
+    precondition {
+      condition     = !local.static_node_set || !local.autoscale_set
+      error_message = "static_node_count cannot be set with either autoscaling_total_min_nodes or autoscaling_total_max_nodes."
+    }
+    precondition {
+      condition     = !local.static_node_set || !local.initial_node_set
+      error_message = "initial_node_count cannot be set with static_node_count."
+    }
+    precondition {
+      condition     = !local.initial_node_set || (coalesce(var.initial_node_count, 0) >= var.autoscaling_total_min_nodes && coalesce(var.initial_node_count, 0) <= var.autoscaling_total_max_nodes)
+      error_message = "initial_node_count must be between autoscaling_total_min_nodes and autoscaling_total_max_nodes included."
+    }
+    precondition {
+      condition     = !(coalesce(local.local_ssd_config.local_ssd_count_ephemeral_storage, 0) > 0 && coalesce(local.local_ssd_config.local_ssd_count_nvme_block, 0) > 0)
+      error_message = "Only one of local_ssd_count_ephemeral_storage or local_ssd_count_nvme_block can be set to a non-zero value."
+    }
+    precondition {
+      condition = (
+        (var.reservation_affinity.consume_reservation_type != "SPECIFIC_RESERVATION" && local.input_specific_reservations_count == 0) ||
+        (var.reservation_affinity.consume_reservation_type == "SPECIFIC_RESERVATION" && local.input_specific_reservations_count == 1)
+      )
+      error_message = <<-EOT
+      When using NO_RESERVATION or ANY_RESERVATION as the `consume_reservation_type`, `specific_reservations` cannot be set.
+      On the other hand, with SPECIFIC_RESERVATION you must set `specific_reservations`.
+      EOT
+    }
+    precondition {
+      condition = (
+        (local.input_specific_reservations_count == 0) ||
+        (((length(local.verified_specific_reservations) > 0 && length(local.verified_specific_reservations) == length(toset(var.zones != null ? var.zones : []))) || !var.is_reservation_active) &&
+        length(local.specific_reservation_requirement_violations) == 0)
+      )
+      error_message = <<-EOT
+      Check if your reservation is configured correctly:
+      - A reservation with the name must exist in the specified project and all of the specified zones (var.zones must be explicitly provided when var.is_reservation_active is true)
+
+      - Its consumption type must be "specific"
+      %{for property in local.specific_reservation_requirement_violations}
+      - ${local.specific_reservation_requirement_violation_messages[property]}
+      %{endfor}
+      EOT
+    }
+    precondition {
+      condition     = contains(["SURGE"], local.upgrade_settings.strategy)
+      error_message = "Only SURGE strategy is supported"
+    }
+    precondition {
+      condition     = local.upgrade_settings.max_unavailable >= 0
+      error_message = "max_unavailable should be set to 0 or greater"
+    }
+    precondition {
+      condition     = local.upgrade_settings.max_surge >= 0
+      error_message = "max_surge should be set to 0 or greater"
+    }
+    precondition {
+      condition     = local.upgrade_settings.max_unavailable > 0 || local.upgrade_settings.max_surge > 0
+      error_message = "At least one of max_unavailable or max_surge must greater than 0"
+    }
+    precondition {
+      condition     = var.placement_policy.type != "COMPACT" || (var.zones != null ? (length(var.zones) == 1) : false)
+      error_message = "Compact placement is only available for node pools operating in a single zone."
+    }
+    precondition {
+      condition     = var.placement_policy.type != "COMPACT" || local.upgrade_settings.strategy != "BLUE_GREEN"
+      error_message = "Compact placement is not supported with blue-green upgrades."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning == true && var.placement_policy.type == "COMPACT" && !module.tpu.is_tpu)
+      error_message = "placement_policy cannot be COMPACT when enable_queued_provisioning is true, unless using TPUs."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning == true && var.reservation_affinity.consume_reservation_type != "NO_RESERVATION")
+      error_message = "reservation_affinity should be NO_RESERVATION when enable_queued_provisioning is true."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning == true && var.autoscaling_total_min_nodes != 0)
+      error_message = "autoscaling_total_min_nodes should be 0 when enable_queued_provisioning is true."
+    }
+    precondition {
+      condition     = !(var.num_node_pools > 1 && var.num_slices > 1)
+      error_message = "num_node_pools is for CPUs and GPUS, and num_slices is for TPUs. Both cannot be set at the same time to create a group of identical nodepools / slices."
+    }
+    precondition {
+      condition     = !(var.num_node_pools == 0 && var.num_slices == 0)
+      error_message = "Either num_node_pools (for CPUs and GPUS) or num_slices (for TPUs) should be set to a positive integer value."
+    }
+    precondition {
+      condition     = !(var.num_node_pools < 0 || var.num_slices < 0)
+      error_message = "Negative integer value of num_node_pools or num_slices is not valid. Please use a positive integer value to set num_node_pools for CPUs and GPUS, and num_slices for TPUs."
+    }
+    precondition {
+      condition     = var.enable_flex_start == true ? (var.auto_repair == false) : true
+      error_message = "enable_flex_start needs node auto_repair set to false."
+    }
+    precondition {
+      condition     = var.enable_flex_start == true ? (var.static_node_count == null) : true
+      error_message = "enable_flex_start does not work with static_node_count. static_node_count should be set to null."
+    }
+    precondition {
+      condition     = var.enable_flex_start == true ? (var.reservation_affinity.consume_reservation_type == "NO_RESERVATION") : true
+      error_message = "enable_flex_start requires reservation_affinity.consume_reservation_type to be 'NO_RESERVATION'."
+    }
+    precondition {
+      condition     = !(var.enable_flex_start && var.spot)
+      error_message = "Both enable_flex_start and spot consumption option cannot be set to true at the same time."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning && var.spot)
+      error_message = "Both enable_queued_provisioning and spot consumption option cannot be set to true at the same time."
+    }
+    precondition {
+      condition     = var.spot == true ? (var.reservation_affinity.consume_reservation_type == "NO_RESERVATION") : true
+      error_message = "Spot consumption option only works with reservation_affinity consume_reservation_type NO_RESERVATION."
+    }
+    precondition {
+      condition     = !(var.accelerator_topology_mode == "PROVISION_ONLY" && try(var.reservation_affinity.consume_reservation_type, "") != "SPECIFIC_RESERVATION")
+      error_message = "PROVISION_ONLY accelerator topology mode is only supported on GKE node pools configured with SPECIFIC_RESERVATION reservation affinity."
+    }
+    precondition {
+      condition = var.is_reservation_active || (
+        (var.static_node_count == null || var.static_node_count == 0) &&
+        (var.autoscaling_min_node_count == null || var.autoscaling_min_node_count == 0) &&
+        (var.autoscaling_max_node_count == null || var.autoscaling_max_node_count == 0) &&
+        (var.initial_node_count == null || var.initial_node_count == 0)
+      )
+      error_message = "When is_reservation_active is set to false, static_node_count, autoscaling_min_node_count, autoscaling_max_node_count, and initial_node_count must all be either null or 0."
+    }
+    precondition {
+      condition     = !(var.enable_flex_start && try(var.placement_policy.type == "COMPACT", false) && !module.tpu.is_tpu && !can(regex("^(a3-ultragpu-|a4-|h4d-)", var.machine_type)))
+      error_message = "Compact placement with DWS Flex start is only supported for A3 Ultra, A4, and H4D machine types."
+    }
+    precondition {
+      condition     = !var.enable_confidential_storage || (var.boot_disk_kms_key != null && var.boot_disk_kms_key != "")
+      error_message = "A valid boot_disk_kms_key must be provided when enable_confidential_storage is true to satisfy GKE Confidential Storage requirements."
+    }
+    precondition {
+      condition     = !var.enable_confidential_storage || (var.disk_type != null && can(regex("^hyperdisk", var.disk_type)))
+      error_message = "Confidential Storage (enable_confidential_storage = true) is only supported on Hyperdisks. Please set disk_type to 'hyperdisk-balanced' or another hyperdisk type."
+    }
+    # BEGIN sub-block checks (only in subblock_node_pool)
+    # The reservation checks (SPECIFIC_RESERVATION, bare name, paths in that reservation) are
+    # validations on var.reservation_affinity.
+    precondition {
+      condition = (
+        var.num_node_pools == length(local.reservation_subblocks) &&
+        var.num_slices == 1 &&
+        # Only the machine type identifies TPUs. local.is_tpu is also true for GPU pools with a
+        # workload policy topology (e.g. A4X 1x72), so it must not be used here.
+        !module.tpu.is_tpu &&
+        length(coalesce(var.zones, [])) == 1
+      )
+      error_message = "reservation_subblocks requires num_node_pools equal to the number of reservation_subblocks entries, exactly one zone in var.zones, num_slices = 1 and a non-TPU machine type."
+    }
+    # END sub-block checks
+  }
+}
+
+# GKE names instance templates and VMs gke-<cluster>-<pool>-<hash> and shortens <cluster>-<pool>
+# to 32 characters. With a long cluster name, sub-block pools whose names differ only after the
+# 16th character get the same shortened name. That is only a naming issue, so it's a warning.
+check "subblock_pool_name_length" {
+  assert {
+    condition     = alltrue([for k in keys(local.reservation_subblocks) : length("${local.pool_name_prefix}-${k}") <= 16])
+    error_message = "Some sub-block node pool names ('<name>-<key>') are longer than 16 characters. With a long cluster name, GKE shortens them in VM, node and instance template names, so pools can look alike there and the instance_templates output can be wrong. Node pools are still created and pinned correctly. A 'name' of 8 characters or less (e.g. 'gpu-sb' gives 'gpu-sb-01-0001') avoids this."
+  }
+}
+
+locals {
+  # All node pools created by this module, from whichever resource is in use.
+  all_node_pools = concat(
+    google_container_node_pool.node_pool,
+    [for k in sort(keys(google_container_node_pool.subblock_node_pool)) : google_container_node_pool.subblock_node_pool[k]],
+  )
+}
+
 locals {
   supported_machine_types_for_install_dependencies = ["a3-highgpu-8g", "a3-megagpu-8g"]
 }
@@ -519,8 +991,11 @@ locals {
 # - If both names > 16 chars, both are cut to 16.
 # - If one name > 16, it's shortened so the combined name length is 32.
 data "google_compute_region_instance_template" "instance_template" {
-  for_each = { for idx, np in google_container_node_pool.node_pool : idx => np }
-  project  = var.project_id
+  for_each = merge(
+    { for idx, np in google_container_node_pool.node_pool : idx => np },
+    { for k, np in google_container_node_pool.subblock_node_pool : k => np },
+  )
+  project = var.project_id
   filter = "name: gke-${
     (length(local.cluster_name) <= 16 && length(each.value.name) <= 16) ? "${local.cluster_name}-${each.value.name}" :
     (length(local.cluster_name) > 16 && length(each.value.name) > 16) ? "${substr(local.cluster_name, 0, 16)}-${substr(each.value.name, 0, 16)}" :

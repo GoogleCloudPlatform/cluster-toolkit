@@ -22,6 +22,9 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"io"
+	"maps"
+	"path"
+	"slices"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -29,6 +32,52 @@ import (
 	k8syamlutil "k8s.io/apimachinery/pkg/util/yaml"
 	k8syaml "sigs.k8s.io/yaml"
 )
+
+const workloadWrapperScript = `echo "GCluster Start: $(date 2>/dev/null || true)" >&2
+
+# Run workload in a separate process group
+set -m
+/bin/bash -c 'trap : TERM; cmd="$1"; shift; eval "$cmd"' gcluster "$1" &
+child=$!
+
+# Forward signals to the workload process group
+got_sigterm=0
+_fwd() {
+  got_sigterm=1
+  echo "gcluster: SIGTERM received, running cleanup" >&2
+  kill -TERM -- "-$child" 2>/dev/null
+}
+trap _fwd TERM INT
+
+# Wait for workload to exit
+while :; do
+  wait "$child"; rc=$?
+  is_job=0
+  for p in $(jobs -p); do
+    [ "$p" = "$child" ] && is_job=1
+  done
+  [ "$is_job" -eq 1 ] || break
+done
+
+# Interrupted workloads should not exit 0 even if cleanup succeeded
+if [ "$got_sigterm" -ne 0 ] && [ "$rc" -eq 0 ]; then
+  rc=143
+fi
+
+echo "GCluster End: $(date 2>/dev/null || true)" >&2
+echo "Exit code: $rc" >&2
+exit "$rc"
+`
+
+// workloadContainerCommand wraps the user's workload command with SIGTERM
+// forwarding and lifecycle logging. When the container receives SIGTERM (e.g. on
+// job cancellation or Kueue/spot preemption), the signal is forwarded to the
+// workload process group so that in-flight commands terminate and any subsequent
+// cleanup/upload commands in the user's script can run before the pod grace
+// period expires.
+func workloadContainerCommand(userCommand string) []string {
+	return []string{"/bin/bash", "-c", workloadWrapperScript, "gcluster", userCommand}
+}
 
 func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobProfile) (string, error) {
 	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(opts, profile)
@@ -46,7 +95,7 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 		return "", err
 	}
 
-	cmdSlice := []string{"/bin/bash", "-c", opts.CommandToRun}
+	cmdSlice := workloadContainerCommand(opts.CommandToRun)
 
 	tmpl, err := g.parseGKETemplate("jobset.tmpl")
 	if err != nil {
@@ -55,6 +104,7 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 
 	isTPU := tpuLimit != ""
 	isGPU := gpuLimit != ""
+	opts.Env = withDefaultCoordinatorEnv(opts.WorkloadName, opts.Env)
 	data := g.prepareJobSetTemplateData(opts, cmdSlice, resourcesString, isTPU, isGPU)
 
 	var buf bytes.Buffer
@@ -126,7 +176,9 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		Scheduler:          job.GKEScheduler,
 		IsDynamicSlicing:   isDynamicSlicing,
 		IsStaticSlicing:    isStaticSlicing,
+		MachineType:        job.MachineType,
 		IsTPU:              config.IsTPU(job.MachineType) || config.IsTPU(originalAccelType),
+		IsNAP:              job.GKENAPProvisioning != "",
 	}
 
 	// Reuse GCluster's existing GKE accelerator label mapping and algorithmically
@@ -144,6 +196,12 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 	pathwaysPlatform := strings.ReplaceAll(normalizedLabel, "-podslice", "")
 	pathwaysPlatform = strings.ReplaceAll(pathwaysPlatform, "-slice", "")
 	pathwaysPlatform = strings.ReplaceAll(pathwaysPlatform, "-", "")
+	// 8-chip single-VM TPUs share their GKE accelerator label with the 4-chip
+	// VMs, but Pathways identifies them by a distinct "1t" platform name.
+	if (pathwaysPlatform == "tpuv6e" || pathwaysPlatform == "tpuv5e") &&
+		(strings.HasSuffix(job.MachineType, "-8t") || strings.HasSuffix(originalAccelType, "-8t")) {
+		pathwaysPlatform += "1t"
+	}
 
 	pathwaysInstanceType := fmt.Sprintf("%s:%s", pathwaysPlatform, schedOpts.Topology)
 
@@ -351,9 +409,7 @@ type jobSetValidationSpec struct {
 				Spec struct {
 					PodFailurePolicy interface{} `json:"podFailurePolicy" yaml:"podFailurePolicy"`
 					Template         struct {
-						Spec struct {
-							RestartPolicy string `json:"restartPolicy" yaml:"restartPolicy"`
-						} `json:"spec" yaml:"spec"`
+						Spec corev1.PodSpec `json:"spec" yaml:"spec"`
 					} `json:"template" yaml:"template"`
 				} `json:"spec" yaml:"spec"`
 			} `json:"template" yaml:"template"`
@@ -367,9 +423,7 @@ type jobValidationSpec struct {
 	Spec       struct {
 		PodFailurePolicy interface{} `json:"podFailurePolicy" yaml:"podFailurePolicy"`
 		Template         struct {
-			Spec struct {
-				RestartPolicy string `json:"restartPolicy" yaml:"restartPolicy"`
-			} `json:"spec" yaml:"spec"`
+			Spec corev1.PodSpec `json:"spec" yaml:"spec"`
 		} `json:"template" yaml:"template"`
 	} `json:"spec" yaml:"spec"`
 }
@@ -396,8 +450,44 @@ func splitYAMLDocuments(content string) ([]string, error) {
 	return docs, nil
 }
 
-// ValidateJobSetManifest validates that any JobSet or Job resources in the manifest conform
-// to Kubernetes batch/v1 validation constraints (e.g. podFailurePolicy requires restartPolicy: Never).
+func validatePodSpecVolumes(contextPrefix string, podSpec *corev1.PodSpec) error {
+	definedVolumes := make(map[string]bool, len(podSpec.Volumes))
+	for _, v := range podSpec.Volumes {
+		if definedVolumes[v.Name] {
+			return fmt.Errorf("%s declares duplicate volume %q", contextPrefix, v.Name)
+		}
+		definedVolumes[v.Name] = true
+	}
+
+	for _, c := range slices.Concat(podSpec.InitContainers, podSpec.Containers) {
+		seenMountPaths := make(map[string]bool, len(c.VolumeMounts))
+		for _, m := range c.VolumeMounts {
+			if !definedVolumes[m.Name] {
+				return fmt.Errorf("%s container %q mounts undefined volume %q at %q", contextPrefix, c.Name, m.Name, m.MountPath)
+			}
+			if m.MountPath != "" {
+				cleanPath := path.Clean(m.MountPath)
+				if seenMountPaths[cleanPath] {
+					return fmt.Errorf("%s container %q has duplicate volumeMount path %q", contextPrefix, c.Name, m.MountPath)
+				}
+				seenMountPaths[cleanPath] = true
+			}
+		}
+	}
+	return nil
+}
+
+func validateJobSpecPodPolicyAndVolumes(contextPrefix string, hasPodFailurePolicy bool, podSpec *corev1.PodSpec) error {
+	if hasPodFailurePolicy {
+		restartPolicy := string(podSpec.RestartPolicy)
+		if restartPolicy != "Never" {
+			return fmt.Errorf("%s specifies podFailurePolicy with restartPolicy %q; only \"Never\" is supported when podFailurePolicy is specified", contextPrefix, restartPolicy)
+		}
+	}
+	return validatePodSpecVolumes(contextPrefix, podSpec)
+}
+
+// ValidateJobSetManifest validates JobSet and Job resources in the manifest.
 func ValidateJobSetManifest(manifestContent string) error {
 	docs, err := splitYAMLDocuments(manifestContent)
 	if err != nil {
@@ -415,12 +505,11 @@ func ValidateJobSetManifest(manifestContent string) error {
 			if err := k8syaml.Unmarshal([]byte(doc), &jsDoc); err != nil {
 				return fmt.Errorf("failed to parse JobSet manifest spec: %w", err)
 			}
-			for _, rj := range jsDoc.Spec.ReplicatedJobs {
-				if rj.Template.Spec.PodFailurePolicy != nil {
-					restartPolicy := rj.Template.Spec.Template.Spec.RestartPolicy
-					if restartPolicy != "Never" {
-						return fmt.Errorf("invalid JobSet manifest: replicatedJob %q specifies podFailurePolicy with restartPolicy %q; only \"Never\" is supported when podFailurePolicy is specified", rj.Name, restartPolicy)
-					}
+			for i := range jsDoc.Spec.ReplicatedJobs {
+				rj := &jsDoc.Spec.ReplicatedJobs[i]
+				prefix := fmt.Sprintf("invalid JobSet manifest: replicatedJob %q", rj.Name)
+				if err := validateJobSpecPodPolicyAndVolumes(prefix, rj.Template.Spec.PodFailurePolicy != nil, &rj.Template.Spec.Template.Spec); err != nil {
+					return err
 				}
 			}
 		case "Job":
@@ -428,13 +517,275 @@ func ValidateJobSetManifest(manifestContent string) error {
 			if err := k8syaml.Unmarshal([]byte(doc), &jDoc); err != nil {
 				return fmt.Errorf("failed to parse Job manifest spec: %w", err)
 			}
-			if jDoc.Spec.PodFailurePolicy != nil {
-				restartPolicy := jDoc.Spec.Template.Spec.RestartPolicy
-				if restartPolicy != "Never" {
-					return fmt.Errorf("invalid Job manifest: specifies podFailurePolicy with restartPolicy %q; only \"Never\" is supported when podFailurePolicy is specified", restartPolicy)
-				}
+			if err := validateJobSpecPodPolicyAndVolumes("invalid Job manifest:", jDoc.Spec.PodFailurePolicy != nil, &jDoc.Spec.Template.Spec); err != nil {
+				return err
 			}
 		}
 	}
 	return nil
+}
+
+const (
+	defaultPathwaysProxyImage   = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
+	defaultPathwaysServerImage  = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
+	pathwaysTemplateExtractHint = "If you use --gke-custom-templates-path, re-extract pathways_jobset.tmpl with 'gcluster job gke-template-extract' and re-apply your changes"
+)
+
+// GeneratePathwaysManifest generates the Kubernetes JobSet manifest for a Pathways job.
+func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) (string, error) {
+	// Set default values for Pathways-specific fields if not provided
+	if job.Pathways.ProxyServerImage == "" {
+		job.Pathways.ProxyServerImage = defaultPathwaysProxyImage
+	}
+	if job.Pathways.ServerImage == "" {
+		job.Pathways.ServerImage = defaultPathwaysServerImage
+	}
+	if job.Pathways.WorkerImage == "" {
+		// WorkerImage defaults to ServerImage if not explicitly set
+		job.Pathways.WorkerImage = job.Pathways.ServerImage
+	}
+
+	tmpl, err := g.parseGKETemplate("pathways_jobset.tmpl")
+	if err != nil {
+		return "", fmt.Errorf("failed to parse pathways jobset template: %w", err)
+	}
+
+	opts, err := g.PrepareManifestOptions(job, fullImageName, profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		return "", err
+	}
+
+	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(opts, profile)
+	var resStr string
+	if err == nil {
+		resStr, err = g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit, 14)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		logging.Warn("Warning: failed to calculate resource limits for Pathways job: %v", err)
+	}
+
+	cmdSlice := workloadContainerCommand(opts.CommandToRun)
+	isTPU := tpuLimit != ""
+	isGPU := gpuLimit != ""
+	data := g.prepareJobSetTemplateData(opts, cmdSlice, resStr, isTPU, isGPU)
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
+	}
+	if err := validatePathwaysMTCManifest(buf.String(), opts); err != nil {
+		return "", err
+	}
+
+	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
+	if err := ValidateJobSetManifest(manifest); err != nil {
+		return "", err
+	}
+	return manifest, nil
+}
+
+func findCSIVolumeName(podSpec *corev1.PodSpec, driver string) string {
+	for _, v := range podSpec.Volumes {
+		if v.CSI != nil && v.CSI.Driver == driver {
+			return v.Name
+		}
+	}
+	return ""
+}
+
+func containerMountsVolumeAt(podSpec *corev1.PodSpec, containerName, volumeName, mountPath string) bool {
+	for _, c := range slices.Concat(podSpec.InitContainers, podSpec.Containers) {
+		if c.Name != containerName {
+			continue
+		}
+		for _, m := range c.VolumeMounts {
+			if m.Name == volumeName && path.Clean(m.MountPath) == path.Clean(mountPath) {
+				return true
+			}
+		}
+		return false
+	}
+	return false
+}
+
+func extractPathwaysPodSpecs(jobSet string) (workerSpec, headSpec *corev1.PodSpec, err error) {
+	docs, err := splitYAMLDocuments(jobSet)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, doc := range docs {
+		var meta typeMeta
+		if err := k8syaml.Unmarshal([]byte(doc), &meta); err != nil || meta.Kind != "JobSet" {
+			continue
+		}
+		var jsDoc jobSetValidationSpec
+		if err := k8syaml.Unmarshal([]byte(doc), &jsDoc); err != nil {
+			return nil, nil, fmt.Errorf("failed to parse Pathways JobSet manifest spec: %w", err)
+		}
+		for i := range jsDoc.Spec.ReplicatedJobs {
+			rj := &jsDoc.Spec.ReplicatedJobs[i]
+			switch rj.Name {
+			case "worker":
+				workerSpec = &rj.Template.Spec.Template.Spec
+			case "pathways-head":
+				headSpec = &rj.Template.Spec.Template.Spec
+			}
+		}
+	}
+	return workerSpec, headSpec, nil
+}
+
+// validatePathwaysMTCManifest checks that Pathways MTC jobs mount the CSI volume only on worker pods.
+func validatePathwaysMTCManifest(jobSet string, opts ManifestOptions) error {
+	if !opts.GKEMTCEnabled {
+		return nil
+	}
+	workerSpec, headSpec, err := extractPathwaysPodSpecs(jobSet)
+	if err != nil {
+		return err
+	}
+	if headSpec != nil && findCSIVolumeName(headSpec, multitierCheckpointCSIDriver) != "" {
+		return fmt.Errorf("--gke-mtc-enabled is set but pathways-head declares a %s volume; the MTC volume must only be declared on worker pods. %s", multitierCheckpointCSIDriver, pathwaysTemplateExtractHint)
+	}
+	if workerSpec == nil {
+		return fmt.Errorf("--gke-mtc-enabled is set but the Pathways manifest has no worker replicatedJob. %s", pathwaysTemplateExtractHint)
+	}
+	mtcVolName := findCSIVolumeName(workerSpec, multitierCheckpointCSIDriver)
+	if mtcVolName == "" {
+		return fmt.Errorf("--gke-mtc-enabled is set but the Pathways manifest has no %s volume on worker pods. %s", multitierCheckpointCSIDriver, pathwaysTemplateExtractHint)
+	}
+	if !containerMountsVolumeAt(workerSpec, "pathways-worker", mtcVolName, opts.GKEMTCRamdiskDirectory) {
+		return fmt.Errorf("--gke-mtc-enabled is set but container \"pathways-worker\" does not mount %s volume %q at %q. %s", multitierCheckpointCSIDriver, mtcVolName, opts.GKEMTCRamdiskDirectory, pathwaysTemplateExtractHint)
+	}
+	if opts.Pathways.ColocatedPythonSidecarImage != "" && !containerMountsVolumeAt(workerSpec, "colocated-python-sidecar", mtcVolName, opts.GKEMTCRamdiskDirectory) {
+		return fmt.Errorf("--gke-mtc-enabled is set with --pathways-colocated-python-sidecar-image, but container \"colocated-python-sidecar\" does not mount %s volume %q at %q. %s", multitierCheckpointCSIDriver, mtcVolName, opts.GKEMTCRamdiskDirectory, pathwaysTemplateExtractHint)
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
+	exclusiveTopology := ""
+	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
+		if opts.NodesPerSlice <= 1 {
+			exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: kubernetes.io/hostname"
+		} else {
+			exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
+		}
+	}
+
+	workerBackoffLimit := opts.Pathways.MaxSliceRestarts * opts.NodesPerSlice
+
+	var proxyArgsList []string
+	if opts.Pathways.ProxyArgs != "" {
+		proxyArgsList = strings.Fields(opts.Pathways.ProxyArgs)
+	}
+	var serverArgsList []string
+	if opts.Pathways.ServerArgs != "" {
+		serverArgsList = strings.Fields(opts.Pathways.ServerArgs)
+	}
+	var workerArgsList []string
+	if opts.Pathways.WorkerArgs != "" {
+		workerArgsList = strings.Fields(opts.Pathways.WorkerArgs)
+	}
+
+	var containers []ContainerData
+	if opts.ParallelContainers > 1 {
+		for i := 0; i < opts.ParallelContainers; i++ {
+			containers = append(containers, ContainerData{
+				Name:          fmt.Sprintf("workload-container-%d", i+1),
+				ResourcesYAML: resourcesYAML,
+			})
+		}
+	} else {
+		containers = append(containers, ContainerData{
+			Name:          "workload-container",
+			ResourcesYAML: resourcesYAML,
+		})
+	}
+
+	return jobSetTemplateData{
+		WorkloadName:                  opts.WorkloadName,
+		ClusterName:                   opts.ClusterName,
+		Containers:                    containers,
+		ProjectID:                     opts.ProjectID,
+		KueueQueueName:                opts.KueueQueueName,
+		TtlSecondsAfterFinished:       opts.TtlSecondsAfterFinished,
+		TerminationGracePeriodSeconds: opts.TerminationGracePeriodSeconds,
+		MaxRestarts:                   opts.MaxRestarts,
+		NumSlices:                     opts.NumSlices,
+		NodesPerSlice:                 opts.NodesPerSlice,
+		WorkerBackoffLimit:            workerBackoffLimit,
+		WorkerBackoffLimitPerIndex:    opts.Pathways.MaxSliceRestarts,
+		ProxyArgsList:                 proxyArgsList,
+		ServerArgsList:                serverArgsList,
+		WorkerArgsList:                workerArgsList,
+		PathwaysInstanceType:          opts.PathwaysInstanceType,
+		CommandToRun:                  opts.CommandToRun,
+		ResourcesString:               resourcesYAML,
+		FullImageName:                 opts.FullImageName,
+		Command:                       command,
+		ResourcesYAML:                 resourcesYAML,
+		AcceleratorTypeLabel:          g.GenerateGKENodeSelectorLabel(opts.ComputeType),
+		NodeSelector:                  opts.NodeSelector,
+		Affinity:                      opts.Affinity,
+		PodFailurePolicy:              opts.PodFailurePolicy,
+		ImagePullSecrets:              opts.ImagePullSecrets,
+		ServiceAccountName:            opts.ServiceAccountName,
+		TopologyAnnotation:            opts.TopologyAnnotation,
+		SchedulerName:                 opts.SchedulerName,
+		SchedulingGates:               opts.SchedulingGates,
+		Tolerations:                   opts.Tolerations,
+		PriorityClassName:             opts.PriorityClassName,
+		VolumesYAML:                   opts.VolumesYAML,
+		VolumeMountsYAML:              opts.VolumeMountsYAML,
+		GCSFuseEnabled:                opts.GCSFuseEnabled,
+		HostNetworkEnabled:            isTPU || isGPU,
+		Pathways:                      opts.Pathways,
+		ExclusiveTopologyAnnotation:   exclusiveTopology,
+		Verbose:                       opts.Verbose,
+		Env:                           sortedEnvVars(opts.Env),
+		PathwaysProxyEnv:              sortedEnvVars(opts.Pathways.ProxyEnv),
+		PathwaysServerEnv:             sortedEnvVars(opts.Pathways.ServerEnv),
+		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
+		IsTPU:                         isTPU,
+		IsGPU:                         isGPU,
+		MLDiagnosticsEnabled:          opts.MLDiagnosticsEnabled,
+		GKEMTCEnabled:                 opts.GKEMTCEnabled,
+		GKEMTCRamdiskDirectory:        opts.GKEMTCRamdiskDirectory,
+	}
+}
+
+// withDefaultCoordinatorEnv injects default MASTER_ADDR and WORKERS_0_HOSTNAME
+// pointing to the rank-0 pod of the JobSet. We populate these directly in the
+// container env instead of setting spec.coordinator to avoid generating the
+// jobset.sigs.k8s.io/coordinator label, which would exceed the 63-character
+// limit for workload names up to 28 characters.
+func withDefaultCoordinatorEnv(workloadName string, userEnv map[string]string) map[string]string {
+	if workloadName == "" {
+		return userEnv
+	}
+	coordinatorHost := fmt.Sprintf("%s-main-job-0-0.%s", workloadName, workloadName)
+	merged := make(map[string]string, len(userEnv)+2)
+	merged["MASTER_ADDR"] = coordinatorHost
+	merged["WORKERS_0_HOSTNAME"] = coordinatorHost
+	maps.Copy(merged, userEnv)
+	return merged
+}
+
+func sortedEnvVars(envMap map[string]string) []EnvVar {
+	if len(envMap) == 0 {
+		return nil
+	}
+	envKeys := make([]string, 0, len(envMap))
+	for k := range envMap {
+		envKeys = append(envKeys, k)
+	}
+	slices.Sort(envKeys)
+	res := make([]EnvVar, len(envKeys))
+	for i, k := range envKeys {
+		res[i] = EnvVar{Name: k, Value: envMap[k]}
+	}
+	return res
 }

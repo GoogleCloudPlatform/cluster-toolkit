@@ -44,7 +44,7 @@ import (
 
 const (
 	maxHintDist          int = 3 // Maximum Levenshtein distance where we suggest a hint
-	latestToolkitVersion     = "v1.105.0"
+	latestToolkitVersion     = "v1.107.0"
 	// SharedModulesDirName is the name of the shared directory for embedded modules
 	SharedModulesDirName = "_modules"
 )
@@ -318,6 +318,9 @@ type Blueprint struct {
 	AddCreatorLabel bool `yaml:"-"`
 	// CreatorUsername is the username to use for the creator label
 	CreatorUsername string `yaml:"-"`
+	// subblockIO asks the user and saves sub-block maps chosen by gcluster
+	// (runtime-only, not serialized). Nil means read-only (gcluster expand).
+	subblockIO *SubblockIO
 }
 
 func (bp *Blueprint) Clone() Blueprint {

@@ -11,7 +11,17 @@ Key parameters when working with TPUs:
 
 Before you start, make sure you have performed the following tasks:
 
-* Enable the Google Kubernetes Engine API.
+* Enable the required Google Cloud APIs (`compute.googleapis.com`, `container.googleapis.com`, `iam.googleapis.com`, `storage.googleapis.com`):
+
+  ```sh
+  gcloud services enable \
+    compute.googleapis.com \
+    container.googleapis.com \
+    iam.googleapis.com \
+    storage.googleapis.com \
+    --project=<PROJECT_ID>
+  ```
+
 * If you want to use the Google Cloud CLI for this task, [install](https://cloud.google.com/sdk/docs/install) and then [initialize](https://cloud.google.com/sdk/docs/initializing) the gcloud CLI.
 * Ensure that you have enough quota for TPUs (`tpu-v5-lite-podslice` quota in your region).
 * Ensure that you have the following roles enabled on your deployment identity:
@@ -27,11 +37,10 @@ This section guides you through the cluster creation process, ensuring that your
 
 1. [Launch Cloud Shell](https://cloud.google.com/shell/docs/launching-cloud-shell). You can use a different environment; however, we recommend Cloud Shell because the dependencies are already pre-installed for Cluster Toolkit. If you don't want to use Cloud Shell, follow the instructions to [install dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies) to prepare a different environment.
 
-1. Install the Cluster Toolkit: Download and extract the pre-built `gcluster` binary bundle. Follow the download commands for your operating system in the [Install the Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment#install) section of the setup guide.
-
-1. Once extracted, verify that the installation is ready:
+1. Install or build the Cluster Toolkit: Either download the pre-built `gcluster` bundle per the [Install the Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment#install) guide, or from the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository build `./gcluster`:
 
       ```sh
+      test -x ./gcluster || make
       ./gcluster --version
       ```
 
@@ -56,13 +65,13 @@ This section guides you through the cluster creation process, ensuring that your
    * `region`: the compute region for the cluster.
    * `zone`: the compute zone for the TPUs.
    * `num_slices`: the number of TPU slices to create.
-   * `machine_type`: the machine type of the TPU (e.g.,`ct5lp-hightpu-1t`, `ct5lp-hightpu-4t`, `ct5lp-hightpu-8t`).
+   * `compute_machine_type`: the machine type of the TPU (e.g.,`ct5lp-hightpu-1t`, `ct5lp-hightpu-4t`, `ct5lp-hightpu-8t`).
    * `tpu_topology`: the TPU placement topology for the pod slice node pool (e.g., `2x4`).
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine running Terraform.
    * `reservation`: the name of the Compute Engine reservation of TPU v5e nodes (if any).
    * `user_namespace`: The Kubernetes service account namespace where your TPU workloads will run (defaults to `default`).
 
-    > **Note:** The `static_node_count` is automatically calculated from `machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`.
+    > **Note:** The `static_node_count` is automatically calculated from `compute_machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`.
 
    To modify advanced settings, edit `examples/gke-tpu-v5e/gke-tpu-v5e.yaml`.
 
@@ -94,15 +103,15 @@ By default, the toolkit dynamically applies an embedded kueue configuration base
   * If you want to override the default embedded configurations, or apply configuration in the scenario above, you can uncomment and set `config_path` in the `kueue` section of the `workload-manager-install` module in the blueprint.
   * For more details on default configurations and variables, see the [`kubectl-apply` documentation](https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/management/kubectl-apply#inputs).
 
-* **Quota Allocation:** The blueprint automatically calculates and sets a `google.com/tpu` quota in Kueue's `ClusterQueue`. The node count is derived from your `machine_type` and `tpu_topology`, and the quota is calculated using the formula: `num_slices` × `(total_chips_in_topology / chips_per_machine)` × `chips_per_machine`.
+* **Quota Allocation:** The blueprint automatically calculates and sets a `google.com/tpu` quota in Kueue's `ClusterQueue`. The node count is derived from your `compute_machine_type` and `tpu_topology`, and the quota is calculated using the formula: `num_slices` × `(total_chips_in_topology / chips_per_machine)` × `chips_per_machine`.
 
 1. **Connect to your cluster:**
 
     ```sh
-    gcloud container clusters get-credentials gke-tpu-v5e --region=REGION --project=PROJECT_ID
+    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project=PROJECT_ID
     ```
 
-    Replace `REGION` and `PROJECT_ID` with your deployment region and project ID.
+    Replace `DEPLOYMENT_NAME`, `REGION`, and `PROJECT_ID` with your deployment name, region, and project ID.
 
 2. **Update the Node Selector:** Open `examples/gke-tpu-v5e/tpu-kueue-jax-sample.yaml` and verify that the `nodeSelector` values match the TPU accelerator and topology configured in your deployment:
 
@@ -173,7 +182,7 @@ Before submitting the job to the live GKE cluster, it is highly recommended to p
   --pathways \
   --pathways-gcs-location gs://YOUR_COORDINATION_BUCKET/pathways-scratch \
   --image us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest \
-  --command "pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print(\"JAX Device count:\", jax.device_count())'" \
+  --command "pip install -U jax jaxlib && python -c 'import jax; print(\"JAX Device count:\", jax.device_count())'" \
   --dry-run-out my-manifest.yaml
 ```
 
@@ -188,7 +197,7 @@ This generates a local file `my-manifest.yaml` containing the complete Kubernete
 * `--pathways`: Flags GCluster to generate a Pathways JobSet coordination architecture.
 * `--pathways-gcs-location`: A Cloud Storage bucket URI used by the coordinator and worker pods to synchronize network state and parameters.
 * `--image`: The container image for the workload (using the standard TPU JAX image).
-* `--command`: The entrypoint command. It dynamically installs `pathwaysutils` and executes the python command verifying JAX initialization. Calling `pathwaysutils.initialize()` is required since it registers the virtual `'proxy'` backend inside JAX, allowing it to delegate computations over the network to the TPU workers
+* `--command`: The entrypoint command. `gcluster job submit --pathways` automatically sets `JAX_PLATFORMS=proxy` and `JAX_BACKEND_TARGET=grpc://localhost:29000` so JAX delegates computations to the TPU workers via its built-in `'proxy'` backend. `pathwaysutils.initialize()` is only needed for Pathways-specific features (such as Orbax checkpoint persistence or profiling) and, if used, must be called before `jax.devices()`.
 * `--dry-run-out`: Outputs the generated Kubernetes manifests to the file path specified as the argument to this flag (e.g., `my-manifest.yaml` in the example above) instead of submitting them to GKE.
 
 ### 3. Submit the Live Job
@@ -202,7 +211,7 @@ Once you have verified the manifest, submit the job to your live GKE cluster by 
   --pathways \
   --pathways-gcs-location gs://YOUR_COORDINATION_BUCKET/pathways-scratch \
   --image us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest \
-  --command "pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print(\"JAX Device count:\", jax.device_count())'"
+  --command "pip install -U jax jaxlib && python -c 'import jax; print(\"JAX Device count:\", jax.device_count())'"
 ```
 
 ### 4. Monitor and Manage the Job
@@ -210,7 +219,7 @@ Once you have verified the manifest, submit the job to your live GKE cluster by 
 1. **Monitor and Check Logs:** Use the `gcluster` CLI to track the execution status and view the workload logs:
 
    ```sh
-   gcluster job logs pathways-job
+   ./gcluster job logs pathways-job
    ```
 
    A successful execution will output logs ending with:
@@ -222,7 +231,7 @@ Once you have verified the manifest, submit the job to your live GKE cluster by 
 2. **Cancel and Clean Up Job:** To terminate a running job or clean up resources once finished, run:
 
    ```sh
-   gcluster job cancel pathways-job
+   ./gcluster job cancel pathways-job
    ```
 
 ## Tear down the cluster

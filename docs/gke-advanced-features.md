@@ -14,7 +14,7 @@ To deploy a GKE cluster configured for TPU Dynamic Slicing, configure your TPU v
 
 ```yaml
 vars:
-  machine_type: tpu7x-standard-4t
+  compute_machine_type: tpu7x-standard-4t
   accelerator_type: tpu7x
   enable_dynamic_slicing_for_tpus: true
 ```
@@ -45,6 +45,7 @@ Submit a dynamic slicing workload that requests a `4x4x4` TPU v7x topology:
 ```shell
 ./gcluster job submit \
   --name my-dynamic-slice-job \
+  --image <CONTAINER_IMAGE> \
   --command "python train.py" \
   --compute-type tpu7x \
   --topology 4x4x4
@@ -52,8 +53,8 @@ Submit a dynamic slicing workload that requests a `4x4x4` TPU v7x topology:
 
 #### GKE documentation reference
 
-* [TPU Dynamic Slicing on GKE Concepts](https://cloud.google.com/kubernetes-engine/docs/concepts/tpu-dynamic-slicing)
-* [Scheduling Dynamic Slices with Kueue and TAS on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/kueue-tpu-dynamic-slicing)
+* [TPU Dynamic Slicing on GKE Concepts](https://cloud.google.com/kubernetes-engine/docs/concepts/dynamic-slicing)
+* [Scheduling Dynamic Slices with Kueue and TAS on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/use-gke-dynamic-slicing)
 
 ---
 
@@ -110,6 +111,7 @@ Submit a multi-slice Pathways training workload with Cloud Storage state persist
 ```shell
 ./gcluster job submit \
   --name my-pathways-job \
+  --image <CONTAINER_IMAGE> \
   --command "python train_pathways.py" \
   --compute-type v6e-16 \
   --pathways \
@@ -145,7 +147,6 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     settings:
       cluster_autoscaling:
-        enabled: true
         autoprovisioning_disk_size_gb: 100
         autoprovisioning_disk_type: pd-balanced
         autoprovisioning_cpu_max: 1000
@@ -175,7 +176,7 @@ When submitting jobs to a NAP-enabled GKE cluster by using the `gcluster job sub
 
 * **Spot versus on-demand provisioning:** Use `--gke-nap-provisioning spot` or `--gke-nap-provisioning on-demand`. When you specify `spot`, Cluster Toolkit injects the standard GKE provisioning toleration (`cloud.google.com/gke-provisioning=spot:NoSchedule`) and node selector into the pod template.
 * **Compute Engine reservation targeting:** Use `--gke-nap-provisioning reservation` in combination with `--gke-nap-reservation RESERVATION_NAME`. Cluster Toolkit automatically populates the reservation node selector and tolerations (`cloud.google.com/reservation-name=RESERVATION_NAME:NoSchedule`), letting GKE NAP spawn node pools directly inside your targeted Compute Engine reservation. You can also pass a full Google Cloud resource URI (for example, `projects/PROJECT_ID/reservations/RESERVATION_NAME`) to target shared reservations in other projects, which automatically configures the `cloud.google.com/reservation-project` label.
-* **Pre-flight limit verification:** Before submitting a job, Cluster Toolkit queries GKE cluster metadata to verify that the requested machine type (for example, `v6e-4` or `a3-megagpu-8g`) is explicitly permitted by your cluster's NAP resource limits. If not permitted, submission fails quickly with a clear diagnostic error.
+* **Pre-flight limit verification:** When `--gke-nap-provisioning` is passed, Cluster Toolkit queries GKE cluster metadata before submission to verify that the requested accelerator resource type (or the `cpu` limit for CPU machine types) has a non-zero maximum in your cluster's NAP resource limits. If not permitted, submission fails quickly with a clear diagnostic error.
 
 #### Example CLI commands
 
@@ -184,6 +185,7 @@ Submit a workload that provisions Spot VMs dynamically:
 ```shell
 ./gcluster job submit \
   --name my-nap-spot-job \
+  --image <CONTAINER_IMAGE> \
   --command "python app.py" \
   --compute-type v6e-4 \
   --gke-nap-provisioning spot
@@ -194,6 +196,7 @@ Submit a workload that targets an existing Compute Engine reservation:
 ```shell
 ./gcluster job submit \
   --name my-nap-reservation-job \
+  --image <CONTAINER_IMAGE> \
   --command "python app.py" \
   --compute-type v6e-4 \
   --gke-nap-provisioning reservation \
@@ -208,58 +211,186 @@ Multi-Tier Checkpointing (MTC) provides high-throughput, low-latency checkpoint 
 
 ### 4.1 Blueprint configuration
 
-To enable MTC on your GKE cluster, configure `enable_multi_tier_checkpointing: true` in your `gke-cluster` module settings, grant GKE Node Service Account access in your GCS checkpoint bucket's `object_users` list, and apply the `CheckpointConfiguration` Custom Resource (CR):
+To enable MTC on your GKE cluster, set `enable_multi_tier_checkpointing: true` and `enable_gcsfuse_csi: true` on the `gke-cluster` module, grant the MTC driver access to your checkpoint bucket through the bucket's `object_users`, and create the `CheckpointConfiguration` resource with the `checkpoint_configuration` setting of the `kubectl-apply` module:
 
 ```yaml
 deployment_groups:
 - group: primary
   modules:
-  - id: checkpoint_bucket
-    source: modules/file-system/cloud-storage-bucket
-    settings:
-      # Pass the GKE Node Service Account to grant GCS read/write/list object permissions:
-      object_users:
-        gke_node_sa: "serviceAccount:$(gke_cluster.node_service_account)"
-
   - id: gke_cluster
     source: modules/scheduler/gke-cluster
     settings:
-      enable_multi_tier_checkpointing: true  # Enables MTC GKE Addon & Workload Identity
+      enable_multi_tier_checkpointing: true  # Enables the GKE HighScaleCheckpointing addon
+      enable_gcsfuse_csi: true               # Required by enable_multi_tier_checkpointing
+
+  - id: checkpoint_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      enable_hierarchical_namespace: true  # Required for MTC backups; set at bucket creation
+      # Grants the MTC driver roles/storage.objectUser on the bucket:
+      object_users:
+        mtc_sa: $(gke_cluster.mtc_service_account_member)
 
   - id: apply_mtc_config
     source: modules/management/kubectl-apply
     use: [gke_cluster]
     settings:
-      apply_manifests:
-      - name: checkpoint-configuration
-        source: $(ghpc_stage("../modules/management/kubectl-apply/manifests/checkpoint-configuration.yaml.tftpl"))
-        template_vars:
-          namespace: "default"
-          inMemoryVolumeSize: "50Gi"
-          cloudStorageBucketName: $(checkpoint_bucket.gcs_bucket_name)
+      checkpoint_configuration:
+        cloud_storage_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
+        in_memory_volume_size: "50Gi"
+        # Lets the multitier driver DaemonSet run on tainted accelerator nodes:
+        tolerations:
+        - key: google.com/tpu
+          operator: Exists
+          effect: NoSchedule
+        # Optional: limit the driver to the nodes that run checkpointing workloads:
+        node_selector:
+          node.kubernetes.io/instance-type: ct6e-standard-4t
 ```
 
 #### Key configuration notes
-* **Workload Identity & IAM Permissions**: Setting `enable_multi_tier_checkpointing: true` automatically binds the MTC Kubernetes Service Account (`gke-managed-checkpointing/gke-checkpointing-multitier-node`) to the Node GCP Service Account via Workload Identity.
-* **GCS Bucket Permissions**: Ensure the `checkpoint_bucket` includes `object_users: { gke_node_sa: "serviceAccount:$(gke_cluster.node_service_account)" }` so the MTC background replicator daemonset has object write, list, and read access (`roles/storage.objectUser`).
+* **Bucket access**: The `multitier-driver` DaemonSet runs as the Kubernetes service account `gke-managed-checkpointing/gke-checkpointing-multitier-node`. `$(gke_cluster.mtc_service_account_member)` is that service account's Workload Identity Federation principal, and granting it `roles/storage.objectUser` on the bucket is all the driver needs. No Google service account or service account annotation is required. The bucket must have hierarchical namespace enabled, otherwise MTC backups fail; this can only be set when the bucket is created. The principal is the same for all clusters in the project, so remove `mtc_sa` from `object_users` if you disable MTC.
+* **Accelerator node tolerations and node selector**: TPU nodes are tainted with `google.com/tpu=present:NoSchedule`, and GPU nodes with `nvidia.com/gpu=present:NoSchedule`. Set matching `checkpoint_configuration.tolerations` (and optionally `node_selector`) so the `multitier-driver` DaemonSet runs on the accelerator nodes that run your training pods; pods that mount the MTC volume can only start on nodes where the driver runs.
+* **Cluster upgrades and configuration changes**: When you change any setting in `checkpoint_configuration` (such as `tolerations`, `node_selector`, `in_memory_volume_size`, `cloud_storage_bucket_name`, or `gcs_fuse_mount_options`), `gcluster deploy` automatically replaces (deletes and re-creates) the `CheckpointConfiguration` resource so the `multitier-driver` DaemonSet reconciles with the updated settings in a single deploy. Apply configuration changes while no MTC jobs are running, because replacing the `CheckpointConfiguration` restarts the driver and removes active RAM disks. By contrast, GKE cluster version upgrades do not automatically upgrade the MTC driver; to upgrade the driver before or after a cluster upgrade when `checkpoint_configuration` settings have not changed, see [Cluster upgrades](https://cloud.google.com/kubernetes-engine/docs/how-to/machine-learning/training/multi-tier-checkpointing#cluster_upgrades) (with `checkpoint_configuration`, set `enable_multi_tier_checkpointing: false` on `gke-cluster` or remove `checkpoint_configuration` and run `gcluster deploy`, wait until `kubectl get pods -n gke-managed-checkpointing -l k8s-app=high-scale-checkpointing` lists no driver pods, then set `enable_multi_tier_checkpointing` back to `true` or restore `checkpoint_configuration` and deploy again; with an `apply_manifests` entry, toggle its `enable` setting instead).
+* **Troubleshooting**: Pods that mount the MTC volume stay in `ContainerCreating` with `FailedMount` events when the driver does not run on their node; compare `kubectl get pods -n gke-managed-checkpointing -o wide` with the nodes of your job. Driver pods that report `FailedMount` with `PermissionDenied` for their `gcs` volume cannot access the bucket: check the bucket's `object_users` and the annotation described in [Migrating from earlier gcluster versions](#migrating-from-earlier-gcluster-versions). See also [Troubleshoot](https://cloud.google.com/kubernetes-engine/docs/how-to/machine-learning/training/multi-tier-checkpointing#troubleshoot).
+
+#### Migrating from earlier gcluster versions
+
+Earlier versions of `gcluster job submit` annotated the driver's service account with the node pool's Google service account (`iam.gke.io/gcp-service-account`), and the `gke-cluster` module allowed that impersonation. While the annotation is present, GKE authenticates the driver as the annotated Google service account instead of the principal above, and `gcluster job submit --gke-mtc-enabled` prints a warning. To migrate, while no MTC jobs are running:
+
+1. Add `mtc_service_account_member` to the bucket's `object_users` and run `gcluster deploy`. This also removes the impersonation grant from the node service account. The grant and the driver's principal are shared by all clusters in the project, so migrate the other clusters that use the same node service account at the same time.
+2. Check for the annotation. This command prints a service account if the annotation is present:
+
+   ```shell
+   kubectl get serviceaccount gke-checkpointing-multitier-node -n gke-managed-checkpointing -o jsonpath='{.metadata.annotations.iam\.gke\.io/gcp-service-account}'
+   ```
+
+3. If it is present, remove it and restart the driver, then check that the driver pods are `Running` again:
+
+   ```shell
+   kubectl annotate serviceaccount gke-checkpointing-multitier-node -n gke-managed-checkpointing iam.gke.io/gcp-service-account-
+   kubectl delete pods -n gke-managed-checkpointing -l k8s-app=high-scale-checkpointing
+   kubectl get pods -n gke-managed-checkpointing
+   ```
+
+Everyone who submits MTC jobs to the cluster needs this gcluster version or later, because earlier versions add the annotation back on each submission.
+
+Blueprints that create the `CheckpointConfiguration` with an `apply_manifests` entry for `checkpoint-configuration.yaml.tftpl` keep working. To switch to `checkpoint_configuration`, remove that entry in the same change and deploy while no MTC jobs are running: the old resource is deleted and a new one is created, and the driver and its RAM disks are removed in between. If the deploy fails because the `CheckpointConfiguration` already exists, run `gcluster deploy` again. `checkpoint_configuration` manages one `CheckpointConfiguration` per cluster.
 
 ### 4.2 One-Command MTC Job Submission (`gcluster job submit --gke-mtc-enabled`)
 
-When submitting training workloads via `gcluster job submit`, add the `--gke-mtc-enabled` flag. `gcluster` will automatically inject the MTC CSI driver (`multitier-checkpoint.csi.storage.gke.io`) into your pod specification mounted at `/tmp/mtc_checkpoints`:
+When submitting training workloads with `gcluster job submit`, pass `--gke-mtc-enabled` together with `--gke-mtc-ramdisk-dir <dir>`; there is no default directory. `gcluster` mounts the MTC CSI volume (`multitier-checkpoint.csi.storage.gke.io`) at that path in your pods:
 
 ```shell
 ./gcluster job submit \
   --name my-mtc-training-job \
+  --image <CONTAINER_IMAGE> \
   --command "python train.py --checkpoint-dir=/tmp/mtc_checkpoints" \
   --compute-type v6e-4 \
-  --gke-mtc-enabled
+  --gke-mtc-enabled \
+  --gke-mtc-ramdisk-dir /tmp/mtc_checkpoints
+```
+
+Before submitting, `gcluster` checks that the HighScaleCheckpointing addon is enabled on the cluster, that a `CheckpointConfiguration` resource exists whose `nodeSelector` and `tolerations` are compatible with at least one node pool the job can run on, and waits up to two minutes until all pods of the `multitier-driver` DaemonSet in `gke-managed-checkpointing` are ready (it can have no pods yet when the node pools scale from zero), and warns if the driver's service account still has the annotation described in [Migrating from earlier gcluster versions](#migrating-from-earlier-gcluster-versions). The cluster resource, driver readiness, and annotation checks are skipped with `--dry-run-out`.
+
+For Pathways jobs (`--pathways`), the MTC volume is mounted only in the worker pods (including the colocated Python sidecar, if set), not in the `pathways-head` pod, which usually runs on CPU nodes where the driver is not deployed. Code that runs in the head pod through `--command` cannot use the RAM disk; write local checkpoints from the workers, for example from the colocated Python sidecar. The ramdisk directory and `--mount` destinations cannot be `/tmp`, or `/tmp/sidecar` and its subdirectories when `--pathways-colocated-python-sidecar-image` is set, because built-in Pathways volumes use those paths. If you use a custom `pathways_jobset.tmpl` extracted with an earlier gcluster version, extract it again: the template now defines the Pathways MTC and colocated-sidecar volumes itself. With an older copy, MTC jobs fail with an error that asks you to re-extract the template, and jobs that use `--pathways-colocated-python-sidecar-image` fail because the old template mounts a `sidecar-shared-memory` volume that gcluster no longer adds.
+
+---
+
+## 5. Cloud Storage FUSE storage profiles
+
+[GKE Cloud Storage FUSE storage profiles](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles) tune GCSFuse automatically for AI/ML access patterns. Adding `profile=` to a `gs://` mount in `gcluster job submit` generates the PersistentVolume and PersistentVolumeClaim ("gateway") the profile needs, instead of an inline CSI volume. The `--mount` format itself is described in the [gcluster job guide](gcluster_job_guide.md#44-example-submit-job-with-persistent-storage).
+
+### 5.1 Cluster prerequisites
+
+* **GKE version**: GKE `1.35.1-gke.1616000` or later with the Cloud Storage FUSE CSI driver enabled (`enable_gcsfuse_csi: true` on the `gke-cluster` module). Verify with `kubectl get sc -l gke-gcsfuse/profile=true`, which lists the three StorageClasses.
+* **GKE Service Agent IAM**: the GKE Service Agent (`service-<PROJECT_NUMBER>@container-engine-robot.iam.gserviceaccount.com`) needs bucket permissions to scan the bucket and, for Rapid Cache, to manage caches (see [Configure IAM permissions](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#configure_permissions)). Buckets provisioned through the [`gke-persistent-volume`](../modules/file-system/gke-persistent-volume/README.md) module get this binding automatically.
+
+> [!IMPORTANT]
+> **`profile=serving` requires the bucket and the cluster to be in the same
+> region.** GKE documents this co-location as *mandatory* for the
+> `gcsfusecsi-serving` profile, and equally mandatory whenever Rapid Cache
+> (`anywhereCacheZones`) is enabled - on any profile.
+>
+> Confirm the bucket's location before submitting:
+>
+> ```bash
+> gcloud storage buckets describe gs://<YOUR_BUCKET_NAME> --format="value(location)"
+> ```
+>
+> `training` and `checkpointing` without Rapid Cache do not carry this hard
+> requirement, though same-region buckets remain the better choice for
+> throughput and egress cost.
+
+### 5.2 Job submission (`gcluster job submit --mount "...;profile=<profile>"`)
+
+Accepted profiles are `training`, `checkpointing`, and `serving` (canonical `gcsfusecsi-<name>` names are also accepted). To choose one, see [Select performance profile](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#select-performance-profile).
+
+```shell
+./gcluster job submit \
+  --name my-serving-job \
+  --command "python serve.py" \
+  --compute-type n2-standard-32 \
+  --image us-docker.pkg.dev/my-project/my-repo/my-image:latest \
+  --mount "gs://<YOUR_MODEL_BUCKET>/llama;/models;ro;profile=serving"
+```
+
+Before applying anything, `gcluster` checks each profile mount:
+
+* A StorageClass missing from the cluster fails the submission.
+* A bucket outside the cluster's region fails the submission where GKE requires co-location (`serving`, or any profile with Rapid Cache enabled), and only warns otherwise.
+* A GKE Service Agent that appears to lack the bucket permissions produces a warning; submission continues.
+
+A dry run (`--dry-run-out`) turns the blocking checks into warnings.
+
+#### Volume attributes
+
+`attributes=<k=v,...>` overrides the [storage profile StorageClass parameters](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#storageclass_configuration_reference) on the generated volume (without `profile=`, it sets [GCSFuse CSI volume attributes](https://docs.cloud.google.com/kubernetes-engine/docs/reference/cloud-storage-fuse-csi-driver/volume-attr) on the inline mount). `gcluster` derives some attributes from the rest of the `--mount` spec, and supplying one of them through `attributes=` fails validation, so the two cannot silently overwrite each other. Use `options=<opt1>,<opt2>` instead of `attributes=mountOptions=...` for gcsfuse mount flags, and put the bucket in the `<src>` position of `--mount` (`gs://<bucket>[/<path>]`) instead of `attributes=bucketName=...`.
+
+#### Gateway sharing and naming
+
+* The generated claim is named `gcluster-gcsfuse-<bucket>-<profile>-<hash>` and the
+  PersistentVolume `gcluster-gcsfuse-<bucket>-<profile>-<hash>-<namespace>`, where
+  `<hash>` is a short digest of the volume's settings. The names are
+  deterministic, so several jobs that use the same bucket, profile, and settings
+  in the same namespace **share one gateway** rather than each creating their own.
+  A bucket subpath is applied on the pod's mount, so it does not create a new gateway.
+* Any change to the settings gives the mount its own gateway, so
+  it never clashes with the immutable spec of an existing one. Running jobs keep
+  using the old gateway.
+
+#### Managing gateways
+
+`gcluster job cancel` deletes the job, then every unused gateway (claim and volume)
+in the namespace:
+
+* Gateways used by other running jobs, or claimed by a submit in the last two minutes, are kept.
+* Gateways left by jobs that ended on their own or were deleted with `kubectl` are
+  reused by new jobs until the next cancel removes them.
+* A submit right after a cancel waits for the old gateway to go, then recreates it.
+  If a cancel removes a gateway mid-submit, the job is not started; resubmit.
+* Only gateways labelled by gcluster are touched. Bucket data is never affected.
+
+To list gateways:
+
+```bash
+kubectl get pv,pvc -A -l gcluster.google.com/managed-by=cluster-toolkit,gcluster.google.com/storage-type=gcsfuse
+```
+
+To delete one by hand, delete the claim first, then the volume bound to it:
+
+```bash
+VOLUME=$(kubectl get pvc <claim> -n <namespace> -o jsonpath='{.spec.volumeName}') && \
+kubectl delete pvc <claim> -n <namespace> && \
+{ [ -z "$VOLUME" ] || kubectl delete pv "$VOLUME"; }
 ```
 
 ---
 
 ## What's next
 
-* [TPU Dynamic Slicing on GKE Concepts](https://cloud.google.com/kubernetes-engine/docs/concepts/tpu-dynamic-slicing)
-* [Scheduling Dynamic Slices with Kueue and TAS on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/kueue-tpu-dynamic-slicing)
+* [TPU Dynamic Slicing on GKE Concepts](https://cloud.google.com/kubernetes-engine/docs/concepts/dynamic-slicing)
+* [Scheduling Dynamic Slices with Kueue and TAS on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/use-gke-dynamic-slicing)
 * [GKE Node Auto-Provisioning Documentation](https://cloud.google.com/kubernetes-engine/docs/concepts/node-auto-provisioning)
-* [Multi-Tier Checkpointing on GKE Overview](https://cloud.google.com/kubernetes-engine/docs/concepts/multi-tier-checkpointing)
+* [Train large-scale machine learning models on GKE with Multi-Tier Checkpointing](https://cloud.google.com/kubernetes-engine/docs/how-to/machine-learning/training/multi-tier-checkpointing)
+* [Cloud Storage FUSE storage profiles on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles)

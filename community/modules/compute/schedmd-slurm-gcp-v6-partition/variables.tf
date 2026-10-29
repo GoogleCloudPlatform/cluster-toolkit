@@ -60,15 +60,17 @@ variable "nodeset" {
     node_conf              = optional(map(string), {})
     nodeset_name           = string
     additional_disks = optional(list(object({
-      disk_name                  = optional(string)
-      device_name                = optional(string)
-      disk_size_gb               = optional(number)
-      disk_type                  = optional(string)
-      disk_storage_pool          = optional(string)
-      disk_labels                = optional(map(string), {})
-      auto_delete                = optional(bool, true)
-      boot                       = optional(bool, false)
-      disk_resource_manager_tags = optional(map(string), {})
+      disk_name                   = optional(string)
+      device_name                 = optional(string)
+      disk_size_gb                = optional(number)
+      disk_type                   = optional(string)
+      disk_storage_pool           = optional(string)
+      disk_provisioned_iops       = optional(number)
+      disk_provisioned_throughput = optional(number)
+      disk_labels                 = optional(map(string), {})
+      auto_delete                 = optional(bool, true)
+      boot                        = optional(bool, false)
+      disk_resource_manager_tags  = optional(map(string), {})
     })), [])
     bandwidth_tier                      = optional(string, "platform_default")
     can_ip_forward                      = optional(bool, false)
@@ -78,6 +80,8 @@ variable "nodeset" {
     disk_size_gb                        = optional(number)
     disk_type                           = optional(string)
     disk_storage_pool                   = optional(string)
+    disk_provisioned_iops               = optional(number)
+    disk_provisioned_throughput         = optional(number)
     disk_encryption_key                 = optional(string)
     disk_encryption_key_service_account = optional(string)
     enable_confidential_vm              = optional(bool, false)
@@ -180,6 +184,14 @@ variable "nodeset" {
     zone_target_shape = string
     zone_policy_allow = set(string)
     zone_policy_deny  = set(string)
+
+    instance_flexibility_policy = optional(object({
+      instance_selections = list(object({
+        name          = optional(string)
+        rank          = optional(number, 1)
+        machine_types = set(string)
+      }))
+    }))
   }))
   default = []
 

@@ -22,6 +22,13 @@ vars:
   region: ""                       ## Set region
   zone: ""                         ## Set zone
   nfs_dir: "/gpfs/fs1/export1"     ## Set the directory to export
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned nodes in the compute partition.
+  compute_node_count_dynamic_max: 4
+  # Machine type for the compute partition.
+  compute_machine_type: n2-standard-2
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -76,8 +83,8 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network1]
     settings:
-      node_count_dynamic_max: 4
-      machine_type: n2-standard-2
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
+      machine_type: $(vars.compute_machine_type)
       allow_automatic_updates: false
 
   - id: compute_partition
@@ -92,7 +99,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network1]
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       enable_login_public_ips: true
 
   - id: slurm_controller

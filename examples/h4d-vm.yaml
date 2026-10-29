@@ -25,6 +25,9 @@ vars:
   hostname_prefix: $(vars.deployment_name)-odyssey
   base_network_name: $(vars.deployment_name)
   reservation_name: "" # Optional: Set only if a reservation is available.
+  # Optional overrides (defaults shown)
+  # Number of H4D compute VMs.
+  compute_instance_count: 2
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -83,7 +86,7 @@ deployment_groups:
     use: [h4d_startup, homefs]
     settings:
       machine_type: h4d-highmem-192-lssd
-      instance_count: 2
+      instance_count: $(vars.compute_instance_count)
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
       reservation_name: $(vars.reservation_name)

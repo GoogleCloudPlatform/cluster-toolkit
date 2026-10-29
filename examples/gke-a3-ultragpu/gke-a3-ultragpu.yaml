@@ -57,6 +57,10 @@ vars:
   # # Maximum throughput of the lustre instance in MBps per TiB
   # per_unit_storage_throughput: 500
 
+  # Optional overrides (defaults shown)
+  # Machine type for the GKE system node pool.
+  system_node_pool_machine_type: n2d-standard-16
+
 deployment_groups:
 - group: primary
   modules:
@@ -133,7 +137,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-a3-ultra-net-0, workload_service_account]
     settings:
-      system_node_pool_machine_type: "n2d-standard-16"
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
@@ -201,6 +205,9 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [a3-ultragpu-cluster, node_pool_service_account]
     settings:
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a3-ultragpu-8g
       auto_upgrade: true
       enable_dranet: true

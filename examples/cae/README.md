@@ -123,17 +123,10 @@ You can customize your deployment settings in [`cae-slurm-deployment.yaml`](./ca
 
 ### Step-by-Step Deployment
 
-1. Clone the repo
+1. From the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository, build `./gcluster` (if not already built):
 
    ```bash
-   git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
-   cd cluster-toolkit
-   ```
-
-1. Build the Cluster Toolkit
-
-   ```bash
-   make
+   test -x ./gcluster || make
    ```
 
 1. Update `project_id` (and any other desired variables) in
@@ -283,8 +276,8 @@ Depending on the software you want to use, different installation paths may be r
   to install all dependencies for a particular version of the software, including compiling
   the software or its dependencies from source.
 
-  Please also see the [OpenFOAM](../../docs/tutorials/openfoam/spack-openfoam.md) example
-  for how this can be used to install the OpenFOAM software.
+  Please also see the [GROMACS](../../docs/tutorials/gromacs/spack-gromacs.md) example
+  for how this can be used to install scientific software using Spack.
 
   Once that is completed, the software will persist on the NFS Filestore share for as long as you
   do not destroy the `setup` stage.

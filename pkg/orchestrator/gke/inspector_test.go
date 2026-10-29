@@ -107,6 +107,8 @@ func TestInspectCluster_Success(t *testing.T) {
 		"Google Cloud SDK 400.0.0",
 		"GKE: Cluster Details",
 		"cluster-description",
+		// The logged command must be the pinned one that actually ran.
+		"Command: kubectl [--context gke_test-project_us-central1-a_test-cluster-success get nodes -o wide]",
 		"Node Pool Node Counts:",
 		"pool-1: 1 total",
 		"Healthy Node Counts Per Node Pool:",

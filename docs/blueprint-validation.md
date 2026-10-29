@@ -33,7 +33,7 @@ Each validator is described below:
     the user with instructions for enabling it
   * Manual test: `gcloud projects describe $(vars.project_id)`
 * `test_apis_enabled`
-  * Inputs: none; reads whole blueprint to discover required APIs for project(s)
+  * Inputs: `project_id` (string); required APIs are discovered from the metadata of modules in the blueprint
   * PASS: if all required services are enabled in each project
   * FAIL: if `project_id` is not an existing Google Cloud project _or_ the
     active credentials cannot access the Google Cloud project
@@ -41,19 +41,19 @@ Each validator is described below:
     the user with instructions for enabling it
   * Manual test: `gcloud services list --enabled --project $(vars.project_id)`
 * `test_region_exists`
-  * Inputs: `region` (string)
+  * Inputs: `project_id` (string), `region` (string)
   * PASS: if region exists and is accessible within the project
   * FAIL: if region does not exist or is not accessible within the project
   * Typical failures involve simple typos
   * Manual test: `gcloud compute regions describe $(vars.region) --project $(vars.project_id)`
 * `test_zone_exists`
-  * Inputs: `zone` (string)
+  * Inputs: `project_id` (string), `zone` (string)
   * PASS: if zone exists and is accessible within the project
   * FAIL: if zone does not exist or is not accessible within the project
   * Typical failures involve simple typos
   * Manual test: `gcloud compute zones describe $(vars.zone) --project $(vars.project_id)`
 * `test_zone_in_region`
-  * Inputs: `zone` (string), `region` (string)
+  * Inputs: `project_id` (string), `zone` (string), `region` (string)
   * PASS: if zone and region exist and the zone is part of the region
   * FAIL: if either region or zone do not exist or the zone is not within the
     region
@@ -66,6 +66,16 @@ Each validator is described below:
   * FAIL: If the machine type is invalid or unavailable in that zone.
   * Note: To explicitly verify multiple machine types in a zone, add this validator to the blueprint multiple times.
   * Manual test: `gcloud compute machine-types describe $(vars.machine_type) --zone $(vars.zone) --project $(vars.project_id)`
+* `test_disk_type_in_zone`
+  * Inputs: `project_id` (string), `zone` (string), `disk_type` (string)
+  * PASS: If the disk type is available in the specified zone and project.
+  * FAIL: If the disk type is invalid or unavailable in that zone.
+* `test_reservation_exists`
+  * Inputs: `project_id` (string), `zone` (string), `reservation_name` (string)
+  * PASS: if a standard or future reservation with that name exists in the project/zone
+* `test_quota_availability`
+  * Inputs: `project_id` (string), `region` (string, optional default); resource requirements are derived from the blueprint's modules
+  * PASS: If sufficient project/regional quota is available for the requested resources.
 * `test_module_not_used`
   * Inputs: none; reads whole blueprint
   * PASS: if all instances of use keyword pass matching variables
@@ -93,7 +103,8 @@ validators:
     inputs:
       project_id: $(vars.project_id)
   - validator: test_apis_enabled
-    inputs: {}
+    inputs:
+      project_id: $(vars.project_id)
   - validator: test_region_exists
     inputs:
       project_id: $(vars.project_id)
@@ -218,7 +229,7 @@ The `exclusive` validator ensures that at most one of the specified variables is
 
 ```yaml
 ghpc:
-validators:
+  validators:
   - validator: exclusive
     inputs:
       vars: [preemptible, reserved]
@@ -271,6 +282,41 @@ ghpc:
         trigger_value: true
         dependent: slurm_control_host
       error_message: "slurm_control_host is required when enable_hybrid is true."
+```
+
+### Conditional Regex Validator
+The `conditional_regex` validator ensures that a `dependent` string variable matches a regular expression `pattern` when a trigger condition is met. Set `match_expected: false` to require that the variable does not match the pattern.
+
+Specify the condition with `trigger` and `trigger_value`, or use `triggers` to pass a map of variable names or dot-separated nested paths (such as `dws_flex.enabled`) to expected values. Unset or empty dependent variables are skipped unless `required: true` is set.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+    - validator: conditional_regex
+      inputs:
+        trigger: enable_custom_domain
+        trigger_value: true
+        dependent: custom_domain_name
+        pattern: "^[a-z0-9.-]+\\.[a-z]{2,}$"
+        match_expected: true
+      error_message: "custom_domain_name must be a valid domain when enable_custom_domain is true."
+```
+
+### CIDR Validator
+The `cidr` validator ensures that input variables are valid IP CIDR blocks. It validates strings, lists of strings, or specific fields within objects and maps when `object_key` is set. Supports optional `allow_null` (defaults to `false`) and `optional` (defaults to `true`) flags.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: cidr
+    inputs:
+      vars: [master_authorized_networks]
+      object_key: cidr_block
+    error_message: "All values in 'master_authorized_networks.cidr_block' must be in CIDR format (e.g. 1.2.3.4/32)."
 ```
 
 Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.

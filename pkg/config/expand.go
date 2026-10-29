@@ -33,7 +33,7 @@ import (
 const (
 	blueprintLabel        = "ghpc_blueprint"
 	deploymentLabel       = "ghpc_deployment"
-	GoogleProviderVersion = ">= 6.9.0, <= 8.3.0"
+	GoogleProviderVersion = ">= 6.9.0, <= 8.8.0"
 )
 
 var validLabelValueRegex = regexp.MustCompile("[^a-z0-9_-]")
@@ -133,6 +133,9 @@ func (bp *Blueprint) expandGroups() error {
 	bp.addKindToModules()
 	bp.substituteModuleSources()
 	if err := checkModulesAndGroups(*bp); err != nil {
+		return err
+	}
+	if err := bp.resolveReservationSubblocks(); err != nil {
 		return err
 	}
 
@@ -689,7 +692,7 @@ func isTPUTopologyWorkloadPolicy(bp Blueprint, wpMap map[string]cty.Value) bool 
 		return false
 	}
 	if ev, err := bp.Eval(topVal); err == nil && ev.IsKnown() && !ev.IsNull() && ev.Type() == cty.String {
-		return strings.Count(ev.AsString(), "x") == 2
+		return strings.Count(strings.ToLower(ev.AsString()), "x") == 2
 	}
 	return true
 }

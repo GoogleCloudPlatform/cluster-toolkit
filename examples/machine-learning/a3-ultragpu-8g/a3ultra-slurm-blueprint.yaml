@@ -23,11 +23,12 @@ vars:
   a3u_cluster_size: # supply cluster size
   instance_image:
     project: advanced-compute-images
-    family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-amd64
+    family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-amd64
   # Image settings
   # Cluster env settings
-  net0_range: 192.168.0.0/19
-  net1_range: 192.168.64.0/18
+  network_address_range: 172.16.0.0/16
+  primary_subnet: 172.16.0.0/20
+  secondary_subnet: 172.16.16.0/20
   rdma_net_range: 192.168.128.0/18
   # Cluster Settings
   local_ssd_mountpoint: /mnt/localssd
@@ -38,6 +39,10 @@ vars:
   a3u_reservation_name: "" # supply reservation name
   a3u_dws_flex_enabled: false
   a3u_enable_spot_vm: false
+
+  # Multi-NIC configuration
+  enable_multinic: true
+  multinic_client_tag: $(vars.deployment_name)-multinic-client
 
   # Managed Lustre is only supported in specific regions and zones
   # Please refer https://cloud.google.com/managed-lustre/docs/locations
@@ -53,6 +58,18 @@ vars:
   # Maximum throughput of the lustre instance in MBps per TiB
   per_unit_storage_throughput: 500
 
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned nodes in the a3ultra partition.
+  a3u_node_count_dynamic_max: 0
+  # Machine type for the login node.
+  login_machine_type: n2d-standard-16
+  # Boot disk size in GB for the login node.
+  login_disk_size_gb: 300
+  # Machine type for the controller node.
+  controller_machine_type: n2d-standard-16
+  # Boot disk size in GB for the controller node.
+  controller_disk_size_gb: 300
+
 deployment_groups:
 
 - group: cluster-env
@@ -66,28 +83,13 @@ deployment_groups:
       subnetworks:
       - subnet_name: $(vars.base_network_name)-sub-0
         subnet_region: $(vars.region)
-        subnet_ip: $(vars.net0_range)
-      firewall_rules:
-      - name: $(vars.base_network_name)-internal-0
-        ranges: [$(vars.net0_range)]
-        allow:
-        - protocol: tcp
-        - protocol: udp
-        - protocol: icmp
-
-  - id: a3ultra-slurm-net-1
-    source: modules/network/vpc
-    settings:
-      network_name: $(vars.base_network_name)-net-1
-      mtu: 8896
-      enable_internal_traffic: false # Setting firewall below instead
-      subnetworks:
+        subnet_ip: $(vars.primary_subnet)
       - subnet_name: $(vars.base_network_name)-sub-1
         subnet_region: $(vars.region)
-        subnet_ip: $(vars.net1_range)
+        subnet_ip: $(vars.secondary_subnet)
       firewall_rules:
-      - name: $(vars.base_network_name)-internal-1
-        ranges: [$(vars.net1_range)]
+      - name: $(vars.base_network_name)-internal
+        ranges: [$(vars.network_address_range)]
         allow:
         - protocol: tcp
         - protocol: udp
@@ -119,6 +121,10 @@ deployment_groups:
       name: $(vars.lustre_instance_id)
       local_mount: /home
       remote_mount: lustrefs
+      multinic:
+        enabled: $(vars.enable_multinic)
+        psa_ip_ranges: [$(private_service_access.cidr_range)]
+        client_tags: [$(vars.multinic_client_tag)]
       per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
     outputs:
     - network_storage
@@ -209,7 +215,7 @@ deployment_groups:
   - id: a3ultra_startup
     source: modules/scripts/startup-script
     settings:
-      install_ansible: true
+      install_ansible: false
       local_ssd_filesystem:
         mountpoint: $(vars.local_ssd_mountpoint)
         permissions: "1777" # must quote numeric filesystem permissions!
@@ -258,8 +264,8 @@ deployment_groups:
             hosts: all
             become: true
             vars:
-              cuda_installer_url: "https://developer.download.nvidia.com/compute/cuda/13.0.0/local_installers/cuda_13.0.0_580.65.06_linux.run"
-              cuda_installer_file: "/tmp/cuda_13.0.0_580.65.06_linux.run"
+              cuda_installer_url: "https://developer.download.nvidia.com/compute/cuda/13.2.2/local_installers/cuda_13.2.2_595.71.05_linux.run"
+              cuda_installer_file: "/tmp/cuda_13.2.2_595.71.05_linux.run"
               nvidia_packages:
                 - datacenter-gpu-manager-4-core=1:4.6.1-1
                 - datacenter-gpu-manager-4-dev=1:4.6.1-1
@@ -355,12 +361,16 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [a3ultra-slurm-net-0, a3ultra_startup]
     settings:
+      metadata: $(homefs.lnet_multinic_metadata)
       bandwidth_tier: gvnic_enabled
+      # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
+      # settings in this blueprint are specific to this shape. To use a different
+      # machine type, copy this blueprint (ai_assisted: true) and change it there.
       machine_type: a3-ultragpu-8g
-
+      tags: [$(vars.multinic_client_tag)]
       enable_public_ips: true
       node_count_static: $(vars.a3u_cluster_size)
-      node_count_dynamic_max: 0
+      node_count_dynamic_max: $(vars.a3u_node_count_dynamic_max)
       enable_placement: false
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
@@ -381,7 +391,7 @@ deployment_groups:
         $(concat(
           [{
             network=null,
-            subnetwork=a3ultra-slurm-net-1.subnetwork_self_link,
+            subnetwork=a3ultra-slurm-net-0.subnetworks["${vars.region}/${vars.base_network_name}-sub-1"].self_link,
             subnetwork_project=vars.project_id,
             nic_type="GVNIC",
             queue_count=null,
@@ -411,9 +421,9 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [a3ultra-slurm-net-0]
     settings:
-      disk_size_gb: 300
+      disk_size_gb: $(vars.login_disk_size_gb)
       enable_login_public_ips: true
-      machine_type: n2d-standard-16
+      machine_type: $(vars.login_machine_type)
 
   - id: controller_startup
     source: modules/scripts/startup-script
@@ -471,8 +481,8 @@ deployment_groups:
     settings:
       enable_controller_public_ips: true
       disk_type: pd-extreme
-      disk_size_gb: 300
-      machine_type: n2d-standard-16
+      disk_size_gb: $(vars.controller_disk_size_gb)
+      machine_type: $(vars.controller_machine_type)
       controller_startup_script: $(controller_startup.startup_script)
       enable_external_prolog_epilog: true
       compute_startup_scripts_timeout: 1800

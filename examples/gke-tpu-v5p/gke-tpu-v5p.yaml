@@ -34,7 +34,7 @@ vars:
 
   # Machine type
   # TPU v5p options: ct5p-hightpu-4t
-  machine_type: ct5p-hightpu-4t
+  compute_machine_type: ct5p-hightpu-4t
 
   # The TPU placement topology for pod slice node pool.
   # TPU v5p options: 2x2x1, 2x2x2, 2x2x4, 2x4x4, 4x4x4, etc.
@@ -67,6 +67,10 @@ vars:
 
   # The namespace to be configured for running workloads
   user_namespace: default
+
+  # Optional overrides (defaults shown)
+  # Machine type for the GKE system node pool.
+  system_node_pool_machine_type: n2-standard-8
 
 
 deployment_groups:
@@ -126,7 +130,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-v5p-net, workload_service_account]
     settings:
-      system_node_pool_machine_type: "n2-standard-8"
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_private_endpoint: false # Allows access from authorized public IPs
@@ -155,7 +159,7 @@ deployment_groups:
       num_slices: $(vars.num_slices)
       name: gke-tpu-v5p-pool
       disk_type: pd-balanced
-      machine_type: $(vars.machine_type)
+      machine_type: $(vars.compute_machine_type)
       auto_upgrade: true
       zones: [$(vars.zone)]
       disk_size_gb: $(vars.v5p_node_pool_disk_size_gb)

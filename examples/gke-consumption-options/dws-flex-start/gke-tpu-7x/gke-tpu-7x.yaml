@@ -33,7 +33,7 @@ vars:
   num_slices:
 
   # Machine type
-  machine_type: tpu7x-standard-4t
+  compute_machine_type: tpu7x-standard-4t
 
   # The TPU placement topology for pod slice node pool.
   tpu_topology:
@@ -56,6 +56,10 @@ vars:
 
 # Kueue configuration
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+
+  # Optional overrides (defaults shown)
+  # Machine type for the GKE system node pool.
+  system_node_pool_machine_type: n2-standard-8
 
 deployment_groups:
 - group: primary
@@ -150,7 +154,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-7x-net-0, workload_service_account]
     settings:
-      system_node_pool_machine_type: "n2-standard-8"
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
       system_node_pool_taints: []
       enable_private_endpoint: false # Allows access from authorized public IPs
       enable_pathways_for_tpus: $(vars.enable_pathways_for_tpus)
@@ -202,7 +206,7 @@ deployment_groups:
       num_slices: $(vars.num_slices)
       name: gke-tpu-7x-pool
       disk_type: hyperdisk-balanced
-      machine_type: $(vars.machine_type)
+      machine_type: $(vars.compute_machine_type)
       auto_upgrade: true
       zones: [$(vars.zone)]
       enable_flex_start: $(vars.enable_flex_start)

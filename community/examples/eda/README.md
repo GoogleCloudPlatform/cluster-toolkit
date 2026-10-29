@@ -27,7 +27,7 @@ Two example blueprints are provided.
 
 This blueprint assumes that all compute and data resides in the cloud.
 
-In the base deployment group (see [deployment stages](#deployment_stages)) it provisions a new network and multiple volumes to store your data. Adjust the volume sizes to suit your requirements before deployment. If your volumes are larger than 15 TiB, creating them as [large volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes) adds performance benefits. The blueprint creates a private Cloud DNS zone and configures every volume with a DNS record. For large-capacity volumes, the record contains all NFS endpoint IPs so Slurm clients use the volume FQDN and are distributed across the endpoints through DNS round-robin.
+In the base deployment group (see [deployment stages](#deployment-stages)) it provisions a new network and multiple volumes to store your data. Adjust the volume sizes to suit your requirements before deployment. If your volumes are larger than 15 TiB, creating them as [large volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes) adds performance benefits. The blueprint creates a private Cloud DNS zone and configures every volume with a DNS record. For large-capacity volumes, the record contains all NFS endpoint IPs so Slurm clients use the volume FQDN and are distributed across the endpoints through DNS round-robin.
 
 The cluster deployment group deploys a managed instance group which is managed by Slurm.
 
@@ -37,7 +37,7 @@ When scaling down the deployment, make sure to only destroy the *compute* deploy
 
 This blueprint assumes you are using NetApp Volumes [FlexCache](https://docs.cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/cache-ontap-volumes/overview) to enable a [hybrid cloud EDA](https://community.netapp.com/t5/Tech-ONTAP-Blogs/NetApp-FlexCache-Enhancing-hybrid-EDA-with-Google-Cloud-NetApp-Volumes/ba-p/462768) environment.
 
-The base deployment group (see [deployment stages](#deployment_stages)) connects to an existing network and mounts multiple volumes. This blueprint assumes you have pre-existing volumes for "tools", "libraries", "home" and "scratch". Before deployment, set each `*_server_ips` blueprint variable to the complete list of NFS endpoint IPs for that volume and update its `remote_mount` parameter with the export path. The blueprint creates private DNS records from those addresses and supplies the resulting FQDNs to the storage modules. Using existing volumes also avoids the danger of them being deleted accidentally when deleting the base deployment group.
+The base deployment group (see [deployment stages](#deployment-stages)) connects to an existing network and mounts multiple volumes. This blueprint assumes you have pre-existing volumes for "tools", "libraries", "home" and "scratch". Before deployment, set each `*_server_ips` blueprint variable to the complete list of NFS endpoint IPs for that volume and update its `remote_mount` parameter with the export path. The blueprint creates private DNS records from those addresses and supplies the resulting FQDNs to the storage modules. Using existing volumes also avoids the danger of them being deleted accidentally when deleting the base deployment group.
 
 The volumes used can be regular NetApp Volume [volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview), [large volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes) or [FlexCache volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/cache-ontap-volumes/overview).
 
@@ -171,6 +171,8 @@ storage intact and b) you can build software before you deploy your cluster.
 
    This deployment group contains the Slurm cluster and compute partitions.
 
+   Once the cluster is up, you can try the example front-end (Verilator/RTLMeter) and back-end (OpenROAD) EDA workloads from the [GCD EDA example](../hpc-slurm-google-cloud-dedicated/eda/README.md#3-front-end-rtl-verification-example-verilator--rtlmeter-nvdla). Because `eda-all-on-cloud.yaml` does not pre-install Apptainer or automatically build the Verilator image, first install `apptainer` on the nodes, build and copy `/tools/containers/verilator-nvdla.sif` from [`verilator-nvdla.def`](../hpc-slurm-google-cloud-dedicated/eda/verilator-nvdla.def) (or pull `/tools/containers/openroad-orfs.sif`), and change `--partition=compute` in the job scripts to `--partition=h4d`.
+
 ## Teardown Instructions
 
 > [!NOTE]
@@ -239,13 +241,13 @@ Depending on the software you want to use, different installation paths may be r
   a non-negligible amount of time (~hours). We therefore strongly suggest to use
   the `software_installation` stage for this purpose.
 
-  Please see the [HCLS Blueprint](../../docs/videos/healthcare-and-life-sciences/README.md) example
+  Please see the [HCLS Blueprint](../../../docs/videos/healthcare-and-life-sciences/README.md) example
   for how the `software_installation` stage can be used to use the spack package manager
   to install all dependencies for a particular version of the software, including compiling
   the software or its dependencies from source.
 
-  Please also see the [OpenFOAM](../../docs/tutorials/openfoam/spack-openfoam.md) example
-  for how this can be used to install the OpenFOAM software.
+  Please also see the [GROMACS](../../../docs/tutorials/gromacs/spack-gromacs.md) example
+  for how this can be used to install scientific software using Spack.
 
   Once that is completed, the software will persist on the NetApp Volumes share for as long as you
   do not destroy the `base` stage.
