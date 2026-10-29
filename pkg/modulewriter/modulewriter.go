@@ -32,6 +32,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -160,7 +161,23 @@ func copySharedEmbeddedModules(bp config.Blueprint, deploymentDir string) error 
 	return writeSharedEmbeddedOverrides(bp, deploymentDir)
 }
 
+func validateModuleIgnoresRemoteSource(bp config.Blueprint) error {
+	for _, g := range bp.Groups {
+		for _, mod := range g.Modules {
+			if mod.Kind == config.TerraformKind && len(mod.ReconfigureIgnores) > 0 && sourcereader.IsRemotePath(mod.Source) {
+				return fmt.Errorf("module %q specifies reconfigure_ignores, but uses a remote source %q: "+
+					"reconfigure_ignores is currently only supported on local and embedded modules", mod.ID, mod.Source)
+			}
+		}
+	}
+	return nil
+}
+
 func writeSharedEmbeddedOverrides(bp config.Blueprint, deploymentDir string) error {
+	if err := validateModuleIgnoresRemoteSource(bp); err != nil {
+		return err
+	}
+
 	embeddedIgnores := make(map[string]map[string][]string)
 	for _, g := range bp.Groups {
 		for _, mod := range g.Modules {
@@ -397,19 +414,27 @@ func contains(list []string, s string) bool {
 	return false
 }
 
+var singleQuoteIndexRe = regexp.MustCompile(`\[\s*'([^']*)'\s*\]`)
+
+func normalizeIgnoreAttribute(attr string) string {
+	return singleQuoteIndexRe.ReplaceAllString(attr, `["$1"]`)
+}
+
 func mergeIgnores(existing, additions []string) []string {
 	seen := make(map[string]bool)
 	var merged []string
 	for _, item := range existing {
-		if !seen[item] {
-			seen[item] = true
-			merged = append(merged, item)
+		norm := normalizeIgnoreAttribute(item)
+		if !seen[norm] {
+			seen[norm] = true
+			merged = append(merged, norm)
 		}
 	}
 	for _, item := range additions {
-		if !seen[item] {
-			seen[item] = true
-			merged = append(merged, item)
+		norm := normalizeIgnoreAttribute(item)
+		if !seen[norm] {
+			seen[norm] = true
+			merged = append(merged, norm)
 		}
 	}
 	return merged

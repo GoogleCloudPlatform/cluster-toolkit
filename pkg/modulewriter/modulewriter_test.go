@@ -952,3 +952,66 @@ func TestFormatTargetNotFoundError(t *testing.T) {
 		t.Errorf("got error %q, want substring %q", err.Error(), expectedSub)
 	}
 }
+
+func TestNormalizeIgnoreAttribute(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"metadata['ssh-keys']", `metadata["ssh-keys"]`},
+		{"metadata[ 'ssh-keys' ]", `metadata["ssh-keys"]`},
+		{"node_config[0].labels['app']", `node_config[0].labels["app"]`},
+		{`node_config[0].labels["app"]`, `node_config[0].labels["app"]`},
+		{"labels", "labels"},
+	}
+	for _, tc := range tests {
+		got := normalizeIgnoreAttribute(tc.input)
+		if got != tc.expected {
+			t.Errorf("normalizeIgnoreAttribute(%q) = %q, want %q", tc.input, got, tc.expected)
+		}
+	}
+}
+
+func TestValidateModuleIgnoresRemoteSource(t *testing.T) {
+	bpRemote := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "remote_mod",
+						Kind:   config.TerraformKind,
+						Source: "git::https://github.com/terraform-google-modules/network.git",
+						ReconfigureIgnores: map[string][]string{
+							"google_compute_network": {"mtu"},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := validateModuleIgnoresRemoteSource(bpRemote); err == nil {
+		t.Fatalf("expected error for remote module with reconfigure_ignores, got nil")
+	}
+
+	bpLocal := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "local_mod",
+						Kind:   config.TerraformKind,
+						Source: "modules/network/vpc",
+						ReconfigureIgnores: map[string][]string{
+							"google_compute_network": {"mtu"},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := validateModuleIgnoresRemoteSource(bpLocal); err != nil {
+		t.Fatalf("unexpected error for embedded module: %v", err)
+	}
+}
