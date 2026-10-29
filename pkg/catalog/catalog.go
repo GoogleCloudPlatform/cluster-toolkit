@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulereader"
+	"hpc-toolkit/pkg/sourcereader"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -328,29 +329,44 @@ func cachedMetadataServices(key, source string) ([]string, bool) {
 	return svcs, true
 }
 
+func lookupLocalModuleServices(dir, rel string) ([]string, bool) {
+	joined := filepath.FromSlash(rel)
+	if dir != "" {
+		joined = filepath.Join(dir, joined)
+	}
+	localAbs, err := filepath.Abs(joined)
+	if err != nil {
+		return nil, false
+	}
+	return cachedMetadataServices("loc:"+localAbs, localAbs)
+}
+
 func moduleServicesForSource(repoRoot, bpDir, rawSrc string) []string {
-	normSrc := normalizeModuleSource(rawSrc)
-	if repoRoot != "" {
-		modAbs := filepath.Join(repoRoot, filepath.FromSlash(normSrc))
-		if svcs, ok := cachedMetadataServices("abs:"+modAbs, modAbs); ok {
-			return svcs
+	trimmed := strings.TrimSpace(rawSrc)
+	normSrc := normalizeModuleSource(trimmed)
+	if sourcereader.IsEmbeddedPath(normSrc) {
+		if repoRoot != "" {
+			modAbs := filepath.Join(repoRoot, filepath.FromSlash(normSrc))
+			if svcs, ok := cachedMetadataServices("abs:"+modAbs, modAbs); ok {
+				return svcs
+			}
 		}
-	}
-	if svcs, ok := cachedMetadataServices("emb:"+normSrc, normSrc); ok {
-		return svcs
-	}
-	if bpDir != "" {
-		joined := filepath.Join(bpDir, filepath.FromSlash(strings.TrimSpace(rawSrc)))
-		if localAbs, err := filepath.Abs(joined); err == nil {
-			if svcs, ok := cachedMetadataServices("loc:"+localAbs, localAbs); ok {
+		if sourcereader.ModuleFS != nil {
+			if svcs, ok := cachedMetadataServices("emb:"+normSrc, normSrc); ok {
 				return svcs
 			}
 		}
 	}
-	if localAbs, err := filepath.Abs(filepath.FromSlash(strings.TrimSpace(rawSrc))); err == nil {
-		if svcs, ok := cachedMetadataServices("loc:"+localAbs, localAbs); ok {
+	if !sourcereader.IsLocalPath(trimmed) {
+		return nil
+	}
+	if bpDir != "" {
+		if svcs, ok := lookupLocalModuleServices(bpDir, trimmed); ok {
 			return svcs
 		}
+	}
+	if svcs, ok := lookupLocalModuleServices("", trimmed); ok {
+		return svcs
 	}
 	return nil
 }

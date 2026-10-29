@@ -519,7 +519,64 @@ func verifyLLMsRenderOutputs(t *testing.T, cat Catalog) {
 	if strings.Contains(llms1, "a4xm_reservation_name") {
 		t.Errorf("RenderLLMsTxt must not contain non-existent variable name a4xm_reservation_name")
 	}
+	verifyLLMsMatrixRows(t, llms1, cat.Blueprints)
 	verifyLLMsFullOutput(t, cat)
+}
+
+func verifyLLMsMatrixRows(t *testing.T, llmsTxt string, blueprints []BlueprintEntry) {
+	t.Helper()
+	byPath := make(map[string]BlueprintEntry, len(blueprints))
+	for _, bp := range blueprints {
+		byPath[bp.Path] = bp
+	}
+	inTable := false
+	rowCount := 0
+	for _, line := range strings.Split(llmsTxt, "\n") {
+		if strings.HasPrefix(line, "## AI Hypercomputer Hardware x Orchestrator") {
+			inTable = true
+			continue
+		}
+		if !inTable || !strings.HasPrefix(line, "| **") {
+			continue
+		}
+		rowCount++
+		verifySingleMatrixRow(t, line, byPath)
+	}
+	if rowCount != 21 {
+		t.Errorf("verifyLLMsMatrixRows found %d rows, want 21", rowCount)
+	}
+}
+
+func verifySingleMatrixRow(t *testing.T, line string, byPath map[string]BlueprintEntry) {
+	t.Helper()
+	cols := strings.Split(line, "|")
+	if len(cols) < 7 {
+		t.Fatalf("malformed matrix row: %s", line)
+	}
+	mt := strings.Trim(strings.TrimSpace(cols[2]), "`")
+	bpPath := extractMarkdownLinkTarget(cols[4])
+	deplPath := extractMarkdownLinkTarget(cols[5])
+	bp, ok := byPath[bpPath]
+	if !ok {
+		t.Errorf("matrix row references unknown blueprint %q", bpPath)
+		return
+	}
+	if deplPath != bp.DeploymentPath {
+		t.Errorf("matrix row for %s deployment path = %q, want %q", bpPath, deplPath, bp.DeploymentPath)
+	}
+	if !slices.Contains(bp.MachineTypes, mt) {
+		t.Errorf("matrix row for %s machine type %q not in %v", bpPath, mt, bp.MachineTypes)
+	}
+}
+
+func extractMarkdownLinkTarget(cell string) string {
+	s := strings.TrimSpace(cell)
+	if start := strings.Index(s, "]("); start >= 0 {
+		if end := strings.Index(s[start+2:], ")"); end >= 0 {
+			return s[start+2 : start+2+end]
+		}
+	}
+	return ""
 }
 
 func verifyLLMsFullOutput(t *testing.T, cat Catalog) {

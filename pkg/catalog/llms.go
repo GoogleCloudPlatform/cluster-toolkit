@@ -99,7 +99,7 @@ const llmsTxtMatrixAndDocsSection = `
 | **A4X High (4x GB200)** | ` + "`a4x-highgpu-4g`" + ` | **GKE** | [examples/gke-a4x/gke-a4x.yaml](examples/gke-a4x/gke-a4x.yaml) | [examples/gke-a4x/gke-a4x-deployment.yaml](examples/gke-a4x/gke-a4x-deployment.yaml) | GCS FUSE + Managed Lustre CSI + DRANET RDMA + Kueue TAS |
 | **A4X Max Bare Metal** | ` + "`a4x-maxgpu-4g-metal`" + ` | **Slurm** | [examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml](examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml) | [examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml](examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml) | 18,000 GiB Managed Lustre + 4 GCS FUSE mounts + 8 RoCE RDMA NICs |
 | **A4X Max Bare Metal** | ` + "`a4x-maxgpu-4g-metal`" + ` | **GKE** | [examples/gke-a4x-max-bm/gke-a4x-max-bm.yaml](examples/gke-a4x-max-bm/gke-a4x-max-bm.yaml) | [examples/gke-a4x-max-bm/gke-a4x-max-bm-deployment.yaml](examples/gke-a4x-max-bm/gke-a4x-max-bm-deployment.yaml) | GCS FUSE + Managed Lustre CSI + DRANET RDMA + Kueue TAS |
-| **G4 (NVIDIA RTX PRO 6000)** | ` + "`g4-standard-48`" + ` / ` + "`g4-standard-384`" + ` | **Slurm** | [examples/ml-slurm-g4.yaml](examples/ml-slurm-g4.yaml) | Inline ` + "`--vars project_id=<PROJECT_ID>`" + ` | Filestore + Slurm v6 auto-scaling |
+| **G4 (NVIDIA RTX PRO 6000)** | ` + "`g4-standard-48`" + ` | **Slurm** | [examples/ml-slurm-g4.yaml](examples/ml-slurm-g4.yaml) | Inline ` + "`--vars project_id=<PROJECT_ID>`" + ` | Filestore + 2 static Slurm v6 nodes (Dual-NIC ` + "`g4-standard-384`" + ` commented) |
 | **G4 (NVIDIA RTX PRO 6000)** | ` + "`g4-standard-48`" + ` | **GKE** | [examples/gke-g4/gke-g4.yaml](examples/gke-g4/gke-g4.yaml) | [examples/gke-g4/gke-g4-deployment.yaml](examples/gke-g4/gke-g4-deployment.yaml) | Kueue/JobSet + gke-job-template |
 | **H4D (Cloud RDMA HPC)** | ` + "`h4d-highmem-192-lssd`" + ` | **Slurm** | [examples/hpc-slurm-h4d/hpc-slurm-h4d.yaml](examples/hpc-slurm-h4d/hpc-slurm-h4d.yaml) | [examples/hpc-slurm-h4d/hpc-slurm-h4d-deployment.yaml](examples/hpc-slurm-h4d/hpc-slurm-h4d-deployment.yaml) | Filestore + Cloud RDMA Falcon VPC |
 | **H4D (Cloud RDMA HPC)** | ` + "`h4d-highmem-192-lssd`" + ` | **GKE** | [examples/gke-h4d/gke-h4d.yaml](examples/gke-h4d/gke-h4d.yaml) | [examples/gke-h4d/gke-h4d-deployment.yaml](examples/gke-h4d/gke-h4d-deployment.yaml) | Cloud RDMA Falcon VPC + Kueue |
@@ -211,6 +211,9 @@ func shortLLMsDescription(desc string) string {
 		}
 		s = strings.TrimRight(cut, ".,;:- ") + "..."
 	}
+	if strings.HasSuffix(s, ":") {
+		s = strings.TrimSuffix(s, ":") + "."
+	}
 	return s
 }
 
@@ -269,7 +272,7 @@ func renderBlueprintFullSection(sb *strings.Builder, bp BlueprintEntry) {
 	if len(bp.RequiredServices) > 0 {
 		apis = fmt.Sprintf("`gcloud services enable %s`", strings.Join(bp.RequiredServices, " "))
 	}
-	deployCmd := fmt.Sprintf("`./gcluster deploy %s --vars project_id=<PROJECT_ID>,deployment_name=<DEPLOYMENT_NAME>,region=<REGION>,zone=<ZONE>`", bp.Path)
+	deployCmd := fmt.Sprintf("`./gcluster deploy -d <deployment.yaml> %s`", bp.Path)
 	if bp.DeploymentPath != "" {
 		deployCmd = fmt.Sprintf("`./gcluster deploy -d %s %s`", bp.DeploymentPath, bp.Path)
 	}
@@ -348,7 +351,7 @@ func formatCompactValue(val interface{}) string {
 		if v == "" {
 			return `""`
 		}
-		return strings.ReplaceAll(v, "\n", " ")
+		return strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "`", "'").Replace(v)
 	case map[string]interface{}:
 		if len(v) == 0 {
 			return "{}"
