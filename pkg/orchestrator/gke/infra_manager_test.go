@@ -121,8 +121,8 @@ func TestValidateClusterState_TargetNamespaceValidation(t *testing.T) {
 }
 
 const (
-	jobSetCRDGetCmd       = "kubectl get crd jobsets.jobset.x-k8s.io --ignore-not-found -o name"
-	jobSetServiceGetCmd   = "kubectl get service jobset-webhook-service -n jobset-system --ignore-not-found -o name"
+	jobSetCRDGetCmd       = "kubectl get crd jobsets.jobset.x-k8s.io --ignore-not-found -o name --request-timeout=10s"
+	jobSetServiceGetCmd   = "kubectl get service jobset-webhook-service -n jobset-system --ignore-not-found -o name --request-timeout=10s"
 	jobSetEndpointsCmd    = "kubectl get endpointslice -l kubernetes.io/service-name=jobset-webhook-service -n jobset-system -o json --request-timeout=10s"
 	jobSetSelectorCmd     = "kubectl get service jobset-webhook-service -n jobset-system -o jsonpath={.spec.selector} --request-timeout=10s"
 	jobSetPodsCmd         = "kubectl get pods -n jobset-system -o json --request-timeout=10s"
@@ -759,25 +759,25 @@ func TestResourceExists(t *testing.T) {
 		{
 			name: "cluster-scoped object found", kind: "crd", rname: "jobsets.jobset.x-k8s.io",
 			result:     shell.CommandResult{ExitCode: 0, Stdout: "customresourcedefinition.apiextensions.k8s.io/jobsets.jobset.x-k8s.io\n"},
-			wantArgs:   "get crd jobsets.jobset.x-k8s.io --ignore-not-found -o name",
+			wantArgs:   "get crd jobsets.jobset.x-k8s.io --ignore-not-found -o name --request-timeout=10s",
 			wantExists: true,
 		},
 		{
 			name: "namespaced object absent", kind: "service", rname: "jobset-webhook-service", ns: "jobset-system",
 			result:   shell.CommandResult{ExitCode: 0},
-			wantArgs: "get service jobset-webhook-service -n jobset-system --ignore-not-found -o name",
+			wantArgs: "get service jobset-webhook-service -n jobset-system --ignore-not-found -o name --request-timeout=10s",
 		},
 		{
 			name: "forbidden counts as existing", kind: "service", rname: "jobset-webhook-service", ns: "jobset-system",
 			result:        readForbidden,
-			wantArgs:      "get service jobset-webhook-service -n jobset-system --ignore-not-found -o name",
+			wantArgs:      "get service jobset-webhook-service -n jobset-system --ignore-not-found -o name --request-timeout=10s",
 			wantExists:    true,
 			wantForbidden: true,
 		},
 		{
 			name: "other failure is an error", kind: "crd", rname: "jobsets.jobset.x-k8s.io",
 			result:          readUnreachable,
-			wantArgs:        "get crd jobsets.jobset.x-k8s.io --ignore-not-found -o name",
+			wantArgs:        "get crd jobsets.jobset.x-k8s.io --ignore-not-found -o name --request-timeout=10s",
 			wantErrContains: "Unable to connect to the server",
 		},
 	}

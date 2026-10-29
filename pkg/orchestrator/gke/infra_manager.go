@@ -161,7 +161,7 @@ func (g *GKEOrchestrator) checkResourceExists(kind, name, namespace string) (exi
 	if namespace != "" {
 		args = append(args, "-n", namespace)
 	}
-	res := g.kubectl(append(args, "--ignore-not-found", "-o", "name")...)
+	res := g.kubectl(append(args, "--ignore-not-found", "-o", "name", kubectlReadTimeout)...)
 	if res.ExitCode == 0 {
 		return strings.TrimSpace(res.Stdout) != "", false, nil
 	}
