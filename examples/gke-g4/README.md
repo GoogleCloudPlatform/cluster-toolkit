@@ -75,13 +75,14 @@ Option 1 (Specific Reservation) is uncommented by default in `gke-g4-deployment.
 
    Type `a` and hit enter to create the cluster.
 
-## Inference Benchmarks on GKE G4
+## Inference Benchmarks for GKE G4
 
-Ready-to-run LLM inference benchmarks for G4 (for example, DiffusionGemma
-26B-A4B served with vLLM on a Spot G4 node pool) live in
-[community/examples/gke-inference-benchmarks](../../community/examples/gke-inference-benchmarks/README.md). Each
-benchmark is self-contained: one `gcluster deploy` creates the cluster and node
-pool, serves the model and runs the benchmark.
+The [gke-inference-benchmarks](../../community/examples/gke-inference-benchmarks/README.md)
+directory contains community-maintained blueprints that run LLM inference
+benchmarks on G4. Each benchmark provisions a separate GKE cluster and G4 node
+pool, serves the model with vLLM and runs the benchmark with a single
+`gcluster deploy`. The first entry serves DiffusionGemma 26B-A4B on a Spot G4
+node pool.
 
 ## NCCL Tests for GKE G4
 
