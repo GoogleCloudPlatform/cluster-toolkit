@@ -60,10 +60,14 @@ var autoInjectedGlobals = map[string]bool{
 // genericOutputNames are output names that are too generic for blind
 // name-based output-to-input matching unless backed by an observed blueprint use edge.
 var genericOutputNames = map[string]bool{
-	"id":            true,
-	"instance_name": true,
-	"name":          true,
-	"self_link":     true,
+	"capacity_gb":      true,
+	"gcp_service_list": true,
+	"id":               true,
+	"instance_name":    true,
+	"mode":             true,
+	"name":             true,
+	"self_link":        true,
+	"type":             true,
 }
 
 // integrationInputNames are optional module inputs that commonly wire modules
@@ -287,7 +291,8 @@ func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string
 }
 
 // ExtractBlueprintServices returns the sorted list of unique GCP service APIs
-// required by all modules in bp.
+// required by all modules in bp. Passing repoRoot == "" skips the on-disk
+// repoRoot lookup so callers like gcluster explain read embedded module metadata first.
 func ExtractBlueprintServices(repoRoot, bpDir string, bp config.Blueprint) []string {
 	svcSet := make(map[string]bool)
 	for _, grp := range bp.Groups {
@@ -335,9 +340,11 @@ func moduleServicesForSource(repoRoot, bpDir, rawSrc string) []string {
 		return svcs
 	}
 	if bpDir != "" {
-		localAbs := filepath.Clean(filepath.Join(bpDir, filepath.FromSlash(strings.TrimSpace(rawSrc))))
-		if svcs, ok := cachedMetadataServices("loc:"+localAbs, localAbs); ok {
-			return svcs
+		joined := filepath.Join(bpDir, filepath.FromSlash(strings.TrimSpace(rawSrc)))
+		if localAbs, err := filepath.Abs(joined); err == nil {
+			if svcs, ok := cachedMetadataServices("loc:"+localAbs, localAbs); ok {
+				return svcs
+			}
 		}
 	}
 	return nil

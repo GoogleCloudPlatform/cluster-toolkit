@@ -176,8 +176,10 @@ var explainGenericOutputs = map[string]bool{
 	"gcp_service_list": true,
 	"id":               true,
 	"instance_name":    true,
+	"mode":             true,
 	"name":             true,
 	"self_link":        true,
+	"type":             true,
 }
 
 func writef(w io.Writer, format string, args ...interface{}) {
@@ -757,6 +759,8 @@ func buildExplainBlueprint(repoRoot, bpPath, explicitDeplPath string) (ExplainBl
 	if err != nil {
 		return ExplainBlueprintResult{}, err
 	}
+	// "" skips the on-disk lookup so explain reports the binary's embedded module
+	// metadata, i.e. what `gcluster deploy` validates via test_apis_enabled.
 	apis := catalog.ExtractBlueprintServices("", filepath.Dir(bpPath), bp)
 	if apis == nil {
 		apis = []string{}

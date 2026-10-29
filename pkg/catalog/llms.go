@@ -325,7 +325,7 @@ func renderBlueprintVarsCompact(sb *strings.Builder, varsMap map[string]interfac
 	}
 	var parts []string
 	if len(req) > 0 {
-		parts = append(parts, "**required/unset:** "+joinItemsWithLimit(req, 400))
+		parts = append(parts, "**unset (no default; `./gcluster explain` marks which are optional):** "+joinItemsWithLimit(req, 400))
 	}
 	if len(defs) > 0 {
 		budget := maxLLMsFullLineContentChars

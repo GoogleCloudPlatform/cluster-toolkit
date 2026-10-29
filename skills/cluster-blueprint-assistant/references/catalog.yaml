@@ -6396,8 +6396,6 @@ module_wiring:
   community/modules/project/service-enablement:
     required_services: [serviceusage.googleapis.com]
     required_inputs: [gcp_service_list]
-    recommended_use:
-    - community/modules/scripts/htcondor-install
   community/modules/pubsub/bigquery-sub:
     required_services: [pubsub.googleapis.com]
     required_inputs: [dataset_id, table_id, topic_id]
@@ -6491,7 +6489,6 @@ module_wiring:
     - modules/iam/iap-policy
   community/modules/scripts/htcondor-install:
     consumed_by:
-    - community/modules/project/service-enablement
     - modules/scripts/startup-script
   community/modules/scripts/ramble-execute:
     required_inputs: [gcs_bucket_path, ramble_profile_script_path, ramble_runner, system_user_name]
@@ -6675,8 +6672,6 @@ module_wiring:
   modules/file-system/gke-storage:
     required_inputs: [access_mode, capacity_gb, cluster_id, sc_reclaim_policy, storage_type]
     recommended_use:
-    - modules/file-system/netapp-storage-pool
-    - modules/file-system/netapp-volume
     - modules/scheduler/gke-cluster
     - modules/scheduler/pre-existing-gke-cluster
     consumed_by:
@@ -6714,7 +6709,6 @@ module_wiring:
     - modules/network/pre-existing-vpc
     - modules/network/vpc
     consumed_by:
-    - modules/file-system/gke-storage
     - modules/file-system/netapp-volume
   modules/file-system/netapp-volume:
     required_services: [dns.googleapis.com, netapp.googleapis.com]
@@ -6737,7 +6731,6 @@ module_wiring:
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - modules/compute/vm-instance
     - modules/file-system/gke-persistent-volume
-    - modules/file-system/gke-storage
     - modules/scheduler/batch-job-template
     - modules/scheduler/batch-login-node
   modules/file-system/parallelstore:

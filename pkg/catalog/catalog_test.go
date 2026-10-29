@@ -532,6 +532,7 @@ func verifyLLMsFullOutput(t *testing.T, cat Catalog) {
 		"### examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml",
 		"gcloud services enable",
 		"lustre.googleapis.com",
+		"**unset (no default; `./gcluster explain` marks which are optional):**",
 		"| `modules/file-system/managed-lustre` |",
 	} {
 		if !strings.Contains(full1, want) {
@@ -554,3 +555,23 @@ func verifyLLMsFullOutput(t *testing.T, cat Catalog) {
 		t.Errorf("RenderLLMsFullTxt must format nil values as null, found <nil>")
 	}
 }
+
+func TestModuleServicesForSourceRelativeLocalDir(t *testing.T) {
+	root := testRepoRoot(t)
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("os.Getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("os.Chdir(%s): %v", root, err)
+	}
+	defer func() { _ = os.Chdir(origWD) }()
+
+	// Relative bpDir ("examples/machine-learning/a3-ultragpu-8g") + relative local source ("../../../modules/file-system/managed-lustre")
+	// with repoRoot == "" exercises the filepath.Abs fallback in moduleServicesForSource.
+	svcs := moduleServicesForSource("", "examples/machine-learning/a3-ultragpu-8g", "../../../modules/file-system/managed-lustre")
+	if !slices.Contains(svcs, "lustre.googleapis.com") {
+		t.Errorf("expected lustre.googleapis.com from relative local module path, got %v", svcs)
+	}
+}
+
