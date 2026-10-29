@@ -92,7 +92,7 @@ deployment_groups:
       name: master-sa
       project_roles:
       - compute.instanceAdmin.v1
-      - storage.objectUser
+      - storage.admin
       - logging.logWriter
       - monitoring.metricWriter
       - container.developer

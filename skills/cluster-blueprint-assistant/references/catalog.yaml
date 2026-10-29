@@ -548,7 +548,8 @@ blueprints:
   blueprint_name: ibm-symphony
   scheduler: none
   description: "This project provides a blueprint for deploying an IBM Spectrum Symphony cluster on Google Cloud Platform using the Google Cloud Cluster Toolkit. The blueprint automates infrastructure provisioning, custom base image creation via..."
-  machine_types: [c2-standard-4, c2-standard-30]
+  machine_types: [c2-standard-30, c2-standard-4]
+  required_services: [compute.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
     admin_password_secret: "$(\"${vars.deployment_name}-admin-password\")"
     base_image:
@@ -630,7 +631,8 @@ blueprints:
   blueprint_name: ibm-symphony-gke
   scheduler: gke
   description: "This project provides a blueprint for deploying an IBM Spectrum Symphony cluster on Google Cloud Platform using the Google Cloud Cluster Toolkit and Google Kubernetes Engine (GKE). The blueprint automates infrastructure provisioning..."
-  machine_types: [c2-standard-4, c2-standard-16]
+  machine_types: [c2-standard-16, c2-standard-4]
+  required_services: [artifactregistry.googleapis.com, cloudbuild.googleapis.com, compute.googleapis.com, container.googleapis.com, iam.googleapis.com, logging.googleapis.com, secretmanager.googleapis.com, serviceusage.googleapis.com, storage.googleapis.com]
   vars:
     admin_password_secret: "$(\"${vars.deployment_name}-admin-password\")"
     authorized_cidr: 0.0.0.0/0
