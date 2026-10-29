@@ -21,6 +21,7 @@ import (
 	"crypto/md5"
 	"embed"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
@@ -31,6 +32,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/hashicorp/go-getter"
 	"github.com/otiai10/copy"
@@ -146,6 +149,17 @@ func copySharedEmbeddedModules(bp config.Blueprint, deploymentDir string) error 
 			}
 			if err := copyModuleSource(dep, dst); err != nil {
 				return err
+			}
+		}
+	}
+
+	for _, g := range bp.Groups {
+		for _, mod := range g.Modules {
+			if mod.Kind == config.TerraformKind && sourcereader.IsEmbeddedPath(mod.Source) && len(mod.ReconfigureIgnores) > 0 {
+				dst := filepath.Join(deploymentDir, config.SharedModulesDirName, "embedded", mod.Source)
+				if err := writeModuleReconfigureOverrides(dst, mod.ReconfigureIgnores); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -318,6 +332,109 @@ func copyModuleSource(src, dst string) error {
 	return nil
 }
 
+var resourceDeclRegex = regexp.MustCompile(`resource\s+"([^"]+)"\s+"([^"]+)"`)
+
+func findModuleResources(moduleDir string) (map[string][]string, error) {
+	resources := make(map[string][]string)
+	entries, err := os.ReadDir(moduleDir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tf") || strings.HasSuffix(entry.Name(), "_override.tf") || entry.Name() == "override.tf" {
+			continue
+		}
+		filePath := filepath.Join(moduleDir, entry.Name())
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, err
+		}
+		matches := resourceDeclRegex.FindAllStringSubmatch(string(content), -1)
+		for _, m := range matches {
+			resType := m[1]
+			resName := m[2]
+			resources[resType] = append(resources[resType], resName)
+		}
+	}
+	return resources, nil
+}
+
+type tfLifecycleOverride struct {
+	IgnoreChanges []string `json:"ignore_changes"`
+}
+
+type tfResourceOverride struct {
+	Lifecycle tfLifecycleOverride `json:"lifecycle"`
+}
+
+type tfOverrideFile struct {
+	Resource map[string]map[string]tfResourceOverride `json:"resource"`
+}
+
+func writeModuleReconfigureOverrides(moduleDir string, reconfigIgnores map[string][]string) error {
+	if len(reconfigIgnores) == 0 {
+		return nil
+	}
+
+	discovered, err := findModuleResources(moduleDir)
+	if err != nil {
+		return fmt.Errorf("failed to discover resources in module at %s: %w", moduleDir, err)
+	}
+
+	override := tfOverrideFile{
+		Resource: make(map[string]map[string]tfResourceOverride),
+	}
+
+	for target, ignores := range reconfigIgnores {
+		if len(ignores) == 0 {
+			continue
+		}
+
+		if strings.Contains(target, ".") {
+			parts := strings.SplitN(target, ".", 2)
+			rType, rName := parts[0], parts[1]
+			if override.Resource[rType] == nil {
+				override.Resource[rType] = make(map[string]tfResourceOverride)
+			}
+			override.Resource[rType][rName] = tfResourceOverride{
+				Lifecycle: tfLifecycleOverride{IgnoreChanges: ignores},
+			}
+		} else {
+			rType := target
+			names, ok := discovered[rType]
+			if !ok || len(names) == 0 {
+				logging.Error("WARNING: reconfigure_ignores target %q was not found in module %s", target, moduleDir)
+				continue
+			}
+			if override.Resource[rType] == nil {
+				override.Resource[rType] = make(map[string]tfResourceOverride)
+			}
+			for _, rName := range names {
+				override.Resource[rType][rName] = tfResourceOverride{
+					Lifecycle: tfLifecycleOverride{IgnoreChanges: ignores},
+				}
+			}
+		}
+	}
+
+	if len(override.Resource) == 0 {
+		return nil
+	}
+
+	data, err := json.MarshalIndent(override, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal reconfigure_ignores override json: %w", err)
+	}
+
+	overridePath := filepath.Join(moduleDir, "override.tf.json")
+	if err := os.WriteFile(overridePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", overridePath, err)
+	}
+
+	return nil
+}
+
 func copyNonEmbeddedModules(gPath string, modules []config.Module) error {
 	for iMod := range modules {
 		mod := &modules[iMod]
@@ -344,6 +461,9 @@ func copyNonEmbeddedModules(gPath string, modules []config.Module) error {
 			return err
 		}
 		if err := copyModuleSource(src, dst); err != nil {
+			return err
+		}
+		if err := writeModuleReconfigureOverrides(dst, mod.ReconfigureIgnores); err != nil {
 			return err
 		}
 	}

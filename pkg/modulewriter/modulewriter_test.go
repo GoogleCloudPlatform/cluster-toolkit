@@ -18,6 +18,7 @@ package modulewriter
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
@@ -26,6 +27,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"golang.org/x/exp/slices"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
@@ -719,4 +722,65 @@ func (s *zeroSuite) TestGetUniqueGcsBuckets_Errors(c *C) {
 	_, err = GetUniqueGcsBuckets(bp)
 	c.Assert(err, NotNil)
 	c.Check(err.Error(), Equals, "GCS backend bucket name for group \"group_null\" cannot be empty or unknown")
+}
+
+func TestWriteModuleReconfigureOverrides(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mainTf := `
+resource "google_container_node_pool" "node_pool" {
+  name = "np1"
+}
+resource "google_container_node_pool" "subblock_node_pool" {
+  name = "np2"
+}
+resource "null_resource" "dummy" {
+  triggers = {}
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte(mainTf), 0644); err != nil {
+		t.Fatalf("failed to write main.tf: %v", err)
+	}
+
+	reconfigIgnores := map[string][]string{
+		"google_container_node_pool": {
+			"node_config[0].labels",
+			"initial_node_count",
+		},
+		"null_resource.dummy": {
+			"triggers",
+		},
+	}
+
+	if err := writeModuleReconfigureOverrides(tmpDir, reconfigIgnores); err != nil {
+		t.Fatalf("unexpected error from writeModuleReconfigureOverrides: %v", err)
+	}
+
+	overrideFile := filepath.Join(tmpDir, "override.tf.json")
+	data, err := os.ReadFile(overrideFile)
+	if err != nil {
+		t.Fatalf("failed to read override.tf.json: %v", err)
+	}
+
+	var parsed tfOverrideFile
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("failed to unmarshal override.tf.json: %v", err)
+	}
+
+	np := parsed.Resource["google_container_node_pool"]["node_pool"]
+	expectedNP := []string{"node_config[0].labels", "initial_node_count"}
+	if !slices.Equal(np.Lifecycle.IgnoreChanges, expectedNP) {
+		t.Errorf("got %v for node_pool, want %v", np.Lifecycle.IgnoreChanges, expectedNP)
+	}
+
+	snp := parsed.Resource["google_container_node_pool"]["subblock_node_pool"]
+	if !slices.Equal(snp.Lifecycle.IgnoreChanges, expectedNP) {
+		t.Errorf("got %v for subblock_node_pool, want %v", snp.Lifecycle.IgnoreChanges, expectedNP)
+	}
+
+	nr := parsed.Resource["null_resource"]["dummy"]
+	expectedNR := []string{"triggers"}
+	if !slices.Equal(nr.Lifecycle.IgnoreChanges, expectedNR) {
+		t.Errorf("got %v for dummy null_resource, want %v", nr.Lifecycle.IgnoreChanges, expectedNR)
+	}
 }
