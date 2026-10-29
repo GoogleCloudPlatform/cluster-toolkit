@@ -59,9 +59,11 @@ load_exclusions() {
 		local line="$1"
 		local trimmed_line
 		trimmed_line=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-		# Normalize gs://bucket-name or gs://bucket-name/ entries to bucket-name
-		trimmed_line="${trimmed_line#gs://}"
-		trimmed_line="${trimmed_line%/}"
+		# Normalize gs://bucket-name or gs://bucket-name/... entries to bucket-name
+		if [[ "$trimmed_line" == gs://* ]]; then
+			trimmed_line="${trimmed_line#gs://}"
+			trimmed_line="${trimmed_line%%/*}"
+		fi
 		if [[ -n "$trimmed_line" ]] && [[ "$trimmed_line" != \#* ]] && [[ -z "${EXCLUSION_MAP[${trimmed_line}]:-}" ]]; then
 			EXCLUSION_MAP["${trimmed_line}"]=1
 			((line_count++))
@@ -96,15 +98,15 @@ load_exclusions() {
 }
 
 populate_active_build_exclusions() {
-	log "INFO" "Fetching active Cloud Build builds to protect their service accounts..."
+	log "INFO" "Fetching active Cloud Build builds to protect their resources..."
 
-	# --- Protect service accounts tied to ongoing Cloud Build builds ---
+	# --- Protect resources tied to ongoing Cloud Build builds ---
 	local ongoing_builds
 	local build_id
 	local prefix
 
 	if ! ongoing_builds=$(gcloud builds list --project="$PROJECT_ID" --filter="status=(QUEUED,WORKING)" --format="value(id)" 2>/dev/null); then
-		log "WARNING" "Failed to list ongoing Cloud Build builds. Service accounts for in-flight builds may not be protected."
+		log "WARNING" "Failed to list ongoing Cloud Build builds. Resources for in-flight builds may not be protected."
 	elif [[ -z "$ongoing_builds" ]]; then
 		log "INFO" "No ongoing Cloud Build builds found."
 	else
@@ -112,7 +114,7 @@ populate_active_build_exclusions() {
 			[[ -z "$build_id" ]] && continue
 			prefix="${build_id:0:6}"
 			if [[ -n "$prefix" && -z "${EXCLUSION_MAP[${prefix}]:-}" ]]; then
-				log "INFO" "Protecting service accounts matching active Cloud Build prefix: ${prefix} (build ${build_id})"
+				log "INFO" "Protecting resources matching active Cloud Build prefix: ${prefix} (build ${build_id})"
 				EXCLUSION_MAP["${prefix}"]=1
 			fi
 		done <<<"$ongoing_builds"
@@ -251,23 +253,29 @@ _protect_network_resources() {
 	fi
 }
 
-# Helper function to protect the deployment name from a resource's labels (key1=val1;key2=val2)
-_protect_deployment_from_labels() {
-	local labels_str="${1:-}"
-	[[ -z "$labels_str" ]] && return 0
-	local -a LABEL_PAIRS
-	local PAIR KEY VAL
-	IFS=';' read -ra LABEL_PAIRS <<<"$labels_str"
-	for PAIR in "${LABEL_PAIRS[@]}"; do
-		KEY="${PAIR%%=*}"
-		VAL="${PAIR#*=}"
-		if [[ "$KEY" == "ghpc_deployment" && -n "$VAL" ]]; then
-			if [[ -z "${EXCLUSION_MAP[${VAL}]:-}" ]]; then
-				log "INFO" "Protecting deployment '${VAL}' (from active/protected resource label ${KEY}=${VAL})"
-				EXCLUSION_MAP["${VAL}"]=1
-			fi
+# Helper function to extract ghpc_deployment from a resource's labels (key1=val1;key2=val2)
+_get_deployment_from_labels() {
+	local pair
+	local -a label_pairs
+	IFS=';' read -ra label_pairs <<<"${1:-}"
+	for pair in "${label_pairs[@]}"; do
+		if [[ "${pair%%=*}" == "ghpc_deployment" && -n "${pair#*=}" ]]; then
+			echo "${pair#*=}"
+			return 0
 		fi
 	done
+	return 1
+}
+
+# Helper function to protect the deployment name from a resource's labels (key1=val1;key2=val2)
+_protect_deployment_from_labels() {
+	local deployment
+	if deployment=$(_get_deployment_from_labels "${1:-}"); then
+		if [[ -z "${EXCLUSION_MAP[${deployment}]:-}" ]]; then
+			log "INFO" "Protecting deployment '${deployment}' (from active/protected resource label ghpc_deployment=${deployment})"
+			EXCLUSION_MAP["${deployment}"]=1
+		fi
+	fi
 }
 
 # Populates EXCLUSION_MAP and other protection arrays based on resources
@@ -664,6 +672,24 @@ populate_protected_resources() {
 				fi
 			fi
 		done <<<"$lustre_data"
+	fi
+
+	# Part 9: Protect deployments associated with EXCLUDED or NEW Storage Buckets.
+	log "INFO" "Checking for Storage Buckets to protect..."
+	local buckets_protect_data
+	if ! buckets_protect_data=$(gcloud storage buckets list --project="$PROJECT_ID" \
+		--format="value(name,creation_time,labels.map())"); then
+		log "WARNING" "Failed to list Storage Buckets for protection check."
+	elif [[ -n "$buckets_protect_data" ]]; then
+		while IFS=$'\t' read -r bkt_name bkt_create_time bkt_labels; do
+			[[ -z "$bkt_name" ]] && continue
+			bkt_name="${bkt_name#gs://}"
+			bkt_name="${bkt_name%/}"
+			if is_excluded "$bkt_name" "${bkt_labels:-}" || is_newer "$bkt_create_time"; then
+				EXCLUSION_MAP["${bkt_name}"]=1
+				_protect_deployment_from_labels "${bkt_labels:-}"
+			fi
+		done <<<"$buckets_protect_data"
 	fi
 
 	log "INFO" "Finished identifying resources to protect."
@@ -1180,8 +1206,7 @@ process_lustre_instances() {
 
 process_storage_buckets() {
 	log "INFO" "--- Processing: Storage Buckets ---"
-	local buckets_data name location creation_time labels_str protected protected_name PAIR KEY VAL
-	local -a LABEL_PAIRS
+	local buckets_data name location creation_time labels_str protected protected_name deployment
 	if ! buckets_data=$(gcloud storage buckets list --project="$PROJECT_ID" \
 		--filter="creation_time < '$CUTOFF_TIME'" \
 		--sort-by=name \
@@ -1225,26 +1250,16 @@ process_storage_buckets() {
 		fi
 
 		# 4. Check if bucket's ghpc_deployment label is in EXCLUSION_MAP
-		protected=false
-		if [[ -n "${labels_str:-}" ]]; then
-			IFS=';' read -ra LABEL_PAIRS <<<"$labels_str"
-			for PAIR in "${LABEL_PAIRS[@]}"; do
-				KEY="${PAIR%%=*}"
-				VAL="${PAIR#*=}"
-				if [[ "$KEY" == "ghpc_deployment" ]]; then
-					if [[ -n "$VAL" && -n "${EXCLUSION_MAP[${VAL}]:-}" ]]; then
-						protected=true
-						log "SKIP" "Storage Bucket $name is protected because its deployment '$VAL' is protected."
-						break
-					fi
-				fi
-			done
+		if deployment=$(_get_deployment_from_labels "${labels_str:-}") && [[ -n "${EXCLUSION_MAP[${deployment}]:-}" ]]; then
+			log "SKIP" "Storage Bucket $name is protected because its deployment '$deployment' is protected."
+			continue
 		fi
-		[[ "$protected" == "true" ]] && continue
 
 		# 5. Check if bucket name contains any active Cloud Build prefix or protected resource name
+		protected=false
 		for protected_name in "${!EXCLUSION_MAP[@]}"; do
-			if [[ -n "$protected_name" && "$name" == *"$protected_name"* ]]; then
+			[[ -z "$protected_name" || "$protected_name" == "default" ]] && continue
+			if [[ "$name" == *"$protected_name"* ]]; then
 				protected=true
 				log "SKIP" "Storage Bucket $name is protected because it matches protected resource/prefix: $protected_name"
 				break
