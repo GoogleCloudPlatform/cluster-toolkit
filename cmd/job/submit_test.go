@@ -340,10 +340,6 @@ func resetCommandFlags(cmd *cobra.Command) {
 		_ = f.Value.Set(f.DefValue)
 		f.Changed = false
 	})
-	cmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
-		_ = f.Value.Set(f.DefValue)
-		f.Changed = false
-	})
 	for _, sub := range cmd.Commands() {
 		resetCommandFlags(sub)
 	}
