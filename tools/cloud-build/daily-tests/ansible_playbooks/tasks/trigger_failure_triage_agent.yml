@@ -12,120 +12,72 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-- name: Set Triage Agent Configuration
-  ansible.builtin.set_fact:
-    triage_gcs_bucket: "{{ triage_gcs_bucket_override | default('') }}"
-    triage_project_number: "{{ triage_project_number_override | default('') }}"
-    triage_invoker_sa: "{{ triage_invoker_sa_override | default('') }}"
-    triage_cloud_run_url: "{{ triage_cloud_run_url_override | default('') }}"
-
-- name: Check Triage Agent Prerequisites
+- name: Determine Triage Agent Pre-requisites
   delegate_to: localhost
   changed_when: false
-  args:
-    executable: /bin/bash
   environment:
-    TRIAGE_BUILD_ID: "{{ full_build_id | default('') }}"
-    TRIAGE_GCS_BUCKET: "{{ triage_gcs_bucket }}"
-    TRIAGE_PROJECT_NUMBER: "{{ triage_project_number }}"
-    TRIAGE_INVOKER_SA: "{{ triage_invoker_sa }}"
-    TRIAGE_CLOUD_RUN_URL: "{{ triage_cloud_run_url }}"
+    PROJECT_ID: "{{ project }}"
   ansible.builtin.shell: |
-    if [ -z "$TRIAGE_GCS_BUCKET" ] || [ -z "$TRIAGE_PROJECT_NUMBER" ] || [ -z "$TRIAGE_INVOKER_SA" ] || [ -z "$TRIAGE_CLOUD_RUN_URL" ]; then
-      echo "SKIPPED: One or more Triage Agent configuration variables are missing." >&2
-      exit 0
+    if [ -z "$PROJECT_ID" ]; then
+      echo "ERROR: PROJECT_ID is empty or undefined." >&2
+      exit 1
     fi
-
-    if [ -z "$TRIAGE_BUILD_ID" ]; then
-      echo "SKIPPED: The 'full_build_id' variable is missing." >&2
-      exit 0
-    fi
-
-    if ! gcloud storage buckets describe "gs://$TRIAGE_GCS_BUCKET" >/dev/null 2>&1; then
-      echo "SKIPPED: Triage Agent bucket '$TRIAGE_GCS_BUCKET' does not exist." >&2
-      exit 0
-    fi
-
-    ENABLE_AGENT=$(gcloud secrets versions access latest --secret="triage_agent_enabled" --project="$TRIAGE_PROJECT_NUMBER" || echo "false")
+    ENABLE_AGENT=$(gcloud secrets versions access latest --secret="triage-agent-enabled" --project="$PROJECT_ID" 2>/dev/null || echo "false")
     if [ "$ENABLE_AGENT" != "true" ]; then
-      echo "SKIPPED: Failure Triage Agent is currently disabled in Secret Manager, or the secret could not be accessed." >&2
+      echo "DISABLED"
       exit 0
     fi
-
-    echo "PROCEED: Agent is enabled and build ID is present."
+    echo "PROCEED"
   register: triage_init
   ignore_errors: true
 
+- name: Retrieve Core Architecture Secrets natively via gcloud
+  when: "not triage_init.failed and 'PROCEED' in (triage_init.stdout | default(''))"
+  delegate_to: localhost
+  changed_when: false
+  ansible.builtin.command: "gcloud secrets versions access latest --secret={{ item }} --project={{ project }}"
+  loop:
+  - triage-project-number
+  - triage-invoker-sa
+  - triage-cloud-run-url
+  - triage-firestore-url
+  - triage-ui-url
+  register: triage_secrets
+  ignore_errors: true
+
+- name: Bind Secrets to Ansible Facts
+  when: "not triage_init.failed and 'PROCEED' in (triage_init.stdout | default('')) and (triage_secrets.results | default([]) | selectattr('failed') | list | length) == 0"
+  ansible.builtin.set_fact:
+    triage_project_number: "{{ triage_project_number_override | default((triage_secrets.results | selectattr('item', 'equalto', 'triage-project-number') | first).stdout | default(''), true) }}"
+    triage_invoker_sa: "{{ triage_invoker_sa_override | default((triage_secrets.results | selectattr('item', 'equalto', 'triage-invoker-sa') | first).stdout | default(''), true) }}"
+    triage_cloud_run_url: "{{ triage_cloud_run_url_override | default((triage_secrets.results | selectattr('item', 'equalto', 'triage-cloud-run-url') | first).stdout | default(''), true) }}"
+    triage_firestore_url: "{{ triage_firestore_url_override | default((triage_secrets.results | selectattr('item', 'equalto', 'triage-firestore-url') | first).stdout | default(''), true) }}"
+    triage_ui_url: "{{ triage_ui_url_override | default((triage_secrets.results | selectattr('item', 'equalto', 'triage-ui-url') | first).stdout | default(''), true) }}"
+
 - name: Execute Triage Agent Pipeline
-  when: "'PROCEED' in triage_init.stdout"
+  when: "not triage_init.failed and 'PROCEED' in (triage_init.stdout | default('')) and (triage_secrets.results | default([]) | selectattr('failed') | list | length) == 0"
   vars:
     triage_build_id: "{{ full_build_id | default('') }}"
   block:
   - name: Trigger Failure Triage Agent
     delegate_to: localhost
     changed_when: false
-    args:
-      executable: /bin/bash
     environment:
       TRIAGE_BUILD_ID: "{{ triage_build_id }}"
       TRIAGE_INVOKER_SA: "{{ triage_invoker_sa }}"
       TRIAGE_CLOUD_RUN_URL: "{{ triage_cloud_run_url }}"
       TRIAGE_PROJECT_NUMBER: "{{ triage_project_number }}"
-    ansible.builtin.shell: |
-      TOKEN=$(gcloud auth print-identity-token --impersonate-service-account="$TRIAGE_INVOKER_SA" --audiences="$TRIAGE_CLOUD_RUN_URL")
-      if [ -z "$TOKEN" ]; then
-        echo "Failed to get identity token." >&2
-        exit 1
-      fi
-
-      RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST "$TRIAGE_CLOUD_RUN_URL/trigger" \
-        -H "Authorization: Bearer $TOKEN" \
-        -H "Content-Type: application/json" \
-        -d "{\"build_id\": \"$TRIAGE_BUILD_ID\", \"project_number\": \"$TRIAGE_PROJECT_NUMBER\"}")
-
-      HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
-      BODY=$(echo "$RESPONSE" | sed '$d')
-
-      if [ "$HTTP_STATUS" != "202" ]; then
-        echo "Failed to trigger agent. HTTP Status: $HTTP_STATUS" >&2
-        echo "Response Body: $BODY" >&2
-        exit 1
-      fi
+    ansible.builtin.command: "python3 {{ playbook_dir }}/../../trigger_triage_agent.py"
     ignore_errors: true
 
   - name: Wait for Analysis to Complete
     delegate_to: localhost
     changed_when: false
-    args:
-      executable: /bin/bash
     environment:
       TRIAGE_BUILD_ID: "{{ triage_build_id }}"
-      TRIAGE_GCS_BUCKET: "{{ triage_gcs_bucket }}"
-    ansible.builtin.shell: |
-      # Wait for Cloud Run to start and for the initial state file to be copied
-      for i in {1..12}; do
-        if gcloud storage ls "gs://$TRIAGE_GCS_BUCKET/$TRIAGE_BUILD_ID/state.json" >/dev/null 2>&1; then
-          break
-        fi
-        sleep 5
-      done
-
-      if ! gcloud storage ls "gs://$TRIAGE_GCS_BUCKET/$TRIAGE_BUILD_ID/state.json" >/dev/null 2>&1; then
-        echo "Agent failed to start: state.json was not created within 60 seconds." >&2
-        exit 1
-      fi
-
-      for i in {1..30}; do
-        STATE_JSON=$(gcloud storage cat "gs://$TRIAGE_GCS_BUCKET/$TRIAGE_BUILD_ID/state.json" 2>/dev/null || echo '{}')
-        STATUS=$(echo "$STATE_JSON" | python3 -c "import sys, json; print(json.load(sys.stdin).get('status', ''))" 2>/dev/null)
-        if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
-          echo "$STATE_JSON"
-          exit 0
-        fi
-        # Time delay between polling attempts
-        sleep 30
-      done
-      exit 1
+      TRIAGE_FIRESTORE_URL: "{{ triage_firestore_url }}"
+      TRIAGE_INVOKER_SA: "{{ triage_invoker_sa }}"
+    ansible.builtin.command: "python3 {{ playbook_dir }}/../../wait_for_triage_agent.py"
     register: agent_state
     ignore_errors: true
 
@@ -139,9 +91,6 @@
         TRIAGE AGENT SUMMARY:
         {{ (agent_state.stdout | default('{}', true) | from_json).executive_summary | default('No summary available.') | wordwrap(100) }}
 
-        Full diagnostic report available at:
-        https://storage.mtls.cloud.google.com/{{ triage_gcs_bucket }}/{{ triage_build_id }}/report.txt
+        View the comprehensive diagnostic report for this build at:
+        {{ triage_ui_url | regex_replace('/$', '') }}/?build_id={{ triage_build_id }}&project={{ project }}
         {% endif %}
-
-        For detailed intermediate state information, please review the diagnostic state file:
-        https://storage.mtls.cloud.google.com/{{ triage_gcs_bucket }}/{{ triage_build_id }}/state.json
