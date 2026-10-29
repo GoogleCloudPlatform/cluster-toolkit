@@ -145,8 +145,6 @@ spec:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
-              - name: IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS
-                value: "true"
               {{- range $.PathwaysProxyEnv }}
               - name: {{ .Name }}
                 value: {{ printf "%q" .Value }}
@@ -183,8 +181,6 @@ spec:
                 value: GCP
               - name: JAX_BACKEND_TARGET
                 value: grpc://localhost:29000
-              - name: IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS
-                value: "true"
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
               {{- range $.Env }}

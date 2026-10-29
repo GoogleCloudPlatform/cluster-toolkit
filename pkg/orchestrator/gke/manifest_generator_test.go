@@ -2081,15 +2081,10 @@ func TestGeneratePathwaysManifest_GoldenYAMLAlignment(t *testing.T) {
 				t.Errorf("pathways-head system containers = %v, want %v", names, want)
 			}
 
-			proxy := findContainer(head, "pathways-proxy")
-			if got := envValues(proxy, "IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS"); !reflect.DeepEqual(got, []string{"true"}) {
-				t.Errorf("pathways-proxy IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS = %v, want [true]", got)
-			}
-
 			if !tc.headless {
 				workload := findContainer(head, "workload-container")
-				if got := envValues(workload, "IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS"); !reflect.DeepEqual(got, []string{"true"}) {
-					t.Errorf("workload-container IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS = %v, want [true]", got)
+				if workload == nil {
+					t.Fatalf("workload-container not found in manifest:\n%s", manifest)
 				}
 				if got := envValues(workload, "JAX_BACKEND_TARGET"); !reflect.DeepEqual(got, []string{"grpc://localhost:29000"}) {
 					t.Errorf("workload-container JAX_BACKEND_TARGET = %v, want [grpc://localhost:29000]", got)
@@ -2101,6 +2096,9 @@ func TestGeneratePathwaysManifest_GoldenYAMLAlignment(t *testing.T) {
 				wantShm = []string{"/tmp/sidecar"}
 			}
 			pathwaysWorker := findContainer(worker, "pathways-worker")
+			if pathwaysWorker == nil {
+				t.Fatalf("pathways-worker not found in manifest:\n%s", manifest)
+			}
 			if got := envValues(pathwaysWorker, "CLOUD_PATHWAYS_SIDECAR_SHM_DIRECTORY"); !reflect.DeepEqual(got, wantShm) {
 				t.Errorf("pathways-worker CLOUD_PATHWAYS_SIDECAR_SHM_DIRECTORY = %v, want %v", got, wantShm)
 			}
