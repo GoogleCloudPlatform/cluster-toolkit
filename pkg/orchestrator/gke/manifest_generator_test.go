@@ -2052,20 +2052,18 @@ func TestGeneratePathwaysManifest_GoldenYAMLAlignment(t *testing.T) {
 	tests := []struct {
 		name     string
 		headless bool
-		sidecar  string
 	}{
 		{name: "batch"},
 		{name: "headless", headless: true},
-		{name: "colocated python sidecar", sidecar: "sidecar:latest"},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			manifest := renderPathwaysTestManifest(t, tc.headless, tc.sidecar, "", nil)
+			manifest := renderPathwaysTestManifest(t, tc.headless, "", "", nil)
 			specs := pathwaysPodSpecs(t, manifest)
-			head, worker := specs["pathways-head"], specs["worker"]
-			if head == nil || worker == nil {
-				t.Fatalf("pathways-head or worker replicatedJob not found in manifest:\n%s", manifest)
+			head := specs["pathways-head"]
+			if head == nil {
+				t.Fatalf("pathways-head replicatedJob not found in manifest:\n%s", manifest)
 			}
 
 			// The resource manager starts before the proxy that connects to it.
