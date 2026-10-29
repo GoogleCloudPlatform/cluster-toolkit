@@ -381,4 +381,10 @@ deployment_groups:
 	_, err = runExplainForTest(bp)
 	c.Assert(err, NotNil)
 	c.Check(strings.Contains(err.Error(), "failed to load deployment file"), Equals, true)
+
+	// Blueprints with 0 required APIs must serialize "required_apis": [] (not null) in JSON output
+	explainFlags.format = "json"
+	outNoAPIs, err := runExplainForTest("community/examples/gcloud-example.yaml")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outNoAPIs, `"required_apis": []`), Equals, true)
 }
