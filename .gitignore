@@ -75,6 +75,7 @@ venv*/
 # committed entry point for Gemini CLI (symlinked to AGENTS.md).
 GEMINI.md
 !/GEMINI.md
+!tools/validate_configs/golden_copies/expectations/*/GEMINI.md
 
 # Ignore Antigravity agents customizations
 .agents/

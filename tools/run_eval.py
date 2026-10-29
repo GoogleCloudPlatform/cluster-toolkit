@@ -444,6 +444,9 @@ LIVE_INVOCATIONS_LOG = "invocations.log"
 _GCLUSTER_SHIM = """#!/usr/bin/env bash
 real="$(dirname "$0")/{shim_dir}/gcluster.real"
 echo "gcluster $*" >> "$(dirname "$0")/{shim_dir}/{invocations_log}"
+for a in "$@"; do
+  case "$a" in --help|-h) exec "$real" "$@" ;; esac
+done
 case "${{1:-}}" in
   deploy|destroy)
     echo "gcluster $*" >> "$(dirname "$0")/{shim_dir}/{blocked_log}"
@@ -452,6 +455,10 @@ case "${{1:-}}" in
 esac
 exec "$real" "$@"
 """
+
+
+def _gcluster_shim_text() -> str:
+    return _GCLUSTER_SHIM.format(shim_dir=LIVE_SHIM_DIR, blocked_log=LIVE_BLOCKED_LOG, invocations_log=LIVE_INVOCATIONS_LOG)
 
 # Shim placed on PATH as `terraform`. `version` and help are allowed (gcluster
 # itself calls `terraform version --json`); anything else is refused and logged.
@@ -480,6 +487,10 @@ class LiveOracles:
     timed_out: bool = False
     agent_exit_code: Optional[int] = None
     agent_not_run: str = ""  # non-empty when the CLI failed before doing any work
+    # Non-empty when the agent replaced the ./gcluster shim (e.g. `rm ./gcluster && make`).
+    # A warning, not a failure: later gcluster calls are unlogged, but terraform is
+    # still refused and logged by its own shim on PATH.
+    shim_replaced: str = ""
 
     def hard_failures(self) -> List[str]:
         fails = []
@@ -597,17 +608,41 @@ class LiveCLIEvaluatorBackend:
             raise RuntimeError(f"git worktree add failed: {res.stderr.strip()}")
         return wt
 
+    def _gcluster_for_ref(self, wt: str) -> Optional[str]:
+        """Path to a gcluster binary built from the worktree's commit.
+
+        The agent must run the gcluster that matches the code under test: a
+        Before/After comparison with --repo-ref would otherwise generate Before
+        fixtures using the After binary (e.g. carrying its DO NOT EDIT header).
+        When the ref is the checked-out HEAD the repo-root binary is reused;
+        otherwise the binary is built once per commit and cached under /tmp."""
+        head = self._git(["rev-parse", "HEAD"], self.repo_root).stdout.strip()
+        ref = self._git(["rev-parse", self.repo_ref], self.repo_root).stdout.strip()
+        root_bin = os.path.join(self.repo_root, "gcluster")
+        if not ref or ref == head:
+            return root_bin if os.path.isfile(root_bin) else None
+        cached = os.path.join(tempfile.gettempdir(), f"ctk-live-gcluster-{ref[:12]}")
+        if not os.path.isfile(cached):
+            print(f"  [live] building gcluster from {self.repo_ref} ({ref[:12]}) for fixtures and shims ...")
+            res = self._exec(["make", "gcluster"], wt, dict(os.environ), 1800)
+            built = os.path.join(wt, "gcluster")
+            if res.returncode != 0 or not os.path.isfile(built):
+                raise RuntimeError(f"could not build gcluster at {self.repo_ref}: {(res.stderr or res.stdout or '').strip()[-300:]}")
+            shutil.copy2(built, cached)
+            os.remove(built)  # the shim takes this path
+        return cached
+
     def _install_shims(self, wt: str) -> str:
         shim_dir = os.path.join(wt, LIVE_SHIM_DIR)
         os.makedirs(shim_dir, exist_ok=True)
         log = os.path.join(shim_dir, LIVE_BLOCKED_LOG)
         open(log, "a", encoding="utf-8").close()
 
-        real_gcluster = os.path.join(self.repo_root, "gcluster")
-        if os.path.isfile(real_gcluster):
+        real_gcluster = self._gcluster_for_ref(wt)
+        if real_gcluster and os.path.isfile(real_gcluster):
             shutil.copy2(real_gcluster, os.path.join(shim_dir, "gcluster.real"))
             with open(os.path.join(wt, "gcluster"), "w", encoding="utf-8") as f:
-                f.write(_GCLUSTER_SHIM.format(shim_dir=LIVE_SHIM_DIR, blocked_log=LIVE_BLOCKED_LOG, invocations_log=LIVE_INVOCATIONS_LOG))
+                f.write(_gcluster_shim_text())
             os.chmod(os.path.join(wt, "gcluster"), 0o755)
 
         real_tf = self._which("terraform") or "/bin/false"
@@ -655,21 +690,42 @@ class LiveCLIEvaluatorBackend:
         res = self._exec(["find", "modules", "community/modules", "-name", "*.tf", "-anewer", marker], wt)
         oracles.tf_files_read = len([l for l in (res.stdout or "").splitlines() if l.strip()])
 
-        # 3. Forbidden commands caught by shims.
+        # 3. Commands caught by shims (blocked) and every gcluster call (invocations).
         log = os.path.join(shim_dir, LIVE_BLOCKED_LOG)
         if os.path.isfile(log):
             with open(log, encoding="utf-8") as f:
                 oracles.blocked_commands = [l.strip() for l in f if l.strip()]
+        inv_log = os.path.join(shim_dir, LIVE_INVOCATIONS_LOG)
+        if os.path.isfile(inv_log):
+            with open(inv_log, encoding="utf-8") as f:
+                oracles.gcluster_invocations = [l.strip() for l in f if l.strip()]
+        # A rebuilt ./gcluster replaces the logging shim, so a later regeneration
+        # can look like a hand-edit. Flag it so the run gets a manual look.
+        if os.path.isfile(os.path.join(shim_dir, "gcluster.real")):
+            try:
+                with open(os.path.join(wt, "gcluster"), "rb") as f:
+                    intact = f.read() == _gcluster_shim_text().encode("utf-8")
+            except OSError:
+                intact = False
+            if not intact:
+                oracles.shim_replaced = "./gcluster was replaced or removed; gcluster calls after that were not logged"
 
         # 4. New files and ai_assisted tagging on blueprint copies. Files created by
         #    live_setup are excluded; edits to them are reported separately (5).
+        #    Deployment folders the agent generated with `gcluster create` are
+        #    collapsed to "<dir>/" so their contents are never mistaken for
+        #    agent-authored blueprints.
         setup = getattr(self, "_setup_hashes", {}) or {}
         un = self._git(["status", "--porcelain", "--untracked-files=all"], wt)
-        for line in (un.stdout or "").splitlines():
-            if not line.startswith("??"):
-                continue
-            rel = line[3:].strip()
+        untracked = [l[3:].strip() for l in (un.stdout or "").splitlines() if l.startswith("??")]
+        generated_dirs = {rel.split("/.ghpc/")[0] for rel in untracked if "/.ghpc/" in rel}
+        for rel in untracked:
             if rel.startswith(LIVE_SHIM_DIR) or rel == "gcluster" or rel in setup:
+                continue
+            top = next((d for d in generated_dirs if rel == d or rel.startswith(d + "/")), None)
+            if top:
+                if top + "/ (generated deployment)" not in oracles.new_files:
+                    oracles.new_files.append(top + "/ (generated deployment)")
                 continue
             oracles.new_files.append(rel)
             if rel.endswith((".yaml", ".yml")) and rel.startswith(("examples/", "community/examples/")):
@@ -685,12 +741,7 @@ class LiveCLIEvaluatorBackend:
         #    must not be hand-edited. If the agent re-ran `gcluster create` the files
         #    are legitimately regenerated, so only flag changes with no create call.
         if setup:
-            inv_log = os.path.join(shim_dir, LIVE_INVOCATIONS_LOG)
-            invocations: List[str] = []
-            if os.path.isfile(inv_log):
-                with open(inv_log, encoding="utf-8") as f:
-                    invocations = [l.strip() for l in f if l.strip()]
-            oracles.gcluster_invocations = invocations
+            invocations = oracles.gcluster_invocations
             regenerated = any(re.match(r"gcluster\s+(create|expand)\b", i) for i in invocations)
             after = self._hash_untracked(wt)
             changed = [rel for rel, digest in setup.items() if after.get(rel) != digest]
@@ -730,7 +781,10 @@ class LiveCLIEvaluatorBackend:
         if len(blueprints) != 1 or len(deployments) > 1:
             oracles.reexpand = "skipped: could not identify a single blueprint/deployment pair"
             return
-        cmd = [real, "expand", blueprints[0], "-o", os.path.join(wt, LIVE_SHIM_DIR, "expand")]
+        cmd = [real, "expand", blueprints[0], "-o", os.path.join(wt, LIVE_SHIM_DIR, "expand"),
+               # the agent's copy may keep the template's project_id placeholder;
+               # supply the eval project so only real blueprint errors fail this oracle.
+               "--vars", f"project_id={self.project}"]
         if deployments:
             cmd += ["-d", deployments[0]]
         res = self._exec(cmd, wt)
@@ -768,6 +822,13 @@ class LiveCLIEvaluatorBackend:
             if res.returncode != 0:
                 oracles.reexpand = f"failed: live_setup `{cmd}` exited {res.returncode}: {(res.stderr or res.stdout or '').strip()[-300:]}"
                 raise RuntimeError(oracles.reexpand)
+        # Setup's own gcluster/terraform calls must not count as agent activity:
+        # otherwise a fixture `gcluster create` makes any later hand-edit look
+        # like a legitimate regeneration.
+        for name in (LIVE_INVOCATIONS_LOG, LIVE_BLOCKED_LOG):
+            p = os.path.join(shim_dir, name)
+            if os.path.exists(p):
+                open(p, "w", encoding="utf-8").close()
 
     def run_case(self, skill_name: str, prompt: str, case_config: Dict[str, Any]) -> str:
         case_name = case_config.get("name", "case")
@@ -795,6 +856,8 @@ class LiveCLIEvaluatorBackend:
             time.sleep(1)  # atime resolution
             transcript = self._run_agent(wt, shim_dir, prompt, oracles)
             self._collect_oracles(wt, shim_dir, marker, oracles)
+            if oracles.shim_replaced:
+                print(f"  [live] warning ({case_name}): {oracles.shim_replaced}")
         except RuntimeError as e:
             transcript = f"[live-eval] {e}"
         finally:
@@ -814,6 +877,8 @@ class LiveCLIEvaluatorBackend:
         with open(path, "w", encoding="utf-8") as f:
             f.write(f"# agent: {self.agent}  ref: {self.repo_ref}  project: {self.project}\n")
             f.write(f"# prompt:\n{prompt}\n\n# transcript:\n{transcript}\n\n# oracles:\n{oracles.summary()}\n")
+            if oracles.shim_replaced:
+                f.write(f"\n# warning: {oracles.shim_replaced}\n")
             fails = oracles.hard_failures()
             f.write(f"\n# verdict: {'FAIL: ' + '; '.join(fails) if fails else 'PASS'}\n")
 

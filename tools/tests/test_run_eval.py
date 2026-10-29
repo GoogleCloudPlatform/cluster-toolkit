@@ -1102,6 +1102,44 @@ class TestLiveBackend(unittest.TestCase):
         self.assertEqual(b.oracles["c5"].copies_missing_ai_assisted, ["examples/custom.yaml"])
         self.assertTrue(b.hard_failures("c5"))
 
+    def test_gcluster_built_from_repo_ref_when_not_head(self):
+        """--repo-ref <old> must use a gcluster built from <old>, not the repo-root (After) binary."""
+        import tempfile as _tf
+        cached = os.path.join(_tf.gettempdir(), "ctk-live-gcluster-beefbeefbeef")
+        if os.path.exists(cached):
+            os.remove(cached)
+        with open(os.path.join(self.repo, "gcluster"), "w", encoding="utf-8") as f:
+            f.write("AFTER-BINARY")
+        def exec_fn(cmd, cwd, env=None, timeout=None):
+            self.calls.append((cmd, cwd, env, timeout))
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(cmd[4], exist_ok=True)
+                return _FakeProc(0)
+            if cmd[:2] == ["git", "rev-parse"]:
+                return _FakeProc(0, "headheadhead\n" if cmd[2] == "HEAD" else "beefbeefbeefbeef\n")
+            if cmd[:2] == ["make", "gcluster"]:
+                with open(os.path.join(cwd, "gcluster"), "w", encoding="utf-8") as f:
+                    f.write("BEFORE-BINARY")
+                return _FakeProc(0)
+            return _FakeProc(0)
+        try:
+            b = self._backend(exec_fn, keep_worktrees=True, repo_ref="oldref")
+            b.run_case("skill", "p", {"name": "r1"})
+            wt = [c[0][4] for c in self.calls if c[0][:3] == ["git", "worktree", "add"]][0]
+            with open(os.path.join(wt, LIVE_SHIM_DIR, "gcluster.real"), encoding="utf-8") as f:
+                self.assertEqual(f.read(), "BEFORE-BINARY")
+            self.assertTrue(os.path.isfile(cached))
+            shutil.rmtree(wt, ignore_errors=True)
+            # second case reuses the cache: no second make
+            self.calls.clear()
+            b.run_case("skill", "p", {"name": "r2"})
+            self.assertFalse(any(c[0][:2] == ["make", "gcluster"] for c in self.calls))
+            wt2 = [c[0][4] for c in self.calls if c[0][:3] == ["git", "worktree", "add"]][0]
+            shutil.rmtree(wt2, ignore_errors=True)
+        finally:
+            if os.path.exists(cached):
+                os.remove(cached)
+
     def test_shims_installed_in_worktree(self):
         gcluster = os.path.join(self.repo, "gcluster")
         with open(gcluster, "w", encoding="utf-8") as f:
@@ -1201,6 +1239,34 @@ class TestLiveBackend(unittest.TestCase):
         self.assertEqual(b.oracles["s2"].generated_file_edits, ["depl/primary/main.tf"])
         self.assertTrue(any("hand-edited generated files" in f for f in b.hard_failures("s2")))
 
+    def test_setup_gcluster_call_does_not_excuse_hand_edit(self):
+        """The fixture's own `gcluster create` must not be mistaken for an agent regeneration."""
+        def exec_fn(cmd, cwd, env=None, timeout=None):
+            self.calls.append((cmd, cwd, env, timeout))
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(cmd[4], exist_ok=True)
+                return _FakeProc(0)
+            if cmd[0] == "bash":  # live_setup: create fixture AND log the shim invocation, like the real shim
+                os.makedirs(os.path.join(cwd, "depl", "primary"), exist_ok=True)
+                with open(os.path.join(cwd, "depl", "primary", "main.tf"), "w", encoding="utf-8") as f:
+                    f.write("module x {}\n")
+                with open(os.path.join(cwd, LIVE_SHIM_DIR, "invocations.log"), "a", encoding="utf-8") as f:
+                    f.write("gcluster create examples/hpc-slurm.yaml --vars project_id=test-proj\n")
+                return _FakeProc(0)
+            if cmd[:2] == ["git", "status"] and "--untracked-files=all" in cmd:
+                exists = os.path.isfile(os.path.join(cwd, "depl", "primary", "main.tf"))
+                return _FakeProc(0, "?? depl/primary/main.tf\n" if exists else "")
+            if cmd[0] == "gemini":  # agent hand-edits, runs no gcluster
+                with open(os.path.join(cwd, "depl", "primary", "main.tf"), "a", encoding="utf-8") as f:
+                    f.write("edited\n")
+                return _FakeProc(0, "fixed it")
+            return _FakeProc(0)
+        b = self._backend(exec_fn)
+        b.run_case("skill", "p", {"name": "s5", "live_setup": ["./gcluster create x"]})
+        self.assertEqual(b.oracles["s5"].gcluster_invocations, [])
+        self.assertEqual(b.oracles["s5"].generated_file_edits, ["depl/primary/main.tf"])
+        self.assertTrue(b.hard_failures("s5"))
+
     def test_regeneration_via_gcluster_create_is_not_a_failure(self):
         def regen(wt):
             with open(os.path.join(wt, "depl", "primary", "main.tf"), "w", encoding="utf-8") as f:
@@ -1236,6 +1302,27 @@ class TestLiveBackend(unittest.TestCase):
             self.assertEqual([c.case_name for c in res.cases], ["alt_case"])
         finally:
             shutil.rmtree(skill_dir, ignore_errors=True)
+
+    def test_replaced_gcluster_shim_sets_warning(self):
+        with open(os.path.join(self.repo, "gcluster"), "w", encoding="utf-8") as f:
+            f.write("#!/bin/sh\necho real\n")
+        logs = os.path.join(self.repo, "logs")
+        def exec_fn(cmd, cwd, env=None, timeout=None):
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(cmd[4], exist_ok=True)
+                return _FakeProc(0)
+            if cmd[0] == "gemini":
+                # simulate `rm ./gcluster && make` overwriting the shim
+                with open(os.path.join(cwd, "gcluster"), "w", encoding="utf-8") as f:
+                    f.write("rebuilt-binary")
+                return _FakeProc(0, "rebuilt")
+            return _FakeProc(0)
+        b = self._backend(exec_fn, logs_dir=logs)
+        b.run_case("skill", "p", {"name": "w1"})
+        self.assertIn("replaced", b.oracles["w1"].shim_replaced)
+        self.assertEqual(b.hard_failures("w1"), [])  # warning only, not a hard failure
+        with open(os.path.join(logs, "w1.log"), encoding="utf-8") as f:
+            self.assertIn("# warning:", f.read())
 
 
 if __name__ == "__main__":

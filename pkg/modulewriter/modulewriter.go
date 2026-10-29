@@ -18,6 +18,7 @@
 package modulewriter
 
 import (
+	"bytes"
 	"crypto/md5"
 	"embed"
 	"encoding/hex"
@@ -31,6 +32,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"text/template"
 
 	"github.com/hashicorp/go-getter"
 	"github.com/otiai10/copy"
@@ -44,6 +46,8 @@ const (
 	ExpandedBlueprintName    = "expanded_blueprint.yaml"
 	prevGroupDirName         = "previous_deployment_groups"
 	gitignoreTemplate        = "deployment.gitignore.tmpl"
+	agentNoticeTemplate      = "deployment.GEMINI.md.tmpl"
+	agentNoticeFilename      = "GEMINI.md"
 	artifactsWarningFilename = "DO_NOT_MODIFY_THIS_DIRECTORY"
 )
 
@@ -99,6 +103,10 @@ func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
 	defer instructions.Close()
 	fmt.Fprintln(instructions, "Advanced Deployment Instructions")
 	fmt.Fprintln(instructions, "================================")
+
+	if err := writeAgentNotice(deploymentDir); err != nil {
+		return err
+	}
 
 	if err := copySharedEmbeddedModules(bp, deploymentDir); err != nil {
 		return err
@@ -233,6 +241,26 @@ func writeGroup(deplPath string, bp config.Blueprint, gIdx int, instructions io.
 // InstructionsPath returns the path to the instructions file for a deployment
 func InstructionsPath(deploymentDir string) string {
 	return filepath.Join(deploymentDir, "instructions.txt")
+}
+
+// AgentNoticePath returns the path to the agent notice file for a deployment.
+func AgentNoticePath(deploymentDir string) string {
+	return filepath.Join(deploymentDir, agentNoticeFilename)
+}
+
+// writeAgentNotice writes GEMINI.md into the deployment folder. Gemini CLI loads a
+// folder's GEMINI.md when it opens a file there, so the "do not edit" rule reaches
+// the agent together with the file. Rewritten on every create so it never goes stale.
+func writeAgentNotice(deploymentDir string) error {
+	tmpl, err := template.ParseFS(templatesFS, agentNoticeTemplate)
+	if err != nil {
+		return err
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, map[string]string{"Folder": filepath.Base(filepath.Clean(deploymentDir))}); err != nil {
+		return err
+	}
+	return os.WriteFile(AgentNoticePath(deploymentDir), buf.Bytes(), 0644)
 }
 
 func createGroupDir(deplPath string, g config.Group) (string, error) {
