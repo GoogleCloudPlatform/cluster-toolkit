@@ -181,10 +181,10 @@ func init() {
 	SubmitCmd.Flags().StringVar(&pathways.ServerImage, "pathways-server-image", "", "The image for the Pathways server.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerImage, "pathways-worker-image", "", "The image for the Pathways worker.")
 	SubmitCmd.Flags().BoolVar(&pathways.Headless, "pathways-headless", false, "If present, the user's workload container will not be deployed within the `pathways-head` job.")
-	SubmitCmd.Flags().BoolVar(&pathways.DeploySPS, "deploy-pathways-sps", false, "Deploy a Shared Pathways Service (SPS) instance with a resource-manager-only head pod and persistent TPU workers.")
+	SubmitCmd.Flags().BoolVar(&pathways.DeploySPS, "pathways-deploy-sps", false, "Deploy a Shared Pathways Service (SPS) instance with a resource-manager-only head pod and persistent TPU workers.")
 	SubmitCmd.Flags().StringVar(&pathways.GCSLocation, "pathways-gcs-location", "", "Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.")
 	SubmitCmd.Flags().IntVar(&pathways.ElasticSlices, "pathways-elastic-slices", 0, "Configures the number of elastic slices, potentially allowing for more flexible resource allocation.")
-	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 0, "Maximum times the workers in a slice can be restarted (defaults to 0, 4000 when --pathways-elastic-slices>0 or --pathways-headless is set, or 1000000 when --deploy-pathways-sps is set). Maps to backoffLimitPerIndex=N and backoffLimit=N*nodesPerSlice on the worker Job.")
+	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 0, "Maximum times the workers in a slice can be restarted (defaults to 0, 4000 when --pathways-elastic-slices>0 or --pathways-headless is set, or 1000000 when --pathways-deploy-sps is set). Maps to backoffLimitPerIndex=N and backoffLimit=N*nodesPerSlice on the worker Job.")
 	SubmitCmd.Flags().StringVar(&pathways.ProxyArgs, "pathways-proxy-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-proxy` executable.")
 	SubmitCmd.Flags().StringVar(&pathways.ServerArgs, "pathways-server-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-rm` (resource manager) executable.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerArgs, "pathways-worker-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-worker` executable.")
@@ -373,7 +373,7 @@ func validateWorkloadNameLength(name string, isPathways bool) error {
 func validatePathwaysFlags(cmd *cobra.Command) error {
 	if isPathwaysJob {
 		if pathways.DeploySPS && pathways.Headless {
-			return fmt.Errorf("--deploy-pathways-sps and --pathways-headless cannot be used together")
+			return fmt.Errorf("--pathways-deploy-sps and --pathways-headless cannot be used together")
 		}
 		if pathways.GCSLocation == "" {
 			return fmt.Errorf("pathways-gcs-location is required when using --pathways")
@@ -398,7 +398,7 @@ func hasChangedPathwaysFlags(cmd *cobra.Command) bool {
 	}
 	changed := false
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
-		if f.Changed && (strings.HasPrefix(f.Name, "pathways-") || f.Name == "deploy-pathways-sps") {
+		if f.Changed && strings.HasPrefix(f.Name, "pathways-") {
 			changed = true
 		}
 	})

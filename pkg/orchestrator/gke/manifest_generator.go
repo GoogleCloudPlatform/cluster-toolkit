@@ -679,11 +679,11 @@ func validatePathwaysSPSManifest(jobSet string, opts ManifestOptions) error {
 		return err
 	}
 	if headSpec == nil {
-		return fmt.Errorf("--deploy-pathways-sps is set but the Pathways manifest has no pathways-head replicatedJob. %s", pathwaysTemplateExtractHint)
+		return fmt.Errorf("--pathways-deploy-sps is set but the Pathways manifest has no pathways-head replicatedJob. %s", pathwaysTemplateExtractHint)
 	}
 	for _, c := range slices.Concat(headSpec.InitContainers, headSpec.Containers) {
 		if c.Name == "pathways-proxy" || strings.HasPrefix(c.Name, "workload-container") {
-			return fmt.Errorf("--deploy-pathways-sps is set but pathways-head runs container %q; an SPS server runs only pathways-rm. %s", c.Name, pathwaysTemplateExtractHint)
+			return fmt.Errorf("--pathways-deploy-sps is set but pathways-head runs container %q; an SPS server runs only pathways-rm. %s", c.Name, pathwaysTemplateExtractHint)
 		}
 	}
 	return nil

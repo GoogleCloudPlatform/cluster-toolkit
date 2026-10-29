@@ -1560,14 +1560,14 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
 			wantMaxSliceRestarts: 0,
 		},
 		{
-			name:                 "defaults to 1000000 when deploy-pathways-sps is set and max-slice-restarts omitted",
-			extraArgs:            []string{"--deploy-pathways-sps"},
+			name:                 "defaults to 1000000 when pathways-deploy-sps is set and max-slice-restarts omitted",
+			extraArgs:            []string{"--pathways-deploy-sps"},
 			wantElasticSlices:    0,
 			wantMaxSliceRestarts: 1000000,
 		},
 		{
-			name:                 "honors explicit max-slice-restarts when deploy-pathways-sps is set",
-			extraArgs:            []string{"--deploy-pathways-sps", "--pathways-max-slice-restarts", "500"},
+			name:                 "honors explicit max-slice-restarts when pathways-deploy-sps is set",
+			extraArgs:            []string{"--pathways-deploy-sps", "--pathways-max-slice-restarts", "500"},
 			wantElasticSlices:    0,
 			wantMaxSliceRestarts: 500,
 		},
@@ -1621,7 +1621,7 @@ func TestSubmitCmd_DeployPathwaysSPS(t *testing.T) {
 		_, err := executeCommand(JobCmd,
 			"submit",
 			"--pathways",
-			"--deploy-pathways-sps",
+			"--pathways-deploy-sps",
 			"--name", "sps-v5p",
 			"--cluster", "test-cluster",
 			"--location", "us-central1-a",
@@ -1646,7 +1646,7 @@ func TestSubmitCmd_DeployPathwaysSPS(t *testing.T) {
 		}
 	})
 
-	t.Run("honors explicit restarts when deploy-pathways-sps is set", func(t *testing.T) {
+	t.Run("honors explicit restarts when pathways-deploy-sps is set", func(t *testing.T) {
 		setupSubmitTestEnv(t)
 		mockOrc := &mockOrchestrator{}
 		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
@@ -1656,7 +1656,7 @@ func TestSubmitCmd_DeployPathwaysSPS(t *testing.T) {
 		_, err := executeCommand(JobCmd,
 			"submit",
 			"--pathways",
-			"--deploy-pathways-sps",
+			"--pathways-deploy-sps",
 			"--restarts", "5",
 			"--name", "sps-v5p",
 			"--cluster", "test-cluster",
@@ -1673,8 +1673,8 @@ func TestSubmitCmd_DeployPathwaysSPS(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects deploy-pathways-sps without pathways flag", func(t *testing.T) {
-		for _, flagVal := range []string{"--deploy-pathways-sps", "--deploy-pathways-sps=false"} {
+	t.Run("rejects pathways-deploy-sps without pathways flag", func(t *testing.T) {
+		for _, flagVal := range []string{"--pathways-deploy-sps", "--pathways-deploy-sps=false"} {
 			setupSubmitTestEnv(t)
 			_, err := executeCommand(JobCmd,
 				"submit",
@@ -1693,12 +1693,12 @@ func TestSubmitCmd_DeployPathwaysSPS(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects deploy-pathways-sps with pathways-headless", func(t *testing.T) {
+	t.Run("rejects pathways-deploy-sps with pathways-headless", func(t *testing.T) {
 		setupSubmitTestEnv(t)
 		_, err := executeCommand(JobCmd,
 			"submit",
 			"--pathways",
-			"--deploy-pathways-sps",
+			"--pathways-deploy-sps",
 			"--pathways-headless",
 			"--name", "sps-v5p",
 			"--cluster", "test-cluster",
@@ -1707,7 +1707,7 @@ func TestSubmitCmd_DeployPathwaysSPS(t *testing.T) {
 			"--pathways-gcs-location", "gs://my-bucket/sps",
 			"--compute-type", "v5p-8",
 		)
-		if err == nil || !strings.Contains(err.Error(), "--deploy-pathways-sps and --pathways-headless cannot be used together") {
+		if err == nil || !strings.Contains(err.Error(), "--pathways-deploy-sps and --pathways-headless cannot be used together") {
 			t.Errorf("got err = %v, want mutual exclusion error", err)
 		}
 	})
