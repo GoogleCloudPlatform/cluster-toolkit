@@ -161,8 +161,8 @@ func copySharedEmbeddedModules(bp config.Blueprint, deploymentDir string) error 
 			if mod.Kind == config.TerraformKind && sourcereader.IsEmbeddedPath(mod.Source) && len(mod.ReconfigureIgnores) > 0 {
 				existing, ok := embeddedIgnores[mod.Source]
 				if ok && !reconfigIgnoresEqual(existing, mod.ReconfigureIgnores) {
-					logging.Error("WARNING: conflicting reconfigure_ignores found for shared embedded module %q across instances; "+
-						"shared embedded modules share a single deployment directory", mod.Source)
+					return fmt.Errorf("conflicting reconfigure_ignores found for shared embedded module %q across instances: "+
+						"shared embedded modules share a single deployment directory and cannot have differing overrides", mod.Source)
 				}
 				embeddedIgnores[mod.Source] = mod.ReconfigureIgnores
 			}
@@ -406,8 +406,7 @@ func writeModuleReconfigureOverrides(moduleDir string, reconfigIgnores map[strin
 			rType, rName := parts[0], parts[1]
 			names, ok := discovered[rType]
 			if !ok || !slices.Contains(names, rName) {
-				logging.Error("WARNING: reconfigure_ignores target %q was not found in module %s", target, moduleDir)
-				continue
+				return fmt.Errorf("reconfigure_ignores target %q was not found in module %s", target, moduleDir)
 			}
 			if override.Resource[rType] == nil {
 				override.Resource[rType] = make(map[string]tfResourceOverride)
@@ -419,8 +418,7 @@ func writeModuleReconfigureOverrides(moduleDir string, reconfigIgnores map[strin
 			rType := target
 			names, ok := discovered[rType]
 			if !ok || len(names) == 0 {
-				logging.Error("WARNING: reconfigure_ignores target %q was not found in module %s", target, moduleDir)
-				continue
+				return fmt.Errorf("reconfigure_ignores target %q was not found in module %s", target, moduleDir)
 			}
 			if override.Resource[rType] == nil {
 				override.Resource[rType] = make(map[string]tfResourceOverride)

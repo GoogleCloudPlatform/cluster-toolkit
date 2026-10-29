@@ -797,23 +797,25 @@ resource "google_container_node_pool" "node_pool" {
 		t.Fatalf("failed to write main.tf: %v", err)
 	}
 
-	// Target with invalid resource name or type should be safely skipped with warning
+	// Target with invalid resource name should fail with explicit error
 	reconfigIgnores := map[string][]string{
 		"google_container_node_pool.nonexistent": {
 			"node_config[0].labels",
 		},
+	}
+
+	if err := writeModuleReconfigureOverrides(tmpDir, reconfigIgnores); err == nil {
+		t.Fatalf("expected error for nonexistent resource target, got nil")
+	}
+
+	// Target with invalid resource type should fail with explicit error
+	reconfigIgnoresType := map[string][]string{
 		"invalid_resource_type": {
 			"foo",
 		},
 	}
 
-	if err := writeModuleReconfigureOverrides(tmpDir, reconfigIgnores); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Since all targets were invalid, no override.tf.json should be written
-	overrideFile := filepath.Join(tmpDir, "override.tf.json")
-	if _, err := os.Stat(overrideFile); !os.IsNotExist(err) {
-		t.Errorf("expected override.tf.json to not exist for invalid targets, but found it")
+	if err := writeModuleReconfigureOverrides(tmpDir, reconfigIgnoresType); err == nil {
+		t.Fatalf("expected error for invalid resource type target, got nil")
 	}
 }
