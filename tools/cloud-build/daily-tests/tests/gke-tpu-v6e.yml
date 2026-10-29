@@ -53,6 +53,7 @@ custom_vars:
 instance_type: "tpuv6e"
 scheduler: "gke"
 chs_nodepools: "gke-tpu-v6e-pool"
+chs_version: "refs/changes/80/16480/1"
 chs_suites:
 - standard
 post_deploy_tests:
