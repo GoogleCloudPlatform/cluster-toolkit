@@ -2034,6 +2034,64 @@ func findContainer(spec *corev1.PodSpec, name string) *corev1.Container {
 	return nil
 }
 
+// envValues returns every value set for the named env var on a container, in
+// order, so callers can also detect duplicates.
+func envValues(c *corev1.Container, name string) []string {
+	var values []string
+	for _, e := range c.Env {
+		if e.Name == name {
+			values = append(values, e.Value)
+		}
+	}
+	return values
+}
+
+// TestGeneratePathwaysManifest_GoldenYAMLAlignment covers the fields aligned
+// with the Cloud Pathways golden JobSet YAMLs (pathwaysutils PathwaysJobSet).
+func TestGeneratePathwaysManifest_GoldenYAMLAlignment(t *testing.T) {
+	tests := []struct {
+		name     string
+		headless bool
+	}{
+		{name: "batch"},
+		{name: "headless", headless: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := renderPathwaysTestManifest(t, tc.headless, "", "", nil)
+			specs := pathwaysPodSpecs(t, manifest)
+			head := specs["pathways-head"]
+			if head == nil {
+				t.Fatalf("pathways-head replicatedJob not found in manifest:\n%s", manifest)
+			}
+
+			// The resource manager starts before the proxy that connects to it.
+			headContainers := head.InitContainers
+			if tc.headless {
+				headContainers = head.Containers
+			}
+			var names []string
+			for _, c := range headContainers {
+				names = append(names, c.Name)
+			}
+			if want := []string{"pathways-rm", "pathways-proxy"}; !reflect.DeepEqual(names, want) {
+				t.Errorf("pathways-head system containers = %v, want %v", names, want)
+			}
+
+			if !tc.headless {
+				workload := findContainer(head, "workload-container")
+				if workload == nil {
+					t.Fatalf("workload-container not found in manifest:\n%s", manifest)
+				}
+				if got := envValues(workload, "JAX_BACKEND_TARGET"); !reflect.DeepEqual(got, []string{"grpc://localhost:29000"}) {
+					t.Errorf("workload-container JAX_BACKEND_TARGET = %v, want [grpc://localhost:29000]", got)
+				}
+			}
+		})
+	}
+}
+
 // volumeMountPaths maps each volume a container mounts to its mount path.
 func volumeMountPaths(c *corev1.Container) map[string]string {
 	paths := make(map[string]string, len(c.VolumeMounts))
