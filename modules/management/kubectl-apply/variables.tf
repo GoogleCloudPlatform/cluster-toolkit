@@ -276,6 +276,17 @@ variable "cert_manager" {
   default = {}
 }
 
+variable "k8s_aibom" {
+  description = "Install [k8s-aibom](https://github.com/GoogleCloudPlatform/k8s-aibom), which records an AI bill of materials (CycloneDX) for inference and training workloads in namespaces labeled `aibom.k8saibom.dev/enabled=true`. Unprivileged; reads the Kubernetes API only."
+  type = object({
+    install           = optional(bool, false)
+    version           = optional(string, "1.6.2")
+    controller_cpu    = optional(string, null)
+    controller_memory = optional(string, null)
+  })
+  default = {}
+}
+
 variable "gpu_operator" {
   description = "Install [GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) which uses the [Kubernetes operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) to automate the management of all NVIDIA software components needed to provision GPU."
   type = object({
