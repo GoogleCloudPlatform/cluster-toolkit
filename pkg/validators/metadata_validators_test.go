@@ -2028,8 +2028,14 @@ func TestModuleMetadataRules_StorageAndNodePool(t *testing.T) {
 		wantErr  bool
 	}{
 		{"lustre valid", lustreMod, map[string]cty.Value{"per_unit_storage_throughput": cty.NumberIntVal(500), "import_gcs_bucket_uri": cty.StringVal("gs://my-valid-bucket/dir"), "network_id": cty.StringVal("projects/my-proj/global/networks/my-net")}, false},
+		{"lustre empty gcs uri", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("")}, false},
+		{"lustre null gcs uri", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.NullVal(cty.String)}, false},
 		{"lustre invalid throughput", lustreMod, map[string]cty.Value{"per_unit_storage_throughput": cty.NumberIntVal(300)}, true},
 		{"lustre invalid gcs uri", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("https://storage.googleapis.com/bucket")}, true},
+		{"lustre gcs uri missing scheme", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("my-bucket")}, true},
+		{"lustre gcs uri whitespace", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal(" ")}, true},
+		{"lustre gcs uri single slash", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("gs:/foo")}, true},
+		{"lustre gcs uri newline injection", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("gs://bucket\ninjected")}, true},
 		{"lustre invalid network_id", lustreMod, map[string]cty.Value{"network_id": cty.StringVal("my-net")}, true},
 		{"lustre dynamic tier with module ref throughput", lustreMod, map[string]cty.Value{"enable_dynamic_tier": cty.True, "per_unit_storage_throughput": config.AsProductOfModuleUse(config.ModuleRef("net", "throughput").AsValue(), "net")}, true},
 		{"lustre module ref trigger", lustreMod, map[string]cty.Value{"enable_dynamic_tier": config.ModuleRef("net", "dynamic_tier").AsValue(), "per_unit_storage_throughput": cty.NumberIntVal(500)}, false},
@@ -2039,6 +2045,12 @@ func TestModuleMetadataRules_StorageAndNodePool(t *testing.T) {
 		{"pv invalid lustre_id", pvMod, map[string]cty.Value{"lustre_id": cty.StringVal("invalid-lustre-id")}, true},
 		{"pv invalid gcsfuse class", pvMod, map[string]cty.Value{"gcs_bucket_name": cty.StringVal("my-bucket"), "gcsfuse_storage_class_name": cty.StringVal("invalid-class")}, true},
 		{"node-pool valid", nodePoolMod, map[string]cty.Value{"threads_per_core": cty.NumberIntVal(2), "host_maintenance_interval": cty.StringVal("PERIODIC"), "placement_policy": cty.ObjectVal(map[string]cty.Value{"type": cty.StringVal("COMPACT")})}, false},
+		{"node-pool reservation NO_RESERVATION", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.ObjectVal(map[string]cty.Value{"consume_reservation_type": cty.StringVal("NO_RESERVATION")})}, false},
+		{"node-pool reservation ANY_RESERVATION", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.ObjectVal(map[string]cty.Value{"consume_reservation_type": cty.StringVal("ANY_RESERVATION")})}, false},
+		{"node-pool reservation null object", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.NullVal(cty.DynamicPseudoType)}, false},
+		{"node-pool reservation invalid type", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.ObjectVal(map[string]cty.Value{"consume_reservation_type": cty.StringVal("INVALID")})}, true},
+		{"node-pool reservation lowercase type", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.ObjectVal(map[string]cty.Value{"consume_reservation_type": cty.StringVal("specific_reservation")})}, true},
+		{"node-pool reservation null type", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.ObjectVal(map[string]cty.Value{"consume_reservation_type": cty.NullVal(cty.String)})}, true},
 		{"node-pool invalid threads_per_core", nodePoolMod, map[string]cty.Value{"threads_per_core": cty.NumberIntVal(4)}, true},
 		{"node-pool invalid host_maintenance_interval", nodePoolMod, map[string]cty.Value{"host_maintenance_interval": cty.StringVal("DAILY")}, true},
 		{"node-pool deprecated compact_placement", nodePoolMod, map[string]cty.Value{"compact_placement": cty.True}, true},
@@ -2060,6 +2072,40 @@ func TestModuleMetadataRules_StorageAndNodePool(t *testing.T) {
 			bp.Groups[0].Modules[0].Kind = config.TerraformKind
 			bp.Groups[0].Modules[0].Settings = config.NewDict(tc.settings)
 			if err := runModuleRules(bp, info.Metadata.Ghpc.Validators); (err != nil) != tc.wantErr {
+				t.Fatalf("runModuleRules() error = %v, wantErr = %v", err, tc.wantErr)
+			}
+		})
+	}
+
+	nodePoolInfo, err := modulereader.GetModuleInfo(nodePoolMod, "terraform")
+	if err != nil {
+		t.Fatalf("failed to read module info for %s: %v", nodePoolMod, err)
+	}
+	varRefCases := []struct {
+		name    string
+		resType string
+		wantErr bool
+	}{
+		{"node-pool reservation SPECIFIC_RESERVATION via vars", "SPECIFIC_RESERVATION", false},
+		{"node-pool reservation invalid type via vars", "INVALID", true},
+	}
+	for _, tc := range varRefCases {
+		t.Run(tc.name, func(t *testing.T) {
+			bp := createBaseTestBlueprint()
+			bp.Vars = config.NewDict(map[string]cty.Value{
+				"reservation_affinity": cty.ObjectVal(map[string]cty.Value{
+					"consume_reservation_type": cty.StringVal(tc.resType),
+					"specific_reservations": cty.TupleVal([]cty.Value{
+						cty.ObjectVal(map[string]cty.Value{"name": cty.StringVal("my-res")}),
+					}),
+				}),
+			})
+			bp.Groups[0].Modules[0].Source = nodePoolMod
+			bp.Groups[0].Modules[0].Kind = config.TerraformKind
+			bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+				"reservation_affinity": config.GlobalRef("reservation_affinity").AsValue(),
+			})
+			if err := runModuleRules(bp, nodePoolInfo.Metadata.Ghpc.Validators); (err != nil) != tc.wantErr {
 				t.Fatalf("runModuleRules() error = %v, wantErr = %v", err, tc.wantErr)
 			}
 		})

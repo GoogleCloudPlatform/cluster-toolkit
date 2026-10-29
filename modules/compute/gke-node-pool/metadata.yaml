@@ -110,6 +110,11 @@ ghpc:
       allowed: ["COMPACT"]
       allow_null: true
     error_message: "placement_policy.type must be 'COMPACT' or null."
+  - validator: allowed_enum
+    inputs:
+      vars: [reservation_affinity.consume_reservation_type]
+      allowed: ["NO_RESERVATION", "ANY_RESERVATION", "SPECIFIC_RESERVATION"]
+    error_message: "reservation_affinity.consume_reservation_type must be NO_RESERVATION, ANY_RESERVATION, or SPECIFIC_RESERVATION."
   - validator: required
     inputs:
       vars: [compact_placement]

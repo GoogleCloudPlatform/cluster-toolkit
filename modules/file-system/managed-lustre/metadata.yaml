@@ -35,7 +35,7 @@ ghpc:
   - validator: regex
     inputs:
       vars: [import_gcs_bucket_uri]
-      pattern: "^gs://"
+      pattern: "^(gs://.*)?$"
     error_message: "import_gcs_bucket_uri must be a valid GCS URI starting with gs://."
   - validator: regex
     inputs:
