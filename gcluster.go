@@ -43,6 +43,7 @@ func main() {
 		logging.Fatal("Failed to patch PATH with custom binaries directories: %v", err)
 	}
 
+	sourcereader.UnsetGitLocalEnvVars()
 	sourcereader.ModuleFS = moduleFS
 	cmd.GitTagVersion = gitTagVersion
 	cmd.GitBranch = gitBranch

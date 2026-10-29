@@ -27,11 +27,9 @@ type goGetSuite struct {
 
 var _ = Suite(&goGetSuite{})
 
-// Set GIT_INDEX_FILE during package variable initialization (which runs before init())
-// to verify that init() in goget.go unsets repository-local Git environment variables.
-var _ = os.Setenv("GIT_INDEX_FILE", "should-be-unset-by-init")
-
 func (s *goGetSuite) TestGetModule_GoGet(c *C) {
+	_ = os.Setenv("GIT_INDEX_FILE", "should-be-unset-by-init")
+	UnsetGitLocalEnvVars()
 	for _, key := range gitLocalEnvVars {
 		_, ok := os.LookupEnv(key)
 		c.Assert(ok, Equals, false)

@@ -387,7 +387,7 @@ func resetJobFlags() {
 	platform = "linux/amd64"
 	awaitJobCompletion = false
 	timeout = "-1s"
-	priority = "medium"
+	priority = ""
 	verbose = false
 	volumeStr = nil
 	isPathwaysJob = false

@@ -84,7 +84,8 @@ var gitLocalEnvVars = []string{
 	"GIT_WORK_TREE",
 }
 
-func init() {
+// UnsetGitLocalEnvVars removes repository-local Git environment variables from the current process environment.
+func UnsetGitLocalEnvVars() {
 	for _, key := range gitLocalEnvVars {
 		_ = os.Unsetenv(key)
 	}
@@ -122,8 +123,6 @@ func (r GoGetterSourceReader) GetModule(source string, dst string) error {
 	if isGit && !dependencies.HasBinary("git") {
 		return GitMissingError{Source: source}
 	}
-
-	// Git local env vars are permanently unset at package initialization to prevent leaks without serializing downloads.
 
 	tmp, err := os.MkdirTemp("", "get-module-*")
 	if err != nil {
