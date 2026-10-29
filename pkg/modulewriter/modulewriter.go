@@ -154,7 +154,10 @@ func copySharedEmbeddedModules(bp config.Blueprint, deploymentDir string) error 
 		}
 	}
 
-	// Validate and write reconfigure_ignores for shared embedded modules
+	return writeSharedEmbeddedOverrides(bp, deploymentDir)
+}
+
+func writeSharedEmbeddedOverrides(bp config.Blueprint, deploymentDir string) error {
 	embeddedIgnores := make(map[string]map[string][]string)
 	for _, g := range bp.Groups {
 		for _, mod := range g.Modules {
@@ -382,6 +385,52 @@ type tfOverrideFile struct {
 	Resource map[string]map[string]tfResourceOverride `json:"resource"`
 }
 
+func contains(list []string, s string) bool {
+	for _, item := range list {
+		if item == s {
+			return true
+		}
+	}
+	return false
+}
+
+func applyTargetOverrides(override tfOverrideFile, discovered map[string][]string, target string, ignores []string, moduleDir string) error {
+	if len(ignores) == 0 {
+		return nil
+	}
+
+	if strings.Contains(target, ".") {
+		parts := strings.SplitN(target, ".", 2)
+		rType, rName := parts[0], parts[1]
+		names, ok := discovered[rType]
+		if !ok || !contains(names, rName) {
+			return fmt.Errorf("reconfigure_ignores target %q was not found in module %s", target, moduleDir)
+		}
+		if override.Resource[rType] == nil {
+			override.Resource[rType] = make(map[string]tfResourceOverride)
+		}
+		override.Resource[rType][rName] = tfResourceOverride{
+			Lifecycle: tfLifecycleOverride{IgnoreChanges: ignores},
+		}
+		return nil
+	}
+
+	rType := target
+	names, ok := discovered[rType]
+	if !ok || len(names) == 0 {
+		return fmt.Errorf("reconfigure_ignores target %q was not found in module %s", target, moduleDir)
+	}
+	if override.Resource[rType] == nil {
+		override.Resource[rType] = make(map[string]tfResourceOverride)
+	}
+	for _, rName := range names {
+		override.Resource[rType][rName] = tfResourceOverride{
+			Lifecycle: tfLifecycleOverride{IgnoreChanges: ignores},
+		}
+	}
+	return nil
+}
+
 func writeModuleReconfigureOverrides(moduleDir string, reconfigIgnores map[string][]string) error {
 	if len(reconfigIgnores) == 0 {
 		return nil
@@ -397,37 +446,8 @@ func writeModuleReconfigureOverrides(moduleDir string, reconfigIgnores map[strin
 	}
 
 	for target, ignores := range reconfigIgnores {
-		if len(ignores) == 0 {
-			continue
-		}
-
-		if strings.Contains(target, ".") {
-			parts := strings.SplitN(target, ".", 2)
-			rType, rName := parts[0], parts[1]
-			names, ok := discovered[rType]
-			if !ok || !slices.Contains(names, rName) {
-				return fmt.Errorf("reconfigure_ignores target %q was not found in module %s", target, moduleDir)
-			}
-			if override.Resource[rType] == nil {
-				override.Resource[rType] = make(map[string]tfResourceOverride)
-			}
-			override.Resource[rType][rName] = tfResourceOverride{
-				Lifecycle: tfLifecycleOverride{IgnoreChanges: ignores},
-			}
-		} else {
-			rType := target
-			names, ok := discovered[rType]
-			if !ok || len(names) == 0 {
-				return fmt.Errorf("reconfigure_ignores target %q was not found in module %s", target, moduleDir)
-			}
-			if override.Resource[rType] == nil {
-				override.Resource[rType] = make(map[string]tfResourceOverride)
-			}
-			for _, rName := range names {
-				override.Resource[rType][rName] = tfResourceOverride{
-					Lifecycle: tfLifecycleOverride{IgnoreChanges: ignores},
-				}
-			}
+		if err := applyTargetOverrides(override, discovered, target, ignores, moduleDir); err != nil {
+			return err
 		}
 	}
 
