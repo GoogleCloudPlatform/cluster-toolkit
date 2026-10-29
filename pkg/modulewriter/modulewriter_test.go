@@ -819,3 +819,93 @@ resource "google_container_node_pool" "node_pool" {
 		t.Fatalf("expected error for invalid resource type target, got nil")
 	}
 }
+
+func TestWriteModuleReconfigureOverrides_MergeWithExisting(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mainTf := `
+resource "google_container_node_pool" "node_pool" {
+  name = "np1"
+
+  lifecycle {
+    ignore_changes = [
+      node_config[0].labels,
+      placement_policy[0].type,
+    ]
+  }
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte(mainTf), 0644); err != nil {
+		t.Fatalf("failed to write main.tf: %v", err)
+	}
+
+	reconfigIgnores := map[string][]string{
+		"google_container_node_pool": {
+			"initial_node_count",
+			"node_config[0].labels", // Duplicate, should be deduplicated
+		},
+	}
+
+	if err := writeModuleReconfigureOverrides(tmpDir, reconfigIgnores); err != nil {
+		t.Fatalf("unexpected error from writeModuleReconfigureOverrides: %v", err)
+	}
+
+	overrideFile := filepath.Join(tmpDir, "override.tf.json")
+	data, err := os.ReadFile(overrideFile)
+	if err != nil {
+		t.Fatalf("failed to read override.tf.json: %v", err)
+	}
+
+	var parsed tfOverrideFile
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("failed to unmarshal override.tf.json: %v", err)
+	}
+
+	np := parsed.Resource["google_container_node_pool"]["node_pool"]
+	expected := []string{"node_config[0].labels", "placement_policy[0].type", "initial_node_count"}
+	if diff := cmp.Diff(expected, np.Lifecycle.IgnoreChanges); diff != "" {
+		t.Errorf("merged ignore_changes mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestCheckLocalModuleIgnoresConflict(t *testing.T) {
+	modulesConflicting := []config.Module{
+		{
+			Kind:   config.TerraformKind,
+			Source: "./local-mod",
+			ReconfigureIgnores: map[string][]string{
+				"res": {"field_a"},
+			},
+		},
+		{
+			Kind:   config.TerraformKind,
+			Source: "./local-mod",
+			ReconfigureIgnores: map[string][]string{
+				"res": {"field_b"},
+			},
+		},
+	}
+	if err := checkLocalModuleIgnoresConflict(modulesConflicting); err == nil {
+		t.Fatalf("expected error for conflicting local module ignores, got nil")
+	}
+
+	modulesMatching := []config.Module{
+		{
+			Kind:   config.TerraformKind,
+			Source: "./local-mod",
+			ReconfigureIgnores: map[string][]string{
+				"res": {"field_a"},
+			},
+		},
+		{
+			Kind:   config.TerraformKind,
+			Source: "./local-mod",
+			ReconfigureIgnores: map[string][]string{
+				"res": {"field_a"},
+			},
+		},
+	}
+	if err := checkLocalModuleIgnoresConflict(modulesMatching); err != nil {
+		t.Fatalf("unexpected error for matching local module ignores: %v", err)
+	}
+}

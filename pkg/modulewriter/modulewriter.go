@@ -35,6 +35,8 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-getter"
+	"github.com/hashicorp/hcl/v2/hclparse"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/otiai10/copy"
 	"github.com/zclconf/go-cty/cty"
@@ -394,7 +396,83 @@ func contains(list []string, s string) bool {
 	return false
 }
 
-func applyTargetOverrides(override tfOverrideFile, discovered map[string][]string, target string, ignores []string, moduleDir string) error {
+func mergeIgnores(existing, additions []string) []string {
+	seen := make(map[string]bool)
+	var merged []string
+	for _, item := range existing {
+		if !seen[item] {
+			seen[item] = true
+			merged = append(merged, item)
+		}
+	}
+	for _, item := range additions {
+		if !seen[item] {
+			seen[item] = true
+			merged = append(merged, item)
+		}
+	}
+	return merged
+}
+
+func parseExistingModuleIgnores(moduleDir string) (map[string]map[string][]string, error) {
+	existing := make(map[string]map[string][]string)
+	entries, err := os.ReadDir(moduleDir)
+	if err != nil {
+		return nil, err
+	}
+
+	parser := hclparse.NewParser()
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tf") || strings.HasSuffix(entry.Name(), "override.tf") {
+			continue
+		}
+		filePath := filepath.Join(moduleDir, entry.Name())
+		f, diags := parser.ParseHCLFile(filePath)
+		if diags.HasErrors() || f == nil {
+			continue
+		}
+		body, ok := f.Body.(*hclsyntax.Body)
+		if !ok {
+			continue
+		}
+		extractBodyIgnores(body, f.Bytes, existing)
+	}
+	return existing, nil
+}
+
+func extractBodyIgnores(body *hclsyntax.Body, src []byte, existing map[string]map[string][]string) {
+	for _, block := range body.Blocks {
+		if block.Type != "resource" || len(block.Labels) < 2 {
+			continue
+		}
+		rType, rName := block.Labels[0], block.Labels[1]
+		for _, sub := range block.Body.Blocks {
+			if sub.Type != "lifecycle" {
+				continue
+			}
+			attr, ok := sub.Body.Attributes["ignore_changes"]
+			if !ok {
+				continue
+			}
+			tuple, ok := attr.Expr.(*hclsyntax.TupleConsExpr)
+			if !ok {
+				continue
+			}
+			var list []string
+			for _, elem := range tuple.Exprs {
+				list = append(list, string(elem.Range().SliceBytes(src)))
+			}
+			if len(list) > 0 {
+				if existing[rType] == nil {
+					existing[rType] = make(map[string][]string)
+				}
+				existing[rType][rName] = list
+			}
+		}
+	}
+}
+
+func applyTargetOverrides(override tfOverrideFile, discovered map[string][]string, existingIgnores map[string]map[string][]string, target string, ignores []string, moduleDir string) error {
 	if len(ignores) == 0 {
 		return nil
 	}
@@ -409,8 +487,9 @@ func applyTargetOverrides(override tfOverrideFile, discovered map[string][]strin
 		if override.Resource[rType] == nil {
 			override.Resource[rType] = make(map[string]tfResourceOverride)
 		}
+		finalIgnores := mergeIgnores(existingIgnores[rType][rName], ignores)
 		override.Resource[rType][rName] = tfResourceOverride{
-			Lifecycle: tfLifecycleOverride{IgnoreChanges: ignores},
+			Lifecycle: tfLifecycleOverride{IgnoreChanges: finalIgnores},
 		}
 		return nil
 	}
@@ -424,8 +503,9 @@ func applyTargetOverrides(override tfOverrideFile, discovered map[string][]strin
 		override.Resource[rType] = make(map[string]tfResourceOverride)
 	}
 	for _, rName := range names {
+		finalIgnores := mergeIgnores(existingIgnores[rType][rName], ignores)
 		override.Resource[rType][rName] = tfResourceOverride{
-			Lifecycle: tfLifecycleOverride{IgnoreChanges: ignores},
+			Lifecycle: tfLifecycleOverride{IgnoreChanges: finalIgnores},
 		}
 	}
 	return nil
@@ -441,12 +521,14 @@ func writeModuleReconfigureOverrides(moduleDir string, reconfigIgnores map[strin
 		return fmt.Errorf("failed to discover resources in module at %s: %w", moduleDir, err)
 	}
 
+	existingIgnores, _ := parseExistingModuleIgnores(moduleDir)
+
 	override := tfOverrideFile{
 		Resource: make(map[string]map[string]tfResourceOverride),
 	}
 
 	for target, ignores := range reconfigIgnores {
-		if err := applyTargetOverrides(override, discovered, target, ignores, moduleDir); err != nil {
+		if err := applyTargetOverrides(override, discovered, existingIgnores, target, ignores, moduleDir); err != nil {
 			return err
 		}
 	}
@@ -468,38 +550,68 @@ func writeModuleReconfigureOverrides(moduleDir string, reconfigIgnores map[strin
 	return nil
 }
 
+func checkLocalModuleIgnoresConflict(modules []config.Module) error {
+	localIgnores := make(map[string]map[string][]string)
+	for _, mod := range modules {
+		if mod.Kind != config.TerraformKind || len(mod.ReconfigureIgnores) == 0 {
+			continue
+		}
+		if sourcereader.IsEmbeddedPath(mod.Source) || sourcereader.IsRemotePath(mod.Source) {
+			continue
+		}
+		cleanSource := filepath.Clean(mod.Source)
+		existing, ok := localIgnores[cleanSource]
+		if ok && !reconfigIgnoresEqual(existing, mod.ReconfigureIgnores) {
+			return fmt.Errorf("conflicting reconfigure_ignores found for local module %q across instances: "+
+				"instances of the same local module in a group share destination directory and cannot have differing overrides", mod.Source)
+		}
+		localIgnores[cleanSource] = mod.ReconfigureIgnores
+	}
+	return nil
+}
+
+func copySingleNonEmbeddedModule(gPath string, mod *config.Module) error {
+	if mod.Kind == config.TerraformKind {
+		if sourcereader.IsEmbeddedPath(mod.Source) || sourcereader.IsRemotePath(mod.Source) {
+			return nil
+		}
+	}
+
+	var src, dst string
+	if sourcereader.IsRemotePath(mod.Source) && mod.Kind == config.PackerKind {
+		src, _ = getter.SourceDirSubdir(mod.Source)
+		dst = filepath.Join(gPath, string(mod.ID))
+	} else {
+		deplSource, err := DeploymentSource(*mod)
+		if err != nil {
+			return err
+		}
+		src = mod.Source
+		dst = filepath.Join(gPath, deplSource)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+	if err := copyModuleSource(src, dst); err != nil {
+		return err
+	}
+	if mod.Kind == config.TerraformKind {
+		if err := writeModuleReconfigureOverrides(dst, mod.ReconfigureIgnores); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func copyNonEmbeddedModules(gPath string, modules []config.Module) error {
+	if err := checkLocalModuleIgnoresConflict(modules); err != nil {
+		return err
+	}
+
 	for iMod := range modules {
-		mod := &modules[iMod]
-		if mod.Kind == config.TerraformKind {
-			if sourcereader.IsEmbeddedPath(mod.Source) || sourcereader.IsRemotePath(mod.Source) {
-				continue
-			}
-		}
-
-		var src, dst string
-		if sourcereader.IsRemotePath(mod.Source) && mod.Kind == config.PackerKind {
-			src, _ = getter.SourceDirSubdir(mod.Source)
-			dst = filepath.Join(gPath, string(mod.ID))
-		} else {
-			deplSource, err := DeploymentSource(*mod)
-			if err != nil {
-				return err
-			}
-			src = mod.Source
-			dst = filepath.Join(gPath, deplSource)
-		}
-
-		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		if err := copySingleNonEmbeddedModule(gPath, &modules[iMod]); err != nil {
 			return err
-		}
-		if err := copyModuleSource(src, dst); err != nil {
-			return err
-		}
-		if mod.Kind == config.TerraformKind {
-			if err := writeModuleReconfigureOverrides(dst, mod.ReconfigureIgnores); err != nil {
-				return err
-			}
 		}
 	}
 	return nil
