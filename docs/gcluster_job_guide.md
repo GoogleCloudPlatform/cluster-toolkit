@@ -164,7 +164,7 @@ A TPU shorthand names a slice size, not a host shape. GKE can run the same slice
 *Note: Please ensure that you replace all placeholders enclosed in angle brackets (such as `<PROJECT_ID>`, `<CLUSTER_NAME>`, and `<REGION/ZONE>`) with your actual environment values before executing the command.*
 
 This command will:
-1. Verify/install the JobSet CRD on your cluster.
+1. Verify that JobSet is installed and its webhook is ready (waiting up to 5 minutes if the webhook is still starting, plus up to 10 minutes for the rollout on a fresh installation). JobSet is installed only when neither the JobSet CRD nor its webhook Service exists (requires cluster-admin permissions); `gcluster` never modifies an existing or partial JobSet installation.
 2. Auto-discover the Kueue LocalQueue name from the cluster.
 3. Use the compute type installed on the cluster nodes and map the necessary resource requests.
 4. Build a container image from the job_details directory using python:3.9-slim as the base, and push it to Artifact Registry.
@@ -263,7 +263,9 @@ Adding `profile=` (`training`, `checkpointing`, or `serving`) to a `gs://` mount
 
 ### 4.5 Example: Submit Job with Custom Environment Variables
 
-You can pass custom environment variables to the container using the `--env` flag:
+For standard (non-Pathways) JobSet workloads, `gcluster job submit` automatically injects `WORKERS_0_HOSTNAME` and `MASTER_ADDR` into the workload container environment, both set to `<workload-name>-main-job-0-0.<workload-name>` (the DNS hostname of the rank-0 pod on the JobSet headless service) for distributed frameworks such as PyTorch `torchrun`.
+
+You can pass additional custom environment variables—or override `WORKERS_0_HOSTNAME` / `MASTER_ADDR`—using the `--env` flag:
 
 ```bash
 ./gcluster job submit \
@@ -1270,7 +1272,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. Supports pipe separator (`|`) for multiple values. |
 | `--restarts` | `int` | Maximum number of restarts allowed for the JobSet before marked as failed (Default: `1`). |
 | `--mount` | `stringArray` | Mount storage volumes, buckets, filestore instances, or PVCs using the `<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]` format. Examples of `<src>`: `gs://my-bucket`, `filestore://my-instance/share`, `my-pvc` (for Lustre/etc), or `/host/path`. `profile=` (`training`, `checkpointing`, `serving`) is GCS-only and provisions a shared GCS FUSE storage-profile PV/PVC gateway instead of an inline CSI volume. |
-| `--env` | `stringArray` | Custom environment variables to pass exclusively to the user's workload container in KEY=VALUE format (e.g. `--env KEY=VALUE`). Applies to both standard and Pathways workloads. Can be specified multiple times. |
+| `--env` | `stringArray` | Custom environment variables to pass exclusively to the user's workload container in KEY=VALUE format (e.g. `--env KEY=VALUE`). Applies to both standard and Pathways workloads and can be specified multiple times. For standard JobSet workloads, `WORKERS_0_HOSTNAME` and `MASTER_ADDR` are preset to `<name>-main-job-0-0.<name>` unless overridden via `--env`. |
 | `--await-job-completion` | `bool` | If true, the CLI waits for the job to complete before exiting. |
 | `--timeout` | `string` | Time to wait for job completion (e.g., `1h`, `10m`). Used with `--await-job-completion`. |
 | `--verbose` | `bool` | Enable verbose logging for the workload. |

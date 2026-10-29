@@ -342,6 +342,15 @@ For more details, see [VM image support](docs/vm-images.md).
 
 A cluster blueprint is the core configuration file (YAML) for your deployment. Cluster Toolkit includes validator functions that perform basic tests on the blueprint to ensure variables are valid and resources can be provisioned. See [Blueprint validation](docs/blueprint-validation.md) for more details.
 
+## Documentation guides (`docs/`)
+
+- **GPU & AI Hypercomputer:** [GPU Support](docs/gpu-support.md), [MaxText on Slurm TPU](docs/hpc-slurm6-tpu-maxtext.md)
+- **GKE Orchestration & Workloads:** [Gcluster Job Submission Guide](docs/gcluster_job_guide.md), [Advanced GKE Infrastructure Features](docs/gke-advanced-features.md), [GKE Cluster Management](docs/gke-cluster-management.md), [Migrating from XPK to Cluster Toolkit](docs/migration/xpk_to_clustertoolkit.md)
+- **Slurm on GCP:** [Slurm GCP Support](docs/slurm-gcp-support.md), [Slurm Advanced Features](docs/slurm-advanced-features.md), [Slurm Topology](docs/slurm-topology.md), [Slurm DWS Flex-Start](docs/slurm-dws-flex.md), [Slurm DWS Calendar Mode](docs/slurm-dws-calendar.md), [Slurm Native Auth Migration](docs/slurm-native-auth-migration-guide.md), [CHS Slurm](docs/CHS-Slurm.md), [Hybrid Slurm Cluster](docs/hybrid-slurm-cluster/README.md), [Slurm Troubleshooting](docs/slurm-troubleshooting.md)
+- **Storage, Images & Batch:** [Network Storage](docs/network_storage.md), [VM Images](docs/vm-images.md), [Custom Image Building](docs/image-building.md), [Cloud Batch](docs/batch.md)
+- **Validation & Module Authoring:** [Blueprint Validation](docs/blueprint-validation.md), [Module Guidelines](docs/module-guidelines.md)
+- **LLM & AI Assistant Indexes:** [`llms.txt`](llms.txt) (concise index) and [`llms-full.txt`](llms-full.txt) (complete blueprint and module reference)
+
 ## Billing reports
 
 To track the costs of your deployment, use the [Cloud Billing Reports](https://cloud.google.com/billing/docs/how-to/reports) page. You need a role with the `billing.accounts.getSpendingInformation` permission.

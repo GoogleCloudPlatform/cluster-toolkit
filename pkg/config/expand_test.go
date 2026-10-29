@@ -956,7 +956,9 @@ func (s *zeroSuite) TestValidateModuleInputs_OutputFiltering(c *C) {
 	c.Check(IsAutoInjectedGlobal("cluster_id"), Equals, false)
 	c.Check(IsGenericOutputName("capacity_gb"), Equals, true)
 	c.Check(IsGenericOutputName("gcp_service_list"), Equals, true)
+	c.Check(IsGenericOutputName("mode"), Equals, true)
 	c.Check(IsGenericOutputName("self_link"), Equals, true)
+	c.Check(IsGenericOutputName("type"), Equals, true)
 	c.Check(IsGenericOutputName("cluster_id"), Equals, false)
 	c.Check(IsIntegrationInputName("network_storage"), Equals, true)
 	c.Check(IsIntegrationInputName("cluster_id"), Equals, false)
@@ -964,7 +966,7 @@ func (s *zeroSuite) TestValidateModuleInputs_OutputFiltering(c *C) {
 	// Auto-injected globals and generic output names never receive a use: hint
 	excludedNames := []string{
 		"project_id", "deployment_name", "region", "zone", "labels",
-		"capacity_gb", "gcp_service_list", "id", "instance_name", "name", "self_link",
+		"capacity_gb", "gcp_service_list", "id", "instance_name", "mode", "name", "self_link", "type",
 	}
 	noisy := tMod("noisy").outputs(excludedNames...).build()
 	for _, name := range excludedNames {

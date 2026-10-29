@@ -120,6 +120,9 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err := g.validateJobConflicts(job); err != nil {
 		return err
 	}
+	if err := g.validateMTCConfig(&job); err != nil {
+		return err
+	}
 
 	fullImageName, err := g.BuildContainerImage(job)
 	if err != nil {
@@ -569,10 +572,6 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 	}
 
 	if err := g.configureClusterEnvironment(job); err != nil {
-		return err
-	}
-
-	if err := g.validateMTCConfig(job); err != nil {
 		return err
 	}
 

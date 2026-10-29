@@ -260,7 +260,7 @@ endif
 
 ###################################
 # AGENT SKILLS SECTION
-.PHONY: lint-skills test-skills validate-docs
+.PHONY: lint-skills test-skills generate-docs validate-docs
 
 lint-skills:
 	$(info **************** linting agent skills ***************)
@@ -270,6 +270,10 @@ test-skills:
 	$(info **************** running skills unit tests and evals ***************)
 	@python3 tools/tests/test_run_eval.py
 	@python3 tools/run_eval.py --all
+
+generate-docs:
+	$(info **************** generating catalog, README tables, and llms.txt ***************)
+	@go run ./tools/catalog-gen
 
 validate-docs:
 	$(info **************** validating README snippets and links ***************)

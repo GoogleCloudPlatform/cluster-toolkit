@@ -740,7 +740,13 @@ func buildExplainBlueprint(repoRoot, bpPath, explicitDeplPath string) (ExplainBl
 	if err != nil {
 		return ExplainBlueprintResult{}, err
 	}
-	apis, stages := collectBlueprintAPIsAndStages(bp)
+	// "" skips the on-disk lookup so explain reports the binary's embedded module
+	// metadata, i.e. what `gcluster deploy` validates via test_apis_enabled.
+	apis := catalog.ExtractBlueprintServices("", filepath.Dir(bpPath), bp)
+	if apis == nil {
+		apis = []string{}
+	}
+	stages := collectBlueprintStages(bp)
 
 	gcloudCmd := ""
 	if len(apis) > 0 {
@@ -781,17 +787,12 @@ func loadCompanionDeployment(repoRoot, bpPath, blueprintName, explicitDeplPath s
 	return displayDeplPath, parsedDS, nil
 }
 
-func collectBlueprintAPIsAndStages(bp config.Blueprint) ([]string, []ExplainStage) {
-	servicesSet := make(map[string]bool)
+func collectBlueprintStages(bp config.Blueprint) []ExplainStage {
 	stages := make([]ExplainStage, 0, len(bp.Groups))
-
 	for _, grp := range bp.Groups {
 		stageMods := make([]ExplainStageModule, 0, len(grp.Modules))
 		for _, mod := range grp.Modules {
 			normSrc := strings.TrimPrefix(strings.TrimSpace(mod.Source), "./")
-			for _, svc := range extractModuleRequiredServices(mod, normSrc) {
-				servicesSet[svc] = true
-			}
 			useIDs := make([]string, 0, len(mod.Use))
 			for _, u := range mod.Use {
 				useIDs = append(useIDs, string(u))
@@ -808,33 +809,7 @@ func collectBlueprintAPIsAndStages(bp config.Blueprint) ([]string, []ExplainStag
 			Modules: stageMods,
 		})
 	}
-
-	apis := make([]string, 0, len(servicesSet))
-	for s := range servicesSet {
-		apis = append(apis, s)
-	}
-	sort.Strings(apis)
-	return apis, stages
-}
-
-func extractModuleRequiredServices(mod config.Module, normSrc string) []string {
-	kind := mod.Kind.String()
-	if kind == "" {
-		kind = config.TerraformKind.String()
-	}
-	if kind != "terraform" && kind != "packer" {
-		return nil
-	}
-	if detectEmbeddedModuleKind(sourcereader.ModuleFS, normSrc) != "" {
-		if mi, err := modulereader.GetModuleInfo(normSrc, kind); err == nil {
-			return nonEmptyStrings(mi.Metadata.Spec.Requirements.Services)
-		}
-	} else if sourcereader.IsLocalPath(mod.Source) {
-		if mtd, err := modulereader.GetMetadata(mod.Source); err == nil {
-			return nonEmptyStrings(mtd.Spec.Requirements.Services)
-		}
-	}
-	return nil
+	return stages
 }
 
 func nonEmptyStrings(items []string) []string {

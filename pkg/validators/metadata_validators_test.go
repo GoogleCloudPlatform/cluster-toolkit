@@ -1450,6 +1450,26 @@ func TestRequiredValidator(t *testing.T) {
 			t.Fatalf("expected error message to contain 'Custom Error: missing required settings', got: %q", err.Error())
 		}
 	})
+
+	t.Run("fails_when_deprecated_vars_have_zero_false_or_empty_values", func(t *testing.T) {
+		for name, val := range map[string]cty.Value{
+			"false":        cty.False,
+			"zero":         cty.NumberIntVal(0),
+			"empty_string": cty.StringVal(""),
+			"empty_list":   cty.EmptyTupleVal,
+			"empty_object": cty.EmptyObjectVal,
+		} {
+			bp := createBaseTestBlueprint()
+			bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"old_var": val})
+			rule := modulereader.ValidationRule{
+				Validator: "required",
+				Inputs:    map[string]interface{}{"vars": []interface{}{"old_var"}, "deprecated": true},
+			}
+			if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err == nil {
+				t.Errorf("%s: expected validation error for deprecated variable, got nil", name)
+			}
+		}
+	})
 }
 
 func TestIsVarSet(t *testing.T) {
@@ -1917,4 +1937,177 @@ func TestCIDRValidator(t *testing.T) {
 			t.Fatal("expected invalid CIDR master_ipv4_cidr_block to fail, got nil")
 		}
 	})
+}
+
+func runModuleRules(bp config.Blueprint, rules []modulereader.ValidationRule) error {
+	mod, grp := bp.Groups[0].Modules[0], bp.Groups[0]
+	for _, r := range rules {
+		if v, ok := Registry[r.Validator]; ok {
+			if err := v.Validate(bp, mod, r, grp, 0); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func TestAllowedEnumValidator_NumericAndNestedExpressions(t *testing.T) {
+	v := &AllowedEnumValidator{}
+	numRule := modulereader.ValidationRule{
+		Validator: "allowed_enum",
+		Inputs:    map[string]interface{}{"vars": []interface{}{"per_unit_storage_throughput"}, "allowed": []interface{}{125, 250, 500, 1000}, "allow_null": true},
+	}
+
+	bp := createBaseTestBlueprint()
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"per_unit_storage_throughput": config.AsProductOfModuleUse(cty.NumberIntVal(250), "mod")})
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], numRule, bp.Groups[0], 0); err != nil {
+		t.Fatalf("expected valid numeric enum to pass, got: %v", err)
+	}
+
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"per_unit_storage_throughput": cty.NumberIntVal(300)})
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], numRule, bp.Groups[0], 0); err == nil {
+		t.Fatal("expected invalid numeric enum 300 to fail, got nil")
+	}
+
+	nestedRule := modulereader.ValidationRule{
+		Validator: "allowed_enum",
+		Inputs:    map[string]interface{}{"vars": []interface{}{"placement_policy.type"}, "allowed": []interface{}{"COMPACT"}, "allow_null": true},
+	}
+	bp.Vars = config.NewDict(map[string]cty.Value{"placement_policy": cty.ObjectVal(map[string]cty.Value{"type": cty.StringVal("SPREAD")})})
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"placement_policy": config.GlobalRef("placement_policy").AsValue()})
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], nestedRule, bp.Groups[0], 0); err == nil {
+		t.Fatal("expected invalid nested placement_policy.type via expression to fail, got nil")
+	}
+
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{})
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], nestedRule, bp.Groups[0], 0); err == nil {
+		t.Fatal("expected invalid nested placement_policy.type in global vars to fail, got nil")
+	}
+}
+
+func TestExclusiveValidator_MinSetAndModuleUse(t *testing.T) {
+	v := &ExclusiveValidator{}
+	rule := modulereader.ValidationRule{
+		Validator: "exclusive",
+		Inputs:    map[string]interface{}{"vars": []interface{}{"filestore_id", "lustre_id", "gcs_bucket_name"}, "min_set": 1},
+	}
+
+	bp := createBaseTestBlueprint()
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{})
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err == nil {
+		t.Fatal("expected error when min_set is 1 and no vars are set, got nil")
+	}
+
+	useVal := config.AsProductOfModuleUse(config.ModuleRef("lustre", "lustre_id").AsValue(), "lustre")
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"lustre_id": useVal})
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+		t.Fatalf("expected module use reference to satisfy min_set=1, got: %v", err)
+	}
+
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"lustre_id": useVal, "gcs_bucket_name": cty.StringVal("my-bucket")})
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err == nil {
+		t.Fatal("expected error when both lustre_id (via use) and gcs_bucket_name are set, got nil")
+	}
+
+	badRule := modulereader.ValidationRule{Validator: "exclusive", Inputs: map[string]interface{}{"vars": []interface{}{"a", "b"}, "min_set": "not-an-int"}}
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], badRule, bp.Groups[0], 0); err == nil {
+		t.Fatal("expected error for non-integer min_set, got nil")
+	}
+}
+
+func TestModuleMetadataRules_StorageAndNodePool(t *testing.T) {
+	const (
+		lustreMod   = "../../modules/file-system/managed-lustre"
+		pvMod       = "../../modules/file-system/gke-persistent-volume"
+		nodePoolMod = "../../modules/compute/gke-node-pool"
+	)
+	cases := []struct {
+		name     string
+		modPath  string
+		settings map[string]cty.Value
+		wantErr  bool
+	}{
+		{"lustre valid", lustreMod, map[string]cty.Value{"per_unit_storage_throughput": cty.NumberIntVal(500), "import_gcs_bucket_uri": cty.StringVal("gs://my-valid-bucket/dir"), "network_id": cty.StringVal("projects/my-proj/global/networks/my-net")}, false},
+		{"lustre empty gcs uri", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("")}, false},
+		{"lustre null gcs uri", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.NullVal(cty.String)}, false},
+		{"lustre invalid throughput", lustreMod, map[string]cty.Value{"per_unit_storage_throughput": cty.NumberIntVal(300)}, true},
+		{"lustre invalid gcs uri", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("https://storage.googleapis.com/bucket")}, true},
+		{"lustre gcs uri missing scheme", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("my-bucket")}, true},
+		{"lustre gcs uri whitespace", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal(" ")}, true},
+		{"lustre gcs uri single slash", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("gs:/foo")}, true},
+		{"lustre gcs uri newline injection", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("gs://bucket\ninjected")}, true},
+		{"lustre invalid network_id", lustreMod, map[string]cty.Value{"network_id": cty.StringVal("my-net")}, true},
+		{"lustre dynamic tier with module ref throughput", lustreMod, map[string]cty.Value{"enable_dynamic_tier": cty.True, "per_unit_storage_throughput": config.AsProductOfModuleUse(config.ModuleRef("net", "throughput").AsValue(), "net")}, true},
+		{"lustre module ref trigger", lustreMod, map[string]cty.Value{"enable_dynamic_tier": config.ModuleRef("net", "dynamic_tier").AsValue(), "per_unit_storage_throughput": cty.NumberIntVal(500)}, false},
+		{"pv valid filestore", pvMod, map[string]cty.Value{"filestore_id": cty.StringVal("projects/p/locations/us-central1-a/instances/fs"), "gcsfuse_storage_class_name": cty.StringVal("gcsfusecsi-training")}, false},
+		{"pv missing backing storage", pvMod, map[string]cty.Value{}, true},
+		{"pv multiple backing storages", pvMod, map[string]cty.Value{"filestore_id": cty.StringVal("projects/p/locations/us-central1-a/instances/fs"), "gcs_bucket_name": cty.StringVal("my-bucket")}, true},
+		{"pv invalid lustre_id", pvMod, map[string]cty.Value{"lustre_id": cty.StringVal("invalid-lustre-id")}, true},
+		{"pv invalid gcsfuse class", pvMod, map[string]cty.Value{"gcs_bucket_name": cty.StringVal("my-bucket"), "gcsfuse_storage_class_name": cty.StringVal("invalid-class")}, true},
+		{"node-pool valid", nodePoolMod, map[string]cty.Value{"threads_per_core": cty.NumberIntVal(2), "host_maintenance_interval": cty.StringVal("PERIODIC"), "placement_policy": cty.ObjectVal(map[string]cty.Value{"type": cty.StringVal("COMPACT")})}, false},
+		{"node-pool reservation NO_RESERVATION", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.ObjectVal(map[string]cty.Value{"consume_reservation_type": cty.StringVal("NO_RESERVATION")})}, false},
+		{"node-pool reservation ANY_RESERVATION", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.ObjectVal(map[string]cty.Value{"consume_reservation_type": cty.StringVal("ANY_RESERVATION")})}, false},
+		{"node-pool reservation null object", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.NullVal(cty.DynamicPseudoType)}, false},
+		{"node-pool reservation invalid type", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.ObjectVal(map[string]cty.Value{"consume_reservation_type": cty.StringVal("INVALID")})}, true},
+		{"node-pool reservation lowercase type", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.ObjectVal(map[string]cty.Value{"consume_reservation_type": cty.StringVal("specific_reservation")})}, true},
+		{"node-pool reservation null type", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.ObjectVal(map[string]cty.Value{"consume_reservation_type": cty.NullVal(cty.String)})}, true},
+		{"node-pool invalid threads_per_core", nodePoolMod, map[string]cty.Value{"threads_per_core": cty.NumberIntVal(4)}, true},
+		{"node-pool invalid host_maintenance_interval", nodePoolMod, map[string]cty.Value{"host_maintenance_interval": cty.StringVal("DAILY")}, true},
+		{"node-pool deprecated compact_placement", nodePoolMod, map[string]cty.Value{"compact_placement": cty.True}, true},
+		{"node-pool deprecated compact_placement false", nodePoolMod, map[string]cty.Value{"compact_placement": cty.False}, true},
+		{"node-pool deprecated total_min_nodes zero", nodePoolMod, map[string]cty.Value{"total_min_nodes": cty.NumberIntVal(0)}, true},
+		{"node-pool deprecated compact_placement null", nodePoolMod, map[string]cty.Value{"compact_placement": cty.NullVal(cty.Bool)}, false},
+		{"node-pool exclusive autoscaling min", nodePoolMod, map[string]cty.Value{"autoscaling_total_min_nodes": cty.NumberIntVal(1), "autoscaling_min_node_count": cty.NumberIntVal(1)}, true},
+		{"node-pool exclusive local ssd", nodePoolMod, map[string]cty.Value{"local_ssd_count_ephemeral_storage": cty.NumberIntVal(1), "local_ssd_count_nvme_block": cty.NumberIntVal(1)}, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			info, err := modulereader.GetModuleInfo(tc.modPath, "terraform")
+			if err != nil {
+				t.Fatalf("failed to read module info for %s: %v", tc.modPath, err)
+			}
+			bp := createBaseTestBlueprint()
+			bp.Groups[0].Modules[0].Source = tc.modPath
+			bp.Groups[0].Modules[0].Kind = config.TerraformKind
+			bp.Groups[0].Modules[0].Settings = config.NewDict(tc.settings)
+			if err := runModuleRules(bp, info.Metadata.Ghpc.Validators); (err != nil) != tc.wantErr {
+				t.Fatalf("runModuleRules() error = %v, wantErr = %v", err, tc.wantErr)
+			}
+		})
+	}
+
+	nodePoolInfo, err := modulereader.GetModuleInfo(nodePoolMod, "terraform")
+	if err != nil {
+		t.Fatalf("failed to read module info for %s: %v", nodePoolMod, err)
+	}
+	varRefCases := []struct {
+		name    string
+		resType string
+		wantErr bool
+	}{
+		{"node-pool reservation SPECIFIC_RESERVATION via vars", "SPECIFIC_RESERVATION", false},
+		{"node-pool reservation invalid type via vars", "INVALID", true},
+	}
+	for _, tc := range varRefCases {
+		t.Run(tc.name, func(t *testing.T) {
+			bp := createBaseTestBlueprint()
+			bp.Vars = config.NewDict(map[string]cty.Value{
+				"reservation_affinity": cty.ObjectVal(map[string]cty.Value{
+					"consume_reservation_type": cty.StringVal(tc.resType),
+					"specific_reservations": cty.TupleVal([]cty.Value{
+						cty.ObjectVal(map[string]cty.Value{"name": cty.StringVal("my-res")}),
+					}),
+				}),
+			})
+			bp.Groups[0].Modules[0].Source = nodePoolMod
+			bp.Groups[0].Modules[0].Kind = config.TerraformKind
+			bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+				"reservation_affinity": config.GlobalRef("reservation_affinity").AsValue(),
+			})
+			if err := runModuleRules(bp, nodePoolInfo.Metadata.Ghpc.Validators); (err != nil) != tc.wantErr {
+				t.Fatalf("runModuleRules() error = %v, wantErr = %v", err, tc.wantErr)
+			}
+		})
+	}
 }

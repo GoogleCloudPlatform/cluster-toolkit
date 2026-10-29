@@ -333,6 +333,9 @@ type Blueprint struct {
 	AddCreatorLabel bool `yaml:"-"`
 	// CreatorUsername is the username to use for the creator label
 	CreatorUsername string `yaml:"-"`
+	// subblockIO asks the user and saves sub-block maps chosen by gcluster
+	// (runtime-only, not serialized). Nil means read-only (gcluster expand).
+	subblockIO *SubblockIO
 }
 
 func (bp *Blueprint) Clone() Blueprint {

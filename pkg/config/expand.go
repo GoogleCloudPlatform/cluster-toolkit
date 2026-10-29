@@ -34,7 +34,7 @@ import (
 const (
 	blueprintLabel        = "ghpc_blueprint"
 	deploymentLabel       = "ghpc_deployment"
-	GoogleProviderVersion = ">= 6.9.0, <= 8.6.0"
+	GoogleProviderVersion = ">= 6.9.0, <= 8.8.0"
 )
 
 var validLabelValueRegex = regexp.MustCompile("[^a-z0-9_-]")
@@ -52,8 +52,10 @@ var genericOutputNames = map[string]bool{
 	"gcp_service_list": true,
 	"id":               true,
 	"instance_name":    true,
+	"mode":             true,
 	"name":             true,
 	"self_link":        true,
+	"type":             true,
 }
 
 var integrationInputNames = map[string]bool{
@@ -397,6 +399,9 @@ func (bp *Blueprint) expandGroups() error {
 	bp.addKindToModules()
 	bp.substituteModuleSources()
 	if err := checkModulesAndGroups(*bp); err != nil {
+		return err
+	}
+	if err := bp.resolveReservationSubblocks(); err != nil {
 		return err
 	}
 
