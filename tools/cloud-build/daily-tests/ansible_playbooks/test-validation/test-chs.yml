@@ -111,14 +111,24 @@
       async: 3000
       poll: 10
       changed_when: false
+      failed_when: false
       vars:
         target_flag: "{{ '--nodepools' if scheduler == 'gke' else ('--partitions' if scheduler == 'slurm' else '') }}"
         target_val: "{{ (chs_nodepools if scheduler == 'gke' else (chs_partitions if scheduler == 'slurm' else '')) | default('') }}"
         chs_target: "{{ target_flag + ' ' + target_val if (target_flag and target_val) else '' }}"
 
+    # On async timeout Ansible returns only `failed`/`msg` (no rc/stdout), so
+    # every field below needs a default.
     - name: CHS run output
       ansible.builtin.debug:
-        msg: "{{ chs_run.stdout }}"
+        msg: |
+          {{ chs_run.stdout | default('') }}
+          {{ chs_run.stderr | default('') }}
+
+    - name: Fail on CHS command execution failure
+      ansible.builtin.fail:
+        msg: "CHS execution failed (rc={{ chs_run.rc | default('n/a') }}): {{ chs_run.msg | default('see CHS run output above') }}"
+      when: chs_run.rc | default(1) != 0
 
     # `chs run` exits 0 even when health checks fail; the verdict lives in the
     # Bill of Health (BoH) that CHS uploads to

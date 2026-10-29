@@ -174,12 +174,30 @@ class SummarizeTest(unittest.TestCase):
         self.assertEqual(validate_chs_boh.validated_metrics(tr), [])
 
     def test_empty_report_no_test_results(self):
-        # When 0 tests run, proto3 omits test_results
+        # When 0 tests run, it should fail validation in CI
         report = {"report_id": "empty-run", "chs_version": "0.3.1"}
         lines, has_failures = validate_chs_boh.summarize(report, "chs-results")
         text = "\n".join(lines)
-        self.assertFalse(has_failures)
+        self.assertTrue(has_failures)
         self.assertIn("Summary: no test results", text)
+        self.assertIn("ERROR: CHS Bill of Health 'empty-run' contains no test results.", text)
+
+    def test_relative_metric_formatting(self):
+        metric = {
+            "key": "Achieved Bandwidth",
+            "value": 2500.0,
+            "unit": "GB/s",
+            "metadata": {"relative": 0.82, "context": "triad"},
+            "validation_criteria": {
+                "name": "efficiency",
+                "comparator": "COMPARATOR_GTE",
+                "expected_value": 0.85,
+                "result_status": "RESULT_STATUS_FAILED",
+            },
+        }
+        formatted = validate_chs_boh.format_criteria(metric)
+        self.assertIn("Achieved Bandwidth (triad) = 0.820 (ratio, raw: 2500.0 GB/s)", formatted)
+        self.assertIn("expected >= 0.85", formatted)
 
 
 class MainTest(unittest.TestCase):
@@ -197,9 +215,9 @@ class MainTest(unittest.TestCase):
         self.assertEqual(validate_chs_boh.main([ok]), 0)
         self.assertEqual(validate_chs_boh.main([bad]), 1)
 
-    def test_empty_report_exits_zero(self):
+    def test_empty_report_exits_one(self):
         empty = self._write({"report_id": "empty-run", "chs_version": "0.3.1"})
-        self.assertEqual(validate_chs_boh.main([empty]), 0)
+        self.assertEqual(validate_chs_boh.main([empty]), 1)
 
     def test_invalid_json_raises(self):
         fd, path = tempfile.mkstemp(suffix=".json")

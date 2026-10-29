@@ -68,8 +68,15 @@ def format_expected(criteria: Dict[str, Any]) -> str:
 
 def format_metric(metric: Dict[str, Any]) -> str:
     """Formats a validated metric as '<key>[ (<context>)] = <value><unit>'."""
-    context = (metric.get("metadata") or {}).get("context") or ""
+    metadata = metric.get("metadata") or {}
+    context = metadata.get("context") or ""
     label = f"{metric.get('key')} ({context})" if context else str(metric.get("key"))
+    if "relative" in metadata:
+        rel = metadata["relative"]
+        rel_str = f"{rel:.3f}" if isinstance(rel, (int, float)) else str(rel)
+        unit = f" {metric.get('unit')}" if metric.get("unit") else ""
+        raw = f"{metric.get('value')}{unit}" if metric.get("value") is not None else ""
+        return f"{label} = {rel_str} (ratio, raw: {raw})" if raw else f"{label} = {rel_str} (ratio)"
     unit = f" {metric.get('unit')}" if metric.get("unit") else ""
     return f"{label} = {metric.get('value')}{unit}"
 
@@ -123,6 +130,13 @@ def summarize(report: Dict[str, Any], bucket: str) -> Tuple[List[str], bool]:
     counts: Dict[str, int] = {}
     failed_labels: List[str] = []
     test_results = [t for t in (report.get("test_results") or []) if isinstance(t, dict)]
+
+    if not test_results:
+        lines.append("")
+        lines.append("Summary: no test results")
+        lines.append(f"ERROR: CHS Bill of Health '{report_id}' contains no test results.")
+        return lines, True
+
     for tr in sorted(
         test_results,
         key=lambda t: (t.get("test_name") or "", t.get("test_level") or "", test_label(t)),
