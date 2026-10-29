@@ -49,3 +49,19 @@ ghpc:
       dependent: enable_slurm_auth
       dependent_value: true
     error_message: "DEPRECATION NOTICE: Legacy MUNGE-based authentication is end-of-support and no longer maintained in Cluster Toolkit; the option to use MUNGE will be completely removed soon. Please migrate your blueprint to Slurm Native Authentication. See docs/slurm-native-auth-migration-guide.md for migration steps."
+  day2_ignored_settings:
+  - setting: nodeset_dyn
+    display_name: "partition or nodeset definitions were modified"
+    attribute: target_size
+    reason: "Instance group 'target_size' is in lifecycle.ignore_changes because Slurm manages autoscaling dynamically."
+    remediation: "Changes to initial or static node counts will not resize existing Slurm nodesets via Terraform."
+  - setting: nodeset_tpu
+    display_name: "partition or nodeset definitions were modified"
+    attribute: target_size
+    reason: "Instance group 'target_size' is in lifecycle.ignore_changes because Slurm manages autoscaling dynamically."
+    remediation: "Changes to initial or static node counts will not resize existing Slurm nodesets via Terraform."
+  - setting: partitions
+    display_name: "partition or nodeset definitions were modified"
+    attribute: target_size
+    reason: "Instance group 'target_size' is in lifecycle.ignore_changes because Slurm manages autoscaling dynamically."
+    remediation: "Changes to initial or static node counts will not resize existing Slurm nodesets via Terraform."

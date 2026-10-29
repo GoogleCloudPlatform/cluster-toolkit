@@ -92,3 +92,12 @@ ghpc:
       dependent: reservation_affinity.consume_reservation_type
       pattern: "^NO_RESERVATION$"
     error_message: "reservation_affinity should be NO_RESERVATION when enable_queued_provisioning is true."
+  day2_ignored_settings:
+  - setting: labels
+    attribute: node_config[0].resource_labels
+    reason: "GCE 'resource_labels' is in lifecycle.ignore_changes to prevent GKE from rolling/recreating active node pools and terminating running jobs."
+    remediation: "gcloud container node-pools update {name} --cluster <cluster-name> --region <region> --labels <key=val,...>"
+  - setting: initial_node_count
+    attribute: initial_node_count
+    reason: "'initial_node_count' is in lifecycle.ignore_changes because node pool scaling is managed dynamically after creation."
+    remediation: "gcloud container clusters resize <cluster-name> --node-pool {name} --num-nodes <count>"

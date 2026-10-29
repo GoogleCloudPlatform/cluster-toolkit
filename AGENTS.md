@@ -28,3 +28,11 @@ refuse that step, explain why, and offer the gcluster-based alternative.
 - Do only what was asked. Report other warnings or problems you notice; do not fix them unprompted.
 
 Other skills live under [`skills/`](skills/README.md).
+
+- 2026-10-28 10:51Z: Addressed gemini-code-assist review comments on PR #6561:
+  1. Implemented `isNilOrNull(v cty.Value) bool { return v == cty.NilVal || v.IsNull() }` in `cmd/create.go`.
+  2. Applied `isNilOrNull` in `settingChanged` to prevent false-positive drift warnings when optional settings toggle between omitted and explicitly null.
+  3. Applied `isNilOrNull` in `getSettingVal` so fallback aliases are evaluated when primary settings are explicitly set to null.
+  4. Added Unit Test Cases 11 (explicit null vs absent) and 12 (explicit null alias fallback) in `cmd/create_test.go`. Verified all 12 test cases pass cleanly.
+  5. Committed commit `2e2ef853b` and pushed to `origin/swarnabm/gcluster-day2-ignore-warnings`.
+  6. Synced Tab 2 of Google Doc `1n2CxfaF_gtc82ZsYFqPbzjdenesjQnM509jX5onyAnw` with the updated code.
