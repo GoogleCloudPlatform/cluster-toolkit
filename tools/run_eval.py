@@ -529,6 +529,8 @@ class LiveCLIEvaluatorBackend:
             return False, f"Agent CLI '{binary}' not found on PATH. Install and log in before using --live."
         if not self._which("git"):
             return False, "git not found on PATH."
+        if not os.path.isfile(os.path.join(self.repo_root, "gcluster")):
+            return False, "gcluster binary not found at repo root. Run 'make' first so the deploy/destroy safety shim can wrap it."
         return True, "ok"
 
     # -- worktree + shims -----------------------------------------------------
@@ -538,6 +540,8 @@ class LiveCLIEvaluatorBackend:
         os.rmdir(wt)  # git worktree add wants a non-existent path
         res = self._git(["worktree", "add", "--detach", wt, self.repo_ref], self.repo_root)
         if res.returncode != 0:
+            shutil.rmtree(wt, ignore_errors=True)
+            self._git(["worktree", "prune"], self.repo_root)
             raise RuntimeError(f"git worktree add failed: {res.stderr.strip()}")
         return wt
 
@@ -645,17 +649,16 @@ class LiveCLIEvaluatorBackend:
                 blueprints.append(rel)
             elif "vars" in doc:
                 deployments.append(rel)
-        if len(blueprints) != 1 and not (len(blueprints) == 0 and len(deployments) == 1):
-            oracles.reexpand = "skipped: could not identify a single blueprint/deployment pair"
-            return
-        if blueprints:
-            cmd = [real, "expand", blueprints[0], "-o", os.path.join(wt, LIVE_SHIM_DIR, "expand")]
-            if deployments:
-                cmd += ["-d", deployments[0]]
-        else:
+        if not blueprints and len(deployments) == 1:
             # deployment.yaml only: the template is whatever the deployment file was written for.
             oracles.reexpand = f"skipped: deployment file {deployments[0]} written; blueprint inferred from prompt not re-expanded"
             return
+        if len(blueprints) != 1 or len(deployments) > 1:
+            oracles.reexpand = "skipped: could not identify a single blueprint/deployment pair"
+            return
+        cmd = [real, "expand", blueprints[0], "-o", os.path.join(wt, LIVE_SHIM_DIR, "expand")]
+        if deployments:
+            cmd += ["-d", deployments[0]]
         res = self._exec(cmd, wt)
         oracles.reexpand = "ok" if res.returncode == 0 else f"failed: {(res.stderr or res.stdout or '').strip()[-400:]}"
 
@@ -667,6 +670,11 @@ class LiveCLIEvaluatorBackend:
         wt = self._make_worktree(case_name)
         try:
             shim_dir = self._install_shims(wt)
+            # Linux relatime only bumps atime on read when atime < mtime. A fresh
+            # worktree has atime == mtime for every file, so backdate .tf atimes
+            # first; otherwise the first read would not be visible to -anewer.
+            self._exec(["find", "modules", "community/modules", "-name", "*.tf",
+                        "-exec", "touch", "-a", "-t", "200001010000", "{}", "+"], wt)
             marker = os.path.join(shim_dir, "marker")
             open(marker, "w", encoding="utf-8").close()
             time.sleep(1)  # atime resolution

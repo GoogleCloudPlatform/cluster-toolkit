@@ -943,6 +943,63 @@ class TestLiveBackend(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("gemini", msg)
 
+    def test_prerequisites_require_built_gcluster(self):
+        # Without ./gcluster the deploy/destroy shim cannot wrap anything, so refuse to start.
+        b = self._backend(self._fake_exec())
+        ok, msg = b.check_prerequisites()
+        self.assertFalse(ok)
+        self.assertIn("gcluster", msg)
+        with open(os.path.join(self.repo, "gcluster"), "w", encoding="utf-8") as f:
+            f.write("#!/bin/sh\n")
+        ok, _ = b.check_prerequisites()
+        self.assertTrue(ok)
+
+    def test_tf_atimes_backdated_before_marker(self):
+        b = self._backend(self._fake_exec())
+        b.run_case("skill", "p", {"name": "c0"})
+        cmds = [c[0] for c in self.calls]
+        touch_idx = next(i for i, c in enumerate(cmds) if c[0] == "find" and "touch" in c)
+        agent_idx = next(i for i, c in enumerate(cmds) if c[0] == "gemini")
+        anewer_idx = next(i for i, c in enumerate(cmds) if c[0] == "find" and "-anewer" in c)
+        self.assertLess(touch_idx, agent_idx)
+        self.assertLess(agent_idx, anewer_idx)
+
+    def test_worktree_add_failure_cleans_up(self):
+        def exec_fn(cmd, cwd, env=None, timeout=None):
+            self.calls.append((cmd, cwd, env, timeout))
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(cmd[4], exist_ok=True)
+                return _FakeProc(128, "", "fatal: bad ref")
+            return _FakeProc(0)
+        b = self._backend(exec_fn)
+        with self.assertRaises(RuntimeError):
+            b.run_case("skill", "p", {"name": "c7"})
+        wt = [c[0][4] for c in self.calls if c[0][:3] == ["git", "worktree", "add"]][0]
+        self.assertFalse(os.path.exists(wt))
+        self.assertTrue(any(c[0][:3] == ["git", "worktree", "prune"] for c in self.calls))
+
+    def test_reexpand_skips_ambiguous_pairs(self):
+        def make_exec(status_all):
+            def exec_fn(cmd, cwd, env=None, timeout=None):
+                self.calls.append((cmd, cwd, env, timeout))
+                if cmd[:3] == ["git", "worktree", "add"]:
+                    os.makedirs(os.path.join(cmd[4], "examples"), exist_ok=True)
+                    for rel, body in [("examples/bp.yaml", "deployment_groups: []\nai_assisted: true\n"),
+                                      ("d1.yaml", "vars: {a: 1}\n"), ("d2.yaml", "vars: {a: 2}\n")]:
+                        with open(os.path.join(cmd[4], rel), "w", encoding="utf-8") as f:
+                            f.write(body)
+                    return _FakeProc(0)
+                if cmd[:2] == ["git", "status"] and "--untracked-files=all" in cmd:
+                    return _FakeProc(0, status_all)
+                return _FakeProc(0)
+            return exec_fn
+        with open(os.path.join(self.repo, "gcluster"), "w", encoding="utf-8") as f:
+            f.write("#!/bin/sh\n")
+        b = self._backend(make_exec("?? examples/bp.yaml\n?? d1.yaml\n?? d2.yaml\n"))
+        b.run_case("skill", "p", {"name": "c8"})
+        self.assertTrue(b.oracles["c8"].reexpand.startswith("skipped: could not identify"))
+        self.assertFalse(any(c[0][0].endswith("gcluster.real") for c in self.calls))
+
     def test_clean_run_passes_and_substitutes_project(self):
         b = self._backend(self._fake_exec(agent_out="Created deployment.yaml and ran ./gcluster expand"))
         case = {"name": "c1", "expect_keywords_all": ["deployment.yaml"]}
