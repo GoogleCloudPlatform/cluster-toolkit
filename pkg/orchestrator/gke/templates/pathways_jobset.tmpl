@@ -101,10 +101,6 @@ spec:
               - name: {{ .Name }}
                 value: {{ printf "%q" .Value }}
               {{- end }}
-              {{- if .VolumeMountsYAML }}
-              volumeMounts:
-{{(StructuralData .VolumeMountsYAML)}}
-              {{- end }}
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
               {{- end }}
@@ -150,10 +146,6 @@ spec:
               {{- range $.PathwaysServerEnv }}
               - name: {{ .Name }}
                 value: {{ printf "%q" .Value }}
-              {{- end }}
-              {{- if .VolumeMountsYAML }}
-              volumeMounts:
-{{(StructuralData .VolumeMountsYAML)}}
               {{- end }}
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
@@ -287,17 +279,14 @@ spec:
               - name: PYTHONUNBUFFERED
                 value: "1"
               volumeMounts:
-                - name: shared-tmp
-                  mountPath: /tmp
-                - name: sidecar-shared-memory
-                  mountPath: /tmp/sidecar
-                {{- if .GKEMTCEnabled}}
-                - name: cache
-                  mountPath: {{ printf "%q" .GKEMTCRamdiskDirectory }}
-                {{- end}}
-{{- if .VolumeMountsYAML }}
-{{(StructuralData .VolumeMountsYAML)}}
-{{- end }}
+              - name: shared-tmp
+                mountPath: /tmp
+              - name: sidecar-shared-memory
+                mountPath: /tmp/sidecar
+              {{- if .GKEMTCEnabled}}
+              - name: cache
+                mountPath: {{ printf "%q" .GKEMTCRamdiskDirectory }}
+              {{- end}}
             {{- end}}
             containers:
             - name: pathways-worker
