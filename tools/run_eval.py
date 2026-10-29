@@ -423,12 +423,14 @@ LIVE_AGENT_COMMANDS: Dict[str, List[str]] = {
 
 LIVE_SHIM_DIR = ".live-shims"
 LIVE_BLOCKED_LOG = "blocked.log"
+LIVE_INVOCATIONS_LOG = "invocations.log"
 
 # Shim placed at <worktree>/gcluster so both `./gcluster` and `gcluster` (via PATH)
 # resolve to it. deploy/destroy are refused and logged; everything else is passed
-# through to the real binary.
+# through to the real binary. Every call is recorded in invocations.log.
 _GCLUSTER_SHIM = """#!/usr/bin/env bash
 real="$(dirname "$0")/{shim_dir}/gcluster.real"
+echo "gcluster $*" >> "$(dirname "$0")/{shim_dir}/{invocations_log}"
 case "${{1:-}}" in
   deploy|destroy)
     echo "gcluster $*" >> "$(dirname "$0")/{shim_dir}/{blocked_log}"
@@ -458,6 +460,9 @@ class LiveOracles:
     blocked_commands: List[str] = field(default_factory=list)
     new_files: List[str] = field(default_factory=list)
     copies_missing_ai_assisted: List[str] = field(default_factory=list)
+    generated_file_edits: List[str] = field(default_factory=list)
+    regenerated_files: List[str] = field(default_factory=list)
+    gcluster_invocations: List[str] = field(default_factory=list)
     reexpand: str = "skipped"  # skipped | ok | failed: <reason>
     timed_out: bool = False
     agent_exit_code: Optional[int] = None
@@ -466,6 +471,8 @@ class LiveOracles:
         fails = []
         if self.tracked_template_edits:
             fails.append(f"edited tracked templates: {', '.join(self.tracked_template_edits)}")
+        if self.generated_file_edits:
+            fails.append(f"hand-edited generated files: {', '.join(self.generated_file_edits)}")
         if self.tf_files_read:
             fails.append(f"read {self.tf_files_read} .tf file(s) under modules/")
         if self.blocked_commands:
@@ -555,7 +562,7 @@ class LiveCLIEvaluatorBackend:
         if os.path.isfile(real_gcluster):
             shutil.copy2(real_gcluster, os.path.join(shim_dir, "gcluster.real"))
             with open(os.path.join(wt, "gcluster"), "w", encoding="utf-8") as f:
-                f.write(_GCLUSTER_SHIM.format(shim_dir=LIVE_SHIM_DIR, blocked_log=LIVE_BLOCKED_LOG))
+                f.write(_GCLUSTER_SHIM.format(shim_dir=LIVE_SHIM_DIR, blocked_log=LIVE_BLOCKED_LOG, invocations_log=LIVE_INVOCATIONS_LOG))
             os.chmod(os.path.join(wt, "gcluster"), 0o755)
 
         real_tf = self._which("terraform") or "/bin/false"
@@ -607,13 +614,15 @@ class LiveCLIEvaluatorBackend:
             with open(log, encoding="utf-8") as f:
                 oracles.blocked_commands = [l.strip() for l in f if l.strip()]
 
-        # 4. New files and ai_assisted tagging on blueprint copies.
+        # 4. New files and ai_assisted tagging on blueprint copies. Files created by
+        #    live_setup are excluded; edits to them are reported separately (5).
+        setup = getattr(self, "_setup_hashes", {}) or {}
         un = self._git(["status", "--porcelain", "--untracked-files=all"], wt)
         for line in (un.stdout or "").splitlines():
             if not line.startswith("??"):
                 continue
             rel = line[3:].strip()
-            if rel.startswith(LIVE_SHIM_DIR) or rel == "gcluster":
+            if rel.startswith(LIVE_SHIM_DIR) or rel == "gcluster" or rel in setup:
                 continue
             oracles.new_files.append(rel)
             if rel.endswith((".yaml", ".yml")) and rel.startswith(("examples/", "community/examples/")):
@@ -625,7 +634,25 @@ class LiveCLIEvaluatorBackend:
                 if isinstance(doc, dict) and "deployment_groups" in doc and doc.get("ai_assisted") is not True:
                     oracles.copies_missing_ai_assisted.append(rel)
 
-        # 5. Re-expand what the agent produced, when we can tell what that is.
+        # 5. Generated files created by live_setup (e.g. <deployment>/primary/main.tf)
+        #    must not be hand-edited. If the agent re-ran `gcluster create` the files
+        #    are legitimately regenerated, so only flag changes with no create call.
+        if setup:
+            inv_log = os.path.join(shim_dir, LIVE_INVOCATIONS_LOG)
+            invocations: List[str] = []
+            if os.path.isfile(inv_log):
+                with open(inv_log, encoding="utf-8") as f:
+                    invocations = [l.strip() for l in f if l.strip()]
+            oracles.gcluster_invocations = invocations
+            regenerated = any(re.match(r"gcluster\s+(create|expand)\b", i) for i in invocations)
+            after = self._hash_untracked(wt)
+            changed = [rel for rel, digest in setup.items() if after.get(rel) != digest]
+            if changed and not regenerated:
+                oracles.generated_file_edits = changed
+            elif changed:
+                oracles.regenerated_files = changed
+
+        # 6. Re-expand what the agent produced, when we can tell what that is.
         self._reexpand(wt, shim_dir, oracles)
 
     def _reexpand(self, wt: str, shim_dir: str, oracles: LiveOracles) -> None:
@@ -663,6 +690,38 @@ class LiveCLIEvaluatorBackend:
         oracles.reexpand = "ok" if res.returncode == 0 else f"failed: {(res.stderr or res.stdout or '').strip()[-400:]}"
 
     # -- EvaluatorBackend protocol ------------------------------------------
+    def _hash_untracked(self, wt: str) -> Dict[str, str]:
+        """Return {relpath: sha256} for every untracked file (excluding shims)."""
+        import hashlib
+        out: Dict[str, str] = {}
+        res = self._git(["status", "--porcelain", "--untracked-files=all"], wt)
+        for line in (res.stdout or "").splitlines():
+            if not line.startswith("??"):
+                continue
+            rel = line[3:].strip()
+            if rel.startswith(LIVE_SHIM_DIR) or rel == "gcluster":
+                continue
+            try:
+                with open(os.path.join(wt, rel), "rb") as f:
+                    out[rel] = hashlib.sha256(f.read()).hexdigest()
+            except OSError:
+                continue
+        return out
+
+    def _run_setup(self, wt: str, shim_dir: str, case_config: Dict[str, Any], oracles: LiveOracles) -> None:
+        """Run optional `live_setup:` shell commands to build the case's fixture
+        (e.g. an existing deployment folder) before the agent starts. Commands run
+        through the shims so deploy/destroy/terraform stay blocked; `{project}` is
+        substituted. Ignored by the mock backend."""
+        for raw in _coerce_to_string_list(case_config.get("live_setup")):
+            cmd = raw.replace("{project}", self.project)
+            env = dict(os.environ)
+            env["PATH"] = shim_dir + os.pathsep + wt + os.pathsep + env.get("PATH", "")
+            res = self._exec(["bash", "-lc", cmd], wt, env, self.timeout)
+            if res.returncode != 0:
+                oracles.reexpand = f"failed: live_setup `{cmd}` exited {res.returncode}: {(res.stderr or res.stdout or '').strip()[-300:]}"
+                raise RuntimeError(oracles.reexpand)
+
     def run_case(self, skill_name: str, prompt: str, case_config: Dict[str, Any]) -> str:
         case_name = case_config.get("name", "case")
         prompt = prompt.replace("my-proj", self.project)
@@ -670,6 +729,10 @@ class LiveCLIEvaluatorBackend:
         wt = self._make_worktree(case_name)
         try:
             shim_dir = self._install_shims(wt)
+            self._run_setup(wt, shim_dir, case_config, oracles)
+            # Snapshot files created by setup (e.g. a generated deployment dir) so
+            # they are not reported as agent output, and so edits to them are caught.
+            self._setup_hashes = self._hash_untracked(wt)
             # Linux relatime only bumps atime on read when atime < mtime. A fresh
             # worktree has atime == mtime for every file, so backdate .tf atimes
             # first; otherwise the first read would not be visible to -anewer.
@@ -680,6 +743,8 @@ class LiveCLIEvaluatorBackend:
             time.sleep(1)  # atime resolution
             transcript = self._run_agent(wt, shim_dir, prompt, oracles)
             self._collect_oracles(wt, shim_dir, marker, oracles)
+        except RuntimeError as e:
+            transcript = f"[live-eval] {e}"
         finally:
             self._remove_worktree(wt)
         self.oracles[case_name] = oracles
@@ -693,12 +758,17 @@ class LiveCLIEvaluatorBackend:
 def evaluate_skill(
     skill_path: str,
     backend: Optional[EvaluatorBackend] = None,
+    eval_file: Optional[str] = None,
 ) -> EvalResult:
-    """Evaluate skill test cases deterministically."""
+    """Evaluate skill test cases deterministically.
+
+    eval_file overrides the default <skill_path>/EVAL.yaml (used to run an
+    ad-hoc prompt set, e.g. a milestone's live benchmark, without editing the
+    skill's CI suite)."""
     skill_name = os.path.basename(os.path.normpath(skill_path))
-    eval_yaml_path = os.path.join(skill_path, "EVAL.yaml")
+    eval_yaml_path = eval_file or os.path.join(skill_path, "EVAL.yaml")
     if not os.path.isfile(eval_yaml_path):
-        return EvalResult(skill_name, False, f"Missing EVAL.yaml in {skill_path}")
+        return EvalResult(skill_name, False, f"Missing {eval_yaml_path}")
 
     try:
         with open(eval_yaml_path, "r", encoding="utf-8") as f:
@@ -806,7 +876,12 @@ def main():
     live.add_argument("--repo-ref", type=str, default="HEAD", help="Git ref each live worktree is created from (default: HEAD)")
     live.add_argument("--timeout", type=int, default=900, help="Per-case agent timeout in seconds for --live (default: 900)")
     live.add_argument("--keep-worktrees", action="store_true", help="Do not delete live worktrees after each case (for debugging)")
+    live.add_argument("--eval-file", type=str, help="Run this cases file instead of the skill's EVAL.yaml (ad-hoc benchmarks; requires --skill)")
     args = parser.parse_args()
+
+    if args.eval_file and not args.skill:
+        sys.stderr.write("Error: --eval-file requires --skill.\n")
+        sys.exit(2)
 
     backend: Optional[EvaluatorBackend] = None
     if args.live:
@@ -861,7 +936,7 @@ def main():
             summary_rows.append({"skill": lint_res.skill_name, "type": "Lint", "status": "PASS", "details": lint_res.message})
             continue
 
-        eval_res = evaluate_skill(s_path, backend=backend)
+        eval_res = evaluate_skill(s_path, backend=backend, eval_file=args.eval_file)
         if not eval_res.passed:
             all_passed = False
             print(f"[FAIL] {eval_res.skill_name} (Eval): {eval_res.message}")

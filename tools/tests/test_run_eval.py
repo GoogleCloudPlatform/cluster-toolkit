@@ -1047,12 +1047,16 @@ class TestLiveBackend(unittest.TestCase):
     def test_blueprint_copy_without_ai_assisted_flagged(self):
         def exec_fn(cmd, cwd, env=None, timeout=None):
             if cmd[:3] == ["git", "worktree", "add"]:
-                os.makedirs(os.path.join(cmd[4], "examples"), exist_ok=True)
-                with open(os.path.join(cmd[4], "examples", "custom.yaml"), "w", encoding="utf-8") as f:
-                    f.write("blueprint_name: custom\ndeployment_groups:\n- group: primary\n  modules: []\n")
+                os.makedirs(cmd[4], exist_ok=True)
                 return _FakeProc(0)
+            if cmd[0] == "gemini":  # the agent writes an untagged copy
+                os.makedirs(os.path.join(cwd, "examples"), exist_ok=True)
+                with open(os.path.join(cwd, "examples", "custom.yaml"), "w", encoding="utf-8") as f:
+                    f.write("blueprint_name: custom\ndeployment_groups:\n- group: primary\n  modules: []\n")
+                return _FakeProc(0, "copied")
             if cmd[:2] == ["git", "status"] and "--untracked-files=all" in cmd:
-                return _FakeProc(0, "?? examples/custom.yaml\n")
+                exists = os.path.isfile(os.path.join(cwd, "examples", "custom.yaml"))
+                return _FakeProc(0, "?? examples/custom.yaml\n" if exists else "")
             return _FakeProc(0)
         b = self._backend(exec_fn)
         b.run_case("skill", "p", {"name": "c5"})
@@ -1108,6 +1112,91 @@ class TestLiveBackend(unittest.TestCase):
         data = json.loads(o.summary())
         self.assertEqual(data["tf_files_read"], 3)
         self.assertEqual(o.hard_failures(), ["read 3 .tf file(s) under modules/"])
+
+    def _setup_exec(self, agent_action, create_invoked=False):
+        """exec_fn where live_setup creates depl/primary/main.tf and the agent then
+        performs `agent_action(wt)`; git status reports whatever is on disk."""
+        def exec_fn(cmd, cwd, env=None, timeout=None):
+            self.calls.append((cmd, cwd, env, timeout))
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(cmd[4], exist_ok=True)
+                return _FakeProc(0)
+            if cmd[0] == "bash":  # live_setup command
+                os.makedirs(os.path.join(cwd, "depl", "primary"), exist_ok=True)
+                with open(os.path.join(cwd, "depl", "primary", "main.tf"), "w", encoding="utf-8") as f:
+                    f.write("# DO NOT EDIT\nmodule x {}\n")
+                return _FakeProc(0)
+            if cmd[:2] == ["git", "status"] and "--untracked-files=all" in cmd:
+                rels = []
+                for root, _, files in os.walk(cwd):
+                    for fn in files:
+                        rel = os.path.relpath(os.path.join(root, fn), cwd)
+                        if not rel.startswith(LIVE_SHIM_DIR) and rel != "gcluster":
+                            rels.append(f"?? {rel}")
+                return _FakeProc(0, "\n".join(rels) + "\n")
+            if cmd[0] == "gemini":
+                agent_action(cwd)
+                if create_invoked:
+                    with open(os.path.join(cwd, LIVE_SHIM_DIR, "invocations.log"), "a", encoding="utf-8") as f:
+                        f.write("gcluster create examples/hpc-slurm.yaml -w\n")
+                return _FakeProc(0, "ok")
+            return _FakeProc(0)
+        return exec_fn
+
+    def test_live_setup_runs_with_project_substituted_and_files_excluded(self):
+        b = self._backend(self._setup_exec(lambda wt: None))
+        b.run_case("skill", "p", {"name": "s1", "live_setup": ["./gcluster create x --vars project_id={project}"]})
+        setup_calls = [c for c in self.calls if c[0][0] == "bash"]
+        self.assertEqual(len(setup_calls), 1)
+        self.assertIn("project_id=test-proj", setup_calls[0][0][2])
+        # files created by setup are neither "new files" nor failures
+        self.assertEqual(b.oracles["s1"].new_files, [])
+        self.assertEqual(b.hard_failures("s1"), [])
+
+    def test_hand_edit_of_generated_file_is_hard_failure(self):
+        def edit(wt):
+            with open(os.path.join(wt, "depl", "primary", "main.tf"), "a", encoding="utf-8") as f:
+                f.write("machine_type = \"n2-standard-8\"\n")
+        b = self._backend(self._setup_exec(edit))
+        b.run_case("skill", "p", {"name": "s2", "live_setup": ["./gcluster create x"]})
+        self.assertEqual(b.oracles["s2"].generated_file_edits, ["depl/primary/main.tf"])
+        self.assertTrue(any("hand-edited generated files" in f for f in b.hard_failures("s2")))
+
+    def test_regeneration_via_gcluster_create_is_not_a_failure(self):
+        def regen(wt):
+            with open(os.path.join(wt, "depl", "primary", "main.tf"), "w", encoding="utf-8") as f:
+                f.write("# DO NOT EDIT\nmodule x { machine_type = \"n2-standard-8\" }\n")
+        b = self._backend(self._setup_exec(regen, create_invoked=True))
+        b.run_case("skill", "p", {"name": "s3", "live_setup": ["./gcluster create x"]})
+        self.assertEqual(b.oracles["s3"].generated_file_edits, [])
+        self.assertEqual(b.oracles["s3"].regenerated_files, ["depl/primary/main.tf"])
+        self.assertEqual(b.hard_failures("s3"), [])
+
+    def test_live_setup_failure_reported_not_raised(self):
+        def exec_fn(cmd, cwd, env=None, timeout=None):
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(cmd[4], exist_ok=True)
+                return _FakeProc(0)
+            if cmd[0] == "bash":
+                return _FakeProc(1, "", "boom")
+            return _FakeProc(0)
+        b = self._backend(exec_fn)
+        text = b.run_case("skill", "p", {"name": "s4", "live_setup": ["false"]})
+        self.assertIn("live_setup", text)
+        self.assertTrue(any("does not expand" in f for f in b.hard_failures("s4")))
+
+    def test_eval_file_override(self):
+        skill_dir = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(skill_dir, "EVAL.yaml"), "w", encoding="utf-8") as f:
+                f.write(DEFAULT_EVAL_YAML)
+            alt = os.path.join(skill_dir, "bench.yaml")
+            with open(alt, "w", encoding="utf-8") as f:
+                f.write("cases:\n- name: alt_case\n  prompt: hi\n  expect_keywords_all: [hello]\n")
+            res = evaluate_skill(skill_dir, eval_file=alt)
+            self.assertEqual([c.case_name for c in res.cases], ["alt_case"])
+        finally:
+            shutil.rmtree(skill_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":
