@@ -577,6 +577,25 @@ func (e *ExclusiveValidator) Validate(
 // RequiredValidator implements the RuleValidator interface for the 'required' validation type.
 type RequiredValidator struct{}
 
+func isRequiredOrDeprecatedVarSet(values []cty.Value, present bool, deprecated bool) bool {
+	if !deprecated {
+		return isVarSet(values)
+	}
+	if !present {
+		return false
+	}
+	if len(values) == 0 {
+		// An empty flattened slice for a present setting means a non-null empty list/tuple ([]).
+		return true
+	}
+	for _, val := range values {
+		if val != cty.NilVal && !val.IsNull() {
+			return true
+		}
+	}
+	return false
+}
+
 // Validate checks if the variables specified in the rule are present (required) or absent (deprecated).
 func (r *RequiredValidator) Validate(
 	bp config.Blueprint,
@@ -585,34 +604,26 @@ func (r *RequiredValidator) Validate(
 	group config.Group,
 	modIdx int) error {
 
-	var unsetVarNames []string
-	var setVarNames []string
-
-	handler := func(t Target) error {
-		if !isVarSet(t.Values) {
-			unsetVarNames = append(unsetVarNames, t.Name)
-		} else {
-			setVarNames = append(setVarNames, t.Name)
-		}
-		return nil
-	}
 	modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
 
 	varsList, ok := parseStringList(rule.Inputs["vars"])
 	if !ok {
 		return config.BpError{Err: fmt.Errorf("validation rule for module %q is missing 'vars'", mod.ID), Path: modPath}
 	}
-	for _, varName := range varsList {
-		values, _, _ := getModuleSettingValues(bp, group, modIdx, mod, varName)
-
-		if err := handler(Target{Name: varName, Values: values}); err != nil {
-			return err
-		}
-	}
-
 	deprecated, err := parseBoolInput(rule.Inputs, "deprecated", false)
 	if err != nil {
 		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
+	}
+
+	var unsetVarNames []string
+	var setVarNames []string
+	for _, varName := range varsList {
+		values, _, settingErr := getModuleSettingValues(bp, group, modIdx, mod, varName)
+		if isRequiredOrDeprecatedVarSet(values, settingErr == nil, deprecated) {
+			setVarNames = append(setVarNames, varName)
+		} else {
+			unsetVarNames = append(unsetVarNames, varName)
+		}
 	}
 
 	if deprecated {

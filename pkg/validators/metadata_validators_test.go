@@ -1450,6 +1450,26 @@ func TestRequiredValidator(t *testing.T) {
 			t.Fatalf("expected error message to contain 'Custom Error: missing required settings', got: %q", err.Error())
 		}
 	})
+
+	t.Run("fails_when_deprecated_vars_have_zero_false_or_empty_values", func(t *testing.T) {
+		for name, val := range map[string]cty.Value{
+			"false":        cty.False,
+			"zero":         cty.NumberIntVal(0),
+			"empty_string": cty.StringVal(""),
+			"empty_list":   cty.EmptyTupleVal,
+			"empty_object": cty.EmptyObjectVal,
+		} {
+			bp := createBaseTestBlueprint()
+			bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"old_var": val})
+			rule := modulereader.ValidationRule{
+				Validator: "required",
+				Inputs:    map[string]interface{}{"vars": []interface{}{"old_var"}, "deprecated": true},
+			}
+			if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err == nil {
+				t.Errorf("%s: expected validation error for deprecated variable, got nil", name)
+			}
+		}
+	})
 }
 
 func TestIsVarSet(t *testing.T) {
@@ -2022,6 +2042,9 @@ func TestModuleMetadataRules_StorageAndNodePool(t *testing.T) {
 		{"node-pool invalid threads_per_core", nodePoolMod, map[string]cty.Value{"threads_per_core": cty.NumberIntVal(4)}, true},
 		{"node-pool invalid host_maintenance_interval", nodePoolMod, map[string]cty.Value{"host_maintenance_interval": cty.StringVal("DAILY")}, true},
 		{"node-pool deprecated compact_placement", nodePoolMod, map[string]cty.Value{"compact_placement": cty.True}, true},
+		{"node-pool deprecated compact_placement false", nodePoolMod, map[string]cty.Value{"compact_placement": cty.False}, true},
+		{"node-pool deprecated total_min_nodes zero", nodePoolMod, map[string]cty.Value{"total_min_nodes": cty.NumberIntVal(0)}, true},
+		{"node-pool deprecated compact_placement null", nodePoolMod, map[string]cty.Value{"compact_placement": cty.NullVal(cty.Bool)}, false},
 		{"node-pool exclusive autoscaling min", nodePoolMod, map[string]cty.Value{"autoscaling_total_min_nodes": cty.NumberIntVal(1), "autoscaling_min_node_count": cty.NumberIntVal(1)}, true},
 		{"node-pool exclusive local ssd", nodePoolMod, map[string]cty.Value{"local_ssd_count_ephemeral_storage": cty.NumberIntVal(1), "local_ssd_count_nvme_block": cty.NumberIntVal(1)}, true},
 	}
