@@ -58,7 +58,7 @@ install: install-user
 
 endif
 
-tests: warn-terraform-version warn-packer-version test-engine validate_golden_copy validate_configs packer-check validate-docs
+tests: warn-terraform-version warn-packer-version test-engine validate_golden_copy validate_configs packer-check validate-docs test-agentgateway
 
 format: warn-go-version warn-terraform-version warn-packer-version terraform-format packer-format
 	$(info **************** formatting go code *******************)
@@ -275,3 +275,12 @@ validate-docs:
 	$(info **************** validating README snippets and links ***************)
 	@python3 tools/validate_readme_snippets.py
 # END OF AGENT SKILLS SECTION
+
+.PHONY: test-agentgateway agentgateway-static
+test-agentgateway:
+	go test ./tests
+	python3 -m unittest tests.test_agentgateway
+
+# Requires Helm >= 3.12 and Python packages PyYAML and jsonschema.
+agentgateway-static:
+	python3 tools/validate_configs/agentgateway/validate_static.py

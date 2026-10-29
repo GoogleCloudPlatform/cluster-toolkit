@@ -24,6 +24,9 @@ resource "time_static" "exclusion_start" {
 }
 
 locals {
+  # Inference Gateway retains its existing prerequisites.
+  enable_gateway_api = var.enable_gateway_api || var.enable_inference_gateway
+
   upgrade_settings = {
     strategy        = var.upgrade_settings.strategy
     max_surge       = coalesce(var.upgrade_settings.max_surge, 0)
@@ -313,7 +316,7 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   dynamic "gateway_api_config" {
-    for_each = var.enable_inference_gateway ? [1] : []
+    for_each = local.enable_gateway_api ? [1] : []
     content {
       channel = "CHANNEL_STANDARD"
     }
@@ -392,7 +395,7 @@ resource "google_container_cluster" "gke_cluster" {
       enabled = var.enable_managed_lustre_csi
     }
     dynamic "http_load_balancing" {
-      for_each = var.enable_inference_gateway ? [1] : []
+      for_each = local.enable_gateway_api ? [1] : []
       content {
         disabled = false
       }
