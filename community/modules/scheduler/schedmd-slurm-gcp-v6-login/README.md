@@ -16,14 +16,14 @@ terraform modules. The login node is used in conjunction with the
   use:
   - network
   settings:
-    group_name: login
+    name_prefix: login
     machine_type: n2-standard-4
 
 - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use:
-    - network
-    - slurm_login
+  source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+  use:
+  - network
+  - slurm_login
 ```
 
 This creates a Slurm login node which is:

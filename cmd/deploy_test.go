@@ -69,3 +69,9 @@ func (s *MySuite) TestCreateGcsBucketsIfMissingEmptyBucket(c *C) {
 	c.Assert(err, NotNil)
 	c.Check(err.Error(), Equals, "GCS backend bucket name for group \"group1\" cannot be empty")
 }
+
+func (s *MySuite) TestSkipGKESecurityCheckFlag(c *C) {
+	flag := deployCmd.Flags().Lookup("skip-gke-security-check")
+	c.Assert(flag, NotNil)
+	c.Check(flag.DefValue, Equals, "false")
+}

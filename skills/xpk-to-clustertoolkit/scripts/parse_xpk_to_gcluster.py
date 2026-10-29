@@ -850,16 +850,16 @@ def parse_cluster_create(
     else:
       is_tpu = resolve_is_tpu(device_type, m_type, bool(parsed.tpu_type))
       if is_tpu:
-        blueprint_vars["machine_type"] = m_type
+        blueprint_vars["compute_machine_type"] = m_type
       elif is_unified_gpu_hardware(m_type, device_type):
         warnings.append(
-            f"Omitted 'machine_type: {m_type}' from global vars because modern "
+            f"Omitted 'compute_machine_type: {m_type}' from global vars because modern "
             "unified GPU blueprints (e.g. A3 Mega/High/Ultra, A4) hardcode the "
             "machine type in the node pool settings. Merging this key into vars "
             "may cause testDeploymentVariableNotUsed errors."
         )
       else:
-        blueprint_vars["machine_type"] = m_type
+        blueprint_vars["compute_machine_type"] = m_type
       if top and top not in ("N/A", "UNKNOWN"):
         blueprint_vars["tpu_topology"] = top
       elif is_tpu:
@@ -916,7 +916,7 @@ def parse_cluster_create(
     )
 
   is_unified = is_unified_gpu_hardware(
-      blueprint_vars.get("machine_type"), device_type
+      blueprint_vars.get("compute_machine_type"), device_type
   )
 
   if is_unified:
@@ -1022,7 +1022,7 @@ def parse_cluster_create(
         "enable_pathways_for_tpus: true automatically provisions the dedicated"
         " cpu-np CPU node pool with default n4-standard-64 instances."
     )
-  elif is_tpu_hardware(blueprint_vars.get("machine_type"), device_type):
+  elif is_tpu_hardware(blueprint_vars.get("compute_machine_type"), device_type):
     # Canonical TPU blueprints default this to true; without an explicit
     # false the merge leaves an unrequested cpu-np pool in place.
     # GPU blueprints do not declare this variable, so emitting it there
@@ -1098,7 +1098,7 @@ def parse_cluster_create(
       parsed.num_nodes
       and not is_flag_true(parsed.flex)
       and not is_tpu_hardware(
-          blueprint_vars.get("machine_type"), device_type
+          blueprint_vars.get("compute_machine_type"), device_type
       )
   ):
     try:

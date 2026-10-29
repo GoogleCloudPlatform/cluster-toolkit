@@ -26,6 +26,21 @@ vars:
   deployment_name: netapp-volumes-slurm
   region: us-central1
   zone: us-central1-a
+  # Optional overrides (defaults shown)
+  # Capacity in GiB of the NetApp storage pool.
+  netapp_pool_capacity_gib: 12288
+  # Capacity in GiB of the /home volume (4800 GiB is the minimum large-capacity volume size).
+  homefs_capacity_gib: 4800
+  # Number of statically provisioned nodes in the compute partition.
+  compute_node_count_static: 2
+  # Maximum number of dynamically provisioned nodes in the compute partition.
+  compute_node_count_dynamic_max: 10
+  # Machine type for the compute partition.
+  compute_machine_type: n2-standard-4
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
+  # Machine type for the controller node.
+  controller_machine_type: n2-standard-4
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/cluster-toolkit
@@ -67,7 +82,7 @@ deployment_groups:
       region: $(vars.region)
       zone: $(vars.zone)
       scale_type: SCALE_TYPE_SCALEOUT
-      capacity_gib: 12288
+      capacity_gib: $(vars.netapp_pool_capacity_gib)
       total_throughput_mibps: 256
       total_iops: 4096
       allow_auto_tiering: true
@@ -80,7 +95,7 @@ deployment_groups:
     settings:
       volume_name: homefs
       # 4800 GiB is the minimum Flex Unified large-capacity volume size.
-      capacity_gib: 4800
+      capacity_gib: $(vars.homefs_capacity_gib)
       large_capacity_config:
         constituent_count: 48
       local_mount: /home
@@ -97,9 +112,9 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, homefs]
     settings:
-      node_count_static: 2
-      node_count_dynamic_max: 10
-      machine_type: n2-standard-4
+      node_count_static: $(vars.compute_node_count_static)
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
+      machine_type: $(vars.compute_machine_type)
       disk_type: pd-balanced
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
@@ -116,7 +131,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       enable_login_public_ips: true
 
   - id: slurm_controller
@@ -127,6 +142,6 @@ deployment_groups:
     - homefs
     - slurm_login
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.controller_machine_type)
       enable_controller_public_ips: true
       enable_slurm_auth: true

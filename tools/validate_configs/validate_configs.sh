@@ -144,6 +144,7 @@ EXCLUDE_EXAMPLE["community/examples/fsi/ibm-symphony-on-gce/symphony.yaml"]=
 EXCLUDE_EXAMPLE["community/examples/fsi/ibm-symphony-on-gke/symphony.yaml"]=
 EXCLUDE_EXAMPLE["community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/primary-cluster.yaml"]=
 EXCLUDE_EXAMPLE["community/examples/hpc-slurm-google-cloud-dedicated/hybrid-slurm-cluster/burst-cluster.yaml"]=
+EXCLUDE_EXAMPLE["community/examples/hpc-slurm-google-cloud-dedicated/eda/eda-gcd-cluster.yaml"]=
 
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}

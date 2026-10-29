@@ -46,6 +46,11 @@ vars:
   - us-west1-a
   - us-west1-b
   - us-west1-c
+  # Optional overrides (defaults shown)
+  # Size in GB of the shared /home Filestore instance.
+  homefs_size_gb: 1024
+  # Number of statically provisioned nodes in each regional nodeset.
+  compute_node_count_static: 0
 
 deployment_groups:
 - group: primary
@@ -76,14 +81,14 @@ deployment_groups:
     settings:
       local_mount: /home
       filestore_tier: BASIC_HDD
-      size_gb: 1024
+      size_gb: $(vars.homefs_size_gb)
 
   # 3. Dynamic Nodeset for Region 1: US Central (4 Zones)
   - id: nodeset_central
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      node_count_static: 0
+      node_count_static: $(vars.compute_node_count_static)
       node_count_dynamic_max: $(vars.node_count_dynamic_max_per_region)
       machine_type: $(vars.compute_machine_type)
       enable_spot_vm: $(vars.enable_spot_vm)
@@ -101,7 +106,7 @@ deployment_groups:
   - id: nodeset_east
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     settings:
-      node_count_static: 0
+      node_count_static: $(vars.compute_node_count_static)
       node_count_dynamic_max: $(vars.node_count_dynamic_max_per_region)
       machine_type: $(vars.compute_machine_type)
       enable_spot_vm: $(vars.enable_spot_vm)
@@ -120,7 +125,7 @@ deployment_groups:
   - id: nodeset_west
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     settings:
-      node_count_static: 0
+      node_count_static: $(vars.compute_node_count_static)
       node_count_dynamic_max: $(vars.node_count_dynamic_max_per_region)
       machine_type: $(vars.compute_machine_type)
       enable_spot_vm: $(vars.enable_spot_vm)

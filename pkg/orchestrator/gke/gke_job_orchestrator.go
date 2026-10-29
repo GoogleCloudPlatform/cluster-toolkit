@@ -95,7 +95,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	g.gkeCustomTemplatesPath = job.GkeCustomTemplatesPath
 
 	sm := &StorageManager{orchestrator: g}
-	if err := sm.ValidateMounts(job.RawMounts); err != nil {
+	if err := sm.validateJobMounts(job.RawMounts, job.IsPathwaysJob, job.Pathways.ColocatedPythonSidecarImage != ""); err != nil {
 		return err
 	}
 
@@ -118,6 +118,9 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 	if err := g.validateJobConflicts(job); err != nil {
+		return err
+	}
+	if err := g.validateMTCConfig(&job); err != nil {
 		return err
 	}
 
@@ -549,6 +552,9 @@ func (g *GKEOrchestrator) isSystemPool(np gkeJobNodePool) bool {
 }
 
 func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinition) error {
+	if err := g.validateMTCJobFlags(job); err != nil {
+		return err
+	}
 	if err := g.populateClusterMetadata(job); err != nil {
 		return err
 	}
@@ -566,10 +572,6 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 	}
 
 	if err := g.configureClusterEnvironment(job); err != nil {
-		return err
-	}
-
-	if err := g.validateMTCConfig(job); err != nil {
 		return err
 	}
 

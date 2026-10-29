@@ -22,6 +22,8 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"io"
+	"maps"
+	"path"
 	"slices"
 	"strings"
 
@@ -102,6 +104,7 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 
 	isTPU := tpuLimit != ""
 	isGPU := gpuLimit != ""
+	opts.Env = withDefaultCoordinatorEnv(opts.WorkloadName, opts.Env)
 	data := g.prepareJobSetTemplateData(opts, cmdSlice, resourcesString, isTPU, isGPU)
 
 	var buf bytes.Buffer
@@ -193,6 +196,12 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 	pathwaysPlatform := strings.ReplaceAll(normalizedLabel, "-podslice", "")
 	pathwaysPlatform = strings.ReplaceAll(pathwaysPlatform, "-slice", "")
 	pathwaysPlatform = strings.ReplaceAll(pathwaysPlatform, "-", "")
+	// 8-chip single-VM TPUs share their GKE accelerator label with the 4-chip
+	// VMs, but Pathways identifies them by a distinct "1t" platform name.
+	if (pathwaysPlatform == "tpuv6e" || pathwaysPlatform == "tpuv5e") &&
+		(strings.HasSuffix(job.MachineType, "-8t") || strings.HasSuffix(originalAccelType, "-8t")) {
+		pathwaysPlatform += "1t"
+	}
 
 	pathwaysInstanceType := fmt.Sprintf("%s:%s", pathwaysPlatform, schedOpts.Topology)
 
@@ -400,9 +409,7 @@ type jobSetValidationSpec struct {
 				Spec struct {
 					PodFailurePolicy interface{} `json:"podFailurePolicy" yaml:"podFailurePolicy"`
 					Template         struct {
-						Spec struct {
-							RestartPolicy string `json:"restartPolicy" yaml:"restartPolicy"`
-						} `json:"spec" yaml:"spec"`
+						Spec corev1.PodSpec `json:"spec" yaml:"spec"`
 					} `json:"template" yaml:"template"`
 				} `json:"spec" yaml:"spec"`
 			} `json:"template" yaml:"template"`
@@ -416,9 +423,7 @@ type jobValidationSpec struct {
 	Spec       struct {
 		PodFailurePolicy interface{} `json:"podFailurePolicy" yaml:"podFailurePolicy"`
 		Template         struct {
-			Spec struct {
-				RestartPolicy string `json:"restartPolicy" yaml:"restartPolicy"`
-			} `json:"spec" yaml:"spec"`
+			Spec corev1.PodSpec `json:"spec" yaml:"spec"`
 		} `json:"template" yaml:"template"`
 	} `json:"spec" yaml:"spec"`
 }
@@ -445,8 +450,44 @@ func splitYAMLDocuments(content string) ([]string, error) {
 	return docs, nil
 }
 
-// ValidateJobSetManifest validates that any JobSet or Job resources in the manifest conform
-// to Kubernetes batch/v1 validation constraints (e.g. podFailurePolicy requires restartPolicy: Never).
+func validatePodSpecVolumes(contextPrefix string, podSpec *corev1.PodSpec) error {
+	definedVolumes := make(map[string]bool, len(podSpec.Volumes))
+	for _, v := range podSpec.Volumes {
+		if definedVolumes[v.Name] {
+			return fmt.Errorf("%s declares duplicate volume %q", contextPrefix, v.Name)
+		}
+		definedVolumes[v.Name] = true
+	}
+
+	for _, c := range slices.Concat(podSpec.InitContainers, podSpec.Containers) {
+		seenMountPaths := make(map[string]bool, len(c.VolumeMounts))
+		for _, m := range c.VolumeMounts {
+			if !definedVolumes[m.Name] {
+				return fmt.Errorf("%s container %q mounts undefined volume %q at %q", contextPrefix, c.Name, m.Name, m.MountPath)
+			}
+			if m.MountPath != "" {
+				cleanPath := path.Clean(m.MountPath)
+				if seenMountPaths[cleanPath] {
+					return fmt.Errorf("%s container %q has duplicate volumeMount path %q", contextPrefix, c.Name, m.MountPath)
+				}
+				seenMountPaths[cleanPath] = true
+			}
+		}
+	}
+	return nil
+}
+
+func validateJobSpecPodPolicyAndVolumes(contextPrefix string, hasPodFailurePolicy bool, podSpec *corev1.PodSpec) error {
+	if hasPodFailurePolicy {
+		restartPolicy := string(podSpec.RestartPolicy)
+		if restartPolicy != "Never" {
+			return fmt.Errorf("%s specifies podFailurePolicy with restartPolicy %q; only \"Never\" is supported when podFailurePolicy is specified", contextPrefix, restartPolicy)
+		}
+	}
+	return validatePodSpecVolumes(contextPrefix, podSpec)
+}
+
+// ValidateJobSetManifest validates JobSet and Job resources in the manifest.
 func ValidateJobSetManifest(manifestContent string) error {
 	docs, err := splitYAMLDocuments(manifestContent)
 	if err != nil {
@@ -464,12 +505,11 @@ func ValidateJobSetManifest(manifestContent string) error {
 			if err := k8syaml.Unmarshal([]byte(doc), &jsDoc); err != nil {
 				return fmt.Errorf("failed to parse JobSet manifest spec: %w", err)
 			}
-			for _, rj := range jsDoc.Spec.ReplicatedJobs {
-				if rj.Template.Spec.PodFailurePolicy != nil {
-					restartPolicy := rj.Template.Spec.Template.Spec.RestartPolicy
-					if restartPolicy != "Never" {
-						return fmt.Errorf("invalid JobSet manifest: replicatedJob %q specifies podFailurePolicy with restartPolicy %q; only \"Never\" is supported when podFailurePolicy is specified", rj.Name, restartPolicy)
-					}
+			for i := range jsDoc.Spec.ReplicatedJobs {
+				rj := &jsDoc.Spec.ReplicatedJobs[i]
+				prefix := fmt.Sprintf("invalid JobSet manifest: replicatedJob %q", rj.Name)
+				if err := validateJobSpecPodPolicyAndVolumes(prefix, rj.Template.Spec.PodFailurePolicy != nil, &rj.Template.Spec.Template.Spec); err != nil {
+					return err
 				}
 			}
 		case "Job":
@@ -477,11 +517,8 @@ func ValidateJobSetManifest(manifestContent string) error {
 			if err := k8syaml.Unmarshal([]byte(doc), &jDoc); err != nil {
 				return fmt.Errorf("failed to parse Job manifest spec: %w", err)
 			}
-			if jDoc.Spec.PodFailurePolicy != nil {
-				restartPolicy := jDoc.Spec.Template.Spec.RestartPolicy
-				if restartPolicy != "Never" {
-					return fmt.Errorf("invalid Job manifest: specifies podFailurePolicy with restartPolicy %q; only \"Never\" is supported when podFailurePolicy is specified", restartPolicy)
-				}
+			if err := validateJobSpecPodPolicyAndVolumes("invalid Job manifest:", jDoc.Spec.PodFailurePolicy != nil, &jDoc.Spec.Template.Spec); err != nil {
+				return err
 			}
 		}
 	}
@@ -489,8 +526,9 @@ func ValidateJobSetManifest(manifestContent string) error {
 }
 
 const (
-	defaultPathwaysProxyImage  = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
-	defaultPathwaysServerImage = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
+	defaultPathwaysProxyImage   = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
+	defaultPathwaysServerImage  = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
+	pathwaysTemplateExtractHint = "If you use --gke-custom-templates-path, re-extract pathways_jobset.tmpl with 'gcluster job gke-template-extract' and re-apply your changes"
 )
 
 // GeneratePathwaysManifest generates the Kubernetes JobSet manifest for a Pathways job.
@@ -537,12 +575,94 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
 	}
+	if err := validatePathwaysMTCManifest(buf.String(), opts); err != nil {
+		return "", err
+	}
 
 	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
 	if err := ValidateJobSetManifest(manifest); err != nil {
 		return "", err
 	}
 	return manifest, nil
+}
+
+func findCSIVolumeName(podSpec *corev1.PodSpec, driver string) string {
+	for _, v := range podSpec.Volumes {
+		if v.CSI != nil && v.CSI.Driver == driver {
+			return v.Name
+		}
+	}
+	return ""
+}
+
+func containerMountsVolumeAt(podSpec *corev1.PodSpec, containerName, volumeName, mountPath string) bool {
+	for _, c := range slices.Concat(podSpec.InitContainers, podSpec.Containers) {
+		if c.Name != containerName {
+			continue
+		}
+		for _, m := range c.VolumeMounts {
+			if m.Name == volumeName && path.Clean(m.MountPath) == path.Clean(mountPath) {
+				return true
+			}
+		}
+		return false
+	}
+	return false
+}
+
+func extractPathwaysPodSpecs(jobSet string) (workerSpec, headSpec *corev1.PodSpec, err error) {
+	docs, err := splitYAMLDocuments(jobSet)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, doc := range docs {
+		var meta typeMeta
+		if err := k8syaml.Unmarshal([]byte(doc), &meta); err != nil || meta.Kind != "JobSet" {
+			continue
+		}
+		var jsDoc jobSetValidationSpec
+		if err := k8syaml.Unmarshal([]byte(doc), &jsDoc); err != nil {
+			return nil, nil, fmt.Errorf("failed to parse Pathways JobSet manifest spec: %w", err)
+		}
+		for i := range jsDoc.Spec.ReplicatedJobs {
+			rj := &jsDoc.Spec.ReplicatedJobs[i]
+			switch rj.Name {
+			case "worker":
+				workerSpec = &rj.Template.Spec.Template.Spec
+			case "pathways-head":
+				headSpec = &rj.Template.Spec.Template.Spec
+			}
+		}
+	}
+	return workerSpec, headSpec, nil
+}
+
+// validatePathwaysMTCManifest checks that Pathways MTC jobs mount the CSI volume only on worker pods.
+func validatePathwaysMTCManifest(jobSet string, opts ManifestOptions) error {
+	if !opts.GKEMTCEnabled {
+		return nil
+	}
+	workerSpec, headSpec, err := extractPathwaysPodSpecs(jobSet)
+	if err != nil {
+		return err
+	}
+	if headSpec != nil && findCSIVolumeName(headSpec, multitierCheckpointCSIDriver) != "" {
+		return fmt.Errorf("--gke-mtc-enabled is set but pathways-head declares a %s volume; the MTC volume must only be declared on worker pods. %s", multitierCheckpointCSIDriver, pathwaysTemplateExtractHint)
+	}
+	if workerSpec == nil {
+		return fmt.Errorf("--gke-mtc-enabled is set but the Pathways manifest has no worker replicatedJob. %s", pathwaysTemplateExtractHint)
+	}
+	mtcVolName := findCSIVolumeName(workerSpec, multitierCheckpointCSIDriver)
+	if mtcVolName == "" {
+		return fmt.Errorf("--gke-mtc-enabled is set but the Pathways manifest has no %s volume on worker pods. %s", multitierCheckpointCSIDriver, pathwaysTemplateExtractHint)
+	}
+	if !containerMountsVolumeAt(workerSpec, "pathways-worker", mtcVolName, opts.GKEMTCRamdiskDirectory) {
+		return fmt.Errorf("--gke-mtc-enabled is set but container \"pathways-worker\" does not mount %s volume %q at %q. %s", multitierCheckpointCSIDriver, mtcVolName, opts.GKEMTCRamdiskDirectory, pathwaysTemplateExtractHint)
+	}
+	if opts.Pathways.ColocatedPythonSidecarImage != "" && !containerMountsVolumeAt(workerSpec, "colocated-python-sidecar", mtcVolName, opts.GKEMTCRamdiskDirectory) {
+		return fmt.Errorf("--gke-mtc-enabled is set with --pathways-colocated-python-sidecar-image, but container \"colocated-python-sidecar\" does not mount %s volume %q at %q. %s", multitierCheckpointCSIDriver, mtcVolName, opts.GKEMTCRamdiskDirectory, pathwaysTemplateExtractHint)
+	}
+	return nil
 }
 
 func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
@@ -635,6 +755,23 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		GKEMTCEnabled:                 opts.GKEMTCEnabled,
 		GKEMTCRamdiskDirectory:        opts.GKEMTCRamdiskDirectory,
 	}
+}
+
+// withDefaultCoordinatorEnv injects default MASTER_ADDR and WORKERS_0_HOSTNAME
+// pointing to the rank-0 pod of the JobSet. We populate these directly in the
+// container env instead of setting spec.coordinator to avoid generating the
+// jobset.sigs.k8s.io/coordinator label, which would exceed the 63-character
+// limit for workload names up to 28 characters.
+func withDefaultCoordinatorEnv(workloadName string, userEnv map[string]string) map[string]string {
+	if workloadName == "" {
+		return userEnv
+	}
+	coordinatorHost := fmt.Sprintf("%s-main-job-0-0.%s", workloadName, workloadName)
+	merged := make(map[string]string, len(userEnv)+2)
+	merged["MASTER_ADDR"] = coordinatorHost
+	merged["WORKERS_0_HOSTNAME"] = coordinatorHost
+	maps.Copy(merged, userEnv)
+	return merged
 }
 
 func sortedEnvVars(envMap map[string]string) []EnvVar {

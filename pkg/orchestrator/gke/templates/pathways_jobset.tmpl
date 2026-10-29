@@ -8,8 +8,6 @@ metadata:
 {{- if .MLDiagnosticsEnabled }}
     managed-mldiagnostics-gke: "true"
 {{- end }}
-  annotations:
-    jobset.sigs.k8s.io/hack: "true"
 spec:
   suspend: false
   ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
@@ -77,39 +75,6 @@ spec:
 {{- else }}
             containers:
 {{- end }}
-            - name: pathways-proxy
-              image: {{.Pathways.ProxyServerImage}}
-              imagePullPolicy: Always
-              ports:
-              - containerPort: 29000
-              args:
-              - --server_port=29000
-              - --resource_manager_address=$(PATHWAYS_HEAD):29001
-              - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
-              {{- if gt .Pathways.ElasticSlices 0}}
-              - --num_elastic_slices={{.Pathways.ElasticSlices}}
-              {{- end}}
-              {{- range .ProxyArgsList }}
-              - {{.}}
-              {{- end }}
-              env:
-              - name: PATHWAYS_HEAD
-                valueFrom:
-                  fieldRef:
-                    fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
-              - name: ABSL_FLAGS
-                value: "--pathways_pipe_unreachable_timeout=60s"
-              {{- range $.PathwaysProxyEnv }}
-              - name: {{ .Name }}
-                value: {{ printf "%q" .Value }}
-              {{- end }}
-              {{- if not .Pathways.Headless}}
-              restartPolicy: Always
-              {{- end }}
-              resources:
-                limits:
-                  cpu: "16"
-                  memory: "100Gi"
             - name: pathways-rm
               image: {{.Pathways.ServerImage}}
               imagePullPolicy: Always
@@ -153,6 +118,45 @@ spec:
                 limits:
                   cpu: "8"
                   memory: "32Gi"
+                requests:
+                  cpu: "2"
+                  memory: "8Gi"
+            - name: pathways-proxy
+              image: {{.Pathways.ProxyServerImage}}
+              imagePullPolicy: Always
+              ports:
+              - containerPort: 29000
+              args:
+              - --server_port=29000
+              - --resource_manager_address=$(PATHWAYS_HEAD):29001
+              - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
+              {{- if gt .Pathways.ElasticSlices 0}}
+              - --num_elastic_slices={{.Pathways.ElasticSlices}}
+              {{- end}}
+              {{- range .ProxyArgsList }}
+              - {{.}}
+              {{- end }}
+              env:
+              - name: PATHWAYS_HEAD
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              - name: ABSL_FLAGS
+                value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- range $.PathwaysProxyEnv }}
+              - name: {{ .Name }}
+                value: {{ printf "%q" .Value }}
+              {{- end }}
+              {{- if not .Pathways.Headless}}
+              restartPolicy: Always
+              {{- end }}
+              resources:
+                limits:
+                  cpu: "16"
+                  memory: "100Gi"
+                requests:
+                  cpu: "8"
+                  memory: "32Gi"
             {{- if not .Pathways.Headless}}
             containers:
             - name: workload-container
@@ -174,7 +178,7 @@ spec:
               - name: XCLOUD_ENVIRONMENT
                 value: GCP
               - name: JAX_BACKEND_TARGET
-                value: grpc://$(PATHWAYS_HEAD):29000
+                value: grpc://localhost:29000
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
               {{- range $.Env }}
@@ -239,7 +243,11 @@ spec:
           spec:
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
+{{- if eq .WorkerBackoffLimitPerIndex 0 }}
+            restartPolicy: Never
+{{- else }}
             restartPolicy: OnFailure
+{{- end }}
 {{- if .ServiceAccountName }}
             serviceAccountName: {{.ServiceAccountName}}
 {{- end }}
@@ -277,7 +285,7 @@ spec:
                 mountPath: /tmp/sidecar
               {{- if .GKEMTCEnabled}}
               - name: cache
-                mountPath: {{.GKEMTCRamdiskDirectory}}
+                mountPath: {{ printf "%q" .GKEMTCRamdiskDirectory }}
               {{- end}}
             {{- end}}
             containers:
@@ -293,7 +301,7 @@ spec:
                 - --server_port=29005
                 - --resource_manager_address=$(PATHWAYS_HEAD):29001
                 - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
-                {{- if .GKEMTCEnabled}}
+                {{- if .Pathways.ColocatedPythonSidecarImage}}
                 - --cloud_pathways_sidecar_shm_directory=/tmp/sidecar
                 {{- end}}
                 {{- range .WorkerArgsList }}
@@ -344,6 +352,14 @@ spec:
               volumeMounts:
                 - name: shared-tmp
                   mountPath: /tmp
+                {{- if .Pathways.ColocatedPythonSidecarImage}}
+                - name: sidecar-shared-memory
+                  mountPath: /tmp/sidecar
+                {{- end}}
+                {{- if .GKEMTCEnabled}}
+                - name: cache
+                  mountPath: {{ printf "%q" .GKEMTCRamdiskDirectory }}
+                {{- end}}
 {{- if .VolumeMountsYAML }}
 {{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
@@ -352,6 +368,16 @@ spec:
                 hostPath:
                   path: /tmp
                   type: DirectoryOrCreate
+              {{- if .Pathways.ColocatedPythonSidecarImage}}
+              - name: sidecar-shared-memory
+                emptyDir:
+                  medium: Memory
+              {{- end}}
+              {{- if .GKEMTCEnabled}}
+              - name: cache
+                csi:
+                  driver: multitier-checkpoint.csi.storage.gke.io
+              {{- end}}
 {{- if .VolumesYAML }}
 {{(StructuralData .VolumesYAML)}}
 {{- end }}

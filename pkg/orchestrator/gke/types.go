@@ -128,6 +128,12 @@ var pvGVR = schema.GroupVersionResource{
 	Resource: "persistentvolumes",
 }
 
+var serviceGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "services",
+}
+
 // HTTPClient abstracts HTTP GET calls for testability and thread safety.
 type HTTPClient interface {
 	Get(url string) (*http.Response, error)
@@ -248,6 +254,35 @@ type gkePVC struct {
 
 type gkePVCList struct {
 	Items []gkePVC `json:"items"`
+}
+
+type k8sEndpointSliceList struct {
+	Items []struct {
+		Endpoints []struct {
+			Addresses  []string `json:"addresses"`
+			Conditions struct {
+				// Ready is a pointer because discovery/v1 treats an omitted condition as ready.
+				Ready *bool `json:"ready"`
+			} `json:"conditions"`
+		} `json:"endpoints"`
+	} `json:"items"`
+}
+
+func (eps *k8sEndpointSliceList) HasReadyEndpoint() bool {
+	for _, item := range eps.Items {
+		for _, ep := range item.Endpoints {
+			if (ep.Conditions.Ready == nil || *ep.Conditions.Ready) && len(ep.Addresses) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// permissionCheck is one `kubectl auth can-i <verb> <resource>` query.
+type permissionCheck struct {
+	verb     string
+	resource string
 }
 
 type JobProfile struct {
@@ -712,6 +747,35 @@ type kueueWorkload struct {
 
 type kueueWorkloadList struct {
 	Items []kueueWorkload `json:"items"`
+}
+
+type kueueDeployment struct {
+	Metadata struct {
+		Generation int64 `json:"generation"`
+	} `json:"metadata"`
+	Spec struct {
+		Replicas *int32 `json:"replicas"`
+		Paused   bool   `json:"paused"`
+		Template struct {
+			Spec struct {
+				Containers []struct {
+					Name  string `json:"name"`
+					Image string `json:"image"`
+				} `json:"containers"`
+			} `json:"spec"`
+		} `json:"template"`
+	} `json:"spec"`
+	Status struct {
+		ObservedGeneration int64 `json:"observedGeneration"`
+		Replicas           int32 `json:"replicas"`
+		UpdatedReplicas    int32 `json:"updatedReplicas"`
+		AvailableReplicas  int32 `json:"availableReplicas"`
+		Conditions         []struct {
+			Type   string `json:"type"`
+			Status string `json:"status"`
+			Reason string `json:"reason"`
+		} `json:"conditions"`
+	} `json:"status"`
 }
 
 // parsedReservation holds the extracted components of a GCE reservation URI/path.

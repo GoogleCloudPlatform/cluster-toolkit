@@ -14,6 +14,7 @@ gcluster [SUBCOMMAND]
 
 ### Subcommands - gcluster
 
+* [`explain`](#gcluster-explain): Discover and inspect blueprints, embedded modules, and cluster specs
 * [`deploy`](#gcluster-deploy): Deploy an AI/ML or HPC cluster on Google Cloud
 * [`create`](#gcluster-create): Create a new deployment
 * [`expand`](#gcluster-expand): Expand the blueprint without creating a new deployment
@@ -37,6 +38,36 @@ gcluster [SUBCOMMAND]
 
 ```bash
 gcluster --version
+```
+
+## gcluster explain
+
+`gcluster explain` lists available blueprints and embedded modules, inspects a specific blueprint or module (showing required GCP APIs, customizable variables, deployment stages, and ready-to-copy `use:` YAML blocks), or matches cluster specs (e.g., `slurm a3u lustre` or `gke a3-megagpu lustre`) to the exact or closest blueprint.
+
+### Usage - explain
+
+```bash
+gcluster explain [MODULE | BLUEPRINT | SPECS...] [flags]
+```
+
+### Flags - explain
+
+* `-d, --deployment-file <string>`: Optional companion deployment YAML file when explaining a blueprint.
+* `-f, --format <string>`: Output format: `text`, `yaml`, or `json` (default `"text"`).
+
+### Examples - explain
+
+```bash
+# List all available blueprints and top-level embedded modules
+./gcluster explain
+
+# Find the exact or closest blueprint for given specs
+./gcluster explain slurm a3u lustre
+./gcluster explain gke a3-megagpu lustre
+
+# Inspect a specific blueprint or module
+./gcluster explain examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml
+./gcluster explain modules/file-system/managed-lustre --format=json
 ```
 
 ## gcluster deploy
@@ -63,6 +94,7 @@ gcluster deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
 * `-w, --overwrite-deployment`: If specified, an existing deployment directory is overwritten by the new deployment.
 * `--parallelism <int>`: Limit the number of concurrent operations in Terraform (default: 10, or `GCLUSTER_TERRAFORM_PARALLELISM`).
 * `--skip <strings>`: Skip groups with the given names (comma-separated).
+* `--skip-gke-security-check`: Skip the GKE security hygiene notice before applying.
 * `--skip-validators <strings>`: Validators to skip (comma-separated).
 * `-l, --validation-level <string>`: Set validation level to one of (`"ERROR"`, `"WARNING"`, `"IGNORE"`) (default `"ERROR"`).
 * `--vars <strings>`: Comma-separated list of `name=value` variables to override YAML configuration. Can be used multiple times.
@@ -172,6 +204,13 @@ gcluster import-inputs DEPLOYMENT_GROUP_DIRECTORY [flags]
 ```bash
 gcluster cluster <list|describe|info|volume> [flags]
 ```
+
+### Subcommands - cluster
+
+* `gcluster cluster list [-p <project>]`: Lists GKE clusters in the project.
+* `gcluster cluster describe -c <cluster> -l <location>`: Prints the full `gcloud container clusters describe` output (YAML) for the cluster.
+* `gcluster cluster info -c <cluster> -l <location>`: Prints a per-node-pool summary (name, machine type, status).
+* `gcluster cluster volume -c <cluster> -l <location>`: Lists Toolkit-managed PVCs (label `ghpc_role=file-system`) across all namespaces, with their module or storage class.
 
 ## gcluster job
 

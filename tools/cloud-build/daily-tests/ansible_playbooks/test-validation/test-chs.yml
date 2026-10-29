@@ -125,9 +125,8 @@
 
   rescue:
   - name: CHS Test Failure
-    ansible.builtin.debug:
-      msg: "CHS tests failed or timed out. Continuing playbook execution."
-    ignore_errors: true
+    ansible.builtin.fail:
+      msg: "CHS tests failed or timed out."
 
   always:
   - name: Cleanup Kubernetes resources

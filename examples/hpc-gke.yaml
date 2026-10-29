@@ -22,6 +22,15 @@ vars:
   region: us-central1
   gcp_public_cidrs_access_enabled: false
   authorized_cidr:  # <your-ip-address>/32
+  # Optional overrides (defaults shown)
+  # Machine type for the compute node pool.
+  compute_machine_type: c2-standard-60
+  # Minimum total number of nodes in the compute node pool (autoscaling).
+  compute_autoscaling_total_min_nodes: 0
+  # Maximum total number of nodes in the compute node pool (autoscaling).
+  compute_autoscaling_total_max_nodes: 1000
+  # Use Spot VMs for the compute node pool.
+  compute_spot: false
 
 deployment_groups:
 - group: primary
@@ -77,6 +86,11 @@ deployment_groups:
   - id: compute_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, node_pool_service_account]
+    settings:
+      machine_type: $(vars.compute_machine_type)
+      autoscaling_total_min_nodes: $(vars.compute_autoscaling_total_min_nodes)
+      autoscaling_total_max_nodes: $(vars.compute_autoscaling_total_max_nodes)
+      spot: $(vars.compute_spot)
 
   - id: job-template
     source: modules/compute/gke-job-template

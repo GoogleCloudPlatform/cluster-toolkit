@@ -2228,6 +2228,7 @@ func TestPrepareManifestOptions_PathwaysPlatform(t *testing.T) {
 	setupMockMachineConfig(t)
 	tests := []struct {
 		computeType  string
+		machineType  string // resolved machine type for aliases; defaults to computeType
 		topology     string
 		wantPlatform string
 	}{
@@ -2261,6 +2262,41 @@ func TestPrepareManifestOptions_PathwaysPlatform(t *testing.T) {
 			topology:     "2x2x2",
 			wantPlatform: "tpuv5:2x2x2",
 		},
+		{
+			computeType:  "ct6e-standard-4t",
+			topology:     "2x4",
+			wantPlatform: "tpuv6e:2x4",
+		},
+		{
+			computeType:  "ct6e-standard-8t",
+			topology:     "2x4",
+			wantPlatform: "tpuv6e1t:2x4",
+		},
+		{
+			computeType:  "v6e-8",
+			machineType:  "ct6e-standard-8t",
+			topology:     "2x4",
+			wantPlatform: "tpuv6e1t:2x4",
+		},
+		{
+			// On a cluster with 4-chip node pools, v6e-8 resolves to two
+			// ct6e-standard-4t VMs and keeps the plain tpuv6e platform.
+			computeType:  "v6e-8",
+			machineType:  "ct6e-standard-4t",
+			topology:     "2x4",
+			wantPlatform: "tpuv6e:2x4",
+		},
+		{
+			computeType:  "ct5lp-hightpu-8t",
+			topology:     "2x4",
+			wantPlatform: "tpuv5e1t:2x4",
+		},
+		{
+			computeType:  "v5e-8",
+			machineType:  "ct5lp-hightpu-8t",
+			topology:     "2x4",
+			wantPlatform: "tpuv5e1t:2x4",
+		},
 	}
 
 	for _, tc := range tests {
@@ -2279,12 +2315,23 @@ func TestPrepareManifestOptions_PathwaysPlatform(t *testing.T) {
 				"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: tc.topology}},
 				"gcloud compute machine-types describe " + tc.computeType + " --zone=us-central1-a --format=json":                       {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "` + tc.computeType + `"}]}`}},
 			}
+			machineType := tc.machineType
+			if machineType == "" {
+				machineType = tc.computeType
+			}
+			if machineType != tc.computeType {
+				chips := 4
+				if strings.HasSuffix(machineType, "-8t") {
+					chips = 8
+				}
+				mockResponses["gcloud compute machine-types describe "+machineType+" --zone=us-central1-a --format=json"] = []shell.CommandResult{{ExitCode: 0, Stdout: fmt.Sprintf(`{"accelerators": [{"guestAcceleratorCount": %d, "guestAcceleratorType": "%s"}]}`, chips, tc.computeType)}}
+			}
 
 			mockExec := NewMockExecutor(mockResponses)
 			orc := newTestGKEOrchestrator(mockExec)
 			orc.projectID = "mock-project"
 			orc.clusterDesc.NodePools = []gkeJobNodePool{
-				{Config: gkeNodePoolConfig{MachineType: tc.computeType}},
+				{Config: gkeNodePoolConfig{MachineType: machineType}},
 			}
 
 			profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
@@ -3336,13 +3383,43 @@ func TestGetJobLogs_LatePodCreationAndTerminalJobSet(t *testing.T) {
 	})
 }
 
+func TestSubmitJob_PathwaysMountCollisionFailsBeforeClusterCalls(t *testing.T) {
+	tests := []struct {
+		name    string
+		sidecar string
+		mount   string
+		want    string
+	}{
+		{name: "mount at /tmp", mount: "gs://bucket;/tmp", want: `conflicts with built-in Pathways mount "/tmp"`},
+		{name: "mount at /tmp/sidecar with colocated sidecar", sidecar: "sidecar:latest", mount: "gs://bucket;/tmp/sidecar", want: `conflicts with built-in Pathways mount "/tmp/sidecar"`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(nil)
+			orc := newTestGKEOrchestrator(mockExec)
+			err := orc.SubmitJob(orchestrator.JobDefinition{
+				WorkloadName:    "pathways-job",
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "test-project",
+				IsPathwaysJob:   true,
+				RawMounts:       []string{tc.mount},
+				Pathways:        orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: tc.sidecar},
+			})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("SubmitJob() error = %v, want error containing %q", err, tc.want)
+			}
+			if len(mockExec.calls) != 0 || len(mockExec.streamCalls) != 0 {
+				t.Errorf("SubmitJob() ran commands before rejecting the mount: %v %v", mockExec.calls, mockExec.streamCalls)
+			}
+		})
+	}
+}
+
 type mockNamespaceableResource struct {
 	dynamic.NamespaceableResourceInterface
-	getFunc    func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
-	listFunc   func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
-	updateFunc func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error)
-	deleteFunc func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error
-	patchFunc  func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error)
+	getFunc  func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
+	listFunc func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
 }
 
 func (m *mockNamespaceableResource) Get(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
@@ -3363,43 +3440,20 @@ func (m *mockNamespaceableResource) List(ctx context.Context, opts metav1.ListOp
 	return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{}}, nil
 }
 
-func (m *mockNamespaceableResource) Update(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
-	if m.updateFunc != nil {
-		return m.updateFunc(ctx, obj, options, subresources...)
-	}
-	return obj, nil
-}
-
 func (m *mockNamespaceableResource) Delete(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
-	if m.deleteFunc != nil {
-		return m.deleteFunc(ctx, name, options, subresources...)
-	}
 	return nil
-}
-
-func (m *mockNamespaceableResource) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
-	if m.patchFunc != nil {
-		return m.patchFunc(ctx, name, pt, data, options, subresources...)
-	}
-	return &unstructured.Unstructured{}, nil
 }
 
 type mockDynamicClient struct {
 	dynamic.Interface
-	getFunc    func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
-	listFunc   func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
-	updateFunc func(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error)
-	deleteFunc func(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error
-	patchFunc  func(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error)
+	getFunc  func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
+	listFunc func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
 }
 
 func (m *mockDynamicClient) Resource(resource schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
 	return &mockNamespaceableResource{
-		getFunc:    m.getFunc,
-		listFunc:   m.listFunc,
-		updateFunc: m.updateFunc,
-		deleteFunc: m.deleteFunc,
-		patchFunc:  m.patchFunc,
+		getFunc:  m.getFunc,
+		listFunc: m.listFunc,
 	}
 }
 
@@ -3858,14 +3912,7 @@ func TestSubmitJob_SkipsConflictCheckOnDryRun(t *testing.T) {
 				{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
 			},
 			"kubectl get deployment": {
-				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
-				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
-				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
-				{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.15.2"},
-			},
-			"kubectl rollout status": {
-				{ExitCode: 0, Stdout: "successfully rolled out"},
-				{ExitCode: 0, Stdout: "successfully rolled out"},
+				{ExitCode: 0, Stdout: `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"image":"registry.k8s.io/kueue/kueue:v0.15.2"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`},
 			},
 			"kubectl get endpointslice": {
 				{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`},
@@ -3952,4 +3999,87 @@ func TestSubmitJob_SkipsConflictCheckOnDryRun(t *testing.T) {
 			t.Fatalf("SubmitJob() without DryRunManifest error = %v, want job conflict error", err)
 		}
 	})
+}
+
+func TestSubmitJob_MTCFastFailBeforeClusterCalls(t *testing.T) {
+	tests := []struct {
+		name    string
+		job     orchestrator.JobDefinition
+		wantErr string
+	}{
+		{
+			name: "ramdisk dir without mtc enabled",
+			job: orchestrator.JobDefinition{
+				WorkloadName:           "mtc-fast-fail",
+				GKEMTCEnabled:          false,
+				GKEMTCRamdiskDirectory: "/local/ramdisk",
+			},
+			wantErr: "--gke-mtc-ramdisk-dir requires --gke-mtc-enabled",
+		},
+		{
+			name: "mtc enabled with empty ramdisk dir",
+			job: orchestrator.JobDefinition{
+				WorkloadName:  "mtc-fast-fail",
+				GKEMTCEnabled: true,
+			},
+			wantErr: "ramdisk directory path (--gke-mtc-ramdisk-dir) cannot be empty",
+		},
+		{
+			name: "mtc enabled with relative ramdisk dir",
+			job: orchestrator.JobDefinition{
+				WorkloadName:           "mtc-fast-fail",
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "relative/ramdisk",
+			},
+			wantErr: "--gke-mtc-ramdisk-dir must be an absolute path",
+		},
+		{
+			name: "mtc ramdisk conflicts with pathways /tmp mount",
+			job: orchestrator.JobDefinition{
+				WorkloadName:           "mtc-fast-fail",
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/tmp",
+				IsPathwaysJob:          true,
+			},
+			wantErr: "conflicts with built-in Pathways mount \"/tmp\"",
+		},
+		{
+			name: "mtc ramdisk under pathways /tmp/sidecar mount with colocated sidecar",
+			job: orchestrator.JobDefinition{
+				WorkloadName:           "mtc-fast-fail",
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/tmp/sidecar/ckpt",
+				IsPathwaysJob:          true,
+				Pathways:               orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: "sidecar:latest"},
+			},
+			wantErr: "conflicts with built-in Pathways mount \"/tmp/sidecar\"",
+		},
+		{
+			name: "mtc ramdisk conflicts with user mount",
+			job: orchestrator.JobDefinition{
+				WorkloadName:           "mtc-fast-fail",
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/mnt/data",
+				RawMounts:              []string{"gs://my-bucket;/mnt/data;rw"},
+			},
+			wantErr: "conflicts with duplicate mount destination in --mount flag",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{})
+			orc := newTestGKEOrchestrator(mockExec)
+			err := orc.SubmitJob(tt.job)
+			if err == nil {
+				t.Fatalf("SubmitJob() expected error containing %q, got nil", tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("SubmitJob() error = %v, want substring %q", err, tt.wantErr)
+			}
+			if len(mockExec.calls) > 0 {
+				t.Errorf("SubmitJob() executed external commands before failing fast: %v", mockExec.calls)
+			}
+		})
+	}
 }
