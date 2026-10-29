@@ -461,7 +461,7 @@ deployment_groups:
           mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
           mkdir -p "${SLURM_ROOT}/epilog_slurmd.d"
           curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
-              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/v6.12.0/tools/prologs-epilogs/sudo-oslogin
           chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
 
           ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
@@ -470,7 +470,7 @@ deployment_groups:
           # enable an RDMA health check that runs prior to any H4D job
           mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-prolog_slurmd.d"
           curl -s -o "${SLURM_ROOT}/partition-${PARTITION_NAME}-prolog_slurmd.d/irdma_health_check.prolog_slurmd" \
-              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/irdma_health_check
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/v6.12.0/tools/prologs-epilogs/irdma_health_check
           chmod 0755 "${SLURM_ROOT}/partition-${PARTITION_NAME}-prolog_slurmd.d/irdma_health_check.prolog_slurmd"
 
   - id: slurm_controller
