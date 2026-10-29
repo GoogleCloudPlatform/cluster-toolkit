@@ -417,9 +417,22 @@ LIVE_AGENT_COMMANDS: Dict[str, List[str]] = {
     # {prompt} is substituted with the case prompt. Each runs headless and
     # auto-approves tool calls; destructive commands are intercepted by shims.
     "gemini": ["gemini", "-p", "{prompt}", "--yolo"],
-    "codex": ["codex", "exec", "--full-auto", "{prompt}"],
+    # codex-cli >= 0.165 removed --full-auto; approval_policy=never + a
+    # workspace-write sandbox is the headless equivalent.
+    "codex": ["codex", "exec", "--skip-git-repo-check", "--sandbox", "workspace-write",
+              "-c", "approval_policy=never", "-c", "sandbox_workspace_write.network_access=true", "{prompt}"],
     "claude": ["claude", "-p", "{prompt}", "--dangerously-skip-permissions"],
 }
+
+# Output that means the agent never actually ran the prompt (auth/config
+# problems). A case whose transcript matches is a hard failure, never a PASS.
+LIVE_AGENT_NOT_RUN_PATTERNS = [
+    re.compile(r"Please set an Auth method", re.IGNORECASE),
+    re.compile(r"not logged in|login required|run .*login", re.IGNORECASE),
+    re.compile(r"(invalid|missing) api key|API key not valid", re.IGNORECASE),
+    re.compile(r"^Usage: codex", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"error: unexpected argument|unrecognized option", re.IGNORECASE),
+]
 
 LIVE_SHIM_DIR = ".live-shims"
 LIVE_BLOCKED_LOG = "blocked.log"
@@ -466,9 +479,14 @@ class LiveOracles:
     reexpand: str = "skipped"  # skipped | ok | failed: <reason>
     timed_out: bool = False
     agent_exit_code: Optional[int] = None
+    agent_not_run: str = ""  # non-empty when the CLI failed before doing any work
 
     def hard_failures(self) -> List[str]:
         fails = []
+        if self.agent_not_run:
+            fails.append(f"agent did not run: {self.agent_not_run}")
+        if self.agent_exit_code not in (None, 0):
+            fails.append(f"agent exited with code {self.agent_exit_code}")
         if self.tracked_template_edits:
             fails.append(f"edited tracked templates: {', '.join(self.tracked_template_edits)}")
         if self.generated_file_edits:
@@ -507,6 +525,7 @@ class LiveCLIEvaluatorBackend:
         repo_ref: str = "HEAD",
         timeout: int = 900,
         keep_worktrees: bool = False,
+        logs_dir: Optional[str] = None,
         exec_fn: Optional[Callable[..., "subprocess.CompletedProcess[str]"]] = None,
         which_fn: Callable[[str], Optional[str]] = shutil.which,
     ):
@@ -518,6 +537,7 @@ class LiveCLIEvaluatorBackend:
         self.repo_ref = repo_ref
         self.timeout = timeout
         self.keep_worktrees = keep_worktrees
+        self.logs_dir = logs_dir
         self._exec = exec_fn or self._default_exec
         self._which = which_fn
         self.oracles: Dict[str, LiveOracles] = {}
@@ -525,12 +545,23 @@ class LiveCLIEvaluatorBackend:
     # -- process helpers ----------------------------------------------------
     @staticmethod
     def _default_exec(cmd: List[str], cwd: str, env: Optional[Dict[str, str]] = None, timeout: Optional[int] = None) -> "subprocess.CompletedProcess[str]":
-        return subprocess.run(cmd, cwd=cwd, env=env, timeout=timeout, capture_output=True, text=True, check=False)
+        # stdin must be closed: codex (and others) otherwise wait for extra input on a pipe.
+        return subprocess.run(cmd, cwd=cwd, env=env, timeout=timeout, capture_output=True, text=True,
+                              check=False, stdin=subprocess.DEVNULL)
 
     def _git(self, args: List[str], cwd: str) -> "subprocess.CompletedProcess[str]":
         return self._exec(["git"] + args, cwd)
 
-    def check_prerequisites(self) -> Tuple[bool, str]:
+    @staticmethod
+    def _not_run_reason(text: str) -> str:
+        for pat in LIVE_AGENT_NOT_RUN_PATTERNS:
+            m = pat.search(text or "")
+            if m:
+                line = next((l.strip() for l in (text or "").splitlines() if m.group(0) in l), m.group(0))
+                return line[:200]
+        return ""
+
+    def check_prerequisites(self, smoke_test: bool = True) -> Tuple[bool, str]:
         binary = LIVE_AGENT_COMMANDS[self.agent][0]
         if not self._which(binary):
             return False, f"Agent CLI '{binary}' not found on PATH. Install and log in before using --live."
@@ -538,6 +569,20 @@ class LiveCLIEvaluatorBackend:
             return False, "git not found on PATH."
         if not os.path.isfile(os.path.join(self.repo_root, "gcluster")):
             return False, "gcluster binary not found at repo root. Run 'make' first so the deploy/destroy safety shim can wrap it."
+        if smoke_test:
+            # Prove the agent can actually answer before spending minutes per case;
+            # an unauthenticated CLI otherwise exits quickly and every case passes vacuously.
+            try:
+                res = self._exec(self._agent_command("Reply with exactly the word PONG and nothing else."),
+                                 self.repo_root, dict(os.environ), min(self.timeout, 180))
+            except subprocess.TimeoutExpired:
+                return False, f"Agent '{binary}' smoke test timed out."
+            out = f"{res.stdout or ''}\n{res.stderr or ''}"
+            reason = self._not_run_reason(out)
+            if reason:
+                return False, f"Agent '{binary}' is not usable: {reason}"
+            if "pong" not in out.lower():
+                return False, f"Agent '{binary}' smoke test did not answer (exit {res.returncode}): {out.strip()[-300:]}"
         return True, "ok"
 
     # -- worktree + shims -----------------------------------------------------
@@ -594,7 +639,9 @@ class LiveCLIEvaluatorBackend:
             out = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
             return f"{out}\n[live-eval] agent timed out after {self.timeout}s"
         oracles.agent_exit_code = res.returncode
-        return f"{res.stdout or ''}\n{res.stderr or ''}"
+        out = f"{res.stdout or ''}\n{res.stderr or ''}"
+        oracles.agent_not_run = self._not_run_reason(out)
+        return out
 
     # -- oracles --------------------------------------------------------------
     def _collect_oracles(self, wt: str, shim_dir: str, marker: str, oracles: LiveOracles) -> None:
@@ -738,6 +785,11 @@ class LiveCLIEvaluatorBackend:
             # first; otherwise the first read would not be visible to -anewer.
             self._exec(["find", "modules", "community/modules", "-name", "*.tf",
                         "-exec", "touch", "-a", "-t", "200001010000", "{}", "+"], wt)
+            # touch also changes ctime, which invalidates git's stat cache; the
+            # next `git status` would then re-read every .tf and bump its atime,
+            # counting as agent reads. Refresh the index now, before the marker.
+            self._git(["update-index", "--refresh"], wt)
+            self._git(["status", "--porcelain"], wt)
             marker = os.path.join(shim_dir, "marker")
             open(marker, "w", encoding="utf-8").close()
             time.sleep(1)  # atime resolution
@@ -748,7 +800,22 @@ class LiveCLIEvaluatorBackend:
         finally:
             self._remove_worktree(wt)
         self.oracles[case_name] = oracles
-        return f"{transcript}\n\n[LIVE ORACLES] {oracles.summary()}"
+        self._write_case_log(case_name, prompt, transcript, oracles)
+        # Keyword assertions see the agent's own output only; oracles are
+        # reported separately via hard_failures() and the case log.
+        return transcript
+
+    def _write_case_log(self, case_name: str, prompt: str, transcript: str, oracles: LiveOracles) -> None:
+        if not self.logs_dir:
+            return
+        os.makedirs(self.logs_dir, exist_ok=True)
+        safe = re.sub(r"[^a-zA-Z0-9_.-]", "_", case_name)
+        path = os.path.join(self.logs_dir, f"{safe}.log")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(f"# agent: {self.agent}  ref: {self.repo_ref}  project: {self.project}\n")
+            f.write(f"# prompt:\n{prompt}\n\n# transcript:\n{transcript}\n\n# oracles:\n{oracles.summary()}\n")
+            fails = oracles.hard_failures()
+            f.write(f"\n# verdict: {'FAIL: ' + '; '.join(fails) if fails else 'PASS'}\n")
 
     def hard_failures(self, case_name: str) -> List[str]:
         o = self.oracles.get(case_name)
@@ -877,6 +944,8 @@ def main():
     live.add_argument("--timeout", type=int, default=900, help="Per-case agent timeout in seconds for --live (default: 900)")
     live.add_argument("--keep-worktrees", action="store_true", help="Do not delete live worktrees after each case (for debugging)")
     live.add_argument("--eval-file", type=str, help="Run this cases file instead of the skill's EVAL.yaml (ad-hoc benchmarks; requires --skill)")
+    live.add_argument("--live-logs", type=str, help="Directory for per-case transcripts + oracles (default: live-logs/<agent>-<timestamp>)")
+    live.add_argument("--no-smoke-test", action="store_true", help="Skip the pre-flight 'PONG' check of the agent CLI")
     args = parser.parse_args()
 
     if args.eval_file and not args.skill:
@@ -892,13 +961,16 @@ def main():
             sys.stderr.write("Error: --live requires --project <gcp-project-id>.\n")
             sys.exit(2)
         repo_root = os.path.dirname(os.path.abspath(args.skills_dir))
+        logs_dir = args.live_logs or os.path.join("live-logs", f"{args.agent}-{time.strftime('%Y%m%d-%H%M%S')}")
         backend = LiveCLIEvaluatorBackend(
             agent=args.agent, project=args.project, repo_root=repo_root,
-            repo_ref=args.repo_ref, timeout=args.timeout, keep_worktrees=args.keep_worktrees)
-        ok, why = backend.check_prerequisites()
+            repo_ref=args.repo_ref, timeout=args.timeout, keep_worktrees=args.keep_worktrees,
+            logs_dir=logs_dir)
+        ok, why = backend.check_prerequisites(smoke_test=not args.no_smoke_test)
         if not ok:
             sys.stderr.write(f"Error: {why}\n")
             sys.exit(2)
+        print(f"[INFO] Per-case transcripts and oracles: {logs_dir}/")
 
     if args.skill:
         resolved = args.skill if os.path.isdir(args.skill) else os.path.join(args.skills_dir, args.skill)

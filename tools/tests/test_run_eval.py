@@ -946,13 +946,51 @@ class TestLiveBackend(unittest.TestCase):
     def test_prerequisites_require_built_gcluster(self):
         # Without ./gcluster the deploy/destroy shim cannot wrap anything, so refuse to start.
         b = self._backend(self._fake_exec())
-        ok, msg = b.check_prerequisites()
+        ok, msg = b.check_prerequisites(smoke_test=False)
         self.assertFalse(ok)
         self.assertIn("gcluster", msg)
         with open(os.path.join(self.repo, "gcluster"), "w", encoding="utf-8") as f:
             f.write("#!/bin/sh\n")
-        ok, _ = b.check_prerequisites()
+        ok, _ = b.check_prerequisites(smoke_test=False)
         self.assertTrue(ok)
+
+    def test_prerequisites_smoke_test_catches_unauthenticated_agent(self):
+        with open(os.path.join(self.repo, "gcluster"), "w", encoding="utf-8") as f:
+            f.write("#!/bin/sh\n")
+        auth_err = ("YOLO mode is enabled.\nPlease set an Auth method in your settings.json or specify one of the "
+                    "following environment variables before running: GEMINI_API_KEY, GOOGLE_GENAI_USE_VERTEXAI\n")
+        b = self._backend(self._fake_exec(agent_out=auth_err))
+        ok, msg = b.check_prerequisites()
+        self.assertFalse(ok)
+        self.assertIn("Please set an Auth method", msg)
+        # a working agent answers the smoke prompt
+        b2 = self._backend(self._fake_exec(agent_out="PONG\n"))
+        ok, _ = b2.check_prerequisites()
+        self.assertTrue(ok)
+        # an agent that answers something else is also rejected
+        b3 = self._backend(self._fake_exec(agent_out="hello"))
+        ok, msg = b3.check_prerequisites()
+        self.assertFalse(ok)
+        self.assertIn("did not answer", msg)
+
+    def test_agent_not_run_or_nonzero_exit_is_hard_failure(self):
+        b = self._backend(self._fake_exec(agent_out="Usage: codex exec [OPTIONS] [PROMPT]\n"))
+        b.run_case("skill", "p", {"name": "n1"})
+        self.assertTrue(any("agent did not run" in f for f in b.hard_failures("n1")))
+        b2 = self._backend(self._fake_exec(agent_rc=3, agent_out="boom"))
+        b2.run_case("skill", "p", {"name": "n2"})
+        self.assertTrue(any("exited with code 3" in f for f in b2.hard_failures("n2")))
+
+    def test_case_log_written(self):
+        logs = os.path.join(self.repo, "logs")
+        b = self._backend(self._fake_exec(agent_out="did the thing"), logs_dir=logs)
+        b.run_case("skill", "hello prompt", {"name": "L1"})
+        with open(os.path.join(logs, "L1.log"), encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("hello prompt", content)
+        self.assertIn("did the thing", content)
+        self.assertIn('"tf_files_read"', content)
+        self.assertIn("# verdict: PASS", content)
 
     def test_tf_atimes_backdated_before_marker(self):
         b = self._backend(self._fake_exec())
@@ -1012,7 +1050,8 @@ class TestLiveBackend(unittest.TestCase):
         env = agent_calls[0][2]
         self.assertTrue(env["PATH"].split(os.pathsep)[0].endswith(LIVE_SHIM_DIR))
         self.assertEqual(env["CLOUDSDK_CORE_PROJECT"], "test-proj")
-        self.assertIn("[LIVE ORACLES]", text)
+        self.assertIn("Created deployment.yaml", text)
+        self.assertNotIn("[LIVE ORACLES]", text)  # oracles are not part of keyword-checked text
         self.assertEqual(b.hard_failures("c1"), [])
 
     def test_tracked_template_edit_is_hard_failure(self):
