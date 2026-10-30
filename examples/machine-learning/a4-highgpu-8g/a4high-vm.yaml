@@ -30,8 +30,8 @@ vars:
 
   a4h_provisioning_model: RESERVATION_BOUND
   instance_image:
-    project: ubuntu-os-cloud
-    family: ubuntu-2204-lts
+    project: advanced-compute-images
+    family: aci-gpu-u2404-cuda-132-nvidia-595-amd64
   net0_range: 192.168.0.0/19
   net1_range: 192.168.64.0/18
   filestore_ip_range: 192.168.32.0/24
@@ -131,43 +131,22 @@ deployment_groups:
           * - cpu unlimited
           * - rtprio unlimited
 
-      # Install Nvidia driver / CUDA components
+      # Configure Nvidia driver / CUDA services (packages are pre-installed in base image)
       - type: ansible-local
         destination: install_a4h_drivers.yml
         content: |
           ---
-          - name: Install A4 Drivers and Utils
+          - name: Configure A4 Drivers and Services
             hosts: all
             become: true
             vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
-              cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
-              cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
-              enable_nvidia_dcgm: false
               nvidia_packages:
-              - nvidia-open-570
-              - nvidia-utils-570
-              - nvidia-container-toolkit
-              - cuda-toolkit-12-8
-              - datacenter-gpu-manager
-              - libnvidia-nscq-570
+              - cuda-toolkit-13-2
+              - datacenter-gpu-manager-4-cuda13
+              - libnvidia-nscq-595
+              - nccl-gib
             tasks:
-            - name: Download NVIDIA repository package
-              ansible.builtin.get_url:
-                url: "{{ cuda_repo_url }}"
-                dest: "{{ cuda_repo_filename }}"
-            - name: Install NVIDIA repository package
-              ansible.builtin.apt:
-                deb: "{{ cuda_repo_filename }}"
-                state: present
-            - name: Update apt cache
-              ansible.builtin.apt:
-                update_cache: true
-            - name: Install NVIDIA fabric and CUDA
-              ansible.builtin.apt:
-                name: "{{ item }}"
-              loop: "{{ nvidia_packages }}"
-            - name: Freeze NVIDIA fabric and CUDA
+            - name: Freeze NVIDIA fabric, CUDA, and NCCL-GIB packages
               ansible.builtin.dpkg_selections:
                 name: "{{ item }}"
                 selection: hold
@@ -186,37 +165,6 @@ deployment_groups:
                 name: nvidia-persistenced.service
                 state: started
                 enabled: true
-
-      # Install ibverbs-utils
-      - type: ansible-local
-        destination: install_ibverbs_utils.yml
-        content: |
-          ---
-          - name: Install ibverbs-utils
-            hosts: all
-            become: true
-            tasks:
-            - name: Install Linux Modules Extra
-              ansible.builtin.package:
-                name:
-                - ibverbs-utils
-                state: present
-
-      # Install NCCL
-      - type: ansible-local
-        destination: install_nccl.yml
-        content: |
-          ---
-          - name: Install nccl
-            hosts: all
-            become: true
-            tasks:
-            - name: Install Linux Modules Extra
-              ansible.builtin.package:
-                name:
-                - libnccl2
-                - libnccl-dev
-                state: present
 
       # Install OpenMPI
       - type: ansible-local
@@ -245,44 +193,6 @@ deployment_groups:
                 path: /etc/openmpi/openmpi-mca-params.conf
                 line: btl_tcp_if_include = enp0s19
                 create: yes
-
-      # Install NCCL-GIB Plugin
-      - type: ansible-local
-        destination: install_nccl_gib.yml
-        content: |
-          ---
-          - name: Install Google NCCL-GIB Plugin
-            hosts: localhost
-            become: true
-            tasks:
-            - name: Add artifact registry gpg key
-              ansible.builtin.apt_key:
-                url: https://us-apt.pkg.dev/doc/repo-signing-key.gpg
-                state: present
-            - name: Add artifact registry gpg key
-              ansible.builtin.apt_key:
-                url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-                state: present
-            - name: Install Apt Transport AR Apt Repo
-              apt_repository:
-                repo: 'deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main'
-                state: present
-            - name: Install AR transport
-              ansible.builtin.apt:
-                name: "apt-transport-artifact-registry"
-                update_cache: true
-            - name: Install Google NCCL-GIB Plugin
-              apt_repository:
-                repo: "deb ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-gib-apt main"
-                state: present
-            - name: Install NCCL-GIB Plugin
-              ansible.builtin.apt:
-                name: "nccl-gib"
-                update_cache: true
-            - name: Freeze NCCL GIB Plugin
-              ansible.builtin.dpkg_selections:
-                name: "nccl-gib"
-                selection: hold
 
       # (Optional) Set defaults compatible with NCCL-GIB
       - type: data

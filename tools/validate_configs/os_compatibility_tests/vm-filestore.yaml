@@ -55,7 +55,7 @@ deployment_groups:
     - homefs
     settings:
       instance_image:
-        family: ubuntu-2204-lts
+        family: ubuntu-2404-lts-amd64
         project: ubuntu-os-cloud
       name_prefix: workstation-ubuntu
       instance_count: 1
@@ -64,22 +64,6 @@ deployment_groups:
     settings:
       instance_name: ((module.workstation_ubuntu.name[0]))
 
-  - id: workstation_centos
-    source: modules/compute/vm-instance
-    use:
-    - network1
-    - homefs
-    settings:
-      instance_image:
-        name: centos-7-v20240611
-        project: centos-cloud
-      name_prefix: workstation-centos
-      instance_count: 1
-  - id: wait_centos
-    source: community/modules/scripts/wait-for-startup
-    settings:
-      instance_name: ((module.workstation_centos.name[0]))
-
   - id: workstation_rocky
     source: modules/compute/vm-instance
     use:
@@ -87,27 +71,11 @@ deployment_groups:
     - homefs
     settings:
       instance_image:
-        family: rocky-linux-8
-        project: rocky-linux-cloud
+        family: aci-cpu-rocky-linux-9-amd64
+        project: advanced-compute-images
       name_prefix: workstation-rocky
       instance_count: 1
   - id: wait_rocky
     source: community/modules/scripts/wait-for-startup
     settings:
       instance_name: ((module.workstation_rocky.name[0]))
-
-  - id: workstation_debian
-    source: modules/compute/vm-instance
-    use:
-    - network1
-    - homefs
-    settings:
-      instance_image:
-        family: debian-12
-        project: debian-cloud
-      name_prefix: workstation-debian
-      instance_count: 1
-  - id: wait_debian
-    source: community/modules/scripts/wait-for-startup
-    settings:
-      instance_name: ((module.workstation_debian.name[0]))

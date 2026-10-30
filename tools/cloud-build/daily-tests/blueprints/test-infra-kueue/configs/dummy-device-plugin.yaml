@@ -35,10 +35,8 @@ spec:
         args:
         - --domain=test-locks
         - '--device={"name": "slurm", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
-        - '--device={"name": "ml-slurm", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
-        - '--device={"name": "slurm-gcp-v6-rocky8", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
+        - '--device={"name": "slurm-gcp-v6-rocky9", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "slurm-gcp-v6-ubuntu", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
-        - '--device={"name": "slurm-gcp-v6-debian", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "slurm-gcp-v6-reconfig-size", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "slurm-gcp-v6-ssd", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "hpc-build-slurm-image", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'

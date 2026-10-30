@@ -52,7 +52,8 @@ deployment_groups:
     - htcondor_install_script
     settings:
       disk_size: 50
-      source_image_family: hpc-rocky-linux-8
+      source_image_family: aci-cpu-rocky-linux-9-amd64
+      source_image_project_id: [advanced-compute-images]
       image_family: "htcondor-10x"
 ```
 

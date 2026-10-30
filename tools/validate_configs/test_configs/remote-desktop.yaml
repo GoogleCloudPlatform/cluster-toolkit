@@ -36,7 +36,7 @@ deployment_groups:
     settings:
       name_prefix: crd-ubuntu
       instance_image:
-        family: ubuntu-2204-lts
+        family: ubuntu-2404-lts-amd64
         project: ubuntu-os-cloud
 
   # This module makes terraform wait until the remote-desktop setup is complete

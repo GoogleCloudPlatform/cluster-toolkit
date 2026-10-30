@@ -108,7 +108,7 @@ deployment_groups:
             "install_gcsfuse": true,
             "install_cuda": false,
             "allow_kernel_upgrades": false,
-            "monitoring_agent": "cloud-ops",
+            "monitoring_agent": "cloud-ops"
           }
       - type: shell
         destination: install_slurm.sh
@@ -130,35 +130,7 @@ deployment_groups:
           - name: Install A4X Drivers and Utils
             hosts: all
             become: true
-            vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
-              cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/sbsa/cuda-keyring_1.1-1_all.deb
-              cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
-              nvidia_packages:
-              - cuda-toolkit-12-8
-              - datacenter-gpu-manager-4-cuda12
             tasks:
-            - name: Download NVIDIA repository package
-              ansible.builtin.get_url:
-                url: "{{ cuda_repo_url }}"
-                dest: "{{ cuda_repo_filename }}"
-            - name: Install NVIDIA repository package
-              ansible.builtin.apt:
-                deb: "{{ cuda_repo_filename }}"
-                state: present
-            - name: Install NVIDIA fabric and CUDA
-              ansible.builtin.apt:
-                name: "{{ item }}"
-                update_cache: true
-                allow_downgrade: yes
-              loop: "{{ nvidia_packages }}"
-            - name: Freeze NVIDIA fabric and CUDA
-              ansible.builtin.command:
-                argv:
-                - apt-mark
-                - hold
-                - "{{ item }}"
-              loop: "{{ nvidia_packages }}"
             - name: Create nvidia-persistenced override directory
               ansible.builtin.file:
                 path: /etc/systemd/system/nvidia-persistenced.service.d
@@ -192,19 +164,6 @@ deployment_groups:
                 name: nvidia-persistenced.service
                 state: stopped
                 enabled: false
-      - type: ansible-local
-        destination: install_ibverbs_utils.yml
-        content: |
-          ---
-          - name: Install ibverbs-utils
-            hosts: all
-            become: true
-            tasks:
-            - name: Install Linux Modules Extra
-              ansible.builtin.package:
-                name:
-                - ibverbs-utils
-                state: present
       # The script below is intended to bypass the packer script that fails on Ubuntu 24.04 images
       # Once Ubuntu 24.04 no longer sets ${HOSTNAME} to the FQDN, this can be removed
       - type: shell
@@ -228,8 +187,8 @@ deployment_groups:
       disk_size: 100
       disk_type: hyperdisk-balanced
       machine_type: c4a-highcpu-16
-      source_image: ubuntu-accelerator-2404-arm64-with-nvidia-570-v20260110
-      source_image_project_id: [ubuntu-os-accelerator-images]
+      source_image_family: aci-gpu-u2404-cuda-132-nvidia-595-arm64
+      source_image_project_id: [advanced-compute-images]
       image_family: $(vars.family)
       omit_external_ip: false
 

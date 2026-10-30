@@ -23,8 +23,8 @@ vars:
   reservation_name: # supply reservation name
   hostname_prefix: $(vars.deployment_name)
   base_image:
-    project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2404-arm64-with-nvidia-580-v20260218
+    project: advanced-compute-images
+    family: aci-gpu-u2404-cuda-132-nvidia-595-arm64
   instance_image:
     project: $(vars.project_id)
     family: jbvm-ubuntu2404-accelerator-arm64
@@ -89,39 +89,15 @@ deployment_groups:
         destination: setup_nvidia_cuda_environment.yml
         content: |
           # ---
-          - name: Install NVIDIA repository packages
+          - name: Configure NVIDIA packages and services
             hosts: all
             become: true
             vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
-              cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/sbsa/cuda-keyring_1.1-1_all.deb
-              cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
-              enable_nvidia_dcgm: false
               nvidia_packages:
               - nvidia-container-toolkit
-              - cuda-toolkit-13
+              - cuda-toolkit-13-2
               - datacenter-gpu-manager-4-cuda13
             tasks:
-            # Download the NVIDIA repo
-            - name: Download NVIDIA CUDA repository keyring
-              ansible.builtin.get_url:
-                url: "{{ cuda_repo_url }}"
-                dest: "{{ cuda_repo_filename }}"
-            # Install the NVIDIA repo
-            - name: Installing NVIDIA CUDA repository keyring
-              ansible.builtin.apt:
-                deb: "{{ cuda_repo_filename }}"
-                state: present
-            # Update apt cache
-            - name: Update apt cache
-              ansible.builtin.apt:
-                update_cache: true
-            # Install the package
-            - name: Install NVIDIA fabric and CUDA
-              ansible.builtin.apt:
-                name: "{{ item }}"
-                state: present
-              loop: "{{ nvidia_packages }}"
             # Freeze NVIDIA fabric and CUDA
             - name: Freeze NVIDIA fabric and CUDA
               ansible.builtin.dpkg_selections:
@@ -134,20 +110,6 @@ deployment_groups:
                 name: nvidia-dcgm.service
                 state: started
                 enabled: true
-      # Install ibverbs-utils
-      - type: ansible-local
-        destination: install_ibverbs_packages.yml
-        content: |
-          ---
-          - name: Install ibverbs-utils
-            hosts: all
-            become: true
-            tasks:
-            - name: Install ibverbs
-              ansible.builtin.package:
-                name:
-                - ibverbs-utils
-                state: present
      # Prerequisites for Mellanox/DOCA
       - type: ansible-local
         destination: install_mellanox_deps.yml
@@ -165,7 +127,7 @@ deployment_groups:
                 - "linux-headers-{{ ansible_kernel }}"
                 state: present
                 update_cache: true
-      # Install DOCA-OFED
+      # Install MFT
       - type: shell
         destination: install_mellanox.sh
         content: |
@@ -178,14 +140,6 @@ deployment_groups:
           tar -xvf mft-4.34.0-145-aarch64-deb.tgz
           ./mft-4.34.0-145-aarch64-deb/install.sh
           rm -rf mft-4.34.0-145-aarch64-deb
-          DOCA_URL="https://linux.mellanox.com/public/repo/doca/3.2.0/ubuntu24.04/arm64-sbsa/"
-          BASE_URL=https://linux.mellanox.com/public/repo/doca
-          DOCA_SUFFIX=3.2.0/ubuntu24.04/arm64-sbsa/
-          DOCA_URL="$BASE_URL/$DOCA_SUFFIX"
-          curl $BASE_URL/GPG-KEY-Mellanox.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub
-          echo "deb [signed-by=/etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub] $DOCA_URL ./" > /etc/apt/sources.list.d/doca.list
-          sudo apt-get update
-          sudo apt-get -y install doca-ofed
 
       # Install OpenMPI from source.
       - type: shell
@@ -269,7 +223,7 @@ deployment_groups:
       disk_size: $(vars.image_disk_size_gb)
       state_timeout: 45m  # Give the build plenty of time to finish
       # Start from this source image
-      source_image: $(vars.base_image.image)
+      source_image_family: $(vars.base_image.family)
       source_image_project_id: [$(vars.base_image.project)]
       image_family: $(vars.instance_image.family)
       omit_external_ip: false

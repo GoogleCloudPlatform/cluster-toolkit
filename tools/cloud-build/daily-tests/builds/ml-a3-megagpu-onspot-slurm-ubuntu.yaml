@@ -25,6 +25,7 @@ tags:
 - m.schedmd-slurm-gcp-v6-partition
 - m.vpc
 - m.cloud-storage-bucket
+- m.pre-existing-network-storage
 - m.multivpc
 - m.private-service-access
 

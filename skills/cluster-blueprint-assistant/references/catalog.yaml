@@ -718,13 +718,11 @@ blueprints:
 - path: community/examples/hpc-build-slurm-image.yaml
   blueprint_name: hpc-build-slurm-image
   scheduler: slurm
-  description: "This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top of an existing image, hpc-rocky-linux-9 in the case of this example."
+  description: "This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top of an existing image, aci-cpu-rocky-linux-9-amd64 in the case of this example."
   machine_types: [n2d-standard-2]
   required_services: [compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
     build_from_git_ref: 6.13.2
-    build_from_image_family: hpc-rocky-linux-9
-    build_from_image_project: cloud-hpc-image-public
     built_image_family: my-custom-slurm
     built_instance_image:
       family: $(vars.built_image_family)
@@ -735,6 +733,8 @@ blueprints:
     image_build_machine_type: n2d-standard-16
     project_id: null
     region: us-central1
+    source_image_family: aci-cpu-rocky-linux-9-amd64
+    source_image_project: advanced-compute-images
     zone: us-central1-a
   modules:
   - id: network
@@ -818,7 +818,7 @@ blueprints:
   required_services: [compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
     authorized_ssh_ranges: []
-    build_slurm_from_git_ref: 6.12.3
+    build_slurm_from_git_ref: 6.13.2
     built_instance_image:
       family: slurm-rocky9-eda
       project: $(vars.project_id)
@@ -993,7 +993,7 @@ blueprints:
   required_services: [compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
     authorized_ssh_ranges: []
-    build_slurm_from_git_ref: 6.12.1
+    build_slurm_from_git_ref: 6.13.2
     built_instance_image:
       family: slurm-rocky9
       project: $(vars.project_id)
@@ -1415,58 +1415,6 @@ blueprints:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [network1, debug_partition, compute_partition, slurm_login, homefs]
     settings: [enable_controller_public_ips]
-- path: community/examples/hpc-slurm-ubuntu2204.yaml
-  blueprint_name: hpc-slurm-ubuntu2204-v6
-  scheduler: slurm
-  description: "Similar to the hpc-slurm.yaml example, but using Ubuntu 22.04 instead of CentOS 7. Other operating systems are supported by SchedMD for the Slurm on GCP project and images are listed here. Only the examples listed on this page have been..."
-  machine_types: [n2-standard-2]
-  required_services: [compute.googleapis.com, file.googleapis.com, iam.googleapis.com, servicenetworking.googleapis.com, storage.googleapis.com]
-  vars:
-    compute_node_count_dynamic_max: 20
-    debug_machine_type: n2-standard-2
-    debug_node_count_dynamic_max: 4
-    deployment_name: slurm-gcp-v6
-    login_machine_type: n2-standard-4
-    project_id: null
-    region: us-west4
-    slurm_image:
-      family: aci-gpu-u2204-slurm-2511-cuda-130-nvidia-580-amd64
-      project: advanced-compute-images
-    zone: us-west4-c
-  modules:
-  - id: network
-    source: modules/network/vpc
-  - id: private_service_access
-    source: modules/network/private-service-access
-    use: [network]
-  - id: homefs
-    source: modules/file-system/filestore
-    use: [network, private_service_access]
-    settings: [local_mount]
-  - id: debug_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
-    settings: [instance_image, machine_type, node_count_dynamic_max]
-  - id: debug_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [debug_nodeset]
-    settings: [exclusive, is_default, partition_name]
-  - id: compute_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
-    settings: [bandwidth_tier, instance_image, node_count_dynamic_max]
-  - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [compute_nodeset]
-    settings: [partition_name]
-  - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [network, slurm_login, debug_partition, compute_partition, homefs]
-    settings: [enable_controller_public_ips, instance_image]
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
-    settings: [enable_login_public_ips, instance_image, machine_type]
 - path: community/examples/hpc-slurm6-apptainer.yaml
   blueprint_name: hpc-slurm6-apptainer
   scheduler: slurm
@@ -1523,7 +1471,6 @@ blueprints:
     deployment_name: slurm6-hybrid
     disk_size: 64
     key_export_dir: /slurm/key_distribution
-    latest_base_image: slurm-gcp-6-11-hpc-rocky-linux-8
     on_prem_install_dir: your_slurm_installation_directory
     onprem_ctld_addr: your_slurmctld_IPaddress
     onprem_ctld_host: your_slurmctld_name
@@ -1532,8 +1479,10 @@ blueprints:
     region: us-central1
     slurm_gid: 620
     slurm_uid: 620
-    slurm_version: 25.11.6
+    slurm_version: ""
     slurmd_port: 6818
+    source_image_family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+    source_image_project: advanced-compute-images
     zone: us-central1-c
   modules:
   - id: network
@@ -1663,7 +1612,7 @@ blueprints:
   - id: custom-image
     source: modules/packer/custom-image
     use: [network1, htcondor_install_script]
-    settings: [disk_size, image_family, source_image_family]
+    settings: [disk_size, image_family, source_image_family, source_image_project_id]
   - id: htcondor_service_accounts
     source: community/modules/scheduler/htcondor-service-accounts
   - id: htcondor_setup
@@ -2221,57 +2170,6 @@ blueprints:
   - id: wait
     source: community/modules/scripts/wait-for-startup
     settings: [instance_name]
-- path: community/examples/tutorial-starccm-slurm.yaml
-  blueprint_name: starccm-on-slurm
-  scheduler: slurm
-  description: "This blueprint provisions an HPC cluster running Slurm for use with a Simcenter StarCCM+ tutorial."
-  machine_types: [n2-standard-2, c2-standard-60]
-  required_services: [compute.googleapis.com, file.googleapis.com, storage.googleapis.com]
-  vars:
-    compute_machine_type: c2-standard-60
-    compute_node_count_dynamic_max: 20
-    debug_machine_type: n2-standard-2
-    debug_node_count_dynamic_max: 4
-    deployment_name: starccm-slurm
-    login_machine_type: n2-standard-4
-    project_id: null
-    region: us-central1
-    zone: us-central1-c
-  modules:
-  - id: network1
-    source: modules/network/vpc
-  - id: homefs
-    source: modules/file-system/filestore
-    use: [network1]
-    settings: [local_mount]
-  - id: login-script
-    source: modules/scripts/startup-script
-    settings: [configure_ssh_host_patterns]
-  - id: compute-script
-    source: modules/scripts/startup-script
-    settings: [configure_ssh_host_patterns, runners]
-  - id: debug_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
-    settings: [machine_type, node_count_dynamic_max]
-  - id: debug_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use: [network1, homefs, debug_node_group, compute-script]
-    settings: [is_default, partition_name]
-  - id: compute_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
-    settings: [bandwidth_tier, disable_public_ips, machine_type, node_count_dynamic_max]
-  - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use: [network1, homefs, compute_node_group, compute-script]
-    settings: [partition_name]
-  - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
-    use: [network1, debug_partition, compute_partition, homefs]
-    settings: [disable_controller_public_ips]
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
-    use: [network1, slurm_controller, login-script]
-    settings: [disable_login_public_ips, machine_type]
 - path: community/examples/tutorial-starccm.yaml
   blueprint_name: tutorial-starccm
   scheduler: none
@@ -2359,8 +2257,8 @@ blueprints:
     compute_machine_type: c2-standard-60
     deployment_name: batch-wrf
     instance_image:
-      family: hpc-rocky-linux-9
-      project: cloud-hpc-image-public
+      family: aci-cpu-rocky-linux-9-amd64
+      project: advanced-compute-images
     project_id: null
     region: us-central1
     spack_builder_machine_type: c2-standard-16
@@ -4778,8 +4676,8 @@ blueprints:
     a3mega_partition_name: a3mega
     a3mega_reservation_name: null
     base_image:
-      image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260522
-      project: ubuntu-os-accelerator-images
+      family: aci-gpu-u2404-cuda-132-nvidia-595-amd64
+      project: advanced-compute-images
     build_slurm_from_git_ref: 6.13.2
     controller_machine_type: c2-standard-8
     debug_machine_type: n2-standard-2
@@ -4820,10 +4718,19 @@ blueprints:
   - id: slurm-image
     source: modules/packer/custom-image
     use: [image_build_script, sysnet]
-    settings: [disk_size, image_family, machine_type, metadata, omit_external_ip, source_image, source_image_project_id]
+    settings: [disk_size, image_family, machine_type, metadata, omit_external_ip, source_image_family, source_image_project_id]
   - id: data-bucket
     source: modules/file-system/cloud-storage-bucket
-    settings: [local_mount, mount_options, random_suffix]
+    settings: [enable_hierarchical_namespace, local_mount, mount_options, random_suffix]
+  - id: gcs_checkpoints
+    source: modules/file-system/pre-existing-network-storage
+    settings: [fs_type, local_mount, mount_options, remote_mount]
+  - id: gcs_training_data
+    source: modules/file-system/pre-existing-network-storage
+    settings: [fs_type, local_mount, mount_options, remote_mount]
+  - id: gcs_model_serving
+    source: modules/file-system/pre-existing-network-storage
+    settings: [fs_type, local_mount, mount_options, remote_mount]
   - id: gpunets
     source: modules/network/multivpc
     settings: [global_ip_address_range, network_count, network_name_prefix, subnetwork_cidr_suffix]
@@ -4864,136 +4771,6 @@ blueprints:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [sysnet, a3mega_partition, debug_partition, slurm_login, homefs, data-bucket]
     settings: [controller_startup_script, enable_cleanup_compute, enable_controller_public_ips, enable_external_prolog_epilog, login_startup_script, machine_type, prolog_scripts, slurm_conf_tpl]
-- path: examples/machine-learning/a3-megagpu-8g/a3mega-slurm-gcsfuse-lssd-blueprint.yaml
-  deployment_path: examples/machine-learning/a3-megagpu-8g/a3mega-slurm-deployment.yaml
-  blueprint_name: a3mega-slurm
-  scheduler: slurm
-  description: "GCSFuse with Local SSD Cache (a3mega-slurm-gcsfuse-lssd-blueprint.yaml): Reflects best practices for using GCSFuse for ML workloads. It is configured to mount GCS buckets on two mountpoints on a3-mega nodes. Use the gcs_bucket variable..."
-  machine_types: [n2-standard-2, a3-megagpu-8g]
-  required_services: [compute.googleapis.com, file.googleapis.com, iam.googleapis.com, logging.googleapis.com, servicenetworking.googleapis.com, storage.googleapis.com]
-  vars:
-    a3m_runners:
-    - content: "---\n- name: Configure Slurm to depend upon aperture devices\n  hosts: all\n  become: true\n  vars: {}\n  tasks:\n  - name: Ensure slurmd starts after aperture devices are ready\n    ansible.builtin.copy:\n      dest: /etc/systemd/system/slurmd.service.d/aperture.conf\n      owner: root\n      group: root\n      mode: 0o644\n      content: |\n        [Service]\n        ExecCondition=/usr/bin/test -d /dev/aperture_devices/\n    notify: Reload SystemD\n  handlers:\n  - name: Reload SystemD\n    ansible.builtin.systemd:\n      daemon_reload: true\n"
-      destination: slurm_aperture.yml
-      type: ansible-local
-    - content: "$(\"---\\n- name: Enable NVIDIA DCGM on GPU nodes\\n  hosts: all\\n  become: true\\n  vars:\\n    enable_ops_agent: ${vars.enable_ops_agent}\\n    enable_nvidia_dcgm: ${vars.enable_nvidia_dcgm}\\n    enable_nvidia_persistenced: ${vars.enable_nvidia_persistenced}\\n  tasks:\\n  - name: Update Ops Agent configuration\\n    ansible.builtin.blockinfile:\\n      path: /etc/google-cloud-ops-agent/config.yaml\\n      insertafter: EOF\\n      block: |\\n        metrics:\\n          receivers:\\n            dcgm:\\n              type: dcgm\\n          service:\\n            pipelines:\\n              dcgm:\\n                receivers:\\n                  - dcgm\\n    notify:\\n    - Restart Google Cloud Ops Agent\\n  handlers:\\n  - name: Restart Google Cloud Ops Agent\\n    ansible.builtin.service:\\n      name: google-cloud-ops-agent.service\\n      state: \\\"{{ 'restarted' if enable_ops_agent else 'stopped' }}\\\"\\n      enabled: \\\"{{ enable_ops_agent }}\\\"\\n  post_tasks:\\n  - name: Enable Google Cloud Ops Agent\\n    ansible.builtin.service:\\n      name: google-cloud-ops-agent.service\\n      state: \\\"{{ 'started' if enable_ops_agent else 'stopped' }}\\\"\\n      enabled: \\\"{{ enable_ops_agent }}\\\"\\n  - name: Enable NVIDIA DCGM\\n    ansible.builtin.service:\\n      name: nvidia-dcgm.service\\n      state: \\\"{{ 'started' if enable_nvidia_dcgm else 'stopped' }}\\\"\\n      enabled: \\\"{{ enable_nvidia_dcgm }}\\\"\\n  - name: Enable NVIDIA Persistence Daemon\\n    ansible.builtin.service:\\n      name: nvidia-persistenced.service\\n      state: \\\"{{ 'started' if enable_nvidia_persistenced else 'stopped' }}\\\"\\n      enabled: \\\"{{ enable_nvidia_persistenced }}\\\"\\n\")"
-      destination: enable_dcgm.yml
-      type: ansible-local
-    a3mega_cluster_size: null
-    a3mega_dws_flex_enabled: false
-    a3mega_enable_spot_vm: false
-    a3mega_maintenance_interval: ""
-    a3mega_node_count_dynamic_max: 0
-    a3mega_partition_name: a3mega
-    a3mega_reservation_name: null
-    base_image:
-      image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
-      project: ubuntu-os-accelerator-images
-    build_slurm_from_git_ref: 6.13.2
-    controller_machine_type: c2-standard-8
-    controller_runners:
-    - content: "$(\"#!/bin/bash\\nSLURM_ROOT=/opt/apps/adm/slurm\\nmkdir -m 0755 -p \\\"$${SLURM_ROOT}/scripts\\\"\\nmkdir -p \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-prolog_slurmd.d\\\"\\nmkdir -p \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-epilog_slurmd.d\\\"\\ncurl -s -o \\\"$${SLURM_ROOT}/scripts/sudo-oslogin\\\" \\\\\\n    https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin\\nchmod 0755 \\\"$${SLURM_ROOT}/scripts/sudo-oslogin\\\"\\nln -s \\\"$${SLURM_ROOT}/scripts/sudo-oslogin\\\" \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-prolog_slurmd.d/sudo-oslogin.prolog_slurmd\\\"\\nln -s \\\"$${SLURM_ROOT}/scripts/sudo-oslogin\\\" \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-epilog_slurmd.d/sudo-oslogin.epilog_slurmd\\\"\\ncurl -s -o \\\"$${SLURM_ROOT}/scripts/rxdm\\\" \\\\\\n    https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/receive-data-path-manager-mega\\nchmod 0755 \\\"$${SLURM_ROOT}/scripts/rxdm\\\"\\nln -s \\\"$${SLURM_ROOT}/scripts/rxdm\\\" \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-prolog_slurmd.d/rxdm.prolog_slurmd\\\"\\nln -s \\\"$${SLURM_ROOT}/scripts/rxdm\\\" \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-epilog_slurmd.d/rxdm.epilog_slurmd\\\"\\n# Uncomment the line below to enable epilog that will check health of GPUs and drain node if problem is detected.\\n# ln -s \\\"/slurm/scripts/tools/gpu-test\\\" \\\"$${SLURM_ROOT}/partition-${vars.a3mega_partition_name}-epilog_slurmd.d/gpu-test.epilog_slurmd\\\"\\n\")"
-      destination: stage_scripts.sh
-      type: shell
-    - content: "#!/bin/bash\n# reset enroot to defaults of files under /home and running under /run\n# allows basic enroot testing with reduced I/O performance\nrm -f /etc/enroot/enroot.conf\n"
-      destination: reset_enroot.sh
-      type: shell
-    debug_machine_type: n2-standard-2
-    debug_node_count_dynamic_max: 4
-    debug_node_count_static: 0
-    deployment_name: null
-    enable_controller_public_ips: true
-    enable_login_public_ips: true
-    enable_nvidia_dcgm: true
-    enable_nvidia_persistenced: true
-    enable_ops_agent: true
-    enable_placement: false
-    final_image_family: slurm-a3mega
-    gcs_bucket: ""
-    gcsfuse_lssd_runners:
-    - content: "$(\"---\\n- name: Create LSSD optimized gcsfuse mount\\n  hosts: localhost\\n  become: true\\n  tasks:\\n  - name: Create gcsfuse rwx configuration\\n    ansible.builtin.copy:\\n      dest: /etc/gcsfuse.yml\\n      owner: root\\n      group: root\\n      mode: 0o644\\n      content: |\\n        file-cache:\\n          max-size-mb: -1\\n          enable-parallel-downloads: true\\n          download-chunk-size-mb: 50\\n          parallel-downloads-per-file: 16\\n        cache-dir: ${vars.localssd_mountpoint}\\n        file-system:\\n          dir-mode: \\\"777\\\"\\n          file-mode: \\\"777\\\"\\n          rename-dir-limit: 0  # Set to 20000 for hierarchical buckets\\n          temp-dir: ${vars.localssd_mountpoint}\\n          fuse-options: allow_other\\n        foreground: true\\n\\n  - name: Create gcsfuse ro configuration\\n    ansible.builtin.copy:\\n      dest: /etc/gcsfuse-ro.yml\\n      owner: root\\n      group: root\\n      mode: 0o644\\n      content: |\\n        file-cache:\\n          max-size-mb: -1\\n        metadata-cache:\\n          ttl-secs: 3600\\n        cache-dir: ${vars.localssd_mountpoint}\\n        file-system:\\n          dir-mode: \\\"555\\\" # need 5 on dir to enable ls\\n          file-mode: \\\"444\\\"\\n          rename-dir-limit: 0  # Set to 20000 for hierarchical buckets\\n          temp-dir: ${vars.localssd_mountpoint}\\n          fuse-options: allow_other\\n          kernel-list-cache-ttl-secs: 60\\n        foreground: true\\n\\n  - name: Create gcsfuse systemd service\\n    ansible.builtin.copy:\\n      dest: /etc/systemd/system/gcsfuse.service\\n      owner: root\\n      group: root\\n      mode: 0o644\\n      content: |\\n        [Unit]\\n        Description=gcsfuse mount of all buckets\\n        After=local-fs.target\\n\\n        [Service]\\n        Type=simple\\n        User=root\\n        ExecStartPre=/bin/mkdir -p /gcs\\n        ExecStart=gcsfuse --config-file /etc/gcsfuse.yml ${vars.gcs_bucket} /gcs\\n        ExecStop=fusermount3 -u /gcs\\n\\n        [Install]\\n        WantedBy=slurmd.service multi-user.target\\n\\n  - name: Create gcsfuse-ro systemd service\\n    ansible.builtin.copy:\\n      dest: /etc/systemd/system/gcsfuse-ro.service\\n      owner: root\\n      group: root\\n      mode: 0o644\\n      content: |\\n        [Unit]\\n        Description=gcsfuse ro mount of all buckets\\n        After=local-fs.target\\n\\n        [Service]\\n        Type=simple\\n        User=root\\n        ExecStartPre=/bin/mkdir -p /gcs-ro\\n        ExecStart=gcsfuse --config-file /etc/gcsfuse-ro.yml ${vars.gcs_bucket} /gcs-ro\\n        ExecStop=fusermount3 -u /gcs-ro\\n\\n        [Install]\\n        WantedBy=slurmd.service multi-user.target\\n\\n  post_tasks:\\n  - name: Enable and restart gcsfuse\\n    ansible.builtin.service:\\n      name: gcsfuse.service\\n      state: restarted\\n      enabled: true\\n\\n  - name: Enable and restart gcsfuse-ro\\n    ansible.builtin.service:\\n      name: gcsfuse-ro.service\\n      state: restarted\\n      enabled: true\\n\")"
-      destination: gcsfuse.yml
-      type: ansible-local
-    gcsfuse_runners:
-    - content: "$(\"---\\n- name: Create LSSD optimized gcsfuse mount\\n  hosts: localhost\\n  become: true\\n  tasks:\\n  - name: Create gcsfuse configuration\\n    ansible.builtin.copy:\\n      dest: /etc/gcsfuse.yml\\n      owner: root\\n      group: root\\n      mode: 0o644\\n      content: |\\n        file-system:\\n          dir-mode: \\\"777\\\"\\n          file-mode: \\\"777\\\"\\n          rename-dir-limit: 0  # Set to 20000 for hierarchical buckets\\n          fuse-options: allow_other\\n        foreground: true\\n\\n  - name: Create gcsfuse systemd service\\n    ansible.builtin.copy:\\n      dest: /etc/systemd/system/gcsfuse.service\\n      owner: root\\n      group: root\\n      mode: 0o644\\n      content: |\\n        [Unit]\\n        Description=gcsfuse mount of all buckets\\n        After=local-fs.target\\n\\n        [Service]\\n        Type=simple\\n        User=root\\n        ExecStartPre=/bin/mkdir -p /gcs\\n        ExecStart=gcsfuse --config-file /etc/gcsfuse.yml ${vars.gcs_bucket} /gcs\\n        ExecStop=fusermount3 -u /gcs\\n\\n        [Install]\\n        WantedBy=slurmd.service multi-user.target\\n\\n  post_tasks:\\n  - name: Enable and restart gcsfuse\\n    ansible.builtin.service:\\n      name: gcsfuse.service\\n      state: restarted\\n      enabled: true\\n\")"
-      destination: gcsfuse.yml
-      type: ansible-local
-    homefs_size_gb: 10240
-    image_build_machine_type: c2-standard-8
-    instance_image:
-      family: $(vars.final_image_family)
-      project: $(vars.project_id)
-    local_mount_homefs: /home
-    localssd_mountpoint: /mnt/localssd
-    login_machine_type: c2-standard-4
-    login_runners:
-    - content: "#!/bin/bash\n# reset enroot to defaults of files under /home and running under /run\n# allows basic enroot testing with reduced I/O performance\nrm -f /etc/enroot/enroot.conf\n"
-      destination: reset_enroot.sh
-      type: shell
-    network_name_system: null
-    project_id: null
-    region: null
-    slurm_cluster_name: null
-    subnetwork_name_system: null
-    sys_net_range: 172.16.0.0/16
-    zone: null
-  modules:
-  - id: sysnet
-    source: modules/network/vpc
-    settings: [mtu, network_address_range, network_name, subnetworks]
-  - id: image_build_script
-    source: modules/scripts/startup-script
-    settings: [configure_ssh_host_patterns, docker, install_ansible, runners]
-  - id: slurm-image
-    source: modules/packer/custom-image
-    use: [image_build_script, sysnet]
-    settings: [disk_size, image_family, machine_type, omit_external_ip, source_image, source_image_project_id]
-  - id: data-bucket
-    source: modules/file-system/cloud-storage-bucket
-    settings: [local_mount, mount_options, random_suffix]
-  - id: gpunets
-    source: modules/network/multivpc
-    settings: [global_ip_address_range, network_count, network_name_prefix, subnetwork_cidr_suffix]
-  - id: private_service_access
-    source: modules/network/private-service-access
-    use: [sysnet]
-  - id: homefs
-    source: modules/file-system/filestore
-    use: [sysnet, private_service_access]
-    settings: [deletion_protection, filestore_tier, local_mount, mount_options, size_gb]
-  - id: debug_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [sysnet]
-    settings: [machine_type, node_count_dynamic_max, node_count_static]
-  - id: debug_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [debug_nodeset]
-    settings: [exclusive, partition_name]
-  - id: a3mega_startup
-    source: modules/scripts/startup-script
-    settings: [docker, local_ssd_filesystem, runners]
-  - id: a3mega_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [sysnet, gpunets]
-    settings: [bandwidth_tier, disk_type, enable_public_ips, machine_type, maintenance_interval, node_conf, node_count_dynamic_max, node_count_static, on_host_maintenance, reservation_name, startup_script]
-  - id: a3mega_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [a3mega_nodeset]
-    settings: [exclusive, is_default, partition_conf, partition_name]
-  - id: controller_startup
-    source: modules/scripts/startup-script
-    settings: [runners]
-  - id: login_startup
-    source: modules/scripts/startup-script
-    settings: [runners]
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [sysnet]
-    settings: [disk_type, machine_type, name_prefix]
-  - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [sysnet, a3mega_partition, debug_partition, slurm_login, homefs, data-bucket]
-    settings: [controller_startup_script, enable_cleanup_compute, enable_external_prolog_epilog, login_startup_script, machine_type, prolog_scripts, slurm_conf_tpl]
 - path: examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml
   deployment_path: examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml
   blueprint_name: a3ultra-slurm
@@ -5094,8 +4871,8 @@ blueprints:
     homefs_size_gb: 2560
     hostname_prefix: "$(\"${vars.deployment_name}-beowulf\")"
     instance_image:
-      name: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
-      project: ubuntu-os-accelerator-images
+      family: aci-gpu-u2404-cuda-132-nvidia-595-amd64
+      project: advanced-compute-images
     net0_range: 192.168.0.0/19
     net1_range: 192.168.64.0/18
     number_of_vms: null
@@ -5119,7 +4896,7 @@ blueprints:
     settings: [filestore_tier, local_mount, reserved_ip_range, size_gb]
   - id: startup-script
     source: modules/scripts/startup-script
-    settings: [configure_ssh_host_patterns, runners]
+    settings: [configure_ssh_host_patterns]
   - id: a3ultra-vms
     source: modules/compute/vm-instance
     use: [startup-script, homefs]
@@ -5225,8 +5002,8 @@ blueprints:
     homefs_size_gb: 10240
     hostname_prefix: $(vars.deployment_name)
     instance_image:
-      family: ubuntu-2204-lts
-      project: ubuntu-os-cloud
+      family: aci-gpu-u2404-cuda-132-nvidia-595-amd64
+      project: advanced-compute-images
     local_ssd_mountpoint: /mnt/localssd
     net0_range: 192.168.0.0/19
     net1_range: 192.168.64.0/18
@@ -5268,8 +5045,8 @@ blueprints:
   required_services: [compute.googleapis.com, file.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
     base_image:
-      image: ubuntu-accelerator-2404-arm64-with-nvidia-580-v20260218
-      project: ubuntu-os-accelerator-images
+      family: aci-gpu-u2404-cuda-132-nvidia-595-arm64
+      project: advanced-compute-images
     deployment_name: null
     disk_size_gb: 100
     filestore_ip_range: 192.168.32.0/24
@@ -5300,7 +5077,7 @@ blueprints:
   - id: custom-image
     source: modules/packer/custom-image
     use: [a4x_net_0, image-build-script]
-    settings: [disk_size, image_family, machine_type, metadata, omit_external_ip, source_image, source_image_project_id, state_timeout]
+    settings: [disk_size, image_family, machine_type, metadata, omit_external_ip, source_image_family, source_image_project_id, state_timeout]
   - id: a4x_rdma_net
     source: modules/network/gpu-rdma-vpc
     settings: [mtu, network_name, network_profile, network_routing_mode, subnetworks_template]
@@ -5407,8 +5184,6 @@ blueprints:
     a4x_max_node_count_dynamic_max: 0
     a4x_max_reservation_name: null
     benchmark_dir: "$(ghpc_stage(\"system_benchmarks\"))"
-    build_from_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-580
-    build_from_image_project: ubuntu-os-accelerator-images
     build_slurm_from_git_ref: 6.13.2
     built_image_family: slurm-ubuntu2404-a4x-max-metal
     controller_machine_type: c4a-highcpu-16
@@ -5434,6 +5209,8 @@ blueprints:
     psa_address: 10.10.0.0
     psa_range: 10.10.0.0/16
     region: null
+    source_image_family: aci-gpu-u2404-cuda-132-nvidia-595-arm64
+    source_image_project: advanced-compute-images
     zone: null
   modules:
   - id: a4x-max-slurm-image-net
@@ -5510,7 +5287,7 @@ blueprints:
   - id: image
     source: modules/packer/custom-image
     use: [image-net, build-script]
-    settings: [disk_size, image_family, machine_type, metadata, omit_external_ip, source_image, source_image_project_id]
+    settings: [disk_size, image_family, machine_type, metadata, omit_external_ip, source_image_family, source_image_project_id]
 - path: examples/machine-learning/build-service-images/a4x/blueprint.yaml
   blueprint_name: roll-a4x-image
   scheduler: none
@@ -5525,7 +5302,7 @@ blueprints:
   - id: image
     source: modules/packer/custom-image
     use: [image-net, build-script]
-    settings: [disk_size, disk_type, image_family, machine_type, metadata, omit_external_ip, source_image, source_image_project_id]
+    settings: [disk_size, disk_type, image_family, machine_type, metadata, omit_external_ip, source_image_family, source_image_project_id]
 - path: examples/machine-learning/build-service-images/common/blueprint.yaml
   blueprint_name: roll-common-image
   scheduler: none
@@ -5540,7 +5317,7 @@ blueprints:
   - id: image
     source: modules/packer/custom-image
     use: [image-net, build-script]
-    settings: [disk_size, image_family, machine_type, metadata, omit_external_ip, source_image, source_image_project_id]
+    settings: [disk_size, image_family, machine_type, metadata, omit_external_ip, source_image_family, source_image_project_id]
 - path: examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml
   deployment_path: examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml
   blueprint_name: tpu7x-slurm
@@ -5734,8 +5511,8 @@ blueprints:
     net0_range: 192.168.0.0/24
     project_id: null
     region: us-central1
-    source_image_family: ubuntu-accelerator-2204-amd64-with-nvidia-580
-    source_image_project: ubuntu-os-accelerator-images
+    source_image_family: aci-gpu-u2404-cuda-132-nvidia-595-amd64
+    source_image_project: advanced-compute-images
     zone: us-central1-b
   modules:
   - id: builder-net
@@ -5774,77 +5551,6 @@ blueprints:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [g4_partition, net0, homefs, slurm_login]
     settings: [disk_size_gb, enable_controller_public_ips, instance_image, instance_image_custom, machine_type]
-- path: examples/ml-slurm.yaml
-  blueprint_name: ml-slurm-v6
-  scheduler: slurm
-  description: "This blueprint provisions an HPC cluster running the Slurm scheduler with the machine learning frameworks PyTorch and TensorFlow pre-installed on every VM. The cluster has 2 partitions:"
-  machine_types: [a2-highgpu-1g, g2-standard-4]
-  required_services: [compute.googleapis.com, file.googleapis.com, iam.googleapis.com, logging.googleapis.com, servicenetworking.googleapis.com, storage.googleapis.com]
-  vars:
-    a2_enable_spot_vm: false
-    a2_node_count_dynamic_max: 20
-    deployment_name: ml-example-v6
-    disk_size_gb: 200
-    g2_enable_spot_vm: false
-    g2_node_count_dynamic_max: 20
-    homefs_size_gb: 2560
-    image_build_machine_type: c2-standard-4
-    metadata:
-      VmDnsSetting: GlobalOnly
-    new_image:
-      family: ml-slurm
-      project: $(vars.project_id)
-    project_id: null
-    region: asia-southeast1
-    zone: asia-southeast1-b
-    zones:
-    - asia-southeast1-a
-    - asia-southeast1-b
-    - asia-southeast1-c
-  modules:
-  - id: network
-    source: modules/network/vpc
-  - id: private_service_access
-    source: modules/network/private-service-access
-    use: [network]
-  - id: homefs
-    source: modules/file-system/filestore
-    use: [network, private_service_access]
-    settings: [filestore_tier, local_mount, size_gb]
-  - id: script
-    source: modules/scripts/startup-script
-    settings: [runners]
-  - id: custom-image
-    source: modules/packer/custom-image
-    use: [network, script]
-    settings: [disk_size, disk_type, image_family, machine_type, omit_external_ip, source_image_family, source_image_project_id, state_timeout]
-  - id: examples
-    source: modules/scripts/startup-script
-    settings: [runners]
-  - id: a2_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
-    settings: [bandwidth_tier, enable_spot_vm, instance_image, machine_type, node_count_dynamic_max]
-  - id: a2_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [a2_nodeset]
-    settings: [is_default, partition_name]
-  - id: g2_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
-    settings: [bandwidth_tier, enable_spot_vm, instance_image, machine_type, node_count_dynamic_max]
-  - id: g2_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [g2_nodeset]
-    settings: [exclusive, partition_name]
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
-    settings: [enable_login_public_ips, instance_image]
-  - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [network, a2_partition, g2_partition, homefs, slurm_login]
-    settings: [enable_controller_public_ips, instance_image, login_startup_script]
 - path: examples/netapp-volumes-slurm.yaml
   blueprint_name: netapp-volumes-slurm
   scheduler: slurm

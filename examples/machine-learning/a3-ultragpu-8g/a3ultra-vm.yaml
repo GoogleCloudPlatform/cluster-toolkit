@@ -25,8 +25,8 @@ vars:
   number_of_vms: 2
   a3u_provisioning_model: RESERVATION_BOUND
   instance_image:
-    project: ubuntu-os-accelerator-images
-    name: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
+    project: advanced-compute-images
+    family: aci-gpu-u2404-cuda-132-nvidia-595-amd64
   net0_range: 192.168.0.0/19
   net1_range: 192.168.64.0/18
   filestore_ip_range: 192.168.32.0/29
@@ -104,14 +104,6 @@ deployment_groups:
     settings:
       configure_ssh_host_patterns:
       - $(vars.hostname_prefix)-*
-      runners:
-      - type: shell
-        destination: install-cuda-toolkit.sh
-        content: |
-          #!/bin/bash
-          set -e -o pipefail
-          add-nvidia-repositories -y
-          apt install -y cuda-toolkit-12-8
 
   - id: a3ultra-vms
     source: modules/compute/vm-instance
