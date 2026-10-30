@@ -84,10 +84,22 @@ var gitLocalEnvVars = []string{
 	"GIT_WORK_TREE",
 }
 
-// UnsetGitLocalEnvVars removes repository-local Git environment variables from the current process environment.
-func UnsetGitLocalEnvVars() {
+// UnsetGitLocalEnvVars removes repository-local Git environment variables from the current process environment and returns their original values.
+func UnsetGitLocalEnvVars() map[string]string {
+	originalEnv := make(map[string]string)
 	for _, key := range gitLocalEnvVars {
-		_ = os.Unsetenv(key)
+		if val, ok := os.LookupEnv(key); ok {
+			originalEnv[key] = val
+			_ = os.Unsetenv(key)
+		}
+	}
+	return originalEnv
+}
+
+// RestoreGitLocalEnvVars restores repository-local Git environment variables.
+func RestoreGitLocalEnvVars(env map[string]string) {
+	for key, val := range env {
+		_ = os.Setenv(key, val)
 	}
 }
 
