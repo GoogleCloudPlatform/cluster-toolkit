@@ -28,8 +28,6 @@ import (
 	"strings"
 	"testing"
 
-	"golang.org/x/exp/slices"
-
 	"github.com/google/go-cmp/cmp"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	"github.com/hashicorp/hcl/v2/hclwrite"
@@ -768,19 +766,19 @@ resource "null_resource" "dummy" {
 	}
 
 	np := parsed.Resource["google_container_node_pool"]["node_pool"]
-	expectedNP := []string{"node_config[0].labels", "initial_node_count"}
-	if !slices.Equal(np.Lifecycle.IgnoreChanges, expectedNP) {
+	expectedNP := []string{"initial_node_count", "node_config[0].labels"}
+	if !stringSlicesEqual(np.Lifecycle.IgnoreChanges, expectedNP) {
 		t.Errorf("got %v for node_pool, want %v", np.Lifecycle.IgnoreChanges, expectedNP)
 	}
 
 	snp := parsed.Resource["google_container_node_pool"]["subblock_node_pool"]
-	if !slices.Equal(snp.Lifecycle.IgnoreChanges, expectedNP) {
+	if !stringSlicesEqual(snp.Lifecycle.IgnoreChanges, expectedNP) {
 		t.Errorf("got %v for subblock_node_pool, want %v", snp.Lifecycle.IgnoreChanges, expectedNP)
 	}
 
 	nr := parsed.Resource["null_resource"]["dummy"]
 	expectedNR := []string{"triggers"}
-	if !slices.Equal(nr.Lifecycle.IgnoreChanges, expectedNR) {
+	if !stringSlicesEqual(nr.Lifecycle.IgnoreChanges, expectedNR) {
 		t.Errorf("got %v for dummy null_resource, want %v", nr.Lifecycle.IgnoreChanges, expectedNR)
 	}
 }
@@ -862,7 +860,7 @@ resource "google_container_node_pool" "node_pool" {
 	}
 
 	np := parsed.Resource["google_container_node_pool"]["node_pool"]
-	expected := []string{"node_config[0].labels", "placement_policy[0].type", "initial_node_count"}
+	expected := []string{"initial_node_count", "node_config[0].labels", "placement_policy[0].type"}
 	if diff := cmp.Diff(expected, np.Lifecycle.IgnoreChanges); diff != "" {
 		t.Errorf("merged ignore_changes mismatch (-want +got):\n%s", diff)
 	}
@@ -1071,8 +1069,41 @@ resource "google_compute_disk" "disk_a" {
 		t.Fatalf("expected override for google_compute_disk.disk_a")
 	}
 
-	expected := []string{"type", "size"}
-	if !stringSlicesEqual(diskA.Lifecycle.IgnoreChanges, expected) && !stringSlicesEqual(diskA.Lifecycle.IgnoreChanges, []string{"size", "type"}) {
-		t.Errorf("got ignore_changes %v, want union of type and specific ignores (%v)", diskA.Lifecycle.IgnoreChanges, expected)
+	expected := []string{"size", "type"}
+	if !stringSlicesEqual(diskA.Lifecycle.IgnoreChanges, expected) {
+		t.Errorf("got ignore_changes %v, want sorted deterministic output %v", diskA.Lifecycle.IgnoreChanges, expected)
+	}
+}
+
+func TestReconfigIgnoresEqual_Duplicates(t *testing.T) {
+	a := map[string][]string{
+		"google_compute_disk": {"size", "labels", "size"},
+	}
+	b := map[string][]string{
+		"google_compute_disk": {"labels", "size"},
+	}
+	if !reconfigIgnoresEqual(a, b) {
+		t.Errorf("reconfigIgnoresEqual(a, b) = false, want true for slices with duplicates")
+	}
+}
+
+func TestWriteModuleReconfigureOverrides_RejectAll(t *testing.T) {
+	dir := t.TempDir()
+	mainTf := `
+resource "google_compute_disk" "disk_a" {
+  name = "disk-a"
+  type = "pd-standard"
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "main.tf"), []byte(mainTf), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ignores := map[string][]string{
+		"google_compute_disk": {"all"},
+	}
+
+	if err := writeModuleReconfigureOverrides(dir, ignores); err == nil {
+		t.Fatal("expected error when reconfigure_ignores specifies 'all', got nil")
 	}
 }

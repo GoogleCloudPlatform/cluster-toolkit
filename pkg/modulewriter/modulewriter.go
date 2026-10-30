@@ -213,16 +213,10 @@ func stringSlicesEqual(a, b []string) bool {
 }
 
 func equalIgnoreSlices(a, b []string) bool {
-	if len(a) != len(b) {
+	normA := mergeIgnores(nil, a)
+	normB := mergeIgnores(nil, b)
+	if len(normA) != len(normB) {
 		return false
-	}
-	normA := make([]string, len(a))
-	for i, s := range a {
-		normA[i] = normalizeIgnoreAttribute(s)
-	}
-	normB := make([]string, len(b))
-	for i, s := range b {
-		normB[i] = normalizeIgnoreAttribute(s)
 	}
 	sort.Strings(normA)
 	sort.Strings(normB)
@@ -566,6 +560,7 @@ func setResourceOverride(override tfOverrideFile, existingIgnores map[string]map
 	}
 	mergedWithExisting := mergeIgnores(existingIgnores[rType][rName], ignores)
 	finalIgnores := mergeIgnores(current, mergedWithExisting)
+	sort.Strings(finalIgnores)
 	override.Resource[rType][rName] = tfResourceOverride{
 		Lifecycle: tfLifecycleOverride{IgnoreChanges: finalIgnores},
 	}
@@ -574,6 +569,9 @@ func setResourceOverride(override tfOverrideFile, existingIgnores map[string]map
 func applyTargetOverrides(override tfOverrideFile, discovered map[string][]string, existingIgnores map[string]map[string][]string, target string, ignores []string, moduleDir string) error {
 	if len(ignores) == 0 {
 		return nil
+	}
+	if contains(ignores, "all") {
+		return fmt.Errorf("reconfigure_ignores target %q specifies %q; ignoring \"all\" changes is not supported, please specify individual attribute names", target, "all")
 	}
 
 	if strings.Contains(target, ".") {
@@ -614,7 +612,14 @@ func writeModuleReconfigureOverrides(moduleDir string, reconfigIgnores map[strin
 		Resource: make(map[string]map[string]tfResourceOverride),
 	}
 
-	for target, ignores := range reconfigIgnores {
+	targets := make([]string, 0, len(reconfigIgnores))
+	for target := range reconfigIgnores {
+		targets = append(targets, target)
+	}
+	sort.Strings(targets)
+
+	for _, target := range targets {
+		ignores := reconfigIgnores[target]
 		if err := applyTargetOverrides(override, discovered, existingIgnores, target, ignores, moduleDir); err != nil {
 			return err
 		}
