@@ -14,14 +14,14 @@
 
 ---
 
-test_name: hpc-slurm-v6-ubuntu2204
+test_name: hpc-slurm-v6-ubuntu2404
 deployment_name: "ubun-v6-{{ build }}"
 # Manually adding the slurm_cluster_name for use in node names, which filters
 # non-alphanumeric chars and is capped at 10 chars.
 slurm_cluster_name: "ubunv6{{ build[0:4] }}"
 zone: us-west4-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm-ubuntu2204.yaml"
+blueprint_yaml: "{{ workspace }}/examples/hpc-slurm.yaml"
 network: "{{ test_name }}-net"
 # Note: Pattern matching in gcloud only supports 1 wildcard, centv5*-login-* won't work.
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
@@ -36,4 +36,10 @@ custom_vars:
   mounts:
   - /home
 cli_deployment_vars:
+  test_name: "{{ test_name }}"
   network_name: "{{ network }}"
+  region: us-west4
+  zone: us-west4-c
+  instance_image: "{family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-amd64, project: advanced-compute-images}"
+# Assert that machines are getting shut down eventually
+wait_for_compute_nodes_to_go_down: true

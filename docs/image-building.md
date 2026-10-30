@@ -25,7 +25,6 @@ or (2) install both the scheduler and your custom application. The examples
 below demonstrate each approach:
 
 - [Customizing a Slurm cluster (Hello, World)](../examples/README.md#image-builderyaml-)
-- [Customizing a Slurm cluster (AI/ML applications)](../examples/README.md#ml-slurmyaml-)
 - [Provisioning an HTCondor pool (installing scheduler)](../examples/README.md#htc-htcondoryaml--)
 
 ## Why build an image?

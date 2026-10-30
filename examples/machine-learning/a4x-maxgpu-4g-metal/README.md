@@ -20,8 +20,8 @@ Key features include:
 
 This blueprint installs and configures several key software components. While the blueprint aims to pull recent stable versions, specific versions installed within the image build process include:
 
-* **Base Image Family:** `ubuntu-accelerator-2404-arm64-with-nvidia-580` (from `ubuntu-os-accelerator-images`)
-* **NVIDIA CUDA Toolkit:** 13.0 (and related `datacenter-gpu-manager` packages)
+* **Base Image Family:** `aci-gpu-u2404-cuda-132-nvidia-595-arm64` (from `advanced-compute-images`)
+* **NVIDIA CUDA Toolkit:** 13.2 (and related `datacenter-gpu-manager` packages)
 * **Mellanox OFED (DOCA):** 3.2.0 for Ubuntu 24.04 arm64-sbsa
 * **Mellanox Firmware Tools (MFT):** 4.34.0-145
 * **Slurm:** Git ref `6.13.2` from `https://github.com/GoogleCloudPlatform/slurm-gcp`

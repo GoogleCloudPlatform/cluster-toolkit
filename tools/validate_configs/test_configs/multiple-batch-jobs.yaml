@@ -67,7 +67,7 @@ deployment_groups:
       runnable: "cat /sw/hello.txt"
       machine_type: n2-standard-4
       instance_image:
-        family: rocky-linux-8-optimized-gcp
+        family: rocky-linux-9-optimized-gcp
         project: rocky-linux-cloud
       parallelism: 2
       task_count: 4
@@ -81,7 +81,7 @@ deployment_groups:
       job_id: job-2
       job_filename: batch-job-2.json
       instance_image:
-        family: rocky-linux-8-optimized-gcp
+        family: rocky-linux-9-optimized-gcp
         project: rocky-linux-cloud
 
   - id: batch-login

@@ -100,42 +100,6 @@ deployment_groups:
           apt-get update
           apt-get install -y git
       - $(vars.runner_install_slurm)
-      - type: ansible-local
-        destination: update-gvnic.yml
-        content: |
-          ---
-          - name: Install updated gVNIC driver from GitHub
-            hosts: all
-            become: true
-            vars:
-              package_url: https://github.com/GoogleCloudPlatform/compute-virtual-ethernet-linux/releases/download/v1.4.3/gve-dkms_1.4.3_all.deb
-              package_filename: /tmp/{{ package_url | basename }}
-            tasks:
-            - name: Install driver dependencies
-              ansible.builtin.apt:
-                name:
-                - dkms
-            - name: Download gVNIC package
-              ansible.builtin.get_url:
-                url: "{{ package_url }}"
-                dest: "{{ package_filename }}"
-            - name: Install updated gVNIC
-              ansible.builtin.apt:
-                deb: "{{ package_filename }}"
-                state: present
-      - type: shell
-        destination: install-nvidia.sh
-        content: |
-          #!/bin/bash
-          set -ex -o pipefail
-          # Install nvidia container toolkit
-          curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
-            gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg  && \
-            curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-            sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-            tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-          apt-get update -y
-          apt-get install -y nvidia-container-toolkit
       # this duplicates the ulimits configuration of the HPC VM Image
       - $(vars.runner_setup_hpc_vm_image_ulimits)
       - type: data
@@ -150,50 +114,13 @@ deployment_groups:
         destination: configure_gpu_monitoring.yml
         content: |
           ---
-          - name: Install CUDA & DCGM & Configure Ops Agent
+          - name: Configure DCGM, nvidia-persistenced & Ops Agent
             hosts: all
             become: true
             vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
-              package_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
-              package_filename: /tmp/{{ package_url | basename }}
               enable_ops_agent: true
               enable_nvidia_dcgm: true
-              nvidia_packages:
-              - cuda-toolkit-12-8
-              - datacenter-gpu-manager-4-cuda12
             tasks:
-            - name: Download NVIDIA repository package
-              ansible.builtin.get_url:
-                url: "{{ package_url }}"
-                dest: "{{ package_filename }}"
-            - name: Install NVIDIA repository package
-              ansible.builtin.apt:
-                deb: "{{ package_filename }}"
-                state: present
-            - name: Reduce NVIDIA repository priority
-              ansible.builtin.copy:
-                dest: /etc/apt/preferences.d/cuda-repository-pin-600
-                mode: 0o0644
-                owner: root
-                group: root
-                content: |
-                  Package: nsight-compute
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
-                  Package: nsight-systems
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
-                  Package: *
-                  Pin: release l=NVIDIA CUDA
-                  Pin-Priority: 400
-            - name: Install CUDA & DCGM
-              ansible.builtin.apt:
-                name: "{{ item }}"
-                update_cache: true
-              loop: "{{ nvidia_packages }}"
             - name: Create nvidia-persistenced override directory
               ansible.builtin.file:
                 path: /etc/systemd/system/nvidia-persistenced.service.d
@@ -297,7 +224,7 @@ deployment_groups:
           # the LXD container manager, both of which might have been installed via Snap.
           # This step is crucial to prevent conflicts with the upcoming APT installation
           # and address potential issues with Snapd and NFS mounts in specific environments
-          snap remove google-cloud-cli lxd
+          snap remove google-cloud-cli lxd || true
           # Install key and google-cloud-cli from apt repo
           GCLOUD_APT_SOURCE="/etc/apt/sources.list.d/google-cloud-sdk.list"
           if [ ! -f "${GCLOUD_APT_SOURCE}" ]; then
@@ -325,8 +252,8 @@ deployment_groups:
       disk_size: 100
       machine_type: c2-standard-8
 
-      source_image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
-      source_image_project_id: [ubuntu-os-accelerator-images]
+      source_image_family: aci-gpu-u2404-cuda-132-nvidia-595-amd64
+      source_image_project_id: [advanced-compute-images]
 
       image_family: $(vars.family)
       omit_external_ip: false

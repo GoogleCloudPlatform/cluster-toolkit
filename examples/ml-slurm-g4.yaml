@@ -27,8 +27,8 @@ vars:
   # To enable Dual NIC, you MUST use g4-standard-384
   # compute_machine_type: g4-standard-384
   # Image settings
-  source_image_family: ubuntu-accelerator-2204-amd64-with-nvidia-580
-  source_image_project: ubuntu-os-accelerator-images
+  source_image_family: aci-gpu-u2404-cuda-132-nvidia-595-amd64
+  source_image_project: advanced-compute-images
   image_build_machine_type: n2-standard-4
   image_disk_size_gb: 50
   built_image_family: slurm-g4-ubuntu2404
@@ -72,49 +72,20 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      # Install nvidia drivers/utilities
+      # Freeze pre-installed NVIDIA CUDA and DCGM packages
       - type: ansible-local
         destination: install_nvidia_drivers.yml
         content: |
           # ---
-          - name: Install NVIDIA Drivers and Utils
+          - name: Freeze NVIDIA Drivers and Utils
             hosts: all
             become: true
             vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
-              cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
-              cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
-              enable_nvidia_dcgm: false
               nvidia_packages:
-              - datacenter-gpu-manager
-              - cuda-toolkit-12-9
+              - datacenter-gpu-manager-4-cuda13
+              - cuda-toolkit-13-2
 
             tasks:
-            # Download the NVIDIA repo
-            - name: Download NVIDIA repository package
-              ansible.builtin.get_url:
-                url: "{{ cuda_repo_url }}"
-                dest: "{{ cuda_repo_filename }}"
-
-            # Install the NVIDIA repo
-            - name: Install NVIDIA repository package
-              ansible.builtin.apt:
-                deb: "{{ cuda_repo_filename }}"
-                state: present
-
-            # Update apt cache
-            - name: Update apt cache
-              ansible.builtin.apt:
-                update_cache: true
-
-            # Install the package
-            - name: Install NVIDIA fabric and CUDA
-              ansible.builtin.apt:
-                name: "{{ item }}"
-              loop: "{{ nvidia_packages }}"
-
-            # This section will optionally freeze the packages with
-            # an apt-mark hold.
             - name: Freeze NVIDIA fabric and CUDA
               ansible.builtin.dpkg_selections:
                 name: "{{ item }}"

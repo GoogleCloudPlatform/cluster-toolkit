@@ -128,11 +128,11 @@ func verifyDeploymentPairings(t *testing.T, byPath map[string]BlueprintEntry) {
 		// exact: <stem>-deployment.yaml
 		"examples/machine-learning/a3-ultragpu-8g/a3ultra-vm.yaml": "examples/machine-learning/a3-ultragpu-8g/a3ultra-vm-deployment.yaml",
 		// prefix: -blueprint / -advanced / -infra / -experiment suffixes
-		"examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml":            "examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml",
-		"examples/machine-learning/a3-megagpu-8g/a3mega-slurm-gcsfuse-lssd-blueprint.yaml": "examples/machine-learning/a3-megagpu-8g/a3mega-slurm-deployment.yaml",
-		"examples/gke-tpu-7x/gke-tpu-7x-advanced.yaml":                                     "examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml",
-		"community/examples/alphaevolve/alpha-evolve-infra.yaml":                           "community/examples/alphaevolve/alpha-evolve-deployment.yaml",
-		"community/examples/alphaevolve/alpha-evolve-experiment.yaml":                      "community/examples/alphaevolve/alpha-evolve-deployment.yaml",
+		"examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml": "examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml",
+		"examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml":   "examples/machine-learning/a3-megagpu-8g/a3mega-slurm-deployment.yaml",
+		"examples/gke-tpu-7x/gke-tpu-7x-advanced.yaml":                          "examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml",
+		"community/examples/alphaevolve/alpha-evolve-infra.yaml":                "community/examples/alphaevolve/alpha-evolve-deployment.yaml",
+		"community/examples/alphaevolve/alpha-evolve-experiment.yaml":           "community/examples/alphaevolve/alpha-evolve-deployment.yaml",
 		// two blueprints + two deployment files in one folder must not cross-pair
 		"examples/machine-learning/a4x-highgpu-4g/a4x-vm.yaml":                  "examples/machine-learning/a4x-highgpu-4g/a4x-vm-deployment.yaml",
 		"examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml": "examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-deployment.yaml",
@@ -281,10 +281,6 @@ func verifyMultiBlueprintDescriptions(t *testing.T, byPath map[string]BlueprintE
 	a4xVM := byPath["examples/machine-learning/a4x-highgpu-4g/a4x-vm.yaml"]
 	if !strings.Contains(a4xVM.Description, "standalone group") {
 		t.Errorf("expected standalone group description for a4x-vm.yaml, got %q", a4xVM.Description)
-	}
-	a3mGcs := byPath["examples/machine-learning/a3-megagpu-8g/a3mega-slurm-gcsfuse-lssd-blueprint.yaml"]
-	if !strings.Contains(a3mGcs.Description, "GCSFuse with Local SSD Cache") {
-		t.Errorf("expected GCSFuse with Local SSD Cache description for a3mega-slurm-gcsfuse-lssd-blueprint.yaml, got %q", a3mGcs.Description)
 	}
 	for bpPath := range byPath {
 		if strings.HasPrefix(bpPath, "examples/gke-consumption-options/") {

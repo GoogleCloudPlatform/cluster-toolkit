@@ -25,8 +25,8 @@ validators:
 vars:
   sys_net_range: 172.16.0.0/16
   base_image:
-    project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260522
+    project: advanced-compute-images
+    family: aci-gpu-u2404-cuda-132-nvidia-595-amd64
   a3mega_partition_name: a3mega
   local_mount_homefs: /home
   instance_image:
@@ -198,11 +198,10 @@ deployment_groups:
               distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
               cuda_repo_url: "https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb"
               nvidia_packages:
-                - cuda-toolkit-13-0
-                - nvidia-container-toolkit
-                - datacenter-gpu-manager-4-cuda13=1:4.6.0-1
-                - datacenter-gpu-manager-4-dev=1:4.6.0-1
-                - datacenter-gpu-manager-4-core=1:4.6.0-1
+                - cuda-toolkit-13-2
+                - datacenter-gpu-manager-4-cuda13=1:4.6.1-1
+                - datacenter-gpu-manager-4-dev=1:4.6.1-1
+                - datacenter-gpu-manager-4-core=1:4.6.1-1
 
             tasks:
               - name: Install NVIDIA repository keyring
@@ -444,7 +443,7 @@ deployment_groups:
           # the LXD container manager, both of which might have been installed via Snap.
           # This step is crucial to prevent conflicts with the upcoming APT installation
           # and address potential issues with Snapd and NFS mounts in specific environments
-          snap remove google-cloud-cli lxd
+          snap remove google-cloud-cli lxd || true
           # Install key and google-cloud-cli from apt repo
           GCLOUD_APT_SOURCE="/etc/apt/sources.list.d/google-cloud-sdk.list"
           if [ ! -f "${GCLOUD_APT_SOURCE}" ]; then
@@ -471,7 +470,7 @@ deployment_groups:
       # building this image does not require a GPU-enabled VM but must *not* be
       # run on a N-series VM otherwise, the "open" drivers will not install
       machine_type: $(vars.image_build_machine_type)
-      source_image: $(vars.base_image.image)
+      source_image_family: $(vars.base_image.family)
       source_image_project_id: [$(vars.base_image.project)]
       image_family: $(vars.final_image_family)
       disk_size: $(vars.disk_size_gb)
@@ -500,13 +499,80 @@ deployment_groups:
 
 - group: cluster
   modules:
+  # The following four modules create and mount a Cloud Storage Bucket with
+  # gcsfuse. They are optional but recommended for many use cases.
   # if an existing bucket is desired, follow modules/file-system/pre-existing-network-storage/README.md
   - id: data-bucket
     source: modules/file-system/cloud-storage-bucket
     settings:
+      enable_hierarchical_namespace: true
       local_mount: /gcs
-      mount_options: defaults,rw,_netdev,implicit_dirs,allow_other,implicit_dirs,file_mode=777,dir_mode=777
+      mount_options: "implicit_dirs,\
+                      metadata_cache_negative_ttl_secs=0,\
+                      metadata_cache_ttl_secs=-1,\
+                      stat_cache_max_size_mb=-1,\
+                      type_cache_max_size_mb=-1,\
+                      dir_mode=777,\
+                      file_mode=777,\
+                      allow_other"
       random_suffix: true
+
+  # (Optional) Create a mount-point optimized for checkpoint writing/reading. Uses
+  # local-ssd and enables parallel downloads. For more information on
+  # these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  # and
+  # https://docs.cloud.google.com/storage/docs/cloud-storage-fuse/profile-based-configurations
+  - id: gcs_checkpoints
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(data-bucket.gcs_bucket_name)
+      local_mount: /gcs-checkpoints
+      fs_type: gcsfuse
+      mount_options: "profile=aiml-checkpointing,\
+                      cache_dir=$(vars.localssd_mountpoint),\
+                      dir_mode=777,\
+                      file_mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for reading training data.
+  # If your training dataset fits on localssd, then you may want to enable file
+  # cache as well, which is done by adding
+  # cache-dir=/mnt/localssd,\
+  # file-cache-max-size-mb=<DATASET_SIZE>,\
+  # file-cache-cache-file-for-range-read=true,\
+  # to the mount_options.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  # and
+  # https://docs.cloud.google.com/storage/docs/cloud-storage-fuse/profile-based-configurations
+  - id: gcs_training_data
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(data-bucket.gcs_bucket_name)
+      local_mount: /gcs-training-data
+      fs_type: gcsfuse
+      mount_options: "profile=aiml-training,\
+                      dir_mode=777,\
+                      file_mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for model serving.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  # and
+  # https://docs.cloud.google.com/storage/docs/cloud-storage-fuse/profile-based-configurations
+  - id: gcs_model_serving
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(data-bucket.gcs_bucket_name)
+      local_mount: /gcs-model-serving
+      fs_type: gcsfuse
+      mount_options: "profile=aiml-serving,\
+                      cache_dir=$(vars.localssd_mountpoint),\
+                      dir_mode=777,\
+                      file_mode=777,\
+                      allow_other"
 
   - id: gpunets
     source: modules/network/multivpc
@@ -526,6 +592,23 @@ deployment_groups:
     source: modules/network/private-service-access
     use:
     - sysnet
+
+  # (Optional) To use Filestore instead of Managed Lustre for /home,
+  # uncomment the filestore module below and comment out the managed-lustre module.
+  # - id: homefs
+  #   source: modules/file-system/filestore
+  #   use:
+  #   - sysnet
+  #   - private_service_access
+  #   settings:
+  #     filestore_tier: REGIONAL
+  #     size_gb: 1024
+  #     local_mount: $(vars.local_mount_homefs)
+  #     deletion_protection:
+  #       enabled: true
+  #       reason: Avoid data loss
+  #   outputs:
+  #   - network_storage
 
   - id: homefs
     source: modules/file-system/managed-lustre
@@ -578,6 +661,12 @@ deployment_groups:
             "data-root": "$(vars.localssd_mountpoint)/docker"
           }
       runners:
+      - $(gcs_checkpoints.client_install_runner)
+      - $(gcs_checkpoints.mount_runner)
+      - $(gcs_training_data.client_install_runner)
+      - $(gcs_training_data.mount_runner)
+      - $(gcs_model_serving.client_install_runner)
+      - $(gcs_model_serving.mount_runner)
       - type: ansible-local
         destination: slurm_aperture.yml
         content: |
