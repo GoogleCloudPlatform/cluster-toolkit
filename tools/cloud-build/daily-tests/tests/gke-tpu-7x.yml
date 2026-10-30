@@ -31,6 +31,7 @@ cli_deployment_vars:
   authorized_cidr: "{{ build_ip.stdout }}/32"
   user_namespace: ai-workloads
   spot: "{{ enable_spot | default(true) }}"
+  system_node_pool_machine_type: n2d-standard-8
 custom_vars:
   project: "{{ project }}"
   user_namespace: ai-workloads

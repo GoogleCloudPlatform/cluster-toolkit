@@ -30,6 +30,7 @@ cli_deployment_vars:
   tpu_topology: "{{ tpu_topology }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   spot: "{{ enable_spot | default(true) }}"
+  system_node_pool_machine_type: n2d-standard-8
 custom_vars:
   project: "{{ project }}"
   expected_tpu_count: 4
