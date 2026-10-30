@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -3522,8 +3523,8 @@ func TestGeneratePathwaysManifest_DeploySPS(t *testing.T) {
 				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
 			}
 			assertSPSManifest(t, manifest, tc.sidecar, tc.ramdiskDir)
-			if got := spsEndpoint(job.WorkloadName); got != "sps-v5p-pathways-head-0-0.sps-v5p:29001" {
-				t.Errorf("spsEndpoint() = %q, want sps-v5p-pathways-head-0-0.sps-v5p:29001", got)
+			if got := fmt.Sprintf(spsEndpointFormat, job.WorkloadName); got != "sps-v5p-pathways-head-0-0.sps-v5p:29001" {
+				t.Errorf("spsEndpointFormat gives %q, want sps-v5p-pathways-head-0-0.sps-v5p:29001", got)
 			}
 		})
 	}

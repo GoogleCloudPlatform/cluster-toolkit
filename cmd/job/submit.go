@@ -372,8 +372,8 @@ func validateWorkloadNameLength(name string, isPathways bool) error {
 
 func validatePathwaysFlags(cmd *cobra.Command) error {
 	if isPathwaysJob {
-		if pathways.DeploySPS && pathways.Headless {
-			return fmt.Errorf("--pathways-deploy-sps and --pathways-headless cannot be used together")
+		if err := validateDeploySPSFlags(); err != nil {
+			return err
 		}
 		if pathways.GCSLocation == "" {
 			return fmt.Errorf("pathways-gcs-location is required when using --pathways")
@@ -388,6 +388,20 @@ func validatePathwaysFlags(cmd *cobra.Command) error {
 	}
 	if !reflect.DeepEqual(pathways, orchestrator.PathwaysJobDefinition{}) || len(pathwaysProxyEnv) > 0 || len(pathwaysServerEnv) > 0 || len(pathwaysWorkerEnv) > 0 || hasChangedPathwaysFlags(cmd) {
 		return fmt.Errorf("pathways flags specified but --pathways flag is missing")
+	}
+	return nil
+}
+
+// validateDeploySPSFlags rejects flags that have no effect on an SPS instance, which runs no workload.
+func validateDeploySPSFlags() error {
+	if !pathways.DeploySPS {
+		return nil
+	}
+	if pathways.Headless {
+		return fmt.Errorf("--pathways-deploy-sps and --pathways-headless cannot be used together")
+	}
+	if imageName != "" || baseImage != "" || buildContext != "" || commandToRun != "" {
+		return fmt.Errorf("--pathways-deploy-sps does not run a workload; remove --image, --base-image, --build-context and --command")
 	}
 	return nil
 }

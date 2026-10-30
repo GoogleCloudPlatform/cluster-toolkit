@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1582,18 +1583,21 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
 				return mockOrc
 			}
 
-			args := append([]string{
+			args := []string{
 				"submit",
 				"--pathways",
 				"--pathways-gcs-location", "gs://my-bucket",
 				"--name", "pw-restarts-default",
-				"--image", "busybox",
-				"--command", "echo hello",
 				"--compute-type", "n2-standard-4",
 				"--cluster", "test-cluster",
 				"--location", "us-central1-a",
 				"--project", "test-project",
-			}, tc.extraArgs...)
+			}
+			if !slices.Contains(tc.extraArgs, "--pathways-deploy-sps") {
+				// An SPS instance runs no workload, so it rejects --image and --command.
+				args = append(args, "--image", "busybox", "--command", "echo hello")
+			}
+			args = append(args, tc.extraArgs...)
 
 			_, err := executeCommand(JobCmd, args...)
 			if err != nil {
@@ -1711,4 +1715,32 @@ func TestSubmitCmd_DeployPathwaysSPS(t *testing.T) {
 			t.Errorf("got err = %v, want mutual exclusion error", err)
 		}
 	})
+}
+
+func TestSubmitCmd_DeployPathwaysSPSRejectsWorkloadFlags(t *testing.T) {
+	for _, workloadArgs := range [][]string{
+		{"--image", "us-docker.pkg.dev/my-project/my-repo/my-image:tag"},
+		{"--base-image", "python:3.11-slim"},
+		{"--build-context", "."},
+		{"--command", "python3 train.py"},
+	} {
+		t.Run("rejects pathways-deploy-sps with "+workloadArgs[0], func(t *testing.T) {
+			setupSubmitTestEnv(t)
+			args := append([]string{
+				"submit",
+				"--pathways",
+				"--pathways-deploy-sps",
+				"--name", "sps-v5p",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+				"--pathways-gcs-location", "gs://my-bucket/sps",
+				"--compute-type", "v5p-8",
+			}, workloadArgs...)
+			_, err := executeCommand(JobCmd, args...)
+			if err == nil || !strings.Contains(err.Error(), "--pathways-deploy-sps does not run a workload") {
+				t.Errorf("got err = %v, want workload flags error", err)
+			}
+		})
+	}
 }
