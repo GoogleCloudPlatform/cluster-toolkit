@@ -14,6 +14,30 @@
 
 - name: Run MTC test and ensure cleanup
   block:
+  - name: Get cluster credentials for MTC verification
+    delegate_to: localhost
+    ansible.builtin.command: >
+      gcloud container clusters get-credentials {{ deployment_name }}
+      --region {{ region }}
+      --project {{ (custom_vars | default({})).project | default(project) }}
+    changed_when: false
+
+  - name: Wait for MTC multitier-driver DaemonSet to become Ready
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      set -eo pipefail
+      DESIRED=$(kubectl get ds -n gke-managed-checkpointing -l k8s-app=high-scale-checkpointing -o jsonpath='{.items[0].status.desiredNumberScheduled}' 2>/dev/null || echo 0)
+      READY=$(kubectl get ds -n gke-managed-checkpointing -l k8s-app=high-scale-checkpointing -o jsonpath='{.items[0].status.numberReady}' 2>/dev/null || echo 0)
+      echo "desired=${DESIRED} ready=${READY}"
+      [ "${DESIRED:-0}" -gt 0 ] && [ "${READY:-0}" -eq "${DESIRED}" ]
+    args:
+      executable: /bin/bash
+    register: mtc_ds_ready
+    until: mtc_ds_ready.rc == 0
+    retries: 60
+    delay: 10
+    changed_when: false
+
   - name: Execute GCluster Job Submit with MTC enabled
     delegate_to: localhost
     ansible.builtin.shell: >-
@@ -25,7 +49,7 @@
       --name mtc-test-job
       --compute-type {{ (custom_vars | default({})).compute_type | default('n2d-standard-2') }}
       --image {{ (custom_vars | default({})).image | default('debian:bookworm-slim') }}
-      --command "grep -q /gke-mtc /proc/mounts"
+      --command 'set -eux; grep -E "\s/gke-mtc\s+tmpfs\s" /proc/mounts; rm -f /gke-mtc/replicator.yaml; printf "job-name: mtc-test-job\nframework: orbax\nassume-data-parallelism: 1\nnode-rank: 0\nnodes: 1\npeers-per-node: 1\nbackup-interval-minutes: 1\n" > /gke-mtc/replicator.yaml; for i in $(seq 1 30); do [ ! -f /gke-mtc/replicator.yaml ] && break; sleep 2; done; test ! -f /gke-mtc/replicator.yaml; mkdir -p /gke-mtc/step-1; dd if=/dev/urandom of=/gke-mtc/step-1/ckpt.bin bs=1M count=4 status=none; sha256sum /gke-mtc/step-1/ckpt.bin > /gke-mtc/step-1/ckpt.bin.sha256; sha256sum -c /gke-mtc/step-1/ckpt.bin.sha256; rm -rf /gke-mtc/step-1'
       --gke-mtc-enabled
       --gke-mtc-ramdisk-dir /gke-mtc
       --skip-prereqs

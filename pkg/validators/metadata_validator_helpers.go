@@ -24,20 +24,25 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-// getNestedValue retrieves a cty.Value from a Dict using a dot-separated path.
-func getNestedValue(d config.Dict, path string) (cty.Value, bool) {
+// getNestedValueEval retrieves a cty.Value from a Dict using a dot-separated path,
+// evaluating intermediate expression values against the blueprint when encountered.
+func getNestedValueEval(bp config.Blueprint, d config.Dict, path string) (cty.Value, bool) {
 	parts := strings.Split(path, ".")
 	currentVal := d.AsObject()
 
 	for i, part := range parts {
-		if !currentVal.Type().IsObjectType() && !currentVal.Type().IsMapType() {
+		if _, isExpr := config.IsExpressionValue(currentVal); isExpr {
+			if evaledVal, err := bp.Eval(currentVal); err == nil {
+				currentVal = evaledVal
+			}
+		}
+		if currentVal == cty.NilVal || !currentVal.IsKnown() || currentVal.IsNull() {
 			return cty.NilVal, false
 		}
-
-		if !currentVal.Type().HasAttribute(part) {
+		currentVal, _ = currentVal.Unmark()
+		if !currentVal.Type().IsObjectType() || !currentVal.Type().HasAttribute(part) {
 			return cty.NilVal, false
 		}
-
 		val := currentVal.GetAttr(part)
 		if i == len(parts)-1 {
 			return val, true
@@ -47,19 +52,53 @@ func getNestedValue(d config.Dict, path string) (cty.Value, bool) {
 	return cty.NilVal, false
 }
 
+// getNestedValue retrieves a cty.Value from a Dict using a dot-separated path.
+func getNestedValue(d config.Dict, path string) (cty.Value, bool) {
+	return getNestedValueEval(config.Blueprint{}, d, path)
+}
+
+func resolveExplicitSettingPath(bp config.Blueprint, groupIndex int, modIdx int, mod config.Module, settingName string, hasSetting bool) (config.Path, bool) {
+	settingsPath := config.Root.Groups.At(groupIndex).Modules.At(modIdx).Settings
+	path := settingsPath.Dot(settingName)
+	if bp.YamlCtx == nil {
+		return path, hasSetting
+	}
+	if _, ok := bp.YamlCtx.Pos(path); ok {
+		return path, true
+	}
+	if !hasSetting {
+		return path, false
+	}
+	parts := strings.Split(settingName, ".")
+	for i := len(parts) - 1; i >= 1; i-- {
+		prefixPath := settingsPath.Dot(strings.Join(parts[:i], "."))
+		if _, ok := bp.YamlCtx.Pos(prefixPath); ok {
+			return prefixPath, true
+		}
+	}
+	return path, mod.Settings.Has(parts[0]) && len(config.IsProductOfModuleUse(mod.Settings.Get(parts[0]))) > 0
+}
+
 // evaluateAndFlatten converts a cty.Value into a slice of cty.Value elements.
-// If it's a list/tuple, returns elements; otherwise returns single-item slice.
+// If it is a list, tuple, or set, returns its elements; otherwise returns a single-item slice.
 func evaluateAndFlatten(val cty.Value) []cty.Value {
-	var values []cty.Value
-	if val.Type().IsListType() || val.Type().IsTupleType() {
+	if val == cty.NilVal || !val.IsKnown() || val.IsNull() {
+		return []cty.Value{val}
+	}
+	val, _ = val.Unmark()
+	if val.Type().IsListType() || val.Type().IsTupleType() || val.Type().IsSetType() {
+		var values []cty.Value
 		for it := val.ElementIterator(); it.Next(); {
 			_, v := it.Element()
+			if v.IsKnown() {
+				v, _ = v.UnmarkDeep()
+			}
 			values = append(values, v)
 		}
-	} else {
-		values = append(values, val)
+		return values
 	}
-	return values
+	val, _ = val.UnmarkDeep()
+	return []cty.Value{val}
 }
 
 // getModuleSettingValues retrieves a cty.Value from module settings using a dot-separated path,
@@ -67,47 +106,30 @@ func evaluateAndFlatten(val cty.Value) []cty.Value {
 func getModuleSettingValues(bp config.Blueprint, group config.Group, modIdx int, mod config.Module, settingName string) ([]cty.Value, config.Path, error) {
 	var nilPath config.Path
 
-	// Determine canonical path for this module.setting in the blueprint.
 	groupIndex := bp.GroupIndex(group.Name)
-	path := config.Root.Groups.At(groupIndex).Modules.At(modIdx).Settings.Dot(settingName)
+	val, hasSetting := getNestedValueEval(bp, mod.Settings, settingName)
+	path, isExplicitSetting := resolveExplicitSettingPath(bp, groupIndex, modIdx, mod, settingName, hasSetting)
 
 	// If the setting is omitted from the settings block, check if it's implicitly bound
 	// to a global variable with the exact same name declared in the vars block.
-	isExplicitSetting := false
-	if bp.YamlCtx != nil {
-		_, isExplicitSetting = bp.YamlCtx.Pos(path)
-	} else {
-		_, isExplicitSetting = getNestedValue(mod.Settings, settingName)
-	}
-
-	if !isExplicitSetting && bp.Vars.Has(settingName) {
-		val := bp.Vars.Get(settingName)
-		if evaledVal, err := bp.Eval(val); err == nil {
-			val = evaledVal
+	if !isExplicitSetting {
+		if varVal, ok := getNestedValueEval(bp, bp.Vars, settingName); ok {
+			if evaledVal, err := bp.Eval(varVal); err == nil {
+				varVal = evaledVal
+			}
+			return evaluateAndFlatten(varVal), config.Root.Vars.Dot(settingName), nil
 		}
-		values := evaluateAndFlatten(val)
-		varPath := config.Root.Vars.Dot(settingName)
-		return values, varPath, nil
+		return nil, nilPath, fmt.Errorf("setting %q not present in blueprint YAML for module %q", settingName, mod.ID)
 	}
 
-	// Fallback to explicit settings extraction
-	if bp.YamlCtx != nil {
-		if !isExplicitSetting {
-			return nil, nilPath, fmt.Errorf("setting %q not present in blueprint YAML for module %q", settingName, mod.ID)
-		}
-	}
-
-	val, ok := getNestedValue(mod.Settings, settingName)
-	if !ok {
+	if !hasSetting {
 		return nil, nilPath, fmt.Errorf("setting %q not present in blueprint YAML for module %q", settingName, mod.ID)
 	}
 
 	if evaledVal, err := bp.Eval(val); err == nil {
 		val = evaledVal
 	}
-	values := evaluateAndFlatten(val)
-
-	return values, path, nil
+	return evaluateAndFlatten(val), path, nil
 }
 
 // parseStringList normalizes an input that may be a single string, []interface{} or nil into []string.
@@ -240,33 +262,37 @@ func parseBoolInput(inputs map[string]interface{}, key string, defaultVal bool) 
 	return b, nil
 }
 
-// isVarSet returns true if the value is known, non-null, and non-empty (positive number, non-empty string, true bool, or non-empty collection).
+func isSingleValSet(val cty.Value) bool {
+	if val == cty.NilVal || val.IsNull() {
+		return false
+	}
+	if !val.IsKnown() {
+		_, isExpr := config.IsExpressionValue(val)
+		return isExpr || len(config.IsProductOfModuleUse(val)) > 0
+	}
+	val, _ = val.Unmark()
+	switch val.Type() {
+	case cty.String:
+		return val.AsString() != ""
+	case cty.Number:
+		return val.AsBigFloat().Sign() > 0
+	case cty.Bool:
+		return val.True()
+	default:
+		// For lists, maps, and sets, consider them "not set" if they are empty.
+		return val.LengthInt() > 0
+	}
+}
+
+// isVarSet returns true if the value is known (or a dynamic expression/module use reference), non-null,
+// and non-empty (positive number, non-empty string, true bool, or non-empty collection).
 func isVarSet(values []cty.Value) bool {
 	if len(values) == 0 {
 		return false
 	}
 	for _, val := range values {
-		if val.IsNull() || !val.IsKnown() {
+		if !isSingleValSet(val) {
 			return false
-		}
-		switch val.Type() {
-		case cty.String:
-			if val.AsString() == "" {
-				return false
-			}
-		case cty.Number:
-			if val.AsBigFloat().Sign() <= 0 {
-				return false
-			}
-		case cty.Bool:
-			if val.False() {
-				return false
-			}
-		default:
-			// For lists, maps, and sets, consider them "not set" if they are empty.
-			if val.LengthInt() == 0 {
-				return false
-			}
 		}
 	}
 	return true
@@ -324,7 +350,12 @@ func ValuesMatch(original []cty.Value, expected []cty.Value) bool {
 		if !isOriginalSet && !isExpectedSet {
 			continue
 		}
-		if !originalVal.Equals(expectedVal).True() {
+		if isOriginalSet != isExpectedSet || !originalVal.IsKnown() || !expectedVal.IsKnown() {
+			return false
+		}
+		origUnmarked, _ := originalVal.UnmarkDeep()
+		expUnmarked, _ := expectedVal.UnmarkDeep()
+		if !origUnmarked.Equals(expUnmarked).True() {
 			return false
 		}
 	}
@@ -333,12 +364,11 @@ func ValuesMatch(original []cty.Value, expected []cty.Value) bool {
 
 // formatValue formats a cty.Value slice for display in error messages.
 func formatValue(vals []cty.Value) string {
-	if len(vals) == 0 {
+	if len(vals) == 0 || vals[0] == cty.NilVal || vals[0].IsNull() {
 		return "null"
 	}
-	val := vals[0]
-	if val.IsNull() {
-		return "null"
+	if _, isExpr := config.IsExpressionValue(vals[0]); !isExpr && !vals[0].IsKnown() {
+		return "unknown"
 	}
-	return string(config.TokensForValue(val).Bytes())
+	return string(config.TokensForValue(vals[0]).Bytes())
 }

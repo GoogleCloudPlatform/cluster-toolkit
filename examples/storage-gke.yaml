@@ -27,6 +27,25 @@ vars:
   # Replace 'your-pool-balanced' and 'your-pool-throughput' with your storage pool names.
   hyperdisk_balanced_storage_pool: "projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-balanced"
   hyperdisk_throughput_storage_pool: "projects/$(vars.project_id)/zones/$(vars.zone)/storagePools/your-pool-throughput"
+  # Optional overrides (defaults shown)
+  # Machine type for the GKE system node pool.
+  system_node_pool_machine_type: n2d-standard-4
+  # Machine type for the "debug" node pool.
+  debug_pool_machine_type: n2d-standard-2
+  # Fixed node count for the "debug" node pool.
+  debug_pool_static_node_count: 2
+  # Machine type for the "local-ssd" node pool.
+  local_ssd_pool_machine_type: n2d-standard-2
+  # Fixed node count for the "local-ssd" node pool.
+  local_ssd_pool_static_node_count: 1
+  # Machine type for the "hp-pool" (Hyperdisk storage pool) node pool.
+  hp_pool_machine_type: c3d-standard-8
+  # Fixed node count for the "hp-pool" (Hyperdisk storage pool) node pool.
+  hp_pool_static_node_count: 1
+  # Capacity in GB of the Hyperdisk Balanced persistent volume backed by a storage pool.
+  hyperdisk_balanced_capacity_gb: 20
+  # Capacity in GB of the Hyperdisk Throughput persistent volume backed by a storage pool.
+  hyperdisk_throughput_capacity_gb: 5000
 
 deployment_groups:
 - group: primary
@@ -79,7 +98,7 @@ deployment_groups:
       configure_workload_identity_sa: true  # needed when using GCS
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
-      system_node_pool_machine_type: n2d-standard-4
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
       system_node_pool_zones: [$(vars.zone)]
       master_authorized_networks:
       - display_name: deployment-machine
@@ -92,9 +111,9 @@ deployment_groups:
     settings:
       name: debug
       zones: [$(vars.zone)]
-      machine_type: n2d-standard-2
+      machine_type: $(vars.debug_pool_machine_type)
       threads_per_core: 2
-      static_node_count: 2
+      static_node_count: $(vars.debug_pool_static_node_count)
 
   ### Google Cloud Storage ###
 
@@ -104,8 +123,11 @@ deployment_groups:
       local_mount: /data
       random_suffix: true
       force_destroy: true
+      # Hierarchical namespace is required for MTC backup and replication.
+      enable_hierarchical_namespace: true
       object_users:
         gke_node_sa: "serviceAccount:$(gke_cluster.node_service_account)"
+        mtc_sa: $(gke_cluster.mtc_service_account_member)
       # Refer https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache for parameter details
       anywhere_cache:
         zones: [$(vars.zone)]
@@ -127,12 +149,9 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [gke_cluster]
     settings:
-      apply_manifests:
-      - name: checkpoint-configuration
-        source: $(ghpc_stage("../modules/management/kubectl-apply/manifests/checkpoint-configuration.yaml.tftpl"))
-        template_vars:
-          inMemoryVolumeSize: "50Gi"
-          cloudStorageBucketName: $(data-bucket.gcs_bucket_name)
+      checkpoint_configuration:
+        in_memory_volume_size: "50Gi"
+        cloud_storage_bucket_name: $(data-bucket.gcs_bucket_name)
 
   - id: data-bucket-pv
     source: modules/file-system/gke-persistent-volume
@@ -211,9 +230,9 @@ deployment_groups:
     settings:
       name: local-ssd
       zones: [$(vars.zone)]
-      machine_type: n2d-standard-2
+      machine_type: $(vars.local_ssd_pool_machine_type)
       threads_per_core: 2
-      static_node_count: 1
+      static_node_count: $(vars.local_ssd_pool_static_node_count)
       local_ssd_count_ephemeral_storage: 1
 
   - id: ephemeral-storage-job
@@ -268,11 +287,11 @@ deployment_groups:
     settings:
       name: hp-pool
       zones: [$(vars.zone)]
-      machine_type: c3d-standard-8
+      machine_type: $(vars.hp_pool_machine_type)
       threads_per_core: 2
       disk_type: hyperdisk-balanced
       disk_storage_pool: $(vars.hyperdisk_balanced_storage_pool)
-      static_node_count: 1
+      static_node_count: $(vars.hp_pool_static_node_count)
 
   - id: gke-storage-hp
     source: modules/file-system/gke-storage
@@ -280,7 +299,7 @@ deployment_groups:
     settings:
       storage_type: hyperdisk-balanced
       access_mode: ReadWriteOnce
-      capacity_gb: 20
+      capacity_gb: $(vars.hyperdisk_balanced_capacity_gb)
       sc_reclaim_policy: Delete
       disk_storage_pool: $(vars.hyperdisk_balanced_storage_pool)
 
@@ -290,6 +309,6 @@ deployment_groups:
     settings:
       storage_type: hyperdisk-throughput
       access_mode: ReadWriteOnce
-      capacity_gb: 5000
+      capacity_gb: $(vars.hyperdisk_throughput_capacity_gb)
       sc_reclaim_policy: Delete
       disk_storage_pool: $(vars.hyperdisk_throughput_storage_pool)

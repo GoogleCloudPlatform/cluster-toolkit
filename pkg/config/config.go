@@ -260,12 +260,13 @@ type ModuleIDs []ModuleID
 
 // Module stores YAML definition of an HPC cluster component defined in a blueprint
 type Module struct {
-	Source   string
-	Kind     ModuleKind
-	ID       ModuleID
-	Use      ModuleIDs                 `yaml:"use,omitempty"`
-	Outputs  []modulereader.OutputInfo `yaml:"outputs,omitempty"`
-	Settings Dict                      `yaml:"settings,omitempty"`
+	Source             string
+	Kind               ModuleKind
+	ID                 ModuleID
+	Use                ModuleIDs                 `yaml:"use,omitempty"`
+	Outputs            []modulereader.OutputInfo `yaml:"outputs,omitempty"`
+	Settings           Dict                      `yaml:"settings,omitempty"`
+	ReconfigureIgnores map[string][]string       `yaml:"reconfigure_ignores,omitempty"`
 	// DEPRECATED fields, keep in the struct for backwards compatibility
 	RequiredApis     interface{} `yaml:"required_apis,omitempty"`
 	WrapSettingsWith interface{} `yaml:"wrapsettingswith,omitempty"`
@@ -276,12 +277,33 @@ func (m *Module) Clone() Module {
 	// copy slices
 	c.Use = slices.Clone(m.Use)
 	c.Outputs = slices.Clone(m.Outputs)
+	if m.ReconfigureIgnores != nil {
+		c.ReconfigureIgnores = make(map[string][]string, len(m.ReconfigureIgnores))
+		for k, v := range m.ReconfigureIgnores {
+			c.ReconfigureIgnores[k] = slices.Clone(v)
+		}
+	}
 	return c
+}
+
+// Info returns the ModuleInfo for the module without panicking.
+func (m Module) Info() (modulereader.ModuleInfo, error) {
+	if m.Source == "" {
+		return modulereader.ModuleInfo{}, EmptyModuleSource
+	}
+	kind := m.Kind.String()
+	if kind == "" {
+		kind = TerraformKind.String()
+	}
+	if kind != TerraformKind.String() && kind != PackerKind.String() {
+		return modulereader.ModuleInfo{}, InvalidModuleKind
+	}
+	return modulereader.GetModuleInfo(m.Source, kind)
 }
 
 // InfoOrDie returns the ModuleInfo for the module or panics
 func (m Module) InfoOrDie() modulereader.ModuleInfo {
-	mi, err := modulereader.GetModuleInfo(m.Source, m.Kind.String())
+	mi, err := m.Info()
 	if err != nil {
 		panic(err)
 	}
@@ -318,6 +340,9 @@ type Blueprint struct {
 	AddCreatorLabel bool `yaml:"-"`
 	// CreatorUsername is the username to use for the creator label
 	CreatorUsername string `yaml:"-"`
+	// subblockIO asks the user and saves sub-block maps chosen by gcluster
+	// (runtime-only, not serialized). Nil means read-only (gcluster expand).
+	subblockIO *SubblockIO
 }
 
 func (bp *Blueprint) Clone() Blueprint {

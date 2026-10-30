@@ -549,63 +549,94 @@ func TestEnsureApplicationDefaultCredentials_Failure(t *testing.T) {
 func TestIsDockerCredsConfigured(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
+	t.Setenv("USERPROFILE", tempDir) // os.UserHomeDir on Windows
+	t.Setenv("DOCKER_CONFIG", "")
 
 	dockerDir := filepath.Join(tempDir, ".docker")
 	configPath := filepath.Join(dockerDir, "config.json")
+	const registry = "us-central1-docker.pkg.dev"
 
 	tests := []struct {
 		name          string
 		configContent string
 		shouldExist   bool
-		region        string
 		expected      bool
 	}{
 		{
 			name:        "No config file",
 			shouldExist: false,
-			region:      "us-central1",
 			expected:    false,
 		},
 		{
 			name:          "Corrupted config file",
 			configContent: "invalid",
 			shouldExist:   true,
-			region:        "us-central1",
 			expected:      false,
 		},
 		{
 			name:          "CredsStore set to gcloud",
 			configContent: `{"credsStore": "gcloud"}`,
 			shouldExist:   true,
-			region:        "us-central1",
 			expected:      true,
 		},
 		{
-			name:          "CredHelpers configured correctly",
+			name:          "CredHelpers configured for gcr.io and the regional registry",
 			configContent: `{"credHelpers": {"gcr.io": "gcloud", "us-central1-docker.pkg.dev": "gcloud"}}`,
 			shouldExist:   true,
-			region:        "us-central1",
 			expected:      true,
 		},
 		{
-			name:          "CredHelpers missing gcr.io",
+			name:          "CredHelpers configured for the regional registry only",
 			configContent: `{"credHelpers": {"us-central1-docker.pkg.dev": "gcloud"}}`,
 			shouldExist:   true,
-			region:        "us-central1",
-			expected:      false,
+			expected:      true,
 		},
 		{
 			name:          "CredHelpers missing regional registry",
 			configContent: `{"credHelpers": {"gcr.io": "gcloud"}}`,
 			shouldExist:   true,
-			region:        "us-central1",
 			expected:      false,
 		},
 		{
-			name:          "CredHelpers wrong helper",
-			configContent: `{"credHelpers": {"gcr.io": "desktop", "us-central1-docker.pkg.dev": "gcloud"}}`,
+			name:          "CredHelpers wrong helper for the regional registry",
+			configContent: `{"credHelpers": {"gcr.io": "gcloud", "us-central1-docker.pkg.dev": "desktop"}}`,
 			shouldExist:   true,
-			region:        "us-central1",
+			expected:      false,
+		},
+		{
+			name:          "CredHelpers overrides CredsStore for the regional registry",
+			configContent: `{"credsStore": "gcloud", "credHelpers": {"us-central1-docker.pkg.dev": "desktop"}}`,
+			shouldExist:   true,
+			expected:      false,
+		},
+		{
+			name:          "CredHelpers set to gcr for the regional registry",
+			configContent: `{"credHelpers": {"us-central1-docker.pkg.dev": "gcr"}}`,
+			shouldExist:   true,
+			expected:      true,
+		},
+		{
+			name:          "CredsStore set to gcr",
+			configContent: `{"credsStore": "gcr"}`,
+			shouldExist:   true,
+			expected:      true,
+		},
+		{
+			name:          "Auths entry for the regional registry",
+			configContent: `{"auths": {"us-central1-docker.pkg.dev": {"auth": "b2F1dGgyYWNjZXNzdG9rZW46dG9rZW4="}}}`,
+			shouldExist:   true,
+			expected:      true,
+		},
+		{
+			name:          "Auths entry with https prefix for the regional registry",
+			configContent: `{"auths": {"https://us-central1-docker.pkg.dev": {"auth": "b2F1dGgyYWNjZXNzdG9rZW46dG9rZW4="}}}`,
+			shouldExist:   true,
+			expected:      true,
+		},
+		{
+			name:          "Empty auths entry for the regional registry",
+			configContent: `{"auths": {"us-central1-docker.pkg.dev": {}}}`,
+			shouldExist:   true,
 			expected:      false,
 		},
 	}
@@ -623,7 +654,7 @@ func TestIsDockerCredsConfigured(t *testing.T) {
 				}
 			}
 
-			got := isDockerCredsConfigured(tt.region)
+			got := isDockerCredsConfigured(registry)
 			if got != tt.expected {
 				t.Errorf("isDockerCredsConfigured() = %v, want %v", got, tt.expected)
 			}
@@ -631,51 +662,130 @@ func TestIsDockerCredsConfigured(t *testing.T) {
 	}
 }
 
-func TestEnsurePrerequisites_DockerCreds(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
+// stubPrereqCommands makes every local/gcloud command used by the prerequisite
+// checks succeed, points HOME and DOCKER_CONFIG at empty directories (no cached
+// state or Docker credentials on any OS), and returns the command lines executed.
+func stubPrereqCommands(t *testing.T) *[]string {
+	t.Helper()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("DOCKER_CONFIG", t.TempDir())
+	useFileStore(t)
 
+	executed := new([]string)
 	origExecuteCommand := shell.ExecuteCommandWithTimeout
-	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
-
+	t.Cleanup(func() { shell.ExecuteCommandWithTimeout = origExecuteCommand })
 	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		*executed = append(*executed, strings.Join(append([]string{name}, args...), " "))
 		if name == "gcloud" && len(args) > 1 && args[0] == "auth" && args[1] == "list" {
 			return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
 		}
 		if name == "gcloud" && len(args) > 1 && args[0] == "services" && args[1] == "list" {
-			return shell.CommandResult{ExitCode: 0, Stdout: "artifactregistry.googleapis.com"}
+			return shell.CommandResult{ExitCode: 0, Stdout: "ENABLED"}
 		}
 		return shell.CommandResult{ExitCode: 0}
 	}
 
 	origGetADCSetupCommand := getADCSetupCommandFunc
-	defer func() { getADCSetupCommandFunc = origGetADCSetupCommand }()
+	t.Cleanup(func() { getADCSetupCommandFunc = origGetADCSetupCommand })
 	getADCSetupCommandFunc = func() string { return "" }
+	return executed
+}
 
-	origStore := store
-	defer func() { store = origStore }()
-	store = &MockPrereqStore{
-		State: PrereqState{
-			LastCheckedTimestamp: time.Now().Add(-48 * time.Hour), // Stale
-		},
+// writeDockerConfig writes a Docker config with a gcloud credential helper for the
+// given registries into the DOCKER_CONFIG directory set by stubPrereqCommands.
+func writeDockerConfig(t *testing.T, registries ...string) {
+	t.Helper()
+	helpers := map[string]string{}
+	for _, r := range registries {
+		helpers[r] = "gcloud"
 	}
+	data, err := json.Marshal(map[string]any{"credHelpers": helpers})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(os.Getenv("DOCKER_CONFIG"), "config.json"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func ranArtifactRegistryCheck(executed []string) bool {
+	for _, c := range executed {
+		if strings.HasPrefix(c, "gcloud services list") {
+			return true
+		}
+	}
+	return false
+}
+
+func TestEnsureBuildPrerequisites_MissingDockerCreds(t *testing.T) {
+	stubPrereqCommands(t)
 
 	cmd := &cobra.Command{}
-	projectID := "test-project"
-	location := "us-central1-a"
-
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 
-	err := ensurePrerequisites(cmd, projectID, location)
+	err := ensureBuildPrerequisites(cmd, "test-project", "us-central1-a")
 	if err == nil {
-		t.Error("expected error because prerequisites are missing, got nil")
+		t.Fatalf("expected an error without Docker credentials, got nil\noutput:\n%s", buf.String())
+	}
+	output := buf.String()
+	if want := "gcloud auth configure-docker us-central1-docker.pkg.dev --quiet"; !strings.Contains(output, want) {
+		t.Errorf("expected output to contain %q, got:\n%s", want, output)
+	}
+	if strings.Contains(output, "gcr.io") {
+		t.Errorf("a Crane build only pushes to Artifact Registry; output must not ask for gcr.io credentials:\n%s", output)
+	}
+}
+
+// With a fresh state the Artifact Registry API result is reused, but the Docker
+// config is read for the current cluster's region on every build.
+func TestEnsureBuildPrerequisites_FreshState(t *testing.T) {
+	tests := []struct {
+		name           string
+		dockerRegistry string // registry with a gcloud helper; "" for no Docker config
+		wantErr        bool
+	}{
+		{name: "credentials for the cluster's region skip all checks", dockerRegistry: "us-west4-docker.pkg.dev"},
+		{name: "credentials for another region only are not enough", dockerRegistry: "us-central1-docker.pkg.dev", wantErr: true},
+		{name: "no Docker config", wantErr: true},
 	}
 
-	output := buf.String()
-	expectedCmd := "gcloud auth configure-docker us-central1-docker.pkg.dev --quiet"
-	if !strings.Contains(output, expectedCmd) {
-		t.Errorf("expected output to contain %q, but got:\n%s", expectedCmd, output)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			executed := stubPrereqCommands(t)
+			if tt.dockerRegistry != "" {
+				writeDockerConfig(t, tt.dockerRegistry)
+			}
+
+			store.Save(PrereqState{
+				GCloudSDKInstalled:           true,
+				GCloudProjectConfigured:      true,
+				GCloudAuthenticated:          true,
+				ADCConfigured:                true,
+				KubectlInstalled:             true,
+				GKEGCloudAuthPluginInstalled: true,
+				ArtifactRegistryAPIEnabled:   true,
+				LastCheckedProjectID:         "test-project",
+				LastCheckedTimestamp:         time.Now(),
+			})
+
+			cmd := &cobra.Command{}
+			var buf bytes.Buffer
+			cmd.SetOut(&buf)
+
+			err := ensureBuildPrerequisites(cmd, "test-project", "us-west4-a")
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ensureBuildPrerequisites() error = %v, wantErr %v\noutput:\n%s", err, tt.wantErr, buf.String())
+			}
+			if got := strings.Contains(buf.String(), "gcloud auth configure-docker us-west4-docker.pkg.dev --quiet"); got != tt.wantErr {
+				t.Errorf("remediation for us-west4 shown = %v, want %v\noutput:\n%s", got, tt.wantErr, buf.String())
+			}
+			if ran := len(*executed) > 0; ran != tt.wantErr {
+				t.Errorf("executed %v; want checks to run = %v", *executed, tt.wantErr)
+			}
+		})
 	}
 }
 

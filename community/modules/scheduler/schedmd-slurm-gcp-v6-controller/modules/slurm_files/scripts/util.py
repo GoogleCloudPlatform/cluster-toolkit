@@ -129,6 +129,8 @@ if ENV_CONFIG_YAML:
 else:
     CONFIG_FILE = Path(__file__).with_name("config.yaml")
 API_REQ_LIMIT = 2000
+# Wait time after a 409 "already exists" for a concurrent GCE resource insert to finish.
+ALREADY_EXISTS_SETTLE_SEC = 5
 
 
 def mkdirp(path: Path) -> None:
@@ -875,7 +877,7 @@ def _fetch_config(old_hash: Optional[str], bucket: Optional[str] = None) -> Opti
         return None
 
     def _download(bs) -> List[Any]:
-        return [yaml.safe_load(b.download_as_text()) for b in bs]
+        return [_yaml_load(b.download_as_text()) for b in bs]
 
     return _assemble_config(
         core=_download([blobs.core])[0],
@@ -897,7 +899,7 @@ def _fetch_mounted_config() -> NSDict:
         file_yaml=[]
         for file in files:
             with open(file, "r") as f:
-                file_yaml.append(yaml.safe_load(f))
+                file_yaml.append(_yaml_load(f.read()))
         return file_yaml
 
     return _assemble_config(
@@ -1675,7 +1677,8 @@ def host_lookup(host_name: str) -> str:
     return socket.gethostbyname(host_name)
 
 
-class Dumper(yaml.SafeDumper):
+# libyaml when available, same output as the pure Python dumper at a fraction of the time
+class Dumper(getattr(yaml, "CSafeDumper", yaml.SafeDumper)):  # type: ignore
     """Add representers for pathlib.Path and NSDict for yaml serialization"""
 
     def __init__(self, *args, **kwargs):
@@ -2527,7 +2530,7 @@ class Lookup:
         else:
             job_state = None
 
-        if match := re.search(r"ReqNodeList=([^ ]+)", job_info):
+        if match := re.search(r"ReqNodeList=(\S+)", job_info):
             required_nodes = match.group(1)
         else:
             required_nodes = None
@@ -2538,7 +2541,11 @@ class Lookup:
     def get_jobs(self) -> List[Job]:
         res = run(f"{self.scontrol} show jobs", timeout=30)
 
-        return [self._parse_job_info(job) for job in res.stdout.split("\n\n")[:-1]]
+        return [
+            self._parse_job_info(job)
+            for job in re.split(r"\n\n+(?=JobId=\d+)", res.stdout.strip())
+            if job.startswith("JobId=")
+        ]
 
     @lru_cache
     def job(self, job_id: int) -> Optional[Job]:
@@ -2717,11 +2724,6 @@ class Lookup:
                 type="tpu7x",
                 tpus_per_node=4,
             )
-        elif family.startswith("tpu7"):
-            return TpuInfo(
-                type="7",
-                tpus_per_node=4,
-            )
         else:
             raise ValueError(
                 f"Unsupported TPU machine type family: {family}"
@@ -2834,8 +2836,12 @@ class Lookup:
 
 _lkp: Optional[Lookup] = None
 
+def _yaml_load(text: str) -> Any:
+    # libyaml when available, the pure Python loader takes seconds on a big config
+    return yaml.load(text, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
 def _load_config() -> NSDict:
-    return NSDict(yaml.safe_load(CONFIG_FILE.read_text()))
+    return NSDict(_yaml_load(CONFIG_FILE.read_text()))
 
 def lookup() -> Lookup:
     global _lkp

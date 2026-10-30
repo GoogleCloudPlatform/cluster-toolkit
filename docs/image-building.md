@@ -172,5 +172,4 @@ deployment_groups:
     settings:
       use_iap: true
       subnetwork: $(network1.subnetwork_self_link)
-      ...
 ```

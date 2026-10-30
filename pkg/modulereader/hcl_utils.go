@@ -52,11 +52,10 @@ func (s slashWrapFS) ReadDir(dirname string) ([]os.FileInfo, error) {
 	return s.FS.ReadDir(sourcereader.ToSlash(dirname))
 }
 
-// getHCLInfo is wrapped by SourceReader interface which supports multiple
-// sources and stores remote modules locally, so the given source parameter to
-// getHCLInfo is only a local path.
-func loadTFConfigModule(source string) (*tfconfig.Module, error) {
-	if sourcereader.IsEmbeddedPath(source) {
+// LoadTFConfigModule loads a terraform module configuration using tfconfig.
+// It supports both embedded modules via sourcereader.ModuleFS and local filesystem modules.
+func LoadTFConfigModule(source string) (*tfconfig.Module, error) {
+	if sourcereader.IsEmbeddedPath(source) && sourcereader.ModuleFS != nil {
 		source = sourcereader.ToSlash(source)
 		wrapFS := slashWrapFS{tfconfig.WrapFS(sourcereader.ModuleFS)}
 		if !tfconfig.IsModuleDirOnFilesystem(wrapFS, source) {
@@ -90,7 +89,7 @@ func loadTFConfigModule(source string) (*tfconfig.Module, error) {
 }
 
 func getHCLInfo(source string) (ModuleInfo, error) {
-	module, err := loadTFConfigModule(source)
+	module, err := LoadTFConfigModule(source)
 	if err != nil {
 		return ModuleInfo{}, err
 	}
@@ -202,7 +201,7 @@ func ReadHclAttributes(file string) (map[string]cty.Value, error) {
 // Paths returned are relative to the toolkit root if the module is embedded. For non-embedded modules,
 // paths are resolved relative to the input source path.
 func GetLocalDependencies(source string) ([]string, error) {
-	module, err := loadTFConfigModule(source)
+	module, err := LoadTFConfigModule(source)
 	if err != nil {
 		return nil, err
 	}

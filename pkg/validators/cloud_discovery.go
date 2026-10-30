@@ -52,37 +52,52 @@ func getSoftWarningMessage(err error, validatorName, projectID, apiName, permiss
 	return "", false
 }
 
-// 1. Helper for cty resolution
+// resolveStringSetting evaluates val against bp and safely returns its string value,
+// or "" if the value is nil, null, unknown, or not a string.
 func resolveStringSetting(bp config.Blueprint, val cty.Value) string {
-	v := val
-	if resolved, err := bp.Eval(v); err == nil {
-		v = resolved
-	}
-	if v != cty.NilVal && !v.IsNull() && v.Type() == cty.String {
-		return v.AsString()
-	}
-	return ""
+	s, _ := evalTrimmedString(bp, val)
+	return s
 }
 
-// extractZones converts a cty.Value (String, List, Set, or Tuple) into a string slice.
-// This helper removes complex type-checking branches from the main resolution logic.
+// extractZones converts a cty.Value (String, List, Set, or Tuple) into a string slice,
+// skipping null, unknown, or whitespace-only elements.
 func extractZones(val cty.Value) ([]string, error) {
-	if val.IsNull() || !val.IsKnown() {
+	if val == cty.NilVal {
+		return nil, nil
+	}
+	u, _ := val.Unmark()
+	if u.IsNull() || !u.IsKnown() {
 		return nil, nil
 	}
 
 	var zones []string
-	// evaluateAndFlatten handles single strings, lists, and tuples for us
-	for _, v := range evaluateAndFlatten(val) {
-		if v.Type() == cty.String {
-			zones = append(zones, v.AsString())
-		} else {
-			// Reuse toolkit standard error generation for non-string types
-			_, err := inputsAsStrings(config.NewDict(map[string]cty.Value{"zone": v}))
-			return nil, err
+	for _, elem := range evaluateAndFlatten(u) {
+		if elem == cty.NilVal {
+			continue
+		}
+		v, _ := elem.Unmark()
+		if v.IsNull() || !v.IsKnown() {
+			continue
+		}
+		if v.Type() != cty.String {
+			return nil, fmt.Errorf("validator inputs must be strings, zone is a %s", v.Type().FriendlyName())
+		}
+		if s := strings.TrimSpace(v.AsString()); s != "" {
+			zones = append(zones, s)
 		}
 	}
 	return zones, nil
+}
+
+// isZoneSettingKey returns (isPlural, ok) indicating whether key names a zone setting.
+func isZoneSettingKey(key string) (bool, bool) {
+	if key == "zones" || strings.HasSuffix(key, "_zones") {
+		return true, true
+	}
+	if key == "zone" || strings.HasSuffix(key, "_zone") {
+		return false, true
+	}
+	return false, false
 }
 
 // resolveZones identifies all target zones for a module by scanning its settings.
@@ -92,10 +107,8 @@ func resolveZones(blueprint config.Blueprint, module *config.Module, globalZone 
 	plural, singular := make(map[string]bool), make(map[string]bool)
 
 	for key, val := range module.Settings.Items() {
-		// Identify settings ending in 'zone' or 'zones'.
-		// strings.HasSuffix also matches the words "zone" and "zones" themselves.
-		isPlural := strings.HasSuffix(key, "zones")
-		if !isPlural && !strings.HasSuffix(key, "zone") {
+		isPlural, ok := isZoneSettingKey(key)
+		if !ok {
 			continue
 		}
 

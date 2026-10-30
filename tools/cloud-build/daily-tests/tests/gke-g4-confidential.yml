@@ -30,7 +30,7 @@ static_node_count: 2
 cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
-  machine_type: "{{ machine_type }}"
+  compute_machine_type: "{{ machine_type }}"
   static_node_count: "{{ static_node_count }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   enable_confidential_storage: true

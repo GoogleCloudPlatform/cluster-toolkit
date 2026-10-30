@@ -39,6 +39,13 @@ vars:
   # Enable DWS Flex Start.
   enable_flex_start: true
 
+  # Optional overrides (defaults shown)
+  # Machine type for the GKE system node pool.
+  system_node_pool_machine_type: n2d-standard-16
+  # Machine type for the compute node pool.
+  # Allowed: h4d-highmem-192-lssd | h4d-standard-192 (same RDMA network wiring).
+  compute_machine_type: h4d-standard-192
+
 deployment_groups:
 - group: primary
   modules:
@@ -110,7 +117,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-h4d-net, gke-h4d-rdma-net, workload_service_account]
     settings:
-      system_node_pool_machine_type: "n2d-standard-16"
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_multi_networking: true
@@ -145,7 +152,7 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [h4d-cluster, gke-h4d-rdma-net, node_pool_service_account, workload_policy]
     settings:
-      machine_type: h4d-standard-192
+      machine_type: $(vars.compute_machine_type)
       enable_flex_start: $(vars.enable_flex_start) # flex-start
       auto_repair: false # flex-start dependency
       auto_upgrade: true

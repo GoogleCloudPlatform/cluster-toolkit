@@ -38,6 +38,28 @@ are created in the VPC module. By default the `gke-cluster` module will look for
 ranges with the names `pods` and `services`. These names can be configured using
 the `pods_ip_range_name` and `services_ip_range_name` settings.
 
+#### Using a Pre-existing VPC
+
+To deploy a GKE cluster into an existing VPC and subnetwork using [pre-existing-vpc](../../network/pre-existing-vpc/README.md), ensure that the target subnetwork has [Private Google Access](https://cloud.google.com/vpc/docs/private-google-access) enabled and includes secondary IP ranges for pods and services:
+
+```yaml
+  - id: existing_network
+    source: modules/network/pre-existing-vpc
+    settings:
+      network_name: my-existing-vpc
+      subnetwork_name: my-existing-subnet
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [existing_network]
+    settings:
+      enable_private_endpoint: false # Or set enable_external_dns_endpoint: true when deploying from outside the VPC
+      pods_ip_range_name: pods
+      services_ip_range_name: services
+```
+
+By default, `master_ipv4_cidr_block` is `null`, which configures GKE to use Private Service Connect (PSC) and reserve the control plane private endpoint IP directly from the cluster's primary subnetwork (`subnetwork_self_link`). This avoids `/28` CIDR collisions when deploying into pre-existing VPCs or running multiple GKE clusters in the same VPC. If you need GKE to provision a dedicated `/28` control plane endpoint subnetwork instead, set `master_ipv4_cidr_block` to an unused `/28` IPv4 CIDR range in your VPC (e.g., `1.2.3.0/28`).
+
 ### Multi-networking
 
 To [enable Multi-networking](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#create-gke-environment), pass multivpc module to gke-cluster module as described in example below. Passing a multivpc module enables multi networking and [Dataplane V2](https://cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2?hl=en) on the cluster.
@@ -65,11 +87,9 @@ To [enable Multi-networking](https://cloud.google.com/kubernetes-engine/docs/how
   - id: gke-cluster
     source: modules/scheduler/gke-cluster
     use: [network, multinetwork] ## enables multi networking and Dataplane V2 on cluster
-    settings:
-      cluster_name: $(vars.deployment_name)
 ```
 
-Find an example of multi networking in GKE [here](../../../examples/gke-a3-megagpu.yaml).
+Find an example of multi networking in GKE [here](../../../examples/gke-a3-megagpu/gke-a3-megagpu.yaml).
 
 ### Cluster Limitations
 
@@ -133,7 +153,7 @@ limitations under the License.
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
 | <a name="module_mldiagnostics_version_check"></a> [mldiagnostics\_version\_check](#module\_mldiagnostics\_version\_check) | ../../internal/semver_compare | n/a |
 | <a name="module_slice_controller_version_check"></a> [slice\_controller\_version\_check](#module\_slice\_controller\_version\_check) | ../../internal/semver_compare | n/a |
-| <a name="module_workload_identity"></a> [workload\_identity](#module\_workload\_identity) | terraform-google-modules/kubernetes-engine/google//modules/workload-identity | >= 40.0 |
+| <a name="module_workload_identity"></a> [workload\_identity](#module\_workload\_identity) | terraform-google-modules/kubernetes-engine/google//modules/workload-identity | >= 46.0 |
 
 ## Resources
 
@@ -142,7 +162,6 @@ limitations under the License.
 | [google-beta_google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_cluster) | resource |
 | [google-beta_google_container_node_pool.cpu_np](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
 | [google-beta_google_container_node_pool.system_node_pools](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
-| [google_service_account_iam_member.mtc_node_workload_identity](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account_iam_member) | resource |
 | [kubernetes_labels.workload_namespace_labels](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/labels) | resource |
 | [kubernetes_namespace.user_namespace](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/namespace) | resource |
 | [terraform_data.validate_high_scale_checkpointing_version](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
@@ -207,7 +226,7 @@ limitations under the License.
 | <a name="input_maintenance_exclusions"></a> [maintenance\_exclusions](#input\_maintenance\_exclusions) | List of maintenance exclusions. A cluster can have up to three. For each exclusion, exactly one of `end_time` or `exclusion_end_time_behavior` must be specified. If `exclusion_end_time_behavior` is used, its value must be `UNTIL_END_OF_SUPPORT`. | <pre>list(object({<br/>    name                        = string<br/>    start_time                  = optional(string)<br/>    end_time                    = optional(string)<br/>    exclusion_scope             = string<br/>    exclusion_end_time_behavior = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_maintenance_start_time"></a> [maintenance\_start\_time](#input\_maintenance\_start\_time) | Start time for daily maintenance operations in GMT (HH:MM format). If set to null, a daily maintenance window restriction is not configured, meaning GKE can schedule maintenance at any time. | `string` | `"09:00"` | no |
 | <a name="input_master_authorized_networks"></a> [master\_authorized\_networks](#input\_master\_authorized\_networks) | External network that can access Kubernetes master through HTTPS. Must be specified in CIDR notation. | <pre>list(object({<br/>    cidr_block   = string<br/>    display_name = string<br/>  }))</pre> | `[]` | no |
-| <a name="input_master_ipv4_cidr_block"></a> [master\_ipv4\_cidr\_block](#input\_master\_ipv4\_cidr\_block) | (Beta) The IP range in CIDR notation to use for the hosted master network. | `string` | `"172.16.0.32/28"` | no |
+| <a name="input_master_ipv4_cidr_block"></a> [master\_ipv4\_cidr\_block](#input\_master\_ipv4\_cidr\_block) | (Beta) The IP range in CIDR notation (size must be /28) to use for the hosted master network. If null (default), GKE uses Private Service Connect (PSC) and reserves the control plane endpoint IP from the cluster's primary subnetwork (`subnetwork_self_link`). | `string` | `null` | no |
 | <a name="input_min_master_version"></a> [min\_master\_version](#input\_min\_master\_version) | The minimum version of the master. If unset, the cluster's version will be set by GKE to the version of the most recent official release. | `string` | `null` | no |
 | <a name="input_monitoring_components"></a> [monitoring\_components](#input\_monitoring\_components) | List of GKE monitoring components to enable. If empty, GKE monitoring is disabled. | `list(string)` | <pre>[<br/>  "SYSTEM_COMPONENTS",<br/>  "POD",<br/>  "DAEMONSET",<br/>  "DEPLOYMENT",<br/>  "STATEFULSET",<br/>  "STORAGE",<br/>  "HPA",<br/>  "CADVISOR",<br/>  "KUBELET",<br/>  "JOBSET"<br/>]</pre> | no |
 | <a name="input_name_suffix"></a> [name\_suffix](#input\_name\_suffix) | Custom cluster name postpended to the `deployment_name`. See `prefix_with_deployment_name`. | `string` | `""` | no |
@@ -254,12 +273,14 @@ limitations under the License.
 | <a name="output_confidential_instance_type"></a> [confidential\_instance\_type](#output\_confidential\_instance\_type) | The type of technology used by the confidential nodes. |
 | <a name="output_enable_confidential_nodes"></a> [enable\_confidential\_nodes](#output\_enable\_confidential\_nodes) | Indicates whether Confidential Nodes are enabled at the cluster level. |
 | <a name="output_enable_confidential_storage"></a> [enable\_confidential\_storage](#output\_enable\_confidential\_storage) | Indicates whether Confidential Storage is enabled at the cluster level. |
+| <a name="output_enable_multi_tier_checkpointing"></a> [enable\_multi\_tier\_checkpointing](#output\_enable\_multi\_tier\_checkpointing) | Indicates whether High Scale Checkpointing (Multi-Tier Checkpointing) is enabled. |
 | <a name="output_enable_pathways_for_tpus"></a> [enable\_pathways\_for\_tpus](#output\_enable\_pathways\_for\_tpus) | Indicates whether Pathways for TPUs is enabled. |
 | <a name="output_enable_slice_controller"></a> [enable\_slice\_controller](#output\_enable\_slice\_controller) | Indicates whether the GKE Slice Controller is enabled. |
 | <a name="output_gke_cluster_exists"></a> [gke\_cluster\_exists](#output\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. |
 | <a name="output_gke_version"></a> [gke\_version](#output\_gke\_version) | GKE cluster's version. |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to connect to the created cluster. |
 | <a name="output_k8s_service_account_name"></a> [k8s\_service\_account\_name](#output\_k8s\_service\_account\_name) | Name of k8s service account. |
+| <a name="output_mtc_service_account_member"></a> [mtc\_service\_account\_member](#output\_mtc\_service\_account\_member) | Workload Identity Federation principal of the Multi-Tier Checkpointing (MTC) driver's Kubernetes service account. Grant it object access on the MTC checkpoint bucket; it is only used when enable\_multi\_tier\_checkpointing is true. |
 | <a name="output_namespace"></a> [namespace](#output\_namespace) | The namespace where Workload Identity is configured (created if not 'default'). |
 | <a name="output_node_service_account"></a> [node\_service\_account](#output\_node\_service\_account) | The GCP Service Account email used by the GKE node pools. |
 | <a name="output_system_node_pool_id"></a> [system\_node\_pool\_id](#output\_system\_node\_pool\_id) | The ID of the system node pool. |

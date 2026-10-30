@@ -256,6 +256,10 @@ spec:
     - test-locks/a4x-max
     - test-locks/gke-a4x-max-bm
     - test-locks/ml-tpu7x-onspot-slurm
+    - test-locks/ml-tpu-v6e-onspot-slurm
+    - test-locks/ml-tpu-v5p-onspot-slurm
+    - test-locks/ml-tpu-v5e-onspot-slurm
+    - test-locks/novnc
     flavors:
     - name: test-lock-flavor-2
       resources:
@@ -294,6 +298,14 @@ spec:
       - name: test-locks/gke-a4x-max-bm
         nominalQuota: 1
       - name: test-locks/ml-tpu7x-onspot-slurm
+        nominalQuota: 1
+      - name: test-locks/ml-tpu-v6e-onspot-slurm
+        nominalQuota: 1
+      - name: test-locks/ml-tpu-v5p-onspot-slurm
+        nominalQuota: 1
+      - name: test-locks/ml-tpu-v5e-onspot-slurm
+        nominalQuota: 1
+      - name: test-locks/novnc
         nominalQuota: 1
 ---
 apiVersion: kueue.x-k8s.io/v1beta1

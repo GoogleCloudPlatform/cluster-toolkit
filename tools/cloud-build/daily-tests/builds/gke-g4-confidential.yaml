@@ -114,8 +114,11 @@ steps:
               cd /workspace
 
               DEPLOYMENT_NAME="gke-g4-conf-$$BUILD_ID_SHORT"
+              EXAMPLE_BP=examples/gke-g4-confidential/gke-g4-confidential.yaml
+              BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$EXAMPLE_BP" 2>/dev/null | awk '{print \$$2}')
+
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/\$${BP_NAME:-*}/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
@@ -123,7 +126,6 @@ steps:
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
-              EXAMPLE_BP=examples/gke-g4-confidential/gke-g4-confidential.yaml
               echo '  - id: remote-node'                           >> \$$EXAMPLE_BP
               echo '    source: modules/compute/vm-instance'       >> \$$EXAMPLE_BP
               echo '    use: [gke-g4-net-0]'                       >> \$$EXAMPLE_BP
@@ -145,6 +147,10 @@ steps:
               echo ''                                              >> \$$EXAMPLE_BP
 
               bash tools/add_ttl_label.sh "\$$EXAMPLE_BP"
+
+              # Validate and wait for hardware reservation capacity before deployment
+              echo "INFO: Checking GCE reservation capacity"
+              bash /workspace/tools/cloud-build/wait_for_available_reservation.sh "g4-reservation-0" "us-south1-a" "hpc-toolkit-dev" 2 "\$$EXAMPLE_BP"
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
                   --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
