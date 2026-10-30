@@ -175,6 +175,14 @@ Modules that are still in development and less stable are labeled with the
 [DDN-EXAScaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
 [Intel-DAOS]: ../community/modules/file-system/Intel-DAOS/README.md
 
+### General
+
+* **[instructions]** ![community-badge] ![experimental-badge] : Enables blueprint
+  authors to provide dynamic, formatted post-deployment instructions, display
+  console banners, and persist local next-steps guidance files.
+
+[instructions]: ../community/modules/general/instructions/README.md
+
 ### IAM
 
 * **[iap-policy]** ![core-badge] : Configures IAM policy for Identity-Aware Proxy (IAP) on a Google Cloud Backend Service.
