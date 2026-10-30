@@ -28,7 +28,22 @@ type goGetSuite struct {
 var _ = Suite(&goGetSuite{})
 
 func (s *goGetSuite) TestGetModule_GoGet(c *C) {
+	origEnv := UnsetGitLocalEnvVars()
+	defer RestoreGitLocalEnvVars(origEnv)
+
+	_ = os.Setenv("GIT_INDEX_FILE", "should-be-unset")
+	saved := UnsetGitLocalEnvVars()
+	c.Assert(saved["GIT_INDEX_FILE"], Equals, "should-be-unset")
+	for _, key := range gitLocalEnvVars {
+		_, ok := os.LookupEnv(key)
+		c.Assert(ok, Equals, false)
+	}
+	RestoreGitLocalEnvVars(saved)
+	c.Assert(os.Getenv("GIT_INDEX_FILE"), Equals, "should-be-unset")
+	_ = UnsetGitLocalEnvVars()
+
 	destDir := c.MkDir()
+
 	// Success via HTTPS
 	destDirForHTTPS := filepath.Join(destDir, "https")
 	err := s.r.GetModule("github.com/terraform-google-modules/terraform-google-project-factory//helpers", destDirForHTTPS)

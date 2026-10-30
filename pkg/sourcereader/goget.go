@@ -68,8 +68,46 @@ func getterClient(source string, dst string) getter.Client {
 	}
 }
 
+// gitLocalEnvVars lists repository-local Git environment variables that must not leak into child git processes.
+var gitLocalEnvVars = []string{
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES",
+	"GIT_COMMON_DIR",
+	"GIT_DIR",
+	"GIT_GRAFT_FILE",
+	"GIT_IMPLICIT_WORK_TREE",
+	"GIT_INDEX_FILE",
+	"GIT_NO_REPLACE_OBJECTS",
+	"GIT_OBJECT_DIRECTORY",
+	"GIT_PREFIX",
+	"GIT_REPLACE_REF_BASE",
+	"GIT_SHALLOW_FILE",
+	"GIT_WORK_TREE",
+}
+
+// UnsetGitLocalEnvVars removes repository-local Git environment variables from the current process environment and returns their original values.
+func UnsetGitLocalEnvVars() map[string]string {
+	originalEnv := make(map[string]string)
+	for _, key := range gitLocalEnvVars {
+		if val, ok := os.LookupEnv(key); ok {
+			originalEnv[key] = val
+			_ = os.Unsetenv(key)
+		}
+	}
+	return originalEnv
+}
+
+// RestoreGitLocalEnvVars restores repository-local Git environment variables.
+func RestoreGitLocalEnvVars(env map[string]string) {
+	for key, val := range env {
+		_ = os.Setenv(key, val)
+	}
+}
+
 // GetModule copies the git source to a provided destination (the deployment directory)
 func (r GoGetterSourceReader) GetModule(source string, dst string) error {
+	origEnv := UnsetGitLocalEnvVars()
+	defer RestoreGitLocalEnvVars(origEnv)
+
 	pwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get working directory: %w", err)

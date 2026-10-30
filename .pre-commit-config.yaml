@@ -170,9 +170,17 @@ repos:
 
   - id: go-unit-tests-community-health-check
     name: go-unit-tests-community-health-check
-    entry: bash -c 'cd community/cluster-health-check && go test -timeout 30s -short -v ./...'
+    entry: bash -c 'unset $(git rev-parse --local-env-vars) && cd community/cluster-health-check && go test -timeout 30s -short -v ./...'
     language: system
     files: ^community/cluster-health-check/.*\.go$
+    pass_filenames: false
+
+  - id: go-unit-tests
+    name: go-unit-tests
+    entry: bash -c 'unset $(git rev-parse --local-env-vars) && go test -tags=unit -timeout 30s -short -v $(go list ./... | grep -v /vendor/)'
+    language: system
+    files: \.go$
+    exclude: ^community/cluster-health-check/
     pass_filenames: false
 
   - id: go-mod-tidy-community-health-check
@@ -191,7 +199,6 @@ repos:
   - id: go-imports
   - id: go-cyclo
     args: [-over=13]
-  - id: go-unit-tests
   - id: go-mod-tidy
 # Disabled temporarily due to https://github.com/go-critic/go-critic/issues/1388
 # - repo: https://github.com/tekwizely/pre-commit-golang
@@ -202,6 +209,7 @@ repos:
   rev: v2.13.1
   hooks:
   - id: golangci-lint
+    entry: golangci-lint run --new-from-rev HEAD
 - repo: https://github.com/adrienverge/yamllint
   rev: v1.34.0
   hooks:
