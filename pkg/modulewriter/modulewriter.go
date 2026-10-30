@@ -42,7 +42,6 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/otiai10/copy"
 	"github.com/zclconf/go-cty/cty"
-	"golang.org/x/exp/slices"
 )
 
 // strings that get re-used throughout this package and others
@@ -201,13 +200,42 @@ func writeSharedEmbeddedOverrides(bp config.Blueprint, deploymentDir string) err
 	return nil
 }
 
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func equalIgnoreSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	normA := make([]string, len(a))
+	for i, s := range a {
+		normA[i] = normalizeIgnoreAttribute(s)
+	}
+	normB := make([]string, len(b))
+	for i, s := range b {
+		normB[i] = normalizeIgnoreAttribute(s)
+	}
+	sort.Strings(normA)
+	sort.Strings(normB)
+	return stringSlicesEqual(normA, normB)
+}
+
 func reconfigIgnoresEqual(a, b map[string][]string) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for k, va := range a {
 		vb, ok := b[k]
-		if !ok || !slices.Equal(va, vb) {
+		if !ok || !equalIgnoreSlices(va, vb) {
 			return false
 		}
 	}
@@ -525,6 +553,24 @@ func formatTargetNotFoundError(target, moduleDir string, discovered map[string][
 	return fmt.Errorf("reconfigure_ignores target %q was not found in module %s", target, moduleDir)
 }
 
+func setResourceOverride(override tfOverrideFile, existingIgnores map[string]map[string][]string, rType, rName string, ignores []string) {
+	if contains(existingIgnores[rType][rName], "all") {
+		return
+	}
+	if override.Resource[rType] == nil {
+		override.Resource[rType] = make(map[string]tfResourceOverride)
+	}
+	var current []string
+	if prev, ok := override.Resource[rType][rName]; ok {
+		current = prev.Lifecycle.IgnoreChanges
+	}
+	mergedWithExisting := mergeIgnores(existingIgnores[rType][rName], ignores)
+	finalIgnores := mergeIgnores(current, mergedWithExisting)
+	override.Resource[rType][rName] = tfResourceOverride{
+		Lifecycle: tfLifecycleOverride{IgnoreChanges: finalIgnores},
+	}
+}
+
 func applyTargetOverrides(override tfOverrideFile, discovered map[string][]string, existingIgnores map[string]map[string][]string, target string, ignores []string, moduleDir string) error {
 	if len(ignores) == 0 {
 		return nil
@@ -537,16 +583,7 @@ func applyTargetOverrides(override tfOverrideFile, discovered map[string][]strin
 		if !ok || !contains(names, rName) {
 			return formatTargetNotFoundError(target, moduleDir, discovered)
 		}
-		if contains(existingIgnores[rType][rName], "all") {
-			return nil
-		}
-		if override.Resource[rType] == nil {
-			override.Resource[rType] = make(map[string]tfResourceOverride)
-		}
-		finalIgnores := mergeIgnores(existingIgnores[rType][rName], ignores)
-		override.Resource[rType][rName] = tfResourceOverride{
-			Lifecycle: tfLifecycleOverride{IgnoreChanges: finalIgnores},
-		}
+		setResourceOverride(override, existingIgnores, rType, rName, ignores)
 		return nil
 	}
 
@@ -556,16 +593,7 @@ func applyTargetOverrides(override tfOverrideFile, discovered map[string][]strin
 		return formatTargetNotFoundError(target, moduleDir, discovered)
 	}
 	for _, rName := range names {
-		if contains(existingIgnores[rType][rName], "all") {
-			continue
-		}
-		if override.Resource[rType] == nil {
-			override.Resource[rType] = make(map[string]tfResourceOverride)
-		}
-		finalIgnores := mergeIgnores(existingIgnores[rType][rName], ignores)
-		override.Resource[rType][rName] = tfResourceOverride{
-			Lifecycle: tfLifecycleOverride{IgnoreChanges: finalIgnores},
-		}
+		setResourceOverride(override, existingIgnores, rType, rName, ignores)
 	}
 	return nil
 }

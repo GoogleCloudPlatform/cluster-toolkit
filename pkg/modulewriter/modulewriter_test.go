@@ -1015,3 +1015,64 @@ func TestValidateModuleIgnoresRemoteSource(t *testing.T) {
 		t.Fatalf("unexpected error for embedded module: %v", err)
 	}
 }
+
+func TestReconfigIgnoresEqual_Unordered(t *testing.T) {
+	a := map[string][]string{
+		"google_compute_disk": {"size", "labels", "metadata['ssh-keys']"},
+	}
+	b := map[string][]string{
+		"google_compute_disk": {"labels", `metadata["ssh-keys"]`, "size"},
+	}
+	if !reconfigIgnoresEqual(a, b) {
+		t.Errorf("reconfigIgnoresEqual(a, b) = false, want true for unordered and quote-normalized matches")
+	}
+
+	c := map[string][]string{
+		"google_compute_disk": {"size", "type"},
+	}
+	if reconfigIgnoresEqual(a, c) {
+		t.Errorf("reconfigIgnoresEqual(a, c) = true, want false for different attributes")
+	}
+}
+
+func TestWriteModuleReconfigureOverrides_TypeAndSpecificMerge(t *testing.T) {
+	dir := t.TempDir()
+	mainTf := `
+resource "google_compute_disk" "disk_a" {
+  name = "disk-a"
+  type = "pd-standard"
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "main.tf"), []byte(mainTf), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ignores := map[string][]string{
+		"google_compute_disk":        {"type"},
+		"google_compute_disk.disk_a": {"size"},
+	}
+
+	if err := writeModuleReconfigureOverrides(dir, ignores); err != nil {
+		t.Fatalf("writeModuleReconfigureOverrides failed: %v", err)
+	}
+
+	overrideBytes, err := os.ReadFile(filepath.Join(dir, "override.tf.json"))
+	if err != nil {
+		t.Fatalf("failed to read override.tf.json: %v", err)
+	}
+
+	var parsed tfOverrideFile
+	if err := json.Unmarshal(overrideBytes, &parsed); err != nil {
+		t.Fatalf("failed to unmarshal override.tf.json: %v", err)
+	}
+
+	diskA, ok := parsed.Resource["google_compute_disk"]["disk_a"]
+	if !ok {
+		t.Fatalf("expected override for google_compute_disk.disk_a")
+	}
+
+	expected := []string{"type", "size"}
+	if !stringSlicesEqual(diskA.Lifecycle.IgnoreChanges, expected) && !stringSlicesEqual(diskA.Lifecycle.IgnoreChanges, []string{"size", "type"}) {
+		t.Errorf("got ignore_changes %v, want union of type and specific ignores (%v)", diskA.Lifecycle.IgnoreChanges, expected)
+	}
+}
