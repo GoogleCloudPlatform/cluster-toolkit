@@ -42,25 +42,28 @@ allowed_read_only_commands:
 
 ## Core rules (read before touching any YAML)
 
-1. **Start from the catalog or `./gcluster explain`, never from scratch.** Run
+1. **Start from `./gcluster explain` or the catalog, never from scratch.** Run
    `./gcluster explain <specs...>` (e.g. `./gcluster explain slurm a3u lustre`) or
    read [`references/catalog.yaml`](references/catalog.yaml) to find an existing
    blueprint under `examples/` or `community/examples/` that already matches the
-   request. Do not grep `.tf` files to discover modules; run
-   `./gcluster explain <module>` (e.g. `./gcluster explain modules/file-system/managed-lustre`)
-   or check the catalog's `module_wiring` section for a module's `required_inputs`,
-   which module sources satisfy them (`recommended_use`), and which modules consume
-   its outputs (`consumed_by`). If the request is a question ("do we
-   have…", "can I get…", "what's in…"), answer it using `./gcluster explain` / the catalog and
-   `examples/README.md` and confirm the approach with the user **before**
-   editing anything.
-2. **Customize through a `deployment.yaml`, not module blocks.** If the request
+   request. Do not run `ls`, `find`, or `grep` across `examples/` or `.tf` files to
+   discover templates or modules; run `./gcluster explain <module>` (e.g.
+   `./gcluster explain modules/file-system/managed-lustre`) or check the catalog's
+   `module_wiring` section for a module's `required_inputs`, which module sources
+   satisfy them (`recommended_use`), and which modules consume its outputs
+   (`consumed_by`). If the request is a question ("do we have…", "can I get…",
+   "what's in…"), answer it using `./gcluster explain` / `catalog.yaml` and
+   confirm the approach with the user **before** editing anything.
+2. **Customize through a new, untracked `deployment.yaml`, not module blocks.** If the request
    only changes project, region/zone, node counts, machine types,
    Spot/reservation, or storage size:
    - **Case 1 — All requested knobs already exist in `vars:`:** Create or edit
-     **only** `deployment.yaml` (passed with `-d`). Do **not** copy or edit the
-     blueprint `.yaml` file (even if a knob is commented out in a companion
-     `-deployment.yaml`).
+     **only** a **new, untracked** `deployment.yaml` (or `<name>-deployment.yaml`)
+     passed with `-d`, containing only `vars:` (omit `terraform_backend_defaults: type: gcs`
+     unless the user provides a GCS state bucket). Do **not** copy or edit the
+     blueprint `.yaml` file, and **never modify git-tracked companion `*-deployment.yaml`
+     files** under `examples/` or `community/examples/` in place (read them only as a
+     reference for variable names).
    - **Case 2 — Promoting a hardcoded module setting to `vars:`:** When a
      requested setting is hardcoded inside a module block and missing from
      `vars:`, never modify a tracked template under `examples/` or
@@ -76,6 +79,21 @@ allowed_read_only_commands:
      (check the catalog entry), it is Case 2 — copy the blueprint. Never add the
      knob to the tracked template, and never pass it as a bare module-input name
      in `deployment.yaml` hoping it will be picked up.
+   - **Mutually exclusive consumption models (Spot vs. DWS Flex Start vs. Reservations):**
+     Spot VMs (`spot` / `enable_spot_vm`), DWS Flex Start (`enable_flex_start` / `dws_flex`),
+     and Reservations (`reservation` / `SPECIFIC_RESERVATION`) cannot be combined on the
+     same node pool or nodeset. If the user asks to enable Spot on a DWS Flex Start or
+     Reservation blueprint (or vice versa), **never silently disable** the blueprint's
+     existing consumption model (e.g. do not set `enable_flex_start: false` unprompted);
+     stop, explain that the two models are mutually exclusive, and ask the user which
+     single consumption model they want.
+   - On casual or vague requests (e.g. a "small" or "cheap" cluster with Spot VMs
+     and N nodes), override **only** the requested Spot and node-count variables
+     (such as `compute_enable_spot_vm: true`, `debug_enable_spot_vm: true`,
+     `h3_enable_spot_vm: true`, `compute_node_count_dynamic_max: 2`) in
+     `deployment.yaml`—keep the blueprint's default machine types (never downgrade
+     `c2-standard-60` to `e2-standard-2`, which fails `gvnic_enabled` validation)
+     and never remove partitions or storage modules unprompted.
    - Do **not** add, remove, rename or restructure `deployment_groups[].modules[]`
      entries for value overrides.
 3. **Only edit module blocks when adding or removing capability** (Case 3 — e.g.
@@ -95,13 +113,28 @@ allowed_read_only_commands:
    of any blueprint you create, copy, or repair/fix (if an existing custom
    blueprint you are fixing lacks `ai_assisted: true`, add it).
 5. **Validate with gcluster, fix the blueprint, never the output.**
-   `./gcluster expand` and `./gcluster create` are the validation step. If they or
+   `./gcluster expand` and `./gcluster create` are the validation step. Once
+   `./gcluster create` or `./gcluster expand` succeeds, **stop immediately**—do
+   not run `terraform init` or `terraform validate` afterwards. If they or
    `./gcluster deploy` fail, fix the blueprint YAML or `deployment.yaml` and re-run
-   `./gcluster`. Never edit generated files under `<deployment_name>/` (`main.tf`,
-   `variables.tf`, `terraform.tfvars`, `.ghpc/`) and never run `terraform` in
-   any form — not `init`, `validate`, `plan`, `apply` or `destroy` — even if the
-   user asks you to; refuse, explain, and offer the gcluster equivalent.
-   gcluster regenerates these files on every run. Generated `.tf`, `.tfvars`
+   `./gcluster`. Never bypass validators via CLI flags (`-l IGNORE`,
+   `--validation-level IGNORE`, `--skip-validators`), environment variables
+   (`GHPC_MOCK_MACHINE_CONFIG`), or YAML fields (`validation_level: IGNORE`, or
+   `skip: true` under `validators:`), **even if the user explicitly asks to skip a
+   validator by name**—refuse the bypass, explain that skipping
+   `test_machine_type_in_zone` still fails with a 404 Compute API error during
+   module expansion (for Slurm `machine_configs` lookup) or deployment when the
+   machine type does not exist in that zone, and ask
+   the user for a supported zone or machine type. Never edit
+   generated files under `<deployment_name>/` (`main.tf`, `variables.tf`,
+   `terraform.tfvars`, `defaults.auto.pkrvars.hcl`, `.ghpc/`) and never run
+   `terraform` in any form — not `init`, `validate`, `plan`, `apply`, `destroy`,
+   or `fmt` — even if the user asks you to; refuse, explain, and offer the
+   gcluster equivalent. `./gcluster` has no dry-run `plan` command: if asked for a
+   dry-run plan or resource preview before deploying, never run `terraform plan` or
+   pipe `yes n | ./gcluster deploy`; instead run `./gcluster explain <blueprint.yaml>`
+   and inspect `<deployment_name>/.ghpc/artifacts/expanded_blueprint.yaml`.
+   gcluster regenerates deployment files on every run. Generated `.tf`, `.tfvars`
    and `.pkrvars.hcl` files have a `# DO NOT EDIT: Generated by gcluster.` line
    just below the license header — if you see that line, you are in the wrong file,
    even if a terraform error points at it. A failed `./gcluster deploy` prints a `Hint:` with
@@ -113,9 +146,10 @@ allowed_read_only_commands:
    `./gcluster destroy`, and anything that creates or deletes cloud resources must
    be presented as a `[PROPOSED REMEDIATION PLAN]` and wait for the user to reply
    `yes`. The same applies to local destructive steps: deleting a deployment
-   folder, deleting or overwriting user files, and `git checkout` / `git reset`
-   of user edits — state exactly what will be removed and wait for `yes`.
-   Prefer `./gcluster create … -w` over deleting the deployment folder.
+   folder (`rm -rf <deployment_name>`), deleting or overwriting user `.yaml` files,
+   and `git checkout` / `git restore` / `git reset` / `git clean` of user edits —
+   present a `[PROPOSED REMEDIATION PLAN]` stating exactly what will be removed and
+   wait for `yes`. Prefer `./gcluster create … -w` over deleting the deployment folder.
 7. **Do only what was asked.** If you notice unrelated warnings or problems
    (deprecation notices, bugs in Go code, other blueprints), report them in your
    summary — do not fix, migrate or refactor them unprompted.
@@ -157,12 +191,15 @@ Prefer blueprints under `examples/` over `community/examples/` when both match.
 
 ### 2. Customize via deployment.yaml
 
-Create the deployment file next to the blueprint (e.g.
-`examples/hpc-slurm-deployment.yaml`, matching the `gke-a4/*-deployment.yaml`
-convention) or in the repo root, or edit the blueprint's existing companion
-`-deployment.yaml` file (`deployment_path` in the catalog entry, such as
-`examples/gke-a4/gke-a4-deployment.yaml`). It is user-specific — do not commit
-it.
+Always create a **new, untracked** deployment file (e.g. `my-deployment.yaml` in
+the repo root or `examples/<name>-deployment.yaml`) containing only `vars:`.
+**Never modify git-tracked companion `*-deployment.yaml` files** under
+`examples/` or `community/examples/` in place (`deployment_path` in the catalog
+entry, such as `examples/gke-a4/gke-a4-deployment.yaml` or
+`examples/hpc-slurm-h4d/hpc-slurm-h4d-deployment.yaml`) — read them only to
+inspect variable names, and omit `terraform_backend_defaults: type: gcs` unless
+the user explicitly provides a GCS state bucket. Your new deployment file is
+user-specific — do not commit it.
 
 Only override keys that already exist in the blueprint's `vars:` (see the
 catalog entry). Variable syntax is Cluster Toolkit's `$(vars.name)`, not
@@ -231,29 +268,43 @@ Rules the agent must respect:
 - **Hardware-locked blueprints hardcode `machine_type` in the module.** The
   GKE and Slurm A3 / A4 / A4X blueprints have multi-NIC RDMA / GPUDirect wiring
   that only works with one shape, so they expose no compute machine-type var at
-  all (the shape still appears in the catalog's `machine_types`). Multi-shape
+  all (the shape still appears in the catalog's `machine_types`). If the user
+  asks for a different accelerator or machine series (e.g. `a3-highgpu-8g` on
+  `gke-a4.yaml`), do **not** copy that blueprint and change `machine_type` —
+  instead, use `./gcluster explain` to switch to the matching blueprint in
+  `examples/` (e.g. `examples/gke-a3-highgpu/gke-a3-highgpu.yaml`). Multi-shape
   families (`gke-h4d`, `gke-tpu-*`, `gke-g4*`, all CPU blueprints) expose
   `compute_machine_type` with an `# Allowed:` comment listing valid shapes.
-- **Three override states.** `""` means "empty string" (e.g.
-  `compute_reservation_name: ""` in `ml-slurm-g4` = no reservation); `$(null)` means
-  "unset this input" (e.g. `static_node_count` must be unset under flex-start);
-  a bare `key:` in YAML or `key=` on `--vars` is **always an error** (`deployment
-  variable "key" was not set`). That error means a **null value in your `-d`
-  file or `--vars`** — even though the location gcluster prints is the
-  blueprint's `vars:` line, the fix belongs in `deployment.yaml`, not in the
-  template.
+- **Three override states & GKE `SPECIFIC_RESERVATION`.** `""` means "empty
+  string" (e.g. `compute_reservation_name: ""` in `ml-slurm-g4` or
+  `h4d_reservation_name: ""` in `hpc-slurm-h4d` = no reservation); `$(null)`
+  means "unset this input" (e.g. `static_node_count` must be unset under
+  flex-start); a bare `key:` in YAML or `key=` on `--vars` is **always an
+  error** (`deployment variable "key" was not set`). That error means a **null
+  value in your `-d` file or `--vars`** — even though the location gcluster
+  prints is the blueprint's `vars:` line, the fix belongs in `deployment.yaml`,
+  not in the template. Note: if a GKE blueprint hardcodes
+  `consume_reservation_type: SPECIFIC_RESERVATION` (such as `gke-tpu-v5e.yaml` or
+  `gke-a4x.yaml`) and the user did not provide a
+  reservation name, do **not** set `reservation: ""` (which generates an invalid
+  empty `SPECIFIC_RESERVATION`); stop and ask whether the user has a reservation
+  name or wants a custom blueprint copy (`ai_assisted: true`) configured for
+  on-demand, Spot, or DWS Flex Start.
 - **Precedence:** blueprint `vars:` < `-d deployment.yaml` < `--vars`. Later
   sources override earlier ones key by key.
-- **Only use keys present in the catalog entry's `vars`.** A `deployment.yaml`
-  key that is *not* in the blueprint's `vars:` but happens to match a module
-  input (a typo such as `machine_type` instead of `compute_machine_type`, or
-  `enable_spot_vm` on a blueprint that has no Spot var) is **silently injected
-  into every module that lacks that setting** — no error is raised as long as
-  at least one module can absorb it (only when *no* module can does
-  `test_deployment_variable_not_used` fail). Check `vars` in the catalog before
-  writing the key. Never run `gcluster` with `-l IGNORE` or add
-  `test_deployment_variable_not_used` to `--skip-validators`: that validator is
-  the only guard against a typo'd key, so if it fails, fix the key.
+- **Only use keys present in the catalog entry's `vars`, and never silence
+  validators.** A `deployment.yaml` key that is *not* in the blueprint's `vars:`
+  but happens to match a module input (a typo such as `machine_type` instead of
+  `compute_machine_type`, or `enable_spot_vm` on a blueprint that has no Spot
+  var) is **silently injected into every module that lacks that setting** — no
+  error is raised as long as at least one module can absorb it (only when *no*
+  module can does `test_deployment_variable_not_used` fail). Check `vars` in the
+  catalog before writing the key. Never run `gcluster` with `-l IGNORE` /
+  `--validation-level IGNORE`, never pass `--skip-validators` (except for the
+  documented offline `GHPC_MOCK_MACHINE_CONFIG` dry-run when unauthenticated),
+  and never add `validation_level: IGNORE` or `skip: true` under `validators:`
+  in a blueprint YAML to silence a failing validator (`test_machine_type_in_zone`,
+  `test_zone_in_region`, `test_deployment_variable_not_used`, etc.).
 - **The catalog is the contract, not this document.** Official `examples/`
   follow the `<role>_<terraform_input>` convention; `community/examples/` may
   still use older names (`cluster_size`, `size_gib`, bare `machine_type`, …).
@@ -261,9 +312,10 @@ Rules the agent must respect:
   `catalog.yaml` before writing keys to `deployment.yaml` or `--vars`. If a
   machine type appears in the catalog's `machine_types` but the entry has no
   `*_machine_type` var, it is hardware-locked — do not try to override it.
-- Every companion `*-deployment.yaml` whose blueprint exposes prefixed vars
-  ends with a commented `Optional overrides (defaults shown)` block listing
-  them; uncomment a line to override it.
+- Companion `*-deployment.yaml` files whose blueprint exposes prefixed vars end
+  with a commented `Optional overrides (defaults shown)` block listing them;
+  copy those variable names into your own untracked `deployment.yaml` rather than
+  editing the tracked companion file in place.
 
 If the blueprint does not expose the setting you need in `vars:`, copy the
 tracked template to a new file in the same directory with `ai_assisted: true`
