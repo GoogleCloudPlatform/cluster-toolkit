@@ -86,5 +86,8 @@ To tear down the cluster when finished:
 ## Managed Lustre & GCSFuse with Local SSD Cache
 
 - **Managed Lustre (`a3mega-slurm-blueprint.yaml`):** Provisions a **36 TiB Google Cloud Managed Lustre (`lustre_size_gib: 36000`, `per_unit_storage_throughput: 500`)** instance mounted at `/home` across all Slurm nodes.
-- **GCSFuse with Local SSD Cache (`a3mega-slurm-gcsfuse-lssd-blueprint.yaml`):** Reflects best practices for using GCSFuse for ML workloads. It is configured to mount GCS buckets on two mountpoints on a3-mega nodes. Use the `gcs_bucket` variable to specify a GCS bucket to mount, or leave the variable empty to mount all available buckets [dynamically](https://cloud.google.com/storage/docs/cloud-storage-fuse/mount-bucket#dynamic-mount).
-  The `/gcs` mountpoint enables parallel downloads, intended for reading/writing checkpoints, logs, application outputs, model serving, or loading large files (e.g. squashfs files). The read-only `/gcs-ro` mountpoint disables parallel downloads and enables the list cache, intended for reading training data. Parallel downloads are not recommended for training workloads; see [GCSFuse documentation](https://cloud.google.com/storage/docs/cloud-storage-fuse/file-caching#parallel-downloads) for details.
+- **GCSFuse with Local SSD Cache (`a3mega-slurm-blueprint.yaml`):** Configured with [GCSFuse profile-based configurations](https://cloud.google.com/storage/docs/cloud-storage-fuse/profile-based-configurations) and Local SSD caching on A3 Mega nodes:
+  - `/gcs`: General-purpose mount of the created GCS bucket (`data-bucket`).
+  - `/gcs-checkpoints`: Uses `profile=aiml-checkpointing` with `cache_dir=/mnt/localssd` for high-throughput checkpoint reads/writes.
+  - `/gcs-training-data`: Uses `profile=aiml-training` optimized for reading training datasets.
+  - `/gcs-model-serving`: Uses `profile=aiml-serving` with `cache_dir=/mnt/localssd` optimized for model serving.

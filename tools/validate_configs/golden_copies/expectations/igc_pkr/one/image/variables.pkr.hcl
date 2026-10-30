@@ -115,7 +115,7 @@ first project ID in the list first, and fall back to the next in the list,
 until it finds the source image.
 EOD
   type        = list(string)
-  default     = null
+  default     = ["advanced-compute-images"]
 }
 
 variable "source_image" {
@@ -127,7 +127,7 @@ variable "source_image" {
 variable "source_image_family" {
   description = "Alternative to source_image. Specify image family to build from latest image in family"
   type        = string
-  default     = "hpc-rocky-linux-9"
+  default     = "aci-cpu-rocky-linux-9-amd64"
 }
 
 variable "service_account_email" {

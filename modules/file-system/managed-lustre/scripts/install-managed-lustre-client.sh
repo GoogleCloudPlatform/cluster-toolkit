@@ -40,11 +40,11 @@ fi
 . /etc/os-release
 DIST="NA"
 if [[ $NAME == *"Ubuntu"* ]]; then
-	if [[ $VERSION_ID == "22.04" ]]; then
+	if [[ $VERSION_ID == "22.04" || $VERSION_ID == "24.04" ]]; then
 		DIST="Ubuntu"
 	fi
 elif [[ $NAME == *"Rocky"* ]]; then
-	if [[ $VERSION_ID == "8"* ]]; then
+	if [[ $VERSION_ID == "8"* || $VERSION_ID == "9"* ]]; then
 		DIST="Rocky"
 	fi
 fi
@@ -69,19 +69,20 @@ if [[ ${DIST} == "Ubuntu" ]]; then
 		fi
 	fi
 elif [[ ${DIST} == "Rocky" ]]; then
+	ROCKY_MAJOR="${VERSION_ID%%.*}"
 	# Set up yum repo
 	touch /etc/yum.repos.d/artifact-registry.repo
 	tee -a /etc/yum.repos.d/artifact-registry.repo <<-EOF
-		[lustre-client-rocky-8]
-		name=lustre-client-rocky-8
-		baseurl=https://us-yum.pkg.dev/projects/lustre-client-binaries/lustre-client-rocky-8
+		[lustre-client-rocky-${ROCKY_MAJOR}]
+		name=lustre-client-rocky-${ROCKY_MAJOR}
+		baseurl=https://us-yum.pkg.dev/projects/lustre-client-binaries/lustre-client-rocky-${ROCKY_MAJOR}
 		enabled=1
 		repo_gpgcheck=0
 		gpgcheck=0
 	EOF
 	# Install modules
 	yum makecache
-	yum --enablerepo=lustre-client-rocky-8 install -y kmod-lustre-client lustre-client
+	yum --enablerepo="lustre-client-rocky-${ROCKY_MAJOR}" install -y kmod-lustre-client lustre-client
 fi
 
 if [[ $DIST != "NA" ]]; then

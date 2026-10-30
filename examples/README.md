@@ -28,7 +28,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm6-apptainer.yaml](#hpc-slurm6-apptaineryaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-hybrid.yaml](#hpc-slurm6-hybridyaml--) ![community-badge] ![experimental-badge]
   * [apptainer-artifact-registry-openfoam.yaml](#apptainer-artifact-registry-openfoamyaml--) ![community-badge] ![experimental-badge]
-  * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [ml-slurm-g4.yaml](#ml-slurm-g4yaml-) ![core-badge]
   * [ml-slurm-g4-vgpu.yaml](#ml-slurm-g4-vgpuyaml--) ![community-badge] ![experimental-badge]
   * [h4d-vm.yaml](#h4d-vmyaml--) ![core-badge] ![experimental-badge]
@@ -41,7 +40,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-managed-lustre.yaml](#gke-managed-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-ubuntu2204.yaml](#hpc-slurm-ubuntu2204yaml-) ![community-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
   * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
@@ -66,7 +64,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml--) ![community-badge] ![experimental-badge]
   * [fsi/gce-symphony.yaml](#fsigce-symphonyyaml--) ![community-badge] ![experimental-badge]
   * [fsi/gke-symphony.yaml](#fsigke-symphonyyaml--) ![community-badge] ![experimental-badge]
-  * [tutorial-starccm-slurm.yaml](#tutorial-starccm-slurmyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
@@ -218,7 +215,7 @@ the experimental badge (![experimental-badge]).
 | [community/examples/fsi/ibm-symphony-on-gce/symphony.yaml](../community/examples/fsi/ibm-symphony-on-gce/symphony.yaml) | none | c2-standard-30, c2-standard-4 | This project provides a blueprint for deploying an IBM Spectrum Symphony cluster on Google Cloud Platform using the Google Cloud Cluster Toolkit. The blueprint automates infrastructure provisioning, custom base image creation via... |
 | [community/examples/fsi/ibm-symphony-on-gke/symphony.yaml](../community/examples/fsi/ibm-symphony-on-gke/symphony.yaml) | gke | c2-standard-16, c2-standard-4 | This project provides a blueprint for deploying an IBM Spectrum Symphony cluster on Google Cloud Platform using the Google Cloud Cluster Toolkit and Google Kubernetes Engine (GKE). The blueprint automates infrastructure provisioning... |
 | [community/examples/gcloud-example.yaml](../community/examples/gcloud-example.yaml) | none | - | This blueprint demonstrates how to use the gcloud community module to run arbitrary gcloud commands during deployment and destroy. It shows an example of creating and deleting a network, subnet, and VM instance. |
-| [community/examples/hpc-build-slurm-image.yaml](../community/examples/hpc-build-slurm-image.yaml) | slurm | n2d-standard-2 | This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top of an existing image, hpc-rocky-linux-9 in the case of this example. |
+| [community/examples/hpc-build-slurm-image.yaml](../community/examples/hpc-build-slurm-image.yaml) | slurm | n2d-standard-2 | This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top of an existing image, aci-cpu-rocky-linux-9-amd64 in the case of this example. |
 | [community/examples/hpc-slinky/hpc-slinky.yaml](../community/examples/hpc-slinky/hpc-slinky.yaml) | slurm-on-gke (slinky) | n2d-standard-8, h3-standard-88 | The SchedMD Slinky Project deploys Slurm on Kubernetes. Slinky is particularly useful for: 1. Those with a prefer a Slurm workload management paradigm, but a cloud-native operational experience 2. Those who want the flexibility of... |
 | [community/examples/hpc-slurm-google-cloud-dedicated/eda/eda-gcd-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/eda/eda-gcd-cluster.yaml) | slurm | c3-standard-8, c3-standard-176 | This directory provides a Cluster Toolkit (gcluster) blueprint (eda-gcd-cluster.yaml) and end-to-end Electronic Design Automation (EDA) workload examples for Google Cloud Dedicated (GCD) environments (*.apis-<location>.goog): |
 | [community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml) | slurm | c3-standard-4, c3-standard-176 | Creates a Slurm cluster on C3 machine types for Google Cloud Dedicated (GCD) and sovereign cloud environments using Packer to pre-build a custom Slurm image based on Rocky Linux 8, configured with NFS home directories, SAuth... |
@@ -231,7 +228,6 @@ the experimental badge (![experimental-badge]).
 | [community/examples/hpc-slurm-local-ssd.yaml](../community/examples/hpc-slurm-local-ssd.yaml) | slurm | c2-standard-4 | This blueprint demonstrates the use of Slurm and Filestore, with compute nodes that have local ssd drives deployed. |
 | [community/examples/hpc-slurm-ramble-gromacs.yaml](../community/examples/hpc-slurm-ramble-gromacs.yaml) | slurm | - | Ramble is an experimentation framework which can drive the installation of software with Spack and create, execute, and analyze experiments using the installed software. |
 | [community/examples/hpc-slurm-sharedvpc.yaml](../community/examples/hpc-slurm-sharedvpc.yaml) | slurm | n2-standard-2 | This blueprint demonstrates the use of the Slurm and Filestore modules in the service project of an existing Shared VPC. Before attempting to deploy the blueprint, one must first complete initial setup for provisioning Filestore in a... |
-| [community/examples/hpc-slurm-ubuntu2204.yaml](../community/examples/hpc-slurm-ubuntu2204.yaml) | slurm | n2-standard-2 | Similar to the hpc-slurm.yaml example, but using Ubuntu 22.04 instead of CentOS 7. Other operating systems are supported by SchedMD for the Slurm on GCP project and images are listed here. Only the examples listed on this page have been... |
 | [community/examples/hpc-slurm6-apptainer.yaml](../community/examples/hpc-slurm6-apptainer.yaml) | slurm | - | This blueprint creates a custom Apptainer enabled image and builds an auto-scaling Slurm cluster using that image. You can deploy containerized workloads on that cluster as described here. |
 | [community/examples/hpc-slurm6-hybrid.yaml](../community/examples/hpc-slurm6-hybrid.yaml) | slurm | - | This blueprint extends an on-premise Slurm cluster with cloud nodes. It builds a compute image matching the on-premise Slurm installation and generates the configuration the on-premise controller needs to burst into GCP. See the hybrid... |
 | [community/examples/hpc-slurm6-tpu-maxtext.yaml](../community/examples/hpc-slurm6-tpu-maxtext.yaml) | slurm | - | Creates an auto-scaling Slurm cluster with TPU nodes. |
@@ -248,7 +244,6 @@ the experimental badge (![experimental-badge]).
 | [community/examples/sycomp/sycomp-storage-slurm.yaml](../community/examples/sycomp/sycomp-storage-slurm.yaml) | slurm | n2-standard-2 | Deploys and expands an IBM Storage Scale cluster using the Sycomp Intelligent Data Storage Platform and exposes it to compute clients over NFS. |
 | [community/examples/sycomp/sycomp-storage.yaml](../community/examples/sycomp/sycomp-storage.yaml) | none | - | Deploys and expands an IBM Storage Scale cluster using the Sycomp Intelligent Data Storage Platform and exposes it to compute clients over NFS. |
 | [community/examples/tutorial-fluent.yaml](../community/examples/tutorial-fluent.yaml) | none | c2-standard-60, c2-standard-8 | This blueprint provisions a simple cluster for use with an Ansys Fluent tutorial. |
-| [community/examples/tutorial-starccm-slurm.yaml](../community/examples/tutorial-starccm-slurm.yaml) | slurm | n2-standard-2, c2-standard-60 | This blueprint provisions an HPC cluster running Slurm for use with a Simcenter StarCCM+ tutorial. |
 | [community/examples/tutorial-starccm.yaml](../community/examples/tutorial-starccm.yaml) | none | c2-standard-60 | This blueprint provisions a simple cluster for use with a Simcenter StarCCM+ tutorial. |
 | [community/examples/xpk-n2-filestore/xpk-n2-filestore.yaml](../community/examples/xpk-n2-filestore/xpk-n2-filestore.yaml) | gke | n2-standard-32 | This example shows how to set up an XPK-compatible GKE cluster - giving researchers a Slurm-like CLI experience but with lightweight Kueue and Kjob resources on the cluster side. The blueprint creates a low-cost, CPU-based XPK cluster... |
 | [examples/batch-mpi.yaml](./batch-mpi.yaml) | batch | c2-standard-16, c2-standard-60 | This blueprint demonstrates how to use Spack to run a real MPI job on Batch. |
@@ -292,7 +287,6 @@ the experimental badge (![experimental-badge]).
 | [examples/image-builder.yaml](./image-builder.yaml) | slurm | c2-standard-60 | This blueprint uses the Packer template module to create a custom VM image and uses it to provision an HPC cluster using the Slurm scheduler. By using a custom image, the cluster is able to begin running jobs sooner and more reliably... |
 | [examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml](./machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml) | slurm | a3-highgpu-8g | This document will guide you to successfully provisioning a Slurm cluster with a3-highgpu-8g compute nodes running NVIDIA H100 GPUs. |
 | [examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml](./machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml) | slurm | n2-standard-2, a3-megagpu-8g | This directory provides a Cluster Toolkit blueprint (a3mega-slurm-blueprint.yaml) and deployment configuration (a3mega-slurm-deployment.yaml) for provisioning a Slurm cluster with a3-megagpu-8g (8x NVIDIA H100) compute nodes... |
-| [examples/machine-learning/a3-megagpu-8g/a3mega-slurm-gcsfuse-lssd-blueprint.yaml](./machine-learning/a3-megagpu-8g/a3mega-slurm-gcsfuse-lssd-blueprint.yaml) | slurm | n2-standard-2, a3-megagpu-8g | GCSFuse with Local SSD Cache (a3mega-slurm-gcsfuse-lssd-blueprint.yaml): Reflects best practices for using GCSFuse for ML workloads. It is configured to mount GCS buckets on two mountpoints on a3-mega nodes. Use the gcs_bucket variable... |
 | [examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml](./machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml) | slurm | a3-ultragpu-8g | This blueprint provisions an A3 Ultra (a3-ultragpu-8g, 8x NVIDIA H200) Slurm cluster with multi-NIC RoCE GPUDirect RDMA networking (gpu-rdma-vpc), a 36 TiB Google Cloud Managed Lustre filesystem (modules/file-system/managed-lustre)... |
 | [examples/machine-learning/a3-ultragpu-8g/a3ultra-vm.yaml](./machine-learning/a3-ultragpu-8g/a3ultra-vm.yaml) | none | a3-ultragpu-8g | The standalone VM blueprint (a3ultra-vm.yaml) uses a Filestore Zonal instance (2.5 TiB / 2560 GiB default, requiring gcloud services enable file.googleapis.com --project=<PROJECT_ID>), which may require a quota increase request. See... |
 | [examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml](./machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml) | slurm | a4-highgpu-8g | This blueprint provisions an A4 High (a4-highgpu-8g, 8x NVIDIA B200) Slurm cluster with multi-NIC RoCE GPUDirect RDMA networking (gpu-rdma-vpc), a 36 TiB Google Cloud Managed Lustre filesystem (modules/file-system/managed-lustre)... |
@@ -307,7 +301,6 @@ the experimental badge (![experimental-badge]).
 | [examples/ml-gke.yaml](./ml-gke.yaml) | gke | g2-standard-4 | This blueprint demonstrates how to set up a GPU GKE cluster using the Cluster Toolkit. It includes: |
 | [examples/ml-slurm-g4-vgpu.yaml](./ml-slurm-g4-vgpu.yaml) | slurm | g4-standard-12 | This blueprint creates a Slurm cluster on Google Cloud optimized for machine learning workloads using NVIDIA G4 vGPUs (Fractional GPUs). It automates the installation of the necessary NVIDIA GRID drivers and configures Slurm to... |
 | [examples/ml-slurm-g4.yaml](./ml-slurm-g4.yaml) | slurm | g4-standard-48 | This blueprint deploys a high-performance computing (HPC) cluster featuring a Slurm scheduler, optimized for machine learning workloads. |
-| [examples/ml-slurm.yaml](./ml-slurm.yaml) | slurm | a2-highgpu-1g, g2-standard-4 | This blueprint provisions an HPC cluster running the Slurm scheduler with the machine learning frameworks PyTorch and TensorFlow pre-installed on every VM. The cluster has 2 partitions: |
 | [examples/netapp-volumes-slurm.yaml](./netapp-volumes-slurm.yaml) | slurm | n2-standard-4 | This blueprint creates a basic Slurm cluster that mounts a Flex Unified large-capacity NetApp volume at /home. A private Cloud DNS zone publishes all NFS endpoint IPs under one FQDN so Slurm clients are distributed across endpoints... |
 | [examples/netapp-volumes.yaml](./netapp-volumes.yaml) | none | n2-standard-2 | This blueprint demonstrates how to provision NFS volumes as shared filesystems for compute VMs, using Google Cloud NetApp Volumes. It can be used as an alternative to FileStore in blueprints. |
 | [examples/pfs-managed-lustre-slurm.yaml](./pfs-managed-lustre-slurm.yaml) | slurm | c2-standard-4 | This blueprint, managed-lustre-slurm, is a specialized configuration designed to deploy a high-performance compute cluster on Google Cloud. It integrates the Slurm Workload Manager with Google Cloud Managed Service for Lustre, a fully... |
@@ -508,55 +501,6 @@ This blueprint demonstrates staging and running an [Apptainer](https://apptainer
 This blueprint deploys a cluster containing a pair of `h4d-highmem-192-lssd` VMs with RDMA networking enabled along with a filestore instance mounted to `/home`.
 
 [h4d-vm.yaml]: ../examples/h4d-vm.yaml
-
-### [ml-slurm.yaml] ![core-badge]
-
-This blueprint provisions an HPC cluster running the Slurm scheduler with the
-machine learning frameworks PyTorch and TensorFlow pre-installed on every
-VM. The cluster has 2 partitions:
-
-* [A2 family VMs][a2] with the NVIDIA A100 GPU accelerator
-* [G2 family VMs][g2] with the NVIDIA L4 GPU accelerator
-
-[a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
-[g2]: https://cloud.google.com/compute/docs/gpus#l4-gpus
-
-To provision the cluster, please run:
-
-```text
-./gcluster create examples/ml-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./gcluster deploy ml-example-v6
-```
-
-After accessing the login node, you can activate the conda environment for each
-library with:
-
-```shell
-source /etc/profile.d/conda.sh
-# to activate PyTorch
-conda activate pytorch
-# to activate TensorFlow
-conda activate tf
-```
-
-An example benchmarking job for PyTorch can be run under Slurm:
-
-```shell
-cp /var/tmp/torch_test.* .
-sbatch -N 1 --gpus-per-node=1 torch_test.sh
-```
-
-When you are done, clean up the resources in reverse order of creation:
-
-```text
-./gcluster destroy ml-example-v6
-```
-
-Finally, browse to the [Cloud Console][console-images] to delete your custom
-image. It will be named beginning with `ml-slurm` followed by a date and
-timestamp for uniqueness.
-
-[ml-slurm.yaml]: ../examples/ml-slurm.yaml
 
 ### [ml-slurm-g4.yaml] ![core-badge]
 
@@ -1046,7 +990,7 @@ For this example the following is needed in the selected region:
 ### [hpc-build-slurm-image.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top
-of an existing image, `hpc-rocky-linux-9` in the case of this example.
+of an existing image, `aci-cpu-rocky-linux-9-amd64` in the case of this example.
 
 The blueprint contains 3 groups:
 
@@ -1061,37 +1005,6 @@ The blueprint contains 3 groups:
    slurm cluster from other examples.
 
 [hpc-build-slurm-image.yaml]: ../community/examples/hpc-build-slurm-image.yaml
-
-### [hpc-slurm-ubuntu2204.yaml] ![community-badge]
-
-Similar to the [hpc-slurm.yaml] example, but using Ubuntu 22.04 instead of CentOS 7.
-[Other operating systems] are supported by SchedMD for the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed on this page have been tested by the Cluster Toolkit team.
-
-The cluster will support 2 partitions named `debug` and `compute`.
-The `debug` partition is the default partition and runs on smaller
-`n2-standard-2` nodes. The `compute` partition is not default and requires
-specifying in the `srun` command via the `--partition` flag. The `compute`
-partition runs on compute optimized nodes of type `cs-standard-60`. The
-`compute` partition may require additional quota before using.
-
-[Other operating systems]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
-[hpc-slurm-ubuntu2204.yaml]: ../community/examples/hpc-slurm-ubuntu2204.yaml
-
-#### Quota Requirements for hpc-slurm-ubuntu2204.yaml
-
-For this example the following is needed in the selected region:
-
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
-* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~50 GB static + 50
-  GB/node** up to 1,250 GB
-* Compute Engine API: N2 CPUs: **12**
-* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
-  in `compute` partition up to 1,204
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
-* Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
 
 ### [hpc-amd-slurm.yaml] ![community-badge]
 
@@ -1749,15 +1662,6 @@ See the [full tutorial here](../community/examples/fsi/ibm-symphony-on-gce/READM
 This project provides a blueprint for deploying an [IBM Spectrum Symphony](https://www.ibm.com/products/spectrum-symphony) cluster on Google Cloud Platform using the [Google Cloud Cluster Toolkit](https://cloud.google.com/cluster-toolkit) and Google Kubernetes Engine (GKE). The blueprint automates infrastructure provisioning, custom base image creation via Packer, Artifact Registry repository creation, GKE cluster setup with the Google Symphony Kubernetes Operator, and Symphony Host Factory integration for elastic containerized compute bursting into GKE.
 
 See the [full tutorial here](../community/examples/fsi/ibm-symphony-on-gke/README.md).
-
-### [tutorial-starccm-slurm.yaml] ![community-badge] ![experimental-badge]
-
-This blueprint provisions an HPC cluster running Slurm for use with a Simcenter StarCCM+
-tutorial.
-
-> The main tutorial is described on the [Cluster Toolkit website](https://cloud.google.com/cluster-toolkit/docs/simcenter-star-ccm/run-workload).
-
-[tutorial-starccm-slurm.yaml]: ../community/examples/tutorial-starccm-slurm.yaml
 
 ### [tutorial-starccm.yaml] ![community-badge] ![experimental-badge]
 

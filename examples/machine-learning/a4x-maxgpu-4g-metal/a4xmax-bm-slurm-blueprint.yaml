@@ -24,8 +24,8 @@ vars:
   a4x_max_cluster_size: # supply cluster size
 
   # Image settings
-  build_from_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-580
-  build_from_image_project: ubuntu-os-accelerator-images
+  source_image_family: aci-gpu-u2404-cuda-132-nvidia-595-arm64
+  source_image_project: advanced-compute-images
   image_build_machine_type: c4a-highcpu-16
   image_build_disk_type: hyperdisk-balanced
   image_disk_size_gb: 100
@@ -266,39 +266,7 @@ deployment_groups:
           - name: Install A4X Drivers and Utils
             hosts: all
             become: true
-            vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
-              cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/sbsa/cuda-keyring_1.1-1_all.deb
-              cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
-              nvidia_packages:
-              - cuda-toolkit-13-0
-              - datacenter-gpu-manager-4-cuda13=1:4.6.0-1
-              - datacenter-gpu-manager-4-dev=1:4.6.0-1
-              - datacenter-gpu-manager-4-core=1:4.6.0-1
             tasks:
-            - name: Download NVIDIA repository package
-              ansible.builtin.get_url:
-                url: "{{ cuda_repo_url }}"
-                dest: "{{ cuda_repo_filename }}"
-            - name: Install NVIDIA repository package
-              ansible.builtin.apt:
-                deb: "{{ cuda_repo_filename }}"
-                state: present
-            - name: Install NVIDIA fabric and CUDA
-              ansible.builtin.apt:
-                name: "{{ item }}"
-                update_cache: true
-                allow_downgrade: yes
-              loop: "{{ nvidia_packages }}"
-              ignore_errors: yes # Ignore errors during packer build
-            - name: Freeze NVIDIA fabric and CUDA
-              ansible.builtin.command:
-                argv:
-                - apt-mark
-                - hold
-                - "{{ item.split('=')[0] }}"
-              loop: "{{ nvidia_packages }}"
-              ignore_errors: yes # Ignore errors during packer build
             - name: Create nvidia-persistenced override directory
               ansible.builtin.file:
                 path: /etc/systemd/system/nvidia-persistenced.service.d
@@ -333,7 +301,7 @@ deployment_groups:
                 name: nvidia-persistenced.service
                 state: stopped
                 enabled: false
-      # Install DOCA-OFED
+      # Install MFT
       - type: shell
         destination: install_mofed.sh
         content: |
@@ -353,16 +321,6 @@ deployment_groups:
           cd ..
           # remove
           rm -rf mft-4.34.0-145-aarch64-deb
-
-          BASE_URL=https://linux.mellanox.com/public/repo/doca
-          DOCA_SUFFIX=latest/ubuntu24.04/arm64-sbsa/
-          DOCA_URL="$BASE_URL/$DOCA_SUFFIX"
-          # Download both old Mellanox key and new NVIDIA DOCA key (required for 'latest' repository signature verification)
-          curl -fsSL $BASE_URL/GPG-KEY-Mellanox.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.gpg
-          curl -fsSL -o /etc/apt/trusted.gpg.d/nvidia-doca-debian-gpg-public-key.gpg $BASE_URL/public_keys/nvidia-doca-debian-gpg-public-key.gpg
-          echo "deb [signed-by=/etc/apt/trusted.gpg.d/nvidia-doca-debian-gpg-public-key.gpg] $DOCA_URL ./" > /etc/apt/sources.list.d/doca.list
-          sudo apt-get update
-          sudo apt-get -y install doca-ofed
       - type: data
         destination: /etc/systemd/network/20-mrdma.network
         content: |
@@ -401,8 +359,8 @@ deployment_groups:
       disk_size: $(vars.image_disk_size_gb)
       disk_type: $(vars.image_build_disk_type)
       machine_type: $(vars.image_build_machine_type)
-      source_image_family: $(vars.build_from_image_family)
-      source_image_project_id: [$(vars.build_from_image_project)]
+      source_image_family: $(vars.source_image_family)
+      source_image_project_id: [$(vars.source_image_project)]
       image_family: $(vars.built_image_family)
       omit_external_ip: false
       metadata:

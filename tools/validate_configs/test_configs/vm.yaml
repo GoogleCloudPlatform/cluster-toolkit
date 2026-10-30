@@ -39,10 +39,10 @@ deployment_groups:
       machine_type: n2-standard-2
       instance_image:
         project: ubuntu-os-cloud
-        family: ubuntu-2204-lts
+        family: ubuntu-2404-lts-amd64
         # The following can be uncommented to test that changing an image definition triggers recreation.
         # Create this image by running:
-        # gcloud compute images create myubuntu-1 --source-image-family ubuntu-2204-lts \
+        # gcloud compute images create myubuntu-1 --source-image-family ubuntu-2404-lts-amd64 \
         #        --source-image-project=ubuntu-os-cloud --family myubuntu --project <project_id>
         # project: $(vars.project_id)
         # family: myubuntu
@@ -56,4 +56,4 @@ deployment_groups:
       machine_type: n2-standard-2
       instance_image:
         project: ubuntu-os-cloud
-        name: ubuntu-2004-focal-v20231101
+        name: ubuntu-2404-noble-amd64-v20250606
