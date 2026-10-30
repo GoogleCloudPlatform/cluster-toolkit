@@ -1704,7 +1704,7 @@ func (g *GKEOrchestrator) checkJobPodWarningEvents(ns, workloadName string) stri
 	if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) == "" {
 		return ""
 	}
-	podPrefix := workloadName + "-"
+	podPrefix := "pod/" + workloadName + "-"
 	var matched []string
 	for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
 		line = strings.TrimSpace(line)

@@ -4204,7 +4204,7 @@ func TestCheckJobSetWarningEvents_IncludesPodSchedulingEvents(t *testing.T) {
 		"2m          Normal    Scheduled           pod/pw-job-worker-0-0-abc   Successfully assigned default/pw-job-worker-0-0-abc to node-1",
 		"90s         Warning   FailedScheduling    pod/pw-job-pathways-head-0-0-xyz   0/5 nodes are available: 5 Insufficient cpu.",
 		"85s         Normal    NotTriggerScaleUp   pod/pw-job-pathways-head-0-0-xyz   pod didn't trigger scale-up: 1 max node group size reached",
-		"80s         Warning   FailedScheduling    pod/unrelated-job-0-0-def   0/5 nodes are available",
+		"80s         Warning   FailedScheduling    pod/other-pw-job-0-0-def   0/5 nodes are available",
 	}, "\n")
 
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
@@ -4223,8 +4223,8 @@ func TestCheckJobSetWarningEvents_IncludesPodSchedulingEvents(t *testing.T) {
 	if strings.Contains(got, "Successfully assigned") {
 		t.Errorf("did not expect Normal Scheduled event in warning output, got:\n%s", got)
 	}
-	if strings.Contains(got, "unrelated-job") {
-		t.Errorf("did not expect events from unrelated job, got:\n%s", got)
+	if strings.Contains(got, "other-pw-job") {
+		t.Errorf("did not expect events from unrelated job with matching suffix, got:\n%s", got)
 	}
 }
 
