@@ -42,7 +42,6 @@ import (
 	"github.com/hashicorp/go-getter"
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/otiai10/copy"
 	"github.com/zclconf/go-cty/cty"
 )
@@ -93,6 +92,10 @@ func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
 
 	// TODO: probably not a right place to do "materialize". Consider bubbling it up.
 	if err := bp.Materialize(); err != nil {
+		return err
+	}
+
+	if err := validateModuleIgnores(bp); err != nil {
 		return err
 	}
 
@@ -169,18 +172,53 @@ func copySharedEmbeddedModules(bp config.Blueprint, deploymentDir string) error 
 	return writeSharedEmbeddedOverrides(bp, deploymentDir)
 }
 
-func validateModuleIgnoresRemoteSource(bp config.Blueprint) error {
+func validateTargetExistence(source string, reconfigIgnores map[string][]string, discovered map[string][]string) error {
+	for target := range reconfigIgnores {
+		if strings.Contains(target, ".") {
+			parts := strings.SplitN(target, ".", 2)
+			rType, rName := parts[0], parts[1]
+			names, ok := discovered[rType]
+			if !ok || !slices.Contains(names, rName) {
+				return formatTargetNotFoundError(target, source, discovered)
+			}
+		} else {
+			names, ok := discovered[target]
+			if !ok || len(names) == 0 {
+				return formatTargetNotFoundError(target, source, discovered)
+			}
+		}
+	}
+	return nil
+}
+
+func validateSingleModuleIgnores(mod config.Module) error {
+	if len(mod.ReconfigureIgnores) == 0 {
+		return nil
+	}
+	if mod.Kind != config.TerraformKind {
+		return fmt.Errorf("module %q specifies reconfigure_ignores, which is only supported for terraform modules (got kind %q)", mod.ID, mod.Kind)
+	}
+	if sourcereader.IsRemotePath(mod.Source) {
+		return fmt.Errorf("module %q specifies reconfigure_ignores, but uses a remote source %q: "+
+			"reconfigure_ignores is currently only supported on local and embedded modules", mod.ID, mod.Source)
+	}
+	for target, ignores := range mod.ReconfigureIgnores {
+		if slices.Contains(ignores, "all") {
+			return fmt.Errorf("reconfigure_ignores target %q specifies %q; ignoring \"all\" changes is not supported, please specify individual attribute names", target, "all")
+		}
+	}
+	discovered, err := findModuleResources(mod.Source)
+	if err != nil {
+		return fmt.Errorf("failed to discover resources in module %q (%s): %w", mod.ID, mod.Source, err)
+	}
+	return validateTargetExistence(mod.Source, mod.ReconfigureIgnores, discovered)
+}
+
+func validateModuleIgnores(bp config.Blueprint) error {
 	for _, g := range bp.Groups {
 		for _, mod := range g.Modules {
-			if len(mod.ReconfigureIgnores) == 0 {
-				continue
-			}
-			if mod.Kind != config.TerraformKind {
-				return fmt.Errorf("module %q specifies reconfigure_ignores, which is only supported for terraform modules (got kind %q)", mod.ID, mod.Kind)
-			}
-			if sourcereader.IsRemotePath(mod.Source) {
-				return fmt.Errorf("module %q specifies reconfigure_ignores, but uses a remote source %q: "+
-					"reconfigure_ignores is currently only supported on local and embedded modules", mod.ID, mod.Source)
+			if err := validateSingleModuleIgnores(mod); err != nil {
+				return err
 			}
 		}
 	}
@@ -188,10 +226,6 @@ func validateModuleIgnoresRemoteSource(bp config.Blueprint) error {
 }
 
 func writeSharedEmbeddedOverrides(bp config.Blueprint, deploymentDir string) error {
-	if err := validateModuleIgnoresRemoteSource(bp); err != nil {
-		return err
-	}
-
 	for _, g := range bp.Groups {
 		for _, mod := range g.Modules {
 			if mod.Kind == config.TerraformKind && sourcereader.IsEmbeddedPath(mod.Source) && len(mod.ReconfigureIgnores) > 0 {
@@ -405,11 +439,14 @@ func copyModuleSource(src, dst string) error {
 	return nil
 }
 
-func findModuleResources(moduleDir string) (map[string][]string, error) {
+func findModuleResources(source string) (map[string][]string, error) {
 	resources := make(map[string][]string)
-	mod, diags := tfconfig.LoadModule(moduleDir)
-	if diags.HasErrors() {
-		return nil, fmt.Errorf("failed to load terraform module at %s: %v", moduleDir, diags)
+	mod, err := modulereader.LoadTFConfigModule(source)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load terraform module at %s: %w", source, err)
+	}
+	if mod == nil {
+		return nil, fmt.Errorf("source is not a terraform module: %s", source)
 	}
 
 	for _, res := range mod.ManagedResources {
@@ -544,12 +581,11 @@ func setResourceOverride(override tfOverrideFile, existingIgnores map[string]map
 	if override.Resource[rType] == nil {
 		override.Resource[rType] = make(map[string]tfResourceOverride)
 	}
-	var current []string
+	current := existingIgnores[rType][rName]
 	if prev, ok := override.Resource[rType][rName]; ok {
 		current = prev.Lifecycle.IgnoreChanges
 	}
-	mergedWithExisting := mergeIgnores(existingIgnores[rType][rName], ignores)
-	finalIgnores := mergeIgnores(current, mergedWithExisting)
+	finalIgnores := mergeIgnores(current, ignores)
 	sort.Strings(finalIgnores)
 	override.Resource[rType][rName] = tfResourceOverride{
 		Lifecycle: tfLifecycleOverride{IgnoreChanges: finalIgnores},

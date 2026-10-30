@@ -967,6 +967,13 @@ func assertFileNotExists(t *testing.T, path string) {
 	}
 }
 
+func assertFileExists(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("expected %s to exist, but got: %v", path, err)
+	}
+}
+
 func assertFileContains(t *testing.T, path string, substrs ...string) {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -1119,7 +1126,28 @@ func TestNormalizeIgnoreAttribute(t *testing.T) {
 	}
 }
 
-func TestValidateModuleIgnoresRemoteSource(t *testing.T) {
+func setupMockVpcFS(t *testing.T) {
+	t.Helper()
+	repoDir := t.TempDir()
+	modDir := filepath.Join(repoDir, "modules", "network", "vpc")
+	if err := os.MkdirAll(modDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	mainTf := `
+resource "google_compute_network" "network" {
+  name = "test"
+}
+`
+	if err := os.WriteFile(filepath.Join(modDir, "main.tf"), []byte(mainTf), 0644); err != nil {
+		t.Fatal(err)
+	}
+	oldFS := sourcereader.ModuleFS
+	t.Cleanup(func() { sourcereader.ModuleFS = oldFS })
+	sourcereader.ModuleFS = mockFS{os.DirFS(repoDir)}
+}
+
+func TestValidateModuleIgnores(t *testing.T) {
+	setupMockVpcFS(t)
 	bpPacker := config.Blueprint{
 		Groups: []config.Group{
 			{
@@ -1137,7 +1165,7 @@ func TestValidateModuleIgnoresRemoteSource(t *testing.T) {
 			},
 		},
 	}
-	if err := validateModuleIgnoresRemoteSource(bpPacker); err == nil {
+	if err := validateModuleIgnores(bpPacker); err == nil {
 		t.Fatalf("expected error for packer module with reconfigure_ignores, got nil")
 	}
 
@@ -1158,11 +1186,53 @@ func TestValidateModuleIgnoresRemoteSource(t *testing.T) {
 			},
 		},
 	}
-	if err := validateModuleIgnoresRemoteSource(bpRemote); err == nil {
+	if err := validateModuleIgnores(bpRemote); err == nil {
 		t.Fatalf("expected error for remote module with reconfigure_ignores, got nil")
 	}
 
-	bpLocal := config.Blueprint{
+	bpAll := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "mod_all",
+						Kind:   config.TerraformKind,
+						Source: "modules/network/vpc",
+						ReconfigureIgnores: map[string][]string{
+							"google_compute_network": {"all"},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := validateModuleIgnores(bpAll); err == nil {
+		t.Fatalf("expected error for reconfigure_ignores with 'all', got nil")
+	}
+
+	bpTypo := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "vpc_mod",
+						Kind:   config.TerraformKind,
+						Source: "modules/network/vpc",
+						ReconfigureIgnores: map[string][]string{
+							"google_compute_network.typo": {"mtu"},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := validateModuleIgnores(bpTypo); err == nil || !strings.Contains(err.Error(), "modules/network/vpc") {
+		t.Fatalf("expected error mentioning mod.Source for target typo, got: %v", err)
+	}
+
+	bpValid := config.Blueprint{
 		Groups: []config.Group{
 			{
 				Name: "primary",
@@ -1179,9 +1249,64 @@ func TestValidateModuleIgnoresRemoteSource(t *testing.T) {
 			},
 		},
 	}
-	if err := validateModuleIgnoresRemoteSource(bpLocal); err != nil {
+	if err := validateModuleIgnores(bpValid); err != nil {
 		t.Fatalf("unexpected error for embedded module: %v", err)
 	}
+}
+
+func TestWriteDeployment_Day2StatePreservationOnValidationError(t *testing.T) {
+	setupMockVpcFS(t)
+	depDir := filepath.Join(t.TempDir(), "day2-dep")
+	bpInitial := config.Blueprint{
+		Vars: config.Dict{}.With("deployment_name", cty.StringVal("day2-test")),
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "vpc",
+						Kind:   config.TerraformKind,
+						Source: "modules/network/vpc",
+					},
+				},
+			},
+		},
+	}
+	if err := WriteDeployment(bpInitial, depDir); err != nil {
+		t.Fatalf("initial WriteDeployment failed: %v", err)
+	}
+
+	expandedPath := filepath.Join(ArtifactsDir(depDir), ExpandedBlueprintName)
+	assertFileExists(t, expandedPath)
+
+	bpWithTypo := config.Blueprint{
+		Vars: config.Dict{}.With("deployment_name", cty.StringVal("day2-test")),
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "vpc",
+						Kind:   config.TerraformKind,
+						Source: "modules/network/vpc",
+						ReconfigureIgnores: map[string][]string{
+							"nonexistent_resource": {"mtu"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := WriteDeployment(bpWithTypo, depDir)
+	if err == nil {
+		t.Fatal("expected WriteDeployment to fail on typo, got nil")
+	}
+
+	// Verify expanded blueprint and primary group still exist in-place, not moved to previous_deployment_groups
+	assertFileExists(t, expandedPath)
+	assertFileExists(t, filepath.Join(depDir, "primary", "main.tf"))
+	assertFileNotExists(t, filepath.Join(HiddenGhpcDir(depDir), prevGroupDirName, "primary"))
 }
 
 func TestWriteModuleReconfigureOverrides_TypeAndSpecificMerge(t *testing.T) {
