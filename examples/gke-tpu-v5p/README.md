@@ -193,7 +193,7 @@ This generates a local file `my-manifest.yaml` containing the complete Kubernete
 * `--pathways`: Flags GCluster to generate a Pathways JobSet coordination architecture.
 * `--pathways-gcs-location`: A Cloud Storage bucket URI used by the coordinator and worker pods to synchronize network state and parameters.
 * `--image`: The container image for the workload (using the standard TPU JAX image).
-* `--command`: The entrypoint command. `gcluster job submit --pathways` automatically sets `JAX_PLATFORMS=proxy` and `JAX_BACKEND_TARGET=grpc://$(PATHWAYS_HEAD):29000` so JAX delegates computations to the TPU workers via its built-in `'proxy'` backend. `pathwaysutils.initialize()` is only needed for Pathways-specific features (such as Orbax checkpoint persistence or profiling) and, if used, must be called before `jax.devices()`.
+* `--command`: The entrypoint command. `gcluster job submit --pathways` automatically sets `JAX_PLATFORMS=proxy` and `JAX_BACKEND_TARGET=grpc://localhost:29000` so JAX delegates computations to the TPU workers via its built-in `'proxy'` backend. `pathwaysutils.initialize()` is only needed for Pathways-specific features (such as Orbax checkpoint persistence or profiling) and, if used, must be called before `jax.devices()`.
 * `--dry-run-out`: Outputs the generated Kubernetes manifests to the file path specified as the argument to this flag (e.g., `my-manifest.yaml` in the example above) instead of submitting them to GKE.
 
 ### 3. Submit the Live Job

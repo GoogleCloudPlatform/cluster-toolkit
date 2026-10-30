@@ -239,6 +239,39 @@ python3 tools/run_eval.py --lint-only --all
 make test-skills
 ```
 
+#### Live Evaluation Against a Real Agent (`--live`, manual only)
+
+The offline runner proves that `EVAL.yaml` is well-formed; it cannot tell you
+whether a real coding agent follows the skill. `--live` runs every prompt
+against an actual agent CLI and scores it from **filesystem and transcript
+evidence** instead of keyword matching:
+
+| Oracle | Hard failure when |
+| :--- | :--- |
+| `git status -- examples community/examples` | any tracked template was modified |
+| `find modules community/modules -name '*.tf' -anewer <marker>` | the agent read raw Terraform instead of `references/catalog.yaml` |
+| `gcluster` / `terraform` shims placed in the worktree | `gcluster deploy`, `gcluster destroy`, or any `terraform` command (other than `version`/help) was attempted |
+| new blueprint under `examples/` | the copy lacks `ai_assisted: true` |
+| `gcluster expand` on the agent's new blueprint | the produced YAML does not expand |
+
+Each case runs in a throwaway `git worktree` of `--repo-ref` (default `HEAD`),
+so the checkout you are in is never touched. Keyword assertions are still
+reported in the case message but do not change the verdict.
+
+```bash
+# Prerequisites: agent CLI installed and logged in (gemini | codex | claude),
+# ./gcluster built, gcloud ADC for the sandbox project.
+python3 tools/run_eval.py --skill cluster-blueprint-assistant --live \
+  --agent gemini --project <sandbox-project> [--timeout 900] [--keep-worktrees]
+
+# Or for all skills, writing live-eval-report.md:
+make test-skills-live LIVE_PROJECT=<sandbox-project> LIVE_AGENT=codex
+```
+
+`--live` is **never run in pre-commit or GitHub Actions**: it needs
+credentials, a GCP project, and minutes per case. Use it at the end of a
+milestone and attach `live-eval-report.md` to the PR.
+
 ---
 
 ## 5. Continuous Integration & Local Verification
