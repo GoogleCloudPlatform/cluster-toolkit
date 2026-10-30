@@ -259,24 +259,30 @@ Periodically, the Cluster Toolkit team will update the default versions defined 
 When performing manual upgrades, following aspects need to be considered:
 
 * **Disruption and Reboots**:
-  * Upgrading GKE node pools requires node replacement or restarts. Whether triggered via blueprint redeployment, `gcloud` CLI, or the Cloud Console, upgrading a node pool initiates a rolling update. This process replaces old nodes with new ones running the updated version, which is disruptive as pods will be evicted and rescheduled.
-  * Standard rolling upgrades are disruptive to tightly-coupled distributed workloads (e.g., multi-node training jobs using `JobSet`). Losing a single node in a distributed job usually causes the entire job to fail. For these workloads, operators should gracefully pause or drain their jobs (e.g., scaling JobSets/deployments to 0) and verify that a successful checkpoint has been saved to persistent storage before initiating a node pool upgrade.
-* **Node Pool Label Updates (GCE Resource Labels)**:
-  * Applied to the underlying Compute Engine VM instances and disks (used for billing, organization tracking, and Toolkit metadata such as `ghpc_blueprint`). Updating GCE resource labels on a node pool forces GKE to initiate a **rolling recreation of all nodes** in the pool to apply the new GCE metadata, which is disruptive to running workloads. Because of this, Cluster Toolkit places `node_config[0].resource_labels` in `lifecycle.ignore_changes` to prevent inadvertent metadata updates (such as renaming a blueprint) from rolling production node pools.
-  * If GCE resource labels must be updated on an existing node pool, perform the update deliberately during a scheduled maintenance window using the `gcloud` CLI. Note that `--labels` **replaces the entire set** of resource labels on the node pool rather than merging with existing labels, which drops existing Cluster Toolkit labels (`ghpc_blueprint`, `ghpc_deployment`, `ghpc_module`, `ghpc_role`) if omitted. The documentation for `--labels` also explicitly warns: _"Updating this label will causes the node(s) to be recreated"_. Inspect the current labels first, then supply the complete combined label set:
+  * Upgrading GKE node pools requires node replacement or restarts. Standard rolling upgrades are disruptive to tightly-coupled distributed workloads (e.g., multi-node training jobs using `JobSet`). Losing a single node in a distributed job usually causes the entire job to fail.
+  * **Decoupling Control Plane Upgrades from Compute Disruption**: Because of this, Cluster Toolkit places compute node pool `version` in `lifecycle.ignore_changes`. Bumping `gke_version` in your blueprint or having GKE auto-upgrade the control plane will **not** trigger an unexpected rolling reboot of compute nodes on Day 2.
+  * **How to Upgrade Compute Node Pools**:
+    * **Blue-Green Node Pool Swap (Recommended for AI/HPC)**: Define a new node pool in your blueprint (e.g. `a4x-pool-v2`) with the new version, deploy it alongside the existing pool, validate NCCL/GPU health, drain/cut over workloads at a scheduled training checkpoint, and decommission the old pool.
+    * **Direct Maintenance Window Upgrade**: Gracefully pause or drain jobs (ensuring a checkpoint is saved), then trigger the upgrade via `gcloud`:
+      ```shell
+      gcloud container node-pools upgrade <pool-name> \
+        --cluster <cluster-name> \
+        --region <region> \
+        --version <target-gke-version>
+      ```
+* **Node Pool Label Updates (GCE Resource Labels vs. Kubernetes Node Labels)**:
+  * **GCE Resource Labels (`node_config[0].resource_labels`)**: Applied to the underlying Compute Engine VM instances and disks (used for billing, organization tracking, and Toolkit metadata such as `ghpc_blueprint`). Updating GCE resource labels forces GKE to initiate a **rolling recreation of all nodes** in the pool to apply the new GCE metadata. Cluster Toolkit places `resource_labels` in `lifecycle.ignore_changes` to prevent inadvertent metadata updates (such as renaming a blueprint) from rolling production node pools. Updates must be executed deliberately via `gcloud container node-pools update <pool-name> --labels <key=val,...>`.
+  * **Kubernetes Node Labels (`node_config[0].labels`)**: Applied to the Kubernetes Node objects and configured via `var.kubernetes_labels` in Cluster Toolkit. GKE updates Kubernetes node labels **in-place without restarting nodes or disrupting workloads**.
+  * **Upgrade Advisory for Existing Deployments**: GKE's `nodePools.update` API replaces the **entire Kubernetes label map** rather than merging. If you previously applied labels to existing node pools out-of-band (e.g., using `kubectl label node` or `gcloud container node-pools update --node-labels`), running `gcluster deploy` or `terraform apply` will **remove any labels missing from your blueprint**. Always review `terraform plan` (or deploy without auto-approve) and ensure all active labels are recorded in `vars.kubernetes_labels` before applying:
 
     ```shell
-    # 1. Inspect existing resource labels
+    # 1. Inspect existing live Kubernetes labels
     gcloud container node-pools describe <pool-name> \
       --cluster <cluster-name> \
       --region <region> \
-      --format="value(config.resourceLabels)"
+      --format="json(config.labels)"
 
-    # 2. Update with the full set of existing and new labels
-    gcloud container node-pools update <pool-name> \
-      --cluster <cluster-name> \
-      --region <region> \
-      --labels ghpc_blueprint=<bp>,ghpc_deployment=<dep>,key1=val1,key2=val2
+    # 2. Add any active labels to vars.kubernetes_labels in deployment.yaml before deploying
     ```
 
 * **Pod Disruption Budgets (PDBs)**: GKE respects PDBs during upgrades. If a PDB is overly restrictive, it can block or slow down the upgrade process. Conversely, ensure PDBs are configured correctly to maintain application availability during the rolling update.  
