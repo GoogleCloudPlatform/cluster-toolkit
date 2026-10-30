@@ -288,7 +288,7 @@ class ParseXpkToGclusterTest(unittest.TestCase):
 
     cluster_cmd = "xpk cluster create --cluster c1 --tpu-type $MY_ACCELERATOR"
     cluster_output = parse_xpk_to_gcluster.parse_xpk_command(cluster_cmd)
-    self.assertIn("machine_type: $MY_ACCELERATOR", cluster_output)
+    self.assertIn("compute_machine_type: $MY_ACCELERATOR", cluster_output)
     self.assertIn("tpu_topology: <YOUR_TOPOLOGY>", cluster_output)
 
   def test_cores_vs_chips_topology_mapping(self):
@@ -625,7 +625,7 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     self.assertEqual(vars_block.get("project_id"), "my-project")
     self.assertEqual(vars_block.get("zone"), "us-central1-a")
     self.assertEqual(vars_block.get("region"), "us-central1")
-    self.assertEqual(vars_block.get("machine_type"), "ct6e-standard-4t")
+    self.assertEqual(vars_block.get("compute_machine_type"), "ct6e-standard-4t")
     self.assertEqual(vars_block.get("tpu_topology"), "4x4")
     self.assertEqual(vars_block.get("num_slices"), 2)
 
@@ -652,7 +652,7 @@ class ParseXpkToGclusterTest(unittest.TestCase):
 
     cmd_cl = "xpk cluster create --cluster c1 --tpu-type tpu7x"
     out_cl = parse_xpk_to_gcluster.parse_xpk_command(cmd_cl)
-    self.assertIn("machine_type: tpu7x-standard-4t", out_cl)
+    self.assertIn("compute_machine_type: tpu7x-standard-4t", out_cl)
     self.assertIn("tpu_topology: <YOUR_TOPOLOGY>", out_cl)
 
   def test_tpu7x_trailing_dash(self):

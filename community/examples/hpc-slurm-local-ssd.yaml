@@ -21,6 +21,17 @@ vars:
   deployment_name: hpc-localssd
   region: us-central1
   zone: us-central1-a
+  # Optional overrides (defaults shown)
+  # Machine type for the ssdcomp partition.
+  compute_machine_type: c2-standard-4
+  # Maximum number of dynamically provisioned nodes in the ssdcomp partition.
+  compute_node_count_dynamic_max: 5
+  # Number of statically provisioned nodes in the ssdcomp partition.
+  compute_node_count_static: 0
+  # Machine type for the login node.
+  login_machine_type: n1-standard-4
+  # Machine type for the controller node.
+  controller_machine_type: n1-standard-4
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -82,9 +93,9 @@ deployment_groups:
         boot: false
         disk_resource_manager_tags: {}
       bandwidth_tier: gvnic_enabled
-      machine_type: c2-standard-4
-      node_count_dynamic_max: 5
-      node_count_static: 0
+      machine_type: $(vars.compute_machine_type)
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
+      node_count_static: $(vars.compute_node_count_static)
       allow_automatic_updates: false
 
   - id: partition
@@ -98,7 +109,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
-      machine_type: n1-standard-4
+      machine_type: $(vars.login_machine_type)
       enable_login_public_ips: true
 
   - id: slurm_controller
@@ -111,5 +122,5 @@ deployment_groups:
         suspend_rate: 0
         suspend_timeout: 300
         no_comma_params: false
-      machine_type: n1-standard-4
+      machine_type: $(vars.controller_machine_type)
       enable_controller_public_ips: true

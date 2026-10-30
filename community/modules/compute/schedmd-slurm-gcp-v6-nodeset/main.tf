@@ -124,6 +124,8 @@ locals {
       device_name                         = ad.device_name
       disk_type                           = ad.disk_type
       disk_storage_pool                   = ad.disk_storage_pool
+      disk_provisioned_iops               = ad.disk_provisioned_iops
+      disk_provisioned_throughput         = ad.disk_provisioned_throughput
       disk_size_gb                        = ad.disk_size_gb
       disk_labels                         = merge(ad.disk_labels, local.labels)
       auto_delete                         = ad.auto_delete
@@ -157,13 +159,15 @@ locals {
     dws_flex               = var.dws_flex
     provisioning_engine    = var.provisioning_engine
 
-    disk_auto_delete           = var.disk_auto_delete
-    disk_labels                = merge(local.labels, var.disk_labels)
-    disk_size_gb               = var.disk_size_gb
-    disk_type                  = var.disk_type
-    disk_storage_pool          = var.disk_storage_pool
-    disk_resource_manager_tags = var.disk_resource_manager_tags
-    additional_disks           = local.additional_disks
+    disk_auto_delete            = var.disk_auto_delete
+    disk_labels                 = merge(local.labels, var.disk_labels)
+    disk_size_gb                = var.disk_size_gb
+    disk_type                   = var.disk_type
+    disk_storage_pool           = var.disk_storage_pool
+    disk_provisioned_iops       = var.disk_provisioned_iops
+    disk_provisioned_throughput = var.disk_provisioned_throughput
+    disk_resource_manager_tags  = var.disk_resource_manager_tags
+    additional_disks            = local.additional_disks
 
     disk_encryption_key                 = var.disk_encryption_key
     disk_encryption_key_service_account = var.disk_encryption_key_service_account
@@ -210,7 +214,7 @@ locals {
 
     zone_target_shape = local.zone_target_shape
     zone_policy_allow = local.zones_allow
-    zone_policy_deny  = local.zones_deny
+    zone_policy_deny  = toset([]) # derived by the controller
 
     instance_flexibility_policy = local.instance_flexibility_policy
 
@@ -237,23 +241,8 @@ locals {
     var.future_reservation == ""
   )
 
-  zones_allow = local.expand_zones ? toset(data.google_compute_zones.available.names) : local.zones
-  zones_deny  = setsubtract(data.google_compute_zones.available.names, local.zones_allow)
-}
-
-data "google_compute_zones" "available" {
-  project = var.project_id
-  region  = var.region
-
-  lifecycle {
-    postcondition {
-      condition     = length(setsubtract(local.zones, self.names)) == 0
-      error_message = <<-EOD
-      Invalid zones=${jsonencode(setsubtract(local.zones, self.names))}
-      Available zones=${jsonencode(self.names)}
-      EOD
-    }
-  }
+  # null means every zone of the region. The controller resolves it with its per-region zones data source.
+  zones_allow = local.expand_zones ? null : local.zones
 }
 
 locals {

@@ -70,20 +70,20 @@ limitations under the License.
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.64 |
 
 ## Providers
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 4.64 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
-| <a name="module_firewall_rule"></a> [firewall\_rule](#module\_firewall\_rule) | terraform-google-modules/network/google//modules/firewall-rules | ~> 13.0 |
+| <a name="module_firewall_rule"></a> [firewall\_rule](#module\_firewall\_rule) | terraform-google-modules/network/google//modules/firewall-rules | ~> 18.3 |
 
 ## Resources
 

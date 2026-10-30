@@ -38,3 +38,7 @@ vars:
 # tpu_enable_spot_vm: true
 #
 # To make use of spot VMs, for more info visit: https://cloud.google.com/compute/docs/instances/spot
+
+## --- Optional overrides (defaults shown) ---
+  # login_machine_type: n2d-standard-4
+  # controller_machine_type: n2d-standard-4

@@ -1,0 +1,15 @@
+google-cloud-storage
+google-api-core
+protobuf
+google-cloud-bigquery
+tqdm
+deprecation
+pandas<3
+matplotlib<3.10
+scipy
+types-PyYAML
+distro
+archspec
+jsonschema
+jinja2
+ruamel.yaml

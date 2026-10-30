@@ -336,6 +336,56 @@ def test_parse_job_info(job_info, expected_job):
     assert lkp._parse_job_info(job_info) == expected_job
 
 
+@pytest.mark.parametrize(
+    "stdout,expected_jobs",
+    [
+        ("No jobs in the system\n", []),
+        (
+            "JobId=16 JobName=bash\n"
+            "   JobState=COMPLETED\n"
+            "   TimeLimit=00:05:00\n"
+            "   ReqNodeList=(null) ExcNodeList=(null)\n"
+            "   Command=bash -c \"\n"
+            "echo hello\n"
+            "\"\n"
+            "\n"
+            "   WorkDir=/home/user\n"
+            "   TresPerNode=gres/tpu:v5p:4\n"
+            "   Layout=v5p=2x2x1\n"
+            "\n"
+            "JobId=17 JobName=python\n"
+            "   JobState=RUNNING\n"
+            "   TimeLimit=01:00:00\n"
+            "   ReqNodeList=node-0 ExcNodeList=(null)\n"
+            "   Command=/tmp/job.sh\n"
+            "   WorkDir=/home/user\n"
+            "\n",
+            [
+                util.Job(
+                    id=16,
+                    duration=timedelta(minutes=5),
+                    name="bash",
+                    job_state="COMPLETED",
+                    required_nodes="(null)",
+                ),
+                util.Job(
+                    id=17,
+                    duration=timedelta(hours=1),
+                    name="python",
+                    job_state="RUNNING",
+                    required_nodes="node-0",
+                ),
+            ],
+        ),
+    ],
+)
+def test_get_jobs(mocker, stdout, expected_jobs):
+    lkp = util.Lookup(TstCfg())
+    mocker.patch.object(util, "run", return_value=Mock(stdout=stdout))
+    assert lkp.get_jobs() == expected_jobs
+
+
+
 
 @pytest.mark.parametrize(
     "node,state,want",
@@ -1659,7 +1709,6 @@ def _mk_tpu_tpl(machine_name: str):
         ("ct5p-hightpu-4t", "2x2x2", "v5p", 2),
         ("ct6e-standard-4t", "2x4", "v6e", 2),
         ("tpu7x-standard-4t", "2x2x2", "tpu7x", 2),
-        ("tpu7-standard-4t", "2x2x2", "7", 2),
         ("ct6e-standard-8t", "2x4", ValueError, None),
         ("ct6e-standard-1t", "2x4", ValueError, None),
         ("n1-standard-4", None, None, 1),

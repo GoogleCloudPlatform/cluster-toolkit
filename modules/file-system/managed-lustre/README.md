@@ -25,7 +25,7 @@ to be passed to the Lustre module to ensure that they're built in order and
 that the correct subnetwork has private service access.
 
 ```yaml
- - id: network
+  - id: network
     source: modules/network/vpc
 
   - id: private_service_access

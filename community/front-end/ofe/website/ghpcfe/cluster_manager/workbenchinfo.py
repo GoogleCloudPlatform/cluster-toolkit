@@ -336,7 +336,10 @@ machine_type = "{self.workbench.machine_type}"
 boot_disk_type = "{self.workbench.boot_disk_type}"
 boot_disk_size_gb = "{self.workbench.boot_disk_capacity}"
 trusted_user = "{self.workbench.trusted_user.email}"
-image_family = "{self.workbench.image_family}"
+instance_image = {{
+  project = "deeplearning-platform-release"
+  family  = "{self.workbench.image_family}"
+}}
 
 owner_id = ["{self.workbench.trusted_user.email}"]
 wb_startup_script_name   = "workbench/workbench_{self.workbench.id}_startup_script"
