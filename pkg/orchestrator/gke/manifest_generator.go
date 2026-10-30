@@ -578,6 +578,9 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 	if err := validatePathwaysMTCManifest(buf.String(), opts); err != nil {
 		return "", err
 	}
+	if err := validatePathwaysSPSManifest(buf.String(), opts); err != nil {
+		return "", err
+	}
 
 	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
 	if err := ValidateJobSetManifest(manifest); err != nil {
@@ -665,6 +668,27 @@ func validatePathwaysMTCManifest(jobSet string, opts ManifestOptions) error {
 	return nil
 }
 
+// validatePathwaysSPSManifest checks that an SPS server's pathways-head runs only pathways-rm,
+// which a pathways_jobset.tmpl extracted from an older gcluster version does not do.
+func validatePathwaysSPSManifest(jobSet string, opts ManifestOptions) error {
+	if !opts.Pathways.DeploySPS {
+		return nil
+	}
+	_, headSpec, err := extractPathwaysPodSpecs(jobSet)
+	if err != nil {
+		return err
+	}
+	if headSpec == nil {
+		return fmt.Errorf("--pathways-deploy-sps is set but the Pathways manifest has no pathways-head replicatedJob. %s", pathwaysTemplateExtractHint)
+	}
+	for _, c := range slices.Concat(headSpec.InitContainers, headSpec.Containers) {
+		if c.Name == "pathways-proxy" || strings.HasPrefix(c.Name, "workload-container") {
+			return fmt.Errorf("--pathways-deploy-sps is set but pathways-head runs container %q; an SPS server runs only pathways-rm. %s", c.Name, pathwaysTemplateExtractHint)
+		}
+	}
+	return nil
+}
+
 func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
 	exclusiveTopology := ""
 	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
@@ -743,6 +767,8 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		GCSFuseEnabled:                opts.GCSFuseEnabled,
 		HostNetworkEnabled:            isTPU || isGPU,
 		Pathways:                      opts.Pathways,
+		PathwaysProxyEnabled:          !opts.Pathways.DeploySPS,
+		PathwaysWorkloadEnabled:       !opts.Pathways.Headless && !opts.Pathways.DeploySPS,
 		ExclusiveTopologyAnnotation:   exclusiveTopology,
 		Verbose:                       opts.Verbose,
 		Env:                           sortedEnvVars(opts.Env),
