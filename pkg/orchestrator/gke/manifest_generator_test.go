@@ -58,6 +58,18 @@ func TestBuildResourcesString(t *testing.T) {
 			wantErr:     false,
 		},
 		{
+			name:        "cpu request equals limit",
+			cpu:         "1",
+			wantContain: "requests:\n                    cpu: \"1\"",
+			wantErr:     false,
+		},
+		{
+			name:        "millicore cpu request equals limit",
+			cpu:         "1430m",
+			wantContain: "requests:\n                    cpu: 1430m",
+			wantErr:     false,
+		},
+		{
 			name:    "invalid cpu",
 			cpu:     "invalid",
 			wantErr: true,

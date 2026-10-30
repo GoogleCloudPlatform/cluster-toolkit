@@ -341,6 +341,159 @@ func TestCalculateResourceLimits_CPU(t *testing.T) {
 	}
 }
 
+const testNodesN2D2 = `{"items":[
+ {"metadata":{"name":"node-cordoned"},"spec":{"unschedulable":true},
+  "status":{"allocatable":{"cpu":"1930m"},"conditions":[{"type":"Ready","status":"True"}]}},
+ {"metadata":{"name":"node-a"},"spec":{},
+  "status":{"allocatable":{"cpu":"1930m"},"conditions":[{"type":"Ready","status":"True"}]}}]}`
+
+// DaemonSet (500m) + static kube-proxy mirror pod (100m+200m); the ReplicaSet pod is ignored.
+const testPodsNodeA = `{"items":[
+ {"metadata":{"ownerReferences":[{"kind":"DaemonSet"}]},"spec":{"containers":[{"resources":{"requests":{"cpu":"500m"}}}]}},
+ {"metadata":{"ownerReferences":[{"kind":"Node"}]},"spec":{"containers":[{"resources":{"requests":{"cpu":"100m"}}},{"resources":{"requests":{"cpu":"0.2"}}}]}},
+ {"metadata":{"ownerReferences":[{"kind":"ReplicaSet"}]},"spec":{"containers":[{"resources":{"requests":{"cpu":"1"}}}]}}]}`
+
+const (
+	testNodesCmd = "kubectl get nodes -l node.kubernetes.io/instance-type=n2d-standard-2 -o json"
+	testPodsCmd  = "kubectl get pods --all-namespaces --field-selector spec.nodeName=node-a,"
+)
+
+func TestCalculateResourceLimits_CPU_NodeAware(t *testing.T) {
+	tests := []struct {
+		name      string
+		responses map[string][]shell.CommandResult
+		gcsFuse   bool
+		wantCPU   string
+	}{
+		{
+			name: "live node: allocatable minus per-node pod requests",
+			responses: map[string][]shell.CommandResult{
+				testNodesCmd: {{ExitCode: 0, Stdout: testNodesN2D2}},
+				testPodsCmd:  {{ExitCode: 0, Stdout: testPodsNodeA}},
+			},
+			wantCPU: "1130m", // 1930 - 500 - 100 - 200
+		},
+		{
+			name: "live node with gcsfuse mount reserves sidecar CPU",
+			responses: map[string][]shell.CommandResult{
+				testNodesCmd: {{ExitCode: 0, Stdout: testNodesN2D2}},
+				testPodsCmd:  {{ExitCode: 0, Stdout: testPodsNodeA}},
+			},
+			gcsFuse: true,
+			wantCPU: "880m", // 1130 - 250
+		},
+		{
+			name: "pool scaled to zero falls back to 95% rule",
+			responses: map[string][]shell.CommandResult{
+				testNodesCmd: {{ExitCode: 0, Stdout: `{"items":[]}`}},
+			},
+			wantCPU: "1",
+		},
+		{
+			name: "only NotReady nodes falls back to 95% rule",
+			responses: map[string][]shell.CommandResult{
+				testNodesCmd: {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"node-a"},"status":{"allocatable":{"cpu":"1930m"},"conditions":[{"type":"Ready","status":"False"}]}}]}`}},
+			},
+			wantCPU: "1",
+		},
+		{
+			name: "kubectl get nodes fails falls back to 95% rule",
+			responses: map[string][]shell.CommandResult{
+				testNodesCmd: {{ExitCode: 1, Stderr: "forbidden"}},
+			},
+			wantCPU: "1",
+		},
+		{
+			name: "kubectl get pods fails falls back to 95% rule",
+			responses: map[string][]shell.CommandResult{
+				testNodesCmd: {{ExitCode: 0, Stdout: testNodesN2D2}},
+				testPodsCmd:  {{ExitCode: 1, Stderr: "forbidden"}},
+			},
+			wantCPU: "1",
+		},
+		{
+			name: "no CPU left after sidecar falls back to 95% rule minus sidecar",
+			responses: map[string][]shell.CommandResult{
+				testNodesCmd: {{ExitCode: 0, Stdout: testNodesN2D2}},
+				testPodsCmd:  {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"ownerReferences":[{"kind":"DaemonSet"}]},"spec":{"containers":[{"resources":{"requests":{"cpu":"1800m"}}}]}}]}`}},
+			},
+			gcsFuse: true,
+			wantCPU: "750m",
+		},
+		{
+			name: "pool scaled to zero with gcsfuse reserves sidecar in fallback",
+			responses: map[string][]shell.CommandResult{
+				testNodesCmd: {{ExitCode: 0, Stdout: `{"items":[]}`}},
+			},
+			gcsFuse: true,
+			wantCPU: "750m", // int(2*0.95)=1 CPU - 250m
+		},
+		{
+			name: "large one-shot init container dominates the effective request",
+			responses: map[string][]shell.CommandResult{
+				testNodesCmd: {{ExitCode: 0, Stdout: testNodesN2D2}},
+				testPodsCmd: {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"ownerReferences":[{"kind":"DaemonSet"}]},"spec":{
+				 "containers":[{"resources":{"requests":{"cpu":"500m"}}}],
+				 "initContainers":[{"restartPolicy":"Always","resources":{"requests":{"cpu":"100m"}}},{"resources":{"requests":{"cpu":"900m"}}}]}}]}`}},
+			},
+			wantCPU: "930m", // effective = max(500+100, 900+100) = 1000; 1930 - 1000
+		},
+		{
+			name: "native sidecar counted, small one-shot init container does not dominate",
+			responses: map[string][]shell.CommandResult{
+				testNodesCmd: {{ExitCode: 0, Stdout: testNodesN2D2}},
+				testPodsCmd: {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"ownerReferences":[{"kind":"DaemonSet"}]},"spec":{
+				 "containers":[{"resources":{"requests":{"cpu":"500m"}}}],
+				 "initContainers":[{"resources":{"requests":{"cpu":"200m"}}},{"restartPolicy":"Always","resources":{"requests":{"cpu":"100m"}}}]}}]}`}},
+			},
+			wantCPU: "1330m", // effective = max(500+100, 200+0) = 600; 1930 - 600
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := newTestGKEOrchestrator(NewMockExecutor(tt.responses))
+			opts := ManifestOptions{MachineType: "n2d-standard-2", GCSFuseEnabled: tt.gcsFuse}
+			profile := JobProfile{IsCPUMachine: true, CapacityCount: 2}
+
+			cpu, mem, gpu, tpu, err := g.calculateResourceLimits(opts, profile)
+			if err != nil {
+				t.Fatalf("calculateResourceLimits failed: %v", err)
+			}
+			if cpu != tt.wantCPU {
+				t.Errorf("cpu = %v, want %v", cpu, tt.wantCPU)
+			}
+			if mem != "" || gpu != "" || tpu != "" {
+				t.Errorf("mem, gpu, tpu = %q, %q, %q; want empty strings", mem, gpu, tpu)
+			}
+		})
+	}
+}
+
+func TestCalculateResourceLimits_CPU_NodeAwareCached(t *testing.T) {
+	// Each command has exactly one response; a second lookup would hit the mock's
+	// "unexpected command" error and fall back to "1".
+	g := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
+		testNodesCmd: {{ExitCode: 0, Stdout: testNodesN2D2}},
+		testPodsCmd:  {{ExitCode: 0, Stdout: testPodsNodeA}},
+	}))
+	profile := JobProfile{IsCPUMachine: true, CapacityCount: 2}
+
+	for i, tc := range []struct {
+		gcsFuse bool
+		want    string
+	}{{false, "1130m"}, {true, "880m"}, {false, "1130m"}} {
+		opts := ManifestOptions{MachineType: "n2d-standard-2", GCSFuseEnabled: tc.gcsFuse}
+		cpu, _, _, _, err := g.calculateResourceLimits(opts, profile)
+		if err != nil {
+			t.Fatalf("call %d: calculateResourceLimits failed: %v", i, err)
+		}
+		if cpu != tc.want {
+			t.Errorf("call %d: cpu = %v, want %v", i, cpu, tc.want)
+		}
+	}
+}
+
 type MockMachineTypeClient struct {
 	FailAll  bool
 	MT       *compute.MachineType

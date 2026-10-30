@@ -120,12 +120,16 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 
 func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string, indent int) (string, error) {
 	limits := corev1.ResourceList{}
+	requests := corev1.ResourceList{}
 	if cpu != "" {
 		q, err := resource.ParseQuantity(cpu)
 		if err != nil {
 			return "", fmt.Errorf("failed to parse CPU quantity %q: %w", cpu, err)
 		}
 		limits[corev1.ResourceCPU] = q
+		// Requests equal limits: CPU is already sized to what a node can actually offer
+		// (see calculateResourceLimits), so the job keeps reserving a whole node.
+		requests[corev1.ResourceCPU] = q.DeepCopy()
 	}
 	if mem != "" {
 		q, err := resource.ParseQuantity(mem)
@@ -133,6 +137,7 @@ func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string, indent
 			return "", fmt.Errorf("failed to parse memory quantity %q: %w", mem, err)
 		}
 		limits[corev1.ResourceMemory] = q
+		requests[corev1.ResourceMemory] = q.DeepCopy()
 	}
 	if gpu != "" {
 		q, err := resource.ParseQuantity(gpu)
@@ -140,6 +145,7 @@ func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string, indent
 			return "", fmt.Errorf("failed to parse GPU quantity %q: %w", gpu, err)
 		}
 		limits[corev1.ResourceName("nvidia.com/gpu")] = q
+		requests[corev1.ResourceName("nvidia.com/gpu")] = q.DeepCopy()
 	}
 	if tpu != "" {
 		q, err := resource.ParseQuantity(tpu)
@@ -147,6 +153,7 @@ func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string, indent
 			return "", fmt.Errorf("failed to parse TPU quantity %q: %w", tpu, err)
 		}
 		limits[corev1.ResourceName("google.com/tpu")] = q
+		requests[corev1.ResourceName("google.com/tpu")] = q.DeepCopy()
 	}
 
 	if len(limits) == 0 {
@@ -154,7 +161,8 @@ func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string, indent
 	}
 
 	resources := corev1.ResourceRequirements{
-		Limits: limits,
+		Limits:   limits,
+		Requests: requests,
 	}
 
 	b, err := k8syaml.Marshal(resources)
