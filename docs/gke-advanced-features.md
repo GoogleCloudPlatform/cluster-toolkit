@@ -102,7 +102,7 @@ When you enable the `--pathways-headless` flag, Cluster Toolkit deploys the Path
   kubectl port-forward PATHWAYS_HEAD_POD 29000:29000
   ```
 
-  Then initialize your JAX/Pathways client against `grpc://127.0.0.1:29000`.
+  Then set `IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS=true` in your client environment and initialize your JAX/Pathways client against `grpc://127.0.0.1:29000`.
 
 #### Example CLI commands
 

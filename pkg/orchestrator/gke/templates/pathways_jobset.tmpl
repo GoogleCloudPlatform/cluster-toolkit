@@ -57,8 +57,6 @@ spec:
           spec:
             nodeSelector:
               cloud.google.com/gke-nodepool: {{.Pathways.HeadNodePool}}
-            hostNetwork: true
-            dnsPolicy: ClusterFirstWithHostNet
             restartPolicy: Never
 {{- if .PriorityClassName }}
             priorityClassName: {{.PriorityClassName}}
@@ -243,8 +241,6 @@ spec:
                 gke-gcsfuse/volumes: "true"
 {{- end }}
           spec:
-            hostNetwork: true
-            dnsPolicy: ClusterFirstWithHostNet
 {{- if eq .WorkerBackoffLimitPerIndex 0 }}
             restartPolicy: Never
 {{- else }}

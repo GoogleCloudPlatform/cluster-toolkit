@@ -1096,7 +1096,7 @@ Pathways integration provides the following orchestration capabilities:
 
 * **Multi-role JobSet orchestration:** When you specify the `--pathways` flag, Cluster Toolkit generates and coordinates a multi-role JobSet comprising the Resource Manager (`pathways-rm`), Proxy server (`pathways-proxy`), and JAX worker pods.
 * **Kueue resource management:** Cluster Toolkit automatically maps multi-slice resource limits and unifies Kueue ClusterQueue resource groups so that coordinator and worker pods schedule without resource deadlocks.
-* **Headless execution mode:** With the `--pathways-headless` flag, Cluster Toolkit provisions the Pathways server infrastructure without requiring a client workload container, letting external clients (such as local notebooks) connect to the cluster.
+* **Headless execution mode:** With the `--pathways-headless` flag, Cluster Toolkit provisions the Pathways server infrastructure without requiring a client workload container, letting external clients (such as local notebooks) connect to the cluster (external clients must set `IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS=true` to match `pathways-proxy`).
 * **Shared Pathways Service (SPS) mode:** With the `--pathways-deploy-sps` flag, Cluster Toolkit deploys a long-running Shared Pathways Service instance: `pathways-head` runs only `pathways-rm` (no proxy or workload container, because each SPS client brings its own proxy), the TPU worker pods keep running with optional colocated Python sidecar support, and `--restarts` and `--pathways-max-slice-restarts` default to `30` and `1000000`. The command prints the in-cluster service endpoint (`<name>-pathways-head-0-0.<name>:29001`).
 * **Completion and restart semantics:** In non-headless mode, the JobSet's `successPolicy` tracks `pathways-head`: when `workload-container` exits `0`, the entire JobSet is marked `Completed` and the worker pods are torn down; when it exits non-zero (including `143` on `SIGTERM`), the JobSet `failurePolicy` restarts the job up to `--restarts` times. Ensure your training command exits non-zero on fatal errors (for example, if a framework catches checkpoint or data-loader exceptions and exits `0` early, the JobSet will complete as `Succeeded` instead of restarting).
 
@@ -1302,7 +1302,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--pathways-proxy-server-image` | `string` | Container image for the Pathways proxy server. |
 | `--pathways-server-image` | `string` | Container image for the Pathways resource manager / server. |
 | `--pathways-worker-image` | `string` | Container image for the Pathways workers. |
-| `--pathways-headless` | `flag` | If present, the user workload container will not be deployed in the `pathways-head` job. |
+| `--pathways-headless` | `flag` | If present, the user workload container will not be deployed in the `pathways-head` job. External clients connecting to `pathways-proxy` must set `IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS=true`. |
 | `--pathways-deploy-sps` | `flag` | If present, deploys a Shared Pathways Service (SPS) instance (`pathways-rm` on `pathways-head` without a proxy or workload container, plus the TPU worker pods). Mutually exclusive with `--pathways-headless`. |
 | `--pathways-elastic-slices` | `int` | Configures the number of elastic slices for resilient training scaling. |
 | `--pathways-max-slice-restarts` | `int` | Maximum number of times the workers within a single slice can be restarted (Default: `0`, `4000` when `--pathways-elastic-slices > 0` or `--pathways-headless` is set, or `1000000` when `--pathways-deploy-sps` is set). Maps to `backoffLimitPerIndex: N` and `backoffLimit: N * nodesPerSlice` on the Pathways worker Job. |
@@ -1336,7 +1336,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--restart-on-exit-codes` | `string` | Comma-separated allowlist of retriable container exit codes (`1..255`). Exit codes in this list allow the job to restart up to `--restarts`, while any other non-zero exit code fails the job immediately (`action: FailJob` on `NotIn`). |
 | `--gke-scheduler` | `string` | Specific GKE scheduler selection (e.g., `gke.io/topology-aware-auto`). |
 | `--image-pull-secret` | `string` | Secret name required to authenticate and pull images from private container registries. |
-| `--service-account` | `string` | Kubernetes service account name used to provide fine-grained IAM roles to the job pods. |
+| `--service-account` | `string` | Kubernetes service account name used to provide fine-grained IAM roles to the job pods via GKE Workload Identity. On non-Pathways TPU jobs, setting `--service-account` disables `hostNetwork` (which otherwise bypasses `gke-metadata-server` and falls back to the node pool's IAM service account, though GKE recommends `hostNetwork: true` for multislice DCN performance when Workload Identity is not needed). |
 | `--cpu-affinity` | `string` | CPU affinity rules (e.g., `'numa'`). |
 | `--gke-disable-parallel-containers` | `bool` | Disable parallel containers for TPU v7/v7x on GKE. (Default: `false`) |
 | `--gke-nap-provisioning` | `string` | Compute provisioning model for GKE NAP. Allowed values: `on-demand`, `spot`, `reservation`. |
