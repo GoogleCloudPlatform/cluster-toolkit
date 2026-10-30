@@ -53,6 +53,10 @@ const (
 
 	// podContainersJSONPath prints one line per pod with all container names for pod and stream counting.
 	podContainersJSONPath = `{range .items[*]}{.spec.initContainers[*].name}{" "}{.spec.containers[*].name}{" "}{.spec.ephemeralContainers[*].name}{"\n"}{end}`
+
+	// spsEndpointFormat is the address SPS clients use to reach an SPS instance's resource manager,
+	// formatted with the instance's workload name.
+	spsEndpointFormat = "%[1]s-pathways-head-0-0.%[1]s:29001"
 )
 
 // logsRetryInterval is the wait between waitForJobPods and fetchLogsWithRetry attempts; tests shorten it.
@@ -118,6 +122,9 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 	if err := g.validateJobConflicts(job); err != nil {
+		return err
+	}
+	if err := g.validateMTCConfig(&job); err != nil {
 		return err
 	}
 
@@ -464,6 +471,9 @@ func (g *GKEOrchestrator) printConsoleLinks(job orchestrator.JobDefinition) {
 
 	logsLink := getCloudConsoleLogsURL(job.ProjectID, job.ClusterLocation, job.ClusterName, ns, jobName)
 	logging.Info("View your workload logs in real-time here: %s or use gcluster job logs [job-name] to view logs using kubectl", logsLink)
+	if job.Pathways.DeploySPS {
+		logging.Info("SPS instance %s submitted. Endpoint: %s", job.WorkloadName, fmt.Sprintf(spsEndpointFormat, job.WorkloadName))
+	}
 }
 
 func (g *GKEOrchestrator) validateJobConflicts(job orchestrator.JobDefinition) error {
@@ -569,10 +579,6 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 	}
 
 	if err := g.configureClusterEnvironment(job); err != nil {
-		return err
-	}
-
-	if err := g.validateMTCConfig(job); err != nil {
 		return err
 	}
 
@@ -1014,7 +1020,7 @@ func (g *GKEOrchestrator) queryDiscoveredTopologies(accelLabel string, machineTy
 }
 
 func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (string, error) {
-	if job.Pathways.Headless {
+	if job.Pathways.Headless || job.Pathways.DeploySPS {
 		return "", nil
 	}
 	if job.DryRunManifest != "" {

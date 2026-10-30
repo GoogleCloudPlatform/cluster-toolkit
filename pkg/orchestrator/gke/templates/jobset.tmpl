@@ -14,6 +14,9 @@ metadata:
 {{- end }}
 spec:
   ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
+  network:
+    enableDNSHostnames: true
+    publishNotReadyAddresses: true
   failurePolicy:
     maxRestarts: {{.MaxRestarts}}
     rules:
@@ -25,6 +28,7 @@ spec:
       replicas: {{.NumSlices}}
       template:
         spec:
+          completionMode: Indexed
           parallelism: {{.NodesPerSlice}}
           completions: {{.NodesPerSlice}}
           backoffLimit: 0

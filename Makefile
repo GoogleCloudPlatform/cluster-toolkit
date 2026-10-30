@@ -260,7 +260,7 @@ endif
 
 ###################################
 # AGENT SKILLS SECTION
-.PHONY: lint-skills test-skills validate-docs
+.PHONY: lint-skills test-skills test-skills-live generate-docs validate-docs
 
 lint-skills:
 	$(info **************** linting agent skills ***************)
@@ -270,6 +270,21 @@ test-skills:
 	$(info **************** running skills unit tests and evals ***************)
 	@python3 tools/tests/test_run_eval.py
 	@python3 tools/run_eval.py --all
+
+generate-docs:
+	$(info **************** generating catalog, README tables, and llms.txt ***************)
+	@go run ./tools/catalog-gen
+
+# Manual only (never CI): drives a real agent CLI against every EVAL.yaml prompt
+# in throwaway git worktrees. Requires the agent CLI installed + logged in and a
+# GCP project for gcluster validators. Example:
+#   make test-skills-live LIVE_PROJECT=my-sandbox LIVE_AGENT=gemini
+LIVE_AGENT ?= gemini
+LIVE_SKILL ?= cluster-blueprint-assistant
+test-skills-live: gcluster
+	$(info **************** running LIVE skills evals ($(LIVE_SKILL)) against $(LIVE_AGENT) ***************)
+	@test -n "$(LIVE_PROJECT)" || { echo "LIVE_PROJECT=<gcp-project> is required"; exit 2; }
+	@python3 tools/run_eval.py --skill $(LIVE_SKILL) --live --agent $(LIVE_AGENT) --project $(LIVE_PROJECT) --markdown-output live-eval-report.md
 
 validate-docs:
 	$(info **************** validating README snippets and links ***************)

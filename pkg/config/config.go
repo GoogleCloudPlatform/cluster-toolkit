@@ -279,9 +279,24 @@ func (m *Module) Clone() Module {
 	return c
 }
 
+// Info returns the ModuleInfo for the module without panicking.
+func (m Module) Info() (modulereader.ModuleInfo, error) {
+	if m.Source == "" {
+		return modulereader.ModuleInfo{}, EmptyModuleSource
+	}
+	kind := m.Kind.String()
+	if kind == "" {
+		kind = TerraformKind.String()
+	}
+	if kind != TerraformKind.String() && kind != PackerKind.String() {
+		return modulereader.ModuleInfo{}, InvalidModuleKind
+	}
+	return modulereader.GetModuleInfo(m.Source, kind)
+}
+
 // InfoOrDie returns the ModuleInfo for the module or panics
 func (m Module) InfoOrDie() modulereader.ModuleInfo {
-	mi, err := modulereader.GetModuleInfo(m.Source, m.Kind.String())
+	mi, err := m.Info()
 	if err != nil {
 		panic(err)
 	}
@@ -318,6 +333,9 @@ type Blueprint struct {
 	AddCreatorLabel bool `yaml:"-"`
 	// CreatorUsername is the username to use for the creator label
 	CreatorUsername string `yaml:"-"`
+	// subblockIO asks the user and saves sub-block maps chosen by gcluster
+	// (runtime-only, not serialized). Nil means read-only (gcluster expand).
+	subblockIO *SubblockIO
 }
 
 func (bp *Blueprint) Clone() Blueprint {

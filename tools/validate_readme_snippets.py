@@ -556,7 +556,7 @@ def validate_markdown_links_and_cli(non_ignored: set[str] | None = None) -> list
         p
         for p in (
             os.path.join(REPO_ROOT, root_doc)
-            for root_doc in ("README.md", "AGENTS.md", "CONTRIBUTING.md")
+            for root_doc in ("README.md", "AGENTS.md", "CONTRIBUTING.md", "llms.txt", "llms-full.txt")
         )
         if _is_checked_repo_file(p, non_ignored)
     ] + _find_markdown_files_under(

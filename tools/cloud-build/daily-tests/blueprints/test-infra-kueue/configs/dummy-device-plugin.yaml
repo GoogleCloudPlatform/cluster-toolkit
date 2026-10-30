@@ -115,6 +115,9 @@ spec:
         - '--device={"name": "a4x-max", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "gke-a4x-max-bm", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "ml-tpu7x-onspot-slurm", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
+        - '--device={"name": "ml-tpu-v6e-onspot-slurm", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
+        - '--device={"name": "ml-tpu-v5p-onspot-slurm", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
+        - '--device={"name": "ml-tpu-v5e-onspot-slurm", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "novnc", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - --listen=:8085
         securityContext:

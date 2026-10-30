@@ -128,6 +128,12 @@ var pvGVR = schema.GroupVersionResource{
 	Resource: "persistentvolumes",
 }
 
+var serviceGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "services",
+}
+
 // HTTPClient abstracts HTTP GET calls for testability and thread safety.
 type HTTPClient interface {
 	Get(url string) (*http.Response, error)
@@ -248,6 +254,35 @@ type gkePVC struct {
 
 type gkePVCList struct {
 	Items []gkePVC `json:"items"`
+}
+
+type k8sEndpointSliceList struct {
+	Items []struct {
+		Endpoints []struct {
+			Addresses  []string `json:"addresses"`
+			Conditions struct {
+				// Ready is a pointer because discovery/v1 treats an omitted condition as ready.
+				Ready *bool `json:"ready"`
+			} `json:"conditions"`
+		} `json:"endpoints"`
+	} `json:"items"`
+}
+
+func (eps *k8sEndpointSliceList) HasReadyEndpoint() bool {
+	for _, item := range eps.Items {
+		for _, ep := range item.Endpoints {
+			if (ep.Conditions.Ready == nil || *ep.Conditions.Ready) && len(ep.Addresses) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// permissionCheck is one `kubectl auth can-i <verb> <resource>` query.
+type permissionCheck struct {
+	verb     string
+	resource string
 }
 
 type JobProfile struct {
@@ -636,6 +671,8 @@ type jobSetTemplateData struct {
 	GCSFuseEnabled                bool
 	HostNetworkEnabled            bool
 	Pathways                      orchestrator.PathwaysJobDefinition
+	PathwaysProxyEnabled          bool // pathways-head runs pathways-proxy (false for an SPS server)
+	PathwaysWorkloadEnabled       bool // pathways-head runs the user's workload (false for headless and SPS)
 	ExclusiveTopologyAnnotation   string
 	Verbose                       bool
 	Env                           []EnvVar

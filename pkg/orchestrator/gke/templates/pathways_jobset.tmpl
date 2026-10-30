@@ -8,8 +8,6 @@ metadata:
 {{- if .MLDiagnosticsEnabled }}
     managed-mldiagnostics-gke: "true"
 {{- end }}
-  annotations:
-    jobset.sigs.k8s.io/hack: "true"
 spec:
   suspend: false
   ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
@@ -20,7 +18,7 @@ spec:
     replicatedJob: pathways-head
   startupPolicy:
     startupPolicyOrder: InOrder
-{{- if not .Pathways.Headless}}
+{{- if .PathwaysWorkloadEnabled}}
   successPolicy:
     operator: All
     targetReplicatedJobs:
@@ -72,47 +70,11 @@ spec:
             imagePullSecrets:
 {{(StructuralData .ImagePullSecrets)}}
 {{- end }}
-{{- if not .Pathways.Headless}}
+{{- if .PathwaysWorkloadEnabled}}
             initContainers:
 {{- else }}
             containers:
 {{- end }}
-            - name: pathways-proxy
-              image: {{.Pathways.ProxyServerImage}}
-              imagePullPolicy: Always
-              ports:
-              - containerPort: 29000
-              args:
-              - --server_port=29000
-              - --resource_manager_address=$(PATHWAYS_HEAD):29001
-              - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
-              {{- if gt .Pathways.ElasticSlices 0}}
-              - --num_elastic_slices={{.Pathways.ElasticSlices}}
-              {{- end}}
-              {{- range .ProxyArgsList }}
-              - {{.}}
-              {{- end }}
-              env:
-              - name: PATHWAYS_HEAD
-                valueFrom:
-                  fieldRef:
-                    fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
-              - name: ABSL_FLAGS
-                value: "--pathways_pipe_unreachable_timeout=60s"
-              {{- range $.PathwaysProxyEnv }}
-              - name: {{ .Name }}
-                value: {{ printf "%q" .Value }}
-              {{- end }}
-              {{- if not .Pathways.Headless}}
-              restartPolicy: Always
-              {{- end }}
-              resources:
-                limits:
-                  cpu: "16"
-                  memory: "100Gi"
-                requests:
-                  cpu: "8"
-                  memory: "32Gi"
             - name: pathways-rm
               image: {{.Pathways.ServerImage}}
               imagePullPolicy: Always
@@ -149,7 +111,7 @@ spec:
               - name: {{ .Name }}
                 value: {{ printf "%q" .Value }}
               {{- end }}
-              {{- if not .Pathways.Headless}}
+              {{- if .PathwaysWorkloadEnabled}}
               restartPolicy: Always
               {{- end }}
               resources:
@@ -159,7 +121,45 @@ spec:
                 requests:
                   cpu: "2"
                   memory: "8Gi"
-            {{- if not .Pathways.Headless}}
+{{- if .PathwaysProxyEnabled }}
+            - name: pathways-proxy
+              image: {{.Pathways.ProxyServerImage}}
+              imagePullPolicy: Always
+              ports:
+              - containerPort: 29000
+              args:
+              - --server_port=29000
+              - --resource_manager_address=$(PATHWAYS_HEAD):29001
+              - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
+              {{- if gt .Pathways.ElasticSlices 0}}
+              - --num_elastic_slices={{.Pathways.ElasticSlices}}
+              {{- end}}
+              {{- range .ProxyArgsList }}
+              - {{.}}
+              {{- end }}
+              env:
+              - name: PATHWAYS_HEAD
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              - name: ABSL_FLAGS
+                value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- range $.PathwaysProxyEnv }}
+              - name: {{ .Name }}
+                value: {{ printf "%q" .Value }}
+              {{- end }}
+              {{- if .PathwaysWorkloadEnabled}}
+              restartPolicy: Always
+              {{- end }}
+              resources:
+                limits:
+                  cpu: "16"
+                  memory: "100Gi"
+                requests:
+                  cpu: "8"
+                  memory: "32Gi"
+{{- end }}
+            {{- if .PathwaysWorkloadEnabled}}
             containers:
             - name: workload-container
               image: {{.FullImageName}}
@@ -180,7 +180,7 @@ spec:
               - name: XCLOUD_ENVIRONMENT
                 value: GCP
               - name: JAX_BACKEND_TARGET
-                value: grpc://$(PATHWAYS_HEAD):29000
+                value: grpc://localhost:29000
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
               {{- range $.Env }}
@@ -205,7 +205,7 @@ spec:
                 hostPath:
                   path: /tmp
                   type: DirectoryOrCreate
-{{- if not .Pathways.Headless }}
+{{- if .PathwaysWorkloadEnabled }}
               - name: dshm
                 emptyDir:
                   medium: Memory
