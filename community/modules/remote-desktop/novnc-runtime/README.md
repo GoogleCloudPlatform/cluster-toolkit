@@ -92,7 +92,7 @@ connect to the socket, but each only ever gets their own desktop.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 
 ## Providers
@@ -102,7 +102,7 @@ No providers.
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_desktop_broker"></a> [desktop\_broker](#module\_desktop\_broker) | ../../internal/desktop-broker | n/a |
 
 ## Resources
@@ -112,7 +112,7 @@ No resources.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_enable_gpu_acceleration"></a> [enable\_gpu\_acceleration](#input\_enable\_gpu\_acceleration) | Use hardware OpenGL for desktop sessions. Requires a GPU on the host and an<br/>image whose NVIDIA driver has graphics (not merely compute) support; falls<br/>back to software rendering otherwise. Requires vnc\_backend = "turbovnc".<br/>See community/examples/remote-desktop/README.md for which image to use. | `bool` | `false` | no |
 | <a name="input_install_root"></a> [install\_root](#input\_install\_root) | Directory under which noVNC assets are installed. | `string` | `"/opt/ghpc-remote-desktop"` | no |
 | <a name="input_max_user_sessions"></a> [max\_user\_sessions](#input\_max\_user\_sessions) | Maximum number of concurrent per-user desktop sessions the host VM will support. | `number` | `32` | no |
@@ -128,7 +128,7 @@ No resources.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_broker_socket_path"></a> [broker\_socket\_path](#output\_broker\_socket\_path) | Unix socket the desktop broker serves on. Forward a local port to it over SSH to reach a desktop. |
 | <a name="output_startup_runners"></a> [startup\_runners](#output\_startup\_runners) | Startup-script runners required to install and launch the noVNC desktop runtime. |
 | <a name="output_vnc_backend"></a> [vnc\_backend](#output\_vnc\_backend) | VNC backend used by the noVNC desktop runtime. |

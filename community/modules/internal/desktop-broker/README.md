@@ -97,13 +97,13 @@ account that SSH authenticated.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
@@ -113,13 +113,13 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [terraform_data.input_validation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_enable_gpu_acceleration"></a> [enable\_gpu\_acceleration](#input\_enable\_gpu\_acceleration) | Use hardware OpenGL for desktop sessions where a usable GPU is present. | `bool` | `false` | no |
 | <a name="input_install_root"></a> [install\_root](#input\_install\_root) | Directory under which the broker and front-end assets are installed. | `string` | `"/opt/ghpc-remote-desktop"` | no |
 | <a name="input_max_user_sessions"></a> [max\_user\_sessions](#input\_max\_user\_sessions) | Maximum number of concurrent per-user desktop sessions. | `number` | `32` | no |
@@ -135,7 +135,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_broker_socket_path"></a> [broker\_socket\_path](#output\_broker\_socket\_path) | Unix socket the broker serves on. Forward a local port to it over SSH to reach a desktop. |
 | <a name="output_startup_runners"></a> [startup\_runners](#output\_startup\_runners) | Ordered startup-script runners that install the desktop runtime, the selected front end and the per-user broker. |
 | <a name="output_vnc_backend"></a> [vnc\_backend](#output\_vnc\_backend) | VNC backend used for per-user desktop sessions. |

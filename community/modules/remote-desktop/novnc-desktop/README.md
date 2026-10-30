@@ -59,9 +59,8 @@ How the broker identifies the user is described in the
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
 
 ## Providers
 
@@ -70,7 +69,7 @@ No providers.
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_client_startup_script"></a> [client\_startup\_script](#module\_client\_startup\_script) | ../../../../modules/scripts/startup-script | n/a |
 | <a name="module_instances"></a> [instances](#module\_instances) | ../../../../modules/compute/vm-instance | n/a |
 | <a name="module_novnc_runtime"></a> [novnc\_runtime](#module\_novnc\_runtime) | ../novnc-runtime | n/a |
@@ -82,7 +81,7 @@ No resources.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_add_deployment_name_before_prefix"></a> [add\_deployment\_name\_before\_prefix](#input\_add\_deployment\_name\_before\_prefix) | If true, names are prefixed with deployment\_name for uniqueness. | `bool` | `true` | no |
 | <a name="input_auto_delete_boot_disk"></a> [auto\_delete\_boot\_disk](#input\_auto\_delete\_boot\_disk) | Controls if boot disk should be auto-deleted when instance is deleted. | `bool` | `true` | no |
 | <a name="input_bandwidth_tier"></a> [bandwidth\_tier](#input\_bandwidth\_tier) | Bandwidth tier to use for the instance. | `string` | `"not_enabled"` | no |
@@ -125,7 +124,7 @@ No resources.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_broker_socket_path"></a> [broker\_socket\_path](#output\_broker\_socket\_path) | Unix socket the desktop broker serves on. Forward a local port to it over SSH to reach a desktop. |
 | <a name="output_external_ip"></a> [external\_ip](#output\_external\_ip) | External IP addresses of created desktop instances, if enabled. |
 | <a name="output_iap_tunnel_command"></a> [iap\_tunnel\_command](#output\_iap\_tunnel\_command) | SSH command that forwards localhost:6080 to the desktop broker through IAP. Run it, then browse to http://localhost:6080/vnc.html. |
