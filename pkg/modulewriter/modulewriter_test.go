@@ -939,6 +939,48 @@ resource "google_container_node_pool" "node_pool" {
 	}
 }
 
+func assertSingleResourceOverrideIgnores(t *testing.T, path string, want []string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", path, err)
+	}
+	var parsed tfOverrideFile
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("failed to unmarshal %s: %v", path, err)
+	}
+	for _, resMap := range parsed.Resource {
+		for _, override := range resMap {
+			if !slices.Equal(override.Lifecycle.IgnoreChanges, want) {
+				t.Errorf("%s ignore_changes = %v, want %v", path, override.Lifecycle.IgnoreChanges, want)
+			}
+			return
+		}
+	}
+	t.Errorf("%s contained no resource overrides", path)
+}
+
+func assertFileNotExists(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("expected %s to NOT exist, but found it", path)
+	}
+}
+
+func assertFileContains(t *testing.T, path string, substrs ...string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", path, err)
+	}
+	content := string(data)
+	for _, substr := range substrs {
+		if !strings.Contains(content, substr) {
+			t.Errorf("%s does not contain substring %q", path, substr)
+		}
+	}
+}
+
 func TestWriteDeployment_LocalInstanceIsolation(t *testing.T) {
 	localModDir := filepath.Join(t.TempDir(), "local-disk")
 	if err := os.MkdirAll(localModDir, 0755); err != nil {
@@ -996,54 +1038,20 @@ resource "google_compute_disk" "disk" {
 	hash := shortHash(clean)
 
 	// 1. disk_b uses shared local module directory without overrides
-	sharedOverride := filepath.Join(depDir, "primary", "modules", fmt.Sprintf("local-disk-%s", hash), "override.tf.json")
-	if _, err := os.Stat(sharedOverride); !os.IsNotExist(err) {
-		t.Errorf("expected shared local module to NOT have override.tf.json, but found one")
-	}
+	assertFileNotExists(t, filepath.Join(depDir, "primary", "modules", fmt.Sprintf("local-disk-%s", hash), "override.tf.json"))
 
 	// 2. disk_a has isolated directory with its own override
-	diskAOverridePath := filepath.Join(depDir, "primary", "modules", fmt.Sprintf("local-disk-disk_a-%s", hash), "override.tf.json")
-	diskAData, err := os.ReadFile(diskAOverridePath)
-	if err != nil {
-		t.Fatalf("failed to read disk_a override: %v", err)
-	}
-	var diskAParsed tfOverrideFile
-	if err := json.Unmarshal(diskAData, &diskAParsed); err != nil {
-		t.Fatalf("failed to unmarshal disk_a override: %v", err)
-	}
-	if !slices.Equal(diskAParsed.Resource["google_compute_disk"]["disk"].Lifecycle.IgnoreChanges, []string{"size"}) {
-		t.Errorf("unexpected disk_a ignore_changes: %v", diskAParsed.Resource["google_compute_disk"]["disk"].Lifecycle.IgnoreChanges)
-	}
+	assertSingleResourceOverrideIgnores(t, filepath.Join(depDir, "primary", "modules", fmt.Sprintf("local-disk-disk_a-%s", hash), "override.tf.json"), []string{"size"})
 
 	// 3. disk_c has isolated directory with its own override
-	diskCOverridePath := filepath.Join(depDir, "primary", "modules", fmt.Sprintf("local-disk-disk_c-%s", hash), "override.tf.json")
-	diskCData, err := os.ReadFile(diskCOverridePath)
-	if err != nil {
-		t.Fatalf("failed to read disk_c override: %v", err)
-	}
-	var diskCParsed tfOverrideFile
-	if err := json.Unmarshal(diskCData, &diskCParsed); err != nil {
-		t.Fatalf("failed to unmarshal disk_c override: %v", err)
-	}
-	if !slices.Equal(diskCParsed.Resource["google_compute_disk"]["disk"].Lifecycle.IgnoreChanges, []string{"type"}) {
-		t.Errorf("unexpected disk_c ignore_changes: %v", diskCParsed.Resource["google_compute_disk"]["disk"].Lifecycle.IgnoreChanges)
-	}
+	assertSingleResourceOverrideIgnores(t, filepath.Join(depDir, "primary", "modules", fmt.Sprintf("local-disk-disk_c-%s", hash), "override.tf.json"), []string{"type"})
 
 	// 4. Check main.tf in deployment group references the respective isolated/shared sources
-	groupMainTf, err := os.ReadFile(filepath.Join(depDir, "primary", "main.tf"))
-	if err != nil {
-		t.Fatalf("failed to read group main.tf: %v", err)
-	}
-	mainStr := string(groupMainTf)
-	if !strings.Contains(mainStr, fmt.Sprintf("./modules/local-disk-disk_a-%s", hash)) {
-		t.Errorf("main.tf does not contain disk_a instance source path")
-	}
-	if !strings.Contains(mainStr, fmt.Sprintf("./modules/local-disk-disk_c-%s", hash)) {
-		t.Errorf("main.tf does not contain disk_c instance source path")
-	}
-	if !strings.Contains(mainStr, fmt.Sprintf("./modules/local-disk-%s", hash)) {
-		t.Errorf("main.tf does not contain shared disk_b source path")
-	}
+	assertFileContains(t, filepath.Join(depDir, "primary", "main.tf"),
+		fmt.Sprintf("./modules/local-disk-disk_a-%s", hash),
+		fmt.Sprintf("./modules/local-disk-disk_c-%s", hash),
+		fmt.Sprintf("./modules/local-disk-%s", hash),
+	)
 }
 
 func TestWriteModuleReconfigureOverrides_IgnoreChangesAll(t *testing.T) {
@@ -1298,52 +1306,24 @@ resource "google_container_node_pool" "node_pool" {
 	}
 
 	// 1. pool_c uses shared module directory without overrides
-	sharedOverride := filepath.Join(depDir, config.SharedModulesDirName, "embedded", "modules", "compute", "test-node-pool", "override.tf.json")
-	if _, err := os.Stat(sharedOverride); !os.IsNotExist(err) {
-		t.Errorf("expected shared embedded module to NOT have override.tf.json, but found one")
-	}
+	assertFileNotExists(t, filepath.Join(depDir, config.SharedModulesDirName, "embedded", "modules", "compute", "test-node-pool", "override.tf.json"))
 
 	// 2. pool_a has isolated directory with its own override
-	poolAOverridePath := filepath.Join(depDir, config.SharedModulesDirName, "embedded", "modules", "compute", "test-node-pool-pool_a", "override.tf.json")
-	poolAData, err := os.ReadFile(poolAOverridePath)
-	if err != nil {
-		t.Fatalf("failed to read pool_a override: %v", err)
-	}
-	var poolAParsed tfOverrideFile
-	if err := json.Unmarshal(poolAData, &poolAParsed); err != nil {
-		t.Fatalf("failed to unmarshal pool_a override: %v", err)
-	}
-	if !slices.Equal(poolAParsed.Resource["google_container_node_pool"]["node_pool"].Lifecycle.IgnoreChanges, []string{"node_count"}) {
-		t.Errorf("unexpected pool_a ignore_changes: %v", poolAParsed.Resource["google_container_node_pool"]["node_pool"].Lifecycle.IgnoreChanges)
-	}
+	assertSingleResourceOverrideIgnores(t,
+		filepath.Join(depDir, config.SharedModulesDirName, "embedded", "modules", "compute", "test-node-pool-pool_a", "override.tf.json"),
+		[]string{"node_count"},
+	)
 
 	// 3. pool_b has isolated directory with its own override
-	poolBOverridePath := filepath.Join(depDir, config.SharedModulesDirName, "embedded", "modules", "compute", "test-node-pool-pool_b", "override.tf.json")
-	poolBData, err := os.ReadFile(poolBOverridePath)
-	if err != nil {
-		t.Fatalf("failed to read pool_b override: %v", err)
-	}
-	var poolBParsed tfOverrideFile
-	if err := json.Unmarshal(poolBData, &poolBParsed); err != nil {
-		t.Fatalf("failed to unmarshal pool_b override: %v", err)
-	}
-	if !slices.Equal(poolBParsed.Resource["google_container_node_pool"]["node_pool"].Lifecycle.IgnoreChanges, []string{"initial_node_count"}) {
-		t.Errorf("unexpected pool_b ignore_changes: %v", poolBParsed.Resource["google_container_node_pool"]["node_pool"].Lifecycle.IgnoreChanges)
-	}
+	assertSingleResourceOverrideIgnores(t,
+		filepath.Join(depDir, config.SharedModulesDirName, "embedded", "modules", "compute", "test-node-pool-pool_b", "override.tf.json"),
+		[]string{"initial_node_count"},
+	)
 
 	// 4. Check main.tf in deployment group references the respective isolated/shared sources
-	groupMainTf, err := os.ReadFile(filepath.Join(depDir, "primary", "main.tf"))
-	if err != nil {
-		t.Fatalf("failed to read group main.tf: %v", err)
-	}
-	mainStr := string(groupMainTf)
-	if !strings.Contains(mainStr, `../_modules/embedded/modules/compute/test-node-pool-pool_a`) {
-		t.Errorf("main.tf does not contain pool_a instance source path")
-	}
-	if !strings.Contains(mainStr, `../_modules/embedded/modules/compute/test-node-pool-pool_b`) {
-		t.Errorf("main.tf does not contain pool_b instance source path")
-	}
-	if !strings.Contains(mainStr, `../_modules/embedded/modules/compute/test-node-pool"`) {
-		t.Errorf("main.tf does not contain shared pool_c source path")
-	}
+	assertFileContains(t, filepath.Join(depDir, "primary", "main.tf"),
+		`../_modules/embedded/modules/compute/test-node-pool-pool_a`,
+		`../_modules/embedded/modules/compute/test-node-pool-pool_b`,
+		`../_modules/embedded/modules/compute/test-node-pool"`,
+	)
 }
