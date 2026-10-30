@@ -3606,3 +3606,127 @@ func TestValidatePathwaysSPSManifest(t *testing.T) {
 		})
 	}
 }
+
+func TestWithSidecarNameArg(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{name: "nil args", args: nil, want: []string{"--sidecar_name=external"}},
+		{name: "other args", args: []string{"--foo=1"}, want: []string{"--foo=1", "--sidecar_name=external"}},
+		{name: "user value kept", args: []string{"--sidecar_name=custom"}, want: []string{"--sidecar_name=custom"}},
+		{name: "user value without equals kept", args: []string{"--sidecar_name", "custom"}, want: []string{"--sidecar_name", "custom"}},
+		{name: "user single-dash value kept", args: []string{"-sidecar_name=custom"}, want: []string{"-sidecar_name=custom"}},
+		{name: "user empty value kept", args: []string{"--sidecar_name="}, want: []string{"--sidecar_name="}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := withSidecarNameArg(tc.args); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("withSidecarNameArg(%v) = %v, want %v", tc.args, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestGeneratePathwaysManifest_SidecarNameArg verifies that pathways-proxy is
+// told to use the external sidecar only when the colocated Python sidecar is
+// enabled.
+func TestGeneratePathwaysManifest_SidecarNameArg(t *testing.T) {
+	tests := []struct {
+		name     string
+		headless bool
+		sidecar  string
+		wantArg  bool
+	}{
+		{name: "no sidecar"},
+		{name: "sidecar", sidecar: "sidecar:latest", wantArg: true},
+		{name: "headless no sidecar", headless: true},
+		{name: "headless sidecar", headless: true, sidecar: "sidecar:latest", wantArg: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := renderPathwaysTestManifest(t, tc.headless, tc.sidecar, "", nil)
+			head := pathwaysPodSpecs(t, manifest)["pathways-head"]
+			if head == nil {
+				t.Fatalf("pathways-head replicatedJob not found in manifest:\n%s", manifest)
+			}
+			proxy := findContainer(head, "pathways-proxy")
+			if proxy == nil {
+				t.Fatalf("pathways-proxy not found in manifest:\n%s", manifest)
+			}
+			count := 0
+			for _, arg := range proxy.Args {
+				if arg == "--sidecar_name=external" {
+					count++
+				}
+			}
+			want := 0
+			if tc.wantArg {
+				want = 1
+			}
+			if count != want {
+				t.Errorf("pathways-proxy has --sidecar_name=external %d times, want %d (args: %v)", count, want, proxy.Args)
+			}
+		})
+	}
+}
+
+// TestGeneratePathwaysManifest_SidecarNameArgUserValue verifies that a
+// --sidecar_name passed through --pathways-proxy-args, with or without "=",
+// is kept and gcluster does not add a second one.
+func TestGeneratePathwaysManifest_SidecarNameArgUserValue(t *testing.T) {
+	for _, proxyArgs := range []string{"--sidecar_name=custom", "--sidecar_name custom"} {
+		t.Run(proxyArgs, func(t *testing.T) {
+			setupMockMachineConfig(t)
+			job := orchestrator.JobDefinition{
+				WorkloadName:    "pathways-test",
+				CommandToRun:    "python3 train.py",
+				NumSlices:       2,
+				ClusterLocation: "us-central1",
+				ComputeType:     "n2-standard-2",
+				IsPathwaysJob:   true,
+				Pathways: orchestrator.PathwaysJobDefinition{
+					ProxyServerImage:            "proxy:latest",
+					ServerImage:                 "server:latest",
+					WorkerImage:                 "worker:latest",
+					ColocatedPythonSidecarImage: "sidecar:latest",
+					GCSLocation:                 "gs://my-bucket",
+					HeadNodePool:                "pathways-np",
+					ProxyArgs:                   proxyArgs,
+				},
+			}
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+			})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.projectID = "mock-project"
+			orc.clusterZones = []string{"us-central1-a"}
+			orc.clusterDesc.NodePools = []gkeJobNodePool{
+				{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+			}
+			profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+			if err != nil {
+				t.Fatalf("resolveHardwareRequirements failed: %v", err)
+			}
+			manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+			if err != nil {
+				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+			}
+
+			head := pathwaysPodSpecs(t, manifest)["pathways-head"]
+			if head == nil {
+				t.Fatalf("pathways-head replicatedJob not found in manifest:\n%s", manifest)
+			}
+			proxy := findContainer(head, "pathways-proxy")
+			if proxy == nil {
+				t.Fatalf("pathways-proxy not found in manifest:\n%s", manifest)
+			}
+			want := strings.Fields(proxyArgs)
+			i := slices.Index(proxy.Args, want[0])
+			if i < 0 || !slices.Equal(proxy.Args[i:min(i+len(want), len(proxy.Args))], want) || slices.Contains(proxy.Args, "--sidecar_name=external") {
+				t.Errorf("pathways-proxy args = %v, want %v kept and no --sidecar_name=external", proxy.Args, want)
+			}
+		})
+	}
+}

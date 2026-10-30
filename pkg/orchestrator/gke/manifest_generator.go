@@ -705,6 +705,9 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 	if opts.Pathways.ProxyArgs != "" {
 		proxyArgsList = strings.Fields(opts.Pathways.ProxyArgs)
 	}
+	if opts.Pathways.ColocatedPythonSidecarImage != "" {
+		proxyArgsList = withSidecarNameArg(proxyArgsList)
+	}
 	var serverArgsList []string
 	if opts.Pathways.ServerArgs != "" {
 		serverArgsList = strings.Fields(opts.Pathways.ServerArgs)
@@ -798,6 +801,22 @@ func withDefaultCoordinatorEnv(workloadName string, userEnv map[string]string) m
 	merged["WORKERS_0_HOSTNAME"] = coordinatorHost
 	maps.Copy(merged, userEnv)
 	return merged
+}
+
+// withSidecarNameArg appends --sidecar_name=external to the pathways-proxy
+// args; call it when the colocated Python sidecar is enabled. Without it the
+// proxy does not set up the sidecar connection on the workers, so the sidecar
+// receives no work. A --sidecar_name the user already passed via
+// --pathways-proxy-args is kept as is.
+func withSidecarNameArg(proxyArgs []string) []string {
+	for _, arg := range proxyArgs {
+		// absl accepts both --flag and -flag, with or without "=value".
+		name := strings.TrimLeft(arg, "-")
+		if name == "sidecar_name" || strings.HasPrefix(name, "sidecar_name=") {
+			return proxyArgs
+		}
+	}
+	return append(proxyArgs, "--sidecar_name=external")
 }
 
 func sortedEnvVars(envMap map[string]string) []EnvVar {
