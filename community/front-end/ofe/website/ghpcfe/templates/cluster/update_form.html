@@ -88,6 +88,10 @@
 
   <hr>
 
+  {% include "cmek/_panel.html" %}
+
+  <hr>
+
   <p style="text-decoration: underline; font-size: large;">Artifact/Container Registries</p>
 
   <div class="form-group">
@@ -925,4 +929,6 @@ function deletePartition(partitionId, row) {
     display: none !important;
   }
 </style>
+  {% include "cmek/_panel_script.html" %}
+
 {% endblock %}

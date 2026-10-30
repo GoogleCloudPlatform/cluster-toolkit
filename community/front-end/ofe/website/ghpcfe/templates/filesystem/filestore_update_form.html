@@ -78,8 +78,13 @@
 
     <br/>
     <br/>  
+    {% include "cmek/_panel.html" %}
+
     <input type="submit" value="Save" class="btn btn-primary"/>
     <button class="btn btn-primary" onclick="javascript:history.back();"/>Cancel</button>
   </form>
+
+
+  {% include "cmek/_panel_script.html" %}
 
 {% endblock %}

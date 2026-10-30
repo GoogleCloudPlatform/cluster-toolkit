@@ -63,11 +63,11 @@ from ..models import (
 )
 from ..serializers import ClusterSerializer
 from ..forms import ClusterForm, ClusterMountPointForm, ClusterPartitionForm, ContainerRegistryForm
-from ..cluster_manager import cloud_info, c2, utils
-from ..cluster_manager.clusterinfo import ClusterInfo
+from ..cluster_manager import cloud_info, c2, cmek, utils
+from ..cluster_manager.clusterinfo import ClusterInfo, TEARDOWN_UNFINISHED
 from ..views.asyncview import BackendAsyncView
 
-from .view_utils import TerraformLogFile, GCSFile, StreamingFileView
+from .view_utils import cmek_detail_context, TerraformLogFile, GCSFile, StreamingFileView
 
 import logging
 import secrets
@@ -137,6 +137,7 @@ class ClusterDetailView(LoginRequiredMixin, generic.DetailView):
         context = super().get_context_data(**kwargs)
         context["navtab"] = "cluster"
         context["admin_view"] = admin_view
+        context["cmek_detail"] = cmek_detail_context(self.object)
         # Perform extra query to populate instance types data
         # context['cluster_instance_types'] = \
         #     ClusterInstanceType.objects.filter(cluster=self.kwargs['pk'])
@@ -355,7 +356,6 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
         context["container_registry_formset"] = self.get_container_registry_formset()
         return context
 
-
     def form_valid(self, form):
         logger.info("In form_valid")
         context = self.get_context_data()
@@ -410,6 +410,12 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
         
         if self.object.status != "n" and self.object.status != "r":
             form.add_error(None, "It is not newly created cluster or it is not running yet.")
+            return self.form_invalid(form)
+
+        try:
+            cmek.assert_not_revoked(self.object)
+        except cmek.CmekConfigError as err:
+            form.add_error(None, str(err))
             return self.form_invalid(form)
 
         # Verify Disk Types & Sizes
@@ -1113,14 +1119,32 @@ class BackendCreateCluster(BackendAsyncView):
 class BackendReconfigureCluster(BackendAsyncView):
     """View to reconfigure the cluster."""
 
+    refused = False
+
     @sync_to_async
     def get_orm(self, cluster_id):
         cluster = Cluster.objects.get(pk=cluster_id)
+        # Only a running cluster has a deployment to reconfigure.
+        if cluster.status != "r":
+            self.refused = True
+            messages.add_message(
+                self.request,
+                messages.ERROR,
+                "Cannot reconfigure - the cluster is not running "
+                f"({cluster.get_status_display()}).",
+            )
         return (cluster,)
 
     def cmd(self, unused_task_id, unused_token, cluster):
         ci = ClusterInfo(cluster)
-        ci.update()
+        try:
+            ci.update()
+        except Exception as err:
+            # Nothing was applied, so the cluster keeps its status and
+            # cloud_state; only say why the reconfigure did not happen.
+            cluster.status_message = f"Reconfigure failed: {err}"
+            cluster.save(update_fields=["status_message"])
+            raise
         ci.reconfigure_cluster()
 
     async def get(self, request, pk):
@@ -1131,6 +1155,9 @@ class BackendReconfigureCluster(BackendAsyncView):
         await self.test_user_is_cluster_admin(request.user)
 
         args = await self.get_orm(pk)
+        if self.refused:
+            return HttpResponseRedirect(
+                reverse("cluster-detail", kwargs={"pk": pk}))
         await self.create_task("Live Reconfigure the Cluster", *args)
         return HttpResponseRedirect(
             reverse("cluster-detail", kwargs={"pk": pk})
@@ -1140,9 +1167,26 @@ class BackendReconfigureCluster(BackendAsyncView):
 class BackendStartCluster(BackendAsyncView):
     """A view to make async call to create a new cluster"""
 
+    refused = False
+
     @sync_to_async
     def get_orm(self, cluster_id):
         cluster = Cluster.objects.get(pk=cluster_id)
+        # Only a new cluster, or one whose start failed, is started: anything
+        # else is deployed or on its way, and starting it again would reset it.
+        if cluster.status not in ("n", "e"):
+            self.refused = True
+            messages.add_message(
+                self.request,
+                messages.ERROR,
+                "Cannot start - the cluster is neither new nor failed "
+                f"({cluster.get_status_display()}).",
+            )
+        # A failed destroy: part of the cluster may be gone already.
+        elif cluster.cloud_state == "dm":
+            self.refused = True
+            messages.add_message(
+                self.request, messages.ERROR, TEARDOWN_UNFINISHED)
         creds = cluster.cloud_credential.detail
         return (cluster, creds)
 
@@ -1158,6 +1202,9 @@ class BackendStartCluster(BackendAsyncView):
         await self.test_user_is_cluster_admin(request.user)
 
         args = await self.get_orm(pk)
+        if self.refused:
+            return HttpResponseRedirect(
+                reverse("cluster-detail", kwargs={"pk": pk}))
         await self.create_task("Start Cluster", *args)
         return HttpResponseRedirect(
             reverse("cluster-detail", kwargs={"pk": pk})
@@ -1167,9 +1214,20 @@ class BackendStartCluster(BackendAsyncView):
 class BackendDestroyCluster(BackendAsyncView):
     """A view to make async call to destroy a cluster"""
 
+    refused = False
+
     @sync_to_async
     def get_orm(self, cluster_id):
         cluster = Cluster.objects.get(pk=cluster_id)
+        # A destroyed cluster has nothing left to tear down. A failed destroy
+        # ("e") is not refused: destroying it again is how it finishes.
+        if cluster.status == "d":
+            self.refused = True
+            messages.add_message(
+                self.request,
+                messages.ERROR,
+                "Cannot destroy - the cluster is already destroyed.",
+            )
         return (cluster,)
 
     def cmd(self, unused_task_id, unused_token, cluster):
@@ -1184,6 +1242,9 @@ class BackendDestroyCluster(BackendAsyncView):
         await self.test_user_is_cluster_admin(request.user)
 
         args = await self.get_orm(pk)
+        if self.refused:
+            return HttpResponseRedirect(
+                reverse("cluster-detail", kwargs={"pk": pk}))
         await self.create_task("Destroy Cluster", *args)
         return HttpResponseRedirect(
             reverse("cluster-detail", kwargs={"pk": pk})

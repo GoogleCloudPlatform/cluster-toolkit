@@ -17,7 +17,8 @@ limitations under the License.
 - source: community/modules/container/artifact-registry
   kind: terraform
   id: {{ registry_id }}
-  settings:
+{% if cmek %}  use: [cmek_key_iam]
+{% endif %}  settings:
     repo_mode: {{ repo_mode }}
     format: {{ format }}
     {% if repo_mode == "REMOTE_REPOSITORY" %}
@@ -25,4 +26,7 @@ limitations under the License.
     {% if use_public_repository == True %}repo_public_repository: DOCKER_HUB{% else %}repo_mirror_url: {{ repo_mirror_url }}{% endif %}
     {% if use_upstream_credentials == True %}repo_username: {{ repo_username }}
     repo_password: {{ repo_password }}
-    {% endif %}{% endif %}
+    {% if cmek %}user_managed_replication:
+      - location: {{ cmek_location }}
+        kms_key_name: $(cmek_key_iam.crypto_key_id)
+    {% endif %}{% endif %}{% endif %}

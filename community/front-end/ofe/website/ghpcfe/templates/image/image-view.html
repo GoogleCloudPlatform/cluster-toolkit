@@ -26,6 +26,13 @@
   <p><b>Source Image Family:</b> {{ object.source_image_family }}</p>
   <p><b>Enable OS Login:</b> {{ object.enable_os_login }}</p>
   <p><b>Block Project SSH Keys:</b> {{ object.block_project_ssh_keys }}</p>
+  {% if object.status_message %}
+  <div class="alert alert-warning" role="alert">
+    <b>Details:</b> {{ object.status_message }}
+  </div>
+  {% endif %}
+  {% include "cmek/_detail.html" %}
+
   <p><b>Startup Scripts:</b></p>
   {% if object.startup_script.all %}
   <div>
