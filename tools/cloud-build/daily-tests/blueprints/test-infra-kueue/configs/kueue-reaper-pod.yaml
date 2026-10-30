@@ -65,29 +65,28 @@ data:
             continue
           fi
           active_jobs+=("$job_name|$build_id")
-          filter_parts+=("id=$build_id")
+          filter_parts+=("build_id=\"$build_id\"")
         done <<< "$jobs_data"
-
         if [ ${#active_jobs[@]} -gt 0 ]; then
-          # Construct the filter string for batch query
-          filter_str=""
-          for part in "${filter_parts[@]}"; do
-            if [ -z "$filter_str" ]; then
-              filter_str="$part"
-            else
-              filter_str="$filter_str OR $part"
-            fi
-          done
-
-          # Query all statuses in a single batch call
           unset build_statuses
           declare -A build_statuses
-          while read -r bid bstatus; do
-            if [ -n "$bid" ]; then
-              build_statuses["$bid"]="$bstatus"
-            fi
-          done < <(gcloud builds list --filter="create_time > -P2D AND ($filter_str)" --format="value(id,status)")
-
+          # Batch queries in chunks of 25 to respect URL length limits
+          for ((i=0; i<${#filter_parts[@]}; i+=25)); do
+            chunk=("${filter_parts[@]:i:25}")
+            filter_str=""
+            for part in "${chunk[@]}"; do
+              if [ -z "$filter_str" ]; then
+                filter_str="$part"
+              else
+                filter_str="$filter_str OR $part"
+              fi
+            done
+            while read -r bid bstatus; do
+              if [ -n "$bid" ]; then
+                build_statuses["$bid"]="$bstatus"
+              fi
+            done < <(gcloud builds list --filter="$filter_str" --format="value(id,status)")
+          done
           # Check and delete jobs for cancelled/failed builds
           for item in "${active_jobs[@]}"; do
             IFS='|' read -r job_name build_id <<< "$item"
@@ -122,6 +121,9 @@ spec:
     metadata:
       labels:
         app: kueue-reaper
+      annotations:
+        # Bump this whenever reaper.sh changes so the Deployment rolls the pod.
+        reaper-script-version: "2"
     spec:
       serviceAccountName: kueue-reaper-ksa
       containers:
