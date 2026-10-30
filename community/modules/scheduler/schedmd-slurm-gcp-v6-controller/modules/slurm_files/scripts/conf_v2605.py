@@ -48,7 +48,7 @@ class SlurmConfigGeneratorV2605(SlurmConfigGeneratorV2511):
             conf_options["SlurmctldParameters"] = ["enable_async_reply"]
         else:
             if isinstance(val, str):
-                conf_options["SlurmctldParameters"] = [val]
+                conf_options["SlurmctldParameters"] = [s.strip() for s in val.split(",") if s.strip()]
             if "enable_async_reply" not in conf_options["SlurmctldParameters"]:
                 conf_options["SlurmctldParameters"].append("enable_async_reply")
 
