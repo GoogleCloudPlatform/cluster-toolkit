@@ -105,6 +105,9 @@ func RestoreGitLocalEnvVars(env map[string]string) {
 
 // GetModule copies the git source to a provided destination (the deployment directory)
 func (r GoGetterSourceReader) GetModule(source string, dst string) error {
+	origEnv := UnsetGitLocalEnvVars()
+	defer RestoreGitLocalEnvVars(origEnv)
+
 	pwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get working directory: %w", err)
