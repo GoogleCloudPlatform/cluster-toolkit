@@ -172,7 +172,13 @@ func copySharedEmbeddedModules(bp config.Blueprint, deploymentDir string) error 
 func validateModuleIgnoresRemoteSource(bp config.Blueprint) error {
 	for _, g := range bp.Groups {
 		for _, mod := range g.Modules {
-			if mod.Kind == config.TerraformKind && len(mod.ReconfigureIgnores) > 0 && sourcereader.IsRemotePath(mod.Source) {
+			if len(mod.ReconfigureIgnores) == 0 {
+				continue
+			}
+			if mod.Kind != config.TerraformKind {
+				return fmt.Errorf("module %q specifies reconfigure_ignores, which is only supported for terraform modules (got kind %q)", mod.ID, mod.Kind)
+			}
+			if sourcereader.IsRemotePath(mod.Source) {
 				return fmt.Errorf("module %q specifies reconfigure_ignores, but uses a remote source %q: "+
 					"reconfigure_ignores is currently only supported on local and embedded modules", mod.ID, mod.Source)
 			}
@@ -204,30 +210,6 @@ func writeSharedEmbeddedOverrides(bp config.Blueprint, deploymentDir string) err
 		}
 	}
 	return nil
-}
-
-func equalIgnoreSlices(a, b []string) bool {
-	normA := mergeIgnores(nil, a)
-	normB := mergeIgnores(nil, b)
-	if len(normA) != len(normB) {
-		return false
-	}
-	sort.Strings(normA)
-	sort.Strings(normB)
-	return slices.Equal(normA, normB)
-}
-
-func reconfigIgnoresEqual(a, b map[string][]string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, va := range a {
-		vb, ok := b[k]
-		if !ok || !equalIgnoreSlices(va, vb) {
-			return false
-		}
-	}
-	return true
 }
 
 func stageFiles(bp config.Blueprint, deplPath string) error {
@@ -378,6 +360,9 @@ func tfDeploymentSource(mod config.Module) (string, error) {
 	case sourcereader.IsLocalPath(mod.Source):
 		clean := filepath.Clean(mod.Source)
 		base := filepath.Base(clean)
+		if len(mod.ReconfigureIgnores) > 0 {
+			return fmt.Sprintf("./modules/%s-%s-%s", base, mod.ID, shortHash(clean)), nil
+		}
 		return fmt.Sprintf("./modules/%s-%s", base, shortHash(clean)), nil
 	default:
 		return mod.Source, nil
@@ -445,10 +430,10 @@ type tfOverrideFile struct {
 	Resource map[string]map[string]tfResourceOverride `json:"resource"`
 }
 
-var singleQuoteIndexRe = regexp.MustCompile(`\[\s*'([^']*)'\s*\]`)
+var quoteIndexRe = regexp.MustCompile(`\[\s*['"]([^'"]*)['"]\s*\]`)
 
 func normalizeIgnoreAttribute(attr string) string {
-	return singleQuoteIndexRe.ReplaceAllString(attr, `["$1"]`)
+	return quoteIndexRe.ReplaceAllString(attr, `["$1"]`)
 }
 
 func mergeIgnores(existing, additions []string) []string {
@@ -492,7 +477,9 @@ func parseExistingModuleIgnores(moduleDir string) (map[string]map[string][]strin
 		if !ok {
 			continue
 		}
-		extractBodyIgnores(body, f.Bytes, existing)
+		for _, block := range body.Blocks {
+			extractResourceIgnores(block, f.Bytes, existing)
+		}
 	}
 	return existing, nil
 }
@@ -532,12 +519,6 @@ func extractResourceIgnores(block *hclsyntax.Block, src []byte, existing map[str
 			}
 			existing[rType][rName] = list
 		}
-	}
-}
-
-func extractBodyIgnores(body *hclsyntax.Body, src []byte, existing map[string]map[string][]string) {
-	for _, block := range body.Blocks {
-		extractResourceIgnores(block, src, existing)
 	}
 }
 
@@ -615,7 +596,10 @@ func writeModuleReconfigureOverrides(moduleDir string, reconfigIgnores map[strin
 		return fmt.Errorf("failed to discover resources in module at %s: %w", moduleDir, err)
 	}
 
-	existingIgnores, _ := parseExistingModuleIgnores(moduleDir)
+	existingIgnores, err := parseExistingModuleIgnores(moduleDir)
+	if err != nil {
+		return fmt.Errorf("failed to parse existing lifecycle ignores in module at %s: %w", moduleDir, err)
+	}
 
 	override := tfOverrideFile{
 		Resource: make(map[string]map[string]tfResourceOverride),
@@ -648,26 +632,6 @@ func writeModuleReconfigureOverrides(moduleDir string, reconfigIgnores map[strin
 		return fmt.Errorf("failed to write %s: %w", overridePath, err)
 	}
 
-	return nil
-}
-
-func checkLocalModuleIgnoresConflict(modules []config.Module) error {
-	localIgnores := make(map[string]map[string][]string)
-	for _, mod := range modules {
-		if mod.Kind != config.TerraformKind || len(mod.ReconfigureIgnores) == 0 {
-			continue
-		}
-		if sourcereader.IsEmbeddedPath(mod.Source) || sourcereader.IsRemotePath(mod.Source) {
-			continue
-		}
-		cleanSource := filepath.Clean(mod.Source)
-		existing, ok := localIgnores[cleanSource]
-		if ok && !reconfigIgnoresEqual(existing, mod.ReconfigureIgnores) {
-			return fmt.Errorf("conflicting reconfigure_ignores found for local module %q across instances: "+
-				"instances of the same local module in a group share destination directory and cannot have differing overrides", mod.Source)
-		}
-		localIgnores[cleanSource] = mod.ReconfigureIgnores
-	}
 	return nil
 }
 
@@ -706,10 +670,6 @@ func copySingleNonEmbeddedModule(gPath string, mod *config.Module) error {
 }
 
 func copyNonEmbeddedModules(gPath string, modules []config.Module) error {
-	if err := checkLocalModuleIgnoresConflict(modules); err != nil {
-		return err
-	}
-
 	for iMod := range modules {
 		if err := copySingleNonEmbeddedModule(gPath, &modules[iMod]); err != nil {
 			return err

@@ -592,6 +592,19 @@ func (s *zeroSuite) TestDeploymentSource(c *C) {
 		c.Check(err, IsNil)
 		c.Check(s, Equals, "../"+config.SharedModulesDirName+"/embedded/community/modules/x/y-worker_pool")
 	}
+	{ // local rel in repo with reconfigure_ignores
+		m := config.Module{
+			ID:     "inst_a",
+			Kind:   config.TerraformKind,
+			Source: "./modules/x/y",
+			ReconfigureIgnores: map[string][]string{
+				"google_compute_disk": {"size"},
+			},
+		}
+		s, err := DeploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Matches, `^\./modules/y-inst_a-\w\w\w\w$`)
+	}
 	{ // local rel in repo
 		m := config.Module{Kind: config.TerraformKind, Source: "./modules/x/y"}
 		s, err := DeploymentSource(m)
@@ -926,45 +939,110 @@ resource "google_container_node_pool" "node_pool" {
 	}
 }
 
-func TestCheckLocalModuleIgnoresConflict(t *testing.T) {
-	modulesConflicting := []config.Module{
-		{
-			Kind:   config.TerraformKind,
-			Source: "./local-mod",
-			ReconfigureIgnores: map[string][]string{
-				"res": {"field_a"},
-			},
-		},
-		{
-			Kind:   config.TerraformKind,
-			Source: "./local-mod",
-			ReconfigureIgnores: map[string][]string{
-				"res": {"field_b"},
-			},
-		},
+func TestWriteDeployment_LocalInstanceIsolation(t *testing.T) {
+	localModDir := filepath.Join(t.TempDir(), "local-disk")
+	if err := os.MkdirAll(localModDir, 0755); err != nil {
+		t.Fatal(err)
 	}
-	if err := checkLocalModuleIgnoresConflict(modulesConflicting); err == nil {
-		t.Fatalf("expected error for conflicting local module ignores, got nil")
+	mainTf := `
+resource "google_compute_disk" "disk" {
+  name = "d"
+  size = 10
+  type = "pd-standard"
+}
+`
+	if err := os.WriteFile(filepath.Join(localModDir, "main.tf"), []byte(mainTf), 0644); err != nil {
+		t.Fatal(err)
 	}
 
-	modulesMatching := []config.Module{
-		{
-			Kind:   config.TerraformKind,
-			Source: "./local-mod",
-			ReconfigureIgnores: map[string][]string{
-				"res": {"field_a"},
-			},
-		},
-		{
-			Kind:   config.TerraformKind,
-			Source: "./local-mod",
-			ReconfigureIgnores: map[string][]string{
-				"res": {"field_a"},
+	bp := config.Blueprint{
+		Vars: config.Dict{}.With("deployment_name", cty.StringVal("test-local-iso")),
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "disk_a",
+						Kind:   config.TerraformKind,
+						Source: localModDir,
+						ReconfigureIgnores: map[string][]string{
+							"google_compute_disk": {"size"},
+						},
+					},
+					{
+						ID:     "disk_b",
+						Kind:   config.TerraformKind,
+						Source: localModDir,
+					},
+					{
+						ID:     "disk_c",
+						Kind:   config.TerraformKind,
+						Source: localModDir,
+						ReconfigureIgnores: map[string][]string{
+							"google_compute_disk": {"type"},
+						},
+					},
+				},
 			},
 		},
 	}
-	if err := checkLocalModuleIgnoresConflict(modulesMatching); err != nil {
-		t.Fatalf("unexpected error for matching local module ignores: %v", err)
+
+	depDir := filepath.Join(t.TempDir(), "dep")
+	if err := WriteDeployment(bp, depDir); err != nil {
+		t.Fatalf("WriteDeployment failed: %v", err)
+	}
+
+	clean := filepath.Clean(localModDir)
+	hash := shortHash(clean)
+
+	// 1. disk_b uses shared local module directory without overrides
+	sharedOverride := filepath.Join(depDir, "primary", "modules", fmt.Sprintf("local-disk-%s", hash), "override.tf.json")
+	if _, err := os.Stat(sharedOverride); !os.IsNotExist(err) {
+		t.Errorf("expected shared local module to NOT have override.tf.json, but found one")
+	}
+
+	// 2. disk_a has isolated directory with its own override
+	diskAOverridePath := filepath.Join(depDir, "primary", "modules", fmt.Sprintf("local-disk-disk_a-%s", hash), "override.tf.json")
+	diskAData, err := os.ReadFile(diskAOverridePath)
+	if err != nil {
+		t.Fatalf("failed to read disk_a override: %v", err)
+	}
+	var diskAParsed tfOverrideFile
+	if err := json.Unmarshal(diskAData, &diskAParsed); err != nil {
+		t.Fatalf("failed to unmarshal disk_a override: %v", err)
+	}
+	if !slices.Equal(diskAParsed.Resource["google_compute_disk"]["disk"].Lifecycle.IgnoreChanges, []string{"size"}) {
+		t.Errorf("unexpected disk_a ignore_changes: %v", diskAParsed.Resource["google_compute_disk"]["disk"].Lifecycle.IgnoreChanges)
+	}
+
+	// 3. disk_c has isolated directory with its own override
+	diskCOverridePath := filepath.Join(depDir, "primary", "modules", fmt.Sprintf("local-disk-disk_c-%s", hash), "override.tf.json")
+	diskCData, err := os.ReadFile(diskCOverridePath)
+	if err != nil {
+		t.Fatalf("failed to read disk_c override: %v", err)
+	}
+	var diskCParsed tfOverrideFile
+	if err := json.Unmarshal(diskCData, &diskCParsed); err != nil {
+		t.Fatalf("failed to unmarshal disk_c override: %v", err)
+	}
+	if !slices.Equal(diskCParsed.Resource["google_compute_disk"]["disk"].Lifecycle.IgnoreChanges, []string{"type"}) {
+		t.Errorf("unexpected disk_c ignore_changes: %v", diskCParsed.Resource["google_compute_disk"]["disk"].Lifecycle.IgnoreChanges)
+	}
+
+	// 4. Check main.tf in deployment group references the respective isolated/shared sources
+	groupMainTf, err := os.ReadFile(filepath.Join(depDir, "primary", "main.tf"))
+	if err != nil {
+		t.Fatalf("failed to read group main.tf: %v", err)
+	}
+	mainStr := string(groupMainTf)
+	if !strings.Contains(mainStr, fmt.Sprintf("./modules/local-disk-disk_a-%s", hash)) {
+		t.Errorf("main.tf does not contain disk_a instance source path")
+	}
+	if !strings.Contains(mainStr, fmt.Sprintf("./modules/local-disk-disk_c-%s", hash)) {
+		t.Errorf("main.tf does not contain disk_c instance source path")
+	}
+	if !strings.Contains(mainStr, fmt.Sprintf("./modules/local-disk-%s", hash)) {
+		t.Errorf("main.tf does not contain shared disk_b source path")
 	}
 }
 
@@ -1018,7 +1096,10 @@ func TestNormalizeIgnoreAttribute(t *testing.T) {
 	}{
 		{"metadata['ssh-keys']", `metadata["ssh-keys"]`},
 		{"metadata[ 'ssh-keys' ]", `metadata["ssh-keys"]`},
+		{`metadata[ "ssh-keys" ]`, `metadata["ssh-keys"]`},
+		{`labels[ "key" ]`, `labels["key"]`},
 		{"node_config[0].labels['app']", `node_config[0].labels["app"]`},
+		{`node_config[0].labels[ "app" ]`, `node_config[0].labels["app"]`},
 		{`node_config[0].labels["app"]`, `node_config[0].labels["app"]`},
 		{"labels", "labels"},
 	}
@@ -1031,6 +1112,27 @@ func TestNormalizeIgnoreAttribute(t *testing.T) {
 }
 
 func TestValidateModuleIgnoresRemoteSource(t *testing.T) {
+	bpPacker := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "packer_mod",
+						Kind:   config.PackerKind,
+						Source: "modules/packer/custom-image",
+						ReconfigureIgnores: map[string][]string{
+							"anything": {"field"},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := validateModuleIgnoresRemoteSource(bpPacker); err == nil {
+		t.Fatalf("expected error for packer module with reconfigure_ignores, got nil")
+	}
+
 	bpRemote := config.Blueprint{
 		Groups: []config.Group{
 			{
@@ -1074,25 +1176,6 @@ func TestValidateModuleIgnoresRemoteSource(t *testing.T) {
 	}
 }
 
-func TestReconfigIgnoresEqual_Unordered(t *testing.T) {
-	a := map[string][]string{
-		"google_compute_disk": {"size", "labels", "metadata['ssh-keys']"},
-	}
-	b := map[string][]string{
-		"google_compute_disk": {"labels", `metadata["ssh-keys"]`, "size"},
-	}
-	if !reconfigIgnoresEqual(a, b) {
-		t.Errorf("reconfigIgnoresEqual(a, b) = false, want true for unordered and quote-normalized matches")
-	}
-
-	c := map[string][]string{
-		"google_compute_disk": {"size", "type"},
-	}
-	if reconfigIgnoresEqual(a, c) {
-		t.Errorf("reconfigIgnoresEqual(a, c) = true, want false for different attributes")
-	}
-}
-
 func TestWriteModuleReconfigureOverrides_TypeAndSpecificMerge(t *testing.T) {
 	dir := t.TempDir()
 	mainTf := `
@@ -1132,18 +1215,6 @@ resource "google_compute_disk" "disk_a" {
 	expected := []string{"size", "type"}
 	if !slices.Equal(diskA.Lifecycle.IgnoreChanges, expected) {
 		t.Errorf("got ignore_changes %v, want sorted deterministic output %v", diskA.Lifecycle.IgnoreChanges, expected)
-	}
-}
-
-func TestReconfigIgnoresEqual_Duplicates(t *testing.T) {
-	a := map[string][]string{
-		"google_compute_disk": {"size", "labels", "size"},
-	}
-	b := map[string][]string{
-		"google_compute_disk": {"labels", "size"},
-	}
-	if !reconfigIgnoresEqual(a, b) {
-		t.Errorf("reconfigIgnoresEqual(a, b) = false, want true for slices with duplicates")
 	}
 }
 
