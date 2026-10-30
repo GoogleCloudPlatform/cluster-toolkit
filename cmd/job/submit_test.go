@@ -337,11 +337,11 @@ func TestSubmitCmd_PathwaysLongWorkloadName_Fails(t *testing.T) {
 
 func resetCommandFlags(cmd *cobra.Command) {
 	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
-		defVal := f.DefValue
-		if strings.HasSuffix(f.Value.Type(), "Slice") || strings.HasSuffix(f.Value.Type(), "Array") {
-			defVal = strings.TrimSuffix(strings.TrimPrefix(defVal, "["), "]")
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			_ = sv.Replace(nil)
+		} else {
+			_ = f.Value.Set(f.DefValue)
 		}
-		_ = f.Value.Set(defVal)
 		f.Changed = false
 	})
 	for _, sub := range cmd.Commands() {
