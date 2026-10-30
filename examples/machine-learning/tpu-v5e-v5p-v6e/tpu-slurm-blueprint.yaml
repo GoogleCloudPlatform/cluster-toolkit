@@ -1,0 +1,161 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+blueprint_name: tpu-slurm
+vars:
+  project_id: # supply existing GCP project ID
+  deployment_name: # supply unique deployment name (e.g. tpu-slurm)
+  region: # supply region (e.g. us-west1)
+  zone: # supply zone (e.g. us-west1-c)
+
+  # TPU machine type to provision (choose one based on your TPU generation):
+  #   TPU v6e : ct6e-standard-4t
+  #   TPU v5p : ct5p-hightpu-4t
+  #   TPU v5e : ct5lp-hightpu-4t
+  tpu_machine_type: ct6e-standard-4t
+
+  tpu_static_nodes: # supply total static TPU VM nodes (4 TPU chips/node; multiple of slice VMs, e.g. 4 for one 4x4 or 2x2x4 slice)
+  tpu_accelerator_topology: "" # supply topology per static TPU slice (e.g. 4x4 for v6e/v5e, 2x2x4 for v5p; defaults to 1-node topology)
+  # Note: slice VMs = total chips / 4, e.g. 4x4 or 2x2x4 = 4 nodes/slice, 4x8 or 2x4x4 = 8 nodes/slice
+  tpu_dynamic_max_nodes: # supply max dynamic TPU nodes (e.g. 4)
+
+  # Image settings
+  instance_image:
+    family: aci-tpu-v5e-v5p-v6e-u2204-slurm-2605-amd64
+    project: advanced-compute-images
+
+  # Cluster Settings
+  disk_size_gb: 100
+
+  # Managed Lustre is only supported in specific regions and zones
+  # Please refer https://cloud.google.com/managed-lustre/docs/locations
+  lustre_instance_id: $(vars.deployment_name)-lustre # Managed-Lustre instance name. This should be unique for each deployment.
+  # The values of size_gib and per_unit_storage_throughput are co-related
+  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  lustre_size_gib: 36000 # Storage capacity of the lustre instance in GiB
+  per_unit_storage_throughput: 500 # Maximum throughput of the lustre instance in MBps per TiB
+
+  #Provisioning models (set to true or fill in reservation name, pick only one)
+  tpu_reservation_name: "" # supply reservation name
+  tpu_dws_flex_enabled: false
+  tpu_enable_spot_vm: false
+
+deployment_groups:
+- group: cluster-env
+  modules:
+  - id: slurm-network
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-1
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.64.0/18
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [slurm-network]
+
+  - id: homefs
+    source: modules/file-system/managed-lustre
+    use:
+    - slurm-network
+    - private_service_access
+    settings:
+      size_gib: $(vars.lustre_size_gib)
+      name: $(vars.lustre_instance_id)
+      local_mount: /home
+      remote_mount: lustrefs
+      per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
+    outputs:
+    - network_storage
+
+- group: cluster
+  modules:
+  - id: tpu_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [slurm-network]
+    settings:
+      machine_type: $(vars.tpu_machine_type)
+      accelerator_topology: '$(vars.tpu_accelerator_topology != "" && vars.tpu_accelerator_topology != null ? vars.tpu_accelerator_topology : (vars.tpu_machine_type == "ct5p-hightpu-4t" ? "2x2x1" : "2x2"))'
+      enable_public_ips: true
+      node_count_static: $(vars.tpu_static_nodes)
+      node_count_dynamic_max: 0
+      disk_type: '$(vars.tpu_machine_type == "ct6e-standard-4t" ? "hyperdisk-balanced" : "pd-balanced")'
+      reservation_name: $(vars.tpu_reservation_name)
+      enable_spot_vm: $(vars.tpu_enable_spot_vm)
+      dws_flex:
+        enabled: $(vars.tpu_dws_flex_enabled)
+
+  - id: tpu_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [tpu_nodeset]
+    settings:
+      partition_name: tpu
+      resume_timeout: 1200
+      suspend_timeout: 600
+      exclusive: false
+      is_default: true
+
+  - id: tpu_dyn_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [slurm-network]
+    settings:
+      machine_type: $(vars.tpu_machine_type)
+      enable_public_ips: true
+      node_count_static: 0
+      node_count_dynamic_max: $(vars.tpu_dynamic_max_nodes)
+      disk_type: '$(vars.tpu_machine_type == "ct6e-standard-4t" ? "hyperdisk-balanced" : "pd-balanced")'
+      reservation_name: $(vars.tpu_reservation_name)
+      enable_spot_vm: $(vars.tpu_enable_spot_vm)
+      dws_flex:
+        enabled: $(vars.tpu_dws_flex_enabled)
+
+  - id: tpu_dyn_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [tpu_dyn_nodeset]
+    settings:
+      partition_name: tpu-dyn
+      resume_timeout: 1200
+      suspend_timeout: 600
+      exclusive: true
+      is_default: false
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [slurm-network]
+    settings:
+      machine_type: n2d-standard-4
+      enable_login_public_ips: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - tpu_partition
+    - tpu_dyn_partition
+    - slurm_login
+    - slurm-network
+    - homefs
+    settings:
+      machine_type: n2d-standard-4
+      enable_controller_public_ips: true

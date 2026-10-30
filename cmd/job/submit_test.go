@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -380,7 +381,7 @@ func setupSubmitTestEnv(t *testing.T) {
 	pathwaysServerEnv = nil
 	pathwaysWorkerEnv = nil
 	SubmitCmd.Flags().VisitAll(func(f *pflag.Flag) {
-		if f.Name == "pathways-max-slice-restarts" || f.Name == "pathways-elastic-slices" {
+		if f.Name == "pathways-max-slice-restarts" || f.Name == "pathways-elastic-slices" || f.Name == "restarts" {
 			_ = f.Value.Set(f.DefValue)
 		}
 		f.Changed = false
@@ -1559,6 +1560,18 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
 			wantElasticSlices:    0,
 			wantMaxSliceRestarts: 0,
 		},
+		{
+			name:                 "defaults to 1000000 when pathways-deploy-sps is set and max-slice-restarts omitted",
+			extraArgs:            []string{"--pathways-deploy-sps"},
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 1000000,
+		},
+		{
+			name:                 "honors explicit max-slice-restarts when pathways-deploy-sps is set",
+			extraArgs:            []string{"--pathways-deploy-sps", "--pathways-max-slice-restarts", "500"},
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 500,
+		},
 	}
 
 	for _, tc := range tests {
@@ -1570,18 +1583,21 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
 				return mockOrc
 			}
 
-			args := append([]string{
+			args := []string{
 				"submit",
 				"--pathways",
 				"--pathways-gcs-location", "gs://my-bucket",
 				"--name", "pw-restarts-default",
-				"--image", "busybox",
-				"--command", "echo hello",
 				"--compute-type", "n2-standard-4",
 				"--cluster", "test-cluster",
 				"--location", "us-central1-a",
 				"--project", "test-project",
-			}, tc.extraArgs...)
+			}
+			if !slices.Contains(tc.extraArgs, "--pathways-deploy-sps") {
+				// An SPS instance runs no workload, so it rejects --image and --command.
+				args = append(args, "--image", "busybox", "--command", "echo hello")
+			}
+			args = append(args, tc.extraArgs...)
 
 			_, err := executeCommand(JobCmd, args...)
 			if err != nil {
@@ -1593,6 +1609,137 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
 			}
 			if got := mockOrc.SubmittedJob.Pathways.MaxSliceRestarts; got != tc.wantMaxSliceRestarts {
 				t.Errorf("MaxSliceRestarts = %d, want %d", got, tc.wantMaxSliceRestarts)
+			}
+		})
+	}
+}
+
+func TestSubmitCmd_DeployPathwaysSPS(t *testing.T) {
+	t.Run("deploys SPS without image or command and applies SPS defaults", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+			return mockOrc
+		}
+
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-deploy-sps",
+			"--name", "sps-v5p",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+			"--pathways-gcs-location", "gs://my-bucket/sps",
+			"--compute-type", "v5p-8",
+			"--num-slices", "4",
+		)
+		if err != nil {
+			t.Fatalf("command failed with error: %v", err)
+		}
+
+		got := mockOrc.SubmittedJob
+		if !got.Pathways.DeploySPS {
+			t.Errorf("DeploySPS = false, want true")
+		}
+		if got.MaxRestarts != 30 {
+			t.Errorf("MaxRestarts = %d, want 30", got.MaxRestarts)
+		}
+		if got.Pathways.MaxSliceRestarts != 1000000 {
+			t.Errorf("MaxSliceRestarts = %d, want 1000000", got.Pathways.MaxSliceRestarts)
+		}
+	})
+
+	t.Run("honors explicit restarts when pathways-deploy-sps is set", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+			return mockOrc
+		}
+
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-deploy-sps",
+			"--restarts", "5",
+			"--name", "sps-v5p",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+			"--pathways-gcs-location", "gs://my-bucket/sps",
+			"--compute-type", "v5p-8",
+		)
+		if err != nil {
+			t.Fatalf("command failed with error: %v", err)
+		}
+		if got := mockOrc.SubmittedJob.MaxRestarts; got != 5 {
+			t.Errorf("MaxRestarts = %d, want 5", got)
+		}
+	})
+
+	t.Run("rejects pathways-deploy-sps without pathways flag", func(t *testing.T) {
+		for _, flagVal := range []string{"--pathways-deploy-sps", "--pathways-deploy-sps=false"} {
+			setupSubmitTestEnv(t)
+			_, err := executeCommand(JobCmd,
+				"submit",
+				flagVal,
+				"--name", "sps-v5p",
+				"--image", "busybox",
+				"--command", "echo hello",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+				"--compute-type", "v5p-8",
+			)
+			if err == nil || !strings.Contains(err.Error(), "pathways flags specified but --pathways flag is missing") {
+				t.Errorf("for %s, got err = %v, want missing --pathways error", flagVal, err)
+			}
+		}
+	})
+
+	t.Run("rejects pathways-deploy-sps with pathways-headless", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-deploy-sps",
+			"--pathways-headless",
+			"--name", "sps-v5p",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+			"--pathways-gcs-location", "gs://my-bucket/sps",
+			"--compute-type", "v5p-8",
+		)
+		if err == nil || !strings.Contains(err.Error(), "--pathways-deploy-sps and --pathways-headless cannot be used together") {
+			t.Errorf("got err = %v, want mutual exclusion error", err)
+		}
+	})
+}
+
+func TestSubmitCmd_DeployPathwaysSPSRejectsWorkloadFlags(t *testing.T) {
+	for _, workloadArgs := range [][]string{
+		{"--image", "us-docker.pkg.dev/my-project/my-repo/my-image:tag"},
+		{"--base-image", "python:3.11-slim"},
+		{"--build-context", "."},
+		{"--command", "python3 train.py"},
+	} {
+		t.Run("rejects pathways-deploy-sps with "+workloadArgs[0], func(t *testing.T) {
+			setupSubmitTestEnv(t)
+			args := append([]string{
+				"submit",
+				"--pathways",
+				"--pathways-deploy-sps",
+				"--name", "sps-v5p",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+				"--pathways-gcs-location", "gs://my-bucket/sps",
+				"--compute-type", "v5p-8",
+			}, workloadArgs...)
+			_, err := executeCommand(JobCmd, args...)
+			if err == nil || !strings.Contains(err.Error(), "--pathways-deploy-sps does not run a workload") {
+				t.Errorf("got err = %v, want workload flags error", err)
 			}
 		})
 	}

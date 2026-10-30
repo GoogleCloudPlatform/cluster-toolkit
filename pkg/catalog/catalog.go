@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulereader"
+	"hpc-toolkit/pkg/sourcereader"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -30,6 +31,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/zclconf/go-cty/cty"
 	"gopkg.in/yaml.v3"
@@ -40,41 +42,11 @@ const (
 	BeginCatalogMarker = "<!-- BEGIN_BLUEPRINT_CATALOG -->"
 	// EndCatalogMarker marks the end of the auto-generated table in examples/README.md.
 	EndCatalogMarker = "<!-- END_BLUEPRINT_CATALOG -->"
+	// BeginCommunityCatalogMarker marks the start of the auto-generated table in community/examples/README.md.
+	BeginCommunityCatalogMarker = "<!-- BEGIN_COMMUNITY_BLUEPRINT_CATALOG -->"
+	// EndCommunityCatalogMarker marks the end of the auto-generated table in community/examples/README.md.
+	EndCommunityCatalogMarker = "<!-- END_COMMUNITY_BLUEPRINT_CATALOG -->"
 )
-
-// autoInjectedGlobals are top-level vars automatically passed by gcluster to
-// every module that declares them as inputs.
-var autoInjectedGlobals = map[string]bool{
-	"project_id":      true,
-	"deployment_name": true,
-	"region":          true,
-	"zone":            true,
-	"labels":          true,
-}
-
-// genericOutputNames are output names that are too generic for blind
-// name-based output-to-input matching unless backed by an observed blueprint use edge.
-var genericOutputNames = map[string]bool{
-	"id":            true,
-	"instance_name": true,
-	"name":          true,
-	"self_link":     true,
-}
-
-// integrationInputNames are optional module inputs that commonly wire modules
-// together via `use:` in Cluster Toolkit blueprints.
-var integrationInputNames = map[string]bool{
-	"network_storage":           true,
-	"partitions":                true,
-	"nodeset":                   true,
-	"nodeset_dyn":               true,
-	"nodeset_tpu":               true,
-	"login_nodes":               true,
-	"runners":                   true,
-	"startup_script":            true,
-	"compute_startup_script":    true,
-	"controller_startup_script": true,
-}
 
 // Catalog is the top-level structure serialized to references/catalog.yaml.
 type Catalog struct {
@@ -84,14 +56,15 @@ type Catalog struct {
 
 // BlueprintEntry describes a single blueprint template in examples/ or community/examples/.
 type BlueprintEntry struct {
-	Path           string                 `yaml:"path"`
-	DeploymentPath string                 `yaml:"deployment_path,omitempty"`
-	BlueprintName  string                 `yaml:"blueprint_name"`
-	Scheduler      string                 `yaml:"scheduler"`
-	Description    string                 `yaml:"description,omitempty"`
-	MachineTypes   []string               `yaml:"machine_types,omitempty,flow"`
-	Vars           map[string]interface{} `yaml:"vars,omitempty"`
-	Modules        []ModuleSummary        `yaml:"modules"`
+	Path             string                 `yaml:"path"`
+	DeploymentPath   string                 `yaml:"deployment_path,omitempty"`
+	BlueprintName    string                 `yaml:"blueprint_name"`
+	Scheduler        string                 `yaml:"scheduler"`
+	Description      string                 `yaml:"description,omitempty"`
+	MachineTypes     []string               `yaml:"machine_types,omitempty,flow"`
+	RequiredServices []string               `yaml:"required_services,omitempty,flow"`
+	Vars             map[string]interface{} `yaml:"vars,omitempty"`
+	Modules          []ModuleSummary        `yaml:"modules"`
 }
 
 // ModuleSummary describes one module block inside a blueprint.
@@ -105,31 +78,48 @@ type ModuleSummary struct {
 // ModuleWiringEntry describes inputs, recommended upstream providers, and
 // downstream consumers for a Terraform or Packer module.
 type ModuleWiringEntry struct {
-	RequiredInputs []string `yaml:"required_inputs,omitempty,flow"`
-	RecommendedUse []string `yaml:"recommended_use,omitempty"`
-	ConsumedBy     []string `yaml:"consumed_by,omitempty"`
+	RequiredServices []string `yaml:"required_services,omitempty,flow"`
+	RequiredInputs   []string `yaml:"required_inputs,omitempty,flow"`
+	RecommendedUse   []string `yaml:"recommended_use,omitempty"`
+	ConsumedBy       []string `yaml:"consumed_by,omitempty"`
 }
 
-// Generate scans the repository at repoRoot, writes the YAML catalog to
-// catalogOut, and updates the summary table in readmePath.
-func Generate(repoRoot, catalogOut, readmePath string) error {
+// OutputPaths configures output file paths for Generate.
+type OutputPaths struct {
+	CatalogOut      string
+	ExamplesReadme  string
+	CommunityReadme string
+	LLMsTxtPath     string
+	LLMsFullTxtPath string
+}
+
+// Generate scans the repository at repoRoot and writes all configured catalog,
+// README table, and llms.txt / llms-full.txt outputs.
+func Generate(repoRoot string, opts OutputPaths) error {
 	cat, err := BuildCatalog(repoRoot)
 	if err != nil {
 		return err
 	}
-	yamlBytes, err := MarshalCatalog(cat)
-	if err != nil {
-		return err
+	if opts.CatalogOut != "" {
+		yamlBytes, err := MarshalCatalog(cat)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(opts.CatalogOut, yamlBytes, 0644); err != nil {
+			return fmt.Errorf("writing %s: %w", opts.CatalogOut, err)
+		}
 	}
-	if err := os.WriteFile(catalogOut, yamlBytes, 0644); err != nil {
-		return fmt.Errorf("writing %s: %w", catalogOut, err)
-	}
-	if readmePath != "" {
-		if err := UpdateExamplesReadme(readmePath, cat.Blueprints); err != nil {
+	if opts.ExamplesReadme != "" {
+		if err := UpdateExamplesReadme(opts.ExamplesReadme, cat.Blueprints); err != nil {
 			return err
 		}
 	}
-	return nil
+	if opts.CommunityReadme != "" {
+		if err := UpdateCommunityExamplesReadme(opts.CommunityReadme, cat.Blueprints); err != nil {
+			return err
+		}
+	}
+	return writeLLMsFiles(cat, opts.LLMsTxtPath, opts.LLMsFullTxtPath)
 }
 
 // BuildCatalog scans blueprints and modules under repoRoot and returns a populated Catalog.
@@ -236,32 +226,129 @@ func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string
 	if varsMap == nil {
 		varsMap = make(map[string]interface{})
 	}
-	deployRel := findCompanionDeployment(repoRoot, absPath, bp.BlueprintName, varsMap, tracked)
+	machineVarsMap := make(map[string]interface{}, len(varsMap))
+	for k, v := range varsMap {
+		machineVarsMap[k] = v
+	}
+	deployRel := findCompanionDeployment(repoRoot, absPath, bp.BlueprintName, varsMap, machineVarsMap, tracked)
 	modules := extractModuleSummaries(bp)
 	scheduler := inferScheduler(modules)
-	machineTypes := extractMachineTypes(bp, varsMap)
+	machineTypes := extractMachineTypes(bp, machineVarsMap)
+	reqServices := ExtractBlueprintServices(repoRoot, filepath.Dir(absPath), bp)
 	desc := lookupDescription(repoRoot, absPath, relPath, readmeDescs)
 	if len(varsMap) == 0 {
 		varsMap = nil
 	}
 
 	return BlueprintEntry{
-		Path:           relPath,
-		DeploymentPath: deployRel,
-		BlueprintName:  bp.BlueprintName,
-		Scheduler:      scheduler,
-		Description:    desc,
-		MachineTypes:   machineTypes,
-		Vars:           varsMap,
-		Modules:        modules,
+		Path:             relPath,
+		DeploymentPath:   deployRel,
+		BlueprintName:    bp.BlueprintName,
+		Scheduler:        scheduler,
+		Description:      desc,
+		MachineTypes:     machineTypes,
+		RequiredServices: reqServices,
+		Vars:             varsMap,
+		Modules:          modules,
 	}, true
 }
 
+// ExtractBlueprintServices returns the sorted list of unique GCP service APIs
+// required by all modules in bp. Passing repoRoot == "" skips the on-disk
+// repoRoot lookup so callers like gcluster explain read embedded module metadata first.
+func ExtractBlueprintServices(repoRoot, bpDir string, bp config.Blueprint) []string {
+	svcSet := make(map[string]bool)
+	for _, grp := range bp.Groups {
+		for _, mod := range grp.Modules {
+			kind := mod.Kind.String()
+			if kind != "" && kind != "terraform" && kind != "packer" {
+				continue
+			}
+			for _, svc := range moduleServicesForSource(repoRoot, bpDir, mod.Source) {
+				svcSet[svc] = true
+			}
+		}
+	}
+	return sortedKeys(svcSet)
+}
+
+var moduleServicesCache sync.Map
+
+func cachedMetadataServices(key, source string) ([]string, bool) {
+	if cached, ok := moduleServicesCache.Load(key); ok {
+		if svcs, valid := cached.([]string); valid {
+			return svcs, true
+		}
+		return nil, false
+	}
+	mtd, err := modulereader.GetMetadata(source)
+	if err != nil {
+		moduleServicesCache.Store(key, false)
+		return nil, false
+	}
+	svcs := cleanServiceList(mtd.Spec.Requirements.Services)
+	moduleServicesCache.Store(key, svcs)
+	return svcs, true
+}
+
+func lookupLocalModuleServices(dir, rel string) ([]string, bool) {
+	joined := filepath.FromSlash(rel)
+	if dir != "" {
+		joined = filepath.Join(dir, joined)
+	}
+	localAbs, err := filepath.Abs(joined)
+	if err != nil {
+		return nil, false
+	}
+	return cachedMetadataServices("loc:"+localAbs, localAbs)
+}
+
+func moduleServicesForSource(repoRoot, bpDir, rawSrc string) []string {
+	trimmed := strings.TrimSpace(rawSrc)
+	normSrc := normalizeModuleSource(trimmed)
+	if sourcereader.IsEmbeddedPath(normSrc) {
+		if repoRoot != "" {
+			modAbs := filepath.Join(repoRoot, filepath.FromSlash(normSrc))
+			if svcs, ok := cachedMetadataServices("abs:"+modAbs, modAbs); ok {
+				return svcs
+			}
+		}
+		if sourcereader.ModuleFS != nil {
+			if svcs, ok := cachedMetadataServices("emb:"+normSrc, normSrc); ok {
+				return svcs
+			}
+		}
+	}
+	if !sourcereader.IsLocalPath(trimmed) {
+		return nil
+	}
+	if bpDir != "" {
+		if svcs, ok := lookupLocalModuleServices(bpDir, trimmed); ok {
+			return svcs
+		}
+	}
+	if svcs, ok := lookupLocalModuleServices("", trimmed); ok {
+		return svcs
+	}
+	return nil
+}
+
+func cleanServiceList(services []string) []string {
+	set := make(map[string]bool, len(services))
+	for _, s := range services {
+		if trimmed := strings.TrimSpace(s); trimmed != "" {
+			set[trimmed] = true
+		}
+	}
+	return sortedKeys(set)
+}
+
 // findCompanionDeployment pairs a blueprint with a git-tracked deployment file
-// in the same directory and merges the deployment file's vars into varsMap for
-// keys that are missing or null in the blueprint. It returns the repo-relative
+// in the same directory and merges the deployment file's vars into varsMap,
+// mirroring cmd/create.go mergeDeploymentSettings (deployment keys, including
+// explicit null, override blueprint defaults). It returns the repo-relative
 // path of the matched deployment file, or "" when none matches.
-func findCompanionDeployment(repoRoot, bpAbsPath, blueprintName string, varsMap map[string]interface{}, tracked map[string]bool) string {
+func findCompanionDeployment(repoRoot, bpAbsPath, blueprintName string, varsMap, machineVarsMap map[string]interface{}, tracked map[string]bool) string {
 	dir := filepath.Dir(bpAbsPath)
 	candidates := trackedDeploymentFiles(repoRoot, dir, tracked)
 	match := matchDeploymentFile(filepath.Base(bpAbsPath), blueprintName, candidates, isExampleSubfolder(repoRoot, dir))
@@ -271,8 +358,9 @@ func findCompanionDeployment(repoRoot, bpAbsPath, blueprintName string, varsMap 
 	cand := filepath.Join(dir, match)
 	if ds, _, err := config.NewDeploymentSettings(cand); err == nil {
 		for k, v := range dictToPlainMap(ds.Vars) {
-			if _, exists := varsMap[k]; !exists || varsMap[k] == nil {
-				varsMap[k] = v
+			varsMap[k] = v
+			if machineVarsMap[k] == nil && v != nil {
+				machineVarsMap[k] = v
 			}
 		}
 	}
@@ -676,11 +764,29 @@ func lookupDescription(repoRoot, absPath, relPath string, readmeDescs map[string
 		if d := extractSiblingReadmeDescription(filepath.Dir(absPath), base); d != "" {
 			return d
 		}
+		grandParentDir := filepath.Dir(filepath.Dir(absPath))
+		if gpBase := filepath.Base(grandParentDir); gpBase != "examples" && gpBase != "." {
+			if d := extractNamedReadmeDescription(grandParentDir, parentDir); d != "" {
+				return d
+			}
+		}
 	}
 	if d := extractBlueprintHeaderComment(absPath); d != "" {
 		return d
 	}
 	return fmt.Sprintf("Cluster Toolkit blueprint (%s).", relPath)
+}
+
+func extractNamedReadmeDescription(dir, key string) string {
+	data, err := os.ReadFile(filepath.Join(dir, "README.md"))
+	if err != nil {
+		return ""
+	}
+	text := string(data)
+	if d := extractHeadingParagraphForBlueprint(text, key); d != "" {
+		return d
+	}
+	return extractSectionParagraphMentioning(strings.Split(text, "\n"), key)
 }
 
 func extractSiblingReadmeDescription(dir, base string) string {
@@ -749,7 +855,11 @@ func extractImmediateParagraph(lines []string) string {
 			para = append(para, trimmed)
 		}
 	}
-	return cleanDescriptionText(strings.Join(para, " "))
+	joined := strings.TrimSpace(strings.Join(para, " "))
+	if strings.HasSuffix(joined, ":") || strings.HasSuffix(joined, ",") {
+		return ""
+	}
+	return cleanDescriptionText(joined)
 }
 
 func extractSectionParagraphMentioning(lines []string, base string) string {
@@ -884,10 +994,11 @@ func isLicenseCommentLine(c string) bool {
 }
 
 type parsedModule struct {
-	source         string
-	requiredInputs []string
-	allInputs      map[string]bool
-	trueOutputs    map[string]bool
+	source           string
+	requiredServices []string
+	requiredInputs   []string
+	allInputs        map[string]bool
+	trueOutputs      map[string]bool
 }
 
 // ScanModuleWiring inspects all modules under modules/ and community/modules/,
@@ -990,33 +1101,24 @@ func buildParsedModule(source string, info modulereader.ModuleInfo) parsedModule
 	var reqInputs []string
 	for _, in := range info.Inputs {
 		allInputs[in.Name] = true
-		if in.Required && !autoInjectedGlobals[in.Name] && in.Name != injectedID {
+		if in.Required && !config.IsAutoInjectedGlobal(in.Name) && in.Name != injectedID {
 			reqInputs = append(reqInputs, in.Name)
 		}
 	}
 	sort.Strings(reqInputs)
 
-	// Echo variable suppression: exclude outputs that share a name with an input
-	// on the same module, unless the module is a root provider (no required inputs)
-	// whose outputs also accept optional name-override inputs.
 	trueOutputs := make(map[string]bool, len(info.Outputs))
 	for _, out := range info.Outputs {
-		if !allInputs[out.Name] && !genericOutputNames[out.Name] {
+		if config.IsTrueProviderOutput(info, out.Name) {
 			trueOutputs[out.Name] = true
 		}
 	}
-	if len(reqInputs) == 0 {
-		for _, out := range info.Outputs {
-			if !genericOutputNames[out.Name] && !integrationInputNames[out.Name] {
-				trueOutputs[out.Name] = true
-			}
-		}
-	}
 	return parsedModule{
-		source:         source,
-		requiredInputs: reqInputs,
-		allInputs:      allInputs,
-		trueOutputs:    trueOutputs,
+		source:           source,
+		requiredServices: cleanServiceList(info.Metadata.Spec.Requirements.Services),
+		requiredInputs:   reqInputs,
+		allInputs:        allInputs,
+		trueOutputs:      trueOutputs,
 	}
 }
 
@@ -1053,9 +1155,10 @@ func buildModuleWiringMap(mods []parsedModule, observed map[string]map[string]bo
 		recommendedUse := findRecommendedUse(m, mods)
 		consumedBy := findConsumedBy(m, mods, observed, knownSources)
 		wiring[m.source] = ModuleWiringEntry{
-			RequiredInputs: m.requiredInputs,
-			RecommendedUse: recommendedUse,
-			ConsumedBy:     consumedBy,
+			RequiredServices: m.requiredServices,
+			RequiredInputs:   m.requiredInputs,
+			RecommendedUse:   recommendedUse,
+			ConsumedBy:       consumedBy,
 		}
 	}
 	return wiring
@@ -1080,7 +1183,7 @@ func findConsumedBy(provider parsedModule, allMods []parsedModule, observed map[
 			if cand.source == provider.source {
 				continue
 			}
-			if slices.Contains(cand.requiredInputs, outName) || (integrationInputNames[outName] && cand.allInputs[outName]) {
+			if slices.Contains(cand.requiredInputs, outName) || (config.IsIntegrationInputName(outName) && cand.allInputs[outName]) {
 				consumers[cand.source] = true
 			}
 		}
@@ -1262,28 +1365,43 @@ func needsQuotedYAMLString(s string) bool {
 // UpdateExamplesReadme replaces the block between BeginCatalogMarker and
 // EndCatalogMarker in readmePath with a Markdown summary table of blueprints.
 func UpdateExamplesReadme(readmePath string, blueprints []BlueprintEntry) error {
+	return updateReadmeBetweenMarkers(readmePath, BeginCatalogMarker, EndCatalogMarker, renderBlueprintMarkdownTable(blueprints, readmeRelativeLink))
+}
+
+// UpdateCommunityExamplesReadme replaces the block between
+// BeginCommunityCatalogMarker and EndCommunityCatalogMarker in readmePath with
+// a Markdown summary table of community/examples/ blueprints.
+func UpdateCommunityExamplesReadme(readmePath string, blueprints []BlueprintEntry) error {
+	var comm []BlueprintEntry
+	for _, bp := range blueprints {
+		if strings.HasPrefix(bp.Path, "community/examples/") {
+			comm = append(comm, bp)
+		}
+	}
+	return updateReadmeBetweenMarkers(readmePath, BeginCommunityCatalogMarker, EndCommunityCatalogMarker, renderBlueprintMarkdownTable(comm, communityReadmeRelativeLink))
+}
+
+func updateReadmeBetweenMarkers(readmePath, beginMarker, endMarker, table string) error {
 	content, err := os.ReadFile(readmePath)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", readmePath, err)
 	}
 	text := string(content)
-	startIdx := strings.Index(text, BeginCatalogMarker)
-	endIdx := strings.Index(text, EndCatalogMarker)
+	startIdx := strings.Index(text, beginMarker)
+	endIdx := strings.Index(text, endMarker)
 	if startIdx == -1 || endIdx == -1 || endIdx < startIdx {
-		return fmt.Errorf("markers %s ... %s not found in %s", BeginCatalogMarker, EndCatalogMarker, readmePath)
+		return fmt.Errorf("markers %s ... %s not found in %s", beginMarker, endMarker, readmePath)
 	}
-
-	table := renderBlueprintMarkdownTable(blueprints)
-	updated := text[:startIdx+len(BeginCatalogMarker)] + "\n\n" + table + "\n" + text[endIdx:]
+	updated := text[:startIdx+len(beginMarker)] + "\n\n" + table + "\n" + text[endIdx:]
 	return os.WriteFile(readmePath, []byte(updated), 0644)
 }
 
-func renderBlueprintMarkdownTable(blueprints []BlueprintEntry) string {
+func renderBlueprintMarkdownTable(blueprints []BlueprintEntry, linkFn func(string) string) string {
 	var sb strings.Builder
 	sb.WriteString("| Blueprint | Scheduler | Machine Types | Description |\n")
 	sb.WriteString("| :--- | :--- | :--- | :--- |\n")
 	for _, bp := range blueprints {
-		linkTarget := readmeRelativeLink(bp.Path)
+		linkTarget := linkFn(bp.Path)
 		mt := "-"
 		if len(bp.MachineTypes) > 0 {
 			mt = strings.Join(bp.MachineTypes, ", ")
@@ -1299,4 +1417,11 @@ func readmeRelativeLink(bpPath string) string {
 		return "./" + strings.TrimPrefix(bpPath, "examples/")
 	}
 	return "../" + bpPath
+}
+
+func communityReadmeRelativeLink(bpPath string) string {
+	if strings.HasPrefix(bpPath, "community/examples/") {
+		return "./" + strings.TrimPrefix(bpPath, "community/examples/")
+	}
+	return "../../" + bpPath
 }

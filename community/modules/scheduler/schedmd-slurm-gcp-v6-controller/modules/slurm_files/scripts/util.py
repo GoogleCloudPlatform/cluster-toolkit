@@ -129,6 +129,8 @@ if ENV_CONFIG_YAML:
 else:
     CONFIG_FILE = Path(__file__).with_name("config.yaml")
 API_REQ_LIMIT = 2000
+# Wait time after a 409 "already exists" for a concurrent GCE resource insert to finish.
+ALREADY_EXISTS_SETTLE_SEC = 5
 
 
 def mkdirp(path: Path) -> None:
@@ -2528,7 +2530,7 @@ class Lookup:
         else:
             job_state = None
 
-        if match := re.search(r"ReqNodeList=([^ ]+)", job_info):
+        if match := re.search(r"ReqNodeList=(\S+)", job_info):
             required_nodes = match.group(1)
         else:
             required_nodes = None
@@ -2539,7 +2541,11 @@ class Lookup:
     def get_jobs(self) -> List[Job]:
         res = run(f"{self.scontrol} show jobs", timeout=30)
 
-        return [self._parse_job_info(job) for job in res.stdout.split("\n\n")[:-1]]
+        return [
+            self._parse_job_info(job)
+            for job in re.split(r"\n\n+(?=JobId=\d+)", res.stdout.strip())
+            if job.startswith("JobId=")
+        ]
 
     @lru_cache
     def job(self, job_id: int) -> Optional[Job]:
@@ -2716,11 +2722,6 @@ class Lookup:
         elif family.startswith("tpu7x"):
             return TpuInfo(
                 type="tpu7x",
-                tpus_per_node=4,
-            )
-        elif family.startswith("tpu7"):
-            return TpuInfo(
-                type="7",
                 tpus_per_node=4,
             )
         else:

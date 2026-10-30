@@ -231,6 +231,9 @@ Modules that are still in development and less stable are labeled with the
 * **[gpu-rdma-vpc]** ![core-badge] : Creates a VPC network and subnetworks for
   RDMA traffic between GPU nodes, with outputs for [vm-instance], Slurm, and
   GKE modules.
+* **[int-app-lb]** ![community-badge] ![experimental-badge] : Creates a regional
+  Internal Application (L7) Load Balancer in Google Cloud with support for
+  Managed Instance Group backends, IAP, and custom SSL certificates.
 
 [vpc]: network/vpc/README.md
 [dns-managed-zone]: network/dns-managed-zone/README.md
@@ -241,6 +244,7 @@ Modules that are still in development and less stable are labeled with the
 [private-service-access]: network/private-service-access/README.md
 [pre-existing-subnetwork]: network/pre-existing-subnetwork/README.md
 [gpu-rdma-vpc]: network/gpu-rdma-vpc/README.md
+[int-app-lb]: ../community/modules/network/int-app-lb/README.md
 
 ### Packer
 

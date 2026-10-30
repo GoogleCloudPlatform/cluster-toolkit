@@ -1,0 +1,13 @@
+{
+    "version": 2,
+    "providers":[
+        {
+            "name": "gcpgkeinst",
+            "enabled": 1,
+            "plugin": "gcpgke",
+            "confPath": "${HF_CONFDIR}/providers/gcpgkeinst/",
+            "workPath": "${HF_WORKDIR}/providers/gcpgkeinst/",
+            "logPath": "${HF_LOGDIR}/"
+        }
+    ]
+}
