@@ -1,0 +1,152 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: hpc-slurm-remote-desktop
+
+vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  enable_slurm_auth: true
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: hpc-slurm-remote-desktop
+  region: us-central1
+  zone: us-central1-a
+
+  slurm_cluster_name: slurmdesktop
+  slurm_image:
+    family: slurm-gcp-6-12-hpc-rocky-linux-9
+    project: schedmd-slurm-public
+
+  controller_machine_type: e2-standard-4
+  login_machine_type: n2-standard-4
+  compute_machine_type: n2-standard-4
+  viz_machine_type: n2-standard-8
+
+  controller_startup_scripts_timeout: 1800
+  login_startup_scripts_timeout: 1800
+  compute_startup_scripts_timeout: 1800
+
+  homefs_name: $(vars.deployment_name)-homefs
+  sharedfs_name: $(vars.deployment_name)-sharedfs
+  shared_root: /shared
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net
+      subnetwork_name: $(vars.deployment_name)-subnet
+
+  - id: homefs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    outputs:
+    - network_storage
+    settings:
+      name: $(vars.homefs_name)
+      metadata:
+        enable-oslogin: "TRUE"
+      local_mounts:
+      - /home
+
+  - id: sharedfs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    outputs:
+    - network_storage
+    settings:
+      name: $(vars.sharedfs_name)
+      metadata:
+        enable-oslogin: "TRUE"
+      local_mounts:
+      - $(vars.shared_root)
+
+  - id: compute-nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, homefs, sharedfs]
+    settings:
+      instance_image: $(vars.slurm_image)
+      machine_type: $(vars.compute_machine_type)
+      advanced_machine_features:
+        threads_per_core: 1
+      on_host_maintenance: MIGRATE
+      node_count_static: 1
+      node_count_dynamic_max: 0
+      allow_automatic_updates: false
+
+  - id: compute-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute-nodeset]
+    settings:
+      partition_name: compute
+      exclusive: false
+      is_default: true
+
+  - id: login-desktop-runtime
+    source: community/modules/remote-desktop/novnc-runtime
+    settings:
+      slurm_auth_mode: auto
+      vnc_backend: tigervnc
+
+  - id: login-desktop-startup
+    source: modules/scripts/startup-script
+    settings:
+      runners: $(login-desktop-runtime.startup_runners)
+
+  - id: slurm-login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      instance_image: $(vars.slurm_image)
+      machine_type: $(vars.login_machine_type)
+      allow_automatic_updates: false
+      enable_login_public_ips: false
+
+  - id: slurm-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, homefs, sharedfs, slurm-login, compute-partition]
+    settings:
+      enable_slurm_auth: $(vars.enable_slurm_auth)
+      slurm_cluster_name: $(vars.slurm_cluster_name)
+      instance_image: $(vars.slurm_image)
+      machine_type: $(vars.controller_machine_type)
+      allow_automatic_updates: false
+      enable_controller_public_ips: false
+      login_startup_script: $(login-desktop-startup.startup_script)
+      controller_startup_scripts_timeout: $(vars.controller_startup_scripts_timeout)
+      login_startup_scripts_timeout: $(vars.login_startup_scripts_timeout)
+      compute_startup_scripts_timeout: $(vars.compute_startup_scripts_timeout)
+      login_network_storage:
+      - server_ip: $(homefs.network_storage[0].server_ip)
+        remote_mount: $(homefs.network_storage[0].remote_mount)
+        local_mount: $(homefs.network_storage[0].local_mount)
+        fs_type: $(homefs.network_storage[0].fs_type)
+        mount_options: $(homefs.network_storage[0].mount_options)
+      - server_ip: $(sharedfs.network_storage[0].server_ip)
+        remote_mount: $(sharedfs.network_storage[0].remote_mount)
+        local_mount: $(sharedfs.network_storage[0].local_mount)
+        fs_type: $(sharedfs.network_storage[0].fs_type)
+        mount_options: $(sharedfs.network_storage[0].mount_options)
+
+  - id: viz-desktop
+    source: community/modules/remote-desktop/novnc-desktop
+    use: [network, homefs, sharedfs]
+    settings:
+      instance_image: $(vars.slurm_image)
+      machine_type: $(vars.viz_machine_type)
+      enable_public_ips: false
+      vnc_backend: turbovnc
