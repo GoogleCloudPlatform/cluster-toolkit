@@ -3,6 +3,15 @@
 This module facilitates the creation of custom firewall rules for existing
 networks.
 
+By default, this module looks up `subnetwork_self_link` to derive missing project
+and network values. When either value is omitted, it also verifies that Private
+Google Access is enabled. The subnet can be created in the same deployment group;
+its lookup waits until it exists.
+
+To skip the lookup and Private Google Access check, set `use_subnetwork_data: false`
+and supply both `project_id` and `network_name`. The switch must be known during
+planning, even when the network and subnet values are not yet known.
+
 ## Example usage
 
 This module can be used by other Toolkit modules to create application-specific
@@ -101,6 +110,7 @@ limitations under the License.
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the network to create firewall rules in | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the network in | `string` | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork whose global network firewall rules will be modified. | `string` | n/a | yes |
+| <a name="input_use_subnetwork_data"></a> [use\_subnetwork\_data](#input\_use\_subnetwork\_data) | Look up the subnetwork to derive missing project and network values and check Private Google Access when deriving those values. Set to false when supplying project\_id and network\_name directly. Must be known at plan time. | `bool` | `true` | no |
 
 ## Outputs
 
