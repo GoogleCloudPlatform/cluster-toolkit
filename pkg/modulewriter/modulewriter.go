@@ -34,6 +34,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"text/template"
@@ -185,39 +186,24 @@ func writeSharedEmbeddedOverrides(bp config.Blueprint, deploymentDir string) err
 		return err
 	}
 
-	embeddedIgnores := make(map[string]map[string][]string)
 	for _, g := range bp.Groups {
 		for _, mod := range g.Modules {
 			if mod.Kind == config.TerraformKind && sourcereader.IsEmbeddedPath(mod.Source) && len(mod.ReconfigureIgnores) > 0 {
-				existing, ok := embeddedIgnores[mod.Source]
-				if ok && !reconfigIgnoresEqual(existing, mod.ReconfigureIgnores) {
-					return fmt.Errorf("conflicting reconfigure_ignores found for shared embedded module %q across instances: "+
-						"shared embedded modules share a single deployment directory and cannot have differing overrides", mod.Source)
+				instanceSrc := fmt.Sprintf("%s-%s", mod.Source, mod.ID)
+				dst := filepath.Join(deploymentDir, config.SharedModulesDirName, "embedded", instanceSrc)
+				if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+					return err
 				}
-				embeddedIgnores[mod.Source] = mod.ReconfigureIgnores
+				if err := copyModuleSource(mod.Source, dst); err != nil {
+					return err
+				}
+				if err := writeModuleReconfigureOverrides(dst, mod.ReconfigureIgnores); err != nil {
+					return err
+				}
 			}
 		}
 	}
-
-	for source, ignores := range embeddedIgnores {
-		dst := filepath.Join(deploymentDir, config.SharedModulesDirName, "embedded", source)
-		if err := writeModuleReconfigureOverrides(dst, ignores); err != nil {
-			return err
-		}
-	}
 	return nil
-}
-
-func stringSlicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func equalIgnoreSlices(a, b []string) bool {
@@ -228,7 +214,7 @@ func equalIgnoreSlices(a, b []string) bool {
 	}
 	sort.Strings(normA)
 	sort.Strings(normB)
-	return stringSlicesEqual(normA, normB)
+	return slices.Equal(normA, normB)
 }
 
 func reconfigIgnoresEqual(a, b map[string][]string) bool {
@@ -384,7 +370,11 @@ func DeploymentSource(mod config.Module) (string, error) {
 func tfDeploymentSource(mod config.Module) (string, error) {
 	switch {
 	case sourcereader.IsEmbeddedPath(mod.Source):
-		return "../" + config.SharedModulesDirName + "/" + filepath.ToSlash(filepath.Join("embedded", mod.Source)), nil
+		srcPath := mod.Source
+		if len(mod.ReconfigureIgnores) > 0 {
+			srcPath = fmt.Sprintf("%s-%s", mod.Source, mod.ID)
+		}
+		return "../" + config.SharedModulesDirName + "/" + filepath.ToSlash(filepath.Join("embedded", srcPath)), nil
 	case sourcereader.IsLocalPath(mod.Source):
 		clean := filepath.Clean(mod.Source)
 		base := filepath.Base(clean)
@@ -453,15 +443,6 @@ type tfResourceOverride struct {
 
 type tfOverrideFile struct {
 	Resource map[string]map[string]tfResourceOverride `json:"resource"`
-}
-
-func contains(list []string, s string) bool {
-	for _, item := range list {
-		if item == s {
-			return true
-		}
-	}
-	return false
 }
 
 var singleQuoteIndexRe = regexp.MustCompile(`\[\s*'([^']*)'\s*\]`)
@@ -576,7 +557,7 @@ func formatTargetNotFoundError(target, moduleDir string, discovered map[string][
 }
 
 func setResourceOverride(override tfOverrideFile, existingIgnores map[string]map[string][]string, rType, rName string, ignores []string) {
-	if contains(existingIgnores[rType][rName], "all") {
+	if slices.Contains(existingIgnores[rType][rName], "all") {
 		return
 	}
 	if override.Resource[rType] == nil {
@@ -598,7 +579,7 @@ func applyTargetOverrides(override tfOverrideFile, discovered map[string][]strin
 	if len(ignores) == 0 {
 		return nil
 	}
-	if contains(ignores, "all") {
+	if slices.Contains(ignores, "all") {
 		return fmt.Errorf("reconfigure_ignores target %q specifies %q; ignoring \"all\" changes is not supported, please specify individual attribute names", target, "all")
 	}
 
@@ -606,7 +587,7 @@ func applyTargetOverrides(override tfOverrideFile, discovered map[string][]strin
 		parts := strings.SplitN(target, ".", 2)
 		rType, rName := parts[0], parts[1]
 		names, ok := discovered[rType]
-		if !ok || !contains(names, rName) {
+		if !ok || !slices.Contains(names, rName) {
 			return formatTargetNotFoundError(target, moduleDir, discovered)
 		}
 		setResourceOverride(override, existingIgnores, rType, rName, ignores)

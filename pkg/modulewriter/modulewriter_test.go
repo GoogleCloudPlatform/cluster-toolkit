@@ -23,8 +23,10 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
 	"hpc-toolkit/pkg/modulereader"
+	"hpc-toolkit/pkg/sourcereader"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -558,11 +560,37 @@ func (s *zeroSuite) TestDeploymentSource(c *C) {
 		c.Check(err, IsNil)
 		c.Check(s, Equals, "../"+config.SharedModulesDirName+"/embedded/modules/x/y")
 	}
+	{ // embedded core with reconfigure_ignores
+		m := config.Module{
+			ID:     "pool_a",
+			Kind:   config.TerraformKind,
+			Source: "modules/x/y",
+			ReconfigureIgnores: map[string][]string{
+				"google_container_node_pool": {"node_count"},
+			},
+		}
+		s, err := DeploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Equals, "../"+config.SharedModulesDirName+"/embedded/modules/x/y-pool_a")
+	}
 	{ // embedded community
 		m := config.Module{Kind: config.TerraformKind, Source: "community/modules/x/y"}
 		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
 		c.Check(s, Equals, "../"+config.SharedModulesDirName+"/embedded/community/modules/x/y")
+	}
+	{ // embedded community with reconfigure_ignores
+		m := config.Module{
+			ID:     "worker_pool",
+			Kind:   config.TerraformKind,
+			Source: "community/modules/x/y",
+			ReconfigureIgnores: map[string][]string{
+				"google_container_node_pool": {"node_count"},
+			},
+		}
+		s, err := DeploymentSource(m)
+		c.Check(err, IsNil)
+		c.Check(s, Equals, "../"+config.SharedModulesDirName+"/embedded/community/modules/x/y-worker_pool")
 	}
 	{ // local rel in repo
 		m := config.Module{Kind: config.TerraformKind, Source: "./modules/x/y"}
@@ -799,18 +827,18 @@ resource "null_resource" "dummy" {
 
 	np := parsed.Resource["google_container_node_pool"]["node_pool"]
 	expectedNP := []string{"initial_node_count", "node_config[0].labels"}
-	if !stringSlicesEqual(np.Lifecycle.IgnoreChanges, expectedNP) {
+	if !slices.Equal(np.Lifecycle.IgnoreChanges, expectedNP) {
 		t.Errorf("got %v for node_pool, want %v", np.Lifecycle.IgnoreChanges, expectedNP)
 	}
 
 	snp := parsed.Resource["google_container_node_pool"]["subblock_node_pool"]
-	if !stringSlicesEqual(snp.Lifecycle.IgnoreChanges, expectedNP) {
+	if !slices.Equal(snp.Lifecycle.IgnoreChanges, expectedNP) {
 		t.Errorf("got %v for subblock_node_pool, want %v", snp.Lifecycle.IgnoreChanges, expectedNP)
 	}
 
 	nr := parsed.Resource["null_resource"]["dummy"]
 	expectedNR := []string{"triggers"}
-	if !stringSlicesEqual(nr.Lifecycle.IgnoreChanges, expectedNR) {
+	if !slices.Equal(nr.Lifecycle.IgnoreChanges, expectedNR) {
 		t.Errorf("got %v for dummy null_resource, want %v", nr.Lifecycle.IgnoreChanges, expectedNR)
 	}
 }
@@ -1102,7 +1130,7 @@ resource "google_compute_disk" "disk_a" {
 	}
 
 	expected := []string{"size", "type"}
-	if !stringSlicesEqual(diskA.Lifecycle.IgnoreChanges, expected) {
+	if !slices.Equal(diskA.Lifecycle.IgnoreChanges, expected) {
 		t.Errorf("got ignore_changes %v, want sorted deterministic output %v", diskA.Lifecycle.IgnoreChanges, expected)
 	}
 }
@@ -1137,5 +1165,114 @@ resource "google_compute_disk" "disk_a" {
 
 	if err := writeModuleReconfigureOverrides(dir, ignores); err == nil {
 		t.Fatal("expected error when reconfigure_ignores specifies 'all', got nil")
+	}
+}
+
+func TestWriteDeployment_EmbeddedInstanceIsolation(t *testing.T) {
+	repoDir := t.TempDir()
+	modDir := filepath.Join(repoDir, "modules", "compute", "test-node-pool")
+	if err := os.MkdirAll(modDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	mainTf := `
+resource "google_container_node_pool" "node_pool" {
+  name               = "np"
+  node_count         = 1
+  initial_node_count = 1
+}
+`
+	if err := os.WriteFile(filepath.Join(modDir, "main.tf"), []byte(mainTf), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldFS := sourcereader.ModuleFS
+	defer func() { sourcereader.ModuleFS = oldFS }()
+	sourcereader.ModuleFS = mockFS{os.DirFS(repoDir)}
+
+	bp := config.Blueprint{
+		Vars: config.Dict{}.With("deployment_name", cty.StringVal("test-iso")),
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "pool_a",
+						Kind:   config.TerraformKind,
+						Source: "modules/compute/test-node-pool",
+						ReconfigureIgnores: map[string][]string{
+							"google_container_node_pool": {"node_count"},
+						},
+					},
+					{
+						ID:     "pool_b",
+						Kind:   config.TerraformKind,
+						Source: "modules/compute/test-node-pool",
+						ReconfigureIgnores: map[string][]string{
+							"google_container_node_pool": {"initial_node_count"},
+						},
+					},
+					{
+						ID:     "pool_c",
+						Kind:   config.TerraformKind,
+						Source: "modules/compute/test-node-pool",
+					},
+				},
+			},
+		},
+	}
+
+	depDir := filepath.Join(t.TempDir(), "dep")
+	if err := WriteDeployment(bp, depDir); err != nil {
+		t.Fatalf("WriteDeployment failed: %v", err)
+	}
+
+	// 1. pool_c uses shared module directory without overrides
+	sharedOverride := filepath.Join(depDir, config.SharedModulesDirName, "embedded", "modules", "compute", "test-node-pool", "override.tf.json")
+	if _, err := os.Stat(sharedOverride); !os.IsNotExist(err) {
+		t.Errorf("expected shared embedded module to NOT have override.tf.json, but found one")
+	}
+
+	// 2. pool_a has isolated directory with its own override
+	poolAOverridePath := filepath.Join(depDir, config.SharedModulesDirName, "embedded", "modules", "compute", "test-node-pool-pool_a", "override.tf.json")
+	poolAData, err := os.ReadFile(poolAOverridePath)
+	if err != nil {
+		t.Fatalf("failed to read pool_a override: %v", err)
+	}
+	var poolAParsed tfOverrideFile
+	if err := json.Unmarshal(poolAData, &poolAParsed); err != nil {
+		t.Fatalf("failed to unmarshal pool_a override: %v", err)
+	}
+	if !slices.Equal(poolAParsed.Resource["google_container_node_pool"]["node_pool"].Lifecycle.IgnoreChanges, []string{"node_count"}) {
+		t.Errorf("unexpected pool_a ignore_changes: %v", poolAParsed.Resource["google_container_node_pool"]["node_pool"].Lifecycle.IgnoreChanges)
+	}
+
+	// 3. pool_b has isolated directory with its own override
+	poolBOverridePath := filepath.Join(depDir, config.SharedModulesDirName, "embedded", "modules", "compute", "test-node-pool-pool_b", "override.tf.json")
+	poolBData, err := os.ReadFile(poolBOverridePath)
+	if err != nil {
+		t.Fatalf("failed to read pool_b override: %v", err)
+	}
+	var poolBParsed tfOverrideFile
+	if err := json.Unmarshal(poolBData, &poolBParsed); err != nil {
+		t.Fatalf("failed to unmarshal pool_b override: %v", err)
+	}
+	if !slices.Equal(poolBParsed.Resource["google_container_node_pool"]["node_pool"].Lifecycle.IgnoreChanges, []string{"initial_node_count"}) {
+		t.Errorf("unexpected pool_b ignore_changes: %v", poolBParsed.Resource["google_container_node_pool"]["node_pool"].Lifecycle.IgnoreChanges)
+	}
+
+	// 4. Check main.tf in deployment group references the respective isolated/shared sources
+	groupMainTf, err := os.ReadFile(filepath.Join(depDir, "primary", "main.tf"))
+	if err != nil {
+		t.Fatalf("failed to read group main.tf: %v", err)
+	}
+	mainStr := string(groupMainTf)
+	if !strings.Contains(mainStr, `../_modules/embedded/modules/compute/test-node-pool-pool_a`) {
+		t.Errorf("main.tf does not contain pool_a instance source path")
+	}
+	if !strings.Contains(mainStr, `../_modules/embedded/modules/compute/test-node-pool-pool_b`) {
+		t.Errorf("main.tf does not contain pool_b instance source path")
+	}
+	if !strings.Contains(mainStr, `../_modules/embedded/modules/compute/test-node-pool"`) {
+		t.Errorf("main.tf does not contain shared pool_c source path")
 	}
 }
