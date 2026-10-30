@@ -24,6 +24,6 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:cloud-build/v1.107.0"
+    module_name = "blueprints/terraform/hpc-toolkit:cloud-build/v1.108.0"
   }
 }
