@@ -1,0 +1,133 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: cloudsql-database-test
+
+# Daily-test blueprint for community/modules/database/cloudsql: a MySQL
+# instance over Private Service Access, a second module adopting it, and a
+# PostgreSQL instance over Private Service Connect. Each generated password is
+# delivered only through Secret Manager, and a small client VM reads them with
+# its own service account. See
+# tools/cloud-build/daily-tests/tests/cloudsql-database.yml.
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: cloudsql-db-test
+  region: us-central1
+  zone: us-central1-a
+  # The test rotates the MySQL password by re-applying with
+  # mysql_password_version=2. Not named password_version, which gcluster
+  # would pass to every cloudsql module.
+  mysql_password_version: 1
+  # The test also turns deletion protection on and checks that a destroy is
+  # refused before anything is removed.
+  mysql_deletion_protection: false
+  # Set per attempt by the test (see tests/cloudsql-database.yml).
+  mysql_name_suffix: "0"
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [network]
+    settings:
+      deletion_policy: ABANDON
+
+  - id: client_sa
+    source: modules/project/service-account
+    settings:
+      name: client
+      project_roles:
+      - logging.logWriter
+      # Lets the client VM read its startup-script bucket, which vm-instance
+      # creates without granting the VM any access to it.
+      - storage.objectViewer
+
+  # The name must be known at plan time for sql_adopt to adopt this instance
+  # in the same apply. Cloud SQL reserves a deleted instance's name for up to
+  # a week, and a requeued attempt reuses the build's deployment name, so the
+  # test adds a per-attempt suffix. The test reads the name from these outputs.
+  - id: sql
+    source: community/modules/database/cloudsql
+    use: [network, private_service_access]
+    outputs:
+    - instance_name
+    - username
+    - password_secret_id
+    - private_ip_address
+    settings:
+      database_name: appdb
+      sql_instance_name: $(vars.deployment_name)-mysql-$(vars.mysql_name_suffix)
+      tier: db-f1-micro
+      password_version: $(vars.mysql_password_version)
+      # Let the test tear down completely.
+      deletion_protection: $(vars.mysql_deletion_protection)
+      api_deletion_protection: false
+      retain_backups_on_delete: false
+      password_secret_accessors:
+      - $(client_sa.service_account_iam_email)
+
+  # Adopts the instance above in the same apply, through its instance_name
+  # output, with a second database and user.
+  - id: sql_adopt
+    source: community/modules/database/cloudsql
+    outputs:
+    - username
+    - password_secret_id
+    - private_ip_address
+    settings:
+      existing_instance_name: $(sql.instance_name)
+      database_name: adopteddb
+      sql_username: adoptuser
+      password_secret_accessors:
+      - $(client_sa.service_account_iam_email)
+
+  # PostgreSQL reached through a Private Service Connect endpoint in the
+  # deployment's subnetwork.
+  - id: pg
+    source: community/modules/database/cloudsql
+    use: [network]
+    outputs:
+    - instance_name
+    - username
+    - password_secret_id
+    - private_ip_address
+    settings:
+      database_name: pgappdb
+      database_version: POSTGRES_15
+      tier: db-f1-micro
+      use_psc_connection: true
+      deletion_protection: false
+      api_deletion_protection: false
+      retain_backups_on_delete: false
+      password_secret_accessors:
+      - $(client_sa.service_account_iam_email)
+
+  - id: client
+    source: modules/compute/vm-instance
+    use: [network]
+    settings:
+      name_prefix: client
+      add_deployment_name_before_prefix: true
+      machine_type: e2-small
+      instance_image:
+        family: debian-12
+        project: debian-cloud
+      service_account_email: $(client_sa.service_account_email)
