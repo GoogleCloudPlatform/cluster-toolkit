@@ -54,6 +54,8 @@ func defaultMockResponses(clusterName, location, project string) map[string][]sh
 		"kubectl get workloads":                                           {workloadsResult, workloadsResult, workloadsResult, workloadsResult},
 		"kubectl describe jobsets":                                        {{ExitCode: 0, Stdout: "jobset-config"}},
 		"kubectl describe workloads":                                      {{ExitCode: 0, Stdout: "workload-config"}},
+		"kubectl get pods":                                                {{ExitCode: 0, Stdout: "pods-status"}},
+		"kubectl describe pods":                                           {{ExitCode: 0, Stdout: "pods-config-events"}},
 		"kubectl config set-context":                                      {{ExitCode: 0}},
 	}
 }
@@ -136,6 +138,10 @@ func TestInspectCluster_Success(t *testing.T) {
 		"jobset-config",
 		"Kueue: Workload config for test-workload",
 		"workload-config",
+		"Pods: Status for test-workload",
+		"pods-status",
+		"Pods: Config and Events for test-workload",
+		"pods-config-events",
 		"Cloud Console Links",
 		"https://console.cloud.google.com/kubernetes/clusters/details/us-central1-a/test-cluster-success/details?project=test-project",
 		"https://console.cloud.google.com/kubernetes/workload/details/us-central1-a/test-cluster-success/custom-namespace/test-workload?project=test-project",
