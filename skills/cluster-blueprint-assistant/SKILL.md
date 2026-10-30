@@ -118,12 +118,13 @@ allowed_read_only_commands:
    not run `terraform init` or `terraform validate` afterwards. If they or
    `./gcluster deploy` fail, fix the blueprint YAML or `deployment.yaml` and re-run
    `./gcluster`. Never bypass validators via CLI flags (`-l IGNORE`,
-   `--validation-level`, `--skip-validators`), environment variables
+   `--validation-level IGNORE`, `--skip-validators`), environment variables
    (`GHPC_MOCK_MACHINE_CONFIG`), or YAML fields (`validation_level: IGNORE`, or
    `skip: true` under `validators:`), **even if the user explicitly asks to skip a
    validator by name**—refuse the bypass, explain that skipping
    `test_machine_type_in_zone` still fails with a 404 Compute API error during
-   module expansion when the machine type does not exist in that zone, and ask
+   module expansion (for Slurm `machine_configs` lookup) or deployment when the
+   machine type does not exist in that zone, and ask
    the user for a supported zone or machine type. Never edit
    generated files under `<deployment_name>/` (`main.tf`, `variables.tf`,
    `terraform.tfvars`, `defaults.auto.pkrvars.hcl`, `.ghpc/`) and never run
@@ -283,8 +284,8 @@ Rules the agent must respect:
   value in your `-d` file or `--vars`** — even though the location gcluster
   prints is the blueprint's `vars:` line, the fix belongs in `deployment.yaml`,
   not in the template. Note: if a GKE blueprint hardcodes
-  `consume_reservation_type: SPECIFIC_RESERVATION` (such as `gke-tpu-v5e.yaml`,
-  `gke-a3-megagpu.yaml`, or `gke-a4.yaml`) and the user did not provide a
+  `consume_reservation_type: SPECIFIC_RESERVATION` (such as `gke-tpu-v5e.yaml` or
+  `gke-a4x.yaml`) and the user did not provide a
   reservation name, do **not** set `reservation: ""` (which generates an invalid
   empty `SPECIFIC_RESERVATION`); stop and ask whether the user has a reservation
   name or wants a custom blueprint copy (`ai_assisted: true`) configured for
