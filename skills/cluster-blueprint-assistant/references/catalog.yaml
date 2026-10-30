@@ -1901,6 +1901,7 @@ blueprints:
   scheduler: slurm
   description: "These blueprints deploy browser-based Linux desktops alongside a Slurm cluster, using the novnc-runtime and novnc-desktop modules. Users reach an XFCE session over noVNC in a browser, with sessions created per user from their OS Login..."
   machine_types: [n2-standard-4, n2-standard-8]
+  required_services: [compute.googleapis.com, iam.googleapis.com, storage.googleapis.com]
   vars:
     compute_machine_type: n2-standard-4
     compute_startup_scripts_timeout: 1800
@@ -6693,7 +6694,8 @@ module_wiring:
     - community/modules/pubsub/bigquery-sub
   community/modules/remote-desktop/chrome-remote-desktop:
     required_inputs: [install_nvidia_driver]
-  community/modules/remote-desktop/novnc-desktop: {}
+  community/modules/remote-desktop/novnc-desktop:
+    required_services: [compute.googleapis.com, storage.googleapis.com]
   community/modules/remote-desktop/novnc-runtime: {}
   community/modules/scheduler/htcondor-access-point:
     required_services: [compute.googleapis.com, storage.googleapis.com]
