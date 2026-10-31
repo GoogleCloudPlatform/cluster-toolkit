@@ -53,9 +53,16 @@ data:
       gcloud config set project "$PROJECT_ID" 2>/dev/null
     fi
 
+    REAPER_PY_PATH="/reaper-py/reap_stale_pr_builds.py"
+
     while true; do
-      # Fetch all jobs, checking their Complete and Failed conditions
-      jobs_data=$(kubectl get jobs -l build-id -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.metadata.labels.build-id}{"|"}{.status.conditions[?(@.type=="Complete")].status}{"|"}{.status.conditions[?(@.type=="Failed")].status}{"\n"}{end}')
+      # 1. Run stale PR Cloud Build reaper mounted from ConfigMap (cancels superseded/closed-PR WORKING & QUEUED builds)
+      if [ -s "$REAPER_PY_PATH" ] && [ -n "$PROJECT_ID" ]; then
+        python3 "$REAPER_PY_PATH" --project="$PROJECT_ID" || true
+      fi
+
+      # 2. Fetch all jobs, checking their Complete and Failed conditions
+      jobs_data=$(kubectl get jobs -l build-id --request-timeout=15s -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.metadata.labels.build-id}{"|"}{.status.conditions[?(@.type=="Complete")].status}{"|"}{.status.conditions[?(@.type=="Failed")].status}{"\n"}{end}' 2>/dev/null || true)
 
       if [ -n "$jobs_data" ]; then
         active_jobs=()
@@ -65,7 +72,8 @@ data:
             continue
           fi
           active_jobs+=("$job_name|$build_id")
-          filter_parts+=("id=$build_id")
+          # gcloud's cloudbuild filter_rewrite maps 'build_id' (not 'id') to a server-side filter
+          filter_parts+=("build_id=\"$build_id\"")
         done <<< "$jobs_data"
 
         if [ ${#active_jobs[@]} -gt 0 ]; then
@@ -86,7 +94,7 @@ data:
             if [ -n "$bid" ]; then
               build_statuses["$bid"]="$bstatus"
             fi
-          done < <(gcloud builds list --filter="create_time > -P2D AND ($filter_str)" --format="value(id,status)")
+          done < <(gcloud builds list --filter="$filter_str" --format="value(id,status)")
 
           # Check and delete jobs for cancelled/failed builds
           for item in "${active_jobs[@]}"; do
@@ -122,6 +130,8 @@ spec:
     metadata:
       labels:
         app: kueue-reaper
+      annotations:
+        reaper-script-version: "2.2-stale-pr-reaper"
     spec:
       serviceAccountName: kueue-reaper-ksa
       containers:
@@ -131,8 +141,15 @@ spec:
         volumeMounts:
         - name: script-volume
           mountPath: /scripts
+        - name: stale-pr-reaper-volume
+          mountPath: /reaper-py
       volumes:
       - name: script-volume
         configMap:
           name: kueue-reaper-script
           defaultMode: 0777
+      - name: stale-pr-reaper-volume
+        configMap:
+          name: kueue-stale-pr-reaper
+          defaultMode: 0755
+          optional: true

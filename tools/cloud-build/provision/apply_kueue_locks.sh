@@ -54,6 +54,29 @@ for PROJECT in "${PROJECTS[@]}"; do
 
 			echo "Applying kueue-setup..."
 			kubectl apply -f "$CONFIGS_DIR/kueue-setup.yaml" || ERRORS=1
+
+			REAPER_GSA=$(kubectl get serviceaccount kueue-reaper-ksa -n default --request-timeout=15s -o jsonpath="{.metadata.annotations['iam.gke.io/gcp-service-account']}" 2>/dev/null || true)
+			if [ -n "$REAPER_GSA" ]; then
+				echo "Ensuring roles/cloudbuild.builds.editor for $REAPER_GSA in $PROJECT..."
+				# --condition=None is required by gcloud in non-interactive mode (--quiet)
+				# when the project IAM policy contains conditional bindings.
+				gcloud projects add-iam-policy-binding "$PROJECT" \
+					--member="serviceAccount:$REAPER_GSA" \
+					--role="roles/cloudbuild.builds.editor" \
+					--condition=None \
+					--quiet >/dev/null || ERRORS=1
+			else
+				echo "WARNING: kueue-reaper-ksa service account not found or lacks GCP service account annotation in $PROJECT. Skipping IAM binding."
+			fi
+
+			echo "Syncing kueue-stale-pr-reaper ConfigMap..."
+			kubectl create configmap kueue-stale-pr-reaper \
+				-n default \
+				--from-file=reap_stale_pr_builds.py="$SCRIPT_DIR/../reap_stale_pr_builds.py" \
+				--dry-run=client -o yaml | kubectl apply -f - || ERRORS=1
+
+			echo "Applying kueue-reaper-pod..."
+			kubectl apply -f "$CONFIGS_DIR/kueue-reaper-pod.yaml" || ERRORS=1
 		else
 			echo "Failed to get credentials for $CLUSTER_NAME in $PROJECT."
 			ERRORS=1

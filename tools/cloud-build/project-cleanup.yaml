@@ -29,6 +29,9 @@ steps:
   - -c
   - |
     set -euo pipefail
+    echo "--- Reaping Stale / Closed-PR Cloud Builds and Kueue Jobs ---"
+    python3 /workspace/tools/cloud-build/reap_stale_pr_builds.py --project="${PROJECT_ID}" || true
+
     # Set time variables
     export CUTOFF_TIME=$(date -d '2 hours ago' -u +%Y-%m-%dT%H:%M:%S%z)
     export CUTOFF_TIME_IMAGES=$(date -d "60 days ago" -u +%Y-%m-%dT%H:%M:%S%z)
