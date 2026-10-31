@@ -125,9 +125,11 @@ def fetch_pr_info(
         "Accept": "application/vnd.github+json",
         "User-Agent": "cluster-toolkit-pr-reaper",
     }
-    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    token = (
+        os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or ""
+    ).strip()
     if token:
-        headers["Authorization"] = f"Bearer {token.strip()}"
+        headers["Authorization"] = f"Bearer {token}"
     if cached_entry.get("etag"):
         headers["If-None-Match"] = str(cached_entry["etag"])
 
@@ -176,12 +178,14 @@ def fetch_pr_info(
         return None
 
 
-def list_active_pr_builds(project: str) -> list[dict]:
+def list_active_pr_builds(project: str, target_pr: str = "") -> list[dict]:
     """Fetch all WORKING and QUEUED PR builds in the project as JSON."""
-    build_filter = (
-        '(status="WORKING" OR status="QUEUED") '
-        'AND substitutions._PR_NUMBER!=""'
+    pr_filter = (
+        f'substitutions._PR_NUMBER="{target_pr.strip()}"'
+        if target_pr and target_pr.strip()
+        else 'substitutions._PR_NUMBER!=""'
     )
+    build_filter = f'(status="WORKING" OR status="QUEUED") AND {pr_filter}'
     cmd = [
         "gcloud",
         "builds",
@@ -271,7 +275,7 @@ def identify_stale_builds(
                     continue
                 subs = b.get("substitutions") or {}
                 build_sha = extract_commit_sha(subs)
-                if not build_sha or not commits_match(build_sha, latest_sha):
+                if build_sha and not commits_match(build_sha, latest_sha):
                     b_copy = dict(b)
                     b_copy["stale_reason"] = (
                         f"superseded by PR #{pr_num} HEAD {latest_sha[:7]}"
@@ -352,7 +356,7 @@ def reap_stale_pr_builds(
     dry_run: bool = False,
 ) -> dict[str, int]:
     """Discover and cancel stale QUEUED/WORKING PR Cloud Builds."""
-    builds = list_active_pr_builds(project)
+    builds = list_active_pr_builds(project, target_pr=target_pr)
     if not builds:
         print("No active PR Cloud Builds found.")
         return {"cancelled_active": 0}

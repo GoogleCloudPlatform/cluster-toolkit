@@ -58,6 +58,8 @@ for PROJECT in "${PROJECTS[@]}"; do
 			REAPER_GSA=$(kubectl get serviceaccount kueue-reaper-ksa -n default -o jsonpath='{.metadata.annotations.iam\.gke\.io/gcp-service-account}' 2>/dev/null || true)
 			if [ -n "$REAPER_GSA" ]; then
 				echo "Ensuring roles/cloudbuild.builds.editor for $REAPER_GSA in $PROJECT..."
+				# --condition=None is required by gcloud in non-interactive mode (--quiet)
+				# when the project IAM policy contains conditional bindings.
 				gcloud projects add-iam-policy-binding "$PROJECT" \
 					--member="serviceAccount:$REAPER_GSA" \
 					--role="roles/cloudbuild.builds.editor" \
