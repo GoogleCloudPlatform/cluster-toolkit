@@ -20,25 +20,63 @@
 #
 # This blueprint features a reference design suited for CAE applications on GCP.
 # It sets up the following infrastructure:
-#   * Google's H3 VMs, ideally suited for CAE workloads
-#   * Google's C3-highmem VM, suited for workloads with 16GB/core requirement
+#   * Google's H4D VMs with Cloud RDMA, ideally suited for CAE workloads
+#   * Google's C4D-highmem VM, suited for workloads with 16GB/core requirement
+#   * Google's G4 GPU VMs, suited for GPU-accelerated CAE and visualization workloads
 #   * Google's Filestore NFS-based shared storage
+#   * Google's Managed Lustre parallel file system for /scratch
 #   * Google's Chrome Remote Desktop
 #   * SLURM workload scheduler
 #
 blueprint_name: cae-slurm-v6
+
+validators:
+- validator: test_apis_enabled
+  skip: true # skipping this validator, since "service-enablement" will take care of it.
+
 vars:
   project_id: ## Set GCP Project ID Here ##
   deployment_name: cae-slurm-v6
-  # check here for other regions with H3 deployments: https://cloud.google.com/compute/docs/regions-zones
+  # check here for other regions with H4D, C4D, and G4 deployments: https://cloud.google.com/compute/docs/regions-zones
   # For example
   # region: europe-west4
   # zone: europe-west4-b
   region: us-central1
-  zone: us-central1-a
+  zone: us-central1-b
   # Visit https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
-  # for a list of valid family options with Slurm; note: the image types for the compute nodes
-  # and the Chrome Remote Desktop (CRD) need to have the same Slurm base.
+  # for a list of valid family options with Slurm.
+  slurm_image:
+    # Rocky 8: slurm-gcp-6-12-hpc-rocky-linux-8
+    # Rocky 9: slurm-gcp-6-12-hpc-rocky-linux-9
+    family: slurm-gcp-6-12-hpc-rocky-linux-9
+    project: schedmd-slurm-public
+
+  # H4D & Cloud RDMA settings
+  rdma_net_range: 192.168.128.0/18
+  h4d_cluster_size: 0
+  # Provisioning model, select one, lack of selection will rely on on-demand capacity
+  h4d_reservation_name: ""
+  h4d_dws_flex_enabled: false
+  h4d_enable_spot_vm: false
+
+  # G4 GPU settings
+  g4_cluster_size: 0
+  g4_machine_type: g4-standard-48
+  # To enable Dual NIC, you MUST use g4-standard-384
+  # g4_machine_type: g4-standard-384
+  # net1_range: 192.168.2.0/24 # Uncomment for Dual NIC on g4-standard-384
+  g4_disk_size_gb: 100
+  # Provisioning models (set to true or fill in reservation name, pick only one)
+  g4_reservation_name: "" # To use a reservation, provide its name here.
+  g4_enable_spot_vm: false # To use Spot VMs, set this to true.
+  g4_dws_flex_enabled: true # To use DWS Flex Provisioning
+
+  # Managed Lustre settings for /scratch
+  # The values of lustre_size_gib and per_unit_storage_throughput are co-related
+  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  lustre_instance_id: cae-scratch-lustre
+  lustre_size_gib: 9000
+  per_unit_storage_throughput: 1000
 
   # Optional overrides (defaults shown)
   # Size in GB of the /home Filestore instance.
@@ -61,15 +99,34 @@ vars:
   controller_machine_type: n2-standard-16
 
 # Documentation for each of the modules used below can be found at
-# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+# https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/README.md
 deployment_groups:
+
+- group: enable_apis
+  modules:
+  - id: services-api
+    source: community/modules/project/service-enablement
+    settings:
+      gcp_service_list:
+      - compute.googleapis.com
+      - file.googleapis.com
+      - iam.googleapis.com
+      - logging.googleapis.com
+      - lustre.googleapis.com
+      - monitoring.googleapis.com
+      - pubsub.googleapis.com
+      - secretmanager.googleapis.com
+      - servicenetworking.googleapis.com
+      - serviceusage.googleapis.com
+      - stackdriver.googleapis.com
+      - storage.googleapis.com
 
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #
 #
 # Deployment Group: Setup
 #
-# Sets up VPC network, persistent NFS shares, dashboard
+# Sets up VPC network, RDMA network, persistent NFS shares, dashboard
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 - group: setup
   modules:
@@ -81,6 +138,54 @@ deployment_groups:
     settings:
       network_name: cae-slurm-net
       subnetwork_name: primary-subnet
+
+  ####### Private Service Access #######
+  # Required for Managed Lustre instance.
+  # Private Service Access (PSA) requires the compute.networkAdmin (or
+  # servicenetworking.networksAdmin) role, which is included in the Owner role
+  # but not the Editor role.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [network]
+
+  ####### Cloud RDMA Network Setup #######
+  # This creates the secondary Cloud RDMA (IRDMA) network for H4D compute nodes
+  - id: h4d-rdma-net
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-rdma-net-0
+      mtu: 8896
+      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-falcon
+      network_routing_mode: REGIONAL
+      enable_cloud_router: false
+      enable_cloud_nat: false
+      enable_internal_traffic: false
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-rdma-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.rdma_net_range)
+      nic_type: "IRDMA"
+
+  # Instructions for Dual NIC on g4-standard-384:
+  # 1. Uncomment the 'net1' module below.
+  # 2. Ensure 'vars.net1_range' is also uncommented and defined.
+  #
+  # - id: net1
+  #   source: modules/network/vpc
+  #   settings:
+  #     network_name: $(vars.deployment_name)-net-1
+  #     subnetworks:
+  #     - subnet_name: $(vars.deployment_name)-sub-1
+  #       subnet_region: $(vars.region)
+  #       subnet_ip: $(vars.net1_range)
+  #     firewall_rules:
+  #     - name: $(vars.deployment_name)-internal-1
+  #       ranges: [$(vars.net1_range)]
+  #       allow:
+  #       - protocol: tcp
+  #       - protocol: udp
+  #       - protocol: icmp
 
   ####### User Home Storage #######
   # This block creates an NFS file share for /home
@@ -136,32 +241,31 @@ deployment_groups:
   modules:
 
   #######  Scratch #######
-  # This block creates an NFS file share for scratch. If you experience an IO bottleneck,
-  # consider to use the more performant version HIGH_SCALE_SSD with the following settings:
+  # This block creates a Managed Lustre parallel file system share for /scratch.
+  # Please visit here for more information:
+  # - Managed Lustre: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/file-system/managed-lustre/README.md
   - id: scratchfs
-    source: modules/file-system/filestore
-    use: [network]
+    source: modules/file-system/managed-lustre
+    use: [network, private_service_access]
     settings:
       filestore_tier: HIGH_SCALE_SSD
       size_gb: $(vars.scratchfs_size_gb)    # smallest size for HIGH_SSD_SCALE
       filestore_share_name: scratchshare
       local_mount: /scratch
-
-  # If you require maximum IO performance, you can consider to bring up a dedicated parallel
-  # file system, e.g.GCPs Managed Lustre,Sycomp GPFS,NetApp Volumes etc.
-  # Note: Those solutions may have associated license cost.
-  #
-  # Please visit here for more information
-  # - Sycomp IBM Spectrum Scale: https://console.developers.google.com/marketplace/product/sycomp/sycomp-storage-fueled-by-ibm-spectrum-scale
-  # - Managed Lustre: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/file-system/managed-lustre/README.md
+      remote_mount: lustrefs
+      size_gib: $(vars.lustre_size_gib)
+      per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
 
   ######## Remote Desktop(s) #######
   # This block creates chrome remote desktop.
-  # For more info: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/remote-desktop/chrome-remote-desktop
+  # For more info: https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/community/modules/remote-desktop/chrome-remote-desktop
   - id: remotedesktop
     source: community/modules/remote-desktop/chrome-remote-desktop
-    use: [network]
+    use: [network, homefs, appsfs]
     settings:
+      instance_image:
+        project: debian-cloud
+        family: debian-12
       install_nvidia_driver: true
       add_deployment_name_before_prefix: true
       name_prefix: chrome-remote-desktop
@@ -170,10 +274,19 @@ deployment_groups:
         count: 1
 
   ####### Balanced partition #######
-  # this block creates a partition uses GCP H3-standard VM for regular jobs with 4GB/core
-  - id: h3_nodeset
+  # this block creates a partition uses GCP H4D VM with Cloud RDMA for CAE jobs
+  - id: h4d_startup
+    source: modules/scripts/startup-script
+    settings:
+      set_ofi_cloud_rdma_tunables: true
+      local_ssd_filesystem:
+        fs_type: ext4
+        mountpoint: /mnt/lssd
+        permissions: "1777"
+
+  - id: h4d_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+    use: [h4d_startup, network]
     settings:
       node_count_dynamic_max: $(vars.h3_node_count_dynamic_max)
       enable_spot_vm: $(vars.h3_enable_spot_vm)
@@ -181,17 +294,38 @@ deployment_groups:
       disk_type: 'pd-balanced'
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
+      bandwidth_tier: gvnic_enabled
+      machine_type: h4d-highmem-192-lssd
+      instance_image: $(vars.slurm_image)
+      node_count_static: $(vars.h4d_cluster_size)
+      node_count_dynamic_max: 10
+      enable_placement: false
+      enable_spot_vm: $(vars.h4d_enable_spot_vm)
 
-  - id: h3_partition
+      # Provisioning models
+      reservation_name: $(vars.h4d_reservation_name)
+      dws_flex:
+        enabled: $(vars.h4d_dws_flex_enabled)
+
+      disk_type: hyperdisk-balanced
+      on_host_maintenance: TERMINATE
+      additional_networks: $(h4d-rdma-net.instance_additional_networks)
+
+  - id: h4d_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [h3_nodeset]
+    use:
+    - h4d_nodeset
     settings:
-      partition_name: balance
+      exclusive: false
+      partition_name: h4d
       is_default: true
+      partition_conf:
+        ResumeTimeout: 900
+        SuspendTimeout: 600
 
   ####### High-Mem partition #######
-  #  this block creates partition uses GCP C3-highmem VM for jobs with 16GB/core requirement
-  - id: c3_nodeset
+  #  this block creates partition uses GCP C4D-highmem VM for jobs with 16GB/core requirement
+  - id: c4d_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
@@ -202,11 +336,102 @@ deployment_groups:
       bandwidth_tier: tier_1_enabled
       allow_automatic_updates: false
 
-  - id: c3_partition
+  - id: c4d_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [c3_nodeset]
+    use: [c4d_nodeset]
     settings:
       partition_name: highmem
+
+  ####### GPU partition #######
+  # this block creates a partition uses GCP G4 VM for GPU-accelerated CAE and visualization jobs
+  - id: g4_node_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: ansible-local
+        destination: enable_dcgm.yml
+        content: |
+          ---
+          - name: Enable NVIDIA DCGM and Persistence on GPU nodes
+            hosts: all
+            become: true
+            vars:
+              enable_ops_agent: true
+              enable_nvidia_dcgm: true
+            tasks:
+            - name: Update Ops Agent configuration for DCGM
+              ansible.builtin.blockinfile:
+                path: /etc/google-cloud-ops-agent/config.yaml
+                create: yes
+                insertafter: EOF
+                block: |
+                  metrics:
+                    receivers:
+                      dcgm:
+                        type: dcgm
+                        receiver_version: 2
+                    service:
+                      pipelines:
+                        dcgm:
+                          receivers:
+                            - dcgm
+              notify:
+              - Restart Google Cloud Ops Agent
+            handlers:
+            - name: Restart Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'restarted' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            post_tasks:
+            - name: Ensure Google Cloud Ops Agent is running
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            - name: Enable and Start NVIDIA DCGM
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
+                enabled: "{{ enable_nvidia_dcgm }}"
+            # Enable persistenced service
+            - name: Enable and Start nvidia-persistenced
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
+                state: started
+                enabled: true
+
+  - id: g4_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, g4_node_startup]
+    settings:
+      node_count_static: $(vars.g4_cluster_size)
+      node_count_dynamic_max: 2
+      machine_type: $(vars.g4_machine_type)
+      instance_image: $(vars.slurm_image)
+      bandwidth_tier: gvnic_enabled
+      disk_type: hyperdisk-balanced
+      disk_size_gb: $(vars.g4_disk_size_gb)
+      enable_placement: false
+      allow_automatic_updates: false
+      # Provisioning models
+      reservation_name: $(vars.g4_reservation_name)
+      enable_spot_vm: $(vars.g4_enable_spot_vm)
+      dws_flex:
+        enabled: $(vars.g4_dws_flex_enabled)
+
+      # Instructions for Dual NIC on g4-standard-384:
+      # 3. Uncomment 'additional_networks' below to attach the second NIC.
+      #
+      # additional_networks: $(net1.instance_additional_networks)
+
+  - id: g4_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - g4_nodeset
+    settings:
+      partition_name: g4
+      exclusive: false
 
   ####### Scheduler: SLURM #######
   # This block creates a SLURM login node
@@ -218,6 +443,36 @@ deployment_groups:
 
   ####### Scheduler: SLURM #######
   # This block creates a SLURM controller
+  - id: controller_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: stage_scripts.sh
+        content: |
+          #!/bin/bash
+          SLURM_ROOT=/opt/apps/adm/slurm
+          PARTITION_NAME=$(h4d_partition.partitions[0].partition_name)
+          mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
+
+          # enable the use of password-free sudo within Slurm jobs on all compute nodes
+          # feature is restricted to users with OS Admin Login IAM role
+          # https://cloud.google.com/iam/docs/understanding-roles#compute.osAdminLogin
+          mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/epilog_slurmd.d"
+          curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/v6.12.0/tools/prologs-epilogs/sudo-oslogin
+          chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
+
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
+
+          # enable an RDMA health check that runs prior to any H4D job
+          mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-prolog_slurmd.d"
+          curl -s -o "${SLURM_ROOT}/partition-${PARTITION_NAME}-prolog_slurmd.d/irdma_health_check.prolog_slurmd" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/v6.12.0/tools/prologs-epilogs/irdma_health_check
+          chmod 0755 "${SLURM_ROOT}/partition-${PARTITION_NAME}-prolog_slurmd.d/irdma_health_check.prolog_slurmd"
+
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
@@ -225,8 +480,9 @@ deployment_groups:
     - homefs
     - appsfs
     - scratchfs
-    - h3_partition
-    - c3_partition
+    - h4d_partition
+    - c4d_partition
+    - g4_partition
     - slurm_login
     settings:
       machine_type: $(vars.controller_machine_type)
@@ -237,3 +493,4 @@ deployment_groups:
         suspend_rate: 0
         suspend_timeout: 300
         no_comma_params: false
+        unkillable_step_timeout: 900
