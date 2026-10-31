@@ -26,12 +26,10 @@ on:
     types:
     - opened
     - reopened
-    - synchronize
 
 permissions:
   issues: write
   contents: read
-  actions: write
   pull-requests: write
 
 jobs:
@@ -42,6 +40,7 @@ jobs:
     - name: Checkout repo
       uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       with:
+        ref: ${{ github.event.pull_request.base.ref }}
         persist-credentials: false
 
     - name: Add external label only for develop PRs
@@ -49,29 +48,34 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GITHUB_EVENT_PULL_REQUEST_USER_LOGIN: ${{ github.event.pull_request.user.login }}
         GITHUB_EVENT_PULL_REQUEST_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
       run: |
-          AUTHOR="${GITHUB_EVENT_PULL_REQUEST_USER_LOGIN}"
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          TARGET_BRANCH="${GITHUB_EVENT_PULL_REQUEST_BASE_REF}"
+        AUTHOR="${GITHUB_EVENT_PULL_REQUEST_USER_LOGIN}"
+        TARGET_BRANCH="${GITHUB_EVENT_PULL_REQUEST_BASE_REF}"
 
-          echo "Author: $AUTHOR"
-          echo "Target branch: $TARGET_BRANCH"
+        echo "Author: $AUTHOR"
+        echo "Target branch: $TARGET_BRANCH"
 
-          # Extra safety check
-          if [ "$TARGET_BRANCH" != "develop" ]; then
-            echo "Not targeting develop → skipping"
-            exit 0
-          fi
+        # Extra safety check
+        if [ "$TARGET_BRANCH" != "develop" ]; then
+          echo "Not targeting develop → skipping"
+          exit 0
+        fi
 
-          INTERNAL_USERS=$(jq -r '.[].login' cluster-toolkit-writers.json)
+        if [ ! -f cluster-toolkit-writers.json ]; then
+          echo "Error: cluster-toolkit-writers.json not found"
+          exit 1
+        fi
 
-          if echo "$INTERNAL_USERS" | grep -qx "$AUTHOR"; then
-            echo "Internal user → no label"
-          else
-            echo "External user → adding label"
+        INTERNAL_USERS=$(jq -r '.[].login' cluster-toolkit-writers.json)
 
-            gh api \
-              repos/${{ github.repository }}/issues/$PR_NUMBER/labels \
-              -X POST \
-              -F labels[]=external || true
-          fi
+        if echo "$INTERNAL_USERS" | grep -qx "$AUTHOR"; then
+          echo "Internal user → no label"
+        else
+          echo "External user → adding label"
+
+          gh api \
+            "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/labels" \
+            -X POST \
+            -F "labels[]=external" || true
+        fi
