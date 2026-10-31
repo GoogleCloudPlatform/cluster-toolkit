@@ -84,6 +84,10 @@ bash /workspace/tools/cloud-build/wait_for_available_reservation.sh "g4-reservat
 * If the reservation is not in `READY` state, has `0` total capacity, or `TOTAL_COUNT < REQUIRED_COUNT`, it fails fast with exit code `3`.
 * If the reservation does not exist (`404`), lacks permissions (`403`), or fails authentication/validation (`400`/`401`), it fails fast with exit code `1`.
 
+## Unit Testing
+
+Unit tests for GCE reservation capacity polling (`wait_for_available_reservation.sh`) are located in `tools/tests/test_wait_for_available_reservation.py`.
+
 To run the unit tests:
 
 ```bash

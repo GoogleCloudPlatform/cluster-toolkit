@@ -62,7 +62,7 @@ data:
       fi
 
       # 2. Fetch all jobs, checking their Complete and Failed conditions
-      jobs_data=$(kubectl get jobs -l build-id -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.metadata.labels.build-id}{"|"}{.status.conditions[?(@.type=="Complete")].status}{"|"}{.status.conditions[?(@.type=="Failed")].status}{"\n"}{end}')
+      jobs_data=$(kubectl get jobs -l build-id --request-timeout=15s -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.metadata.labels.build-id}{"|"}{.status.conditions[?(@.type=="Complete")].status}{"|"}{.status.conditions[?(@.type=="Failed")].status}{"\n"}{end}' 2>/dev/null || true)
 
       if [ -n "$jobs_data" ]; then
         active_jobs=()

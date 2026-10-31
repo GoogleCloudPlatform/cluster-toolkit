@@ -49,7 +49,6 @@ import urllib.request
 DEFAULT_PROJECT = "hpc-toolkit-dev"
 DEFAULT_REPO = "GoogleCloudPlatform/cluster-toolkit"
 DEFAULT_ETAG_CACHE_PATH = "/tmp/ctk_pr_etag_cache.json"
-CANCEL_BATCH_SIZE = 50
 SUBPROCESS_TIMEOUT_SECONDS = 60
 
 
@@ -99,15 +98,20 @@ def _load_etag_cache(cache_path: str) -> dict:
 
 
 def _save_etag_cache(cache_path: str, cache: dict) -> None:
-    """Persist the ETag cache dictionary to disk."""
+    """Persist the ETag cache dictionary to disk atomically."""
     if not cache_path:
         return
     _ETAG_CACHES[cache_path] = cache
+    tmp_path = f"{cache_path}.tmp.{os.getpid()}"
     try:
-        with open(cache_path, "w", encoding="utf-8") as fh:
+        with open(tmp_path, "w", encoding="utf-8") as fh:
             json.dump(cache, fh)
+        os.replace(tmp_path, cache_path)
     except OSError:
-        pass
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
 
 
 def fetch_pr_info(
@@ -290,7 +294,7 @@ def cancel_active_builds(
     active_builds: list[dict],
     dry_run: bool = False,
 ) -> int:
-    """Cancel QUEUED and WORKING Cloud Builds in batches."""
+    """Cancel QUEUED and WORKING Cloud Builds individually for failure isolation."""
     if not active_builds:
         return 0
 
@@ -313,13 +317,12 @@ def cancel_active_builds(
         return len(build_ids)
 
     cancelled = 0
-    for i in range(0, len(build_ids), CANCEL_BATCH_SIZE):
-        chunk = build_ids[i : i + CANCEL_BATCH_SIZE]
+    for build_id in build_ids:
         cmd = [
             "gcloud",
             "builds",
             "cancel",
-            *chunk,
+            build_id,
             f"--project={project}",
             "--quiet",
         ]
@@ -333,15 +336,15 @@ def cancel_active_builds(
             )
         except (subprocess.TimeoutExpired, OSError) as exc:
             print(
-                f"WARNING: gcloud builds cancel failed to execute: {exc}",
+                f"WARNING: gcloud builds cancel {build_id} failed to execute: {exc}",
                 file=sys.stderr,
             )
             continue
         if res.returncode == 0:
-            cancelled += len(chunk)
+            cancelled += 1
         else:
             print(
-                f"WARNING: gcloud builds cancel returned exit {res.returncode}: "
+                f"WARNING: gcloud builds cancel {build_id} returned exit {res.returncode}: "
                 f"{res.stderr.strip()}",
                 file=sys.stderr,
             )
@@ -371,12 +374,9 @@ def reap_stale_pr_builds(
         print("No stale PR Cloud Builds detected.")
         return {"cancelled_active": 0}
 
-    stale_active = [
-        b for b in stale_builds if b.get("status") in ("WORKING", "QUEUED")
-    ]
     cancelled_active = cancel_active_builds(
         project=project,
-        active_builds=stale_active,
+        active_builds=stale_builds,
         dry_run=dry_run,
     )
     return {"cancelled_active": cancelled_active}

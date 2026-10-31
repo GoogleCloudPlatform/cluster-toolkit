@@ -55,7 +55,7 @@ for PROJECT in "${PROJECTS[@]}"; do
 			echo "Applying kueue-setup..."
 			kubectl apply -f "$CONFIGS_DIR/kueue-setup.yaml" || ERRORS=1
 
-			REAPER_GSA=$(kubectl get serviceaccount kueue-reaper-ksa -n default -o jsonpath='{.metadata.annotations.iam\.gke\.io/gcp-service-account}' 2>/dev/null || true)
+			REAPER_GSA=$(kubectl get serviceaccount kueue-reaper-ksa -n default --request-timeout=15s -o jsonpath="{.metadata.annotations['iam.gke.io/gcp-service-account']}" 2>/dev/null || true)
 			if [ -n "$REAPER_GSA" ]; then
 				echo "Ensuring roles/cloudbuild.builds.editor for $REAPER_GSA in $PROJECT..."
 				# --condition=None is required by gcloud in non-interactive mode (--quiet)

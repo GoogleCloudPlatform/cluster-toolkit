@@ -158,6 +158,7 @@ class TestReapStalePRBuilds(unittest.TestCase):
         )
         self.assertEqual(stale, [])
 
+    @mock.patch.dict(os.environ, {"GITHUB_TOKEN": "fake-test-token"}, clear=True)
     @mock.patch("urllib.request.urlopen")
     def test_fetch_pr_info_uses_etag_cache_on_304_not_modified(self, mock_urlopen):
         """Verify fetch_pr_info caches ETag and returns cached PR info on HTTP 304 Not Modified."""
@@ -205,6 +206,10 @@ class TestReapStalePRBuilds(unittest.TestCase):
                 seen_headers.get("If-none-match")
                 or seen_headers.get("If-None-Match"),
                 '"etag-abc-123"',
+            )
+            self.assertEqual(
+                seen_headers.get("Authorization"),
+                "Bearer fake-test-token",
             )
 
     def test_identify_stale_builds_never_cancels_current_build_id(self):
@@ -342,6 +347,43 @@ class TestReapStalePRBuilds(unittest.TestCase):
             ],
         )
 
+    @mock.patch("subprocess.run")
+    def test_cancel_active_builds_isolates_per_build_failure(self, mock_subproc):
+        """Ensure a build that finishes before cancel (exit 1) does not abort remaining cancellations."""
+        active_builds = [
+            {
+                "id": "build-already-finished",
+                "status": "WORKING",
+                "substitutions": {"_PR_NUMBER": "6550", "COMMIT_SHA": "aaaa111"},
+                "stale_reason": "superseded",
+            },
+            {
+                "id": "build-still-working",
+                "status": "WORKING",
+                "substitutions": {"_PR_NUMBER": "6550", "COMMIT_SHA": "aaaa111"},
+                "stale_reason": "superseded",
+            },
+        ]
+
+        def side_effect(cmd, **kwargs):
+            if "build-already-finished" in cmd:
+                return subprocess.CompletedProcess(
+                    cmd,
+                    1,
+                    stdout="",
+                    stderr='FAILED_PRECONDITION: Cannot cancel build in status "SUCCESS"',
+                )
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        mock_subproc.side_effect = side_effect
+        cancelled = reaper.cancel_active_builds(
+            project="hpc-toolkit-dev",
+            active_builds=active_builds,
+            dry_run=False,
+        )
+        self.assertEqual(cancelled, 1)
+        self.assertEqual(mock_subproc.call_count, 2)
+
     @mock.patch("reap_stale_pr_builds.fetch_pr_info")
     @mock.patch("subprocess.run")
     def test_dry_run_performs_no_mutations(self, mock_subproc, mock_fetch_pr):
@@ -379,16 +421,29 @@ class TestReapStalePRBuilds(unittest.TestCase):
         )
 
     @mock.patch("subprocess.run")
-    def test_list_active_pr_builds_handles_timeout_gracefully(
+    def test_list_active_pr_builds_handles_timeout_and_invalid_json_gracefully(
         self, mock_subproc
     ):
-        """Ensure gcloud builds list timeout returns an empty list without raising."""
+        """Ensure gcloud builds list timeout or malformed JSON returns an empty list without raising."""
         mock_subproc.side_effect = subprocess.TimeoutExpired(
             cmd=["gcloud", "builds", "list"],
             timeout=60,
         )
-        builds = reaper.list_active_pr_builds("hpc-toolkit-dev")
-        self.assertEqual(builds, [])
+        self.assertEqual(reaper.list_active_pr_builds("hpc-toolkit-dev"), [])
+
+        mock_subproc.side_effect = None
+        mock_subproc.return_value = subprocess.CompletedProcess(
+            ["gcloud", "builds", "list"], 0, stdout="{invalid-json", stderr=""
+        )
+        self.assertEqual(reaper.list_active_pr_builds("hpc-toolkit-dev"), [])
+
+    def test_commits_match_handles_short_and_full_shas(self):
+        """Verify commits_match handles full SHAs, >=7-char prefixes, and rejects short/empty strings."""
+        full_sha = "AAAA1111aaaa1111aaaa1111aaaa1111aaaa1111"
+        self.assertTrue(reaper.commits_match(full_sha, full_sha.lower()))
+        self.assertTrue(reaper.commits_match("aaaa111", full_sha))
+        self.assertFalse(reaper.commits_match("aaaa11", full_sha))
+        self.assertFalse(reaper.commits_match("", full_sha))
 
 
 if __name__ == "__main__":
