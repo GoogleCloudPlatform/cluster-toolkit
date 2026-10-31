@@ -120,8 +120,16 @@ def fetch_pr_info(
     cache_path: str = DEFAULT_ETAG_CACHE_PATH,
 ) -> Optional[dict]:
     """Query GitHub REST API for a PR's state ('open'/'closed') and head.sha."""
-    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
-    cache_key = f"{repo}#{pr_number}"
+    pr_number_clean = str(pr_number or "").strip()
+    if not pr_number_clean.isdigit():
+        print(
+            f"WARNING: Invalid non-numeric PR number: {pr_number!r}",
+            file=sys.stderr,
+        )
+        return None
+
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number_clean}"
+    cache_key = f"{repo}#{pr_number_clean}"
     cache = _load_etag_cache(cache_path)
     cached_entry = cache.get(cache_key) if isinstance(cache.get(cache_key), dict) else {}
 
@@ -163,8 +171,8 @@ def fetch_pr_info(
                 "head_sha": str(cached_entry.get("head_sha") or ""),
             }
         print(
-            f"WARNING: GitHub API lookup failed for PR #{pr_number} ({exc}); "
-            f"skipping PR #{pr_number} on this run.",
+            f"WARNING: GitHub API lookup failed for PR #{pr_number_clean} ({exc}); "
+            f"skipping PR #{pr_number_clean} on this run.",
             file=sys.stderr,
         )
         return None
@@ -175,8 +183,8 @@ def fetch_pr_info(
         OSError,
     ) as exc:
         print(
-            f"WARNING: GitHub API lookup failed for PR #{pr_number} ({exc}); "
-            f"skipping PR #{pr_number} on this run.",
+            f"WARNING: GitHub API lookup failed for PR #{pr_number_clean} ({exc}); "
+            f"skipping PR #{pr_number_clean} on this run.",
             file=sys.stderr,
         )
         return None
@@ -184,9 +192,16 @@ def fetch_pr_info(
 
 def list_active_pr_builds(project: str, target_pr: str = "") -> list[dict]:
     """Fetch all WORKING and QUEUED PR builds in the project as JSON."""
+    target_pr_clean = str(target_pr or "").strip()
+    if target_pr_clean and not target_pr_clean.isdigit():
+        print(
+            f"WARNING: Invalid non-numeric target PR: {target_pr!r}",
+            file=sys.stderr,
+        )
+        return []
     pr_filter = (
-        f'substitutions._PR_NUMBER="{target_pr.strip()}"'
-        if target_pr and target_pr.strip()
+        f'substitutions._PR_NUMBER="{target_pr_clean}"'
+        if target_pr_clean
         else 'substitutions._PR_NUMBER!=""'
     )
     build_filter = f'(status="WORKING" OR status="QUEUED") AND {pr_filter}'
@@ -248,7 +263,7 @@ def identify_stale_builds(
     for b in builds:
         subs = b.get("substitutions") or {}
         pr_num = str(subs.get("_PR_NUMBER") or "").strip()
-        if not pr_num:
+        if not pr_num.isdigit():
             continue
         if target_pr and pr_num != str(target_pr).strip():
             continue

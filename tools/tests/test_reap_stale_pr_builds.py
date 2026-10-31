@@ -445,6 +445,25 @@ class TestReapStalePRBuilds(unittest.TestCase):
         self.assertFalse(reaper.commits_match("aaaa11", full_sha))
         self.assertFalse(reaper.commits_match("", full_sha))
 
+    @mock.patch("urllib.request.urlopen")
+    @mock.patch("subprocess.run")
+    def test_non_numeric_pr_numbers_rejected(self, mock_subproc, mock_urlopen):
+        """Ensure non-numeric PR strings are rejected before URL or gcloud filter construction."""
+        self.assertIsNone(
+            reaper.fetch_pr_info(
+                "GoogleCloudPlatform/cluster-toolkit", "../6550"
+            )
+        )
+        mock_urlopen.assert_not_called()
+
+        self.assertEqual(
+            reaper.list_active_pr_builds(
+                "hpc-toolkit-dev", target_pr='6550" OR status="SUCCESS'
+            ),
+            [],
+        )
+        mock_subproc.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
