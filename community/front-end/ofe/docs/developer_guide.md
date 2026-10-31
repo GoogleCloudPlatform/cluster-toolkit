@@ -98,6 +98,17 @@ Here are some notes from a developer's perspective:
 - Terraform creates a supporting GCS bucket. This bucket is not only used
   during deployment, but also provides a long-term storage for clusters
   operating within this deployment.
+- Before any of the above, `deploy.sh` applies a second, separate Terraform
+  root, `tf/state_bucket/`, which creates a versioned bucket holding the
+  Terraform state of every resource the FrontEnd goes on to provision. It is a
+  separate root so that tearing the FrontEnd down cannot destroy it
+  (`teardown.sh` removes it only with `--delete-state-bucket`): state for a
+  running cluster must outlive the FrontEnd that created it. `deploy.sh` runs
+  it in `tf/state_bucket/deployments/<deployment_name>/`, which links to the
+  root's `.tf` files and holds that deployment's own local state and
+  variables. The bucket name is passed to the service machine in the
+  `terraform-state-bucket` instance metadata key and ends up as
+  `server.terraform_state_bucket` in `configuration.yaml`.
 - Terraform sets up a Pub/Sub topic for communication between the service
   machine and clusters.
 - Terraform provisions a compute engine virtual machine to be the service
@@ -168,6 +179,22 @@ The directory contains the following:
 
 Note that life cycles of VPCs and Filestores are managed independently to those
 of clusters.
+
+These run-time directories hold the generated Terraform configuration and the
+log files, but **not** the Terraform state: each directory is configured with a
+GCS backend, so state lives in the state bucket under a prefix made of the
+database's namespace and the directory name
+(`\<namespace>/clusters/cluster_\<id>`, `\<namespace>/vpcs/vpc_\<id>`, and so
+on for `fs`, `images` and `workbenches`), built by
+`cluster_manager.utils.terraform_state_prefix`. The namespace is created with
+the TKFE database (model `StateNamespace`; `python manage.py tfstate_namespace`
+prints it), so a rebuilt server never writes over an earlier database's state.
+Blueprint-generated resources get the backend from `terraform_backend_defaults`
+in the generated blueprint; the raw-template resources (VPCs and workbenches)
+get a `backend.tf`, written into the directory by
+`cluster_manager.utils.write_backend_tf` when the template is copied. Code that
+needs to inspect state uses `cluster_manager.utils.get_terraform_state`, which
+runs `terraform state pull`, rather than opening a local `terraform.tfstate`.
 
 #### For applications
 
@@ -251,6 +278,7 @@ define the major components:
 | `.../docs/`                 | documentation |
 | `.../infrastructure_files/` | Support files for deploying cloud infrastructure |
 | `.../tf/`                   | Terraform files for deploying the HPC FrontEnd |
+| `.../tf/state_bucket/`      | Separate Terraform root for the Terraform state bucket |
 | `.../website/`              | Source code for the HPC Frontend website |
 
 ##### Infrastructure Files
@@ -368,7 +396,6 @@ following info gathered by the FrontEnd during the workbench creation process:
 - boot_disk_type
 - boot_disk_size_gb
 - trusted_users
-- image_family
 - owner_id
 - wb_startup_script_name
 - wb_startup_script_bucket

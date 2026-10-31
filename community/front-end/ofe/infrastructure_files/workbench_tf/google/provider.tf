@@ -15,7 +15,9 @@
  */
 
 provider "google" {
-  region  = var.region
-  zone    = var.zone
-  project = var.project
+  region = var.region
+  zone   = var.zone
+  # Provider 6.x rejects an empty project, and var.project is optional, so
+  # fall back to the existing-project name that OFE always supplies.
+  project = var.project != "" ? var.project : var.project_name
 }

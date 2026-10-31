@@ -1120,7 +1120,6 @@ class BackendReconfigureCluster(BackendAsyncView):
 
     def cmd(self, unused_task_id, unused_token, cluster):
         ci = ClusterInfo(cluster)
-        ci.update()
         ci.reconfigure_cluster()
 
     async def get(self, request, pk):
