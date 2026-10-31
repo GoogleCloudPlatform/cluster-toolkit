@@ -42,13 +42,21 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from typing import Callable, Optional
 import urllib.error
 import urllib.request
 
 DEFAULT_PROJECT = "hpc-toolkit-dev"
 DEFAULT_REPO = "GoogleCloudPlatform/cluster-toolkit"
-DEFAULT_ETAG_CACHE_PATH = "/tmp/ctk_pr_etag_cache.json"
+_CACHE_USER = (
+    str(os.getuid())
+    if hasattr(os, "getuid")
+    else (os.environ.get("USER") or os.environ.get("USERNAME") or "default")
+)
+DEFAULT_ETAG_CACHE_PATH = os.path.join(
+    tempfile.gettempdir(), f"ctk_pr_etag_cache_{_CACHE_USER}.json"
+)
 SUBPROCESS_TIMEOUT_SECONDS = 60
 
 

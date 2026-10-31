@@ -65,6 +65,8 @@ for PROJECT in "${PROJECTS[@]}"; do
 					--role="roles/cloudbuild.builds.editor" \
 					--condition=None \
 					--quiet >/dev/null || ERRORS=1
+			else
+				echo "WARNING: kueue-reaper-ksa service account not found or lacks GCP service account annotation in $PROJECT. Skipping IAM binding."
 			fi
 
 			echo "Syncing kueue-stale-pr-reaper ConfigMap..."
