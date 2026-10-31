@@ -54,11 +54,16 @@ data:
     fi
 
     REAPER_PY_PATH="/reaper-py/reap_stale_pr_builds.py"
+    # GitHub allows 60 unauthenticated requests/hour per IP (304s included), so the
+    # PR reaper runs every 5 minutes while the Job reaper below keeps its 60s cadence.
+    PR_REAPER_INTERVAL_SECONDS=300
+    next_pr_reap=0
 
     while true; do
-      # 1. Run stale PR Cloud Build reaper mounted from ConfigMap (cancels superseded/closed-PR WORKING & QUEUED builds)
-      if [ -s "$REAPER_PY_PATH" ] && [ -n "$PROJECT_ID" ]; then
-        python3 "$REAPER_PY_PATH" --project="$PROJECT_ID" || true
+      # 1. Cancel Cloud Builds of superseded commits and closed PRs.
+      if [ -s "$REAPER_PY_PATH" ] && [ -n "$PROJECT_ID" ] && [ "$(date +%s)" -ge "$next_pr_reap" ]; then
+        next_pr_reap=$(($(date +%s) + PR_REAPER_INTERVAL_SECONDS))
+        timeout 240 python3 "$REAPER_PY_PATH" --project="$PROJECT_ID" || true
       fi
 
       # 2. Fetch all jobs, checking their Complete and Failed conditions
@@ -94,7 +99,7 @@ data:
             if [ -n "$bid" ]; then
               build_statuses["$bid"]="$bstatus"
             fi
-          done < <(gcloud builds list --filter="$filter_str" --format="value(id,status)")
+          done < <(gcloud builds list --filter="$filter_str" --limit=unlimited --format="value(id,status)")
 
           # Check and delete jobs for cancelled/failed builds
           for item in "${active_jobs[@]}"; do
@@ -130,8 +135,6 @@ spec:
     metadata:
       labels:
         app: kueue-reaper
-      annotations:
-        reaper-script-version: "2.2-stale-pr-reaper"
     spec:
       serviceAccountName: kueue-reaper-ksa
       containers:

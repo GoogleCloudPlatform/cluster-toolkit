@@ -13,14 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for the stale PR Cloud Build reaper.
+"""Unit tests for tools/cloud-build/reap_stale_pr_builds.py.
 
-How to run these tests:
-  Direct execution:
-    python3 tools/tests/test_reap_stale_pr_builds.py
-
-  Via unittest module:
-    python3 -m unittest tools/tests/test_reap_stale_pr_builds.py -v
+Run: python3 -m unittest tools/tests/test_reap_stale_pr_builds.py -v
 """
 
 import io
@@ -28,7 +23,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import unittest
 from unittest import mock
 import urllib.error
@@ -39,430 +33,203 @@ sys.path.insert(
 )
 import reap_stale_pr_builds as reaper  # noqa: E402
 
+OLD = "a" * 40
+NEW = "b" * 40
 
-class TestReapStalePRBuilds(unittest.TestCase):
-    """Tests for tools/cloud-build/reap_stale_pr_builds.py."""
 
-    def test_identify_stale_builds_open_pr_supersedes_older_commit_working_and_queued(
-        self,
-    ):
-        """When GitHub PR is open, WORKING and QUEUED builds for older commits are marked stale."""
-        old_sha = "aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111"
-        new_sha = "bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222"
+def _build(build_id, pr, sha, status="WORKING"):
+    return {
+        "id": build_id,
+        "status": status,
+        "substitutions": {"_PR_NUMBER": pr, "COMMIT_SHA": sha, "TRIGGER_NAME": "PR-test-gke"},
+    }
+
+
+def _http_response(payload):
+    resp = mock.MagicMock()
+    resp.read.return_value = json.dumps(payload).encode("utf-8")
+    resp.__enter__.return_value = resp
+    return resp
+
+
+def _rate_limited():
+    return urllib.error.HTTPError(
+        "https://api.github.com", 403, "rate limit exceeded", {}, io.BytesIO(b"")
+    )
+
+
+def _fake_gcloud(builds, recorded):
+    def run(cmd, **kwargs):
+        recorded.append(list(cmd))
+        if cmd[:3] == ["gcloud", "builds", "list"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(builds), stderr="")
+        if cmd[:3] == ["gcloud", "builds", "cancel"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    return run
+
+
+class IdentifyStaleBuildsTest(unittest.TestCase):
+    """Pure classification logic."""
+
+    def _never(self, pr):
+        self.fail(f"unexpected closed-PR lookup for #{pr}")
+
+    def test_open_pr_marks_older_commits_stale_and_keeps_head(self):
         builds = [
-            {
-                "id": "build-old-working",
-                "status": "WORKING",
-                "createTime": "2026-10-31T05:00:00Z",
-                "substitutions": {
-                    "_PR_NUMBER": "6550",
-                    "COMMIT_SHA": old_sha,
-                    "TRIGGER_NAME": "PR-test-gke",
-                },
-            },
-            {
-                "id": "build-old-queued",
-                "status": "QUEUED",
-                "createTime": "2026-10-31T05:00:01Z",
-                "substitutions": {
-                    "_PR_NUMBER": "6550",
-                    "COMMIT_SHA": old_sha,
-                    "TRIGGER_NAME": "PR-test-ml-gke",
-                },
-            },
-            {
-                "id": "build-new-working",
-                "status": "WORKING",
-                "createTime": "2026-10-31T06:00:00Z",
-                "substitutions": {
-                    "_PR_NUMBER": "6550",
-                    "COMMIT_SHA": new_sha,
-                    "TRIGGER_NAME": "PR-test-gke",
-                },
-            },
+            _build("old-working", "6550", OLD),
+            _build("old-queued", "6550", OLD, status="QUEUED"),
+            _build("head", "6550", NEW),
         ]
+        stale = reaper.identify_stale_builds(builds, {"6550": NEW}, self._never)
+        self.assertEqual([b["id"] for b in stale], ["old-working", "old-queued"])
 
-        def fake_fetch_pr(repo, pr_num):
-            self.assertEqual(pr_num, "6550")
-            return {"state": "open", "head_sha": new_sha}
+    def test_head_sha_comparison_is_case_insensitive(self):
+        builds = [_build("head", "1", NEW.upper())]
+        self.assertEqual(reaper.identify_stale_builds(builds, {"1": NEW}, self._never), [])
 
-        stale = reaper.identify_stale_builds(
-            builds,
-            repo="GoogleCloudPlatform/cluster-toolkit",
-            pr_fetcher=fake_fetch_pr,
-        )
-        self.assertEqual(
-            [b["id"] for b in stale],
-            ["build-old-working", "build-old-queued"],
-        )
-
-    def test_identify_stale_builds_closed_pr_marks_all_builds_stale(self):
-        """When GitHub PR is closed or merged, all WORKING and QUEUED builds for that PR are stale."""
-        sha = "cccc3333cccc3333cccc3333cccc3333cccc3333"
-        builds = [
-            {
-                "id": "build-closed-working",
-                "status": "WORKING",
-                "createTime": "2026-10-31T05:30:00Z",
-                "substitutions": {
-                    "_PR_NUMBER": "6551",
-                    "COMMIT_SHA": sha,
-                    "TRIGGER_NAME": "PR-test-gke-tpu-7x",
-                },
-            },
-            {
-                "id": "build-closed-queued",
-                "status": "QUEUED",
-                "createTime": "2026-10-31T05:30:05Z",
-                "substitutions": {
-                    "_PR_NUMBER": "6551",
-                    "COMMIT_SHA": sha,
-                    "TRIGGER_NAME": "PR-test-gke",
-                },
-            },
-        ]
-
-        stale = reaper.identify_stale_builds(
-            builds,
-            repo="GoogleCloudPlatform/cluster-toolkit",
-            pr_fetcher=lambda repo, pr_num: {"state": "closed", "head_sha": sha},
-        )
-        self.assertEqual(
-            [b["id"] for b in stale],
-            ["build-closed-working", "build-closed-queued"],
-        )
+    def test_pr_missing_from_open_list_is_cancelled_only_when_confirmed_closed(self):
+        builds = [_build("b1", "6551", NEW), _build("b2", "6551", OLD, status="QUEUED")]
+        stale = reaper.identify_stale_builds(builds, {}, lambda pr: True)
+        self.assertEqual([b["id"] for b in stale], ["b1", "b2"])
         self.assertTrue(all("closed" in b["stale_reason"] for b in stale))
+        self.assertEqual(reaper.identify_stale_builds(builds, {}, lambda pr: False), [])
 
-    def test_identify_stale_builds_github_api_failure_safely_skips_pr_without_cancelling(
-        self,
-    ):
-        """When GitHub API is unreachable/rate-limited, safely skip the PR instead of guessing from active builds."""
-        old_sha = "1111111111111111111111111111111111111111"
-        builds = [
-            {
-                "id": "b-old",
-                "status": "WORKING",
-                "createTime": "2026-10-31T06:00:00Z",
-                "substitutions": {
-                    "_PR_NUMBER": "6552",
-                    "COMMIT_SHA": old_sha,
-                    "TRIGGER_NAME": "PR-test-gke",
-                },
-            },
-        ]
+    def test_builds_without_numeric_pr_or_commit_are_ignored(self):
+        builds = [_build("no-pr", "", OLD), _build("bad-pr", "../1", OLD), _build("no-sha", "7", "")]
+        self.assertEqual(reaper.identify_stale_builds(builds, {"7": NEW}, self._never), [])
 
-        stale = reaper.identify_stale_builds(
-            builds,
-            repo="GoogleCloudPlatform/cluster-toolkit",
-            pr_fetcher=lambda repo, pr_num: None,
-        )
-        self.assertEqual(stale, [])
 
-    @mock.patch.dict(os.environ, {"GITHUB_TOKEN": "fake-test-token"}, clear=True)
+class GitHubTest(unittest.TestCase):
+    """GitHub REST calls."""
+
+    @mock.patch.dict(os.environ, {}, clear=True)
     @mock.patch("urllib.request.urlopen")
-    def test_fetch_pr_info_uses_etag_cache_on_304_not_modified(self, mock_urlopen):
-        """Verify fetch_pr_info caches ETag and returns cached PR info on HTTP 304 Not Modified."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cache_path = os.path.join(tmpdir, "pr_etag_cache.json")
-            sha = "dddd4444dddd4444dddd4444dddd4444dddd4444"
+    def test_fetch_open_pr_heads_paginates_unauthenticated(self, mock_urlopen):
+        page1 = [{"number": n, "head": {"sha": NEW}} for n in range(1, 101)]
+        page2 = [{"number": 101, "head": {"sha": OLD.upper()}}]
+        mock_urlopen.side_effect = [_http_response(page1), _http_response(page2)]
 
-            # First call: 200 OK with ETag header
-            resp_200 = mock.MagicMock()
-            resp_200.read.return_value = json.dumps(
-                {"state": "open", "head": {"sha": sha}}
-            ).encode("utf-8")
-            resp_200.headers = {"ETag": '"etag-abc-123"'}
-            resp_200.__enter__.return_value = resp_200
+        heads = reaper.fetch_open_pr_heads("o/r")
 
-            mock_urlopen.return_value = resp_200
-            info_1 = reaper.fetch_pr_info(
-                "GoogleCloudPlatform/cluster-toolkit",
-                "6550",
-                cache_path=cache_path,
-            )
-            self.assertEqual(info_1, {"state": "open", "head_sha": sha})
-
-            # Second call: 304 Not Modified should send If-None-Match and return cached data
-            seen_headers = {}
-
-            def side_effect_304(req, timeout=5):
-                seen_headers.update(dict(req.header_items()))
-                raise urllib.error.HTTPError(
-                    req.full_url,
-                    304,
-                    "Not Modified",
-                    {},
-                    io.BytesIO(b""),
-                )
-
-            mock_urlopen.side_effect = side_effect_304
-            info_2 = reaper.fetch_pr_info(
-                "GoogleCloudPlatform/cluster-toolkit",
-                "6550",
-                cache_path=cache_path,
-            )
-            self.assertEqual(info_2, {"state": "open", "head_sha": sha})
-            self.assertEqual(
-                seen_headers.get("If-none-match")
-                or seen_headers.get("If-None-Match"),
-                '"etag-abc-123"',
-            )
-            self.assertEqual(
-                seen_headers.get("Authorization"),
-                "Bearer fake-test-token",
-            )
-
-    def test_identify_stale_builds_never_cancels_current_build_id(self):
-        """Ensure current_build_id is never marked stale even if PR is closed."""
-        sha = "dddd4444dddd4444dddd4444dddd4444dddd4444"
-        builds = [
-            {
-                "id": "self-build-id",
-                "status": "WORKING",
-                "createTime": "2026-10-31T06:00:00Z",
-                "substitutions": {
-                    "_PR_NUMBER": "6553",
-                    "COMMIT_SHA": sha,
-                    "TRIGGER_NAME": "PR-validation",
-                },
-            },
-            {
-                "id": "other-build-id",
-                "status": "WORKING",
-                "createTime": "2026-10-31T05:00:00Z",
-                "substitutions": {
-                    "_PR_NUMBER": "6553",
-                    "COMMIT_SHA": "eeee5555eeee5555eeee5555eeee5555eeee5555",
-                    "TRIGGER_NAME": "PR-test-gke",
-                },
-            },
-        ]
-
-        stale = reaper.identify_stale_builds(
-            builds,
-            repo="GoogleCloudPlatform/cluster-toolkit",
-            current_build_id="self-build-id",
-            pr_fetcher=lambda repo, pr_num: {"state": "closed", "head_sha": sha},
-        )
-        self.assertEqual([b["id"] for b in stale], ["other-build-id"])
-
-    def test_identify_stale_builds_pr_filter_scopes_to_single_pr(self):
-        """Ensure target_pr filters evaluation strictly to the requested PR number."""
-        builds = [
-            {
-                "id": "b-pr100",
-                "status": "WORKING",
-                "createTime": "2026-10-31T05:00:00Z",
-                "substitutions": {
-                    "_PR_NUMBER": "100",
-                    "COMMIT_SHA": "old100",
-                },
-            },
-            {
-                "id": "b-pr200",
-                "status": "WORKING",
-                "createTime": "2026-10-31T05:00:00Z",
-                "substitutions": {
-                    "_PR_NUMBER": "200",
-                    "COMMIT_SHA": "old200",
-                },
-            },
-        ]
-
-        stale = reaper.identify_stale_builds(
-            builds,
-            repo="GoogleCloudPlatform/cluster-toolkit",
-            target_pr="100",
-            pr_fetcher=lambda repo, pr_num: {"state": "closed", "head_sha": "new"},
-        )
-        self.assertEqual([b["id"] for b in stale], ["b-pr100"])
-
-    @mock.patch("reap_stale_pr_builds.fetch_pr_info")
-    @mock.patch("subprocess.run")
-    def test_reap_stale_pr_builds_cancels_active_builds(
-        self, mock_subproc, mock_fetch_pr
-    ):
-        """Verify reap_stale_pr_builds lists WORKING/QUEUED builds and cancels superseded ones via gcloud."""
-        old_sha = "aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111"
-        new_sha = "bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222"
-        mock_fetch_pr.return_value = {"state": "open", "head_sha": new_sha}
-
-        builds_json = json.dumps(
-            [
-                {
-                    "id": "111111-stale-working",
-                    "status": "WORKING",
-                    "createTime": "2026-10-31T05:00:00Z",
-                    "substitutions": {
-                        "_PR_NUMBER": "6550",
-                        "COMMIT_SHA": old_sha,
-                        "TRIGGER_NAME": "PR-test-gke",
-                    },
-                },
-                {
-                    "id": "222222-current-working",
-                    "status": "WORKING",
-                    "createTime": "2026-10-31T06:00:00Z",
-                    "substitutions": {
-                        "_PR_NUMBER": "6550",
-                        "COMMIT_SHA": new_sha,
-                        "TRIGGER_NAME": "PR-test-gke",
-                    },
-                },
-            ]
-        )
-
-        recorded_cmds = []
-
-        def side_effect(cmd, **kwargs):
-            recorded_cmds.append(list(cmd))
-            if cmd[:3] == ["gcloud", "builds", "list"]:
-                return subprocess.CompletedProcess(
-                    cmd, 0, stdout=builds_json, stderr=""
-                )
-            if cmd[:3] == ["gcloud", "builds", "cancel"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-            raise AssertionError(f"Unexpected command: {cmd}")
-
-        mock_subproc.side_effect = side_effect
-
-        summary = reaper.reap_stale_pr_builds(
-            project="hpc-toolkit-dev",
-            repo="GoogleCloudPlatform/cluster-toolkit",
-            dry_run=False,
-        )
-
-        self.assertEqual(summary["cancelled_active"], 1)
-        self.assertEqual(len(recorded_cmds), 2)
-        self.assertEqual(recorded_cmds[0][:3], ["gcloud", "builds", "list"])
+        self.assertEqual(len(heads), 101)
+        self.assertEqual(heads["101"], OLD)
         self.assertEqual(
-            recorded_cmds[1],
+            [c.args[0].full_url for c in mock_urlopen.call_args_list],
             [
-                "gcloud",
-                "builds",
-                "cancel",
-                "111111-stale-working",
-                "--project=hpc-toolkit-dev",
-                "--quiet",
+                "https://api.github.com/repos/o/r/pulls?state=open&per_page=100&page=1",
+                "https://api.github.com/repos/o/r/pulls?state=open&per_page=100&page=2",
             ],
         )
+        self.assertIsNone(mock_urlopen.call_args.args[0].get_header("Authorization"))
+
+    @mock.patch.dict(os.environ, {"GITHUB_TOKEN": " t0k "}, clear=True)
+    @mock.patch("urllib.request.urlopen")
+    def test_fetch_open_pr_heads_sends_stripped_token(self, mock_urlopen):
+        mock_urlopen.return_value = _http_response([])
+        self.assertEqual(reaper.fetch_open_pr_heads("o/r"), {})
+        self.assertEqual(mock_urlopen.call_args.args[0].get_header("Authorization"), "Bearer t0k")
+
+    @mock.patch("urllib.request.urlopen")
+    def test_github_errors_fail_safe(self, mock_urlopen):
+        for error in (_rate_limited(), TimeoutError("timed out")):
+            mock_urlopen.side_effect = error
+            self.assertIsNone(reaper.fetch_open_pr_heads("o/r"))
+            self.assertFalse(reaper.is_pr_closed("o/r", "6550"))
+
+
+class GcloudTest(unittest.TestCase):
+    """gcloud subprocess calls."""
 
     @mock.patch("subprocess.run")
-    def test_cancel_active_builds_isolates_per_build_failure(self, mock_subproc):
-        """Ensure a build that finishes before cancel (exit 1) does not abort remaining cancellations."""
-        active_builds = [
-            {
-                "id": "build-already-finished",
-                "status": "WORKING",
-                "substitutions": {"_PR_NUMBER": "6550", "COMMIT_SHA": "aaaa111"},
-                "stale_reason": "superseded",
-            },
-            {
-                "id": "build-still-working",
-                "status": "WORKING",
-                "substitutions": {"_PR_NUMBER": "6550", "COMMIT_SHA": "aaaa111"},
-                "stale_reason": "superseded",
-            },
+    def test_list_active_pr_builds_lifts_default_limit(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess([], 0, stdout="[]", stderr="")
+        reaper.list_active_pr_builds("p")
+        argv = mock_run.call_args.args[0]
+        self.assertIn("--ongoing", argv)
+        self.assertIn("--limit=unlimited", argv)  # `gcloud builds list` defaults to --limit=50.
+        self.assertIn('--filter=substitutions._PR_NUMBER!=""', argv)
+
+        reaper.list_active_pr_builds("p", target_pr=6550)
+        self.assertIn('--filter=substitutions._PR_NUMBER="6550"', mock_run.call_args.args[0])
+
+    @mock.patch("subprocess.run")
+    def test_list_active_pr_builds_handles_timeout_and_invalid_json(self, mock_run):
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd=["gcloud"], timeout=60)
+        self.assertEqual(reaper.list_active_pr_builds("p"), [])
+        mock_run.side_effect = None
+        mock_run.return_value = subprocess.CompletedProcess([], 0, stdout="{bad", stderr="")
+        self.assertEqual(reaper.list_active_pr_builds("p"), [])
+
+    @mock.patch("subprocess.run")
+    def test_cancel_isolates_per_build_failure(self, mock_run):
+        def run(cmd, **kwargs):
+            rc = 1 if "already-finished" in cmd else 0
+            return subprocess.CompletedProcess(cmd, rc, stdout="", stderr="FAILED_PRECONDITION")
+
+        mock_run.side_effect = run
+        builds = [
+            {**_build("already-finished", "1", OLD), "stale_reason": "superseded"},
+            {**_build("still-working", "1", OLD), "stale_reason": "superseded"},
         ]
+        self.assertEqual(reaper.cancel_active_builds("p", builds), 1)
+        self.assertEqual(mock_run.call_count, 2)
 
-        def side_effect(cmd, **kwargs):
-            if "build-already-finished" in cmd:
-                return subprocess.CompletedProcess(
-                    cmd,
-                    1,
-                    stdout="",
-                    stderr='FAILED_PRECONDITION: Cannot cancel build in status "SUCCESS"',
-                )
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        mock_subproc.side_effect = side_effect
-        cancelled = reaper.cancel_active_builds(
-            project="hpc-toolkit-dev",
-            active_builds=active_builds,
-            dry_run=False,
-        )
-        self.assertEqual(cancelled, 1)
-        self.assertEqual(mock_subproc.call_count, 2)
-
-    @mock.patch("reap_stale_pr_builds.fetch_pr_info")
-    @mock.patch("subprocess.run")
-    def test_dry_run_performs_no_mutations(self, mock_subproc, mock_fetch_pr):
-        """Verify --dry-run only lists builds and never spawns gcloud builds cancel."""
-        mock_fetch_pr.return_value = {"state": "closed", "head_sha": "sha"}
-        builds_json = json.dumps(
-            [
-                {
-                    "id": "stale-working-1",
-                    "status": "WORKING",
-                    "createTime": "2026-10-31T05:00:00Z",
-                    "substitutions": {
-                        "_PR_NUMBER": "6550",
-                        "COMMIT_SHA": "sha",
-                        "TRIGGER_NAME": "PR-test-gke",
-                    },
-                },
-            ]
-        )
-
-        mock_subproc.return_value = subprocess.CompletedProcess(
-            ["gcloud", "builds", "list"], 0, stdout=builds_json, stderr=""
-        )
-
-        summary = reaper.reap_stale_pr_builds(
-            project="hpc-toolkit-dev",
-            repo="GoogleCloudPlatform/cluster-toolkit",
-            dry_run=True,
-        )
-
-        self.assertEqual(summary["cancelled_active"], 1)
-        self.assertEqual(mock_subproc.call_count, 1)
-        self.assertEqual(
-            mock_subproc.call_args[0][0][:3], ["gcloud", "builds", "list"]
-        )
-
-    @mock.patch("subprocess.run")
-    def test_list_active_pr_builds_handles_timeout_and_invalid_json_gracefully(
-        self, mock_subproc
-    ):
-        """Ensure gcloud builds list timeout or malformed JSON returns an empty list without raising."""
-        mock_subproc.side_effect = subprocess.TimeoutExpired(
-            cmd=["gcloud", "builds", "list"],
-            timeout=60,
-        )
-        self.assertEqual(reaper.list_active_pr_builds("hpc-toolkit-dev"), [])
-
-        mock_subproc.side_effect = None
-        mock_subproc.return_value = subprocess.CompletedProcess(
-            ["gcloud", "builds", "list"], 0, stdout="{invalid-json", stderr=""
-        )
-        self.assertEqual(reaper.list_active_pr_builds("hpc-toolkit-dev"), [])
-
-    def test_commits_match_handles_short_and_full_shas(self):
-        """Verify commits_match handles full SHAs, >=7-char prefixes, and rejects short/empty strings."""
-        full_sha = "AAAA1111aaaa1111aaaa1111aaaa1111aaaa1111"
-        self.assertTrue(reaper.commits_match(full_sha, full_sha.lower()))
-        self.assertTrue(reaper.commits_match("aaaa111", full_sha))
-        self.assertFalse(reaper.commits_match("aaaa11", full_sha))
-        self.assertFalse(reaper.commits_match("", full_sha))
+class ReapStalePRBuildsTest(unittest.TestCase):
+    """End-to-end flow with gcloud and GitHub mocked."""
 
     @mock.patch("urllib.request.urlopen")
     @mock.patch("subprocess.run")
-    def test_non_numeric_pr_numbers_rejected(self, mock_subproc, mock_urlopen):
-        """Ensure non-numeric PR strings are rejected before URL or gcloud filter construction."""
-        self.assertIsNone(
-            reaper.fetch_pr_info(
-                "GoogleCloudPlatform/cluster-toolkit", "../6550"
-            )
+    def test_one_github_call_covers_all_prs(self, mock_run, mock_urlopen):
+        recorded = []
+        mock_run.side_effect = _fake_gcloud(
+            [
+                _build("pr1-old", "1", OLD),
+                _build("pr1-head", "1", NEW),
+                _build("pr2-old", "2", OLD),
+                _build("pr3-head", "3", NEW),
+            ],
+            recorded,
         )
+        mock_urlopen.return_value = _http_response(
+            [{"number": n, "head": {"sha": NEW}} for n in (1, 2, 3)]
+        )
+
+        self.assertEqual(reaper.reap_stale_pr_builds("p", "o/r"), 2)
+        self.assertEqual(mock_urlopen.call_count, 1)
+        cancelled = [c[3] for c in recorded if c[:3] == ["gcloud", "builds", "cancel"]]
+        self.assertEqual(cancelled, ["pr1-old", "pr2-old"])
+
+    @mock.patch("urllib.request.urlopen")
+    @mock.patch("subprocess.run")
+    def test_no_github_call_without_active_builds(self, mock_run, mock_urlopen):
+        mock_run.side_effect = _fake_gcloud([], [])
+        self.assertEqual(reaper.reap_stale_pr_builds("p", "o/r"), 0)
         mock_urlopen.assert_not_called()
 
-        self.assertEqual(
-            reaper.list_active_pr_builds(
-                "hpc-toolkit-dev", target_pr='6550" OR status="SUCCESS'
-            ),
-            [],
-        )
-        mock_subproc.assert_not_called()
+    @mock.patch("urllib.request.urlopen")
+    @mock.patch("subprocess.run")
+    def test_rate_limited_github_cancels_nothing(self, mock_run, mock_urlopen):
+        recorded = []
+        mock_run.side_effect = _fake_gcloud([_build("b", "1", OLD)], recorded)
+        mock_urlopen.side_effect = _rate_limited()
+        self.assertEqual(reaper.reap_stale_pr_builds("p", "o/r"), 0)
+        self.assertEqual([c[:3] for c in recorded], [["gcloud", "builds", "list"]])
+
+    @mock.patch("urllib.request.urlopen")
+    @mock.patch("subprocess.run")
+    def test_dry_run_performs_no_mutations(self, mock_run, mock_urlopen):
+        recorded = []
+        mock_run.side_effect = _fake_gcloud([_build("b", "1", OLD)], recorded)
+        mock_urlopen.side_effect = [_http_response([]), _http_response({"state": "closed"})]
+        self.assertEqual(reaper.reap_stale_pr_builds("p", "o/r", dry_run=True), 1)
+        self.assertEqual([c[:3] for c in recorded], [["gcloud", "builds", "list"]])
+
+    def test_non_numeric_pr_rejected_by_cli(self):
+        with mock.patch("sys.stderr", new=io.StringIO()), self.assertRaises(SystemExit):
+            reaper.parse_args(["--pr", '6550" OR status="SUCCESS'])
 
 
 if __name__ == "__main__":

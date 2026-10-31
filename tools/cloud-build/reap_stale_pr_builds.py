@@ -13,26 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Reaps stale Cloud Build PR runs when newer commits are pushed or PRs close.
+"""Cancels QUEUED/WORKING PR Cloud Builds that are superseded or whose PR closed.
 
-When a new commit is pushed to a Pull Request (or when a PR is closed/merged),
-previously triggered Cloud Build integration tests (`PR-test-*`) from older
-commits on the same PR become obsolete. If left running or queued, their
-corresponding Kubernetes Jobs on `test-kueue-cluster` continue holding scarce
-`test-locks/*` quota and GCP hardware resources for hours.
+GitHub is the source of truth: one paginated `GET /pulls?state=open` call per run
+returns every open PR's head SHA. A PR that has active builds but is missing from
+that list is confirmed closed with a single per-PR lookup before its builds are
+cancelled. Any GitHub or gcloud failure skips the run instead of guessing.
 
-This script:
-1. Queries active (`WORKING` and `QUEUED`) PR builds in Cloud Build using
-   `--format=json(id,status,createTime,substitutions)`.
-2. Queries the GitHub REST API for each active PR (using `ETag` / `If-None-Match`
-   conditional requests so `304 Not Modified` responses do not consume GitHub's
-   unauthenticated rate limit). If a GitHub API lookup fails, that PR is safely
-   skipped until the next run.
-3. Cancels stale `QUEUED` and `WORKING` Cloud Builds via `gcloud builds cancel`.
-   Once a Cloud Build transitions to `CANCELLED`, the in-cluster `kueue-reaper`
-   pod on `test-kueue-cluster` automatically deletes the corresponding Kubernetes
-   `Job` so queued jobs exit Kueue immediately and running pods receive `SIGTERM`
-   to execute `cleanup_pod` (`terraform destroy`).
+Unauthenticated GitHub requests (304s included) count against a 60/hour per-IP
+limit, so run this every few minutes, or set GITHUB_TOKEN to raise the limit.
 """
 
 from __future__ import annotations
@@ -43,190 +32,84 @@ import os
 import subprocess
 import sys
 from typing import Callable, Optional
-import urllib.error
 import urllib.request
 
 DEFAULT_PROJECT = "hpc-toolkit-dev"
 DEFAULT_REPO = "GoogleCloudPlatform/cluster-toolkit"
-DEFAULT_ETAG_CACHE_PATH = "/tmp/ctk_pr_etag_cache.json"
 SUBPROCESS_TIMEOUT_SECONDS = 60
+GITHUB_TIMEOUT_SECONDS = 10
+GITHUB_PAGE_SIZE = 100
 
 
-def extract_commit_sha(substitutions: dict) -> str:
-    """Extract the commit SHA from Cloud Build substitutions."""
-    return (
-        substitutions.get("COMMIT_SHA")
-        or substitutions.get("REVISION_ID")
-        or substitutions.get("SHORT_SHA")
-        or ""
-    ).strip()
-
-
-def commits_match(sha_a: str, sha_b: str) -> bool:
-    """Return True if two full or abbreviated commit SHAs refer to the same commit."""
-    a = (sha_a or "").strip().lower()
-    b = (sha_b or "").strip().lower()
-    if not a or not b:
-        return False
-    if a == b:
-        return True
-    min_len = min(len(a), len(b))
-    if min_len >= 7 and (a.startswith(b) or b.startswith(a)):
-        return True
-    return False
-
-
-_ETAG_CACHES: dict[str, dict] = {}
-
-
-def _load_etag_cache(cache_path: str) -> dict:
-    """Load the on-disk ETag cache dictionary if present."""
-    if not cache_path or not os.path.exists(cache_path):
-        _ETAG_CACHES.pop(cache_path, None)
-        return {}
-    if cache_path in _ETAG_CACHES:
-        return _ETAG_CACHES[cache_path]
-    try:
-        with open(cache_path, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-            if isinstance(data, dict):
-                _ETAG_CACHES[cache_path] = data
-                return data
-            return {}
-    except (OSError, ValueError):
-        return {}
-
-
-def _save_etag_cache(cache_path: str, cache: dict) -> None:
-    """Persist the ETag cache dictionary to disk atomically."""
-    if not cache_path:
-        return
-    _ETAG_CACHES[cache_path] = cache
-    tmp_path = f"{cache_path}.tmp.{os.getpid()}"
-    try:
-        with open(tmp_path, "w", encoding="utf-8") as fh:
-            json.dump(cache, fh)
-        os.replace(tmp_path, cache_path)
-    except OSError:
-        try:
-            os.remove(tmp_path)
-        except OSError:
-            pass
-
-
-def fetch_pr_info(
-    repo: str,
-    pr_number: str,
-    cache_path: str = DEFAULT_ETAG_CACHE_PATH,
-) -> Optional[dict]:
-    """Query GitHub REST API for a PR's state ('open'/'closed') and head.sha."""
-    pr_number_clean = str(pr_number or "").strip()
-    if not pr_number_clean.isdigit():
-        print(
-            f"WARNING: Invalid non-numeric PR number: {pr_number!r}",
-            file=sys.stderr,
-        )
-        return None
-
-    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number_clean}"
-    cache_key = f"{repo}#{pr_number_clean}"
-    cache = _load_etag_cache(cache_path)
-    cached_entry = cache.get(cache_key) if isinstance(cache.get(cache_key), dict) else {}
-
+def _github_get(path: str):
+    """GET https://api.github.com/<path> and return the decoded JSON payload."""
     headers = {
         "Accept": "application/vnd.github+json",
         "User-Agent": "cluster-toolkit-pr-reaper",
     }
-    token = (
-        os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or ""
-    ).strip()
+    token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    if cached_entry.get("etag"):
-        headers["If-None-Match"] = str(cached_entry["etag"])
+    req = urllib.request.Request(f"https://api.github.com/{path}", headers=headers)
+    with urllib.request.urlopen(req, timeout=GITHUB_TIMEOUT_SECONDS) as resp:
+        return json.loads(resp.read().decode("utf-8"))
 
-    req = urllib.request.Request(url, headers=headers, method="GET")
+
+def fetch_open_pr_heads(repo: str) -> Optional[dict[str, str]]:
+    """Return {pr_number: head_sha} for every open PR, or None if GitHub is unavailable."""
+    heads: dict[str, str] = {}
+    page = 1
     try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-            if not isinstance(payload, dict):
+        while True:
+            prs = _github_get(
+                f"repos/{repo}/pulls?state=open&per_page={GITHUB_PAGE_SIZE}&page={page}"
+            )
+            if not isinstance(prs, list):
                 return None
-            state = (payload.get("state") or "").lower()
-            head_sha = ((payload.get("head") or {}).get("sha") or "").strip()
-            if not state:
-                return None
-            etag = resp.headers.get("ETag") if resp.headers else None
-            if etag:
-                cache[cache_key] = {
-                    "etag": etag,
-                    "state": state,
-                    "head_sha": head_sha,
-                }
-                _save_etag_cache(cache_path, cache)
-            return {"state": state, "head_sha": head_sha}
-    except urllib.error.HTTPError as exc:
-        if exc.code == 304 and cached_entry.get("state"):
-            return {
-                "state": str(cached_entry["state"]),
-                "head_sha": str(cached_entry.get("head_sha") or ""),
-            }
-        print(
-            f"WARNING: GitHub API lookup failed for PR #{pr_number_clean} ({exc}); "
-            f"skipping PR #{pr_number_clean} on this run.",
-            file=sys.stderr,
-        )
-        return None
-    except (
-        urllib.error.URLError,
-        TimeoutError,
-        ValueError,
-        OSError,
-    ) as exc:
-        print(
-            f"WARNING: GitHub API lookup failed for PR #{pr_number_clean} ({exc}); "
-            f"skipping PR #{pr_number_clean} on this run.",
-            file=sys.stderr,
-        )
+            for pr in prs:
+                sha = ((pr.get("head") or {}).get("sha") or "").strip().lower()
+                if pr.get("number") and sha:
+                    heads[str(pr["number"])] = sha
+            if len(prs) < GITHUB_PAGE_SIZE:
+                return heads
+            page += 1
+    except (OSError, ValueError) as exc:  # URLError, HTTPError and timeouts are OSErrors.
+        print(f"WARNING: listing open PRs failed ({exc}); skipping this run.", file=sys.stderr)
         return None
 
 
-def list_active_pr_builds(project: str, target_pr: str = "") -> list[dict]:
-    """Fetch all WORKING and QUEUED PR builds in the project as JSON."""
-    target_pr_clean = str(target_pr or "").strip()
-    if target_pr_clean and not target_pr_clean.isdigit():
-        print(
-            f"WARNING: Invalid non-numeric target PR: {target_pr!r}",
-            file=sys.stderr,
-        )
-        return []
+def is_pr_closed(repo: str, pr_number: str) -> bool:
+    """Return True only if GitHub confirms the PR is closed."""
+    try:
+        pr = _github_get(f"repos/{repo}/pulls/{pr_number}")
+    except (OSError, ValueError) as exc:
+        print(f"WARNING: looking up PR #{pr_number} failed ({exc}); skipping it.", file=sys.stderr)
+        return False
+    return isinstance(pr, dict) and pr.get("state") == "closed"
+
+
+def list_active_pr_builds(project: str, target_pr: Optional[int] = None) -> list[dict]:
+    """Return every QUEUED/WORKING Cloud Build that has a _PR_NUMBER substitution."""
     pr_filter = (
-        f'substitutions._PR_NUMBER="{target_pr_clean}"'
-        if target_pr_clean
-        else 'substitutions._PR_NUMBER!=""'
+        f'substitutions._PR_NUMBER="{target_pr}"' if target_pr else 'substitutions._PR_NUMBER!=""'
     )
-    build_filter = f'(status="WORKING" OR status="QUEUED") AND {pr_filter}'
     cmd = [
         "gcloud",
         "builds",
         "list",
         f"--project={project}",
-        f"--filter={build_filter}",
+        "--ongoing",
+        "--limit=unlimited",
         "--page-size=500",
-        "--format=json(id,status,createTime,substitutions)",
+        f"--filter={pr_filter}",
+        "--format=json(id,status,substitutions)",
     ]
     try:
         res = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=SUBPROCESS_TIMEOUT_SECONDS,
+            cmd, capture_output=True, text=True, check=False, timeout=SUBPROCESS_TIMEOUT_SECONDS
         )
     except (subprocess.TimeoutExpired, OSError) as exc:
-        print(
-            f"WARNING: gcloud builds list failed to execute: {exc}",
-            file=sys.stderr,
-        )
+        print(f"WARNING: gcloud builds list failed to execute: {exc}", file=sys.stderr)
         return []
     if res.returncode != 0:
         print(
@@ -234,132 +117,68 @@ def list_active_pr_builds(project: str, target_pr: str = "") -> list[dict]:
             file=sys.stderr,
         )
         return []
-    out = res.stdout.strip()
-    if not out:
-        return []
     try:
-        data = json.loads(out)
-        return [b for b in data if isinstance(b, dict)] if isinstance(data, list) else []
+        data = json.loads(res.stdout or "[]")
     except ValueError as exc:
-        print(
-            f"WARNING: Failed to parse gcloud builds list JSON: {exc}",
-            file=sys.stderr,
-        )
+        print(f"WARNING: Failed to parse gcloud builds list JSON: {exc}", file=sys.stderr)
         return []
+    return [b for b in data if isinstance(b, dict)] if isinstance(data, list) else []
 
 
 def identify_stale_builds(
     builds: list[dict],
-    repo: str = DEFAULT_REPO,
-    target_pr: str = "",
-    current_build_id: str = "",
-    pr_fetcher: Optional[Callable[[str, str], Optional[dict]]] = None,
+    open_pr_heads: dict[str, str],
+    is_closed: Callable[[str], bool],
 ) -> list[dict]:
-    """Return the subset of builds that belong to closed PRs or superseded commits."""
-    if pr_fetcher is None:
-        pr_fetcher = fetch_pr_info
-
+    """Return builds whose PR is closed or whose commit is no longer the PR head."""
     by_pr: dict[str, list[dict]] = {}
     for b in builds:
-        subs = b.get("substitutions") or {}
-        pr_num = str(subs.get("_PR_NUMBER") or "").strip()
-        if not pr_num.isdigit():
-            continue
-        if target_pr and pr_num != str(target_pr).strip():
-            continue
-        by_pr.setdefault(pr_num, []).append(b)
+        pr_num = str((b.get("substitutions") or {}).get("_PR_NUMBER") or "").strip()
+        if pr_num.isdigit():
+            by_pr.setdefault(pr_num, []).append(b)
 
-    stale_builds: list[dict] = []
+    stale: list[dict] = []
     for pr_num, pr_builds in by_pr.items():
-        pr_info = pr_fetcher(repo, pr_num)
-        if not pr_info:
+        head_sha = open_pr_heads.get(pr_num)
+        if head_sha is None:
+            if is_closed(pr_num):
+                stale.extend({**b, "stale_reason": f"PR #{pr_num} is closed"} for b in pr_builds)
             continue
-
-        if pr_info.get("state") == "closed":
-            for b in pr_builds:
-                if current_build_id and b.get("id") == current_build_id:
-                    continue
-                b_copy = dict(b)
-                b_copy["stale_reason"] = f"PR #{pr_num} is closed"
-                stale_builds.append(b_copy)
-            continue
-
-        if pr_info.get("state") == "open":
-            latest_sha = (pr_info.get("head_sha") or "").strip()
-            if not latest_sha:
-                continue
-
-            for b in pr_builds:
-                if current_build_id and b.get("id") == current_build_id:
-                    continue
-                subs = b.get("substitutions") or {}
-                build_sha = extract_commit_sha(subs)
-                if build_sha and not commits_match(build_sha, latest_sha):
-                    b_copy = dict(b)
-                    b_copy["stale_reason"] = (
-                        f"superseded by PR #{pr_num} HEAD {latest_sha[:7]}"
-                    )
-                    stale_builds.append(b_copy)
-
-    return stale_builds
+        for b in pr_builds:
+            build_sha = ((b.get("substitutions") or {}).get("COMMIT_SHA") or "").strip().lower()
+            if build_sha and build_sha != head_sha:
+                reason = f"superseded by PR #{pr_num} HEAD {head_sha[:7]}"
+                stale.append({**b, "stale_reason": reason})
+    return stale
 
 
-def cancel_active_builds(
-    project: str,
-    active_builds: list[dict],
-    dry_run: bool = False,
-) -> int:
-    """Cancel QUEUED and WORKING Cloud Builds individually for failure isolation."""
-    if not active_builds:
-        return 0
-
-    build_ids = [b["id"] for b in active_builds if b.get("id")]
-    if not build_ids:
-        return 0
-
-    for b in active_builds:
-        subs = b.get("substitutions") or {}
-        trig = subs.get("TRIGGER_NAME", "unknown-trigger")
-        pr_num = subs.get("_PR_NUMBER", "?")
-        sha = extract_commit_sha(subs)[:7]
-        prefix = "[DRY-RUN] Would cancel" if dry_run else "Cancelling"
-        print(
-            f"{prefix} {b.get('status')} Cloud Build {b.get('id')} "
-            f"(PR #{pr_num}, commit {sha}, trigger {trig}): {b.get('stale_reason')}"
-        )
-
-    if dry_run:
-        return len(build_ids)
-
+def cancel_active_builds(project: str, builds: list[dict], dry_run: bool = False) -> int:
+    """Cancel builds one at a time so one already-finished build cannot block the rest."""
     cancelled = 0
-    for build_id in build_ids:
-        cmd = [
-            "gcloud",
-            "builds",
-            "cancel",
-            build_id,
-            f"--project={project}",
-            "--quiet",
-        ]
+    for b in builds:
+        subs = b.get("substitutions") or {}
+        print(
+            f"{'[DRY-RUN] Would cancel' if dry_run else 'Cancelling'} {b.get('status')} "
+            f"Cloud Build {b['id']} (PR #{subs.get('_PR_NUMBER')}, "
+            f"commit {(subs.get('COMMIT_SHA') or '')[:7]}, "
+            f"trigger {subs.get('TRIGGER_NAME', 'unknown')}): {b['stale_reason']}"
+        )
+        if dry_run:
+            cancelled += 1
+            continue
+        cmd = ["gcloud", "builds", "cancel", b["id"], f"--project={project}", "--quiet"]
         try:
             res = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=SUBPROCESS_TIMEOUT_SECONDS,
+                cmd, capture_output=True, text=True, check=False, timeout=SUBPROCESS_TIMEOUT_SECONDS
             )
         except (subprocess.TimeoutExpired, OSError) as exc:
-            print(
-                f"WARNING: gcloud builds cancel {build_id} failed to execute: {exc}",
-                file=sys.stderr,
-            )
+            print(f"WARNING: gcloud builds cancel {b['id']} failed to execute: {exc}", file=sys.stderr)
             continue
         if res.returncode == 0:
             cancelled += 1
         else:
             print(
-                f"WARNING: gcloud builds cancel {build_id} returned exit {res.returncode}: "
+                f"WARNING: gcloud builds cancel {b['id']} returned exit {res.returncode}: "
                 f"{res.stderr.strip()}",
                 file=sys.stderr,
             )
@@ -369,60 +188,37 @@ def cancel_active_builds(
 def reap_stale_pr_builds(
     project: str = DEFAULT_PROJECT,
     repo: str = DEFAULT_REPO,
-    target_pr: str = "",
-    current_build_id: str = "",
+    target_pr: Optional[int] = None,
     dry_run: bool = False,
-) -> dict[str, int]:
-    """Discover and cancel stale QUEUED/WORKING PR Cloud Builds."""
-    builds = list_active_pr_builds(project, target_pr=target_pr)
+) -> int:
+    """Cancel stale PR builds; return how many were (or, with dry_run, would be) cancelled."""
+    builds = [b for b in list_active_pr_builds(project, target_pr) if b.get("id")]
     if not builds:
-        print("No active PR Cloud Builds found.")
-        return {"cancelled_active": 0}
-
-    stale_builds = identify_stale_builds(
-        builds,
-        repo=repo,
-        target_pr=target_pr,
-        current_build_id=current_build_id,
-    )
-    if not stale_builds:
-        print("No stale PR Cloud Builds detected.")
-        return {"cancelled_active": 0}
-
-    cancelled_active = cancel_active_builds(
-        project=project,
-        active_builds=stale_builds,
-        dry_run=dry_run,
-    )
-    return {"cancelled_active": cancelled_active}
+        return 0
+    open_pr_heads = fetch_open_pr_heads(repo)
+    if open_pr_heads is None:
+        return 0
+    stale = identify_stale_builds(builds, open_pr_heads, lambda pr: is_pr_closed(repo, pr))
+    return cancel_active_builds(project, stale, dry_run=dry_run)
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(
-        description=(
-            "Cancel superseded or closed-PR Cloud Builds (WORKING and QUEUED)."
-        )
+        description="Cancel superseded or closed-PR Cloud Builds (WORKING and QUEUED)."
     )
     parser.add_argument(
         "--project",
         default=os.environ.get("PROJECT_ID") or DEFAULT_PROJECT,
-        help=f"GCP project ID (default: {DEFAULT_PROJECT})",
+        help=f"GCP project ID (default: $PROJECT_ID or {DEFAULT_PROJECT})",
     )
     parser.add_argument(
         "--repo",
-        default=os.environ.get("GITHUB_UPSTREAM_REPO") or DEFAULT_REPO,
+        default=DEFAULT_REPO,
         help=f"GitHub owner/repo (default: {DEFAULT_REPO})",
     )
     parser.add_argument(
-        "--pr",
-        default="",
-        help="Optional PR number to scope reaping to a single PR",
-    )
-    parser.add_argument(
-        "--current-build-id",
-        default=os.environ.get("BUILD_ID") or "",
-        help="Current Cloud Build ID to exclude from cancellation",
+        "--pr", type=int, default=None, help="Only consider builds of this PR number"
     )
     parser.add_argument(
         "--dry-run",
@@ -435,16 +231,9 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[list[str]] = None) -> int:
     """CLI entrypoint."""
     args = parse_args(argv)
-    summary = reap_stale_pr_builds(
-        project=args.project,
-        repo=args.repo,
-        target_pr=args.pr,
-        current_build_id=args.current_build_id,
-        dry_run=args.dry_run,
-    )
-    print(
-        f"Reap summary: cancelled_active={summary['cancelled_active']}"
-    )
+    cancelled = reap_stale_pr_builds(args.project, args.repo, args.pr, args.dry_run)
+    if cancelled or args.dry_run:
+        print(f"Reap summary: {'would cancel' if args.dry_run else 'cancelled'} {cancelled} build(s)")
     return 0
 
 

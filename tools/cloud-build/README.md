@@ -96,12 +96,14 @@ python3 -m unittest tools/tests/test_wait_for_available_reservation.py -v
 
 ## Stale PR Build & Kueue Job Reaper
 
-When a new commit is pushed to an open Pull Request (or when a PR is closed or merged), `reap_stale_pr_builds.py` runs every 60 seconds inside the in-cluster `kueue-reaper` deployment on `test-kueue-cluster` (`kueue-reaper-pod.yaml`) as well as during scheduled cleanup (`project-cleanup.yaml`):
+The in-cluster `kueue-reaper` deployment on `test-kueue-cluster` (`kueue-reaper-pod.yaml`) runs `reap_stale_pr_builds.py` every 5 minutes:
 
-1. Queries active (`QUEUED` and `WORKING`) PR builds in Cloud Build.
-2. Checks each PR's state and latest `head.sha` via the GitHub REST API (using `ETag` / `If-None-Match` conditional caching so unchanged PRs return `304 Not Modified` without consuming GitHub's unauthenticated rate limit).
-3. Cancels `QUEUED` and `WORKING` Cloud Build runs from superseded commits on the same PR (or closed/merged PRs).
-4. Once those Cloud Builds transition to `CANCELLED`, the `kueue-reaper` pod immediately deletes the corresponding Kubernetes `Job`s on `test-kueue-cluster` so queued jobs exit Kueue immediately and running pods receive `SIGTERM` to tear down their test infrastructure (`kueue_cleanup_pod.sh`).
+1. Lists ongoing (`QUEUED` and `WORKING`) Cloud Builds that carry a `_PR_NUMBER` substitution.
+2. Fetches the head SHA of every open PR with one paginated GitHub REST call (`GET /pulls?state=open`). Unauthenticated calls, `304 Not Modified` included, count against GitHub's 60 requests/hour per-IP limit; set `GITHUB_TOKEN` to raise it.
+3. Cancels builds whose commit is no longer the PR head, and builds of PRs that GitHub confirms are closed or merged. If GitHub or `gcloud` is unavailable, nothing is cancelled on that run.
+4. Once those Cloud Builds transition to `CANCELLED`, the same pod deletes the matching Kubernetes `Job`s so queued jobs leave Kueue and running pods receive `SIGTERM` to tear down their test infrastructure (`kueue_cleanup_pod.sh`).
+
+> **Note:** A build that a maintainer re-runs on an older commit of an open PR is cancelled on the next run, because it no longer matches the PR head.
 
 You can also invoke it manually as a CLI quick action (for a specific PR or across all open/closed PRs):
 
