@@ -47,6 +47,10 @@ class TestReapStalePRBuilds(unittest.TestCase):
         ts_frac = reaper.parse_rfc3339("2026-10-31T06:00:00.500000Z")
         self.assertLess(ts_whole, ts_frac)
 
+        # Verify nanosecond-precision timestamps (9 fractional digits) truncate cleanly to microseconds
+        ts_nano = reaper.parse_rfc3339("2026-10-31T06:00:00.500000123Z")
+        self.assertEqual(ts_frac, ts_nano)
+
     def test_identify_stale_builds_open_pr_supersedes_older_commit_working_queued_pending(
         self,
     ):
@@ -332,6 +336,8 @@ class TestReapStalePRBuilds(unittest.TestCase):
         self, mock_subproc, mock_fetch_pr, mock_reject_pending
     ):
         """Verify Cloud Build cancel precedes K8s Job deletion and uses an isolated temporary KUBECONFIG."""
+        import subprocess
+
         old_sha = "aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111"
         new_sha = "bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222"
         mock_fetch_pr.return_value = {"state": "open", "head_sha": new_sha}
@@ -398,8 +404,6 @@ class TestReapStalePRBuilds(unittest.TestCase):
                 return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
             raise AssertionError(f"Unexpected command: {cmd}")
 
-        import subprocess
-
         mock_subproc.side_effect = side_effect
 
         summary = reaper.reap_stale_pr_builds(
@@ -427,6 +431,43 @@ class TestReapStalePRBuilds(unittest.TestCase):
                 ["gcloud", "container", "clusters"],
                 ["kubectl", "get", "jobs"],
                 ["kubectl", "delete", "job"],
+            ],
+        )
+        self.assertEqual(
+            recorded_calls[1][0],
+            [
+                "gcloud",
+                "builds",
+                "cancel",
+                "111111-stale-working",
+                "--project=hpc-toolkit-dev",
+                "--quiet",
+            ],
+        )
+        self.assertEqual(
+            recorded_calls[2][0],
+            [
+                "gcloud",
+                "container",
+                "clusters",
+                "get-credentials",
+                "test-kueue-cluster",
+                "--region=us-central1",
+                "--project=hpc-toolkit-dev",
+            ],
+        )
+        self.assertEqual(
+            recorded_calls[4][0],
+            [
+                "kubectl",
+                "delete",
+                "job",
+                "gke-111111",
+                "-n",
+                "default",
+                "--wait=false",
+                "--ignore-not-found=true",
+                "--request-timeout=15s",
             ],
         )
         # Verify temporary KUBECONFIG was isolated and cleaned up after execution
@@ -522,23 +563,74 @@ class TestReapStalePRBuilds(unittest.TestCase):
                 },
             ]
         )
-
-        mock_subproc.return_value = subprocess.CompletedProcess(
-            ["gcloud", "builds", "list"], 0, stdout=builds_json, stderr=""
+        jobs_json = json.dumps(
+            {
+                "items": [
+                    {
+                        "metadata": {
+                            "name": "gke-stale-1",
+                            "labels": {"build-id": "stale-working-1"},
+                        },
+                        "status": {},
+                        "spec": {},
+                    }
+                ]
+            }
         )
 
-        reaper.reap_stale_pr_builds(
+        recorded_cmds = []
+
+        def side_effect(cmd, **kwargs):
+            recorded_cmds.append(list(cmd))
+            if cmd[:3] == ["gcloud", "builds", "list"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout=builds_json, stderr="")
+            if cmd[:4] == ["gcloud", "container", "clusters", "get-credentials"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            if cmd[:3] == ["kubectl", "get", "jobs"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout=jobs_json, stderr="")
+            raise AssertionError(f"Unexpected mutating command in dry-run: {cmd}")
+
+        mock_subproc.side_effect = side_effect
+
+        summary = reaper.reap_stale_pr_builds(
             project="hpc-toolkit-dev",
             repo="GoogleCloudPlatform/cluster-toolkit",
             dry_run=True,
         )
 
-        # Only the single read-only `gcloud builds list` call should have occurred
-        self.assertEqual(mock_subproc.call_count, 1)
+        self.assertEqual(summary["cancelled_active"], 1)
+        self.assertEqual(summary["deleted_kueue_jobs"], 1)
+        self.assertEqual(summary["rejected_pending"], 1)
         self.assertEqual(
-            mock_subproc.call_args[0][0][:3], ["gcloud", "builds", "list"]
+            [c[:3] for c in recorded_cmds],
+            [
+                ["gcloud", "builds", "list"],
+                ["gcloud", "container", "clusters"],
+                ["kubectl", "get", "jobs"],
+            ],
         )
         mock_urlopen.assert_not_called()
+
+    @mock.patch("subprocess.run")
+    def test_delete_kueue_jobs_handles_kubectl_errors_and_timeouts_gracefully(
+        self, mock_subproc
+    ):
+        """Ensure kubectl failures or timeouts return 0 without raising."""
+        import subprocess
+
+        mock_subproc.side_effect = subprocess.TimeoutExpired(
+            cmd=["gcloud", "container", "clusters", "get-credentials"],
+            timeout=60,
+        )
+        deleted = reaper.delete_kueue_jobs_for_builds(
+            project="hpc-toolkit-dev",
+            cluster_name="test-kueue-cluster",
+            cluster_region="us-central1",
+            namespace="default",
+            stale_build_ids={"111111-stale"},
+            dry_run=False,
+        )
+        self.assertEqual(deleted, 0)
 
 
 if __name__ == "__main__":

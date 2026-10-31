@@ -108,6 +108,8 @@ python3 tools/cloud-build/reap_stale_pr_builds.py --project=hpc-toolkit-dev --dr
 python3 tools/cloud-build/reap_stale_pr_builds.py --project=hpc-toolkit-dev --pr=6550
 ```
 
+> **Note:** To run this manually without `--dry-run`, your authenticated Google Cloud account needs permissions to cancel builds (`roles/cloudbuild.builds.editor`) and delete Kubernetes jobs on `test-kueue-cluster` (`roles/container.developer`).
+
 Unit tests for `reap_stale_pr_builds.py` are located in `tools/tests/test_reap_stale_pr_builds.py`:
 
 ```bash

@@ -36,6 +36,8 @@ This script:
    closed PRs concurrently via the Cloud Build REST API.
 """
 
+from __future__ import annotations
+
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -55,6 +57,7 @@ DEFAULT_CLUSTER_REGION = "us-central1"
 DEFAULT_NAMESPACE = "default"
 CANCEL_BATCH_SIZE = 50
 REJECT_MAX_WORKERS = 16
+SUBPROCESS_TIMEOUT_SECONDS = 60
 
 
 def parse_rfc3339(ts_str: str) -> datetime:
@@ -65,6 +68,16 @@ def parse_rfc3339(ts_str: str) -> datetime:
     if normalized.endswith("Z"):
         normalized = normalized[:-1] + "+00:00"
     try:
+        if "." in normalized:
+            before_dot, after_dot = normalized.split(".", 1)
+            non_digit_idx = 0
+            for char in after_dot:
+                if not char.isdigit():
+                    break
+                non_digit_idx += 1
+            frac = after_dot[:non_digit_idx][:6]
+            tz = after_dot[non_digit_idx:]
+            normalized = f"{before_dot}.{frac}{tz}"
         dt = datetime.fromisoformat(normalized)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
@@ -75,8 +88,6 @@ def parse_rfc3339(ts_str: str) -> datetime:
 
 def extract_commit_sha(substitutions: dict) -> str:
     """Extract the commit SHA from Cloud Build substitutions."""
-    if not isinstance(substitutions, dict):
-        return ""
     return (
         substitutions.get("COMMIT_SHA")
         or substitutions.get("REVISION_ID")
@@ -113,9 +124,9 @@ def fetch_pr_info(repo: str, pr_number: str) -> Optional[dict]:
     req = urllib.request.Request(url, headers=headers, method="GET")
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
-            if getattr(resp, "status", 200) != 200:
-                return None
             payload = json.loads(resp.read().decode("utf-8"))
+            if not isinstance(payload, dict):
+                return None
             state = (payload.get("state") or "").lower()
             head_sha = ((payload.get("head") or {}).get("sha") or "").strip()
             if not state:
@@ -151,7 +162,20 @@ def list_ongoing_and_pending_pr_builds(project: str) -> list[dict]:
         "--page-size=500",
         "--format=json(id,status,createTime,substitutions)",
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    try:
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=SUBPROCESS_TIMEOUT_SECONDS,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        print(
+            f"WARNING: gcloud builds list failed to execute: {exc}",
+            file=sys.stderr,
+        )
+        return []
     if res.returncode != 0:
         print(
             f"WARNING: gcloud builds list failed (exit {res.returncode}): {res.stderr.strip()}",
@@ -301,7 +325,20 @@ def cancel_active_builds(
             f"--project={project}",
             "--quiet",
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        try:
+            res = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=SUBPROCESS_TIMEOUT_SECONDS,
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            print(
+                f"WARNING: gcloud builds cancel failed to execute: {exc}",
+                file=sys.stderr,
+            )
+            continue
         if res.returncode == 0:
             cancelled += len(chunk)
         else:
@@ -318,13 +355,11 @@ def find_matching_kueue_jobs(
     stale_build_ids: set[str],
 ) -> list[str]:
     """Find active/suspended K8s Job names matching stale_build_ids by label or env."""
-    if not isinstance(k8s_jobs_payload, dict) or not stale_build_ids:
+    if not stale_build_ids:
         return []
 
     matched_names: list[str] = []
     for item in k8s_jobs_payload.get("items") or []:
-        if not isinstance(item, dict):
-            continue
         metadata = item.get("metadata") or {}
         job_name = metadata.get("name") or ""
         if not job_name:
@@ -332,15 +367,11 @@ def find_matching_kueue_jobs(
 
         # Skip jobs that have already reached terminal Complete or Failed state
         conditions = (item.get("status") or {}).get("conditions") or []
-        is_terminal = False
-        for cond in conditions:
-            if (
-                isinstance(cond, dict)
-                and cond.get("type") in ("Complete", "Failed")
-                and cond.get("status") == "True"
-            ):
-                is_terminal = True
-                break
+        is_terminal = any(
+            cond.get("type") in ("Complete", "Failed")
+            and cond.get("status") == "True"
+            for cond in conditions
+        )
         if is_terminal:
             continue
 
@@ -354,21 +385,12 @@ def find_matching_kueue_jobs(
         containers = (
             ((item.get("spec") or {}).get("template") or {}).get("spec") or {}
         ).get("containers") or []
-        found_in_env = False
-        for container in containers:
-            if not isinstance(container, dict):
-                continue
-            for env_entry in container.get("env") or []:
-                if (
-                    isinstance(env_entry, dict)
-                    and env_entry.get("name") == "BUILD_ID"
-                    and (env_entry.get("value") or "").strip() in stale_build_ids
-                ):
-                    found_in_env = True
-                    break
-            if found_in_env:
-                break
-
+        found_in_env = any(
+            (env_entry.get("value") or "").strip() in stale_build_ids
+            for container in containers
+            for env_entry in container.get("env") or []
+            if env_entry.get("name") == "BUILD_ID"
+        )
         if found_in_env:
             matched_names.append(job_name)
 
@@ -384,7 +406,7 @@ def delete_kueue_jobs_for_builds(
     dry_run: bool = False,
 ) -> int:
     """Delete Kueue K8s Jobs for stale builds using an isolated temporary KUBECONFIG."""
-    if not stale_build_ids or dry_run:
+    if not stale_build_ids:
         return 0
 
     with tempfile.NamedTemporaryFile(
@@ -405,9 +427,21 @@ def delete_kueue_jobs_for_builds(
             f"--region={cluster_region}",
             f"--project={project}",
         ]
-        cred_res = subprocess.run(
-            cred_cmd, env=env, capture_output=True, text=True, check=False
-        )
+        try:
+            cred_res = subprocess.run(
+                cred_cmd,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=SUBPROCESS_TIMEOUT_SECONDS,
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            print(
+                f"WARNING: Failed to get credentials for {cluster_name} in {project}: {exc}",
+                file=sys.stderr,
+            )
+            return 0
         if cred_res.returncode != 0:
             print(
                 f"WARNING: Failed to get credentials for {cluster_name} in {project}: "
@@ -426,9 +460,21 @@ def delete_kueue_jobs_for_builds(
             "-o",
             "json",
         ]
-        get_res = subprocess.run(
-            get_cmd, env=env, capture_output=True, text=True, check=False
-        )
+        try:
+            get_res = subprocess.run(
+                get_cmd,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=SUBPROCESS_TIMEOUT_SECONDS,
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            print(
+                f"WARNING: kubectl get jobs failed to execute: {exc}",
+                file=sys.stderr,
+            )
+            return 0
         if get_res.returncode != 0:
             print(
                 f"WARNING: kubectl get jobs failed: {get_res.stderr.strip()}",
@@ -452,31 +498,55 @@ def delete_kueue_jobs_for_builds(
             )
             return 0
 
+        if dry_run:
+            print(
+                f"[DRY-RUN] Would delete {len(matched_jobs)} stale Kubernetes Job(s) from {cluster_name}: "
+                f"{', '.join(matched_jobs)}"
+            )
+            return len(matched_jobs)
+
         print(
             f"Deleting {len(matched_jobs)} stale Kubernetes Job(s) from {cluster_name}: "
             f"{', '.join(matched_jobs)}"
         )
-        del_cmd = [
-            "kubectl",
-            "delete",
-            "job",
-            *matched_jobs,
-            "-n",
-            namespace,
-            "--wait=false",
-            "--ignore-not-found=true",
-            "--request-timeout=15s",
-        ]
-        del_res = subprocess.run(
-            del_cmd, env=env, capture_output=True, text=True, check=False
-        )
-        if del_res.returncode != 0:
-            print(
-                f"WARNING: kubectl delete job returned exit {del_res.returncode}: "
-                f"{del_res.stderr.strip()}",
-                file=sys.stderr,
-            )
-        return len(matched_jobs)
+        deleted = 0
+        for i in range(0, len(matched_jobs), CANCEL_BATCH_SIZE):
+            chunk = matched_jobs[i : i + CANCEL_BATCH_SIZE]
+            del_cmd = [
+                "kubectl",
+                "delete",
+                "job",
+                *chunk,
+                "-n",
+                namespace,
+                "--wait=false",
+                "--ignore-not-found=true",
+                "--request-timeout=15s",
+            ]
+            try:
+                del_res = subprocess.run(
+                    del_cmd,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=SUBPROCESS_TIMEOUT_SECONDS,
+                )
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                print(
+                    f"WARNING: kubectl delete job failed to execute: {exc}",
+                    file=sys.stderr,
+                )
+                continue
+            if del_res.returncode == 0:
+                deleted += len(chunk)
+            else:
+                print(
+                    f"WARNING: kubectl delete job returned exit {del_res.returncode}: "
+                    f"{del_res.stderr.strip()}",
+                    file=sys.stderr,
+                )
+        return deleted
     finally:
         if os.path.exists(kubeconfig_path):
             try:
@@ -511,8 +581,8 @@ def _reject_single_pending_build(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return 200 <= getattr(resp, "status", 200) < 300
+        with urllib.request.urlopen(req, timeout=10):
+            return True
     except urllib.error.HTTPError as exc:
         print(
             f"WARNING: Could not reject PENDING build {build_id} "
@@ -543,12 +613,20 @@ def reject_pending_builds(
         )
         return len(pending_builds)
 
-    token_res = subprocess.run(
-        ["gcloud", "auth", "print-access-token"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        token_res = subprocess.run(
+            ["gcloud", "auth", "print-access-token"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=SUBPROCESS_TIMEOUT_SECONDS,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        print(
+            f"WARNING: Unable to obtain gcloud access token to reject PENDING builds: {exc}",
+            file=sys.stderr,
+        )
+        return 0
     token = token_res.stdout.strip()
     if token_res.returncode != 0 or not token:
         print(
