@@ -168,6 +168,9 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, w
 	}
 	writer.runAndLog(fmt.Sprintf("Kueue: Workload config for %s", workloadName), "kubectl", "describe", "workloads", targetWorkload, "-n", workloadNamespace)
 
+	podSelector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", workloadName)
+	writer.runAndLog(fmt.Sprintf("Pods: Status for %s", workloadName), "kubectl", "get", "pods", "-l", podSelector, "-n", workloadNamespace, "-o", "wide")
+	writer.runAndLog(fmt.Sprintf("Pods: Config and Events for %s", workloadName), "kubectl", "describe", "pods", "-l", podSelector, "-n", workloadNamespace)
 }
 
 func (g *GKEOrchestrator) logNodeCounts(w io.Writer) {
