@@ -84,12 +84,32 @@ bash /workspace/tools/cloud-build/wait_for_available_reservation.sh "g4-reservat
 * If the reservation is not in `READY` state, has `0` total capacity, or `TOTAL_COUNT < REQUIRED_COUNT`, it fails fast with exit code `3`.
 * If the reservation does not exist (`404`), lacks permissions (`403`), or fails authentication/validation (`400`/`401`), it fails fast with exit code `1`.
 
-## Unit Testing
-
-Unit tests for GCE reservation capacity polling (`wait_for_available_reservation.sh`) are located in `tools/tests/test_wait_for_available_reservation.py`.
-
 To run the unit tests:
 
 ```bash
 python3 -m unittest tools/tests/test_wait_for_available_reservation.py -v
+```
+
+## Stale PR Build & Kueue Job Reaper
+
+When a new commit is pushed to an open Pull Request (or when a PR is closed or merged), `reap_stale_pr_builds.py` automatically runs during `PR-validation` (`hpc-toolkit-pr-validation.yaml`) and scheduled cleanup (`project-cleanup.yaml`) to:
+
+1. Cancel `QUEUED` and `WORKING` Cloud Build runs from superseded commits on the same PR (or closed/merged PRs).
+2. Delete the corresponding Kubernetes `Job`s on `test-kueue-cluster` so queued jobs exit Kueue immediately and running pods receive `SIGTERM` to tear down their test infrastructure (`kueue_cleanup_pod.sh`).
+3. Reject unapproved `PENDING` Cloud Build triggers from older commits on the same PR.
+
+You can also invoke it manually as a CLI quick action (for a specific PR or across all open/closed PRs):
+
+```bash
+# Preview stale builds across all PRs without cancelling:
+python3 tools/cloud-build/reap_stale_pr_builds.py --project=hpc-toolkit-dev --dry-run
+
+# Reap stale builds and Kueue jobs for a specific PR:
+python3 tools/cloud-build/reap_stale_pr_builds.py --project=hpc-toolkit-dev --pr=6550
+```
+
+Unit tests for `reap_stale_pr_builds.py` are located in `tools/tests/test_reap_stale_pr_builds.py`:
+
+```bash
+python3 -m unittest tools/tests/test_reap_stale_pr_builds.py -v
 ```
