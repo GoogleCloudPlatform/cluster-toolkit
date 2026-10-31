@@ -84,7 +84,7 @@ vars:
 
   # Optional overrides (defaults shown)
   # Machine type for the GKE system node pool.
-  system_node_pool_machine_type: n2-standard-8
+  system_node_pool_machine_type: n2d-standard-8
 
 deployment_groups:
 - group: primary
