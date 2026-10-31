@@ -54,6 +54,19 @@ for PROJECT in "${PROJECTS[@]}"; do
 
 			echo "Applying kueue-setup..."
 			kubectl apply -f "$CONFIGS_DIR/kueue-setup.yaml" || ERRORS=1
+
+			REAPER_GSA=$(kubectl get serviceaccount kueue-reaper-ksa -n default -o jsonpath='{.metadata.annotations.iam\.gke\.io/gcp-service-account}' 2>/dev/null || true)
+			if [ -n "$REAPER_GSA" ]; then
+				echo "Ensuring roles/cloudbuild.builds.editor for $REAPER_GSA in $PROJECT..."
+				gcloud projects add-iam-policy-binding "$PROJECT" \
+					--member="serviceAccount:$REAPER_GSA" \
+					--role="roles/cloudbuild.builds.editor" \
+					--condition=None \
+					--quiet >/dev/null || ERRORS=1
+			fi
+
+			echo "Applying kueue-reaper-pod..."
+			kubectl apply -f "$CONFIGS_DIR/kueue-reaper-pod.yaml" || ERRORS=1
 		else
 			echo "Failed to get credentials for $CLUSTER_NAME in $PROJECT."
 			ERRORS=1

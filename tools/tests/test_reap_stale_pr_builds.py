@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for the push-triggered stale PR Cloud Build and Kueue job reaper.
+"""Unit tests for the stale PR Cloud Build reaper.
 
 How to run these tests:
   Direct execution:
@@ -26,7 +26,9 @@ How to run these tests:
 import io
 import json
 import os
+import subprocess
 import sys
+import tempfile
 import unittest
 from unittest import mock
 import urllib.error
@@ -41,20 +43,10 @@ import reap_stale_pr_builds as reaper  # noqa: E402
 class TestReapStalePRBuilds(unittest.TestCase):
     """Tests for tools/cloud-build/reap_stale_pr_builds.py."""
 
-    def test_parse_rfc3339_handles_missing_and_present_fractional_seconds(self):
-        """Ensure RFC3339 timestamps without fractional seconds sort before microsecond timestamps."""
-        ts_whole = reaper.parse_rfc3339("2026-10-31T06:00:00Z")
-        ts_frac = reaper.parse_rfc3339("2026-10-31T06:00:00.500000Z")
-        self.assertLess(ts_whole, ts_frac)
-
-        # Verify nanosecond-precision timestamps (9 fractional digits) truncate cleanly to microseconds
-        ts_nano = reaper.parse_rfc3339("2026-10-31T06:00:00.500000123Z")
-        self.assertEqual(ts_frac, ts_nano)
-
-    def test_identify_stale_builds_open_pr_supersedes_older_commit_working_queued_pending(
+    def test_identify_stale_builds_open_pr_supersedes_older_commit_working_and_queued(
         self,
     ):
-        """When GitHub PR is open, builds for older commits are marked stale across WORKING, QUEUED, PENDING."""
+        """When GitHub PR is open, WORKING and QUEUED builds for older commits are marked stale."""
         old_sha = "aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111"
         new_sha = "bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222"
         builds = [
@@ -79,29 +71,9 @@ class TestReapStalePRBuilds(unittest.TestCase):
                 },
             },
             {
-                "id": "build-old-pending",
-                "status": "PENDING",
-                "createTime": "2026-10-31T05:00:02Z",
-                "substitutions": {
-                    "_PR_NUMBER": "6550",
-                    "COMMIT_SHA": old_sha,
-                    "TRIGGER_NAME": "PR-test-slurm",
-                },
-            },
-            {
                 "id": "build-new-working",
                 "status": "WORKING",
                 "createTime": "2026-10-31T06:00:00Z",
-                "substitutions": {
-                    "_PR_NUMBER": "6550",
-                    "COMMIT_SHA": new_sha,
-                    "TRIGGER_NAME": "PR-validation",
-                },
-            },
-            {
-                "id": "build-new-pending",
-                "status": "PENDING",
-                "createTime": "2026-10-31T06:00:01Z",
                 "substitutions": {
                     "_PR_NUMBER": "6550",
                     "COMMIT_SHA": new_sha,
@@ -119,14 +91,13 @@ class TestReapStalePRBuilds(unittest.TestCase):
             repo="GoogleCloudPlatform/cluster-toolkit",
             pr_fetcher=fake_fetch_pr,
         )
-        stale_ids = [b["id"] for b in stale]
         self.assertEqual(
-            stale_ids,
-            ["build-old-working", "build-old-queued", "build-old-pending"],
+            [b["id"] for b in stale],
+            ["build-old-working", "build-old-queued"],
         )
 
     def test_identify_stale_builds_closed_pr_marks_all_builds_stale(self):
-        """When GitHub PR is closed or merged, all WORKING, QUEUED, and PENDING builds for that PR are stale."""
+        """When GitHub PR is closed or merged, all WORKING and QUEUED builds for that PR are stale."""
         sha = "cccc3333cccc3333cccc3333cccc3333cccc3333"
         builds = [
             {
@@ -140,9 +111,9 @@ class TestReapStalePRBuilds(unittest.TestCase):
                 },
             },
             {
-                "id": "build-closed-pending",
-                "status": "PENDING",
-                "createTime": "2026-10-31T05:30:00Z",
+                "id": "build-closed-queued",
+                "status": "QUEUED",
+                "createTime": "2026-10-31T05:30:05Z",
                 "substitutions": {
                     "_PR_NUMBER": "6551",
                     "COMMIT_SHA": sha,
@@ -158,16 +129,15 @@ class TestReapStalePRBuilds(unittest.TestCase):
         )
         self.assertEqual(
             [b["id"] for b in stale],
-            ["build-closed-working", "build-closed-pending"],
+            ["build-closed-working", "build-closed-queued"],
         )
         self.assertTrue(all("closed" in b["stale_reason"] for b in stale))
 
-    def test_identify_stale_builds_github_api_failure_falls_back_to_cloud_build_timestamps(
+    def test_identify_stale_builds_github_api_failure_safely_skips_pr_without_cancelling(
         self,
     ):
-        """When GitHub API is unreachable/rate-limited, fallback uses newest createTime per COMMIT_SHA."""
+        """When GitHub API is unreachable/rate-limited, safely skip the PR instead of guessing from active builds."""
         old_sha = "1111111111111111111111111111111111111111"
-        new_sha = "2222222222222222222222222222222222222222"
         builds = [
             {
                 "id": "b-old",
@@ -179,16 +149,6 @@ class TestReapStalePRBuilds(unittest.TestCase):
                     "TRIGGER_NAME": "PR-test-gke",
                 },
             },
-            {
-                "id": "b-new",
-                "status": "WORKING",
-                "createTime": "2026-10-31T06:00:00.250000Z",
-                "substitutions": {
-                    "_PR_NUMBER": "6552",
-                    "COMMIT_SHA": new_sha,
-                    "TRIGGER_NAME": "PR-validation",
-                },
-            },
         ]
 
         stale = reaper.identify_stale_builds(
@@ -196,7 +156,56 @@ class TestReapStalePRBuilds(unittest.TestCase):
             repo="GoogleCloudPlatform/cluster-toolkit",
             pr_fetcher=lambda repo, pr_num: None,
         )
-        self.assertEqual([b["id"] for b in stale], ["b-old"])
+        self.assertEqual(stale, [])
+
+    @mock.patch("urllib.request.urlopen")
+    def test_fetch_pr_info_uses_etag_cache_on_304_not_modified(self, mock_urlopen):
+        """Verify fetch_pr_info caches ETag and returns cached PR info on HTTP 304 Not Modified."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_path = os.path.join(tmpdir, "pr_etag_cache.json")
+            sha = "dddd4444dddd4444dddd4444dddd4444dddd4444"
+
+            # First call: 200 OK with ETag header
+            resp_200 = mock.MagicMock()
+            resp_200.read.return_value = json.dumps(
+                {"state": "open", "head": {"sha": sha}}
+            ).encode("utf-8")
+            resp_200.headers = {"ETag": '"etag-abc-123"'}
+            resp_200.__enter__.return_value = resp_200
+
+            mock_urlopen.return_value = resp_200
+            info_1 = reaper.fetch_pr_info(
+                "GoogleCloudPlatform/cluster-toolkit",
+                "6550",
+                cache_path=cache_path,
+            )
+            self.assertEqual(info_1, {"state": "open", "head_sha": sha})
+
+            # Second call: 304 Not Modified should send If-None-Match and return cached data
+            seen_headers = {}
+
+            def side_effect_304(req, timeout=5):
+                seen_headers.update(dict(req.header_items()))
+                raise urllib.error.HTTPError(
+                    req.full_url,
+                    304,
+                    "Not Modified",
+                    {},
+                    io.BytesIO(b""),
+                )
+
+            mock_urlopen.side_effect = side_effect_304
+            info_2 = reaper.fetch_pr_info(
+                "GoogleCloudPlatform/cluster-toolkit",
+                "6550",
+                cache_path=cache_path,
+            )
+            self.assertEqual(info_2, {"state": "open", "head_sha": sha})
+            self.assertEqual(
+                seen_headers.get("If-none-match")
+                or seen_headers.get("If-None-Match"),
+                '"etag-abc-123"',
+            )
 
     def test_identify_stale_builds_never_cancels_current_build_id(self):
         """Ensure current_build_id is never marked stale even if PR is closed."""
@@ -228,7 +237,6 @@ class TestReapStalePRBuilds(unittest.TestCase):
             builds,
             repo="GoogleCloudPlatform/cluster-toolkit",
             current_build_id="self-build-id",
-            current_commit_sha=sha,
             pr_fetcher=lambda repo, pr_num: {"state": "closed", "head_sha": sha},
         )
         self.assertEqual([b["id"] for b in stale], ["other-build-id"])
@@ -264,84 +272,15 @@ class TestReapStalePRBuilds(unittest.TestCase):
         )
         self.assertEqual([b["id"] for b in stale], ["b-pr100"])
 
-    def test_match_kueue_jobs_by_label_and_container_env_skips_completed_jobs(self):
-        """Match K8s Jobs by metadata.labels['build-id'] and container env BUILD_ID while skipping finished jobs."""
-        k8s_jobs_payload = {
-            "items": [
-                {
-                    "metadata": {
-                        "name": "ml-gke-111111",
-                        "labels": {"build-id": "111111-full-uuid"},
-                    },
-                    "status": {"conditions": []},
-                    "spec": {"template": {"spec": {"containers": []}}},
-                },
-                {
-                    "metadata": {
-                        "name": "gke-222222",
-                        "labels": {
-                            "kueue.x-k8s.io/queue-name": "local-queue-test-locks"
-                        },
-                    },
-                    "status": {"conditions": []},
-                    "spec": {
-                        "template": {
-                            "spec": {
-                                "containers": [
-                                    {
-                                        "name": "runner",
-                                        "env": [
-                                            {
-                                                "name": "BUILD_ID",
-                                                "value": "222222-full-uuid",
-                                            }
-                                        ],
-                                    }
-                                ]
-                            }
-                        }
-                    },
-                },
-                {
-                    "metadata": {
-                        "name": "gke-completed",
-                        "labels": {"build-id": "111111-full-uuid"},
-                    },
-                    "status": {
-                        "conditions": [{"type": "Complete", "status": "True"}]
-                    },
-                    "spec": {"template": {"spec": {"containers": []}}},
-                },
-                {
-                    "metadata": {
-                        "name": "gke-unrelated",
-                        "labels": {"build-id": "999999-full-uuid"},
-                    },
-                    "status": {"conditions": []},
-                    "spec": {"template": {"spec": {"containers": []}}},
-                },
-            ]
-        }
-
-        matched = reaper.find_matching_kueue_jobs(
-            k8s_jobs_payload,
-            {"111111-full-uuid", "222222-full-uuid"},
-        )
-        self.assertEqual(matched, ["ml-gke-111111", "gke-222222"])
-
-    @mock.patch("reap_stale_pr_builds.reject_pending_builds")
     @mock.patch("reap_stale_pr_builds.fetch_pr_info")
     @mock.patch("subprocess.run")
-    def test_reap_executes_cloud_build_cancel_before_kubectl_delete_and_uses_isolated_kubeconfig(
-        self, mock_subproc, mock_fetch_pr, mock_reject_pending
+    def test_reap_stale_pr_builds_cancels_active_builds(
+        self, mock_subproc, mock_fetch_pr
     ):
-        """Verify Cloud Build cancel precedes K8s Job deletion and uses an isolated temporary KUBECONFIG."""
-        import subprocess
-
+        """Verify reap_stale_pr_builds lists WORKING/QUEUED builds and cancels superseded ones via gcloud."""
         old_sha = "aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111"
         new_sha = "bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222"
         mock_fetch_pr.return_value = {"state": "open", "head_sha": new_sha}
-        mock_reject_pending.return_value = 1
 
         builds_json = json.dumps(
             [
@@ -356,51 +295,27 @@ class TestReapStalePRBuilds(unittest.TestCase):
                     },
                 },
                 {
-                    "id": "222222-stale-pending",
-                    "status": "PENDING",
-                    "createTime": "2026-10-31T05:00:01Z",
+                    "id": "222222-current-working",
+                    "status": "WORKING",
+                    "createTime": "2026-10-31T06:00:00Z",
                     "substitutions": {
                         "_PR_NUMBER": "6550",
-                        "COMMIT_SHA": old_sha,
-                        "TRIGGER_NAME": "PR-test-slurm",
+                        "COMMIT_SHA": new_sha,
+                        "TRIGGER_NAME": "PR-test-gke",
                     },
                 },
             ]
         )
-        jobs_json = json.dumps(
-            {
-                "items": [
-                    {
-                        "metadata": {
-                            "name": "gke-111111",
-                            "labels": {"build-id": "111111-stale-working"},
-                        },
-                        "status": {},
-                        "spec": {},
-                    }
-                ]
-            }
-        )
 
-        recorded_calls = []
+        recorded_cmds = []
 
         def side_effect(cmd, **kwargs):
-            env = kwargs.get("env") or {}
-            kubeconfig = env.get("KUBECONFIG")
-            recorded_calls.append((list(cmd), kubeconfig))
+            recorded_cmds.append(list(cmd))
             if cmd[:3] == ["gcloud", "builds", "list"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout=builds_json, stderr="")
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout=builds_json, stderr=""
+                )
             if cmd[:3] == ["gcloud", "builds", "cancel"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-            if cmd[:4] == ["gcloud", "container", "clusters", "get-credentials"]:
-                self.assertIsNotNone(kubeconfig)
-                self.assertTrue(os.path.exists(kubeconfig))
-                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-            if cmd[:3] == ["kubectl", "get", "jobs"]:
-                self.assertIsNotNone(kubeconfig)
-                return subprocess.CompletedProcess(cmd, 0, stdout=jobs_json, stderr="")
-            if cmd[:3] == ["kubectl", "delete", "job"]:
-                self.assertIsNotNone(kubeconfig)
                 return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
             raise AssertionError(f"Unexpected command: {cmd}")
 
@@ -409,32 +324,14 @@ class TestReapStalePRBuilds(unittest.TestCase):
         summary = reaper.reap_stale_pr_builds(
             project="hpc-toolkit-dev",
             repo="GoogleCloudPlatform/cluster-toolkit",
-            current_build_id="current-build-999",
-            current_commit_sha=new_sha,
-            cluster_name="test-kueue-cluster",
-            cluster_region="us-central1",
-            namespace="default",
-            skip_pending=False,
             dry_run=False,
         )
 
         self.assertEqual(summary["cancelled_active"], 1)
-        self.assertEqual(summary["deleted_kueue_jobs"], 1)
-        self.assertEqual(summary["rejected_pending"], 1)
-
-        cmd_prefixes = [c[0][:3] for c in recorded_calls]
+        self.assertEqual(len(recorded_cmds), 2)
+        self.assertEqual(recorded_cmds[0][:3], ["gcloud", "builds", "list"])
         self.assertEqual(
-            cmd_prefixes,
-            [
-                ["gcloud", "builds", "list"],
-                ["gcloud", "builds", "cancel"],
-                ["gcloud", "container", "clusters"],
-                ["kubectl", "get", "jobs"],
-                ["kubectl", "delete", "job"],
-            ],
-        )
-        self.assertEqual(
-            recorded_calls[1][0],
+            recorded_cmds[1],
             [
                 "gcloud",
                 "builds",
@@ -444,100 +341,11 @@ class TestReapStalePRBuilds(unittest.TestCase):
                 "--quiet",
             ],
         )
-        self.assertEqual(
-            recorded_calls[2][0],
-            [
-                "gcloud",
-                "container",
-                "clusters",
-                "get-credentials",
-                "test-kueue-cluster",
-                "--region=us-central1",
-                "--project=hpc-toolkit-dev",
-            ],
-        )
-        self.assertEqual(
-            recorded_calls[4][0],
-            [
-                "kubectl",
-                "delete",
-                "job",
-                "gke-111111",
-                "-n",
-                "default",
-                "--wait=false",
-                "--ignore-not-found=true",
-                "--request-timeout=15s",
-            ],
-        )
-        # Verify temporary KUBECONFIG was isolated and cleaned up after execution
-        kubeconfig_paths = {c[1] for c in recorded_calls[2:]}
-        self.assertEqual(len(kubeconfig_paths), 1)
-        isolated_kc = next(iter(kubeconfig_paths))
-        self.assertIsNotNone(isolated_kc)
-        self.assertFalse(os.path.exists(isolated_kc))
-
-    @mock.patch("urllib.request.urlopen")
-    @mock.patch("subprocess.run")
-    def test_reject_pending_builds_403_and_404_are_non_fatal(
-        self, mock_subproc, mock_urlopen
-    ):
-        """Ensure HTTP 403 Forbidden and 404 Not Found during PENDING build rejection are caught and non-fatal."""
-        import subprocess
-
-        mock_subproc.return_value = subprocess.CompletedProcess(
-            ["gcloud", "auth", "print-access-token"],
-            0,
-            stdout="fake-token\n",
-            stderr="",
-        )
-
-        def urlopen_side_effect(req, timeout=10):
-            if "build-403" in req.full_url:
-                raise urllib.error.HTTPError(
-                    req.full_url,
-                    403,
-                    "Forbidden",
-                    {},
-                    io.BytesIO(b"Permission denied"),
-                )
-            if "build-404" in req.full_url:
-                raise urllib.error.HTTPError(
-                    req.full_url,
-                    404,
-                    "Not Found",
-                    {},
-                    io.BytesIO(b"Build not found"),
-                )
-            resp = mock.MagicMock()
-            resp.status = 200
-            resp.__enter__.return_value = resp
-            return resp
-
-        mock_urlopen.side_effect = urlopen_side_effect
-
-        pending_builds = [
-            {"id": "build-403", "stale_reason": "superseded"},
-            {"id": "build-404", "stale_reason": "superseded"},
-            {"id": "build-200", "stale_reason": "superseded"},
-        ]
-
-        rejected_count = reaper.reject_pending_builds(
-            project="hpc-toolkit-dev",
-            pending_builds=pending_builds,
-            dry_run=False,
-        )
-        self.assertEqual(rejected_count, 1)
 
     @mock.patch("reap_stale_pr_builds.fetch_pr_info")
-    @mock.patch("urllib.request.urlopen")
     @mock.patch("subprocess.run")
-    def test_dry_run_performs_no_mutations(
-        self, mock_subproc, mock_urlopen, mock_fetch_pr
-    ):
-        """Verify --dry-run only lists builds/jobs and never cancels, rejects, or deletes."""
-        import subprocess
-
+    def test_dry_run_performs_no_mutations(self, mock_subproc, mock_fetch_pr):
+        """Verify --dry-run only lists builds and never spawns gcloud builds cancel."""
         mock_fetch_pr.return_value = {"state": "closed", "head_sha": "sha"}
         builds_json = json.dumps(
             [
@@ -551,46 +359,12 @@ class TestReapStalePRBuilds(unittest.TestCase):
                         "TRIGGER_NAME": "PR-test-gke",
                     },
                 },
-                {
-                    "id": "stale-pending-1",
-                    "status": "PENDING",
-                    "createTime": "2026-10-31T05:00:00Z",
-                    "substitutions": {
-                        "_PR_NUMBER": "6550",
-                        "COMMIT_SHA": "sha",
-                        "TRIGGER_NAME": "PR-test-slurm",
-                    },
-                },
             ]
         )
-        jobs_json = json.dumps(
-            {
-                "items": [
-                    {
-                        "metadata": {
-                            "name": "gke-stale-1",
-                            "labels": {"build-id": "stale-working-1"},
-                        },
-                        "status": {},
-                        "spec": {},
-                    }
-                ]
-            }
+
+        mock_subproc.return_value = subprocess.CompletedProcess(
+            ["gcloud", "builds", "list"], 0, stdout=builds_json, stderr=""
         )
-
-        recorded_cmds = []
-
-        def side_effect(cmd, **kwargs):
-            recorded_cmds.append(list(cmd))
-            if cmd[:3] == ["gcloud", "builds", "list"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout=builds_json, stderr="")
-            if cmd[:4] == ["gcloud", "container", "clusters", "get-credentials"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-            if cmd[:3] == ["kubectl", "get", "jobs"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout=jobs_json, stderr="")
-            raise AssertionError(f"Unexpected mutating command in dry-run: {cmd}")
-
-        mock_subproc.side_effect = side_effect
 
         summary = reaper.reap_stale_pr_builds(
             project="hpc-toolkit-dev",
@@ -599,38 +373,22 @@ class TestReapStalePRBuilds(unittest.TestCase):
         )
 
         self.assertEqual(summary["cancelled_active"], 1)
-        self.assertEqual(summary["deleted_kueue_jobs"], 1)
-        self.assertEqual(summary["rejected_pending"], 1)
+        self.assertEqual(mock_subproc.call_count, 1)
         self.assertEqual(
-            [c[:3] for c in recorded_cmds],
-            [
-                ["gcloud", "builds", "list"],
-                ["gcloud", "container", "clusters"],
-                ["kubectl", "get", "jobs"],
-            ],
+            mock_subproc.call_args[0][0][:3], ["gcloud", "builds", "list"]
         )
-        mock_urlopen.assert_not_called()
 
     @mock.patch("subprocess.run")
-    def test_delete_kueue_jobs_handles_kubectl_errors_and_timeouts_gracefully(
+    def test_list_active_pr_builds_handles_timeout_gracefully(
         self, mock_subproc
     ):
-        """Ensure kubectl failures or timeouts return 0 without raising."""
-        import subprocess
-
+        """Ensure gcloud builds list timeout returns an empty list without raising."""
         mock_subproc.side_effect = subprocess.TimeoutExpired(
-            cmd=["gcloud", "container", "clusters", "get-credentials"],
+            cmd=["gcloud", "builds", "list"],
             timeout=60,
         )
-        deleted = reaper.delete_kueue_jobs_for_builds(
-            project="hpc-toolkit-dev",
-            cluster_name="test-kueue-cluster",
-            cluster_region="us-central1",
-            namespace="default",
-            stale_build_ids={"111111-stale"},
-            dry_run=False,
-        )
-        self.assertEqual(deleted, 0)
+        builds = reaper.list_active_pr_builds("hpc-toolkit-dev")
+        self.assertEqual(builds, [])
 
 
 if __name__ == "__main__":

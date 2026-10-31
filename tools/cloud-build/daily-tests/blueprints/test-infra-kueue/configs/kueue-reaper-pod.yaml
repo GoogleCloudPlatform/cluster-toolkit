@@ -53,8 +53,24 @@ data:
       gcloud config set project "$PROJECT_ID" 2>/dev/null
     fi
 
+    REAPER_PY_URL="https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/develop/tools/cloud-build/reap_stale_pr_builds.py"
+    REAPER_PY_PATH="/tmp/reap_stale_pr_builds.py"
+    LAST_SCRIPT_REFRESH=0
+
     while true; do
-      # Fetch all jobs, checking their Complete and Failed conditions
+      # 1. Refresh and run stale PR Cloud Build reaper (cancels superseded/closed-PR WORKING & QUEUED builds)
+      NOW=$(date +%s)
+      if [ ! -s "$REAPER_PY_PATH" ] || [ $((NOW - LAST_SCRIPT_REFRESH)) -ge 600 ]; then
+        if curl -fsSL -m 10 "$REAPER_PY_URL" -o "${REAPER_PY_PATH}.tmp" 2>/dev/null && [ -s "${REAPER_PY_PATH}.tmp" ]; then
+          mv "${REAPER_PY_PATH}.tmp" "$REAPER_PY_PATH"
+          LAST_SCRIPT_REFRESH=$NOW
+        fi
+      fi
+      if [ -s "$REAPER_PY_PATH" ] && [ -n "$PROJECT_ID" ]; then
+        python3 "$REAPER_PY_PATH" --project="$PROJECT_ID" || true
+      fi
+
+      # 2. Fetch all jobs, checking their Complete and Failed conditions
       jobs_data=$(kubectl get jobs -l build-id -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.metadata.labels.build-id}{"|"}{.status.conditions[?(@.type=="Complete")].status}{"|"}{.status.conditions[?(@.type=="Failed")].status}{"\n"}{end}')
 
       if [ -n "$jobs_data" ]; then
@@ -65,7 +81,7 @@ data:
             continue
           fi
           active_jobs+=("$job_name|$build_id")
-          filter_parts+=("id=$build_id")
+          filter_parts+=("build_id=\"$build_id\"")
         done <<< "$jobs_data"
 
         if [ ${#active_jobs[@]} -gt 0 ]; then
@@ -86,7 +102,7 @@ data:
             if [ -n "$bid" ]; then
               build_statuses["$bid"]="$bstatus"
             fi
-          done < <(gcloud builds list --filter="create_time > -P2D AND ($filter_str)" --format="value(id,status)")
+          done < <(gcloud builds list --filter="$filter_str" --format="value(id,status)")
 
           # Check and delete jobs for cancelled/failed builds
           for item in "${active_jobs[@]}"; do
@@ -122,6 +138,8 @@ spec:
     metadata:
       labels:
         app: kueue-reaper
+      annotations:
+        reaper-script-version: "2.1-stale-pr-reaper"
     spec:
       serviceAccountName: kueue-reaper-ksa
       containers:

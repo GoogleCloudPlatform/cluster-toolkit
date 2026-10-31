@@ -16,6 +16,7 @@ resource "terraform_data" "apply_kueue_locks" {
   triggers_replace = {
     dummy_hash  = filemd5("${path.module}/../daily-tests/blueprints/test-infra-kueue/configs/dummy-device-plugin.yaml")
     setup_hash  = filemd5("${path.module}/../daily-tests/blueprints/test-infra-kueue/configs/kueue-setup.yaml")
+    reaper_hash = filemd5("${path.module}/../daily-tests/blueprints/test-infra-kueue/configs/kueue-reaper-pod.yaml")
     script_hash = filemd5("${path.module}/apply_kueue_locks.sh")
   }
 

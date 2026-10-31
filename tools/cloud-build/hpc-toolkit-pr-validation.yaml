@@ -15,24 +15,7 @@
 ---
 
 steps:
-- id: reap-stale-pr-builds
-  waitFor: ['-']
-  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
-  allowFailure: true
-  entrypoint: /bin/bash
-  env:
-  - 'PROJECT_ID=$PROJECT_ID'
-  - 'BUILD_ID=$BUILD_ID'
-  - 'COMMIT_SHA=$COMMIT_SHA'
-  args:
-  - -c
-  - |
-    python3 /workspace/tools/cloud-build/reap_stale_pr_builds.py \
-      --project="$$PROJECT_ID" \
-      --current-build-id="$$BUILD_ID" \
-      --current-commit-sha="$$COMMIT_SHA"
 - id: git-fetch-unshallow
-  waitFor: ['-']
   name: gcr.io/cloud-builders/git
   args: ['fetch', '--unshallow']
 - id: make-tests

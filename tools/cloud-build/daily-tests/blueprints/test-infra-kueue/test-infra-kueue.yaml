@@ -121,7 +121,7 @@ deployment_groups:
     settings:
       name: reaper
       project_roles:
-      - cloudbuild.builds.viewer
+      - cloudbuild.builds.editor
 
   - id: kueue_reaper_binding
     source: modules/project/workload_identity_binding
