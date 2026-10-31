@@ -77,14 +77,23 @@ def commits_match(sha_a: str, sha_b: str) -> bool:
     return False
 
 
+_ETAG_CACHES: dict[str, dict] = {}
+
+
 def _load_etag_cache(cache_path: str) -> dict:
     """Load the on-disk ETag cache dictionary if present."""
     if not cache_path or not os.path.exists(cache_path):
+        _ETAG_CACHES.pop(cache_path, None)
         return {}
+    if cache_path in _ETAG_CACHES:
+        return _ETAG_CACHES[cache_path]
     try:
         with open(cache_path, "r", encoding="utf-8") as fh:
             data = json.load(fh)
-            return data if isinstance(data, dict) else {}
+            if isinstance(data, dict):
+                _ETAG_CACHES[cache_path] = data
+                return data
+            return {}
     except (OSError, ValueError):
         return {}
 
@@ -93,6 +102,7 @@ def _save_etag_cache(cache_path: str, cache: dict) -> None:
     """Persist the ETag cache dictionary to disk."""
     if not cache_path:
         return
+    _ETAG_CACHES[cache_path] = cache
     try:
         with open(cache_path, "w", encoding="utf-8") as fh:
             json.dump(cache, fh)
@@ -206,7 +216,7 @@ def list_active_pr_builds(project: str) -> list[dict]:
         return []
     try:
         data = json.loads(out)
-        return data if isinstance(data, list) else []
+        return [b for b in data if isinstance(b, dict)] if isinstance(data, list) else []
     except ValueError as exc:
         print(
             f"WARNING: Failed to parse gcloud builds list JSON: {exc}",

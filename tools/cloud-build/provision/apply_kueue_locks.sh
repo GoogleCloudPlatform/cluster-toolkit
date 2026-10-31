@@ -65,6 +65,12 @@ for PROJECT in "${PROJECTS[@]}"; do
 					--quiet >/dev/null || ERRORS=1
 			fi
 
+			echo "Syncing kueue-stale-pr-reaper ConfigMap..."
+			kubectl create configmap kueue-stale-pr-reaper \
+				-n default \
+				--from-file=reap_stale_pr_builds.py="$SCRIPT_DIR/../reap_stale_pr_builds.py" \
+				--dry-run=client -o yaml | kubectl apply -f - || ERRORS=1
+
 			echo "Applying kueue-reaper-pod..."
 			kubectl apply -f "$CONFIGS_DIR/kueue-reaper-pod.yaml" || ERRORS=1
 		else

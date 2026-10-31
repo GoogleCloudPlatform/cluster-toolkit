@@ -53,19 +53,10 @@ data:
       gcloud config set project "$PROJECT_ID" 2>/dev/null
     fi
 
-    REAPER_PY_URL="https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/develop/tools/cloud-build/reap_stale_pr_builds.py"
-    REAPER_PY_PATH="/tmp/reap_stale_pr_builds.py"
-    LAST_SCRIPT_REFRESH=0
+    REAPER_PY_PATH="/reaper-py/reap_stale_pr_builds.py"
 
     while true; do
-      # 1. Refresh and run stale PR Cloud Build reaper (cancels superseded/closed-PR WORKING & QUEUED builds)
-      NOW=$(date +%s)
-      if [ ! -s "$REAPER_PY_PATH" ] || [ $((NOW - LAST_SCRIPT_REFRESH)) -ge 600 ]; then
-        if curl -fsSL -m 10 "$REAPER_PY_URL" -o "${REAPER_PY_PATH}.tmp" 2>/dev/null && [ -s "${REAPER_PY_PATH}.tmp" ]; then
-          mv "${REAPER_PY_PATH}.tmp" "$REAPER_PY_PATH"
-          LAST_SCRIPT_REFRESH=$NOW
-        fi
-      fi
+      # 1. Run stale PR Cloud Build reaper mounted from ConfigMap (cancels superseded/closed-PR WORKING & QUEUED builds)
       if [ -s "$REAPER_PY_PATH" ] && [ -n "$PROJECT_ID" ]; then
         python3 "$REAPER_PY_PATH" --project="$PROJECT_ID" || true
       fi
@@ -81,6 +72,7 @@ data:
             continue
           fi
           active_jobs+=("$job_name|$build_id")
+          # gcloud's cloudbuild filter_rewrite maps 'build_id' (not 'id') to a server-side filter
           filter_parts+=("build_id=\"$build_id\"")
         done <<< "$jobs_data"
 
@@ -139,7 +131,7 @@ spec:
       labels:
         app: kueue-reaper
       annotations:
-        reaper-script-version: "2.1-stale-pr-reaper"
+        reaper-script-version: "2.2-stale-pr-reaper"
     spec:
       serviceAccountName: kueue-reaper-ksa
       containers:
@@ -149,8 +141,15 @@ spec:
         volumeMounts:
         - name: script-volume
           mountPath: /scripts
+        - name: stale-pr-reaper-volume
+          mountPath: /reaper-py
       volumes:
       - name: script-volume
         configMap:
           name: kueue-reaper-script
           defaultMode: 0777
+      - name: stale-pr-reaper-volume
+        configMap:
+          name: kueue-stale-pr-reaper
+          defaultMode: 0755
+          optional: true
