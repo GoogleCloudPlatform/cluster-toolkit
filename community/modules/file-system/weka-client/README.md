@@ -30,35 +30,37 @@ This example creates mount scripts that will mount `default` filesystem from
 `10.0.0.3` WEKA backend:
 
 ```yaml
-      - id: wekafs
-        source: community/modules/file-system/weka-client
-        settings:
-          local_mount: /scratch
-          server_ip: 10.0.0.3
-          remote_mount: default
+    - id: wekafs
+      source: community/modules/file-system/weka-client
+      settings:
+        local_mount: /scratch
+        server_ip: 10.0.0.3
+        remote_mount: default
 
     - id: mount-at-startup
       source: modules/scripts/startup-script
       settings:
-        runners: $(wekafs.runners)
+        runners:
+          - $(wekafs.client_install_runner)
+          - $(wekafs.mount_runner)
 ```
 
-If you need to add mount script along other runners, remember to add all 4
-runners provided by this script as shown in this example:
+If you need to add mount script along other runners, remember to add both
+runners provided by this module as shown in this example:
 
 ```yaml
     - id: mount-at-startup
       source: modules/scripts/startup-script
       settings:
-      runners:
-        - $(wekafs.client_install_runner)
-        - $(wekafs.mount_runner)
-        - type: shell
-          content: |
-            #!/bin/bash
+        runners:
+          - $(wekafs.client_install_runner)
+          - $(wekafs.mount_runner)
+          - type: shell
+            content: |
+              #!/bin/bash
 
-            echo Sample
-          destination: sample-script.sh
+              echo Sample
+            destination: sample-script.sh
 ```
 
 To use the client within Slurm partition, with DPDK, remember to set additional
@@ -103,12 +105,12 @@ client in the instance image, you may need to increase the timeout for startups 
     settings:
       compute_startup_scripts_timeout: 600
       login_startup_scripts_timeout: 600
-    ...
+      # ...
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     settings:
       resume_timeout: 600
-      ...
+      # ...
 ```
 
 ## Supported VM metadata options

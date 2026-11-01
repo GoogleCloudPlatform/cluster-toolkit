@@ -14,7 +14,7 @@
 ---
 test_name: batch
 deployment_name: batch-{{ build }}
-zone: us-central1-c
+zone: us-central1-a
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/batch.yaml"
 network: "default"

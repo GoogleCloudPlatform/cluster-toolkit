@@ -1,0 +1,174 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: gke-scale-5k-autoscaled
+
+# Uncomment to store Terraform state in a remote GCS bucket:
+# terraform_backend_defaults:
+#   type: gcs
+#   configuration:
+#     bucket: <your-tf-state-bucket>
+
+vars:
+  project_id:  # Set GCP Project ID Here
+  deployment_name: gke-scale-5k  # Keep <= 16-20 chars so ${deployment_name}-gke-np-sa stays <= 30 chars
+  region: us-central1
+  zone: us-central1-a
+  authorized_cidr:  # <your-ip-address>/32
+  version_prefix: "1.36."
+
+  # 49 pools x 100 max nodes = 4,900 worker nodes
+  machine_type: e2-standard-2
+  num_node_pools: 49
+  initial_node_count: 0
+  autoscaling_total_min_nodes: 0  # Set to 100 in Step 2 to keep 4,900 nodes running 24/7
+  autoscaling_total_max_nodes: 100
+
+  # System node pool and disk settings
+  system_node_pool_machine_type: e2-standard-16
+  node_disk_type: pd-balanced
+  node_disk_size_gb: 100
+  max_pods_per_node: 32  # Reserves 64 Pod IPs (/26) per node instead of 256 (/24)
+
+  # Kueue and JobSet controller resources for 5,000 nodes
+  kueue_controller_cpu: "4"
+  kueue_controller_memory: "8Gi"
+  jobset_controller_cpu: "4"
+  jobset_controller_memory: "8Gi"
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net
+      subnetwork_name: $(vars.deployment_name)-subnet
+      # Creates a /18 primary node subnet (16,382 IPs); GKE manages firewall rules for pod/service ranges
+      network_address_range: 10.0.0.0/16
+      default_primary_subnetwork_size: 2
+      ips_per_nat: 8
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-subnet
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.32.0.0/11
+        - range_name: services
+          ip_cidr_range: 10.2.0.0/20
+
+  # Shared across all node pools (gke-np-sa) and Workload Identity pods (gke-wl-sa)
+  - id: node_pool_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  # Used by gke_cluster system_node_pools VMs and Workload Identity pods
+  - id: workload_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
+  - id: scale_gcs_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      name_prefix: $(vars.project_id)-gcs
+      use_deployment_name_in_bucket_name: true
+      random_suffix: false
+      force_destroy: true
+      storage_class: REGIONAL
+      object_users:
+        node_sa: $(node_pool_service_account.service_account_iam_email)
+        wl_sa: $(workload_service_account.service_account_iam_email)
+    outputs: [gcs_bucket_name]
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network1, workload_service_account]
+    settings:
+      version_prefix: $(vars.version_prefix)
+      enable_dataplane_v2: true
+      enable_node_local_dns_cache: true
+      enable_gcfs: true
+      enable_gcsfuse_csi: true
+      enable_dcgm_monitoring: false
+      configure_workload_identity_sa: true
+      enable_private_endpoint: false
+      gcp_public_cidrs_access_enabled: true
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr)
+        display_name: "kubectl-access-network"
+      default_max_pods_per_node: $(vars.max_pods_per_node)
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
+      system_node_pool_disk_type: $(vars.node_disk_type)
+      system_node_pool_disk_size_gb: $(vars.node_disk_size_gb)
+      system_node_pool_zones: [$(vars.zone)]
+      system_node_pool_node_count:
+        total_min_nodes: 2
+        total_max_nodes: 8
+      deletion_protection: false
+      timeout_create: 2h
+      timeout_update: 2h
+      timeout_delete: 2h
+    outputs: [instructions]
+
+  - id: compute_pools
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, node_pool_service_account]
+    settings:
+      machine_type: $(vars.machine_type)
+      threads_per_core: 2
+      disk_type: $(vars.node_disk_type)
+      disk_size_gb: $(vars.node_disk_size_gb)
+      enable_gcfs: true
+      num_node_pools: $(vars.num_node_pools)
+      static_node_count: null
+      initial_node_count: $(vars.initial_node_count)
+      autoscaling_total_min_nodes: $(vars.autoscaling_total_min_nodes)
+      autoscaling_total_max_nodes: $(vars.autoscaling_total_max_nodes)
+      max_pods_per_node: $(vars.max_pods_per_node)
+      zones: [$(vars.zone)]
+      enable_private_nodes: true
+      taints: []
+      timeout_create: 2h
+      timeout_update: 2h
+      timeout_delete: 2h
+      auto_upgrade: false
+      auto_repair: false
+
+  - id: workload_manager_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      kueue:
+        install: true
+        controller_cpu: $(vars.kueue_controller_cpu)
+        controller_memory: $(vars.kueue_controller_memory)
+      jobset:
+        install: true
+        controller_cpu: $(vars.jobset_controller_cpu)
+        controller_memory: $(vars.jobset_controller_memory)

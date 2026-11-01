@@ -25,6 +25,13 @@ vars:
   # The following line must be updated for this example to work.
   authorized_cidr:  # <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
+  # Optional overrides (defaults shown)
+  # Machine type for the GPU compute node pool.
+  compute_machine_type: g2-standard-4
+  # Fixed number of nodes in the compute node pool (autoscaling disabled).
+  compute_static_node_count: 1
+  # Use Spot VMs for the GPU compute node pool.
+  compute_spot: false
 
 deployment_groups:
 - group: primary
@@ -82,8 +89,9 @@ deployment_groups:
     use: [gke_cluster, node_pool_service_account]
     settings:
       disk_type: pd-balanced
-      machine_type: g2-standard-4
-      static_node_count: 1
+      machine_type: $(vars.compute_machine_type)
+      static_node_count: $(vars.compute_static_node_count)
+      spot: $(vars.compute_spot)
 
   - id: nvidia_smi_job_template
     source: modules/compute/gke-job-template

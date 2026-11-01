@@ -21,10 +21,8 @@ Also see a full [GKE example blueprint](../../../examples/hpc-gke.yaml).
 
 ### Taints and Tolerations
 
-By default node pools created with this module will be tainted with
-`user-workload=true:NoSchedule` to prevent system pods from being scheduled.
-User jobs targeting the node pool should include this toleration. This behavior
-can be overridden using the `taints` setting. See
+Custom node taints can be configured on node pools created with this module
+using the `taints` setting (which defaults to `[]`). See
 [docs](https://cloud.google.com/kubernetes-engine/docs/how-to/node-taints) for
 more info.
 
@@ -172,7 +170,7 @@ The following is an example of using a GPU (with sharing config) attached to an 
 
 ```yaml
   - id: n1-t4-pool
-    source: community/modules/compute/gke-node-pool
+    source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       name: n1-t4-pool
@@ -212,15 +210,12 @@ Finally, the following is adding multivpc to a node pool:
   - id: gke-cluster
     source: modules/scheduler/gke-cluster
     use: [network, multinetwork]
-    settings:
-      cluster_name: $(vars.deployment_name)
 
   - id: a3-megagpu_pool
     source: modules/compute/gke-node-pool
     use: [gke-cluster, multinetwork]
     settings:
       machine_type: a3-megagpu-8g
-      ...
 ```
 
 ## Using GCE Reservations
@@ -270,6 +265,107 @@ reservation_affinity:
 
 Once the future reservation is active or the reservation is fulfilled, set the `is_reservation_active` input variable to `true`. Also set the node count information with either the `static_node_count` to define the required number of static nodes, or the `autoscaling_min_node_count` and `autoscaling_max_node_count` to use node scaling. Remember to use the `-w` flag in the `gcluster deploy` command and DO NOT change the `deployment_name` variable.
 
+### One node pool per reservation sub-block
+
+Some dense reservations (for example A4X) are divided into blocks and sub-blocks. Sub-block pinning needs such a reservation. One module block can create `num_node_pools` node pools, each pinned to its own sub-block. The sub-block of each pool comes from a map, `reservation_subblocks`, on the reservation in `reservation_affinity.specific_reservations[0]`. Each node pool is named `{name}-{key}`. All node pools share the other settings, including `static_node_count` and `placement_policy`.
+
+**Standard setup.** The blueprint refers to a deployment variable, and the deployment file holds the map:
+
+```yaml
+# blueprint.yaml
+vars:
+  reservation_subblocks: {}            # the map itself lives in deployment.yaml
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: gpu-sb
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      name: gpu-sb                     # 8 characters or less keeps names short (see below)
+      machine_type: a4x-highgpu-4g
+      zones: [us-central1-a]           # exactly one zone
+      num_node_pools: 3                # one node pool per sub-block
+      static_node_count: 18
+      reservation_affinity:
+        consume_reservation_type: SPECIFIC_RESERVATION
+        specific_reservations:
+        - name: my-res                 # bare reservation name
+          pin_to_subblocks: true       # gcluster proposes and saves the map
+          reservation_subblocks: $(vars.reservation_subblocks)
+```
+
+With `pin_to_subblocks: true`, `gcluster create` and `gcluster deploy` compare the map with `num_node_pools`:
+
+| Map | What gcluster does |
+|---|---|
+| Has `num_node_pools` entries | Uses it as is, without a prompt. It also checks (read-only) that the saved sub-blocks still exist: a missing one gives a warning and a "continue?" prompt, an unhealthy or `DEGRADED` one a warning. |
+| Empty | Lists the reservation's sub-blocks and proposes the `num_node_pools` free ones (no hosts in use): `HEALTHY` ones with the lowest keys first, then `DEGRADED` ones, each with a warning |
+| Fewer entries than `num_node_pools` | Keeps all entries and proposes free sub-blocks for the rest, in the same order |
+| More entries than `num_node_pools` | Proposes dropping the entries with the highest keys (their node pools are deleted) |
+
+A `DEGRADED` sub-block has some unhealthy hosts, so its node pool may get fewer nodes than `static_node_count`. Sub-blocks that are not `READY`, or whose health is neither `HEALTHY` nor `DEGRADED`, are never proposed.
+
+gcluster prints the proposed sub-block map as YAML (new entries marked `# new`) and asks before saving it to the deployment file (or to the blueprint's `vars:` if there is no deployment file). It keeps a timestamped backup and prints the diff. Answering no stops without changes. `gcluster deploy --auto-approve` approves; without a terminal, `gcluster create` stops with the proposed YAML. `gcluster expand` never prompts or edits files.
+
+Keys use the format `BB-SSSS` (block number, sub-block number), so `my-res-block-0002-subblock-0001` gets key `02-0001` and node pool `gpu-sb-02-0001`. Sub-blocks already in another pinned module's map are never proposed again, and the same sub-block in two maps is an error.
+
+If the blueprint has `pin_to_subblocks: true` but no `reservation_subblocks` setting, gcluster stops and prints the two lines to add. gcluster only updates a map that comes from a variable; a map written directly in the blueprint must be edited by hand. `num_node_pools` must equal the number of map entries.
+
+**Explicit mode.** With `pin_to_subblocks` unset or `false`, gcluster doesn't touch the map, and the user maintains it, with any keys (for example `"0001"` to keep existing node pool names). The node pools are the same as with pinning on, so pinning can be turned on later without changes. The map can be inline or in a deployment variable:
+
+```yaml
+      num_node_pools: 2
+      reservation_affinity:
+        consume_reservation_type: SPECIFIC_RESERVATION
+        specific_reservations:
+        - name: my-res
+          reservation_subblocks:
+            "01-0001": my-res/reservationBlocks/my-res-block-0001/reservationSubBlocks/my-res-block-0001-subblock-0001
+            "01-0002": my-res/reservationBlocks/my-res-block-0001/reservationSubBlocks/my-res-block-0001-subblock-0002
+```
+
+These commands print the reservation's sub-block map in the accepted format (requires the permissions below):
+
+```shell
+RES=my-res ZONE=us-central1-b PROJECT=owner-proj
+echo "# Sub-block map for $RES: paste under vars: in the deployment file"
+echo "reservation_subblocks:"
+for B in $(gcloud compute reservations blocks list "$RES" --zone="$ZONE" --project="$PROJECT" --format="value(name)"); do
+  gcloud compute reservations sub-blocks list "$RES" --block-name="$B" --zone="$ZONE" --project="$PROJECT" --format="value(name)" |
+  while read -r SB; do
+    printf '  "%02d-%04d": %s/reservationBlocks/%s/reservationSubBlocks/%s\n' "$((10#${B##*-}))" "$((10#${SB##*-}))" "$RES" "$B" "$SB"
+  done
+done
+```
+
+Example output:
+
+```yaml
+# Sub-block map for my-res: paste under vars: in the deployment file
+reservation_subblocks:
+  "01-0001": my-res/reservationBlocks/my-res-block-0001/reservationSubBlocks/my-res-block-0001-subblock-0001
+  "01-0002": my-res/reservationBlocks/my-res-block-0001/reservationSubBlocks/my-res-block-0001-subblock-0002
+```
+
+Keep only as many entries as `num_node_pools`.
+
+Shared reservations and permissions: gcluster looks up the reservation in `specific_reservations[0].project` if it is set (a reservation shared from another project), otherwise in `project_id`. Listing sub-blocks requires `compute.reservationBlocks.list` and `compute.reservationSubBlocks.list` on that project, for example through `roles/compute.viewer`. For a shared reservation, being able to consume it from your project is not enough. The permissions are only needed when gcluster has to propose sub-blocks; a complete map works without them. If they are missing at that point, gcluster stops and asks you to add the entries to the map yourself, for example with the output of the commands above from someone who can list the reservation.
+
+Requirements: `SPECIFIC_RESERVATION`, a single entry in `specific_reservations` whose `name` is the bare reservation name that every sub-block path starts with, `num_node_pools` equal to the number of map entries, exactly one zone in `zones`, `num_slices` left at 1, and a non-TPU machine type.
+
+If `num_node_pools` is set through a deployment variable of that name, gcluster also passes it to other modules with that input, such as other gke-node-pool modules that don't set it themselves.
+
+Node pool names (`{name}-{key}`) longer than 16 characters give a warning on every plan. With a long cluster name, GKE shortens node pool names in VM, node and instance template names, so pools can look alike there and the `instance_templates` output can be wrong. Node pools are still created and pinned correctly.
+
+Each node pool is identified by its key, so changes to the map only affect the entries that change:
+- Adding an entry, in any position, creates only that node pool.
+- Removing an entry deletes only that node pool.
+- Changing an entry's sub-block path recreates only that node pool.
+
+The `node_pool_count`, `total_static_node_count` and `total_static_gpu_count` outputs report totals across all node pools created by the module, for example to size Kueue quotas. `static_gpu_count` and `node_count_static` report values for a single node pool.
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -292,16 +388,16 @@ limitations under the License.
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.24.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.44.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.44.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.24.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.44.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.44.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
@@ -321,6 +417,7 @@ limitations under the License.
 | Name | Type |
 | ---- | ---- |
 | [google-beta_google_container_node_pool.node_pool](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
+| [google-beta_google_container_node_pool.subblock_node_pool](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
 | [null_resource.enable_tcpx_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.enable_tcpxo_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.install_dependencies](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
@@ -364,7 +461,8 @@ limitations under the License.
 | <a name="input_gke_version"></a> [gke\_version](#input\_gke\_version) | GKE version | `string` | n/a | yes |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = optional(string)<br/>    count = optional(number, 0)<br/>    gpu_driver_installation_config = optional(object({<br/>      gpu_driver_version = string<br/>    }), { gpu_driver_version = "DEFAULT" })<br/>    gpu_partition_size = optional(string)<br/>    gpu_sharing_config = optional(object({<br/>      gpu_sharing_strategy       = string<br/>      max_shared_clients_per_gpu = number<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_host_maintenance_interval"></a> [host\_maintenance\_interval](#input\_host\_maintenance\_interval) | Specifies the frequency of planned maintenance events. | `string` | `""` | no |
-| <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
+| <a name="input_ignore_node_count_changes"></a> [ignore\_node\_count\_changes](#input\_ignore\_node\_count\_changes) | Whether to ignore external changes (drift) to the node count (e.g. from out-of-band resizes using gcloud). Setting this to true allows node pool size changes made outside Terraform to be preserved instead of reverted on subsequent applies. | `bool` | `false` | no |
+| <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. Use CUSTOM\_CONTAINERD together with var.node\_image\_config to run a custom node image. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_initial_node_count"></a> [initial\_node\_count](#input\_initial\_node\_count) | The initial number of nodes for the pool. In regional clusters, this is the number of nodes per zone. Changing this setting after node pool creation will not make any effect. It cannot be set with static\_node\_count and must be set to a value between autoscaling\_total\_min\_nodes and autoscaling\_total\_max\_nodes. | `number` | `null` | no |
 | <a name="input_install_dranet_template"></a> [install\_dranet\_template](#input\_install\_dranet\_template) | If true, automatically deploys the DRANET ResourceClaimTemplate. The compiler automatically overrides this to false for subsequent node pools in the same cluster if they use the same device class. | `bool` | `true` | no |
 | <a name="input_install_gpu_direct_manifests"></a> [install\_gpu\_direct\_manifests](#input\_install\_gpu\_direct\_manifests) | If true, automatically downloads and applies GPUDirect (NCCL and NRI) manifests from GitHub for A3 High/Mega GPUs. Set to false if you are applying these manifests manually. | `bool` | `true` | no |
@@ -380,11 +478,12 @@ limitations under the License.
 | <a name="input_max_pods_per_node"></a> [max\_pods\_per\_node](#input\_max\_pods\_per\_node) | The maximum number of pods per node in this node pool. This will force replacement. | `number` | `null` | no |
 | <a name="input_max_run_duration"></a> [max\_run\_duration](#input\_max\_run\_duration) | The duration (in whole seconds) of the instance. Instance will run and be terminated after then. | `number` | `null` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the node pool. If not set, automatically populated by machine type and module id (unique blueprint-wide) as suffix.<br/>If setting manually, ensure a unique value across all gke-node-pools. | `string` | `null` | no |
+| <a name="input_node_image_config"></a> [node\_image\_config](#input\_node\_image\_config) | Custom OS image for the nodes. Requires var.image\_type = "CUSTOM\_CONTAINERD".<br/>The GKE service agent of the project needs roles/compute.imageUser on image\_project. | <pre>object({<br/>    image         = optional(string)<br/>    image_project = optional(string)<br/>  })</pre> | `null` | no |
 | <a name="input_num_node_pools"></a> [num\_node\_pools](#input\_num\_node\_pools) | Number of node pools to create. This is same as num\_slices. | `number` | `1` | no |
 | <a name="input_num_slices"></a> [num\_slices](#input\_num\_slices) | Number of TPUs slices to create. This is same as num\_node\_pools. | `number` | `1` | no |
 | <a name="input_placement_policy"></a> [placement\_policy](#input\_placement\_policy) | Group placement policy to use for the node pool's nodes. `COMPACT` is the only supported value for `type` currently. `name` is the name of the placement policy. `tpu_topology` is the TPU placement topology for pod slice node pool.<br/>It is assumed that the specified policy exists. To create a placement policy refer to https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement.<br/>Note: Placement policies have the [following](https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies) restrictions. | <pre>object({<br/>    type         = string<br/>    name         = optional(string)<br/>    tpu_topology = optional(string)<br/>  })</pre> | <pre>{<br/>  "name": null,<br/>  "tpu_topology": null,<br/>  "type": null<br/>}</pre> | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the cluster in. | `string` | n/a | yes |
-| <a name="input_reservation_affinity"></a> [reservation\_affinity](#input\_reservation\_affinity) | Reservation resource to consume. When targeting SPECIFIC\_RESERVATION, specific\_reservations needs be specified.<br/>Even though specific\_reservations is a list, only one reservation is allowed by the NodePool API.<br/>It is assumed that the specified reservation exists and has available capacity.<br/>For a shared reservation, specify the project\_id as well in which it was created.<br/>To create a reservation refer to https://cloud.google.com/compute/docs/instances/reservations-single-project and https://cloud.google.com/compute/docs/instances/reservations-shared | <pre>object({<br/>    consume_reservation_type = string<br/>    specific_reservations = optional(list(object({<br/>      name    = string<br/>      project = optional(string)<br/>    })))<br/>  })</pre> | <pre>{<br/>  "consume_reservation_type": "NO_RESERVATION",<br/>  "specific_reservations": []<br/>}</pre> | no |
+| <a name="input_reservation_affinity"></a> [reservation\_affinity](#input\_reservation\_affinity) | Reservation resource to consume. When targeting SPECIFIC\_RESERVATION, specific\_reservations needs be specified.<br/>Even though specific\_reservations is a list, only one reservation is allowed by the NodePool API.<br/>It is assumed that the specified reservation exists and has available capacity.<br/>For a shared reservation, specify the project\_id as well in which it was created.<br/>To create a reservation refer to https://cloud.google.com/compute/docs/instances/reservations-single-project and https://cloud.google.com/compute/docs/instances/reservations-shared<br/>To pin each of the num\_node\_pools node pools to its own reservation sub-block, set reservation\_subblocks (map of key,<br/>e.g. "02-0001", to RESERVATION/reservationBlocks/BLOCK/reservationSubBlocks/SUBBLOCK). With pin\_to\_subblocks = true,<br/>gcluster create/deploy proposes free sub-blocks and saves the map to the deployment file; see README. | <pre>object({<br/>    consume_reservation_type = string<br/>    specific_reservations = optional(list(object({<br/>      name                  = string<br/>      project               = optional(string)<br/>      reservation_subblocks = optional(map(string))<br/>      pin_to_subblocks      = optional(bool)<br/>    })))<br/>  })</pre> | <pre>{<br/>  "consume_reservation_type": "NO_RESERVATION",<br/>  "specific_reservations": []<br/>}</pre> | no |
 | <a name="input_run_workload_script"></a> [run\_workload\_script](#input\_run\_workload\_script) | Whether execute the script to create a sample workload and inject rxdm sidecar into workload. Currently, implemented for A3-Highgpu and A3-Megagpu only. | `bool` | `true` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | DEPRECATED: use service\_account\_email and scopes. | <pre>object({<br/>    email  = string,<br/>    scopes = set(string)<br/>  })</pre> | `null` | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | Service account e-mail address to use with the node pool | `string` | `null` | no |
@@ -393,8 +492,9 @@ limitations under the License.
 | <a name="input_static_node_count"></a> [static\_node\_count](#input\_static\_node\_count) | The static number of nodes in the node pool. If set, autoscaling will be disabled. | `number` | `null` | no |
 | <a name="input_taints"></a> [taints](#input\_taints) | Taints to be applied to the system node pool. | <pre>list(object({<br/>    key    = string<br/>    value  = any<br/>    effect = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_threads_per_core"></a> [threads\_per\_core](#input\_threads\_per\_core) | Sets the number of threads per physical core. By setting threads\_per\_core<br/>to 2, Simultaneous Multithreading (SMT) is enabled extending the total number<br/>of virtual cores. For example, a machine of type c2-standard-60 will have 60<br/>virtual cores with threads\_per\_core equal to 2. With threads\_per\_core equal<br/>to 1 (SMT turned off), only the 30 physical cores will be available on the VM.<br/><br/>The default value of \"0\" will turn off SMT for supported machine types, and<br/>will fall back to GCE defaults for unsupported machine types (t2d, shared-core<br/>instances, or instances with less than 2 vCPU).<br/><br/>Disabling SMT can be more performant in many HPC workloads, therefore it is<br/>disabled by default where compatible.<br/><br/>null = SMT configuration will use the GCE defaults for the machine type<br/>0 = SMT will be disabled where compatible (default)<br/>1 = SMT will always be disabled (will fail on incompatible machine types)<br/>2 = SMT will always be enabled (will fail on incompatible machine types) | `number` | `0` | no |
-| <a name="input_timeout_create"></a> [timeout\_create](#input\_timeout\_create) | Timeout for creating a node pool | `string` | `null` | no |
-| <a name="input_timeout_update"></a> [timeout\_update](#input\_timeout\_update) | Timeout for updating a node pool | `string` | `null` | no |
+| <a name="input_timeout_create"></a> [timeout\_create](#input\_timeout\_create) | Timeout for creating a node pool (e.g., '30m', '60m', '2h', '1h30m'). Must be a positive duration string with 's', 'm', or 'h' units. If null, defaults to the Terraform provider timeout (2h). | `string` | `null` | no |
+| <a name="input_timeout_delete"></a> [timeout\_delete](#input\_timeout\_delete) | Timeout for deleting a node pool (e.g., '30m', '60m', '2h', '1h30m'). Must be a positive duration string with 's', 'm', or 'h' units. If null, defaults to the Terraform provider timeout (2h). | `string` | `null` | no |
+| <a name="input_timeout_update"></a> [timeout\_update](#input\_timeout\_update) | Timeout for updating a node pool (e.g., '30m', '60m', '2h', '1h30m'). Must be a positive duration string with 's', 'm', or 'h' units. If null, defaults to the Terraform provider timeout (2h). | `string` | `null` | no |
 | <a name="input_total_max_nodes"></a> [total\_max\_nodes](#input\_total\_max\_nodes) | DEPRECATED: Use autoscaling\_total\_max\_nodes. | `number` | `null` | no |
 | <a name="input_total_min_nodes"></a> [total\_min\_nodes](#input\_total\_min\_nodes) | DEPRECATED: Use autoscaling\_total\_min\_nodes. | `number` | `null` | no |
 | <a name="input_upgrade_settings"></a> [upgrade\_settings](#input\_upgrade\_settings) | Defines node pool upgrade settings. It is highly recommended that you define all max\_surge and max\_unavailable.<br/>If max\_surge is not specified, it would be set to a default value of 0.<br/>If max\_unavailable is not specified, it would be set to a default value of 1. | <pre>object({<br/>    strategy        = string<br/>    max_surge       = optional(number)<br/>    max_unavailable = optional(number)<br/>  })</pre> | <pre>{<br/>  "max_surge": 0,<br/>  "max_unavailable": 1,<br/>  "strategy": "SURGE"<br/>}</pre> | no |
@@ -415,10 +515,14 @@ limitations under the License.
 | <a name="output_instance_templates"></a> [instance\_templates](#output\_instance\_templates) | The URLs of Instance Templates |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions for submitting the sample GPUDirect enabled job. |
 | <a name="output_machine_type"></a> [machine\_type](#output\_machine\_type) | Machine Type |
-| <a name="output_node_count_static"></a> [node\_count\_static](#output\_node\_count\_static) | The number of static nodes in node-pool. |
+| <a name="output_node_count_static"></a> [node\_count\_static](#output\_node\_count\_static) | The number of static nodes in one node pool. See total\_static\_node\_count for all node pools created by this module. |
+| <a name="output_node_pool_count"></a> [node\_pool\_count](#output\_node\_pool\_count) | Number of node pools created by this module. |
 | <a name="output_node_pool_names"></a> [node\_pool\_names](#output\_node\_pool\_names) | Names of the node pools. |
-| <a name="output_static_gpu_count"></a> [static\_gpu\_count](#output\_static\_gpu\_count) | Total number of GPUs in the node pool. Available only for static node pools. |
+| <a name="output_reservation_subblock_node_pools"></a> [reservation\_subblock\_node\_pools](#output\_reservation\_subblock\_node\_pools) | Map of reservation\_subblocks key to the node pool name and reservation sub-block it is pinned to. Empty when reservation\_subblocks is not set. |
+| <a name="output_static_gpu_count"></a> [static\_gpu\_count](#output\_static\_gpu\_count) | Total number of GPUs in one node pool. Available only for static node pools. See total\_static\_gpu\_count for all node pools created by this module. |
 | <a name="output_tolerations"></a> [tolerations](#output\_tolerations) | Tolerations needed for a pod to be scheduled on this node pool. |
+| <a name="output_total_static_gpu_count"></a> [total\_static\_gpu\_count](#output\_total\_static\_gpu\_count) | Number of GPUs summed across all static node pools created by this module. Use for cluster-wide quotas. |
+| <a name="output_total_static_node_count"></a> [total\_static\_node\_count](#output\_total\_static\_node\_count) | Number of static nodes summed across all node pools created by this module. |
 | <a name="output_tpu_accelerator_type"></a> [tpu\_accelerator\_type](#output\_tpu\_accelerator\_type) | The label value for the TPU accelerator type (e.g., 'tpu-v6e-slice'). |
 | <a name="output_tpu_chips_per_node"></a> [tpu\_chips\_per\_node](#output\_tpu\_chips\_per\_node) | The number of TPU chips on each node in the pool. |
 | <a name="output_tpu_topology"></a> [tpu\_topology](#output\_tpu\_topology) | The topology of the TPU slice (e.g., '4x4'). |

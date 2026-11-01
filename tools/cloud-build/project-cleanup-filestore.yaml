@@ -13,6 +13,7 @@
 # limitations under the License.
 
 ---
+timeout: 3600s
 options:
   defaultLogsBucketBehavior: REGIONAL_USER_OWNED_BUCKET
 
@@ -22,48 +23,43 @@ steps:
   env:
   - "BUILD_ID=${BUILD_ID}"
   - "PROJECT_ID=${PROJECT_ID}"
+  - "DRY_RUN=false"
   args:
   - -c
   - |
-    trap 'failures=$((failures+1))' ERR
-    # retry for up to 2047 seconds (34 minutes)
+    set -euo pipefail
+
+    echo "Starting Filestore Cleanup..."
+
+    # Retry with exponential backoff (up to ~34 minutes) if Filestore is in use by active builds.
     attempt=0
     max_retries=10
-    while [[ $attempt -le $max_retries ]]; do
-        failures=0
-        if [[ $attempt -gt 0 ]]; then
-            wait=$((2 ** attempt))
-            echo "Retry attempt ${attempt} of ${max_retries} with exponential backoff: ${wait} seconds."
-            sleep $wait
+
+    while [ "$$attempt" -le "$$max_retries" ]; do
+        if [ "$$attempt" -gt 0 ]; then
+            wait_time=$$((2 ** attempt))
+            echo "Waiting $${wait_time}s before retry $${attempt} of $${max_retries}..."
+            sleep "$$wait_time"
         fi
 
-        # look only for tests that use Filestore
-        builds_filter="tags=m.filestore"
-        builds_format="value(substitutions.TRIGGER_NAME,logUrl)"
-        active_builds=$(gcloud builds list --project "${PROJECT_ID}" --filter="${builds_filter}" --format="${builds_format}" --ongoing 2>/dev/null)
-        if [[ -n "$active_builds" ]]; then
-            echo "There are active Cloud Build jobs."
-            echo "$active_builds"
-            echo "Skipping cleanup."
-            # set failures to non-0 in case this is last retry
-            ((failures++))
-            ((attempt++))
-            continue
-        fi
+        rc=0
+        /workspace/tools/clean-filestore-limit.sh || rc=$$?
 
-        echo
-        echo "Cleaning Filestore"
-        /workspace/tools/clean-filestore-limit.sh
+        case "$$rc" in
+            0)
+                echo "Filestore cleanup and limit reset completed successfully."
+                exit 0
+                ;;
+            2)
+                echo "Filestore is currently in use; retrying with backoff..."
+                ;;
+            *)
+                echo "Cleanup script encountered an error (exit code: $${rc}); retrying..."
+                ;;
+        esac
 
-        if [[ $failures -eq 0 ]]; then
-            break
-        else
-            echo "At least one failure occurred during cleanup."
-            ((attempt++))
-        fi
+        attempt=$$((attempt + 1))
     done
 
-    if [[ $failures -ne 0 ]]; then
-        echo "Cleanup did not succeed despite retrying."
-        exit 1
-    fi
+    echo "ERROR: Filestore cleanup could not complete after $${max_retries} retries."
+    exit 1

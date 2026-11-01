@@ -32,7 +32,7 @@ user will modify the template after running the Cluster Toolkit.
 ```
 
 See the
-[Google Cloud Batch Example](../../../../examples/README.md#batchyaml-)
+[Google Cloud Batch Example](../../../examples/README.md#batchyaml-)
 for how to use the `batch-job-template` module with other Cluster Toolkit modules such
 as `filestore` and `startup-script`.
 
@@ -146,7 +146,7 @@ limitations under the License.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
-| <a name="module_instance_template"></a> [instance\_template](#module\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 12.1 |
+| <a name="module_instance_template"></a> [instance\_template](#module\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 15.4 |
 | <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | ../../scripts/startup-script | n/a |
 
 ## Resources
@@ -173,8 +173,10 @@ limitations under the License.
 | <a name="input_job_filename"></a> [job\_filename](#input\_job\_filename) | The filename of the generated job template file. Will default to `<job_id>.yaml` if not specified | `string` | `null` | no |
 | <a name="input_job_id"></a> [job\_id](#input\_job\_id) | An id for the Google Cloud Batch job. Used for output instructions and file naming. Automatically populated by the module id if not set. If setting manually, ensure a unique value across all jobs. | `string` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the Google Cloud Batch compute nodes. Key-value pairs. Ignored if `instance_template` is provided. | `map(string)` | n/a | yes |
+| <a name="input_lifecycle_policies"></a> [lifecycle\_policies](#input\_lifecycle\_policies) | List of lifecycle policies defining task retry or fail actions for specific exit codes (e.g., 50001 for Spot preemption; note that Spot VMs require a custom instance\_template). Note: Cloud Batch currently supports at most 1 lifecycle policy. | <pre>list(object({<br/>    action     = string<br/>    exit_codes = list(number)<br/>  }))</pre> | `[]` | no |
 | <a name="input_log_policy"></a> [log\_policy](#input\_log\_policy) | Create a block to define log policy.<br/>When set to `CLOUD_LOGGING`, logs will be sent to Cloud Logging.<br/>When set to `PATH`, path must be added to generated template.<br/>When set to `DESTINATION_UNSPECIFIED`, logs will not be preserved. | `string` | `"CLOUD_LOGGING"` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for Google Cloud Batch compute nodes. Ignored if `instance_template` is provided. | `string` | `"n2-standard-4"` | no |
+| <a name="input_max_retry_count"></a> [max\_retry\_count](#input\_max\_retry\_count) | Maximum number of automatic retries for each failed task (between 0 and 10). Defaults to null (Batch default is 0). | `number` | `null` | no |
 | <a name="input_mpi_mode"></a> [mpi\_mode](#input\_mpi\_mode) | Sets up barriers before and after each runnable. In addition, sets `permissiveSsh=true`, `requireHostsFile=true`, and `taskCountPerNode=1`. `taskCountPerNode` can be overridden by `task_count_per_node`. | `bool` | `false` | no |
 | <a name="input_native_batch_mounting"></a> [native\_batch\_mounting](#input\_native\_batch\_mounting) | Batch can mount some fs\_type nativly using the 'volumes' block in the job file. If set to false, all mounting will happen through Cluster Toolkit startup scripts. | `bool` | `true` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. Ignored if `instance_template` is provided. | <pre>list(object({<br/>    server_ip             = string<br/>    remote_mount          = string<br/>    local_mount           = string<br/>    fs_type               = string<br/>    mount_options         = string<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  }))</pre> | `[]` | no |

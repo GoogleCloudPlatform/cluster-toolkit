@@ -53,6 +53,15 @@ vars:
   built_instance_image:
     family: slurm-rocky9
     project: $(vars.project_id)
+  # Optional overrides (defaults shown)
+  # Number of statically provisioned nodes in the compute partition.
+  compute_node_count_static: 1
+  # Maximum number of dynamically provisioned nodes in the compute partition.
+  compute_node_count_dynamic_max: 16
+  # Machine type for the compute partition.
+  compute_machine_type: c3-standard-176
+  # Size in GB of the data disk exported by the NFS server (/home, /opt/apps).
+  homefs_disk_size: 100
 
 terraform_providers:
   google:
@@ -171,7 +180,7 @@ deployment_groups:
       machine_type: $(vars.image_build_machine_type)
       boot_disk_type: hyperdisk-balanced
       type: hyperdisk-balanced
-      disk_size: 100
+      disk_size: $(vars.homefs_disk_size)
       instance_image:
         family: $(vars.built_instance_image.family)
         project: $(vars.project_id)
@@ -278,9 +287,9 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, ssh_config]
     settings:
-      node_count_static: 1
-      node_count_dynamic_max: 16
-      machine_type: c3-standard-176
+      node_count_static: $(vars.compute_node_count_static)
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
+      machine_type: $(vars.compute_machine_type)
       disk_type: hyperdisk-balanced
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false

@@ -178,3 +178,11 @@ ghpc:
       dependent: zone_target_shape
       pattern: "^ANY_SINGLE_ZONE$"
     error_message: "zone_target_shape must be 'ANY_SINGLE_ZONE' on MIG NodeSets using enable_placement or accelerator_topology; those policies are zonal."
+  - validator: conditional_regex
+    inputs:
+      triggers:
+        enable_multinic: true
+      dependent: machine_type
+      pattern: "^a3-(high|mega)gpu-"
+      match_expected: false
+    error_message: "enable_multinic is not supported on A3 High or A3 Mega: they have only one host NIC."

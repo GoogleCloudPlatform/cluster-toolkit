@@ -39,7 +39,7 @@ vars:
   num_slices: 1
 
   # Machine type
-  machine_type: tpu7x-standard-4t
+  compute_machine_type: tpu7x-standard-4t
 
   # The physical arrangement of the TPU chips in the slice.
   tpu_topology: 2x2x2
@@ -58,3 +58,6 @@ vars:
   # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
+
+## --- Optional overrides (defaults shown) ---
+  # system_node_pool_machine_type: n2-standard-8

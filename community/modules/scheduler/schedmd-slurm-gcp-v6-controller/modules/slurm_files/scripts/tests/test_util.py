@@ -336,6 +336,56 @@ def test_parse_job_info(job_info, expected_job):
     assert lkp._parse_job_info(job_info) == expected_job
 
 
+@pytest.mark.parametrize(
+    "stdout,expected_jobs",
+    [
+        ("No jobs in the system\n", []),
+        (
+            "JobId=16 JobName=bash\n"
+            "   JobState=COMPLETED\n"
+            "   TimeLimit=00:05:00\n"
+            "   ReqNodeList=(null) ExcNodeList=(null)\n"
+            "   Command=bash -c \"\n"
+            "echo hello\n"
+            "\"\n"
+            "\n"
+            "   WorkDir=/home/user\n"
+            "   TresPerNode=gres/tpu:v5p:4\n"
+            "   Layout=v5p=2x2x1\n"
+            "\n"
+            "JobId=17 JobName=python\n"
+            "   JobState=RUNNING\n"
+            "   TimeLimit=01:00:00\n"
+            "   ReqNodeList=node-0 ExcNodeList=(null)\n"
+            "   Command=/tmp/job.sh\n"
+            "   WorkDir=/home/user\n"
+            "\n",
+            [
+                util.Job(
+                    id=16,
+                    duration=timedelta(minutes=5),
+                    name="bash",
+                    job_state="COMPLETED",
+                    required_nodes="(null)",
+                ),
+                util.Job(
+                    id=17,
+                    duration=timedelta(hours=1),
+                    name="python",
+                    job_state="RUNNING",
+                    required_nodes="node-0",
+                ),
+            ],
+        ),
+    ],
+)
+def test_get_jobs(mocker, stdout, expected_jobs):
+    lkp = util.Lookup(TstCfg())
+    mocker.patch.object(util, "run", return_value=Mock(stdout=stdout))
+    assert lkp.get_jobs() == expected_jobs
+
+
+
 
 @pytest.mark.parametrize(
     "node,state,want",
@@ -1335,6 +1385,68 @@ def test_check_sackd_ready_retry_and_exhaustion(mocker):
     mock_sleep.assert_has_calls([call(10.0)])
 
 
+@pytest.mark.parametrize(
+    "restart,expect_restart",
+    [
+        (True, True),
+        (False, False),
+    ],
+)
+def test_scontrol_reconfigure(restart, expect_restart, mocker):
+    """`scontrol reconfigure` always runs; the slurmctld restart is opt-out.
+
+    `update_topology` runs on every node power-up, so restarting slurmctld there
+    put a controller restart on the autoscaling hot path.
+    """
+    mock_run = mocker.patch("util.run")
+    mock_wait = mocker.patch("util.wait_slurmctld_up")
+    lkp = mocker.Mock(scontrol="scontrol")
+
+    util.scontrol_reconfigure(lkp, restart=restart)
+
+    commands = [c.args[0] for c in mock_run.call_args_list]
+    assert "scontrol reconfigure" in commands
+    assert ("sudo systemctl restart slurmctld.service" in commands) == expect_restart
+    assert mock_wait.called == expect_restart
+
+
+@pytest.mark.parametrize(
+    "config_changed,topology_changed,expect_restart",
+    [
+        (True, False, True),
+        (True, True, True),
+        (False, True, False),
+    ],
+)
+def test_slurmsync_deferred_reconfigure_restart(
+    config_changed, topology_changed, expect_restart, mocker
+):
+    """slurmsync restarts slurmctld for a config change, but not for topology alone."""
+    import slurmsync
+
+    mocker.patch("slurmsync.lookup", return_value=Mock(is_controller=True))
+    mocker.patch("slurmsync.reconfigure_slurm", return_value=config_changed)
+    mocker.patch("slurmsync.update_topology", return_value=(topology_changed, Mock()))
+    mocker.patch("util.should_mount_slurm_bucket", return_value=False)
+    mocker.patch("util.is_active_controller", return_value=True)
+    mocker.patch("util.run")
+    for name in (
+        "process_messages",
+        "sync_instances",
+        "sync_flex_migs",
+        "sync_placement_groups",
+        "sync_maintenance_reservation",
+        "sync_opportunistic_maintenance",
+        "install_custom_scripts",
+        "repair.poll_operations",
+    ):
+        mocker.patch(f"slurmsync.{name}")
+    mock_reconfigure = mocker.patch("util.scontrol_reconfigure")
+
+    slurmsync.main()
+
+    mock_reconfigure.assert_called_once()
+    assert mock_reconfigure.call_args.kwargs["restart"] is expect_restart
 def test_nodeset_slice_size():
     cfg = TstCfg(
         slurm_cluster_name="testcl",
@@ -1597,7 +1709,6 @@ def _mk_tpu_tpl(machine_name: str):
         ("ct5p-hightpu-4t", "2x2x2", "v5p", 2),
         ("ct6e-standard-4t", "2x4", "v6e", 2),
         ("tpu7x-standard-4t", "2x2x2", "tpu7x", 2),
-        ("tpu7-standard-4t", "2x2x2", "7", 2),
         ("ct6e-standard-8t", "2x4", ValueError, None),
         ("ct6e-standard-1t", "2x4", ValueError, None),
         ("n1-standard-4", None, None, 1),

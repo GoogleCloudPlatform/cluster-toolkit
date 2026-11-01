@@ -146,3 +146,46 @@ variable "enable_dynamic_tier" {
   type        = bool
   default     = false
 }
+
+variable "multinic" {
+  description = <<-EOT
+    Multi-NIC (LNet Multi-Rail) client configuration.
+
+    Requires a second NIC on the clients in the same VPC as nic0. At boot,
+    every NIC in the same VPC as nic0 is used as a Lustre rail; NICs in other
+    VPCs (such as GPU RDMA NICs) are ignored.
+
+    Requires an image that runs cloud-init; otherwise clients stay single-rail.
+    client_tags must match the client nodesets' tags.
+  EOT
+  type = object({
+    enabled = optional(bool, false)
+    # numa_range=1000000: hides CPU socket distance from LNet so peers spread
+    # over both rails instead of all picking the nearest NIC.
+    # lnet_peer_discovery_disabled=1: disables LNet dynamic peer discovery as
+    # required by Managed Lustre for multi-NIC client striping.
+    lnet_options = optional(string, "lnet_numa_range=1000000 lnet_peer_discovery_disabled=1")
+    table_base   = optional(number, 101)
+    rp_filter    = optional(number, 2)
+    # LNet servers open callback connections back to the client on tcp:988
+    # and tcp:1021-1023 (tcp:6988 instead of 988 with gke_support_enabled).
+    # Scope the ingress rule to the PSA tenant range and target the clients'
+    # network tag.
+    create_firewall = optional(bool, true)
+    psa_ip_ranges   = optional(list(string), [])
+    client_tags     = optional(list(string), [])
+    # Extra cloud-config keys merged into the emitted yaml. Needed where a
+    # blueprint already uses metadata.user-data
+    extra_cloud_config = optional(any, {})
+  })
+  default = {}
+
+  validation {
+    condition     = !(var.multinic.enabled && var.multinic.create_firewall) || length(var.multinic.psa_ip_ranges) > 0
+    error_message = "multinic.create_firewall requires multinic.psa_ip_ranges (use the private_service_access module's cidr_range)."
+  }
+  validation {
+    condition     = !(var.multinic.enabled && var.multinic.create_firewall) || length(var.multinic.client_tags) > 0
+    error_message = "multinic.create_firewall requires multinic.client_tags, and the SAME tags must appear in the compute nodeset's `tags` setting. Without a match the firewall rule targets a tag no instance carries and is silently inert."
+  }
+}

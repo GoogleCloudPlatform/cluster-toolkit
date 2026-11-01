@@ -54,11 +54,12 @@ locals {
 resource "google_filestore_instance" "filestore_instance" {
   project = var.project_id
 
-  name        = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
-  description = var.description
-  location    = contains(["ENTERPRISE", "REGIONAL"], var.filestore_tier) ? var.region : var.zone
-  tier        = var.filestore_tier
-  protocol    = var.protocol
+  name         = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  description  = var.description
+  location     = contains(["ENTERPRISE", "REGIONAL"], var.filestore_tier) ? var.region : var.zone
+  tier         = var.filestore_tier
+  protocol     = var.protocol
+  kms_key_name = var.kms_key_name
 
   deletion_protection_enabled = var.deletion_protection.enabled
   deletion_protection_reason  = var.deletion_protection.reason
@@ -111,6 +112,16 @@ resource "google_filestore_instance" "filestore_instance" {
     precondition {
       condition     = !startswith(var.filestore_tier, "BASIC") || var.protocol != "NFS_V4_1"
       error_message = "NFS_V4_1 is not supported on BASIC Filestore tiers."
+    }
+
+    precondition {
+      # HIGH_SCALE_SSD is the legacy name for ZONAL and is functionally the
+      # same tier, so it supports CMEK too. Matching on the literal string
+      # without it blocked callers using the older name -- including OFE,
+      # which offers HIGH_SCALE_SSD rather than ZONAL -- from any CMEK
+      # Filestore below the far more expensive ENTERPRISE tier.
+      condition     = var.kms_key_name == null || contains(["ZONAL", "HIGH_SCALE_SSD", "REGIONAL", "ENTERPRISE"], var.filestore_tier)
+      error_message = "kms_key_name (CMEK) is only supported for the ZONAL (a.k.a. HIGH_SCALE_SSD), REGIONAL and ENTERPRISE Filestore tiers."
     }
   }
 }

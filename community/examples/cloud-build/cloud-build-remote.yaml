@@ -1,0 +1,44 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+blueprint_name: cloud-build-demo
+
+vars:
+  project_id:  ## Set GCP project ID here ##
+  deployment_name: af3-msa
+  region: us-central1
+  af3_version: v3.0.4
+
+
+deployment_groups:
+- group: primary
+  modules:
+
+  - id: artifact-repository
+    source: community/modules/container/artifact-registry
+    settings:
+      repo_mode: STANDARD_REPOSITORY
+      format: DOCKER
+
+  - id: build-af3
+    source: community/modules/container/cloud-build
+    settings:
+      repo_url: "https://github.com/google-deepmind/alphafold3.git"
+      repo_ref: $(vars.af3_version)
+      cloud_build_template_path: $(ghpc_stage("./build-alphafold3.yaml.tfpl"))
+      skip_if_exists:
+      - "$(artifact-repository.registry_url)/alphafold3:$(vars.af3_version)"
+      template_vars:
+        _DEST_REPO_URL: $(artifact-repository.registry_url)

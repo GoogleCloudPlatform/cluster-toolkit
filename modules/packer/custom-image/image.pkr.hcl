@@ -96,11 +96,19 @@ locals {
 }
 
 source "googlecompute" "toolkit_image" {
-  communicator                = local.communicator
-  project_id                  = var.project_id
-  image_name                  = local.image_name
-  image_family                = local.image_family
-  image_labels                = local.labels
+  communicator = local.communicator
+  project_id   = var.project_id
+  image_name   = local.image_name
+  image_family = local.image_family
+  image_labels = local.labels
+
+  dynamic "image_encryption_key" {
+    for_each = var.image_encryption_key != null ? [var.image_encryption_key] : []
+    content {
+      kmsKeyName = image_encryption_key.value
+    }
+  }
+
   instance_name               = local.instance_name
   machine_type                = var.machine_type
   accelerator_type            = local.accelerator_type

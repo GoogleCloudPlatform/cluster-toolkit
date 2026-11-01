@@ -128,7 +128,7 @@ vars:
   zone: us-central1-a
   region: us-central1
   num_slices: 2
-  machine_type: ct6e-standard-4t
+  compute_machine_type: ct6e-standard-4t
   tpu_topology: 4x4
   enable_private_endpoint: true
   authorized_cidr: 10.0.0.0/8
@@ -154,7 +154,7 @@ deployment_groups:
     use: [tpu_cluster]
     settings:
       name: tpu-pool
-      machine_type: $(vars.machine_type)
+      machine_type: $(vars.compute_machine_type)
       num_slices: $(vars.num_slices)
       spot: $(vars.spot)
       placement_policy:

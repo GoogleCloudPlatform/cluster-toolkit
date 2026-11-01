@@ -40,7 +40,7 @@ vars:
   num_slices: 1
 
   # Machine type
-  machine_type: tpu7x-standard-4t
+  compute_machine_type: tpu7x-standard-4t
 
   # The physical arrangement of the TPU chips in the slice.
   tpu_topology: 2x2x1
@@ -84,3 +84,6 @@ vars:
 
 ## --- Option 5: On-Demand ---
   # No variables needed; comment out Option 1 and leave the rest commented.
+
+## --- Optional overrides (defaults shown) ---
+  # system_node_pool_machine_type: n2-standard-8

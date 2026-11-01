@@ -97,7 +97,7 @@ The following example creates a Managed Lustre and then uses the
 ```
 
 See example
-[storage-gke.yaml](../../../../examples/README.md#storage-gkeyaml--) blueprint
+[storage-gke.yaml](../../../examples/README.md#storage-gkeyaml-) blueprint
 for a complete example.
 
 ### Authorized Network

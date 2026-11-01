@@ -71,8 +71,13 @@ venv*/
 !tools/validate_configs/golden_copies/expectations/*/*/*/defaults.auto.pkrvars.hcl
 !tools/validate_configs/golden_copies/expectations/*/*/terraform.tfvars
 
-# Ignore Gemini memories
+# Ignore Gemini memories, except the repo-root GEMINI.md which is the
+# committed entry point for Gemini CLI (symlinked to AGENTS.md).
 GEMINI.md
+!/GEMINI.md
+!tools/validate_configs/golden_copies/expectations/*/GEMINI.md
 
 # Ignore Antigravity agents customizations
 .agents/
+live-logs/
+live-eval-report.md

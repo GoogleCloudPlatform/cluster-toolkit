@@ -1,0 +1,36 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[Unit]
+Description=Configure Multi-NIC Lustre rails (policy routing + LNet)
+After=network-online.target google-guest-agent.service
+Wants=network-online.target
+# Ordered before ALL remote mount units. Before=remote-fs.target would NOT be
+# sufficient: the Lustre .mount unit is also Before=remote-fs.target, leaving
+# the two mutually unordered.
+Wants=remote-fs-pre.target
+Before=remote-fs-pre.target
+# First boot on Slurm: the mount is performed by slurm-gcp's setup.py, which
+# runs inside google-startup-scripts.service rather than from fstab.
+Before=google-startup-scripts.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/etc/google/multinic-lustre.env
+ExecStart=/usr/local/sbin/multi-nic-lustre-setup.sh
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

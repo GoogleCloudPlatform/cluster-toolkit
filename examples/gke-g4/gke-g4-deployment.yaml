@@ -31,13 +31,6 @@ vars:
   # The GCP Zone used for this deployment.
   zone:
 
-  # The VM shape. See allowed values here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
-  machine_type:
-
-  # Number of GPUS in the VM. Can be found here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
-  # If the value is fractional (less than 1), it should be set to 1.
-  num_gpus:
-
   # Cidr block containing the IP of the machine calling terraform.
   # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
@@ -70,3 +63,10 @@ vars:
 
 ## --- Option 5: On-Demand ---
   #static_node_count:
+
+## --- Optional overrides (defaults shown) ---
+  # The VM shape. See allowed values here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
+  # Allowed: g4-standard-48 | g4-standard-96 | g4-standard-192 | g4-standard-384 (num_gpus 1 | 2 | 4 | 8).
+  # compute_machine_type: g4-standard-48
+  # num_gpus: 1
+  # system_node_pool_machine_type: n2d-standard-16

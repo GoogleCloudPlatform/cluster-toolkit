@@ -361,9 +361,17 @@ variable "enable_private_endpoint" {
 }
 
 variable "master_ipv4_cidr_block" {
-  description = "(Beta) The IP range in CIDR notation to use for the hosted master network."
+  description = "(Beta) The IP range in CIDR notation (size must be /28) to use for the hosted master network. If null (default), GKE uses Private Service Connect (PSC) and reserves the control plane endpoint IP from the cluster's primary subnetwork (`subnetwork_self_link`)."
   type        = string
-  default     = "172.16.0.32/28"
+  default     = null
+  validation {
+    condition = var.master_ipv4_cidr_block == null || try(
+      cidrnetmask(var.master_ipv4_cidr_block) == "255.255.255.240" &&
+      cidrsubnet(var.master_ipv4_cidr_block, 0, 0) == var.master_ipv4_cidr_block,
+      false
+    )
+    error_message = "master_ipv4_cidr_block must be null or a valid IPv4 /28 CIDR block (e.g. 1.2.3.0/28)."
+  }
 }
 
 variable "enable_master_global_access" {
@@ -448,15 +456,33 @@ variable "labels" {
 }
 
 variable "timeout_create" {
-  description = "Timeout for creating a node pool"
+  description = "Timeout for creating a cluster and its node pools (e.g., '30m', '60m', '2h', '1h30m'). Must be a positive duration string with 's', 'm', or 'h' units. If null, defaults to the Terraform provider timeout (90m for cluster, 2h for node pools)."
   type        = string
   default     = null
+  validation {
+    condition     = var.timeout_create == null || (can(regex("^([0-9]+(s|m|h))+$", var.timeout_create)) && !can(regex("^(0+(s|m|h))+$", var.timeout_create)))
+    error_message = "timeout_create must be a positive duration string using 's', 'm', or 'h' units (e.g., '30m', '60m', '1h30m', '2h'), or null."
+  }
 }
 
 variable "timeout_update" {
-  description = "Timeout for updating a node pool"
+  description = "Timeout for updating a cluster and its node pools (e.g., '30m', '60m', '2h', '1h30m'). Must be a positive duration string with 's', 'm', or 'h' units. If null, defaults to the Terraform provider timeout (90m for cluster, 2h for node pools)."
   type        = string
   default     = null
+  validation {
+    condition     = var.timeout_update == null || (can(regex("^([0-9]+(s|m|h))+$", var.timeout_update)) && !can(regex("^(0+(s|m|h))+$", var.timeout_update)))
+    error_message = "timeout_update must be a positive duration string using 's', 'm', or 'h' units (e.g., '30m', '60m', '1h30m', '2h'), or null."
+  }
+}
+
+variable "timeout_delete" {
+  description = "Timeout for deleting a cluster and its node pools (e.g., '30m', '60m', '2h', '1h30m'). Must be a positive duration string with 's', 'm', or 'h' units. If null, defaults to the Terraform provider timeout (90m for cluster, 2h for node pools)."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.timeout_delete == null || (can(regex("^([0-9]+(s|m|h))+$", var.timeout_delete)) && !can(regex("^(0+(s|m|h))+$", var.timeout_delete)))
+    error_message = "timeout_delete must be a positive duration string using 's', 'm', or 'h' units (e.g., '30m', '60m', '1h30m', '2h'), or null."
+  }
 }
 
 # Deprecated
@@ -506,7 +532,7 @@ variable "additional_networks" {
 }
 
 variable "cluster_reference_type" {
-  description = "How the google_container_node_pool.system_node_pools refers to the cluster. Possible values are: {SELF_LINK, NAME}"
+  description = "How system node pools refer to the cluster. Possible values are: {SELF_LINK, NAME}. Defaults to SELF_LINK to prevent destructive replacement of existing node pools (since cluster is immutable). For new clusters deployed with Google Provider >= 8.0, set this to 'NAME' to avoid provider URL path concatenation errors (HTTP 404)."
   default     = "SELF_LINK"
   type        = string
   nullable    = false

@@ -32,7 +32,7 @@ vars:
   zone:
 
   # The VM shape (must be g4-standard-48 for RTX 6000 GPU Confidential nodes).
-  machine_type: g4-standard-48
+  compute_machine_type: g4-standard-48
 
   # Number of GPUs in the VM (must be 1 for g4-standard-48).
   num_gpus: 1
@@ -66,3 +66,8 @@ vars:
   #
   # Formats and mounts Local SSDs for GKE ephemeral scratch storage (emptyDir):
   # local_ssd_count_ephemeral_storage: 4
+
+## --- Optional overrides (defaults shown) ---
+  # system_node_pool_machine_type: n2d-standard-16
+  # system_node_pool_disk_size_gb: 100
+  # confidential_storage_capacity_gb: 100

@@ -3,51 +3,63 @@
 This document outlines the deployment steps for provisioning A4X High
 `a4x-highgpu-4g` VMs using either Slurm as an orchestrator or as a standalone VM group.
 
-## A4X-High Slurm Cluster Deployment
+## A4X-High Slurm Cluster Deployment (`a4xhigh-slurm-blueprint.yaml`)
 
-### Build the Cluster Toolkit gcluster binary
+### 1. Enable Required GCP APIs & Build `gcluster`
 
-Follow instructions
-[here](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment),
-on how to set up your cluster toolkit environment, including enabling necessary
-APIs and IAM permissions.
+Follow the instructions [here](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment) to set up your Cluster Toolkit environment, enable required APIs, and build `./gcluster` from the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository:
 
-### (Optional, but recommended) Create a GCS Bucket for storing terraform state
+```bash
+gcloud services enable \
+  compute.googleapis.com \
+  iam.googleapis.com \
+  logging.googleapis.com \
+  monitoring.googleapis.com \
+  servicenetworking.googleapis.com \
+  lustre.googleapis.com \
+  storage.googleapis.com \
+  --project=<PROJECT_ID> # logging & monitoring used by Ops Agent (enable_ops_agent: true)
 
-  ```bash
-  #!/bin/bash
-  TF_STATE_BUCKET_NAME=<your-bucket>
-  PROJECT_ID=<your-gcp-project>
-  REGION=<your-preferred-region>
-  gcloud storage buckets create gs://${TF_STATE_BUCKET_NAME} \
-      --project=${PROJECT_ID} \
-      --default-storage-class=STANDARD --location=${REGION} \
-      --uniform-bucket-level-access
-  gcloud storage buckets update gs://${TF_STATE_BUCKET_NAME} --versioning
-  ```
+test -x ./gcluster || make
+```
+
+### 2. (Optional, but recommended) Create a GCS Bucket for storing Terraform state
+
+```bash
+#!/bin/bash
+TF_STATE_BUCKET_NAME=<your-bucket>
+PROJECT_ID=<your-gcp-project>
+REGION=<your-preferred-region>
+gcloud storage buckets create gs://${TF_STATE_BUCKET_NAME} \
+    --project=${PROJECT_ID} \
+    --default-storage-class=STANDARD --location=${REGION} \
+    --uniform-bucket-level-access
+gcloud storage buckets update gs://${TF_STATE_BUCKET_NAME} --versioning
+```
 
 **Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
 
-### Obtain Filestore Zonal Capacity
-We suggest using a filestore zonal instance for the best NFS performance, which
-may require a quota increase request. See
-[here](https://cloud.google.com/filestore/docs/requesting-quota-increases) for
-more information. The Slurm and VM blueprints below default to 10TiB (10240 GiB)
-instances.
+### 3. Managed Lustre & Cloud Storage FUSE (Slurm Blueprint)
 
-## A4X-High Slurm Cluster Deployment
+The Slurm blueprint (`a4xhigh-slurm-blueprint.yaml`) provisions:
 
-### Modify the deployment file with your preferred configuration
+- **36 TiB Google Cloud Managed Lustre (`lustre_size_gib: 36000`)** mounted at `/home` across all Slurm nodes. See [Managed Lustre supported locations](https://cloud.google.com/managed-lustre/docs/locations) and [performance tiers](https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers).
+- **Four Cloud Storage FUSE mounts:**
+  1. `/gcs` is a general purpose mount that can be used for shared tools and data.
+  2. `/gcs-checkpoints` is an optimized mount for writing and reading checkpoints. It uses the local SSD for caching and enables parallel downloads to improve performance.
+  3. `/gcs-training-data` is an optimized mount for reading training data. It can be further tuned if the training data fits fully within the local SSD storage.
+  4. `/gcs-model-serving` is an optimized mount for serving models, which downloads model weights in parallel to local SSD.
 
-For example, set the such as size, reservation to be used, etc, as well as the
-name of the bucket that you just created. Below are example contents for `a4xhigh-slurm-deployment.yaml`.
+### 4. Modify `examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-deployment.yaml`
+
+Set your project, region, zone, reservation, cluster size, and state bucket in `a4xhigh-slurm-deployment.yaml`:
 
 ```yaml
 ---
 terraform_backend_defaults:
   type: gcs
   configuration:
-    bucket: TF_STATE_BUCKET_NAME
+    bucket: <TF_STATE_BUCKET_NAME>
 
 vars:
   deployment_name: a4x-slurm
@@ -58,18 +70,23 @@ vars:
   a4x_cluster_size: <RESERVATION_SIZE>
 ```
 
-### Deploy the cluster
+### 5. Deploy the Slurm cluster
 
-``` bash
+```bash
 #!/bin/bash
-gcluster deploy -d a4xhigh-slurm-deployment.yaml a4xhigh-slurm-blueprint.yaml
+./gcluster deploy \
+  -d examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-deployment.yaml \
+  examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml
 ```
 
 ### Re-deploy the cluster
 
 ```bash
 #!/bin/bash
-gcluster deploy -d a4xhigh-slurm-deployment.yaml examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml --only cluster-env,cluster --auto-approve -w
+./gcluster deploy \
+  -d examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-deployment.yaml \
+  examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml \
+  --only cluster-env,cluster --auto-approve -w
 ```
 
 ### Destroy the cluster
@@ -79,18 +96,24 @@ gcluster deploy -d a4xhigh-slurm-deployment.yaml examples/machine-learning/a4x-h
 ./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
 ```
 
-Selective deployment and teardown for this blueprint are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
+Selective deployment and teardown for this blueprint (`cluster-env` and `cluster` groups) are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
 
-Example (deploy only the primary group for this blueprint):
+Example (deploy only the `cluster-env` group for this blueprint):
 
 ```bash
-./gcluster deploy -d a4xhigh-slurm-deployment.yaml a4xhigh-slurm-blueprint.yaml --only primary
+./gcluster deploy \
+  -d examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-deployment.yaml \
+  examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml \
+  --only cluster-env
 ```
 
-## A4X-High VM Deployment
-----------------------
+## A4X-High VM Deployment (`a4x-vm.yaml`)
 
 This section covers deploying A4X High VMs as a standalone group, which is suitable for workloads that do not require the Slurm scheduler.
+
+### Obtain Filestore Zonal Capacity (Standalone VM Blueprint Only)
+
+The standalone VM blueprint (`a4x-vm.yaml`) uses a Filestore Zonal instance (`10 TiB` / `10240 GiB` default, requiring `gcloud services enable file.googleapis.com --project=<PROJECT_ID>`), which may require a quota increase request. See [Requesting Filestore quota increases](https://cloud.google.com/filestore/docs/requesting-quota-increases) for more information. *(Note: The Slurm blueprint above uses 36 TiB Managed Lustre instead of Filestore).*
 
 ### Modify the deployment file with your preferred configuration
 
@@ -101,7 +124,7 @@ Update `a4x-vm-deployment.yaml` with your project-specific details, such as the 
 terraform_backend_defaults:
   type: gcs
   configuration:
-    bucket: TF_STATE_BUCKET_NAME
+    bucket: <TF_STATE_BUCKET_NAME>
 
 vars:
   deployment_name: a4x-vm
@@ -114,29 +137,16 @@ vars:
 
 ### Deploy the VMs
 
-``` bash
+```bash
 #!/bin/bash
-gcluster deploy -d a4x-vm-deployment.yaml a4x-vm.yaml
+./gcluster deploy \
+  -d examples/machine-learning/a4x-highgpu-4g/a4x-vm-deployment.yaml \
+  examples/machine-learning/a4x-highgpu-4g/a4x-vm.yaml
 ```
 
 ### Destroy the VM group
 
-``` bash
+```bash
 #!/bin/bash
 ./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
 ```
-
-### Cloud Storage FUSE
-
-This blueprint includes four Cloud Storage FUSE mounts to provide a simple and scalable way
-to manage data.
-
-1. `/gcs` is a general purpose mount that can be used for shared tools and data.
-1. `/gcs-checkpoints` is an optimized mount for writing and reading checkpoints. It
-    uses the local SSD for caching and enables parallel downloads to improve
-    performance.
-1. `/gcs-training-data` is an optimized mount for reading training data. It can
-   be further tuned if the training data fits fully within the local ssd
-   storage.
-1. `/gcs-model-serving` is an optimized mount for serving models, which
-   downloads model weights in parallel to local ssd.

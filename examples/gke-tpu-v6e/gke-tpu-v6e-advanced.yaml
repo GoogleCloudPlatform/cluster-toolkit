@@ -33,7 +33,7 @@ vars:
   num_slices:
 
   # Machine type
-  machine_type: ct6e-standard-4t
+  compute_machine_type: ct6e-standard-4t
 
   # The TPU placement topology for pod slice node pool.
   tpu_topology:
@@ -82,6 +82,10 @@ vars:
 
   # # Maximum throughput of the lustre instance in MBps per TiB
   # per_unit_storage_throughput: 500
+
+  # Optional overrides (defaults shown)
+  # Machine type for the GKE system node pool.
+  system_node_pool_machine_type: n2-standard-8
 
 
 deployment_groups:
@@ -155,12 +159,15 @@ deployment_groups:
       random_suffix: true
       force_destroy: false
       enable_hierarchical_namespace: true
+      object_users:
+        mtc_sa: $(gke-tpu-v6e-cluster.mtc_service_account_member)
+    outputs: [gcs_bucket_name]
 
   - id: gke-tpu-v6e-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-v6e-net-0, workload_service_account]
     settings:
-      system_node_pool_machine_type: "n2-standard-8"
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_private_endpoint: false # Allows access from authorized public IPs
@@ -172,6 +179,7 @@ deployment_groups:
       namespace: $(vars.user_namespace)
       enable_filestore_csi: true
       enable_gcsfuse_csi: true
+      enable_multi_tier_checkpointing: true
       enable_managed_lustre_csi: true
       enable_persistent_disk_csi: true # enable Hyperdisk for the cluster
       master_authorized_networks:
@@ -194,7 +202,7 @@ deployment_groups:
       num_slices: $(vars.num_slices)
       name: gke-tpu-v6e-pool
       disk_type: hyperdisk-balanced
-      machine_type: $(vars.machine_type)
+      machine_type: $(vars.compute_machine_type)
       auto_upgrade: true
       enable_dranet: true
       zones: [$(vars.zone)]
@@ -273,6 +281,15 @@ deployment_groups:
         install: true
       cert_manager:
         install: true
+      checkpoint_configuration:
+        in_memory_volume_size: "50Gi"
+        cloud_storage_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
+        node_selector:
+          node.kubernetes.io/instance-type: $(vars.machine_type)
+        tolerations:
+        - key: google.com/tpu
+          operator: Exists
+          effect: NoSchedule
 
   # Persistent Volume for training data using GCS Fuse Storage Profile.
   # For shared buckets or custom IAM roles, see modules/file-system/gke-persistent-volume/README.md
@@ -297,6 +314,7 @@ deployment_groups:
     source: modules/compute/gke-job-template
     use: [checkpointing-pv, training-pv, gke-tpu-v6e-pool]
     settings:
+      name: gcsfuse-fio-job
       node_count: '$(vars.enable_flex_start ? vars.autoscaling_max_node_count : gke-tpu-v6e-pool.node_count_static)'
       security_context:  # to make sure the job have enough access to install the fio packages
       - key: runAsUser

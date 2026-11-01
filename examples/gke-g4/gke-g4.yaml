@@ -29,13 +29,15 @@ vars:
   zone:
 
   # The VM shape. See allowed values here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
-  machine_type:
+  # Allowed: g4-standard-48 | g4-standard-96 | g4-standard-192 | g4-standard-384
+  # (num_gpus must match: 1 | 2 | 4 | 8).
+  compute_machine_type: g4-standard-48
 
   # Number of GPUS in the VM. Can be found here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
-  num_gpus:
+  num_gpus: 1
 
   # The number of nodes to be created.
-  static_node_count:
+  static_node_count: 1
 
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
@@ -53,6 +55,10 @@ vars:
 
   system_node_pool_disk_size_gb: 100
   version_prefix: "1.35."
+
+  # Optional overrides (defaults shown)
+  # Machine type for the GKE system node pool.
+  system_node_pool_machine_type: n2d-standard-16
 
 deployment_groups:
 - group: primary
@@ -128,7 +134,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-g4-net-0, workload_service_account]
     settings:
-      system_node_pool_machine_type: "n2d-standard-16"
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
@@ -152,7 +158,7 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [g4-cluster, node_pool_service_account]
     settings:
-      machine_type: $(vars.machine_type)
+      machine_type: $(vars.compute_machine_type)
       auto_upgrade: true
       zones: [$(vars.zone)]
       static_node_count: $(vars.static_node_count)

@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestIsGroupSelected(t *testing.T) {
@@ -79,5 +81,93 @@ func TestValidateGroupSelectionFlags(t *testing.T) {
 			}
 		})
 	}
+}
 
+func TestAddParallelismFlag(t *testing.T) {
+	origFlag := flagParallelism
+	defer func() { flagParallelism = origFlag }()
+
+	testCmd := &cobra.Command{Use: "test"}
+	retCmd := addParallelismFlag(testCmd)
+	if retCmd != testCmd {
+		t.Errorf("addParallelismFlag should return the passed command")
+	}
+
+	flag := testCmd.Flags().Lookup("parallelism")
+	if flag == nil {
+		t.Fatalf("expected --parallelism flag to be registered on cmd")
+	}
+	if flag.DefValue != "0" {
+		t.Errorf("expected default value '0', got %q", flag.DefValue)
+	}
+
+	expectedUsage := "Limit the number of concurrent operations in Terraform (default: 10, or GCLUSTER_TERRAFORM_PARALLELISM)"
+	if flag.Usage != expectedUsage {
+		t.Errorf("expected usage %q, got %q", expectedUsage, flag.Usage)
+	}
+
+	flagParallelism = 0
+	if err := testCmd.ParseFlags([]string{"--parallelism", "80"}); err != nil {
+		t.Fatalf("failed to parse flags: %v", err)
+	}
+	if flagParallelism != 80 {
+		t.Errorf("expected flagParallelism to be 80, got %d", flagParallelism)
+	}
+}
+
+func TestValidateParallelismFlag(t *testing.T) {
+	origFlag := flagParallelism
+	defer func() { flagParallelism = origFlag }()
+
+	testCases := []struct {
+		val       int
+		shouldErr bool
+	}{
+		{-100, true},
+		{-10, true},
+		{-1, true},
+		{0, false},
+		{1, false},
+		{10, false},
+		{80, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("parallelism_%d", tc.val), func(t *testing.T) {
+			flagParallelism = tc.val
+			err := validateParallelismFlag()
+			if tc.shouldErr && err == nil {
+				t.Errorf("validateParallelismFlag() with %d expected error, got nil", tc.val)
+			}
+			if !tc.shouldErr && err != nil {
+				t.Errorf("validateParallelismFlag() with %d expected nil, got error: %v", tc.val, err)
+			}
+		})
+	}
+}
+
+func TestPreRunEParallelismValidation(t *testing.T) {
+	origFlag := flagParallelism
+	defer func() { flagParallelism = origFlag }()
+
+	cmds := []*cobra.Command{deployCmd, destroyCmd, exportCmd}
+	for _, c := range cmds {
+		t.Run(c.Name(), func(t *testing.T) {
+			if c.PreRunE == nil {
+				t.Fatalf("command %s has nil PreRunE", c.Name())
+			}
+			flagParallelism = -5
+			if err := c.PreRunE(c, []string{}); err == nil {
+				t.Errorf("command %s PreRunE expected error for negative parallelism (-5), got nil", c.Name())
+			}
+			flagParallelism = 0
+			if err := c.PreRunE(c, []string{}); err != nil {
+				t.Errorf("command %s PreRunE expected nil for parallelism 0, got %v", c.Name(), err)
+			}
+			flagParallelism = 40
+			if err := c.PreRunE(c, []string{}); err != nil {
+				t.Errorf("command %s PreRunE expected nil for parallelism 40, got %v", c.Name(), err)
+			}
+		})
+	}
 }

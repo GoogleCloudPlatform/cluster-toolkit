@@ -23,6 +23,7 @@ network: "{{ test_name }}-net"
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 post_deploy_tests:
+- test-validation/test-mounts.yml
 - test-validation/test-slurm-storage.yml
 cli_deployment_vars:
   region: "{{ region }}"
@@ -37,5 +38,6 @@ custom_vars:
   output_dir: "{{ (lookup('file', blueprint_yaml) | from_yaml)['vars']['gcs_bucket_local_mount'] }}"
   mounts:
   - "{{ (lookup('file', blueprint_yaml) | from_yaml)['vars']['gcs_bucket_local_mount'] }}"
+  - "{{ (lookup('file', blueprint_yaml) | from_yaml)['vars']['regional_gcs_bucket_local_mount'] }}"
   partitions:
   - rapid

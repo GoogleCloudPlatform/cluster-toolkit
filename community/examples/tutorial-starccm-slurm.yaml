@@ -25,6 +25,17 @@ vars:
   deployment_name: starccm-slurm
   region: us-central1
   zone: us-central1-c
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned nodes in the debug partition.
+  debug_node_count_dynamic_max: 4
+  # Machine type for the debug partition.
+  debug_machine_type: n2-standard-2
+  # Machine type for the compute partition.
+  compute_machine_type: c2-standard-60
+  # Maximum number of dynamically provisioned nodes in the compute partition.
+  compute_node_count_dynamic_max: 20
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
 
 terraform_providers:
   google:
@@ -81,8 +92,8 @@ deployment_groups:
   - id: debug_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
-      node_count_dynamic_max: 4
-      machine_type: n2-standard-2
+      node_count_dynamic_max: $(vars.debug_node_count_dynamic_max)
+      machine_type: $(vars.debug_machine_type)
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -100,8 +111,8 @@ deployment_groups:
     settings:
       bandwidth_tier: "gvnic_enabled"
       disable_public_ips: false
-      machine_type: c2-standard-60
-      node_count_dynamic_max: 20
+      machine_type: $(vars.compute_machine_type)
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -130,5 +141,5 @@ deployment_groups:
     - slurm_controller
     - login-script
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       disable_login_public_ips: true
