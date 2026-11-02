@@ -527,9 +527,11 @@ func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, wor
 		}
 		logging.Info("GKE manifest saved successfully.")
 	} else {
-		// Submit will fail if a job with the same name already exists.
+		// Submit will fail if a job with the same name already exists. The workload templates declare no
+		// metadata.namespace, so apply into the namespace resolved for this submission (--gke-namespace or
+		// the pinned context's namespace) rather than whatever kubectl would default to.
 		logging.Info("Applying GKE manifest to cluster...")
-		err := g.applyManifests([]byte(manifestContent), workloadName+".yaml")
+		err := g.applyManifests([]byte(manifestContent), workloadName+".yaml", g.namespace)
 		if err != nil {
 			return fmt.Errorf("failed to apply GKE manifest: %w", err)
 		}

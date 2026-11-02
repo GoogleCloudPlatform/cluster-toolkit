@@ -2720,3 +2720,57 @@ func TestDefaultKubeClient_ListResourcesFieldSelectorAndLazySync(t *testing.T) {
 		t.Errorf("expected empty fieldSelector passthrough on generic ListResources, got %q (err=%v)", gotFieldSelector, err)
 	}
 }
+
+const applyManifestTestJobSet = `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: ns-apply
+spec:
+  replicatedJobs:
+  - name: main-job
+    replicas: 1
+    template:
+      spec:
+        template:
+          spec:
+            restartPolicy: Never
+            containers:
+            - name: workload-container
+              image: busybox
+`
+
+// The workload manifest carries no metadata.namespace, so the apply must target the namespace
+// SubmitJob resolved (--gke-namespace or the pinned context's namespace); every read path already does.
+func TestApplyManifest_AppliesInTargetNamespace(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	manifestPath := filepath.Join(home, ".gcluster", "generated", "ns-apply.yaml")
+
+	cases := []struct {
+		name      string
+		namespace string
+		want      []string
+	}{
+		{name: "resolved namespace", namespace: "team-a", want: []string{"kubectl apply -n team-a -f " + manifestPath}},
+		{name: "no resolved namespace keeps the context default", namespace: "", want: []string{"kubectl apply -f " + manifestPath}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{"kubectl apply": {{ExitCode: 0}}})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.kubeContext = jobSetTestKubeContext
+			orc.namespace = tc.namespace
+			if err := orc.ApplyManifest(applyManifestTestJobSet, "", "ns-apply"); err != nil {
+				t.Fatalf("ApplyManifest() error = %v", err)
+			}
+			if got := commandsWithPrefix(mockExec, "kubectl apply"); !slices.Equal(got, tc.want) {
+				t.Errorf("kubectl apply calls = %q, want %q", got, tc.want)
+			}
+			if _, err := os.Stat(manifestPath); err != nil {
+				t.Errorf("generated manifest not written: %v", err)
+			}
+			assertEveryKubectlCallPinned(t, mockExec, jobSetTestKubeContext)
+		})
+	}
+}
