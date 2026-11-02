@@ -509,7 +509,7 @@ func TestInspectCluster_SPS(t *testing.T) {
 	responses["kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=sps-v6e --field-selector=status.phase=Running"] = []shell.CommandResult{{ExitCode: 0,
 		Stdout: "sps-v6e-pathways-head-0-0-abc sps-v6e-worker-0-0-def"}}
 	responses["kubectl exec -n default pod/sps-v6e-worker-0-0-def -c colocated-python-sidecar"] = []shell.CommandResult{{ExitCode: 0,
-		Stdout: "3.12,0.11.1,0.11.1\n"}}
+		Stdout: "warning: sitecustomize diagnostic\n3.12,0.11.1,0.11.1\n"}}
 	orc := newTestGKEOrchestrator(NewMockExecutor(responses))
 	orc.projectID = "p"
 
