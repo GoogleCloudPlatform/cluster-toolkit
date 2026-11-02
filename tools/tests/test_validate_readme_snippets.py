@@ -112,6 +112,64 @@ class TestValidateReadmeSnippets(unittest.TestCase):
         )
         self.assertEqual(errs, [])
 
+    def test_validate_yaml_block_nested_object_keys(self):
+        snippet = """
+- id: gke_cluster
+  source: modules/scheduler/gke-cluster
+  settings:
+    cluster_autoscaling:
+      enabled: true
+      limits:
+        - autoprovisioning_machine_type: g2-standard-48
+          invalid_limit_field: 10
+- id: workload_mgr
+  source: modules/management/kubectl-apply
+  settings:
+    kueue:
+      install: true
+      wait: true
+      wait_for_pods_ready:
+        bad_timeout_key: 30m
+    jobset:
+      install: true
+      wait: true
+"""
+        tf_cache = {}
+        errs = vrs.validate_yaml_block(snippet, "test.md", tf_cache)
+        self.assertEqual(len(errs), 5)
+        self.assertIn("cluster_autoscaling.enabled", errs[0])
+        self.assertIn("cluster_autoscaling.limits.invalid_limit_field", errs[1])
+        self.assertIn("kueue.wait", errs[2])
+        self.assertIn("kueue.wait_for_pods_ready.bad_timeout_key", errs[3])
+        self.assertIn("jobset.wait", errs[4])
+
+    def test_strip_yaml_elision_lines(self):
+        raw = (
+            "    vars:\n"
+            "      project_id: test\n"
+            "      ... # more settings\n"
+            "    ---\n"
+            "    deployment_groups: []\n"
+        )
+        cleaned = vrs._strip_yaml_elision_lines(raw)
+        docs = list(yaml.safe_load_all(cleaned))
+        self.assertEqual(len(docs), 2)
+        self.assertEqual(docs[0]["vars"]["project_id"], "test")
+
+    def test_validate_yaml_block_required_kms_key_settings(self):
+        snippet = """
+- id: kms_key
+  source: community/modules/security/kms-key
+  settings:
+    project_id: $(vars.project_id)
+    location: $(vars.region)
+    key_ring_name: my-keyring
+    key_name: my-key
+"""
+        errs = vrs.validate_yaml_block(snippet, "kms-key-iam/README.md", {})
+        self.assertEqual(len(errs), 1)
+        self.assertIn("missing required setting 'deletion_policy'", errs[0])
+
 
 if __name__ == "__main__":
     unittest.main()

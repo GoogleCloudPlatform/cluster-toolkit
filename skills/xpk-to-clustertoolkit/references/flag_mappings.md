@@ -38,7 +38,7 @@ This reference provides a comprehensive mapping of commands, flags, and options 
 | `xpk cluster describe` | `gcluster cluster describe` | Shows cluster infrastructure details. |
 | `xpk info` | `gcluster cluster info` | Displays current cluster context. |
 | `xpk inspector` | `gcluster job logs` or `gcluster job inspect` | Inspects workload logs and status. |
-| `xpk config set` | `gcluster job config set` | Sets default CLI configuration (`project`, `cluster`, `location` only). |
+| `xpk config set` | `gcluster job context set` (`job config set` alias) | Sets default CLI context (`project`, `cluster`, `location` only). |
 | `xpk storage list` | `gcluster cluster volume` | Displays attached cluster storage. |
 | `xpk cluster adapt` | *(Omit command)* | Prerequisite CLI tools (`gcloud`, `kubectl`, docker auth) are checked during `gcluster job submit`. Cluster-side CRDs (JobSet, Kueue) are deployed by blueprint modules. |
 
@@ -159,7 +159,7 @@ When migrating workload listing commands from `xpk workload list --filter-by-sta
 | XPK `--filter-by-status` Value | Cluster Toolkit `gcluster job list --status` Value |
 | :--- | :--- |
 | `RUNNING` | `Running` |
-| `QUEUED` | `Pending` |
+| `QUEUED` | `Suspended` (GKE JobSets queued in Kueue) / `Pending` (Slurm or `gcluster job status <id>`) |
 | `SUCCESSFUL` | `Succeeded` |
 | `FAILED` | `Failed` |
 | `FINISHED` | *(Run without `--status`, or filter client-side)* |
@@ -168,7 +168,7 @@ When migrating workload listing commands from `xpk workload list --filter-by-sta
 > [!IMPORTANT]
 > The `gcluster job list --status` argument is case-sensitive and accepts **only** values in the strict allowlist (`cmd/job/list.go:35-48 (validStatuses)`):
 > `Pending`, `Running`, `Succeeded`, `Failed`, `Suspended`.
-> Passing `Success` or lowercase names produces a validation error.
+> On GKE, `gcluster job list` inspects the JobSet object directly, so jobs queued in Kueue report `Suspended` and admitted jobs report `Running` (pod-level `Pending` is reported by `gcluster job status <name>`). Passing `Success` or lowercase names produces a validation error.
 
 ---
 

@@ -80,9 +80,9 @@ storage intact and b) you can build software before you deploy your cluster.
 > - Compute Node Group
 >   - 60 CPUs * 20 VMs = **1200 `C2 CPUs`**
 > - Slurm Login VM
->   - **2 `N2 CPUs`**
+>   - **4 `C2 CPUs`** (`c2-standard-4`)
 > - Slurm Controller VM
->   - **4 `C2 CPUs`**
+>   - **4 `C2 CPUs`** (`c2-standard-4`)
 >
 > Neither the Water Benchmark Example or the Lysozyme Example require the
 > cluster to fully scale up. Please see:

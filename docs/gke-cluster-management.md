@@ -42,10 +42,7 @@ deployment_groups:
       # ...
 ```
 
-**Note** on `version_prefix`: By default, the `gke-cluster` module restricts upgrades to a specific minor version (like `1.35.`).
-
-* To stay on the same minor version: Leave `version_prefix` as is.  
-* To upgrade to a new minor version (or specific patch): You must update `version_prefix` to that new prefix or full version (e.g., `"1.35."` or `"1.35.2-gke.100"`).
+**Note** on `version_prefix`: At initial cluster creation, `version_prefix` selects the newest GKE version matching that prefix (for example, `"1.35."` or `"1.35.2-gke.100"`). Because `gke-cluster` sets `lifecycle.ignore_changes = [min_master_version]` on the cluster resource (and `ignore_changes = [version]` on its system node pools), modifying `version_prefix` after the cluster is created **does not upgrade an existing control plane**—see [Section 2.2](#22-upgrading-an-existing-cluster) for upgrading existing clusters via `release_channel`, `gcloud`, or the Cloud Console.
 
 ##### Specifying Release Channels in Blueprint
 
@@ -245,13 +242,13 @@ gcloud container clusters update CLUSTER_NAME \
 
 ## 3\. Cluster Toolkit Team Updates
 
-Periodically, the Cluster Toolkit team will update the default versions defined in the modules to incorporate new stable GKE versions. To adopt these new defaults:
+Periodically, the Cluster Toolkit team updates the default `version_prefix` defined in `gke-cluster` and example blueprints to incorporate new stable GKE versions for **newly created** clusters:
 
-1. **Update Toolkit**: You should update your Cluster Toolkit installation by downloading the latest cluster toolkit binary.  
-2. **Re-Deploy**: Regenerate your Terraform code from your blueprints using the updated toolkit and apply the changes. This ensures you pick up the new defaults without necessarily hardcoding versions in your blueprints.
+1. **New Clusters**: Updating your Cluster Toolkit checkout (`git pull && make`) ensures newly created deployments pick up the latest default `version_prefix`.
+2. **Existing Clusters**: Because `gke-cluster` sets `ignore_changes = [min_master_version]`, re-running `./gcluster deploy <path-to-blueprint.yaml> -w` on an existing deployment will **not** upgrade an existing control plane's GKE version (though it will reconcile any `gke-node-pool` versions to match the cluster's current `master_version` if the control plane was already upgraded via release channel, `gcloud`, or the Cloud Console; see [Section 2.2](#22-upgrading-an-existing-cluster)).
 
 ```shell
-./gcluster deploy <path-to-blueprint.yaml>
+./gcluster deploy <path-to-blueprint.yaml> -w
 ```
 
 ## 4\. Important Considerations During Upgrades

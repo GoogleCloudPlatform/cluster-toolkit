@@ -11,7 +11,7 @@ Cluster Toolkit provides a built-in GPU health check script that can be automati
 If the health check detects failures (DCGM test failures, ECC errors, or NVLink errors), the compute node is marked as drained, preventing further job scheduling. It runs the following checks:
 
 - DCGM Health Check: It utilizes dcgmi to run diagnostic tests and verify the overall health of the GPUs.
-- ECC Error Check: It monitors and reports uncorrected volatile ECC errors using nvidia-smi.
+- ECC Error Check: It monitors and reports volatile and aggregate double-bit ECC errors, uncorrectable SRAM errors, and pending page retirement / row-remapping failure states using `nvidia-smi`.
 - NVLink Error Check: It checks for NVLink errors using nvidia-smi nvlink.
 
 Detailed logs of the health check results are written to `/var/log/slurm/chs_health_check.log` on the compute node where a job is allocated. Additionally, these logs can be accessed through the Google Cloud Logging console via the use of the below filters:
@@ -43,7 +43,7 @@ To enable both prolog and epilog GPU health checks, include the following settin
     settings:
       enable_chs_gpu_health_check_prolog: true # false by default
       enable_chs_gpu_health_check_epilog: true # false by default
-      # the rest of the settings, e.g. mahcine_type, controller_startup_script, login_startup_script, etc.
+      # the rest of the settings, e.g. machine_type, controller_startup_script, compute_startup_script, etc.
 ```
 
 ### On-demand Cluster Health Checks

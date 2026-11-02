@@ -56,7 +56,7 @@ To use this feature, the cluster administrator must also deploy the `CheckpointC
 
 ## 2. Prepare Sample Application Code
 
-Create a directory named `job_details` and place your application files inside it. This will serve as your build context for the job. The tool will package all files in this directory and add them to the image.
+Create a directory named `job_details` and place your application files inside it. This will serve as your build context for the job. The tool packages the files in this directory (excluding `.dockerignore` patterns and default build/VCS artifacts) and adds them to the root (`/`) of the container image.
 
 ### `cluster-toolkit/job_details/app.py`
 
@@ -67,7 +67,7 @@ print("This is a sample application running on GKE.")
 ```
 
 > [!NOTE]
-> This on-the-fly image build does not execute a Dockerfile. It packages the files from your build context directory directly into the root directory (`/`) of the container image, honoring `.dockerignore` and skipping common VCS/build artifacts (such as `.git`, `.terraform`, `node_modules`, and `__pycache__`). If you need to install dependencies, make sure they are already present in your `--base-image`.
+> This on-the-fly image build does not execute a Dockerfile. It packages the files from your build context directory directly into the root directory (`/`) of the container image, honoring `.dockerignore` and skipping 12 hardcoded VCS/build patterns (`.git`, `.terraform`, `.ghpc`, `.ansible`, `vendor`, `bin`, `pkg`, `node_modules`, `*.log`, `tmp/`, `.DS_Store`, and `__pycache__`). Because the container's runtime `WORKDIR` is inherited from `--base-image` (which is `/` for standard base images like `python:3.9-slim`, so `python app.py` resolves `/app.py`), if your `--base-image` sets a non-root `WORKDIR`, reference your packaged files from `/` (for example, `python /app.py`). If you need to install dependencies, make sure they are already present in your `--base-image`.
 
 ## 3. Deploy a GKE Cluster
 
@@ -129,22 +129,22 @@ By specifying the `--compute-type` flag, you can use the exact same command to t
 A TPU shorthand names a slice size, not a host shape. GKE can run the same slice on different machine types of a TPU family (an 8-chip `2x4` v5e slice is one `ct5lp-hightpu-8t` host or two `ct5lp-hightpu-4t` hosts), so `gcluster` uses the machine type of that family found in the cluster's node pools. `v5e-N` and `v5litepod-N` are equivalent. To pin a specific host shape, pass the full machine type (for example `--compute-type ct5lp-hightpu-4t`).
 
 > [!TIP]
-> **Simplify Commands with Configuration**: You can set these values once using the configuration command and omit them from subsequent commands:
+> **Simplify Commands with Context Configuration**: You can set these values once using `gcluster job context` (`config` is supported as an alias) and omit them from subsequent commands:
 >
 > ```bash
 > # Open system editor to edit defaults interactively
-> ./gcluster job config set
+> ./gcluster job context set
 >
 > # Or set values individually
-> ./gcluster job config set project <PROJECT_ID>
-> ./gcluster job config set cluster <CLUSTER_NAME>
-> ./gcluster job config set location <REGION/ZONE>
+> ./gcluster job context set project <PROJECT_ID>
+> ./gcluster job context set cluster <CLUSTER_NAME>
+> ./gcluster job context set location <REGION/ZONE>
 > ```
 >
 > To view your current configuration, run:
 >
 > ```bash
-> ./gcluster job config show
+> ./gcluster job context show
 > ```
 
 ### 4.2 Submit the Job
@@ -156,7 +156,7 @@ A TPU shorthand names a slice size, not a host shape. GKE can run the same slice
   --location <REGION/ZONE> \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --command "python app.py" \
+  --command "python /app.py" \
   --name my-python-app-job \
   --compute-type n2-standard-32
 ```
@@ -170,7 +170,7 @@ This command will:
 4. Build a container image from the job_details directory using python:3.9-slim as the base, and push it to Artifact Registry.
 5. Generate and apply an intelligently configured Kubernetes JobSet manifest to your cluster.
 
-*Note: The following examples assume you have configured your default project, cluster, and location using `./gcluster job config set`.*
+*Note: The following examples assume you have configured your default project, cluster, and location using `./gcluster job context set`.*
 
 ### 4.3 Example for Multi-Slice GPU Job
 
@@ -219,7 +219,7 @@ Mounting a GCS bucket (read-write):
 ```bash
 ./gcluster job submit \
   --name my-storage-job \
-  --command "python app.py" \
+  --command "python /app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -234,7 +234,7 @@ Mounting GCS buckets with storage profiles:
 ```bash
 ./gcluster job submit \
   --name my-training-job \
-  --command "python app.py" \
+  --command "python /app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -250,7 +250,7 @@ Mounting an existing PVC named `lustre-pvc` (read-only):
 ```bash
 ./gcluster job submit \
   --name my-lustre-job \
-  --command "python app.py" \
+  --command "python /app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -270,7 +270,7 @@ You can pass additional custom environment variables—or override `WORKERS_0_HO
 ```bash
 ./gcluster job submit \
   --name my-env-job \
-  --command "python app.py" \
+  --command "python /app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -358,7 +358,7 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
 
 ## 6. Advanced Workloads
 
-*Note: The following examples assume you have configured your default project, cluster, and location using `./gcluster job config set`.*
+*Note: The following examples assume you have configured your default project, cluster, and location using `./gcluster job context set`.*
 
 ### 6.1 Run with Advanced Scheduling Flags
 
@@ -370,7 +370,7 @@ Use `--node-constraint` to target a specific node pool. This maps to node labels
 ```bash
 ./gcluster job submit \
   --name my-nodepool-job \
-  --command "python app.py" \
+  --command "python /app.py" \
   --compute-type c2-standard-60 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -456,7 +456,7 @@ Use `--queue` to submit the job to a specific Kueue LocalQueue.
 ```bash
 ./gcluster job submit \
   --name my-kueue-job \
-  --command "python app.py" \
+  --command "python /app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -529,7 +529,7 @@ Request a specific TPU slice topology using `--topology`.
   --name my-topology-job \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --command "python app.py" \
+  --command "python /app.py" \
   --compute-type v6e-16 \
   --topology 4x4
 ```
@@ -543,7 +543,7 @@ Use a specific GKE scheduler (e.g., `gke.io/topology-aware-auto`) using `--gke-s
   --cluster <CLUSTER_NAME> \
   --location <REGION/ZONE> \
   --name my-scheduler-job \
-  --command "python app.py" \
+  --command "python /app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -1221,7 +1221,7 @@ Pass the `--gke-custom-templates-path` flag to the `submit` command:
 ## 9. `gcluster job` Command Reference
 
 ### 9.1 Common Flags
-*These flags are common to almost all `gcluster job` subcommands (except `config`). `project`, `cluster`, and `location` can be set as defaults via `config set`.*
+*These flags are common to almost all `gcluster job` subcommands (except `context`/`config`). `project`, `cluster`, and `location` can be set as defaults via `context set` (to discover clusters and storage volumes in your project, see `gcluster cluster list|describe|info|volume` in [`cmd/README.md`](../cmd/README.md#gcluster-cluster)).*
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
@@ -1231,11 +1231,11 @@ Pass the `--gke-custom-templates-path` flag to the `submit` command:
 | `--gke-namespace` | `string` | Target GKE namespace for the operation. Supported across all job commands. If omitted, automatic detection is used. |
 | `--skip-prereqs` | `flag` | Bypasses local workstation pre-flight environment checks (e.g. gcloud SDK, IAM checks, Docker config). |
 
-### 9.2 Configuration Commands
-*Use these commands to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*
+### 9.2 Context / Configuration Commands
+*Use `gcluster job context` (`gcluster job config` is supported as an alias) to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*
 
-#### `gcluster job config set [key] [value]`
-Modifies configuration defaults. If run without any arguments (`./gcluster job config set`), it automatically opens your default system text editor (`$EDITOR` or `nano`) to edit the configuration file interactively.
+#### `gcluster job context set [key] [value]`
+Modifies configuration defaults. If run without any arguments (`./gcluster job context set`), it automatically opens your default system text editor (`$EDITOR` or `nano`) to edit the configuration file interactively.
 
 * **Supported Keys:**
   * `project`: Google Cloud Project ID
@@ -1246,21 +1246,21 @@ Modifies configuration defaults. If run without any arguments (`./gcluster job c
 
 ```bash
 # Interactive editor mode:
-./gcluster job config set
+./gcluster job context set
 
 # Set specific key/value pairs:
-./gcluster job config set project my-awesome-project
-./gcluster job config set cluster my-cluster
-./gcluster job config set location us-central1-a
+./gcluster job context set project my-awesome-project
+./gcluster job context set cluster my-cluster
+./gcluster job context set location us-central1-a
 ```
 
-#### `gcluster job config show`
+#### `gcluster job context show`
 Prints the current saved configuration defaults and configuration file path.
 
 **Example:**
 
 ```bash
-./gcluster job config show
+./gcluster job context show
 ```
 
 ### 9.3 `submit` Flags
@@ -1272,7 +1272,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | Flag | Type | Description |
 | :--- | :--- | :--- |
 | `-n, --name` | `string` | Name of the job (JobSet) to create. Used for Kubernetes resources. Maximum of 28 characters for standard workloads, or 22 characters when `--pathways` is enabled. *(Required)* |
-| `-e, --command` | `string` | Command to execute inside the container (e.g., `'python app.py'`). *(Required except when `--pathways-headless` or `--pathways-deploy-sps` is set)* |
+| `-e, --command` | `string` | Command to execute inside the container (e.g., `'python /app.py'`). *(Required except when `--pathways-headless` or `--pathways-deploy-sps` is set)* |
 | `--compute-type` | `string` | The hardware target for the job. GPU/TPU shorthands (e.g., `h100-80gb-8`, `l4-1`, `v6e-8`) and machine types from `gcluster`'s built-in shorthand map (e.g., `a3-highgpu-8g`) resolve without a matching node pool, so they also work on NAP clusters. Any other GCE machine type (e.g., `n2-standard-32`) or a GKE accelerator label (e.g., `nvidia-l4`) is resolved against the cluster's existing node pools. *(Required)* The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed. |
 | `-i, --image` | `string` | Full registry path of a pre-built container image to run. Either `--image`, **or** both `--base-image` and `--build-context`, is required and the two forms are mutually exclusive (except when `--pathways-headless` or `--pathways-deploy-sps` is set, where no image is needed). |
 | `-B, --base-image` | `string` | Name of the base container image to build upon (e.g., `python:3.9-slim`). Requires `--build-context`; mutually exclusive with `--image`. |
@@ -1281,7 +1281,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `-o, --dry-run-out` | `string` | Local file path to save the generated Kubernetes manifest instead of applying it (must specify a file path, not a directory). |
 | `--num-slices` | `int` | Number of independent groups/slices to use (Default: `1`). |
 | `--num-nodes` | `int` | Number of nodes to use per group/slice (Default: `1`). Auto-calculated for TPUs based on topology. |
-| `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. Supports pipe separator (`|`) for multiple values. |
+| `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. Supports pipe separator (`\|`) for multiple values. |
 | `--restarts` | `int` | Maximum number of restarts allowed for the JobSet before marked as failed (Default: `1`, or `30` when `--pathways-deploy-sps` is set). |
 | `--mount` | `stringArray` | Mount storage volumes, buckets, filestore instances, or PVCs using the `<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]` format. Examples of `<src>`: `gs://my-bucket`, `filestore://my-instance/share`, `my-pvc` (for Lustre/etc), or `/host/path`. `profile=` (`training`, `checkpointing`, `serving`) is GCS-only and provisions a shared GCS FUSE storage-profile PV/PVC gateway instead of an inline CSI volume. |
 | `--env` | `stringArray` | Custom environment variables to pass exclusively to the user's workload container in KEY=VALUE format (e.g. `--env KEY=VALUE`). Applies to both standard and Pathways workloads and can be specified multiple times. For standard JobSet workloads, `WORKERS_0_HOSTNAME` and `MASTER_ADDR` are preset to `<name>-main-job-0-0.<name>` unless overridden via `--env`. |
@@ -1331,6 +1331,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--grace-period` | `string` | Buffer period given to pods to save checkpoints before forced termination (Default: `30s`). |
 | `--gke-mtc-enabled` | `flag` | If present, enables Multi-Tier Checkpointing (MTC) for the workload. |
 | `--gke-mtc-ramdisk-dir` | `string` | The ramdisk directory path for local checkpoints in MTC (required when `--gke-mtc-enabled` is set). |
+| `--enable-ml-diagnostics` | `bool` | Enables ML Diagnostics (`diagon.gke.io/enable-ml-diagnostics: "true"`) for the workload. Requires the target GKE cluster to have ML Diagnostics enabled (`enable_ml_diagnostics: true`). |
 | `--gke-ttl-after-finished` | `string` | Time duration to retain the JobSet resources after completion (Default: `1h`). |
 | `--placement-policy` | `string` | Name of an existing GCE compact placement or workload policy; the job is pinned to nodes carrying it via `cloud.google.com/placement-policy-name`. Auto-resolved for A4X and multi-host TPU 7x when omitted. |
 | `--restart-on-exit-codes` | `string` | Comma-separated allowlist of retriable container exit codes (`1..255`). Exit codes in this list allow the job to restart up to `--restarts`, while any other non-zero exit code fails the job immediately (`action: FailJob` on `NotIn`). |
@@ -1348,7 +1349,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `--status` | `string` | Filter jobs by status (e.g., `Pending`, `Running`, `Succeeded`, `Failed`, `Suspended`). |
+| `--status` | `string` | Filter jobs by status (`Pending`, `Running`, `Succeeded`, `Failed`, `Suspended`). On GKE, `job list` derives status directly from the JobSet object (`Suspended` while queued in Kueue, `Running` once admitted, `Succeeded`, or `Failed`); pod-level `Pending` (admitted JobSet waiting on pod scheduling) is reported by `gcluster job status <job-id>`. |
 | `--name-contains` | `string` | Filter jobs by name containing the specified string. |
 
 ### 9.5 `logs` Flags

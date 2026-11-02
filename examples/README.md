@@ -1412,7 +1412,8 @@ Toolkit. It includes:
   Example settings for a2 look like:
 
   ```yaml
-  source: modules/compute/gke-node-pool
+  - id: gke_node_pool
+    source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       disk_type: pd-balanced
@@ -2305,15 +2306,17 @@ deployment_groups:
    characters, underscores and dashes.
 
 * **toolkit_modules_url** and **toolkit_modules_version** (optional): The blueprint schema provides the optional fields `toolkit_modules_url` and `toolkit_modules_version` to version a blueprint. When these fields are provided, any module in the blueprint with a reference to an embedded module in its source field will be updated to reference the specified GitHub source and toolkit version in the deployment folder. `toolkit_modules_url` specifies the base URL of the GitHub repository containing the modules and `toolkit_modules_version` specifies the version of the modules to use. `toolkit_modules_url` and `toolkit_modules_version` should be provided together when in use.
+* **terraform_backend_defaults** (optional): Configures a default Terraform state backend (for example, `type: gcs` with `configuration: {bucket: <BUCKET_NAME>}`) inherited by every Terraform deployment group unless overridden on the group's `terraform_backend` field.
+* **validation_level** and **validators** (optional): `validation_level` sets the pre-flight validation severity (`"ERROR"` (default), `"WARNING"`, or `"IGNORE"`), and `validators` customizes or skips individual pre-flight checks (see [`docs/blueprint-validation.md`](../docs/blueprint-validation.md)).
+* **terraform_providers** (optional): Overrides default Terraform provider `source`, `version`, and `configuration` blocks (for example, `google` and `google-beta`) across Terraform deployment groups.
 
 ### Deployment Variables
 
 ```yaml
 vars:
-  region: "us-west-1"
+  region: "us-west1"
   labels:
     "user-defined-deployment-label": "slurm-cluster"
-  ...
 ```
 
 Deployment variables are set under the vars field at the top level of the
@@ -2335,13 +2338,12 @@ alongside module specific labels. Precedence is given to the module specific
 labels if a collision occurs. Default module labels will still be overwritten by
 deployment labels.
 
-The Cluster Toolkit uses special reserved labels for monitoring each deployment.
-These are set automatically, but can be overridden in vars or module settings.
-They include:
+The Cluster Toolkit automatically sets reserved labels for monitoring and resource attribution across each deployment:
 
-* ghpc_blueprint: The name of the blueprint the deployment was created from
-* ghpc_deployment: The name of the specific deployment
-* ghpc_role: See below
+* `ghpc_blueprint`: The name of the blueprint the deployment was created from (can be overridden in `vars.labels` or module `settings.labels`)
+* `ghpc_deployment`: The name of the specific deployment (can be overridden in `vars.labels` or module `settings.labels`)
+* `ghpc_creator`: Set automatically to the sanitized username when deploying with a `@google.com` account (or when `--add-creator-label` is passed)
+* `ghpc_module` and `ghpc_role`: Set inside each Terraform/Packer module's `locals` via `merge(var.labels, { ghpc_module = "...", ghpc_role = "..." })` (see below; because they are merged after `var.labels`, they cannot be overridden via `vars.labels`)
 
 A module role is a default label applied to modules (`ghpc_role`), which
 conveys what role that module plays within a larger HPC environment.
@@ -2403,28 +2405,26 @@ vars:
 
 deployment_groups:
   - group: primary
-     modules:
-       - id: resource1
-         source: path/to/module/1
-         ...
-       - id: resource2
-         source: path/to/module/2
-         ...
-         settings:
-            key1: $(vars.zone)
-            key2: $(resource1.name)
-            # access nested fields
-            key3: $(resource1.nodes[0].private_ip)
-            # arithmetic expression
-            key4: $(vars.num_nodes + 5)
-            # string interpolation
-            key5: $(resource1.name)_$(vars.zone)
-            # multiline string interpolation
-            key6: |
-              #!/bin/bash
-              echo "Hello $(vars.project_id) from $(vars.region)"
-            # use a function, supported by Terraform
-            key7: $(jsonencode(resource1.config))
+    modules:
+      - id: resource1
+        source: path/to/module/1
+      - id: resource2
+        source: path/to/module/2
+        settings:
+          key1: $(vars.zone)
+          key2: $(resource1.name)
+          # access nested fields
+          key3: $(resource1.nodes[0].private_ip)
+          # arithmetic expression
+          key4: $(vars.num_nodes + 5)
+          # string interpolation
+          key5: $(resource1.name)_$(vars.zone)
+          # multiline string interpolation
+          key6: |
+            #!/bin/bash
+            echo "Hello $(vars.project_id) from $(vars.region)"
+          # use a function, supported by Terraform
+          key7: $(jsonencode(resource1.config))
 ```
 
 #### Escape expressions
@@ -2434,13 +2434,13 @@ Under circumstances where the expression notation conflicts with the content of 
 ```yaml
 deployment_groups:
   - group: primary
-     modules:
-       - id: resource1
-         source: path/to/module/1
-         settings:
-            key1: |
-              #!/bin/bash
-              echo \$(cat /tmp/file1)    ## Evaluates to "echo $(cat /tmp/file1)"
+    modules:
+      - id: resource1
+        source: path/to/module/1
+        settings:
+          key1: |
+            #!/bin/bash
+            echo \$(cat /tmp/file1)    ## Evaluates to "echo $(cat /tmp/file1)"
 ```
 
 ### Functions

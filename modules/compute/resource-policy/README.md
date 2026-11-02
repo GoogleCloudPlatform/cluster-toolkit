@@ -69,7 +69,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_group_placement_max_distance"></a> [group\_placement\_max\_distance](#input\_group\_placement\_max\_distance) | The max distance for group placement policy to use for the node pool's nodes. If set it will add a compact group placement policy.<br/>Note: Placement policies have the [following](https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies) restrictions. | `number` | `0` | no |
-| <a name="input_name"></a> [name](#input\_name) | The resource policy's name. | `string` | n/a | yes |
+| <a name="input_name"></a> [name](#input\_name) | The resource policy's name (1-63 characters, or up to 54 characters when random\_name\_suffix is true). | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID for the resource policy. | `string` | n/a | yes |
 | <a name="input_random_name_suffix"></a> [random\_name\_suffix](#input\_random\_name\_suffix) | Appends a random suffix to the resource policy name to avoid clashes. | `bool` | `true` | no |
 | <a name="input_region"></a> [region](#input\_region) | The region for the resource policy. | `string` | n/a | yes |

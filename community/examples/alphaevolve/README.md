@@ -212,7 +212,7 @@ Please open the Jupyter Notebook and follow these steps under the 'Show how chan
 2026-05-01T18:13:29Z module.show-instructions.null_resource.gcloud_commands: Creation complete after 0s [id=1881624798606908193]
 
 2026-05-01T18:13:29Z Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
-2026-05-01T18:13:29Z: Collecting terraform outputs from /home/<user>/deployment/alpha-evolve-experiment-experiment-1/show-instructions
+2026-05-01T18:13:29Z: Collecting terraform outputs from /home/<user>/deployment/ae-exp-experiment-1/show-instructions
 2026-05-01T18:13:29Z: Deployment group show-instructions contains no artifacts to export
 ```
 

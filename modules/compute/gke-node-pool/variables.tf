@@ -123,7 +123,7 @@ variable "guest_accelerator" {
 }
 
 variable "image_type" {
-  description = "The default image type used by NAP once a new node pool is being created. Use either COS_CONTAINERD or UBUNTU_CONTAINERD. Use CUSTOM_CONTAINERD together with var.node_image_config to run a custom node image."
+  description = "The OS image type for the nodes in this node pool. Use either COS_CONTAINERD or UBUNTU_CONTAINERD. Use CUSTOM_CONTAINERD together with var.node_image_config to run a custom node image."
   type        = string
   default     = "COS_CONTAINERD"
 }
@@ -302,7 +302,7 @@ variable "service_account_scopes" {
 }
 
 variable "taints" {
-  description = "Taints to be applied to the system node pool."
+  description = "Kubernetes taints to be applied to the nodes in this node pool. When empty (default), GPU and TPU node pools automatically receive their accelerator taint (nvidia.com/gpu or google.com/tpu)."
   type = list(object({
     key    = string
     value  = any
@@ -536,7 +536,7 @@ variable "upgrade_settings" {
 }
 
 variable "run_workload_script" {
-  description = "Whether execute the script to create a sample workload and inject rxdm sidecar into workload. Currently, implemented for A3-Highgpu and A3-Megagpu only."
+  description = "If true, runs a local Python helper script (installing pyyaml via pip3) to generate a sample workload manifest with the rxdm sidecar injected. Only runs when machine_type is a3-highgpu-8g or a3-megagpu-8g."
   type        = bool
   default     = true
 }
