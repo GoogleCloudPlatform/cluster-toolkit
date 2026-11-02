@@ -16,7 +16,7 @@
 
 output "node_pool_names" {
   description = "Names of the node pools."
-  value       = google_container_node_pool.node_pool[*].name
+  value       = local.all_node_pools[*].name
 }
 
 locals {
@@ -48,8 +48,33 @@ output "allocatable_gpu_per_node" {
 }
 
 output "static_gpu_count" {
-  description = "Total number of GPUs in the node pool. Available only for static node pools."
+  description = "Total number of GPUs in one node pool. Available only for static node pools. See total_static_gpu_count for all node pools created by this module."
   value       = local.static_gpu_count
+}
+
+output "node_pool_count" {
+  description = "Number of node pools created by this module."
+  value       = length(local.all_node_pools)
+}
+
+output "total_static_node_count" {
+  description = "Number of static nodes summed across all node pools created by this module."
+  value       = coalesce(var.static_node_count, var.initial_node_count, 0) * length(local.all_node_pools)
+}
+
+output "total_static_gpu_count" {
+  description = "Number of GPUs summed across all static node pools created by this module. Use for cluster-wide quotas."
+  value       = local.static_gpu_count * length(local.all_node_pools)
+}
+
+output "reservation_subblock_node_pools" {
+  description = "Map of reservation_subblocks key to the node pool name and reservation sub-block it is pinned to. Empty when reservation_subblocks is not set."
+  value = {
+    for k, np in google_container_node_pool.subblock_node_pool : k => {
+      node_pool_name       = np.name
+      reservation_subblock = local.reservation_subblocks[k]
+    }
+  }
 }
 
 locals {
@@ -58,7 +83,7 @@ locals {
     NO_SCHEDULE        = "NoSchedule"
     NO_EXECUTE         = "NoExecute"
   }
-  taints = google_container_node_pool.node_pool[0].node_config[0].taint
+  taints = local.all_node_pools[0].node_config[0].taint
   tolerations = [for taint in local.taints : {
     key      = taint.key
     operator = "Equal"
@@ -112,7 +137,7 @@ output "instructions" {
 }
 
 output "node_count_static" {
-  description = "The number of static nodes in node-pool."
+  description = "The number of static nodes in one node pool. See total_static_node_count for all node pools created by this module."
   value       = coalesce(var.static_node_count, var.initial_node_count, 0)
 }
 

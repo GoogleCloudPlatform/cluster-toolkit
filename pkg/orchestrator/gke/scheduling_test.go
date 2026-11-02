@@ -56,10 +56,20 @@ func TestGetNodeSelector(t *testing.T) {
 			name: "non-tpu placement policy label",
 			opts: SchedulingOptions{
 				PlacementPolicy: "compact-placement",
+				MachineType:     "a3-highgpu-8g",
 				IsTPU:           false,
 			},
-			wantKey:   "cloud.google.com/gke-placement-group",
+			wantKey:   "cloud.google.com/placement-policy-name",
 			wantValue: "compact-placement",
+		},
+		{
+			name: "a4x workload policy label",
+			opts: SchedulingOptions{
+				PlacementPolicy: "gb200-4-1x72-placement-policy",
+				MachineType:     "a4x-highgpu-4g",
+			},
+			wantKey:   "cloud.google.com/placement-policy-name",
+			wantValue: "gb200-4-1x72-placement-policy",
 		},
 		{
 			name: "tpu placement policy with relative URI is sanitized to bare name",
@@ -74,9 +84,10 @@ func TestGetNodeSelector(t *testing.T) {
 			name: "non-tpu placement policy with HTTPS URL is sanitized to bare name",
 			opts: SchedulingOptions{
 				PlacementPolicy: "https://www.googleapis.com/compute/v1/projects/my-proj/regions/us-central1/resourcePolicies/gpu-policy",
+				MachineType:     "a3-ultragpu-8g",
 				IsTPU:           false,
 			},
-			wantKey:   "cloud.google.com/gke-placement-group",
+			wantKey:   "cloud.google.com/placement-policy-name",
 			wantValue: "gpu-policy",
 		},
 		{
@@ -155,6 +166,109 @@ func TestGetNodeSelector(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGetNodeSelector_PlacementLabelsByProvisioning(t *testing.T) {
+	tests := []struct {
+		name        string
+		opts        SchedulingOptions
+		wantLabels  map[string]string
+		absentLabel string
+	}{
+		{
+			name: "static GPU: policy name only",
+			opts: SchedulingOptions{PlacementPolicy: "h100-compact", MachineType: "a3-highgpu-8g"},
+			wantLabels: map[string]string{
+				placementPolicyNameLabel: "h100-compact",
+			},
+			absentLabel: placementGroupLabel,
+		},
+		{
+			name: "NAP GPU: policy name plus placement group",
+			opts: SchedulingOptions{PlacementPolicy: "h100-compact", MachineType: "a3-highgpu-8g", IsNAP: true},
+			wantLabels: map[string]string{
+				placementPolicyNameLabel: "h100-compact",
+				placementGroupLabel:      "h100-compact",
+			},
+		},
+		{
+			name: "NAP CPU: policy name plus placement group",
+			opts: SchedulingOptions{PlacementPolicy: "c2-compact", MachineType: "c2-standard-60", IsNAP: true},
+			wantLabels: map[string]string{
+				placementPolicyNameLabel: "c2-compact",
+				placementGroupLabel:      "c2-compact",
+			},
+		},
+		{
+			name: "NAP A4X: workload policy only, no placement group",
+			opts: SchedulingOptions{PlacementPolicy: "gb200-4-1x72-placement-policy", MachineType: "a4x-highgpu-4g", IsNAP: true},
+			wantLabels: map[string]string{
+				placementPolicyNameLabel: "gb200-4-1x72-placement-policy",
+			},
+			absentLabel: placementGroupLabel,
+		},
+		{
+			name: "NAP TPU 7x: workload policy only, no placement group",
+			opts: SchedulingOptions{PlacementPolicy: "tpu7x-16-2x2x2-placement-policy", MachineType: "tpu7x-standard-4t", IsTPU: true, IsNAP: true},
+			wantLabels: map[string]string{
+				placementPolicyNameLabel: "tpu7x-16-2x2x2-placement-policy",
+			},
+			absentLabel: placementGroupLabel,
+		},
+		{
+			name: "NAP TPU v5e: policy name only",
+			opts: SchedulingOptions{PlacementPolicy: "v5e-compact", MachineType: "ct5lp-hightpu-4t", IsTPU: true, IsNAP: true},
+			wantLabels: map[string]string{
+				placementPolicyNameLabel: "v5e-compact",
+			},
+			absentLabel: placementGroupLabel,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			selector, err := getNodeSelector(tt.opts)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			for k, v := range tt.wantLabels {
+				if got := selector[k]; got != v {
+					t.Errorf("selector[%s] = %q, want %q", k, got, v)
+				}
+			}
+			if tt.absentLabel != "" {
+				if _, ok := selector[tt.absentLabel]; ok {
+					t.Errorf("selector must not contain %s: %v", tt.absentLabel, selector)
+				}
+			}
+		})
+	}
+}
+
+func TestRequiresWorkloadPolicy(t *testing.T) {
+	tests := map[string]bool{
+		"a4x-highgpu-4g":        true,
+		"a4x-highgpu-4g-nolssd": true,
+		"a4x-maxgpu-4g-metal":   true,
+		"tpu7x-standard-4t":     true,
+		"a4-highgpu-8g":         false,
+		"a3-ultragpu-8g":        false,
+		"a3-highgpu-8g":         false,
+		"ct6e-standard-4t":      false,
+		"ct5lp-hightpu-4t":      false,
+		"n2-standard-8":         false,
+		"":                      false,
+	}
+	for machineType, want := range tests {
+		if got := requiresWorkloadPolicy(machineType); got != want {
+			t.Errorf("requiresWorkloadPolicy(%q) = %v, want %v", machineType, got, want)
+		}
+	}
+	if got := gpuWorkloadPolicyTopology("a4x-highgpu-4g"); got != "1x72" {
+		t.Errorf("gpuWorkloadPolicyTopology(a4x-highgpu-4g) = %q, want 1x72", got)
+	}
+	if got := gpuWorkloadPolicyTopology("tpu7x-standard-4t"); got != "" {
+		t.Errorf("gpuWorkloadPolicyTopology(tpu7x) = %q, want empty", got)
 	}
 }
 
@@ -426,22 +540,37 @@ func TestBuildNodeSelector_PlacementPolicy(t *testing.T) {
 		t.Errorf("Did not expect cloud.google.com/gke-placement-group in %s", tpuSelectorStr)
 	}
 
-	// 2. Non-TPU workload uses cloud.google.com/gke-placement-group
+	// 2. Non-TPU workload on a static cluster also uses cloud.google.com/placement-policy-name
 	nonTpuJob := orchestrator.JobDefinition{
 		MachineType: "a3-highgpu-8g",
 	}
 	nonTpuOpts := SchedulingOptions{
 		PlacementPolicy: "compact-placement-group",
+		MachineType:     "a3-highgpu-8g",
 	}
 	nonTpuSelectorStr, err := g.buildNodeSelector(nonTpuOpts, nonTpuJob, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(nonTpuSelectorStr, "cloud.google.com/gke-placement-group: compact-placement-group") {
-		t.Errorf("Expected cloud.google.com/gke-placement-group in %s", nonTpuSelectorStr)
+	if !strings.Contains(nonTpuSelectorStr, "cloud.google.com/placement-policy-name: compact-placement-group") {
+		t.Errorf("Expected cloud.google.com/placement-policy-name in %s", nonTpuSelectorStr)
 	}
-	if strings.Contains(nonTpuSelectorStr, "cloud.google.com/placement-policy-name") {
-		t.Errorf("Did not expect cloud.google.com/placement-policy-name in %s", nonTpuSelectorStr)
+	if strings.Contains(nonTpuSelectorStr, "cloud.google.com/gke-placement-group") {
+		t.Errorf("Did not expect cloud.google.com/gke-placement-group in %s", nonTpuSelectorStr)
+	}
+
+	// 2b. Non-TPU workload under NAP additionally gets cloud.google.com/gke-placement-group
+	napOpts := nonTpuOpts
+	napOpts.IsNAP = true
+	napSelectorStr, err := g.buildNodeSelector(napOpts, nonTpuJob, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(napSelectorStr, "cloud.google.com/gke-placement-group: compact-placement-group") {
+		t.Errorf("Expected cloud.google.com/gke-placement-group in %s", napSelectorStr)
+	}
+	if !strings.Contains(napSelectorStr, "cloud.google.com/placement-policy-name: compact-placement-group") {
+		t.Errorf("Expected cloud.google.com/placement-policy-name in %s", napSelectorStr)
 	}
 
 	// 3. Placement policy passed as URI with trailing slash is sanitized into bare name

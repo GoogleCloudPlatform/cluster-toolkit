@@ -19,15 +19,18 @@ vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: htcondor-pool
   region: us-central1
-  zone: us-central1-c
+  zone: us-central1-a
   zones:
   - $(vars.zone)
-  - us-central1-f
+  - us-central1-b
   disk_size_gb: 100
   new_image:
     family: htcondor-10x
     project: $(vars.project_id)
   enable_shielded_vm: true
+  # Optional overrides (defaults shown)
+  # Size in GB of the access point spool disk (200 GB or more is required for regional HA).
+  access_point_spool_disk_size_gb: 200
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -135,7 +138,7 @@ deployment_groups:
       enable_public_ips: true
       instance_image: $(vars.new_image)
       enable_high_availability: true
-      spool_disk_size_gb: 200 # required for regional HA
+      spool_disk_size_gb: $(vars.access_point_spool_disk_size_gb) # required for regional HA
     outputs:
     - access_point_ips
     - access_point_name

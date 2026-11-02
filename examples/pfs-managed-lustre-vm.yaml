@@ -30,6 +30,11 @@ vars:
   lustre_size_gib: 36000
   # Maximum throughput of the lustre instance in MBps per TiB
   per_unit_storage_throughput: 500
+  # Optional overrides (defaults shown)
+  # Number of Lustre client VMs.
+  client_instance_count: 1
+  # Machine type of the Lustre client VMs.
+  client_machine_type: n2-standard-2
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -61,8 +66,8 @@ deployment_groups:
     settings:
       add_deployment_name_before_prefix: true
       name_prefix: lustre-ubuntu22
-      instance_count: 1
-      machine_type: n2-standard-2
+      instance_count: $(vars.client_instance_count)
+      machine_type: $(vars.client_machine_type)
       instance_image:
         project: ubuntu-os-cloud
         name: ubuntu-2204-jammy-v20250128

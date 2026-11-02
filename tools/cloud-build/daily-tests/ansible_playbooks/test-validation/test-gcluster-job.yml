@@ -120,6 +120,19 @@
       - job_name in list_output.stdout
       fail_msg: "Job {{ job_name }} was not found in the gcluster job list."
 
+  - name: Verify gcluster job logs fails fast for a non-existent job
+    delegate_to: localhost
+    ansible.builtin.command: >
+      {{ workspace }}/gcluster job logs "{{ job_name }}-nonexistent"
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ custom_vars.project }}
+    register: missing_job_logs
+    failed_when: >
+      missing_job_logs.rc == 0 or
+      "not found in namespace" not in (missing_job_logs.stderr ~ missing_job_logs.stdout)
+    changed_when: false
+
   - name: Wait for job to complete
     delegate_to: localhost
     ansible.builtin.command: >
@@ -140,6 +153,23 @@
       that:
       - list_state_output.stdout_lines | select('search', job_name) | select('search', 'Succeeded') | list | length > 0
       fail_msg: "Job {{ job_name }} failed in GKE."
+
+  - name: Stream job logs with --follow and --main-only
+    delegate_to: localhost
+    ansible.builtin.command: >
+      {{ workspace }}/gcluster job logs "{{ job_name }}"
+      -f --main-only
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ custom_vars.project }}
+    register: follow_job_logs
+    changed_when: false
+
+  - name: Assert expected log output is found in --follow --main-only output
+    ansible.builtin.assert:
+      that:
+      - follow_job_logs.stdout is search(custom_vars.expected_log_output)
+      fail_msg: "Failed to find expected output: '{{ custom_vars.expected_log_output }}' in --follow --main-only job logs."
 
   - name: Fetch job logs
     delegate_to: localhost

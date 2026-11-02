@@ -20,7 +20,7 @@ This example has been adapted with changes from tutorials by:
 The Lysozyme Example only deploys one GPU VM from the blueprint, as such you
 will only need quota for:
 
-- GPU: 12 `A2 CPUs` and 1 `NVIDIA A100 GPUs`
+- GPU: 4 `G2 CPUs` and 1 `NVIDIA L4 GPUs`
 
 Note that these quotas are in addition to the quota requirements for the slurm
 login node (2x `N2 CPUs`) and slurm controller VM (4x `C2 CPUs`). The
@@ -87,8 +87,8 @@ button or by any other means.
 
    If you refresh the
    [VM instances page](https://console.cloud.google.com/compute/instances) you
-   will see an `a2-highgpu-1g` machine that has been auto-scaled up to run this
-   job. It will have a name like `hcls01-gpu-ghpc-0`.
+   will see a `g2-standard-4` machine that has been auto-scaled up to run this
+   job. It will have a name like `hclscluste-gpu-0`.
 
    Once the job is in the running state you can track progress with the
    following command:

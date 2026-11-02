@@ -118,13 +118,19 @@ func TestParseSingleVolume(t *testing.T) {
 			name:       "invalid scheme",
 			input:      "parallelstore://my-instance/share;/data",
 			wantErr:    true,
-			wantErrSub: "Unsupported scheme",
+			wantErrSub: "unsupported scheme",
 		},
 		{
 			name:       "invalid scheme with mode",
 			input:      "parallelstore://my-instance/share;/data;ro",
 			wantErr:    true,
-			wantErrSub: "Unsupported scheme",
+			wantErrSub: "unsupported scheme",
+		},
+		{
+			name:       "invalid pvc scheme",
+			input:      "pvc://my-claim;/data",
+			wantErr:    true,
+			wantErrSub: "invalid volume format: pvc://my-claim;/data. unsupported scheme: pvc. Only gs:// and filestore:// schemes are supported. To mount an existing PVC (including for other storage types), specify the volume claim name directly without a URI scheme prefix (e.g. '<pvc-name>;<destination>')",
 		},
 		{
 			name:       "missing destination for gcsfuse",
@@ -336,6 +342,13 @@ func TestParseSingleVolume(t *testing.T) {
 			wantErrSub: "use options=",
 		},
 		{
+			// The bucket already comes from the gs:// source.
+			name:       "bucketName is rejected as an attribute",
+			input:      "gs://my-bucket;/data;profile=training;attributes=bucketName=other",
+			wantErr:    true,
+			wantErrSub: "the bucket is taken from the mount source",
+		},
+		{
 			// Whitespace is trimmed on both sides of the '=', so a naturally
 			// typed ", " separator does not smuggle a leading space into the
 			// value that the CSI driver would then see.
@@ -532,7 +545,7 @@ func TestValidateMounts(t *testing.T) {
 				"parallelstore://foo;/data",
 			},
 			wantErr:   true,
-			errSubstr: "Unsupported scheme",
+			errSubstr: "unsupported scheme",
 		},
 		{
 			name: "root directory",
@@ -588,11 +601,13 @@ func TestValidateRamdiskDir(t *testing.T) {
 	sm := &StorageManager{}
 
 	type testCase struct {
-		name       string
-		ramdiskDir string
-		rawMounts  []string
-		wantErr    bool
-		errSubstr  string
+		name                string
+		ramdiskDir          string
+		rawMounts           []string
+		isPathways          bool
+		hasColocatedSidecar bool
+		wantErr             bool
+		errSubstr           string
 	}
 
 	tests := []testCase{
@@ -624,6 +639,48 @@ func TestValidateRamdiskDir(t *testing.T) {
 			ramdiskDir: "/tmp/ramdisk",
 			rawMounts:  []string{"gs://bucket;/data"},
 		},
+		{
+			name:       "Valid Nested /tmp Path on Pathways - Pass",
+			ramdiskDir: "/tmp/ramdisk",
+			rawMounts:  []string{"gs://bucket;/data"},
+			isPathways: true,
+		},
+		{
+			name:       "Built-in /tmp Mount Conflict on Pathways - Fail",
+			ramdiskDir: "/tmp",
+			isPathways: true,
+			wantErr:    true,
+			errSubstr:  "conflicts with built-in Pathways mount",
+		},
+		{
+			name:                "Built-in Pathways /tmp/sidecar Mount Conflict - Fail",
+			ramdiskDir:          "/tmp/sidecar",
+			isPathways:          true,
+			hasColocatedSidecar: true,
+			wantErr:             true,
+			errSubstr:           "conflicts with built-in Pathways mount",
+		},
+		{
+			name:                "Built-in Pathways /tmp/sidecar Subdir Mount Conflict - Fail",
+			ramdiskDir:          "/tmp/sidecar/shm",
+			isPathways:          true,
+			hasColocatedSidecar: true,
+			wantErr:             true,
+			errSubstr:           "conflicts with built-in Pathways mount",
+		},
+		{
+			name:                "Pathways /tmp/sidecar Without Colocated Sidecar - Pass",
+			ramdiskDir:          "/tmp/sidecar",
+			isPathways:          true,
+			hasColocatedSidecar: false,
+			wantErr:             false,
+		},
+		{
+			name:       "Pathways Sidecar Path on Non-Pathways Job - Pass",
+			ramdiskDir: "/tmp/sidecar",
+			isPathways: false,
+			wantErr:    false,
+		},
 	}
 
 	for _, reserved := range []string{"/dev", "/proc", "/sys", "/etc", "/bin", "/sbin", "/usr", "/lib", "/lib64", "/proc/"} {
@@ -646,7 +703,7 @@ func TestValidateRamdiskDir(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := sm.ValidateRamdiskDir(tt.ramdiskDir, tt.rawMounts)
+			err := sm.ValidateRamdiskDir(tt.ramdiskDir, tt.rawMounts, tt.isPathways, tt.hasColocatedSidecar)
 			if tt.wantErr {
 				if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
 					t.Errorf("expected error containing %q, got %v", tt.errSubstr, err)
@@ -656,6 +713,149 @@ func TestValidateRamdiskDir(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateJobMounts(t *testing.T) {
+	sm := &StorageManager{}
+
+	tests := []struct {
+		name                string
+		mounts              []string
+		isPathways          bool
+		hasColocatedSidecar bool
+		errSubstr           string
+	}{
+		{
+			name:       "Valid Pathways mounts - Pass",
+			mounts:     []string{"gs://bucket-a;/data", "gs://bucket-b;/tmp/checkpoints"},
+			isPathways: true,
+		},
+		{
+			name:   "Non-Pathways job may mount at /tmp",
+			mounts: []string{"gs://bucket;/tmp"},
+		},
+		{
+			name:       "Pathways job rejects /tmp",
+			mounts:     []string{"gs://bucket;/tmp"},
+			isPathways: true,
+			errSubstr:  "conflicts with built-in Pathways mount \"/tmp\"",
+		},
+		{
+			name:       "Pathways job rejects /tmp/ with trailing slash",
+			mounts:     []string{"gs://bucket;/tmp/"},
+			isPathways: true,
+			errSubstr:  "conflicts with built-in Pathways mount \"/tmp\"",
+		},
+		{
+			name:                "Pathways job with sidecar rejects /tmp/sidecar",
+			mounts:              []string{"gs://bucket;/tmp/sidecar"},
+			isPathways:          true,
+			hasColocatedSidecar: true,
+			errSubstr:           "conflicts with built-in Pathways mount \"/tmp/sidecar\"",
+		},
+		{
+			name:                "Pathways job with sidecar rejects /tmp/sidecar/ with trailing slash",
+			mounts:              []string{"gs://bucket;/tmp/sidecar/"},
+			isPathways:          true,
+			hasColocatedSidecar: true,
+			errSubstr:           "conflicts with built-in Pathways mount \"/tmp/sidecar\"",
+		},
+		{
+			name:                "Pathways job with sidecar rejects /tmp/sidecar subpath",
+			mounts:              []string{"gs://bucket;/tmp/sidecar/ipc"},
+			isPathways:          true,
+			hasColocatedSidecar: true,
+			errSubstr:           "conflicts with built-in Pathways mount \"/tmp/sidecar\"",
+		},
+		{
+			name:       "Pathways job without sidecar allows /tmp/sidecar",
+			mounts:     []string{"gs://bucket;/tmp/sidecar"},
+			isPathways: true,
+		},
+		{
+			name:       "Pathways job without sidecar allows /tmp/sidecar subpath",
+			mounts:     []string{"gs://bucket;/tmp/sidecar/ipc"},
+			isPathways: true,
+		},
+		{
+			name:      "Non-Pathways job rejects duplicate destinations",
+			mounts:    []string{"gs://a;/data", "gs://b;/data"},
+			errSubstr: "duplicate volume destination",
+		},
+		{
+			name:       "Pathways job rejects duplicate destinations",
+			mounts:     []string{"gs://a;/data", "gs://b;/data"},
+			isPathways: true,
+			errSubstr:  "duplicate volume destination",
+		},
+		{
+			name:       "Pathways job rejects duplicate sources",
+			mounts:     []string{"gs://same;/data", "gs://same;/tmp/checkpoints"},
+			isPathways: true,
+			errSubstr:  "duplicate volume source",
+		},
+		{
+			name:       "Pathways job rejects reserved system path",
+			mounts:     []string{"gs://bucket;/proc"},
+			isPathways: true,
+			errSubstr:  "reserved system directory",
+		},
+		{
+			name:       "Pathways job rejects invalid mount format",
+			mounts:     []string{"gs://bucket"},
+			isPathways: true,
+			errSubstr:  "Missing destination",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := sm.validateJobMounts(tt.mounts, tt.isPathways, tt.hasColocatedSidecar)
+			if tt.errSubstr == "" {
+				if err != nil {
+					t.Fatalf("validateJobMounts() unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
+				t.Errorf("validateJobMounts() error = %v, want error containing %q", err, tt.errSubstr)
+			}
+		})
+	}
+}
+
+func TestAddVolumeOptions_MTC(t *testing.T) {
+	sm := &StorageManager{}
+
+	t.Run("Standard job adds MTC cache volume to VolumesYAML and VolumeMountsYAML", func(t *testing.T) {
+		opts := ManifestOptions{
+			GKEMTCEnabled:          true,
+			GKEMTCRamdiskDirectory: "/tmp/mtc",
+			IsPathwaysJob:          false,
+		}
+		sm.AddVolumeOptions(&opts, nil)
+		if !strings.Contains(opts.VolumesYAML, multitierCheckpointCSIDriver) {
+			t.Errorf("expected VolumesYAML to contain MTC CSI driver for standard job, got %q", opts.VolumesYAML)
+		}
+		if !strings.Contains(opts.VolumeMountsYAML, "mountPath: /tmp/mtc") {
+			t.Errorf("expected VolumeMountsYAML to contain /tmp/mtc for standard job, got %q", opts.VolumeMountsYAML)
+		}
+	})
+
+	t.Run("Pathways job leaves MTC volumes to the Pathways template", func(t *testing.T) {
+		opts := ManifestOptions{
+			GKEMTCEnabled:          true,
+			GKEMTCRamdiskDirectory: "/tmp/mtc",
+			IsPathwaysJob:          true,
+			Pathways: orchestrator.PathwaysJobDefinition{
+				ColocatedPythonSidecarImage: "gcr.io/pathways/sidecar:latest",
+			},
+		}
+		sm.AddVolumeOptions(&opts, nil)
+		if opts.VolumesYAML != "" || opts.VolumeMountsYAML != "" {
+			t.Errorf("expected no shared volumes for Pathways job, got VolumesYAML=%q VolumeMountsYAML=%q", opts.VolumesYAML, opts.VolumeMountsYAML)
+		}
+	})
 }
 
 func TestProcessMounts_Basic(t *testing.T) {
@@ -1572,8 +1772,8 @@ func assertProfilePVSpec(t *testing.T, pv map[string]interface{}, wantPV, wantPV
 	if got := nestedString(t, pv, "spec", "csi", "driver"); got != "gcsfuse.csi.storage.gke.io" {
 		t.Errorf("PV csi driver = %q", got)
 	}
-	if got := nestedString(t, pv, "spec", "csi", "volumeHandle"); got != "imagenet-dataset" {
-		t.Errorf("PV volumeHandle = %q, want imagenet-dataset", got)
+	if got := nestedString(t, pv, "spec", "csi", "volumeHandle"); got != "imagenet-dataset:"+wantPV {
+		t.Errorf("PV volumeHandle = %q, want imagenet-dataset:%s", got, wantPV)
 	}
 	if got := nestedString(t, pv, "spec", "claimRef", "name"); got != wantPVC {
 		t.Errorf("PV claimRef.name = %q, want %q", got, wantPVC)
@@ -1782,8 +1982,8 @@ func TestGCSFuseProfile_SubPathIsDelegatedToPod(t *testing.T) {
 	}
 
 	pv := findDoc(t, splitManifestDocs(t, manifests[0]), "PersistentVolume")
-	if got := nestedString(t, pv, "spec", "csi", "volumeHandle"); got != "model-checkpoints" {
-		t.Errorf("PV volumeHandle = %q, want the bare bucket name", got)
+	if got := nestedString(t, pv, "spec", "csi", "volumeHandle"); got != "model-checkpoints:gcluster-gcsfuse-model-checkpoints-checkpointing-c75dd3-default" {
+		t.Errorf("PV volumeHandle = %q, want the bucket name with a per-PV suffix (sub path must not leak in)", got)
 	}
 	if _, present := pv["spec"].(map[string]interface{})["mountOptions"]; present {
 		t.Error("PV must not receive only-dir/read-only mountOptions derived from the sub path")
@@ -2519,12 +2719,13 @@ func TestBuildVolumeSpec_AttributesOnlyApplyToInlineGCSFuse(t *testing.T) {
 func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 	pvcName := gatewayNameFor(t, profileStorageManager(t.TempDir()), "gs://bkt;/data;profile=training")
 	pvName := pvcName + "-default"
+	volumeHandle := "bkt:" + pvName
 
 	matchingPVJSON := `{
 		"spec": {
 			"storageClassName": "gcsfusecsi-training",
 			"capacity": {"storage": "5Gi"},
-			"csi": {"volumeHandle": "bkt"}
+			"csi": {"volumeHandle": "` + volumeHandle + `"}
 		},
 		"status": {"phase": "Bound"}
 	}`
@@ -2532,7 +2733,7 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 		"spec": {
 			"storageClassName": "gcsfusecsi-training",
 			"capacity": {"storage": "10Gi"},
-			"csi": {"volumeHandle": "bkt"}
+			"csi": {"volumeHandle": "` + volumeHandle + `"}
 		},
 		"status": {"phase": "Bound"}
 	}`
@@ -2540,7 +2741,7 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 		"spec": {
 			"storageClassName": "gcsfusecsi-training",
 			"capacity": {"storage": "5Gi"},
-			"csi": {"volumeHandle": "bkt"}
+			"csi": {"volumeHandle": "` + volumeHandle + `"}
 		},
 		"status": {"phase": "Released"}
 	}`
@@ -2549,7 +2750,7 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 		"spec": {
 			"storageClassName": "gcsfusecsi-training",
 			"capacity": {"storage": "10Gi"},
-			"csi": {"volumeHandle": "bkt"}
+			"csi": {"volumeHandle": "` + volumeHandle + `"}
 		},
 		"status": {"phase": "Released"}
 	}`
@@ -2559,7 +2760,7 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 		"spec": {
 			"storageClassName": "gcsfusecsi-training",
 			"capacity": {"storage": "10Gi"},
-			"csi": {"volumeHandle": "bkt"}
+			"csi": {"volumeHandle": "` + volumeHandle + `"}
 		},
 		"status": {"phase": "Bound"}
 	}`

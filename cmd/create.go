@@ -191,6 +191,7 @@ func expandOrDie(cmd *cobra.Command, path string) (config.Blueprint, *config.Yam
 	}
 
 	mergeDeploymentSettings(&bp, ds)
+	setSubblockIO(cmd, &bp, path)
 
 	checkErr(setValidationLevel(&bp, expandFlags.validationLevel), ctx)
 	skipValidators(&bp)

@@ -69,12 +69,14 @@ limitations under the License.
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0.0 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 | ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 6.0.0 |
+| <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
 ## Modules
 
@@ -87,6 +89,7 @@ No modules.
 | [google_discovery_engine_assistant.assistant](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/discovery_engine_assistant) | resource |
 | [google_discovery_engine_data_store.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/discovery_engine_data_store) | resource |
 | [google_discovery_engine_search_engine.engine](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/discovery_engine_search_engine) | resource |
+| [random_id.datastore_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 
 ## Inputs
 
@@ -94,7 +97,7 @@ No modules.
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_assistant_id"></a> [assistant\_id](#input\_assistant\_id) | Unique ID for the Assistant attached to the Discovery Engine. | `string` | n/a | yes |
 | <a name="input_collection"></a> [collection](#input\_collection) | Discovery Engine collection ID (e.g., 'default\_collection'). | `string` | `"default_collection"` | no |
-| <a name="input_engine_id"></a> [engine\_id](#input\_engine\_id) | Unique ID for the Discovery Engine chat assistant engine. | `string` | n/a | yes |
+| <a name="input_engine_id"></a> [engine\_id](#input\_engine\_id) | Unique ID for the Discovery Engine chat assistant engine (max 50 characters). | `string` | n/a | yes |
 | <a name="input_location"></a> [location](#input\_location) | Discovery Engine location (e.g., 'global', 'us', 'eu', or an allowlisted in-country location). See [Gemini Enterprise locations](https://cloud.google.com/gemini/enterprise/docs/locations) and [Agent Search locations](https://cloud.google.com/generative-ai-app-builder/docs/locations). | `string` | `"global"` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID. | `string` | n/a | yes |
 

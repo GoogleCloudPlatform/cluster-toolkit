@@ -34,7 +34,7 @@ class SlurmConfigGeneratorV2605(SlurmConfigGeneratorV2511):
     """Slurm 26.05 configuration generator."""
 
     def _add_tpu_conflines(self, conf_options: dict[str, Any]) -> None:
-        """Adds TPU conf lines (GresTypes, JobSubmitPlugins, CliFilterPlugins) to slurm.conf options."""
+        """Adds TPU conf lines (GresTypes, JobSubmitPlugins, CliFilterPlugins, SlurmctldParameters) to slurm.conf options."""
         for param in ("GresTypes", "JobSubmitPlugins", "CliFilterPlugins"):
             val = conf_options.get(param, None)
             if not val:
@@ -43,6 +43,14 @@ class SlurmConfigGeneratorV2605(SlurmConfigGeneratorV2511):
                 conf_options[param] = [val]
             if "tpu" not in conf_options[param]:
                 conf_options[param].append("tpu")
+        val = conf_options.get("SlurmctldParameters", None)
+        if not val:
+            conf_options["SlurmctldParameters"] = ["enable_async_reply"]
+        else:
+            if isinstance(val, str):
+                conf_options["SlurmctldParameters"] = [s.strip() for s in val.split(",") if s.strip()]
+            if "enable_async_reply" not in conf_options["SlurmctldParameters"]:
+                conf_options["SlurmctldParameters"].append("enable_async_reply")
 
     def _append_feature(self, node_conf: dict[str, Any], feature: str) -> None:
         """Appends a feature string to the node configuration's Feature list."""
@@ -101,27 +109,27 @@ class SlurmConfigGeneratorV2605(SlurmConfigGeneratorV2511):
         if not self.lkp.has_tpu_nodesets():
             return base_lines
 
-        tpu_nodes: defaultdict[Tuple[int, str], List[str]] = defaultdict(list)
+        tpu_nodes: defaultdict[int, List[str]] = defaultdict(list)
         for nodeset in self.lkp.cfg.nodeset.values():
             nodelist = self.lkp.nodelist(nodeset)
             if nodelist and (tpu_info := self.lkp.node_tpu_info(nodeset)):
-                tpu_nodes[(tpu_info.tpus_per_node, tpu_info.type)].append(nodelist)
+                tpu_nodes[tpu_info.tpus_per_node].append(nodelist)
 
         tpu_lines = [
             conf.dict_to_conf({
                 "NodeName": names,
                 "Name": "tpu",
-                "Type": tpu_type,
                 "File": f"/dev/vfio/devices/vfio[0-{i-1}]" if i > 1 else "/dev/vfio/devices/vfio0",
             })
-            for (i, tpu_type), names in tpu_nodes.items()
+            for i, names in tpu_nodes.items()
         ]
         combined = [line for line in base_lines.splitlines() if line.strip()] + tpu_lines
         combined.append("\n")
         return "\n".join(combined)
 
     def install_cgroup_conf(self) -> None:
-        # tpu7x and v5p have dual cores per chip (8 VFIO devices for 4 chips), so set ConstrainDevices=no
+        # tpu7x has dual cores per chip (8 VFIO devices for 4 chips), so set ConstrainDevices=no
+        # v5p (ct5p) also requires ConstrainDevices=no so Slurm cgroups do not block VFIO IOMMU group access
         if not self.lkp.remove_device_constrain():
             return super().install_cgroup_conf()
 

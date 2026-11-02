@@ -19,14 +19,23 @@ package shell
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
+)
+
+const (
+	DefaultLocalCommandTimeout = 15 * time.Second // For local checks: gcloud version, config reads, kubectl --client
+	DefaultCloudAPITimeout     = 30 * time.Second // For remote GCP APIs: clusters describe, projects describe
 )
 
 // ProposedChanges provides summary and full description of proposed changes
@@ -41,6 +50,7 @@ type CommandResult struct {
 	Stdout   string
 	Stderr   string
 	ExitCode int
+	Err      error
 }
 
 // Command represents a shell command that can be executed.
@@ -49,12 +59,24 @@ type Command struct {
 	stdin  bytes.Buffer
 	stdout bytes.Buffer
 	stderr bytes.Buffer
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // NewCommand creates a new Command instance.
 func NewCommand(name string, args ...string) *Command {
 	cmd := exec.Command(name, args...)
 	return &Command{cmd: cmd}
+}
+
+// NewCommandWithTimeout creates a new Command instance with a timeout.
+func NewCommandWithTimeout(timeout time.Duration, name string, args ...string) *Command {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	cmd := exec.CommandContext(ctx, name, args...)
+	// Forcefully close I/O pipes if orphaned child processes keep them open after timeout.
+	// This unblocks cmd.Run() reliably on both Windows (TerminateProcess) and Unix (SIGKILL).
+	cmd.WaitDelay = 100 * time.Millisecond
+	return &Command{cmd: cmd, ctx: ctx, cancel: cancel}
 }
 
 // SetInput sets the standard input for the command.
@@ -65,30 +87,36 @@ func (c *Command) SetInput(input string) {
 
 // Execute runs the command and returns a CommandResult.
 func (c *Command) Execute() CommandResult {
+	if c.cancel != nil {
+		defer c.cancel()
+	}
 	c.cmd.Stdout = &c.stdout
 	c.cmd.Stderr = &c.stderr
 
 	err := c.cmd.Run()
+	if errors.Is(err, exec.ErrWaitDelay) {
+		// The process exited successfully; only a child kept stdout/stderr open.
+		err = nil
+	} else if err != nil && c.ctx != nil && c.ctx.Err() == context.DeadlineExceeded {
+		err = context.DeadlineExceeded
+	}
+	result := CommandResult{
+		Stdout: c.stdout.String(),
+		Stderr: c.stderr.String(),
+		Err:    err,
+	}
 	if err != nil {
-		if exitError, ok := err.(*exec.ExitError); ok {
-			return CommandResult{
-				Stdout:   c.stdout.String(),
-				Stderr:   c.stderr.String(),
-				ExitCode: exitError.ExitCode(),
-			}
+		if errors.Is(err, context.DeadlineExceeded) {
+			result.ExitCode = 124
+		} else if exitError, ok := err.(*exec.ExitError); ok {
+			result.ExitCode = exitError.ExitCode()
+		} else {
+			result.ExitCode = -1
 		}
-		// If it's not an ExitError, it's some other error during command execution
-		return CommandResult{
-			Stdout:   c.stdout.String(),
-			Stderr:   c.stderr.String(),
-			ExitCode: 1, // Generic error code
-		}
+	} else {
+		result.ExitCode = 0
 	}
-	return CommandResult{
-		Stdout:   c.stdout.String(),
-		Stderr:   c.stderr.String(),
-		ExitCode: 0,
-	}
+	return result
 }
 
 // ExecuteCommand executes a shell command and returns its output and exit code.
@@ -197,25 +225,65 @@ Please select an option [d,a,s,c]: `)
 	}
 }
 
-// PromptYesNo prompts the user with a yes/no question.
-// It returns true if the user answers 'y' or 'yes' or just presses Enter.
+// PromptYesNo prompts the user with a yes/no question and reads one line from standard input.
+// It returns true for 'y', 'yes' or an empty line (Enter) and false for 'n' or 'no'. It also
+// returns false, without exiting, if standard input ends or fails before a valid answer.
 var PromptYesNo = func(prompt string) bool {
-	reader := bufio.NewReader(os.Stdin)
+	return promptYesNo(os.Stdin, prompt)
+}
+
+func promptYesNo(in io.Reader, prompt string) bool {
 	for {
 		fmt.Printf("%s [Y/n]: ", prompt)
-		response, err := reader.ReadString('\n')
-		if err != nil {
-			logging.Fatal("%v", err)
+		line, err := readLine(in)
+		if err != nil && !errors.Is(err, io.EOF) {
+			fmt.Println()
+			logging.Warn("Could not read standard input (%v); answering 'no'.", err)
+			return false
 		}
-		response = strings.ToLower(strings.TrimSpace(response))
-		if response == "" || response == "y" || response == "yes" {
+		// Windows PowerShell can prepend a UTF-8 byte-order mark, which TrimSpace keeps.
+		switch strings.ToLower(strings.TrimSpace(strings.TrimPrefix(line, "\uFEFF"))) {
+		case "y", "yes":
 			return true
+		case "n", "no":
+			return false
+		case "":
+			if err == nil {
+				return true
+			}
 		}
-		if response == "n" || response == "no" {
+		if err != nil {
+			fmt.Println()
+			logging.Warn("No answer on standard input (it is closed or ended); answering 'no'.")
 			return false
 		}
 		fmt.Println("Invalid input. Please enter 'Y' or 'n'.")
 	}
+}
+
+// readLine reads from r up to and including the next '\n' and returns the line without it.
+// It reads one byte at a time so input after the line stays unread for later prompts. The
+// error is nil only if a '\n' was read.
+func readLine(r io.Reader) (string, error) {
+	var line []byte
+	b := make([]byte, 1)
+	for i := 0; i < 100; {
+		n, err := r.Read(b)
+		if n == 1 {
+			i = 0 // reset retry counter on successful read
+			if b[0] == '\n' {
+				return string(line), nil
+			}
+			line = append(line, b[0])
+		}
+		if err != nil {
+			return string(line), err
+		}
+		if n == 0 {
+			i++
+		}
+	}
+	return string(line), io.ErrNoProgress
 }
 
 // ExtractRegion extracts the region from a location (region or zone).
@@ -226,4 +294,23 @@ func ExtractRegion(location string) string {
 		return parts[0] + "-" + parts[1]
 	}
 	return location
+}
+
+// ExecuteCommandWithTimeout executes a shell command but forcibly kills the
+// process if it does not complete within the provided timeout duration.
+var ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) CommandResult {
+	return NewCommandWithTimeout(timeout, name, args...).Execute()
+}
+
+// HandleExecError checks if a CommandResult failed due to a timeout or failed to start.
+func HandleExecError(result CommandResult, cmdName string, timeoutMsg string) error {
+	if result.Err != nil {
+		if errors.Is(result.Err, context.DeadlineExceeded) {
+			return fmt.Errorf("%s: %w", timeoutMsg, result.Err)
+		}
+		if result.ExitCode == -1 {
+			return fmt.Errorf("failed to execute %s: %w", cmdName, result.Err)
+		}
+	}
+	return nil
 }

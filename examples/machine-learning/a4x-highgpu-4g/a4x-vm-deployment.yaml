@@ -25,3 +25,7 @@ vars:
   zone: # supply zone with a4x-highgpu-8g capacity in reservation
   reservation_name: # supply a4x-highgpu-8g reservation name
   instance_count: # supply number of vms desired
+
+## --- Optional overrides (defaults shown) ---
+  # image_build_machine_type: t2a-standard-16
+  # homefs_size_gb: 10240

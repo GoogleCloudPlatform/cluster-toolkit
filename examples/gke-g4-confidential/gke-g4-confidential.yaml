@@ -29,7 +29,7 @@ vars:
   zone:
 
   # The VM shape (must be g4-standard-48 for RTX 6000 GPU Confidential nodes).
-  machine_type: g4-standard-48
+  compute_machine_type: g4-standard-48
 
   # Number of GPUs in the VM (must be 1 for g4-standard-48).
   num_gpus: 1
@@ -69,6 +69,14 @@ vars:
   subnetwork_name_0: $(vars.deployment_name)-sub-0
   network_name_1: $(vars.deployment_name)-net-1
   subnetwork_name_1: $(vars.deployment_name)-sub-1
+
+  # Optional overrides (defaults shown)
+  # Machine type for the GKE system node pool.
+  system_node_pool_machine_type: n2d-standard-16
+  # Boot disk size in GB of the GKE system node pool nodes.
+  system_node_pool_disk_size_gb: 100
+  # Capacity in GB of the confidential Hyperdisk persistent volume.
+  confidential_storage_capacity_gb: 100
 
 deployment_groups:
 - group: primary
@@ -147,8 +155,8 @@ deployment_groups:
       # N2D supports AMD SEV (E2 is incompatible with cluster-level confidential nodes)
       cluster_availability_type: REGIONAL
       cluster_reference_type: NAME
-      system_node_pool_machine_type: "n2d-standard-16"
-      system_node_pool_disk_size_gb: 100
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
+      system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
       enable_private_endpoint: false
@@ -170,7 +178,7 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [g4-cluster, node_pool_service_account]
     settings:
-      machine_type: $(vars.machine_type)
+      machine_type: $(vars.compute_machine_type)
       auto_upgrade: false
       zones: [$(vars.zone)]
       static_node_count: $(vars.static_node_count)
@@ -197,7 +205,7 @@ deployment_groups:
     settings:
       storage_type: Hyperdisk-balanced
       access_mode: ReadWriteOnce
-      capacity_gb: 100
+      capacity_gb: $(vars.confidential_storage_capacity_gb)
       sc_reclaim_policy: Delete
       enable_confidential_storage: $(vars.enable_confidential_storage)
       disk_encryption_kms_key: $(vars.disk_encryption_kms_key)

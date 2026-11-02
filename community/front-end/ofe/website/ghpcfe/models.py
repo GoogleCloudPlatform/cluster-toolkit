@@ -605,14 +605,14 @@ class Image(CloudResource):
         max_length=60,
         help_text="Enter a source image project",
         blank=False,
-        default="schedmd-slurm-public",
+        default="advanced-compute-images",
     )
 
     source_image_family = models.CharField(
         max_length=60,
         help_text="Enter a source image family",
         blank=False,
-        default="slurm-gcp-6-12-hpc-rocky-linux-9",
+        default="aci-cpu-rocky-linux-9-slurm-2605-amd64",
     )
 
     startup_script = models.ManyToManyField(

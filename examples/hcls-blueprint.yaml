@@ -26,6 +26,17 @@ vars:
   region: asia-southeast1
   zone: asia-southeast1-b
   bucket_force_destroy: false
+  # Optional overrides (defaults shown)
+  # Machine type of the VM that builds the Spack software stack.
+  spack_builder_machine_type: c2-standard-16
+  # Maximum number of dynamically provisioned nodes in the compute partition.
+  compute_node_count_dynamic_max: 20
+  # Machine type for the compute partition.
+  compute_machine_type: c2-standard-60
+  # Maximum number of dynamically provisioned nodes in the gpu partition.
+  gpu_node_count_dynamic_max: 20
+  # Machine type for the gpu partition.
+  gpu_machine_type: g2-standard-4
 
 deployment_groups:
 - group: enable_apis
@@ -292,7 +303,7 @@ deployment_groups:
       name_prefix: spack-builder
       add_deployment_name_before_prefix: true
       threads_per_core: 2
-      machine_type: c2-standard-16
+      machine_type: $(vars.spack_builder_machine_type)
       allow_automatic_updates: false
 
 - group: cluster
@@ -338,8 +349,8 @@ deployment_groups:
     use: [network]
     settings:
       name: ns
-      node_count_dynamic_max: 20
-      machine_type: c2-standard-60
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
+      machine_type: $(vars.compute_machine_type)
       allow_automatic_updates: false
 
   - id: compute_partition
@@ -356,8 +367,8 @@ deployment_groups:
       name: gpu
       advanced_machine_features:
         threads_per_core: null # Use platform default value
-      node_count_dynamic_max: 20
-      machine_type: g2-standard-4
+      node_count_dynamic_max: $(vars.gpu_node_count_dynamic_max)
+      machine_type: $(vars.gpu_machine_type)
       allow_automatic_updates: false
 
   - id: gpu_partition

@@ -242,7 +242,7 @@ Example of creating a storage pool using an existing network which was already P
 
 ```yaml
 deployment_groups:
- - group: primary
+- group: primary
   modules:
   - id: network
     source: modules/network/pre-existing-vpc

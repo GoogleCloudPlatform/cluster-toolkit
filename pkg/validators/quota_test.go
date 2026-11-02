@@ -252,6 +252,26 @@ func TestCollectRequirements(t *testing.T) {
 			},
 		},
 		{
+			name: "Hyperdisk Balance with disk_provisioned_iops",
+			modules: []config.Module{
+				{
+					ID: "hdb-boot",
+					Settings: config.NewDict(map[string]cty.Value{
+						"disk_type":                   cty.StringVal("hyperdisk-balanced"),
+						"disk_size_gb":                cty.NumberIntVal(100),
+						"disk_provisioned_iops":       cty.NumberIntVal(3600),
+						"disk_provisioned_throughput": cty.NumberIntVal(200),
+						"zone":                        cty.StringVal("us-central1-a"),
+					}),
+				},
+			},
+			expected: []QuotaRequirement{
+				{ProjectID: "test-project", Region: "us-central1", Metric: "HYPERDISK_BALANCED_TOTAL_GB", Needed: 100},
+				{ProjectID: "test-project", Region: "us-central1", Metric: "HYPERDISK_BALANCED_IOPS", Needed: 3600},
+				{ProjectID: "test-project", Region: "us-central1", Metric: "HYPERDISK_BALANCED_THROUGHPUT", Needed: 200},
+			},
+		},
+		{
 			name: "TPU v2-8",
 			modules: []config.Module{
 				{
