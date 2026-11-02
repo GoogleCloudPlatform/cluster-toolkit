@@ -658,17 +658,18 @@ func statusReadySlices(js *spsJobSetView, instanceCount int) string {
 
 // parseSPSHead checks that pathways-head runs only the resource manager and reads the slice shape from it.
 func parseSPSHead(name string, head *spsPodSpecView, summary *spsInstanceSummary) error {
-	var rm *spsContainerView
+	var rm spsContainerView
+	var foundRM bool
 	for _, c := range append(append([]spsContainerView{}, head.InitContainers...), head.Containers...) {
 		switch {
 		case c.Name == "pathways-rm":
-			c := c
-			rm = &c
+			rm = c
+			foundRM = true
 		case c.Name == "pathways-proxy" || strings.HasPrefix(c.Name, "workload-container") || c.Name == "user-workload":
 			return fmt.Errorf("JobSet %q is not an SPS instance: its pathways-head runs %s, so it is a regular or headless Pathways job", name, c.Name)
 		}
 	}
-	if rm == nil {
+	if !foundRM {
 		return fmt.Errorf("JobSet %q is not an SPS instance: its pathways-head does not run pathways-rm", name)
 	}
 	summary.ServerImage = rm.Image
