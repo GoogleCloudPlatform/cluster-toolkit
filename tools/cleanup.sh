@@ -17,6 +17,8 @@
 
 # Associative array for resource names to exclude from deletion
 declare -A EXCLUSION_MAP
+# Associative array for active Cloud Build 6-character prefixes
+declare -A ACTIVE_BUILD_PREFIXES
 ERROR_COUNT=0
 
 # To store IPs of protected instances, used to find and protect matching Address resources
@@ -113,9 +115,12 @@ populate_active_build_exclusions() {
 		while IFS= read -r build_id; do
 			[[ -z "$build_id" ]] && continue
 			prefix="${build_id:0:6}"
-			if [[ -n "$prefix" && -z "${EXCLUSION_MAP[${prefix}]:-}" ]]; then
-				log "INFO" "Protecting resources matching active Cloud Build prefix: ${prefix} (build ${build_id})"
-				EXCLUSION_MAP["${prefix}"]=1
+			if [[ -n "$prefix" ]]; then
+				ACTIVE_BUILD_PREFIXES["${prefix}"]=1
+				if [[ -z "${EXCLUSION_MAP[${prefix}]:-}" ]]; then
+					log "INFO" "Protecting resources matching active Cloud Build prefix: ${prefix} (build ${build_id})"
+					EXCLUSION_MAP["${prefix}"]=1
+				fi
 			fi
 		done <<<"$ongoing_builds"
 	fi
@@ -1206,7 +1211,7 @@ process_lustre_instances() {
 
 process_storage_buckets() {
 	log "INFO" "--- Processing: Storage Buckets ---"
-	local buckets_data name location creation_time labels_str protected protected_name deployment
+	local buckets_data name location creation_time labels_str protected build_prefix deployment
 	if ! buckets_data=$(gcloud storage buckets list --project="$PROJECT_ID" \
 		--filter="creation_time < '$CUTOFF_TIME'" \
 		--sort-by=name \
@@ -1255,13 +1260,12 @@ process_storage_buckets() {
 			continue
 		fi
 
-		# 5. Check if bucket name contains any active Cloud Build prefix or protected resource name
+		# 5. Check if bucket name contains any active Cloud Build prefix
 		protected=false
-		for protected_name in "${!EXCLUSION_MAP[@]}"; do
-			[[ -z "$protected_name" || "$protected_name" == "default" ]] && continue
-			if [[ "$name" == *"$protected_name"* ]]; then
+		for build_prefix in "${!ACTIVE_BUILD_PREFIXES[@]}"; do
+			if [[ "$name" == *"$build_prefix"* ]]; then
 				protected=true
-				log "SKIP" "Storage Bucket $name is protected because it matches protected resource/prefix: $protected_name"
+				log "SKIP" "Storage Bucket $name is protected because it matches active Cloud Build prefix: $build_prefix"
 				break
 			fi
 		done
