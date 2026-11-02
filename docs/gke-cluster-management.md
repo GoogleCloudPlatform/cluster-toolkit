@@ -244,7 +244,7 @@ gcloud container clusters update CLUSTER_NAME \
 
 Periodically, the Cluster Toolkit team updates the default `version_prefix` defined in `gke-cluster` and example blueprints to incorporate new stable GKE versions for **newly created** clusters:
 
-1. **New Clusters**: Updating your Cluster Toolkit checkout (`git pull && make`) ensures newly created deployments pick up the latest default `version_prefix`.
+1. **New Clusters**: Updating Cluster Toolkit (download the latest release binary, or `git pull && make` in a source checkout) ensures newly created deployments pick up the latest default `version_prefix`.
 2. **Existing Clusters**: Because `gke-cluster` lists `min_master_version` in `lifecycle.ignore_changes`, re-running `./gcluster deploy <path-to-blueprint.yaml> -w` on an existing deployment will **not** upgrade an existing control plane's GKE version (though it will reconcile any `gke-node-pool` versions to match the cluster's current `master_version` if the control plane was already upgraded via release channel, `gcloud`, or the Cloud Console; see [Section 2.2](#22-upgrading-an-existing-cluster)).
 
 ```shell

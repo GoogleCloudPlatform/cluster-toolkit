@@ -400,7 +400,7 @@ def validate_yaml_block(
     cleaned_block = _strip_yaml_elision_lines(block)
     try:
         docs = list(yaml.safe_load_all(cleaned_block))
-    except yaml.YAMLError as exc:
+    except (yaml.YAMLError, ValueError) as exc:
         first_line = str(exc).splitlines()[0]
         errors.append(f"{rel_path}: invalid YAML syntax in snippet: {first_line}")
         return errors
@@ -614,19 +614,21 @@ def validate_module_readme_snippets(non_ignored: set[str] | None = None) -> list
             block = match.group(2)
             if lang not in ("yaml", "yml", ""):
                 continue
+            line_no = pre_hook.count("\n", 0, match.start(2)) + 1
+            snippet_loc = f"{rel_path}:{line_no}"
             if "source:" in block and "id:" in block:
                 errors.extend(
                     validate_yaml_block(
-                        block, rel_path, tf_cache, require_defined_refs=False, non_ignored=non_ignored
+                        block, snippet_loc, tf_cache, require_defined_refs=False, non_ignored=non_ignored
                     )
                 )
             elif lang in ("yaml", "yml"):
                 cleaned_block = _strip_yaml_elision_lines(block)
                 try:
                     list(yaml.safe_load_all(cleaned_block))
-                except yaml.YAMLError as exc:
+                except (yaml.YAMLError, ValueError) as exc:
                     first_line = str(exc).splitlines()[0]
-                    errors.append(f"{rel_path}: invalid YAML syntax in snippet: {first_line}")
+                    errors.append(f"{snippet_loc}: invalid YAML syntax in snippet: {first_line}")
 
     os_compat_blueprints = [
         p

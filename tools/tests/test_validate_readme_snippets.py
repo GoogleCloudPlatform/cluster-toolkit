@@ -207,6 +207,23 @@ class TestValidateReadmeSnippets(unittest.TestCase):
                     attrs = object_attrs(attrs[part])
                 self.assertEqual(allowed, set(attrs))
 
+    def test_required_module_settings_have_no_default(self):
+        """REQUIRED_MODULE_SETTINGS entries must be variables without a default in variables.tf."""
+        for module, required in vrs.REQUIRED_MODULE_SETTINGS.items():
+            text = ""
+            for tf in sorted(glob.glob(os.path.join(vrs.REPO_ROOT, module, "*.tf"))):
+                with open(tf, encoding="utf-8") as f:
+                    text += vrs._strip_hcl_comments(f.read())
+            for name in sorted(required):
+                with self.subTest(module=module, var=name):
+                    m = re.search(rf'variable\s+"{name}"\s*\{{', text)
+                    self.assertIsNotNone(m, f"variable {name!r} not found in {module}")
+                    body = vrs._hcl_block_body(text, m.end())
+                    self.assertIsNone(
+                        re.search(r"^\s*default\s*=", body, re.MULTILINE),
+                        f"{module}: {name!r} now has a default; drop it from REQUIRED_MODULE_SETTINGS",
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

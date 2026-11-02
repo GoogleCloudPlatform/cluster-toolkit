@@ -25,7 +25,7 @@ This creates a cluster of 8 compute VMs that are:
 > (`threads_per_core=0` by default, which resolves to `1` thread per physical core on SMT-capable machines and falls back to GCE defaults on unsupported types), meaning only the physical cores are visible on the
 > VM. With SMT disabled, a machine of type c2-standard-60 will only have the 30
 > physical cores visible. To enable SMT, set `threads_per_core: 2` under
-> `settings` (or `threads_per_core: $(null)` to always use GCE defaults).
+> `settings` (or `threads_per_core: null` to always use GCE defaults).
 
 ### VPC Networks
 
