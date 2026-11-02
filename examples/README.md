@@ -2307,8 +2307,8 @@ deployment_groups:
 
 * **toolkit_modules_url** and **toolkit_modules_version** (optional): The blueprint schema provides the optional fields `toolkit_modules_url` and `toolkit_modules_version` to version a blueprint. When these fields are provided, any module in the blueprint with a reference to an embedded module in its source field will be updated to reference the specified GitHub source and toolkit version in the deployment folder. `toolkit_modules_url` specifies the base URL of the GitHub repository containing the modules and `toolkit_modules_version` specifies the version of the modules to use. `toolkit_modules_url` and `toolkit_modules_version` should be provided together when in use.
 * **terraform_backend_defaults** (optional): Configures a default Terraform state backend (for example, `type: gcs` with `configuration: {bucket: <BUCKET_NAME>}`) inherited by every Terraform deployment group unless overridden on the group's `terraform_backend` field.
-* **validation_level** and **validators** (optional): `validation_level` sets the pre-flight validation severity (`"ERROR"` (default), `"WARNING"`, or `"IGNORE"`), and `validators` customizes or skips individual pre-flight checks (see [`docs/blueprint-validation.md`](../docs/blueprint-validation.md)).
-* **terraform_providers** (optional): Overrides default Terraform provider `source`, `version`, and `configuration` blocks (for example, `google` and `google-beta`) across Terraform deployment groups.
+* **validators** (optional): Customizes or skips individual pre-flight checks (see [`docs/blueprint-validation.md`](../docs/blueprint-validation.md)). The validation severity is set with the `-l, --validation-level` CLI flag (`ERROR` (default), `WARNING`, or `IGNORE`), which overrides any blueprint-level `validation_level`.
+* **terraform_providers** (optional): Replaces the default `{google, google-beta}` Terraform provider map (`source`, `version`, and `configuration` blocks) across Terraform deployment groups that do not define their own group-level `terraform_providers` (any provider omitted from the map is not generated).
 
 ### Deployment Variables
 
@@ -2342,7 +2342,7 @@ The Cluster Toolkit automatically sets reserved labels for monitoring and resour
 
 * `ghpc_blueprint`: The name of the blueprint the deployment was created from (can be overridden in `vars.labels` or module `settings.labels`)
 * `ghpc_deployment`: The name of the specific deployment (can be overridden in `vars.labels` or module `settings.labels`)
-* `ghpc_creator`: Set automatically to the sanitized username when deploying with a `@google.com` account (or when `--add-creator-label` is passed)
+* `ghpc_creator`: Set automatically to the sanitized account identity (e.g., `jdoe_google_com`) when deploying with a `@google.com` account (or when `--add-creator-label=true` is passed; disable with `--add-creator-label=false`)
 * `ghpc_module` and `ghpc_role`: Set inside each Terraform/Packer module's `locals` via `merge(var.labels, { ghpc_module = "...", ghpc_role = "..." })` (see below; because they are merged after `var.labels`, they cannot be overridden via `vars.labels`)
 
 A module role is a default label applied to modules (`ghpc_role`), which

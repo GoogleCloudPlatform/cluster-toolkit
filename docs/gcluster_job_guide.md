@@ -129,22 +129,22 @@ By specifying the `--compute-type` flag, you can use the exact same command to t
 A TPU shorthand names a slice size, not a host shape. GKE can run the same slice on different machine types of a TPU family (an 8-chip `2x4` v5e slice is one `ct5lp-hightpu-8t` host or two `ct5lp-hightpu-4t` hosts), so `gcluster` uses the machine type of that family found in the cluster's node pools. `v5e-N` and `v5litepod-N` are equivalent. To pin a specific host shape, pass the full machine type (for example `--compute-type ct5lp-hightpu-4t`).
 
 > [!TIP]
-> **Simplify Commands with Context Configuration**: You can set these values once using `gcluster job context` (`config` is supported as an alias) and omit them from subsequent commands:
+> **Simplify Commands with Configuration**: You can set these values once using `gcluster job config` and omit them from subsequent commands:
 >
 > ```bash
 > # Open system editor to edit defaults interactively
-> ./gcluster job context set
+> ./gcluster job config set
 >
 > # Or set values individually
-> ./gcluster job context set project <PROJECT_ID>
-> ./gcluster job context set cluster <CLUSTER_NAME>
-> ./gcluster job context set location <REGION/ZONE>
+> ./gcluster job config set project <PROJECT_ID>
+> ./gcluster job config set cluster <CLUSTER_NAME>
+> ./gcluster job config set location <REGION/ZONE>
 > ```
 >
 > To view your current configuration, run:
 >
 > ```bash
-> ./gcluster job context show
+> ./gcluster job config show
 > ```
 
 ### 4.2 Submit the Job
@@ -170,7 +170,7 @@ This command will:
 4. Build a container image from the job_details directory using python:3.9-slim as the base, and push it to Artifact Registry.
 5. Generate and apply an intelligently configured Kubernetes JobSet manifest to your cluster.
 
-*Note: The following examples assume you have configured your default project, cluster, and location using `./gcluster job context set`.*
+*Note: The following examples assume you have configured your default project, cluster, and location using `./gcluster job config set`.*
 
 ### 4.3 Example for Multi-Slice GPU Job
 
@@ -358,7 +358,7 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
 
 ## 6. Advanced Workloads
 
-*Note: The following examples assume you have configured your default project, cluster, and location using `./gcluster job context set`.*
+*Note: The following examples assume you have configured your default project, cluster, and location using `./gcluster job config set`.*
 
 ### 6.1 Run with Advanced Scheduling Flags
 
@@ -1221,7 +1221,7 @@ Pass the `--gke-custom-templates-path` flag to the `submit` command:
 ## 9. `gcluster job` Command Reference
 
 ### 9.1 Common Flags
-*These flags are common to almost all `gcluster job` subcommands (except `context`/`config`). `project`, `cluster`, and `location` can be set as defaults via `context set` (to discover clusters and storage volumes in your project, see `gcluster cluster list|describe|info|volume` in [`cmd/README.md`](../cmd/README.md#gcluster-cluster)).*
+*These flags are common to almost all `gcluster job` subcommands (except `config`). `project`, `cluster`, and `location` can be set as defaults via `config set` (to discover clusters and storage volumes in your project, see `gcluster cluster list|describe|info|volume` in [`cmd/README.md`](../cmd/README.md#gcluster-cluster)).*
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
@@ -1231,11 +1231,11 @@ Pass the `--gke-custom-templates-path` flag to the `submit` command:
 | `--gke-namespace` | `string` | Target GKE namespace for the operation. Supported across all job commands. If omitted, automatic detection is used. |
 | `--skip-prereqs` | `flag` | Bypasses local workstation pre-flight environment checks (e.g. gcloud SDK, IAM checks, Docker config). |
 
-### 9.2 Context / Configuration Commands
-*Use `gcluster job context` (`gcluster job config` is supported as an alias) to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*
+### 9.2 Configuration Commands
+*Use `gcluster job config` to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*
 
-#### `gcluster job context set [key] [value]`
-Modifies configuration defaults. If run without any arguments (`./gcluster job context set`), it automatically opens your default system text editor (`$EDITOR` or `nano`) to edit the configuration file interactively.
+#### `gcluster job config set [key] [value]`
+Modifies configuration defaults. If run without any arguments (`./gcluster job config set`), it automatically opens your default system text editor (`$EDITOR` or `nano`) to edit the configuration file interactively.
 
 * **Supported Keys:**
   * `project`: Google Cloud Project ID
@@ -1246,21 +1246,21 @@ Modifies configuration defaults. If run without any arguments (`./gcluster job c
 
 ```bash
 # Interactive editor mode:
-./gcluster job context set
+./gcluster job config set
 
 # Set specific key/value pairs:
-./gcluster job context set project my-awesome-project
-./gcluster job context set cluster my-cluster
-./gcluster job context set location us-central1-a
+./gcluster job config set project my-awesome-project
+./gcluster job config set cluster my-cluster
+./gcluster job config set location us-central1-a
 ```
 
-#### `gcluster job context show`
+#### `gcluster job config show`
 Prints the current saved configuration defaults and configuration file path.
 
 **Example:**
 
 ```bash
-./gcluster job context show
+./gcluster job config show
 ```
 
 ### 9.3 `submit` Flags
@@ -1331,7 +1331,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--grace-period` | `string` | Buffer period given to pods to save checkpoints before forced termination (Default: `30s`). |
 | `--gke-mtc-enabled` | `flag` | If present, enables Multi-Tier Checkpointing (MTC) for the workload. |
 | `--gke-mtc-ramdisk-dir` | `string` | The ramdisk directory path for local checkpoints in MTC (required when `--gke-mtc-enabled` is set). |
-| `--enable-ml-diagnostics` | `bool` | Enables ML Diagnostics (`diagon.gke.io/enable-ml-diagnostics: "true"`) for the workload. Requires the target GKE cluster to have ML Diagnostics enabled (`enable_ml_diagnostics: true`). |
+| `--enable-ml-diagnostics` | `bool` | Enables ML Diagnostics for the workload by adding the `managed-mldiagnostics-gke: "true"` label to the JobSet. Requires the target GKE cluster to have ML Diagnostics enabled (`gke-cluster` setting `enable_ml_diagnostics: true`). |
 | `--gke-ttl-after-finished` | `string` | Time duration to retain the JobSet resources after completion (Default: `1h`). |
 | `--placement-policy` | `string` | Name of an existing GCE compact placement or workload policy; the job is pinned to nodes carrying it via `cloud.google.com/placement-policy-name`. Auto-resolved for A4X and multi-host TPU 7x when omitted. |
 | `--restart-on-exit-codes` | `string` | Comma-separated allowlist of retriable container exit codes (`1..255`). Exit codes in this list allow the job to restart up to `--restarts`, while any other non-zero exit code fails the job immediately (`action: FailJob` on `NotIn`). |
@@ -1349,7 +1349,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `--status` | `string` | Filter jobs by status (`Pending`, `Running`, `Succeeded`, `Failed`, `Suspended`). On GKE, `job list` derives status directly from the JobSet object (`Suspended` while queued in Kueue, `Running` once admitted, `Succeeded`, or `Failed`); pod-level `Pending` (admitted JobSet waiting on pod scheduling) is reported by `gcluster job status <job-id>`. |
+| `--status` | `string` | Filter jobs by status (`Pending`, `Running`, `Succeeded`, `Failed`, `Suspended`). `job list` derives status from the JobSet object (`Suspended` while queued in Kueue, `Running` once admitted, `Succeeded`, or `Failed`), so it never reports `Pending` on GKE and an admitted job whose pods are still unscheduled shows `Running`. For admission and pod details, use `gcluster job inspect --name <job-name> --show` or `kubectl get pods -l jobset.sigs.k8s.io/jobset-name=<job-name>`. |
 | `--name-contains` | `string` | Filter jobs by name containing the specified string. |
 
 ### 9.5 `logs` Flags

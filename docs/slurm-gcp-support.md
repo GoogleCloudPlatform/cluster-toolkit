@@ -29,8 +29,8 @@ only supported option for GCE-based Slurm clusters on Google Cloud (for Kubernet
 
   The v5 concept of "node-group" was replaced by "nodeset" to align with Slurm naming convention. Nodeset can be attributed to multiple partitions, as well as partitions can include multiple nodesets.
 
-* Upgrade Slurm to 23.11+ (up to 25.11 in Slurm-GCP 6.13+)
-* TPU v3, v4, and TPU 7x support
+* Upgrade Slurm to 23.11
+* TPU v3, v4 support
 
 ### Unsupported use of End-of-Life modules
 

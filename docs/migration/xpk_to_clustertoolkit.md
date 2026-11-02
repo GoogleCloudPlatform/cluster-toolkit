@@ -216,7 +216,7 @@ Supported hardware shorthands (such as `v6e-4`, `v5e-8` / `v5litepod-8`, `v4-8`,
 | XPK `workload create` Flag | `gcluster job submit` Flag | Notes / Differences |
 | :--- | :--- | :--- |
 | `--workload <NAME>` | `--name <NAME>` | Workload name (max 28 characters for standard jobs, or max 22 characters when `--pathways` is enabled) |
-| `--cluster <NAME>` | `--cluster <NAME>` | Target GKE cluster (optional if configured in `gcluster job context`) |
+| `--cluster <NAME>` | `--cluster <NAME>` | Target GKE cluster (optional if configured in `gcluster job config`) |
 | `--project <ID>` | `--project <ID>` | Target Google Cloud project |
 | `--zone <ZONE>` / `--region <REGION>` | `--location <LOC>` | Target cluster region or zone |
 | `--docker-image <IMG>` | `--image <IMG>` | Container image URL |
@@ -361,5 +361,5 @@ gcluster job submit \
 | `xpk workload delete` | `gcluster job cancel <workload_name>` | Cancel running workload |
 | `xpk inspector` | `gcluster job logs <workload_name>` | View workload logs |
 | `xpk info` | `gcluster cluster info` | View cluster details |
-| `xpk config set` | `gcluster job context set` | Update local CLI context (`project`, `cluster`, `location`; `job config set` alias supported) |
+| `xpk config set` | `gcluster job config set` | Update local CLI config (specifically project, cluster and location) |
 | `xpk storage list` | `gcluster cluster volume` | View mounted volumes |

@@ -96,7 +96,7 @@ Find an example of multi networking in GKE [here](../../../examples/gke-a3-megag
 The current implementation has the following limitations:
 
 - Autopilot is not supported (Standard clusters only; Node Auto-Provisioning is supported via `cluster_autoscaling` and Zonal/Regional availability via `cluster_availability_type`)
-- General addon configuration is limited to the module's explicit feature flags (`enable_gcsfuse_csi`, `enable_filestore_csi`, `enable_parallelstore_csi`, `enable_lustre_csi`, `enable_persistent_disk_csi`, `enable_ray_operator`, `enable_stateful_ha`, `enable_inference_gateway`)
+- General addon configuration is limited to the add-ons the module exposes as inputs (for example `enable_gcsfuse_csi`, `enable_filestore_csi`, `enable_parallelstore_csi`, `enable_managed_lustre_csi`, `enable_persistent_disk_csi`, `enable_ray_operator`, `enable_inference_gateway`, `enable_node_local_dns_cache`, and `network_policy`); see the Inputs table below for the full list.
 
 ### GKE Inference Gateway
 

@@ -14,7 +14,9 @@
 
 """Unit tests for tools/validate_readme_snippets.py."""
 
+import glob
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -169,6 +171,39 @@ class TestValidateReadmeSnippets(unittest.TestCase):
         errs = vrs.validate_yaml_block(snippet, "kms-key-iam/README.md", {})
         self.assertEqual(len(errs), 1)
         self.assertIn("missing required setting 'deletion_policy'", errs[0])
+
+    def test_nested_object_keys_match_variables_tf(self):
+        """NESTED_OBJECT_KEYS must mirror the object({...}) attributes declared in variables.tf."""
+
+        def object_attrs(type_expr: str) -> dict[str, str]:
+            start = type_expr.index("object({") + len("object({")
+            body = vrs._hcl_block_body(type_expr, start)[:-1]
+            attrs: dict[str, str] = {}
+            depth, cur = 0, None
+            for line in body.splitlines():
+                m = re.match(r"\s*([A-Za-z_]\w*)\s*=\s*(.*)$", line)
+                if depth == 0 and m:
+                    cur = m.group(1)
+                    attrs[cur] = m.group(2)
+                elif cur:
+                    attrs[cur] += "\n" + line
+                depth += sum(line.count(c) for c in "({[") - sum(line.count(c) for c in ")}]")
+            return attrs
+
+        for (module, dotted), allowed in vrs.NESTED_OBJECT_KEYS.items():
+            with self.subTest(module=module, key=dotted):
+                root, *rest = dotted.split(".")
+                text = ""
+                for tf in sorted(glob.glob(os.path.join(vrs.REPO_ROOT, module, "*.tf"))):
+                    with open(tf, encoding="utf-8") as f:
+                        text += vrs._strip_hcl_comments(f.read())
+                m = re.search(rf'variable\s+"{root}"\s*\{{', text)
+                self.assertIsNotNone(m, f"variable {root!r} not found in {module}")
+                body = vrs._hcl_block_body(text, m.end())
+                attrs = object_attrs(body[body.index("type"):])
+                for part in rest:
+                    attrs = object_attrs(attrs[part])
+                self.assertEqual(allowed, set(attrs))
 
 
 if __name__ == "__main__":

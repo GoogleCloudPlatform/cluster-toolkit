@@ -20,6 +20,7 @@ import os
 import re
 import subprocess
 import sys
+import textwrap
 import urllib.parse
 import yaml
 
@@ -373,21 +374,18 @@ ILLUSTRATIVE_SOURCES = (
 
 
 def _strip_yaml_elision_lines(block: str) -> str:
-    """Strips blockquote prefixes and standalone '...' placeholder lines from a YAML snippet."""
+    """Strips blockquote prefixes, common indentation, and standalone '...' placeholder lines from a YAML snippet."""
     lines = block.splitlines()
     if lines and all(
         not line.strip() or line.lstrip().startswith(">") for line in lines
     ):
         lines = [re.sub(r"^\s*>\s?", "", line) for line in lines]
-    cleaned: list[str] = []
-    for line in lines:
-        if re.match(r"^\s*\.\.\.(?:\s+#.*|\s*)$", line):
-            continue
-        if re.match(r"^\s*---\s*$", line):
-            cleaned.append("---")
-            continue
-        cleaned.append(line)
-    return "\n".join(cleaned)
+    # Dedent instead of rewriting indented '---' lines: a list-item fence's separator lands at
+    # column 0, while '---' nested inside a block scalar keeps its indentation and stays content.
+    lines = textwrap.dedent("\n".join(lines)).splitlines()
+    return "\n".join(
+        line for line in lines if not re.match(r"^\s*\.\.\.(?:\s+#.*|\s*)$", line)
+    )
 
 
 def validate_yaml_block(
@@ -408,8 +406,11 @@ def validate_yaml_block(
         return errors
 
     mods: list[dict] = []
+    global_vars: set[str] = set()
     for doc in docs:
         mods.extend(extract_modules_from_yaml(doc))
+        if isinstance(doc, dict) and isinstance(doc.get("vars"), dict):
+            global_vars.update(doc["vars"])
 
     mod_by_id: dict[str, str] = {}
     for mod in mods:
@@ -477,7 +478,8 @@ def validate_yaml_block(
                                             )
         if norm_src in REQUIRED_MODULE_SETTINGS:
             present_keys = set(settings.keys()) if isinstance(settings, dict) else set()
-            for req_key in sorted(REQUIRED_MODULE_SETTINGS[norm_src] - present_keys):
+            # gcluster auto-wires unset module inputs from same-named deployment vars.
+            for req_key in sorted(REQUIRED_MODULE_SETTINGS[norm_src] - present_keys - global_vars):
                 errors.append(
                     f"{rel_path}: module '{mid}' ({norm_src}) is missing required "
                     f"setting '{req_key}'"

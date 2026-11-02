@@ -302,7 +302,7 @@ variable "service_account_scopes" {
 }
 
 variable "taints" {
-  description = "Kubernetes taints to be applied to the nodes in this node pool. When empty (default), GPU and TPU node pools automatically receive their accelerator taint (nvidia.com/gpu or google.com/tpu)."
+  description = "Kubernetes taints to be applied to the nodes in this node pool. GPU and TPU node pools always also receive their accelerator taint (nvidia.com/gpu=present or google.com/tpu=present, effect NO_SCHEDULE) in addition to these."
   type = list(object({
     key    = string
     value  = any

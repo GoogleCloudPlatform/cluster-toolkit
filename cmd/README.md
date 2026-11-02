@@ -188,7 +188,7 @@ gcluster export-outputs DEPLOYMENT_GROUP_DIRECTORY [flags]
 ### Flags - export-outputs
 
 * `-a, --artifacts string`: Artifacts directory (default is `<deployment_root>/.ghpc/artifacts`).
-* `--parallelism int`: Limit the number of concurrent Terraform operations (`0` uses Terraform's default of `10`; can also be set via `GCLUSTER_TERRAFORM_PARALLELISM`).
+* `--parallelism int`: Limit the number of concurrent Terraform operations (`0` (default) defers to `GCLUSTER_TERRAFORM_PARALLELISM` if set, otherwise Terraform's default of `10`).
 
 ## gcluster import-inputs
 

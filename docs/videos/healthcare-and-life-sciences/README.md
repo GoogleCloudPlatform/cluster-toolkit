@@ -275,7 +275,7 @@ blueprint, as such you will only need quota for either:
 - CPU: 60 `C2 CPUs`
 
 Note that these quotas are in addition to the quota requirements for the slurm
-login node (2x `N2 CPUs`) and slurm controller VM (4x `C2 CPUs`). The
+login node (4x `C2 CPUs`) and slurm controller VM (4x `C2 CPUs`). The
 `spack-builder` VM should have completed and stopped, freeing its CPU quota
 usage, before the computational VMs are deployed.
 

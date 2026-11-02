@@ -1,5 +1,5 @@
 > [!WARNING]
-> This module is deprecated (Google Cloud Parallelstore reached end-of-support on August 31, 2026) and will be removed in a future release. The
+> This module is deprecated (deprecation date: August 31, 2026) and will be removed in a future release. The
 > recommended replacement is the
 > [GCP Managed Lustre module](../managed-lustre/README.md).
 

@@ -142,7 +142,7 @@ In the other direction the cloud nodes have to reach the controller: set "onprem
 
 ### Create the deployment
 
-Before deploying, ensure the local `output_dir` directory (e.g., `/share`) exists so Terraform can write the generated hybrid configuration files to it:
+Ensure the parent directory for `output_dir` (`/share`) exists and is writable before generating the deployment:
 
 ```shell
 mkdir -p /share
@@ -165,7 +165,7 @@ gcluster deploy --only cluster slurm6-hybrid
 
 ### [VPN setup](./vpn.md)
 In this document an example on how to setup a site vpn between your network and the google network we just created is shown, check with your network administrator if that is the desired way to proceed.
-Normally all the enterprise routers have a ipsec vpn solution, which is what is being explained in the document. Complete the VPN setup and verify connectivity to your on-prem NFS server (`key_export_dir`) before resuming cloud compute nodes, as cloud nodes mount `key_export_dir` at boot to fetch the Munge/Slurm keys.
+Normally all the enterprise routers have a ipsec vpn solution, which is what is being explained in the document. Complete the VPN setup and verify cloud nodes can NFS-mount `key_export_dir` (via `slurm_key_mount`) before resuming cloud compute nodes, as cloud nodes mount `key_export_dir` at boot to fetch the Munge/Slurm keys.
 
 ### Create the configurations
 Execute the install_hybrid script, this will generate a tar file that we will need in the next step.
