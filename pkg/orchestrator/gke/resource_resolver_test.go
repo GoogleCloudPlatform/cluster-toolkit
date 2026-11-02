@@ -293,27 +293,80 @@ func TestCalculateResourceLimits_CPU(t *testing.T) {
 	tests := []struct {
 		name          string
 		capacityCount int
+		gcsFuse       bool
+		wantAlloc     int64
 		wantCPU       string
 	}{
 		{
-			name:          "Large capacity",
+			name:          "Large capacity (32 vCPU)",
 			capacityCount: 32,
-			wantCPU:       "30",
+			wantAlloc:     31850, // 32000 - (60 + 10 + 10 + 28*2.5)
+			wantCPU:       "30850m",
 		},
 		{
-			name:          "Small capacity (rounds down to 1)",
+			name:          "Large capacity (32 vCPU) with GCSFuse",
+			capacityCount: 32,
+			gcsFuse:       true,
+			wantAlloc:     31850,
+			wantCPU:       "30600m",
+		},
+		{
+			name:          "Medium capacity (4 vCPU)",
+			capacityCount: 4,
+			wantAlloc:     3920, // 4000 - (60 + 10 + 10)
+			wantCPU:       "2920m",
+		},
+		{
+			name:          "Medium capacity (4 vCPU) with GCSFuse",
+			capacityCount: 4,
+			gcsFuse:       true,
+			wantAlloc:     3920,
+			wantCPU:       "2670m",
+		},
+		{
+			name:          "3 vCPU capacity",
+			capacityCount: 3,
+			wantAlloc:     2925, // 3000 - (60 + 10 + 5)
+			wantCPU:       "1925m",
+		},
+		{
+			name:          "Small capacity (2 vCPU)",
 			capacityCount: 2,
-			wantCPU:       "1",
+			wantAlloc:     1930,    // 2000 - (60 + 10)
+			wantCPU:       "1065m", // 1930/2 + 100
 		},
 		{
-			name:          "Capacity 1 (offset < 1, fallback to 1)",
+			name:          "Small capacity (2 vCPU) with GCSFuse",
+			capacityCount: 2,
+			gcsFuse:       true,
+			wantAlloc:     1930,
+			wantCPU:       "815m", // 1065 - 250
+		},
+		{
+			name:          "Capacity 1",
 			capacityCount: 1,
-			wantCPU:       "1",
+			wantAlloc:     940,    // 1000 - 60
+			wantCPU:       "570m", // 940/2 + 100
 		},
 		{
-			name:          "Capacity 0 (fallback to 1)",
+			name:          "Capacity 1 with GCSFuse",
+			capacityCount: 1,
+			gcsFuse:       true,
+			wantAlloc:     940,
+			wantCPU:       "320m", // 570 - 250
+		},
+		{
+			name:          "Capacity 0 (floors to 100m)",
 			capacityCount: 0,
-			wantCPU:       "1",
+			wantAlloc:     0,
+			wantCPU:       "100m",
+		},
+		{
+			name:          "Capacity 0 with GCSFuse (floors to 100m)",
+			capacityCount: 0,
+			gcsFuse:       true,
+			wantAlloc:     0,
+			wantCPU:       "100m",
 		},
 	}
 
@@ -321,7 +374,15 @@ func TestCalculateResourceLimits_CPU(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := ManifestOptions{ComputeType: "n2-standard-32", MachineType: "n2-standard-32"}
+			if gotAlloc := calculateAllocatableCPUMilli(tt.capacityCount); gotAlloc != tt.wantAlloc {
+				t.Errorf("calculateAllocatableCPUMilli(%d) = %d, want %d", tt.capacityCount, gotAlloc, tt.wantAlloc)
+			}
+
+			opts := ManifestOptions{
+				ComputeType:    "n2-standard-32",
+				MachineType:    "n2-standard-32",
+				GCSFuseEnabled: tt.gcsFuse,
+			}
 			profile := JobProfile{
 				IsCPUMachine:  true,
 				CapacityCount: tt.capacityCount,

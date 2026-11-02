@@ -343,7 +343,7 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 			cpuLimit:        "",
 			memoryLimit:     "",
 			wantLabels:      []string{},
-			wantLimits:      []string{`cpu: "1"`},
+			wantLimits:      []string{"cpu: 1065m"},
 			dontWantLimits:  []string{"nvidia.com/gpu", "google.com/tpu"},
 			wantErr:         false,
 		},
@@ -1708,7 +1708,6 @@ func TestGenerateGKEManifest_ParallelContainers(t *testing.T) {
 	if !strings.Contains(manifest, "name: workload-container-2") {
 		t.Errorf("manifest missing expected container name %q\nManifest: %s", "workload-container-2", manifest)
 	}
-
 	// Verify that resources are split!
 	// Total chips = 4. Parallel containers = 2. So each should get 2 chips!
 	expectedResources := "google.com/tpu: \"2\""
