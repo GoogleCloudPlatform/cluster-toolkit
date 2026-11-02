@@ -141,6 +141,7 @@ def RunCommand(
   except subprocess.TimeoutExpired as te:
     # clean up the process before raising the timeout experied.
     process.kill()
+    process.communicate()
     raise te
   stdout = stdout.decode()
   stderr = stderr.decode()
@@ -195,7 +196,9 @@ def QueryMetadataServerOrDie(metadata_key: str) -> str:
     after retries.
   """
   metadata_url = f"{constants.METADATA_PREFIX}{metadata_key}"
-  response = requests.get(metadata_url, headers=constants.METADATA_HEADERS)
+  response = requests.get(
+      metadata_url, headers=constants.METADATA_HEADERS, timeout=5
+  )
   response.raise_for_status()
   return response.text
 
@@ -384,7 +387,7 @@ def UploadArtifactsToGcs(
   if bucket is None:
     # Create the bucket if it does not exist.
     try:
-      storage_client.create_bucket(bucket)
+      bucket = storage_client.create_bucket(bucket_name)
       logging.info("Created bucket [%s] in the project.", bucket_name)
     except google_cloud_exceptions.exceptions.GoogleAPIError as e:
       logging.info(
@@ -744,7 +747,7 @@ def DownloadFileFromUrl(url: str, destination_path: str) -> None:
     logging.info("Removing already existing file at: %s", destination_path)
     os.remove(destination_path)
 
-  response = requests.get(url)
+  response = requests.get(url, stream=True, timeout=60)
   response.raise_for_status()
   with open(destination_path, "wb") as file_handle:
     for chunk in response.iter_content(chunk_size=8192):
@@ -1247,6 +1250,11 @@ def IdentifyMftKernelModules(
       latest_version_obj = current_version_obj
       latest_build_version_str = build_version_str
       latest_blob = blob
+  if latest_blob is None:
+    raise ValueError(
+        "No valid MFT kernel modules matching pattern found in bucket"
+        f" {cos_tools_bucket_name}"
+    )
   logging.info(
       "The latest MFT kernel modules available on COS tools is: %s-%s",
       latest_version_str,
