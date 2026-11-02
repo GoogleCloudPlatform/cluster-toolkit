@@ -118,7 +118,7 @@ cases:
   - "deployment.yaml"
   forbidden_commands:
   - "enable_spot_vm: true"
-  - "ai_assisted"
+  - "deployment_groups"
   - "debug_enable_spot_vm: true"
   - "h3_enable_spot_vm: true"
   - "> examples/hpc-slurm.yaml"

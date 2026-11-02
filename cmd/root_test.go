@@ -438,3 +438,67 @@ func TestWrapTelemetryDynamic(t *testing.T) {
 		t.Errorf("Expected userConfigExists to be true")
 	}
 }
+
+func TestWrapTelemetryInitializesBeforePreRunError(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	_ = config.InitUserConfig()
+
+	telemetryCollector = nil
+	userConfigExists = false
+
+	preRunErr := errors.New("missing --cluster flag")
+	customCmd := &cobra.Command{
+		Use: "job-test",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return preRunErr
+		},
+	}
+
+	wrapTelemetry(customCmd)
+
+	err := customCmd.PersistentPreRunE(customCmd, []string{})
+	if !errors.Is(err, preRunErr) {
+		t.Fatalf("Expected error %v, got %v", preRunErr, err)
+	}
+	if telemetryCollector == nil {
+		t.Errorf("Expected telemetryCollector to be initialized even when PersistentPreRunE fails")
+	}
+	if !userConfigExists {
+		t.Errorf("Expected userConfigExists to be true even when PersistentPreRunE fails")
+	}
+}
+
+func TestMergeDeploymentSettingsPropagatesAIAssisted(t *testing.T) {
+	bp := config.Blueprint{}
+	ds := config.DeploymentSettings{AIAssisted: true}
+	if err := mergeDeploymentSettings(&bp, ds); err != nil {
+		t.Fatalf("mergeDeploymentSettings failed: %v", err)
+	}
+	if !bp.AIAssisted {
+		t.Errorf("Expected bp.AIAssisted to be true when ds.AIAssisted is true")
+	}
+}
+
+func TestApplyAgentEnvAttribution(t *testing.T) {
+	t.Setenv("GHPC_AI_ASSISTED", "")
+	t.Setenv("GEMINI_CLI", "1")
+
+	expandBP := config.Blueprint{}
+	applyAgentEnvAttribution(expandCmd, &expandBP)
+	if expandBP.AIAssisted {
+		t.Errorf("Expected gcluster expand to keep untouched blueprint pure (AIAssisted=false)")
+	}
+
+	createBP := config.Blueprint{}
+	applyAgentEnvAttribution(createCmd, &createBP)
+	if !createBP.AIAssisted {
+		t.Errorf("Expected gcluster create to persist AIAssisted=true under agent env")
+	}
+
+	deployBP := config.Blueprint{}
+	applyAgentEnvAttribution(deployCmd, &deployBP)
+	if !deployBP.AIAssisted {
+		t.Errorf("Expected gcluster deploy to persist AIAssisted=true under agent env")
+	}
+}

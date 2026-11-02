@@ -26,7 +26,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -55,6 +54,8 @@ func TestNewCollector(t *testing.T) {
 // Future metrics can be seamlessly verified by adding keys to `expectedKeys`
 // and values to `expectedValues`.
 func TestCollectMetrics_Extensible(t *testing.T) {
+	t.Setenv("GHPC_AI_ASSISTED", "false")
+
 	// Define all expected metric keys from types.go
 	expectedKeys := []string{
 		COMMAND_FLAGS,
@@ -67,6 +68,8 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		OS_VERSION,
 		TERRAFORM_VERSION,
 		INSTALLATION_MODE,
+		IS_AI_ASSISTED,
+		EXPLAIN_TARGET,
 		IS_TEST_DATA,
 		EXIT_CODE,
 	}
@@ -3084,35 +3087,164 @@ func TestGetDynamicNodeCounts(t *testing.T) {
 }
 
 func TestGetIsAIAssisted(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	writeFile := func(name, content string) string {
+		p := filepath.Join(tmpDir, name)
+		if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+			t.Fatalf("failed writing %s: %v", name, err)
+		}
+		return p
+	}
+
+	unmodifiedBP := writeFile("unmodified-bp.yaml", "blueprint_name: hpc-slurm\nvars:\n  project_id: p\n")
+	aiDeployment := writeFile("ai-depl.yaml", "ai_assisted: true\nvars:\n  project_id: p2\n")
+	manualDeployment := writeFile("manual-depl.yaml", "vars:\n  project_id: p2\n")
+	brokenSyntaxAIBP := writeFile("broken-syntax-ai.yaml", "---\nblueprint_name: bad\nai_assisted: true # tagged\nvars:\n  foo: [unclosed\n")
+	unknownFieldAIBP := writeFile("unknown-field-ai.yaml", "blueprint_name: bad\nai_assisted: true\nnot_a_real_key: 123\n")
+	brokenSyntaxAIDepl := writeFile("broken-depl-ai.yaml", "ai_assisted: \"true\"\nvars:\n  foo: [unclosed\n")
+	commentOnlyBP := writeFile("comment-only.yaml", "# ai_assisted: true\nblueprint_name: clean\nvars:\n  ai_assisted: true\n  foo: [unclosed\n")
+
+	allAgentVars := []string{"GHPC_AI_ASSISTED", "GEMINI_CLI", "CLAUDECODE", "CODEX_SANDBOX", "CODEX_CI", "CURSOR_TRACE_ID"}
+
 	tests := []struct {
 		name     string
 		bp       config.Blueprint
-		expected string
+		args     []string
+		deplFile string
+		env      map[string]string
+		expected bool
 	}{
 		{
-			name:     "returns true when AIAssisted is true",
+			name:     "returns true when Blueprint.AIAssisted is true",
 			bp:       config.Blueprint{AIAssisted: true},
-			expected: "true",
+			env:      map[string]string{"GHPC_AI_ASSISTED": "false"},
+			expected: true,
 		},
 		{
-			name:     "returns false when AIAssisted is false",
+			name:     "returns false when Blueprint.AIAssisted is false and no env or file signal",
 			bp:       config.Blueprint{AIAssisted: false},
-			expected: "false",
+			env:      map[string]string{"GHPC_AI_ASSISTED": "false"},
+			expected: false,
 		},
 		{
-			name:     "returns false when AIAssisted is not set",
-			bp:       config.Blueprint{},
-			expected: "false",
+			name:     "Case 1 -d deployment.yaml with ai_assisted: true sets IS_AI_ASSISTED via getBlueprint and raw scan",
+			args:     []string{unmodifiedBP},
+			deplFile: aiDeployment,
+			env:      map[string]string{"GHPC_AI_ASSISTED": "false"},
+			expected: true,
+		},
+		{
+			name:     "Case 1 -d deployment.yaml without ai_assisted and no env returns false",
+			args:     []string{unmodifiedBP},
+			deplFile: manualDeployment,
+			env:      map[string]string{"GHPC_AI_ASSISTED": "false"},
+			expected: false,
+		},
+		{
+			name:     "YAML syntax error in blueprint still detects top-level ai_assisted: true",
+			args:     []string{brokenSyntaxAIBP},
+			env:      map[string]string{"GHPC_AI_ASSISTED": "false"},
+			expected: true,
+		},
+		{
+			name:     "Unknown field error in blueprint still detects ai_assisted: true",
+			args:     []string{unknownFieldAIBP},
+			env:      map[string]string{"GHPC_AI_ASSISTED": "false"},
+			expected: true,
+		},
+		{
+			name:     "YAML syntax error in -d deployment.yaml still detects ai_assisted: true",
+			args:     []string{unmodifiedBP},
+			deplFile: brokenSyntaxAIDepl,
+			env:      map[string]string{"GHPC_AI_ASSISTED": "false"},
+			expected: true,
+		},
+		{
+			name:     "Commented or nested vars ai_assisted: true does not falsely trigger",
+			args:     []string{commentOnlyBP},
+			env:      map[string]string{"GHPC_AI_ASSISTED": "false"},
+			expected: false,
+		},
+		{
+			name:     "Blueprint-less explain/job detects GEMINI_CLI",
+			env:      map[string]string{"GEMINI_CLI": "1"},
+			expected: true,
+		},
+		{
+			name:     "Blueprint-less explain/job detects CLAUDECODE",
+			env:      map[string]string{"CLAUDECODE": "1"},
+			expected: true,
+		},
+		{
+			name:     "Blueprint-less explain/job detects CODEX_SANDBOX",
+			env:      map[string]string{"CODEX_SANDBOX": "seatbelt"},
+			expected: true,
+		},
+		{
+			name:     "Blueprint-less explain/job detects CODEX_CI",
+			env:      map[string]string{"CODEX_CI": "1"},
+			expected: true,
+		},
+		{
+			name:     "Blueprint-less explain/job detects CURSOR_TRACE_ID",
+			env:      map[string]string{"CURSOR_TRACE_ID": "trace-xyz"},
+			expected: true,
+		},
+		{
+			name:     "Blueprint-less explain/job detects GHPC_AI_ASSISTED=true",
+			env:      map[string]string{"GHPC_AI_ASSISTED": "true"},
+			expected: true,
+		},
+		{
+			name:     "GHPC_AI_ASSISTED=false overrides agent env vars for test isolation",
+			env:      map[string]string{"GHPC_AI_ASSISTED": "false", "GEMINI_CLI": "1", "CLAUDECODE": "1"},
+			expected: false,
+		},
+		{
+			name:     "GEMINI_CLI=0 does not trigger",
+			env:      map[string]string{"GEMINI_CLI": "0"},
+			expected: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := strconv.FormatBool(tt.bp.AIAssisted)
-			if actual != tt.expected {
-				t.Errorf("getIsAIAssisted() = %v, want %v", actual, tt.expected)
+			for _, k := range allAgentVars {
+				t.Setenv(k, "")
+			}
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
+
+			cmd := &cobra.Command{Use: "explain"}
+			if tt.deplFile != "" {
+				cmd.Flags().String("deployment-file", "", "")
+				_ = cmd.Flags().Set("deployment-file", tt.deplFile)
+			}
+
+			c := NewCollector(cmd, tt.args, SOURCE)
+			if tt.bp.AIAssisted {
+				c.blueprint = tt.bp
+			}
+			got := isAIAssisted(c.blueprint, c.eventCmd, c.eventArgs)
+			if got != tt.expected {
+				t.Errorf("isAIAssisted() = %v, want %v", got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestSetMetadata_ExplainTargetPreserved(t *testing.T) {
+	t.Setenv("GHPC_AI_ASSISTED", "false")
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	cmd := &cobra.Command{Use: "explain"}
+	c := NewCollector(cmd, []string{"slurm", "a3u"}, SOURCE)
+	c.SetMetadata(EXPLAIN_TARGET, "specs")
+	c.CollectMetrics(0, nil)
+
+	if got, _ := c.GetMetadata(EXPLAIN_TARGET); got != "specs" {
+		t.Errorf("EXPLAIN_TARGET = %q, want %q", got, "specs")
 	}
 }
 

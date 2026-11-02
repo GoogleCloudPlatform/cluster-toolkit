@@ -93,3 +93,45 @@ func TestFlush(t *testing.T) {
 		})
 	}
 }
+
+func TestFlushCustomEndpointOverride(t *testing.T) {
+	origTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = origTransport }()
+
+	t.Run("routes to GHPC_TELEMETRY_ENDPOINT and never hits clearcutProdURL", func(t *testing.T) {
+		t.Setenv(telemetryEndpointEnvVar, "http://127.0.0.1:18080/log")
+		var gotURL string
+		http.DefaultTransport = &mockTransport{
+			roundTripFunc: func(req *http.Request) (*http.Response, error) {
+				gotURL = req.URL.String()
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(bytes.NewBufferString(`{}`)),
+					Header:     make(http.Header),
+				}, nil
+			},
+		}
+
+		Flush(LogRequest{LogSourceName: CONCORD})
+		want := "http://127.0.0.1:18080/log?format=json_proto"
+		if gotURL != want {
+			t.Errorf("Flush request URL = %q, want %q", gotURL, want)
+		}
+	})
+
+	t.Run("invalid GHPC_TELEMETRY_ENDPOINT fails closed without hitting prod", func(t *testing.T) {
+		t.Setenv(telemetryEndpointEnvVar, "not-a-valid-url")
+		called := false
+		http.DefaultTransport = &mockTransport{
+			roundTripFunc: func(req *http.Request) (*http.Response, error) {
+				called = true
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBuffer(nil))}, nil
+			},
+		}
+
+		Flush(LogRequest{LogSourceName: CONCORD})
+		if called {
+			t.Errorf("Expected invalid GHPC_TELEMETRY_ENDPOINT to abort HTTP call instead of falling back to prod")
+		}
+	})
+}

@@ -23,7 +23,24 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 )
+
+func resolveTelemetryEndpoint() (*url.URL, error) {
+	rawURL := clearcutProdURL
+	if custom := strings.TrimSpace(os.Getenv(telemetryEndpointEnvVar)); custom != "" {
+		rawURL = custom
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	if u.Scheme == "" || u.Host == "" {
+		return nil, fmt.Errorf("invalid telemetry endpoint URL %q", rawURL)
+	}
+	return u, nil
+}
 
 func Flush(payload LogRequest) {
 
@@ -36,9 +53,13 @@ func Flush(payload LogRequest) {
 	client := &http.Client{
 		Timeout: uploadTimeout,
 	}
-	u, _ := url.Parse(clearcutProdURL)
-	params := url.Values{}
-	params.Add("format", "json_proto")
+	u, err := resolveTelemetryEndpoint()
+	if err != nil {
+		logging.Error("Error resolving Telemetry endpoint URL: %v", err)
+		return
+	}
+	params := u.Query()
+	params.Set("format", "json_proto")
 	u.RawQuery = params.Encode()
 
 	req, err := http.NewRequest("POST", u.String(), bytes.NewBuffer(jsonData))

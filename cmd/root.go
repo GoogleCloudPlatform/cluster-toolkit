@@ -164,6 +164,12 @@ func initTelemetry(cmd *cobra.Command, args []string) {
 	}
 }
 
+func setTelemetryMetadata(key, value string) {
+	if telemetryCollector != nil {
+		telemetryCollector.SetMetadata(key, value)
+	}
+}
+
 // wrapTelemetry recursively traverses the command tree and wraps any command
 // that defines its own PersistentPreRun or PersistentPreRunE hook.
 // This is necessary because Cobra does not execute a parent's PersistentPreRun
@@ -181,18 +187,14 @@ func wrapTelemetry(cmd *cobra.Command) {
 		if cmd.PersistentPreRunE != nil {
 			oldPreRunE := cmd.PersistentPreRunE
 			cmd.PersistentPreRunE = func(c *cobra.Command, args []string) error {
-				err := oldPreRunE(c, args)
-				if err != nil {
-					return err
-				}
 				initTelemetry(c, args)
-				return nil
+				return oldPreRunE(c, args)
 			}
 		} else if cmd.PersistentPreRun != nil {
 			oldPreRun := cmd.PersistentPreRun
 			cmd.PersistentPreRun = func(c *cobra.Command, args []string) {
-				oldPreRun(c, args)
 				initTelemetry(c, args)
+				oldPreRun(c, args)
 			}
 		}
 	}
