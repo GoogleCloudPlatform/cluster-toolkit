@@ -777,6 +777,61 @@ blueprints:
   - id: gcloud_commands
     source: community/modules/scripts/gcloud
     settings: [commands]
+- path: community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml
+  deployment_path: community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/deployment.yaml
+  blueprint_name: gke-inference-benchmark-g4-diffusiongemma
+  scheduler: gke
+  description: "This benchmark provisions a GKE cluster with a single-zone Spot G4 node pool (g4-standard-48, 1x NVIDIA RTX PRO 6000), serves google/diffusiongemma-26B-A4B-it with vLLM and runs a vllm bench serve throughput and latency benchmark..."
+  machine_types: [g4-standard-48]
+  required_services: [compute.googleapis.com, container.googleapis.com, iam.googleapis.com]
+  vars:
+    authorized_cidr: null
+    auto_repair: true
+    bench_input_len: 1024
+    bench_max_concurrency: 8
+    bench_num_prompts: 64
+    bench_output_len: 1024
+    bench_run_id: ""
+    deployment_name: g4-diffusiongemma
+    hf_token: ""
+    machine_type: g4-standard-48
+    model_bucket: ""
+    model_path: models/diffusiongemma-26B-A4B-it
+    num_gpus: 1
+    project_id: null
+    region: us-central1
+    run_benchmark: true
+    spot: true
+    static_node_count: 1
+    system_node_pool_disk_size_gb: 100
+    version_prefix: "1.35."
+    zone: us-central1-b
+  modules:
+  - id: gke-g4-net-0
+    source: modules/network/vpc
+    settings: [firewall_rules, network_name, secondary_ranges_list, subnetworks]
+  - id: node_pool_service_account
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: workload_service_account
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: g4-cluster
+    source: modules/scheduler/gke-cluster
+    use: [gke-g4-net-0, workload_service_account]
+    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_dcgm_monitoring, enable_filestore_csi, enable_gcsfuse_csi, enable_managed_lustre_csi, enable_private_endpoint, maintenance_exclusions, master_authorized_networks, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, system_node_pool_zones, version_prefix]
+  - id: g4-spot-pool
+    source: modules/compute/gke-node-pool
+    use: [g4-cluster, node_pool_service_account]
+    settings: [auto_repair, auto_upgrade, guest_accelerator, machine_type, spot, static_node_count, zones]
+  - id: hf-secret
+    source: modules/security/kubernetes-secret
+    use: [g4-cluster]
+    settings: [cluster_id, data, secret_name]
+  - id: diffusiongemma-vllm
+    source: modules/management/kubectl-apply
+    use: [g4-cluster]
+    settings: [apply_manifests, jobset]
 - path: community/examples/hpc-build-slurm-image.yaml
   blueprint_name: hpc-build-slurm-image
   scheduler: slurm
