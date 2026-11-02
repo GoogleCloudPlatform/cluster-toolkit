@@ -514,7 +514,7 @@ resource "google_container_cluster" "gke_cluster" {
 
     precondition {
       condition     = !var.enable_pathways_for_tpus || length(local.cpu_np_available_zones) > 0
-      error_message = "Machine type '${local.cpu_np_machine_type}' required for Pathways (cpu-np) is not available in any target zone (${join(", ", local.cpu_np_candidate_zones)}). Set 'system_node_pool_zones' to a zone with N4 support or set 'enable_pathways_for_tpus = false'."
+      error_message = "Machine type '${local.cpu_np_machine_type}' required for Pathways (cpu-np) is not available in any target zone (${join(", ", sort(local.cpu_np_candidate_zones))}). Set 'system_node_pool_zones' to a zone with N4 support or set 'enable_pathways_for_tpus = false'."
     }
   }
 
@@ -684,7 +684,7 @@ resource "google_container_node_pool" "cpu_np" {
   name           = "cpu-np"
   cluster        = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
   location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
-  node_locations = (var.cluster_availability_type == "ZONAL" || (var.system_node_pool_zones == null && length(local.cpu_np_available_zones) == length(data.google_compute_zones.available.names))) ? null : local.cpu_np_available_zones
+  node_locations = (var.system_node_pool_zones == null && (var.cluster_availability_type == "ZONAL" || length(local.cpu_np_available_zones) == length(data.google_compute_zones.available.names))) ? null : local.cpu_np_available_zones
   version        = local.master_version
 
   autoscaling {
