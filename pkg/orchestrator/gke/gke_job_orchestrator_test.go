@@ -74,6 +74,7 @@ func setupMockMachineConfig(t *testing.T) {
 	}`
 	config.ClearMachineTypeCache()
 	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", mockJSON)
+	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
 	t.Cleanup(config.ClearMachineTypeCache)
 }
 
@@ -4188,7 +4189,7 @@ func TestSubmitJob_MTCFastFailBeforeClusterCalls(t *testing.T) {
 	}
 }
 
-func TestSubmitJob_TemplateFastFailBeforeImageBuild(t *testing.T) {
+func TestSubmitJob_TelemetryAndTemplateFastFailBeforeImageBuild(t *testing.T) {
 	setupMockMachineConfig(t)
 	badSyntaxDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(badSyntaxDir, "jobset.tmpl"), []byte("{{ .Unclosed"), 0644); err != nil {
@@ -4249,8 +4250,20 @@ func TestSubmitJob_TemplateFastFailBeforeImageBuild(t *testing.T) {
 			job:           newJob("tmpl-valid", validBaseDir, false),
 			wantPastLocal: true,
 		},
+		{
+			name: "custom telemetry port on GKE without collector image",
+			job: func() orchestrator.JobDefinition {
+				job := newJob("port-without-sidecar", "", false)
+				job.ComputeType = "v6e-4"
+				job.MLDiagnosticsEnabled = true
+				job.MLDiagnosticsTelemetryPort = 9095
+				return job
+			}(),
+			wantErr: "--ml-diagnostics-telemetry-port is only supported when injecting",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
 			mockExec := NewMockExecutor(map[string][]shell.CommandResult{})
 			orc := newTestGKEOrchestrator(mockExec)
 			err := orc.SubmitJob(tc.job)
@@ -4271,4 +4284,50 @@ func TestSubmitJob_TemplateFastFailBeforeImageBuild(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("rejects telemetry sidecar on GPU before Crane image build", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud container clusters describe": {
+				{ExitCode: 0, Stdout: `{"locations":["us-central1-a"],"nodePools":[{"name":"gpu-pool","initialNodeCount":1,"config":{"machineType":"g2-standard-48","accelerators":[{"acceleratorCount":4,"acceleratorType":"nvidia-l4"}]}}]}`},
+			},
+			"gcloud container clusters get-credentials": {
+				{ExitCode: 0},
+			},
+			"kubectl get --raw /version": {
+				{ExitCode: 0, Stdout: `{}`},
+				{ExitCode: 0, Stdout: `{}`},
+			},
+			"kubectl get crd": {
+				{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+				{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+			},
+			"kubectl get service": {
+				{ExitCode: 0, Stdout: "service/jobset-webhook-service\n"},
+			},
+			"kubectl get endpoints": {
+				{ExitCode: 0, Stdout: "10.0.0.1\n"},
+			},
+			"gcloud compute machine-types describe": {
+				{ExitCode: 0, Stdout: `{"guestCpus": 48, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "nvidia-l4"}]}`},
+			},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		err := orc.SubmitJob(orchestrator.JobDefinition{
+			WorkloadName:         "gpu-telem-fast-fail",
+			ProjectID:            "test-project",
+			ClusterName:          "test-cluster",
+			ClusterLocation:      "us-central1-a",
+			GKENamespace:         "default",
+			ComputeType:          "g2-standard-48",
+			BaseImage:            "python:3.11-slim",
+			BuildContext:         filepath.Join(t.TempDir(), "missing-build-ctx"),
+			CommandToRun:         "python3 train.py",
+			DryRunManifest:       filepath.Join(t.TempDir(), "out.yaml"),
+			MLDiagnosticsEnabled: true,
+			MLDiagnosticsImage:   "registry.local/ai-telemetry-collector:v1",
+		})
+		if err == nil || !strings.Contains(err.Error(), "only supported for TPU workloads") {
+			t.Fatalf("got err = %v, want non-TPU telemetry error before Crane build", err)
+		}
+	})
 }

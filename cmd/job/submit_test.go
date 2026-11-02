@@ -336,7 +336,21 @@ func TestSubmitCmd_PathwaysLongWorkloadName_Fails(t *testing.T) {
 	}
 }
 
+func resetFlagSetState(fs *pflag.FlagSet) {
+	fs.VisitAll(func(f *pflag.Flag) {
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			_ = sv.Replace(nil)
+		} else {
+			_ = f.Value.Set(f.DefValue)
+		}
+		f.Changed = false
+	})
+}
+
 func setupSubmitTestEnv(t *testing.T) {
+	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	resetFlagSetState(SubmitCmd.Flags())
+	resetFlagSetState(JobCmd.PersistentFlags())
 	imageName = ""
 	baseImage = ""
 	buildContext = ""
@@ -346,29 +360,34 @@ func setupSubmitTestEnv(t *testing.T) {
 	clusterName = ""
 	location = ""
 	projectID = ""
+	gkeNamespace = ""
 	workloadName = ""
 
-	// Reset MTc & ML Diagnostics global flags to prevent state bleeding across test cases
 	enableMLDiagnostics = false
+	mlDiagnosticsImage = ""
+	mlDiagnosticsTelemetryPort = 8889
 	gkeMtcEnabled = false
 	gkeMtcRamdiskDirectory = ""
+	gkeCustomTemplatesPath = ""
+	gkeDisableParallelContainers = false
 	kueueQueueName = ""
 	numNodes = 1
 	numSlices = 1
 	restarts = 1
 	ttlAfterFinished = "1h"
 	gracePeriodStr = "30s"
+	timeout = "-1s"
+	verbose = false
 	placementPolicy = ""
-	nodeConstraint = nil
+	nodeConstraint = map[string]string{}
 	cpuAffinityStr = ""
 	restartOnExitCodes = nil
+	volumeStr = nil
 	imagePullSecrets = ""
 	serviceAccountName = ""
 	topology = ""
 	gkeScheduler = ""
 	platform = "linux/amd64"
-	gkeMtcEnabled = false
-	gkeMtcRamdiskDirectory = ""
 	awaitJobCompletion = false
 	priority = "medium"
 	isPathwaysJob = false
@@ -380,12 +399,6 @@ func setupSubmitTestEnv(t *testing.T) {
 	pathwaysProxyEnv = nil
 	pathwaysServerEnv = nil
 	pathwaysWorkerEnv = nil
-	SubmitCmd.Flags().VisitAll(func(f *pflag.Flag) {
-		if f.Name == "pathways-max-slice-restarts" || f.Name == "pathways-elastic-slices" || f.Name == "restarts" {
-			_ = f.Value.Set(f.DefValue)
-		}
-		f.Changed = false
-	})
 
 	oldFactory := gkeOrchestratorFactory
 	defer t.Cleanup(func() {
@@ -394,9 +407,6 @@ func setupSubmitTestEnv(t *testing.T) {
 	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
 		return &mockOrchestrator{}
 	}
-	enableMLDiagnostics = false
-	gkeMtcEnabled = false
-	gkeMtcRamdiskDirectory = ""
 }
 
 type mockOrchestrator struct {
@@ -1776,5 +1786,135 @@ func TestSubmitCmd_ImagePullSecretFlagPresence(t *testing.T) {
 		if got := mock.SubmittedJob; got.ImagePullSecrets != tc.wantSecrets || got.ImagePullSecretsSpecified != tc.wantSpecified {
 			t.Errorf("%s: got (%q, specified=%v), want (%q, specified=%v)", tc.name, got.ImagePullSecrets, got.ImagePullSecretsSpecified, tc.wantSecrets, tc.wantSpecified)
 		}
+	}
+}
+
+func TestSubmitCmd_MLDiagnosticsValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		extraArgs []string
+		wantErr   string
+	}{
+		{
+			name:      "image without enable-ml-diagnostics",
+			extraArgs: []string{"--ml-diagnostics-image", "registry.local/col:v1"},
+			wantErr:   "--enable-ml-diagnostics",
+		},
+		{
+			name:      "port without enable-ml-diagnostics",
+			extraArgs: []string{"--ml-diagnostics-telemetry-port", "8889"},
+			wantErr:   "--enable-ml-diagnostics",
+		},
+		{
+			name:      "port zero",
+			extraArgs: []string{"--enable-ml-diagnostics", "--ml-diagnostics-telemetry-port", "0"},
+			wantErr:   "must be between 1 and 65535",
+		},
+		{
+			name:      "port above 65535",
+			extraArgs: []string{"--enable-ml-diagnostics", "--ml-diagnostics-telemetry-port", "70000"},
+			wantErr:   "must be between 1 and 65535",
+		},
+		{
+			name:      "explicit empty ml-diagnostics-image",
+			extraArgs: []string{"--enable-ml-diagnostics", "--ml-diagnostics-image", "   "},
+			wantErr:   "--ml-diagnostics-image cannot be empty",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupSubmitTestEnv(t)
+			args := append([]string{
+				"submit",
+				"--name", "mldiag-val",
+				"--image", "busybox",
+				"--command", "echo hi",
+				"--compute-type", "v6e-4",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+				"--skip-prereqs",
+			}, tc.extraArgs...)
+			_, err := executeCommand(JobCmd, args...)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("got err = %v, want substring %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func runSubmitForTest(t *testing.T, extraArgs ...string) orchestrator.JobDefinition {
+	t.Helper()
+	return runSubmitWithTelemetryEnvForTest(t, "", extraArgs...)
+}
+
+func runSubmitWithTelemetryEnvForTest(t *testing.T, telemetryEnv string, extraArgs ...string) orchestrator.JobDefinition {
+	t.Helper()
+	setupSubmitTestEnv(t)
+	if telemetryEnv != "" {
+		t.Setenv("GCLUSTER_TELEMETRY_IMAGE", telemetryEnv)
+	}
+	mockOrc := &mockOrchestrator{}
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+	args := append([]string{
+		"submit",
+		"--name", "mldiag-job",
+		"--image", "busybox",
+		"--command", "echo hi",
+		"--compute-type", "v6e-4",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--skip-prereqs",
+	}, extraArgs...)
+	if _, err := executeCommand(JobCmd, args...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return mockOrc.SubmittedJob
+}
+
+func TestSubmitCmd_MLDiagnosticsWiring(t *testing.T) {
+	disabled := runSubmitWithTelemetryEnvForTest(t, "registry.local/env-col:v1")
+	if disabled.MLDiagnosticsEnabled || disabled.MLDiagnosticsImage != "" || disabled.MLDiagnosticsTelemetryPort != 0 || disabled.TerminationGracePeriodSeconds != 30 {
+		t.Errorf("unexpected JobDefinition when disabled: %+v", disabled)
+	}
+
+	// The env var is resolved by the orchestrator, so the CLI leaves MLDiagnosticsImage empty; the port is
+	// forwarded only when explicitly passed and --grace-period is forwarded verbatim (0s stays 0).
+	envFallback := runSubmitWithTelemetryEnvForTest(t, "registry.local/env-col:v1", "--enable-ml-diagnostics", "--ml-diagnostics-telemetry-port", "9095", "--grace-period", "0s")
+	if !envFallback.MLDiagnosticsEnabled || envFallback.MLDiagnosticsImage != "" || envFallback.MLDiagnosticsTelemetryPort != 9095 || envFallback.TerminationGracePeriodSeconds != 0 {
+		t.Errorf("got (%v, %q, %d, grace=%d), want (true, \"\", 9095, grace=0)", envFallback.MLDiagnosticsEnabled, envFallback.MLDiagnosticsImage, envFallback.MLDiagnosticsTelemetryPort, envFallback.TerminationGracePeriodSeconds)
+	}
+
+	explicit := runSubmitForTest(t, "--enable-ml-diagnostics", "--ml-diagnostics-image", "registry.local/flag-col:v2", "--ml-diagnostics-telemetry-port", "9096")
+	if explicit.MLDiagnosticsImage != "registry.local/flag-col:v2" || explicit.MLDiagnosticsTelemetryPort != 9096 {
+		t.Errorf("got (%q, %d), want (registry.local/flag-col:v2, 9096)", explicit.MLDiagnosticsImage, explicit.MLDiagnosticsTelemetryPort)
+	}
+	defaultPort := runSubmitForTest(t, "--enable-ml-diagnostics", "--ml-diagnostics-image", "registry.local/flag-col:v2")
+	if defaultPort.MLDiagnosticsTelemetryPort != 0 {
+		t.Errorf("port must stay 0 (orchestrator default) when --ml-diagnostics-telemetry-port is omitted, got %d", defaultPort.MLDiagnosticsTelemetryPort)
+	}
+}
+
+func TestSubmitCmd_FlagResetHygieneAcrossRuns(t *testing.T) {
+	first := runSubmitForTest(t, "--node-constraint", "pool=a", "--mount", "pvc-1;/mnt/a", "--restart-on-exit-codes", "42", "--gke-namespace", "ns-1", "--grace-period", "45s")
+	if first.NodeConstraint["pool"] != "a" || len(first.RawMounts) != 1 || len(first.RestartOnExitCodes) != 1 || first.GKENamespace != "ns-1" {
+		t.Fatalf("unexpected first run JobDefinition: %+v", first)
+	}
+	if first.TerminationGracePeriodSeconds != 45 {
+		t.Fatalf("expected explicit 45s grace period on first run: %+v", first)
+	}
+	assertCleanSecondSubmitRun(t, runSubmitForTest(t, "--node-constraint", "zone=us-central1-a"))
+}
+
+func assertCleanSecondSubmitRun(t *testing.T, second orchestrator.JobDefinition) {
+	t.Helper()
+	if len(second.NodeConstraint) != 1 || second.NodeConstraint["zone"] != "us-central1-a" {
+		t.Fatalf("NodeConstraint leaked into second run: %+v", second.NodeConstraint)
+	}
+	if len(second.RawMounts) != 0 || len(second.RestartOnExitCodes) != 0 || second.GKENamespace != "" {
+		t.Fatalf("slice/string flags leaked into second run: %+v", second)
+	}
+	if second.TerminationGracePeriodSeconds != 30 {
+		t.Fatalf("--grace-period default did not reset on second run: %+v", second)
 	}
 }

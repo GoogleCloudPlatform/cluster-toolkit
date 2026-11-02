@@ -222,6 +222,9 @@ spec:
           metadata:
             labels:
               gcluster.google.com/workload: {{.WorkloadName}}
+{{- if .TelemetryCollectorImage }}
+              tpu-workload-name: {{.WorkloadName}}
+{{- end }}
             annotations:
               kueue.x-k8s.io/safe-to-forcefully-delete: "true"
               cloud.google.com/skip-tpu-webhook-check: "true"
@@ -241,8 +244,9 @@ spec:
 {{- end }}
 {{- with (.RenderBlock "pod_auth_and_priority" 12) }}{{"\n"}}{{(StructuralData .)}}{{- end }}
             terminationGracePeriodSeconds: {{.TerminationGracePeriodSeconds}}
-{{- if .Pathways.ColocatedPythonSidecarImage }}
+{{- if or .Pathways.ColocatedPythonSidecarImage .TelemetryCollectorImage }}
             initContainers:
+{{- if .Pathways.ColocatedPythonSidecarImage }}
             - name: colocated-python-sidecar
               image: {{.Pathways.ColocatedPythonSidecarImage}}
               imagePullPolicy: Always
@@ -272,7 +276,11 @@ spec:
 {{- if .VolumeMountsYAML }}
 {{reindent 16 (StructuralData .VolumeMountsYAML)}}
 {{- end }}
-            {{- end}}
+{{- end }}
+{{- if .TelemetryCollectorImage }}
+{{(StructuralData (.RenderBlock "telemetry_sidecar" 12))}}
+{{- end }}
+{{- end }}
             containers:
             - name: pathways-worker
               image: {{.Pathways.WorkerImage}}

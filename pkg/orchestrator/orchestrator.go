@@ -104,7 +104,9 @@ type JobDefinition struct {
 	GKEMTCEnabled          bool
 	GKEMTCRamdiskDirectory string
 
-	MLDiagnosticsEnabled bool
+	MLDiagnosticsEnabled       bool
+	MLDiagnosticsImage         string
+	MLDiagnosticsTelemetryPort int
 
 	GkeCustomTemplatesPath string
 

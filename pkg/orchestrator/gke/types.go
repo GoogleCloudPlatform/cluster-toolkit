@@ -333,6 +333,8 @@ type ManifestOptions struct {
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
 	MLDiagnosticsEnabled          bool
+	TelemetryCollectorImage       string
+	TelemetryCollectorPort        int
 	Verbose                       bool
 	Env                           map[string]string
 	AdditionalManifests           []string
@@ -689,6 +691,8 @@ type jobSetTemplateData struct {
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
 	MLDiagnosticsEnabled          bool
+	TelemetryCollectorImage       string
+	TelemetryCollectorPort        int
 	Subdomain                     string
 	baseBlocks                    map[string]*yamltemplate.Template
 }
