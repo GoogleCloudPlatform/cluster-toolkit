@@ -89,6 +89,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [netapp-volumes.yaml](#netapp-volumesyaml-) ![core-badge]
   * [netapp-volumes-slurm.yaml](#netapp-volumes-slurmyaml-) ![core-badge]
   * [gke-tpu-7x](#gke-tpu-7x-) ![core-badge]
+  * [gke-inference-benchmarks](#gke-inference-benchmarks--) ![community-badge] ![experimental-badge]
   * [gcloud-example.yaml](#gcloud-exampleyaml--) ![community-badge] ![experimental-badge]
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
@@ -220,6 +221,7 @@ the experimental badge (![experimental-badge]).
 | [community/examples/fsi/ibm-symphony-on-gce/symphony.yaml](../community/examples/fsi/ibm-symphony-on-gce/symphony.yaml) | none | c2-standard-30, c2-standard-4 | This project provides a blueprint for deploying an IBM Spectrum Symphony cluster on Google Cloud Platform using the Google Cloud Cluster Toolkit. The blueprint automates infrastructure provisioning, custom base image creation via... |
 | [community/examples/fsi/ibm-symphony-on-gke/symphony.yaml](../community/examples/fsi/ibm-symphony-on-gke/symphony.yaml) | gke | c2-standard-16, c2-standard-4 | This project provides a blueprint for deploying an IBM Spectrum Symphony cluster on Google Cloud Platform using the Google Cloud Cluster Toolkit and Google Kubernetes Engine (GKE). The blueprint automates infrastructure provisioning... |
 | [community/examples/gcloud-example.yaml](../community/examples/gcloud-example.yaml) | none | - | This blueprint demonstrates how to use the gcloud community module to run arbitrary gcloud commands during deployment and destroy. It shows an example of creating and deleting a network, subnet, and VM instance. |
+| [community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml](../community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml) | gke | g4-standard-48 | This benchmark provisions a GKE cluster with a single-zone Spot G4 node pool (g4-standard-48, 1x NVIDIA RTX PRO 6000), serves google/diffusiongemma-26B-A4B-it with vLLM and runs a vllm bench serve throughput and latency benchmark... |
 | [community/examples/hpc-build-slurm-image.yaml](../community/examples/hpc-build-slurm-image.yaml) | slurm | n2d-standard-2 | This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top of an existing image, hpc-rocky-linux-9 in the case of this example. |
 | [community/examples/hpc-slinky/hpc-slinky.yaml](../community/examples/hpc-slinky/hpc-slinky.yaml) | slurm-on-gke (slinky) | n2d-standard-8, h3-standard-88 | The SchedMD Slinky Project deploys Slurm on Kubernetes. Slinky is particularly useful for: 1. Those with a prefer a Slurm workload management paradigm, but a cloud-native operational experience 2. Those who want the flexibility of... |
 | [community/examples/hpc-slurm-google-cloud-dedicated/eda/eda-gcd-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/eda/eda-gcd-cluster.yaml) | slurm | c3-standard-8, c3-standard-176 | This directory provides a Cluster Toolkit (gcluster) blueprint (eda-gcd-cluster.yaml) and end-to-end Electronic Design Automation (EDA) workload examples for Google Cloud Dedicated (GCD) environments (*.apis-<location>.goog): |
@@ -2087,6 +2089,26 @@ After the cluster is deployed, SSH to the Slurm login node and confirm `/home` i
 This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](gke-tpu-7x/README.md).
 
 [gke-tpu-7x]: ../examples/gke-tpu-7x
+
+### [gke-inference-benchmarks] ![community-badge] ![experimental-badge]
+
+A catalog of self-contained, reproducible LLM inference benchmarks on GKE
+accelerators (GPU and TPU). Each benchmark lives in its own directory
+(`community/examples/gke-inference-benchmarks/<accelerator>-<model>/`) with a blueprint, a
+deployment file and the Kubernetes manifests it applies, so a single
+`gcluster deploy` provisions the cluster and node pool, serves the model and runs
+the benchmark:
+
+```shell
+./gcluster deploy -d community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/deployment.yaml \
+  community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml --vars hf_token=$HF_TOKEN
+```
+
+The first entry serves `google/diffusiongemma-26B-A4B-it` with vLLM on a Spot
+G4 (NVIDIA RTX PRO 6000) node pool. The catalog, conventions and per-benchmark
+instructions are in the [README](/community/examples/gke-inference-benchmarks/README.md).
+
+[gke-inference-benchmarks]: ../community/examples/gke-inference-benchmarks
 
 ### [gcloud-example.yaml] ![community-badge] ![experimental-badge]
 
