@@ -152,6 +152,7 @@ type InspectOptions struct {
 	WorkloadName    string
 	OutputPath      string
 	Show            bool
+	SPS             bool // print a summary of the SPS instance WorkloadName instead of the full report
 }
 
 // JobOrchestrator defines the interface to interact with job orchestrators like GKE.

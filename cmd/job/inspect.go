@@ -15,6 +15,7 @@
 package job
 
 import (
+	"fmt"
 	"hpc-toolkit/pkg/orchestrator"
 
 	"github.com/spf13/cobra"
@@ -33,15 +34,25 @@ var (
 	inspectWorkloadName string
 	inspectOutputPath   string
 	inspectShow         bool
+	inspectSPS          bool
 )
 
 func init() {
 	InspectCmd.Flags().StringVar(&inspectWorkloadName, "name", "", "Specific workload name to inspect.")
 	InspectCmd.Flags().StringVarP(&inspectOutputPath, "output", "o", "", "Custom path/filename to write logs to.")
 	InspectCmd.Flags().BoolVarP(&inspectShow, "show", "s", false, "Print output to terminal in addition to file.")
+	InspectCmd.Flags().BoolVar(&inspectSPS, "sps", false, "Print a short summary of the SPS instance given by --name (status, endpoint, slices, images, sidecar versions) instead of the full report.")
 }
 
 func runInspectCmd(cmd *cobra.Command, args []string) error {
+	if inspectSPS {
+		if inspectWorkloadName == "" {
+			return fmt.Errorf("--sps requires --name")
+		}
+		if inspectOutputPath != "" || inspectShow {
+			return fmt.Errorf("--sps prints a summary to the terminal and cannot be used with --output or --show")
+		}
+	}
 	opts := orchestrator.InspectOptions{
 		ProjectID:       projectID,
 		ClusterName:     clusterName,
@@ -50,6 +61,7 @@ func runInspectCmd(cmd *cobra.Command, args []string) error {
 		WorkloadName:    inspectWorkloadName,
 		OutputPath:      inspectOutputPath,
 		Show:            inspectShow,
+		SPS:             inspectSPS,
 	}
 
 	return orc.InspectCluster(opts)

@@ -22,13 +22,18 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 )
 
 const spacer = "========================================================"
+
+// inspectStdout is where `gcluster job inspect --sps` prints its summary; tests replace it.
+var inspectStdout io.Writer = os.Stdout
 
 type inspectWriter struct {
 	writer io.Writer
@@ -56,11 +61,30 @@ func (w *inspectWriter) runAndLog(description string, command string, args ...st
 }
 
 // InspectCluster runs diagnostic checks on the GKE cluster and writes them to a log file.
+// With opts.SPS it only prints a summary of the SPS instance opts.WorkloadName to the terminal.
 func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error {
+	if opts.SPS && opts.WorkloadName == "" {
+		return fmt.Errorf("--sps requires --name")
+	}
 	g.namespace = opts.GKENamespace
 	// 1. Setup Kubectl (Critical, fail fast)
 	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
 		return fmt.Errorf("failed to configure kubectl: %w", err)
+	}
+
+	// Resolve namespace context
+	targetNamespace, err := g.getCurrentNamespace(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
+	if err != nil {
+		return err
+	}
+
+	if opts.SPS {
+		summary, err := g.inspectSPSInstance(opts.WorkloadName, targetNamespace)
+		if err != nil {
+			return err
+		}
+		_, _ = fmt.Fprint(inspectStdout, formatSPSSummary(summary))
+		return nil
 	}
 
 	// 2. Create log file (Critical, fail fast)
@@ -78,12 +102,6 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 		_ = file.Close()
 	}()
 
-	// Resolve namespace context
-	targetNamespace, err := g.getCurrentNamespace(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
-	if err != nil {
-		return err
-	}
-
 	var outputTarget io.Writer = file
 	if opts.Show {
 		outputTarget = io.MultiWriter(file, os.Stdout)
@@ -91,6 +109,7 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 
 	// Initial header in log
 	_, _ = fmt.Fprintf(outputTarget, "==================\nGCLUSTER INSPECT OUTPUT:\n==================\n\n")
+	g.logSPSSummaryIfInstance(outputTarget, opts.WorkloadName, targetNamespace)
 
 	writer := &inspectWriter{
 		writer: outputTarget,
@@ -427,4 +446,334 @@ func renderWorkloadsTable(w io.Writer, filtered []kueueWorkload) {
 	outStr := sb.String()
 	_, _ = fmt.Fprint(w, outStr)
 	_, _ = fmt.Fprintf(w, "\n%s\n\n", spacer)
+}
+
+// spsInstanceSummary is what `gcluster job inspect --name <instance> --sps` prints.
+type spsInstanceSummary struct {
+	Name          string
+	Namespace     string
+	Status        string
+	InstanceType  string // pathways-rm --instance_type, e.g. tpuv6e:2x4
+	InstanceCount int    // pathways-rm --instance_count
+	ReadySlices   string // e.g. "1/1"; empty until pathways-rm logs or JobSet status reports ready slices
+	ServerImage   string
+	SidecarImage  string // empty when the workers run no colocated Python sidecar
+	SidecarName   string // sidecar container name on worker pods
+	SidecarPython string // from running sidecar container or image tag
+	SidecarJAX    string // from running sidecar container or image tag
+}
+
+type spsContainerView struct {
+	Name  string   `json:"name"`
+	Image string   `json:"image"`
+	Args  []string `json:"args"`
+}
+
+type spsPodSpecView struct {
+	InitContainers []spsContainerView `json:"initContainers"`
+	Containers     []spsContainerView `json:"containers"`
+}
+
+type spsJobSetView struct {
+	Spec struct {
+		Suspend        bool `json:"suspend"`
+		ReplicatedJobs []struct {
+			Name     string `json:"name"`
+			Replicas int    `json:"replicas"`
+			Template struct {
+				Spec struct {
+					Template struct {
+						Spec spsPodSpecView `json:"spec"`
+					} `json:"template"`
+				} `json:"spec"`
+			} `json:"template"`
+		} `json:"replicatedJobs"`
+	} `json:"spec"`
+	Status struct {
+		TerminalState string `json:"terminalState"`
+		Conditions    []struct {
+			Type   string `json:"type"`
+			Status string `json:"status"`
+		} `json:"conditions"`
+		ReplicatedJobsStatus []struct {
+			Name  string `json:"name"`
+			Ready int    `json:"ready"`
+		} `json:"replicatedJobsStatus"`
+	} `json:"status"`
+}
+
+var (
+	spsReadySlicesRe = regexp.MustCompile(`(\d+)/(\d+) Pathways Slices Now Ready`)
+	jaxVersionRe     = regexp.MustCompile(`(?i)jax[-_]?v?(\d+\.\d+(?:\.\d+)?)`)
+	pythonVersionRe  = regexp.MustCompile(`(?i)(?:python|py)[-_]?(3\.\d+)`)
+)
+
+const spsSidecarVersionScript = "import jax, jaxlib, sys; print(f'{sys.version_info.major}.{sys.version_info.minor},{jax.__version__},{jaxlib.__version__}')"
+
+// inspectSPSInstance reads the JobSet name in namespace ns and summarizes it as an SPS instance.
+// It works for instances deployed with --pathways-deploy-sps and with the SPS deploy script.
+func (g *GKEOrchestrator) inspectSPSInstance(name, ns string) (spsInstanceSummary, error) {
+	res := g.kubectl("get", "jobset", name, "-n", ns, "-o", "json")
+	if res.ExitCode != 0 {
+		return spsInstanceSummary{}, fmt.Errorf("failed to read JobSet %q in namespace %q: %s", name, ns, strings.TrimSpace(res.Stderr))
+	}
+	summary, err := parseSPSInstance(name, ns, []byte(res.Stdout))
+	if err != nil {
+		return spsInstanceSummary{}, err
+	}
+	logs := g.kubectl("logs", "-n", ns, "-l", "jobset.sigs.k8s.io/jobset-name="+name+",jobset.sigs.k8s.io/replicatedjob-name=pathways-head",
+		"-c", "pathways-rm", "--tail=-1")
+	if logs.ExitCode == 0 {
+		if ready := lastReadySlices(logs.Stdout); ready != "" {
+			summary.ReadySlices = ready
+		}
+	}
+	g.probeSPSSidecarVersions(name, ns, &summary)
+	return summary, nil
+}
+
+// probeSPSSidecarVersions queries a running worker's sidecar container for its installed
+// Python, JAX, and jaxlib versions (as pathwaysutils get_sidecar_versions does), falling back
+// to the image-tag versions when no worker pod is running or pods/exec is not permitted.
+func (g *GKEOrchestrator) probeSPSSidecarVersions(name, ns string, s *spsInstanceSummary) {
+	if s.SidecarImage == "" {
+		return
+	}
+	pods := g.kubectl("get", "pods", "-n", ns,
+		"-l", "jobset.sigs.k8s.io/jobset-name="+name,
+		"--field-selector=status.phase=Running",
+		"-o", "jsonpath={.items[*].metadata.name}")
+	if pods.ExitCode != 0 {
+		return
+	}
+	workerPod := firstWorkerPod(name, pods.Stdout)
+	if workerPod == "" {
+		return
+	}
+	sidecar := s.SidecarName
+	if sidecar == "" {
+		sidecar = "colocated-python-sidecar"
+	}
+	res := g.kubectl("exec", "-n", ns, "pod/"+workerPod, "-c", sidecar, "--", "python3", "-c", spsSidecarVersionScript)
+	if res.ExitCode == 0 {
+		applyProbedVersions(res.Stdout, s)
+	}
+}
+
+func firstWorkerPod(jobsetName, podsStdout string) string {
+	headPrefix := jobsetName + "-pathways-head-"
+	for _, pod := range strings.Fields(podsStdout) {
+		if !strings.HasPrefix(pod, headPrefix) {
+			return pod
+		}
+	}
+	return ""
+}
+
+func applyProbedVersions(stdout string, s *spsInstanceSummary) {
+	parts := strings.Split(strings.TrimSpace(stdout), ",")
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" {
+		return
+	}
+	s.SidecarPython = strings.TrimSpace(parts[0])
+	jax := strings.TrimSpace(parts[1])
+	if jaxlib := strings.TrimSpace(parts[2]); jaxlib != "" {
+		jax = fmt.Sprintf("%s (jaxlib %s)", jax, jaxlib)
+	}
+	s.SidecarJAX = jax
+}
+
+// logSPSSummaryIfInstance adds the SPS summary to the top of the full inspect report when name is an SPS instance.
+func (g *GKEOrchestrator) logSPSSummaryIfInstance(w io.Writer, name, ns string) {
+	if name == "" {
+		return
+	}
+	summary, err := g.inspectSPSInstance(name, ns)
+	if err != nil {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "SPS instance summary:\n%s\n%s\n\n", formatSPSSummary(summary), spacer)
+}
+
+func parseSPSInstance(name, ns string, data []byte) (spsInstanceSummary, error) {
+	var js spsJobSetView
+	if err := json.Unmarshal(data, &js); err != nil {
+		return spsInstanceSummary{}, fmt.Errorf("failed to parse JobSet %q: %w", name, err)
+	}
+	summary := spsInstanceSummary{Name: name, Namespace: ns}
+	var head, worker *spsPodSpecView
+	var workerReplicas int
+	for i := range js.Spec.ReplicatedJobs {
+		rj := &js.Spec.ReplicatedJobs[i]
+		switch rj.Name {
+		case "pathways-head":
+			head = &rj.Template.Spec.Template.Spec
+		case "worker", "pathways-worker":
+			worker = &rj.Template.Spec.Template.Spec
+			workerReplicas = rj.Replicas
+		}
+	}
+	if head == nil || worker == nil {
+		return spsInstanceSummary{}, fmt.Errorf("JobSet %q is not an SPS instance: it needs a pathways-head job and a worker job", name)
+	}
+	if err := parseSPSHead(name, head, &summary); err != nil {
+		return spsInstanceSummary{}, err
+	}
+	parseSPSWorker(worker, workerReplicas, &summary)
+	summary.Status = spsInstanceStatus(&js)
+	summary.ReadySlices = statusReadySlices(&js, summary.InstanceCount)
+	return summary, nil
+}
+
+func parseSPSWorker(worker *spsPodSpecView, replicas int, summary *spsInstanceSummary) {
+	if summary.InstanceCount == 0 && replicas > 0 {
+		summary.InstanceCount = replicas
+	}
+	for _, c := range append(append([]spsContainerView{}, worker.InitContainers...), worker.Containers...) {
+		switch c.Name {
+		case "pathways-worker":
+			if c.Image != "" {
+				summary.ServerImage = c.Image
+			}
+		case "colocated-python-sidecar", "external-sidecar":
+			summary.SidecarImage = c.Image
+			summary.SidecarName = c.Name
+			summary.SidecarPython, summary.SidecarJAX = imageVersions(c.Image)
+		}
+	}
+}
+
+func statusReadySlices(js *spsJobSetView, instanceCount int) string {
+	if js.Status.TerminalState != "" || instanceCount <= 0 {
+		return ""
+	}
+	for _, rj := range js.Status.ReplicatedJobsStatus {
+		if (rj.Name == "worker" || rj.Name == "pathways-worker") && rj.Ready > 0 {
+			return fmt.Sprintf("%d/%d", rj.Ready, instanceCount)
+		}
+	}
+	return ""
+}
+
+// parseSPSHead checks that pathways-head runs only the resource manager and reads the slice shape from it.
+func parseSPSHead(name string, head *spsPodSpecView, summary *spsInstanceSummary) error {
+	var rm *spsContainerView
+	for _, c := range append(append([]spsContainerView{}, head.InitContainers...), head.Containers...) {
+		switch {
+		case c.Name == "pathways-rm":
+			c := c
+			rm = &c
+		case c.Name == "pathways-proxy" || strings.HasPrefix(c.Name, "workload-container") || c.Name == "user-workload":
+			return fmt.Errorf("JobSet %q is not an SPS instance: its pathways-head runs %s, so it is a regular or headless Pathways job", name, c.Name)
+		}
+	}
+	if rm == nil {
+		return fmt.Errorf("JobSet %q is not an SPS instance: its pathways-head does not run pathways-rm", name)
+	}
+	summary.ServerImage = rm.Image
+	parseRMArgs(rm.Args, summary)
+	return nil
+}
+
+func parseRMArgs(args []string, summary *spsInstanceSummary) {
+	for i := 0; i < len(args); i++ {
+		key, value, ok := strings.Cut(args[i], "=")
+		if !ok && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			value = args[i+1]
+			i++
+		} else if !ok {
+			continue
+		}
+		switch strings.TrimLeft(key, "-") {
+		case "instance_type":
+			summary.InstanceType = value
+		case "instance_count":
+			summary.InstanceCount, _ = strconv.Atoi(value)
+		}
+	}
+}
+
+func spsInstanceStatus(js *spsJobSetView) string {
+	if js.Status.TerminalState != "" {
+		return js.Status.TerminalState
+	}
+	for _, c := range js.Status.Conditions {
+		if (c.Type == "Completed" || c.Type == "Failed") && c.Status == "True" {
+			return c.Type
+		}
+		if c.Type == "Suspended" && c.Status == "True" {
+			return "Suspended (waiting for Kueue admission)"
+		}
+	}
+	if js.Spec.Suspend {
+		return "Suspended (waiting for Kueue admission)"
+	}
+	for _, rj := range js.Status.ReplicatedJobsStatus {
+		if rj.Name == "pathways-head" && rj.Ready > 0 {
+			return "Running"
+		}
+	}
+	return "Starting"
+}
+
+// lastReadySlices returns the most recent "N/M" from pathways-rm's "N/M Pathways Slices Now Ready" log line.
+func lastReadySlices(logs string) string {
+	matches := spsReadySlicesRe.FindAllStringSubmatch(logs, -1)
+	if len(matches) == 0 {
+		return ""
+	}
+	last := matches[len(matches)-1]
+	return last[1] + "/" + last[2]
+}
+
+// imageVersions reads the Python and JAX versions from an image tag such as
+// sidecar:20260831-maxtext-v0.2.4-jax0.11.1-pwutils. Missing versions are returned empty.
+func imageVersions(image string) (python, jax string) {
+	tag, _, _ := strings.Cut(image, "@")
+	i := strings.LastIndex(tag, ":")
+	if i < 0 || strings.Contains(tag[i:], "/") {
+		return "", ""
+	}
+	tag = tag[i+1:]
+	if m := pythonVersionRe.FindStringSubmatch(tag); m != nil {
+		python = m[1]
+	}
+	if m := jaxVersionRe.FindStringSubmatch(tag); m != nil {
+		jax = m[1]
+	}
+	return python, jax
+}
+
+func formatSPSSummary(s spsInstanceSummary) string {
+	var b strings.Builder
+	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+	row := func(k, v string) { _, _ = fmt.Fprintf(tw, "%s:\t%s\n", k, v) }
+	row("Name", fmt.Sprintf("%s (namespace: %s)", s.Name, s.Namespace))
+	row("Status", s.Status)
+	row("Endpoint", fmt.Sprintf(spsEndpointFormat, s.Name))
+	ready := "readiness not logged yet"
+	if s.ReadySlices != "" {
+		ready = s.ReadySlices + " ready"
+	}
+	row("Slices", fmt.Sprintf("%d x %s (%s)", s.InstanceCount, s.InstanceType, ready))
+	row("Server image", s.ServerImage)
+	if s.SidecarImage == "" {
+		row("Sidecar image", "none")
+	} else {
+		python, jax := s.SidecarPython, s.SidecarJAX
+		if python == "" && jax == "" {
+			python, jax = imageVersions(s.SidecarImage)
+		}
+		orUnknown := func(v string) string {
+			if v == "" {
+				return "unknown (not in image tag)"
+			}
+			return v
+		}
+		row("Sidecar image", s.SidecarImage)
+		row("Sidecar Python", orUnknown(python))
+		row("Sidecar JAX", orUnknown(jax))
+	}
+	_ = tw.Flush()
+	return b.String()
 }

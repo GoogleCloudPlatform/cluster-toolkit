@@ -16,6 +16,7 @@ package job
 
 import (
 	"hpc-toolkit/pkg/orchestrator"
+	"strings"
 	"testing"
 )
 
@@ -95,5 +96,49 @@ func TestInspectCmd_Success(t *testing.T) {
 	}
 	if !mockOrc.inspectOpts.Show {
 		t.Errorf("expected Show to be true")
+	}
+}
+
+func TestInspectCmd_SPS(t *testing.T) {
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+	clusterName, location, projectID = "test-cluster", "us-central1-a", "test-project"
+	defer func() {
+		clusterName, location, projectID = "", "", ""
+		inspectWorkloadName, inspectOutputPath, inspectShow, inspectSPS = "", "", false, false
+	}()
+
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{name: "passes --sps", args: []string{"--name", "sps-v6e", "--sps"}},
+		{name: "needs --name", args: []string{"--sps"}, wantErr: "--sps requires --name"},
+		{name: "rejects --output", args: []string{"--name", "sps-v6e", "--sps", "--output", "/tmp/x.log"}, wantErr: "cannot be used with --output or --show"},
+		{name: "rejects --show", args: []string{"--name", "sps-v6e", "--sps", "--show"}, wantErr: "cannot be used with --output or --show"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			inspectWorkloadName, inspectOutputPath, inspectShow, inspectSPS = "", "", false, false
+			mockOrc := &mockJobOrchestrator{}
+			gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+			_, err := executeCommand(JobCmd, append([]string{"inspect"}, tc.args...)...)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("got err = %v, want %q", err, tc.wantErr)
+				}
+				if mockOrc.inspectCalled {
+					t.Errorf("InspectCluster called, want the flag error first")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !mockOrc.inspectOpts.SPS || mockOrc.inspectOpts.WorkloadName != "sps-v6e" {
+				t.Errorf("InspectOptions = %+v, want SPS for sps-v6e", mockOrc.inspectOpts)
+			}
+		})
 	}
 }

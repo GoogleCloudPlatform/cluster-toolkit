@@ -343,6 +343,14 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
   * **Workloads**: Overview of all workloads in the cluster, and specific JobSet/Workload descriptors if a name is targeted.
   * **Console Links**: Direct links to GKE clusters, GKE workloads, IAM permissions, and Quota administration consoles.
 
+    When `--name` is a Shared Pathways Service (SPS) instance, the report starts with a short summary of the instance. To print only that summary to the terminal, add `--sps`:
+
+    ```bash
+    ./gcluster job inspect --name sps-v6e --sps
+    ```
+
+    The summary shows the instance status, the endpoint clients connect to, the slice count and type with how many slices are ready, the server and sidecar images, and the sidecar's Python and JAX versions (read from a running worker sidecar container, falling back to the image tag).
+
 > [!TIP]
 > **Targeting a Specific Namespace**
 > By default, `gcluster job` commands operate on the namespace detected from your active `kubeconfig` context (falling back to `default` if the context is found but its namespace is empty). If the context cannot be resolved, the command will abort with an error. To submit or manage jobs in a custom namespace, use the `--gke-namespace` flag:
