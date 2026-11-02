@@ -440,7 +440,7 @@ Use `--restart-on-exit-codes` to specify the allowlist of retriable container ex
 *(Note: Exit code `143` corresponds to `SIGTERM` ($128 + 15$). Workload pods interrupted by Spot or Kueue preemption receive SIGTERM and exit with code 143; adding 143 ensures preempted pods are restarted rather than failing the job immediately).*
 
 **Example 6: Private Registry & Service Account**
-Use `--image-pull-secret` and `--service-account` for secure jobs.
+Use `--image-pull-secret` and `--service-account` for secure jobs. When `--image-pull-secret` is omitted, `gcluster` inspects `kubernetes.io/dockerconfigjson` secrets in the target namespace and automatically attaches matching pull secrets when a single secret uniquely matches an active workload or Pathways image, using the kubelet's own credential matching rules (registry host with optional `*.` wildcards and port, plus an optional repository-path prefix; a path-less `index.docker.io` entry covers all Docker Hub images). If multiple secrets match the same image, auto-injection is skipped for that image with a warning. Specifying `--image-pull-secret` overrides automatic discovery, so list all pull secrets required by the workload.
 
 ```bash
 ./gcluster job submit \
@@ -1336,7 +1336,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--placement-policy` | `string` | Name of an existing GCE compact placement or workload policy; the job is pinned to nodes carrying it via `cloud.google.com/placement-policy-name`. Auto-resolved for A4X and multi-host TPU 7x when omitted. |
 | `--restart-on-exit-codes` | `string` | Comma-separated allowlist of retriable container exit codes (`1..255`). Exit codes in this list allow the job to restart up to `--restarts`, while any other non-zero exit code fails the job immediately (`action: FailJob` on `NotIn`). |
 | `--gke-scheduler` | `string` | Specific GKE scheduler selection (e.g., `gke.io/topology-aware-auto`). |
-| `--image-pull-secret` | `string` | Secret name required to authenticate and pull images from private container registries. |
+| `--image-pull-secret` | `string` | Comma-separated secret names required to pull images from private container registries. When omitted, `gcluster` auto-discovers uniquely matching `kubernetes.io/dockerconfigjson` secrets in the target namespace; specifying `--image-pull-secret` overrides auto-discovery for all pod images. |
 | `--service-account` | `string` | Kubernetes service account name used to provide fine-grained IAM roles to the job pods. |
 | `--cpu-affinity` | `string` | CPU affinity rules (e.g., `'numa'`). |
 | `--gke-disable-parallel-containers` | `bool` | Disable parallel containers for TPU v7/v7x on GKE. (Default: `false`) |

@@ -31,6 +31,7 @@ import (
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"gopkg.in/yaml.v2"
@@ -901,10 +902,7 @@ func (g *GKEOrchestrator) ensureLocalQueueExists(localQueue, ns string, discover
 
 // isForbiddenError returns true if the error indicates a 403 Forbidden RBAC permission error.
 func isForbiddenError(err error) bool {
-	if err == nil {
-		return false
-	}
-	return apierrors.IsForbidden(err) || strings.Contains(strings.ToLower(err.Error()), "forbidden")
+	return k8s.IsForbiddenError(err)
 }
 
 func (g *GKEOrchestrator) verifyCheckpointConfigurationCR(job *orchestrator.JobDefinition, docRemediationMsg string) error {

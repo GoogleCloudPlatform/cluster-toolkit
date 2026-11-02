@@ -167,6 +167,10 @@ func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string, indent
 }
 
 func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) (ManifestOptions, error) {
+	var err error
+	if job.ImagePullSecrets, err = g.resolveImagePullSecrets(job, fullImageName); err != nil {
+		return ManifestOptions{}, err
+	}
 	originalAccelType := job.ComputeType
 
 	schedOpts := SchedulingOptions{

@@ -172,12 +172,14 @@ type MockKubeClient struct {
 	DeletedJobSets  []string
 
 	// Fixtures keyed by gvr.Resource.
-	Objects    map[string][]unstructured.Unstructured
-	ListErrs   map[string]error
-	GetErr     error
-	DeleteErrs map[string]error
-	Deleted    map[string][]string
-	DeletePre  map[string]*metav1.Preconditions
+	Objects            map[string][]unstructured.Unstructured
+	ListErrs           map[string]error
+	ListNamespaces     map[string]string
+	ListFieldSelectors map[string]string
+	GetErr             error
+	DeleteErrs         map[string]error
+	Deleted            map[string][]string
+	DeletePre          map[string]*metav1.Preconditions
 }
 
 func managedStorageObject(kind, name string) *unstructured.Unstructured {
@@ -224,7 +226,13 @@ func (m *MockKubeClient) ListJobSets(namespace string, labelSelector string) ([]
 	return []orchestrator.JobStatus{}, m.Err
 }
 
-func (m *MockKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error) {
+func (m *MockKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector, fieldSelector string) ([]unstructured.Unstructured, error) {
+	if m.ListNamespaces != nil {
+		m.ListNamespaces[gvr.Resource] = namespace
+	}
+	if m.ListFieldSelectors != nil {
+		m.ListFieldSelectors[gvr.Resource] = fieldSelector
+	}
 	return m.Objects[gvr.Resource], m.ListErrs[gvr.Resource]
 }
 

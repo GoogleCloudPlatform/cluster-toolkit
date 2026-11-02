@@ -1770,13 +1770,20 @@ func (d *DefaultKubeClient) resource(gvr schema.GroupVersionResource, namespace 
 	return d.dynClient.Resource(gvr).Namespace(namespace), nil
 }
 
-// ListResources returns the raw objects of gvr in namespace matching labelSelector.
-func (d *DefaultKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error) {
+const defaultKubeClientListTimeout = 30 * time.Second
+
+// ListResources returns the raw objects of gvr in namespace matching labelSelector and fieldSelector.
+func (d *DefaultKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector, fieldSelector string) ([]unstructured.Unstructured, error) {
 	r, err := d.resource(gvr, namespace)
 	if err != nil {
 		return nil, err
 	}
-	list, err := r.List(context.TODO(), metav1.ListOptions{LabelSelector: labelSelector})
+	ctx, cancel := context.WithTimeout(context.Background(), defaultKubeClientListTimeout)
+	defer cancel()
+	list, err := r.List(ctx, metav1.ListOptions{
+		LabelSelector: labelSelector,
+		FieldSelector: fieldSelector,
+	})
 	if err != nil {
 		return nil, err
 	}

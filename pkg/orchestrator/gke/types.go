@@ -152,7 +152,7 @@ type KubeClient interface {
 	ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error)
 	GetCurrentNamespace(clusterName, location, projectID string) (string, error)
 	// An empty namespace means cluster-scoped.
-	ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error)
+	ListResources(gvr schema.GroupVersionResource, namespace, labelSelector, fieldSelector string) ([]unstructured.Unstructured, error)
 	GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error)
 	// A nil pre deletes unconditionally.
 	DeleteResource(gvr schema.GroupVersionResource, namespace, name string, pre *metav1.Preconditions) error

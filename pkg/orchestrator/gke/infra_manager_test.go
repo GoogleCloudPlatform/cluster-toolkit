@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"io"
 	"net/http"
 	"os"
@@ -2705,5 +2706,54 @@ func assertWantErrSubstr(t *testing.T, err error, wantErr bool, wantErrSubstr st
 		}
 	} else if err != nil {
 		t.Errorf("expected no error, got: %v", err)
+	}
+}
+
+func TestDefaultKubeClient_ListResourcesFieldSelectorAndLazySync(t *testing.T) {
+	setupMockMachineConfig(t)
+	var gotFieldSelector string
+	dyn := &mockDynamicClient{
+		listFunc: func(_ context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+			gotFieldSelector = opts.FieldSelector
+			return &unstructured.UnstructuredList{
+				Items: []unstructured.Unstructured{makeDockerConfigSecret("dyn-sec", "registry.local")},
+			}, nil
+		},
+	}
+
+	if kc := (&GKEOrchestrator{}).usableKubeClient(); kc != nil {
+		t.Fatalf("expected usableKubeClient()=nil when no client, dynamic client, or context is set, got %T", kc)
+	}
+
+	orc := newCachedTestOrchestrator()
+	orc.kubeClient = &DefaultKubeClient{}
+	orc.dynClient = dyn
+	orc.namespace = "lazy-ns"
+
+	kc := orc.usableKubeClient()
+	if kc == nil {
+		t.Fatalf("expected usableKubeClient() to sync d.dynClient from g.dynClient")
+	}
+
+	opts, err := orc.PrepareManifestOptions(orchestrator.JobDefinition{
+		WorkloadName:    "lazy-sec-job",
+		CommandToRun:    "echo hi",
+		ComputeType:     "n2-standard-4",
+		MachineType:     "n2-standard-4",
+		ClusterLocation: "us-central1-a",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+	}, "registry.local/app:v1", JobProfile{IsCPUMachine: true, CapacityCount: 4}, false, false)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+	if gotFieldSelector != "type="+string(corev1.SecretTypeDockerConfigJson) {
+		t.Errorf("fieldSelector = %q, want type=kubernetes.io/dockerconfigjson", gotFieldSelector)
+	}
+	if !strings.Contains(opts.ImagePullSecrets, "dyn-sec") {
+		t.Errorf("expected dyn-sec in ImagePullSecrets, got %q", opts.ImagePullSecrets)
+	}
+	if _, err := kc.ListResources(k8s.SecretGVR, "lazy-ns", "app=demo", ""); err != nil || gotFieldSelector != "" {
+		t.Errorf("expected empty fieldSelector passthrough on generic ListResources, got %q (err=%v)", gotFieldSelector, err)
 	}
 }
