@@ -87,8 +87,8 @@
         {{ ('--backend-config bucket=' + state_bucket) if state_bucket | length > 0 else '' }}
         --vars project_id={{ project }} --vars deployment_name={{ deployment_name }}
         {{ deployment_vars_str }}
-        --vars openai_secret_name={{ openai_test_secret }}
-        --vars anthropic_secret_name={{ anthropic_test_secret }}
+        {{ ('--vars openai_secret_name=' + (openai_test_secret | quote)) if openai_test_secret | length > 0 else '' }}
+        {{ ('--vars anthropic_secret_name=' + (anthropic_test_secret | quote)) if anthropic_test_secret | length > 0 else '' }}
       args:
         chdir: "{{ workspace }}"
       when: external_provider_tests | default([]) | length > 0

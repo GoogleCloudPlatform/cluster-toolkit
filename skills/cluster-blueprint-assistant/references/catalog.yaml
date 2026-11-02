@@ -92,11 +92,12 @@ blueprints:
   blueprint_name: agentgateway-gke
   scheduler: gke
   description: "This blueprint deploys a private generative AI gateway powered by agentgateway on a regional, CPU-only GKE Standard cluster."
+  required_services: [aiplatform.googleapis.com, compute.googleapis.com, container.googleapis.com, iam.googleapis.com]
   vars:
     agentgateway_version: v1.7.0
     anthropic_secret_name: ""
     authorized_cidr: YOUR_IP/32
-    deployment_name: agw-gke
+    deployment_name: agw-demo
     gke_version_prefix: "1.35."
     namespace: agentgateway-system
     openai_secret_name: ""
@@ -6732,6 +6733,7 @@ module_wiring:
     - modules/network/pre-existing-vpc
     - modules/network/vpc
   community/modules/project/aiplatform-predict-iam:
+    required_services: [aiplatform.googleapis.com, iam.googleapis.com]
     required_inputs: [service_account_email]
     recommended_use:
     - modules/project/service-account
