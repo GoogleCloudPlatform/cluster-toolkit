@@ -200,7 +200,9 @@ class TestValidateReadmeSnippets(unittest.TestCase):
                 m = re.search(rf'variable\s+"{root}"\s*\{{', text)
                 self.assertIsNotNone(m, f"variable {root!r} not found in {module}")
                 body = vrs._hcl_block_body(text, m.end())
-                attrs = object_attrs(body[body.index("type"):])
+                type_attr = re.search(r"^\s*type\s*=", body, re.MULTILINE)
+                self.assertIsNotNone(type_attr, f"no type for {root!r} in {module}")
+                attrs = object_attrs(body[type_attr.start():])
                 for part in rest:
                     attrs = object_attrs(attrs[part])
                 self.assertEqual(allowed, set(attrs))

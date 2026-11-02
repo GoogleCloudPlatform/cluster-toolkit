@@ -1404,7 +1404,7 @@ If **both** endpoints are unreachable, the error lists what was attempted for ea
 
 ### 10.2 ImagePullBackOff
 
-If your job status remains `Pending` and the underlying pods show `ImagePullBackOff` or `ErrImagePull`, the GKE node pool service account may lack permission to read from the Artifact Registry repository.
+If `gcluster job list` keeps reporting your job as `Running` but its pods (`kubectl get pods -l jobset.sigs.k8s.io/jobset-name=<job-name>`) show `ImagePullBackOff` or `ErrImagePull`, the GKE node pool service account may lack permission to read from the Artifact Registry repository.
 
 A project administrator can grant the necessary access manually by running:
 
