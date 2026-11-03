@@ -164,7 +164,7 @@ func (sm *StorageManager) isGCSFuseBackedPVC(pvcName string, job orchestrator.Jo
 	}
 
 	ns, err := sm.resolveNamespace(job)
-	if err != nil || ns == "" {
+	if err != nil {
 		logging.Warn("Could not resolve namespace to inspect PVC %q for GCSFuse CSI driver (%v); defaulting to \"default\".", pvcName, err)
 		ns = "default"
 	}
@@ -184,28 +184,24 @@ func (sm *StorageManager) isGCSFuseBackedPVC(pvcName string, job orchestrator.Jo
 	volumeName = strings.TrimSpace(volumeName)
 	storageClassName = strings.TrimSpace(storageClassName)
 
-	if storageClassName != "" && gcsFuseProfileStorageClasses[strings.ToLower(storageClassName)] != "" {
+	if gcsFuseProfileStorageClasses[strings.ToLower(storageClassName)] != "" {
 		return true
 	}
-	if volumeName != "" {
-		pvRes := sm.orchestrator.kubectl("get", "pv", volumeName, "--ignore-not-found", "-o", "jsonpath={.spec.csi.driver}")
-		if pvRes.ExitCode != 0 {
-			logging.Warn("Could not inspect PersistentVolume %q for PVC %q to check for GCSFuse CSI driver: %s.",
-				volumeName, pvcName, strings.TrimSpace(pvRes.Stderr))
-		} else if strings.TrimSpace(pvRes.Stdout) == gcsFuseCSIDriver {
-			return true
-		}
+	return sm.hasGCSFuseCSIField("pv", volumeName, pvcName, "jsonpath={.spec.csi.driver}") ||
+		sm.hasGCSFuseCSIField("storageclass", storageClassName, pvcName, "jsonpath={.provisioner}")
+}
+
+func (sm *StorageManager) hasGCSFuseCSIField(resourceKind, name, pvcName, jsonPath string) bool {
+	if name == "" {
+		return false
 	}
-	if storageClassName != "" {
-		scRes := sm.orchestrator.kubectl("get", "storageclass", storageClassName, "--ignore-not-found", "-o", "jsonpath={.provisioner}")
-		if scRes.ExitCode != 0 {
-			logging.Warn("Could not inspect StorageClass %q for PVC %q to check for GCSFuse CSI driver: %s.",
-				storageClassName, pvcName, strings.TrimSpace(scRes.Stderr))
-		} else if strings.TrimSpace(scRes.Stdout) == gcsFuseCSIDriver {
-			return true
-		}
+	res := sm.orchestrator.kubectl("get", resourceKind, name, "--ignore-not-found", "-o", jsonPath)
+	if res.ExitCode != 0 {
+		logging.Warn("Could not inspect %s %q for PVC %q to check for GCSFuse CSI driver: %s.",
+			resourceKind, name, pvcName, strings.TrimSpace(res.Stderr))
+		return false
 	}
-	return false
+	return strings.TrimSpace(res.Stdout) == gcsFuseCSIDriver
 }
 
 func buildPodLevelMount(pm parsedMount, idx int) MountInfo {
