@@ -343,6 +343,14 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
   * **Workloads**: Overview of all workloads in the cluster, and specific JobSet/Workload descriptors if a name is targeted.
   * **Console Links**: Direct links to GKE clusters, GKE workloads, IAM permissions, and Quota administration consoles.
 
+    When `--name` is a Shared Pathways Service (SPS) instance, the report starts with a short summary of the instance. To collect only that summary into `gcluster-inspect-<cluster>-<timestamp>-sps.log` (or a custom `--output` file), pass `--filter=pathways-sps` (add `--show` / `-s` to also print it to the terminal):
+
+    ```bash
+    ./gcluster job inspect --name sps-v6e --filter=pathways-sps --show
+    ```
+
+    The summary shows the instance status, the endpoint clients connect to, the slice count and type with how many slices are ready, the server and sidecar images, and the sidecar's Python and JAX versions (read from a running worker sidecar container, falling back to the image tag).
+
 > [!TIP]
 > **Targeting a Specific Namespace**
 > By default, `gcluster job` commands operate on the namespace detected from your active `kubeconfig` context (falling back to `default` if the context is found but its namespace is empty). If the context cannot be resolved, the command will abort with an error. To submit or manage jobs in a custom namespace, use the `--gke-namespace` flag:
@@ -1368,6 +1376,16 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 > [!NOTE]
 > **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. For jobs with up to 10 pods, you can override this to stream logs from all pods by explicitly passing `--main-only=false`; for jobs with more than 10 pods, `gcluster` prints a link to view all-pod logs in the Google Cloud Console.
+
+### 9.6 `inspect` Flags
+*Use these flags when inspecting cluster health or a specific workload.*
+
+| Flag | Type | Description |
+| :--- | :--- | :--- |
+| `--name` | `string` | Specific workload name to inspect. |
+| `-o, --output` | `string` | Custom path/filename to write logs to. |
+| `-s, --show` | `flag` | Print output to terminal in addition to file. |
+| `--filter` | `string` | Filter inspect output to a specific component (allowed values: `pathways-sps`; requires `--name`). Writes to `gcluster-inspect-<cluster>-<timestamp>-sps.log` by default. |
 
 ## 10. Troubleshooting
 

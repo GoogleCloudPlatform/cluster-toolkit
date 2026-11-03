@@ -156,6 +156,7 @@ type InspectOptions struct {
 	WorkloadName    string
 	OutputPath      string
 	Show            bool
+	Filter          string // component filter (e.g., "pathways-sps")
 }
 
 // JobOrchestrator defines the interface to interact with job orchestrators like GKE.
