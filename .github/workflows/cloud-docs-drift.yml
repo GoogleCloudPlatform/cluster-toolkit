@@ -73,9 +73,10 @@ jobs:
       env:
         BASE_REF: "origin/${{ github.base_ref }}"
       run: |
-        if [ -n "$(git diff --name-only --no-renames "$BASE_REF...HEAD" -- \
+        changed="$(git diff --name-only --no-renames "$BASE_REF...HEAD" -- \
             tools/validate_cloud_docs.py tools/tests/test_validate_cloud_docs.py \
-            .github/workflows/cloud-docs-drift.yml)" ]; then
+            .github/workflows/cloud-docs-drift.yml)"
+        if [ -n "$changed" ]; then
           python3 tools/tests/test_validate_cloud_docs.py
         else
           echo "Validator unchanged in this PR; skipping its unit tests."

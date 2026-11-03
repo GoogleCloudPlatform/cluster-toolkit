@@ -19,7 +19,8 @@ Modes:
      Inspects changed files in a PR (via git diff or --changed-files) and prints
      a reminder table listing any public cloud.google.com pages that document
      the modified blueprints or CLI commands. Exits 1 when --fail-on-impact is
-     set and Cloud-Doc-backed files are modified (exits 0 otherwise).
+     set and Cloud-Doc-backed files are modified unless the PR description
+     contains a 'Cloud-Docs:' acknowledgment line (exits 0 otherwise).
 
   2. --check-live (or --local-dir <dir>):
      Fetches the live public https://cloud.google.com/cluster-toolkit/docs/...
@@ -371,7 +372,8 @@ def check_slurm_gpu_page(
 
     if "v1.62.0" in text:
         errors.append(
-            f"{slug}: pins outdated Cluster Toolkit version 'v1.62.0' (update to current release tag)"
+            f"{slug}: states 'v1.62.0' as the Cluster Toolkit version "
+            "(literal match; confirm the current minimum)"
         )
     return errors
 
@@ -443,18 +445,34 @@ def check_configure_environment_page(slug: str, raw_html: str) -> list[str]:
     return errors
 
 
+# DevSite reference pages list subcommands as <dt><a ...><code>NAME</code></a></dt>.
+_DT_CMD_RE = re.compile(
+    r"<dt>\s*(?:<a\b[^>]*>)?\s*<code\b[^>]*>\s*([a-z][a-z0-9-]*)\s*</code>",
+    re.IGNORECASE,
+)
+
+
 def check_cli_reference_page(
     slug: str, cmd_rel_dir: str, raw_html: str, repo_root: str = REPO_ROOT
 ) -> list[str]:
     """Validates a CLI reference page against the subcommands defined in cmd_rel_dir."""
     errors: list[str] = []
-    text = html_to_text(raw_html)
-    expected_cmds = extract_cli_subcommands(cmd_rel_dir, repo_root=repo_root)
-    for sub in sorted(expected_cmds):
-        if not re.search(rf"\b{re.escape(sub)}\b", text):
-            errors.append(
-                f"{slug}: CLI subcommand '{sub}' (from {cmd_rel_dir}/) is not documented on page"
-            )
+    group = os.path.basename(os.path.normpath(cmd_rel_dir))
+    expected_cmds = extract_cli_subcommands(cmd_rel_dir, repo_root=repo_root) - {group}
+    documented = {
+        m.lower() for m in _DT_CMD_RE.findall(extract_article_html(raw_html))
+    }
+    if documented:
+        missing = expected_cmds - documented
+    else:
+        text = html_to_text(raw_html)
+        missing = {
+            s for s in expected_cmds if not re.search(rf"\b{re.escape(s)}\b", text)
+        }
+    for sub in sorted(missing):
+        errors.append(
+            f"{slug}: CLI subcommand '{sub}' (from {cmd_rel_dir}/) is not documented on page"
+        )
     return errors
 
 
@@ -496,6 +514,12 @@ def validate_live_cloud_docs(
         except (OSError, yaml.YAMLError) as exc:
             errors.append(
                 f"{slug}: {check.__name__} failed (stale repo mapping?): {exc}"
+            )
+
+    for prefix, _, _ in PR_PATH_TO_CLOUD_DOCS:
+        if not os.path.exists(os.path.join(repo_root, prefix)):
+            errors.append(
+                f"PR_PATH_TO_CLOUD_DOCS: stale repo mapping '{prefix}' (path no longer exists)"
             )
 
     gke_slugs = {s for s, _, _ in GKE_GPU_PAGES}
@@ -561,8 +585,8 @@ def validate_live_cloud_docs(
 
 def get_changed_files_from_git(
     base_ref: str = "origin/develop", repo_root: str = REPO_ROOT
-) -> list[str]:
-    """Returns changed file paths between base_ref and HEAD."""
+) -> list[str] | None:
+    """Returns changed file paths between base_ref and HEAD, or None if git diff fails."""
     res = subprocess.run(
         ["git", "diff", "--name-only", "--no-renames", f"{base_ref}...HEAD"],
         cwd=repo_root,
@@ -588,7 +612,7 @@ def get_changed_files_from_git(
             f"Warning: git diff failed (base_ref={base_ref}): {res.stderr.strip()}",
             file=sys.stderr,
         )
-        return []
+        return None
     return [line.strip() for line in res.stdout.splitlines() if line.strip()]
 
 
@@ -768,6 +792,13 @@ def main(argv: list[str] | None = None) -> int:
             if args.changed_files is not None
             else get_changed_files_from_git(base_ref=args.base_ref)
         )
+        if changed is None:
+            print(
+                "::error title=Cloud Docs Drift Check::Could not compute changed files "
+                f"against '{args.base_ref}' (does actions/checkout use fetch-depth: 0?)",
+                file=sys.stderr,
+            )
+            return 2
         impacts = match_pr_cloud_docs_impacts(changed)
         pr_body = (
             args.pr_body if args.pr_body is not None else os.environ.get("PR_BODY")

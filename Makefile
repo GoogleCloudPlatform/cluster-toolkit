@@ -291,7 +291,7 @@ validate-docs:
 	@python3 tools/validate_readme_snippets.py
 
 check-cloud-docs:
-	$(info **************** validating public cloud.google.com docs against repo ***************)
+	$(info **************** validating public cloud.google.com docs against repo (use main/latest tag for release-accurate results) ***************)
 	@python3 tools/validate_cloud_docs.py --check-live
 # END OF AGENT SKILLS SECTION
 

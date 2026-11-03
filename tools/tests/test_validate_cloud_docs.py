@@ -166,6 +166,15 @@ class TestValidateCloudDocs(unittest.TestCase):
         errs = vcd.check_cli_reference_page(slug, "cmd", stale_html)
         self.assertTrue(any("'explain'" in e for e in errs))
 
+        # When <dt><code> tags are present, prose mentions of a missing subcommand do not mask drift
+        dt_html = (
+            "<article><p>You can deploy or explain blueprints.</p>"
+            "<dl><dt><a href='#'><code>create</code></a></dt></dl></article>"
+        )
+        dt_errs = vcd.check_cli_reference_page(slug, "cmd", dt_html)
+        self.assertTrue(any("'explain'" in e for e in dt_errs))
+        self.assertTrue(any("'deploy'" in e for e in dt_errs))
+
     def test_check_github_blob_links_detects_deleted_files(self):
         slug = "/cluster-toolkit/docs/setup/cluster-blueprint-catalog"
         html = (
