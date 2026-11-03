@@ -3108,7 +3108,7 @@ func TestGetIsAIAssisted(t *testing.T) {
 	validMultiDocBP := writeFile("valid-multidoc.yaml", "blueprint_name: manual\nvars:\n  project_id: p\n---\nai_assisted: true\n")
 	brokenLongLineAIBP := writeFile("broken-long-line-ai.yaml", "blueprint_name: "+strings.Repeat("x", 70*1024)+"\nai_assisted: true\nvars:\n  foo: [unclosed\n")
 
-	allAgentVars := []string{"GHPC_AI_ASSISTED", "GEMINI_CLI", "CLAUDECODE", "CODEX_SANDBOX", "CODEX_CI", "CURSOR_TRACE_ID"}
+	allAgentVars := []string{"GHPC_AI_ASSISTED", "GEMINI_CLI", "CLAUDECODE", "CODEX_SANDBOX", "CODEX_CI", "CURSOR_AGENT", "CURSOR_TRACE_ID"}
 
 	tests := []struct {
 		name     string
@@ -3208,9 +3208,14 @@ func TestGetIsAIAssisted(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "Blueprint-less explain/job detects CURSOR_TRACE_ID",
-			env:      map[string]string{"CURSOR_TRACE_ID": "trace-xyz"},
+			name:     "Blueprint-less explain/job detects CURSOR_AGENT",
+			env:      map[string]string{"CURSOR_AGENT": "1"},
 			expected: true,
+		},
+		{
+			name:     "CURSOR_TRACE_ID alone (Cursor IDE session) does not trigger",
+			env:      map[string]string{"CURSOR_TRACE_ID": "trace-xyz"},
+			expected: false,
 		},
 		{
 			name:     "Blueprint-less explain/job detects GHPC_AI_ASSISTED=true",
@@ -3220,6 +3225,21 @@ func TestGetIsAIAssisted(t *testing.T) {
 		{
 			name:     "GHPC_AI_ASSISTED=false overrides agent env vars for test isolation",
 			env:      map[string]string{"GHPC_AI_ASSISTED": "false", "GEMINI_CLI": "1", "CLAUDECODE": "1"},
+			expected: false,
+		},
+		{
+			name:     "GHPC_AI_ASSISTED=off disables agent env detection",
+			env:      map[string]string{"GHPC_AI_ASSISTED": "off", "GEMINI_CLI": "1"},
+			expected: false,
+		},
+		{
+			name:     "GHPC_AI_ASSISTED=no disables agent env detection",
+			env:      map[string]string{"GHPC_AI_ASSISTED": "no", "GEMINI_CLI": "1"},
+			expected: false,
+		},
+		{
+			name:     "GHPC_AI_ASSISTED=disable disables agent env detection",
+			env:      map[string]string{"GHPC_AI_ASSISTED": "disable", "GEMINI_CLI": "1"},
 			expected: false,
 		},
 		{

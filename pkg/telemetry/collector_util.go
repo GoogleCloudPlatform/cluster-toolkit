@@ -118,7 +118,7 @@ var (
 		"CLAUDECODE",
 		"CODEX_SANDBOX",
 		"CODEX_CI",
-		"CURSOR_TRACE_ID",
+		"CURSOR_AGENT",
 	}
 	rawAIAssistedTopLevelRe = regexp.MustCompile(`^ai_assisted\s*:\s*(?:true|"true"|'true')\s*(?:#.*)?$`)
 )
@@ -126,9 +126,9 @@ var (
 const maxRawYAMLScanBytes = 10 * 1024 * 1024
 
 // IsAgentEnv reports whether the CLI is running inside a recognized AI coding
-// agent environment. Setting GHPC_AI_ASSISTED to "0" or "false" explicitly
-// disables environment auto-detection, while setting it to any other non-empty
-// value explicitly enables it.
+// agent environment. Setting GHPC_AI_ASSISTED to "0", "false", "off", "no", or
+// "disable" explicitly disables environment auto-detection, while setting it to
+// any other non-empty value explicitly enables it.
 func IsAgentEnv() bool {
 	if override := strings.TrimSpace(os.Getenv("GHPC_AI_ASSISTED")); override != "" {
 		return !isDisabledEnvVal(override)
@@ -142,7 +142,11 @@ func IsAgentEnv() bool {
 }
 
 func isDisabledEnvVal(val string) bool {
-	return strings.EqualFold(val, "0") || strings.EqualFold(val, "false")
+	switch strings.ToLower(val) {
+	case "0", "false", "off", "no", "disable":
+		return true
+	}
+	return false
 }
 
 func isAIAssisted(bp config.Blueprint, cmd *cobra.Command, args []string) bool {

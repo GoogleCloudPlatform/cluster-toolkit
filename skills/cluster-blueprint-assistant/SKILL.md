@@ -111,7 +111,7 @@ allowed_read_only_commands:
    satisfied by a module in `use:`.
 4. **Mark agent-authored blueprints and deployment files.** Add `ai_assisted: true` at the top level
    of any new untracked `deployment.yaml` and any blueprint you create, copy, or repair/fix (if an existing custom
-   blueprint you are fixing lacks `ai_assisted: true`, add it).
+   blueprint you are fixing lacks `ai_assisted: true`, add it). If `./gcluster` reports `field ai_assisted not found in type config.DeploymentSettings`, the binary is older than this field: run `make` and retry instead of removing `ai_assisted`.
 5. **Validate with gcluster, fix the blueprint, never the output.**
    `./gcluster expand` and `./gcluster create` are the validation step. Once
    `./gcluster create` or `./gcluster expand` succeeds, **stop immediately**—do
