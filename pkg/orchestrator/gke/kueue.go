@@ -28,6 +28,7 @@ import (
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"gopkg.in/yaml.v2"
@@ -200,7 +201,7 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName, ns string) error {
 	cqName := defaultClusterQueue
 	cqExists, err := g.checkClusterQueueExists(cqName)
 	if err != nil {
-		if isForbiddenError(err) {
+		if k8s.IsForbiddenError(err) {
 			return fmt.Errorf("LocalQueue '%s' does not exist in namespace '%s' and cluster permissions are restricted (403 Forbidden). Please ask your cluster administrator to create a LocalQueue in namespace '%s'", localQueueName, ns, ns)
 		}
 		return fmt.Errorf("failed to check if ClusterQueue %s exists: %w", cqName, err)
@@ -806,7 +807,7 @@ func (g *GKEOrchestrator) installPriorityClasses() error {
 func (g *GKEOrchestrator) EnsurePriorityClassesInstalled() error {
 	existing, err := g.getClusterPriorityClasses()
 	if err != nil {
-		if isForbiddenError(err) {
+		if k8s.IsForbiddenError(err) {
 			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping default PriorityClass installation.")
 			return nil
 		}
@@ -825,7 +826,7 @@ func (g *GKEOrchestrator) ensureAndValidatePriorityClass(requested string) error
 	}
 	existing, err := g.getClusterPriorityClasses()
 	if err != nil {
-		if isForbiddenError(err) {
+		if k8s.IsForbiddenError(err) {
 			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping PriorityClass install/validation for %q.", requested)
 			return nil
 		}

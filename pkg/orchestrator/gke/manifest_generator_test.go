@@ -17,6 +17,8 @@ package gke
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -28,6 +30,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
@@ -3728,5 +3732,205 @@ func TestGeneratePathwaysManifest_SidecarNameArgUserValue(t *testing.T) {
 				t.Errorf("pathways-proxy args = %v, want %v kept and no --sidecar_name=external", proxy.Args, want)
 			}
 		})
+	}
+}
+
+func makeDockerConfigSecret(name string, authHosts ...string) unstructured.Unstructured {
+	auths := make(map[string]map[string]string, len(authHosts))
+	for _, h := range authHosts {
+		auths[h] = map[string]string{"auth": base64.StdEncoding.EncodeToString([]byte("user:pass"))}
+	}
+	raw, _ := json.Marshal(map[string]any{"auths": auths})
+	return unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata":   map[string]any{"name": name},
+			"type":       string(corev1.SecretTypeDockerConfigJson),
+			"data": map[string]any{
+				corev1.DockerConfigJsonKey: base64.StdEncoding.EncodeToString(raw),
+			},
+		},
+	}
+}
+
+func newCachedTestOrchestrator() *GKEOrchestrator {
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.machineCapCache = testMachineCapCache()
+	return orc
+}
+
+func testMachineCapCache() map[string]MachineTypeCap {
+	tpuCap := MachineTypeCap{GuestCpus: 112, MemoryMb: 196608}
+	tpuCap.Accelerators = append(tpuCap.Accelerators, struct {
+		Count int    `json:"guestAcceleratorCount"`
+		Type  string `json:"guestAcceleratorType"`
+	}{Count: 4, Type: "tpu-v6e-slice"})
+	return map[string]MachineTypeCap{
+		"n2-standard-4:us-central1-a": {GuestCpus: 4, MemoryMb: 16000},
+		"tpu-v6e-slice:us-central1-a": tpuCap,
+	}
+}
+
+func TestImagePullSecrets_MultiImageMatching(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	malformed := unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata":   map[string]any{"name": "bad-json"},
+			"type":       string(corev1.SecretTypeDockerConfigJson),
+			"data":       map[string]any{corev1.DockerConfigJsonKey: base64.StdEncoding.EncodeToString([]byte("{not-json"))},
+		},
+	}
+	orc := newCachedTestOrchestrator()
+	orc.kubeClient = &MockKubeClient{
+		Objects: map[string][]unstructured.Unstructured{
+			"secrets": {
+				malformed,
+				makeDockerConfigSecret("dockerhub-sec", "https://index.docker.io/v1/", "https://index.docker.io/v1/access-token"),
+				makeDockerConfigSecret("ipv6-sidecar-sec", "https://[fd00::1]:5000"),
+				makeDockerConfigSecret("team-a-sec", "harbor.local:8443/team-a"),
+				makeDockerConfigSecret("team-b-sec", "harbor.local:8443/team-b"),
+			},
+		},
+	}
+
+	tpuJob := orchestrator.JobDefinition{
+		WorkloadName:    "multi-img-tpu",
+		CommandToRun:    "python3 train.py",
+		ComputeType:     "v6e-4",
+		MachineType:     "tpu-v6e-slice",
+		Topology:        "2x2",
+		ClusterLocation: "us-central1-a",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+	}
+	opts, err := orc.PrepareManifestOptions(tpuJob, "alpine:3.20", JobProfile{CapacityCount: 4}, false, false)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+	if !strings.Contains(opts.ImagePullSecrets, "dockerhub-sec") {
+		t.Fatalf("expected dockerhub-sec, got %q", opts.ImagePullSecrets)
+	}
+
+	pwJob := tpuJob
+	pwJob.WorkloadName = "pw-secrets"
+	pwJob.IsPathwaysJob = true
+	pwJob.Pathways = orchestrator.PathwaysJobDefinition{
+		GCSLocation:                 "gs://bkt",
+		HeadNodePool:                "cpu-np",
+		ServerImage:                 "harbor.local:8443/team-a/pw-server:v1",
+		ProxyServerImage:            "harbor.local:8443/team-a/pw-proxy:v1",
+		WorkerImage:                 "harbor.local:8443/team-a/pw-worker:v1",
+		ColocatedPythonSidecarImage: "[fd00::1]:5000/obs/colocated-sidecar:v1",
+	}
+	pwOpts, err := orc.PrepareManifestOptions(pwJob, "harbor.local:8443/team-a/trainer:v1", JobProfile{CapacityCount: 4}, false, false)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions for Pathways failed: %v", err)
+	}
+	if strings.Count(pwOpts.ImagePullSecrets, "team-a-sec") != 1 || strings.Count(pwOpts.ImagePullSecrets, "ipv6-sidecar-sec") != 1 || strings.Contains(pwOpts.ImagePullSecrets, "team-b-sec") {
+		t.Fatalf("unexpected Pathways ImagePullSecrets %q", pwOpts.ImagePullSecrets)
+	}
+}
+
+func TestImagePullSecrets_AmbiguityWarning(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	secrets := []unstructured.Unstructured{
+		makeDockerConfigSecret("z-dup", "dup.registry.local"),
+		makeDockerConfigSecret("a-dup", "https://dup.registry.local"),
+		makeDockerConfigSecret("unique-sidecar", "sidecar.registry.local"),
+	}
+	orc := newCachedTestOrchestrator()
+	orc.kubeClient = &MockKubeClient{Objects: map[string][]unstructured.Unstructured{"secrets": secrets}}
+	pwJob := orchestrator.JobDefinition{
+		WorkloadName:    "ambig-job",
+		CommandToRun:    "python3 train.py",
+		ComputeType:     "v6e-4",
+		MachineType:     "tpu-v6e-slice",
+		Topology:        "2x2",
+		ClusterLocation: "us-central1-a",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+		IsPathwaysJob:   true,
+		Pathways: orchestrator.PathwaysJobDefinition{
+			GCSLocation:                 "gs://bkt",
+			HeadNodePool:                "cpu-np",
+			ColocatedPythonSidecarImage: "sidecar.registry.local/py-sidecar:v1",
+		},
+	}
+	opts, err := orc.PrepareManifestOptions(pwJob, "dup.registry.local/workload:v1", JobProfile{CapacityCount: 4}, false, false)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+	if !strings.Contains(opts.ImagePullSecrets, "unique-sidecar") || strings.Contains(opts.ImagePullSecrets, "dup") {
+		t.Fatalf("expected only unique-sidecar, got %q", opts.ImagePullSecrets)
+	}
+}
+
+func TestImagePullSecrets_ExplicitBypassAndActiveImages(t *testing.T) {
+	setupMockMachineConfig(t)
+	orc := newCachedTestOrchestrator()
+	orc.kubeClient = &MockKubeClient{
+		ListErrs: map[string]error{"secrets": errors.New("must not list secrets when --image-pull-secret is explicit")},
+	}
+	explicitJob := orchestrator.JobDefinition{
+		WorkloadName:     "explicit-sec",
+		CommandToRun:     "echo hi",
+		ComputeType:      "n2-standard-4",
+		MachineType:      "n2-standard-4",
+		ClusterLocation:  "us-central1-a",
+		NumSlices:        1,
+		NodesPerSlice:    1,
+		ImagePullSecrets: "manual-secret",
+	}
+	opts, err := orc.PrepareManifestOptions(explicitJob, "registry.local/app:v1", JobProfile{IsCPUMachine: true, CapacityCount: 4}, false, false)
+	if err != nil || !strings.Contains(opts.ImagePullSecrets, "manual-secret") {
+		t.Fatalf("explicit ImagePullSecrets failed: opts=%q err=%v", opts.ImagePullSecrets, err)
+	}
+
+	// An explicitly empty --image-pull-secret leaves the pods without imagePullSecrets even when a secret matches.
+	orc.kubeClient = &MockKubeClient{Objects: map[string][]unstructured.Unstructured{"secrets": {makeDockerConfigSecret("reg-sec", "registry.local")}}}
+	disabledJob := explicitJob
+	disabledJob.ImagePullSecrets, disabledJob.ImagePullSecretsSpecified = "", true
+	if opts, err := orc.PrepareManifestOptions(disabledJob, "registry.local/app:v1", JobProfile{IsCPUMachine: true, CapacityCount: 4}, false, false); err != nil || opts.ImagePullSecrets != "" {
+		t.Fatalf("empty --image-pull-secret: opts=%q err=%v, want no imagePullSecrets", opts.ImagePullSecrets, err)
+	}
+
+	// The --service-account ServiceAccount is the one whose pull secrets discovery defers to.
+	saJob := explicitJob
+	saJob.ImagePullSecrets, saJob.ServiceAccountName = "", "team-sa"
+	orc.kubeClient = &MockKubeClient{Objects: map[string][]unstructured.Unstructured{
+		"secrets": {makeDockerConfigSecret("reg-sec", "registry.local")},
+		"serviceaccounts": {{Object: map[string]any{
+			"metadata":         map[string]any{"name": "team-sa"},
+			"imagePullSecrets": []any{map[string]any{"name": "sa-cred"}},
+		}}},
+	}}
+	if opts, err := orc.PrepareManifestOptions(saJob, "registry.local/app:v1", JobProfile{IsCPUMachine: true, CapacityCount: 4}, false, false); err != nil || opts.ImagePullSecrets != "" {
+		t.Fatalf("ServiceAccount with pull secrets: opts=%q err=%v, want discovery skipped", opts.ImagePullSecrets, err)
+	}
+
+	pw := orchestrator.PathwaysJobDefinition{
+		DeploySPS:        true,
+		ServerImage:      "reg.local/server:v1",
+		ProxyServerImage: "reg.local/proxy:v1",
+		WorkerImage:      "reg.local/server:v1",
+	}
+	spsImages := activeWorkloadImages(orchestrator.JobDefinition{IsPathwaysJob: true, Pathways: pw}, "reg.local/workload:v1")
+	if diff := cmp.Diff([]string{"reg.local/server:v1"}, spsImages); diff != "" {
+		t.Errorf("DeploySPS activeWorkloadImages mismatch (-want +got):\n%s", diff)
+	}
+	pw.DeploySPS, pw.Headless = false, true
+	headlessImages := activeWorkloadImages(orchestrator.JobDefinition{IsPathwaysJob: true, Pathways: pw}, "reg.local/workload:v1")
+	if diff := cmp.Diff([]string{"reg.local/server:v1", "reg.local/proxy:v1"}, headlessImages); diff != "" {
+		t.Errorf("Headless activeWorkloadImages mismatch (-want +got):\n%s", diff)
+	}
+	pw.Headless = false
+	fullImages := activeWorkloadImages(orchestrator.JobDefinition{IsPathwaysJob: true, Pathways: pw}, "reg.local/workload:v1")
+	if diff := cmp.Diff([]string{"reg.local/workload:v1", "reg.local/server:v1", "reg.local/proxy:v1"}, fullImages); diff != "" {
+		t.Errorf("Pathways activeWorkloadImages mismatch (-want +got):\n%s", diff)
 	}
 }
