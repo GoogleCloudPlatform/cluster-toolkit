@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,18 +29,33 @@ import (
 )
 
 func resolveTelemetryEndpoint() (*url.URL, error) {
-	rawURL := clearcutProdURL
-	if custom := strings.TrimSpace(os.Getenv(telemetryEndpointEnvVar)); custom != "" {
-		rawURL = custom
+	custom := strings.TrimSpace(os.Getenv(telemetryEndpointEnvVar))
+	if custom == "" {
+		return url.Parse(clearcutProdURL)
 	}
-	u, err := url.Parse(rawURL)
+	u, err := url.Parse(custom)
 	if err != nil {
 		return nil, err
 	}
-	if u.Scheme == "" || u.Host == "" {
-		return nil, fmt.Errorf("invalid telemetry endpoint URL %q", rawURL)
+	if !isAllowedCustomTelemetryURL(u) {
+		return nil, fmt.Errorf("custom telemetry endpoint %q must be an http(s) loopback URL (localhost, 127.0.0.1, or ::1)", custom)
 	}
 	return u, nil
+}
+
+func isAllowedCustomTelemetryURL(u *url.URL) bool {
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	if u.Host == "" || u.User != nil {
+		return false
+	}
+	host := u.Hostname()
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func Flush(payload LogRequest) {
