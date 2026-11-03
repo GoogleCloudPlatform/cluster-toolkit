@@ -258,3 +258,40 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 		}
 	})
 }
+
+func TestResolveSPSClientPathways(t *testing.T) {
+	baseInst := spsInstance{
+		Name:         "sps-v5p",
+		HeadNodePool: "cpu-np",
+		ServerImage:  "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest",
+		ProxyImage:   "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest",
+		GCSLocation:  "gs://my-bucket/sps",
+	}
+
+	t.Run("fails when HeadNodePool is empty", func(t *testing.T) {
+		inst := baseInst
+		inst.HeadNodePool = ""
+		_, err := resolveSPSClientPathways(orchestrator.PathwaysJobDefinition{}, inst)
+		if err == nil || !strings.Contains(err.Error(), "pass --pathways-head-np") {
+			t.Errorf("got err = %v, want --pathways-head-np error", err)
+		}
+	})
+
+	t.Run("fails when ProxyServerImage is empty", func(t *testing.T) {
+		inst := baseInst
+		inst.ProxyImage = ""
+		_, err := resolveSPSClientPathways(orchestrator.PathwaysJobDefinition{}, inst)
+		if err == nil || !strings.Contains(err.Error(), "pass --pathways-proxy-server-image") {
+			t.Errorf("got err = %v, want --pathways-proxy-server-image error", err)
+		}
+	})
+
+	t.Run("fails when GCSLocation is empty", func(t *testing.T) {
+		inst := baseInst
+		inst.GCSLocation = ""
+		_, err := resolveSPSClientPathways(orchestrator.PathwaysJobDefinition{}, inst)
+		if err == nil || !strings.Contains(err.Error(), "pass --pathways-gcs-location") {
+			t.Errorf("got err = %v, want --pathways-gcs-location error", err)
+		}
+	})
+}

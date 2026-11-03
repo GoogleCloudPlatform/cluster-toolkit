@@ -197,6 +197,9 @@ func (g *GKEOrchestrator) readSPSInstance(ref, ns string) (spsInstance, error) {
 	inst.ProxyImage = proxyImageFor(inst.ServerImage)
 
 	phases := g.kubectl("get", "pods", "-n", ns, "-l", "jobset.sigs.k8s.io/jobset-name="+name+",jobset.sigs.k8s.io/replicatedjob-name=pathways-head", "-o", "jsonpath={.items[*].status.phase}")
+	if phases.ExitCode != 0 {
+		return spsInstance{}, fmt.Errorf("failed to check SPS instance pods: %s", strings.TrimSpace(phases.Stderr))
+	}
 	if !strings.Contains(phases.Stdout, "Running") {
 		return spsInstance{}, fmt.Errorf("SPS instance %q has no running pathways-head pod", name)
 	}
@@ -255,6 +258,9 @@ func (g *GKEOrchestrator) submitSPSClusterWorkload(job orchestrator.JobDefinitio
 func resolveSPSClientPathways(p orchestrator.PathwaysJobDefinition, inst spsInstance) (orchestrator.PathwaysJobDefinition, error) {
 	if p.HeadNodePool == "" {
 		p.HeadNodePool = inst.HeadNodePool
+	}
+	if p.HeadNodePool == "" {
+		return p, fmt.Errorf("failed to auto-detect a suitable CPU node pool for the Pathways head job; pass --pathways-head-np")
 	}
 	if p.ProxyServerImage == "" {
 		p.ProxyServerImage = inst.ProxyImage
@@ -355,15 +361,8 @@ func (g *GKEOrchestrator) waitForSPSProxy(name, ns string, sigCh <-chan os.Signa
 	selector := "jobset.sigs.k8s.io/jobset-name=" + name
 	deadline := time.Now().Add(spsProxyStartTimeout)
 	for time.Now().Before(deadline) {
-		res := g.kubectl("get", "pods", "-n", ns, "-l", selector, "-o", `jsonpath={range .items[*]}{.metadata.name}{" "}{.status.phase}{"\n"}{end}`)
-		for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
-			fields := strings.Fields(line)
-			if len(fields) != 2 || fields[1] != "Running" {
-				continue
-			}
-			if logs := g.kubectl("logs", "-n", ns, fields[0], "-c", "pathways-proxy"); strings.Contains(logs.Stdout+logs.Stderr, spsProxyReadyLog) {
-				return fields[0], nil
-			}
+		if pod := g.readySPSProxyPod(ns, selector); pod != "" {
+			return pod, nil
 		}
 		select {
 		case <-sigCh:
@@ -371,7 +370,24 @@ func (g *GKEOrchestrator) waitForSPSProxy(name, ns string, sigCh <-chan os.Signa
 		case <-time.After(5 * time.Second):
 		}
 	}
-	return "", fmt.Errorf("timed out after %s waiting for the SPS proxy of %q", spsProxyStartTimeout, name)
+	var warnSuffix string
+	if warnEvents := g.checkJobSetWarningEvents(ns, name); warnEvents != "" {
+		warnSuffix = fmt.Sprintf("\nJobSet warning events:\n%s", warnEvents)
+	}
+	return "", fmt.Errorf("timed out after %s waiting for the SPS proxy of %q%s", spsProxyStartTimeout, name, warnSuffix)
+}
+
+func (g *GKEOrchestrator) readySPSProxyPod(ns, selector string) string {
+	res := g.kubectl("get", "pods", "-n", ns, "-l", selector, "-o", `jsonpath={range .items[*]}{.metadata.name}{" "}{.status.phase}{"\n"}{end}`)
+	for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && fields[1] == "Running" {
+			if logs := g.kubectl("logs", "-n", ns, fields[0], "-c", "pathways-proxy"); strings.Contains(logs.Stdout+logs.Stderr, spsProxyReadyLog) {
+				return fields[0]
+			}
+		}
+	}
+	return ""
 }
 
 func (g *GKEOrchestrator) startPortForward(pod, ns string) (int, func(), error) {
@@ -406,7 +422,7 @@ func (g *GKEOrchestrator) startPortForward(pod, ns string) (int, func(), error) 
 }
 
 func runLocalCommand(command string, port int, env map[string]string, sigCh <-chan os.Signal) error {
-	cmd := exec.Command("/bin/bash", "-c", command)
+	cmd := exec.Command("bash", "-c", command)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.Env = append(os.Environ(), "JAX_PLATFORMS=proxy", fmt.Sprintf("JAX_BACKEND_TARGET=grpc://127.0.0.1:%d", port))
 	for k, v := range env {
