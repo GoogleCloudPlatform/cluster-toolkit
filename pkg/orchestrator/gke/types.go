@@ -844,3 +844,57 @@ func isPermissionDenied(errStr string) bool {
 		strings.Contains(lower, "required 'compute.") ||
 		(strings.Contains(lower, "403") && strings.Contains(lower, "forbidden"))
 }
+
+// spsInstanceSummary is what `gcluster job inspect --name <instance> --filter=pathways-sps` writes.
+type spsInstanceSummary struct {
+	Name          string
+	Namespace     string
+	Status        string
+	InstanceType  string // pathways-rm --instance_type, e.g. tpuv6e:2x4
+	InstanceCount int    // pathways-rm --instance_count
+	ReadySlices   string // e.g. "1/1"; empty until pathways-rm logs or JobSet status reports ready slices
+	ServerImage   string
+	SidecarImage  string // empty when the workers run no colocated Python sidecar
+	SidecarName   string // sidecar container name on worker pods
+	SidecarPython string // from running sidecar container or image tag
+	SidecarJAX    string // from running sidecar container or image tag
+}
+
+type spsContainerView struct {
+	Name  string   `json:"name"`
+	Image string   `json:"image"`
+	Args  []string `json:"args"`
+}
+
+type spsPodSpecView struct {
+	InitContainers []spsContainerView `json:"initContainers"`
+	Containers     []spsContainerView `json:"containers"`
+}
+
+type spsJobSetView struct {
+	Spec struct {
+		Suspend        bool `json:"suspend"`
+		ReplicatedJobs []struct {
+			Name     string `json:"name"`
+			Replicas int    `json:"replicas"`
+			Template struct {
+				Spec struct {
+					Template struct {
+						Spec spsPodSpecView `json:"spec"`
+					} `json:"template"`
+				} `json:"spec"`
+			} `json:"template"`
+		} `json:"replicatedJobs"`
+	} `json:"spec"`
+	Status struct {
+		TerminalState string `json:"terminalState"`
+		Conditions    []struct {
+			Type   string `json:"type"`
+			Status string `json:"status"`
+		} `json:"conditions"`
+		ReplicatedJobsStatus []struct {
+			Name  string `json:"name"`
+			Ready int    `json:"ready"`
+		} `json:"replicatedJobsStatus"`
+	} `json:"status"`
+}

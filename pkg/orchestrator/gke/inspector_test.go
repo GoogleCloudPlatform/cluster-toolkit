@@ -476,7 +476,7 @@ func TestImageVersions(t *testing.T) {
 
 func TestFormatSPSSummary(t *testing.T) {
 	withSidecar := formatSPSSummary(spsInstanceSummary{Name: "sps", Namespace: "default", Status: "Running", InstanceType: "tpuv6e:2x4", InstanceCount: 1,
-		ReadySlices: "1/1", ServerImage: "server:x", SidecarImage: "sidecar:20260831-jax0.11.1"})
+		ReadySlices: "1/1", ServerImage: "server:x", SidecarImage: "sidecar:20260831-jax0.11.1", SidecarJAX: "0.11.1"})
 	for _, want := range []string{
 		"Name:            sps (namespace: default)",
 		"Status:          Running",
@@ -502,29 +502,31 @@ func TestFormatSPSSummary(t *testing.T) {
 
 func TestInspectCluster_SPS(t *testing.T) {
 	responses := defaultMockResponses("c", "us-central1-a", "p")
-	responses["kubectl get jobset sps-v6e -n default -o json"] = []shell.CommandResult{{ExitCode: 0,
+	responses["kubectl get jobset sps-v6e -n default -o json --request-timeout=10s"] = []shell.CommandResult{{ExitCode: 0,
 		Stdout: spsJobSetJSON(spsRMContainer, "worker", spsWorkerContainer+","+spsSidecarContainer, spsRunningStatus)}}
-	responses["kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=sps-v6e"] = []shell.CommandResult{{ExitCode: 0,
+	responses["kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=sps-v6e,jobset.sigs.k8s.io/replicatedjob-name=pathways-head -c pathways-rm --tail=500 --request-timeout=10s"] = []shell.CommandResult{{ExitCode: 0,
 		Stdout: "2/2 Pathways Slices Now Ready\n"}}
-	responses["kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=sps-v6e --field-selector=status.phase=Running"] = []shell.CommandResult{{ExitCode: 0,
-		Stdout: "sps-v6e-pathways-head-0-0-abc sps-v6e-worker-0-0-def"}}
-	responses["kubectl exec -n default pod/sps-v6e-worker-0-0-def -c colocated-python-sidecar"] = []shell.CommandResult{{ExitCode: 0,
+	responses["kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=sps-v6e,jobset.sigs.k8s.io/replicatedjob-name!=pathways-head --field-selector=status.phase=Running -o jsonpath={.items[*].metadata.name} --request-timeout=10s"] = []shell.CommandResult{{ExitCode: 0,
+		Stdout: "sps-v6e-worker-0-0-bad sps-v6e-worker-0-1-def"}}
+	responses["kubectl exec -n default pod/sps-v6e-worker-0-0-bad -c colocated-python-sidecar -- python3 -c "+spsSidecarVersionScript] = []shell.CommandResult{{ExitCode: 1,
+		Stderr: "container not ready"}}
+	responses["kubectl exec -n default pod/sps-v6e-worker-0-1-def -c colocated-python-sidecar -- python3 -c "+spsSidecarVersionScript] = []shell.CommandResult{{ExitCode: 0,
 		Stdout: "warning: sitecustomize diagnostic\n3.12,0.11.1,0.11.1\n"}}
 	orc := newTestGKEOrchestrator(NewMockExecutor(responses))
 	orc.projectID = "p"
 
-	var out strings.Builder
-	oldStdout := inspectStdout
-	inspectStdout = &out
-	defer func() { inspectStdout = oldStdout }()
-
 	dir := t.TempDir()
-	reportPath := filepath.Join(dir, "report.log")
+	reportPath := filepath.Join(dir, "report-sps.log")
 	err := orc.InspectCluster(orchestrator.InspectOptions{ProjectID: "p", ClusterName: "c", ClusterLocation: "us-central1-a",
-		WorkloadName: "sps-v6e", SPS: true, OutputPath: reportPath})
+		WorkloadName: "sps-v6e", Filter: "pathways-sps", OutputPath: reportPath})
 	if err != nil {
 		t.Fatalf("InspectCluster() error = %v", err)
 	}
+	contentBytes, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("failed to read SPS report file %s: %v", reportPath, err)
+	}
+	out := string(contentBytes)
 	for _, want := range []string{
 		"sps-v6e (namespace: default)",
 		"Endpoint:        sps-v6e-pathways-head-0-0.sps-v6e:29001",
@@ -532,21 +534,18 @@ func TestInspectCluster_SPS(t *testing.T) {
 		"Sidecar Python:  3.12",
 		"Sidecar JAX:     0.11.1 (jaxlib 0.11.1)",
 	} {
-		if !strings.Contains(out.String(), want) {
-			t.Errorf("--sps output missing %q:\n%s", want, out.String())
+		if !strings.Contains(out, want) {
+			t.Errorf("--filter=pathways-sps output missing %q:\n%s", want, out)
 		}
-	}
-	if _, err := os.Stat(reportPath); !os.IsNotExist(err) {
-		t.Errorf("--sps wrote a report file at %s, want terminal output only", reportPath)
 	}
 }
 
 func TestInspectCluster_SPSNotAnInstance(t *testing.T) {
 	responses := defaultMockResponses("c", "us-central1-a", "p")
-	responses["kubectl get jobset train -n default -o json"] = []shell.CommandResult{{ExitCode: 0,
+	responses["kubectl get jobset train -n default -o json --request-timeout=10s"] = []shell.CommandResult{{ExitCode: 0,
 		Stdout: spsJobSetJSON(`{"name":"pathways-proxy"},`+spsRMContainer, "worker", spsWorkerContainer, `{}`)}}
 	orc := newTestGKEOrchestrator(NewMockExecutor(responses))
-	err := orc.InspectCluster(orchestrator.InspectOptions{ProjectID: "p", ClusterName: "c", ClusterLocation: "us-central1-a", WorkloadName: "train", SPS: true})
+	err := orc.InspectCluster(orchestrator.InspectOptions{ProjectID: "p", ClusterName: "c", ClusterLocation: "us-central1-a", WorkloadName: "train", Filter: "pathways-sps"})
 	if err == nil || !strings.Contains(err.Error(), `JobSet "train" is not an SPS instance`) {
 		t.Fatalf("InspectCluster() error = %v, want not-an-SPS-instance error", err)
 	}
@@ -554,7 +553,7 @@ func TestInspectCluster_SPSNotAnInstance(t *testing.T) {
 
 func TestInspectCluster_ReportStartsWithSPSSummary(t *testing.T) {
 	responses := defaultMockResponses("c", "us-central1-a", "p")
-	responses["kubectl get jobset sps-v6e -n default -o json"] = []shell.CommandResult{{ExitCode: 0,
+	responses["kubectl get jobset sps-v6e -n default -o json --request-timeout=10s"] = []shell.CommandResult{{ExitCode: 0,
 		Stdout: spsJobSetJSON(spsRMContainer, "worker", spsWorkerContainer, spsRunningStatus)}}
 	orc := newTestGKEOrchestrator(NewMockExecutor(responses))
 	orc.projectID = "p"
@@ -577,7 +576,10 @@ func TestInspectCluster_ReportStartsWithSPSSummary(t *testing.T) {
 
 func TestInspectCluster_SPSRequiresName(t *testing.T) {
 	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
-	if err := orc.InspectCluster(orchestrator.InspectOptions{SPS: true}); err == nil || !strings.Contains(err.Error(), "--sps requires --name") {
-		t.Fatalf("InspectCluster() error = %v, want --sps requires --name", err)
+	if err := orc.InspectCluster(orchestrator.InspectOptions{Filter: "pathways-sps"}); err == nil || !strings.Contains(err.Error(), "--filter=pathways-sps requires --name") {
+		t.Fatalf("InspectCluster() error = %v, want --filter=pathways-sps requires --name", err)
+	}
+	if err := orc.InspectCluster(orchestrator.InspectOptions{Filter: "unknown", WorkloadName: "x"}); err == nil || !strings.Contains(err.Error(), "invalid value for --filter: unknown") {
+		t.Fatalf("InspectCluster() error = %v, want invalid value for --filter", err)
 	}
 }

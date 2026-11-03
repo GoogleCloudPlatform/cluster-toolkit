@@ -32,9 +32,6 @@ import (
 
 const spacer = "========================================================"
 
-// inspectStdout is where `gcluster job inspect --sps` prints its summary; tests replace it.
-var inspectStdout io.Writer = os.Stdout
-
 type inspectWriter struct {
 	writer io.Writer
 	orc    *GKEOrchestrator
@@ -61,10 +58,15 @@ func (w *inspectWriter) runAndLog(description string, command string, args ...st
 }
 
 // InspectCluster runs diagnostic checks on the GKE cluster and writes them to a log file.
-// With opts.SPS it only prints a summary of the SPS instance opts.WorkloadName to the terminal.
+// With opts.Filter == "pathways-sps" it writes only the SPS instance summary for opts.WorkloadName.
 func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error {
-	if opts.SPS && opts.WorkloadName == "" {
-		return fmt.Errorf("--sps requires --name")
+	if opts.Filter != "" {
+		if opts.Filter != "pathways-sps" {
+			return fmt.Errorf("invalid value for --filter: %s. Allowed values are: pathways-sps", opts.Filter)
+		}
+		if opts.WorkloadName == "" {
+			return fmt.Errorf("--filter=%s requires --name", opts.Filter)
+		}
 	}
 	g.namespace = opts.GKENamespace
 	// 1. Setup Kubectl (Critical, fail fast)
@@ -78,34 +80,18 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 		return err
 	}
 
-	if opts.SPS {
-		summary, err := g.inspectSPSInstance(opts.WorkloadName, targetNamespace)
-		if err != nil {
-			return err
-		}
-		_, _ = fmt.Fprint(inspectStdout, formatSPSSummary(summary))
-		return nil
+	if opts.Filter == "pathways-sps" {
+		return g.inspectSPSInstanceToLog(opts, targetNamespace)
 	}
 
 	// 2. Create log file (Critical, fail fast)
-	filePath := opts.OutputPath
-	if filePath == "" {
-		timestamp := time.Now().UTC().Format("20060102-150405")
-		fileName := fmt.Sprintf("gcluster-inspect-%s-%s.log", opts.ClusterName, timestamp)
-		filePath = filepath.Join(".", fileName)
-	}
-	file, err := os.Create(filePath)
+	file, outputTarget, filePath, err := openInspectOutput(opts, ".log")
 	if err != nil {
-		return fmt.Errorf("failed to create log file %s: %w", filePath, err)
+		return err
 	}
 	defer func() {
 		_ = file.Close()
 	}()
-
-	var outputTarget io.Writer = file
-	if opts.Show {
-		outputTarget = io.MultiWriter(file, os.Stdout)
-	}
 
 	// Initial header in log
 	_, _ = fmt.Fprintf(outputTarget, "==================\nGCLUSTER INSPECT OUTPUT:\n==================\n\n")
@@ -448,60 +434,6 @@ func renderWorkloadsTable(w io.Writer, filtered []kueueWorkload) {
 	_, _ = fmt.Fprintf(w, "\n%s\n\n", spacer)
 }
 
-// spsInstanceSummary is what `gcluster job inspect --name <instance> --sps` prints.
-type spsInstanceSummary struct {
-	Name          string
-	Namespace     string
-	Status        string
-	InstanceType  string // pathways-rm --instance_type, e.g. tpuv6e:2x4
-	InstanceCount int    // pathways-rm --instance_count
-	ReadySlices   string // e.g. "1/1"; empty until pathways-rm logs or JobSet status reports ready slices
-	ServerImage   string
-	SidecarImage  string // empty when the workers run no colocated Python sidecar
-	SidecarName   string // sidecar container name on worker pods
-	SidecarPython string // from running sidecar container or image tag
-	SidecarJAX    string // from running sidecar container or image tag
-}
-
-type spsContainerView struct {
-	Name  string   `json:"name"`
-	Image string   `json:"image"`
-	Args  []string `json:"args"`
-}
-
-type spsPodSpecView struct {
-	InitContainers []spsContainerView `json:"initContainers"`
-	Containers     []spsContainerView `json:"containers"`
-}
-
-type spsJobSetView struct {
-	Spec struct {
-		Suspend        bool `json:"suspend"`
-		ReplicatedJobs []struct {
-			Name     string `json:"name"`
-			Replicas int    `json:"replicas"`
-			Template struct {
-				Spec struct {
-					Template struct {
-						Spec spsPodSpecView `json:"spec"`
-					} `json:"template"`
-				} `json:"spec"`
-			} `json:"template"`
-		} `json:"replicatedJobs"`
-	} `json:"spec"`
-	Status struct {
-		TerminalState string `json:"terminalState"`
-		Conditions    []struct {
-			Type   string `json:"type"`
-			Status string `json:"status"`
-		} `json:"conditions"`
-		ReplicatedJobsStatus []struct {
-			Name  string `json:"name"`
-			Ready int    `json:"ready"`
-		} `json:"replicatedJobsStatus"`
-	} `json:"status"`
-}
-
 var (
 	spsReadySlicesRe = regexp.MustCompile(`(\d+)/(\d+) Pathways Slices Now Ready`)
 	jaxVersionRe     = regexp.MustCompile(`(?i)jax[-_]?v?(\d+\.\d+(?:\.\d+)?)`)
@@ -510,10 +442,45 @@ var (
 
 const spsSidecarVersionScript = "import jax, jaxlib, sys; print(f'{sys.version_info.major}.{sys.version_info.minor},{jax.__version__},{jaxlib.__version__}')"
 
+func openInspectOutput(opts orchestrator.InspectOptions, defaultSuffix string) (*os.File, io.Writer, string, error) {
+	filePath := opts.OutputPath
+	if filePath == "" {
+		timestamp := time.Now().UTC().Format("20060102-150405")
+		fileName := fmt.Sprintf("gcluster-inspect-%s-%s%s", opts.ClusterName, timestamp, defaultSuffix)
+		filePath = filepath.Join(".", fileName)
+	}
+	file, err := os.Create(filePath)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("failed to create log file %s: %w", filePath, err)
+	}
+	var outputTarget io.Writer = file
+	if opts.Show {
+		outputTarget = io.MultiWriter(file, os.Stdout)
+	}
+	return file, outputTarget, filePath, nil
+}
+
+func (g *GKEOrchestrator) inspectSPSInstanceToLog(opts orchestrator.InspectOptions, targetNamespace string) error {
+	summary, err := g.inspectSPSInstance(opts.WorkloadName, targetNamespace)
+	if err != nil {
+		return err
+	}
+	file, outputTarget, filePath, err := openInspectOutput(opts, "-sps.log")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+	_, _ = fmt.Fprint(outputTarget, formatSPSSummary(summary))
+	logging.Info("Cluster inspection report saved to %s", filePath)
+	return nil
+}
+
 // inspectSPSInstance reads the JobSet name in namespace ns and summarizes it as an SPS instance.
 // It works for instances deployed with --pathways-deploy-sps and with the SPS deploy script.
 func (g *GKEOrchestrator) inspectSPSInstance(name, ns string) (spsInstanceSummary, error) {
-	res := g.kubectl("get", "jobset", name, "-n", ns, "-o", "json")
+	res := g.kubectl("get", "jobset", name, "-n", ns, "-o", "json", kubectlReadTimeout)
 	if res.ExitCode != 0 {
 		return spsInstanceSummary{}, fmt.Errorf("failed to read JobSet %q in namespace %q: %s", name, ns, strings.TrimSpace(res.Stderr))
 	}
@@ -521,14 +488,16 @@ func (g *GKEOrchestrator) inspectSPSInstance(name, ns string) (spsInstanceSummar
 	if err != nil {
 		return spsInstanceSummary{}, err
 	}
-	logs := g.kubectl("logs", "-n", ns, "-l", "jobset.sigs.k8s.io/jobset-name="+name+",jobset.sigs.k8s.io/replicatedjob-name=pathways-head",
-		"-c", "pathways-rm", "--tail=-1")
-	if logs.ExitCode == 0 {
-		if ready := lastReadySlices(logs.Stdout); ready != "" {
-			summary.ReadySlices = ready
+	if summary.Status == "Running" {
+		logs := g.kubectl("logs", "-n", ns, "-l", "jobset.sigs.k8s.io/jobset-name="+name+",jobset.sigs.k8s.io/replicatedjob-name=pathways-head",
+			"-c", "pathways-rm", "--tail=500", kubectlReadTimeout)
+		if logs.ExitCode == 0 {
+			if ready := lastReadySlices(logs.Stdout); ready != "" {
+				summary.ReadySlices = ready
+			}
 		}
+		g.probeSPSSidecarVersions(name, ns, &summary)
 	}
-	g.probeSPSSidecarVersions(name, ns, &summary)
 	return summary, nil
 }
 
@@ -540,34 +509,21 @@ func (g *GKEOrchestrator) probeSPSSidecarVersions(name, ns string, s *spsInstanc
 		return
 	}
 	pods := g.kubectl("get", "pods", "-n", ns,
-		"-l", "jobset.sigs.k8s.io/jobset-name="+name,
+		"-l", "jobset.sigs.k8s.io/jobset-name="+name+",jobset.sigs.k8s.io/replicatedjob-name!=pathways-head",
 		"--field-selector=status.phase=Running",
-		"-o", "jsonpath={.items[*].metadata.name}")
+		"-o", "jsonpath={.items[*].metadata.name}",
+		kubectlReadTimeout)
 	if pods.ExitCode != 0 {
 		return
 	}
-	workerPod := firstWorkerPod(name, pods.Stdout)
-	if workerPod == "" {
-		return
-	}
-	sidecar := s.SidecarName
-	if sidecar == "" {
-		sidecar = "colocated-python-sidecar"
-	}
-	res := g.kubectl("exec", "-n", ns, "pod/"+workerPod, "-c", sidecar, "--", "python3", "-c", spsSidecarVersionScript)
-	if res.ExitCode == 0 {
-		applyProbedVersions(res.Stdout, s)
-	}
-}
-
-func firstWorkerPod(jobsetName, podsStdout string) string {
-	headPrefix := jobsetName + "-pathways-head-"
-	for _, pod := range strings.Fields(podsStdout) {
-		if !strings.HasPrefix(pod, headPrefix) {
-			return pod
+	workerPods := strings.Fields(pods.Stdout)
+	for _, pod := range workerPods[:min(len(workerPods), 3)] {
+		res := g.kubectlWithTimeout(10*time.Second, "exec", "-n", ns, "pod/"+pod, "-c", s.SidecarName, "--", "python3", "-c", spsSidecarVersionScript)
+		if res.ExitCode == 0 {
+			applyProbedVersions(res.Stdout, s)
+			return
 		}
 	}
-	return ""
 }
 
 func applyProbedVersions(stdout string, s *spsInstanceSummary) {
@@ -622,7 +578,9 @@ func parseSPSInstance(name, ns string, data []byte) (spsInstanceSummary, error) 
 	}
 	parseSPSWorker(worker, workerReplicas, &summary)
 	summary.Status = spsInstanceStatus(&js)
-	summary.ReadySlices = statusReadySlices(&js, summary.InstanceCount)
+	if summary.Status == "Running" {
+		summary.ReadySlices = statusReadySlices(&js, summary.InstanceCount)
+	}
 	return summary, nil
 }
 
@@ -645,7 +603,7 @@ func parseSPSWorker(worker *spsPodSpecView, replicas int, summary *spsInstanceSu
 }
 
 func statusReadySlices(js *spsJobSetView, instanceCount int) string {
-	if js.Status.TerminalState != "" || instanceCount <= 0 {
+	if instanceCount <= 0 {
 		return ""
 	}
 	for _, rj := range js.Status.ReplicatedJobsStatus {
@@ -762,10 +720,6 @@ func formatSPSSummary(s spsInstanceSummary) string {
 	if s.SidecarImage == "" {
 		row("Sidecar image", "none")
 	} else {
-		python, jax := s.SidecarPython, s.SidecarJAX
-		if python == "" && jax == "" {
-			python, jax = imageVersions(s.SidecarImage)
-		}
 		orUnknown := func(v string) string {
 			if v == "" {
 				return "unknown (not in image tag)"
@@ -773,8 +727,8 @@ func formatSPSSummary(s spsInstanceSummary) string {
 			return v
 		}
 		row("Sidecar image", s.SidecarImage)
-		row("Sidecar Python", orUnknown(python))
-		row("Sidecar JAX", orUnknown(jax))
+		row("Sidecar Python", orUnknown(s.SidecarPython))
+		row("Sidecar JAX", orUnknown(s.SidecarJAX))
 	}
 	_ = tw.Flush()
 	return b.String()

@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/shell"
@@ -345,6 +346,11 @@ func kubectlCommandLine(kubeContext string, args ...string) string {
 // kubectl runs kubectl against the context chosen by configureKubectl.
 func (g *GKEOrchestrator) kubectl(args ...string) shell.CommandResult {
 	return g.executor.ExecuteCommand("kubectl", withKubeContext(g.kubeContext, args)...)
+}
+
+// kubectlWithTimeout runs kubectl with a process timeout against the context chosen by configureKubectl.
+func (g *GKEOrchestrator) kubectlWithTimeout(timeout time.Duration, args ...string) shell.CommandResult {
+	return g.executor.ExecuteCommandWithTimeout(timeout, "kubectl", withKubeContext(g.kubeContext, args)...)
 }
 
 // kubectlStream streams kubectl output against the context chosen by configureKubectl.
