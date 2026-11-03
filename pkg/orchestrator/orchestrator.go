@@ -14,8 +14,6 @@
 
 package orchestrator
 
-import "fmt"
-
 var ValidPriorityClasses = []string{"very-low", "low", "medium", "high", "very-high"}
 
 type PathwaysJobDefinition struct {
@@ -155,19 +153,6 @@ type InspectOptions struct {
 	OutputPath      string
 	Show            bool
 	Filter          string // component filter (e.g., "pathways-sps")
-}
-
-// Validate checks that InspectOptions has a supported filter and required workload name.
-func (o InspectOptions) Validate() error {
-	if o.Filter != "" {
-		if o.Filter != "pathways-sps" {
-			return fmt.Errorf("invalid value for --filter: %s. Allowed values are: pathways-sps", o.Filter)
-		}
-		if o.WorkloadName == "" {
-			return fmt.Errorf("--filter=%s requires --name", o.Filter)
-		}
-	}
-	return nil
 }
 
 // JobOrchestrator defines the interface to interact with job orchestrators like GKE.

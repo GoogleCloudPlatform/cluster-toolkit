@@ -573,13 +573,3 @@ func TestInspectCluster_ReportStartsWithSPSSummary(t *testing.T) {
 		t.Errorf("report should start with the SPS summary (summary at %d, gcloud section at %d):\n%s", summaryAt, gcloudAt, content)
 	}
 }
-
-func TestInspectCluster_SPSRequiresName(t *testing.T) {
-	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
-	if err := orc.InspectCluster(orchestrator.InspectOptions{Filter: "pathways-sps"}); err == nil || !strings.Contains(err.Error(), "--filter=pathways-sps requires --name") {
-		t.Fatalf("InspectCluster() error = %v, want --filter=pathways-sps requires --name", err)
-	}
-	if err := orc.InspectCluster(orchestrator.InspectOptions{Filter: "unknown", WorkloadName: "x"}); err == nil || !strings.Contains(err.Error(), "invalid value for --filter: unknown") {
-		t.Fatalf("InspectCluster() error = %v, want invalid value for --filter", err)
-	}
-}

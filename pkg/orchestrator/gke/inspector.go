@@ -60,9 +60,6 @@ func (w *inspectWriter) runAndLog(description string, command string, args ...st
 // InspectCluster runs diagnostic checks on the GKE cluster and writes them to a log file.
 // With opts.Filter == "pathways-sps" it writes only the SPS instance summary for opts.WorkloadName.
 func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error {
-	if err := opts.Validate(); err != nil {
-		return err
-	}
 	g.namespace = opts.GKENamespace
 	// 1. Setup Kubectl (Critical, fail fast)
 	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
