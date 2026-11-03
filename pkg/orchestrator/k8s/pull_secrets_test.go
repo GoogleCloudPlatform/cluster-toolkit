@@ -150,6 +150,25 @@ func TestAuthHostMatches(t *testing.T) {
 	}
 }
 
+func TestIsForbiddenError(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"typed 403", apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "", errors.New("forbidden")), true},
+		{"kubectl stderr", errors.New("Error from server (Forbidden): secrets is forbidden: User cannot list"), true},
+		{"other error", errors.New("connection refused"), false},
+	}
+	for _, tc := range cases {
+		if got := IsForbiddenError(tc.err); got != tc.want {
+			t.Errorf("%s: IsForbiddenError(%v) = %v, want %v", tc.name, tc.err, got, tc.want)
+		}
+	}
+}
+
 func TestDiscoverImagePullSecrets_ListErrorsAndNamespaceDefault(t *testing.T) {
 	t.Parallel()
 	if got := DiscoverImagePullSecrets(nil, "ns", "", []string{"alpine:3"}); got != "" {
@@ -160,9 +179,6 @@ func TestDiscoverImagePullSecrets_ListErrorsAndNamespaceDefault(t *testing.T) {
 		t.Errorf("expected no list call without images, got %q (ns=%q)", got, noImages.gotNS)
 	}
 	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "", errors.New("forbidden"))
-	if !IsForbiddenError(forbidden) || IsForbiddenError(nil) || !IsForbiddenError(errors.New("secrets is forbidden: User cannot list")) {
-		t.Errorf("unexpected IsForbiddenError behavior")
-	}
 	forbiddenLister := &stubResourceLister{err: forbidden}
 	if got := DiscoverImagePullSecrets(forbiddenLister, "", "", []string{"registry.local/app:v1"}); got != "" || forbiddenLister.gotNS != "default" {
 		t.Errorf("got (%q, ns=%q), want (\"\", \"default\")", got, forbiddenLister.gotNS)

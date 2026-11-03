@@ -1777,43 +1777,6 @@ func TestLegacyMTCDriverGSA(t *testing.T) {
 	}
 }
 
-func TestIsForbiddenError(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{
-			name: "Nil error returns false",
-			err:  nil,
-			want: false,
-		},
-		{
-			name: "Typed 403 Forbidden returns true",
-			err:  apierrors.NewForbidden(schema.GroupResource{Resource: "services"}, "test-svc", fmt.Errorf("forbidden")),
-			want: true,
-		},
-		{
-			name: "Generic error with forbidden substring returns true",
-			err:  fmt.Errorf("Error from server (Forbidden): request forbidden"),
-			want: true,
-		},
-		{
-			name: "Other error returns false",
-			err:  fmt.Errorf("connection refused"),
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := isForbiddenError(tt.err); got != tt.want {
-				t.Errorf("isForbiddenError(%v) = %v; want %v", tt.err, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestVerifyCheckpointConfigurationCR(t *testing.T) {
 	const docRemediation = "Please follow the documentation."
 
