@@ -30,7 +30,6 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8syaml "sigs.k8s.io/yaml"
@@ -1192,15 +1191,16 @@ func assertJobSetEscapedPullSecret(t *testing.T, orc *GKEOrchestrator, opts Mani
 func TestImagePullSecrets_NamespaceResolutionFailureFailsFast(t *testing.T) {
 	setupMockMachineConfig(t)
 	profile := JobProfile{IsCPUMachine: true, CapacityCount: 4}
-	dyn := &mockDynamicClient{
-		listFunc: func(_ context.Context, _ metav1.ListOptions) (*unstructured.UnstructuredList, error) {
-			return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{makeDockerConfigSecret("ns-sec", "registry.local")}}, nil
+	mockClient := &MockKubeClient{
+		ExplicitEmpty: true,
+		Err:           errors.New("no matching context found for cluster clus-1 in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag"),
+		Objects: map[string][]unstructured.Unstructured{
+			"secrets": {makeDockerConfigSecret("ns-sec", "registry.local")},
 		},
 	}
-	// A usable API client but a kubeconfig without any matching context: discovery must not probe "default".
+	// A usable API client whose context resolution fails: discovery must not probe "default".
 	orc := newCachedTestOrchestrator()
-	orc.kubeClient = &DefaultKubeClient{}
-	orc.dynClient = dyn
+	orc.kubeClient = mockClient
 	job := orchestrator.JobDefinition{
 		WorkloadName:    "ns-fail-job",
 		CommandToRun:    "echo hi",

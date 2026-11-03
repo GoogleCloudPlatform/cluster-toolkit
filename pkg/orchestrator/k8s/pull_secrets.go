@@ -104,7 +104,7 @@ func matchingSecretNames(secrets []unstructured.Unstructured, img string) []stri
 	for i := range secrets {
 		if slices.ContainsFunc(dockerConfigAuthKeys(&secrets[i]), func(key string) bool {
 			host, prefix, ok := authKeyHostAndPath(key)
-			return ok && authHostMatches(host, imgHost) && strings.HasPrefix(imgPath, prefix)
+			return ok && authHostMatches(host, imgHost) && authPathMatches(prefix, imgPath)
 		}) {
 			names = append(names, secrets[i].GetName())
 		}
@@ -199,6 +199,17 @@ func authHostMatches(authHost, imgHost string) bool {
 		}
 	}
 	return true
+}
+
+// authPathMatches checks if imgPath matches prefix on path-segment boundaries.
+// An empty prefix matches every repository path under the host.
+func authPathMatches(prefix, imgPath string) bool {
+	prefix = strings.Trim(prefix, "/")
+	imgPath = strings.Trim(imgPath, "/")
+	if prefix == "" {
+		return true
+	}
+	return imgPath == prefix || strings.HasPrefix(imgPath, prefix+"/")
 }
 
 func splitHostPort(hostport string) (string, string) {

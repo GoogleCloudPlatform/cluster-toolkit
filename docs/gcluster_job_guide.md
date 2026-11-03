@@ -446,6 +446,8 @@ Use `--image-pull-secret` and `--service-account` for secure jobs. `--image-pull
 * A comma-separated list: exactly those secrets are attached, so list every secret the workload needs.
 * `--image-pull-secret=""`: no pull secrets are attached.
 
+Discovery needs permission to list Secrets and read the ServiceAccount in the target namespace; without it, `gcluster` skips discovery and logs why. If a matching secret holds expired credentials, image pulls from that registry fail (even for public images); pass `--image-pull-secret=""` to attach none.
+
 ```bash
 ./gcluster job submit \
   ... \

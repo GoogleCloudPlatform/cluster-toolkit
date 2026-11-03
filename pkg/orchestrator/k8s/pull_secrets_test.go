@@ -150,6 +150,33 @@ func TestAuthHostMatches(t *testing.T) {
 	}
 }
 
+func TestAuthPathMatches(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		prefix, imgPath string
+		want            bool
+	}{
+		{"", "anything", true},
+		{"", "team-a/app", true},
+		{"team-a", "team-a", true},
+		{"team-a", "team-a/app", true},
+		{"team-a", "team-a/sub/app", true},
+		{"team-a", "team-alpha", false},
+		{"team-a", "team-alpha/app", false},
+		{"team-a/", "team-a/app", true},
+		{"team-a/", "team-alpha", false},
+		{"team-a/", "team-alpha/app", false},
+		{"/team-a/", "team-a/app", true},
+		{"proj", "proj/image", true},
+		{"proj", "proj-two/image", false},
+	}
+	for _, tc := range cases {
+		if got := authPathMatches(tc.prefix, tc.imgPath); got != tc.want {
+			t.Errorf("authPathMatches(%q, %q) = %v, want %v", tc.prefix, tc.imgPath, got, tc.want)
+		}
+	}
+}
+
 func TestIsForbiddenError(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -229,8 +256,8 @@ func TestDiscoverImagePullSecrets_MatchingSemantics(t *testing.T) {
 		{"us-docker.pkg.dev:5000/p/r/img:v1", []string{"pkg-wildcard-port"}},
 		{"sub.us-docker.pkg.dev/p/r/img:v1", nil},
 		{"harbor.local/team-a/trainer:v1", []string{"scoped-v2"}},
-		// String-prefix path scoping, as in the kubelet keyring.
-		{"harbor.local/team-alpha/x:v1", []string{"scoped-v2"}},
+		// Path prefix scoping matches on path segment boundaries; team-alpha does not match team-a.
+		{"harbor.local/team-alpha/x:v1", nil},
 		{"harbor.local/other/x:v1", nil},
 		{"[fd00::1]:5000/obs/collector:v1", []string{"ipv6-sec"}},
 		{"dup.local/app:v1", []string{"a-dup", "z-dup"}},
