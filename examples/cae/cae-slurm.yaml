@@ -288,11 +288,6 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [h4d_startup, network]
     settings:
-      node_count_dynamic_max: $(vars.h3_node_count_dynamic_max)
-      enable_spot_vm: $(vars.h3_enable_spot_vm)
-      machine_type: h3-standard-88
-      disk_type: 'pd-balanced'
-      bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
       bandwidth_tier: gvnic_enabled
       machine_type: h4d-highmem-192-lssd
