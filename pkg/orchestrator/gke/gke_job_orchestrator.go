@@ -1379,6 +1379,8 @@ func dedupeValidExitCodes(exitCodes []int) ([]int, error) {
 			validCodes = append(validCodes, code)
 		}
 	}
+	// batch/v1 declares onExitCodes.values as +listType=set: the API server rejects unordered or duplicate
+	// lists ("must be ordered"), so sorting here is required, not cosmetic.
 	slices.Sort(validCodes)
 	return validCodes, nil
 }

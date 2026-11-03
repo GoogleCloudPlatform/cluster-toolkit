@@ -27,7 +27,9 @@ spec:
   completionMode: Indexed
   parallelism: {{.NodesPerSlice}}
   completions: {{.NodesPerSlice}}
-  backoffLimit: {{.MaxRestarts}}
+  # Fail fast like the child Job in jobset.tmpl: a batch/v1 Job replaces single indexes and cannot restart the
+  # whole gang, so --restarts is not mapped here; the single-slice caller owns the restart strategy.
+  backoffLimit: 0
 {{- if .PodFailurePolicy }}
   podFailurePolicy:
 {{reindent 4 (StructuralData .PodFailurePolicy)}}

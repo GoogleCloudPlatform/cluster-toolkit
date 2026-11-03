@@ -4138,40 +4138,76 @@ func TestSubmitJob_TemplateFastFailBeforeImageBuild(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(badSyntaxDir, "jobset.tmpl"), []byte("{{ .Unclosed"), 0644); err != nil {
 		t.Fatal(err)
 	}
+	badPathwaysDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(badPathwaysDir, "pathways_jobset.tmpl"), []byte("{{ .Unclosed"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Only base.tmpl is overridden, so preflight passes and the flow proceeds to the first external command.
+	validBaseDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(validBaseDir, "base.tmpl"), []byte("{{- define \"workload_labels\" -}}\nteam: platform\n{{- end -}}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// ImageName (not BaseImage) so no image build is attempted; the mock executor stops the flow after preflight.
+	newJob := func(name, customDir string, pathways bool) orchestrator.JobDefinition {
+		job := orchestrator.JobDefinition{
+			WorkloadName:           name,
+			ProjectID:              "proj",
+			ImageName:              "img",
+			GkeCustomTemplatesPath: customDir,
+			IsPathwaysJob:          pathways,
+		}
+		if pathways {
+			job.Pathways = orchestrator.PathwaysJobDefinition{GCSLocation: "gs://bkt", HeadNodePool: "head-np"}
+		}
+		return job
+	}
 
 	for _, tc := range []struct {
-		name    string
-		job     orchestrator.JobDefinition
-		wantErr string
+		name          string
+		job           orchestrator.JobDefinition
+		wantErr       string
+		wantPastLocal bool
 	}{
 		{
-			name: "missing custom template directory",
-			job: orchestrator.JobDefinition{
-				WorkloadName:           "tmpl-missing",
-				ProjectID:              "proj",
-				BaseImage:              "python:3.11-slim",
-				BuildContext:           "/nonexistent/context",
-				GkeCustomTemplatesPath: filepath.Join(badSyntaxDir, "missing-dir"),
-			},
+			name:    "missing custom template directory",
+			job:     newJob("tmpl-missing", filepath.Join(badSyntaxDir, "missing-dir"), false),
 			wantErr: "--gke-custom-templates-path",
 		},
 		{
-			name: "malformed custom jobset template",
-			job: orchestrator.JobDefinition{
-				WorkloadName:           "tmpl-syntax",
-				ProjectID:              "proj",
-				BaseImage:              "python:3.11-slim",
-				BuildContext:           "/nonexistent/context",
-				GkeCustomTemplatesPath: badSyntaxDir,
-			},
+			name:    "malformed custom jobset template",
+			job:     newJob("tmpl-syntax", badSyntaxDir, false),
 			wantErr: "unclosed action",
+		},
+		{
+			name:    "malformed custom pathways template reaches the Pathways preflight",
+			job:     newJob("tmpl-pw-syntax", badPathwaysDir, true),
+			wantErr: "unclosed action",
+		},
+		{
+			name:          "malformed jobset template is not parsed for Pathways jobs",
+			job:           newJob("tmpl-pw-ok", badSyntaxDir, true),
+			wantPastLocal: true,
+		},
+		{
+			name:          "valid base.tmpl-only override proceeds past preflight",
+			job:           newJob("tmpl-valid", validBaseDir, false),
+			wantPastLocal: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mockExec := NewMockExecutor(map[string][]shell.CommandResult{})
 			orc := newTestGKEOrchestrator(mockExec)
 			err := orc.SubmitJob(tc.job)
-			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+			if err == nil {
+				t.Fatal("SubmitJob() succeeded against an empty mock executor, want error")
+			}
+			if tc.wantPastLocal {
+				if len(mockExec.calls) == 0 {
+					t.Fatalf("SubmitJob() failed before reaching any external command: %v", err)
+				}
+				return
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("got err = %v, want substring %q", err, tc.wantErr)
 			}
 			if len(mockExec.calls) > 0 {
