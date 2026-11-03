@@ -28,6 +28,8 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 
+	"github.com/google/go-cmp/cmp"
+	batchv1 "k8s.io/api/batch/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -37,6 +39,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/util/jsonpath"
+	k8syaml "sigs.k8s.io/yaml"
 )
 
 func setupMockMachineConfig(t *testing.T) {
@@ -70,10 +73,8 @@ func setupMockMachineConfig(t *testing.T) {
 	  }
 	}`
 	config.ClearMachineTypeCache()
-	os.Setenv("GHPC_MOCK_MACHINE_CONFIG", mockJSON)
-	t.Cleanup(func() {
-		os.Unsetenv("GHPC_MOCK_MACHINE_CONFIG")
-	})
+	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", mockJSON)
+	t.Cleanup(config.ClearMachineTypeCache)
 }
 
 type MockExecutor struct {
@@ -3601,11 +3602,12 @@ func TestGeneratePodFailurePolicy(t *testing.T) {
 	orc := &GKEOrchestrator{}
 
 	tests := []struct {
-		name       string
-		exitCodes  []int
-		expectErr  bool
-		wantEmpty  bool
-		wantSubstr string
+		name           string
+		exitCodes      []int
+		containerNames []string
+		expectErr      bool
+		wantEmpty      bool
+		wantSubstr     string
 	}{
 		{
 			name:      "nil slice",
@@ -3628,9 +3630,21 @@ func TestGeneratePodFailurePolicy(t *testing.T) {
 			wantSubstr: "values:\n    - 137\n    - 143",
 		},
 		{
-			name:       "valid with duplicates",
-			exitCodes:  []int{137, 137, 143},
-			wantSubstr: "values:\n    - 137\n    - 143",
+			name:       "valid with duplicates and unsorted order sorted ascending",
+			exitCodes:  []int{143, 42, 143, 137},
+			wantSubstr: "values:\n    - 42\n    - 137\n    - 143",
+		},
+		{
+			name:           "scoped to single workload container",
+			exitCodes:      []int{42},
+			containerNames: []string{"workload-container"},
+			wantSubstr:     "containerName: workload-container",
+		},
+		{
+			name:           "scoped to dual parallel workload containers",
+			exitCodes:      []int{143, 42},
+			containerNames: []string{"workload-container-1", "workload-container-2"},
+			wantSubstr:     "containerName: workload-container-2",
 		},
 		{
 			name:       "boundary valid min (1) and max (255)",
@@ -3661,7 +3675,7 @@ func TestGeneratePodFailurePolicy(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			res, err := orc.generatePodFailurePolicy(tc.exitCodes)
+			res, err := orc.generatePodFailurePolicy(tc.exitCodes, tc.containerNames...)
 			if tc.expectErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil with result: %s", res)
@@ -3677,7 +3691,33 @@ func TestGeneratePodFailurePolicy(t *testing.T) {
 			if tc.wantSubstr != "" && !strings.Contains(res, tc.wantSubstr) {
 				t.Errorf("expected result to contain %q, got:\n%s", tc.wantSubstr, res)
 			}
+			if !tc.wantEmpty {
+				assertStrictPodFailurePolicyYAML(t, res, tc.containerNames)
+			}
 		})
+	}
+}
+
+func assertStrictPodFailurePolicyYAML(t *testing.T, res string, containerNames []string) {
+	t.Helper()
+	var pfp batchv1.PodFailurePolicy
+	if err := k8syaml.UnmarshalStrict([]byte(res), &pfp); err != nil {
+		t.Fatalf("failed strict unmarshal into batchv1.PodFailurePolicy: %v\n%s", err, res)
+	}
+	wantRules := max(1, len(containerNames))
+	if len(pfp.Rules) != wantRules {
+		t.Fatalf("got %d rules, want %d", len(pfp.Rules), wantRules)
+	}
+	for i, r := range pfp.Rules {
+		if r.OnExitCodes == nil || !slices.IsSorted(r.OnExitCodes.Values) {
+			t.Errorf("rule[%d] values not sorted ascending: %+v", i, r.OnExitCodes)
+		}
+		if i < len(containerNames) && (r.OnExitCodes.ContainerName == nil || *r.OnExitCodes.ContainerName != containerNames[i]) {
+			t.Errorf("rule[%d] containerName = %v, want %q", i, r.OnExitCodes.ContainerName, containerNames[i])
+		}
+	}
+	if len(containerNames) == 2 && cmp.Diff([]int32{42, 143}, pfp.Rules[0].OnExitCodes.Values) != "" {
+		t.Errorf("unexpected sorted values: %+v", pfp.Rules[0].OnExitCodes.Values)
 	}
 }
 
@@ -4087,6 +4127,55 @@ func TestSubmitJob_MTCFastFailBeforeClusterCalls(t *testing.T) {
 			}
 			if len(mockExec.calls) > 0 {
 				t.Errorf("SubmitJob() executed external commands before failing fast: %v", mockExec.calls)
+			}
+		})
+	}
+}
+
+func TestSubmitJob_TemplateFastFailBeforeImageBuild(t *testing.T) {
+	setupMockMachineConfig(t)
+	badSyntaxDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(badSyntaxDir, "jobset.tmpl"), []byte("{{ .Unclosed"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		job     orchestrator.JobDefinition
+		wantErr string
+	}{
+		{
+			name: "missing custom template directory",
+			job: orchestrator.JobDefinition{
+				WorkloadName:           "tmpl-missing",
+				ProjectID:              "proj",
+				BaseImage:              "python:3.11-slim",
+				BuildContext:           "/nonexistent/context",
+				GkeCustomTemplatesPath: filepath.Join(badSyntaxDir, "missing-dir"),
+			},
+			wantErr: "--gke-custom-templates-path",
+		},
+		{
+			name: "malformed custom jobset template",
+			job: orchestrator.JobDefinition{
+				WorkloadName:           "tmpl-syntax",
+				ProjectID:              "proj",
+				BaseImage:              "python:3.11-slim",
+				BuildContext:           "/nonexistent/context",
+				GkeCustomTemplatesPath: badSyntaxDir,
+			},
+			wantErr: "unclosed action",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{})
+			orc := newTestGKEOrchestrator(mockExec)
+			err := orc.SubmitJob(tc.job)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("got err = %v, want substring %q", err, tc.wantErr)
+			}
+			if len(mockExec.calls) > 0 {
+				t.Errorf("SubmitJob() executed external commands before local fast-fail: %v", mockExec.calls)
 			}
 		})
 	}

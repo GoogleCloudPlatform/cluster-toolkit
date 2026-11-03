@@ -1214,7 +1214,14 @@ Extracted templates match the gcluster version that extracted them. After upgrad
 
 #### 2. Modify the templates
 
-Open the extracted `.tmpl` files in your preferred editor. These are standard Go text templates (`text/template` and `yamltemplate`). You can inject any static Kubernetes YAML or modify the existing template variables.
+Open the extracted `.tmpl` files in your preferred editor. Workload manifests are composed from the following templates (`yamltemplate`):
+
+* `jobset.tmpl`: Standard (non-Pathways) `JobSet` wrapper used by `gcluster job submit`. Delegates shared labels, network settings, and `pod_template` to `base.tmpl`.
+* `pathways_jobset.tmpl`: Pathways (`--pathways`) `JobSet` manifest. Defines `pathways-head` and `worker` pod specs inline while reusing `workload_labels`, `jobset_network`, `pod_auth_and_priority`, and `pod_placement` from `base.tmpl`.
+* `base.tmpl`: Shared named `{{- define "<block>" -}}` blocks rendered at a target YAML column width via `{{(StructuralData (.RenderBlock "<block>" <indent>))}}`. To add custom sidecars, pod annotations, or volumes to standard workloads, edit `pod_template` in `base.tmpl`.
+* `job.tmpl`: Standalone `batch/v1` Indexed `Job` and headless `Service` template (reserved for upcoming single-slice `Job` support; `gcluster job submit` does not render `job.tmpl` yet).
+* `filestore.tmpl` & `gcs_fuse_pv_pvc.tmpl`: Storage templates used when provisioning Filestore and Cloud Storage FUSE storage-profile `PersistentVolume` / `PersistentVolumeClaim` resources.
+* `local_queue.tmpl` & `priority_classes.tmpl`: Kueue templates used when bootstrapping default `LocalQueue` and `PriorityClass` resources.
 
 > [!NOTE]
 > `gcluster job logs --main-only` lets `kubectl` choose which container to read: the one named by the pod-template annotation `kubectl.kubernetes.io/default-container`, otherwise the first entry in `containers` (kubectl 1.24 or later; older versions require the annotation when there are several containers). Set this annotation if your template lists a regular (non-native) sidecar before your workload container.
@@ -1230,7 +1237,7 @@ Pass the `--gke-custom-templates-path` flag to the `submit` command:
 ```
 
 > [!TIP]
-> If a template file (e.g., `jobset.tmpl`) is not found in your custom directory, `gcluster` will automatically fall back to using its embedded default version for that specific file.
+> If a template file (e.g., `jobset.tmpl` or `base.tmpl`) or a specific block in `base.tmpl` is omitted from your custom directory, `gcluster` automatically falls back to its embedded default—so you can place only `base.tmpl` (or only the single `define` block you want to override) in `--gke-custom-templates-path`. Two caveats: features and overrides in `base.tmpl` only take effect when the workload template being rendered calls `.RenderBlock` (a `jobset.tmpl` or `pathways_jobset.tmpl` extracted from an older release does not, and `gcluster` warns whenever a custom workload template omits `.RenderBlock`), and an override whose body is empty (only whitespace or comments) does not replace the embedded block. To suppress an optional `with`-guarded block (`pod_auth_and_priority` or `pod_placement`) in `base.tmpl`, define it with an empty string action (`{{- define "pod_auth_and_priority" -}}{{""}}{{- end -}}`); to drop any other block entirely, override `jobset.tmpl` or `pathways_jobset.tmpl` and remove its `.RenderBlock` call.
 
 ## 9. `gcluster job` Command Reference
 

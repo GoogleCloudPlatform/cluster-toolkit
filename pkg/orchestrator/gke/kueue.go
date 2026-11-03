@@ -785,7 +785,7 @@ func hasUserPriorityClasses(existing []string) bool {
 
 func (g *GKEOrchestrator) installPriorityClasses() error {
 	logging.Info("Installing Kueue PriorityClasses...")
-	tmpl, err := g.parseGKETemplate("priority_classes.tmpl")
+	tmpl, err := k8s.ParseYAMLTemplate(g.gkeCustomTemplatesPath, "priority_classes.tmpl")
 	if err != nil {
 		return err
 	}
@@ -952,7 +952,7 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 }
 
 func (g *GKEOrchestrator) renderLocalQueueInNamespace(lqName, cqName, ns string) ([]byte, error) {
-	localQueueTmpl, err := g.parseGKETemplate(localQueueTemplateFile)
+	localQueueTmpl, err := k8s.ParseYAMLTemplate(g.gkeCustomTemplatesPath, localQueueTemplateFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse %s: %w", localQueueTemplateFile, err)
 	}

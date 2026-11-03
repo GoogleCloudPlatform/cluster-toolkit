@@ -22,6 +22,7 @@ import (
 	"hpc-toolkit/pkg/imagebuilder"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 	"net/url"
 	"os"
@@ -99,13 +100,11 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	g.gkeCustomTemplatesPath = job.GkeCustomTemplatesPath
 
 	sm := &StorageManager{orchestrator: g}
-	if err := sm.validateJobMounts(job.RawMounts, job.IsPathwaysJob, job.Pathways.ColocatedPythonSidecarImage != ""); err != nil {
+	if err := g.validateSubmitLocalPreflight(sm, job); err != nil {
 		return err
 	}
 
-	var err error
-	err = g.initializeJobSubmission(&job)
-	if err != nil {
+	if err := g.initializeJobSubmission(&job); err != nil {
 		return err
 	}
 
@@ -148,6 +147,22 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	logging.Info("gcluster job submit workflow completed.")
 
 	return nil
+}
+
+func workloadTemplateName(job orchestrator.JobDefinition) string {
+	if job.IsPathwaysJob {
+		return "pathways_jobset.tmpl"
+	}
+	return "jobset.tmpl"
+}
+
+// validateSubmitLocalPreflight runs the checks that need no cluster access or image build: mount syntax and
+// custom template parsing.
+func (g *GKEOrchestrator) validateSubmitLocalPreflight(sm *StorageManager, job orchestrator.JobDefinition) error {
+	if err := sm.validateJobMounts(job.RawMounts, job.IsPathwaysJob, job.Pathways.ColocatedPythonSidecarImage != ""); err != nil {
+		return err
+	}
+	return k8s.ValidateCustomWorkloadTemplates(g.gkeCustomTemplatesPath, workloadTemplateName(job))
 }
 
 // ListJobs retrieves a list of jobs in the GKE cluster.
@@ -422,19 +437,20 @@ func (g *GKEOrchestrator) resolveLogsSelector(name string, optsMainOnly *bool, p
 }
 
 func (g *GKEOrchestrator) generateAndSubmitManifests(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) error {
-	if job.IsPathwaysJob {
+	switch workloadTemplateName(job) {
+	case "pathways_jobset.tmpl":
 		manifestContent, err := g.GeneratePathwaysManifest(job, fullImageName, profile, isDynamicSlicing, isStaticSlicing)
 		if err != nil {
 			return err
 		}
 		return g.ApplyManifest(manifestContent, job.DryRunManifest, job.WorkloadName)
+	default:
+		manifestOpts, err := g.PrepareManifestOptions(job, fullImageName, profile, isDynamicSlicing, isStaticSlicing)
+		if err != nil {
+			return err
+		}
+		return g.generateAndApplyManifest(manifestOpts, profile, job.DryRunManifest)
 	}
-
-	manifestOpts, err := g.PrepareManifestOptions(job, fullImageName, profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		return err
-	}
-	return g.generateAndApplyManifest(manifestOpts, profile, job.DryRunManifest)
 }
 
 func getCloudConsoleLogsURL(projectID, location, clusterName, namespace, podNamePrefix string) string {
@@ -1331,43 +1347,55 @@ func (g *GKEOrchestrator) parseKueueWorkloadStatus(obj map[string]interface{}) s
 	return "Unknown"
 }
 
-func (g *GKEOrchestrator) generatePodFailurePolicy(exitCodes []int) (string, error) {
+func (g *GKEOrchestrator) generatePodFailurePolicy(exitCodes []int, containerNames ...string) (string, error) {
 	if len(exitCodes) == 0 {
 		return "", nil
 	}
 
-	var validCodes []int
-	seen := make(map[int]bool)
-	for _, code := range exitCodes {
-		if code < 1 || code > 255 {
-			return "", fmt.Errorf("invalid exit code %d in restart-on-exit-codes: exit codes must be between 1 and 255", code)
-		}
-		if !seen[code] {
-			seen[code] = true
-			validCodes = append(validCodes, code)
-		}
-	}
-
-	if len(validCodes) == 0 {
-		return "", nil
+	validCodes, err := dedupeValidExitCodes(exitCodes)
+	if err != nil || len(validCodes) == 0 {
+		return "", err
 	}
 
 	policy := map[string]interface{}{
-		"rules": []map[string]interface{}{
-			{
-				"action": "FailJob",
-				"onExitCodes": map[string]interface{}{
-					"operator": "NotIn",
-					"values":   validCodes,
-				},
-			},
-		},
+		"rules": buildPodFailureRules(validCodes, containerNames),
 	}
 	b, err := yaml.Marshal(policy)
 	if err != nil {
 		return "", err
 	}
 	return string(b), nil
+}
+
+func dedupeValidExitCodes(exitCodes []int) ([]int, error) {
+	var validCodes []int
+	seen := make(map[int]bool, len(exitCodes))
+	for _, code := range exitCodes {
+		if code < 1 || code > 255 {
+			return nil, fmt.Errorf("invalid exit code %d in restart-on-exit-codes: exit codes must be between 1 and 255", code)
+		}
+		if !seen[code] {
+			seen[code] = true
+			validCodes = append(validCodes, code)
+		}
+	}
+	slices.Sort(validCodes)
+	return validCodes, nil
+}
+
+func buildPodFailureRules(validCodes []int, containerNames []string) []map[string]interface{} {
+	if len(containerNames) == 0 {
+		containerNames = []string{""} // one pod-wide rule
+	}
+	rules := make([]map[string]interface{}, 0, len(containerNames))
+	for _, cname := range containerNames {
+		onExitCodes := map[string]interface{}{"operator": "NotIn", "values": validCodes}
+		if cname != "" {
+			onExitCodes["containerName"] = cname
+		}
+		rules = append(rules, map[string]interface{}{"action": "FailJob", "onExitCodes": onExitCodes})
+	}
+	return rules
 }
 
 func (g *GKEOrchestrator) generateImagePullSecrets(secrets string) string {
