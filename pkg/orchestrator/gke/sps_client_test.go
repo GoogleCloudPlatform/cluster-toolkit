@@ -257,6 +257,33 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 			t.Errorf("terminal-mode manifest should not contain workload-container:\n%s", manifest)
 		}
 	})
+
+	t.Run("in-cluster mode mounts RawMounts onto workload-container", func(t *testing.T) {
+		job := orchestrator.JobDefinition{
+			WorkloadName:            "sps-client-mount",
+			NumSlices:               1,
+			TtlSecondsAfterFinished: 3600,
+			CommandToRun:            "python3 train.py",
+			RawMounts:               []string{"gs://my-bucket;/mnt/data;rw"},
+			Pathways: orchestrator.PathwaysJobDefinition{
+				RunSPSWorkload: "sps-j6080103",
+			},
+		}
+		manifest, err := orc.generateSPSClientManifest(job, inst, "us-docker.pkg.dev/my-proj/img:latest")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, want := range []string{
+			`gke-gcsfuse/volumes: "true"`,
+			"mountPath: /mnt/data",
+			"driver: gcsfuse.csi.storage.gke.io",
+			"bucketName: my-bucket",
+		} {
+			if !strings.Contains(manifest, want) {
+				t.Errorf("manifest missing %q:\n%s", want, manifest)
+			}
+		}
+	})
 }
 
 func TestResolveSPSClientPathways(t *testing.T) {

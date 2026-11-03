@@ -16,6 +16,7 @@ package gke
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -241,6 +242,10 @@ func (g *GKEOrchestrator) runSPSWorkload(job orchestrator.JobDefinition) error {
 }
 
 func (g *GKEOrchestrator) submitSPSClusterWorkload(job orchestrator.JobDefinition, inst spsInstance) error {
+	sm := &StorageManager{orchestrator: g}
+	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
+		return err
+	}
 	fullImageName, err := g.BuildContainerImage(job)
 	if err != nil {
 		return err
@@ -300,6 +305,15 @@ func (g *GKEOrchestrator) generateSPSClientManifest(job orchestrator.JobDefiniti
 		IsPathwaysJob:                 true,
 		Pathways:                      p,
 	}
+	if fullImageName != "" && len(job.RawMounts) > 0 {
+		sm := &StorageManager{orchestrator: g}
+		mountInfos, manifests, err := sm.ProcessMounts(job.RawMounts, job)
+		if err != nil {
+			return "", err
+		}
+		opts.AdditionalManifests = manifests
+		sm.AddVolumeOptions(&opts, mountInfos)
+	}
 	data := g.prepareJobSetTemplateData(opts, workloadContainerCommand(job.CommandToRun), "", false, false)
 	data.PathwaysRMEnabled = false
 	data.PathwaysWorkersEnabled = false
@@ -319,12 +333,15 @@ func (g *GKEOrchestrator) generateSPSClientManifest(job orchestrator.JobDefiniti
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
 	}
-	return buf.String(), nil
+	return assembleManifest(buf.String(), opts.AdditionalManifests), nil
 }
 
 // runSPSWorkloadLocally works like pathwaysutils run_workload: it starts a proxy in the cluster, port-forwards
 // to it and runs the command on this machine with the terminal attached, so pdb works. The proxy is deleted on exit.
 func (g *GKEOrchestrator) runSPSWorkloadLocally(job orchestrator.JobDefinition, inst spsInstance, ns string) error {
+	if len(job.RawMounts) > 0 {
+		return fmt.Errorf("--mount requires --image or --base-image when used with --pathways-run-sps-workload")
+	}
 	manifest, err := g.generateSPSClientManifest(job, inst, "")
 	if err != nil {
 		return err
@@ -398,27 +415,44 @@ func (g *GKEOrchestrator) startPortForward(pod, ns string) (int, func(), error) 
 	port := l.Addr().(*net.TCPAddr).Port
 	_ = l.Close()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	args := withKubeContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf("%d:%d", port, spsProxyPort)})
 	var out bytes.Buffer
-	cmd := exec.Command("kubectl", withKubeContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf("%d:%d", port, spsProxyPort)})...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd := exec.CommandContext(ctx, "kubectl", args...)
 	cmd.Stdout, cmd.Stderr = &out, &out
 	if err := cmd.Start(); err != nil {
+		cancel()
 		return 0, nil, fmt.Errorf("failed to start kubectl port-forward: %w", err)
 	}
-	stop := func() {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
-	}
+
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	for i := 0; i < 60; i++ {
 		if conn, err := net.DialTimeout("tcp", addr, time.Second); err == nil {
 			_ = conn.Close()
-			return port, stop, nil
+			done := make(chan struct{})
+			go keepPortForwardAlive(ctx, cmd, args, done)
+			return port, func() { cancel(); <-done }, nil
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	stop()
+	cancel()
+	_ = cmd.Wait()
 	return 0, nil, fmt.Errorf("port-forward to %s did not become ready: %s", pod, strings.TrimSpace(out.String()))
+}
+
+// keepPortForwardAlive restarts kubectl port-forward if it exits before ctx is cancelled (e.g. on Ctrl-C in pdb).
+func keepPortForwardAlive(ctx context.Context, cmd *exec.Cmd, args []string, done chan<- struct{}) {
+	defer close(done)
+	for {
+		_ = cmd.Wait()
+		if ctx.Err() != nil {
+			return
+		}
+		cmd = exec.CommandContext(ctx, "kubectl", args...)
+		if err := cmd.Start(); err != nil {
+			return
+		}
+	}
 }
 
 func runLocalCommand(command string, port int, env map[string]string, sigCh <-chan os.Signal) error {

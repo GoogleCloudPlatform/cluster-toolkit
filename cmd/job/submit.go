@@ -423,6 +423,9 @@ func validateSPSModeFlags() error {
 	if pathways.RunSPSWorkload != "" && (pathways.DeploySPS || pathways.Headless) {
 		return fmt.Errorf("--pathways-run-sps-workload cannot be used with --pathways-deploy-sps or --pathways-headless")
 	}
+	if isSPSTerminalRun() && len(volumeStr) > 0 {
+		return fmt.Errorf("--mount requires --image or --base-image when used with --pathways-run-sps-workload")
+	}
 	return validateDeploySPSFlags()
 }
 

@@ -2070,4 +2070,22 @@ func TestSubmitCmd_RunSPSWorkload_Validation(t *testing.T) {
 			t.Errorf("got err = %v, want required flag \"command\" not set error", err)
 		}
 	})
+
+	t.Run("rejects mount in terminal mode without image", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-run-sps-workload", "sps-v5p",
+			"--name", "sps-client",
+			"--command", "python3 train.py",
+			"--mount", "gs://my-bucket;/mnt/data",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+		)
+		if err == nil || !strings.Contains(err.Error(), "--mount requires --image or --base-image when used with --pathways-run-sps-workload") {
+			t.Errorf("got err = %v, want --mount requires --image error", err)
+		}
+	})
 }
