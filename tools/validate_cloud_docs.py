@@ -33,14 +33,15 @@ from __future__ import annotations
 
 import argparse
 import html as html_lib
+import http.client
 import os
 import re
 import subprocess
 import sys
 import time
+from typing import Callable
 import urllib.error
 import urllib.request
-from typing import Callable
 import yaml
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -223,8 +224,6 @@ def fetch_page(
             os.path.join(local_dir, rel),
             os.path.join(local_dir, f"{rel}.html"),
             os.path.join(local_dir, f"{rel}.md"),
-            os.path.join(local_dir, os.path.basename(rel) + ".html"),
-            os.path.join(local_dir, os.path.basename(rel) + ".md"),
         ):
             if os.path.isfile(candidate):
                 with open(candidate, encoding="utf-8") as f:
@@ -238,7 +237,12 @@ def fetch_page(
             req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return resp.read().decode("utf-8", errors="replace")
-        except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        except (
+            urllib.error.URLError,
+            OSError,
+            http.client.HTTPException,
+            ValueError,
+        ) as exc:
             last_err = exc
             if isinstance(exc, urllib.error.HTTPError) and exc.code not in (
                 429,
@@ -253,7 +257,9 @@ def fetch_page(
     raise RuntimeError(f"Failed to fetch {url}: {last_err}")
 
 
-def get_blueprint_module_sources(blueprint_rel_path: str, repo_root: str = REPO_ROOT) -> set[str]:
+def get_blueprint_module_sources(
+    blueprint_rel_path: str, repo_root: str = REPO_ROOT
+) -> set[str]:
     """Returns the set of module source paths used in a blueprint YAML file."""
     full_path = os.path.join(repo_root, blueprint_rel_path)
     with open(full_path, encoding="utf-8") as f:
@@ -270,7 +276,9 @@ def get_blueprint_module_sources(blueprint_rel_path: str, repo_root: str = REPO_
     return sources
 
 
-def extract_cli_subcommands(cmd_rel_dir: str, repo_root: str = REPO_ROOT) -> set[str]:
+def extract_cli_subcommands(
+    cmd_rel_dir: str, repo_root: str = REPO_ROOT
+) -> set[str]:
     """Extracts user-facing CLI subcommand names from Use: fields in a cmd directory."""
     full_dir = os.path.join(repo_root, cmd_rel_dir)
     commands: set[str] = set()
@@ -283,9 +291,11 @@ def extract_cli_subcommands(cmd_rel_dir: str, repo_root: str = REPO_ROOT) -> set
         with open(path, encoding="utf-8") as f:
             content = f.read()
         for match in re.finditer(r'\bUse:\s*"([^"]+)"', content):
-            sub = match.group(1).strip().split()[0]
-            if sub not in INTERNAL_CMD_NAMES:
-                commands.add(sub)
+            parts = match.group(1).strip().split()
+            if parts:
+                sub = parts[0]
+                if sub not in INTERNAL_CMD_NAMES:
+                    commands.add(sub)
     return commands
 
 
@@ -307,6 +317,31 @@ def check_github_blob_links(
             errors.append(
                 f"{slug}: broken GitHub repo path '{rel_path}' (does not exist on current branch)"
             )
+    return errors
+
+
+def check_code_block_paths(
+    slug: str, article_html: str, repo_root: str = REPO_ROOT
+) -> list[str]:
+    """Checks that any examples/*.yaml or community/examples/*.yaml paths in <pre> blocks exist."""
+    errors: list[str] = []
+    pre_blocks = [
+        html_lib.unescape(re.sub(r"<[^>]+>", "", p))
+        for p in re.findall(r"<pre[^>]*>(.*?)</pre>", article_html, re.DOTALL | re.IGNORECASE)
+    ]
+    seen_paths: set[str] = set()
+    pattern = re.compile(
+        r"(?<![a-zA-Z0-9_./-])((?:community/)?examples/[a-zA-Z0-9_./-]+\.ya?ml)\b"
+    )
+    for pre_text in pre_blocks:
+        for match in pattern.finditer(pre_text):
+            rel_ex = match.group(1)
+            if rel_ex not in seen_paths:
+                seen_paths.add(rel_ex)
+                if not os.path.exists(os.path.join(repo_root, rel_ex)):
+                    errors.append(
+                        f"{slug}: code block references non-existent repo file '{rel_ex}'"
+                    )
     return errors
 
 
@@ -336,7 +371,7 @@ def check_slurm_gpu_page(
 
     if "v1.62.0" in text:
         errors.append(
-            f"{slug}: pins outdated Cluster Toolkit version 'v1.62.0' (should be v1.103.0+)"
+            f"{slug}: pins outdated Cluster Toolkit version 'v1.62.0' (update to current release tag)"
         )
     return errors
 
@@ -392,16 +427,7 @@ def check_gke_gpu_page(
             f"{slug}: runs 'gcluster destroy CLUSTER_NAME' (should pass deployment directory, not GKE cluster name)"
         )
 
-    seen_paths: set[str] = set()
-    for pre_text in pre_blocks:
-        for match in re.finditer(r"\b(examples/[a-zA-Z0-9_./-]+\.ya?ml)\b", pre_text):
-            rel_ex = match.group(1)
-            if rel_ex not in seen_paths:
-                seen_paths.add(rel_ex)
-                if not os.path.exists(os.path.join(repo_root, rel_ex)):
-                    errors.append(
-                        f"{slug}: code block references non-existent repo file '{rel_ex}'"
-                    )
+    errors.extend(check_code_block_paths(slug, article, repo_root=repo_root))
     return errors
 
 
@@ -449,39 +475,58 @@ def validate_live_cloud_docs(
 ) -> list[str]:
     """Runs all deterministic drift validations across the monitored Cloud Docs pages."""
     if fetcher is None:
-        fetcher = lambda s: fetch_page(s)
+        fetcher = fetch_page
 
     errors: list[str] = []
-    cache: dict[str, str] = {}
+    cache: dict[str, str | None] = {}
 
     def get_page(slug: str) -> str | None:
         if slug in cache:
             return cache[slug]
         try:
             cache[slug] = fetcher(slug)
-            return cache[slug]
         except Exception as exc:  # pylint: disable=broad-except
             errors.append(f"{slug}: failed to load page: {exc}")
-            return None
+            cache[slug] = None
+        return cache[slug]
 
+    def run_check(slug: str, check: Callable[..., list[str]], *args, **kwargs) -> None:
+        try:
+            errors.extend(check(*args, **kwargs))
+        except (OSError, yaml.YAMLError) as exc:
+            errors.append(
+                f"{slug}: {check.__name__} failed (stale repo mapping?): {exc}"
+            )
+
+    gke_slugs = {s for s, _, _ in GKE_GPU_PAGES}
     for slug in ALL_MONITORED_PAGES:
         raw = get_page(slug)
         if raw is not None:
             article = extract_article_html(raw)
             errors.extend(check_github_blob_links(slug, article, repo_root=repo_root))
+            if slug not in gke_slugs:
+                errors.extend(
+                    check_code_block_paths(slug, article, repo_root=repo_root)
+                )
 
     for slug, bp_rel in SLURM_GPU_PAGES:
         raw = get_page(slug)
         if raw is not None:
-            errors.extend(
-                check_slurm_gpu_page(slug, bp_rel, raw, repo_root=repo_root)
+            run_check(
+                slug, check_slurm_gpu_page, slug, bp_rel, raw, repo_root=repo_root
             )
 
     for slug, bp_rel, dep_rel in GKE_GPU_PAGES:
         raw = get_page(slug)
         if raw is not None:
-            errors.extend(
-                check_gke_gpu_page(slug, bp_rel, dep_rel, raw, repo_root=repo_root)
+            run_check(
+                slug,
+                check_gke_gpu_page,
+                slug,
+                bp_rel,
+                dep_rel,
+                raw,
+                repo_root=repo_root,
             )
 
     env_raw = get_page("/cluster-toolkit/docs/setup/configure-environment")
@@ -499,8 +544,8 @@ def validate_live_cloud_docs(
     ):
         raw = get_page(slug)
         if raw is not None:
-            errors.extend(
-                check_cli_reference_page(slug, cmd_dir, raw, repo_root=repo_root)
+            run_check(
+                slug, check_cli_reference_page, slug, cmd_dir, raw, repo_root=repo_root
             )
 
     cat_raw = get_page("/cluster-toolkit/docs/setup/cluster-blueprint-catalog")
@@ -519,15 +564,20 @@ def get_changed_files_from_git(
 ) -> list[str]:
     """Returns changed file paths between base_ref and HEAD."""
     res = subprocess.run(
-        ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
+        ["git", "diff", "--name-only", "--no-renames", f"{base_ref}...HEAD"],
         cwd=repo_root,
         capture_output=True,
         text=True,
         check=False,
     )
     if res.returncode != 0:
+        print(
+            f"Warning: '{base_ref}...HEAD' failed ({res.stderr.strip()}); "
+            "falling back to HEAD~1 (last commit only)",
+            file=sys.stderr,
+        )
         res = subprocess.run(
-            ["git", "diff", "--name-only", "HEAD~1", "HEAD"],
+            ["git", "diff", "--name-only", "--no-renames", "HEAD~1", "HEAD"],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -561,7 +611,22 @@ def match_pr_cloud_docs_impacts(
     return impacts
 
 
-def format_pr_reminder_markdown(impacts: list[tuple[str, list[str], str]]) -> str:
+def extract_cloud_docs_ack(pr_body: str | None) -> str | None:
+    """Extracts a 'Cloud-Docs: <plan or none>' acknowledgment line from a PR description."""
+    if not pr_body:
+        return None
+    match = re.search(
+        r"^\s*(?:\*\*|`)?cloud[-_\s]?docs(?:\*\*|`)?\s*:\s*(\S.*)$",
+        pr_body,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    return match.group(1).strip() if match else None
+
+
+def format_pr_reminder_markdown(
+    impacts: list[tuple[str, list[str], str]],
+    ack: str | None = None,
+) -> str:
     """Formats a Markdown reminder table for PR authors when Cloud-Doc-backed files change."""
     if not impacts:
         return (
@@ -581,7 +646,32 @@ def format_pr_reminder_markdown(impacts: list[tuple[str, list[str], str]]) -> st
         url_links = "<br>".join(f"[{u}]({u})" for u in urls)
         lines.append(f"| `{path}` | {url_links} | {reason} |")
     lines.append("")
+    if ack:
+        lines.append(
+            f"**Cloud-Docs Acknowledgment:** `{ack}` (acknowledged in PR description — check passed)"
+        )
+    else:
+        lines.append(
+            "**How to pass this check:** Add a `Cloud-Docs:` line to your PR description "
+            "(for example, `Cloud-Docs: b/123456` or `Cloud-Docs: none (no public doc impact)`) "
+            "to acknowledge and turn this check green."
+        )
+    lines.append("")
     return "\n".join(lines)
+
+
+def _emit_github_annotations(impacts: list[tuple[str, list[str], str]]) -> None:
+    """Emits ::warning annotations so impacts show inline on the PR diff."""
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    for path, urls, reason in impacts:
+        msg = (
+            f"{reason}. Verify: {' '.join(urls)} "
+            "(Add 'Cloud-Docs: <bug or none>' to PR description to pass check)"
+        )
+        msg = msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        prop = path.replace("%", "%25").replace(":", "%3A").replace(",", "%2C")
+        print(f"::warning file={prop},title=Cloud Docs may need an update::{msg}")
 
 
 def format_live_drift_markdown(errors: list[str]) -> str:
@@ -630,7 +720,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--fail-on-impact",
         action="store_true",
-        help="With --check-pr, exit 1 when Cloud-Doc-backed files are modified so the CI check surfaces visibly.",
+        help=(
+            "With --check-pr, exit 1 when Cloud-Doc-backed files are modified unless "
+            "the PR description includes a 'Cloud-Docs:' acknowledgment line."
+        ),
+    )
+    parser.add_argument(
+        "--pr-body",
+        default=None,
+        help="PR description body to inspect for a 'Cloud-Docs:' acknowledgment (defaults to $PR_BODY).",
     )
     parser.add_argument(
         "--base-ref",
@@ -662,13 +760,22 @@ def main(argv: list[str] | None = None) -> int:
             else get_changed_files_from_git(base_ref=args.base_ref)
         )
         impacts = match_pr_cloud_docs_impacts(changed)
-        md = format_pr_reminder_markdown(impacts)
-        print(md, file=sys.stderr if (impacts and args.fail_on_impact) else sys.stdout)
+        pr_body = (
+            args.pr_body if args.pr_body is not None else os.environ.get("PR_BODY")
+        )
+        ack = extract_cloud_docs_ack(pr_body)
+        should_fail = bool(impacts and args.fail_on_impact and not ack)
+        md = format_pr_reminder_markdown(impacts, ack=ack)
+        if impacts and not ack:
+            _emit_github_annotations(impacts)
+        print(md, file=sys.stderr if should_fail else sys.stdout)
         _write_summary(args.summary_file, md)
-        return 1 if (impacts and args.fail_on_impact) else 0
+        return 1 if should_fail else 0
 
     # Default to --check-live when neither flag is specified.
-    fetcher = lambda slug: fetch_page(slug, local_dir=args.local_dir)
+    def fetcher(slug: str) -> str:
+        return fetch_page(slug, local_dir=args.local_dir)
+
     errors = validate_live_cloud_docs(fetcher=fetcher, repo_root=REPO_ROOT)
     md = format_live_drift_markdown(errors)
     print(md, file=sys.stderr if errors else sys.stdout)

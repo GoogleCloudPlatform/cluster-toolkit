@@ -177,55 +177,114 @@ class TestValidateCloudDocs(unittest.TestCase):
         self.assertEqual(len(errs), 1)
         self.assertIn("examples/non-existent-deleted.yaml", errs[0])
 
-    def test_check_pr_mode_maps_files_and_supports_fail_on_impact(self):
+    def test_check_pr_mode_maps_files_and_supports_fail_on_impact_and_pr_body_ack(self):
         with tempfile.NamedTemporaryFile("w+", encoding="utf-8", delete=False) as tf:
             summary_path = tf.name
         try:
             buf, err_buf = io.StringIO(), io.StringIO()
-            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err_buf):
-                rc = vcd.main(
-                    [
-                        "--check-pr",
-                        "--changed-files",
-                        "examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml",
-                        "cmd/explain.go",
-                        "cmd/explain_test.go",
-                        "cmd/job/list.go",
-                        "--summary-file",
-                        summary_path,
-                    ]
-                )
-                rc_fail = vcd.main(
-                    [
-                        "--check-pr",
-                        "--fail-on-impact",
-                        "--changed-files",
-                        "cmd/explain.go",
-                        "--summary-file",
-                        summary_path,
-                    ]
-                )
-                rc_clean = vcd.main(
-                    [
-                        "--check-pr",
-                        "--fail-on-impact",
-                        "--changed-files",
-                        "cmd/explain_test.go",
-                        "--summary-file",
-                        summary_path,
-                    ]
-                )
+            old_gha = os.environ.get("GITHUB_ACTIONS")
+            os.environ["GITHUB_ACTIONS"] = "true"
+            try:
+                with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err_buf):
+                    rc = vcd.main(
+                        [
+                            "--check-pr",
+                            "--changed-files",
+                            "examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml",
+                            "cmd/explain.go",
+                            "cmd/explain_test.go",
+                            "cmd/job/list.go",
+                            "--pr-body",
+                            "",
+                            "--summary-file",
+                            summary_path,
+                        ]
+                    )
+                    rc_fail = vcd.main(
+                        [
+                            "--check-pr",
+                            "--fail-on-impact",
+                            "--changed-files",
+                            "cmd/explain.go",
+                            "--pr-body",
+                            "Normal PR description without ack",
+                            "--summary-file",
+                            summary_path,
+                        ]
+                    )
+                    rc_acked = vcd.main(
+                        [
+                            "--check-pr",
+                            "--fail-on-impact",
+                            "--changed-files",
+                            "cmd/explain.go",
+                            "--pr-body",
+                            "Summary of changes\nCloud-Docs: b/573807418 (planned update)",
+                            "--summary-file",
+                            summary_path,
+                        ]
+                    )
+                    rc_clean = vcd.main(
+                        [
+                            "--check-pr",
+                            "--fail-on-impact",
+                            "--changed-files",
+                            "cmd/explain_test.go",
+                            "--pr-body",
+                            "",
+                            "--summary-file",
+                            summary_path,
+                        ]
+                    )
+            finally:
+                if old_gha is None:
+                    os.environ.pop("GITHUB_ACTIONS", None)
+                else:
+                    os.environ["GITHUB_ACTIONS"] = old_gha
             self.assertEqual(rc, 0)
             self.assertEqual(rc_fail, 1)
+            self.assertEqual(rc_acked, 0)
             self.assertEqual(rc_clean, 0)
+            self.assertIn("::warning file=cmd/explain.go", buf.getvalue())
             with open(summary_path, encoding="utf-8") as f:
                 summary = f.read()
             self.assertIn("create-a3-ultra-cluster", summary)
             self.assertIn("/cluster-toolkit/docs/reference/gcluster", summary)
             self.assertIn("/cluster-toolkit/docs/reference/gcluster-job", summary)
+            self.assertIn("b/573807418 (planned update)", summary)
             self.assertNotIn("explain_test.go", summary)
         finally:
             os.remove(summary_path)
+
+    def test_resilience_and_community_code_block_paths(self):
+        # 1. community/examples/ path in <pre> must not be truncated to examples/
+        article = (
+            "<article><pre>./gcluster deploy "
+            "community/examples/apptainer-artifact-registry-openfoam.yaml</pre></article>"
+        )
+        self.assertEqual(
+            vcd.check_code_block_paths("/cluster-toolkit/docs/overview", article),
+            [],
+        )
+
+        # 2. Failed fetch is cached so each failing slug is only fetched once
+        calls: list[str] = []
+
+        def failing_fetcher(slug: str) -> str:
+            calls.append(slug)
+            raise RuntimeError("network timeout")
+
+        errs = vcd.validate_live_cloud_docs(fetcher=failing_fetcher)
+        self.assertEqual(len(calls), len(vcd.ALL_MONITORED_PAGES))
+        self.assertEqual(len(errs), len(vcd.ALL_MONITORED_PAGES))
+
+        # 3. Missing repo files in repo_root report clean errors instead of crashing
+        pages = _compliant_pages()
+        with tempfile.TemporaryDirectory() as empty_root:
+            missing_errs = vcd.validate_live_cloud_docs(
+                fetcher=lambda s: pages[s], repo_root=empty_root
+            )
+            self.assertTrue(any("stale repo mapping" in e for e in missing_errs))
 
     def test_validate_live_cloud_docs_passes_on_compliant_pages_and_fails_on_drift(self):
         pages = _compliant_pages()

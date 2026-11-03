@@ -20,6 +20,7 @@ on:
   pull_request:
     types:
     - opened
+    - edited
     - reopened
     - synchronize
     branches:
@@ -70,12 +71,15 @@ jobs:
     - name: Check PR for Cloud Docs Impact
       env:
         BASE_REF: "origin/${{ github.base_ref }}"
+        PR_BODY: ${{ github.event.pull_request.body }}
       run: |
         python3 tools/validate_cloud_docs.py --check-pr --fail-on-impact --base-ref "$BASE_REF"
 
   live-cloud-docs-drift:
     name: Live Cloud Docs Drift Check
-    if: github.event_name != 'pull_request'
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.repository == 'GoogleCloudPlatform/cluster-toolkit'
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Code
