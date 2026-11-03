@@ -129,13 +129,29 @@ steps:
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
+              CHECK_LUSTRE="true" \
+              REQUIRED_LUSTRE_GB="18000" \
+              MACHINE_TYPE="n2-standard-16" \
+              NUM_NODES="1" \
+              MIN_NODES="1" \
+              INSTANCE_PREFIX="gkeml" \
+              OPTIONS_GCS_PATH="gs://hpc-ctk1357/lustreoptions.txt" \
+              ENABLE_SPOT_FALLBACK="true" \
+              source /workspace/tools/cloud-build/find_available_zone.sh
+              if [ -z "\$${ZONE}" ]; then
+                echo "ERROR: No available zone found."
+                exit 1
+              fi
+              REGION=\$(echo "\$${ZONE}" | sed 's/-[a-z0-9]*$$//')
+              echo "Selected zone: \$$ZONE (region: \$$REGION)"
+
               # Adding vm to act as remote node
               echo '  - id: remote-node'                     >> \$$EXAMPLE_BP
               echo '    source: modules/compute/vm-instance' >> \$$EXAMPLE_BP
               echo '    use: [network]'                      >> \$$EXAMPLE_BP
               echo '    settings:'                           >> \$$EXAMPLE_BP
-              echo '      machine_type: n2d-standard-2'       >> \$$EXAMPLE_BP
-              echo '      zone: $(vars.zone)'                 >> \$$EXAMPLE_BP
+              echo '      machine_type: n2d-standard-2'      >> \$$EXAMPLE_BP
+              echo '      zone: \$(vars.zone)'               >> \$$EXAMPLE_BP
 
               IP=\$(curl ifconfig.me)
               sed -i "s|.*authorized_cidr:.*|  authorized_cidr: \$$IP/32|" \$$EXAMPLE_BP
@@ -150,6 +166,7 @@ steps:
                 --extra-vars="test_prefix=${_TEST_PREFIX}" \
                 --extra-vars="use_fixed_vpc=true" \
                 --extra-vars="@tools/cloud-build/daily-tests/tests/gke-managed-lustre.yml" \
+                --extra-vars="region=\$${REGION} zone=\$${ZONE}" \
                 --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
                 --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
                 --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \

@@ -24,6 +24,8 @@ remote_node: "{{ deployment_name }}-lustre-ubuntu22-0"
 cli_deployment_vars:
   lustre_instance_id: "lustre-instance-{{build}}"
   test_name: "{{ test_name }}"
+  region: "{{ region }}"
+  zone: "{{ zone }}"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-managed-lustre-vm.yml
