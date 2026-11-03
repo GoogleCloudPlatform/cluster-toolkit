@@ -170,6 +170,23 @@ func TestParseSPSClientTarget(t *testing.T) {
 			t.Errorf("got err = %v, want non-SPS rejection", err)
 		}
 	})
+
+	t.Run("rejects JobSet with pathways-head but no worker job", func(t *testing.T) {
+		raw := `{
+			"spec": {
+				"replicatedJobs": [{
+					"name": "pathways-head",
+					"template": {"spec": {"template": {"spec": {
+						"containers": [{"name": "pathways-rm", "image": "server:latest", "args": ["--instance_type=tpuv6e:2x4"]}]
+					}}}}
+				}]
+			}
+		}`
+		_, err := parseSPSClientTarget("head-only", []byte(raw))
+		if err == nil || !strings.Contains(err.Error(), "and a worker job running pathways-worker") {
+			t.Errorf("got err = %v, want missing worker rejection", err)
+		}
+	})
 }
 
 func TestGenerateSPSClientManifest(t *testing.T) {

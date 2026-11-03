@@ -106,19 +106,21 @@ func parseSPSClientTarget(name string, data []byte) (spsInstance, error) {
 		Name:           name,
 		KueueQueueName: js.Metadata.Labels["kueue.x-k8s.io/queue-name"],
 	}
+	var hasHead, hasWorker bool
 	for i := range js.Spec.ReplicatedJobs {
 		rj := &js.Spec.ReplicatedJobs[i]
 		pod := &rj.Template.Spec.Template.Spec
 		switch rj.Name {
 		case "pathways-head":
+			hasHead = true
 			if err := parseSPSClientTargetHead(name, pod, &inst); err != nil {
 				return spsInstance{}, err
 			}
 		case "worker", "pathways-worker":
-			parseSPSClientTargetWorker(pod, rj.Replicas, &inst)
+			hasWorker = parseSPSClientTargetWorker(pod, rj.Replicas, &inst)
 		}
 	}
-	if inst.InstanceType == "" || inst.ServerImage == "" {
+	if !hasHead || !hasWorker || inst.InstanceType == "" || inst.ServerImage == "" {
 		return spsInstance{}, fmt.Errorf("JobSet %q is not an SPS instance: it needs a pathways-head job running pathways-rm and a worker job running pathways-worker", name)
 	}
 	return inst, nil
@@ -160,13 +162,15 @@ func parseSPSClientTargetRMArgs(args []string, inst *spsInstance) {
 	}
 }
 
-func parseSPSClientTargetWorker(pod *corev1.PodSpec, replicas int, inst *spsInstance) {
+func parseSPSClientTargetWorker(pod *corev1.PodSpec, replicas int, inst *spsInstance) bool {
 	if inst.InstanceCount == 0 && replicas > 0 {
 		inst.InstanceCount = replicas
 	}
+	hasWorker := false
 	for _, c := range slices.Concat(pod.InitContainers, pod.Containers) {
 		switch c.Name {
 		case "pathways-worker":
+			hasWorker = true
 			if c.Image != "" {
 				inst.ServerImage = c.Image
 			}
@@ -174,6 +178,7 @@ func parseSPSClientTargetWorker(pod *corev1.PodSpec, replicas int, inst *spsInst
 			inst.HasSidecar = true
 		}
 	}
+	return hasWorker
 }
 
 func spsVirtualSlices(instanceType string, n int) string {
