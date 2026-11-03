@@ -15,7 +15,6 @@
 package job
 
 import (
-	"fmt"
 	"hpc-toolkit/pkg/orchestrator"
 
 	"github.com/spf13/cobra"
@@ -45,14 +44,6 @@ func init() {
 }
 
 func runInspectCmd(cmd *cobra.Command, args []string) error {
-	if inspectFilter != "" {
-		if inspectFilter != "pathways-sps" {
-			return fmt.Errorf("invalid value for --filter: %s. Allowed values are: pathways-sps", inspectFilter)
-		}
-		if inspectWorkloadName == "" {
-			return fmt.Errorf("--filter=%s requires --name", inspectFilter)
-		}
-	}
 	opts := orchestrator.InspectOptions{
 		ProjectID:       projectID,
 		ClusterName:     clusterName,
@@ -62,6 +53,9 @@ func runInspectCmd(cmd *cobra.Command, args []string) error {
 		OutputPath:      inspectOutputPath,
 		Show:            inspectShow,
 		Filter:          inspectFilter,
+	}
+	if err := opts.Validate(); err != nil {
+		return err
 	}
 
 	return orc.InspectCluster(opts)

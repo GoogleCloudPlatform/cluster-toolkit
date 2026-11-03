@@ -109,12 +109,14 @@ func TestInspectCmd_SPS(t *testing.T) {
 	}()
 
 	tests := []struct {
-		name    string
-		args    []string
-		wantErr string
+		name       string
+		args       []string
+		wantOutput string
+		wantShow   bool
+		wantErr    string
 	}{
 		{name: "passes --filter=pathways-sps", args: []string{"--name", "sps-v6e", "--filter", "pathways-sps"}},
-		{name: "passes --filter=pathways-sps with --output and --show", args: []string{"--name", "sps-v6e", "--filter=pathways-sps", "--output", "/tmp/x.log", "--show"}},
+		{name: "passes --filter=pathways-sps with --output and --show", args: []string{"--name", "sps-v6e", "--filter=pathways-sps", "--output", "/tmp/x.log", "--show"}, wantOutput: "/tmp/x.log", wantShow: true},
 		{name: "needs --name", args: []string{"--filter=pathways-sps"}, wantErr: "--filter=pathways-sps requires --name"},
 		{name: "rejects unknown filter", args: []string{"--name", "sps-v6e", "--filter=unknown"}, wantErr: "invalid value for --filter: unknown. Allowed values are: pathways-sps"},
 	}
@@ -136,8 +138,10 @@ func TestInspectCmd_SPS(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if mockOrc.inspectOpts.Filter != "pathways-sps" || mockOrc.inspectOpts.WorkloadName != "sps-v6e" {
-				t.Errorf("InspectOptions = %+v, want Filter=pathways-sps for sps-v6e", mockOrc.inspectOpts)
+			if mockOrc.inspectOpts.Filter != "pathways-sps" || mockOrc.inspectOpts.WorkloadName != "sps-v6e" ||
+				mockOrc.inspectOpts.OutputPath != tc.wantOutput || mockOrc.inspectOpts.Show != tc.wantShow {
+				t.Errorf("InspectOptions = %+v, want Filter=pathways-sps WorkloadName=sps-v6e OutputPath=%q Show=%v",
+					mockOrc.inspectOpts, tc.wantOutput, tc.wantShow)
 			}
 		})
 	}

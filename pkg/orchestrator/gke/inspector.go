@@ -60,13 +60,8 @@ func (w *inspectWriter) runAndLog(description string, command string, args ...st
 // InspectCluster runs diagnostic checks on the GKE cluster and writes them to a log file.
 // With opts.Filter == "pathways-sps" it writes only the SPS instance summary for opts.WorkloadName.
 func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error {
-	if opts.Filter != "" {
-		if opts.Filter != "pathways-sps" {
-			return fmt.Errorf("invalid value for --filter: %s. Allowed values are: pathways-sps", opts.Filter)
-		}
-		if opts.WorkloadName == "" {
-			return fmt.Errorf("--filter=%s requires --name", opts.Filter)
-		}
+	if err := opts.Validate(); err != nil {
+		return err
 	}
 	g.namespace = opts.GKENamespace
 	// 1. Setup Kubectl (Critical, fail fast)
@@ -490,7 +485,7 @@ func (g *GKEOrchestrator) inspectSPSInstance(name, ns string) (spsInstanceSummar
 	}
 	if summary.Status == "Running" {
 		logs := g.kubectl("logs", "-n", ns, "-l", "jobset.sigs.k8s.io/jobset-name="+name+",jobset.sigs.k8s.io/replicatedjob-name=pathways-head",
-			"-c", "pathways-rm", "--tail=500", kubectlReadTimeout)
+			"-c", "pathways-rm", "--tail=-1", kubectlReadTimeout)
 		if logs.ExitCode == 0 {
 			if ready := lastReadySlices(logs.Stdout); ready != "" {
 				summary.ReadySlices = ready
@@ -519,18 +514,17 @@ func (g *GKEOrchestrator) probeSPSSidecarVersions(name, ns string, s *spsInstanc
 	workerPods := strings.Fields(pods.Stdout)
 	for _, pod := range workerPods[:min(len(workerPods), 3)] {
 		res := g.kubectlWithTimeout(10*time.Second, "exec", "-n", ns, "pod/"+pod, "-c", s.SidecarName, "--", "python3", "-c", spsSidecarVersionScript)
-		if res.ExitCode == 0 {
-			applyProbedVersions(res.Stdout, s)
+		if res.ExitCode == 0 && applyProbedVersions(res.Stdout, s) {
 			return
 		}
 	}
 }
 
-func applyProbedVersions(stdout string, s *spsInstanceSummary) {
+func applyProbedVersions(stdout string, s *spsInstanceSummary) bool {
 	lines := strings.Split(strings.TrimSpace(stdout), "\n")
 	parts := strings.Split(strings.TrimSpace(lines[len(lines)-1]), ",")
 	if len(parts) != 3 || parts[0] == "" || parts[1] == "" {
-		return
+		return false
 	}
 	s.SidecarPython = strings.TrimSpace(parts[0])
 	jax := strings.TrimSpace(parts[1])
@@ -538,6 +532,7 @@ func applyProbedVersions(stdout string, s *spsInstanceSummary) {
 		jax = fmt.Sprintf("%s (jaxlib %s)", jax, jaxlib)
 	}
 	s.SidecarJAX = jax
+	return true
 }
 
 // logSPSSummaryIfInstance adds the SPS summary to the top of the full inspect report when name is an SPS instance.

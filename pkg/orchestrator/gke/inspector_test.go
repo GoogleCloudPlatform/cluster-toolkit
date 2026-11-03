@@ -395,7 +395,7 @@ func TestParseSPSInstance(t *testing.T) {
 		},
 		{
 			name: "finished instance",
-			json: spsJobSetJSON(spsRMContainer, "worker", spsWorkerContainer, `{"terminalState":"Failed"}`),
+			json: spsJobSetJSON(spsRMContainer, "worker", spsWorkerContainer, `{"terminalState":"Failed","replicatedJobsStatus":[{"name":"pathways-head","ready":1},{"name":"worker","ready":2}]}`),
 			want: spsInstanceSummary{Name: "sps", Namespace: "ns", Status: "Failed", InstanceType: "tpuv6e:2x4", InstanceCount: 2,
 				ServerImage: "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:20260901-jax_0.11.1"},
 		},
@@ -504,12 +504,12 @@ func TestInspectCluster_SPS(t *testing.T) {
 	responses := defaultMockResponses("c", "us-central1-a", "p")
 	responses["kubectl get jobset sps-v6e -n default -o json --request-timeout=10s"] = []shell.CommandResult{{ExitCode: 0,
 		Stdout: spsJobSetJSON(spsRMContainer, "worker", spsWorkerContainer+","+spsSidecarContainer, spsRunningStatus)}}
-	responses["kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=sps-v6e,jobset.sigs.k8s.io/replicatedjob-name=pathways-head -c pathways-rm --tail=500 --request-timeout=10s"] = []shell.CommandResult{{ExitCode: 0,
+	responses["kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=sps-v6e,jobset.sigs.k8s.io/replicatedjob-name=pathways-head -c pathways-rm --tail=-1 --request-timeout=10s"] = []shell.CommandResult{{ExitCode: 0,
 		Stdout: "2/2 Pathways Slices Now Ready\n"}}
 	responses["kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=sps-v6e,jobset.sigs.k8s.io/replicatedjob-name!=pathways-head --field-selector=status.phase=Running -o jsonpath={.items[*].metadata.name} --request-timeout=10s"] = []shell.CommandResult{{ExitCode: 0,
 		Stdout: "sps-v6e-worker-0-0-bad sps-v6e-worker-0-1-def"}}
-	responses["kubectl exec -n default pod/sps-v6e-worker-0-0-bad -c colocated-python-sidecar -- python3 -c "+spsSidecarVersionScript] = []shell.CommandResult{{ExitCode: 1,
-		Stderr: "container not ready"}}
+	responses["kubectl exec -n default pod/sps-v6e-worker-0-0-bad -c colocated-python-sidecar -- python3 -c "+spsSidecarVersionScript] = []shell.CommandResult{{ExitCode: 0,
+		Stdout: "malformed output"}}
 	responses["kubectl exec -n default pod/sps-v6e-worker-0-1-def -c colocated-python-sidecar -- python3 -c "+spsSidecarVersionScript] = []shell.CommandResult{{ExitCode: 0,
 		Stdout: "warning: sitecustomize diagnostic\n3.12,0.11.1,0.11.1\n"}}
 	orc := newTestGKEOrchestrator(NewMockExecutor(responses))
