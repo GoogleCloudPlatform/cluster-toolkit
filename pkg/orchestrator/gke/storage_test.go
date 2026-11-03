@@ -4038,3 +4038,109 @@ func TestVerifyStorageGateways_NoGatewaysIsANoOp(t *testing.T) {
 	}
 	assertDeleted(t, mock, nil, nil)
 }
+
+func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
+	tests := []struct {
+		name          string
+		mount         string
+		namespace     string
+		mockResponses map[string][]shell.CommandResult
+		wantGCSFuse   bool
+	}{
+		{
+			name:  "static PVC bound to gcsfuse CSI PV enables gke-gcsfuse annotation",
+			mount: "ub-verify-dataset-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get pvc ub-verify-dataset-pvc -n default --ignore-not-found -o jsonpath={.spec.volumeName}{\"\\t\"}{.spec.storageClassName}": {
+					{ExitCode: 0, Stdout: "ub-verify-dataset-pv\t"},
+				},
+				"kubectl get pv ub-verify-dataset-pv --ignore-not-found -o jsonpath={.spec.csi.driver}": {
+					{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
+				},
+			},
+			wantGCSFuse: true,
+		},
+		{
+			name:      "unbound PVC with built-in gcsfusecsi-training StorageClass in custom namespace",
+			mount:     "profile-pvc;/data;ro",
+			namespace: "team-ns",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get pvc profile-pvc -n team-ns --ignore-not-found -o jsonpath={.spec.volumeName}{\"\\t\"}{.spec.storageClassName}": {
+					{ExitCode: 0, Stdout: "\tgcsfusecsi-training"},
+				},
+			},
+			wantGCSFuse: true,
+		},
+		{
+			name:  "PVC with custom StorageClass provisioned by gcsfuse.csi.storage.gke.io",
+			mount: "custom-sc-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get pvc custom-sc-pvc -n default --ignore-not-found -o jsonpath={.spec.volumeName}{\"\\t\"}{.spec.storageClassName}": {
+					{ExitCode: 0, Stdout: "\tmy-custom-gcsfuse-sc"},
+				},
+				"kubectl get storageclass my-custom-gcsfuse-sc --ignore-not-found -o jsonpath={.provisioner}": {
+					{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
+				},
+			},
+			wantGCSFuse: true,
+		},
+		{
+			name:        "toolkit gcluster-gcsfuse-* PVC name enables gke-gcsfuse annotation without kubectl lookup",
+			mount:       "gcluster-gcsfuse-mybucket-training-abc123;/data;ro",
+			wantGCSFuse: true,
+		},
+		{
+			name:  "non-GCSFuse PVC (Persistent Disk CSI) leaves GCSFuseEnabled false",
+			mount: "pd-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get pvc pd-pvc -n default --ignore-not-found -o jsonpath={.spec.volumeName}{\"\\t\"}{.spec.storageClassName}": {
+					{ExitCode: 0, Stdout: "pvc-12345\tstandard-rwo"},
+				},
+				"kubectl get pv pvc-12345 --ignore-not-found -o jsonpath={.spec.csi.driver}": {
+					{ExitCode: 0, Stdout: "pd.csi.storage.gke.io"},
+				},
+				"kubectl get storageclass standard-rwo --ignore-not-found -o jsonpath={.provisioner}": {
+					{ExitCode: 0, Stdout: "pd.csi.storage.gke.io"},
+				},
+			},
+			wantGCSFuse: false,
+		},
+		{
+			name:  "missing PVC leaves GCSFuseEnabled false without failing",
+			mount: "nonexistent-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get pvc nonexistent-pvc -n default --ignore-not-found -o jsonpath={.spec.volumeName}{\"\\t\"}{.spec.storageClassName}": {
+					{ExitCode: 0, Stdout: ""},
+				},
+			},
+			wantGCSFuse: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orc := newTestGKEOrchestrator(NewMockExecutor(tc.mockResponses))
+			if tc.namespace != "" {
+				orc.namespace = tc.namespace
+			}
+			sm := &StorageManager{orchestrator: orc}
+
+			infos, _, err := sm.ProcessMounts([]string{tc.mount}, orchestrator.JobDefinition{})
+			if err != nil {
+				t.Fatalf("ProcessMounts() unexpected error: %v", err)
+			}
+			if len(infos) != 1 {
+				t.Fatalf("expected 1 MountInfo, got %d", len(infos))
+			}
+			if infos[0].NeedsGCSFuseSidecar != tc.wantGCSFuse {
+				t.Errorf("MountInfo.NeedsGCSFuseSidecar = %v, want %v", infos[0].NeedsGCSFuseSidecar, tc.wantGCSFuse)
+			}
+
+			opts := &ManifestOptions{}
+			sm.AddVolumeOptions(opts, infos)
+			if opts.GCSFuseEnabled != tc.wantGCSFuse {
+				t.Errorf("ManifestOptions.GCSFuseEnabled = %v, want %v", opts.GCSFuseEnabled, tc.wantGCSFuse)
+			}
+		})
+	}
+}

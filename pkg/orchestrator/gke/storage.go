@@ -74,6 +74,7 @@ const (
 	// gatewayReleaseTimeout bounds how long submit waits for a gateway that is still being deleted.
 	gatewayReleaseTimeout = 2 * time.Minute
 
+	gcsFuseCSIDriver           = "gcsfuse.csi.storage.gke.io"
 	servingProfileStorageClass = "gcsfusecsi-serving"
 
 	// minGCSFuseProfileGKEVersion is the first GKE version with storage profile StorageClasses.
@@ -143,8 +144,56 @@ func (sm *StorageManager) dispatchMount(pm parsedMount, idx int, job orchestrato
 	case strings.HasPrefix(pm.Src, "gs://") && pm.Profile != "":
 		return sm.generateGCSFuseProfileResources(pm, idx, job, state)
 	default:
-		return buildPodLevelMount(pm, idx), "", nil
+		info := buildPodLevelMount(pm, idx)
+		if info.Type == "pvc" && sm.isGCSFuseBackedPVC(info.Source, job) {
+			info.NeedsGCSFuseSidecar = true
+		}
+		return info, "", nil
 	}
+}
+
+// isGCSFuseBackedPVC reports whether an existing PVC is backed by the GKE GCSFuse CSI driver
+// (either bound to a PV with spec.csi.driver=gcsfuse.csi.storage.gke.io or using a GCSFuse StorageClass),
+// which requires the pod to carry the gke-gcsfuse/volumes: "true" webhook annotation.
+func (sm *StorageManager) isGCSFuseBackedPVC(pvcName string, job orchestrator.JobDefinition) bool {
+	if strings.HasPrefix(pvcName, gcsFuseGatewayPrefix+"-") {
+		return true
+	}
+	if sm.orchestrator == nil || sm.orchestrator.executor == nil {
+		return false
+	}
+
+	ns, err := sm.resolveNamespace(job)
+	if err != nil || ns == "" {
+		ns = "default"
+	}
+
+	res := sm.orchestrator.kubectl("get", "pvc", pvcName, "-n", ns, "--ignore-not-found",
+		"-o", `jsonpath={.spec.volumeName}{"\t"}{.spec.storageClassName}`)
+	if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) == "" {
+		return false
+	}
+
+	volumeName, storageClassName, _ := strings.Cut(strings.Trim(res.Stdout, "\r\n"), "\t")
+	volumeName = strings.TrimSpace(volumeName)
+	storageClassName = strings.TrimSpace(storageClassName)
+
+	if storageClassName != "" && gcsFuseProfileStorageClasses[strings.ToLower(storageClassName)] != "" {
+		return true
+	}
+	if volumeName != "" {
+		pvRes := sm.orchestrator.kubectl("get", "pv", volumeName, "--ignore-not-found", "-o", "jsonpath={.spec.csi.driver}")
+		if pvRes.ExitCode == 0 && strings.TrimSpace(pvRes.Stdout) == gcsFuseCSIDriver {
+			return true
+		}
+	}
+	if storageClassName != "" {
+		scRes := sm.orchestrator.kubectl("get", "storageclass", storageClassName, "--ignore-not-found", "-o", "jsonpath={.provisioner}")
+		if scRes.ExitCode == 0 && strings.TrimSpace(scRes.Stdout) == gcsFuseCSIDriver {
+			return true
+		}
+	}
+	return false
 }
 
 func buildPodLevelMount(pm parsedMount, idx int) MountInfo {
@@ -1021,7 +1070,7 @@ func buildVolumeSpec(v MountInfo) map[string]interface{} {
 			volumeAttributes[key] = value
 		}
 		spec["csi"] = map[string]interface{}{
-			"driver":           "gcsfuse.csi.storage.gke.io",
+			"driver":           gcsFuseCSIDriver,
 			"readOnly":         v.ReadOnly,
 			"volumeAttributes": volumeAttributes,
 		}
