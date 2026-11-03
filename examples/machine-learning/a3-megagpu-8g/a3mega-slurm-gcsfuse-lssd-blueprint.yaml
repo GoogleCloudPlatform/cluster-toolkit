@@ -768,7 +768,8 @@ deployment_groups:
       disk_type: pd-ssd
       # Hardware-locked: the multi-NIC RDMA/GPUDirect networking and accelerator
       # settings in this blueprint are specific to this shape. To use a different
-      # machine type, copy this blueprint (ai_assisted: true) and change it there.
+      # accelerator or machine series, switch to the matching blueprint in examples/
+      # (run './gcluster explain' to find it) instead of changing machine_type here.
       machine_type: a3-megagpu-8g
       enable_public_ips: false
       node_conf:

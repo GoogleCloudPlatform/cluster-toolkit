@@ -17,7 +17,9 @@ package config
 import (
 	"errors"
 	"fmt"
+	"path"
 	"regexp"
+	"slices"
 	"strings"
 
 	"hpc-toolkit/pkg/logging"
@@ -27,7 +29,6 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/convert"
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 )
 
 const (
@@ -37,6 +38,56 @@ const (
 )
 
 var validLabelValueRegex = regexp.MustCompile("[^a-z0-9_-]")
+
+var autoInjectedGlobals = map[string]bool{
+	"project_id":      true,
+	"deployment_name": true,
+	"region":          true,
+	"zone":            true,
+	"labels":          true,
+}
+
+var genericOutputNames = map[string]bool{
+	"capacity_gb":      true,
+	"gcp_service_list": true,
+	"id":               true,
+	"instance_name":    true,
+	"mode":             true,
+	"name":             true,
+	"self_link":        true,
+	"type":             true,
+}
+
+var integrationInputNames = map[string]bool{
+	"network_storage":           true,
+	"partitions":                true,
+	"nodeset":                   true,
+	"nodeset_dyn":               true,
+	"nodeset_tpu":               true,
+	"login_nodes":               true,
+	"runners":                   true,
+	"startup_script":            true,
+	"compute_startup_script":    true,
+	"controller_startup_script": true,
+}
+
+// IsAutoInjectedGlobal reports whether name is a top-level deployment variable
+// automatically injected into modules by gcluster.
+func IsAutoInjectedGlobal(name string) bool {
+	return autoInjectedGlobals[name]
+}
+
+// IsGenericOutputName reports whether name is too generic for name-based
+// output-to-input module wiring suggestions.
+func IsGenericOutputName(name string) bool {
+	return genericOutputNames[name]
+}
+
+// IsIntegrationInputName reports whether name is a common optional module
+// integration input wired via `use:` in Cluster Toolkit blueprints.
+func IsIntegrationInputName(name string) bool {
+	return integrationInputNames[name]
+}
 
 func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
 	mi := m.InfoOrDie()
@@ -49,7 +100,7 @@ func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
 				errs.At(ip,
 					HintError{
 						Err:  fmt.Errorf("a required setting %q is missing from a module %q", input.Name, m.ID),
-						Hint: fmt.Sprintf("%q description: %s", input.Name, input.Description)})
+						Hint: buildMissingInputHint(input, m, bp)})
 			}
 			continue
 		}
@@ -57,6 +108,221 @@ func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
 		errs.At(ip, checkInputValueMatchesType(m.Settings.Get(input.Name), input, bp))
 	}
 	return errs.OrNil()
+}
+
+func buildMissingInputHint(input modulereader.VarInfo, m Module, bp Blueprint) string {
+	base := fmt.Sprintf("%q description: %s", input.Name, input.Description)
+	useHint := missingInputUseHint(input.Name, m, bp)
+	if useHint == "" {
+		return base
+	}
+	if strings.HasSuffix(base, "\n") {
+		return base + useHint
+	}
+	return base + " " + useHint
+}
+
+func missingInputUseHint(inputName string, m Module, bp Blueprint) string {
+	if autoInjectedGlobals[inputName] || genericOutputNames[inputName] {
+		return ""
+	}
+	if candIDs := findBlueprintProviders(inputName, m, bp); len(candIDs) > 0 {
+		return formatBlueprintProvidersHint(candIDs, m)
+	}
+	if sources := findEmbeddedProviders(inputName, m, bp); len(sources) > 0 {
+		return formatEmbeddedProvidersHint(sources, m)
+	}
+	return ""
+}
+
+// IsTrueProviderOutput reports whether outputName is a non-generic, non-global
+// output of info that originates from the module rather than echoing an input
+// (allowing root providers with no required non-global inputs to expose
+// optional name-override outputs).
+func IsTrueProviderOutput(info modulereader.ModuleInfo, outputName string) bool {
+	if autoInjectedGlobals[outputName] || genericOutputNames[outputName] {
+		return false
+	}
+	if !slices.ContainsFunc(info.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == outputName }) {
+		return false
+	}
+	allInputs, hasRequiredNonGlobalInputs := analyzeModuleInputs(info)
+	if !allInputs[outputName] {
+		return true
+	}
+	return !hasRequiredNonGlobalInputs && !integrationInputNames[outputName]
+}
+
+func analyzeModuleInputs(info modulereader.ModuleInfo) (map[string]bool, bool) {
+	allInputs := make(map[string]bool, len(info.Inputs))
+	injectedID := info.Metadata.Ghpc.InjectModuleId
+	hasRequiredNonGlobal := false
+	for _, in := range info.Inputs {
+		allInputs[in.Name] = true
+		if in.Required && !autoInjectedGlobals[in.Name] && in.Name != injectedID {
+			hasRequiredNonGlobal = true
+		}
+	}
+	return allInputs, hasRequiredNonGlobal
+}
+
+func findBlueprintProviders(inputName string, m Module, bp Blueprint) []string {
+	var candidates []string
+	seen := make(map[ModuleID]bool)
+	for _, g := range eligibleCandidateGroups(bp, m) {
+		for _, cand := range g.Modules {
+			if seen[cand.ID] || !isBlueprintCandidateProvider(cand, m, inputName) {
+				continue
+			}
+			seen[cand.ID] = true
+			candidates = append(candidates, string(cand.ID))
+		}
+	}
+	return candidates
+}
+
+func eligibleCandidateGroups(bp Blueprint, m Module) []Group {
+	idx := slices.IndexFunc(bp.Groups, func(g Group) bool { return g.ModuleIndex(m.ID) != -1 })
+	if idx < 0 {
+		return bp.Groups
+	}
+	if m.Kind == PackerKind {
+		return bp.Groups[:idx]
+	}
+	return bp.Groups[:idx+1]
+}
+
+func isBlueprintCandidateProvider(cand Module, consumer Module, inputName string) bool {
+	if cand.ID == "" || cand.ID == consumer.ID || cand.Kind == PackerKind {
+		return false
+	}
+	if slices.Contains(consumer.Use, cand.ID) {
+		return false
+	}
+	candInfo, err := cand.Info()
+	if err != nil {
+		return false
+	}
+	return IsTrueProviderOutput(candInfo, inputName)
+}
+
+func formatBlueprintProvidersHint(candIDs []string, m Module) string {
+	if len(candIDs) == 1 {
+		return fmt.Sprintf(
+			"Consider adding module %q to the \"use\" list of module %q (e.g. use: %s).",
+			candIDs[0], m.ID, formatUseListExample(m.Use, candIDs[0]))
+	}
+	return fmt.Sprintf(
+		"Consider adding one of modules %s to the \"use\" list of module %q.",
+		formatQuotedList(candIDs), m.ID)
+}
+
+func formatUseListExample(existing ModuleIDs, addID string) string {
+	parts := make([]string, 0, len(existing)+1)
+	for _, id := range existing {
+		parts = append(parts, string(id))
+	}
+	parts = append(parts, addID)
+	return "[" + strings.Join(parts, ", ") + "]"
+}
+
+func formatQuotedList(items []string) string {
+	quoted := make([]string, len(items))
+	for i, item := range items {
+		quoted[i] = fmt.Sprintf("%q", item)
+	}
+	return "[" + strings.Join(quoted, ", ") + "]"
+}
+
+func findEmbeddedProviders(inputName string, consumer Module, bp Blueprint) []string {
+	if sourcereader.ModuleFS == nil {
+		return nil
+	}
+	var matches []string
+	for _, root := range []string{"modules", "community/modules"} {
+		catEntries, err := sourcereader.ModuleFS.ReadDir(root)
+		if err != nil {
+			continue
+		}
+		for _, catDir := range catEntries {
+			if !catDir.IsDir() || catDir.Name() == "internal" {
+				continue
+			}
+			catPath := path.Join(root, catDir.Name())
+			matches = append(matches, scanEmbeddedCategoryProviders(catPath, inputName, consumer, bp)...)
+		}
+	}
+	slices.Sort(matches)
+	return matches
+}
+
+func scanEmbeddedCategoryProviders(catPath string, inputName string, consumer Module, bp Blueprint) []string {
+	modEntries, err := sourcereader.ModuleFS.ReadDir(catPath)
+	if err != nil {
+		return nil
+	}
+	var matches []string
+	for _, modDir := range modEntries {
+		if !modDir.IsDir() {
+			continue
+		}
+		modPath := path.Join(catPath, modDir.Name())
+		if isEmbeddedProviderCandidate(modPath, inputName, consumer.Source, bp) {
+			matches = append(matches, modPath)
+		}
+	}
+	return matches
+}
+
+func isEmbeddedProviderCandidate(modPath string, inputName string, consumerSource string, bp Blueprint) bool {
+	if isSameModuleSource(consumerSource, modPath, bp) || !isEmbeddedTerraformModule(modPath) {
+		return false
+	}
+	info, err := modulereader.GetModuleInfo(modPath, TerraformKind.String())
+	if err != nil || info.Metadata.Ghpc.DeprecationDate != "" {
+		return false
+	}
+	return IsTrueProviderOutput(info, inputName)
+}
+
+func isEmbeddedTerraformModule(modPath string) bool {
+	files, err := sourcereader.ModuleFS.ReadDir(modPath)
+	if err != nil {
+		return false
+	}
+	hasTF := false
+	for _, f := range files {
+		if f.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(f.Name(), ".pkr.hcl") {
+			return false
+		}
+		if strings.HasSuffix(f.Name(), ".tf") {
+			hasTF = true
+		}
+	}
+	return hasTF
+}
+
+func isSameModuleSource(consumerSource string, modPath string, bp Blueprint) bool {
+	clean := strings.TrimPrefix(sourcereader.ToSlash(consumerSource), "./")
+	return clean == modPath || clean == strings.TrimPrefix(sourcereader.ToSlash(bp.transformSource(modPath)), "./")
+}
+
+func formatEmbeddedProvidersHint(sources []string, m Module) string {
+	groupPlacement := "an earlier or same deployment group"
+	if m.Kind == PackerKind {
+		groupPlacement = "an earlier deployment group"
+	}
+	if len(sources) == 1 {
+		return fmt.Sprintf(
+			"Module source %q provides this output; add it to %s and reference its id in the \"use\" list of module %q.",
+			sources[0], groupPlacement, m.ID)
+	}
+	return fmt.Sprintf(
+		"Module sources %s provide this output; add one to %s and reference its id in the \"use\" list of module %q.",
+		formatQuotedList(sources), groupPlacement, m.ID)
 }
 
 func attemptEvalModuleInput(val cty.Value, bp Blueprint) (cty.Value, bool) {

@@ -18,7 +18,7 @@ spec:
     replicatedJob: pathways-head
   startupPolicy:
     startupPolicyOrder: InOrder
-{{- if not .Pathways.Headless}}
+{{- if .PathwaysWorkloadEnabled}}
   successPolicy:
     operator: All
     targetReplicatedJobs:
@@ -70,7 +70,7 @@ spec:
             imagePullSecrets:
 {{(StructuralData .ImagePullSecrets)}}
 {{- end }}
-{{- if not .Pathways.Headless}}
+{{- if .PathwaysWorkloadEnabled}}
             initContainers:
 {{- else }}
             containers:
@@ -111,7 +111,7 @@ spec:
               - name: {{ .Name }}
                 value: {{ printf "%q" .Value }}
               {{- end }}
-              {{- if not .Pathways.Headless}}
+              {{- if .PathwaysWorkloadEnabled}}
               restartPolicy: Always
               {{- end }}
               resources:
@@ -121,6 +121,7 @@ spec:
                 requests:
                   cpu: "2"
                   memory: "8Gi"
+{{- if .PathwaysProxyEnabled }}
             - name: pathways-proxy
               image: {{.Pathways.ProxyServerImage}}
               imagePullPolicy: Always
@@ -147,7 +148,7 @@ spec:
               - name: {{ .Name }}
                 value: {{ printf "%q" .Value }}
               {{- end }}
-              {{- if not .Pathways.Headless}}
+              {{- if .PathwaysWorkloadEnabled}}
               restartPolicy: Always
               {{- end }}
               resources:
@@ -157,7 +158,8 @@ spec:
                 requests:
                   cpu: "8"
                   memory: "32Gi"
-            {{- if not .Pathways.Headless}}
+{{- end }}
+            {{- if .PathwaysWorkloadEnabled}}
             containers:
             - name: workload-container
               image: {{.FullImageName}}
@@ -203,7 +205,7 @@ spec:
                 hostPath:
                   path: /tmp
                   type: DirectoryOrCreate
-{{- if not .Pathways.Headless }}
+{{- if .PathwaysWorkloadEnabled }}
               - name: dshm
                 emptyDir:
                   medium: Memory

@@ -80,13 +80,13 @@ func resolveExplicitSettingPath(bp config.Blueprint, groupIndex int, modIdx int,
 }
 
 // evaluateAndFlatten converts a cty.Value into a slice of cty.Value elements.
-// If it's a list/tuple, returns elements; otherwise returns single-item slice.
+// If it is a list, tuple, or set, returns its elements; otherwise returns a single-item slice.
 func evaluateAndFlatten(val cty.Value) []cty.Value {
 	if val == cty.NilVal || !val.IsKnown() || val.IsNull() {
 		return []cty.Value{val}
 	}
 	val, _ = val.Unmark()
-	if val.Type().IsListType() || val.Type().IsTupleType() {
+	if val.Type().IsListType() || val.Type().IsTupleType() || val.Type().IsSetType() {
 		var values []cty.Value
 		for it := val.ElementIterator(); it.Next(); {
 			_, v := it.Element()

@@ -671,6 +671,8 @@ type jobSetTemplateData struct {
 	GCSFuseEnabled                bool
 	HostNetworkEnabled            bool
 	Pathways                      orchestrator.PathwaysJobDefinition
+	PathwaysProxyEnabled          bool // pathways-head runs pathways-proxy (false for an SPS server)
+	PathwaysWorkloadEnabled       bool // pathways-head runs the user's workload (false for headless and SPS)
 	ExclusiveTopologyAnnotation   string
 	Verbose                       bool
 	Env                           []EnvVar

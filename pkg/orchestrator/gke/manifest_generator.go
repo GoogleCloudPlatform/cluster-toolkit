@@ -578,6 +578,9 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 	if err := validatePathwaysMTCManifest(buf.String(), opts); err != nil {
 		return "", err
 	}
+	if err := validatePathwaysSPSManifest(buf.String(), opts); err != nil {
+		return "", err
+	}
 
 	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
 	if err := ValidateJobSetManifest(manifest); err != nil {
@@ -665,6 +668,27 @@ func validatePathwaysMTCManifest(jobSet string, opts ManifestOptions) error {
 	return nil
 }
 
+// validatePathwaysSPSManifest checks that an SPS server's pathways-head runs only pathways-rm,
+// which a pathways_jobset.tmpl extracted from an older gcluster version does not do.
+func validatePathwaysSPSManifest(jobSet string, opts ManifestOptions) error {
+	if !opts.Pathways.DeploySPS {
+		return nil
+	}
+	_, headSpec, err := extractPathwaysPodSpecs(jobSet)
+	if err != nil {
+		return err
+	}
+	if headSpec == nil {
+		return fmt.Errorf("--pathways-deploy-sps is set but the Pathways manifest has no pathways-head replicatedJob. %s", pathwaysTemplateExtractHint)
+	}
+	for _, c := range slices.Concat(headSpec.InitContainers, headSpec.Containers) {
+		if c.Name == "pathways-proxy" || strings.HasPrefix(c.Name, "workload-container") {
+			return fmt.Errorf("--pathways-deploy-sps is set but pathways-head runs container %q; an SPS server runs only pathways-rm. %s", c.Name, pathwaysTemplateExtractHint)
+		}
+	}
+	return nil
+}
+
 func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
 	exclusiveTopology := ""
 	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
@@ -680,6 +704,9 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 	var proxyArgsList []string
 	if opts.Pathways.ProxyArgs != "" {
 		proxyArgsList = strings.Fields(opts.Pathways.ProxyArgs)
+	}
+	if opts.Pathways.ColocatedPythonSidecarImage != "" {
+		proxyArgsList = withSidecarNameArg(proxyArgsList)
 	}
 	var serverArgsList []string
 	if opts.Pathways.ServerArgs != "" {
@@ -743,6 +770,8 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		GCSFuseEnabled:                opts.GCSFuseEnabled,
 		HostNetworkEnabled:            isTPU || isGPU,
 		Pathways:                      opts.Pathways,
+		PathwaysProxyEnabled:          !opts.Pathways.DeploySPS,
+		PathwaysWorkloadEnabled:       !opts.Pathways.Headless && !opts.Pathways.DeploySPS,
 		ExclusiveTopologyAnnotation:   exclusiveTopology,
 		Verbose:                       opts.Verbose,
 		Env:                           sortedEnvVars(opts.Env),
@@ -772,6 +801,22 @@ func withDefaultCoordinatorEnv(workloadName string, userEnv map[string]string) m
 	merged["WORKERS_0_HOSTNAME"] = coordinatorHost
 	maps.Copy(merged, userEnv)
 	return merged
+}
+
+// withSidecarNameArg appends --sidecar_name=external to the pathways-proxy
+// args; call it when the colocated Python sidecar is enabled. Without it the
+// proxy does not set up the sidecar connection on the workers, so the sidecar
+// receives no work. A --sidecar_name the user already passed via
+// --pathways-proxy-args is kept as is.
+func withSidecarNameArg(proxyArgs []string) []string {
+	for _, arg := range proxyArgs {
+		// absl accepts both --flag and -flag, with or without "=value".
+		name := strings.TrimLeft(arg, "-")
+		if name == "sidecar_name" || strings.HasPrefix(name, "sidecar_name=") {
+			return proxyArgs
+		}
+	}
+	return append(proxyArgs, "--sidecar_name=external")
 }
 
 func sortedEnvVars(envMap map[string]string) []EnvVar {
