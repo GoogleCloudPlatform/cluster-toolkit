@@ -303,6 +303,7 @@ limitations under the License.
 | <a name="module_install_nvidia_dra_driver"></a> [install\_nvidia\_dra\_driver](#module\_install\_nvidia\_dra\_driver) | ./helm_install | n/a |
 | <a name="module_install_slice_controller"></a> [install\_slice\_controller](#module\_install\_slice\_controller) | ./helm_install | n/a |
 | <a name="module_kubectl_apply_manifests"></a> [kubectl\_apply\_manifests](#module\_kubectl\_apply\_manifests) | ./helm_install | n/a |
+| <a name="module_kueue_dra_version_check"></a> [kueue\_dra\_version\_check](#module\_kueue\_dra\_version\_check) | ../../internal/semver_compare | n/a |
 | <a name="module_kueue_pods_ready_default_on_check"></a> [kueue\_pods\_ready\_default\_on\_check](#module\_kueue\_pods\_ready\_default\_on\_check) | ../../internal/semver_compare | n/a |
 
 ## Resources
