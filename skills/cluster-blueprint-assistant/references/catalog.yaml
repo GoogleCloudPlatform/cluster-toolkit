@@ -2013,6 +2013,93 @@ blueprints:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [network, debug_partition, compute_partition, homefs, slurm_login, kms_key_iam]
     settings: [enable_controller_public_ips]
+- path: community/examples/remote-desktop/hpc-slurm-remote-desktop-iap.yaml
+  blueprint_name: hpc-slurm-remote-desktop-iap
+  scheduler: slurm
+  description: "These blueprints deploy browser-based Linux desktops alongside a Slurm cluster, using the novnc-runtime and novnc-desktop modules. Users reach an XFCE session over noVNC in a browser, with sessions created per user from their OS Login..."
+  machine_types: [n2-standard-4, n2-standard-8]
+  required_services: [compute.googleapis.com, iam.googleapis.com, iap.googleapis.com, storage.googleapis.com]
+  vars:
+    compute_machine_type: n2-standard-4
+    compute_startup_scripts_timeout: 1800
+    controller_machine_type: e2-standard-4
+    controller_startup_scripts_timeout: 1800
+    deployment_name: hpc-slurm-remote-desktop-iap
+    desktop_address: null
+    desktop_domain: null
+    desktop_iap_members: []
+    desktop_network_tag: "$(\"${vars.deployment_name}-desktop\")"
+    enable_slurm_auth: true
+    homefs_name: "$(\"${vars.deployment_name}-homefs\")"
+    login_desktop_backend: "$(\"${vars.deployment_name}-login-desktop\")"
+    login_desktop_host: "$(\"login.${vars.desktop_domain}\")"
+    login_machine_type: n2-standard-4
+    login_startup_scripts_timeout: 1800
+    project_id: null
+    region: us-central1
+    shared_root: /shared
+    sharedfs_name: "$(\"${vars.deployment_name}-sharedfs\")"
+    slurm_cluster_name: slurmdesktop
+    slurm_image:
+      family: slurm-gcp-6-12-hpc-rocky-linux-9
+      project: schedmd-slurm-public
+    viz_desktop_backend: "$(\"${vars.deployment_name}-viz-desktop\")"
+    viz_desktop_host: "$(\"viz.${vars.desktop_domain}\")"
+    viz_machine_type: n2-standard-8
+    zone: us-central1-a
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings: [network_name, subnetwork_name]
+  - id: desktop-firewall
+    source: modules/network/firewall-rules
+    use: [network]
+    settings: [ingress_rules]
+  - id: homefs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    settings: [local_mounts, metadata, name]
+  - id: sharedfs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    settings: [local_mounts, metadata, name]
+  - id: compute-nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, homefs, sharedfs]
+    settings: [advanced_machine_features, allow_automatic_updates, instance_image, machine_type, node_count_dynamic_max, node_count_static, on_host_maintenance]
+  - id: compute-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute-nodeset]
+    settings: [exclusive, is_default, partition_name]
+  - id: login-desktop-runtime
+    source: community/modules/remote-desktop/novnc-runtime
+    settings: [iap_backend_service, slurm_auth_mode, vnc_backend]
+  - id: login-desktop-startup
+    source: modules/scripts/startup-script
+    settings: [runners]
+  - id: slurm-login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings: [allow_automatic_updates, enable_login_public_ips, instance_image, machine_type, tags]
+  - id: slurm-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, homefs, sharedfs, slurm-login, compute-partition]
+    settings: [allow_automatic_updates, compute_startup_scripts_timeout, controller_startup_scripts_timeout, enable_controller_public_ips, enable_slurm_auth, instance_image, login_network_storage, login_startup_script, login_startup_scripts_timeout, machine_type, slurm_cluster_name]
+  - id: viz-desktop
+    source: community/modules/remote-desktop/novnc-desktop
+    use: [network, homefs, sharedfs]
+    settings: [enable_public_ips, iap_backend_service, instance_image, machine_type, tags, vnc_backend]
+  - id: login-desktop-backend
+    source: community/modules/network/iap-backend-service
+    use: [network]
+    settings: [endpoints, iap_members, name]
+  - id: viz-desktop-backend
+    source: community/modules/network/iap-backend-service
+    use: [network]
+    settings: [endpoints, iap_members, name]
+  - id: desktop-lb
+    source: community/modules/network/ext-app-lb
+    settings: [address, managed_ssl_certificate_domains, name, routes]
 - path: community/examples/remote-desktop/hpc-slurm-remote-desktop.yaml
   blueprint_name: hpc-slurm-remote-desktop
   scheduler: slurm
@@ -6779,6 +6866,16 @@ module_wiring:
   community/modules/management/helm-upgrade:
     required_services: [container.googleapis.com]
     required_inputs: [chart_name, cluster_name, location, namespace, release_name]
+  community/modules/network/ext-app-lb:
+    required_services: [compute.googleapis.com]
+    required_inputs: [name, routes]
+  community/modules/network/iap-backend-service:
+    required_services: [compute.googleapis.com, iap.googleapis.com]
+    required_inputs: [name, network_self_link]
+    recommended_use:
+    - modules/network/gpu-rdma-vpc
+    - modules/network/pre-existing-vpc
+    - modules/network/vpc
   community/modules/network/int-app-lb:
     required_services: [compute.googleapis.com]
     required_inputs: [backends, endpoints, network_self_link, subnetwork_self_link]
@@ -6787,6 +6884,9 @@ module_wiring:
     - modules/network/pre-existing-subnetwork
     - modules/network/pre-existing-vpc
     - modules/network/vpc
+  community/modules/network/managed-certificate:
+    required_services: [certificatemanager.googleapis.com]
+    required_inputs: [domains, name]
   community/modules/project/aiplatform-predict-iam:
     required_services: [aiplatform.googleapis.com, iam.googleapis.com]
     required_inputs: [service_account_email]
@@ -7245,6 +7345,7 @@ module_wiring:
     required_inputs: [network_profile]
     consumed_by:
     - community/modules/database/slurm-cloudsql-federation
+    - community/modules/network/iap-backend-service
     - community/modules/network/int-app-lb
     - modules/database/redis
     - modules/file-system/filestore
@@ -7282,6 +7383,7 @@ module_wiring:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     - community/modules/database/slurm-cloudsql-federation
     - community/modules/file-system/nfs-server
+    - community/modules/network/iap-backend-service
     - community/modules/network/int-app-lb
     - community/modules/scheduler/htcondor-setup
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -7319,6 +7421,7 @@ module_wiring:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     - community/modules/database/slurm-cloudsql-federation
     - community/modules/file-system/nfs-server
+    - community/modules/network/iap-backend-service
     - community/modules/network/int-app-lb
     - community/modules/remote-desktop/chrome-remote-desktop
     - community/modules/remote-desktop/novnc-desktop
