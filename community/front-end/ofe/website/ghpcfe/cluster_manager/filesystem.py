@@ -195,7 +195,7 @@ def start_filesystem(fs: Filesystem) -> None:
     filestore = _filestore(fs)
     # The record was loaded when the start was queued: a key revoked since
     # then is refused here, and not written back by the saves below.
-    cmek.keep_flags_current(fs)
+    cmek.keep_flags_current(filestore)
     try:
         cmek.assert_not_revoked(filestore)
     except cmek.CmekConfigError as err:
@@ -259,7 +259,7 @@ def start_filesystem(fs: Filesystem) -> None:
             fs.cloud_id = f"network_storage_{fs.name}"
             fs.hostname_or_ip = data["server_ip"]
             fs.cloud_state = "m"
-            cmek.keep_flags_current(fs)
+            cmek.keep_flags_current(filestore)
             fs.save()
     except subprocess.CalledProcessError as cpe:
         fs.cloud_state = "nm"
@@ -268,7 +268,7 @@ def start_filesystem(fs: Filesystem) -> None:
             "The Terraform apply failed - see the Terraform log below for the "
             "provider error (for example an invalid capacity or quota issue)."
         )
-        cmek.keep_flags_current(fs)
+        cmek.keep_flags_current(filestore)
         fs.save()
         logger.error("Terraform apply failed", exc_info=cpe)
         if cpe.stdout:
@@ -284,7 +284,7 @@ def start_filesystem(fs: Filesystem) -> None:
         # clusterinfo.start_cluster(); filesystems were the outlier.
         fs.cloud_state = "nm"
         fs.status_message = f"Deployment failed: {err}"
-        cmek.keep_flags_current(fs)
+        cmek.keep_flags_current(filestore)
         fs.save()
         logger.error("Filesystem %s:%s failed to start", fs.id, fs.name,
                      exc_info=err)
