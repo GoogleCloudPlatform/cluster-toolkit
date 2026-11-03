@@ -20,7 +20,7 @@ It is expected to be used with the [htcondor-install] and
 [htcondor-execute-point] modules.
 
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
-[htcondor-install]: ../../scripts/htcondor-setup/README.md
+[htcondor-install]: ../../scripts/htcondor-install/README.md
 [htcondor-execute-point]: ../../compute/htcondor-execute-point/README.md
 
 [htcrole]: https://htcondor.readthedocs.io/en/latest/getting-htcondor/admin-quick-start.html#what-get-htcondor-does-to-configure-a-role
@@ -40,50 +40,33 @@ example can be found in the [examples README][htc-example].
 - id: htcondor_install
   source: community/modules/scripts/htcondor-install
 
+- id: htcondor_service_accounts
+  source: community/modules/scheduler/htcondor-service-accounts
+
 - id: htcondor_setup
   source: community/modules/scheduler/htcondor-setup
   use:
   - network1
+  - htcondor_service_accounts
 
 - id: htcondor_secrets
   source: community/modules/scheduler/htcondor-pool-secrets
   use:
-  - htcondor_setup 
-
-  - id: htcondor_startup_central_manager
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - $(htcondor_install.install_htcondor_runner)
-      - $(htcondor_secrets.central_manager_runner)
-      - $(htcondor_setup.central_manager_runner)
+  - htcondor_service_accounts
 
 - id: htcondor_cm
-  source: modules/compute/vm-instance
+  source: community/modules/scheduler/htcondor-central-manager
   use:
   - network1
-  - htcondor_startup_central_manager
+  - htcondor_secrets
+  - htcondor_service_accounts
+  - htcondor_setup
   settings:
-    name_prefix: cm0
-    machine_type: c2-standard-4
-    disable_public_ips: true
-    service_account:
-      email: $(htcondor_setup.central_manager_service_account)
-      scopes:
-      - cloud-platform
-    network_interfaces:
-    - network: null
-      subnetwork: $(network1.subnetwork_self_link)
-      subnetwork_project: $(vars.project_id)
-      network_ip: $(htcondor_setup.central_manager_internal_ip)
-      stack_type: null
-      access_config: []
-      ipv6_access_config: []
-      alias_ip_range: []
-      nic_type: VIRTIO_NET
-      queue_count: null
+    instance_image:
+      project: $(vars.project_id)
+      family: $(vars.new_image_family)
   outputs:
-  - internal_ip
+  - central_manager_name
 ```
 
 ## Support

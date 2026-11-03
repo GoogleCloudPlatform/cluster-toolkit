@@ -147,6 +147,8 @@ variable "login_nodes" {
       disk_size_gb                        = optional(number)
       disk_type                           = optional(string)
       disk_storage_pool                   = optional(string)
+      disk_provisioned_iops               = optional(number)
+      disk_provisioned_throughput         = optional(number)
       disk_labels                         = optional(map(string), {})
       auto_delete                         = optional(bool, true)
       boot                                = optional(bool, false)
@@ -175,17 +177,19 @@ variable "login_nodes" {
       subnetwork         = optional(string)
       subnetwork_project = optional(string)
     })), [])
-    bandwidth_tier             = optional(string, "platform_default")
-    can_ip_forward             = optional(bool, false)
-    disk_auto_delete           = optional(bool, true)
-    disk_labels                = optional(map(string), {})
-    disk_resource_manager_tags = optional(map(string), {})
-    disk_size_gb               = optional(number)
-    disk_type                  = optional(string, "n1-standard-1")
-    disk_storage_pool          = optional(string)
-    enable_confidential_vm     = optional(bool, false)
-    enable_oslogin             = optional(bool, true)
-    enable_shielded_vm         = optional(bool, false)
+    bandwidth_tier              = optional(string, "platform_default")
+    can_ip_forward              = optional(bool, false)
+    disk_auto_delete            = optional(bool, true)
+    disk_labels                 = optional(map(string), {})
+    disk_resource_manager_tags  = optional(map(string), {})
+    disk_size_gb                = optional(number)
+    disk_type                   = optional(string, "n1-standard-1")
+    disk_storage_pool           = optional(string)
+    disk_provisioned_iops       = optional(number)
+    disk_provisioned_throughput = optional(number)
+    enable_confidential_vm      = optional(bool, false)
+    enable_oslogin              = optional(bool, true)
+    enable_shielded_vm          = optional(bool, false)
     gpu = optional(object({
       count = number
       type  = string
@@ -283,15 +287,17 @@ variable "nodeset" {
     node_conf              = optional(map(string), {})
     nodeset_name           = string
     additional_disks = optional(list(object({
-      disk_name                  = optional(string)
-      device_name                = optional(string)
-      disk_size_gb               = optional(number)
-      disk_type                  = optional(string)
-      disk_storage_pool          = optional(string)
-      disk_labels                = optional(map(string), {})
-      auto_delete                = optional(bool, true)
-      boot                       = optional(bool, false)
-      disk_resource_manager_tags = optional(map(string), {})
+      disk_name                   = optional(string)
+      device_name                 = optional(string)
+      disk_size_gb                = optional(number)
+      disk_type                   = optional(string)
+      disk_storage_pool           = optional(string)
+      disk_provisioned_iops       = optional(number)
+      disk_provisioned_throughput = optional(number)
+      disk_labels                 = optional(map(string), {})
+      auto_delete                 = optional(bool, true)
+      boot                        = optional(bool, false)
+      disk_resource_manager_tags  = optional(map(string), {})
     })), [])
     bandwidth_tier                      = optional(string, "platform_default")
     can_ip_forward                      = optional(bool, false)
@@ -301,6 +307,8 @@ variable "nodeset" {
     disk_size_gb                        = optional(number)
     disk_type                           = optional(string)
     disk_storage_pool                   = optional(string)
+    disk_provisioned_iops               = optional(number)
+    disk_provisioned_throughput         = optional(number)
     disk_encryption_key                 = optional(string)
     disk_encryption_key_service_account = optional(string)
     enable_confidential_vm              = optional(bool, false)
@@ -539,13 +547,33 @@ variable "controller_state_disk" {
   NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
   EOD
   type = object({
-    type = string
-    size = number
+    type                        = string
+    size                        = number
+    storage_pool                = optional(string)
+    disk_provisioned_iops       = optional(number)
+    disk_provisioned_throughput = optional(number)
+    provisioned_iops            = optional(number)
+    provisioned_throughput      = optional(number)
   })
 
   default = {
     type = "pd-ssd"
     size = 50
+  }
+
+  validation {
+    condition     = var.controller_state_disk == null || var.controller_state_disk.storage_pool == null || var.controller_state_disk.storage_pool == "" || contains(["hyperdisk-balanced", "hyperdisk-throughput"], lower(var.controller_state_disk.type))
+    error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
+  }
+
+  validation {
+    condition     = var.controller_state_disk == null || (var.controller_state_disk.disk_provisioned_iops == null && var.controller_state_disk.provisioned_iops == null) || contains(["hyperdisk-balanced", "hyperdisk-extreme", "pd-extreme"], lower(var.controller_state_disk.type))
+    error_message = "disk_provisioned_iops is only supported with hyperdisk-balanced, hyperdisk-extreme, or pd-extreme disk types."
+  }
+
+  validation {
+    condition     = var.controller_state_disk == null || (var.controller_state_disk.disk_provisioned_throughput == null && var.controller_state_disk.provisioned_throughput == null) || contains(["hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-ml"], lower(var.controller_state_disk.type))
+    error_message = "disk_provisioned_throughput is only supported with hyperdisk-balanced, hyperdisk-throughput, or hyperdisk-ml disk types."
   }
 }
 

@@ -204,8 +204,10 @@ func checkK8sDependencies(state *PrereqState, missing *[]missingPrereq) {
 	checkLocalCLI("gke-gcloud-auth-plugin", []string{"--version"}, &state.GKEGCloudAuthPluginInstalled, missing)
 }
 
-// isDockerCredsConfigured checks if Docker is configured to use gcloud credentials for the required registries.
-func isDockerCredsConfigured(region string) bool {
+// isDockerCredsConfigured reports whether Docker is configured to authenticate
+// against the given Artifact Registry host via a GCP credential helper (gcloud or gcr)
+// or an explicit docker login entry in auths.
+func isDockerCredsConfigured(registry string) bool {
 	configDir := os.Getenv("DOCKER_CONFIG")
 	if configDir == "" {
 		homeDir, err := os.UserHomeDir()
@@ -220,24 +222,26 @@ func isDockerCredsConfigured(region string) bool {
 		return false
 	}
 
-	var config struct {
-		CredHelpers map[string]string `json:"credHelpers"`
-		CredsStore  string            `json:"credsStore"`
-	}
+	var config dockerConfig
 	if err := json.Unmarshal(data, &config); err != nil {
 		logging.Error("Failed to unmarshal Docker config from %s: %v", configPath, err)
 		return false
 	}
 
-	if config.CredsStore == "gcloud" {
+	helper, hasHelper := config.CredHelpers[registry]
+	if !hasHelper {
+		helper = config.CredsStore
+	}
+	if helper == "gcloud" || helper == "gcr" {
 		return true
 	}
 
-	if config.CredHelpers["gcr.io"] != "gcloud" {
-		return false
+	for _, key := range []string{registry, "https://" + registry} {
+		if config.Auths[key] != (dockerAuthEntry{}) {
+			return true
+		}
 	}
-	pkgDevReg := fmt.Sprintf("%s-docker.pkg.dev", region)
-	return config.CredHelpers[pkgDevReg] == "gcloud"
+	return false
 }
 
 // isPermissionDeniedError checks if the error indicates a 403 / permission denied response.
@@ -388,31 +392,31 @@ func checkArtifactRegistryAPI(projectID string, state *PrereqState, missing *[]m
 	}
 }
 
-func checkDockerCredentials(location string, state *PrereqState, missing *[]missingPrereq) {
-	region := shell.ExtractRegion(location)
-	if !isDockerCredsConfigured(region) {
-		cmds := []string{"gcloud auth configure-docker gcr.io --quiet"}
-		if region != "" {
-			cmds = append(cmds, fmt.Sprintf("gcloud auth configure-docker %s-docker.pkg.dev --quiet", region))
-		}
+// checkDockerCredentials verifies Docker uses gcloud credentials for the registry a
+// Crane build pushes to, <cluster-region>-docker.pkg.dev (see imagebuilder.GenerateImageName).
+func checkDockerCredentials(registry string, missing *[]missingPrereq) {
+	if !isDockerCredsConfigured(registry) {
 		*missing = append(*missing, missingPrereq{
 			name:     "Docker Credentials",
-			commands: cmds,
+			commands: []string{fmt.Sprintf("gcloud auth configure-docker %s --quiet", registry)},
 		})
-	} else {
-		state.DockerCredsConfigured = true
 	}
 }
 
-// EnsurePrerequisites checks all necessary gcloud and kubectl prerequisites.
-func ensurePrerequisites(cmd *cobra.Command, projectID string, location string) error {
+// ensureBuildPrerequisites checks what a Crane build needs beyond the basic prerequisites.
+// The image is pushed to Artifact Registry in the cluster's project and region, so that API
+// must be enabled and Docker must hold gcloud credentials for that regional registry.
+func ensureBuildPrerequisites(cmd *cobra.Command, projectID string, location string) error {
 	if dryRunManifest != "" {
 		return nil
 	}
 
+	registry := shell.ExtractRegion(location) + "-docker.pkg.dev"
 	state := store.Load()
 
-	if !isStateStale(state, projectID) && state.DockerCredsConfigured && state.ArtifactRegistryAPIEnabled {
+	// The Docker config is a local file and the registry depends on the cluster's region,
+	// so it is read on every build; only the Artifact Registry API lookup is cached.
+	if !isStateStale(state, projectID) && state.ArtifactRegistryAPIEnabled && isDockerCredsConfigured(registry) {
 		logging.Info("Skipping checks; prerequisites are fresh (project: %s, checked: %v ago).", state.LastCheckedProjectID, time.Since(state.LastCheckedTimestamp).Round(time.Second))
 		return nil
 	}
@@ -428,7 +432,7 @@ func ensurePrerequisites(cmd *cobra.Command, projectID string, location string) 
 	var missing []missingPrereq
 
 	checkArtifactRegistryAPI(projectID, &state, &missing)
-	checkDockerCredentials(location, &state, &missing)
+	checkDockerCredentials(registry, &missing)
 
 	if len(missing) > 0 {
 		printMissingPrereqs(cmd, missing)

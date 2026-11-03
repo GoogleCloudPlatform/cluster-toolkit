@@ -38,3 +38,7 @@ vars:
 
   # Enable DWS Flex Start.
   enable_flex_start: true
+
+## --- Optional overrides (defaults shown) ---
+  # system_node_pool_machine_type: n2d-standard-16
+  # compute_machine_type: h4d-standard-192

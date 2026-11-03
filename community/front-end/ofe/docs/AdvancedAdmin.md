@@ -114,12 +114,23 @@ To create a service account with the basic required roles:
 
 ```bash
 gcloud iam service-accounts create <SERVICE_ACCOUNT_NAME>
-for roleid in file.editor \
+for roleid in aiplatform.admin \
               compute.admin \
-              iam.serviceAccountCreator \
-              iam.serviceAccountDelete \
+              storage.admin \
+              file.editor \
+              iam.serviceAccountAdmin \
+              iam.serviceAccountUser \
+              notebooks.admin \
               resourcemanager.projectIamAdmin \
-              notebooks.admin aiplatform.admin; do \
+              monitoring.viewer \
+              pubsub.admin \
+              cloudsql.admin \
+              bigquery.admin \
+              secretmanager.admin \
+              serviceusage.serviceUsageConsumer \
+              servicenetworking.networksAdmin \
+              artifactregistry.admin \
+              cloudbuild.builds.builder; do \
      gcloud projects add-iam-policy-binding <PROJECT_ID> \
       --member="serviceAccount:<SERVICE_ACCOUNT_NAME>@<PROJECT_ID>.iam.gserviceaccount.com" \
       --role="roles/$roleid"; \

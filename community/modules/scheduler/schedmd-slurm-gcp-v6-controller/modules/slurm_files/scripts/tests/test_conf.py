@@ -454,6 +454,7 @@ def test_v2605_generator_tpu_vs_cpu(mock_slurm_version, tmp_path):
     assert "GresTypes=tpu" not in cpu_conflines
     assert "JobSubmitPlugins=tpu" not in cpu_conflines
     assert "CliFilterPlugins=tpu" not in cpu_conflines
+    assert "enable_async_reply" not in cpu_conflines
 
     # 2. TPU cluster on 26.05 -> Includes GresTypes=tpu, JobSubmitPlugins=tpu, CliFilterPlugins=tpu, gres, and topology
     ns_v6e_static = TstNodeset(
@@ -503,6 +504,7 @@ def test_v2605_generator_tpu_vs_cpu(mock_slurm_version, tmp_path):
     assert "GresTypes=tpu" in tpu_conflines
     assert "JobSubmitPlugins=tpu" in tpu_conflines
     assert "CliFilterPlugins=tpu" in tpu_conflines
+    assert "enable_async_reply" in tpu_conflines
 
     cloud_conf = gen_tpu.make_cloud_conf()
     assert "Gres=tpu:v6e:4" in cloud_conf
@@ -516,8 +518,7 @@ def test_v2605_generator_tpu_vs_cpu(mock_slurm_version, tmp_path):
 
     # Gres conf lines
     gres_lines = gen_tpu.gen_cloud_gres_conf_lines()
-    assert "Name=tpu Type=v6e File=/dev/vfio/devices/vfio[0-3]" in gres_lines
-    assert "Name=tpu Type=tpu7x File=/dev/vfio/devices/vfio[0-3]" in gres_lines
+    assert "Name=tpu File=/dev/vfio/devices/vfio[0-3]" in gres_lines
 
     # Topology YAML v2605: TOPOLOGY_TPU_BLOCK for static, topology/tree for dynamic
     gen_tpu.generate_topology_data()

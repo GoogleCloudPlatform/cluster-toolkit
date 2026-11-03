@@ -28,6 +28,22 @@ echo "This is the startup script for the login nodes on cluster ${CLUSTER_ID}"
 set -x
 set -e
 if [[ $(type -P yum) ]]; then
+	# dnf-automatic upgrades packages on first boot, and a yum left waiting on its
+	# lock then fails with DB_VERSION_MISMATCH. Stop the timer; let any run finish.
+	systemctl stop dnf-automatic.timer 2>/dev/null || true
+	while [[ $(systemctl is-active dnf-automatic.service 2>/dev/null) =~ ^(activating|active|deactivating)$ ]]; do
+		sleep 5
+	done
+	# Skip unreachable repos (e.g. an image's CUDA repo) instead of failing every
+	# dnf transaction: set it in [main] (Rocky ships False) and in each repo.
+	dnf_conf=/etc/dnf/dnf.conf
+	[[ -f ${dnf_conf} ]] || dnf_conf=/etc/yum.conf
+	if grep -q '^[[:space:]]*skip_if_unavailable[[:space:]]*=' "${dnf_conf}"; then
+		sed -i --follow-symlinks 's/^[[:space:]]*skip_if_unavailable[[:space:]]*=.*/skip_if_unavailable=True/' "${dnf_conf}"
+	else
+		sed -i --follow-symlinks '/^\[main\]/a skip_if_unavailable=True' "${dnf_conf}"
+	fi
+	sed -i 's/^[[:space:]]*skip_if_unavailable[[:space:]]*=.*/skip_if_unavailable=True/' /etc/yum.repos.d/*.repo 2>/dev/null || true
 	yum install -y ansible
 else
 	apt install -y ansible

@@ -131,10 +131,12 @@ steps:
               cd /workspace
 
               DEPLOYMENT_NAME="gke-tpu-v5p-$$BUILD_ID_SHORT"
+              EXAMPLE_BP=examples/gke-tpu-v5p/gke-tpu-v5p.yaml
+              BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$EXAMPLE_BP" 2>/dev/null | awk '{print \$$2}')
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/\$${BP_NAME:-*}/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
@@ -151,7 +153,6 @@ steps:
               bash tools/get_binary.sh "${_TEST_PREFIX}"
               REGION="\$${ZONE%-*}"
 
-              EXAMPLE_BP=examples/gke-tpu-v5p/gke-tpu-v5p.yaml
               # adding vm to act as remote node
               echo '  - id: remote-node'                                                            >> \$$EXAMPLE_BP
               echo '    source: modules/compute/vm-instance'                                        >> \$$EXAMPLE_BP

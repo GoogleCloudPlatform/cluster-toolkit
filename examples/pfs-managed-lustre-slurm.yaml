@@ -20,7 +20,7 @@ vars:
   deployment_name: managed-lustre-slurm
   region: us-central1
   zone: us-central1-a
-  compute_node_machine_type: c2-standard-4
+  compute_machine_type: c2-standard-4
   # Managed Lustre is only supported in specific regions and zones
   # Please refer https://cloud.google.com/managed-lustre/docs/locations
   # Managed-Lustre instance name. This should be unique for each deployment.
@@ -35,6 +35,13 @@ vars:
   slurm_image:
     family: aci-cpu-rocky-linux-9-slurm-2605-amd64
     project: advanced-compute-images
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned nodes in the lustre partition.
+  compute_node_count_dynamic_max: 2
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
+  # Machine type for the controller node.
+  controller_machine_type: n2-standard-4
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -67,8 +74,8 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      node_count_dynamic_max: 2
-      machine_type: $(vars.compute_node_machine_type)
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
+      machine_type: $(vars.compute_machine_type)
       allow_automatic_updates: false
       instance_image: $(vars.slurm_image)
 
@@ -84,7 +91,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       enable_login_public_ips: false
       instance_image: $(vars.slurm_image)
 
@@ -96,6 +103,6 @@ deployment_groups:
     - lustre-gcp
     - slurm_login
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.controller_machine_type)
       enable_controller_public_ips: false
       instance_image: $(vars.slurm_image)

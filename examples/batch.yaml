@@ -20,6 +20,9 @@ vars:
   deployment_name: hello-workload
   region: us-central1
   zone: us-central1-c
+  # Optional overrides (defaults shown)
+  # Machine type of the Batch compute VMs.
+  compute_machine_type: n2-standard-4
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -43,7 +46,7 @@ deployment_groups:
       - script: |
           mkdir -p /sw/$BATCH_JOB_UID
           echo "Hello World from task $BATCH_TASK_INDEX" > /sw/$BATCH_JOB_UID/$BATCH_TASK_INDEX.txt
-      machine_type: n2-standard-4
+      machine_type: $(vars.compute_machine_type)
       task_count: 8
       task_count_per_node: 4
       allow_automatic_updates: false

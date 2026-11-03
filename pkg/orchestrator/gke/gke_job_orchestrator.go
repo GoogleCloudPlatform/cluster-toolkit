@@ -53,6 +53,10 @@ const (
 
 	// podContainersJSONPath prints one line per pod with all container names for pod and stream counting.
 	podContainersJSONPath = `{range .items[*]}{.spec.initContainers[*].name}{" "}{.spec.containers[*].name}{" "}{.spec.ephemeralContainers[*].name}{"\n"}{end}`
+
+	// spsEndpointFormat is the address SPS clients use to reach an SPS instance's resource manager,
+	// formatted with the instance's workload name.
+	spsEndpointFormat = "%[1]s-pathways-head-0-0.%[1]s:29001"
 )
 
 // logsRetryInterval is the wait between waitForJobPods and fetchLogsWithRetry attempts; tests shorten it.
@@ -95,7 +99,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	g.gkeCustomTemplatesPath = job.GkeCustomTemplatesPath
 
 	sm := &StorageManager{orchestrator: g}
-	if err := sm.ValidateMounts(job.RawMounts); err != nil {
+	if err := sm.validateJobMounts(job.RawMounts, job.IsPathwaysJob, job.Pathways.ColocatedPythonSidecarImage != ""); err != nil {
 		return err
 	}
 
@@ -117,7 +121,10 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err != nil {
 		return err
 	}
-	if err := g.validateJobConflicts(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
+	if err := g.validateJobConflicts(job); err != nil {
+		return err
+	}
+	if err := g.validateMTCConfig(&job); err != nil {
 		return err
 	}
 
@@ -132,12 +139,10 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 
 	if job.DryRunManifest == "" {
 		g.printConsoleLinks(job)
-	}
-
-	if job.AwaitJobCompletion && job.DryRunManifest == "" {
-		err = g.awaitJobCompletion(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, job.Timeout)
-		if err != nil {
-			return err
+		if job.AwaitJobCompletion {
+			if err := g.awaitJobCompletion(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, job.Timeout); err != nil {
+				return err
+			}
 		}
 	}
 	logging.Info("gcluster job submit workflow completed.")
@@ -466,15 +471,21 @@ func (g *GKEOrchestrator) printConsoleLinks(job orchestrator.JobDefinition) {
 
 	logsLink := getCloudConsoleLogsURL(job.ProjectID, job.ClusterLocation, job.ClusterName, ns, jobName)
 	logging.Info("View your workload logs in real-time here: %s or use gcluster job logs [job-name] to view logs using kubectl", logsLink)
+	if job.Pathways.DeploySPS {
+		logging.Info("SPS instance %s submitted. Endpoint: %s", job.WorkloadName, fmt.Sprintf(spsEndpointFormat, job.WorkloadName))
+	}
 }
 
-func (g *GKEOrchestrator) validateJobConflicts(workloadName string, clusterName string, clusterLocation string, projectID string) error {
-	status, err := g.getJobStatus(workloadName)
+func (g *GKEOrchestrator) validateJobConflicts(job orchestrator.JobDefinition) error {
+	if job.DryRunManifest != "" {
+		return nil
+	}
+	status, err := g.getJobStatus(job.WorkloadName)
 	if err != nil {
 		return err
 	}
 	if status != "" {
-		return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s --cluster %s --location %s --project %s' or resubmit this workload with a different name using '--name'", workloadName, status, workloadName, clusterName, clusterLocation, projectID)
+		return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s --cluster %s --location %s --project %s' or resubmit this workload with a different name using '--name'", job.WorkloadName, status, job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID)
 	}
 	return nil
 }
@@ -548,6 +559,9 @@ func (g *GKEOrchestrator) isSystemPool(np gkeJobNodePool) bool {
 }
 
 func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinition) error {
+	if err := g.validateMTCJobFlags(job); err != nil {
+		return err
+	}
 	if err := g.populateClusterMetadata(job); err != nil {
 		return err
 	}
@@ -565,10 +579,6 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 	}
 
 	if err := g.configureClusterEnvironment(job); err != nil {
-		return err
-	}
-
-	if err := g.validateMTCConfig(job); err != nil {
 		return err
 	}
 
@@ -1010,7 +1020,7 @@ func (g *GKEOrchestrator) queryDiscoveredTopologies(accelLabel string, machineTy
 }
 
 func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (string, error) {
-	if job.Pathways.Headless {
+	if job.Pathways.Headless || job.Pathways.DeploySPS {
 		return "", nil
 	}
 	if job.DryRunManifest != "" {

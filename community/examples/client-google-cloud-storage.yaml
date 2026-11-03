@@ -22,6 +22,9 @@ vars:
   zone: us-central1-a
 
   existing_bucket_name: replace-with-name-of-existing-bucket
+  # Optional overrides (defaults shown)
+  # Machine type of the workstation VM that mounts the buckets.
+  client_machine_type: n2d-standard-2
 
 deployment_groups:
 - group: primary
@@ -56,7 +59,7 @@ deployment_groups:
     - existing-bucket
     settings:
       name_prefix: workstation
-      machine_type: n2d-standard-2
+      machine_type: $(vars.client_machine_type)
       allow_automatic_updates: false
 
   - id: wait

@@ -34,6 +34,9 @@ vars:
   kueue_version: v0.17.1
   jobset_version: 0.10.1
   kjob_version: f775609365df47bdc3e7c10290d8efae7f512464
+  # Optional overrides (defaults shown)
+  # Machine type for the GKE system node pool.
+  system_node_pool_machine_type: n2d-standard-4
 
 deployment_groups:
 - group: primary
@@ -54,7 +57,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [network]
     settings:
-      system_node_pool_machine_type: "n2d-standard-4"
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
       system_node_pool_node_count:
         total_min_nodes: 1
         total_max_nodes: 1000

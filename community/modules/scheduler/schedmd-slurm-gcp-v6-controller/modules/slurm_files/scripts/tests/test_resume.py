@@ -1367,3 +1367,17 @@ def test_mig_flex_tpu_resume(mocker):
     assert mock_handle_failure.call_args[0][3] == error_handler.Action.REQUEUE
     assert any("notify 19" in call.args[0] for call in mock_resume_run.call_args_list)
     assert any("scancel 19" in call.args[0] for call in mock_resume_run.call_args_list)
+
+    # 4. Concurrent multi-slice resume_tpu_chunks isolates failure of one slice while succeeding on others
+    mock_handle_failure.reset_mock()
+    mocker.patch(
+        "mig_flex.resume_tpu_chunk",
+        side_effect=[None, RuntimeError("ZONE_RESOURCE_POOL_EXHAUSTED")],
+    )
+    resume.resume_nodes(
+        ["c-tpustatic-0", "c-tpustatic-1", "c-tpustatic-2", "c-tpustatic-3"],
+        ResumeData(jobs=[]),
+    )
+    mock_handle_failure.assert_called_once()
+    assert mock_handle_failure.call_args[0][0] == ["c-tpustatic-2", "c-tpustatic-3"]
+    assert mock_handle_failure.call_args[0][3] == error_handler.Action.REQUEUE

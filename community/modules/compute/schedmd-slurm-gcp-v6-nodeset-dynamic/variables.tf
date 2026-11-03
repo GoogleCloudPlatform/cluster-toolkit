@@ -129,6 +129,18 @@ variable "disk_storage_pool" {
   default     = null
 }
 
+variable "disk_provisioned_iops" {
+  description = "Indicates how many IOPS to provision for the boot disk. This sets the number of I/O operations per second that the disk can handle."
+  type        = number
+  default     = null
+}
+
+variable "disk_provisioned_throughput" {
+  description = "Indicates how much throughput to provision for the boot disk, in MB/s. This sets the amount of data that can be read or written from the disk per second."
+  type        = number
+  default     = null
+}
+
 variable "disk_size_gb" {
   description = "Size of boot disk to create for the partition compute nodes."
   type        = number
@@ -150,14 +162,16 @@ variable "disk_labels" {
 variable "additional_disks" {
   description = "Configurations of additional disks to be included on the partition nodes."
   type = list(object({
-    disk_name         = string
-    device_name       = string
-    disk_size_gb      = number
-    disk_type         = string
-    disk_storage_pool = optional(string)
-    disk_labels       = map(string)
-    auto_delete       = bool
-    boot              = bool
+    disk_name                   = string
+    device_name                 = string
+    disk_size_gb                = number
+    disk_type                   = string
+    disk_storage_pool           = optional(string)
+    disk_provisioned_iops       = optional(number)
+    disk_provisioned_throughput = optional(number)
+    disk_labels                 = map(string)
+    auto_delete                 = bool
+    boot                        = bool
   }))
   default = []
 }

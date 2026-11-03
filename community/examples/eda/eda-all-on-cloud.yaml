@@ -23,6 +23,23 @@ vars:
   zone: us-central1-a  ## Set GCP Zone Here ##
   pool_service_level: "EXTREME"  # Options: "STANDARD", "PREMIUM", "EXTREME"
   rdma_net_range: 192.168.128.0/18 # Specify an unused CIDR range for the RDMA network
+  # Optional overrides (defaults shown)
+  # Capacity in GiB of the NetApp storage pool that hosts all volumes below.
+  netapp_pool_capacity_gib: 4096
+  # Capacity in GiB of the /tools NetApp volume (must fit within the pool).
+  toolsfs_capacity_gib: 1024
+  # Capacity in GiB of the /library NetApp volume (must fit within the pool).
+  libraryfs_capacity_gib: 1024
+  # Capacity in GiB of the /home NetApp volume (must fit within the pool).
+  homefs_capacity_gib: 1024
+  # Capacity in GiB of the /scratch NetApp volume (must fit within the pool).
+  scratchfs_capacity_gib: 1024
+  # Number of statically provisioned nodes in the h4d partition.
+  h4d_node_count_static: 1
+  # Maximum number of dynamically provisioned nodes in the h4d partition.
+  h4d_node_count_dynamic_max: 0
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
 
 deployment_groups:
 
@@ -86,7 +103,7 @@ deployment_groups:
     use: [eda-net, private_service_access]
     settings:
       pool_name: "eda-pool"
-      capacity_gib: 4096
+      capacity_gib: $(vars.netapp_pool_capacity_gib)
       service_level: $(vars.pool_service_level)
       region: $(vars.region)
 
@@ -96,7 +113,7 @@ deployment_groups:
     use: [netapp_pool]
     settings:
       volume_name: "toolsfs"
-      capacity_gib: 1024    # Adjust size as needed
+      capacity_gib: $(vars.toolsfs_capacity_gib)    # Adjust size as needed
       large_capacity: false
       local_mount: "/tools"
       protocols: ["NFSV3"]
@@ -112,7 +129,7 @@ deployment_groups:
     use: [netapp_pool]
     settings:
       volume_name: "libraryfs"
-      capacity_gib: 1024    # Adjust size as needed
+      capacity_gib: $(vars.libraryfs_capacity_gib)    # Adjust size as needed
       large_capacity: false
       local_mount: "/library"
       protocols: ["NFSV3"]
@@ -128,7 +145,7 @@ deployment_groups:
     use: [netapp_pool]
     settings:
       volume_name: "homefs"
-      capacity_gib: 1024    # Adjust size as needed
+      capacity_gib: $(vars.homefs_capacity_gib)    # Adjust size as needed
       large_capacity: false
       local_mount: "/home"
       protocols: ["NFSV3"]
@@ -142,7 +159,7 @@ deployment_groups:
     use: [netapp_pool]
     settings:
       volume_name: "scratchfs"
-      capacity_gib: 1024    # Adjust size as needed
+      capacity_gib: $(vars.scratchfs_capacity_gib)    # Adjust size as needed
       large_capacity: false
       local_mount: "/scratch"
       protocols: ["NFSV3"]
@@ -194,8 +211,8 @@ deployment_groups:
     settings:
       bandwidth_tier: gvnic_enabled
       machine_type: h4d-highmem-192-lssd
-      node_count_static: 1        # Adjust as needed
-      node_count_dynamic_max: 0   # Adjust as needed
+      node_count_static: $(vars.h4d_node_count_static)        # Adjust as needed
+      node_count_dynamic_max: $(vars.h4d_node_count_dynamic_max)   # Adjust as needed
       enable_placement: false
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
@@ -231,7 +248,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [eda-net]
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       enable_login_public_ips: true
 
   - id: slurm_controller

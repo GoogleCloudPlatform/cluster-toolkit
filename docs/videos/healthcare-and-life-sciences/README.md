@@ -70,13 +70,13 @@ storage intact and b) you can build software before you deploy your cluster.
 > Before attempting to execute the following instructions, it is important to
 > consider your project's quota. The `hcls-blueprint.yaml` blueprint creates an
 > autoscaling cluster that, when fully scaled up, can deploy up to 20
-> `a2-highgpu-1g` and `c2-standard-60` VMs.
+> `g2-standard-4` and `c2-standard-60` VMs.
 >
 > To fully scale up this cluster, the project would require quota for (at least):
 >
 > - GPU Node Group
->   - 12 CPUs * 20 VMs = **120 `A2 CPUs`**
->   - 1 GPU * 20 VMs = **20 `NVIDIA A100 GPUs`**
+>   - 4 CPUs * 20 VMs = **80 `G2 CPUs`**
+>   - 1 GPU * 20 VMs = **20 `NVIDIA L4 GPUs`**
 > - Compute Node Group
 >   - 60 CPUs * 20 VMs = **1200 `C2 CPUs`**
 > - Slurm Login VM
@@ -126,7 +126,7 @@ storage intact and b) you can build software before you deploy your cluster.
    Call the following gcluster command to deploy the the hcls blueprint.
 
    ```bash
-   ./gcluster deploy hcls-01
+   ./gcluster deploy hcls-cluster-v6
    ```
 
    This will prompt you to **display**, **apply**, **stop**, or **continue**
@@ -153,20 +153,20 @@ storage intact and b) you can build software before you deploy your cluster.
    > Continue with the steps below before proceeding.
 
    This step will create a storage bucket for depositing software. The bucket
-   will have the prefix `hcls-user-provided-software` followed by a the
-   deployment name (e.g. `hcls-01`) and a random suffix, for example
-   `hcls-user-provided-software-hcls-01-34c8749a`.
+   will have the prefix `hcls-user-provided-software-hcls-cluster-v6` followed by a
+   random suffix, for example
+   `hcls-user-provided-software-hcls-cluster-v6-34c8749a`.
 
    Here are two ways to locate the bucket name:
 
    1. At the end of the `setup` deployment, gcluster should output a line
       `Outputs:`. Under that there should be a line similar to
-      `gcs_bucket_path_bucket-software = "gs://hcls-user-provided-software-hcls-01-84d0b51e"`,
+      `gcs_bucket_path_bucket-software = "gs://hcls-user-provided-software-hcls-cluster-v6-84d0b51e"`,
       the bucket name is located within the quotes after `gs://`
    1. On the GCP Cloud Console, you can navigate to Cloud Storage -> Buckets and
       assuming you have not created two deployments with the same name, there
       should only be one bucket with a name like
-      `hcls-user-provided-software-hcls-01-34c8749a`
+      `hcls-user-provided-software-hcls-cluster-v6-34c8749a`
 
    Copy this bucket name for the next step.
 
@@ -245,7 +245,7 @@ destroyed first. You can use the following commands to destroy the deployment.
 > associated costs.
 
 ```bash
-./gcluster destroy hcls-01 --auto-approve
+./gcluster destroy hcls-cluster-v6 --auto-approve
 ```
 
 > [!NOTE]
@@ -271,7 +271,7 @@ other uses GPUs.
 The Water Benchmark Example only deploys one computational VM from the
 blueprint, as such you will only need quota for either:
 
-- GPU: 12 `A2 CPUs` and 1 `NVIDIA A100 GPUs`
+- GPU: 4 `G2 CPUs` and 1 `NVIDIA L4 GPUs`
 - CPU: 60 `C2 CPUs`
 
 Note that these quotas are in addition to the quota requirements for the slurm
@@ -305,7 +305,7 @@ usage, before the computational VMs are deployed.
 
    The first of these runs on the `compute` partition, which uses CPUs on a
    `c2-standard-60` machine. The second targets the `gpu` partition. It runs on
-   an `a2-highgpu-1g` machine and uses a NVIDIA A100 for GPU acceleration.
+   a `g2-standard-4` machine and uses an NVIDIA L4 for GPU acceleration.
 
    The example below runs the GPU version of the job. You can switch out the
    path of the script to try the CPU version.
@@ -329,8 +329,8 @@ usage, before the computational VMs are deployed.
 
    If you refresh the
    [VM instances page](https://console.cloud.google.com/compute/instances) you
-   will see an `a2-highgpu-1g` machine that has been auto-scaled up to run this
-   job. It will have a name like `hcls01-gpu-ghpc-0`.
+   will see a `g2-standard-4` machine that has been auto-scaled up to run this
+   job. It will have a name like `hclscluste-gpu-0`.
 
    Once the job is in the running state you can track progress with the
    following command:

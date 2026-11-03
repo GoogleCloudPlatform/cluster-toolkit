@@ -94,7 +94,7 @@ resource "terraform_data" "build" {
   ]
 
   provisioner "local-exec" {
-    command = "${path.module}/scripts/cloud_build.sh"
+    command = "bash ${path.module}/scripts/cloud_build.sh"
 
     environment = {
       PROJECT_ID      = var.project_id

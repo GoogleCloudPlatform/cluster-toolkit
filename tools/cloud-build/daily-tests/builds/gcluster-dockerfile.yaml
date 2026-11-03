@@ -93,9 +93,13 @@ steps:
               echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/gcluster-dockerfile.yaml"
               cd /workspace
 
+              DEPLOYMENT_NAME="dockerfile-test"
+              BLUEPRINT="tools/cloud-build/daily-tests/blueprints/e2e.yaml"
+              BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$BLUEPRINT" 2>/dev/null | awk '{print \$$2}' || true)
+
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/*/dockerfile-test/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/\$${BP_NAME:-*}/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               cleanup_pod() {
@@ -122,7 +126,6 @@ steps:
               trap cleanup_pod EXIT SIGTERM SIGINT ERR
 
               echo "=== STAGE: modify-blueprint ==="
-              BLUEPRINT="tools/cloud-build/daily-tests/blueprints/e2e.yaml"
               echo "--- Modifying Blueprint with add_ttl_label.sh ---"
               bash tools/add_ttl_label.sh "\$$BLUEPRINT"
 

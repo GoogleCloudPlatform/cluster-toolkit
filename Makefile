@@ -22,9 +22,11 @@ ifneq (, $(shell which git))
 ## GIT IS PRESENT
 ifneq (,$(wildcard .git))
 ## GIT DIRECTORY EXISTS
-GIT_TAG_VERSION=$(shell git tag --points-at HEAD)
-GIT_BRANCH=$(shell $(SHELL) -c 'git branch --show-current || git rev-parse --abbrev-ref HEAD' 2>/dev/null)
-GIT_COMMIT_INFO=$(shell git describe --tags --dirty --long --always)
+GIT_TAG_VERSION ?= $(or $(_LOUHI_TAG_NAME),$(shell git describe --tags --exact-match 2>/dev/null))
+GIT_BRANCH ?= $(shell $(SHELL) -c 'git branch --show-current || git rev-parse --abbrev-ref HEAD' 2>/dev/null)
+# Keep GIT_COMMIT_INFO pure `git describe` output: the release pipeline's verify step compares
+# "Commit info: <tag>-0-g<sha>" against the release tag as an independent check of the checkout.
+GIT_COMMIT_INFO ?= $(shell git describe --tags --dirty --long --always 2>/dev/null)
 GIT_COMMIT_HASH=$(shell git rev-parse HEAD)
 GIT_INITIAL_HASH=$(shell git rev-list --max-parents=0 HEAD)
 endif
@@ -56,7 +58,7 @@ install: install-user
 
 endif
 
-tests: warn-terraform-version warn-packer-version test-engine validate_golden_copy validate_configs packer-check
+tests: warn-terraform-version warn-packer-version test-engine validate_golden_copy validate_configs packer-check validate-docs
 
 format: warn-go-version warn-terraform-version warn-packer-version terraform-format packer-format
 	$(info **************** formatting go code *******************)
@@ -258,7 +260,7 @@ endif
 
 ###################################
 # AGENT SKILLS SECTION
-.PHONY: lint-skills test-skills
+.PHONY: lint-skills test-skills test-skills-live generate-docs validate-docs
 
 lint-skills:
 	$(info **************** linting agent skills ***************)
@@ -268,4 +270,23 @@ test-skills:
 	$(info **************** running skills unit tests and evals ***************)
 	@python3 tools/tests/test_run_eval.py
 	@python3 tools/run_eval.py --all
+
+generate-docs:
+	$(info **************** generating catalog, README tables, and llms.txt ***************)
+	@go run ./tools/catalog-gen
+
+# Manual only (never CI): drives a real agent CLI against every EVAL.yaml prompt
+# in throwaway git worktrees. Requires the agent CLI installed + logged in and a
+# GCP project for gcluster validators. Example:
+#   make test-skills-live LIVE_PROJECT=my-sandbox LIVE_AGENT=gemini
+LIVE_AGENT ?= gemini
+LIVE_SKILL ?= cluster-blueprint-assistant
+test-skills-live: gcluster
+	$(info **************** running LIVE skills evals ($(LIVE_SKILL)) against $(LIVE_AGENT) ***************)
+	@test -n "$(LIVE_PROJECT)" || { echo "LIVE_PROJECT=<gcp-project> is required"; exit 2; }
+	@python3 tools/run_eval.py --skill $(LIVE_SKILL) --live --agent $(LIVE_AGENT) --project $(LIVE_PROJECT) --markdown-output live-eval-report.md
+
+validate-docs:
+	$(info **************** validating README snippets and links ***************)
+	@python3 tools/validate_readme_snippets.py
 # END OF AGENT SKILLS SECTION

@@ -79,12 +79,12 @@ This section guides you through the cluster creation process.
    - `region`: the compute region for the cluster.
    - `zone`: the compute zone for the TPUs.
    - `num_slices`: the number of TPU slices (node pools) to create.
-   - `machine_type`: the machine type of the TPU.
+   - `compute_machine_type`: the machine type of the TPU.
    - `tpu_topology`: the TPU placement topology for the node pool.
    - `authorized_cidr`: The IP address range you want to allow to connect with the cluster.
    - `reservation_affinity`: the reservation settings (by default, specify the reservation name under Option 1, or uncomment an alternative consumption model such as DWS Flex Start, DWS Flex Start + Queued Provisioning, Spot, or On-Demand).
 
-    > **Note:** The `static_node_count` is now automatically calculated from `machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`. For further details, please refer [appendix](#node-count-calculation)
+    > **Note:** The `static_node_count` is now automatically calculated from `compute_machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`. For further details, please refer [appendix](#node-count-calculation)
 
 5. To modify advanced settings, edit `examples/gke-tpu-7x/gke-tpu-7x.yaml`.
 
@@ -249,14 +249,14 @@ To avoid recurring charges for the resources used, clean up the resources provis
 #### Example 1: *Single-Node Slice* (The default for this blueprint)
 
 - `tpu_topology`: `2x2x1` (Total chips = 2*2*1 = **4**)
-- `machine_type`: `tpu7x-standard-4t` (Chips per machine = **4**)
+- `compute_machine_type`: `tpu7x-standard-4t` (Chips per machine = **4**)
 - **Calculation**: `4 / 4 = 1`
 - **Correct value**: `static_node_count: 1`
 
 #### Example 2: *Multi-Node Slice*
 
 - `tpu_topology`: `4x4x4` (Total chips = 4*4*4 = **64**)
-- `machine_type`: `tpu7x-standard-4t` (Chips per machine = **4**)
+- `compute_machine_type`: `tpu7x-standard-4t` (Chips per machine = **4**)
 - **Calculation**: `64 / 4 = 16`
 - **Correct value**: `static_node_count: 16`
 
@@ -266,7 +266,7 @@ This example shows how `num_slices` and `static_node_count` work together. The g
 
 - `num_slices`: `3` (We want three independent node pools)
 - `tpu_topology`: `2x2x2` (Each slice will have 2*2*2 = 8 chips)
-- `machine_type`: `tpu7x-standard-4t` (Chips per machine = 4)
+- `compute_machine_type`: `tpu7x-standard-4t` (Chips per machine = 4)
 - **Calculation**: `8 / 4 = 2`
 - **Correct value**: `static_node_count: 2`
 - **Result**: This configuration will create three separate GKE node pools, and each of those node pools will contain two nodes. The total number of TPU nodes created will be `3 * 2 = 6`.

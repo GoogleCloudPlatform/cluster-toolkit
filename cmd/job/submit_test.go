@@ -21,11 +21,13 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 func TestMain(m *testing.M) {
@@ -41,7 +43,6 @@ func TestMain(m *testing.M) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 			ArtifactRegistryAPIEnabled:   true,
 		},
 	}
@@ -79,7 +80,6 @@ func TestSubmitCmd_PathwaysDryRun(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -154,7 +154,6 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -223,7 +222,6 @@ func TestSubmitCmd_TPUWithNumNodes_Fails(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -375,13 +373,19 @@ func setupSubmitTestEnv(t *testing.T) {
 	priority = "medium"
 	isPathwaysJob = false
 	skipPrereqs = false
-	pathways = orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 4000}
+	pathways = orchestrator.PathwaysJobDefinition{}
 	gkeNapProvisioning = ""
 	gkeNapReservation = ""
 	envVars = nil
 	pathwaysProxyEnv = nil
 	pathwaysServerEnv = nil
 	pathwaysWorkerEnv = nil
+	SubmitCmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if f.Name == "pathways-max-slice-restarts" || f.Name == "pathways-elastic-slices" || f.Name == "restarts" {
+			_ = f.Value.Set(f.DefValue)
+		}
+		f.Changed = false
+	})
 
 	oldFactory := gkeOrchestratorFactory
 	defer t.Cleanup(func() {
@@ -440,7 +444,6 @@ func (m *MockPrereqStore) Load() PrereqState {
 		state.ADCConfigured = true
 		state.KubectlInstalled = true
 		state.GKEGCloudAuthPluginInstalled = true
-		state.DockerCredsConfigured = true
 		state.ArtifactRegistryAPIEnabled = true
 	}
 	return state
@@ -616,7 +619,6 @@ func TestSubmitCmd_InvalidGKENAPProvisioning(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -656,7 +658,6 @@ func TestSubmitCmd_ReservationModelWithoutName_Fails(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -696,7 +697,6 @@ func TestSubmitCmd_NonReservationModelWithName_Fails(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -1132,7 +1132,6 @@ func TestSubmitCmd_PathwaysMTCFlags(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -1186,7 +1185,6 @@ func TestSubmitCmd_PathwaysHeadless(t *testing.T) {
 			ADCConfigured:                true,
 			KubectlInstalled:             true,
 			GKEGCloudAuthPluginInstalled: true,
-			DockerCredsConfigured:        true,
 		},
 	}
 
@@ -1253,7 +1251,7 @@ func TestSubmitCmd_SkipPrereqs_BypassesChecks(t *testing.T) {
 		"--skip-prereqs", "true",
 	)
 
-	// Since --skip-prereqs is true, all ensureBasicPrerequisites and ensurePrerequisites
+	// Since --skip-prereqs is true, all ensureBasicPrerequisites and ensureBuildPrerequisites
 	// checks must be bypassed, making it succeed and reach the mock orchestrator.
 	if err != nil {
 		t.Fatalf("expected no error when --skip-prereqs is true, got: %v", err)
@@ -1298,6 +1296,68 @@ func TestSubmitCmd_SkipPrereqsFalse_RunsChecks(t *testing.T) {
 	// which will fail either due to absence of gcloud or missing authentication in test env.
 	if err == nil {
 		t.Fatalf("expected an error (prerequisite check failure) since --skip-prereqs is false/omitted, but got nil")
+	}
+}
+
+// Build prerequisites (Artifact Registry API, Docker credentials) only apply when
+// gcluster builds and pushes the image; a pre-built --image is pulled by the nodes.
+func TestSubmitCmd_BuildPrerequisitesOnlyForCraneBuild(t *testing.T) {
+	t.Setenv("GCLUSTER_IMAGE_REPO", "test-repo")
+	t.Setenv("USER", "tester")
+	buildDir := t.TempDir()
+
+	tests := []struct {
+		name       string
+		imageArgs  []string
+		wantErr    bool
+		wantARCall bool
+	}{
+		{
+			name:      "pre-built image",
+			imageArgs: []string{"--image", "us-south1-docker.pkg.dev/other-project/repo/app:tag"},
+		},
+		{
+			name:       "Crane build",
+			imageArgs:  []string{"--base-image", "python:3.9-slim", "--build-context", buildDir},
+			wantErr:    true,
+			wantARCall: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupSubmitTestEnv(t)
+			executed := stubPrereqCommands(t)
+
+			args := append([]string{
+				"submit",
+				"--name", "test-build-prereqs",
+				"--command", "echo hello",
+				"--compute-type", "n2-standard-4",
+				"--cluster", "test-cluster",
+				"--location", "us-west4-a",
+				"--project", "test-project",
+			}, tt.imageArgs...)
+			out, err := executeCommand(JobCmd, args...)
+
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("submit error = %v, wantErr %v\noutput:\n%s", err, tt.wantErr, out)
+			}
+			if got := strings.Contains(out, "Docker Credentials"); got != tt.wantErr {
+				t.Errorf("output asks for Docker credentials = %v, want %v\noutput:\n%s", got, tt.wantErr, out)
+			}
+			if got := ranArtifactRegistryCheck(*executed); got != tt.wantARCall {
+				t.Errorf("Artifact Registry API check ran = %v, want %v\nexecuted: %v", got, tt.wantARCall, *executed)
+			}
+			if tt.wantErr {
+				if want := "gcloud auth configure-docker us-west4-docker.pkg.dev --quiet"; !strings.Contains(out, want) {
+					t.Errorf("expected remediation %q, got:\n%s", want, out)
+				}
+				if strings.Contains(out, "gcr.io") {
+					t.Errorf("remediation must not mention gcr.io:\n%s", out)
+				}
+			}
+		})
 	}
 }
 
@@ -1393,26 +1453,294 @@ func TestSubmitCmd_InvalidRestartOnExitCodes(t *testing.T) {
 }
 
 func TestSubmitCmd_PathwaysMaxSliceRestartsWithoutPathways_Fails(t *testing.T) {
-	setupSubmitTestEnv(t)
-
-	_, err := executeCommand(JobCmd,
-		"submit",
-		"--name", "pathways-missing-flag-test",
-		"--image", "busybox",
-		"--command", "echo hello",
-		"--compute-type", "n2-standard-4",
-		"--cluster", "test-cluster",
-		"--location", "us-central1-a",
-		"--project", "test-project",
-		"--pathways-max-slice-restarts", "5",
-	)
-
-	if err == nil {
-		t.Fatal("expected error when passing --pathways-max-slice-restarts without --pathways, got nil")
+	tests := []struct {
+		name      string
+		extraArgs []string
+		wantErr   string
+	}{
+		{
+			name:      "non-zero max-slice-restarts without --pathways",
+			extraArgs: []string{"--pathways-max-slice-restarts", "5"},
+			wantErr:   "pathways flags specified but --pathways flag is missing",
+		},
+		{
+			name:      "zero max-slice-restarts without --pathways",
+			extraArgs: []string{"--pathways-max-slice-restarts", "0"},
+			wantErr:   "pathways flags specified but --pathways flag is missing",
+		},
+		{
+			name:      "zero elastic-slices without --pathways",
+			extraArgs: []string{"--pathways-elastic-slices", "0"},
+			wantErr:   "pathways flags specified but --pathways flag is missing",
+		},
+		{
+			name:      "negative max-slice-restarts with --pathways",
+			extraArgs: []string{"--pathways", "--pathways-gcs-location", "gs://my-bucket", "--pathways-max-slice-restarts", "-1"},
+			wantErr:   "--pathways-max-slice-restarts must be non-negative",
+		},
+		{
+			name:      "negative elastic-slices with --pathways",
+			extraArgs: []string{"--pathways", "--pathways-gcs-location", "gs://my-bucket", "--pathways-elastic-slices", "-1"},
+			wantErr:   "--pathways-elastic-slices must be non-negative",
+		},
 	}
 
-	expectedErr := "pathways flags specified but --pathways flag is missing"
-	if !strings.Contains(err.Error(), expectedErr) {
-		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupSubmitTestEnv(t)
+
+			args := append([]string{
+				"submit",
+				"--name", "pathways-flag-val-test",
+				"--image", "busybox",
+				"--command", "echo hello",
+				"--compute-type", "n2-standard-4",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+			}, tc.extraArgs...)
+
+			_, err := executeCommand(JobCmd, args...)
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("expected error containing %q, got: %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
+	tests := []struct {
+		name                 string
+		extraArgs            []string
+		wantElasticSlices    int
+		wantMaxSliceRestarts int
+	}{
+		{
+			name:                 "defaults to 0 when elastic-slices is 0 (omitted)",
+			extraArgs:            nil,
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 0,
+		},
+		{
+			name:                 "defaults to 4000 when elastic-slices > 0 and max-slice-restarts omitted",
+			extraArgs:            []string{"--pathways-elastic-slices", "2"},
+			wantElasticSlices:    2,
+			wantMaxSliceRestarts: 4000,
+		},
+		{
+			name:                 "honors explicit max-slice-restarts when elastic-slices > 0",
+			extraArgs:            []string{"--pathways-elastic-slices", "2", "--pathways-max-slice-restarts", "10"},
+			wantElasticSlices:    2,
+			wantMaxSliceRestarts: 10,
+		},
+		{
+			name:                 "honors explicit max-slice-restarts=0 when elastic-slices > 0",
+			extraArgs:            []string{"--pathways-elastic-slices", "2", "--pathways-max-slice-restarts", "0"},
+			wantElasticSlices:    2,
+			wantMaxSliceRestarts: 0,
+		},
+		{
+			name:                 "honors explicit max-slice-restarts when elastic-slices is 0",
+			extraArgs:            []string{"--pathways-max-slice-restarts", "5"},
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 5,
+		},
+		{
+			name:                 "defaults to 4000 when pathways-headless is set and max-slice-restarts omitted",
+			extraArgs:            []string{"--pathways-headless"},
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 4000,
+		},
+		{
+			name:                 "honors explicit max-slice-restarts=0 when pathways-headless is set",
+			extraArgs:            []string{"--pathways-headless", "--pathways-max-slice-restarts", "0"},
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 0,
+		},
+		{
+			name:                 "defaults to 1000000 when pathways-deploy-sps is set and max-slice-restarts omitted",
+			extraArgs:            []string{"--pathways-deploy-sps"},
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 1000000,
+		},
+		{
+			name:                 "honors explicit max-slice-restarts when pathways-deploy-sps is set",
+			extraArgs:            []string{"--pathways-deploy-sps", "--pathways-max-slice-restarts", "500"},
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 500,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupSubmitTestEnv(t)
+
+			mockOrc := &mockOrchestrator{}
+			gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+				return mockOrc
+			}
+
+			args := []string{
+				"submit",
+				"--pathways",
+				"--pathways-gcs-location", "gs://my-bucket",
+				"--name", "pw-restarts-default",
+				"--compute-type", "n2-standard-4",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+			}
+			if !slices.Contains(tc.extraArgs, "--pathways-deploy-sps") {
+				// An SPS instance runs no workload, so it rejects --image and --command.
+				args = append(args, "--image", "busybox", "--command", "echo hello")
+			}
+			args = append(args, tc.extraArgs...)
+
+			_, err := executeCommand(JobCmd, args...)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if got := mockOrc.SubmittedJob.Pathways.ElasticSlices; got != tc.wantElasticSlices {
+				t.Errorf("ElasticSlices = %d, want %d", got, tc.wantElasticSlices)
+			}
+			if got := mockOrc.SubmittedJob.Pathways.MaxSliceRestarts; got != tc.wantMaxSliceRestarts {
+				t.Errorf("MaxSliceRestarts = %d, want %d", got, tc.wantMaxSliceRestarts)
+			}
+		})
+	}
+}
+
+func TestSubmitCmd_DeployPathwaysSPS(t *testing.T) {
+	t.Run("deploys SPS without image or command and applies SPS defaults", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+			return mockOrc
+		}
+
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-deploy-sps",
+			"--name", "sps-v5p",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+			"--pathways-gcs-location", "gs://my-bucket/sps",
+			"--compute-type", "v5p-8",
+			"--num-slices", "4",
+		)
+		if err != nil {
+			t.Fatalf("command failed with error: %v", err)
+		}
+
+		got := mockOrc.SubmittedJob
+		if !got.Pathways.DeploySPS {
+			t.Errorf("DeploySPS = false, want true")
+		}
+		if got.MaxRestarts != 30 {
+			t.Errorf("MaxRestarts = %d, want 30", got.MaxRestarts)
+		}
+		if got.Pathways.MaxSliceRestarts != 1000000 {
+			t.Errorf("MaxSliceRestarts = %d, want 1000000", got.Pathways.MaxSliceRestarts)
+		}
+	})
+
+	t.Run("honors explicit restarts when pathways-deploy-sps is set", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+			return mockOrc
+		}
+
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-deploy-sps",
+			"--restarts", "5",
+			"--name", "sps-v5p",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+			"--pathways-gcs-location", "gs://my-bucket/sps",
+			"--compute-type", "v5p-8",
+		)
+		if err != nil {
+			t.Fatalf("command failed with error: %v", err)
+		}
+		if got := mockOrc.SubmittedJob.MaxRestarts; got != 5 {
+			t.Errorf("MaxRestarts = %d, want 5", got)
+		}
+	})
+
+	t.Run("rejects pathways-deploy-sps without pathways flag", func(t *testing.T) {
+		for _, flagVal := range []string{"--pathways-deploy-sps", "--pathways-deploy-sps=false"} {
+			setupSubmitTestEnv(t)
+			_, err := executeCommand(JobCmd,
+				"submit",
+				flagVal,
+				"--name", "sps-v5p",
+				"--image", "busybox",
+				"--command", "echo hello",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+				"--compute-type", "v5p-8",
+			)
+			if err == nil || !strings.Contains(err.Error(), "pathways flags specified but --pathways flag is missing") {
+				t.Errorf("for %s, got err = %v, want missing --pathways error", flagVal, err)
+			}
+		}
+	})
+
+	t.Run("rejects pathways-deploy-sps with pathways-headless", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-deploy-sps",
+			"--pathways-headless",
+			"--name", "sps-v5p",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+			"--pathways-gcs-location", "gs://my-bucket/sps",
+			"--compute-type", "v5p-8",
+		)
+		if err == nil || !strings.Contains(err.Error(), "--pathways-deploy-sps and --pathways-headless cannot be used together") {
+			t.Errorf("got err = %v, want mutual exclusion error", err)
+		}
+	})
+}
+
+func TestSubmitCmd_DeployPathwaysSPSRejectsWorkloadFlags(t *testing.T) {
+	for _, workloadArgs := range [][]string{
+		{"--image", "us-docker.pkg.dev/my-project/my-repo/my-image:tag"},
+		{"--base-image", "python:3.11-slim"},
+		{"--build-context", "."},
+		{"--command", "python3 train.py"},
+	} {
+		t.Run("rejects pathways-deploy-sps with "+workloadArgs[0], func(t *testing.T) {
+			setupSubmitTestEnv(t)
+			args := append([]string{
+				"submit",
+				"--pathways",
+				"--pathways-deploy-sps",
+				"--name", "sps-v5p",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+				"--pathways-gcs-location", "gs://my-bucket/sps",
+				"--compute-type", "v5p-8",
+			}, workloadArgs...)
+			_, err := executeCommand(JobCmd, args...)
+			if err == nil || !strings.Contains(err.Error(), "--pathways-deploy-sps does not run a workload") {
+				t.Errorf("got err = %v, want workload flags error", err)
+			}
+		})
 	}
 }

@@ -361,9 +361,17 @@ variable "enable_private_endpoint" {
 }
 
 variable "master_ipv4_cidr_block" {
-  description = "(Beta) The IP range in CIDR notation to use for the hosted master network."
+  description = "(Beta) The IP range in CIDR notation (size must be /28) to use for the hosted master network. If null (default), GKE uses Private Service Connect (PSC) and reserves the control plane endpoint IP from the cluster's primary subnetwork (`subnetwork_self_link`)."
   type        = string
-  default     = "172.16.0.32/28"
+  default     = null
+  validation {
+    condition = var.master_ipv4_cidr_block == null || try(
+      cidrnetmask(var.master_ipv4_cidr_block) == "255.255.255.240" &&
+      cidrsubnet(var.master_ipv4_cidr_block, 0, 0) == var.master_ipv4_cidr_block,
+      false
+    )
+    error_message = "master_ipv4_cidr_block must be null or a valid IPv4 /28 CIDR block (e.g. 1.2.3.0/28)."
+  }
 }
 
 variable "enable_master_global_access" {

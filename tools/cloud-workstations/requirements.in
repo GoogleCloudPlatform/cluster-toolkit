@@ -1,7 +1,7 @@
 
 backcall==0.2.0
 cachetools==5.3.1
-certifi==2024.7.4
+certifi==2026.10.19
 charset-normalizer==3.2.0
 decorator==5.1.1
 docopt==0.6.2

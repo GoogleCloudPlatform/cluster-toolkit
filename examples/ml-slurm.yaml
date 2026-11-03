@@ -31,6 +31,19 @@ vars:
   disk_size_gb: 200
   metadata: # Workaround for https://github.com/GoogleCloudPlatform/cluster-toolkit/discussions/3243
     VmDnsSetting: GlobalOnly
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned nodes in the a2 partition.
+  a2_node_count_dynamic_max: 20
+  # Use Spot VMs for the a2 partition.
+  a2_enable_spot_vm: false
+  # Maximum number of dynamically provisioned nodes in the g2 partition.
+  g2_node_count_dynamic_max: 20
+  # Use Spot VMs for the g2 partition.
+  g2_enable_spot_vm: false
+  # Size in GB of the /home Filestore instance.
+  homefs_size_gb: 2560
+  # Machine type of the temporary VM used by Packer to build the custom image.
+  image_build_machine_type: c2-standard-4
 
 # Recommended to use GCS backend for Terraform state
 # See https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#optional-setting-up-a-remote-terraform-state
@@ -61,7 +74,7 @@ deployment_groups:
     use: [network, private_service_access]
     settings:
       local_mount: /home
-      size_gb: 2560
+      size_gb: $(vars.homefs_size_gb)
       filestore_tier: BASIC_SSD
 
   - id: script
@@ -135,7 +148,7 @@ deployment_groups:
       disk_type: pd-ssd
       image_family: $(vars.new_image.family)
       # building this image does not require a GPU-enabled VM
-      machine_type: c2-standard-4
+      machine_type: $(vars.image_build_machine_type)
       state_timeout: 15m
 
 - group: cluster
@@ -190,7 +203,8 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      node_count_dynamic_max: 20
+      node_count_dynamic_max: $(vars.a2_node_count_dynamic_max)
+      enable_spot_vm: $(vars.a2_enable_spot_vm)
       bandwidth_tier: gvnic_enabled
       machine_type: a2-highgpu-1g
       instance_image: $(vars.new_image)
@@ -206,7 +220,8 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      node_count_dynamic_max: 20
+      node_count_dynamic_max: $(vars.g2_node_count_dynamic_max)
+      enable_spot_vm: $(vars.g2_enable_spot_vm)
       bandwidth_tier: gvnic_enabled
       machine_type: g2-standard-4
       instance_image: $(vars.new_image)

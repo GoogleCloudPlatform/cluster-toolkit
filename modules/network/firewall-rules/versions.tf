@@ -18,11 +18,11 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 3.83"
+      version = ">= 4.64"
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:firewall-rules/v1.107.0"
+    module_name = "blueprints/terraform/hpc-toolkit:firewall-rules/v1.108.0"
   }
 
   required_version = ">= 1.12.2"

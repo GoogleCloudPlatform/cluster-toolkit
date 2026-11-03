@@ -98,6 +98,12 @@ vars:
     source: $(ghpc_stage("examples/simple_service_launcher/af3-service.yml"))
     args: "-e service_user=$(vars.af3service_user) -e af3service_activate=$(vars.af3service_activate) -e bucket_name=$(vars.af3service_jobbucket) -e sif_dir=$(vars.sif_dir) -e db_dir=$(vars.db_dir) -e model_dir=$(vars.model_dir) -e pdb_database_path=$(vars.pdb_database_path) -e jax_compilation_cache_path=$(vars.jax_compilation_cache_path) -e datapipeline_partition=$(vars.default_datapipeline_partition.name) -e datapipeline_memory=$(vars.default_datapipeline_partition.memory) -e datapipeline_cpu_count=$(vars.default_datapipeline_partition.cpu_count) -e datapipeline_timeout=$(vars.default_datapipeline_timeout) -e inference_partition=$(vars.default_inference_partition.name) -e inference_memory=$(vars.default_inference_partition.memory) -e inference_cpu_count=$(vars.default_inference_partition.cpu_count) -e inference_timeout=$(vars.default_inference_timeout)  -e max_template_date=$(vars.max_template_date) -e conformer_max_iterations=$(vars.conformer_max_iterations) -e num_recycles=$(vars.num_recycles) -e num_diffusion_samples=$(vars.num_diffusion_samples) -e num_seeds=$(vars.num_seeds) -e save_embeddings=$(vars.save_embeddings)"
 
+  # Optional overrides (defaults shown)
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
+  # Machine type for the controller node.
+  controller_machine_type: c2-standard-8
+
 deployment_groups:
 - group: environment
   modules:
@@ -267,7 +273,7 @@ deployment_groups:
     settings:
       name_prefix: login
       enable_login_public_ips: true
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       disk_size_gb: $(vars.disk_size_gb)
 
   - id: slurm_controller
@@ -283,7 +289,7 @@ deployment_groups:
     settings:
       enable_controller_public_ips: true
       disk_size_gb: $(vars.disk_size_gb)
-      machine_type: c2-standard-8
+      machine_type: $(vars.controller_machine_type)
       enable_external_prolog_epilog: true
       login_startup_script: $(login_startup.startup_script)
       controller_startup_script: $(controller_startup.startup_script)

@@ -641,32 +641,29 @@ func addDiskQuota(bp config.Blueprint, settings config.Dict, projectID, region s
 	addDetailedDiskMetrics(bp, settings, diskType, diskSizeGB, count, projectID, region, totals)
 }
 
+func addDiskMetricFromKeys(bp config.Blueprint, settings config.Dict, keys []string, metric string, count float64, projectID, region string, totals map[string]float64) {
+	for _, k := range keys {
+		if settings.Has(k) {
+			v, err := evalToFloat64(bp, settings.Get(k))
+			if err == nil {
+				addTotal(totals, projectID, region, metric, v*count)
+				break
+			}
+		}
+	}
+}
+
 func addDetailedDiskMetrics(bp config.Blueprint, settings config.Dict, diskType string, sizeGB, count float64, projectID, region string, totals map[string]float64) {
 	if strings.Contains(diskType, "hyperdisk-balanced") {
 		addTotal(totals, projectID, region, "HYPERDISK_BALANCED_TOTAL_GB", sizeGB*count)
-		if settings.Has("provisioned_iops") {
-			v, err := evalToFloat64(bp, settings.Get("provisioned_iops"))
-			if err == nil {
-				addTotal(totals, projectID, region, "HYPERDISK_BALANCED_IOPS", v*count)
-			}
-		}
-		if settings.Has("provisioned_throughput") {
-			v, err := evalToFloat64(bp, settings.Get("provisioned_throughput"))
-			if err == nil {
-				addTotal(totals, projectID, region, "HYPERDISK_BALANCED_THROUGHPUT", v*count)
-			}
-		}
+		addDiskMetricFromKeys(bp, settings, []string{"provisioned_iops", "disk_provisioned_iops"}, "HYPERDISK_BALANCED_IOPS", count, projectID, region, totals)
+		addDiskMetricFromKeys(bp, settings, []string{"provisioned_throughput", "disk_provisioned_throughput"}, "HYPERDISK_BALANCED_THROUGHPUT", count, projectID, region, totals)
 		return
 	}
 
 	if strings.Contains(diskType, "pd-extreme") {
 		addTotal(totals, projectID, region, "EXTREME_TOTAL_GB", sizeGB*count)
-		if settings.Has("provisioned_iops") {
-			v, err := evalToFloat64(bp, settings.Get("provisioned_iops"))
-			if err == nil {
-				addTotal(totals, projectID, region, "PD_EXTREME_TOTAL_PROVISIONED_IOPS", v*count)
-			}
-		}
+		addDiskMetricFromKeys(bp, settings, []string{"provisioned_iops", "disk_provisioned_iops"}, "PD_EXTREME_TOTAL_PROVISIONED_IOPS", count, projectID, region, totals)
 		return
 	}
 	if strings.Contains(diskType, "ssd") || strings.Contains(diskType, "balanced") {
