@@ -92,6 +92,8 @@ No resources.
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enable or Disable OS Login with ENABLE or DISABLE. | `string` | `"ENABLE"` | no |
 | <a name="input_enable_public_ips"></a> [enable\_public\_ips](#input\_enable\_public\_ips) | If true, instances receive public IPs. | `bool` | `false` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = string<br/>    count = number<br/>  }))</pre> | `[]` | no |
+| <a name="input_iap_backend_service"></a> [iap\_backend\_service](#input\_iap\_backend\_service) | Name of the backend service through which an HTTPS load balancer with<br/>Identity-Aware Proxy reaches this host, such as one created by the<br/>iap-backend-service module. When set, the broker also serves the load<br/>balancer on TCP iap\_listen\_port, as whichever user IAP names. The instance<br/>service account needs compute.backendServices.get. Leave null to serve<br/>desktops only over an SSH tunnel. | `string` | `null` | no |
+| <a name="input_iap_listen_port"></a> [iap\_listen\_port](#input\_iap\_listen\_port) | TCP port the broker serves the load balancer on. Only used when iap\_backend\_service is set. | `number` | `6080` | no |
 | <a name="input_install_root"></a> [install\_root](#input\_install\_root) | Directory under which noVNC assets are installed. | `string` | `"/opt/ghpc-remote-desktop"` | no |
 | <a name="input_instance_count"></a> [instance\_count](#input\_instance\_count) | Number of instances. | `number` | `1` | no |
 | <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Image used to build the noVNC desktop node.<br/><br/>Expected fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | <pre>{<br/>  "name": "debian-12-bookworm-v20250610",<br/>  "project": "debian-cloud"<br/>}</pre> | no |
@@ -127,9 +129,11 @@ No resources.
 | ---- | ----------- |
 | <a name="output_broker_socket_path"></a> [broker\_socket\_path](#output\_broker\_socket\_path) | Unix socket the desktop broker serves on. Forward a local port to it over SSH to reach a desktop. |
 | <a name="output_external_ip"></a> [external\_ip](#output\_external\_ip) | External IP addresses of created desktop instances, if enabled. |
+| <a name="output_iap_listen_port"></a> [iap\_listen\_port](#output\_iap\_listen\_port) | TCP port the broker serves the load balancer on, or null when it serves only its unix socket. |
 | <a name="output_iap_tunnel_command"></a> [iap\_tunnel\_command](#output\_iap\_tunnel\_command) | SSH command that forwards localhost:6080 to the desktop broker through IAP. Run it, then browse to http://localhost:6080/vnc.html. |
 | <a name="output_instance_name"></a> [instance\_name](#output\_instance\_name) | Name of the first instance created, if any. |
 | <a name="output_internal_ip"></a> [internal\_ip](#output\_internal\_ip) | Internal IP addresses of created desktop instances. |
+| <a name="output_network_endpoints"></a> [network\_endpoints](#output\_network\_endpoints) | Name and internal IP of each desktop instance, for attaching them to a load balancer backend such as iap-backend-service. |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Script to load and run all desktop runtime runners. |
 | <a name="output_vnc_backend"></a> [vnc\_backend](#output\_vnc\_backend) | VNC backend used by the desktop host. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

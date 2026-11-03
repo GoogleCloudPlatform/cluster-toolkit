@@ -15,6 +15,7 @@
 """Request routing in the broker: what gets a session, what is counted."""
 
 import asyncio
+import socket
 import types
 
 import pytest
@@ -22,6 +23,7 @@ import pytest
 pytest.importorskip("aiohttp")
 
 from desktop_broker.app import Broker  # noqa: E402
+from desktop_broker.errors import BrokerError  # noqa: E402
 from desktop_broker.novnc import NoVncFrontend  # noqa: E402
 
 
@@ -136,3 +138,49 @@ def test_needs_session_ignores_the_query_string():
     # request.path carries no query, which is what this relies on.
     assert frontend.needs_session(_Request("/vnc.html"))
     assert not frontend.needs_session(_Request("/vnc.html.map"))
+
+
+class _Transport:
+    def __init__(self, family):
+        self.connection = types.SimpleNamespace(family=family)
+
+    def get_extra_info(self, name):
+        return self.connection if name == "socket" else None
+
+
+class _Iap:
+    def subject(self, headers):
+        return headers["x-goog-iap-jwt-assertion"]
+
+
+class _Directory:
+    def username_for_subject(self, subject):
+        return {"1234": "alice_example_com"}[subject]
+
+
+def _tcp_request(assertion="1234"):
+    request = _Request("/vnc.html")
+    request.headers = {"x-goog-iap-jwt-assertion": assertion}
+    request.transport = _Transport(socket.AF_INET)
+    return request
+
+
+def _authenticator(iap):
+    broker = Broker.__new__(Broker)
+    broker.iap = iap
+    broker.oslogin = _Directory()
+    return broker
+
+
+def test_tcp_callers_are_named_by_their_iap_assertion():
+    broker = _authenticator(_Iap())
+    assert asyncio.run(broker.authenticate(_tcp_request())) == "alice_example_com"
+
+
+def test_tcp_is_refused_without_an_iap_verifier():
+    # The TCP listener only exists alongside a verifier; if one ever arrives
+    # without it, nobody may be taken at their word.
+    broker = _authenticator(None)
+    with pytest.raises(BrokerError) as excinfo:
+        asyncio.run(broker.authenticate(_tcp_request()))
+    assert excinfo.value.status == 403

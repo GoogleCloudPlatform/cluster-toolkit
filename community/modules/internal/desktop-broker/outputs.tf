@@ -22,6 +22,11 @@ output "broker_socket_path" {
   value       = local.broker_socket_path
 }
 
+output "iap_listen_port" {
+  description = "TCP port the broker serves the load balancer on, or null when it serves only its unix socket."
+  value       = local.iap_listen_port
+}
+
 output "vnc_backend" {
   description = "VNC backend used for per-user desktop sessions."
   value       = local.vnc_backend

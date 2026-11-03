@@ -176,3 +176,68 @@ def test_an_unreadable_metadata_response_is_a_clean_502(monkeypatch, body):
     with pytest.raises(BrokerError) as excinfo:
         oslogin.Directory()._get("users", {"username": "alice"})
     assert excinfo.value.status == 502
+
+
+class ListingDirectory(oslogin.Directory):
+    """Answers the full users listing from scripted pages."""
+
+    def __init__(self, pages, **kwargs):
+        super().__init__(**kwargs)
+        self.pages = pages
+        self.asked = []
+
+    def _get(self, path, params):
+        self.asked.append(dict(params))
+        return self.pages[params.get("pagetoken", "")]
+
+
+def test_an_iap_subject_maps_to_its_primary_linux_account():
+    users = profile(username="alice_example_com")
+    users["loginProfiles"][0]["posixAccounts"].insert(
+        0, {"username": "alice_win", "operatingSystemType": "WINDOWS"}
+    )
+    directory = ListingDirectory({"": users})
+    assert directory.username_for_subject(SUBJECT) == "alice_example_com"
+
+
+def test_the_listing_is_followed_across_pages():
+    first = {"loginProfiles": [], "nextPageToken": "next"}
+    directory = ListingDirectory({"": first, "next": profile()})
+    assert directory.username_for_subject(SUBJECT) == "alice_example_com"
+    assert [params.get("pagetoken") for params in directory.asked] == [None, "next"]
+
+
+def test_a_known_subject_is_answered_from_the_cache():
+    directory = ListingDirectory({"": profile()})
+    directory.username_for_subject(SUBJECT)
+    directory.username_for_subject(SUBJECT)
+    assert len(directory.asked) == 1
+
+
+def test_an_unknown_subject_refetches_then_is_refused():
+    # Refetched so a just-granted account need not wait out the cache.
+    directory = ListingDirectory({"": profile()})
+    directory.username_for_subject(SUBJECT)
+    with pytest.raises(oslogin.ProfileNotFound) as excinfo:
+        directory.username_for_subject("999")
+    assert excinfo.value.status == 403
+    assert len(directory.asked) == 2
+
+
+def test_the_listing_stops_at_the_metadata_servers_end_marker():
+    # Observed on a live instance: the last page carries "LAST_PAGE_TOKEN",
+    # and asking for it returns no profiles and "0", forever.
+    directory = ListingDirectory({
+        "": {**profile(), "nextPageToken": "LAST_PAGE_TOKEN"},
+        "LAST_PAGE_TOKEN": {"loginProfiles": [], "nextPageToken": "0"},
+        "0": {"loginProfiles": [], "nextPageToken": "0"},
+    })
+    assert directory.username_for_subject(SUBJECT) == "alice_example_com"
+    assert len(directory.asked) == 2
+
+
+def test_a_repeated_token_cannot_loop():
+    page = {**profile(), "nextPageToken": "again"}
+    directory = ListingDirectory({"": page, "again": page})
+    assert directory.username_for_subject(SUBJECT) == "alice_example_com"
+    assert len(directory.asked) == 2
