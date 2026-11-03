@@ -27,6 +27,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 
 	"github.com/go-git/go-git/v5"
@@ -123,7 +124,8 @@ Commit info: {{index .Annotations "commitInfo"}}
 		wrapTelemetry(child)
 	}
 
-	err := rootCmd.Execute()
+	executedCmd, err := rootCmd.ExecuteC()
+	initFallbackTelemetryOnError(executedCmd, err)
 
 	// Capture Error Code
 	exitCode := 0
@@ -162,6 +164,27 @@ func initTelemetry(cmd *cobra.Command, args []string) {
 			}
 		}
 	}
+}
+
+func initFallbackTelemetryOnError(executedCmd *cobra.Command, err error) {
+	if err == nil || telemetryCollector != nil {
+		return
+	}
+	if executedCmd == nil {
+		executedCmd = rootCmd
+	}
+	if shouldSkipFallbackTelemetry(executedCmd) {
+		return
+	}
+	initTelemetry(executedCmd, executedCmd.Flags().Args())
+}
+
+func shouldSkipFallbackTelemetry(cmd *cobra.Command) bool {
+	name := cmd.Name()
+	if name == "help" || strings.HasPrefix(name, "__complete") {
+		return true
+	}
+	return cmd == telemetryCmd || cmd.Parent() == telemetryCmd
 }
 
 func setTelemetryMetadata(key, value string) {

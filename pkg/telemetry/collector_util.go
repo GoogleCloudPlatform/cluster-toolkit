@@ -178,11 +178,12 @@ func hasRawAIAssistedTrue(path string) bool {
 	var partial struct {
 		AIAssisted *bool `yaml:"ai_assisted"`
 	}
-	if err := yaml.Unmarshal(data, &partial); err == nil && partial.AIAssisted != nil {
-		return *partial.AIAssisted
+	if err := yaml.Unmarshal(data, &partial); err == nil {
+		return partial.AIAssisted != nil && *partial.AIAssisted
 	}
 
 	scanner := bufio.NewScanner(strings.NewReader(strings.TrimPrefix(string(data), "\ufeff")))
+	scanner.Buffer(make([]byte, 0, 64*1024), maxRawYAMLScanBytes)
 	for scanner.Scan() {
 		if rawAIAssistedTopLevelRe.MatchString(strings.TrimRight(scanner.Text(), "\r")) {
 			return true

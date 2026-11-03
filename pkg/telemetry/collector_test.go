@@ -3104,6 +3104,9 @@ func TestGetIsAIAssisted(t *testing.T) {
 	unknownFieldAIBP := writeFile("unknown-field-ai.yaml", "blueprint_name: bad\nai_assisted: true\nnot_a_real_key: 123\n")
 	brokenSyntaxAIDepl := writeFile("broken-depl-ai.yaml", "ai_assisted: \"true\"\nvars:\n  foo: [unclosed\n")
 	commentOnlyBP := writeFile("comment-only.yaml", "# ai_assisted: true\nblueprint_name: clean\nvars:\n  ai_assisted: true\n  foo: [unclosed\n")
+	validMultilineStringBP := writeFile("valid-multiline-str.yaml", "blueprint_name: manual\ndescription: \"line1\nai_assisted: true\nline3\"\nvars:\n  project_id: p\n")
+	validMultiDocBP := writeFile("valid-multidoc.yaml", "blueprint_name: manual\nvars:\n  project_id: p\n---\nai_assisted: true\n")
+	brokenLongLineAIBP := writeFile("broken-long-line-ai.yaml", "blueprint_name: "+strings.Repeat("x", 70*1024)+"\nai_assisted: true\nvars:\n  foo: [unclosed\n")
 
 	allAgentVars := []string{"GHPC_AI_ASSISTED", "GEMINI_CLI", "CLAUDECODE", "CODEX_SANDBOX", "CODEX_CI", "CURSOR_TRACE_ID"}
 
@@ -3165,6 +3168,24 @@ func TestGetIsAIAssisted(t *testing.T) {
 			args:     []string{commentOnlyBP},
 			env:      map[string]string{"GHPC_AI_ASSISTED": "false"},
 			expected: false,
+		},
+		{
+			name:     "Valid YAML with multiline quoted string containing ai_assisted: true at col 0 returns false",
+			args:     []string{validMultilineStringBP},
+			env:      map[string]string{"GHPC_AI_ASSISTED": "false"},
+			expected: false,
+		},
+		{
+			name:     "Valid multi-document YAML omitting ai_assisted in first doc returns false",
+			args:     []string{validMultiDocBP},
+			env:      map[string]string{"GHPC_AI_ASSISTED": "false"},
+			expected: false,
+		},
+		{
+			name:     "Broken YAML with >64KiB line before ai_assisted: true still returns true",
+			args:     []string{brokenLongLineAIBP},
+			env:      map[string]string{"GHPC_AI_ASSISTED": "false"},
+			expected: true,
 		},
 		{
 			name:     "Blueprint-less explain/job detects GEMINI_CLI",

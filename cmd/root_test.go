@@ -17,6 +17,7 @@ limitations under the License.
 package cmd
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"os/exec"
@@ -27,6 +28,7 @@ import (
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/telemetry"
 
 	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5"
@@ -501,4 +503,153 @@ func TestApplyAgentEnvAttribution(t *testing.T) {
 	if !deployBP.AIAssisted {
 		t.Errorf("Expected gcluster deploy to persist AIAssisted=true under agent env")
 	}
+}
+
+func setupIsolatedExecuteTest(t *testing.T) (string, func()) {
+	t.Helper()
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+	t.Setenv("APPDATA", tempDir)
+	t.Setenv("HOME", tempDir)
+	t.Setenv("GHPC_AI_ASSISTED", "false")
+
+	_ = config.InitUserConfig()
+	_ = config.SetTelemetry(false)
+
+	origSilenceErrors := rootCmd.SilenceErrors
+	origSilenceUsage := rootCmd.SilenceUsage
+	rootCmd.SilenceErrors = true
+	rootCmd.SilenceUsage = true
+	t.Cleanup(func() {
+		rootCmd.SilenceErrors = origSilenceErrors
+		rootCmd.SilenceUsage = origSilenceUsage
+		rootCmd.SetArgs(nil)
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+	})
+
+	reset := func() {
+		userConfigExists = false
+		telemetryCollector = nil
+		telemetryFlushed.Store(false)
+		outBuf := new(bytes.Buffer)
+		rootCmd.SetOut(outBuf)
+		rootCmd.SetErr(outBuf)
+	}
+	return tempDir, reset
+}
+
+func TestExecute_PreRunErrors(t *testing.T) {
+	tempDir, resetTelemetryState := setupIsolatedExecuteTest(t)
+
+	aiDeplPath := filepath.Join(tempDir, "ai-depl.yaml")
+	if err := os.WriteFile(aiDeplPath, []byte("ai_assisted: true\nvars:\n  project_id: test-p\n"), 0644); err != nil {
+		t.Fatalf("failed writing ai-depl.yaml: %v", err)
+	}
+
+	t.Run("Unknown subcommand initializes fallback telemetry", func(t *testing.T) {
+		resetTelemetryState()
+		t.Setenv("GHPC_AI_ASSISTED", "")
+		t.Setenv("GEMINI_CLI", "1")
+		rootCmd.SetArgs([]string{"nonexistent-plan-cmd"})
+
+		err := Execute()
+		if err == nil || telemetryCollector == nil {
+			t.Fatalf("Expected error and initialized telemetryCollector, got err=%v collector=%v", err, telemetryCollector)
+		}
+		telemetryCollector.CollectMetrics(1, err)
+		if got, _ := telemetryCollector.GetMetadata(telemetry.IS_AI_ASSISTED); got != "true" {
+			t.Errorf("IS_AI_ASSISTED = %q, want %q", got, "true")
+		}
+	})
+
+	t.Run("Unknown flag and checkExists error initialize fallback telemetry", func(t *testing.T) {
+		dummy := &cobra.Command{
+			Use:  "dummy-create <BLUEPRINT_FILE>",
+			Args: cobra.MatchAll(cobra.ExactArgs(1), checkExists),
+			RunE: func(cmd *cobra.Command, args []string) error { return nil },
+		}
+		dummy.Flags().StringP("deployment-file", "d", "", "")
+		rootCmd.AddCommand(dummy)
+		defer rootCmd.RemoveCommand(dummy)
+
+		resetTelemetryState()
+		t.Setenv("GHPC_AI_ASSISTED", "false")
+		missingBP := filepath.Join(tempDir, "missing-blueprint.yaml")
+		rootCmd.SetArgs([]string{"dummy-create", missingBP, "-d", aiDeplPath})
+
+		err := Execute()
+		if err == nil || telemetryCollector == nil {
+			t.Fatalf("Expected checkExists error and initialized collector, got err=%v collector=%v", err, telemetryCollector)
+		}
+		telemetryCollector.CollectMetrics(1, err)
+		if got, _ := telemetryCollector.GetMetadata(telemetry.IS_AI_ASSISTED); got != "true" {
+			t.Errorf("IS_AI_ASSISTED = %q, want %q from -d deployment.yaml", got, "true")
+		}
+		if got, _ := telemetryCollector.GetMetadata(telemetry.ERROR_TYPE); got != telemetry.ErrTypeYamlDoesNotExist {
+			t.Errorf("ERROR_TYPE = %q, want %q", got, telemetry.ErrTypeYamlDoesNotExist)
+		}
+
+		resetTelemetryState()
+		t.Setenv("GHPC_AI_ASSISTED", "")
+		t.Setenv("CLAUDECODE", "1")
+		rootCmd.SetArgs([]string{"dummy-create", "--unknown-dry-run-flag"})
+
+		if err := Execute(); err == nil || telemetryCollector == nil {
+			t.Fatalf("Expected unknown flag error and initialized collector, got err=%v collector=%v", err, telemetryCollector)
+		}
+	})
+}
+
+func TestExecute_PreRunTelemetryGuards(t *testing.T) {
+	_, resetTelemetryState := setupIsolatedExecuteTest(t)
+
+	t.Run("Help flag does not initialize telemetry", func(t *testing.T) {
+		dummy := &cobra.Command{
+			Use:  "dummy-help-target",
+			RunE: func(cmd *cobra.Command, args []string) error { return nil },
+		}
+		rootCmd.AddCommand(dummy)
+		defer rootCmd.RemoveCommand(dummy)
+
+		resetTelemetryState()
+		rootCmd.SetArgs([]string{"dummy-help-target", "--help"})
+
+		if err := Execute(); err != nil {
+			t.Fatalf("Unexpected error on --help: %v", err)
+		}
+		if telemetryCollector != nil {
+			t.Errorf("Expected telemetryCollector to stay nil on --help")
+		}
+	})
+
+	t.Run("Telemetry opt-out and __complete commands skip fallback telemetry", func(t *testing.T) {
+		resetTelemetryState()
+		rootCmd.SetArgs([]string{"telemetry"})
+		if err := Execute(); err == nil {
+			t.Fatal("Expected ExactArgs error for bare 'telemetry' command")
+		}
+		if telemetryCollector != nil || userConfigExists {
+			t.Errorf("Expected telemetry opt-out command error to skip fallback telemetry")
+		}
+
+		hiddenComplete := &cobra.Command{
+			Use:    "__complete-test",
+			Hidden: true,
+			Args:   cobra.ExactArgs(1),
+			RunE:   func(cmd *cobra.Command, args []string) error { return nil },
+		}
+		rootCmd.AddCommand(hiddenComplete)
+		defer rootCmd.RemoveCommand(hiddenComplete)
+
+		resetTelemetryState()
+		rootCmd.SetArgs([]string{"__complete-test"})
+		if err := Execute(); err == nil {
+			t.Fatal("Expected ExactArgs error for __complete-test")
+		}
+		if telemetryCollector != nil {
+			t.Errorf("Expected __complete command error to skip fallback telemetry")
+		}
+	})
 }
