@@ -234,6 +234,15 @@ Modules that are still in development and less stable are labeled with the
 * **[int-app-lb]** ![community-badge] ![experimental-badge] : Creates a regional
   Internal Application (L7) Load Balancer in Google Cloud with support for
   Managed Instance Group backends, IAP, and custom SSL certificates.
+* **[ext-app-lb]** ![community-badge] ![experimental-badge] : Creates the front
+  end of a global external Application (L7) Load Balancer, routing hostnames to
+  backend services created elsewhere, such as by [iap-backend-service].
+* **[iap-backend-service]** ![community-badge] ![experimental-badge] : Creates a
+  backend service behind Identity-Aware Proxy for a global external Application
+  Load Balancer, and attaches VM instances to it.
+* **[managed-certificate]** ![community-badge] ![experimental-badge] : Creates a
+  Google-managed Certificate Manager certificate, authorised by DNS and able to
+  cover a wildcard, and a certificate map for [ext-app-lb].
 
 [vpc]: network/vpc/README.md
 [dns-managed-zone]: network/dns-managed-zone/README.md
@@ -245,6 +254,9 @@ Modules that are still in development and less stable are labeled with the
 [pre-existing-subnetwork]: network/pre-existing-subnetwork/README.md
 [gpu-rdma-vpc]: network/gpu-rdma-vpc/README.md
 [int-app-lb]: ../community/modules/network/int-app-lb/README.md
+[ext-app-lb]: ../community/modules/network/ext-app-lb/README.md
+[iap-backend-service]: ../community/modules/network/iap-backend-service/README.md
+[managed-certificate]: ../community/modules/network/managed-certificate/README.md
 
 ### Packer
 
