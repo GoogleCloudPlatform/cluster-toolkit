@@ -21,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import validate_cloud_docs as vcd  # noqa: E402
@@ -364,6 +365,53 @@ class TestValidateCloudDocs(unittest.TestCase):
                     vcd.main(["--check-live", "--local-dir", tmpdir, "--summary-file", summary_file]),
                     1,
                 )
+
+    def test_fail_closed_git_diff_and_pr_mapping_guard(self):
+        # A git diff that cannot run yields None, and --check-pr exits 2 (never "no impacts").
+        with tempfile.TemporaryDirectory() as repo:
+            subprocess.run(["git", "init", "-q", "-b", "lone"], cwd=repo, check=True)
+            subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    "user.email=t@example.com",
+                    "-c",
+                    "user.name=t",
+                    "-c",
+                    "commit.gpgsign=false",
+                    "commit",
+                    "-q",
+                    "--allow-empty",
+                    "-m",
+                    "one",
+                ],
+                cwd=repo,
+                check=True,
+            )
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertIsNone(
+                    vcd.get_changed_files_from_git(
+                        base_ref="origin/develop", repo_root=repo
+                    )
+                )
+        with mock.patch.object(vcd, "get_changed_files_from_git", return_value=None), contextlib.redirect_stderr(
+            io.StringIO()
+        ):
+            self.assertEqual(
+                vcd.main(["--check-pr", "--fail-on-impact", "--pr-body", ""]), 2
+            )
+
+        # Every PR_PATH_TO_CLOUD_DOCS prefix missing from repo_root is reported.
+        with tempfile.TemporaryDirectory() as empty_root:
+            errs = vcd.validate_live_cloud_docs(
+                fetcher=lambda s: "<article></article>", repo_root=empty_root
+            )
+        stale = [
+            e
+            for e in errs
+            if e.startswith("PR_PATH_TO_CLOUD_DOCS: stale repo mapping")
+        ]
+        self.assertEqual(len(stale), len(vcd.PR_PATH_TO_CLOUD_DOCS))
 
 
 if __name__ == "__main__":

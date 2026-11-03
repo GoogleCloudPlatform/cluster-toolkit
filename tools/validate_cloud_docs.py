@@ -20,7 +20,8 @@ Modes:
      a reminder table listing any public cloud.google.com pages that document
      the modified blueprints or CLI commands. Exits 1 when --fail-on-impact is
      set and Cloud-Doc-backed files are modified unless the PR description
-     contains a 'Cloud-Docs:' acknowledgment line (exits 0 otherwise).
+     contains a 'Cloud-Docs:' acknowledgment line (exits 0 otherwise). Exits 2
+     if the changed files cannot be computed.
 
   2. --check-live (or --local-dir <dir>):
      Fetches the live public https://cloud.google.com/cluster-toolkit/docs/...
@@ -182,17 +183,13 @@ ALL_MONITORED_PAGES: list[str] = [
     "/ai-hypercomputer/docs/create/gke-ai-hypercompute",
 ]
 
-INTERNAL_CMD_NAMES = {
-    "gcluster",
-    "show-id",
-    "test",
-    "test-command",
-    "dummy-success",
-    "dummy-error",
-    "dummy-exit-error",
-    "custom",
-    "set",
-    "show",
+# Names excluded from reference-page checks, keyed by cmd dir. "gcluster" is the
+# root command. Nested sub-subcommands are documented on child pages
+# (gcluster-telemetry, gcluster-job-config), not in the parent page's <dt> list,
+# so the exact <dt> match would report them as undocumented: add new ones here.
+EXCLUDED_CMD_NAMES: dict[str, set[str]] = {
+    "cmd": {"gcluster", "show-id"},  # gcluster telemetry show-id
+    "cmd/job": {"set", "show"},  # gcluster job config set|show
 }
 
 
@@ -283,6 +280,7 @@ def extract_cli_subcommands(
     """Extracts user-facing CLI subcommand names from Use: fields in a cmd directory."""
     full_dir = os.path.join(repo_root, cmd_rel_dir)
     commands: set[str] = set()
+    excluded = EXCLUDED_CMD_NAMES.get(os.path.normpath(cmd_rel_dir), set())
     if not os.path.isdir(full_dir):
         return commands
     for entry in sorted(os.listdir(full_dir)):
@@ -295,7 +293,7 @@ def extract_cli_subcommands(
             parts = match.group(1).strip().split()
             if parts:
                 sub = parts[0]
-                if sub not in INTERNAL_CMD_NAMES:
+                if sub not in excluded:
                     commands.add(sub)
     return commands
 
@@ -464,7 +462,7 @@ def check_cli_reference_page(
     }
     if documented:
         missing = expected_cmds - documented
-    else:
+    else:  # No <dt> command list (layout change or synthetic fixture): word search fallback.
         text = html_to_text(raw_html)
         missing = {
             s for s in expected_cmds if not re.search(rf"\b{re.escape(s)}\b", text)
