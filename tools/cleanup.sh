@@ -1310,7 +1310,7 @@ process_storage_buckets() {
 				if delete_err=$(gcloud storage rm --recursive "gs://$name" --project="$PROJECT_ID" --quiet 2>&1); then
 					log "SUCCESS" "Successfully deleted Storage Bucket: $name"
 					((count++)) || true
-				elif [[ "${delete_err,,}" == *"anywhere cache"* || "${delete_err,,}" == *"anywhere_cache"* || "${delete_err,,}" == *"retention"* || "${delete_err}" == *"HTTPError 400"* || "${delete_err}" == *"BadRequestException: 400"* || "${delete_err}" == *"HTTPError 403"* || "${delete_err}" == *"AccessDeniedException: 403"* ]]; then
+				elif [[ "${delete_err,,}" == *"anywhere cache"* || "${delete_err,,}" == *"anywhere_cache"* || "${delete_err,,}" == *"retention"* || "${delete_err,,}" == *"hold"* ]]; then
 					if cache_ids=$(gcloud storage buckets anywhere-caches list "gs://$name" --project="$PROJECT_ID" --format="value(id)" 2>/dev/null) && [[ -n "$cache_ids" ]]; then
 						while IFS= read -r cache_id; do
 							[[ -z "$cache_id" ]] && continue
