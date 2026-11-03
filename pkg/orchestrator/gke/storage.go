@@ -165,12 +165,18 @@ func (sm *StorageManager) isGCSFuseBackedPVC(pvcName string, job orchestrator.Jo
 
 	ns, err := sm.resolveNamespace(job)
 	if err != nil || ns == "" {
+		logging.Warn("Could not resolve namespace to inspect PVC %q for GCSFuse CSI driver (%v); defaulting to \"default\".", pvcName, err)
 		ns = "default"
 	}
 
 	res := sm.orchestrator.kubectl("get", "pvc", pvcName, "-n", ns, "--ignore-not-found",
 		"-o", `jsonpath={.spec.volumeName}{"\t"}{.spec.storageClassName}`)
-	if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) == "" {
+	if res.ExitCode != 0 {
+		logging.Warn("Could not inspect PVC %q in namespace %q to check for GCSFuse CSI driver: %s. Proceeding without GCSFuse sidecar annotation.",
+			pvcName, ns, strings.TrimSpace(res.Stderr))
+		return false
+	}
+	if strings.TrimSpace(res.Stdout) == "" {
 		return false
 	}
 
@@ -183,13 +189,19 @@ func (sm *StorageManager) isGCSFuseBackedPVC(pvcName string, job orchestrator.Jo
 	}
 	if volumeName != "" {
 		pvRes := sm.orchestrator.kubectl("get", "pv", volumeName, "--ignore-not-found", "-o", "jsonpath={.spec.csi.driver}")
-		if pvRes.ExitCode == 0 && strings.TrimSpace(pvRes.Stdout) == gcsFuseCSIDriver {
+		if pvRes.ExitCode != 0 {
+			logging.Warn("Could not inspect PersistentVolume %q for PVC %q to check for GCSFuse CSI driver: %s.",
+				volumeName, pvcName, strings.TrimSpace(pvRes.Stderr))
+		} else if strings.TrimSpace(pvRes.Stdout) == gcsFuseCSIDriver {
 			return true
 		}
 	}
 	if storageClassName != "" {
 		scRes := sm.orchestrator.kubectl("get", "storageclass", storageClassName, "--ignore-not-found", "-o", "jsonpath={.provisioner}")
-		if scRes.ExitCode == 0 && strings.TrimSpace(scRes.Stdout) == gcsFuseCSIDriver {
+		if scRes.ExitCode != 0 {
+			logging.Warn("Could not inspect StorageClass %q for PVC %q to check for GCSFuse CSI driver: %s.",
+				storageClassName, pvcName, strings.TrimSpace(scRes.Stderr))
+		} else if strings.TrimSpace(scRes.Stdout) == gcsFuseCSIDriver {
 			return true
 		}
 	}

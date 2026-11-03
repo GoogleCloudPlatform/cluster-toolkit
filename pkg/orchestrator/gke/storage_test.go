@@ -4115,6 +4115,22 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 			},
 			wantGCSFuse: false,
 		},
+		{
+			name:  "kubectl get pv failure degrades gracefully and falls back to StorageClass check",
+			mount: "rbac-restricted-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get pvc rbac-restricted-pvc -n default --ignore-not-found -o jsonpath={.spec.volumeName}{\"\\t\"}{.spec.storageClassName}": {
+					{ExitCode: 0, Stdout: "restricted-pv\tcustom-gcsfuse-sc"},
+				},
+				"kubectl get pv restricted-pv --ignore-not-found -o jsonpath={.spec.csi.driver}": {
+					{ExitCode: 1, Stderr: "Error from server (Forbidden): persistentvolumes \"restricted-pv\" is forbidden"},
+				},
+				"kubectl get storageclass custom-gcsfuse-sc --ignore-not-found -o jsonpath={.provisioner}": {
+					{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
+				},
+			},
+			wantGCSFuse: true,
+		},
 	}
 
 	for _, tc := range tests {
