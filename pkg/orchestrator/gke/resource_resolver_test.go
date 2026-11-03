@@ -291,11 +291,13 @@ func TestFetchMachineCapabilities_Caching(t *testing.T) {
 
 func TestCalculateResourceLimits_CPU(t *testing.T) {
 	tests := []struct {
-		name          string
-		capacityCount int
-		gcsFuse       bool
-		wantAlloc     int64
-		wantCPU       string
+		name           string
+		machineType    string
+		threadsPerCore string
+		capacityCount  int
+		gcsFuse        bool
+		wantAlloc      int64
+		wantCPU        string
 	}{
 		{
 			name:          "Large capacity (32 vCPU)",
@@ -343,6 +345,46 @@ func TestCalculateResourceLimits_CPU(t *testing.T) {
 			wantCPU:       "815m", // 1065 - 250
 		},
 		{
+			name:          "Shared-core machine type (e2-medium, raw guestCpus=2 -> 1 effective vCPU)",
+			machineType:   "e2-medium",
+			capacityCount: 2,
+			wantAlloc:     1930,
+			wantCPU:       "570m", // 940/2 + 100
+		},
+		{
+			name:          "Shared-core machine type (e2-medium) with GCSFuse",
+			machineType:   "e2-medium",
+			capacityCount: 2,
+			gcsFuse:       true,
+			wantAlloc:     1930,
+			wantCPU:       "320m", // 570 - 250
+		},
+		{
+			name:           "SMT disabled (threads_per_core=1 on n2-standard-4, 4 -> 2 effective vCPUs)",
+			machineType:    "n2-standard-4",
+			threadsPerCore: "1",
+			capacityCount:  4,
+			wantAlloc:      3920,
+			wantCPU:        "1065m", // 2 effective vCPUs -> 1930/2 + 100
+		},
+		{
+			name:           "SMT disabled (threads_per_core=1 on n2-standard-4) with GCSFuse",
+			machineType:    "n2-standard-4",
+			threadsPerCore: "1",
+			capacityCount:  4,
+			gcsFuse:        true,
+			wantAlloc:      3920,
+			wantCPU:        "815m", // 1065 - 250
+		},
+		{
+			name:           "Non-SMT-capable family (t2d-standard-4) ignores threads_per_core=1",
+			machineType:    "t2d-standard-4",
+			threadsPerCore: "1",
+			capacityCount:  4,
+			wantAlloc:      3920,
+			wantCPU:        "2920m",
+		},
+		{
 			name:          "Capacity 1",
 			capacityCount: 1,
 			wantAlloc:     940,    // 1000 - 60
@@ -370,17 +412,24 @@ func TestCalculateResourceLimits_CPU(t *testing.T) {
 		},
 	}
 
-	g := newTestGKEOrchestrator(nil)
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if gotAlloc := calculateAllocatableCPUMilli(tt.capacityCount); gotAlloc != tt.wantAlloc {
 				t.Errorf("calculateAllocatableCPUMilli(%d) = %d, want %d", tt.capacityCount, gotAlloc, tt.wantAlloc)
 			}
 
+			g := newTestGKEOrchestrator(nil)
+			mt := tt.machineType
+			if mt == "" {
+				mt = "n2-standard-32"
+			}
+			if tt.threadsPerCore != "" {
+				g.machineTypeToThreadsPerCore = map[string]string{mt: tt.threadsPerCore}
+			}
+
 			opts := ManifestOptions{
-				ComputeType:    "n2-standard-32",
-				MachineType:    "n2-standard-32",
+				ComputeType:    mt,
+				MachineType:    mt,
 				GCSFuseEnabled: tt.gcsFuse,
 			}
 			profile := JobProfile{

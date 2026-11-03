@@ -347,6 +347,26 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 			dontWantLimits:  []string{"nvidia.com/gpu", "google.com/tpu"},
 			wantErr:         false,
 		},
+		{
+			name:            "Shared-Core CPU Machine (e2-medium)",
+			acceleratorType: "e2-medium",
+			cpuLimit:        "",
+			memoryLimit:     "",
+			wantLabels:      []string{},
+			wantLimits:      []string{"cpu: 570m"},
+			dontWantLimits:  []string{"nvidia.com/gpu", "google.com/tpu"},
+			wantErr:         false,
+		},
+		{
+			name:            "CPU Machine with SMT Disabled (threads_per_core=1)",
+			acceleratorType: "n2-standard-4",
+			cpuLimit:        "",
+			memoryLimit:     "",
+			wantLabels:      []string{},
+			wantLimits:      []string{"cpu: 1065m"},
+			dontWantLimits:  []string{"nvidia.com/gpu", "google.com/tpu"},
+			wantErr:         false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -362,6 +382,8 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 				"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
 				"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "16x16"}},
 				"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json":                                {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+				"gcloud compute machine-types describe e2-medium --zone=us-central1-a --format=json":                                    {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+				"gcloud compute machine-types describe n2-standard-4 --zone=us-central1-a --format=json":                                {{ExitCode: 0, Stdout: `{"guestCpus": 4}`}},
 				"gcloud compute machine-types describe nvidia-h100-mega-80gb --zone=us-central1-a --format=json":                        {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1, "guestAcceleratorType": "nvidia-h100-mega-80gb"}]}`}},
 				"gcloud compute machine-types describe nvidia-gb200 --zone=us-central1-a --format=json":                                 {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1, "guestAcceleratorType": "nvidia-gb200"}]}`}},
 				"gcloud compute machine-types describe nvidia-l4 --zone=us-central1-a --format=json":                                    {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1, "guestAcceleratorType": "nvidia-l4"}]}`}},
@@ -378,6 +400,8 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 				{Config: gkeNodePoolConfig{MachineType: "tpu-v6e-slice"}},
 				{Config: gkeNodePoolConfig{MachineType: "nvidia-unknown-new-gpu"}},
 				{Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+				{Config: gkeNodePoolConfig{MachineType: "e2-medium"}},
+				{Config: gkeNodePoolConfig{MachineType: "n2-standard-4", AdvancedMachineFeatures: &gkeAdvancedMachineFeatures{ThreadsPerCore: "1"}}},
 			}
 
 			profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
@@ -1024,6 +1048,22 @@ func TestProcessNodePoolCapacity_Hyperthreading(t *testing.T) {
 			wantCpus: 16, // Not halved because it's ARM!
 			wantErr:  false,
 		},
+		{
+			name: "Shared-core machine (e2-medium) treated as 1 vCPU per node",
+			np: gkeJobNodePool{
+				Config: gkeNodePoolConfig{
+					MachineType: "e2-medium",
+				},
+				InitialNodeCount: 2,
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe e2-medium --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 2, "memoryMb": 4096}`},
+				},
+			},
+			wantCpus: 2, // 1 effective vCPU * 2 nodes
+			wantErr:  false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1188,6 +1228,23 @@ func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 			},
 			wantIsCPU:    true,
 			wantCapacity: 60, // Not halved!
+			wantErr:      false,
+		},
+		{
+			name: "Shared-core machine (e2-medium) treated as 1 vCPU",
+			job: orchestrator.JobDefinition{
+				ComputeType:     "e2-medium",
+				MachineType:     "e2-medium",
+				ClusterLocation: "us-central1-a",
+			},
+			threadsPerCore: "",
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe e2-medium --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 2, "memoryMb": 4096}`},
+				},
+			},
+			wantIsCPU:    true,
+			wantCapacity: 1, // Treated as 1 vCPU!
 			wantErr:      false,
 		},
 	}

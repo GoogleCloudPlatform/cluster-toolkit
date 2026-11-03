@@ -47,7 +47,7 @@ func (g *GKEOrchestrator) FetchMachineCapacity(machineType, zone string) (int, e
 		return cap.Accelerators[0].Count, nil
 	}
 	if cap.GuestCpus > 0 {
-		return cap.GuestCpus, nil
+		return g.getEffectiveCPUs(machineType, cap.GuestCpus), nil
 	}
 	return 0, fmt.Errorf("no accelerators or guestCpus found for machine type %s in zone %s", machineType, zone)
 }
@@ -423,8 +423,13 @@ func (g *GKEOrchestrator) hasSlicingTopologies() bool {
 
 func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile JobProfile) (cpu, mem, gpu, tpu string, err error) {
 	if profile.IsCPUMachine {
-		logging.Info("Using cached capacity for CPU machine %s during limits calculation: %d", opts.ComputeType, profile.CapacityCount)
-		cpuMilli := calculateFullNodeCPURequestMilli(profile.CapacityCount, opts.GCSFuseEnabled)
+		machineType := opts.MachineType
+		if machineType == "" {
+			machineType = opts.ComputeType
+		}
+		vCPUs := g.getEffectiveCPUs(machineType, profile.CapacityCount)
+		logging.Info("Using cached capacity for CPU machine %s during limits calculation: %d", opts.ComputeType, vCPUs)
+		cpuMilli := calculateFullNodeCPURequestMilli(vCPUs, opts.GCSFuseEnabled)
 		return fmt.Sprintf("%dm", cpuMilli), "", "", "", nil
 	}
 
