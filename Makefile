@@ -260,7 +260,7 @@ endif
 
 ###################################
 # AGENT SKILLS SECTION
-.PHONY: lint-skills test-skills test-skills-live generate-docs validate-docs
+.PHONY: lint-skills test-skills test-skills-live generate-docs validate-docs check-cloud-docs
 
 lint-skills:
 	$(info **************** linting agent skills ***************)
@@ -289,6 +289,10 @@ test-skills-live: gcluster
 validate-docs:
 	$(info **************** validating README snippets and links ***************)
 	@python3 tools/validate_readme_snippets.py
+
+check-cloud-docs:
+	$(info **************** validating public cloud.google.com docs against repo ***************)
+	@python3 tools/validate_cloud_docs.py --check-live
 # END OF AGENT SKILLS SECTION
 
 .PHONY: test-agentgateway agentgateway-static
