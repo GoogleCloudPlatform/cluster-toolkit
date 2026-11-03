@@ -4031,7 +4031,7 @@ blueprints:
       specific_reservations:
       - name: null
     spot: false
-    system_node_pool_machine_type: n2-standard-8
+    system_node_pool_machine_type: n2d-standard-8
     tpu_topology: 2x2x1
     user_namespace: default
     zone: null
@@ -4107,7 +4107,7 @@ blueprints:
       specific_reservations:
       - name: null
     spot: false
-    system_node_pool_machine_type: n2-standard-8
+    system_node_pool_machine_type: n2d-standard-8
     tpu_topology: 2x2x1
     user_namespace: default
     zone: null
@@ -4311,7 +4311,7 @@ blueprints:
       - name: null
     spot: false
     system_node_pool_disk_size_gb: 200
-    system_node_pool_machine_type: n2-standard-8
+    system_node_pool_machine_type: n2d-standard-8
     tpu_topology: 4x4
     user_namespace: default
     v6e_node_pool_disk_size_gb: 100
@@ -4386,7 +4386,7 @@ blueprints:
       - name: null
     spot: false
     system_node_pool_disk_size_gb: 200
-    system_node_pool_machine_type: n2-standard-8
+    system_node_pool_machine_type: n2d-standard-8
     tpu_topology: 4x4
     user_namespace: default
     v6e_node_pool_disk_size_gb: 100
