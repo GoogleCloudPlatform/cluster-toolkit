@@ -17,6 +17,7 @@
 import contextlib
 import io
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -271,6 +272,27 @@ class TestValidateCloudDocs(unittest.TestCase):
         for body, want in cases.items():
             with self.subTest(body=body):
                 self.assertEqual(vcd.extract_cloud_docs_ack(body), want)
+
+    def test_get_changed_files_reports_both_sides_of_a_cross_dir_move(self):
+        with tempfile.TemporaryDirectory() as repo:
+            def git(*args: str) -> None:
+                subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+            git("init", "-q", "-b", "develop")
+            git("config", "user.email", "t@example.com")
+            git("config", "user.name", "t")
+            os.makedirs(os.path.join(repo, "examples/gke-a4"))
+            with open(os.path.join(repo, "examples/gke-a4/gke-a4.yaml"), "w", encoding="utf-8") as f:
+                f.write("blueprint_name: gke-a4\n" * 20)
+            git("add", "-A")
+            git("commit", "-qm", "base")
+            git("checkout", "-qb", "feature")
+            os.makedirs(os.path.join(repo, "examples/archive"))
+            git("mv", "examples/gke-a4/gke-a4.yaml", "examples/archive/gke-a4.yaml")
+            git("commit", "-qm", "move")
+            changed = vcd.get_changed_files_from_git(base_ref="develop", repo_root=repo)
+            self.assertIn("examples/gke-a4/gke-a4.yaml", changed)
+            self.assertTrue(vcd.match_pr_cloud_docs_impacts(changed))
 
     def test_resilience_and_community_code_block_paths(self):
         # 1. community/examples/ path in <pre> must not be truncated to examples/
