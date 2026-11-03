@@ -3891,6 +3891,28 @@ func TestImagePullSecrets_ExplicitBypassAndActiveImages(t *testing.T) {
 		t.Fatalf("explicit ImagePullSecrets failed: opts=%q err=%v", opts.ImagePullSecrets, err)
 	}
 
+	// An explicitly empty --image-pull-secret leaves the pods without imagePullSecrets even when a secret matches.
+	orc.kubeClient = &MockKubeClient{Objects: map[string][]unstructured.Unstructured{"secrets": {makeDockerConfigSecret("reg-sec", "registry.local")}}}
+	disabledJob := explicitJob
+	disabledJob.ImagePullSecrets, disabledJob.ImagePullSecretsSpecified = "", true
+	if opts, err := orc.PrepareManifestOptions(disabledJob, "registry.local/app:v1", JobProfile{IsCPUMachine: true, CapacityCount: 4}, false, false); err != nil || opts.ImagePullSecrets != "" {
+		t.Fatalf("empty --image-pull-secret: opts=%q err=%v, want no imagePullSecrets", opts.ImagePullSecrets, err)
+	}
+
+	// The --service-account ServiceAccount is the one whose pull secrets discovery defers to.
+	saJob := explicitJob
+	saJob.ImagePullSecrets, saJob.ServiceAccountName = "", "team-sa"
+	orc.kubeClient = &MockKubeClient{Objects: map[string][]unstructured.Unstructured{
+		"secrets": {makeDockerConfigSecret("reg-sec", "registry.local")},
+		"serviceaccounts": {{Object: map[string]any{
+			"metadata":         map[string]any{"name": "team-sa"},
+			"imagePullSecrets": []any{map[string]any{"name": "sa-cred"}},
+		}}},
+	}}
+	if opts, err := orc.PrepareManifestOptions(saJob, "registry.local/app:v1", JobProfile{IsCPUMachine: true, CapacityCount: 4}, false, false); err != nil || opts.ImagePullSecrets != "" {
+		t.Fatalf("ServiceAccount with pull secrets: opts=%q err=%v, want discovery skipped", opts.ImagePullSecrets, err)
+	}
+
 	pw := orchestrator.PathwaysJobDefinition{
 		DeploySPS:        true,
 		ServerImage:      "reg.local/server:v1",

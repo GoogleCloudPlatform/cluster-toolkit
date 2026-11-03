@@ -15,6 +15,7 @@
 package k8s
 
 import (
+	"github.com/google/go-containerregistry/pkg/authn"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -26,19 +27,26 @@ var SecretGVR = schema.GroupVersionResource{
 	Resource: "secrets",
 }
 
+// ServiceAccountGVR identifies core/v1 ServiceAccount resources for dynamic Kubernetes queries.
+var ServiceAccountGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "serviceaccounts",
+}
+
 // ResourceLister lists unstructured Kubernetes resources for cluster and secret discovery.
 type ResourceLister interface {
 	ListResources(gvr schema.GroupVersionResource, namespace, labelSelector, fieldSelector string) ([]unstructured.Unstructured, error)
 }
 
-type dockerConfigJSON struct {
-	Auths map[string]dockerConfigEntry `json:"auths"`
+// ResourceReader lists and gets unstructured Kubernetes resources.
+type ResourceReader interface {
+	ResourceLister
+	GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error)
 }
 
-type dockerConfigEntry struct {
-	Username      string `json:"username"`
-	Password      string `json:"password"`
-	Auth          string `json:"auth"`
-	IdentityToken string `json:"identitytoken"`
-	RegistryToken string `json:"registrytoken"`
+// dockerConfigJSON is a .dockerconfigjson payload. authn.AuthConfig decodes "auth" with the kubelet's own rules
+// (base64 of "user:pass"), so a payload the kubelet would reject fails to unmarshal here as well.
+type dockerConfigJSON struct {
+	Auths map[string]authn.AuthConfig `json:"auths"`
 }

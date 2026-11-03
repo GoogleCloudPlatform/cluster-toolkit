@@ -37,16 +37,19 @@ func IsForbiddenError(err error) bool {
 
 // DiscoverImagePullSecrets returns the comma-separated names of the kubernetes.io/dockerconfigjson Secrets
 // in namespace whose auths entries match images, using the same host/path matching as the kubelet's
-// credential keyring. It returns "" when the client is unavailable or Secrets cannot be listed, and skips
-// an image when several secrets match it.
-func DiscoverImagePullSecrets(lister ResourceLister, namespace string, images []string) string {
-	if lister == nil || len(images) == 0 {
+// credential keyring. It returns "" when the client is unavailable, Secrets cannot be listed, or the pods'
+// ServiceAccount already lists imagePullSecrets, and skips an image when several secrets match it.
+func DiscoverImagePullSecrets(client ResourceReader, namespace, serviceAccount string, images []string) string {
+	if client == nil || len(images) == 0 {
 		return ""
 	}
 	if namespace == "" {
 		namespace = "default"
 	}
-	secrets, err := lister.ListResources(SecretGVR, namespace, "", "type="+string(corev1.SecretTypeDockerConfigJson))
+	if deferToServiceAccount(client, namespace, serviceAccount) {
+		return ""
+	}
+	secrets, err := client.ListResources(SecretGVR, namespace, "", "type="+string(corev1.SecretTypeDockerConfigJson))
 	if err != nil {
 		if IsForbiddenError(err) {
 			logging.Info("Skipping automatic imagePullSecrets discovery in namespace %q (lacking permission to list Secrets); pass --image-pull-secret if pulling from a private registry.", namespace)
@@ -69,6 +72,28 @@ func DiscoverImagePullSecrets(lister ResourceLister, namespace string, images []
 	return strings.Join(selected, ",")
 }
 
+// deferToServiceAccount reports whether discovery must leave the pods' imagePullSecrets empty: the ServiceAccount
+// admission plugin copies the ServiceAccount's imagePullSecrets only into pods that declare none, so attaching
+// discovered secrets would silently drop them. An unreadable ServiceAccount is treated the same way.
+func deferToServiceAccount(client ResourceReader, namespace, name string) bool {
+	if name == "" {
+		name = "default"
+	}
+	sa, err := client.GetResource(ServiceAccountGVR, namespace, name)
+	switch {
+	case apierrors.IsNotFound(err):
+		return false
+	case err != nil:
+		logging.Info("Skipping automatic imagePullSecrets discovery: cannot read ServiceAccount %s/%s: %v", namespace, name, err)
+		return true
+	}
+	if refs, _, _ := unstructured.NestedSlice(sa.Object, "imagePullSecrets"); len(refs) > 0 {
+		logging.Info("Skipping automatic imagePullSecrets discovery: ServiceAccount %s/%s already lists imagePullSecrets.", namespace, name)
+		return true
+	}
+	return false
+}
+
 // matchingSecretNames returns the sorted names of the secrets holding credentials for img.
 func matchingSecretNames(secrets []unstructured.Unstructured, img string) []string {
 	imgHost, imgPath, ok := splitImageRef(img)
@@ -88,8 +113,9 @@ func matchingSecretNames(secrets []unstructured.Unstructured, img string) []stri
 	return names
 }
 
-// dockerConfigAuthKeys decodes the secret's .dockerconfigjson payload and returns the auths keys that carry
-// credentials; a malformed payload yields none.
+// dockerConfigAuthKeys decodes the secret's .dockerconfigjson payload and returns the auths keys that give the
+// kubelet credentials. A payload the kubelet cannot parse yields none: attaching it would fail every image pull in
+// the pod, not just the pulls from that registry.
 func dockerConfigAuthKeys(secret *unstructured.Unstructured) []string {
 	raw, _, _ := unstructured.NestedString(secret.Object, "data", corev1.DockerConfigJsonKey)
 	decoded, err := base64.StdEncoding.DecodeString(raw)
@@ -102,7 +128,8 @@ func dockerConfigAuthKeys(secret *unstructured.Unstructured) []string {
 	}
 	var keys []string
 	for key, e := range cfg.Auths {
-		if e.Auth != "" || e.Username != "" || e.Password != "" || e.IdentityToken != "" || e.RegistryToken != "" {
+		// The kubelet reads only username and password (decoded from "auth" when set) from pull secrets.
+		if e.Username != "" || e.Password != "" {
 			keys = append(keys, key)
 		}
 	}

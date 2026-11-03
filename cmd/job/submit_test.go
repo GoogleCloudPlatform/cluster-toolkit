@@ -1744,3 +1744,37 @@ func TestSubmitCmd_DeployPathwaysSPSRejectsWorkloadFlags(t *testing.T) {
 		})
 	}
 }
+
+func TestSubmitCmd_ImagePullSecretFlagPresence(t *testing.T) {
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{State: PrereqState{
+		LastCheckedTimestamp: time.Now(), LastCheckedProjectID: "test-project", GCloudSDKInstalled: true,
+		GCloudAuthenticated: true, ADCConfigured: true, KubectlInstalled: true, GKEGCloudAuthPluginInstalled: true,
+	}}
+	cases := []struct {
+		name          string
+		flagArgs      []string
+		wantSecrets   string
+		wantSpecified bool
+	}{
+		{name: "omitted: discover", wantSpecified: false},
+		// The shell passes --image-pull-secret="" as --image-pull-secret=.
+		{name: `--image-pull-secret=""`, flagArgs: []string{"--image-pull-secret="}, wantSpecified: true},
+		{name: `--image-pull-secret ""`, flagArgs: []string{"--image-pull-secret", ""}, wantSpecified: true},
+		{name: "names: use as is", flagArgs: []string{"--image-pull-secret", "a,b"}, wantSecrets: "a,b", wantSpecified: true},
+	}
+	for _, tc := range cases {
+		setupSubmitTestEnv(t)
+		mock := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mock }
+		args := append([]string{"submit", "--name", "pull-secret-flag", "--image", "busybox", "--command", "echo hi",
+			"--cluster", "test-cluster", "--location", "us-central1-a", "--project", "test-project", "--compute-type", "n2-standard-4"}, tc.flagArgs...)
+		if _, err := executeCommand(JobCmd, args...); err != nil {
+			t.Fatalf("%s: submit failed: %v", tc.name, err)
+		}
+		if got := mock.SubmittedJob; got.ImagePullSecrets != tc.wantSecrets || got.ImagePullSecretsSpecified != tc.wantSpecified {
+			t.Errorf("%s: got (%q, specified=%v), want (%q, specified=%v)", tc.name, got.ImagePullSecrets, got.ImagePullSecretsSpecified, tc.wantSecrets, tc.wantSpecified)
+		}
+	}
+}

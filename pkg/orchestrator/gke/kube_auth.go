@@ -546,11 +546,11 @@ func activeWorkloadImages(job orchestrator.JobDefinition, fullImageName string) 
 	return images
 }
 
-// resolveImagePullSecrets returns the user's --image-pull-secret value verbatim, or the dockerconfigjson
-// secrets in the target namespace matching the workload's images when the flag was omitted. An unavailable
-// API client or an RBAC denial degrades to no secrets; a namespace that cannot be resolved is an error.
+// resolveImagePullSecrets returns the user's --image-pull-secret value verbatim when it was given (an empty value
+// attaches none), otherwise the dockerconfigjson secrets in the target namespace matching the workload's images.
+// An unavailable API client or an RBAC denial degrades to no secrets; a namespace that cannot be resolved is an error.
 func (g *GKEOrchestrator) resolveImagePullSecrets(job orchestrator.JobDefinition, fullImageName string) (string, error) {
-	if job.ImagePullSecrets != "" {
+	if job.ImagePullSecrets != "" || job.ImagePullSecretsSpecified {
 		return job.ImagePullSecrets, nil
 	}
 	kc := g.usableKubeClient()
@@ -561,5 +561,5 @@ func (g *GKEOrchestrator) resolveImagePullSecrets(job orchestrator.JobDefinition
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve the target namespace for imagePullSecrets discovery: %w", err)
 	}
-	return k8s.DiscoverImagePullSecrets(kc, ns, activeWorkloadImages(job, fullImageName)), nil
+	return k8s.DiscoverImagePullSecrets(kc, ns, job.ServiceAccountName, activeWorkloadImages(job, fullImageName)), nil
 }

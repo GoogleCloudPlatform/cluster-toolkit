@@ -32,6 +32,17 @@ type stubResourceLister struct {
 	err   error
 	gotNS string
 	gotFS string
+	sa    *unstructured.Unstructured
+	saErr error
+	gotSA string
+}
+
+func (s *stubResourceLister) GetResource(gvr schema.GroupVersionResource, _, name string) (*unstructured.Unstructured, error) {
+	s.gotSA = name
+	if s.saErr != nil || s.sa != nil {
+		return s.sa, s.saErr
+	}
+	return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
 }
 
 func (s *stubResourceLister) ListResources(_ schema.GroupVersionResource, ns, _, fs string) ([]unstructured.Unstructured, error) {
@@ -141,11 +152,11 @@ func TestAuthHostMatches(t *testing.T) {
 
 func TestDiscoverImagePullSecrets_ListErrorsAndNamespaceDefault(t *testing.T) {
 	t.Parallel()
-	if got := DiscoverImagePullSecrets(nil, "ns", []string{"alpine:3"}); got != "" {
+	if got := DiscoverImagePullSecrets(nil, "ns", "", []string{"alpine:3"}); got != "" {
 		t.Errorf("expected empty on nil lister, got %q", got)
 	}
 	noImages := &stubResourceLister{err: errors.New("must not list")}
-	if got := DiscoverImagePullSecrets(noImages, "ns", nil); got != "" || noImages.gotNS != "" {
+	if got := DiscoverImagePullSecrets(noImages, "ns", "", nil); got != "" || noImages.gotNS != "" {
 		t.Errorf("expected no list call without images, got %q (ns=%q)", got, noImages.gotNS)
 	}
 	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "", errors.New("forbidden"))
@@ -153,15 +164,15 @@ func TestDiscoverImagePullSecrets_ListErrorsAndNamespaceDefault(t *testing.T) {
 		t.Errorf("unexpected IsForbiddenError behavior")
 	}
 	forbiddenLister := &stubResourceLister{err: forbidden}
-	if got := DiscoverImagePullSecrets(forbiddenLister, "", []string{"registry.local/app:v1"}); got != "" || forbiddenLister.gotNS != "default" {
+	if got := DiscoverImagePullSecrets(forbiddenLister, "", "", []string{"registry.local/app:v1"}); got != "" || forbiddenLister.gotNS != "default" {
 		t.Errorf("got (%q, ns=%q), want (\"\", \"default\")", got, forbiddenLister.gotNS)
 	}
 	timeoutLister := &stubResourceLister{err: errors.New("context deadline exceeded")}
-	if got := DiscoverImagePullSecrets(timeoutLister, "team-ns", []string{"registry.local/app:v1"}); got != "" {
+	if got := DiscoverImagePullSecrets(timeoutLister, "team-ns", "", []string{"registry.local/app:v1"}); got != "" {
 		t.Errorf("expected empty on non-RBAC list error, got %q", got)
 	}
 	okLister := &stubResourceLister{items: []unstructured.Unstructured{makeTestDockerSecret("sec-1", "registry.local")}}
-	if got := DiscoverImagePullSecrets(okLister, "team-ns", []string{"registry.local/app:v1"}); got != "sec-1" || okLister.gotNS != "team-ns" || okLister.gotFS != "type=kubernetes.io/dockerconfigjson" {
+	if got := DiscoverImagePullSecrets(okLister, "team-ns", "", []string{"registry.local/app:v1"}); got != "sec-1" || okLister.gotNS != "team-ns" || okLister.gotFS != "type=kubernetes.io/dockerconfigjson" {
 		t.Errorf("got (%q, ns=%q, fs=%q), want (\"sec-1\", \"team-ns\", \"type=kubernetes.io/dockerconfigjson\")", got, okLister.gotNS, okLister.gotFS)
 	}
 }
@@ -185,6 +196,8 @@ func TestDiscoverImagePullSecrets_MatchingSemantics(t *testing.T) {
 		makeTestDockerSecret("pkg-wildcard-port", "https://*.pkg.dev:5000"),
 		makeTestDockerSecret("scoped-v2", "https://harbor.local/v2/team-a"),
 		makeTestDockerSecret("ipv6-sec", "http://[fd00::1]:5000"),
+		rawDockerSecret("auth-not-userpass", base64.StdEncoding.EncodeToString([]byte(`{"auths":{"tok.local":{"auth":"`+base64.StdEncoding.EncodeToString([]byte("token"))+`"}}}`))),
+		rawDockerSecret("identitytoken-only", base64.StdEncoding.EncodeToString([]byte(`{"auths":{"idt.local":{"identitytoken":"t"}}}`))),
 		makeTestDockerSecret("z-dup", "dup.local"),
 		makeTestDockerSecret("a-dup", "https://dup.local"),
 	}
@@ -205,6 +218,10 @@ func TestDiscoverImagePullSecrets_MatchingSemantics(t *testing.T) {
 		{"harbor.local/other/x:v1", nil},
 		{"[fd00::1]:5000/obs/collector:v1", []string{"ipv6-sec"}},
 		{"dup.local/app:v1", []string{"a-dup", "z-dup"}},
+		// The kubelet rejects the whole secret when "auth" is not base64("user:pass"), failing every pull in the pod.
+		{"tok.local/app:v1", nil},
+		// The kubelet ignores identitytoken/registrytoken in pull secrets.
+		{"idt.local/app:v1", nil},
 	}
 	for _, tc := range cases {
 		if got := matchingSecretNames(secrets, tc.image); !slices.Equal(got, tc.want) {
@@ -214,7 +231,32 @@ func TestDiscoverImagePullSecrets_MatchingSemantics(t *testing.T) {
 
 	lister := &stubResourceLister{items: secrets}
 	images := []string{"nginx:1.27", "dup.local/app:v1", "harbor.local/team-a/trainer:v1", "harbor.local/team-a/proxy:v1", "unknown.example.com/img:v1"}
-	if got := DiscoverImagePullSecrets(lister, "ml-ns", images); got != "hub-default,scoped-v2" {
+	if got := DiscoverImagePullSecrets(lister, "ml-ns", "", images); got != "hub-default,scoped-v2" {
 		t.Errorf("DiscoverImagePullSecrets = %q, want ambiguous dup.local skipped and scoped-v2 listed once", got)
+	}
+}
+
+func TestDiscoverImagePullSecrets_DefersToServiceAccount(t *testing.T) {
+	t.Parallel()
+	saWith := func(refs ...any) *unstructured.Unstructured {
+		return &unstructured.Unstructured{Object: map[string]any{"imagePullSecrets": refs}}
+	}
+	images := []string{"registry.local/app:v1"}
+	cases := []struct {
+		name, sa, wantSA, want string
+		obj                    *unstructured.Unstructured
+		err                    error
+	}{
+		{name: "missing ServiceAccount", wantSA: "default", want: "sec-1"},
+		{name: "ServiceAccount without pull secrets", sa: "team-sa", wantSA: "team-sa", obj: saWith(), want: "sec-1"},
+		// Pod-level secrets would stop admission from copying the ServiceAccount's own.
+		{name: "ServiceAccount with pull secrets", sa: "team-sa", wantSA: "team-sa", obj: saWith(map[string]any{"name": "sa-cred"})},
+		{name: "unreadable ServiceAccount", wantSA: "default", err: apierrors.NewForbidden(schema.GroupResource{Resource: "serviceaccounts"}, "default", errors.New("forbidden"))},
+	}
+	for _, tc := range cases {
+		lister := &stubResourceLister{items: []unstructured.Unstructured{makeTestDockerSecret("sec-1", "registry.local")}, sa: tc.obj, saErr: tc.err}
+		if got := DiscoverImagePullSecrets(lister, "team-ns", tc.sa, images); got != tc.want || lister.gotSA != tc.wantSA {
+			t.Errorf("%s: got (%q, sa=%q), want (%q, sa=%q)", tc.name, got, lister.gotSA, tc.want, tc.wantSA)
+		}
 	}
 }
