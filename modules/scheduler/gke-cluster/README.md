@@ -28,6 +28,18 @@ requirements.
 
 Also see a full [GKE example blueprint](../../../examples/hpc-gke.yaml).
 
+### Node pool lifecycle
+
+This module manages the system node pool separately from the cluster, following
+the [Terraform provider's recommended approach](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_node_pool.html).
+This separates node pool lifecycle management from the cluster resource in Terraform.
+
+During creation, GKE requires an initial node pool. The module creates that
+pool with one node per zone, removes it, and then creates the configured system
+pool when `system_node_pool_enabled` is true (the default). This adds temporary
+node usage and provisioning time. For a regional cluster using the default three
+node locations, the initial pool contains three nodes.
+
 ### VPC Network
 
 This module is configured to create a
