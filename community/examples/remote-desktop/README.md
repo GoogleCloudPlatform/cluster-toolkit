@@ -45,7 +45,13 @@ vars:
     project: schedmd-slurm-public
   viz_machine_type: g2-standard-8
 
-# on the viz-desktop module
+# on the viz-desktop module:
+deployment_groups:
+- group: primary
+  modules:
+  - id: viz-desktop
+    source: community/modules/remote-desktop/novnc-desktop
+    settings:
       enable_gpu_acceleration: true
       on_host_maintenance: TERMINATE
 ```

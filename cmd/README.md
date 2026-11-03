@@ -185,6 +185,11 @@ gcluster expand BLUEPRINT_NAME [flags]
 gcluster export-outputs DEPLOYMENT_GROUP_DIRECTORY [flags]
 ```
 
+### Flags - export-outputs
+
+* `-a, --artifacts string`: Artifacts directory (default is `<deployment_root>/.ghpc/artifacts`).
+* `--parallelism int`: Limit the number of concurrent Terraform operations (`0` (default) defers to `GCLUSTER_TERRAFORM_PARALLELISM` if set, otherwise Terraform's default of `10`).
+
 ## gcluster import-inputs
 
 `gcluster import-inputs` imports output values exported by previous deployment groups as input `.tfvars` for subsequent deployment groups (e.g., `gcluster import-inputs a3ultra-slurm/cluster`).
@@ -194,6 +199,10 @@ gcluster export-outputs DEPLOYMENT_GROUP_DIRECTORY [flags]
 ```bash
 gcluster import-inputs DEPLOYMENT_GROUP_DIRECTORY [flags]
 ```
+
+### Flags - import-inputs
+
+* `-a, --artifacts string`: Artifacts directory (default is `<deployment_root>/.ghpc/artifacts`).
 
 ## gcluster cluster
 
