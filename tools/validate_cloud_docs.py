@@ -611,16 +611,23 @@ def match_pr_cloud_docs_impacts(
     return impacts
 
 
+_ACK_RE = re.compile(
+    r"^[ \t]*(?:[-*+][ \t]+)?(?:\*\*|__|`)?cloud[-_ ]?docs(?:\*\*|__|`)?[ \t]*:"
+    r"(?:\*\*|__)?[ \t]*(?P<val>[^\r\n]*)\r?$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
 def extract_cloud_docs_ack(pr_body: str | None) -> str | None:
-    """Extracts a 'Cloud-Docs: <plan or none>' acknowledgment line from a PR description."""
+    """Returns the first non-placeholder 'Cloud-Docs:' value; HTML comments never count."""
     if not pr_body:
         return None
-    match = re.search(
-        r"^\s*(?:\*\*|`)?cloud[-_\s]?docs(?:\*\*|`)?\s*:\s*(\S.*)$",
-        pr_body,
-        re.IGNORECASE | re.MULTILINE,
-    )
-    return match.group(1).strip() if match else None
+    body = re.sub(r"<!--.*?-->", "", pr_body, flags=re.DOTALL)
+    for match in _ACK_RE.finditer(body):
+        val = match.group("val").strip().strip("`*_ ").strip()
+        if val and not re.fullmatch(r"<[^>]*>", val):
+            return val
+    return None
 
 
 def format_pr_reminder_markdown(
@@ -653,8 +660,10 @@ def format_pr_reminder_markdown(
     else:
         lines.append(
             "**How to pass this check:** Add a `Cloud-Docs:` line to your PR description "
-            "(for example, `Cloud-Docs: b/123456` or `Cloud-Docs: none (no public doc impact)`) "
-            "to acknowledge and turn this check green."
+            "(for example, `Cloud-Docs: b/123456` or `Cloud-Docs: none`) "
+            "to acknowledge and turn this check green. Saving the PR description "
+            "automatically triggers a new check run (re-running an older failed run "
+            "will not pick up the updated description)."
         )
     lines.append("")
     return "\n".join(lines)
@@ -667,7 +676,7 @@ def _emit_github_annotations(impacts: list[tuple[str, list[str], str]]) -> None:
     for path, urls, reason in impacts:
         msg = (
             f"{reason}. Verify: {' '.join(urls)} "
-            "(Add 'Cloud-Docs: <bug or none>' to PR description to pass check)"
+            "(Add 'Cloud-Docs: b/123456' or 'Cloud-Docs: none' to PR description to pass check)"
         )
         msg = msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
         prop = path.replace("%", "%25").replace(":", "%3A").replace(",", "%2C")

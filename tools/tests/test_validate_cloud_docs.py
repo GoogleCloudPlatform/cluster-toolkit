@@ -256,6 +256,22 @@ class TestValidateCloudDocs(unittest.TestCase):
         finally:
             os.remove(summary_path)
 
+    def test_extract_cloud_docs_ack_edge_cases(self):
+        cases = {
+            "Cloud-Docs: none": "none",
+            "* Cloud-Docs: b/123": "b/123",
+            "- Cloud-Docs: none": "none",
+            "**Cloud-Docs:** none": "none",
+            "Desc\r\nCloud-Docs: none\r\n": "none",
+            "Cloud-Docs:\n### Testing": None,
+            "Cloud-Docs: <bug or none>": None,
+            "Cloud-Docs: <!-- bug or none -->": None,
+            "<!--\nCloud-Docs: b/1\n-->": None,
+        }
+        for body, want in cases.items():
+            with self.subTest(body=body):
+                self.assertEqual(vcd.extract_cloud_docs_ack(body), want)
+
     def test_resilience_and_community_code_block_paths(self):
         # 1. community/examples/ path in <pre> must not be truncated to examples/
         article = (
