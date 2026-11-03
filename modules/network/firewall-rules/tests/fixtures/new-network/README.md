@@ -16,6 +16,7 @@
 | Name | Source | Version |
 | ---- | ------ | ------- |
 | <a name="module_firewall"></a> [firewall](#module\_firewall) | ../../.. | n/a |
+| <a name="module_firewall_without_lookup"></a> [firewall\_without\_lookup](#module\_firewall\_without\_lookup) | ../../.. | n/a |
 
 ## Resources
 

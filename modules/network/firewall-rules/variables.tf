@@ -18,11 +18,25 @@ variable "use_subnetwork_data" {
   default     = true
   # Explicit null uses the default; count conditions require a non-null boolean.
   nullable = false
+
+  validation {
+    condition     = !var.use_subnetwork_data || (var.subnetwork_self_link != null && var.subnetwork_self_link != "")
+    error_message = "subnetwork_self_link must be set when use_subnetwork_data is true."
+  }
+
+  validation {
+    condition = var.use_subnetwork_data || (
+      var.project_id != null && var.project_id != "" &&
+      var.network_name != null && var.network_name != ""
+    )
+    error_message = "project_id and network_name must be set when use_subnetwork_data is false."
+  }
 }
 
 variable "subnetwork_self_link" {
-  description = "The self link of the subnetwork whose global network firewall rules will be modified."
+  description = "The self link of the subnetwork to look up. Required when use_subnetwork_data is true."
   type        = string
+  default     = null
 }
 
 variable "project_id" {

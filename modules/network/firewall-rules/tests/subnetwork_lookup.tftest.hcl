@@ -108,6 +108,40 @@ run "explicit_inputs_preserve_overrides" {
   }
 }
 
+run "empty_project_still_requires_private_google_access" {
+  command = plan
+  variables {
+    project_id   = ""
+    network_name = "explicit-network"
+  }
+  override_data {
+    target = data.google_compute_subnetwork.subnetwork[0]
+    values = {
+      project                  = "derived-project"
+      network                  = "derived-network"
+      private_ip_google_access = false
+    }
+  }
+  expect_failures = [terraform_data.pga_check]
+}
+
+run "empty_network_still_requires_private_google_access" {
+  command = plan
+  variables {
+    project_id   = "explicit-project"
+    network_name = ""
+  }
+  override_data {
+    target = data.google_compute_subnetwork.subnetwork[0]
+    values = {
+      project                  = "derived-project"
+      network                  = "derived-network"
+      private_ip_google_access = false
+    }
+  }
+  expect_failures = [terraform_data.pga_check]
+}
+
 run "new_network_values_unknown_until_apply" {
   command = plan
   module {

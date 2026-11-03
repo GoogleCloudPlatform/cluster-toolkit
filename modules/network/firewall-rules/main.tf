@@ -28,8 +28,8 @@ locals {
   derived_network_name = var.use_subnetwork_data ? data.google_compute_subnetwork.subnetwork[0].network : null
 
   # Effective values: Use var if provided, otherwise use derived value
-  effective_project_id   = coalesce(var.project_id, local.derived_project_id)
-  effective_network_name = coalesce(var.network_name, local.derived_network_name)
+  effective_project_id   = var.use_subnetwork_data ? coalesce(var.project_id, local.derived_project_id) : var.project_id
+  effective_network_name = var.use_subnetwork_data ? coalesce(var.network_name, local.derived_network_name) : var.network_name
 }
 
 # Module-level check for Private Google Access on the subnetwork.
@@ -39,7 +39,10 @@ resource "terraform_data" "pga_check" {
 
   lifecycle {
     precondition {
-      condition     = var.project_id != null && var.network_name != null ? true : data.google_compute_subnetwork.subnetwork[0].private_ip_google_access
+      condition = (
+        var.project_id != null && var.project_id != "" &&
+        var.network_name != null && var.network_name != ""
+      ) ? true : data.google_compute_subnetwork.subnetwork[0].private_ip_google_access
       error_message = "Private Google Access must be enabled on the subnetwork so instances without external IPs can access Google APIs and services."
     }
   }

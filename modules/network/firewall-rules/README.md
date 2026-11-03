@@ -9,8 +9,13 @@ Google Access is enabled. The subnet can be created in the same deployment group
 its lookup waits until it exists.
 
 To skip the lookup and Private Google Access check, set `use_subnetwork_data: false`
-and supply both `project_id` and `network_name`. The switch must be known during
-planning, even when the network and subnet values are not yet known.
+and supply nonempty `project_id` and `network_name`. In this mode,
+`subnetwork_self_link` can be omitted. With lookup enabled, provide a nonempty
+subnet self link. The switch must be known during planning, even when the network
+and subnet values are not yet known.
+
+Existing callers that passed a null `subnetwork_self_link` with explicit project
+and network values must set `use_subnetwork_data: false` when upgrading.
 
 ## Example usage
 
@@ -109,7 +114,7 @@ limitations under the License.
 | <a name="input_ingress_rules"></a> [ingress\_rules](#input\_ingress\_rules) | List of ingress rules | <pre>list(object({<br/>    name                    = string<br/>    description             = optional(string, null)<br/>    disabled                = optional(bool, null)<br/>    priority                = optional(number, null)<br/>    destination_ranges      = optional(list(string), [])<br/>    source_ranges           = optional(list(string), [])<br/>    source_tags             = optional(list(string))<br/>    source_service_accounts = optional(list(string))<br/>    target_tags             = optional(list(string))<br/>    target_service_accounts = optional(list(string))<br/><br/>    allow = optional(list(object({<br/>      protocol = string<br/>      ports    = optional(list(string))<br/>    })), [])<br/>    deny = optional(list(object({<br/>      protocol = string<br/>      ports    = optional(list(string))<br/>    })), [])<br/>    log_config = optional(object({<br/>      metadata = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the network to create firewall rules in | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the network in | `string` | `null` | no |
-| <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork whose global network firewall rules will be modified. | `string` | n/a | yes |
+| <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork to look up. Required when use\_subnetwork\_data is true. | `string` | `null` | no |
 | <a name="input_use_subnetwork_data"></a> [use\_subnetwork\_data](#input\_use\_subnetwork\_data) | Look up the subnetwork to derive missing project and network values and check Private Google Access when deriving those values. Set to false when supplying project\_id and network\_name directly. Must be known at plan time. | `bool` | `true` | no |
 
 ## Outputs

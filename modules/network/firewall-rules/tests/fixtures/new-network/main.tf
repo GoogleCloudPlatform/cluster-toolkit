@@ -41,3 +41,15 @@ module "firewall" {
     allow         = [{ protocol = "tcp", ports = ["8080"] }]
   }]
 }
+
+module "firewall_without_lookup" {
+  source              = "../../.."
+  use_subnetwork_data = false
+  project_id          = terraform_data.network.output.project
+  network_name        = terraform_data.network.output.name
+  ingress_rules = [{
+    name          = "allow-test-direct"
+    source_ranges = ["10.0.0.0/8"]
+    allow         = [{ protocol = "tcp", ports = ["8080"] }]
+  }]
+}
