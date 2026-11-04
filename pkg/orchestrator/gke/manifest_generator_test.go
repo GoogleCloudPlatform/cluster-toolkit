@@ -5263,3 +5263,75 @@ func TestRenderBlock_RecursiveOverrideFailsFast(t *testing.T) {
 		}
 	}
 }
+
+func assertRenderedNamespace(t *testing.T, kind, manifest, wantNS string) {
+	t.Helper()
+	var meta struct {
+		Metadata struct {
+			Namespace string `json:"namespace"`
+		} `json:"metadata"`
+	}
+	if err := k8syaml.Unmarshal([]byte(manifest), &meta); err != nil {
+		t.Fatalf("%s: failed to parse metadata: %v\n%s", kind, err, manifest)
+	}
+	if meta.Metadata.Namespace != wantNS {
+		t.Errorf("%s: metadata.namespace = %q, want %q", kind, meta.Metadata.Namespace, wantNS)
+	}
+	if wantNS == "" && strings.Contains(manifest, "namespace:") {
+		t.Errorf("%s: no namespace resolved but manifest renders one:\n%s", kind, manifest)
+	}
+}
+
+// TestGenerateManifests_RenderResolvedNamespace pins that all workload templates declare metadata.namespace from
+// the namespace resolved for the submission, so a saved manifest applied outside gcluster lands in the same
+// namespace as the PV/PVC documents appended to it, and that nothing is rendered when no namespace was resolved.
+func TestGenerateManifests_RenderResolvedNamespace(t *testing.T) {
+	setupMockMachineConfig(t)
+	newOrc := func(ns string) *GKEOrchestrator {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.projectID = "mock-project"
+		orc.clusterZones = []string{"us-central1-a"}
+		orc.namespace = ns
+		orc.clusterDesc.NodePools = []gkeJobNodePool{{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}}}
+		return orc
+	}
+	profile := JobProfile{IsCPUMachine: true, CapacityCount: 2}
+	jobSetOpts := ManifestOptions{WorkloadName: "ns-render", FullImageName: "img:v1", CommandToRun: "echo hi", ComputeType: "n2-standard-2", MachineType: "n2-standard-2", ClusterLocation: "us-central1-a", NumSlices: 1, NodesPerSlice: 1}
+	pwJob := orchestrator.JobDefinition{
+		WorkloadName: "ns-render-pw", CommandToRun: "echo hi", NumSlices: 1, NodesPerSlice: 1, ClusterLocation: "us-central1-a", ComputeType: "n2-standard-2", MachineType: "n2-standard-2", IsPathwaysJob: true,
+		Pathways: orchestrator.PathwaysJobDefinition{ProxyServerImage: "proxy:latest", ServerImage: "server:latest", WorkerImage: "worker:latest", GCSLocation: "gs://bkt", HeadNodePool: "pathways-np"},
+	}
+
+	// The rendered namespace must always equal the one the orchestrator resolved: explicitly (--gke-namespace)
+	// or implicitly during generation (pull-secret discovery resolves it through the pinned context), and
+	// nothing is rendered while it is still unresolved.
+	for _, ns := range []string{"team-a", ""} {
+		t.Run("namespace="+ns, func(t *testing.T) {
+			orc := newOrc(ns)
+			jobSet, err := orc.GenerateGKEManifest(jobSetOpts, profile)
+			if err != nil {
+				t.Fatalf("GenerateGKEManifest failed: %v", err)
+			}
+			assertRenderedNamespace(t, "jobset", jobSet, ns)
+
+			jobManifest := mustGenerateJobManifest(t, orc, jobSetOpts, profile)
+			svcDoc, jobDoc, _ := parseServiceAndJobDocs(t, jobManifest)
+			if svcDoc.Namespace != ns || jobDoc.Namespace != ns {
+				t.Errorf("job: Service/Job metadata.namespace = (%q, %q), want %q", svcDoc.Namespace, jobDoc.Namespace, ns)
+			}
+			assertRenderedNamespace(t, "job-service", jobManifest, ns)
+
+			pathways, err := orc.GeneratePathwaysManifest(pwJob, "img:v1", profile, false, false)
+			if err != nil {
+				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+			}
+			assertRenderedNamespace(t, "pathways", pathways, orc.namespace)
+			if ns != "" && orc.namespace != ns {
+				t.Errorf("explicit namespace %q was overwritten during generation with %q", ns, orc.namespace)
+			}
+		})
+	}
+}

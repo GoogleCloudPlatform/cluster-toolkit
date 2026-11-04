@@ -516,6 +516,10 @@ func (g *GKEOrchestrator) validateJobConflicts(job orchestrator.JobDefinition) e
 	return nil
 }
 
+// ApplyManifest validates the workload manifest and either saves it to outputManifestPath or applies it to the
+// cluster in g.namespace. SubmitJob resolves g.namespace (configureClusterEnvironment -> getCurrentNamespace) before
+// reaching this point; when it is empty, kubectl applies into the pinned context's namespace, which is the same value
+// getCurrentNamespace would resolve.
 func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, workloadName string) error {
 	if err := ValidateJobSetManifest(manifestContent); err != nil {
 		return err
@@ -527,9 +531,13 @@ func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, wor
 		}
 		logging.Info("GKE manifest saved successfully.")
 	} else {
-		// Submit will fail if a job with the same name already exists.
+		// Submit will fail if a job with the same name already exists. The embedded workload templates render
+		// metadata.namespace from the same resolved namespace, but a custom template extracted before that
+		// existed does not, so pass -n as well: kubectl then places unnamespaced objects in the resolved
+		// namespace and rejects any object that declares a different one, instead of silently using the
+		// kubeconfig default.
 		logging.Info("Applying GKE manifest to cluster...")
-		err := g.applyManifests([]byte(manifestContent), workloadName+".yaml")
+		err := g.applyManifests([]byte(manifestContent), workloadName+".yaml", g.namespace)
 		if err != nil {
 			return fmt.Errorf("failed to apply GKE manifest: %w", err)
 		}

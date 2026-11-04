@@ -790,6 +790,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 
 	return jobSetTemplateData{
 		WorkloadName:                  opts.WorkloadName,
+		Namespace:                     g.namespace,
 		ClusterName:                   opts.ClusterName,
 		Containers:                    containers,
 		ProjectID:                     opts.ProjectID,

@@ -239,7 +239,7 @@ func (g *GKEOrchestrator) installJobSetCRD(jobSetManifestsURL string) error {
 	if err != nil {
 		return err
 	}
-	if err := g.applyManifestFile(manifestPath); err != nil {
+	if err := g.applyManifestFile(manifestPath, ""); err != nil {
 		return fmt.Errorf("%w\nJobSet may now be partly installed, and later runs of gcluster will not modify it. To finish the installation, run:\n  %s",
 			err, kubectlCommandLine(g.kubeContext, "apply", "-f", manifestPath))
 	}
@@ -623,14 +623,16 @@ func (g *GKEOrchestrator) injectTolerationsAndLabels(data map[interface{}]interf
 	}
 }
 
-// applyManifests saves manifests under ~/.gcluster/generated and applies them.
-func (g *GKEOrchestrator) applyManifests(manifests []byte, filename string) error {
+// applyManifests saves manifests under ~/.gcluster/generated and applies them. A non-empty namespace is passed
+// as `kubectl apply -n`, so objects that declare no metadata.namespace land in the target namespace; add-on
+// manifests that are cluster-scoped or declare their own namespace pass "".
+func (g *GKEOrchestrator) applyManifests(manifests []byte, filename, namespace string) error {
 	logging.Info("Applying manifests for %s...", filename)
 	filePath, err := writeGeneratedManifest(manifests, filename)
 	if err != nil {
 		return err
 	}
-	return g.applyManifestFile(filePath)
+	return g.applyManifestFile(filePath, namespace)
 }
 
 // writeGeneratedManifest saves manifests as ~/.gcluster/generated/<filename> and returns the file's path.
@@ -653,10 +655,18 @@ func writeGeneratedManifest(manifests []byte, filename string) (string, error) {
 	return filePath, nil
 }
 
-func (g *GKEOrchestrator) applyManifestFile(filePath string) error {
-	res := g.kubectl("apply", "-f", filePath)
+func (g *GKEOrchestrator) applyManifestFile(filePath, namespace string) error {
+	args := []string{"apply"}
+	if namespace != "" {
+		args = append(args, "-n", namespace)
+	}
+	res := g.kubectl(append(args, "-f", filePath)...)
 	if res.ExitCode != 0 {
-		return fmt.Errorf("kubectl apply failed with exit code %d: %s\n%s", res.ExitCode, res.Stderr, res.Stdout)
+		out := strings.TrimSpace(strings.TrimSpace(res.Stderr) + "\n" + strings.TrimSpace(res.Stdout))
+		if namespace != "" {
+			return fmt.Errorf("kubectl apply in namespace %q failed with exit code %d: %s", namespace, res.ExitCode, out)
+		}
+		return fmt.Errorf("kubectl apply failed with exit code %d: %s", res.ExitCode, out)
 	}
 	logging.Info("Manifests applied successfully.")
 	return nil
