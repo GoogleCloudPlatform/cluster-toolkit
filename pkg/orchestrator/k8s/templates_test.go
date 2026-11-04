@@ -17,6 +17,7 @@ package k8s
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"maps"
 	"os"
@@ -393,5 +394,81 @@ func TestExtractDefaultTemplates_UnwritableTarget(t *testing.T) {
 	}
 	if err := ExtractDefaultTemplates(dir, true); err == nil || !strings.Contains(err.Error(), "failed to write file") {
 		t.Errorf("ExtractDefaultTemplates with directory at file path: error = %v, want write error", err)
+	}
+}
+
+// captureTemplateLogs redirects logInfo/logWarn for one test and returns the recorded messages.
+func captureTemplateLogs(t *testing.T) (infos, warns *[]string) {
+	t.Helper()
+	var i, w []string
+	origInfo, origWarn := logInfo, logWarn
+	logInfo = func(f string, a ...any) { i = append(i, fmt.Sprintf(f, a...)) }
+	logWarn = func(f string, a ...any) { w = append(w, fmt.Sprintf(f, a...)) }
+	t.Cleanup(func() { logInfo, logWarn = origInfo, origWarn })
+	return &i, &w
+}
+
+// TestCustomTemplateLogs_PreflightQuietRenderOnce pins that a submit (preflight followed by the render-pass
+// load) reports each custom template and the legacy warning exactly once.
+func TestCustomTemplateLogs_PreflightQuietRenderOnce(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "jobset.tmpl"), []byte("kind: JobSet\nname: {{.WorkloadName}}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	infos, warns := captureTemplateLogs(t)
+
+	if err := ValidateCustomWorkloadTemplates(dir, "jobset.tmpl"); err != nil {
+		t.Fatalf("preflight failed: %v", err)
+	}
+	if len(*infos)+len(*warns) != 0 {
+		t.Fatalf("preflight must load quietly, logged infos=%q warns=%q", *infos, *warns)
+	}
+	if _, _, err := LoadWorkloadTemplate(dir, "jobset.tmpl"); err != nil {
+		t.Fatalf("render-pass load failed: %v", err)
+	}
+	wantInfo := 0
+	for _, m := range *infos {
+		if strings.Contains(m, `Loading GKE template "jobset.tmpl"`) {
+			wantInfo++
+		}
+	}
+	if wantInfo != 1 || len(*warns) != 1 || !strings.Contains((*warns)[0], "Legacy custom template") {
+		t.Errorf("after preflight+render want 1 load message and 1 legacy warning, got infos=%q warns=%q", *infos, *warns)
+	}
+}
+
+// TestCustomTemplateLoading_EmptyFileAndWarningOrder pins two edge cases: an empty custom workload template is
+// an error rather than a silent fallback (an empty custom base.tmpl stays a valid "no overrides" file), and a
+// legacy template with a syntax error fails without first emitting the legacy warning.
+func TestCustomTemplateLoading_EmptyFileAndWarningOrder(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "jobset.tmpl"), nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := LoadWorkloadTemplate(dir, "jobset.tmpl"); err == nil || !strings.Contains(err.Error(), "is empty") {
+		t.Errorf("empty custom jobset.tmpl: error = %v, want 'is empty'", err)
+	}
+	if _, err := ParseYAMLTemplate(dir, "jobset.tmpl"); err == nil || !strings.Contains(err.Error(), "is empty") {
+		t.Errorf("empty custom template via ParseYAMLTemplate: error = %v, want 'is empty'", err)
+	}
+
+	baseOnly := t.TempDir()
+	if err := os.WriteFile(filepath.Join(baseOnly, "base.tmpl"), nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, blocks, err := LoadWorkloadTemplate(baseOnly, "jobset.tmpl"); err != nil || blocks["pod_template"] == nil {
+		t.Errorf("empty custom base.tmpl must fall back to embedded blocks: err=%v blocks=%d", err, len(blocks))
+	}
+
+	broken := t.TempDir()
+	if err := os.WriteFile(filepath.Join(broken, "jobset.tmpl"), []byte("kind: JobSet\n{{ .Unclosed\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, warns := captureTemplateLogs(t)
+	if _, _, err := LoadWorkloadTemplate(broken, "jobset.tmpl"); err == nil || !strings.Contains(err.Error(), "unclosed action") {
+		t.Fatalf("malformed legacy template: error = %v, want unclosed action", err)
+	}
+	if len(*warns) != 0 {
+		t.Errorf("a template that fails to parse must not emit the legacy warning first, got %q", *warns)
 	}
 }

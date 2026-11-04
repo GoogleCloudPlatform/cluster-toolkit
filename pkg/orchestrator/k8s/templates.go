@@ -44,6 +44,12 @@ const (
 	JobTemplate = "job.tmpl"
 )
 
+// logInfo and logWarn are package-level so tests can capture template loading messages.
+var (
+	logInfo = logging.Info
+	logWarn = logging.Warn
+)
+
 func templateFuncs() yamltemplate.FuncMap {
 	return yamltemplate.FuncMap{
 		"reindent": ReindentYAML,
@@ -75,37 +81,49 @@ func ReindentYAML(indent int, s string) string {
 	return strings.Join(out, "\n")
 }
 
-// readCustomTemplateBytes returns the contents of name in customDir, or nil when customDir is unset or
-// does not contain name.
-func readCustomTemplateBytes(customDir, name string) ([]byte, error) {
+// readCustomTemplateBytes returns the contents of name in customDir and whether the file exists. An existing
+// but empty file is reported as found with empty data; the caller decides whether that is an override or an error.
+// Loading messages are suppressed when quiet is set, so the submit preflight does not duplicate the render pass.
+func readCustomTemplateBytes(customDir, name string, quiet bool) (data []byte, found bool, err error) {
 	if customDir == "" {
-		return nil, nil
+		return nil, false, nil
 	}
 	stat, err := os.Stat(customDir)
 	if err != nil {
-		return nil, fmt.Errorf("custom template directory %q (--gke-custom-templates-path) could not be accessed: %w", customDir, err)
+		return nil, false, fmt.Errorf("custom template directory %q (--gke-custom-templates-path) could not be accessed: %w", customDir, err)
 	}
 	if !stat.IsDir() {
-		return nil, fmt.Errorf("custom template path %q (--gke-custom-templates-path) is not a directory", customDir)
+		return nil, false, fmt.Errorf("custom template path %q (--gke-custom-templates-path) is not a directory", customDir)
 	}
 	localFile := filepath.Join(customDir, name)
-	data, err := os.ReadFile(localFile)
+	data, err = os.ReadFile(localFile)
 	switch {
 	case os.IsNotExist(err):
-		logging.Info("Template %q not found in custom path %q. Falling back to embedded default.", name, customDir)
-		return nil, nil
+		if !quiet {
+			logInfo("Template %q not found in custom path %q. Falling back to embedded default.", name, customDir)
+		}
+		return nil, false, nil
 	case err != nil:
-		return nil, fmt.Errorf("failed to access custom template %q: %w", localFile, err)
+		return nil, false, fmt.Errorf("failed to access custom template %q: %w", localFile, err)
 	}
-	logging.Info("Loading GKE template %q from custom path %q", name, customDir)
-	return bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n")), nil
+	if !quiet {
+		logInfo("Loading GKE template %q from custom path %q", name, customDir)
+	}
+	return bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n")), true, nil
 }
 
 // readTemplateBytes returns the custom override of name when present (reporting isCustom), otherwise the
-// embedded default.
-func readTemplateBytes(customDir, name string) (data []byte, isCustom bool, err error) {
-	if data, err = readCustomTemplateBytes(customDir, name); err != nil || data != nil {
-		return data, data != nil, err
+// embedded default. An empty custom file is an error rather than a silent fallback.
+func readTemplateBytes(customDir, name string, quiet bool) (data []byte, isCustom bool, err error) {
+	data, found, err := readCustomTemplateBytes(customDir, name, quiet)
+	if err != nil {
+		return nil, false, err
+	}
+	if found {
+		if len(bytes.TrimSpace(data)) == 0 {
+			return nil, false, fmt.Errorf("custom template %q in %q is empty; delete the file to use the embedded default", name, customDir)
+		}
+		return data, true, nil
 	}
 	data, err = templatesFS.ReadFile("templates/" + name)
 	return data, false, err
@@ -113,7 +131,11 @@ func readTemplateBytes(customDir, name string) (data []byte, isCustom bool, err 
 
 // ParseYAMLTemplate loads a safetext YAML template from customDir (if present) or the embedded defaults.
 func ParseYAMLTemplate(customDir, name string) (*yamltemplate.Template, error) {
-	data, _, err := readTemplateBytes(customDir, name)
+	return parseYAMLTemplate(customDir, name, false)
+}
+
+func parseYAMLTemplate(customDir, name string, quiet bool) (*yamltemplate.Template, error) {
+	data, _, err := readTemplateBytes(customDir, name, quiet)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +144,11 @@ func ParseYAMLTemplate(customDir, name string) (*yamltemplate.Template, error) {
 
 // ParseTextTemplate loads a standard Go text/template from customDir (if present) or the embedded defaults.
 func ParseTextTemplate(customDir, name string) (*template.Template, error) {
-	data, _, err := readTemplateBytes(customDir, name)
+	return parseTextTemplate(customDir, name, false)
+}
+
+func parseTextTemplate(customDir, name string, quiet bool) (*template.Template, error) {
+	data, _, err := readTemplateBytes(customDir, name, quiet)
 	if err != nil {
 		return nil, err
 	}
@@ -132,16 +158,18 @@ func ParseTextTemplate(customDir, name string) (*template.Template, error) {
 // LoadWorkloadTemplate parses the workload template name together with the base.tmpl blocks it renders via
 // .RenderBlock, each overlaid with any override found in customDir.
 func LoadWorkloadTemplate(customDir, name string) (*yamltemplate.Template, map[string]*yamltemplate.Template, error) {
-	data, isCustom, err := readTemplateBytes(customDir, name)
+	return loadWorkloadTemplate(customDir, name, false)
+}
+
+func loadWorkloadTemplate(customDir, name string, quiet bool) (*yamltemplate.Template, map[string]*yamltemplate.Template, error) {
+	data, isCustom, err := readTemplateBytes(customDir, name, quiet)
 	if err != nil {
 		return nil, nil, err
 	}
-	customBase, err := readCustomTemplateBytes(customDir, "base.tmpl")
+	// An empty custom base.tmpl is a valid "no overrides" file, so it is read without the empty-file check.
+	customBase, _, err := readCustomTemplateBytes(customDir, "base.tmpl", quiet)
 	if err != nil {
 		return nil, nil, err
-	}
-	if isCustom && !bytes.Contains(data, []byte(".RenderBlock")) {
-		logging.Warn("Legacy custom template %q in %q does not reference .RenderBlock; features and overrides delivered via base.tmpl (e.g. sidecars) will not apply. Extract fresh defaults with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your changes.", name, customDir)
 	}
 	tmpl, err := yamltemplate.New(name).Funcs(templateFuncs()).Parse(string(data))
 	if err != nil {
@@ -150,6 +178,10 @@ func LoadWorkloadTemplate(customDir, name string) (*yamltemplate.Template, map[s
 	blocks, err := loadBaseBlocks(customBase)
 	if err != nil {
 		return nil, nil, err
+	}
+	// Warn only once the template is known to parse, so a syntax error is not preceded by an unrelated warning.
+	if isCustom && !quiet && !bytes.Contains(data, []byte(".RenderBlock")) {
+		logWarn("Legacy custom template %q in %q does not reference .RenderBlock; features and overrides delivered via base.tmpl (e.g. sidecars) will not apply. Extract fresh defaults with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your changes.", name, customDir)
 	}
 	return tmpl, blocks, nil
 }
@@ -162,12 +194,14 @@ func ValidateCustomWorkloadTemplates(customDir, workloadTemplate string) error {
 	if customDir == "" {
 		return nil
 	}
-	if _, _, err := LoadWorkloadTemplate(customDir, workloadTemplate); err != nil {
+	// The preflight loads quietly: the render pass that follows logs each custom template (and the legacy
+	// warning) exactly once.
+	if _, _, err := loadWorkloadTemplate(customDir, workloadTemplate, true); err != nil {
 		return err
 	}
 	for _, name := range []string{"local_queue.tmpl", "priority_classes.tmpl"} {
 		if err := validateOptionalCustomTemplate(customDir, name, func() error {
-			_, err := ParseYAMLTemplate(customDir, name)
+			_, err := parseYAMLTemplate(customDir, name, true)
 			return err
 		}); err != nil {
 			return err
@@ -175,7 +209,7 @@ func ValidateCustomWorkloadTemplates(customDir, workloadTemplate string) error {
 	}
 	for _, name := range []string{"filestore.tmpl", "gcs_fuse_pv_pvc.tmpl"} {
 		if err := validateOptionalCustomTemplate(customDir, name, func() error {
-			_, err := ParseTextTemplate(customDir, name)
+			_, err := parseTextTemplate(customDir, name, true)
 			return err
 		}); err != nil {
 			return err

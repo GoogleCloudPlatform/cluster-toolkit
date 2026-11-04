@@ -459,6 +459,14 @@ func (d jobSetTemplateData) RenderBlock(name string, indent int) (string, error)
 	if !ok {
 		return "", fmt.Errorf("unknown base.tmpl block %q (available blocks: %v); check the block name or extract fresh defaults with 'gcluster job gke-template-extract --output-dir=<new-dir>' to diff and merge", name, slices.Sorted(maps.Keys(d.baseBlocks)))
 	}
+	if bt == nil {
+		return "", fmt.Errorf("base.tmpl block %q renders itself via .RenderBlock; an override cannot call the block it replaces", name)
+	}
+	// safetext serializes Execute per template with a non-reentrant lock, so a block that re-enters itself would
+	// deadlock. d is a copy: mark the block in flight for this render only, which still allows sequential reuse.
+	nextBlocks := maps.Clone(d.baseBlocks)
+	nextBlocks[name] = nil
+	d.baseBlocks = nextBlocks
 	var buf bytes.Buffer
 	if err := bt.Execute(&buf, d); err != nil {
 		return "", fmt.Errorf("failed to execute base template block %q: %w", name, err)
@@ -549,7 +557,8 @@ func forEachWorkloadJobSpec(manifestContent string, visit func(kind, jobName str
 	for _, doc := range docs {
 		var meta metav1.TypeMeta
 		if err := k8syaml.Unmarshal([]byte(doc), &meta); err != nil {
-			continue
+			// splitYAMLDocuments does not validate syntax, so this is where a malformed custom template surfaces.
+			return fmt.Errorf("failed to parse manifest document: %w", err)
 		}
 		switch meta.Kind {
 		case "JobSet":
@@ -591,10 +600,9 @@ func ValidateJobSetManifest(manifestContent string) error {
 }
 
 const (
-	defaultPathwaysProxyImage      = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
-	defaultPathwaysServerImage     = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
-	pathwaysTemplateExtractHint    = "If you use --gke-custom-templates-path, re-extract pathways_jobset.tmpl and base.tmpl with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations"
-	workloadTemplateExtractHintFmt = "If you use --gke-custom-templates-path, re-extract %s and base.tmpl with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations"
+	defaultPathwaysProxyImage   = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
+	defaultPathwaysServerImage  = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
+	pathwaysTemplateExtractHint = "If you use --gke-custom-templates-path, re-extract pathways_jobset.tmpl and base.tmpl with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations"
 )
 
 // GeneratePathwaysManifest generates the Kubernetes JobSet manifest for a Pathways job.

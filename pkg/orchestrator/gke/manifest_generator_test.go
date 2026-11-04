@@ -1421,13 +1421,14 @@ spec:
 			errSubstr: "failed to parse Job manifest spec",
 		},
 		{
-			name: "non-JobSet document with invalid YAML syntax is skipped",
+			name: "document with invalid YAML syntax fails before apply",
 			manifest: `
 apiVersion: v1
 kind: ConfigMap
 data: [unclosed bracket
 `,
-			expectErr: false,
+			expectErr: true,
+			errSubstr: "failed to parse manifest document",
 		},
 	}
 
@@ -5225,5 +5226,40 @@ spec:
 `
 	if err := ValidateJobSetManifest(podConditionsManifest); err != nil {
 		t.Errorf("expected ValidateJobSetManifest to accept onPodConditions rules, got: %v", err)
+	}
+}
+
+// TestRenderBlock_RecursiveOverrideFailsFast pins that a custom base.tmpl block which calls .RenderBlock on itself
+// returns an error instead of deadlocking on safetext's per-template execution lock, and that the same block can
+// still be rendered more than once sequentially.
+func TestRenderBlock_RecursiveOverrideFailsFast(t *testing.T) {
+	baseOpts, profile := newCustomTemplateBaseOpts()
+	customDir := t.TempDir()
+	recursiveBase := "{{- define \"workload_labels\" -}}\n{{(StructuralData (.RenderBlock \"workload_labels\" 0))}}\n{{- end -}}\n"
+	if err := os.WriteFile(filepath.Join(customDir, "base.tmpl"), []byte(recursiveBase), 0644); err != nil {
+		t.Fatal(err)
+	}
+	orc := newCustomTemplateTestOrc(t, customDir)
+	done := make(chan error, 1)
+	go func() {
+		_, err := orc.GenerateGKEManifest(baseOpts, profile)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), `block "workload_labels" renders itself`) {
+			t.Fatalf("expected recursive .RenderBlock error, got: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("GenerateGKEManifest hung on a recursive .RenderBlock override instead of returning an error")
+	}
+
+	// Sequential reuse of one block (jobset.tmpl renders workload_labels once per JobSet; job.tmpl once per Job)
+	// must keep working: render the embedded defaults twice with the same orchestrator.
+	orc = newCustomTemplateTestOrc(t, "")
+	for i := 0; i < 2; i++ {
+		if _, err := orc.GenerateGKEManifest(baseOpts, profile); err != nil {
+			t.Fatalf("render %d with embedded defaults failed: %v", i+1, err)
+		}
 	}
 }
