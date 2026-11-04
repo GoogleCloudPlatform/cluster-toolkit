@@ -102,7 +102,7 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			return err
 		}
 
-		if !pathways.Headless && commandToRun == "" {
+		if !pathways.Headless && !pathways.DeploySPS && commandToRun == "" {
 			return fmt.Errorf("required flag \"command\" not set")
 		}
 
@@ -113,7 +113,7 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 		if err := validatePathwaysFlags(cmd); err != nil {
 			return err
 		}
-		if !skipPrereqs && buildContext != "" {
+		if !skipPrereqs && buildContext != "" && !pathways.Headless && !pathways.DeploySPS {
 			if err := ensureBuildPrerequisites(cmd, projectID, location); err != nil {
 				return err
 			}
@@ -165,7 +165,7 @@ func init() {
 	SubmitCmd.Flags().StringToStringVar(&nodeConstraint, "node-constraint", nil, "Key=value pairs for node labels to target specific nodes. Maps to nodeSelector in GKE, and to SLURM's --constraint.")
 	SubmitCmd.Flags().StringVar(&cpuAffinityStr, "cpu-affinity", "", "CPU affinity rules (e.g., 'numa').")
 	SubmitCmd.Flags().IntSliceVar(&restartOnExitCodes, "restart-on-exit-codes", nil, "List of exit codes that should not trigger a job failure.")
-	SubmitCmd.Flags().StringVar(&imagePullSecrets, "image-pull-secret", "", "Comma-separated list of secrets for pulling images.")
+	SubmitCmd.Flags().StringVar(&imagePullSecrets, "image-pull-secret", "", "Comma-separated list of secrets for pulling images. If omitted, matching dockerconfigjson secrets in the target namespace are attached; pass \"\" to attach none.")
 	SubmitCmd.Flags().StringVar(&serviceAccountName, "service-account", "", "Service account name for the pods.")
 	SubmitCmd.Flags().StringVar(&topology, "topology", "", "TPU slice topology (e.g., 2x2x1).")
 	SubmitCmd.Flags().StringVar(&gkeScheduler, "gke-scheduler", "", "Kubernetes Scheduler name (e.g., gke.io/topology-aware-auto).")
@@ -181,9 +181,10 @@ func init() {
 	SubmitCmd.Flags().StringVar(&pathways.ServerImage, "pathways-server-image", "", "The image for the Pathways server.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerImage, "pathways-worker-image", "", "The image for the Pathways worker.")
 	SubmitCmd.Flags().BoolVar(&pathways.Headless, "pathways-headless", false, "If present, the user's workload container will not be deployed within the `pathways-head` job.")
+	SubmitCmd.Flags().BoolVar(&pathways.DeploySPS, "pathways-deploy-sps", false, "Deploy a Shared Pathways Service (SPS) instance with a resource-manager-only head pod and persistent TPU workers.")
 	SubmitCmd.Flags().StringVar(&pathways.GCSLocation, "pathways-gcs-location", "", "Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.")
 	SubmitCmd.Flags().IntVar(&pathways.ElasticSlices, "pathways-elastic-slices", 0, "Configures the number of elastic slices, potentially allowing for more flexible resource allocation.")
-	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 0, "Maximum times the workers in a slice can be restarted (defaults to 0, or 4000 when --pathways-elastic-slices>0 or --pathways-headless is set). Maps to backoffLimitPerIndex=N and backoffLimit=N*nodesPerSlice on the worker Job.")
+	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 0, "Maximum times the workers in a slice can be restarted (defaults to 0, 4000 when --pathways-elastic-slices>0 or --pathways-headless is set, or 1000000 when --pathways-deploy-sps is set). Maps to backoffLimitPerIndex=N and backoffLimit=N*nodesPerSlice on the worker Job.")
 	SubmitCmd.Flags().StringVar(&pathways.ProxyArgs, "pathways-proxy-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-proxy` executable.")
 	SubmitCmd.Flags().StringVar(&pathways.ServerArgs, "pathways-server-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-rm` (resource manager) executable.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerArgs, "pathways-worker-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-worker` executable.")
@@ -233,13 +234,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	jobTopology := strings.ToLower(strings.TrimSpace(topology))
-
-	if (pathways.ElasticSlices > 0 || pathways.Headless) && !cmd.Flags().Changed("pathways-max-slice-restarts") {
-		pathways.MaxSliceRestarts = defaultElasticMaxSliceRestarts
-	}
-	pathways.ProxyEnv = parseEnvFlags(pathwaysProxyEnv)
-	pathways.ServerEnv = parseEnvFlags(pathwaysServerEnv)
-	pathways.WorkerEnv = parseEnvFlags(pathwaysWorkerEnv)
+	applyPathwaysSubmitDefaults(cmd)
 
 	jobDef := orchestrator.JobDefinition{
 		ImageName:                     imageName,
@@ -283,6 +278,8 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		Pathways:                      pathways,
 		RawMounts:                     volumeStr,
 		Env:                           parseEnvFlags(envVars),
+
+		ImagePullSecretsSpecified: cmd.Flags().Changed("image-pull-secret"),
 	}
 
 	return orc.SubmitJob(jobDef)
@@ -341,7 +338,25 @@ const (
 	// Longest Pathways name whose coordinator label still fits in a label value.
 	maxPathwaysWorkloadNameLen     = (maxLabelValueLen - len(pathwaysCoordinatorSuffix)) / 2
 	defaultElasticMaxSliceRestarts = 4000
+	defaultSPSMaxSliceRestarts     = 1000000
+	defaultSPSMaxRestarts          = 30
 )
+
+func applyPathwaysSubmitDefaults(cmd *cobra.Command) {
+	if pathways.DeploySPS {
+		if !cmd.Flags().Changed("pathways-max-slice-restarts") {
+			pathways.MaxSliceRestarts = defaultSPSMaxSliceRestarts
+		}
+		if !cmd.Flags().Changed("restarts") {
+			restarts = defaultSPSMaxRestarts
+		}
+	} else if (pathways.ElasticSlices > 0 || pathways.Headless) && !cmd.Flags().Changed("pathways-max-slice-restarts") {
+		pathways.MaxSliceRestarts = defaultElasticMaxSliceRestarts
+	}
+	pathways.ProxyEnv = parseEnvFlags(pathwaysProxyEnv)
+	pathways.ServerEnv = parseEnvFlags(pathwaysServerEnv)
+	pathways.WorkerEnv = parseEnvFlags(pathwaysWorkerEnv)
+}
 
 func validateWorkloadNameLength(name string, isPathways bool) error {
 	if isPathways {
@@ -359,6 +374,9 @@ func validateWorkloadNameLength(name string, isPathways bool) error {
 
 func validatePathwaysFlags(cmd *cobra.Command) error {
 	if isPathwaysJob {
+		if err := validateDeploySPSFlags(); err != nil {
+			return err
+		}
 		if pathways.GCSLocation == "" {
 			return fmt.Errorf("pathways-gcs-location is required when using --pathways")
 		}
@@ -372,6 +390,20 @@ func validatePathwaysFlags(cmd *cobra.Command) error {
 	}
 	if !reflect.DeepEqual(pathways, orchestrator.PathwaysJobDefinition{}) || len(pathwaysProxyEnv) > 0 || len(pathwaysServerEnv) > 0 || len(pathwaysWorkerEnv) > 0 || hasChangedPathwaysFlags(cmd) {
 		return fmt.Errorf("pathways flags specified but --pathways flag is missing")
+	}
+	return nil
+}
+
+// validateDeploySPSFlags rejects flags that have no effect on an SPS instance, which runs no workload.
+func validateDeploySPSFlags() error {
+	if !pathways.DeploySPS {
+		return nil
+	}
+	if pathways.Headless {
+		return fmt.Errorf("--pathways-deploy-sps and --pathways-headless cannot be used together")
+	}
+	if imageName != "" || baseImage != "" || buildContext != "" || commandToRun != "" {
+		return fmt.Errorf("--pathways-deploy-sps does not run a workload; remove --image, --base-image, --build-context and --command")
 	}
 	return nil
 }
@@ -390,7 +422,7 @@ func hasChangedPathwaysFlags(cmd *cobra.Command) bool {
 }
 
 func validateImageFlags(ctx context.Context, projectID, location string) error {
-	if pathways.Headless {
+	if pathways.Headless || pathways.DeploySPS {
 		return nil
 	}
 	if err := validateImageSources(); err != nil {

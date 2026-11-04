@@ -76,6 +76,7 @@ steps:
   - -c
   - |
     make tests
+    make agentgateway-static
     tflint --init
     echo "# TEST COMMENT" >> modules/network/vpc/main.tf
     git add -u

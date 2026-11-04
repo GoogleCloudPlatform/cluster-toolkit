@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
+	"hpc-toolkit/pkg/telemetry"
 	"io"
 	"os"
 	"path"
@@ -163,23 +164,6 @@ type ExplainMissingSpec struct {
 	ReferenceBlueprints []string `json:"reference_blueprints,omitempty" yaml:"reference_blueprints,omitempty"`
 }
 
-var explainAutoGlobals = map[string]bool{
-	"project_id":      true,
-	"deployment_name": true,
-	"region":          true,
-	"zone":            true,
-	"labels":          true,
-}
-
-var explainGenericOutputs = map[string]bool{
-	"capacity_gb":      true,
-	"gcp_service_list": true,
-	"id":               true,
-	"instance_name":    true,
-	"name":             true,
-	"self_link":        true,
-}
-
 func writef(w io.Writer, format string, args ...interface{}) {
 	_, _ = fmt.Fprintf(w, format, args...)
 }
@@ -198,6 +182,7 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 
 	if len(args) == 0 {
+		setTelemetryMetadata(telemetry.EXPLAIN_TARGET, "catalog")
 		if err := rejectUnexpectedDeploymentFlag(); err != nil {
 			return err
 		}
@@ -216,6 +201,7 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	setTelemetryMetadata(telemetry.EXPLAIN_TARGET, "specs")
 	if err := rejectUnexpectedDeploymentFlag(); err != nil {
 		return err
 	}
@@ -246,9 +232,11 @@ func parseExplainFormat(raw string) (string, error) {
 func tryExplainSingleTarget(out io.Writer, format, repoRoot, target string) (bool, error) {
 	bpPath, deplPath, ok, err := resolveBlueprintTarget(repoRoot, target, explainFlags.deploymentFile)
 	if err != nil {
+		setTelemetryMetadata(telemetry.EXPLAIN_TARGET, explainYamlTargetKind(target))
 		return true, err
 	}
 	if ok {
+		setTelemetryMetadata(telemetry.EXPLAIN_TARGET, explainYamlTargetKind(target))
 		res, err := buildExplainBlueprint(repoRoot, bpPath, deplPath)
 		if err != nil {
 			return true, err
@@ -259,6 +247,7 @@ func tryExplainSingleTarget(out io.Writer, format, repoRoot, target string) (boo
 	}
 
 	if modPath, kind, ok := resolveModuleTarget(target); ok {
+		setTelemetryMetadata(telemetry.EXPLAIN_TARGET, "module")
 		if err := rejectUnexpectedDeploymentFlag(); err != nil {
 			return true, err
 		}
@@ -272,9 +261,29 @@ func tryExplainSingleTarget(out io.Writer, format, repoRoot, target string) (boo
 	}
 
 	if looksLikePathTarget(target) {
+		setTelemetryMetadata(telemetry.EXPLAIN_TARGET, classifyMissingPathTarget(target))
 		return true, fmt.Errorf("blueprint or module path %q not found; run './gcluster explain' to list all available blueprints and modules", target)
 	}
 	return false, nil
+}
+
+func explainYamlTargetKind(target string) string {
+	if isDeploymentYAMLName(filepath.Base(target)) {
+		return "deployment"
+	}
+	return "blueprint"
+}
+
+func classifyMissingPathTarget(target string) string {
+	if isDeploymentYAMLName(filepath.Base(target)) {
+		return "deployment"
+	}
+	norm := strings.TrimPrefix(sourcereader.ToSlash(filepath.Clean(target)), "./")
+	if strings.HasSuffix(target, ".yaml") || strings.HasSuffix(target, ".yml") ||
+		strings.HasPrefix(norm, "examples/") || strings.HasPrefix(norm, "community/examples/") {
+		return "blueprint"
+	}
+	return "module"
 }
 
 func looksLikePathTarget(target string) bool {
@@ -757,7 +766,13 @@ func buildExplainBlueprint(repoRoot, bpPath, explicitDeplPath string) (ExplainBl
 	if err != nil {
 		return ExplainBlueprintResult{}, err
 	}
-	apis, stages := collectBlueprintAPIsAndStages(bp)
+	// "" skips the on-disk lookup so explain reports the binary's embedded module
+	// metadata, i.e. what `gcluster deploy` validates via test_apis_enabled.
+	apis := catalog.ExtractBlueprintServices("", filepath.Dir(bpPath), bp)
+	if apis == nil {
+		apis = []string{}
+	}
+	stages := collectBlueprintStages(bp)
 
 	gcloudCmd := ""
 	if len(apis) > 0 {
@@ -798,17 +813,12 @@ func loadCompanionDeployment(repoRoot, bpPath, blueprintName, explicitDeplPath s
 	return displayDeplPath, parsedDS, nil
 }
 
-func collectBlueprintAPIsAndStages(bp config.Blueprint) ([]string, []ExplainStage) {
-	servicesSet := make(map[string]bool)
+func collectBlueprintStages(bp config.Blueprint) []ExplainStage {
 	stages := make([]ExplainStage, 0, len(bp.Groups))
-
 	for _, grp := range bp.Groups {
 		stageMods := make([]ExplainStageModule, 0, len(grp.Modules))
 		for _, mod := range grp.Modules {
 			normSrc := strings.TrimPrefix(strings.TrimSpace(mod.Source), "./")
-			for _, svc := range extractModuleRequiredServices(mod, normSrc) {
-				servicesSet[svc] = true
-			}
 			useIDs := make([]string, 0, len(mod.Use))
 			for _, u := range mod.Use {
 				useIDs = append(useIDs, string(u))
@@ -825,33 +835,7 @@ func collectBlueprintAPIsAndStages(bp config.Blueprint) ([]string, []ExplainStag
 			Modules: stageMods,
 		})
 	}
-
-	apis := make([]string, 0, len(servicesSet))
-	for s := range servicesSet {
-		apis = append(apis, s)
-	}
-	sort.Strings(apis)
-	return apis, stages
-}
-
-func extractModuleRequiredServices(mod config.Module, normSrc string) []string {
-	kind := mod.Kind.String()
-	if kind == "" {
-		kind = config.TerraformKind.String()
-	}
-	if kind != "terraform" && kind != "packer" {
-		return nil
-	}
-	if detectEmbeddedModuleKind(sourcereader.ModuleFS, normSrc) != "" {
-		if mi, err := modulereader.GetModuleInfo(normSrc, kind); err == nil {
-			return nonEmptyStrings(mi.Metadata.Spec.Requirements.Services)
-		}
-	} else if sourcereader.IsLocalPath(mod.Source) {
-		if mtd, err := modulereader.GetMetadata(mod.Source); err == nil {
-			return nonEmptyStrings(mtd.Spec.Requirements.Services)
-		}
-	}
-	return nil
+	return stages
 }
 
 func nonEmptyStrings(items []string) []string {
@@ -1121,7 +1105,7 @@ func buildModuleAutoInputs(mi modulereader.ModuleInfo, upstreamGroups []upstream
 
 	var globalInjected []string
 	for _, in := range mi.Inputs {
-		if explainAutoGlobals[in.Name] {
+		if config.IsAutoInjectedGlobal(in.Name) {
 			globalInjected = append(globalInjected, in.Name)
 		}
 	}
@@ -1146,7 +1130,7 @@ func partitionModuleInputs(mi modulereader.ModuleInfo, useProvidedInputs map[str
 	var reqInputs []ExplainModuleInput
 	var optInputs []ExplainModuleInput
 	for _, in := range mi.Inputs {
-		if explainAutoGlobals[in.Name] || in.Name == injectedID || useProvidedInputs[in.Name] || in.Name == "machine_configs" {
+		if config.IsAutoInjectedGlobal(in.Name) || in.Name == injectedID || useProvidedInputs[in.Name] || in.Name == "machine_configs" {
 			continue
 		}
 		entry := ExplainModuleInput{
@@ -1185,7 +1169,7 @@ func classifyTargetModuleInputs(targetInfo modulereader.ModuleInfo) (map[string]
 	injectedID := targetInfo.Metadata.Ghpc.InjectModuleId
 	for _, in := range targetInfo.Inputs {
 		targetInputs[in.Name] = true
-		if in.Required && !explainAutoGlobals[in.Name] && in.Name != injectedID {
+		if in.Required && !config.IsAutoInjectedGlobal(in.Name) && in.Name != injectedID {
 			targetReqInputs[in.Name] = true
 		}
 	}
@@ -1238,13 +1222,13 @@ func extractProviderTrueOutputs(m embeddedModEntry) map[string]bool {
 	hasReq := false
 	for _, in := range info.Inputs {
 		inMap[in.Name] = true
-		if in.Required && !explainAutoGlobals[in.Name] && in.Name != info.Metadata.Ghpc.InjectModuleId {
+		if in.Required && !config.IsAutoInjectedGlobal(in.Name) && in.Name != info.Metadata.Ghpc.InjectModuleId {
 			hasReq = true
 		}
 	}
 	outs := make(map[string]bool)
 	for _, o := range info.Outputs {
-		if !explainGenericOutputs[o.Name] && (!inMap[o.Name] || !hasReq) {
+		if !config.IsGenericOutputName(o.Name) && (!inMap[o.Name] || !hasReq) {
 			outs[o.Name] = true
 		}
 	}
@@ -1295,7 +1279,7 @@ func selectPrimaryProviders(
 			continue
 		}
 		for outName := range p.outputs {
-			if targetInputs[outName] && !useProvided[outName] && !explainAutoGlobals[outName] {
+			if targetInputs[outName] && !useProvided[outName] && !config.IsAutoInjectedGlobal(outName) {
 				primaryToInputs[p.source] = append(primaryToInputs[p.source], outName)
 				useProvided[outName] = true
 			}

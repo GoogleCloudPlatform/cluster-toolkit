@@ -877,7 +877,7 @@ process_service_accounts() {
 		local username="${email%%@*}"
 
 		# Safety filter: only process service accounts matching integration test patterns
-		if [[ "$username" != *-compute && "$username" != *-controller && "$username" != *-login && "$username" != *-sa && "$username" != dummy-* && "$username" != test-* ]]; then
+		if [[ "$username" != *-compute && "$username" != *-compute2 && "$username" != *-controller && "$username" != *-ctrl && "$username" != *-login && "$username" != *-builder && "$username" != *-tpu && "$username" != *-sa && "$username" != dummy-* && "$username" != test-* ]]; then
 			log "SKIP" "Service Account $email does not match known test patterns. Skipping to prevent accidental deletion."
 			continue
 		fi

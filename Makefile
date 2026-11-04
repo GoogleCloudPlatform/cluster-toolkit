@@ -58,7 +58,7 @@ install: install-user
 
 endif
 
-tests: warn-terraform-version warn-packer-version test-engine validate_golden_copy validate_configs packer-check validate-docs
+tests: warn-terraform-version warn-packer-version test-engine validate_golden_copy validate_configs packer-check validate-docs test-agentgateway
 
 format: warn-go-version warn-terraform-version warn-packer-version terraform-format packer-format
 	$(info **************** formatting go code *******************)
@@ -260,7 +260,7 @@ endif
 
 ###################################
 # AGENT SKILLS SECTION
-.PHONY: lint-skills test-skills validate-docs
+.PHONY: lint-skills test-skills test-skills-live generate-docs validate-docs check-cloud-docs
 
 lint-skills:
 	$(info **************** linting agent skills ***************)
@@ -271,7 +271,36 @@ test-skills:
 	@python3 tools/tests/test_run_eval.py
 	@python3 tools/run_eval.py --all
 
+generate-docs:
+	$(info **************** generating catalog, README tables, and llms.txt ***************)
+	@go run ./tools/catalog-gen
+
+# Manual only (never CI): drives a real agent CLI against every EVAL.yaml prompt
+# in throwaway git worktrees. Requires the agent CLI installed + logged in and a
+# GCP project for gcluster validators. Example:
+#   make test-skills-live LIVE_PROJECT=my-sandbox LIVE_AGENT=gemini
+LIVE_AGENT ?= gemini
+LIVE_SKILL ?= cluster-blueprint-assistant
+test-skills-live: gcluster
+	$(info **************** running LIVE skills evals ($(LIVE_SKILL)) against $(LIVE_AGENT) ***************)
+	@test -n "$(LIVE_PROJECT)" || { echo "LIVE_PROJECT=<gcp-project> is required"; exit 2; }
+	@python3 tools/run_eval.py --skill $(LIVE_SKILL) --live --agent $(LIVE_AGENT) --project $(LIVE_PROJECT) --markdown-output live-eval-report.md
+
 validate-docs:
 	$(info **************** validating README snippets and links ***************)
 	@python3 tools/validate_readme_snippets.py
+	@python3 tools/tests/test_validate_cloud_docs.py
+
+check-cloud-docs:
+	$(info **************** validating public cloud.google.com docs against repo (use main/latest tag for release-accurate results) ***************)
+	@python3 tools/validate_cloud_docs.py --check-live
 # END OF AGENT SKILLS SECTION
+
+.PHONY: test-agentgateway agentgateway-static
+test-agentgateway:
+	go test ./tests
+	python3 -m unittest tests.test_agentgateway tests.agentgateway_playbook_checks
+
+# Requires Helm >= 3.12 and Python packages PyYAML and jsonschema.
+agentgateway-static:
+	python3 tools/validate_configs/agentgateway/validate_static.py

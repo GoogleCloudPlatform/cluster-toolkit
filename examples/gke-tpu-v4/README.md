@@ -175,7 +175,7 @@ Submit the job to your live GKE cluster:
   --command "pip install -U jax jaxlib && python -c 'import jax; print(\"JAX Device count:\", jax.device_count())'"
 ```
 
-*Note: `gcluster job submit --pathways` automatically sets `JAX_PLATFORMS=proxy` and `JAX_BACKEND_TARGET=grpc://$(PATHWAYS_HEAD):29000` for JAX's built-in `'proxy'` backend. `pathwaysutils.initialize()` is only needed for Pathways-specific features (such as Orbax checkpoint persistence or profiling) and, if used, must be called before `jax.devices()`.*
+*Note: `gcluster job submit --pathways` automatically sets `JAX_PLATFORMS=proxy` and `JAX_BACKEND_TARGET=grpc://localhost:29000` for JAX's built-in `'proxy'` backend. `pathwaysutils.initialize()` is only needed for Pathways-specific features (such as Orbax checkpoint persistence or profiling) and, if used, must be called before `jax.devices()`.*
 
 ### 3. Monitor and Manage the Job
 

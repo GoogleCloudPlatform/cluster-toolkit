@@ -24,6 +24,9 @@ resource "time_static" "exclusion_start" {
 }
 
 locals {
+  # Inference Gateway retains its existing prerequisites.
+  enable_gateway_api = var.enable_gateway_api || var.enable_inference_gateway
+
   upgrade_settings = {
     strategy        = var.upgrade_settings.strategy
     max_surge       = coalesce(var.upgrade_settings.max_surge, 0)
@@ -313,7 +316,7 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   dynamic "gateway_api_config" {
-    for_each = var.enable_inference_gateway ? [1] : []
+    for_each = local.enable_gateway_api ? [1] : []
     content {
       channel = "CHANNEL_STANDARD"
     }
@@ -392,7 +395,7 @@ resource "google_container_cluster" "gke_cluster" {
       enabled = var.enable_managed_lustre_csi
     }
     dynamic "http_load_balancing" {
-      for_each = var.enable_inference_gateway ? [1] : []
+      for_each = local.enable_gateway_api ? [1] : []
       content {
         disabled = false
       }
@@ -454,6 +457,10 @@ resource "google_container_cluster" "gke_cluster" {
     ignore_changes = [
       node_config,
       min_master_version,
+      # Ignore unmanaged Fleet membership added out-of-band (e.g. Connect Gateway)
+      fleet,
+      # Ignore cluster-level node_locations on regional clusters to prevent fighting GKE regional zone defaults
+      node_locations,
     ]
     precondition {
       condition     = var.default_max_pods_per_node == null || var.networking_mode == "VPC_NATIVE"
@@ -605,6 +612,8 @@ resource "google_container_node_pool" "system_node_pools" {
   lifecycle {
     ignore_changes = [
       node_config[0].labels,
+      # Ignore resource_labels to prevent node pool replacement on blueprint/metadata renames
+      node_config[0].resource_labels,
       node_config[0].taint,
       version,
     ]
@@ -698,6 +707,8 @@ resource "google_container_node_pool" "cpu_np" {
 
   lifecycle {
     ignore_changes = [
+      # Ignore resource_labels to prevent node pool replacement on blueprint/metadata renames
+      node_config[0].resource_labels,
       version,
     ]
   }

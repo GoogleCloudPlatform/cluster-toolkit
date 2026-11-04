@@ -28,6 +28,8 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 
+	"github.com/google/go-cmp/cmp"
+	batchv1 "k8s.io/api/batch/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -37,6 +39,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/util/jsonpath"
+	k8syaml "sigs.k8s.io/yaml"
 )
 
 func setupMockMachineConfig(t *testing.T) {
@@ -70,10 +73,8 @@ func setupMockMachineConfig(t *testing.T) {
 	  }
 	}`
 	config.ClearMachineTypeCache()
-	os.Setenv("GHPC_MOCK_MACHINE_CONFIG", mockJSON)
-	t.Cleanup(func() {
-		os.Unsetenv("GHPC_MOCK_MACHINE_CONFIG")
-	})
+	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", mockJSON)
+	t.Cleanup(config.ClearMachineTypeCache)
 }
 
 type MockExecutor struct {
@@ -172,12 +173,14 @@ type MockKubeClient struct {
 	DeletedJobSets  []string
 
 	// Fixtures keyed by gvr.Resource.
-	Objects    map[string][]unstructured.Unstructured
-	ListErrs   map[string]error
-	GetErr     error
-	DeleteErrs map[string]error
-	Deleted    map[string][]string
-	DeletePre  map[string]*metav1.Preconditions
+	Objects            map[string][]unstructured.Unstructured
+	ListErrs           map[string]error
+	ListNamespaces     map[string]string
+	ListFieldSelectors map[string]string
+	GetErr             error
+	DeleteErrs         map[string]error
+	Deleted            map[string][]string
+	DeletePre          map[string]*metav1.Preconditions
 }
 
 func managedStorageObject(kind, name string) *unstructured.Unstructured {
@@ -224,7 +227,13 @@ func (m *MockKubeClient) ListJobSets(namespace string, labelSelector string) ([]
 	return []orchestrator.JobStatus{}, m.Err
 }
 
-func (m *MockKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error) {
+func (m *MockKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector, fieldSelector string) ([]unstructured.Unstructured, error) {
+	if m.ListNamespaces != nil {
+		m.ListNamespaces[gvr.Resource] = namespace
+	}
+	if m.ListFieldSelectors != nil {
+		m.ListFieldSelectors[gvr.Resource] = fieldSelector
+	}
 	return m.Objects[gvr.Resource], m.ListErrs[gvr.Resource]
 }
 
@@ -343,7 +352,27 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 			cpuLimit:        "",
 			memoryLimit:     "",
 			wantLabels:      []string{},
-			wantLimits:      []string{`cpu: "1"`},
+			wantLimits:      []string{"cpu: 1065m"},
+			dontWantLimits:  []string{"nvidia.com/gpu", "google.com/tpu"},
+			wantErr:         false,
+		},
+		{
+			name:            "Shared-Core CPU Machine (e2-medium)",
+			acceleratorType: "e2-medium",
+			cpuLimit:        "",
+			memoryLimit:     "",
+			wantLabels:      []string{},
+			wantLimits:      []string{"cpu: 570m"},
+			dontWantLimits:  []string{"nvidia.com/gpu", "google.com/tpu"},
+			wantErr:         false,
+		},
+		{
+			name:            "CPU Machine with SMT Disabled (threads_per_core=1)",
+			acceleratorType: "n2-standard-4",
+			cpuLimit:        "",
+			memoryLimit:     "",
+			wantLabels:      []string{},
+			wantLimits:      []string{"cpu: 1065m"},
 			dontWantLimits:  []string{"nvidia.com/gpu", "google.com/tpu"},
 			wantErr:         false,
 		},
@@ -362,6 +391,8 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 				"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
 				"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "16x16"}},
 				"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json":                                {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+				"gcloud compute machine-types describe e2-medium --zone=us-central1-a --format=json":                                    {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+				"gcloud compute machine-types describe n2-standard-4 --zone=us-central1-a --format=json":                                {{ExitCode: 0, Stdout: `{"guestCpus": 4}`}},
 				"gcloud compute machine-types describe nvidia-h100-mega-80gb --zone=us-central1-a --format=json":                        {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1, "guestAcceleratorType": "nvidia-h100-mega-80gb"}]}`}},
 				"gcloud compute machine-types describe nvidia-gb200 --zone=us-central1-a --format=json":                                 {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1, "guestAcceleratorType": "nvidia-gb200"}]}`}},
 				"gcloud compute machine-types describe nvidia-l4 --zone=us-central1-a --format=json":                                    {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1, "guestAcceleratorType": "nvidia-l4"}]}`}},
@@ -378,6 +409,8 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 				{Config: gkeNodePoolConfig{MachineType: "tpu-v6e-slice"}},
 				{Config: gkeNodePoolConfig{MachineType: "nvidia-unknown-new-gpu"}},
 				{Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+				{Config: gkeNodePoolConfig{MachineType: "e2-medium"}},
+				{Config: gkeNodePoolConfig{MachineType: "n2-standard-4", AdvancedMachineFeatures: &gkeAdvancedMachineFeatures{ThreadsPerCore: "1"}}},
 			}
 
 			profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
@@ -1024,6 +1057,22 @@ func TestProcessNodePoolCapacity_Hyperthreading(t *testing.T) {
 			wantCpus: 16, // Not halved because it's ARM!
 			wantErr:  false,
 		},
+		{
+			name: "Shared-core machine (e2-medium) treated as 1 vCPU per node",
+			np: gkeJobNodePool{
+				Config: gkeNodePoolConfig{
+					MachineType: "e2-medium",
+				},
+				InitialNodeCount: 2,
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe e2-medium --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 2, "memoryMb": 4096}`},
+				},
+			},
+			wantCpus: 2, // 1 effective vCPU * 2 nodes
+			wantErr:  false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1188,6 +1237,23 @@ func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 			},
 			wantIsCPU:    true,
 			wantCapacity: 60, // Not halved!
+			wantErr:      false,
+		},
+		{
+			name: "Shared-core machine (e2-medium) treated as 1 vCPU",
+			job: orchestrator.JobDefinition{
+				ComputeType:     "e2-medium",
+				MachineType:     "e2-medium",
+				ClusterLocation: "us-central1-a",
+			},
+			threadsPerCore: "",
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe e2-medium --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 2, "memoryMb": 4096}`},
+				},
+			},
+			wantIsCPU:    true,
+			wantCapacity: 1, // Treated as 1 vCPU!
 			wantErr:      false,
 		},
 	}
@@ -1708,7 +1774,6 @@ func TestGenerateGKEManifest_ParallelContainers(t *testing.T) {
 	if !strings.Contains(manifest, "name: workload-container-2") {
 		t.Errorf("manifest missing expected container name %q\nManifest: %s", "workload-container-2", manifest)
 	}
-
 	// Verify that resources are split!
 	// Total chips = 4. Parallel containers = 2. So each should get 2 chips!
 	expectedResources := "google.com/tpu: \"2\""
@@ -2228,6 +2293,7 @@ func TestPrepareManifestOptions_PathwaysPlatform(t *testing.T) {
 	setupMockMachineConfig(t)
 	tests := []struct {
 		computeType  string
+		machineType  string // resolved machine type for aliases; defaults to computeType
 		topology     string
 		wantPlatform string
 	}{
@@ -2261,6 +2327,41 @@ func TestPrepareManifestOptions_PathwaysPlatform(t *testing.T) {
 			topology:     "2x2x2",
 			wantPlatform: "tpuv5:2x2x2",
 		},
+		{
+			computeType:  "ct6e-standard-4t",
+			topology:     "2x4",
+			wantPlatform: "tpuv6e:2x4",
+		},
+		{
+			computeType:  "ct6e-standard-8t",
+			topology:     "2x4",
+			wantPlatform: "tpuv6e1t:2x4",
+		},
+		{
+			computeType:  "v6e-8",
+			machineType:  "ct6e-standard-8t",
+			topology:     "2x4",
+			wantPlatform: "tpuv6e1t:2x4",
+		},
+		{
+			// On a cluster with 4-chip node pools, v6e-8 resolves to two
+			// ct6e-standard-4t VMs and keeps the plain tpuv6e platform.
+			computeType:  "v6e-8",
+			machineType:  "ct6e-standard-4t",
+			topology:     "2x4",
+			wantPlatform: "tpuv6e:2x4",
+		},
+		{
+			computeType:  "ct5lp-hightpu-8t",
+			topology:     "2x4",
+			wantPlatform: "tpuv5e1t:2x4",
+		},
+		{
+			computeType:  "v5e-8",
+			machineType:  "ct5lp-hightpu-8t",
+			topology:     "2x4",
+			wantPlatform: "tpuv5e1t:2x4",
+		},
 	}
 
 	for _, tc := range tests {
@@ -2279,12 +2380,23 @@ func TestPrepareManifestOptions_PathwaysPlatform(t *testing.T) {
 				"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: tc.topology}},
 				"gcloud compute machine-types describe " + tc.computeType + " --zone=us-central1-a --format=json":                       {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "` + tc.computeType + `"}]}`}},
 			}
+			machineType := tc.machineType
+			if machineType == "" {
+				machineType = tc.computeType
+			}
+			if machineType != tc.computeType {
+				chips := 4
+				if strings.HasSuffix(machineType, "-8t") {
+					chips = 8
+				}
+				mockResponses["gcloud compute machine-types describe "+machineType+" --zone=us-central1-a --format=json"] = []shell.CommandResult{{ExitCode: 0, Stdout: fmt.Sprintf(`{"accelerators": [{"guestAcceleratorCount": %d, "guestAcceleratorType": "%s"}]}`, chips, tc.computeType)}}
+			}
 
 			mockExec := NewMockExecutor(mockResponses)
 			orc := newTestGKEOrchestrator(mockExec)
 			orc.projectID = "mock-project"
 			orc.clusterDesc.NodePools = []gkeJobNodePool{
-				{Config: gkeNodePoolConfig{MachineType: tc.computeType}},
+				{Config: gkeNodePoolConfig{MachineType: machineType}},
 			}
 
 			profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
@@ -3546,11 +3658,12 @@ func TestGeneratePodFailurePolicy(t *testing.T) {
 	orc := &GKEOrchestrator{}
 
 	tests := []struct {
-		name       string
-		exitCodes  []int
-		expectErr  bool
-		wantEmpty  bool
-		wantSubstr string
+		name           string
+		exitCodes      []int
+		containerNames []string
+		expectErr      bool
+		wantEmpty      bool
+		wantSubstr     string
 	}{
 		{
 			name:      "nil slice",
@@ -3573,9 +3686,21 @@ func TestGeneratePodFailurePolicy(t *testing.T) {
 			wantSubstr: "values:\n    - 137\n    - 143",
 		},
 		{
-			name:       "valid with duplicates",
-			exitCodes:  []int{137, 137, 143},
-			wantSubstr: "values:\n    - 137\n    - 143",
+			name:       "valid with duplicates and unsorted order sorted ascending",
+			exitCodes:  []int{143, 42, 143, 137},
+			wantSubstr: "values:\n    - 42\n    - 137\n    - 143",
+		},
+		{
+			name:           "scoped to single workload container",
+			exitCodes:      []int{42},
+			containerNames: []string{"workload-container"},
+			wantSubstr:     "containerName: workload-container",
+		},
+		{
+			name:           "scoped to dual parallel workload containers",
+			exitCodes:      []int{143, 42},
+			containerNames: []string{"workload-container-1", "workload-container-2"},
+			wantSubstr:     "containerName: workload-container-2",
 		},
 		{
 			name:       "boundary valid min (1) and max (255)",
@@ -3606,7 +3731,7 @@ func TestGeneratePodFailurePolicy(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			res, err := orc.generatePodFailurePolicy(tc.exitCodes)
+			res, err := orc.generatePodFailurePolicy(tc.exitCodes, tc.containerNames...)
 			if tc.expectErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil with result: %s", res)
@@ -3622,7 +3747,33 @@ func TestGeneratePodFailurePolicy(t *testing.T) {
 			if tc.wantSubstr != "" && !strings.Contains(res, tc.wantSubstr) {
 				t.Errorf("expected result to contain %q, got:\n%s", tc.wantSubstr, res)
 			}
+			if !tc.wantEmpty {
+				assertStrictPodFailurePolicyYAML(t, res, tc.containerNames)
+			}
 		})
+	}
+}
+
+func assertStrictPodFailurePolicyYAML(t *testing.T, res string, containerNames []string) {
+	t.Helper()
+	var pfp batchv1.PodFailurePolicy
+	if err := k8syaml.UnmarshalStrict([]byte(res), &pfp); err != nil {
+		t.Fatalf("failed strict unmarshal into batchv1.PodFailurePolicy: %v\n%s", err, res)
+	}
+	wantRules := max(1, len(containerNames))
+	if len(pfp.Rules) != wantRules {
+		t.Fatalf("got %d rules, want %d", len(pfp.Rules), wantRules)
+	}
+	for i, r := range pfp.Rules {
+		if r.OnExitCodes == nil || !slices.IsSorted(r.OnExitCodes.Values) {
+			t.Errorf("rule[%d] values not sorted ascending: %+v", i, r.OnExitCodes)
+		}
+		if i < len(containerNames) && (r.OnExitCodes.ContainerName == nil || *r.OnExitCodes.ContainerName != containerNames[i]) {
+			t.Errorf("rule[%d] containerName = %v, want %q", i, r.OnExitCodes.ContainerName, containerNames[i])
+		}
+	}
+	if len(containerNames) == 2 && cmp.Diff([]int32{42, 143}, pfp.Rules[0].OnExitCodes.Values) != "" {
+		t.Errorf("unexpected sorted values: %+v", pfp.Rules[0].OnExitCodes.Values)
 	}
 }
 
@@ -4032,6 +4183,91 @@ func TestSubmitJob_MTCFastFailBeforeClusterCalls(t *testing.T) {
 			}
 			if len(mockExec.calls) > 0 {
 				t.Errorf("SubmitJob() executed external commands before failing fast: %v", mockExec.calls)
+			}
+		})
+	}
+}
+
+func TestSubmitJob_TemplateFastFailBeforeImageBuild(t *testing.T) {
+	setupMockMachineConfig(t)
+	badSyntaxDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(badSyntaxDir, "jobset.tmpl"), []byte("{{ .Unclosed"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	badPathwaysDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(badPathwaysDir, "pathways_jobset.tmpl"), []byte("{{ .Unclosed"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Only base.tmpl is overridden, so preflight passes and the flow proceeds to the first external command.
+	validBaseDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(validBaseDir, "base.tmpl"), []byte("{{- define \"workload_labels\" -}}\nteam: platform\n{{- end -}}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// ImageName (not BaseImage) so no image build is attempted; the mock executor stops the flow after preflight.
+	newJob := func(name, customDir string, pathways bool) orchestrator.JobDefinition {
+		job := orchestrator.JobDefinition{
+			WorkloadName:           name,
+			ProjectID:              "proj",
+			ImageName:              "img",
+			GkeCustomTemplatesPath: customDir,
+			IsPathwaysJob:          pathways,
+		}
+		if pathways {
+			job.Pathways = orchestrator.PathwaysJobDefinition{GCSLocation: "gs://bkt", HeadNodePool: "head-np"}
+		}
+		return job
+	}
+
+	for _, tc := range []struct {
+		name          string
+		job           orchestrator.JobDefinition
+		wantErr       string
+		wantPastLocal bool
+	}{
+		{
+			name:    "missing custom template directory",
+			job:     newJob("tmpl-missing", filepath.Join(badSyntaxDir, "missing-dir"), false),
+			wantErr: "--gke-custom-templates-path",
+		},
+		{
+			name:    "malformed custom jobset template",
+			job:     newJob("tmpl-syntax", badSyntaxDir, false),
+			wantErr: "unclosed action",
+		},
+		{
+			name:    "malformed custom pathways template reaches the Pathways preflight",
+			job:     newJob("tmpl-pw-syntax", badPathwaysDir, true),
+			wantErr: "unclosed action",
+		},
+		{
+			name:          "malformed jobset template is not parsed for Pathways jobs",
+			job:           newJob("tmpl-pw-ok", badSyntaxDir, true),
+			wantPastLocal: true,
+		},
+		{
+			name:          "valid base.tmpl-only override proceeds past preflight",
+			job:           newJob("tmpl-valid", validBaseDir, false),
+			wantPastLocal: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{})
+			orc := newTestGKEOrchestrator(mockExec)
+			err := orc.SubmitJob(tc.job)
+			if err == nil {
+				t.Fatal("SubmitJob() succeeded against an empty mock executor, want error")
+			}
+			if tc.wantPastLocal {
+				if len(mockExec.calls) == 0 {
+					t.Fatalf("SubmitJob() failed before reaching any external command: %v", err)
+				}
+				return
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("got err = %v, want substring %q", err, tc.wantErr)
+			}
+			if len(mockExec.calls) > 0 {
+				t.Errorf("SubmitJob() executed external commands before local fast-fail: %v", mockExec.calls)
 			}
 		})
 	}

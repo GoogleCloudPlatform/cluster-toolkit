@@ -233,6 +233,9 @@ Modules that are still in development and less stable are labeled with the
 * **[gpu-rdma-vpc]** ![core-badge] : Creates a VPC network and subnetworks for
   RDMA traffic between GPU nodes, with outputs for [vm-instance], Slurm, and
   GKE modules.
+* **[int-app-lb]** ![community-badge] ![experimental-badge] : Creates a regional
+  Internal Application (L7) Load Balancer in Google Cloud with support for
+  Managed Instance Group backends, IAP, and custom SSL certificates.
 
 [vpc]: network/vpc/README.md
 [dns-managed-zone]: network/dns-managed-zone/README.md
@@ -243,6 +246,7 @@ Modules that are still in development and less stable are labeled with the
 [private-service-access]: network/private-service-access/README.md
 [pre-existing-subnetwork]: network/pre-existing-subnetwork/README.md
 [gpu-rdma-vpc]: network/gpu-rdma-vpc/README.md
+[int-app-lb]: ../community/modules/network/int-app-lb/README.md
 
 ### Packer
 
@@ -252,6 +256,9 @@ Modules that are still in development and less stable are labeled with the
 [custom-image]: packer/custom-image/README.md
 
 ### Project
+
+* **[aiplatform-predict-iam](../community/modules/project/aiplatform-predict-iam/README.md)** ![community-badge] ![experimental-badge]:
+  Creates a custom role granting only Agent Platform prediction access to a service account.
 
 * **[service-account]** ![core-badge] : Creates [service
   accounts](https://cloud.google.com/iam/docs/service-accounts) for a GCP
@@ -294,8 +301,16 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 
 * **[chrome-remote-desktop]** ![community-badge] ![experimental-badge] : Creates
   a GPU accelerated Chrome Remote Desktop.
+* **[novnc-runtime]** ![community-badge] ![experimental-badge] : Builds the
+  startup-script runners for a per-user XFCE + noVNC desktop runtime, to be
+  layered onto an existing host such as a Slurm login node.
+* **[novnc-desktop]** ![community-badge] ![experimental-badge] : Creates a
+  standalone VM that serves per-user XFCE desktops through noVNC using the
+  [novnc-runtime] module.
 
 [chrome-remote-desktop]: ../community/modules/remote-desktop/chrome-remote-desktop/README.md
+[novnc-runtime]: ../community/modules/remote-desktop/novnc-runtime/README.md
+[novnc-desktop]: ../community/modules/remote-desktop/novnc-desktop/README.md
 
 ### Scheduler
 

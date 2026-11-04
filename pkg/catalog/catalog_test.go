@@ -208,8 +208,8 @@ func verifyExpressionVarDefaults(t *testing.T, byPath map[string]BlueprintEntry)
 		t.Errorf("expected gke-a4 kueue_configuration_path expression preserved, got %v", got)
 	}
 	gkeA4x := byPath["examples/gke-a4x/gke-a4x.yaml"]
-	if got := gkeA4x.Vars["reservation_project_id"]; got != "$(vars.project_id)" {
-		t.Errorf("expected gke-a4x reservation_project_id=$(vars.project_id), got %v", got)
+	if got, exists := gkeA4x.Vars["reservation_project_id"]; !exists || got != nil {
+		t.Errorf("expected gke-a4x reservation_project_id=nil (overridden by companion deployment file), got %v (exists=%v)", got, exists)
 	}
 	tpuV6e := byPath["examples/gke-tpu-v6e/gke-tpu-v6e.yaml"]
 	if got, exists := tpuV6e.Vars["authorized_cidr"]; !exists || got != nil {
@@ -438,5 +438,204 @@ func TestMarshalCatalogDeterminismAndUpdateReadme(t *testing.T) {
 	}
 	if !strings.Contains(updated, "| Blueprint | Scheduler | Machine Types | Description |") {
 		t.Errorf("expected markdown table in updated README, got: %s", updated)
+	}
+
+	verifyRequiredServicesPopulated(t, cat)
+	verifyCommunityReadmeUpdate(t, cat)
+	verifyLLMsRenderOutputs(t, cat)
+}
+
+func verifyRequiredServicesPopulated(t *testing.T, cat Catalog) {
+	t.Helper()
+	var foundA3U, foundA4XImage bool
+	for _, bp := range cat.Blueprints {
+		if bp.Path == "examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml" {
+			foundA3U = true
+			if !slices.Contains(bp.RequiredServices, "lustre.googleapis.com") || !slices.Contains(bp.RequiredServices, "compute.googleapis.com") {
+				t.Errorf("expected lustre and compute APIs in a3ultra-slurm-blueprint RequiredServices, got %v", bp.RequiredServices)
+			}
+		}
+		if bp.Path == "examples/machine-learning/build-service-images/a4x/blueprint.yaml" {
+			foundA4XImage = true
+			if strings.Contains(bp.Description, "a3-megagpu-8g") {
+				t.Errorf("a4x image blueprint description must not inherit unrelated grandparent intro about a3-megagpu-8g, got %q", bp.Description)
+			}
+		}
+	}
+	if !foundA3U {
+		t.Errorf("expected a3ultra-slurm-blueprint.yaml in catalog")
+	}
+	if !foundA4XImage {
+		t.Errorf("expected examples/machine-learning/build-service-images/a4x/blueprint.yaml in catalog")
+	}
+	lustreMod := cat.ModuleWiring["modules/file-system/managed-lustre"]
+	if !slices.Contains(lustreMod.RequiredServices, "lustre.googleapis.com") {
+		t.Errorf("expected lustre.googleapis.com in managed-lustre RequiredServices, got %v", lustreMod.RequiredServices)
+	}
+}
+
+func verifyCommunityReadmeUpdate(t *testing.T, cat Catalog) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	commTmp := filepath.Join(tmpDir, "README.md")
+	commInitial := "# Community\n\n" + BeginCommunityCatalogMarker + "\n" + EndCommunityCatalogMarker + "\n"
+	if err := os.WriteFile(commTmp, []byte(commInitial), 0644); err != nil {
+		t.Fatalf("failed to write temp community README: %v", err)
+	}
+	if err := UpdateCommunityExamplesReadme(commTmp, cat.Blueprints); err != nil {
+		t.Fatalf("UpdateCommunityExamplesReadme failed: %v", err)
+	}
+	commBytes, err := os.ReadFile(commTmp)
+	if err != nil {
+		t.Fatalf("failed to read updated community README: %v", err)
+	}
+	commStr := string(commBytes)
+	if !strings.Contains(commStr, "[community/examples/hpc-slurm-ha.yaml](./hpc-slurm-ha.yaml)") {
+		t.Errorf("expected relative ./hpc-slurm-ha.yaml link in community README, got: %s", commStr)
+	}
+	if strings.Contains(commStr, "| [examples/hpc-slurm.yaml]") {
+		t.Errorf("core examples/hpc-slurm.yaml must not appear in community/examples/README.md table")
+	}
+}
+
+func verifyLLMsRenderOutputs(t *testing.T, cat Catalog) {
+	t.Helper()
+	llms1 := RenderLLMsTxt(cat)
+	if llms1 != RenderLLMsTxt(cat) {
+		t.Errorf("RenderLLMsTxt is not deterministic")
+	}
+	for _, want := range []string{
+		"./gcluster explain",
+		"./gcluster expand <blueprint.yaml> -d <deployment.yaml> -o expanded.yaml",
+		"a3ultra-slurm-blueprint.yaml",
+		"a4x_max_reservation_name",
+		"gke-tpu-7x.yaml",
+		"gke-tpu-v6e.yaml",
+	} {
+		if !strings.Contains(llms1, want) {
+			t.Errorf("RenderLLMsTxt missing %q", want)
+		}
+	}
+	if strings.Contains(llms1, "a4xm_reservation_name") {
+		t.Errorf("RenderLLMsTxt must not contain non-existent variable name a4xm_reservation_name")
+	}
+	verifyLLMsMatrixRows(t, llms1, cat.Blueprints)
+	verifyLLMsFullOutput(t, cat)
+}
+
+func verifyLLMsMatrixRows(t *testing.T, llmsTxt string, blueprints []BlueprintEntry) {
+	t.Helper()
+	byPath := make(map[string]BlueprintEntry, len(blueprints))
+	for _, bp := range blueprints {
+		byPath[bp.Path] = bp
+	}
+	inTable := false
+	rowCount := 0
+	for _, line := range strings.Split(llmsTxt, "\n") {
+		if strings.HasPrefix(line, "## AI Hypercomputer Hardware x Orchestrator") {
+			inTable = true
+			continue
+		}
+		if !inTable || !strings.HasPrefix(line, "| **") {
+			continue
+		}
+		rowCount++
+		verifySingleMatrixRow(t, line, byPath)
+	}
+	if rowCount != 21 {
+		t.Errorf("verifyLLMsMatrixRows found %d rows, want 21", rowCount)
+	}
+}
+
+func verifySingleMatrixRow(t *testing.T, line string, byPath map[string]BlueprintEntry) {
+	t.Helper()
+	cols := strings.Split(line, "|")
+	if len(cols) < 7 {
+		t.Fatalf("malformed matrix row: %s", line)
+	}
+	mt := strings.Trim(strings.TrimSpace(cols[2]), "`")
+	bpPath := extractMarkdownLinkTarget(cols[4])
+	deplPath := extractMarkdownLinkTarget(cols[5])
+	bp, ok := byPath[bpPath]
+	if !ok {
+		t.Errorf("matrix row references unknown blueprint %q", bpPath)
+		return
+	}
+	if deplPath != bp.DeploymentPath {
+		t.Errorf("matrix row for %s deployment path = %q, want %q", bpPath, deplPath, bp.DeploymentPath)
+	}
+	if !slices.Contains(bp.MachineTypes, mt) {
+		t.Errorf("matrix row for %s machine type %q not in %v", bpPath, mt, bp.MachineTypes)
+	}
+}
+
+func extractMarkdownLinkTarget(cell string) string {
+	s := strings.TrimSpace(cell)
+	if start := strings.Index(s, "]("); start >= 0 {
+		if end := strings.Index(s[start+2:], ")"); end >= 0 {
+			return s[start+2 : start+2+end]
+		}
+	}
+	return ""
+}
+
+func verifyLLMsFullOutput(t *testing.T, cat Catalog) {
+	t.Helper()
+	full1 := RenderLLMsFullTxt(cat)
+	if full1 != RenderLLMsFullTxt(cat) {
+		t.Errorf("RenderLLMsFullTxt is not deterministic")
+	}
+	for _, want := range []string{
+		"### examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml",
+		"gcloud services enable",
+		"lustre.googleapis.com",
+		"**unset (no default; `./gcluster explain` marks which are optional):**",
+		"| `modules/file-system/managed-lustre` |",
+	} {
+		if !strings.Contains(full1, want) {
+			t.Errorf("RenderLLMsFullTxt missing %q", want)
+		}
+	}
+	if gotH3 := strings.Count(full1, "\n### "); gotH3 != len(cat.Blueprints) {
+		t.Errorf("RenderLLMsFullTxt H3 section count = %d, want %d (len(cat.Blueprints))", gotH3, len(cat.Blueprints))
+	}
+	maxExpectedLines := 6*len(cat.Blueprints) + len(cat.ModuleWiring) + 60
+	if lines := strings.Count(full1, "\n"); lines > maxExpectedLines {
+		t.Errorf("RenderLLMsFullTxt line count = %d, exceeds per-entry compact budget %d", lines, maxExpectedLines)
+	}
+	for i, line := range strings.Split(full1, "\n") {
+		if len(line) >= 2000 {
+			t.Errorf("RenderLLMsFullTxt line %d has %d chars (>= 2000 agent read-tool truncation threshold)", i+1, len(line))
+		}
+	}
+	if strings.Contains(full1, "<nil>") {
+		t.Errorf("RenderLLMsFullTxt must format nil values as null, found <nil>")
+	}
+}
+
+func TestModuleServicesForSourceRelativeLocalDir(t *testing.T) {
+	tmp := t.TempDir()
+	bpModDir := filepath.Join(tmp, "bp", "local-mod")
+	if err := os.MkdirAll(bpModDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mtd := "spec:\n  requirements:\n    services:\n    - example.googleapis.com\n"
+	if err := os.WriteFile(filepath.Join(bpModDir, "metadata.yaml"), []byte(mtd), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cwdModDir := filepath.Join(tmp, "cwd-mod")
+	if err := os.MkdirAll(cwdModDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cwdMtd := "spec:\n  requirements:\n    services:\n    - cwd.googleapis.com\n"
+	if err := os.WriteFile(filepath.Join(cwdModDir, "metadata.yaml"), []byte(cwdMtd), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(tmp)
+	if svcs := moduleServicesForSource("", "bp", "./local-mod"); !slices.Contains(svcs, "example.googleapis.com") {
+		t.Errorf("expected example.googleapis.com from bpDir-relative module, got %v", svcs)
+	}
+	if svcs := moduleServicesForSource("", "bp", "./cwd-mod"); !slices.Contains(svcs, "cwd.googleapis.com") {
+		t.Errorf("expected cwd.googleapis.com from cwd-relative module, got %v", svcs)
 	}
 }

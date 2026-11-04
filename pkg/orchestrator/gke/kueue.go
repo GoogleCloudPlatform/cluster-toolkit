@@ -17,6 +17,7 @@ package gke
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -27,6 +28,7 @@ import (
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"gopkg.in/yaml.v2"
@@ -59,10 +61,7 @@ const (
 	kueueControllerRolloutTimeout = "--timeout=600s"
 )
 
-var kueuePermissionChecks = []struct {
-	verb     string
-	resource string
-}{
+var kueuePermissionChecks = []permissionCheck{
 	{"create", "namespaces"},
 	{"create", "customresourcedefinitions.apiextensions.k8s.io"},
 	{"create", "clusterroles.rbac.authorization.k8s.io"},
@@ -202,7 +201,7 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName, ns string) error {
 	cqName := defaultClusterQueue
 	cqExists, err := g.checkClusterQueueExists(cqName)
 	if err != nil {
-		if isForbiddenError(err) {
+		if k8s.IsForbiddenError(err) {
 			return fmt.Errorf("LocalQueue '%s' does not exist in namespace '%s' and cluster permissions are restricted (403 Forbidden). Please ask your cluster administrator to create a LocalQueue in namespace '%s'", localQueueName, ns, ns)
 		}
 		return fmt.Errorf("failed to check if ClusterQueue %s exists: %w", cqName, err)
@@ -214,7 +213,7 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName, ns string) error {
 		if err != nil {
 			return fmt.Errorf("failed to render clusterqueue: %w", err)
 		}
-		if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile); err != nil {
+		if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile, ""); err != nil {
 			return fmt.Errorf("failed to apply clusterqueue: %w", err)
 		}
 	} else {
@@ -227,7 +226,7 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName, ns string) error {
 		return err
 	}
 
-	if err := g.applyManifests(localQueueBytes, localQueueManifestFile); err != nil {
+	if err := g.applyManifests(localQueueBytes, localQueueManifestFile, ""); err != nil {
 		return fmt.Errorf("failed to apply localqueue: %w", err)
 	}
 
@@ -258,7 +257,7 @@ func (g *GKEOrchestrator) ensureClusterQueueCoverage(localQueueName, ns string) 
 		if err != nil {
 			return fmt.Errorf("failed to render clusterqueue with new capacity: %w", err)
 		}
-		if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile); err != nil {
+		if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile, ""); err != nil {
 			return fmt.Errorf("failed to apply clusterqueue with new capacity: %w", err)
 		}
 		return nil
@@ -453,7 +452,7 @@ func (g *GKEOrchestrator) installKueue(version string) error {
 		return err
 	}
 
-	if err := g.applyManifests(cleanedManifests, "kueue.yaml"); err != nil {
+	if err := g.applyManifests(cleanedManifests, "kueue.yaml", ""); err != nil {
 		return err
 	}
 
@@ -468,14 +467,7 @@ func (g *GKEOrchestrator) installKueue(version string) error {
 
 func (g *GKEOrchestrator) checkKueueInstallPermissions(version string) error {
 	logging.Info("Verifying cluster permissions for Kueue installation...")
-	var missing []string
-	for _, c := range kueuePermissionChecks {
-		res := g.kubectl("auth", "can-i", c.verb, c.resource)
-		if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) != "yes" {
-			missing = append(missing, fmt.Sprintf("'%s %s'", c.verb, c.resource))
-		}
-	}
-	if len(missing) > 0 {
+	if missing := g.missingPermissions(kueuePermissionChecks); len(missing) > 0 {
 		return fmt.Errorf("unable to re-install Kueue to version %s: missing required RBAC permissions: [%s]. Please contact your cluster administrator", version, strings.Join(missing, ", "))
 	}
 	return nil
@@ -732,13 +724,15 @@ func (g *GKEOrchestrator) getKueuePodDetails() string {
 }
 
 func (g *GKEOrchestrator) checkKueueEndpoints(useEndpointSlice bool) (bool, error) {
-	var cmdEndpoints shell.CommandResult
 	if useEndpointSlice {
-		cmdEndpoints = g.kubectl("get", "endpointslice", "-l", "kubernetes.io/service-name=kueue-webhook-service", "-n", "kueue-system", "-o", "json")
-	} else {
-		cmdEndpoints = g.kubectl("get", "endpoints", "kueue-webhook-service", "-n", "kueue-system", "-o", "json")
+		ready, _, err := g.checkServiceEndpointsReady("kueue-system", "kueue-webhook-service")
+		if errors.Is(err, errEndpointsUnreadable) {
+			return false, nil
+		}
+		return ready, err
 	}
 
+	cmdEndpoints := g.kubectl("get", "endpoints", "kueue-webhook-service", "-n", "kueue-system", "-o", "json")
 	if cmdEndpoints.ExitCode != 0 {
 		errStr := strings.ToLower(cmdEndpoints.Stderr)
 		if strings.Contains(errStr, "forbidden") {
@@ -748,29 +742,19 @@ func (g *GKEOrchestrator) checkKueueEndpoints(useEndpointSlice bool) (bool, erro
 		return false, nil
 	}
 
-	if useEndpointSlice {
-		var eps k8sEndpointSliceList
-		if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
-			return false, fmt.Errorf("failed to unmarshal endpointslice json: %w", err)
-		}
-		if eps.HasReadyEndpoint() {
+	var eps struct {
+		Subsets []struct {
+			Addresses []struct {
+				Ip string `json:"ip"`
+			} `json:"addresses"`
+		} `json:"subsets"`
+	}
+	if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
+		return false, fmt.Errorf("failed to unmarshal endpoints json: %w", err)
+	}
+	for _, subset := range eps.Subsets {
+		if len(subset.Addresses) > 0 {
 			return true, nil
-		}
-	} else {
-		var eps struct {
-			Subsets []struct {
-				Addresses []struct {
-					Ip string `json:"ip"`
-				} `json:"addresses"`
-			} `json:"subsets"`
-		}
-		if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
-			return false, fmt.Errorf("failed to unmarshal endpoints json: %w", err)
-		}
-		for _, subset := range eps.Subsets {
-			if len(subset.Addresses) > 0 {
-				return true, nil
-			}
 		}
 	}
 	return false, nil
@@ -801,7 +785,7 @@ func hasUserPriorityClasses(existing []string) bool {
 
 func (g *GKEOrchestrator) installPriorityClasses() error {
 	logging.Info("Installing Kueue PriorityClasses...")
-	tmpl, err := g.parseGKETemplate("priority_classes.tmpl")
+	tmpl, err := k8s.ParseYAMLTemplate(g.gkeCustomTemplatesPath, "priority_classes.tmpl")
 	if err != nil {
 		return err
 	}
@@ -812,7 +796,7 @@ func (g *GKEOrchestrator) installPriorityClasses() error {
 	}
 
 	logging.Info("Applying Kueue priority classes...")
-	if err := g.applyManifests(buf.Bytes(), "kueue_priority_classes.yaml"); err != nil {
+	if err := g.applyManifests(buf.Bytes(), "kueue_priority_classes.yaml", ""); err != nil {
 		return fmt.Errorf("failed to apply Kueue priority classes: %w", err)
 	}
 
@@ -823,7 +807,7 @@ func (g *GKEOrchestrator) installPriorityClasses() error {
 func (g *GKEOrchestrator) EnsurePriorityClassesInstalled() error {
 	existing, err := g.getClusterPriorityClasses()
 	if err != nil {
-		if isForbiddenError(err) {
+		if k8s.IsForbiddenError(err) {
 			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping default PriorityClass installation.")
 			return nil
 		}
@@ -842,7 +826,7 @@ func (g *GKEOrchestrator) ensureAndValidatePriorityClass(requested string) error
 	}
 	existing, err := g.getClusterPriorityClasses()
 	if err != nil {
-		if isForbiddenError(err) {
+		if k8s.IsForbiddenError(err) {
 			logging.Warn("Insufficient RBAC permissions to list priority classes (403 Forbidden). Skipping PriorityClass install/validation for %q.", requested)
 			return nil
 		}
@@ -900,7 +884,7 @@ func (g *GKEOrchestrator) EnsureResourceFlavors() error {
 		if err != nil {
 			return fmt.Errorf("failed to render ResourceFlavor %s: %w", name, err)
 		}
-		if err := g.applyManifests(rfBytes, fmt.Sprintf("resource-flavor-%s.yaml", name)); err != nil {
+		if err := g.applyManifests(rfBytes, fmt.Sprintf("resource-flavor-%s.yaml", name), ""); err != nil {
 			return fmt.Errorf("failed to apply ResourceFlavor %s: %w", name, err)
 		}
 	}
@@ -950,7 +934,7 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 	if err != nil {
 		return err
 	}
-	if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile); err != nil {
+	if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile, ""); err != nil {
 		return err
 	}
 
@@ -959,7 +943,7 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 	if err != nil {
 		return err
 	}
-	if err := g.applyManifests(localQueueBytes, localQueueManifestFile); err != nil {
+	if err := g.applyManifests(localQueueBytes, localQueueManifestFile, ""); err != nil {
 		return err
 	}
 
@@ -968,7 +952,7 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 }
 
 func (g *GKEOrchestrator) renderLocalQueueInNamespace(lqName, cqName, ns string) ([]byte, error) {
-	localQueueTmpl, err := g.parseGKETemplate(localQueueTemplateFile)
+	localQueueTmpl, err := k8s.ParseYAMLTemplate(g.gkeCustomTemplatesPath, localQueueTemplateFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse %s: %w", localQueueTemplateFile, err)
 	}

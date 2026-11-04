@@ -20,6 +20,7 @@ import os
 import re
 import subprocess
 import sys
+import textwrap
 import urllib.parse
 import yaml
 
@@ -270,6 +271,123 @@ def extract_modules_from_yaml(data: object) -> list[dict]:
     return mods
 
 
+NESTED_OBJECT_KEYS: dict[tuple[str, str], set[str]] = {
+    ("modules/scheduler/gke-cluster", "cluster_autoscaling"): {
+        "autoprovisioning_auto_repair",
+        "autoprovisioning_auto_upgrade",
+        "autoprovisioning_cpu_max",
+        "autoprovisioning_disk_size_gb",
+        "autoprovisioning_disk_type",
+        "autoprovisioning_memory_max",
+        "limits",
+        "oauth_scopes",
+        "service_account_email",
+    },
+    ("modules/scheduler/gke-cluster", "cluster_autoscaling.limits"): {
+        "autoprovisioning_machine_type",
+        "autoprovisioning_max_count",
+        "autoprovisioning_resource_type",
+    },
+    ("modules/management/kubectl-apply", "kueue"): {
+        "accelerator_topology_mode",
+        "config_path",
+        "config_template_vars",
+        "controller_cpu",
+        "controller_memory",
+        "controller_replicas",
+        "enable_dynamic_slicing_for_tpus",
+        "enable_pathways_for_tpus",
+        "install",
+        "machine_type",
+        "slice_controller_cpu_limit",
+        "slice_controller_cpu_request",
+        "slice_controller_memory_limit",
+        "slice_controller_memory_request",
+        "version",
+        "wait_for_pods_ready",
+    },
+    ("modules/management/kubectl-apply", "kueue.wait_for_pods_ready"): {
+        "block_admission",
+        "recovery_timeout",
+        "timeout",
+    },
+    ("modules/management/kubectl-apply", "jobset"): {
+        "controller_cpu",
+        "controller_memory",
+        "install",
+        "version",
+    },
+    ("modules/management/kubectl-apply", "cert_manager"): {
+        "install",
+        "version",
+    },
+    ("modules/management/kubectl-apply", "gpu_operator"): {
+        "install",
+        "version",
+    },
+    ("modules/management/kubectl-apply", "nvidia_dra_driver"): {
+        "accelerator_type",
+        "install",
+        "version",
+    },
+    ("modules/management/kubectl-apply", "gib"): {
+        "install",
+        "path",
+        "template_vars",
+    },
+    ("modules/management/kubectl-apply", "gib.template_vars"): {
+        "accelerator_count",
+        "image",
+        "max_unavailable",
+        "node_affinity",
+        "version",
+    },
+    ("modules/management/kubectl-apply", "asapd_lite"): {
+        "config_path",
+        "config_template_vars",
+        "install",
+    },
+    ("modules/management/kubectl-apply", "checkpoint_configuration"): {
+        "cloud_storage_bucket_name",
+        "gcs_fuse_mount_options",
+        "in_memory_volume_size",
+        "name",
+        "node_selector",
+        "tolerations",
+    },
+    ("modules/management/kubectl-apply", "checkpoint_configuration.tolerations"): {
+        "effect",
+        "key",
+        "operator",
+        "value",
+    },
+}
+REQUIRED_MODULE_SETTINGS: dict[str, set[str]] = {
+    "community/modules/security/kms-key": {"deletion_policy", "key_name", "location"},
+}
+ILLUSTRATIVE_SOURCES = (
+    "None",
+    "modules/role/module-name",
+    "path/to/module/",
+    "<",
+)
+
+
+def _strip_yaml_elision_lines(block: str) -> str:
+    """Strips blockquote prefixes, common indentation, and standalone '...' placeholder lines from a YAML snippet."""
+    lines = block.splitlines()
+    if lines and all(
+        not line.strip() or line.lstrip().startswith(">") for line in lines
+    ):
+        lines = [re.sub(r"^\s*>\s?", "", line) for line in lines]
+    # Dedent instead of rewriting indented '---' lines: a list-item fence's separator lands at
+    # column 0, while '---' nested inside a block scalar keeps its indentation and stays content.
+    lines = textwrap.dedent("\n".join(lines)).splitlines()
+    return "\n".join(
+        line for line in lines if not re.match(r"^\s*\.\.\.(?:\s+#.*|\s*)$", line)
+    )
+
+
 def validate_yaml_block(
     block: str,
     rel_path: str,
@@ -279,27 +397,30 @@ def validate_yaml_block(
 ) -> list[str]:
     """Validates a YAML block containing Cluster Toolkit module definitions."""
     errors: list[str] = []
-    lines = block.splitlines()
-    if lines and all(
-        not line.strip() or line.lstrip().startswith(">") for line in lines
-    ):
-        block = "\n".join(re.sub(r"^\s*>\s?", "", line) for line in lines)
+    cleaned_block = _strip_yaml_elision_lines(block)
     try:
-        docs = list(yaml.safe_load_all(block))
-    except yaml.YAMLError as exc:
+        docs = list(yaml.safe_load_all(cleaned_block))
+    except (yaml.YAMLError, ValueError) as exc:
         first_line = str(exc).splitlines()[0]
         errors.append(f"{rel_path}: invalid YAML syntax in snippet: {first_line}")
         return errors
 
     mods: list[dict] = []
+    global_vars: set[str] = set()
     for doc in docs:
         mods.extend(extract_modules_from_yaml(doc))
+        if isinstance(doc, dict) and isinstance(doc.get("vars"), dict):
+            global_vars.update(doc["vars"])
 
     mod_by_id: dict[str, str] = {}
     for mod in mods:
         mid = str(mod.get("id", ""))
         raw_src = str(mod.get("source", "")).strip()
-        if not raw_src or is_remote_source(raw_src):
+        if (
+            not raw_src
+            or is_remote_source(raw_src)
+            or raw_src.startswith(ILLUSTRATIVE_SOURCES)
+        ):
             continue
         norm_src = raw_src.lstrip("./")
         abs_src = os.path.join(REPO_ROOT, norm_src)
@@ -325,7 +446,7 @@ def validate_yaml_block(
 
         settings = mod.get("settings")
         if isinstance(settings, dict):
-            for key in settings:
+            for key, val in settings.items():
                 if key in deprecated_inputs:
                     errors.append(
                         f"{rel_path}: module '{mid}' ({norm_src}) setting '{key}' "
@@ -336,6 +457,33 @@ def validate_yaml_block(
                         f"{rel_path}: module '{mid}' ({norm_src}) setting '{key}' "
                         "does not exist in variables.tf"
                     )
+                elif (norm_src, key) in NESTED_OBJECT_KEYS and isinstance(val, dict):
+                    allowed_subkeys = NESTED_OBJECT_KEYS[(norm_src, key)]
+                    for subkey, subval in val.items():
+                        if subkey not in allowed_subkeys:
+                            errors.append(
+                                f"{rel_path}: module '{mid}' ({norm_src}) setting "
+                                f"'{key}.{subkey}' does not exist in variables.tf"
+                            )
+                        elif (norm_src, f"{key}.{subkey}") in NESTED_OBJECT_KEYS:
+                            leaf_allowed = NESTED_OBJECT_KEYS[(norm_src, f"{key}.{subkey}")]
+                            items = subval if isinstance(subval, list) else [subval]
+                            for item in items:
+                                if isinstance(item, dict):
+                                    for leaf_key in item:
+                                        if leaf_key not in leaf_allowed:
+                                            errors.append(
+                                                f"{rel_path}: module '{mid}' ({norm_src}) setting "
+                                                f"'{key}.{subkey}.{leaf_key}' does not exist in variables.tf"
+                                            )
+        if norm_src in REQUIRED_MODULE_SETTINGS:
+            present_keys = set(settings.keys()) if isinstance(settings, dict) else set()
+            # gcluster auto-wires unset module inputs from same-named deployment vars.
+            for req_key in sorted(REQUIRED_MODULE_SETTINGS[norm_src] - present_keys - global_vars):
+                errors.append(
+                    f"{rel_path}: module '{mid}' ({norm_src}) is missing required "
+                    f"setting '{req_key}'"
+                )
 
         declared_outputs = mod.get("outputs")
         if isinstance(declared_outputs, list):
@@ -416,11 +564,10 @@ def validate_yaml_block(
 
 
 def validate_module_readme_snippets(non_ignored: set[str] | None = None) -> list[str]:
-    """Validates YAML snippets in module/blueprint READMEs, docs/**/*.md, and os_compatibility_tests."""
+    """Validates YAML snippets in module/blueprint READMEs, docs/**/*.md, skills/**/*.md, and os_compatibility_tests."""
     errors: list[str] = []
     if non_ignored is None:
         non_ignored = _get_non_ignored_repo_files()
-    examples_root_dir = os.path.join(REPO_ROOT, "examples")
     readme_paths = sorted(
         {
             p
@@ -429,17 +576,19 @@ def validate_module_readme_snippets(non_ignored: set[str] | None = None) -> list
                 + glob.glob(
                     os.path.join(REPO_ROOT, "community", "modules", "*", "*", "README.md")
                 )
+                + [
+                    os.path.join(REPO_ROOT, "README.md"),
+                    os.path.join(REPO_ROOT, "cmd", "README.md"),
+                ]
             )
             if _is_checked_repo_file(p, non_ignored)
         }
-        | {
-            p
-            for p in _find_markdown_files_under(
-                ("docs", "examples", "community/examples", "community/front-end"),
+        | set(
+            _find_markdown_files_under(
+                ("docs", "examples", "community/examples", "community/front-end", "skills"),
                 non_ignored,
             )
-            if os.path.dirname(p) != examples_root_dir
-        }
+        )
     )
     tf_cache: dict[str, tuple[set[str], set[str], set[str]]] = {}
 
@@ -465,13 +614,21 @@ def validate_module_readme_snippets(non_ignored: set[str] | None = None) -> list
             block = match.group(2)
             if lang not in ("yaml", "yml", ""):
                 continue
-            if "source:" not in block or "id:" not in block:
-                continue
-            errors.extend(
-                validate_yaml_block(
-                    block, rel_path, tf_cache, require_defined_refs=False, non_ignored=non_ignored
+            line_no = pre_hook.count("\n", 0, match.start(2)) + 1
+            snippet_loc = f"{rel_path}:{line_no}"
+            if "source:" in block and "id:" in block:
+                errors.extend(
+                    validate_yaml_block(
+                        block, snippet_loc, tf_cache, require_defined_refs=False, non_ignored=non_ignored
+                    )
                 )
-            )
+            elif lang in ("yaml", "yml"):
+                cleaned_block = _strip_yaml_elision_lines(block)
+                try:
+                    list(yaml.safe_load_all(cleaned_block))
+                except (yaml.YAMLError, ValueError) as exc:
+                    first_line = str(exc).splitlines()[0]
+                    errors.append(f"{snippet_loc}: invalid YAML syntax in snippet: {first_line}")
 
     os_compat_blueprints = [
         p
@@ -556,7 +713,7 @@ def validate_markdown_links_and_cli(non_ignored: set[str] | None = None) -> list
         p
         for p in (
             os.path.join(REPO_ROOT, root_doc)
-            for root_doc in ("README.md", "AGENTS.md", "CONTRIBUTING.md")
+            for root_doc in ("README.md", "AGENTS.md", "CONTRIBUTING.md", "llms.txt", "llms-full.txt")
         )
         if _is_checked_repo_file(p, non_ignored)
     ] + _find_markdown_files_under(
