@@ -393,12 +393,13 @@ def check_gke_gpu_page(
     with open(dep_path, encoding="utf-8") as f:
         dep_text = f.read()
 
-    uses_reservation_affinity = (
-        "reservation_affinity" in bp_text or "reservation_affinity" in dep_text
+    uses_reservation_affinity = bool(
+        re.search(r"\$\(vars\.reservation_affinity\)", bp_text)
+        or re.search(r"^[ \t]*reservation_affinity\s*:", dep_text, re.MULTILINE)
     )
     uses_flat_reservation = bool(
         re.search(r"\$\(vars\.reservation\)", bp_text)
-        or re.search(r"^\s*reservation\s*:", dep_text, re.MULTILINE)
+        or re.search(r"^[ \t]*reservation\s*:", dep_text, re.MULTILINE)
     )
 
     if uses_reservation_affinity and not uses_flat_reservation:
@@ -594,20 +595,7 @@ def get_changed_files_from_git(
     )
     if res.returncode != 0:
         print(
-            f"Warning: '{base_ref}...HEAD' failed ({res.stderr.strip()}); "
-            "falling back to HEAD~1 (last commit only)",
-            file=sys.stderr,
-        )
-        res = subprocess.run(
-            ["git", "diff", "--name-only", "--no-renames", "HEAD~1", "HEAD"],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    if res.returncode != 0:
-        print(
-            f"Warning: git diff failed (base_ref={base_ref}): {res.stderr.strip()}",
+            f"Warning: git diff '{base_ref}...HEAD' failed: {res.stderr.strip()}",
             file=sys.stderr,
         )
         return None

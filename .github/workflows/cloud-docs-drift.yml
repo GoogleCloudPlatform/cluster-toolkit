@@ -27,6 +27,7 @@ on:
     - main
     - develop
     - release-candidate-*
+    - hotfix-*
     paths:
     - "examples/**"
     - "community/examples/**"

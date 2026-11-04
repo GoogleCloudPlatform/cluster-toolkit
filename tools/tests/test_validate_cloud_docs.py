@@ -140,6 +140,14 @@ class TestValidateCloudDocs(unittest.TestCase):
         )
         self.assertEqual(vcd.check_gke_gpu_page(slug, bp, dep, clean_html), [])
 
+        # gke-a4x uses flat $(vars.reservation) inside its module reservation_affinity block
+        a4x_slug = "/cluster-toolkit/docs/deploy/gke/create-a4x-cluster"
+        a4x_bp = "examples/gke-a4x/gke-a4x.yaml"
+        a4x_dep = "examples/gke-a4x/gke-a4x-deployment.yaml"
+        a4x_stale = "<article>Set reservation_affinity under vars.</article>"
+        a4x_errs = vcd.check_gke_gpu_page(a4x_slug, a4x_bp, a4x_dep, a4x_stale)
+        self.assertTrue(any("uses flat 'reservation'" in e for e in a4x_errs))
+
     def test_check_blueprint_catalog_page_detects_removed_centos7_and_daos(self):
         slug = "/cluster-toolkit/docs/setup/cluster-blueprint-catalog"
         stale_html = (
@@ -370,24 +378,25 @@ class TestValidateCloudDocs(unittest.TestCase):
         # A git diff that cannot run yields None, and --check-pr exits 2 (never "no impacts").
         with tempfile.TemporaryDirectory() as repo:
             subprocess.run(["git", "init", "-q", "-b", "lone"], cwd=repo, check=True)
-            subprocess.run(
-                [
-                    "git",
-                    "-c",
-                    "user.email=t@example.com",
-                    "-c",
-                    "user.name=t",
-                    "-c",
-                    "commit.gpgsign=false",
-                    "commit",
-                    "-q",
-                    "--allow-empty",
-                    "-m",
-                    "one",
-                ],
-                cwd=repo,
-                check=True,
-            )
+            for msg in ("one", "two"):
+                subprocess.run(
+                    [
+                        "git",
+                        "-c",
+                        "user.email=t@example.com",
+                        "-c",
+                        "user.name=t",
+                        "-c",
+                        "commit.gpgsign=false",
+                        "commit",
+                        "-q",
+                        "--allow-empty",
+                        "-m",
+                        msg,
+                    ],
+                    cwd=repo,
+                    check=True,
+                )
             with contextlib.redirect_stderr(io.StringIO()):
                 self.assertIsNone(
                     vcd.get_changed_files_from_git(
