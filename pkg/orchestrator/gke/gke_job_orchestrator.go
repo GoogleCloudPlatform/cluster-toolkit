@@ -637,8 +637,47 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 	return capacity, nodePoolSAs, nil
 }
 
+// isSharedCoreMachineType mirrors local.machine_shared_core in
+// modules/compute/gke-node-pool/threads_per_core_calc.tf: shared-core machine
+// types (e.g. e2-micro, e2-small, e2-medium, f1-micro, g1-small) have two
+// dash-separated parts (<family>-<tier>) and only expose 1 allocatable vCPU in
+// GKE even when guestCpus is 2.
+func isSharedCoreMachineType(machineType string) bool {
+	trimmed := strings.TrimSpace(machineType)
+	if trimmed == "" {
+		return false
+	}
+	return len(strings.Split(trimmed, "-")) <= 2
+}
+
+func (g *GKEOrchestrator) getThreadsPerCore(machineType string) string {
+	if tpc, ok := g.machineTypeToThreadsPerCore[machineType]; ok {
+		return tpc
+	}
+	for _, np := range g.clusterDesc.NodePools {
+		if g.isSystemPool(np) {
+			continue
+		}
+		if strings.EqualFold(np.Config.MachineType, machineType) && np.Config.AdvancedMachineFeatures != nil {
+			return np.Config.AdvancedMachineFeatures.ThreadsPerCore
+		}
+	}
+	return ""
+}
+
 func (g *GKEOrchestrator) getEffectiveCPUs(machineType string, guestCpus int) int {
-	if tpc, ok := g.machineTypeToThreadsPerCore[machineType]; ok && tpc == "1" && !strings.HasPrefix(machineType, "t2a") {
+	if guestCpus <= 0 {
+		return 0
+	}
+	if isSharedCoreMachineType(machineType) {
+		return 1
+	}
+	if g.getThreadsPerCore(machineType) == "1" && !strings.HasPrefix(machineType, "t2a") && !strings.HasPrefix(machineType, "t2d") {
+		for k, cap := range g.machineCapCache {
+			if strings.HasPrefix(k, machineType+":") && cap.GuestCpus > 0 && guestCpus == cap.GuestCpus/2 && cap.GuestCpus != guestCpus {
+				return guestCpus
+			}
+		}
 		return guestCpus / 2
 	}
 	return guestCpus
