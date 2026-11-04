@@ -4040,6 +4040,16 @@ func TestVerifyStorageGateways_NoGatewaysIsANoOp(t *testing.T) {
 }
 
 func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
+	pvcCmd := func(name, ns string) string {
+		return fmt.Sprintf("kubectl get pvc %s -n %s --ignore-not-found --request-timeout=10s -o %s", name, ns, pvcGCSFuseJSONPath)
+	}
+	pvCmd := func(name string) string {
+		return fmt.Sprintf("kubectl get pv %s --ignore-not-found --request-timeout=10s -o %s", name, pvCSIDriverTemplate)
+	}
+	scCmd := func(name string) string {
+		return fmt.Sprintf("kubectl get storageclass %s --ignore-not-found --request-timeout=10s -o jsonpath={.provisioner}", name)
+	}
+
 	tests := []struct {
 		name          string
 		mount         string
@@ -4051,10 +4061,10 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 			name:  "static PVC bound to gcsfuse CSI PV enables gke-gcsfuse annotation",
 			mount: "ub-verify-dataset-pvc;/data;ro",
 			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get pvc ub-verify-dataset-pvc -n default --ignore-not-found -o jsonpath={.spec.volumeName}{\"\\t\"}{.spec.storageClassName}": {
-					{ExitCode: 0, Stdout: "ub-verify-dataset-pv\t"},
+				pvcCmd("ub-verify-dataset-pvc", "default"): {
+					{ExitCode: 0, Stdout: "ub-verify-dataset-pv\t\t\t"},
 				},
-				"kubectl get pv ub-verify-dataset-pv --ignore-not-found -o jsonpath={.spec.csi.driver}": {
+				pvCmd("ub-verify-dataset-pv"): {
 					{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
 				},
 			},
@@ -4065,8 +4075,18 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 			mount:     "profile-pvc;/data;ro",
 			namespace: "team-ns",
 			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get pvc profile-pvc -n team-ns --ignore-not-found -o jsonpath={.spec.volumeName}{\"\\t\"}{.spec.storageClassName}": {
-					{ExitCode: 0, Stdout: "\tgcsfusecsi-training"},
+				pvcCmd("profile-pvc", "team-ns"): {
+					{ExitCode: 0, Stdout: "\tgcsfusecsi-training\t\t"},
+				},
+			},
+			wantGCSFuse: true,
+		},
+		{
+			name:  "dynamically provisioned PVC with storage-provisioner annotation avoids cluster-scoped lookups",
+			mount: "dynamic-gcsfuse-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("dynamic-gcsfuse-pvc", "default"): {
+					{ExitCode: 0, Stdout: "pvc-dyn-123\tcustom-sc\tgcsfuse.csi.storage.gke.io\t"},
 				},
 			},
 			wantGCSFuse: true,
@@ -4075,10 +4095,10 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 			name:  "PVC with custom StorageClass provisioned by gcsfuse.csi.storage.gke.io",
 			mount: "custom-sc-pvc;/data;ro",
 			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get pvc custom-sc-pvc -n default --ignore-not-found -o jsonpath={.spec.volumeName}{\"\\t\"}{.spec.storageClassName}": {
-					{ExitCode: 0, Stdout: "\tmy-custom-gcsfuse-sc"},
+				pvcCmd("custom-sc-pvc", "default"): {
+					{ExitCode: 0, Stdout: "\tmy-custom-gcsfuse-sc\t\t"},
 				},
-				"kubectl get storageclass my-custom-gcsfuse-sc --ignore-not-found -o jsonpath={.provisioner}": {
+				scCmd("my-custom-gcsfuse-sc"): {
 					{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
 				},
 			},
@@ -4093,13 +4113,26 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 			name:  "non-GCSFuse PVC (Persistent Disk CSI) leaves GCSFuseEnabled false",
 			mount: "pd-pvc;/data;ro",
 			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get pvc pd-pvc -n default --ignore-not-found -o jsonpath={.spec.volumeName}{\"\\t\"}{.spec.storageClassName}": {
-					{ExitCode: 0, Stdout: "pvc-12345\tstandard-rwo"},
+				pvcCmd("pd-pvc", "default"): {
+					{ExitCode: 0, Stdout: "pvc-12345\tstandard-rwo\tpd.csi.storage.gke.io\t"},
 				},
-				"kubectl get pv pvc-12345 --ignore-not-found -o jsonpath={.spec.csi.driver}": {
+				pvCmd("pvc-12345"): {
 					{ExitCode: 0, Stdout: "pd.csi.storage.gke.io"},
 				},
-				"kubectl get storageclass standard-rwo --ignore-not-found -o jsonpath={.provisioner}": {
+				scCmd("standard-rwo"): {
+					{ExitCode: 0, Stdout: "pd.csi.storage.gke.io"},
+				},
+			},
+			wantGCSFuse: false,
+		},
+		{
+			name:  "StorageClass named training with non-GCSFuse provisioner leaves GCSFuseEnabled false",
+			mount: "training-sc-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("training-sc-pvc", "default"): {
+					{ExitCode: 0, Stdout: "\ttraining\t\t"},
+				},
+				scCmd("training"): {
 					{ExitCode: 0, Stdout: "pd.csi.storage.gke.io"},
 				},
 			},
@@ -4109,7 +4142,7 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 			name:  "missing PVC leaves GCSFuseEnabled false without failing",
 			mount: "nonexistent-pvc;/data;ro",
 			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get pvc nonexistent-pvc -n default --ignore-not-found -o jsonpath={.spec.volumeName}{\"\\t\"}{.spec.storageClassName}": {
+				pvcCmd("nonexistent-pvc", "default"): {
 					{ExitCode: 0, Stdout: ""},
 				},
 			},
@@ -4119,13 +4152,13 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 			name:  "kubectl get pv failure degrades gracefully and falls back to StorageClass check",
 			mount: "rbac-restricted-pvc;/data;ro",
 			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get pvc rbac-restricted-pvc -n default --ignore-not-found -o jsonpath={.spec.volumeName}{\"\\t\"}{.spec.storageClassName}": {
-					{ExitCode: 0, Stdout: "restricted-pv\tcustom-gcsfuse-sc"},
+				pvcCmd("rbac-restricted-pvc", "default"): {
+					{ExitCode: 0, Stdout: "restricted-pv\tcustom-gcsfuse-sc\t\t"},
 				},
-				"kubectl get pv restricted-pv --ignore-not-found -o jsonpath={.spec.csi.driver}": {
+				pvCmd("restricted-pv"): {
 					{ExitCode: 1, Stderr: "Error from server (Forbidden): persistentvolumes \"restricted-pv\" is forbidden"},
 				},
-				"kubectl get storageclass custom-gcsfuse-sc --ignore-not-found -o jsonpath={.provisioner}": {
+				scCmd("custom-gcsfuse-sc"): {
 					{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
 				},
 			},

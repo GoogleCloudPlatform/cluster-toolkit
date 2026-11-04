@@ -2280,11 +2280,11 @@ func TestGenerateManifest_CustomGCSFusePVCAnnotation(t *testing.T) {
 			{ExitCode: 0, Stdout: `{"guestCpus": 2}`},
 			{ExitCode: 0, Stdout: `{"guestCpus": 2}`},
 		},
-		"kubectl get pvc ub-verify-dataset-pvc -n default --ignore-not-found -o jsonpath={.spec.volumeName}{\"\\t\"}{.spec.storageClassName}": {
-			{ExitCode: 0, Stdout: "ub-verify-dataset-pv\t"},
-			{ExitCode: 0, Stdout: "ub-verify-dataset-pv\t"},
+		fmt.Sprintf("kubectl get pvc ub-verify-dataset-pvc -n default --ignore-not-found --request-timeout=10s -o %s", pvcGCSFuseJSONPath): {
+			{ExitCode: 0, Stdout: "ub-verify-dataset-pv\t\t\t"},
+			{ExitCode: 0, Stdout: "ub-verify-dataset-pv\t\t\t"},
 		},
-		"kubectl get pv ub-verify-dataset-pv --ignore-not-found -o jsonpath={.spec.csi.driver}": {
+		fmt.Sprintf("kubectl get pv ub-verify-dataset-pv --ignore-not-found --request-timeout=10s -o %s", pvCSIDriverTemplate): {
 			{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
 			{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
 		},

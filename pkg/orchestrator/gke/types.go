@@ -405,6 +405,7 @@ type mountSegments struct {
 // mountBuildState maps generated PV name -> Pod volume name to de-duplicate gateways within a job.
 type mountBuildState struct {
 	gatewayVolumeNames map[string]string
+	pvcNamespace       string
 }
 
 // MountInfo represents parsed volume mount options
