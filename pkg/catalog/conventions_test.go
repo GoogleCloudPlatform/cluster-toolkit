@@ -111,7 +111,7 @@ func TestRolePrefixedVarsInOfficialExamples(t *testing.T) {
 	// single-file templates (they would be injected into every module).
 	bare := map[string]bool{"machine_type": true, "enable_spot_vm": true, "node_count_dynamic_max": true, "node_count_static": true, "cluster_size": true}
 	// Blueprints whose bare disk_size_gb broadcast is documented as intentional.
-	allowBareDisk := map[string]bool{"examples/ml-slurm.yaml": true}
+	allowBareDisk := map[string]bool{}
 	for _, bp := range blueprints {
 		if !strings.HasPrefix(bp.Path, "examples/") {
 			continue

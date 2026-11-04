@@ -48,6 +48,17 @@
         - linux-headers-{{ ansible_kernel }}
         grid_fn: NVIDIA-Linux-x86_64-525.125.06-grid.run
         grid_ver: vGPU15.3
+      noble:
+        packages:
+        - build-essential
+        - gdebi-core
+        - mesa-utils
+        - gdm3
+        - pkg-config
+        - libglvnd-dev
+        - linux-headers-{{ ansible_kernel }}
+        grid_fn: NVIDIA-Linux-x86_64-595.112.07-grid.run
+        grid_ver: vGPU20.3
   tasks:
   - name: Fail if using wrong OS
     ansible.builtin.assert:
@@ -100,13 +111,13 @@
 
   - name: Download VirtualGL driver
     ansible.builtin.get_url:
-      url: https://sourceforge.net/projects/virtualgl/files/3.0.2/virtualgl_3.0.2_amd64.deb/download
-      dest: /tmp/virtualgl_3.0.2_amd64.deb
+      url: https://github.com/VirtualGL/virtualgl/releases/download/3.1.1/virtualgl_3.1.1_amd64.deb
+      dest: /tmp/virtualgl_3.1.1_amd64.deb
       mode: "0755"
       timeout: 30
 
   - name: Install VirtualGL
-    ansible.builtin.command: gdebi /tmp/virtualgl_3.0.2_amd64.deb --non-interactive
+    ansible.builtin.command: gdebi /tmp/virtualgl_3.1.1_amd64.deb --non-interactive
     register: result
     changed_when: result.rc == 0
 

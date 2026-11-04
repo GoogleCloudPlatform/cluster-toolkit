@@ -63,7 +63,7 @@ deployment_groups:
       name: c30
       machine_type: c2-standard-30
       instance_image:
-        family: slurm-gcp-6-12-debian-12
+        family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-amd64
         project: advanced-compute-images
 
   - id: nodeset_2

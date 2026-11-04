@@ -67,8 +67,8 @@ deployment_groups:
       name_prefix: rocky
       instance_count: 1
       instance_image:
-        family: rocky-linux-8
-        project: rocky-linux-cloud
+        family: aci-cpu-rocky-linux-9-amd64
+        project: advanced-compute-images
   - id: wait-rocky
     source: community/modules/scripts/wait-for-startup
     settings:
@@ -84,7 +84,7 @@ deployment_groups:
       name_prefix: ubuntu
       instance_count: 1
       instance_image:
-        family: ubuntu-2204-lts
+        family: ubuntu-2404-lts-amd64
         project: ubuntu-os-cloud
   - id: wait-ubuntu
     source: community/modules/scripts/wait-for-startup

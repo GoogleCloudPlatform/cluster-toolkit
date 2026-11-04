@@ -19,9 +19,7 @@
   tasks:
   - name: Install Python 3.9
     ansible.builtin.package:
-      name:
-      - python39
-      - python39-pip
+      name: "{{ ['python39', 'python39-pip'] if (ansible_facts['os_family'] == 'RedHat' and (ansible_facts['distribution_major_version'] | int) < 9) else ['python3', 'python3-pip'] }}"
       state: present
   - name: Create virtual environment for HTCondor autoscaler
     ansible.builtin.pip:

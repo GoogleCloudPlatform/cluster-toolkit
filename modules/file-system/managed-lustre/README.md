@@ -10,7 +10,7 @@ Toolkit, see the extended [Network Storage documentation](../../../docs/network_
 ### Supported Operating Systems
 
 A Managed Lustre instance can be used with Slurm cluster or compute
-VM running Ubuntu 22.04 or Rocky Linux 8 (including the HPC flavor).
+VM running Ubuntu 22.04, Ubuntu 24.04, Rocky Linux 8, or Rocky Linux 9 (including the HPC and Advanced Compute Images flavors).
 
 ### Managed Lustre Access
 

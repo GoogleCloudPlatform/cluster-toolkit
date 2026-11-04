@@ -21,10 +21,8 @@ vars:
   region: us-central1
   zone: us-central1-c
   instance_image:
-    # Rocky 8: hpc-rocky-linux-8
-    # Rocky 9: hpc-rocky-linux-9
-    family: hpc-rocky-linux-9
-    project: cloud-hpc-image-public
+    family: aci-cpu-rocky-linux-9-amd64
+    project: advanced-compute-images
   # Optional overrides (defaults shown)
   # Machine type of the VM that builds the Spack/WRF software stack.
   spack_builder_machine_type: c2-standard-16

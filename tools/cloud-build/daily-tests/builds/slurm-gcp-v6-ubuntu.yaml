@@ -115,7 +115,7 @@ steps:
               cd /workspace
 
               DEPLOYMENT_NAME="ubun-v6-$$BUILD_ID_SHORT"
-              BLUEPRINT="community/examples/hpc-slurm-ubuntu2204.yaml"
+              BLUEPRINT="examples/hpc-slurm.yaml"
               BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$BLUEPRINT" 2>/dev/null | awk '{print \$$2}')
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
@@ -129,10 +129,11 @@ steps:
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
               bash tools/add_ttl_label.sh \$$BLUEPRINT
+              python3 tools/fix_vpc_name.py \$$BLUEPRINT "${_TEST_PREFIX}"
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
-                --user="$$OSLOGIN_USER" \
-                --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
+                --extra-vars="test_prefix=${_TEST_PREFIX}" --extra-vars="use_fixed_vpc=true" \
+                --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
                 --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-v6-ubuntu.yml" \
                 --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
                 --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \

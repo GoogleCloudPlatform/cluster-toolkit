@@ -23,17 +23,11 @@ vars:
   zone: us-central1-a
   machine_type: n1-standard-2
   # instance_image:
-  #   family: ubuntu-2204-lts
+  #   family: ubuntu-2404-lts-amd64
   #   project: ubuntu-os-cloud
-  # instance_image:
-  #   family: centos-7
-  #   project: centos-cloud
   instance_image:
-    family: rocky-linux-8
-    project: rocky-linux-cloud
-  # instance_image:
-  #   family: debian-12
-  #   project: debian-cloud
+    family: aci-cpu-rocky-linux-9-amd64
+    project: advanced-compute-images
 
 deployment_groups:
 - group: primary
