@@ -303,14 +303,16 @@ func workloadContainerNames(parallelContainers int) []string {
 	return []string{"workload-container"}
 }
 
+// podFailurePolicyContainers returns the container names the --restart-on-exit-codes rules are scoped to, so
+// that only the workload's exit code decides the outcome: a pod-wide rule would also match the SIGTERM/SIGKILL
+// exit codes of native sidecars (ML Diagnostics, GCS FUSE, MTC, custom base.tmpl sidecars, or cluster webhook
+// injections such as a service mesh) and turn a retriable workload exit into FailJobSet. Standard workloads are
+// always scoped; a headless or SPS Pathways head has no workload container, so its rule stays pod-wide.
 func podFailurePolicyContainers(opts ManifestOptions) []string {
 	if opts.IsPathwaysJob {
 		if !opts.Pathways.Headless && !opts.Pathways.DeploySPS {
 			return []string{"workload-container"}
 		}
-		return nil
-	}
-	if !opts.MLDiagnosticsEnabled && !opts.GCSFuseEnabled && !opts.GKEMTCEnabled {
 		return nil
 	}
 	return workloadContainerNames(opts.ParallelContainers)
@@ -534,7 +536,7 @@ func validatePodFailureExitCodesRule(contextPrefix string, idx int, req *batchv1
 		return nil
 	}
 	if req.ContainerName != nil && !known[*req.ContainerName] {
-		return fmt.Errorf("%s podFailurePolicy.rules[%d].onExitCodes.containerName %q does not match any container or initContainer in the pod template", contextPrefix, idx, *req.ContainerName)
+		return fmt.Errorf("%s podFailurePolicy.rules[%d].onExitCodes.containerName %q does not match any container or initContainer in the pod template. --restart-on-exit-codes scopes its rules to the workload container(s), so a custom template must keep the %q name prefix, or drop --restart-on-exit-codes and define podFailurePolicy in the template instead", contextPrefix, idx, *req.ContainerName, "workload-container")
 	}
 	return nil
 }

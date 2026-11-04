@@ -4553,7 +4553,21 @@ func TestPodFailurePolicy_SidecarContainerScoping(t *testing.T) {
 		t.Fatalf("PrepareManifestOptions failed: %v", err)
 	}
 	_, pureK8sJob, _ := parseServiceAndJobDocs(t, mustGenerateJobManifest(t, orc, pureOpts, profile))
-	assertPodFailurePolicyContainers(t, pureK8sJob.Spec.PodFailurePolicy, nil)
+	// Always scoped, even without sidecars: a pod-wide rule would evaluate exit codes of containers gcluster
+	// does not control (custom base.tmpl sidecars, cluster webhook injections).
+	assertPodFailurePolicyContainers(t, pureK8sJob.Spec.PodFailurePolicy, []string{"workload-container"})
+
+	parallelOpts := pureOpts
+	parallelOpts.ParallelContainers = 2
+	parallelPFP, err := orc.generatePodFailurePolicy(pureJob.RestartOnExitCodes, podFailurePolicyContainers(parallelOpts)...)
+	if err != nil {
+		t.Fatalf("generatePodFailurePolicy failed: %v", err)
+	}
+	var parallelRules batchv1.PodFailurePolicy
+	if err := k8syaml.UnmarshalStrict([]byte(parallelPFP), &parallelRules); err != nil {
+		t.Fatalf("failed to parse parallel podFailurePolicy: %v\n%s", err, parallelPFP)
+	}
+	assertPodFailurePolicyContainers(t, &parallelRules, []string{"workload-container-1", "workload-container-2"})
 
 	fuseJob := pureJob
 	fuseJob.WorkloadName = "fuse-sidecar-pfp"
@@ -5111,19 +5125,21 @@ spec:
 	if err != nil {
 		t.Fatalf("PrepareManifestOptions failed: %v", err)
 	}
-	if _, err := orc.GenerateGKEManifest(unscopedOpts, profile); err != nil {
-		t.Fatalf("unscoped custom container template should succeed when no sidecar is active: %v", err)
+	// --restart-on-exit-codes is always scoped to the workload container(s), so a custom template that renames
+	// the container fails fast at preflight with an actionable hint rather than silently changing semantics.
+	_, err = orc.GenerateGKEManifest(unscopedOpts, profile)
+	if err == nil || !strings.Contains(err.Error(), `containerName "workload-container"`) || !strings.Contains(err.Error(), "keep the \"workload-container\" name prefix") {
+		t.Errorf("expected PodFailurePolicy missing-container error with rename hint for renamed container, got: %v", err)
 	}
 
-	scopedJob := unscopedJob
-	scopedJob.MLDiagnosticsEnabled = true
-	scopedJob.ProjectID = "gke-proj"
-	scopedOpts, err := orc.PrepareManifestOptions(scopedJob, baseOpts.FullImageName, profile, false, false)
+	noPFPJob := unscopedJob
+	noPFPJob.RestartOnExitCodes = nil
+	noPFPOpts, err := orc.PrepareManifestOptions(noPFPJob, baseOpts.FullImageName, profile, false, false)
 	if err != nil {
 		t.Fatalf("PrepareManifestOptions failed: %v", err)
 	}
-	if _, err := orc.GenerateGKEManifest(scopedOpts, profile); err == nil || !strings.Contains(err.Error(), "workload-container") {
-		t.Errorf("expected PodFailurePolicy missing container error for renamed container with MLDiagnosticsEnabled, got: %v", err)
+	if _, err := orc.GenerateGKEManifest(noPFPOpts, profile); err != nil {
+		t.Fatalf("renamed custom container template must succeed without --restart-on-exit-codes: %v", err)
 	}
 
 	// Rules without onExitCodes (e.g. onPodConditions) carry no container reference to validate.
