@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
@@ -1843,8 +1844,7 @@ func TestGCSFuseProfile_ManifestRendering(t *testing.T) {
 
 func renderGCSFuseGateway(t *testing.T, params GCSFusePVPVCTemplateParams) string {
 	t.Helper()
-	var g *GKEOrchestrator
-	tmpl, err := g.parseGKETextTemplate("gcs_fuse_pv_pvc.tmpl")
+	tmpl, err := k8s.ParseTextTemplate("", "gcs_fuse_pv_pvc.tmpl")
 	if err != nil {
 		t.Fatalf("failed to parse template: %v", err)
 	}

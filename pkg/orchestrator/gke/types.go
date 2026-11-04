@@ -27,10 +27,12 @@ import (
 	"time"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
+	"github.com/google/safetext/yamltemplate"
 	crm "google.golang.org/api/cloudresourcemanager/v1"
 	compute "google.golang.org/api/compute/v1"
 	iamapi "google.golang.org/api/iam/v1"
 	gcs "google.golang.org/api/storage/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -684,6 +686,18 @@ type jobSetTemplateData struct {
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
 	MLDiagnosticsEnabled          bool
+	Subdomain                     string
+	baseBlocks                    map[string]*yamltemplate.Template
+}
+
+type jobSetValidationSpec struct {
+	metav1.TypeMeta `json:",inline"`
+	Spec            struct {
+		ReplicatedJobs []struct {
+			Name     string                  `json:"name"`
+			Template batchv1.JobTemplateSpec `json:"template"`
+		} `json:"replicatedJobs"`
+	} `json:"spec"`
 }
 
 // Types for parsing kubectl get nodes -o json

@@ -34,6 +34,7 @@ import (
 
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 
 	filestore "cloud.google.com/go/filestore/apiv1"
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
@@ -116,6 +117,9 @@ func (s *mountBuildState) volumeNameFor(pvName string, idx int) (name string, re
 
 // ProcessMounts parses mount strings and generates necessary K8s resources.
 func (sm *StorageManager) ProcessMounts(mounts []string, job orchestrator.JobDefinition) ([]MountInfo, []string, error) {
+	if sm.orchestrator == nil {
+		sm.orchestrator = &GKEOrchestrator{namespace: "default"}
+	}
 	var mountInfos []MountInfo
 	var additionalManifests []string
 	state := newMountBuildState()
@@ -736,7 +740,7 @@ func (sm *StorageManager) generateFilestoreResources(pm parsedMount, idx int, jo
 		return info, "", nil
 	}
 
-	filestoreTmpl, err := sm.orchestrator.parseGKETextTemplate("filestore.tmpl")
+	filestoreTmpl, err := k8s.ParseTextTemplate(sm.orchestrator.gkeCustomTemplatesPath, "filestore.tmpl")
 	if err != nil {
 		return MountInfo{}, "", fmt.Errorf("failed to parse filestore template: %w", err)
 	}
@@ -854,7 +858,7 @@ func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx in
 		return MountInfo{}, "", err
 	}
 
-	tmpl, err := sm.orchestrator.parseGKETextTemplate("gcs_fuse_pv_pvc.tmpl")
+	tmpl, err := k8s.ParseTextTemplate(sm.orchestrator.gkeCustomTemplatesPath, "gcs_fuse_pv_pvc.tmpl")
 	if err != nil {
 		return MountInfo{}, "", fmt.Errorf("failed to parse GCSFuse PV/PVC template: %w", err)
 	}

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,12 +35,16 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/safetext/yamltemplate"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8syaml "sigs.k8s.io/yaml"
 )
 
@@ -1416,13 +1421,14 @@ spec:
 			errSubstr: "failed to parse Job manifest spec",
 		},
 		{
-			name: "non-JobSet document with invalid YAML syntax is skipped",
+			name: "document with invalid YAML syntax fails before apply",
 			manifest: `
 apiVersion: v1
 kind: ConfigMap
 data: [unclosed bracket
 `,
-			expectErr: false,
+			expectErr: true,
+			errSubstr: "failed to parse manifest document",
 		},
 	}
 
@@ -3867,6 +3873,708 @@ func TestGeneratePathwaysManifest_SidecarNameArgUserValue(t *testing.T) {
 	}
 }
 
+func unmarshalStrictWorkloadDoc(t *testing.T, kind, doc string) (*corev1.Service, *batchv1.Job) {
+	t.Helper()
+	switch kind {
+	case "PersistentVolume":
+		var pv corev1.PersistentVolume
+		if err := k8syaml.UnmarshalStrict([]byte(doc), &pv); err != nil {
+			t.Fatalf("UnmarshalStrict PersistentVolume failed: %v\n%s", err, doc)
+		}
+	case "PersistentVolumeClaim":
+		var pvc corev1.PersistentVolumeClaim
+		if err := k8syaml.UnmarshalStrict([]byte(doc), &pvc); err != nil {
+			t.Fatalf("UnmarshalStrict PersistentVolumeClaim failed: %v\n%s", err, doc)
+		}
+	case "Service":
+		var s corev1.Service
+		if err := k8syaml.UnmarshalStrict([]byte(doc), &s); err != nil {
+			t.Fatalf("UnmarshalStrict Service failed: %v\n%s", err, doc)
+		}
+		return &s, nil
+	case "Job":
+		var j batchv1.Job
+		if err := k8syaml.UnmarshalStrict([]byte(doc), &j); err != nil {
+			t.Fatalf("UnmarshalStrict Job failed: %v\n%s", err, doc)
+		}
+		return nil, &j
+	default:
+		t.Fatalf("unexpected Kubernetes document kind %q in:\n%s", kind, doc)
+	}
+	return nil, nil
+}
+
+func parseServiceAndJobDocs(t *testing.T, manifest string) (*corev1.Service, *batchv1.Job, []string) {
+	t.Helper()
+	docs, err := splitYAMLDocuments(manifest)
+	if err != nil {
+		t.Fatalf("splitYAMLDocuments failed: %v\n%s", err, manifest)
+	}
+	var svc *corev1.Service
+	var job *batchv1.Job
+	var kinds []string
+	for _, doc := range docs {
+		var meta metav1.TypeMeta
+		if err := k8syaml.Unmarshal([]byte(doc), &meta); err != nil {
+			t.Fatalf("failed to unmarshal doc kind: %v\n%s", err, doc)
+		}
+		kinds = append(kinds, meta.Kind)
+		s, j := unmarshalStrictWorkloadDoc(t, meta.Kind, doc)
+		if s != nil {
+			svc = s
+		}
+		if j != nil {
+			job = j
+		}
+	}
+	if svc == nil || job == nil {
+		t.Fatalf("expected both Service and Job in manifest (got kinds %v):\n%s", kinds, manifest)
+	}
+	return svc, job, kinds
+}
+
+// assertHeadlessWorkloadService checks the headless Service and the two relations that make
+// "<workload>-<index>.<workload>" resolve: the pod subdomain must equal the Service name, and the Service
+// selector must be satisfied by the pod labels plus the batch.kubernetes.io/job-name label the Job controller adds.
+func assertHeadlessWorkloadService(t *testing.T, svc *corev1.Service, k8sJob *batchv1.Job, workloadName string) {
+	t.Helper()
+	if svc.Name != workloadName || svc.Spec.ClusterIP != "None" || !svc.Spec.PublishNotReadyAddresses {
+		t.Errorf("unexpected headless Service spec: %+v", svc)
+	}
+	wantLabels := map[string]string{"gcluster.google.com/workload": workloadName}
+	if diff := cmp.Diff(wantLabels, svc.Labels); diff != "" {
+		t.Errorf("Service labels should only carry workload label (-want +got):\n%s", diff)
+	}
+	wantSelector := map[string]string{
+		"gcluster.google.com/workload": workloadName,
+		"batch.kubernetes.io/job-name": workloadName,
+	}
+	if diff := cmp.Diff(wantSelector, svc.Spec.Selector); diff != "" {
+		t.Errorf("Service selector mismatch (-want +got):\n%s", diff)
+	}
+	if got := k8sJob.Spec.Template.Spec.Subdomain; got != svc.Name {
+		t.Errorf("pod subdomain = %q, want Service name %q", got, svc.Name)
+	}
+	effectivePodLabels := map[string]string{"batch.kubernetes.io/job-name": k8sJob.Name}
+	for k, v := range k8sJob.Spec.Template.Labels {
+		effectivePodLabels[k] = v
+	}
+	for k, v := range svc.Spec.Selector {
+		if effectivePodLabels[k] != v {
+			t.Errorf("Service selector %s=%s not satisfied by pod labels %v", k, v, effectivePodLabels)
+		}
+	}
+}
+
+// assertIndexedJobShape pins the standalone Job contract: Indexed, one completion per node, and backoffLimit 0
+// (fail fast like the child Job in jobset.tmpl; --restarts is not mapped onto a standalone Job).
+func assertIndexedJobShape(t *testing.T, k8sJob *batchv1.Job, wantParallelism int32) {
+	t.Helper()
+	if k8sJob.Spec.CompletionMode == nil || *k8sJob.Spec.CompletionMode != batchv1.IndexedCompletion {
+		t.Errorf("CompletionMode = %v, want Indexed", k8sJob.Spec.CompletionMode)
+	}
+	if k8sJob.Spec.Parallelism == nil || *k8sJob.Spec.Parallelism != wantParallelism {
+		t.Errorf("Parallelism = %v, want %d", k8sJob.Spec.Parallelism, wantParallelism)
+	}
+	if k8sJob.Spec.Completions == nil || *k8sJob.Spec.Completions != wantParallelism {
+		t.Errorf("Completions = %v, want %d", k8sJob.Spec.Completions, wantParallelism)
+	}
+	if k8sJob.Spec.BackoffLimit == nil || *k8sJob.Spec.BackoffLimit != 0 {
+		t.Errorf("BackoffLimit = %v, want 0", k8sJob.Spec.BackoffLimit)
+	}
+	if k8sJob.Spec.Template.Spec.RestartPolicy != corev1.RestartPolicyNever {
+		t.Errorf("pod restartPolicy = %q, want Never", k8sJob.Spec.Template.Spec.RestartPolicy)
+	}
+}
+
+func assertContainerHasMount(t *testing.T, c corev1.Container, mountPath string, wantReadOnly bool) {
+	t.Helper()
+	for _, vm := range c.VolumeMounts {
+		if vm.MountPath == mountPath {
+			if vm.ReadOnly != wantReadOnly {
+				t.Errorf("mount %q ReadOnly = %v, want %v", mountPath, vm.ReadOnly, wantReadOnly)
+			}
+			return
+		}
+	}
+	t.Errorf("container %q missing volumeMount %q (mounts: %+v)", c.Name, mountPath, c.VolumeMounts)
+}
+
+func assertGPUPodSpecFeatures(t *testing.T, podSpec corev1.PodSpec) {
+	t.Helper()
+	if podSpec.Subdomain != "gpu-idx-job" {
+		t.Errorf("PodSpec.Subdomain = %q, want %q", podSpec.Subdomain, "gpu-idx-job")
+	}
+	if !podSpec.HostNetwork || podSpec.DNSPolicy != corev1.DNSClusterFirstWithHostNet {
+		t.Errorf("HostNetwork=%v DNSPolicy=%q, want true and ClusterFirstWithHostNet", podSpec.HostNetwork, podSpec.DNSPolicy)
+	}
+	if podSpec.PriorityClassName != "high" || podSpec.ServiceAccountName != "workload-ksa" {
+		t.Errorf("PriorityClassName=%q ServiceAccountName=%q, want high / workload-ksa", podSpec.PriorityClassName, podSpec.ServiceAccountName)
+	}
+	if len(podSpec.ImagePullSecrets) != 2 {
+		t.Errorf("ImagePullSecrets = %+v, want 2 secrets", podSpec.ImagePullSecrets)
+	}
+	if len(podSpec.SchedulingGates) != 1 || podSpec.SchedulingGates[0].Name != "gke.io/topology-aware-auto-gpu-idx-job" {
+		t.Errorf("SchedulingGates = %+v, want gke.io/topology-aware-auto-gpu-idx-job", podSpec.SchedulingGates)
+	}
+	if podSpec.Affinity == nil || len(podSpec.Tolerations) == 0 {
+		t.Errorf("expected Affinity and Tolerations to be populated, got Affinity=%+v Tolerations=%+v", podSpec.Affinity, podSpec.Tolerations)
+	}
+}
+
+func assertGPUMountsAndTimers(t *testing.T, k8sJob *batchv1.Job) {
+	t.Helper()
+	if k8sJob.Spec.TTLSecondsAfterFinished == nil || *k8sJob.Spec.TTLSecondsAfterFinished != 3600 {
+		t.Errorf("TTLSecondsAfterFinished = %v, want 3600", k8sJob.Spec.TTLSecondsAfterFinished)
+	}
+	podSpec := k8sJob.Spec.Template.Spec
+	if podSpec.TerminationGracePeriodSeconds == nil || *podSpec.TerminationGracePeriodSeconds != 60 {
+		t.Errorf("TerminationGracePeriodSeconds = %v, want 60", podSpec.TerminationGracePeriodSeconds)
+	}
+	if podSpec.NodeSelector["team"] != "ml" {
+		t.Errorf("NodeSelector[team] = %q, want ml (got %+v)", podSpec.NodeSelector["team"], podSpec.NodeSelector)
+	}
+	assertContainerHasMount(t, podSpec.Containers[0], "/mnt/shared", true)
+	assertContainerHasMount(t, podSpec.Containers[0], "/tmp/mtc", false)
+}
+
+// newGPUDerivationTestOrc returns an orchestrator wired for a NAP-provisioned g2-standard-48 (4x L4) job with a
+// pre-existing "shared-data" PVC.
+func newGPUDerivationTestOrc(t *testing.T) *GKEOrchestrator {
+	t.Helper()
+	setupMockMachineConfig(t)
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe g2-standard-48 --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"guestCpus": 48, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "nvidia-l4"}]}`},
+		},
+		"kubectl get pvc shared-data -o jsonpath={.metadata.name}": {
+			{ExitCode: 0, Stdout: "shared-data"},
+		},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.napEnabled = true
+	orc.napLimits = map[string]int64{"nvidia-l4": 16, "cpu": 1000, "memory": 1000}
+	orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "gpu-pool", Config: gkeNodePoolConfig{MachineType: "g2-standard-48"}},
+	}
+	return orc
+}
+
+// gpuDerivationJobDef returns a job exercising every optional manifest input (exit codes, env, priority class,
+// SA, pull secrets, node constraints, MTC, GCS mounts) for the two-node GPU pipeline tests.
+func gpuDerivationJobDef(workloadName string) orchestrator.JobDefinition {
+	return orchestrator.JobDefinition{
+		WorkloadName:                  workloadName,
+		CommandToRun:                  "torchrun train.py",
+		ComputeType:                   "g2-standard-48",
+		NumSlices:                     1,
+		NodesPerSlice:                 2,
+		MaxRestarts:                   3,
+		TtlSecondsAfterFinished:       3600,
+		TerminationGracePeriodSeconds: 60,
+		ClusterLocation:               "us-central1-a",
+		ProjectID:                     "mock-project",
+		KueueQueueName:                "user-queue",
+		GKEScheduler:                  "gke.io/topology-aware-auto",
+		PriorityClassName:             "high",
+		ServiceAccountName:            "workload-ksa",
+		ImagePullSecrets:              "regcred-a,regcred-b",
+		RestartOnExitCodes:            []int{137, 143},
+		NodeConstraint:                map[string]string{"team": "ml"},
+		GKENAPProvisioning:            "spot",
+		MLDiagnosticsEnabled:          true,
+		GKEMTCEnabled:                 true,
+		GKEMTCRamdiskDirectory:        "/tmp/mtc",
+		Verbose:                       true,
+		RawMounts:                     []string{"shared-data;/mnt/shared;ro"},
+		Env:                           map[string]string{"USER_VAR": "hello"},
+	}
+}
+
+func TestGenerateJobManifest_GPUDerivationPipeline(t *testing.T) {
+	orc := newGPUDerivationTestOrc(t)
+	jobDef := gpuDerivationJobDef("gpu-idx-job")
+
+	profile, isDyn, isStat, err := orc.resolveHardwareRequirements(&jobDef)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	opts, err := orc.PrepareManifestOptions(jobDef, "registry.local/trainer:v1", profile, isDyn, isStat)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+	manifest, err := orc.GenerateJobManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateJobManifest failed: %v", err)
+	}
+
+	svc, k8sJob, kinds := parseServiceAndJobDocs(t, manifest)
+	if diff := cmp.Diff([]string{"Service", "Job"}, kinds); diff != "" {
+		t.Errorf("document order mismatch (-want +got):\n%s", diff)
+	}
+	assertHeadlessWorkloadService(t, svc, k8sJob, "gpu-idx-job")
+	assertIndexedJobShape(t, k8sJob, 2)
+
+	wantJobLabels := map[string]string{
+		"gcluster.google.com/workload": "gpu-idx-job",
+		"kueue.x-k8s.io/queue-name":    "user-queue",
+		"managed-mldiagnostics-gke":    "true",
+	}
+	if diff := cmp.Diff(wantJobLabels, k8sJob.Labels); diff != "" {
+		t.Errorf("Job labels mismatch (-want +got):\n%s", diff)
+	}
+	if k8sJob.Spec.Suspend == nil || !*k8sJob.Spec.Suspend {
+		t.Errorf("expected Job.Spec.Suspend=true when KueueQueueName is set, got %v", k8sJob.Spec.Suspend)
+	}
+	if k8sJob.Spec.PodFailurePolicy == nil || len(k8sJob.Spec.PodFailurePolicy.Rules) != 1 || k8sJob.Spec.PodFailurePolicy.Rules[0].OnExitCodes == nil || k8sJob.Spec.PodFailurePolicy.Rules[0].OnExitCodes.ContainerName == nil || *k8sJob.Spec.PodFailurePolicy.Rules[0].OnExitCodes.ContainerName != "workload-container" {
+		t.Errorf("expected PodFailurePolicy scoped to workload-container on Job, got %+v", k8sJob.Spec.PodFailurePolicy)
+	}
+	assertGPUPodSpecFeatures(t, k8sJob.Spec.Template.Spec)
+	assertGPUMountsAndTimers(t, k8sJob)
+	assertContainerEnvMap(t, k8sJob.Spec.Template.Spec.Containers[0], map[string]string{
+		"MASTER_ADDR":        "gpu-idx-job-0.gpu-idx-job",
+		"NCCL_DEBUG":         "INFO",
+		"USER_VAR":           "hello",
+		"WORKERS_0_HOSTNAME": "gpu-idx-job-0.gpu-idx-job",
+	})
+}
+
+func assertTPUv7xDerivedJob(t *testing.T, jobDef orchestrator.JobDefinition, svc *corev1.Service, k8sJob *batchv1.Job) {
+	t.Helper()
+	if jobDef.NodesPerSlice != 2 || jobDef.PlacementPolicy != "tpu7x-16-2x2x2-placement-policy" {
+		t.Errorf("derived NodesPerSlice=%d PlacementPolicy=%q, want 2 and tpu7x-16-2x2x2-placement-policy", jobDef.NodesPerSlice, jobDef.PlacementPolicy)
+	}
+	assertHeadlessWorkloadService(t, svc, k8sJob, "tpu7x-idx-job")
+	assertIndexedJobShape(t, k8sJob, 2)
+	podSpec := k8sJob.Spec.Template.Spec
+	if !podSpec.HostNetwork || podSpec.DNSPolicy != corev1.DNSClusterFirstWithHostNet {
+		t.Errorf("TPU pod hostNetwork=%v dnsPolicy=%q, want true and ClusterFirstWithHostNet", podSpec.HostNetwork, podSpec.DNSPolicy)
+	}
+	if got := k8sJob.Spec.Template.Spec.NodeSelector["cloud.google.com/placement-policy-name"]; got != "tpu7x-16-2x2x2-placement-policy" {
+		t.Errorf("NodeSelector placement-policy-name = %q, want tpu7x-16-2x2x2-placement-policy", got)
+	}
+	if got := k8sJob.Spec.Template.Annotations["cloud.google.com/gke-tpu-slice-topology"]; got != "2x2x2" {
+		t.Errorf("pod topology annotation = %q, want 2x2x2", got)
+	}
+	if got := k8sJob.Spec.Template.Annotations["gke-gcsfuse/volumes"]; got != "true" {
+		t.Errorf("pod gcsfuse annotation = %q, want true", got)
+	}
+}
+
+func TestGenerateJobManifest_TPUv7xDerivationPipeline(t *testing.T) {
+	setupMockMachineConfig(t)
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
+		"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v7x-slice"}]}`},
+		},
+		"gcloud compute resource-policies describe tpu7x-16-2x2x2-placement-policy --region=us-central1 --project=mock-project --format=json": {
+			{ExitCode: 0, Stdout: `{"name":"tpu7x-16-2x2x2-placement-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"2x2x2"}}`},
+		},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.namespace = "ml-ns"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "v7x-pool", Config: gkeNodePoolConfig{MachineType: "tpu7x-standard-4t"}},
+	}
+
+	jobDef := orchestrator.JobDefinition{
+		WorkloadName:          "tpu7x-idx-job",
+		CommandToRun:          "python3 train.py",
+		ComputeType:           "tpu7x-standard-4t",
+		Topology:              "2x2x2",
+		NumSlices:             1,
+		ClusterLocation:       "us-central1-a",
+		ProjectID:             "mock-project",
+		UseParallelContainers: true,
+		DryRunManifest:        "/tmp/dry.yaml",
+		RawMounts:             []string{"gs://my-ckpt-bucket;/ckpt;rw;profile=training"},
+	}
+	profile, isDyn, isStat, err := orc.resolveHardwareRequirements(&jobDef)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	opts, err := orc.PrepareManifestOptions(jobDef, "registry.local/jax:v7x", profile, isDyn, isStat)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+	manifest, err := orc.GenerateJobManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateJobManifest failed: %v", err)
+	}
+
+	svc, k8sJob, kinds := parseServiceAndJobDocs(t, manifest)
+	if diff := cmp.Diff([]string{"PersistentVolume", "PersistentVolumeClaim", "Service", "Job"}, kinds); diff != "" {
+		t.Errorf("document order mismatch (-want +got):\n%s", diff)
+	}
+	assertTPUv7xDerivedJob(t, jobDef, svc, k8sJob)
+	if len(k8sJob.Spec.Template.Spec.Containers) != 2 {
+		t.Fatalf("expected 2 parallel containers, got %d", len(k8sJob.Spec.Template.Spec.Containers))
+	}
+	for _, c := range k8sJob.Spec.Template.Spec.Containers {
+		assertContainerHasMount(t, c, "/ckpt", false)
+		assertContainerEnvMap(t, c, map[string]string{
+			"MASTER_ADDR":        "tpu7x-idx-job-0.tpu7x-idx-job",
+			"WORKERS_0_HOSTNAME": "tpu7x-idx-job-0.tpu7x-idx-job",
+		})
+	}
+}
+
+func TestGenerateJobManifest_CoordinatorEnvAndOptions(t *testing.T) {
+	setupMockMachineConfig(t)
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	profile := JobProfile{IsCPUMachine: true, CapacityCount: 4}
+
+	t.Run("CPU job with empty KueueQueueName, custom SchedulerName, and caller env immutability", func(t *testing.T) {
+		userEnv := map[string]string{"MASTER_ADDR": "custom-master:29500"}
+		opts := ManifestOptions{
+			WorkloadName:    "cpu-job",
+			FullImageName:   "alpine:3.20",
+			CommandToRun:    "echo ok",
+			ComputeType:     "n2-standard-4",
+			MachineType:     "n2-standard-4",
+			ClusterLocation: "us-central1-a",
+			KueueQueueName:  "",
+			SchedulerName:   "custom-scheduler",
+			NumSlices:       1,
+			NodesPerSlice:   1,
+			Env:             userEnv,
+		}
+		manifest, err := orc.GenerateJobManifest(opts, profile)
+		if err != nil {
+			t.Fatalf("GenerateJobManifest failed: %v", err)
+		}
+		if len(userEnv) != 1 {
+			t.Errorf("caller userEnv map was mutated: %+v", userEnv)
+		}
+		_, k8sJob, _ := parseServiceAndJobDocs(t, manifest)
+		if _, hasQueue := k8sJob.Labels["kueue.x-k8s.io/queue-name"]; hasQueue {
+			t.Errorf("expected empty KueueQueueName to omit kueue.x-k8s.io/queue-name label, got %+v", k8sJob.Labels)
+		}
+		if k8sJob.Spec.Suspend != nil {
+			t.Errorf("expected empty KueueQueueName to omit Job.Spec.Suspend, got %v", *k8sJob.Spec.Suspend)
+		}
+		assertIndexedJobShape(t, k8sJob, 1)
+		if k8sJob.Spec.Template.Spec.HostNetwork || k8sJob.Spec.Template.Spec.SchedulerName != "custom-scheduler" {
+			t.Errorf("HostNetwork=%v SchedulerName=%q, want false and custom-scheduler", k8sJob.Spec.Template.Spec.HostNetwork, k8sJob.Spec.Template.Spec.SchedulerName)
+		}
+		assertContainerEnvMap(t, k8sJob.Spec.Template.Spec.Containers[0], map[string]string{
+			"MASTER_ADDR":        "custom-master:29500",
+			"WORKERS_0_HOSTNAME": "cpu-job-0.cpu-job",
+		})
+	})
+
+	t.Run("empty WorkloadName omits coordinator env and subdomain", func(t *testing.T) {
+		opts := ManifestOptions{
+			FullImageName:   "alpine:3.20",
+			CommandToRun:    "echo ok",
+			ComputeType:     "n2-standard-4",
+			MachineType:     "n2-standard-4",
+			ClusterLocation: "us-central1-a",
+			NumSlices:       1,
+			NodesPerSlice:   1,
+		}
+		manifest, err := orc.GenerateJobManifest(opts, profile)
+		if err != nil {
+			t.Fatalf("GenerateJobManifest failed: %v", err)
+		}
+		_, k8sJob, _ := parseServiceAndJobDocs(t, manifest)
+		if k8sJob.Spec.Template.Spec.Subdomain != "" || len(k8sJob.Spec.Template.Spec.Containers[0].Env) != 0 {
+			t.Errorf("expected empty Subdomain and Env, got Subdomain=%q Env=%+v", k8sJob.Spec.Template.Spec.Subdomain, k8sJob.Spec.Template.Spec.Containers[0].Env)
+		}
+	})
+
+	t.Run("rejects multi-slice NumSlices > 1", func(t *testing.T) {
+		opts := ManifestOptions{
+			WorkloadName:    "multi-slice",
+			FullImageName:   "alpine:3.20",
+			CommandToRun:    "echo ok",
+			ComputeType:     "n2-standard-4",
+			MachineType:     "n2-standard-4",
+			ClusterLocation: "us-central1-a",
+			NumSlices:       2,
+			NodesPerSlice:   2,
+		}
+		if _, err := orc.GenerateJobManifest(opts, profile); err == nil || !strings.Contains(err.Error(), "JobSet") {
+			t.Errorf("expected multi-slice error mentioning JobSet, got: %v", err)
+		}
+	})
+}
+
+func parseStrictJobSetTemplates(t *testing.T, manifest string) (map[string]string, map[string]batchv1.JobTemplateSpec) {
+	t.Helper()
+	var raw struct {
+		Metadata metav1.ObjectMeta `json:"metadata"`
+		Spec     struct {
+			ReplicatedJobs []struct {
+				Name     string          `json:"name"`
+				Template json.RawMessage `json:"template"`
+			} `json:"replicatedJobs"`
+		} `json:"spec"`
+	}
+	if err := k8syaml.Unmarshal([]byte(manifest), &raw); err != nil {
+		t.Fatalf("failed to unmarshal JobSet envelope: %v\n%s", err, manifest)
+	}
+	out := make(map[string]batchv1.JobTemplateSpec, len(raw.Spec.ReplicatedJobs))
+	for _, rj := range raw.Spec.ReplicatedJobs {
+		var jt batchv1.JobTemplateSpec
+		if err := k8syaml.UnmarshalStrict(rj.Template, &jt); err != nil {
+			t.Fatalf("UnmarshalStrict JobTemplateSpec for replicatedJob %q failed: %v\n%s", rj.Name, err, string(rj.Template))
+		}
+		out[rj.Name] = jt
+	}
+	return raw.Metadata.Labels, out
+}
+
+func assertPathwaysStrictPodAuth(t *testing.T, name string, spec corev1.PodSpec) {
+	t.Helper()
+	if spec.PriorityClassName != "high-pw" || spec.ServiceAccountName != "pw-ksa" || len(spec.ImagePullSecrets) != 1 {
+		t.Errorf("%s pod_auth_and_priority mismatch: %+v", name, spec)
+	}
+}
+
+func TestGenerateJobSetAndPathways_SharedBaseBlocksStrict(t *testing.T) {
+	setupMockMachineConfig(t)
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe ct5lp-hightpu-4t --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"guestCpus": 112, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v5-lite-podslice"}]}`},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.napEnabled = true
+	orc.napLimits = map[string]int64{"tpu-v5-lite-podslice": 16, "cpu": 1000, "memory": 1000}
+	orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
+	profile := JobProfile{CapacityCount: 4}
+
+	pwJob := orchestrator.JobDefinition{
+		WorkloadName:         "pw-strict",
+		CommandToRun:         "python3 train.py",
+		ComputeType:          "v5litepod-4",
+		MachineType:          "ct5lp-hightpu-4t",
+		Topology:             "2x2",
+		NumSlices:            1,
+		NodesPerSlice:        1,
+		ClusterLocation:      "us-central1-a",
+		ProjectID:            "mock-project",
+		KueueQueueName:       "pw-queue",
+		PriorityClassName:    "high-pw",
+		ServiceAccountName:   "pw-ksa",
+		ImagePullSecrets:     "pw-secret",
+		RestartOnExitCodes:   []int{42},
+		NodeConstraint:       map[string]string{"env": "prod"},
+		GKENAPProvisioning:   "spot",
+		MLDiagnosticsEnabled: true,
+		IsPathwaysJob:        true,
+		Pathways: orchestrator.PathwaysJobDefinition{
+			GCSLocation:  "gs://pw-scratch",
+			HeadNodePool: "cpu-np",
+		},
+	}
+
+	pwManifest, err := orc.GeneratePathwaysManifest(pwJob, "img:v1", profile, false, false)
+	if err != nil {
+		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+	}
+	pwLabels, pwTemplates := parseStrictJobSetTemplates(t, pwManifest)
+	if pwLabels["kueue.x-k8s.io/queue-name"] != "pw-queue" || pwLabels["managed-mldiagnostics-gke"] != "true" {
+		t.Errorf("unexpected Pathways JobSet labels: %+v", pwLabels)
+	}
+	assertPathwaysStrictPodAuth(t, "pathways-head", pwTemplates["pathways-head"].Spec.Template.Spec)
+	workerSpec := pwTemplates["worker"].Spec.Template.Spec
+	assertPathwaysStrictPodAuth(t, "worker", workerSpec)
+	if workerSpec.NodeSelector["env"] != "prod" || workerSpec.Affinity == nil || len(workerSpec.Tolerations) == 0 {
+		t.Errorf("worker pod_placement mismatch: NodeSelector=%+v Affinity=%+v Tolerations=%+v", workerSpec.NodeSelector, workerSpec.Affinity, workerSpec.Tolerations)
+	}
+
+	opts, err := orc.PrepareManifestOptions(pwJob, "img:v1", profile, false, false)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+	jsManifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+	_, jsTemplates := parseStrictJobSetTemplates(t, jsManifest)
+	mainJob := jsTemplates["main-job"]
+	assertPathwaysStrictPodAuth(t, "main-job", mainJob.Spec.Template.Spec)
+	if mainJob.Spec.PodFailurePolicy == nil || mainJob.Spec.Template.Spec.NodeSelector["env"] != "prod" {
+		t.Errorf("main-job strict JobTemplateSpec mismatch: %+v", mainJob)
+	}
+}
+
+func TestGenerateManifest_YAMLInjectionRejectedInBaseBlocks(t *testing.T) {
+	setupMockMachineConfig(t)
+	cpuResp := shell.CommandResult{ExitCode: 0, Stdout: `{"guestCpus": 4}`}
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-4 --zone=us-central1-a --format=json": {cpuResp, cpuResp, cpuResp, cpuResp, cpuResp, cpuResp, cpuResp, cpuResp, cpuResp, cpuResp, cpuResp, cpuResp},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
+	profile := JobProfile{IsCPUMachine: true, CapacityCount: 4}
+
+	cases := []struct {
+		name   string
+		mutate func(*ManifestOptions, *orchestrator.JobDefinition)
+	}{
+		{
+			name: "WorkloadName injection in workload_labels",
+			mutate: func(o *ManifestOptions, j *orchestrator.JobDefinition) {
+				o.WorkloadName = "bad\n  injectedLabel: pwn"
+				j.WorkloadName = o.WorkloadName
+			},
+		},
+		{
+			name: "KueueQueueName injection in workload_labels",
+			mutate: func(o *ManifestOptions, j *orchestrator.JobDefinition) {
+				o.KueueQueueName = "q\n  injectedLabel: pwn"
+				j.KueueQueueName = o.KueueQueueName
+			},
+		},
+		{
+			name: "ServiceAccountName injection in pod_auth_and_priority",
+			mutate: func(o *ManifestOptions, j *orchestrator.JobDefinition) {
+				o.ServiceAccountName = "ksa\n  hostPID: true"
+				j.ServiceAccountName = o.ServiceAccountName
+			},
+		},
+		{
+			name: "PriorityClassName injection in pod_auth_and_priority",
+			mutate: func(o *ManifestOptions, j *orchestrator.JobDefinition) {
+				o.PriorityClassName = "high\n  privileged: true"
+				j.PriorityClassName = o.PriorityClassName
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := profile
+			mt := "n2-standard-4"
+			ct := "n2-standard-4"
+			topo := ""
+			opts := ManifestOptions{
+				WorkloadName:    "safe-job",
+				FullImageName:   "alpine:3.20",
+				CommandToRun:    "echo ok",
+				ComputeType:     mt,
+				MachineType:     mt,
+				ClusterLocation: "us-central1-a",
+				NumSlices:       1,
+				NodesPerSlice:   1,
+			}
+			pwJob := orchestrator.JobDefinition{
+				WorkloadName:    "safe-job",
+				CommandToRun:    "echo ok",
+				ComputeType:     ct,
+				MachineType:     mt,
+				Topology:        topo,
+				ClusterLocation: "us-central1-a",
+				NumSlices:       1,
+				NodesPerSlice:   1,
+				Pathways:        orchestrator.PathwaysJobDefinition{GCSLocation: "gs://bkt", HeadNodePool: "head-np"},
+			}
+			tc.mutate(&opts, &pwJob)
+
+			if _, err := orc.GenerateJobManifest(opts, p); !errors.Is(err, yamltemplate.ErrYAMLInjection) {
+				t.Errorf("GenerateJobManifest error = %v, want wrap of ErrYAMLInjection", err)
+			}
+			if _, err := orc.GenerateGKEManifest(opts, p); !errors.Is(err, yamltemplate.ErrYAMLInjection) {
+				t.Errorf("GenerateGKEManifest error = %v, want wrap of ErrYAMLInjection", err)
+			}
+			if _, err := orc.GeneratePathwaysManifest(pwJob, "alpine:3.20", p, false, false); !errors.Is(err, yamltemplate.ErrYAMLInjection) {
+				t.Errorf("GeneratePathwaysManifest error = %v, want wrap of ErrYAMLInjection", err)
+			}
+		})
+	}
+}
+
+func assertPodFailurePolicyContainers(t *testing.T, pfp *batchv1.PodFailurePolicy, wantContainers []string) {
+	t.Helper()
+	if pfp == nil {
+		t.Fatalf("expected non-nil PodFailurePolicy, want containers %v", wantContainers)
+	}
+	var got []string
+	for _, r := range pfp.Rules {
+		if r.OnExitCodes != nil && r.OnExitCodes.ContainerName != nil {
+			got = append(got, *r.OnExitCodes.ContainerName)
+		}
+	}
+	if diff := cmp.Diff(wantContainers, got); diff != "" {
+		t.Errorf("PodFailurePolicy containerNames mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func mustGenerateJobManifest(t *testing.T, orc *GKEOrchestrator, opts ManifestOptions, profile JobProfile) string {
+	t.Helper()
+	m, err := orc.GenerateJobManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateJobManifest failed: %v", err)
+	}
+	return m
+}
+
+func TestPodFailurePolicy_SidecarContainerScoping(t *testing.T) {
+	setupMockMachineConfig(t)
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-4 --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"guestCpus": 4, "memoryMb": 16384}`},
+			{ExitCode: 0, Stdout: `{"guestCpus": 4, "memoryMb": 16384}`},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.clusterZones = []string{"us-central1-a"}
+	profile := JobProfile{IsCPUMachine: true, CapacityCount: 4}
+
+	pureJob := orchestrator.JobDefinition{
+		WorkloadName:       "no-sidecar-pfp",
+		CommandToRun:       "echo hi",
+		ComputeType:        "n2-standard-4",
+		MachineType:        "n2-standard-4",
+		ClusterLocation:    "us-central1-a",
+		NumSlices:          1,
+		NodesPerSlice:      1,
+		RestartOnExitCodes: []int{143, 42},
+	}
+	pureOpts, err := orc.PrepareManifestOptions(pureJob, "registry.local/app:v1", profile, false, false)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+	_, pureK8sJob, _ := parseServiceAndJobDocs(t, mustGenerateJobManifest(t, orc, pureOpts, profile))
+	// Always scoped, even without sidecars: a pod-wide rule would evaluate exit codes of containers gcluster
+	// does not control (custom base.tmpl sidecars, cluster webhook injections).
+	assertPodFailurePolicyContainers(t, pureK8sJob.Spec.PodFailurePolicy, []string{"workload-container"})
+
+	parallelOpts := pureOpts
+	parallelOpts.ParallelContainers = 2
+	if diff := cmp.Diff([]string{"workload-container-1", "workload-container-2"}, podFailurePolicyContainers(parallelOpts)); diff != "" {
+		t.Errorf("podFailurePolicyContainers with parallel containers (-want +got):\n%s", diff)
+	}
+
+	fuseJob := pureJob
+	fuseJob.WorkloadName = "fuse-sidecar-pfp"
+	fuseJob.RawMounts = []string{"gs://my-bkt;/mnt/gcs;ro"}
+	fuseOpts, err := orc.PrepareManifestOptions(fuseJob, "registry.local/app:v1", profile, false, false)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions with GCSFuse failed: %v", err)
+	}
+	_, fuseK8sJob, _ := parseServiceAndJobDocs(t, mustGenerateJobManifest(t, orc, fuseOpts, profile))
+	assertPodFailurePolicyContainers(t, fuseK8sJob.Spec.PodFailurePolicy, []string{"workload-container"})
+}
 func makeDockerConfigSecret(name string, authHosts ...string) unstructured.Unstructured {
 	auths := make(map[string]map[string]string, len(authHosts))
 	for _, h := range authHosts {
@@ -4064,5 +4772,494 @@ func TestImagePullSecrets_ExplicitBypassAndActiveImages(t *testing.T) {
 	fullImages := activeWorkloadImages(orchestrator.JobDefinition{IsPathwaysJob: true, Pathways: pw}, "reg.local/workload:v1")
 	if diff := cmp.Diff([]string{"reg.local/workload:v1", "reg.local/server:v1", "reg.local/proxy:v1"}, fullImages); diff != "" {
 		t.Errorf("Pathways activeWorkloadImages mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func newCustomTemplateBaseOpts() (ManifestOptions, JobProfile) {
+	return ManifestOptions{
+		WorkloadName:    "custom-tmpl-job",
+		FullImageName:   "test-image:latest",
+		CommandToRun:    "echo hi",
+		ComputeType:     "n2-standard-4",
+		MachineType:     "n2-standard-4",
+		ClusterLocation: "us-central1-a",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+	}, JobProfile{IsCPUMachine: true, CapacityCount: 4}
+}
+
+func newCustomTemplateTestOrc(t *testing.T, customDir string) *GKEOrchestrator {
+	t.Helper()
+	setupMockMachineConfig(t)
+	orc := newCachedTestOrchestrator()
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.gkeCustomTemplatesPath = customDir
+	return orc
+}
+
+func TestCustomTemplateLoading_PartialOverrideFallback(t *testing.T) {
+	baseOpts, profile := newCustomTemplateBaseOpts()
+	customDir := t.TempDir()
+	customJob := `apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{.WorkloadName}}
+  annotations:
+    custom-wrapper: "true"
+  labels:
+{{(StructuralData (.RenderBlock "workload_labels" 4))}}
+spec:
+  completionMode: Indexed
+  parallelism: {{.NodesPerSlice}}
+  completions: {{.NodesPerSlice}}
+  template:
+{{(StructuralData (.RenderBlock "pod_template" 4))}}
+`
+	if err := os.WriteFile(filepath.Join(customDir, "job.tmpl"), []byte(customJob), 0644); err != nil {
+		t.Fatal(err)
+	}
+	orc := newCustomTemplateTestOrc(t, customDir)
+	manifest, err := orc.GenerateJobManifest(baseOpts, profile)
+	if err != nil {
+		t.Fatalf("GenerateJobManifest failed: %v", err)
+	}
+	if !strings.Contains(manifest, `custom-wrapper: "true"`) || !strings.Contains(manifest, "gcluster.google.com/workload: custom-tmpl-job") {
+		t.Errorf("unexpected rendered manifest:\n%s", manifest)
+	}
+}
+
+func TestCustomTemplateLoading_DynamicBlockDiscovery(t *testing.T) {
+	baseOpts, profile := newCustomTemplateBaseOpts()
+	customDir := t.TempDir()
+	if err := k8s.ExtractDefaultTemplates(customDir, false); err != nil {
+		t.Fatalf("ExtractDefaultTemplates failed: %v", err)
+	}
+	origBase, err := os.ReadFile(filepath.Join(customDir, "base.tmpl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	extraBlock := "\n{{- define \"custom_user_block\" -}}\ncustom.example.com/team: \"ml-infra\"\n{{- end -}}\n"
+	if err := os.WriteFile(filepath.Join(customDir, "base.tmpl"), append(origBase, []byte(extraBlock)...), 0644); err != nil {
+		t.Fatal(err)
+	}
+	customJob := `apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{.WorkloadName}}
+  annotations:
+{{(StructuralData (.RenderBlock "custom_user_block" 4))}}
+spec:
+  template:
+{{(StructuralData (.RenderBlock "pod_template" 4))}}
+`
+	if err := os.WriteFile(filepath.Join(customDir, "job.tmpl"), []byte(customJob), 0644); err != nil {
+		t.Fatal(err)
+	}
+	orc := newCustomTemplateTestOrc(t, customDir)
+	manifest, err := orc.GenerateJobManifest(baseOpts, profile)
+	if err != nil {
+		t.Fatalf("GenerateJobManifest failed with user-defined block: %v", err)
+	}
+	if !strings.Contains(manifest, `custom.example.com/team: "ml-infra"`) {
+		t.Errorf("expected custom_user_block output in manifest, got:\n%s", manifest)
+	}
+}
+
+// TestCustomTemplateLoading_ExtractedDefaultsAreNoOp pins that pointing --gke-custom-templates-path at a fresh
+// gke-template-extract output (with and without base.tmpl) renders byte-identical JobSet, Job, and Pathways
+// manifests to the embedded defaults, covering the read-custom -> overlay -> compile-per-block -> reindent path.
+func TestCustomTemplateLoading_ExtractedDefaultsAreNoOp(t *testing.T) {
+	baseOpts, profile := newCustomTemplateBaseOpts()
+	pwJob := newCPUPathwaysJob("pw-noop")
+	render := func(t *testing.T, customDir string) map[string]string {
+		t.Helper()
+		orc := newCustomTemplateTestOrc(t, customDir)
+		out := make(map[string]string, 3)
+		var err error
+		if out["jobset"], err = orc.GenerateGKEManifest(baseOpts, profile); err != nil {
+			t.Fatalf("GenerateGKEManifest(customDir=%q) failed: %v", customDir, err)
+		}
+		if out["job"], err = orc.GenerateJobManifest(baseOpts, profile); err != nil {
+			t.Fatalf("GenerateJobManifest(customDir=%q) failed: %v", customDir, err)
+		}
+		if out["pathways"], err = orc.GeneratePathwaysManifest(pwJob, "img:latest", profile, false, false); err != nil {
+			t.Fatalf("GeneratePathwaysManifest(customDir=%q) failed: %v", customDir, err)
+		}
+		return out
+	}
+	want := render(t, "")
+
+	extracted := t.TempDir()
+	if err := k8s.ExtractDefaultTemplates(extracted, false); err != nil {
+		t.Fatalf("ExtractDefaultTemplates failed: %v", err)
+	}
+	if diff := cmp.Diff(want, render(t, extracted)); diff != "" {
+		t.Errorf("extracted defaults must render identically to embedded templates (-embedded +extracted):\n%s", diff)
+	}
+	if err := os.Remove(filepath.Join(extracted, "base.tmpl")); err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff(want, render(t, extracted)); diff != "" {
+		t.Errorf("extracted workload templates with embedded base.tmpl must render identically (-embedded +extracted):\n%s", diff)
+	}
+}
+
+// newCPUPathwaysJob returns a minimal Pathways job on a CPU head/worker machine type, the shape used by the
+// custom-template, dispatch and podFailurePolicy tests that only need a renderable Pathways manifest.
+func newCPUPathwaysJob(name string) orchestrator.JobDefinition {
+	return orchestrator.JobDefinition{
+		WorkloadName:    name,
+		CommandToRun:    "echo hi",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+		ClusterLocation: "us-central1-a",
+		ComputeType:     "n2-standard-4",
+		MachineType:     "n2-standard-4",
+		IsPathwaysJob:   true,
+		Pathways:        orchestrator.PathwaysJobDefinition{GCSLocation: "gs://bkt", HeadNodePool: "head-np"},
+	}
+}
+
+// TestSubmitWorkloadTemplate_DispatchesByJobKind pins that each job kind reaches its own generator (observed via
+// the dry-run manifest) and that an unknown template name is an error rather than a silent JobSet fallback.
+func TestSubmitWorkloadTemplate_DispatchesByJobKind(t *testing.T) {
+	orc := newCustomTemplateTestOrc(t, "")
+	_, profile := newCustomTemplateBaseOpts()
+	pwJob := newCPUPathwaysJob("dispatch-pw")
+	stdJob := newCPUPathwaysJob("dispatch-std")
+	stdJob.IsPathwaysJob = false
+
+	for _, tc := range []struct {
+		name               string
+		job                orchestrator.JobDefinition
+		wantTemplate       string
+		wantReplicatedJobs []string
+	}{
+		{name: "standard job renders jobset.tmpl", job: stdJob, wantTemplate: k8s.JobSetTemplate, wantReplicatedJobs: []string{"main-job"}},
+		{name: "pathways job renders pathways_jobset.tmpl", job: pwJob, wantTemplate: k8s.PathwaysJobSetTemplate, wantReplicatedJobs: []string{"pathways-head", "worker"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := workloadTemplateName(tc.job); got != tc.wantTemplate {
+				t.Fatalf("workloadTemplateName() = %q, want %q", got, tc.wantTemplate)
+			}
+			job := tc.job
+			job.DryRunManifest = filepath.Join(t.TempDir(), "manifest.yaml")
+			if err := orc.generateAndSubmitManifests(job, "img:v1", profile, false, false); err != nil {
+				t.Fatalf("generateAndSubmitManifests failed: %v", err)
+			}
+			content, err := os.ReadFile(job.DryRunManifest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, templates := parseStrictJobSetTemplates(t, string(content))
+			if diff := cmp.Diff(tc.wantReplicatedJobs, slices.Sorted(maps.Keys(templates))); diff != "" {
+				t.Errorf("dry-run manifest replicatedJobs mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+
+	err := orc.submitWorkloadTemplate("pathways-jobset.tmpl", pwJob, "img:v1", profile, false, false)
+	if err == nil || !strings.Contains(err.Error(), `no manifest generator is wired for workload template "pathways-jobset.tmpl"`) {
+		t.Errorf("unknown template name: error = %v, want internal error naming the template", err)
+	}
+}
+
+// TestGeneratePathwaysManifest_PodFailurePolicyScopingByMode pins podFailurePolicyContainers on the Pathways head:
+// scoped to workload-container when the head runs the workload, pod-wide (no containerName) for headless and SPS
+// heads that have no workload container, and valid in every mode.
+func TestGeneratePathwaysManifest_PodFailurePolicyScopingByMode(t *testing.T) {
+	orc := newCustomTemplateTestOrc(t, "")
+	_, profile := newCustomTemplateBaseOpts()
+	for _, tc := range []struct {
+		mode          string
+		headless      bool
+		deploySPS     bool
+		wantContainer []string // nil = pod-wide rule
+	}{
+		{mode: "default", wantContainer: []string{"workload-container"}},
+		{mode: "headless", headless: true},
+		{mode: "sps", deploySPS: true},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			job := newCPUPathwaysJob("pw-pfp-" + tc.mode)
+			job.RestartOnExitCodes = []int{143, 42}
+			job.Pathways.Headless = tc.headless
+			job.Pathways.DeploySPS = tc.deploySPS
+			manifest, err := orc.GeneratePathwaysManifest(job, "img:v1", profile, false, false)
+			if err != nil {
+				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+			}
+			if err := ValidateJobSetManifest(manifest); err != nil {
+				t.Fatalf("ValidateJobSetManifest failed: %v\n%s", err, manifest)
+			}
+			_, templates := parseStrictJobSetTemplates(t, manifest)
+			head := templates["pathways-head"]
+			if head.Spec.PodFailurePolicy == nil || len(head.Spec.PodFailurePolicy.Rules) != 1 {
+				t.Fatalf("pathways-head podFailurePolicy = %+v, want exactly one rule", head.Spec.PodFailurePolicy)
+			}
+			assertPodFailurePolicyContainers(t, head.Spec.PodFailurePolicy, tc.wantContainer)
+			if worker := templates["worker"]; worker.Spec.PodFailurePolicy != nil {
+				t.Errorf("worker replicatedJob must not carry a podFailurePolicy, got %+v", worker.Spec.PodFailurePolicy)
+			}
+		})
+	}
+}
+
+func TestCustomTemplateLoading_MalformedBaseFailsFast(t *testing.T) {
+	baseOpts, profile := newCustomTemplateBaseOpts()
+	customDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(customDir, "base.tmpl"), []byte(`{{- define "broken" }}{{ .Unclosed`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	orc := newCustomTemplateTestOrc(t, customDir)
+	const wantErr = "failed to parse custom base.tmpl"
+
+	if _, err := orc.GenerateGKEManifest(baseOpts, profile); err == nil || !strings.Contains(err.Error(), wantErr) {
+		t.Errorf("GenerateGKEManifest error = %v, want substring %q", err, wantErr)
+	}
+	if _, err := orc.GenerateJobManifest(baseOpts, profile); err == nil || !strings.Contains(err.Error(), wantErr) {
+		t.Errorf("GenerateJobManifest error = %v, want substring %q", err, wantErr)
+	}
+	pwJob := newCPUPathwaysJob("pw-broken")
+	if _, err := orc.GeneratePathwaysManifest(pwJob, "img:latest", profile, false, false); err == nil || !strings.Contains(err.Error(), wantErr) {
+		t.Errorf("GeneratePathwaysManifest error = %v, want substring %q", err, wantErr)
+	}
+}
+
+func TestCustomTemplateLoading_RenderBlockErrors(t *testing.T) {
+	_, blocks, err := k8s.LoadWorkloadTemplate("", "jobset.tmpl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := jobSetTemplateData{WorkloadName: "zero-job", baseBlocks: blocks}
+	rendered, err := data.RenderBlock("workload_labels", 2)
+	if err != nil || !strings.Contains(rendered, "  gcluster.google.com/workload: zero-job") {
+		t.Fatalf("RenderBlock(workload_labels) = (%q, %v)", rendered, err)
+	}
+	_, err = data.RenderBlock("does_not_exist", 2)
+	if err == nil || !strings.Contains(err.Error(), "does_not_exist") || !strings.Contains(err.Error(), "workload_labels") {
+		t.Errorf("expected unknown block error mentioning block name and available blocks, got: %v", err)
+	}
+	data.PriorityClassName = "high\n  hostPID: true"
+	if _, err := data.RenderBlock("pod_auth_and_priority", 2); err == nil || !strings.Contains(err.Error(), "pod_auth_and_priority") {
+		t.Errorf("expected YAML injection inside a block to fail naming the block, got: %v", err)
+	}
+}
+
+func TestCustomTemplateLoading_PartialBaseBlockAndCommentsCRLF(t *testing.T) {
+	baseOpts, profile := newCustomTemplateBaseOpts()
+	customDir := t.TempDir()
+	partialBaseCRLF := strings.Join([]string{
+		"# Team-wide custom workload_labels override",
+		"{{- define \"workload_labels\" -}}",
+		"gcluster.google.com/workload: {{.WorkloadName}}",
+		"example.com/team: platform",
+		"{{- end -}}",
+		"# Trailing comment outside define blocks",
+		"",
+	}, "\r\n")
+	if err := os.WriteFile(filepath.Join(customDir, "base.tmpl"), []byte(partialBaseCRLF), 0644); err != nil {
+		t.Fatal(err)
+	}
+	orc := newCustomTemplateTestOrc(t, customDir)
+
+	pwJob := newCPUPathwaysJob("custom-tmpl-pw")
+
+	for name, gen := range map[string]func() (string, error){
+		"job":      func() (string, error) { return orc.GenerateJobManifest(baseOpts, profile) },
+		"jobset":   func() (string, error) { return orc.GenerateGKEManifest(baseOpts, profile) },
+		"pathways": func() (string, error) { return orc.GeneratePathwaysManifest(pwJob, "img:v1", profile, false, false) },
+	} {
+		manifest, err := gen()
+		if err != nil {
+			t.Fatalf("%s manifest generation failed with partial CRLF base.tmpl: %v", name, err)
+		}
+		if strings.Contains(manifest, "\r") || strings.Contains(manifest, "Team-wide custom") {
+			t.Errorf("%s manifest leaked CRLF or top-level base.tmpl comment:\n%s", name, manifest)
+		}
+		if !strings.Contains(manifest, "example.com/team: platform") {
+			t.Errorf("%s manifest missing custom workload_labels:\n%s", name, manifest)
+		}
+	}
+
+	badPathOrc := newCustomTemplateTestOrc(t, filepath.Join(customDir, "does-not-exist"))
+	if _, err := badPathOrc.GenerateGKEManifest(baseOpts, profile); err == nil || !strings.Contains(err.Error(), "--gke-custom-templates-path") {
+		t.Errorf("expected manifest generation to fail when gkeCustomTemplatesPath does not exist, got: %v", err)
+	}
+}
+
+// TestCustomTemplateLoading_LegacyJobSetTemplate renders the pre-refactor jobset.tmpl (the file users extracted
+// before base.tmpl existed, kept verbatim under testdata/) through the current PrepareManifestOptions pipeline with
+// a job that exercises every template input, and checks the result still validates.
+func TestCustomTemplateLoading_LegacyJobSetTemplate(t *testing.T) {
+	legacyJobSet, err := os.ReadFile(filepath.Join("testdata", "legacy_jobset.tmpl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(legacyJobSet, []byte(".RenderBlock")) {
+		t.Fatal("testdata/legacy_jobset.tmpl must be the pre-base.tmpl template and not reference .RenderBlock")
+	}
+	customDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(customDir, "jobset.tmpl"), legacyJobSet, 0644); err != nil {
+		t.Fatal(err)
+	}
+	orc := newGPUDerivationTestOrc(t)
+	orc.gkeCustomTemplatesPath = customDir
+	jobDef := gpuDerivationJobDef("legacy-gpu-job")
+
+	profile, isDyn, isStat, err := orc.resolveHardwareRequirements(&jobDef)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	opts, err := orc.PrepareManifestOptions(jobDef, "registry.local/trainer:v1", profile, isDyn, isStat)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("legacy custom jobset.tmpl failed to render: %v", err)
+	}
+	if err := ValidateJobSetManifest(manifest); err != nil {
+		t.Fatalf("legacy manifest failed validation: %v\n%s", err, manifest)
+	}
+	assertLegacyJobSetRendersAllInputs(t, manifest, "legacy-gpu-job")
+}
+
+func assertLegacyJobSetRendersAllInputs(t *testing.T, manifest, workloadName string) {
+	t.Helper()
+	labels, templates := parseStrictJobSetTemplates(t, manifest)
+	if labels["kueue.x-k8s.io/queue-name"] != "user-queue" || labels["managed-mldiagnostics-gke"] != "true" {
+		t.Errorf("unexpected legacy JobSet labels: %+v", labels)
+	}
+	mainJob := templates["main-job"]
+	if mainJob.Spec.PodFailurePolicy == nil || len(mainJob.Spec.PodFailurePolicy.Rules) != 1 {
+		t.Fatalf("expected one podFailurePolicy rule, got %+v", mainJob.Spec.PodFailurePolicy)
+	}
+	if diff := cmp.Diff([]int32{137, 143}, mainJob.Spec.PodFailurePolicy.Rules[0].OnExitCodes.Values); diff != "" {
+		t.Errorf("podFailurePolicy exit codes mismatch (-want +got):\n%s", diff)
+	}
+	podSpec := mainJob.Spec.Template.Spec
+	if podSpec.PriorityClassName != "high" || podSpec.ServiceAccountName != "workload-ksa" || len(podSpec.ImagePullSecrets) != 2 {
+		t.Errorf("legacy pod auth mismatch: priorityClassName=%q serviceAccountName=%q imagePullSecrets=%+v", podSpec.PriorityClassName, podSpec.ServiceAccountName, podSpec.ImagePullSecrets)
+	}
+	if podSpec.NodeSelector["team"] != "ml" || len(podSpec.Tolerations) == 0 || len(podSpec.SchedulingGates) == 0 {
+		t.Errorf("legacy pod placement mismatch: nodeSelector=%+v tolerations=%+v schedulingGates=%+v", podSpec.NodeSelector, podSpec.Tolerations, podSpec.SchedulingGates)
+	}
+	coordHost := fmt.Sprintf("%s-main-job-0-0.%s", workloadName, workloadName)
+	assertContainerEnvMap(t, podSpec.Containers[0], map[string]string{
+		"MASTER_ADDR":        coordHost,
+		"NCCL_DEBUG":         "INFO",
+		"USER_VAR":           "hello",
+		"WORKERS_0_HOSTNAME": coordHost,
+	})
+	assertContainerHasMount(t, podSpec.Containers[0], "/mnt/shared", true)
+	assertContainerHasMount(t, podSpec.Containers[0], "/tmp/mtc", false)
+}
+
+func TestCustomTemplateValidation_PodFailurePolicyAndTemplatePathErrors(t *testing.T) {
+	customDir := t.TempDir()
+	renamedContainerBase := `{{- define "pod_template" -}}
+metadata:
+  labels:
+    gcluster.google.com/workload: {{.WorkloadName}}
+spec:
+  restartPolicy: Never
+  containers:
+  - name: custom-trainer
+    image: {{.FullImageName}}
+{{- end -}}
+`
+	if err := os.WriteFile(filepath.Join(customDir, "base.tmpl"), []byte(renamedContainerBase), 0644); err != nil {
+		t.Fatal(err)
+	}
+	orc := newCustomTemplateTestOrc(t, customDir)
+	baseOpts, profile := newCustomTemplateBaseOpts()
+	unscopedJob := orchestrator.JobDefinition{
+		WorkloadName:       baseOpts.WorkloadName,
+		CommandToRun:       baseOpts.CommandToRun,
+		ComputeType:        baseOpts.ComputeType,
+		MachineType:        baseOpts.MachineType,
+		ClusterLocation:    baseOpts.ClusterLocation,
+		NumSlices:          1,
+		NodesPerSlice:      1,
+		RestartOnExitCodes: []int{42},
+	}
+	unscopedOpts, err := orc.PrepareManifestOptions(unscopedJob, baseOpts.FullImageName, profile, false, false)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+	// --restart-on-exit-codes is always scoped to the workload container(s), so a custom template that renames
+	// the container fails fast at preflight with an actionable hint rather than silently changing semantics.
+	_, err = orc.GenerateGKEManifest(unscopedOpts, profile)
+	if err == nil || !strings.Contains(err.Error(), `containerName "workload-container"`) || !strings.Contains(err.Error(), "keep the \"workload-container\" name prefix") {
+		t.Errorf("expected PodFailurePolicy missing-container error with rename hint for renamed container, got: %v", err)
+	}
+
+	noPFPJob := unscopedJob
+	noPFPJob.RestartOnExitCodes = nil
+	noPFPOpts, err := orc.PrepareManifestOptions(noPFPJob, baseOpts.FullImageName, profile, false, false)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+	if _, err := orc.GenerateGKEManifest(noPFPOpts, profile); err != nil {
+		t.Fatalf("renamed custom container template must succeed without --restart-on-exit-codes: %v", err)
+	}
+
+	// Rules without onExitCodes (e.g. onPodConditions) carry no container reference to validate.
+	podConditionsManifest := `apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pod-conditions-pfp
+spec:
+  podFailurePolicy:
+    rules:
+    - action: Ignore
+      onPodConditions:
+      - type: DisruptionTarget
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: workload-container
+        image: busybox
+`
+	if err := ValidateJobSetManifest(podConditionsManifest); err != nil {
+		t.Errorf("expected ValidateJobSetManifest to accept onPodConditions rules, got: %v", err)
+	}
+}
+
+// TestRenderBlock_RecursiveOverrideFailsFast pins that a custom base.tmpl block which calls .RenderBlock on itself
+// returns an error instead of deadlocking on safetext's per-template execution lock, and that the same block can
+// still be rendered more than once sequentially.
+func TestRenderBlock_RecursiveOverrideFailsFast(t *testing.T) {
+	baseOpts, profile := newCustomTemplateBaseOpts()
+	customDir := t.TempDir()
+	recursiveBase := "{{- define \"workload_labels\" -}}\n{{(StructuralData (.RenderBlock \"workload_labels\" 0))}}\n{{- end -}}\n"
+	if err := os.WriteFile(filepath.Join(customDir, "base.tmpl"), []byte(recursiveBase), 0644); err != nil {
+		t.Fatal(err)
+	}
+	orc := newCustomTemplateTestOrc(t, customDir)
+	done := make(chan error, 1)
+	go func() {
+		_, err := orc.GenerateGKEManifest(baseOpts, profile)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), `block "workload_labels" renders itself`) {
+			t.Fatalf("expected recursive .RenderBlock error, got: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("GenerateGKEManifest hung on a recursive .RenderBlock override instead of returning an error")
+	}
+
+	// Sequential reuse of one block (jobset.tmpl renders workload_labels once per JobSet; job.tmpl once per Job)
+	// must keep working: render the embedded defaults twice with the same orchestrator.
+	orc = newCustomTemplateTestOrc(t, "")
+	for i := 0; i < 2; i++ {
+		if _, err := orc.GenerateGKEManifest(baseOpts, profile); err != nil {
+			t.Fatalf("render %d with embedded defaults failed: %v", i+1, err)
+		}
 	}
 }

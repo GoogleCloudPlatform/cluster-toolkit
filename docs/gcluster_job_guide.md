@@ -436,7 +436,7 @@ Use `--placement-policy` to name an existing GCE compact placement policy or wor
 A4X (`gb200-4`) and multi-host TPU 7x nodes require a `HIGH_THROUGHPUT` workload policy. When `--placement-policy` is omitted for these machine types, gcluster uses the policy attached to the matching node pool; under NAP it looks up, and if needed creates, the canonical policy (`gb200-4-1x72-placement-policy`, `tpu7x-<cores>-<topology>-placement-policy`) in the cluster's region.
 
 **Example 5: Pod Failure Policy**
-Use `--restart-on-exit-codes` to specify the allowlist of retriable container exit codes (`PodFailurePolicy` with `action: FailJob` on `NotIn`). Any non-zero exit code *not* in the list fails the JobSet immediately, whereas exit codes in the list allow the job to restart up to the `--restarts` budget.
+Use `--restart-on-exit-codes` to specify the allowlist of retriable container exit codes (`PodFailurePolicy` with `action: FailJob` on `NotIn`). Any non-zero exit code *not* in the list from the workload container fails the JobSet immediately, whereas exit codes in the list allow the job to restart up to the `--restarts` budget. The rules are always scoped to the workload container(s) (`workload-container`, or `workload-container-<n>` with parallel containers), so the exit code of a sidecar (ML Diagnostics, Cloud Storage FUSE, MTC, Pathways `pathways-rm`/`pathways-proxy`, a sidecar added in a custom `base.tmpl`, or one injected by a cluster webhook) never decides the outcome. A custom template must therefore keep the `workload-container` name prefix when this flag is used; otherwise `gcluster` fails fast before applying the manifest.
 
 ```bash
 ./gcluster job submit \
@@ -1214,7 +1214,14 @@ Extracted templates match the gcluster version that extracted them. After upgrad
 
 #### 2. Modify the templates
 
-Open the extracted `.tmpl` files in your preferred editor. These are standard Go text templates (`text/template` and `yamltemplate`). You can inject any static Kubernetes YAML or modify the existing template variables.
+Open the extracted `.tmpl` files in your preferred editor. Workload manifests are composed from the following templates (`yamltemplate`):
+
+* `jobset.tmpl`: Standard (non-Pathways) `JobSet` wrapper used by `gcluster job submit`. Delegates shared labels, network settings, and `pod_template` to `base.tmpl`.
+* `pathways_jobset.tmpl`: Pathways (`--pathways`) `JobSet` manifest. Defines `pathways-head` and `worker` pod specs inline while reusing `workload_labels`, `jobset_network`, `pod_auth_and_priority`, and `pod_placement` from `base.tmpl`.
+* `base.tmpl`: Shared named `{{- define "<block>" -}}` blocks rendered at a target YAML column width via `{{(StructuralData (.RenderBlock "<block>" <indent>))}}`. To add custom sidecars, pod annotations, or volumes to standard workloads, edit `pod_template` in `base.tmpl`.
+* `job.tmpl`: Standalone `batch/v1` Indexed `Job` and headless `Service` template (reserved for upcoming single-slice `Job` support; `gcluster job submit` does not render `job.tmpl` yet).
+* `filestore.tmpl` & `gcs_fuse_pv_pvc.tmpl`: Storage templates used when provisioning Filestore and Cloud Storage FUSE storage-profile `PersistentVolume` / `PersistentVolumeClaim` resources.
+* `local_queue.tmpl` & `priority_classes.tmpl`: Kueue templates used when bootstrapping default `LocalQueue` and `PriorityClass` resources.
 
 > [!NOTE]
 > `gcluster job logs --main-only` lets `kubectl` choose which container to read: the one named by the pod-template annotation `kubectl.kubernetes.io/default-container`, otherwise the first entry in `containers` (kubectl 1.24 or later; older versions require the annotation when there are several containers). Set this annotation if your template lists a regular (non-native) sidecar before your workload container.
@@ -1230,7 +1237,7 @@ Pass the `--gke-custom-templates-path` flag to the `submit` command:
 ```
 
 > [!TIP]
-> If a template file (e.g., `jobset.tmpl`) is not found in your custom directory, `gcluster` will automatically fall back to using its embedded default version for that specific file.
+> If a template file (e.g., `jobset.tmpl` or `base.tmpl`) or a specific block in `base.tmpl` is omitted from your custom directory, `gcluster` automatically falls back to its embedded default—so you can place only `base.tmpl` (or only the single `define` block you want to override) in `--gke-custom-templates-path`. Two caveats: features and overrides in `base.tmpl` only take effect when the workload template being rendered calls `.RenderBlock` (a `jobset.tmpl` or `pathways_jobset.tmpl` extracted from an older release does not, and `gcluster` warns whenever a custom workload template omits `.RenderBlock`), and an override whose body is empty (only whitespace or comments) does not replace the embedded block. To suppress an optional `with`-guarded block (`pod_auth_and_priority` or `pod_placement`) in `base.tmpl`, define it with an empty string action (`{{- define "pod_auth_and_priority" -}}{{""}}{{- end -}}`); to drop any other block entirely, override `jobset.tmpl` or `pathways_jobset.tmpl` and remove its `.RenderBlock` call.
 
 ## 9. `gcluster job` Command Reference
 
@@ -1348,7 +1355,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--enable-ml-diagnostics` | `bool` | Enables ML Diagnostics for the workload by adding the `managed-mldiagnostics-gke: "true"` label to the JobSet. Requires the target GKE cluster to have ML Diagnostics enabled (`gke-cluster` setting `enable_ml_diagnostics: true`). |
 | `--gke-ttl-after-finished` | `string` | Time duration to retain the JobSet resources after completion (Default: `1h`). |
 | `--placement-policy` | `string` | Name of an existing GCE compact placement or workload policy; the job is pinned to nodes carrying it via `cloud.google.com/placement-policy-name`. Auto-resolved for A4X and multi-host TPU 7x when omitted. |
-| `--restart-on-exit-codes` | `string` | Comma-separated allowlist of retriable container exit codes (`1..255`). Exit codes in this list allow the job to restart up to `--restarts`, while any other non-zero exit code fails the job immediately (`action: FailJob` on `NotIn`). |
+| `--restart-on-exit-codes` | `string` | Comma-separated allowlist of retriable container exit codes (`1..255`). Exit codes in this list allow the job to restart up to `--restarts`, while any other non-zero exit code from the workload container fails the job immediately (`action: FailJob` on `NotIn`, always scoped to the `workload-container` container(s); sidecar exit codes are never evaluated). |
 | `--gke-scheduler` | `string` | Specific GKE scheduler selection (e.g., `gke.io/topology-aware-auto`). |
 | `--image-pull-secret` | `string` | Comma-separated secret names for pulling images from private registries. When omitted, matching `kubernetes.io/dockerconfigjson` secrets in the target namespace are attached; `--image-pull-secret=""` attaches none. See [Example 6](#61-run-with-advanced-scheduling-flags). |
 | `--service-account` | `string` | Kubernetes service account name used to provide fine-grained IAM roles to the job pods. |
