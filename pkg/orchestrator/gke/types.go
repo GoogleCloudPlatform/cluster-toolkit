@@ -27,10 +27,12 @@ import (
 	"time"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
+	"github.com/google/safetext/yamltemplate"
 	crm "google.golang.org/api/cloudresourcemanager/v1"
 	compute "google.golang.org/api/compute/v1"
 	iamapi "google.golang.org/api/iam/v1"
 	gcs "google.golang.org/api/storage/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -152,7 +154,7 @@ type KubeClient interface {
 	ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error)
 	GetCurrentNamespace(clusterName, location, projectID string) (string, error)
 	// An empty namespace means cluster-scoped.
-	ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error)
+	ListResources(gvr schema.GroupVersionResource, namespace, labelSelector, fieldSelector string) ([]unstructured.Unstructured, error)
 	GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error)
 	// A nil pre deletes unconditionally.
 	DeleteResource(gvr schema.GroupVersionResource, namespace, name string, pre *metav1.Preconditions) error
@@ -684,6 +686,18 @@ type jobSetTemplateData struct {
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
 	MLDiagnosticsEnabled          bool
+	Subdomain                     string
+	baseBlocks                    map[string]*yamltemplate.Template
+}
+
+type jobSetValidationSpec struct {
+	metav1.TypeMeta `json:",inline"`
+	Spec            struct {
+		ReplicatedJobs []struct {
+			Name     string                  `json:"name"`
+			Template batchv1.JobTemplateSpec `json:"template"`
+		} `json:"replicatedJobs"`
+	} `json:"spec"`
 }
 
 // Types for parsing kubectl get nodes -o json
@@ -843,4 +857,58 @@ func isPermissionDenied(errStr string) bool {
 		strings.Contains(lower, "permission_denied") ||
 		strings.Contains(lower, "required 'compute.") ||
 		(strings.Contains(lower, "403") && strings.Contains(lower, "forbidden"))
+}
+
+// spsInstanceSummary is what `gcluster job inspect --name <instance> --filter=pathways-sps` writes.
+type spsInstanceSummary struct {
+	Name          string
+	Namespace     string
+	Status        string
+	InstanceType  string // pathways-rm --instance_type, e.g. tpuv6e:2x4
+	InstanceCount int    // pathways-rm --instance_count
+	ReadySlices   string // e.g. "1/1"; empty until pathways-rm logs or JobSet status reports ready slices
+	ServerImage   string
+	SidecarImage  string // empty when the workers run no colocated Python sidecar
+	SidecarName   string // sidecar container name on worker pods
+	SidecarPython string // from running sidecar container or image tag
+	SidecarJAX    string // from running sidecar container or image tag
+}
+
+type spsContainerView struct {
+	Name  string   `json:"name"`
+	Image string   `json:"image"`
+	Args  []string `json:"args"`
+}
+
+type spsPodSpecView struct {
+	InitContainers []spsContainerView `json:"initContainers"`
+	Containers     []spsContainerView `json:"containers"`
+}
+
+type spsJobSetView struct {
+	Spec struct {
+		Suspend        bool `json:"suspend"`
+		ReplicatedJobs []struct {
+			Name     string `json:"name"`
+			Replicas int    `json:"replicas"`
+			Template struct {
+				Spec struct {
+					Template struct {
+						Spec spsPodSpecView `json:"spec"`
+					} `json:"template"`
+				} `json:"spec"`
+			} `json:"template"`
+		} `json:"replicatedJobs"`
+	} `json:"spec"`
+	Status struct {
+		TerminalState string `json:"terminalState"`
+		Conditions    []struct {
+			Type   string `json:"type"`
+			Status string `json:"status"`
+		} `json:"conditions"`
+		ReplicatedJobsStatus []struct {
+			Name  string `json:"name"`
+			Ready int    `json:"ready"`
+		} `json:"replicatedJobsStatus"`
+	} `json:"status"`
 }

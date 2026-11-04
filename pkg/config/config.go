@@ -44,7 +44,7 @@ import (
 
 const (
 	maxHintDist          int = 3 // Maximum Levenshtein distance where we suggest a hint
-	latestToolkitVersion     = "v1.107.0"
+	latestToolkitVersion     = "v1.108.0"
 	// SharedModulesDirName is the name of the shared directory for embedded modules
 	SharedModulesDirName = "_modules"
 )
@@ -260,12 +260,13 @@ type ModuleIDs []ModuleID
 
 // Module stores YAML definition of an HPC cluster component defined in a blueprint
 type Module struct {
-	Source   string
-	Kind     ModuleKind
-	ID       ModuleID
-	Use      ModuleIDs                 `yaml:"use,omitempty"`
-	Outputs  []modulereader.OutputInfo `yaml:"outputs,omitempty"`
-	Settings Dict                      `yaml:"settings,omitempty"`
+	Source             string
+	Kind               ModuleKind
+	ID                 ModuleID
+	Use                ModuleIDs                 `yaml:"use,omitempty"`
+	Outputs            []modulereader.OutputInfo `yaml:"outputs,omitempty"`
+	Settings           Dict                      `yaml:"settings,omitempty"`
+	ReconfigureIgnores map[string][]string       `yaml:"reconfigure_ignores,omitempty"`
 	// DEPRECATED fields, keep in the struct for backwards compatibility
 	RequiredApis     interface{} `yaml:"required_apis,omitempty"`
 	WrapSettingsWith interface{} `yaml:"wrapsettingswith,omitempty"`
@@ -276,6 +277,12 @@ func (m *Module) Clone() Module {
 	// copy slices
 	c.Use = slices.Clone(m.Use)
 	c.Outputs = slices.Clone(m.Outputs)
+	if m.ReconfigureIgnores != nil {
+		c.ReconfigureIgnores = make(map[string][]string, len(m.ReconfigureIgnores))
+		for k, v := range m.ReconfigureIgnores {
+			c.ReconfigureIgnores[k] = slices.Clone(v)
+		}
+	}
 	return c
 }
 
@@ -393,6 +400,7 @@ func (bp *Blueprint) visitDicts(cb func(dictPath, *Dict)) {
 
 // DeploymentSettings are deployment-specific override settings
 type DeploymentSettings struct {
+	AIAssisted               bool             `yaml:"ai_assisted,omitempty"`
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults,omitempty"`
 	Vars                     Dict
 }

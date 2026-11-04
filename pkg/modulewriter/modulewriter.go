@@ -22,6 +22,7 @@ import (
 	"crypto/md5"
 	"embed"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
@@ -32,9 +33,15 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
+	"sort"
+	"strings"
 	"text/template"
 
 	"github.com/hashicorp/go-getter"
+	"github.com/hashicorp/hcl/v2/hclparse"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/otiai10/copy"
 	"github.com/zclconf/go-cty/cty"
 )
@@ -85,6 +92,10 @@ func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
 
 	// TODO: probably not a right place to do "materialize". Consider bubbling it up.
 	if err := bp.Materialize(); err != nil {
+		return err
+	}
+
+	if err := validateModuleIgnores(bp); err != nil {
 		return err
 	}
 
@@ -154,6 +165,81 @@ func copySharedEmbeddedModules(bp config.Blueprint, deploymentDir string) error 
 			}
 			if err := copyModuleSource(dep, dst); err != nil {
 				return err
+			}
+		}
+	}
+
+	return writeSharedEmbeddedOverrides(bp, deploymentDir)
+}
+
+func validateTargetExistence(source string, reconfigIgnores map[string][]string, discovered map[string][]string) error {
+	for target := range reconfigIgnores {
+		if strings.Contains(target, ".") {
+			parts := strings.SplitN(target, ".", 2)
+			rType, rName := parts[0], parts[1]
+			names, ok := discovered[rType]
+			if !ok || !slices.Contains(names, rName) {
+				return formatTargetNotFoundError(target, source, discovered)
+			}
+		} else {
+			names, ok := discovered[target]
+			if !ok || len(names) == 0 {
+				return formatTargetNotFoundError(target, source, discovered)
+			}
+		}
+	}
+	return nil
+}
+
+func validateSingleModuleIgnores(mod config.Module) error {
+	if len(mod.ReconfigureIgnores) == 0 {
+		return nil
+	}
+	if mod.Kind != config.TerraformKind {
+		return fmt.Errorf("module %q specifies reconfigure_ignores, which is only supported for terraform modules (got kind %q)", mod.ID, mod.Kind)
+	}
+	if sourcereader.IsRemotePath(mod.Source) {
+		return fmt.Errorf("module %q specifies reconfigure_ignores, but uses a remote source %q: "+
+			"reconfigure_ignores is currently only supported on local and embedded modules", mod.ID, mod.Source)
+	}
+	for target, ignores := range mod.ReconfigureIgnores {
+		if slices.Contains(ignores, "all") {
+			return fmt.Errorf("reconfigure_ignores target %q specifies %q; ignoring \"all\" changes is not supported, please specify individual attribute names", target, "all")
+		}
+	}
+	discovered, err := findModuleResources(mod.Source)
+	if err != nil {
+		return fmt.Errorf("failed to discover resources in module %q (%s): %w", mod.ID, mod.Source, err)
+	}
+	return validateTargetExistence(mod.Source, mod.ReconfigureIgnores, discovered)
+}
+
+func validateModuleIgnores(bp config.Blueprint) error {
+	for _, g := range bp.Groups {
+		for _, mod := range g.Modules {
+			if err := validateSingleModuleIgnores(mod); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func writeSharedEmbeddedOverrides(bp config.Blueprint, deploymentDir string) error {
+	for _, g := range bp.Groups {
+		for _, mod := range g.Modules {
+			if mod.Kind == config.TerraformKind && sourcereader.IsEmbeddedPath(mod.Source) && len(mod.ReconfigureIgnores) > 0 {
+				instanceSrc := fmt.Sprintf("%s-%s", mod.Source, mod.ID)
+				dst := filepath.Join(deploymentDir, config.SharedModulesDirName, "embedded", instanceSrc)
+				if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+					return err
+				}
+				if err := copyModuleSource(mod.Source, dst); err != nil {
+					return err
+				}
+				if err := writeModuleReconfigureOverrides(dst, mod.ReconfigureIgnores); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -300,10 +386,17 @@ func DeploymentSource(mod config.Module) (string, error) {
 func tfDeploymentSource(mod config.Module) (string, error) {
 	switch {
 	case sourcereader.IsEmbeddedPath(mod.Source):
-		return "../" + config.SharedModulesDirName + "/" + filepath.ToSlash(filepath.Join("embedded", mod.Source)), nil
+		srcPath := mod.Source
+		if len(mod.ReconfigureIgnores) > 0 {
+			srcPath = fmt.Sprintf("%s-%s", mod.Source, mod.ID)
+		}
+		return "../" + config.SharedModulesDirName + "/" + filepath.ToSlash(filepath.Join("embedded", srcPath)), nil
 	case sourcereader.IsLocalPath(mod.Source):
 		clean := filepath.Clean(mod.Source)
 		base := filepath.Base(clean)
+		if len(mod.ReconfigureIgnores) > 0 {
+			return fmt.Sprintf("./modules/%s-%s-%s", base, mod.ID, shortHash(clean)), nil
+		}
 		return fmt.Sprintf("./modules/%s-%s", base, shortHash(clean)), nil
 	default:
 		return mod.Source, nil
@@ -346,32 +439,275 @@ func copyModuleSource(src, dst string) error {
 	return nil
 }
 
-func copyNonEmbeddedModules(gPath string, modules []config.Module) error {
-	for iMod := range modules {
-		mod := &modules[iMod]
-		if mod.Kind == config.TerraformKind {
-			if sourcereader.IsEmbeddedPath(mod.Source) || sourcereader.IsRemotePath(mod.Source) {
-				continue
-			}
-		}
+func findModuleResources(source string) (map[string][]string, error) {
+	resources := make(map[string][]string)
+	mod, err := modulereader.LoadTFConfigModule(source)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load terraform module at %s: %w", source, err)
+	}
+	if mod == nil {
+		return nil, fmt.Errorf("source is not a terraform module: %s", source)
+	}
 
-		var src, dst string
-		if sourcereader.IsRemotePath(mod.Source) && mod.Kind == config.PackerKind {
-			src, _ = getter.SourceDirSubdir(mod.Source)
-			dst = filepath.Join(gPath, string(mod.ID))
-		} else {
-			deplSource, err := DeploymentSource(*mod)
-			if err != nil {
-				return err
-			}
-			src = mod.Source
-			dst = filepath.Join(gPath, deplSource)
-		}
+	for _, res := range mod.ManagedResources {
+		resources[res.Type] = append(resources[res.Type], res.Name)
+	}
+	return resources, nil
+}
 
-		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+type tfLifecycleOverride struct {
+	IgnoreChanges []string `json:"ignore_changes"`
+}
+
+type tfResourceOverride struct {
+	Lifecycle tfLifecycleOverride `json:"lifecycle"`
+}
+
+type tfOverrideFile struct {
+	Resource map[string]map[string]tfResourceOverride `json:"resource"`
+}
+
+var quoteIndexRe = regexp.MustCompile(`\[\s*['"]([^'"]*)['"]\s*\]`)
+
+func normalizeIgnoreAttribute(attr string) string {
+	return quoteIndexRe.ReplaceAllString(attr, `["$1"]`)
+}
+
+func mergeIgnores(existing, additions []string) []string {
+	seen := make(map[string]bool)
+	var merged []string
+	for _, item := range existing {
+		norm := normalizeIgnoreAttribute(item)
+		if !seen[norm] {
+			seen[norm] = true
+			merged = append(merged, norm)
+		}
+	}
+	for _, item := range additions {
+		norm := normalizeIgnoreAttribute(item)
+		if !seen[norm] {
+			seen[norm] = true
+			merged = append(merged, norm)
+		}
+	}
+	return merged
+}
+
+func parseExistingModuleIgnores(moduleDir string) (map[string]map[string][]string, error) {
+	existing := make(map[string]map[string][]string)
+	entries, err := os.ReadDir(moduleDir)
+	if err != nil {
+		return nil, err
+	}
+
+	parser := hclparse.NewParser()
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tf") || strings.HasSuffix(entry.Name(), "override.tf") {
+			continue
+		}
+		filePath := filepath.Join(moduleDir, entry.Name())
+		f, diags := parser.ParseHCLFile(filePath)
+		if diags.HasErrors() || f == nil {
+			continue
+		}
+		body, ok := f.Body.(*hclsyntax.Body)
+		if !ok {
+			continue
+		}
+		for _, block := range body.Blocks {
+			extractResourceIgnores(block, f.Bytes, existing)
+		}
+	}
+	return existing, nil
+}
+
+func parseLifecycleAttribute(attr *hclsyntax.Attribute, src []byte) []string {
+	if scope, ok := attr.Expr.(*hclsyntax.ScopeTraversalExpr); ok && scope.Traversal.RootName() == "all" {
+		return []string{"all"}
+	}
+	tuple, ok := attr.Expr.(*hclsyntax.TupleConsExpr)
+	if !ok {
+		return nil
+	}
+	var list []string
+	for _, elem := range tuple.Exprs {
+		list = append(list, string(elem.Range().SliceBytes(src)))
+	}
+	return list
+}
+
+func extractResourceIgnores(block *hclsyntax.Block, src []byte, existing map[string]map[string][]string) {
+	if block.Type != "resource" || len(block.Labels) < 2 {
+		return
+	}
+	rType, rName := block.Labels[0], block.Labels[1]
+	for _, sub := range block.Body.Blocks {
+		if sub.Type != "lifecycle" {
+			continue
+		}
+		attr, ok := sub.Body.Attributes["ignore_changes"]
+		if !ok {
+			continue
+		}
+		list := parseLifecycleAttribute(attr, src)
+		if len(list) > 0 {
+			if existing[rType] == nil {
+				existing[rType] = make(map[string][]string)
+			}
+			existing[rType][rName] = list
+		}
+	}
+}
+
+func formatTargetNotFoundError(target, moduleDir string, discovered map[string][]string) error {
+	var available []string
+	for rType, names := range discovered {
+		for _, rName := range names {
+			available = append(available, fmt.Sprintf("%s.%s", rType, rName))
+		}
+	}
+	sort.Strings(available)
+	if len(available) > 0 {
+		return fmt.Errorf("reconfigure_ignores target %q was not found in module %s. Available resources in this module: %s",
+			target, moduleDir, strings.Join(available, ", "))
+	}
+	return fmt.Errorf("reconfigure_ignores target %q was not found in module %s", target, moduleDir)
+}
+
+func setResourceOverride(override tfOverrideFile, existingIgnores map[string]map[string][]string, rType, rName string, ignores []string) {
+	if slices.Contains(existingIgnores[rType][rName], "all") {
+		return
+	}
+	if override.Resource[rType] == nil {
+		override.Resource[rType] = make(map[string]tfResourceOverride)
+	}
+	current := existingIgnores[rType][rName]
+	if prev, ok := override.Resource[rType][rName]; ok {
+		current = prev.Lifecycle.IgnoreChanges
+	}
+	finalIgnores := mergeIgnores(current, ignores)
+	sort.Strings(finalIgnores)
+	override.Resource[rType][rName] = tfResourceOverride{
+		Lifecycle: tfLifecycleOverride{IgnoreChanges: finalIgnores},
+	}
+}
+
+func applyTargetOverrides(override tfOverrideFile, discovered map[string][]string, existingIgnores map[string]map[string][]string, target string, ignores []string, moduleDir string) error {
+	if len(ignores) == 0 {
+		return nil
+	}
+	if slices.Contains(ignores, "all") {
+		return fmt.Errorf("reconfigure_ignores target %q specifies %q; ignoring \"all\" changes is not supported, please specify individual attribute names", target, "all")
+	}
+
+	if strings.Contains(target, ".") {
+		parts := strings.SplitN(target, ".", 2)
+		rType, rName := parts[0], parts[1]
+		names, ok := discovered[rType]
+		if !ok || !slices.Contains(names, rName) {
+			return formatTargetNotFoundError(target, moduleDir, discovered)
+		}
+		setResourceOverride(override, existingIgnores, rType, rName, ignores)
+		return nil
+	}
+
+	rType := target
+	names, ok := discovered[rType]
+	if !ok || len(names) == 0 {
+		return formatTargetNotFoundError(target, moduleDir, discovered)
+	}
+	for _, rName := range names {
+		setResourceOverride(override, existingIgnores, rType, rName, ignores)
+	}
+	return nil
+}
+
+func writeModuleReconfigureOverrides(moduleDir string, reconfigIgnores map[string][]string) error {
+	if len(reconfigIgnores) == 0 {
+		return nil
+	}
+
+	discovered, err := findModuleResources(moduleDir)
+	if err != nil {
+		return fmt.Errorf("failed to discover resources in module at %s: %w", moduleDir, err)
+	}
+
+	existingIgnores, err := parseExistingModuleIgnores(moduleDir)
+	if err != nil {
+		return fmt.Errorf("failed to parse existing lifecycle ignores in module at %s: %w", moduleDir, err)
+	}
+
+	override := tfOverrideFile{
+		Resource: make(map[string]map[string]tfResourceOverride),
+	}
+
+	targets := make([]string, 0, len(reconfigIgnores))
+	for target := range reconfigIgnores {
+		targets = append(targets, target)
+	}
+	sort.Strings(targets)
+
+	for _, target := range targets {
+		ignores := reconfigIgnores[target]
+		if err := applyTargetOverrides(override, discovered, existingIgnores, target, ignores, moduleDir); err != nil {
 			return err
 		}
-		if err := copyModuleSource(src, dst); err != nil {
+	}
+
+	if len(override.Resource) == 0 {
+		return nil
+	}
+
+	data, err := json.MarshalIndent(override, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal reconfigure_ignores override json: %w", err)
+	}
+
+	overridePath := filepath.Join(moduleDir, "override.tf.json")
+	if err := os.WriteFile(overridePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", overridePath, err)
+	}
+
+	return nil
+}
+
+func copySingleNonEmbeddedModule(gPath string, mod *config.Module) error {
+	if mod.Kind == config.TerraformKind {
+		if sourcereader.IsEmbeddedPath(mod.Source) || sourcereader.IsRemotePath(mod.Source) {
+			return nil
+		}
+	}
+
+	var src, dst string
+	if sourcereader.IsRemotePath(mod.Source) && mod.Kind == config.PackerKind {
+		src, _ = getter.SourceDirSubdir(mod.Source)
+		dst = filepath.Join(gPath, string(mod.ID))
+	} else {
+		deplSource, err := DeploymentSource(*mod)
+		if err != nil {
+			return err
+		}
+		src = mod.Source
+		dst = filepath.Join(gPath, deplSource)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+	if err := copyModuleSource(src, dst); err != nil {
+		return err
+	}
+	if mod.Kind == config.TerraformKind {
+		if err := writeModuleReconfigureOverrides(dst, mod.ReconfigureIgnores); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyNonEmbeddedModules(gPath string, modules []config.Module) error {
+	for iMod := range modules {
+		if err := copySingleNonEmbeddedModule(gPath, &modules[iMod]); err != nil {
 			return err
 		}
 	}

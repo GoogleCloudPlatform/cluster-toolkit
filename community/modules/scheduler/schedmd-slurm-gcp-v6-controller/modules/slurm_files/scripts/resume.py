@@ -585,16 +585,8 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
                 chunk.nodes, chunk.placement_group, chunk.excl_job_id, chunk.is_job_request
             )
 
-    for chunk in gce_tpu_chunks:
-        try:
-            job_topo = None
-            if resume_data and chunk.excl_job_id is not None:
-                for job in resume_data.jobs:
-                    if job.job_id == chunk.excl_job_id and job.accelerator_topology:
-                        job_topo = job.accelerator_topology
-                        break
-            mig_flex.resume_tpu_chunk(chunk.nodes, chunk.excl_job_id, lkp, topology=job_topo)
-        except Exception as tpu_exc:
+    if gce_tpu_chunks:
+        for chunk, tpu_exc in mig_flex.resume_tpu_chunks(gce_tpu_chunks, resume_data, lkp):
             err_msg = str(tpu_exc)
             reason = getattr(tpu_exc, "_get_reason", lambda: err_msg)()
             _, admin_comment = error_handler.classify_gcp_error(reason, err_msg)

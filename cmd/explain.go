@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
+	"hpc-toolkit/pkg/telemetry"
 	"io"
 	"os"
 	"path"
@@ -181,6 +182,7 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 
 	if len(args) == 0 {
+		setTelemetryMetadata(telemetry.EXPLAIN_TARGET, "catalog")
 		if err := rejectUnexpectedDeploymentFlag(); err != nil {
 			return err
 		}
@@ -199,6 +201,7 @@ func runExplainCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	setTelemetryMetadata(telemetry.EXPLAIN_TARGET, "specs")
 	if err := rejectUnexpectedDeploymentFlag(); err != nil {
 		return err
 	}
@@ -229,9 +232,11 @@ func parseExplainFormat(raw string) (string, error) {
 func tryExplainSingleTarget(out io.Writer, format, repoRoot, target string) (bool, error) {
 	bpPath, deplPath, ok, err := resolveBlueprintTarget(repoRoot, target, explainFlags.deploymentFile)
 	if err != nil {
+		setTelemetryMetadata(telemetry.EXPLAIN_TARGET, explainYamlTargetKind(target))
 		return true, err
 	}
 	if ok {
+		setTelemetryMetadata(telemetry.EXPLAIN_TARGET, explainYamlTargetKind(target))
 		res, err := buildExplainBlueprint(repoRoot, bpPath, deplPath)
 		if err != nil {
 			return true, err
@@ -242,6 +247,7 @@ func tryExplainSingleTarget(out io.Writer, format, repoRoot, target string) (boo
 	}
 
 	if modPath, kind, ok := resolveModuleTarget(target); ok {
+		setTelemetryMetadata(telemetry.EXPLAIN_TARGET, "module")
 		if err := rejectUnexpectedDeploymentFlag(); err != nil {
 			return true, err
 		}
@@ -255,9 +261,29 @@ func tryExplainSingleTarget(out io.Writer, format, repoRoot, target string) (boo
 	}
 
 	if looksLikePathTarget(target) {
+		setTelemetryMetadata(telemetry.EXPLAIN_TARGET, classifyMissingPathTarget(target))
 		return true, fmt.Errorf("blueprint or module path %q not found; run './gcluster explain' to list all available blueprints and modules", target)
 	}
 	return false, nil
+}
+
+func explainYamlTargetKind(target string) string {
+	if isDeploymentYAMLName(filepath.Base(target)) {
+		return "deployment"
+	}
+	return "blueprint"
+}
+
+func classifyMissingPathTarget(target string) string {
+	if isDeploymentYAMLName(filepath.Base(target)) {
+		return "deployment"
+	}
+	norm := strings.TrimPrefix(sourcereader.ToSlash(filepath.Clean(target)), "./")
+	if strings.HasSuffix(target, ".yaml") || strings.HasSuffix(target, ".yml") ||
+		strings.HasPrefix(norm, "examples/") || strings.HasPrefix(norm, "community/examples/") {
+		return "blueprint"
+	}
+	return "module"
 }
 
 func looksLikePathTarget(target string) bool {

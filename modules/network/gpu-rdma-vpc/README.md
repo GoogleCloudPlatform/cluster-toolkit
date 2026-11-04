@@ -24,7 +24,7 @@ created within the network.  This template contains the following values:
 > The `ip_range` should be always be large enough to split into `count`
 > subnetworks and the number of required connections within.
 
-[cft-network]: https://github.com/terraform-google-modules/terraform-google-network/tree/v10.0.0
+[cft-network]: https://github.com/terraform-google-modules/terraform-google-network/tree/v18.3.0
 [cidr]: https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing#CIDR_notation
 
 ### Example

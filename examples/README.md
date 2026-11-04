@@ -19,6 +19,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
+  * [Multi-provider agentgateway on GKE](#multi-provider-agentgateway-on-gke--) ![community-badge] ![experimental-badge]
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-slurm-ha.yaml](#hpc-slurm-hayaml-) ![community-badge]
   * [hpc-slurm-ha-lb.yaml](#hpc-slurm-ha-lbyaml-) ![community-badge]
@@ -88,6 +89,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [netapp-volumes.yaml](#netapp-volumesyaml-) ![core-badge]
   * [netapp-volumes-slurm.yaml](#netapp-volumes-slurmyaml-) ![core-badge]
   * [gke-tpu-7x](#gke-tpu-7x-) ![core-badge]
+  * [gke-inference-benchmarks](#gke-inference-benchmarks--) ![community-badge] ![experimental-badge]
   * [gcloud-example.yaml](#gcloud-exampleyaml--) ![community-badge] ![experimental-badge]
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
@@ -206,6 +208,7 @@ the experimental badge (![experimental-badge]).
 | Blueprint | Scheduler | Machine Types | Description |
 | :--- | :--- | :--- | :--- |
 | [community/examples/AMD/hpc-amd-slurm.yaml](../community/examples/AMD/hpc-amd-slurm.yaml) | slurm | c2d-standard-16, c2d-standard-4, c2d-standard-112 | This example provisions a Slurm cluster using AMD VM machine types. It automates the initial setup of Spack, including a script that can be used to install the AMD Optimizing C/C++ Compiler (AOCC) and compile OpenMPI with AOCC. It is... |
+| [community/examples/agentgateway-gke/agentgateway-gke.yaml](../community/examples/agentgateway-gke/agentgateway-gke.yaml) | gke | - | This blueprint deploys a private generative AI gateway powered by agentgateway on a regional, CPU-only GKE Standard cluster. |
 | [community/examples/alphaevolve/alpha-evolve-experiment.yaml](../community/examples/alphaevolve/alpha-evolve-experiment.yaml) | none | n2-standard-4 | Deploys the Google Cloud infrastructure and per-experiment software environments required to run scalable AlphaEvolve evolutionary code optimization experiments on Cloud Batch and Vertex AI Colab Enterprise. |
 | [community/examples/alphaevolve/alpha-evolve-infra.yaml](../community/examples/alphaevolve/alpha-evolve-infra.yaml) | none | n2-standard-4 | Deploys the Google Cloud infrastructure and per-experiment software environments required to run scalable AlphaEvolve evolutionary code optimization experiments on Cloud Batch and Vertex AI Colab Enterprise. |
 | [community/examples/apptainer-artifact-registry-openfoam.yaml](../community/examples/apptainer-artifact-registry-openfoam.yaml) | none | e2-standard-4 | This blueprint demonstrates staging and running an Apptainer SIF image through the apptainer-runtime and apptainer-app modules, backed by an artifact-registry repository configured as a REMOTE_REPOSITORY pull-through cache mirroring... |
@@ -218,6 +221,7 @@ the experimental badge (![experimental-badge]).
 | [community/examples/fsi/ibm-symphony-on-gce/symphony.yaml](../community/examples/fsi/ibm-symphony-on-gce/symphony.yaml) | none | c2-standard-30, c2-standard-4 | This project provides a blueprint for deploying an IBM Spectrum Symphony cluster on Google Cloud Platform using the Google Cloud Cluster Toolkit. The blueprint automates infrastructure provisioning, custom base image creation via... |
 | [community/examples/fsi/ibm-symphony-on-gke/symphony.yaml](../community/examples/fsi/ibm-symphony-on-gke/symphony.yaml) | gke | c2-standard-16, c2-standard-4 | This project provides a blueprint for deploying an IBM Spectrum Symphony cluster on Google Cloud Platform using the Google Cloud Cluster Toolkit and Google Kubernetes Engine (GKE). The blueprint automates infrastructure provisioning... |
 | [community/examples/gcloud-example.yaml](../community/examples/gcloud-example.yaml) | none | - | This blueprint demonstrates how to use the gcloud community module to run arbitrary gcloud commands during deployment and destroy. It shows an example of creating and deleting a network, subnet, and VM instance. |
+| [community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml](../community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml) | gke | g4-standard-48 | This benchmark provisions a GKE cluster with a single-zone Spot G4 node pool (g4-standard-48, 1x NVIDIA RTX PRO 6000), serves google/diffusiongemma-26B-A4B-it with vLLM and runs a vllm bench serve throughput and latency benchmark... |
 | [community/examples/hpc-build-slurm-image.yaml](../community/examples/hpc-build-slurm-image.yaml) | slurm | n2d-standard-2 | This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top of an existing image, hpc-rocky-linux-9 in the case of this example. |
 | [community/examples/hpc-slinky/hpc-slinky.yaml](../community/examples/hpc-slinky/hpc-slinky.yaml) | slurm-on-gke (slinky) | n2d-standard-8, h3-standard-88 | The SchedMD Slinky Project deploys Slurm on Kubernetes. Slinky is particularly useful for: 1. Those with a prefer a Slurm workload management paradigm, but a cloud-native operational experience 2. Those who want the flexibility of... |
 | [community/examples/hpc-slurm-google-cloud-dedicated/eda/eda-gcd-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/eda/eda-gcd-cluster.yaml) | slurm | c3-standard-8, c3-standard-176 | This directory provides a Cluster Toolkit (gcluster) blueprint (eda-gcd-cluster.yaml) and end-to-end Electronic Design Automation (EDA) workload examples for Google Cloud Dedicated (GCD) environments (*.apis-<location>.goog): |
@@ -240,6 +244,7 @@ the experimental badge (![experimental-badge]).
 | [community/examples/htc-slurm.yaml](../community/examples/htc-slurm.yaml) | slurm | c2-standard-30, n2-standard-2, n2-standard-4 | This blueprint provisions a cluster using the Slurm scheduler in a configuration tuned for the execution of many short-duration, loosely-coupled (non-MPI) jobs. |
 | [community/examples/kms-key-per-service.yaml](../community/examples/kms-key-per-service.yaml) | slurm | n2-standard-2 | The same CMEK Slurm cluster as kms-key.yaml, but with one key per class of resource instead of one shared key, each granted only to the service agent that uses it: the Compute Engine agent can decrypt the disks and nothing else, the... |
 | [community/examples/kms-key.yaml](../community/examples/kms-key.yaml) | slurm | n2-standard-2 | An end-to-end CMEK Slurm cluster. The kms-key module creates one Cloud KMS key ring and symmetric CryptoKey, kms-key-iam grants the service agents that encrypt with it, and every encrypted resource picks the key up through use... |
+| [community/examples/remote-desktop/hpc-slurm-remote-desktop.yaml](../community/examples/remote-desktop/hpc-slurm-remote-desktop.yaml) | slurm | n2-standard-4, n2-standard-8 | These blueprints deploy browser-based Linux desktops alongside a Slurm cluster, using the novnc-runtime and novnc-desktop modules. Users reach an XFCE session over noVNC in a browser, with sessions created per user from their OS Login... |
 | [community/examples/slurm-gke/slurm-gke.yaml](../community/examples/slurm-gke/slurm-gke.yaml) | slurm-on-gke (slinky) | n2d-standard-4, c2-standard-16, n2-standard-2 | Deploys a hybrid Slurm cluster with a GCE-based controller, login node, and debug partition alongside a GKE-backed compute partition managed by the Slinky Slurm operator. The blueprint also creates a VPC, a Filestore instance mounted at... |
 | [community/examples/slurm-high-throughput/hpc-slurm-multiregion-scale.yaml](../community/examples/slurm-high-throughput/hpc-slurm-multiregion-scale.yaml) | slurm | n2d-standard-64 | Creates a massive-scale, multi-region Slurm cluster provisioning up to 1,500 dynamic compute nodes (96,000 to 192,000 vCPUs) aggregated under a unified partition across 3 Google Cloud regions and 10 zones. |
 | [community/examples/slurm-high-throughput/hpc-slurm-scale.yaml](../community/examples/slurm-high-throughput/hpc-slurm-scale.yaml) | slurm | n2-standard-128 | Creates a high-performance, single-region auto-scaling Slurm cluster scaled up to 800 dynamic Spot or On-Demand compute nodes (102,400 vCPUs) across 4 zones with multi-zonal dynamic failover and Cloud NAT. |
@@ -303,6 +308,7 @@ the experimental badge (![experimental-badge]).
 | [examples/machine-learning/build-service-images/a3m/blueprint.yaml](./machine-learning/build-service-images/a3m/blueprint.yaml) | none | - | Cluster Toolkit blueprint (examples/machine-learning/build-service-images/a3m/blueprint.yaml). |
 | [examples/machine-learning/build-service-images/a4x/blueprint.yaml](./machine-learning/build-service-images/a4x/blueprint.yaml) | none | - | Cluster Toolkit blueprint (examples/machine-learning/build-service-images/a4x/blueprint.yaml). |
 | [examples/machine-learning/build-service-images/common/blueprint.yaml](./machine-learning/build-service-images/common/blueprint.yaml) | none | - | Cluster Toolkit blueprint (examples/machine-learning/build-service-images/common/blueprint.yaml). |
+| [examples/machine-learning/tpu-v5e-v5p-v6e/tpu-slurm-blueprint.yaml](./machine-learning/tpu-v5e-v5p-v6e/tpu-slurm-blueprint.yaml) | slurm | ct6e-standard-4t | This directory provides a Cluster Toolkit blueprint (tpu-slurm-blueprint.yaml) and deployment configuration (tpu-slurm-deployment.yaml) for provisioning a Slurm cluster with TPU (ct6e-standard-4t, ct5p-hightpu-4t, ct5lp-hightpu-4t)... |
 | [examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml](./machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml) | slurm | tpu7x-standard-4t | This directory provides a Cluster Toolkit blueprint (tpu7x-slurm-blueprint.yaml) and deployment configuration (tpu7x-slurm-deployment.yaml) for provisioning a Slurm cluster with TPU 7x (tpu7x-standard-4t) compute nodes. It sets up a... |
 | [examples/ml-gke.yaml](./ml-gke.yaml) | gke | g2-standard-4 | This blueprint demonstrates how to set up a GPU GKE cluster using the Cluster Toolkit. It includes: |
 | [examples/ml-slurm-g4-vgpu.yaml](./ml-slurm-g4-vgpu.yaml) | slurm | g4-standard-12 | This blueprint creates a Slurm cluster on Google Cloud optimized for machine learning workloads using NVIDIA G4 vGPUs (Fractional GPUs). It automates the installation of the necessary NVIDIA GRID drivers and configures Slurm to... |
@@ -318,6 +324,13 @@ the experimental badge (![experimental-badge]).
 | [examples/storage-vm.yaml](./storage-vm.yaml) | none | c3d-standard-4 | Creates a standalone VM instance and securely attaches persistent disks that are provisioned directly into specified hyperdisk-balanced and hyperdisk-throughput Storage Pools. This allows the VM to share IOPS and throughput capacity... |
 
 <!-- END_BLUEPRINT_CATALOG -->
+
+### Multi-provider agentgateway on GKE ![community-badge] ![experimental-badge]
+
+The [agentgateway community blueprint](../community/examples/agentgateway-gke/README.md)
+deploys a CPU-only regional GKE cluster with internal application load balancing,
+Workload Identity authentication to Gemini Enterprise Agent Platform, and optional
+OpenAI/Anthropic secret references.
 
 ### [hpc-slurm.yaml] ![core-badge]
 
@@ -1410,7 +1423,8 @@ Toolkit. It includes:
   Example settings for a2 look like:
 
   ```yaml
-  source: modules/compute/gke-node-pool
+  - id: gke_node_pool
+    source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       disk_type: pd-balanced
@@ -2077,6 +2091,26 @@ This example shows how TPU 7x cluster can be created and be used to run a job th
 
 [gke-tpu-7x]: ../examples/gke-tpu-7x
 
+### [gke-inference-benchmarks] ![community-badge] ![experimental-badge]
+
+A catalog of self-contained, reproducible LLM inference benchmarks on GKE
+accelerators (GPU and TPU). Each benchmark lives in its own directory
+(`community/examples/gke-inference-benchmarks/<accelerator>-<model>/`) with a blueprint, a
+deployment file and the Kubernetes manifests it applies, so a single
+`gcluster deploy` provisions the cluster and node pool, serves the model and runs
+the benchmark:
+
+```shell
+./gcluster deploy -d community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/deployment.yaml \
+  community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml --vars hf_token=$HF_TOKEN
+```
+
+The first entry serves `google/diffusiongemma-26B-A4B-it` with vLLM on a Spot
+G4 (NVIDIA RTX PRO 6000) node pool. The catalog, conventions and per-benchmark
+instructions are in the [README](/community/examples/gke-inference-benchmarks/README.md).
+
+[gke-inference-benchmarks]: ../community/examples/gke-inference-benchmarks
+
 ### [gcloud-example.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates how to use the `gcloud` community module to run
@@ -2303,15 +2337,17 @@ deployment_groups:
    characters, underscores and dashes.
 
 * **toolkit_modules_url** and **toolkit_modules_version** (optional): The blueprint schema provides the optional fields `toolkit_modules_url` and `toolkit_modules_version` to version a blueprint. When these fields are provided, any module in the blueprint with a reference to an embedded module in its source field will be updated to reference the specified GitHub source and toolkit version in the deployment folder. `toolkit_modules_url` specifies the base URL of the GitHub repository containing the modules and `toolkit_modules_version` specifies the version of the modules to use. `toolkit_modules_url` and `toolkit_modules_version` should be provided together when in use.
+* **terraform_backend_defaults** (optional): Configures a default Terraform state backend (for example, `type: gcs` with `configuration: {bucket: <BUCKET_NAME>}`) inherited by every Terraform deployment group unless overridden on the group's `terraform_backend` field.
+* **validators** (optional): Customizes or skips individual pre-flight checks (see [`docs/blueprint-validation.md`](../docs/blueprint-validation.md)). The validation severity is set with the `-l, --validation-level` CLI flag (`ERROR` (default), `WARNING`, or `IGNORE`), which overrides any blueprint-level `validation_level`.
+* **terraform_providers** (optional): Replaces the default `{google, google-beta}` Terraform provider map (`source`, `version`, and `configuration` blocks) across Terraform deployment groups that do not define their own group-level `terraform_providers` (any provider omitted from the map is not generated).
 
 ### Deployment Variables
 
 ```yaml
 vars:
-  region: "us-west-1"
+  region: "us-west1"
   labels:
     "user-defined-deployment-label": "slurm-cluster"
-  ...
 ```
 
 Deployment variables are set under the vars field at the top level of the
@@ -2333,13 +2369,12 @@ alongside module specific labels. Precedence is given to the module specific
 labels if a collision occurs. Default module labels will still be overwritten by
 deployment labels.
 
-The Cluster Toolkit uses special reserved labels for monitoring each deployment.
-These are set automatically, but can be overridden in vars or module settings.
-They include:
+The Cluster Toolkit automatically sets reserved labels for monitoring and resource attribution across each deployment:
 
-* ghpc_blueprint: The name of the blueprint the deployment was created from
-* ghpc_deployment: The name of the specific deployment
-* ghpc_role: See below
+* `ghpc_blueprint`: The name of the blueprint the deployment was created from (can be overridden in `vars.labels` or module `settings.labels`)
+* `ghpc_deployment`: The name of the specific deployment (can be overridden in `vars.labels` or module `settings.labels`)
+* `ghpc_creator`: Set automatically to the sanitized account identity (e.g., `jdoe_google_com`) when deploying with a `@google.com` account (or when `--add-creator-label=true` is passed; disable with `--add-creator-label=false`)
+* `ghpc_module` and `ghpc_role`: Set inside each Terraform/Packer module's `locals` via `merge(var.labels, { ghpc_module = "...", ghpc_role = "..." })` (see below; because they are merged after `var.labels`, they cannot be overridden via `vars.labels`)
 
 A module role is a default label applied to modules (`ghpc_role`), which
 conveys what role that module plays within a larger HPC environment.
@@ -2401,28 +2436,26 @@ vars:
 
 deployment_groups:
   - group: primary
-     modules:
-       - id: resource1
-         source: path/to/module/1
-         ...
-       - id: resource2
-         source: path/to/module/2
-         ...
-         settings:
-            key1: $(vars.zone)
-            key2: $(resource1.name)
-            # access nested fields
-            key3: $(resource1.nodes[0].private_ip)
-            # arithmetic expression
-            key4: $(vars.num_nodes + 5)
-            # string interpolation
-            key5: $(resource1.name)_$(vars.zone)
-            # multiline string interpolation
-            key6: |
-              #!/bin/bash
-              echo "Hello $(vars.project_id) from $(vars.region)"
-            # use a function, supported by Terraform
-            key7: $(jsonencode(resource1.config))
+    modules:
+      - id: resource1
+        source: path/to/module/1
+      - id: resource2
+        source: path/to/module/2
+        settings:
+          key1: $(vars.zone)
+          key2: $(resource1.name)
+          # access nested fields
+          key3: $(resource1.nodes[0].private_ip)
+          # arithmetic expression
+          key4: $(vars.num_nodes + 5)
+          # string interpolation
+          key5: $(resource1.name)_$(vars.zone)
+          # multiline string interpolation
+          key6: |
+            #!/bin/bash
+            echo "Hello $(vars.project_id) from $(vars.region)"
+          # use a function, supported by Terraform
+          key7: $(jsonencode(resource1.config))
 ```
 
 #### Escape expressions
@@ -2432,13 +2465,13 @@ Under circumstances where the expression notation conflicts with the content of 
 ```yaml
 deployment_groups:
   - group: primary
-     modules:
-       - id: resource1
-         source: path/to/module/1
-         settings:
-            key1: |
-              #!/bin/bash
-              echo \$(cat /tmp/file1)    ## Evaluates to "echo $(cat /tmp/file1)"
+    modules:
+      - id: resource1
+        source: path/to/module/1
+        settings:
+          key1: |
+            #!/bin/bash
+            echo \$(cat /tmp/file1)    ## Evaluates to "echo $(cat /tmp/file1)"
 ```
 
 ### Functions
