@@ -84,109 +84,129 @@ func TestProxyImageFor(t *testing.T) {
 }
 
 func TestParseSPSClientTarget(t *testing.T) {
-	t.Run("parses SPS JobSet with sidecar, space-separated RM args, and Kueue label", func(t *testing.T) {
-		raw := `{
-			"metadata": {
-				"labels": {"kueue.x-k8s.io/queue-name": "cluster-queue"}
-			},
-			"spec": {
-				"replicatedJobs": [
-					{
+	raw := `{
+		"metadata": {
+			"labels": {"kueue.x-k8s.io/queue-name": "cluster-queue"}
+		},
+		"spec": {
+			"replicatedJobs": [
+				{
+					"name": "pathways-head",
+					"replicas": 1,
+					"template": {"spec": {"template": {"spec": {
+						"nodeSelector": {"cloud.google.com/gke-nodepool": "cpu-np"},
+						"containers": [{
+							"name": "pathways-rm",
+							"image": "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:20261004",
+							"args": [
+								"--gcs_scratch_location", "gs://my-bucket/sps",
+								"--instance_type=tpu7x:2x2x1",
+								"--instance_count=2"
+							]
+						}]
+					}}}}
+				},
+				{
+					"name": "worker",
+					"replicas": 2,
+					"template": {"spec": {"template": {"spec": {
+						"initContainers": [{"name": "colocated-python-sidecar", "image": "sidecar:tag"}],
+						"containers": [{"name": "pathways-worker", "image": "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:20261004"}]
+					}}}}
+				}
+			]
+		}
+	}`
+
+	inst, err := parseSPSClientTarget("sps-j6080103", []byte(raw))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := spsInstance{
+		Name:           "sps-j6080103",
+		KueueQueueName: "cluster-queue",
+		HeadNodePool:   "cpu-np",
+		ServerImage:    "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:20261004",
+		GCSLocation:    "gs://my-bucket/sps",
+		InstanceType:   "tpu7x:2x2x1",
+		InstanceCount:  2,
+		HasSidecar:     true,
+	}
+	if inst != want {
+		t.Errorf("parseSPSClientTarget() = %+v, want %+v", inst, want)
+	}
+}
+
+func TestParseSPSClientTarget_RejectsInvalid(t *testing.T) {
+	tests := []struct {
+		name    string
+		jobName string
+		raw     string
+		wantErr string
+	}{
+		{
+			name:    "rejects regular Pathways JobSet running pathways-proxy",
+			jobName: "regular-pw",
+			raw: `{
+				"spec": {
+					"replicatedJobs": [{
 						"name": "pathways-head",
-						"replicas": 1,
 						"template": {"spec": {"template": {"spec": {
-							"nodeSelector": {"cloud.google.com/gke-nodepool": "cpu-np"},
-							"containers": [{
-								"name": "pathways-rm",
-								"image": "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:20261004",
-								"args": [
-									"--gcs_scratch_location", "gs://my-bucket/sps",
-									"--instance_type=tpu7x:2x2x1",
-									"--instance_count=2"
-								]
-							}]
+							"initContainers": [
+								{"name": "pathways-rm", "image": "server:latest", "args": ["--instance_type=tpuv6e:2x4"]},
+								{"name": "pathways-proxy", "image": "proxy:latest"}
+							]
 						}}}}
-					},
-					{
-						"name": "worker",
-						"replicas": 2,
+					}]
+				}
+			}`,
+			wantErr: "its pathways-head runs pathways-proxy",
+		},
+		{
+			name:    "rejects non-Pathways JobSet",
+			jobName: "plain-job",
+			raw:     `{"spec": {"replicatedJobs": [{"name": "main-job"}]}}`,
+			wantErr: "needs a pathways-head job running pathways-rm",
+		},
+		{
+			name:    "rejects JobSet with pathways-head but no worker job",
+			jobName: "head-only",
+			raw: `{
+				"spec": {
+					"replicatedJobs": [{
+						"name": "pathways-head",
 						"template": {"spec": {"template": {"spec": {
-							"initContainers": [{"name": "colocated-python-sidecar", "image": "sidecar:tag"}],
-							"containers": [{"name": "pathways-worker", "image": "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:20261004"}]
+							"containers": [{"name": "pathways-rm", "image": "server:latest", "args": ["--instance_type=tpuv6e:2x4"]}]
 						}}}}
-					}
-				]
+					}]
+				}
+			}`,
+			wantErr: "and a worker job running pathways-worker",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseSPSClientTarget(tc.jobName, []byte(tc.raw))
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("got err = %v, want substring %q", err, tc.wantErr)
 			}
-		}`
+		})
+	}
+}
 
-		inst, err := parseSPSClientTarget("sps-j6080103", []byte(raw))
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+func assertManifestStrings(t *testing.T, manifest string, want, unwanted []string) {
+	t.Helper()
+	for _, s := range want {
+		if !strings.Contains(manifest, s) {
+			t.Errorf("manifest missing %q:\n%s", s, manifest)
 		}
-		if inst.KueueQueueName != "cluster-queue" {
-			t.Errorf("KueueQueueName = %q, want %q", inst.KueueQueueName, "cluster-queue")
+	}
+	for _, s := range unwanted {
+		if strings.Contains(manifest, s) {
+			t.Errorf("manifest unexpectedly contains %q:\n%s", s, manifest)
 		}
-		if inst.HeadNodePool != "cpu-np" {
-			t.Errorf("HeadNodePool = %q, want %q", inst.HeadNodePool, "cpu-np")
-		}
-		if inst.GCSLocation != "gs://my-bucket/sps" {
-			t.Errorf("GCSLocation = %q, want %q", inst.GCSLocation, "gs://my-bucket/sps")
-		}
-		if inst.InstanceType != "tpu7x:2x2x1" {
-			t.Errorf("InstanceType = %q, want %q", inst.InstanceType, "tpu7x:2x2x1")
-		}
-		if inst.InstanceCount != 2 {
-			t.Errorf("InstanceCount = %d, want 2", inst.InstanceCount)
-		}
-		if !inst.HasSidecar {
-			t.Errorf("HasSidecar = false, want true")
-		}
-	})
-
-	t.Run("rejects regular Pathways JobSet running pathways-proxy", func(t *testing.T) {
-		raw := `{
-			"spec": {
-				"replicatedJobs": [{
-					"name": "pathways-head",
-					"template": {"spec": {"template": {"spec": {
-						"initContainers": [
-							{"name": "pathways-rm", "image": "server:latest", "args": ["--instance_type=tpuv6e:2x4"]},
-							{"name": "pathways-proxy", "image": "proxy:latest"}
-						]
-					}}}}
-				}]
-			}
-		}`
-		_, err := parseSPSClientTarget("regular-pw", []byte(raw))
-		if err == nil || !strings.Contains(err.Error(), "its pathways-head runs pathways-proxy") {
-			t.Errorf("got err = %v, want pathways-proxy rejection", err)
-		}
-	})
-
-	t.Run("rejects non-Pathways JobSet", func(t *testing.T) {
-		raw := `{"spec": {"replicatedJobs": [{"name": "main-job"}]}}`
-		_, err := parseSPSClientTarget("plain-job", []byte(raw))
-		if err == nil || !strings.Contains(err.Error(), "needs a pathways-head job running pathways-rm") {
-			t.Errorf("got err = %v, want non-SPS rejection", err)
-		}
-	})
-
-	t.Run("rejects JobSet with pathways-head but no worker job", func(t *testing.T) {
-		raw := `{
-			"spec": {
-				"replicatedJobs": [{
-					"name": "pathways-head",
-					"template": {"spec": {"template": {"spec": {
-						"containers": [{"name": "pathways-rm", "image": "server:latest", "args": ["--instance_type=tpuv6e:2x4"]}]
-					}}}}
-				}]
-			}
-		}`
-		_, err := parseSPSClientTarget("head-only", []byte(raw))
-		if err == nil || !strings.Contains(err.Error(), "and a worker job running pathways-worker") {
-			t.Errorf("got err = %v, want missing worker rejection", err)
-		}
-	})
+	}
 }
 
 func TestGenerateSPSClientManifest(t *testing.T) {
@@ -218,28 +238,25 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		for _, want := range []string{
-			"name: sps-client-cluster",
-			"cloud.google.com/gke-nodepool: cpu-np",
-			"name: pathways-proxy",
-			`"--resource_manager_address=sps-j6080103-pathways-head-0-0.sps-j6080103:29001"`,
-			"--virtual_slices=tpu7x:2x2x1,tpu7x:2x2x1",
-			"--sidecar_name=external",
-			"name: workload-container",
-			"value: grpc://localhost:29000",
-		} {
-			if !strings.Contains(manifest, want) {
-				t.Errorf("manifest missing %q:\n%s", want, manifest)
-			}
-		}
-		for _, unwanted := range []string{
-			"kueue.x-k8s.io/queue-name",
-			"name: pathways-rm",
-			"name: pathways-worker",
-		} {
-			if strings.Contains(manifest, unwanted) {
-				t.Errorf("manifest unexpectedly contains %q:\n%s", unwanted, manifest)
-			}
+		assertManifestStrings(t, manifest,
+			[]string{
+				"name: sps-client-cluster",
+				"cloud.google.com/gke-nodepool: cpu-np",
+				"name: pathways-proxy",
+				`"--resource_manager_address=sps-j6080103-pathways-head-0-0.sps-j6080103:29001"`,
+				"--virtual_slices=tpu7x:2x2x1,tpu7x:2x2x1",
+				"--sidecar_name=external",
+				"name: workload-container",
+				"value: grpc://localhost:29000",
+			},
+			[]string{
+				"kueue.x-k8s.io/queue-name",
+				"name: pathways-rm",
+				"name: pathways-worker",
+			},
+		)
+		if got := strings.Count(manifest, "gcluster.google.com/workload: sps-client-cluster"); got != 2 {
+			t.Errorf("gcluster.google.com/workload label count = %d, want 2 (JobSet metadata + pathways-head pod template):\n%s", got, manifest)
 		}
 	})
 
@@ -260,19 +277,15 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		for _, want := range []string{
-			"kueue.x-k8s.io/queue-name: cluster-queue",
-			"name: pathways-proxy",
-			"--virtual_slices=tpu7x:2x2x1",
-			"--sidecar_name=external",
-		} {
-			if !strings.Contains(manifest, want) {
-				t.Errorf("manifest missing %q:\n%s", want, manifest)
-			}
-		}
-		if strings.Contains(manifest, "workload-container") {
-			t.Errorf("terminal-mode manifest should not contain workload-container:\n%s", manifest)
-		}
+		assertManifestStrings(t, manifest,
+			[]string{
+				"kueue.x-k8s.io/queue-name: cluster-queue",
+				"name: pathways-proxy",
+				"--virtual_slices=tpu7x:2x2x1",
+				"--sidecar_name=external",
+			},
+			[]string{"workload-container"},
+		)
 	})
 
 	t.Run("in-cluster mode mounts RawMounts onto workload-container", func(t *testing.T) {
@@ -290,15 +303,37 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		for _, want := range []string{
-			`gke-gcsfuse/volumes: "true"`,
-			"mountPath: /mnt/data",
-			"driver: gcsfuse.csi.storage.gke.io",
-			"bucketName: my-bucket",
-		} {
-			if !strings.Contains(manifest, want) {
-				t.Errorf("manifest missing %q:\n%s", want, manifest)
-			}
+		assertManifestStrings(t, manifest,
+			[]string{
+				`gke-gcsfuse/volumes: "true"`,
+				"mountPath: /mnt/data",
+				"driver: gcsfuse.csi.storage.gke.io",
+				"bucketName: my-bucket",
+			},
+			nil,
+		)
+	})
+}
+
+func TestReadForwardedPort(t *testing.T) {
+	t.Run("extracts local port from kubectl port-forward output", func(t *testing.T) {
+		var errOut strings.Builder
+		portCh := make(chan int, 1)
+		readForwardedPort(strings.NewReader("Forwarding from 127.0.0.1:41955 -> 29000\nForwarding from [::1]:41955 -> 29000\n"), &errOut, portCh)
+		if got, ok := <-portCh; !ok || got != 41955 {
+			t.Errorf("got (%d, %v), want (41955, true)", got, ok)
+		}
+	})
+
+	t.Run("captures error output when port-forward fails", func(t *testing.T) {
+		var errOut strings.Builder
+		portCh := make(chan int, 1)
+		readForwardedPort(strings.NewReader("error: unable to forward port\n"), &errOut, portCh)
+		if _, ok := <-portCh; ok {
+			t.Errorf("expected closed channel on failure")
+		}
+		if !strings.Contains(errOut.String(), "unable to forward port") {
+			t.Errorf("errOut = %q, want failure message", errOut.String())
 		}
 	})
 }

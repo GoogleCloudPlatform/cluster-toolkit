@@ -15,14 +15,16 @@
 package gke
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -31,6 +33,7 @@ import (
 
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -330,10 +333,11 @@ func (g *GKEOrchestrator) generateSPSClientManifest(job orchestrator.JobDefiniti
 		data.ProxyArgsList = withSidecarNameArg(data.ProxyArgsList)
 	}
 
-	tmpl, err := g.parseGKETemplate("pathways_jobset.tmpl")
+	tmpl, baseBlocks, err := k8s.LoadWorkloadTemplate(g.gkeCustomTemplatesPath, k8s.PathwaysJobSetTemplate)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse pathways jobset template: %w", err)
 	}
+	data.baseBlocks = baseBlocks
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
@@ -412,37 +416,59 @@ func (g *GKEOrchestrator) readySPSProxyPod(ns, selector string) string {
 	return ""
 }
 
-func (g *GKEOrchestrator) startPortForward(pod, ns string) (int, func(), error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, nil, fmt.Errorf("failed to find a free local port: %w", err)
-	}
-	port := l.Addr().(*net.TCPAddr).Port
-	_ = l.Close()
+var portForwardRe = regexp.MustCompile(`127\.0\.0\.1:(\d+)`)
 
+func (g *GKEOrchestrator) startPortForward(pod, ns string) (int, func(), error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	args := withKubeContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf("%d:%d", port, spsProxyPort)})
-	var out bytes.Buffer
+	args := withKubeContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf(":%d", spsProxyPort)})
 	cmd := exec.CommandContext(ctx, "kubectl", args...)
-	cmd.Stdout, cmd.Stderr = &out, &out
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		cancel()
+		return 0, nil, fmt.Errorf("failed to create stdout pipe for port-forward: %w", err)
+	}
+	cmd.Stderr = cmd.Stdout
 	if err := cmd.Start(); err != nil {
 		cancel()
 		return 0, nil, fmt.Errorf("failed to start kubectl port-forward: %w", err)
 	}
 
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	for i := 0; i < 60; i++ {
-		if conn, err := net.DialTimeout("tcp", addr, time.Second); err == nil {
-			_ = conn.Close()
-			done := make(chan struct{})
-			go keepPortForwardAlive(ctx, cmd, args, done)
-			return port, func() { cancel(); <-done }, nil
+	var errOut strings.Builder
+	portCh := make(chan int, 1)
+	go readForwardedPort(stdout, &errOut, portCh)
+
+	select {
+	case port, ok := <-portCh:
+		if !ok {
+			cancel()
+			_ = cmd.Wait()
+			return 0, nil, fmt.Errorf("port-forward to %s did not become ready: %s", pod, strings.TrimSpace(errOut.String()))
 		}
-		time.Sleep(500 * time.Millisecond)
+		done := make(chan struct{})
+		restartArgs := withKubeContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf("%d:%d", port, spsProxyPort)})
+		go keepPortForwardAlive(ctx, cmd, restartArgs, done)
+		return port, func() { cancel(); <-done }, nil
+	case <-time.After(30 * time.Second):
+		cancel()
+		<-portCh
+		_ = cmd.Wait()
+		return 0, nil, fmt.Errorf("timed out waiting for port-forward to %s", pod)
 	}
-	cancel()
-	_ = cmd.Wait()
-	return 0, nil, fmt.Errorf("port-forward to %s did not become ready: %s", pod, strings.TrimSpace(out.String()))
+}
+
+func readForwardedPort(r io.Reader, errOut *strings.Builder, portCh chan<- int) {
+	defer close(portCh)
+	for scanner := bufio.NewScanner(r); scanner.Scan(); {
+		line := scanner.Text()
+		if m := portForwardRe.FindStringSubmatch(line); len(m) == 2 {
+			if port, err := strconv.Atoi(m[1]); err == nil {
+				portCh <- port
+				_, _ = io.Copy(io.Discard, r)
+				return
+			}
+		}
+		errOut.WriteString(line + "\n")
+	}
 }
 
 // keepPortForwardAlive restarts kubectl port-forward if it exits before ctx is cancelled (e.g. on Ctrl-C in pdb).
