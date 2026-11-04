@@ -1488,6 +1488,11 @@ func TestIsVarSet(t *testing.T) {
 		{"empty list", []cty.Value{cty.ListValEmpty(cty.String)}, false},
 		{"populated list", []cty.Value{cty.ListVal([]cty.Value{cty.StringVal("a")})}, true},
 		{"empty object", []cty.Value{cty.EmptyObjectVal}, false},
+		{"all-null object", []cty.Value{cty.ObjectVal(map[string]cty.Value{"type": cty.NullVal(cty.String), "name": cty.NullVal(cty.String)})}, false},
+		{"all-null object via evaluateAndFlatten", evaluateAndFlatten(cty.ObjectVal(map[string]cty.Value{"server_ip": cty.NullVal(cty.String), "port": cty.NullVal(cty.Number)})), false},
+		{"object with ModuleRef attribute via evaluateAndFlatten", evaluateAndFlatten(cty.ObjectVal(map[string]cty.Value{"server_ip": config.ModuleRef("slurm_db", "server_ip").AsValue(), "port": cty.NullVal(cty.Number)})), true},
+		{"nested object with all-null attribute via evaluateAndFlatten", evaluateAndFlatten(cty.ObjectVal(map[string]cty.Value{"outer": cty.ObjectVal(map[string]cty.Value{"inner": cty.NullVal(cty.String)})})), false},
+		{"nested object with ModuleRef attribute via evaluateAndFlatten", evaluateAndFlatten(cty.ObjectVal(map[string]cty.Value{"outer": cty.ObjectVal(map[string]cty.Value{"inner": config.ModuleRef("slurm_db", "server_ip").AsValue()})})), true},
 		{"populated object", []cty.Value{cty.ObjectVal(map[string]cty.Value{"a": cty.True})}, true},
 	}
 	for _, tt := range tests {
@@ -2209,6 +2214,18 @@ func TestModuleMetadataRules_SlurmTopology(t *testing.T) {
 	literalObjList := cty.TupleVal([]cty.Value{
 		cty.ObjectVal(map[string]cty.Value{"name": cty.StringVal("item-1")}),
 	})
+	exprAttrObjList := cty.TupleVal([]cty.Value{
+		cty.ObjectVal(map[string]cty.Value{
+			"name": config.ModuleRef("part", "name").AsValue(),
+			"zone": cty.NullVal(cty.String),
+		}),
+	})
+	allNullObjList := cty.TupleVal([]cty.Value{
+		cty.ObjectVal(map[string]cty.Value{
+			"name": cty.NullVal(cty.String),
+			"zone": cty.NullVal(cty.String),
+		}),
+	})
 
 	cases := []struct {
 		name     string
@@ -2217,16 +2234,20 @@ func TestModuleMetadataRules_SlurmTopology(t *testing.T) {
 		wantErr  bool
 		errSub   string
 	}{
-		{"partition fails when no nodeset provided", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute")}, true, "at least one nodeset must be provided"},
-		{"partition fails when nodeset list is empty", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": cty.EmptyTupleVal}, true, "at least one nodeset must be provided"},
+		{"partition fails when no nodeset provided", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute")}, true, "A partition must contain exactly one type of nodeset (nodeset, nodeset_dyn, or nodeset_tpu)"},
+		{"partition fails when nodeset list is empty", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": cty.EmptyTupleVal}, true, "A partition must contain exactly one type of nodeset (nodeset, nodeset_dyn, or nodeset_tpu)"},
+		{"partition fails when nodeset object has only null attributes", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": allNullObjList}, true, "A partition must contain exactly one type of nodeset (nodeset, nodeset_dyn, or nodeset_tpu)"},
 		{"partition passes with nodeset via use", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": useNodeset}, false, ""},
 		{"partition passes with two nodesets of same type via use", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": useTwoStaticNodesets}, false, ""},
 		{"partition passes with literal nodeset object list", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": literalObjList}, false, ""},
-		{"partition fails with two nodeset types", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": useNodeset, "nodeset_dyn": useNodesetDyn}, true, "at most one type of nodeset"},
+		{"partition passes with nodeset object containing ModuleRef attribute", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": exprAttrObjList}, false, ""},
+		{"partition fails with two nodeset types", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": useNodeset, "nodeset_dyn": useNodesetDyn}, true, "A partition must contain exactly one type of nodeset (nodeset, nodeset_dyn, or nodeset_tpu): the following are set: nodeset, nodeset_dyn"},
 		{"controller fails when partitions omitted", ctrlMod, map[string]cty.Value{}, true, "At least one partition must be provided to the Slurm controller"},
 		{"controller fails when partitions list is empty", ctrlMod, map[string]cty.Value{"partitions": cty.EmptyTupleVal}, true, "At least one partition must be provided to the Slurm controller"},
+		{"controller fails when partitions object has only null attributes", ctrlMod, map[string]cty.Value{"partitions": allNullObjList}, true, "At least one partition must be provided to the Slurm controller"},
 		{"controller passes with partitions via use", ctrlMod, map[string]cty.Value{"partitions": usePartitions}, false, ""},
 		{"controller passes with literal partitions object list", ctrlMod, map[string]cty.Value{"partitions": literalObjList}, false, ""},
+		{"controller passes with partitions object containing ModuleRef attribute", ctrlMod, map[string]cty.Value{"partitions": exprAttrObjList}, false, ""},
 		{"controller warning rule does not fail validateBlueprintWithMetadata", ctrlMod, map[string]cty.Value{"partitions": usePartitions, "enable_slurm_auth": cty.False}, false, ""},
 	}
 

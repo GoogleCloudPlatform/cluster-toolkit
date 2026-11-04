@@ -28,4 +28,4 @@ ghpc:
     inputs:
       vars: [nodeset, nodeset_dyn, nodeset_tpu]
       min_set: 1
-    error_message: "A partition can contain at most one type of nodeset, and at least one nodeset must be provided."
+    error_message: "A partition must contain exactly one type of nodeset (nodeset, nodeset_dyn, or nodeset_tpu)"

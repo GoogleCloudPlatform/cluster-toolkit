@@ -909,7 +909,13 @@ func (s *zeroSuite) TestValidateModuleInputs_BlueprintUseHints(c *C) {
 	bpMulti := Blueprint{Groups: []Group{{Modules: []Module{gke1}}, {Modules: []Module{pool, gke2}}, {Modules: []Module{gkeLate}}}}
 	hMulti := extractHintError(c, validateModuleInputs(Root.Groups.At(1).Modules.At(0), pool, bpMulti))
 	c.Check(strings.HasPrefix(hMulti.Hint, "\"cluster_id\" description: Cluster identifier.\n"), Equals, true)
-	c.Check(hMulti.Hint, Equals, "\"cluster_id\" description: Cluster identifier.\nConsider adding one of modules [\"gke1\", \"gke2\"] to the \"use\" list of module \"pool\".")
+	c.Check(hMulti.Hint, Equals, "\"cluster_id\" description: Cluster identifier.\nConsider adding one of modules [\"gke1\", \"gke2\"] to the \"use\" list of module \"pool\" (e.g. use: [gke1]).")
+
+	// Multiple providers when module already has an entry in Use appends the first candidate in the example
+	poolWithUse := tMod("pool").uses("net").inputs(reqInput("cluster_id", "Cluster identifier.")).build()
+	bpMultiWithUse := Blueprint{Groups: []Group{{Modules: []Module{net, gke1}}, {Modules: []Module{poolWithUse, gke2}}}}
+	hMultiWithUse := extractHintError(c, validateModuleInputs(Root.Groups.At(1).Modules.At(0), poolWithUse, bpMultiWithUse))
+	c.Check(hMultiWithUse.Hint, Equals, `"cluster_id" description: Cluster identifier. Consider adding one of modules ["gke1", "gke2"] to the "use" list of module "pool" (e.g. use: [net, gke1]).`)
 
 	// Multiple missing inputs on one module (generic "name" input gets no use: hint)
 	multiMissing := tMod("multi_missing").inputs(
@@ -1262,26 +1268,38 @@ func (s *zeroSuite) TestExclusiveRuleHelpers(c *C) {
 	c.Check(extractRuleVars("single"), DeepEquals, []string{"single"})
 	c.Check(extractRuleVars(123), IsNil)
 
-	c.Check(isCtyValueSet(cty.NilVal), Equals, false)
-	c.Check(isCtyValueSet(cty.NullVal(cty.String)), Equals, false)
-	c.Check(isCtyValueSet(cty.UnknownVal(cty.String)), Equals, false)
-	c.Check(isCtyValueSet(GlobalRef("v").AsValue()), Equals, true)
-	c.Check(isCtyValueSet(AsProductOfModuleUse(cty.UnknownVal(cty.String), "m")), Equals, true)
-	c.Check(isCtyValueSet(cty.StringVal("")), Equals, false)
-	c.Check(isCtyValueSet(cty.StringVal("x")), Equals, true)
-	c.Check(isCtyValueSet(cty.NumberIntVal(0)), Equals, false)
-	c.Check(isCtyValueSet(cty.NumberIntVal(5)), Equals, true)
-	c.Check(isCtyValueSet(cty.False), Equals, false)
-	c.Check(isCtyValueSet(cty.True), Equals, true)
-	c.Check(isCtyValueSet(cty.EmptyObjectVal), Equals, false)
-	c.Check(isCtyValueSet(cty.ObjectVal(map[string]cty.Value{"k": cty.True})), Equals, true)
-	c.Check(isCtyValueSet(cty.EmptyTupleVal), Equals, false)
-	c.Check(isCtyValueSet(cty.TupleVal([]cty.Value{cty.StringVal("x")})), Equals, true)
+	c.Check(IsValueSet(cty.NilVal), Equals, false)
+	c.Check(IsValueSet(cty.NullVal(cty.String)), Equals, false)
+	c.Check(IsValueSet(cty.UnknownVal(cty.String)), Equals, false)
+	c.Check(IsValueSet(GlobalRef("v").AsValue()), Equals, true)
+	c.Check(IsValueSet(AsProductOfModuleUse(cty.UnknownVal(cty.String), "m")), Equals, true)
+	c.Check(IsValueSet(cty.StringVal("")), Equals, false)
+	c.Check(IsValueSet(cty.StringVal("x")), Equals, true)
+	c.Check(IsValueSet(cty.NumberIntVal(0)), Equals, false)
+	c.Check(IsValueSet(cty.NumberIntVal(5)), Equals, true)
+	c.Check(IsValueSet(cty.False), Equals, false)
+	c.Check(IsValueSet(cty.True), Equals, true)
+	c.Check(IsValueSet(cty.EmptyObjectVal), Equals, false)
+	c.Check(IsValueSet(cty.ObjectVal(map[string]cty.Value{
+		"type": cty.NullVal(cty.String),
+		"name": cty.NullVal(cty.String),
+	})), Equals, false)
+	c.Check(IsValueSet(cty.ObjectVal(map[string]cty.Value{
+		"type": cty.StringVal("COMPACT"),
+		"name": cty.NullVal(cty.String),
+	})), Equals, true)
+	c.Check(IsValueSet(cty.ObjectVal(map[string]cty.Value{"k": cty.True})), Equals, true)
+	c.Check(IsValueSet(cty.EmptyTupleVal), Equals, false)
+	c.Check(IsValueSet(cty.TupleVal([]cty.Value{cty.StringVal("x")})), Equals, true)
 
 	bp := Blueprint{Vars: NewDict(map[string]cty.Value{
 		"from_vars": cty.StringVal("val"),
 		"empty_var": cty.StringVal(""),
 		"null_var":  cty.NullVal(cty.String),
+		"var_img": cty.ObjectVal(map[string]cty.Value{
+			"name":   cty.StringVal("var-custom-img"),
+			"family": cty.StringVal(""),
+		}),
 	})}
 	mod := Module{Settings: NewDict(map[string]cty.Value{
 		"ref_non_empty": GlobalRef("from_vars").AsValue(),
@@ -1290,6 +1308,18 @@ func (s *zeroSuite) TestExclusiveRuleHelpers(c *C) {
 		"ref_undef":     GlobalRef("undefined_var").AsValue(),
 		"ref_mod":       ModuleRef("data_bucket", "gcs_bucket_name").AsValue(),
 		"ref_use":       AsProductOfModuleUse(ModuleRef("data_bucket", "gcs_bucket_name").AsValue(), "data_bucket"),
+		"instance_image": cty.ObjectVal(map[string]cty.Value{
+			"name":   cty.StringVal("my-custom-img"),
+			"family": cty.NullVal(cty.String),
+		}),
+		"map_image": cty.MapVal(map[string]cty.Value{
+			"name": cty.StringVal("map-custom-img"),
+		}),
+		"ref_img": GlobalRef("var_img").AsValue(),
+		"placement_policy": cty.ObjectVal(map[string]cty.Value{
+			"type": cty.NullVal(cty.String),
+			"name": cty.NullVal(cty.String),
+		}),
 	})}
 	c.Check(isConsumerSettingSet(mod, bp, "from_vars"), Equals, true)
 	c.Check(isConsumerSettingSet(mod, bp, "ref_non_empty"), Equals, true)
@@ -1299,6 +1329,18 @@ func (s *zeroSuite) TestExclusiveRuleHelpers(c *C) {
 	c.Check(isConsumerSettingSet(mod, bp, "ref_mod"), Equals, true)
 	c.Check(isConsumerSettingSet(mod, bp, "ref_use"), Equals, true)
 	c.Check(isConsumerSettingSet(mod, bp, "missing"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, ""), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "instance_image.name"), Equals, true)
+	c.Check(isConsumerSettingSet(mod, bp, "instance_image.family"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "instance_image.nonexistent"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "map_image.name"), Equals, true)
+	c.Check(isConsumerSettingSet(mod, bp, "map_image.missing"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "ref_img.name"), Equals, true)
+	c.Check(isConsumerSettingSet(mod, bp, "ref_img.family"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "var_img.name"), Equals, true)
+	c.Check(isConsumerSettingSet(mod, bp, "var_img.family"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "ref_mod.sub"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "placement_policy"), Equals, false)
 	c.Check(violatesConsumerExclusiveRules(modulereader.ModuleInfo{}, Module{ID: "bad"}, bp), Equals, false)
 
 	rule := modulereader.ValidationRule{

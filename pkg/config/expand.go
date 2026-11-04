@@ -262,20 +262,59 @@ func extractRuleVars(v interface{}) []string {
 }
 
 func isConsumerSettingSet(consumer Module, bp Blueprint, varName string) bool {
-	val := consumer.Settings.Get(varName)
-	if !consumer.Settings.Has(varName) {
-		val = bp.Vars.Get(varName)
+	val, found := getNestedSetting(consumer.Settings, bp, varName)
+	if !found {
+		val, found = getNestedSetting(bp.Vars, bp, varName)
 	}
-	if val == cty.NilVal {
+	if !found || val == cty.NilVal {
 		return false
 	}
 	if evaled, err := bp.Eval(val); err == nil {
 		val = evaled
 	}
-	return isCtyValueSet(val)
+	return IsValueSet(val)
 }
 
-func isCtyValueSet(val cty.Value) bool {
+func getNestedSetting(d Dict, bp Blueprint, path string) (cty.Value, bool) {
+	if path == "" {
+		return cty.NilVal, false
+	}
+	parts := strings.Split(path, ".")
+	if !d.Has(parts[0]) {
+		return cty.NilVal, false
+	}
+	curr := d.Get(parts[0])
+	for _, part := range parts[1:] {
+		next, ok := stepNestedSetting(curr, bp, part)
+		if !ok {
+			return cty.NilVal, false
+		}
+		curr = next
+	}
+	return curr, true
+}
+
+func stepNestedSetting(curr cty.Value, bp Blueprint, key string) (cty.Value, bool) {
+	if evaled, err := bp.Eval(curr); err == nil {
+		curr = evaled
+	}
+	if curr == cty.NilVal || !curr.IsKnown() || curr.IsNull() {
+		return cty.NilVal, false
+	}
+	curr, _ = curr.Unmark()
+	if curr.Type().IsObjectType() && curr.Type().HasAttribute(key) {
+		return curr.GetAttr(key), true
+	}
+	if curr.Type().IsMapType() && curr.HasIndex(cty.StringVal(key)).True() {
+		return curr.Index(cty.StringVal(key)), true
+	}
+	return cty.NilVal, false
+}
+
+// IsValueSet reports whether a cty.Value is considered set (non-null, known or an
+// expression/use reference, and non-empty). For object types, at least one attribute
+// must recursively be set.
+func IsValueSet(val cty.Value) bool {
 	if val == cty.NilVal || val.IsNull() {
 		return false
 	}
@@ -293,7 +332,12 @@ func isCtyValueSet(val cty.Value) bool {
 		return val.True()
 	default:
 		if val.Type().IsObjectType() {
-			return len(val.Type().AttributeTypes()) > 0
+			for attr := range val.Type().AttributeTypes() {
+				if IsValueSet(val.GetAttr(attr)) {
+					return true
+				}
+			}
+			return false
 		}
 		return val.LengthInt() > 0
 	}
@@ -306,8 +350,8 @@ func formatBlueprintProvidersHint(candIDs []string, m Module) string {
 			candIDs[0], m.ID, formatUseListExample(m.Use, candIDs[0]))
 	}
 	return fmt.Sprintf(
-		"Consider adding one of modules %s to the \"use\" list of module %q.",
-		formatQuotedList(candIDs), m.ID)
+		"Consider adding one of modules %s to the \"use\" list of module %q (e.g. use: %s).",
+		formatQuotedList(candIDs), m.ID, formatUseListExample(m.Use, candIDs[0]))
 }
 
 func formatUseListExample(existing ModuleIDs, addID string) string {
