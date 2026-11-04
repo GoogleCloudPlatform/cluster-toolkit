@@ -108,6 +108,22 @@ steps:
               value: "$$TRIAGE_INVOKER_SA"
             - name: TRIAGE_CLOUD_RUN_URL
               value: "$$TRIAGE_CLOUD_RUN_URL"
+            - name: CHECK_LUSTRE
+              value: "true"
+            - name: REQUIRED_LUSTRE_GB
+              value: "18000"
+            - name: MACHINE_TYPE
+              value: "n2-standard-4"
+            - name: NUM_NODES
+              value: "1"
+            - name: MIN_NODES
+              value: "1"
+            - name: INSTANCE_PREFIX
+              value: "gkeml"
+            - name: OPTIONS_GCS_PATH
+              value: "gs://hpc-ctk1357/lustreoptions.txt"
+            - name: ENABLE_SPOT_FALLBACK
+              value: "true"
             command: ["/bin/bash", "-c"]
             args:
             - |
@@ -129,20 +145,12 @@ steps:
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
-              CHECK_LUSTRE="true" \
-              REQUIRED_LUSTRE_GB="18000" \
-              MACHINE_TYPE="n2-standard-16" \
-              NUM_NODES="1" \
-              MIN_NODES="1" \
-              INSTANCE_PREFIX="gkeml" \
-              OPTIONS_GCS_PATH="gs://hpc-ctk1357/lustreoptions.txt" \
-              ENABLE_SPOT_FALLBACK="true" \
               source /workspace/tools/cloud-build/find_available_zone.sh
-              if [ -z "\$${ZONE}" ]; then
-                echo "ERROR: No available zone found."
+              if [ -z "\$${ZONE:-}" ]; then
+                echo "ERROR: No available zone found." >&2
                 exit 1
               fi
-              REGION=\$(echo "\$${ZONE}" | sed 's/-[a-z0-9]*$$//')
+              REGION="\$${ZONE%-*}"
               echo "Selected zone: \$$ZONE (region: \$$REGION)"
 
               # Adding vm to act as remote node
