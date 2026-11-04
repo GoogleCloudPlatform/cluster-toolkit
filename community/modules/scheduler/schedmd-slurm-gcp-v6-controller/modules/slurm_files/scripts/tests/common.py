@@ -60,7 +60,7 @@ class TstPartition:
     partition_nodeset: list[str] = field(default_factory=list)
     partition_nodeset_tpu: list[str] = field(default_factory=list)
     partition_nodeset_dyn: list[str] = field(default_factory=list)
-    partition_conf: dict[str, str] = field(default_factory=dict)
+    partition_conf: dict[str, Any] = field(default_factory=dict)
     enable_job_exclusive: bool = False
 
 @dataclass

@@ -25,8 +25,12 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
+	"hpc-toolkit/pkg/shell"
 
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -148,7 +152,6 @@ func findKubeContext(cfg *clientcmdapi.Config, clusterName, location, projectID 
 type kubeContextCheck struct {
 	contextName string
 	mode        endpointMode
-	current     string // current-context at load time
 	reason      string // non-empty when the context must not be reused
 }
 
@@ -162,7 +165,7 @@ func evaluateExistingContext(cfg *clientcmdapi.Config, clusterName, location, pr
 	if !ok {
 		return kubeContextCheck{reason: fmt.Sprintf("no kubeconfig context found for cluster %q", clusterName)}
 	}
-	check := kubeContextCheck{contextName: name, current: cfg.CurrentContext}
+	check := kubeContextCheck{contextName: name}
 
 	cluster := cfg.Clusters[kubeCtx.Cluster]
 	if cluster == nil {
@@ -289,35 +292,12 @@ func classifyProbeFailure(stderr string) probeOutcome {
 // probeContext runs a bounded read of /version against contextName (or the
 // current context when empty). Success proves network, TLS and credentials.
 func (g *GKEOrchestrator) probeContext(contextName string) (probeOutcome, string) {
-	args := []string{"get", "--raw", "/version", "--request-timeout=" + probeRequestTimeout}
-	if contextName != "" {
-		args = append([]string{"--context", contextName}, args...)
-	}
-	res := g.executor.ExecuteCommand("kubectl", args...)
+	res := g.executor.ExecuteCommand("kubectl", withKubeContext(contextName, []string{"get", "--raw", "/version", "--request-timeout=" + probeRequestTimeout})...)
 	if res.ExitCode == 0 {
 		return probeOK, ""
 	}
 	stderr := strings.TrimSpace(res.Stderr)
 	return classifyProbeFailure(stderr), stderr
-}
-
-// checkClusterConnectivity verifies the current kubectl context can reach the
-// cluster. Unrecognised probe output is not fatal, matching configureKubectl.
-func (g *GKEOrchestrator) checkClusterConnectivity(clusterName string) error {
-	logging.Info("Checking cluster connectivity...")
-	outcome, stderr := g.probeContext("")
-	switch outcome {
-	case probeOK, probeForbidden:
-		logging.Info("Cluster connectivity verified.")
-		return nil
-	case probeAuth:
-		return authFailureError(clusterName, stderr)
-	case probeConnectivity:
-		return fmt.Errorf("failed to connect to GKE cluster %q. Please verify your IP is allowed in the cluster's authorized networks or that you have correct network access. Error: %s", clusterName, stderr)
-	default:
-		logging.Warn("Could not verify connectivity to GKE cluster '%s' (%s). Proceeding; subsequent kubectl calls will report the underlying error.", clusterName, firstLine(stderr))
-		return nil
-	}
 }
 
 func authFailureError(clusterName, stderr string) error {
@@ -345,6 +325,41 @@ func (g *GKEOrchestrator) loadKubeconfig() (*clientcmdapi.Config, error) {
 	return defaultKubeconfigLoader()
 }
 
+// withKubeContext prepends --context so kubectl ignores current-context.
+func withKubeContext(kubeContext string, args []string) []string {
+	if kubeContext == "" {
+		return args
+	}
+	return append([]string{"--context", kubeContext}, args...)
+}
+
+// kubectlCommandLine renders a kubectl command, pinned like the ones gcluster runs, for users to copy.
+// Arguments that contain whitespace, such as Windows paths, are double-quoted.
+func kubectlCommandLine(kubeContext string, args ...string) string {
+	parts := append([]string{"kubectl"}, withKubeContext(kubeContext, args)...)
+	for i, p := range parts {
+		if strings.ContainsAny(p, " \t") {
+			parts[i] = `"` + p + `"`
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+// kubectl runs kubectl against the context chosen by configureKubectl.
+func (g *GKEOrchestrator) kubectl(args ...string) shell.CommandResult {
+	return g.executor.ExecuteCommand("kubectl", withKubeContext(g.kubeContext, args)...)
+}
+
+// kubectlWithTimeout runs kubectl with a process timeout against the context chosen by configureKubectl.
+func (g *GKEOrchestrator) kubectlWithTimeout(timeout time.Duration, args ...string) shell.CommandResult {
+	return g.executor.ExecuteCommandWithTimeout(timeout, "kubectl", withKubeContext(g.kubeContext, args)...)
+}
+
+// kubectlStream streams kubectl output against the context chosen by configureKubectl.
+func (g *GKEOrchestrator) kubectlStream(args ...string) error {
+	return g.executor.ExecuteCommandStream("kubectl", withKubeContext(g.kubeContext, args)...)
+}
+
 // inspectExistingContext loads the kubeconfig and statically validates the cluster's entry.
 func (g *GKEOrchestrator) inspectExistingContext(clusterName, location, projectID string) kubeContextCheck {
 	cfg, err := g.loadKubeconfig()
@@ -352,18 +367,6 @@ func (g *GKEOrchestrator) inspectExistingContext(clusterName, location, projectI
 		return kubeContextCheck{reason: fmt.Sprintf("failed to load kubeconfig: %v", err)}
 	}
 	return evaluateExistingContext(cfg, clusterName, location, projectID, g.clusterDesc)
-}
-
-// ensureCurrentContext points current-context at the reused context.
-func (g *GKEOrchestrator) ensureCurrentContext(check kubeContextCheck) error {
-	if check.current == check.contextName {
-		return nil
-	}
-	res := g.executor.ExecuteCommand("kubectl", "config", "use-context", check.contextName)
-	if res.ExitCode != 0 {
-		return fmt.Errorf("failed to switch kubectl current-context to %q: %s", check.contextName, res.Stderr)
-	}
-	return nil
 }
 
 // endpointModeOrder lists the modes to try, preferred first. A mode already
@@ -389,7 +392,11 @@ func (g *GKEOrchestrator) refreshGKEAuth(clusterName, clusterLocation, projectID
 	if useDNSEndpoint {
 		args = append(args, "--dns-endpoint")
 	}
-	credsRes := g.executor.ExecuteCommand("gcloud", args...)
+	credsRes := g.executor.ExecuteCommandWithTimeout(shell.DefaultCloudAPITimeout, "gcloud", args...)
+	timeoutMsg := fmt.Sprintf("timed out after %v while fetching GKE cluster credentials for '%s' in '%s'. Please check your network connection", shell.DefaultCloudAPITimeout, clusterName, clusterLocation)
+	if err := shell.HandleExecError(credsRes, "gcloud", timeoutMsg); err != nil {
+		return err
+	}
 	if credsRes.ExitCode != 0 {
 		if strings.Contains(strings.ToLower(credsRes.Stderr), "multiple") || strings.Contains(strings.ToLower(credsRes.Stderr), "ambiguous") {
 			return fmt.Errorf("found multiple GKE clusters named %s. Please specify the exact Zone using --location to disambiguate", clusterName)
@@ -400,29 +407,31 @@ func (g *GKEOrchestrator) refreshGKEAuth(clusterName, clusterLocation, projectID
 }
 
 // restoreNamespaceContext re-applies a non-default namespace that gcloud reset.
-func (g *GKEOrchestrator) restoreNamespaceContext(namespace string) error {
+func (g *GKEOrchestrator) restoreNamespaceContext(contextName, namespace string) error {
 	if namespace == "" || namespace == "default" {
 		return nil
 	}
 	logging.Info("Restoring namespace context to '%s'...", namespace)
-	restoreRes := g.executor.ExecuteCommand("kubectl", "config", "set-context", "--current", "--namespace="+namespace)
+	restoreRes := g.executor.ExecuteCommand("kubectl", "config", "set-context", contextName, "--namespace="+namespace)
 	if restoreRes.ExitCode != 0 {
 		return fmt.Errorf("failed to restore namespace context to %s: %s", namespace, restoreRes.Stderr)
 	}
 	return nil
 }
 
-// refreshCredentialsPreservingNamespace runs get-credentials and keeps the user's namespace.
+// refreshCredentialsPreservingNamespace runs get-credentials and keeps the namespace
+// already stored in the kubeconfig context (not the --gke-namespace flag value).
 func (g *GKEOrchestrator) refreshCredentialsPreservingNamespace(clusterName, clusterLocation, projectID string, mode endpointMode) error {
-	originalNamespace, err := g.getCurrentNamespace(clusterName, clusterLocation, projectID)
-	if err != nil {
-		logging.Warn("Could not read current namespace before gcloud (defaulting to 'default'): %v. If you want to target a specific namespace please use the --gke-namespace flag", err)
-		originalNamespace = "default"
+	originalNamespace := "default"
+	if cfg, err := g.loadKubeconfig(); err == nil {
+		if _, kubeCtx, ok := findKubeContext(cfg, clusterName, clusterLocation, projectID); ok && kubeCtx.Namespace != "" {
+			originalNamespace = kubeCtx.Namespace
+		}
 	}
 	if err := g.refreshGKEAuth(clusterName, clusterLocation, projectID, mode == endpointModeDNS); err != nil {
 		return err
 	}
-	return g.restoreNamespaceContext(originalNamespace)
+	return g.restoreNamespaceContext(gkeContextName(projectID, clusterLocation, clusterName), originalNamespace)
 }
 
 // regenerateKubeContext fetches credentials per endpoint mode in order, moving
@@ -445,6 +454,7 @@ func (g *GKEOrchestrator) regenerateKubeContext(clusterName, clusterLocation, pr
 			} else {
 				logging.Info("Cluster connectivity verified via %s endpoint.", mode)
 			}
+			g.kubeContext = contextName
 			return nil
 		case probeAuth:
 			return authFailureError(clusterName, stderr)
@@ -455,6 +465,7 @@ func (g *GKEOrchestrator) regenerateKubeContext(clusterName, clusterLocation, pr
 			}
 		default:
 			logging.Warn("Could not verify connectivity to cluster '%s' via its %s endpoint (%s). Proceeding; subsequent kubectl calls will report the underlying error.", clusterName, mode, firstLine(stderr))
+			g.kubeContext = contextName
 			return nil
 		}
 	}
@@ -465,11 +476,12 @@ func (g *GKEOrchestrator) regenerateKubeContext(clusterName, clusterLocation, pr
 		clusterName, strings.Join(attempts, "; "))
 }
 
-// configureKubectl makes kubectl target the cluster. A verified, reachable
-// existing context is reused as-is (get-credentials would rewrite its endpoint);
-// otherwise credentials are fetched, falling back across endpoint modes.
+// configureKubectl picks the context for this run and pins later kubectl and
+// dynamic-client calls to it: reuse a verified context, else fetch credentials.
+// Reuse never writes to kubeconfig; only get-credentials changes current-context.
 // GCLUSTER_REFRESH_CREDENTIALS=1 skips reuse.
 func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
+	g.kubeContext = ""
 	avoid := endpointModeUnknown
 
 	if forceCredentialRefresh() {
@@ -486,10 +498,8 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 	outcome, stderr := g.probeContext(check.contextName)
 	switch outcome {
 	case probeOK, probeForbidden:
-		if err := g.ensureCurrentContext(check); err != nil {
-			return err
-		}
-		logging.Info("Reusing existing kubeconfig context '%s' (%s endpoint). Set %s=1 to force a credential refresh.", check.contextName, check.mode, refreshCredentialsEnv)
+		g.kubeContext = check.contextName
+		logging.Info("Reusing existing kubeconfig context '%s' (%s endpoint); use 'kubectl --context %s' for manual commands. Set %s=1 to force a credential refresh.", check.contextName, check.mode, check.contextName, refreshCredentialsEnv)
 		return nil
 	case probeAuth:
 		return authFailureError(clusterName, stderr)
@@ -497,11 +507,65 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 		logging.Warn("Existing kubeconfig context '%s' (%s endpoint) is unreachable from here (%s). Refreshing credentials...", check.contextName, check.mode, firstLine(stderr))
 		avoid = check.mode
 	default:
-		if err := g.ensureCurrentContext(check); err != nil {
-			return err
-		}
-		logging.Warn("Could not verify existing kubeconfig context '%s' (%s). Reusing it; set %s=1 to force a credential refresh.", check.contextName, firstLine(stderr), refreshCredentialsEnv)
+		g.kubeContext = check.contextName
+		logging.Warn("Could not verify existing kubeconfig context '%s' (%s). Reusing it; use 'kubectl --context %s' for manual commands, or set %s=1 to force a credential refresh.", check.contextName, firstLine(stderr), check.contextName, refreshCredentialsEnv)
 		return nil
 	}
 	return g.regenerateKubeContext(clusterName, clusterLocation, projectID, avoid)
+}
+
+// usableKubeClient returns the Kubernetes API client for best-effort discovery, or nil when none can be
+// built yet (no pinned context, or an unreadable kubeconfig).
+func (g *GKEOrchestrator) usableKubeClient() KubeClient {
+	if g.needsDynamicClientInit() {
+		if g.dynClient == nil && g.kubeContext == "" {
+			return nil
+		}
+		if _, err := g.getDynamicClient(); err != nil {
+			logging.Warn("Kubernetes API client unavailable for cluster discovery (context %q): %v", g.kubeContext, err)
+			return nil
+		}
+	}
+	return g.kubeClient
+}
+
+// activeWorkloadImages returns the distinct images the rendered pods pull: the workload image plus, for
+// Pathways, the server, proxy, worker, and colocated sidecar images of the selected deployment mode.
+func activeWorkloadImages(job orchestrator.JobDefinition, fullImageName string) []string {
+	raw := []string{fullImageName}
+	if job.IsPathwaysJob {
+		pw := job.Pathways
+		if pw.Headless || pw.DeploySPS {
+			raw = nil
+		}
+		raw = append(raw, pw.ServerImage, pw.WorkerImage, pw.ColocatedPythonSidecarImage)
+		if !pw.DeploySPS {
+			raw = append(raw, pw.ProxyServerImage)
+		}
+	}
+	var images []string
+	for _, img := range raw {
+		if img != "" && !slices.Contains(images, img) {
+			images = append(images, img)
+		}
+	}
+	return images
+}
+
+// resolveImagePullSecrets returns the user's --image-pull-secret value verbatim when it was given (an empty value
+// attaches none), otherwise the dockerconfigjson secrets in the target namespace matching the workload's images.
+// An unavailable API client or an RBAC denial degrades to no secrets; a namespace that cannot be resolved is an error.
+func (g *GKEOrchestrator) resolveImagePullSecrets(job orchestrator.JobDefinition, fullImageName string) (string, error) {
+	if job.ImagePullSecrets != "" || job.ImagePullSecretsSpecified {
+		return job.ImagePullSecrets, nil
+	}
+	kc := g.usableKubeClient()
+	if kc == nil {
+		return "", nil
+	}
+	ns, err := g.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve the target namespace for imagePullSecrets discovery: %w", err)
+	}
+	return k8s.DiscoverImagePullSecrets(kc, ns, job.ServiceAccountName, activeWorkloadImages(job, fullImageName)), nil
 }

@@ -25,3 +25,8 @@ vars:
   zone: # supply zone with a4x-highgpu-4g capacity in reservation
   a4x_cluster_size:  # supply a4x-highgpu-4g reservation size
   a4x_reservation_name: # supply a4x-highgpu-4g reservation name
+
+## --- Optional overrides (defaults shown) ---
+  # a4x_node_count_dynamic_max: 0
+  # login_machine_type: t2a-standard-2
+  # controller_machine_type: t2a-standard-2

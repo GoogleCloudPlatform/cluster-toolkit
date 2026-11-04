@@ -31,17 +31,20 @@ locals {
   job_template_contents = templatefile(
     "${path.module}/templates/batch-job-base.yaml.tftpl",
     {
-      synchronized       = var.mpi_mode
-      runnables          = local.runnables
-      task_count         = var.task_count
-      parallelism        = local.parallelism
-      tasks_per_node     = local.tasks_per_node
-      require_hosts_file = var.mpi_mode
-      permissive_ssh     = var.mpi_mode
-      log_policy         = var.log_policy
-      instance_template  = local.instance_template
-      nfs_volumes        = local.native_batch_network_storage
-      labels             = local.labels
+      synchronized          = var.mpi_mode
+      runnables             = local.runnables
+      task_count            = var.task_count
+      parallelism           = local.parallelism
+      tasks_per_node        = local.tasks_per_node
+      require_hosts_file    = var.mpi_mode
+      permissive_ssh        = var.mpi_mode
+      log_policy            = var.log_policy
+      instance_template     = local.instance_template
+      service_account_email = try(var.service_account.email, null)
+      nfs_volumes           = local.native_batch_network_storage
+      labels                = local.labels
+      max_retry_count       = var.max_retry_count
+      lifecycle_policies    = var.lifecycle_policies
     }
   )
 
@@ -54,7 +57,7 @@ locals {
     {
       project       = var.project_id
       location      = var.region
-      config        = local_file.job_template.filename
+      config        = local.job_filename
       submit_job_id = local.submit_job_id
     }
   )
@@ -92,10 +95,11 @@ locals {
 
 module "instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
-  version = "~> 12.1"
+  version = "~> 15.4"
 
   name_prefix        = var.instance_template == null ? "${var.job_id}-instance-template" : "unused-template"
   project_id         = var.project_id
+  region             = var.region
   subnetwork         = local.subnetwork_name
   subnetwork_project = local.subnetwork_project
   service_account    = var.service_account

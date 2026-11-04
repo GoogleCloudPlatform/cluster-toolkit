@@ -63,12 +63,12 @@ If not already downloaded, the TKFE repository needs to be cloned to the client
 machine.
 
 Clone the repository, checkout the corresponding branch, and switch to
-the `frontend` directory as follows:
+the `front-end/ofe` directory as follows:
 
 ```bash
 git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
 cd cluster-toolkit
-cd community/frontend/ofe
+cd community/front-end/ofe
 ```
 
 All further deployment actions must be performed from this directory.
@@ -124,7 +124,7 @@ required roles are:
 ```
 
 If required, an even stricter, or least-privilege custom role can be created -
-please refer to the [Advanced Admin Guide](AdvancedAdmin.md#Custom-roles/permissions-and-APIs).
+please refer to the [Advanced Admin Guide](AdvancedAdmin.md#custom-rolespermissions-and-apis).
 
 The user account must also be [authenticated to deploy GCP resources](https://cloud.google.com/sdk/gcloud/reference/auth/application-default/login).
 This can be done with the following command:
@@ -186,21 +186,23 @@ If the DJANGO_SUPERUSER_PASSWORD environment variable is set, the script will us
 
 To use this configuration file for automated deployment, follow these steps:
 
-1. Create a file called config.yaml.
+1. Create a file called `config.yaml` (do not place inline `#` comments on value lines — `deploy.sh` parses values directly):
 
   ```yaml
   deployment_name: MyDeployment
   project_id: my-project-id
   zone: us-west1-a
-  subnet_name: my-subnet # (optional)
-  dns_hostname: myhostname.com # (optional)
-  ip_address: 1.2.3.4 # (optional)
+  # Optional fields: subnet_name, dns_hostname, ip_address, deployment_mode, repo_fork, repo_branch
+  subnet_name: my-subnet
+  dns_hostname: myhostname.com
+  ip_address: 1.2.3.4
   django_superuser_username: sysadm
-  django_superuser_password: Passw0rd! # (optional if DJANGO_SUPERUSER_PASSWORD is passed)
+  # Optional if DJANGO_SUPERUSER_PASSWORD is set in the environment
+  django_superuser_password: Passw0rd!
   django_superuser_email: sysadmin@example.com
-  deployment_mode: git # (optional)
-  repo_fork: GoogleCloudPlatform # (optional)
-  repo_branch: develop # (optional)
+  deployment_mode: git
+  repo_fork: GoogleCloudPlatform
+  repo_branch: develop
   ```
 
  1. Save the file in the same directory as the deploy.sh script.

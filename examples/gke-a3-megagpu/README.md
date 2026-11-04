@@ -15,8 +15,19 @@ The blueprint automatically configures the following components to enable optima
 1. **Cluster Toolkit:** Ensure you have installed all the dependencies required in cluster toolkit and followed the setup instructions.
     1. Install [dependencies](https://docs.cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
     2. Set up [Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment). For building the `gcluster` binary, see [Install Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment#install).
-2. **Quota**: Ensure you have sufficient quota for `a3-megagpu-8g` machines in your chosen region.
-3. **IP Address**: You will need the public IP address of the machine where you run `gcluster` to configure the cluster's authorized networks.
+2. **Enable Required GCP APIs:**
+
+    ```bash
+    gcloud services enable \
+      compute.googleapis.com \
+      container.googleapis.com \
+      iam.googleapis.com \
+      storage.googleapis.com \
+      --project=<PROJECT_ID>
+    ```
+
+3. **Quota**: Ensure you have sufficient quota for `a3-megagpu-8g` machines in your chosen region.
+4. **IP Address**: You will need the public IP address of the machine where you run `gcluster` to configure the cluster's authorized networks.
 
 ## Configuration
 
@@ -29,6 +40,29 @@ Before deploying, fill out the `gke-a3-megagpu-deployment.yaml` file with your p
 | `region` / `zone` | The GCP region and zone (e.g., `us-east5`, `us-east5-a`). |
 | `authorized_cidr` | Your public IP address in CIDR notation (e.g., `1.2.3.4/32`). |
 | `bucket` | Name of the GCS bucket to store Terraform state. |
+| `reservation_affinity` | (Option 1 default) Set `specific_reservations[0].name` to your `a3-megagpu-8g` reservation name. |
+| `static_node_count` | Number of `a3-megagpu-8g` nodes to provision (for Specific Reservation, Spot, or On-Demand). |
+
+Example [`gke-a3-megagpu-deployment.yaml`](gke-a3-megagpu-deployment.yaml):
+
+```yaml
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: <BUCKET_NAME>
+
+vars:
+  deployment_name: a3-megagpu-gke
+  project_id: <PROJECT_ID>
+  region: <REGION>
+  zone: <ZONE>
+  authorized_cidr: <YOUR-IP-ADDRESS>/32
+  reservation_affinity:
+    consume_reservation_type: SPECIFIC_RESERVATION
+    specific_reservations:
+    - name: <RESERVATION_NAME>
+  static_node_count: 2
+```
 
 ### Consumption Options
 
@@ -36,19 +70,13 @@ Option 1 (Specific Reservation) is uncommented by default in `gke-a3-megagpu-dep
 
 ## Deploy the Cluster
 
-1. Switch to the toolkit directory:
+1. From the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository, build `./gcluster` (if not already built):
 
     ```bash
-    cd ~/cluster-toolkit
+    test -x ./gcluster || make
     ```
 
-2. Build the toolkit:
-
-    ```bash
-    make
-    ```
-
-3. Deploy the infrastructure:
+2. Deploy the infrastructure:
 
     ```bash
     ./gcluster deploy \

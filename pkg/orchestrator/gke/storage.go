@@ -34,6 +34,7 @@ import (
 
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 
 	filestore "cloud.google.com/go/filestore/apiv1"
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
@@ -74,7 +75,10 @@ const (
 	// gatewayReleaseTimeout bounds how long submit waits for a gateway that is still being deleted.
 	gatewayReleaseTimeout = 2 * time.Minute
 
+	gcsFuseCSIDriver           = "gcsfuse.csi.storage.gke.io"
 	servingProfileStorageClass = "gcsfusecsi-serving"
+	pvcGCSFuseJSONPath         = `jsonpath={.spec.volumeName}{"\t"}{.spec.storageClassName}{"\t"}{.metadata.annotations.volume\.kubernetes\.io/storage-provisioner}{"\t"}{.metadata.annotations.volume\.beta\.kubernetes\.io/storage-provisioner}`
+	pvCSIDriverTemplate        = `go-template={{if .spec.csi}}{{.spec.csi.driver}}{{end}}`
 
 	// minGCSFuseProfileGKEVersion is the first GKE version with storage profile StorageClasses.
 	minGCSFuseProfileGKEVersion = "1.35.1-gke.1616000"
@@ -113,6 +117,9 @@ func (s *mountBuildState) volumeNameFor(pvName string, idx int) (name string, re
 
 // ProcessMounts parses mount strings and generates necessary K8s resources.
 func (sm *StorageManager) ProcessMounts(mounts []string, job orchestrator.JobDefinition) ([]MountInfo, []string, error) {
+	if sm.orchestrator == nil {
+		sm.orchestrator = &GKEOrchestrator{namespace: "default"}
+	}
 	var mountInfos []MountInfo
 	var additionalManifests []string
 	state := newMountBuildState()
@@ -143,8 +150,95 @@ func (sm *StorageManager) dispatchMount(pm parsedMount, idx int, job orchestrato
 	case strings.HasPrefix(pm.Src, "gs://") && pm.Profile != "":
 		return sm.generateGCSFuseProfileResources(pm, idx, job, state)
 	default:
-		return buildPodLevelMount(pm, idx), "", nil
+		info := buildPodLevelMount(pm, idx)
+		if info.Type == "pvc" {
+			ns, err := sm.resolveNamespace(job)
+			if err != nil {
+				logging.Warn("Could not resolve namespace to inspect PVC %q for GCSFuse CSI driver (%v); defaulting to \"default\".", info.Source, err)
+				ns = "default"
+			}
+			if sm.isGCSFuseBackedPVC(info.Source, ns) {
+				info.NeedsGCSFuseSidecar = true
+			}
+		}
+		return info, "", nil
 	}
+}
+
+// isGCSFuseBackedPVC reports whether an existing PVC is backed by the GKE GCSFuse CSI driver
+// (via its storage-provisioner annotation, a bound PV with spec.csi.driver=gcsfuse.csi.storage.gke.io,
+// or a GCSFuse StorageClass), which requires the pod to carry the gke-gcsfuse/volumes: "true" webhook annotation.
+func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string) bool {
+	if strings.HasPrefix(pvcName, gcsFuseGatewayPrefix+"-") {
+		return true
+	}
+	if sm.orchestrator == nil || sm.orchestrator.executor == nil {
+		return false
+	}
+
+	res := sm.orchestrator.kubectl("get", "pvc", pvcName, "-n", ns, "--ignore-not-found", kubectlReadTimeout,
+		"-o", pvcGCSFuseJSONPath)
+	if res.ExitCode != 0 {
+		logGCSFuseInspectWarning("pvc", pvcName, pvcName, res.Stderr)
+		return false
+	}
+	volumeName, storageClassName, provisioner := parsePVCGCSFuseFields(res.Stdout)
+	if provisioner != "" {
+		return provisioner == gcsFuseCSIDriver
+	}
+	if volumeName == "" && storageClassName == "" {
+		return false
+	}
+
+	lowerSC := strings.ToLower(storageClassName)
+	if sc := gcsFuseProfileStorageClasses[lowerSC]; sc != "" && sc == lowerSC {
+		return true
+	}
+	return sm.hasGCSFuseCSIField("pv", volumeName, pvcName, pvCSIDriverTemplate) ||
+		sm.hasGCSFuseCSIField("storageclass", storageClassName, pvcName, "jsonpath={.provisioner}")
+}
+
+func parsePVCGCSFuseFields(stdout string) (volumeName, storageClassName, provisioner string) {
+	if strings.TrimSpace(stdout) == "" {
+		return "", "", ""
+	}
+	fields := strings.Split(strings.Trim(stdout, "\r\n"), "\t")
+	volumeName = strings.TrimSpace(fields[0])
+	if len(fields) > 1 {
+		storageClassName = strings.TrimSpace(fields[1])
+	}
+	for _, ann := range fields[min(2, len(fields)):] {
+		if ann = strings.TrimSpace(ann); ann == gcsFuseCSIDriver {
+			return volumeName, storageClassName, ann
+		}
+		if ann != "" && provisioner == "" {
+			provisioner = ann
+		}
+	}
+	return volumeName, storageClassName, provisioner
+}
+
+func (sm *StorageManager) hasGCSFuseCSIField(resourceKind, name, pvcName, outputFormat string) bool {
+	if name == "" {
+		return false
+	}
+	res := sm.orchestrator.kubectl("get", resourceKind, name, "--ignore-not-found", kubectlReadTimeout, "-o", outputFormat)
+	if res.ExitCode != 0 {
+		logGCSFuseInspectWarning(resourceKind, name, pvcName, res.Stderr)
+		return false
+	}
+	return strings.TrimSpace(res.Stdout) == gcsFuseCSIDriver
+}
+
+func logGCSFuseInspectWarning(resourceKind, name, pvcName, stderr string) {
+	errMsg := strings.TrimSpace(stderr)
+	if strings.Contains(errMsg, "Forbidden") {
+		logging.Warn("Permission denied inspecting %s %q for PVC %q (%s). If %q is backed by GCS FUSE, the pod will not receive the required GCSFuse sidecar annotations and may fail to start. Grant 'get' permission on %s or mount the bucket directly with --mount gs://<bucket>;<dest>.",
+			resourceKind, name, pvcName, errMsg, pvcName, resourceKind)
+		return
+	}
+	logging.Warn("Could not inspect %s %q for PVC %q to check for GCSFuse CSI driver: %s.",
+		resourceKind, name, pvcName, errMsg)
 }
 
 func buildPodLevelMount(pm parsedMount, idx int) MountInfo {
@@ -207,6 +301,12 @@ func checkReservedSystemPath(cleanPath string, targetName string) error {
 
 // ValidateMounts checks mounts for duplicate sources/destinations, reserved system paths, and valid formats.
 func (sm *StorageManager) ValidateMounts(mounts []string) error {
+	return sm.validateJobMounts(mounts, false, false)
+}
+
+// validateJobMounts validates --mount values and, for Pathways jobs, rejects
+// destinations that collide with the built-in Pathways mounts.
+func (sm *StorageManager) validateJobMounts(mounts []string, isPathways bool, hasColocatedSidecar bool) error {
 	seenSources := make(map[string]bool)
 	seenDestinations := make(map[string]bool)
 
@@ -219,6 +319,11 @@ func (sm *StorageManager) ValidateMounts(mounts []string) error {
 		cleanDest := normalizeMountPath(pm.Dest)
 		if err := checkReservedSystemPath(cleanDest, fmt.Sprintf("mount destination %q", pm.Dest)); err != nil {
 			return err
+		}
+		if isPathways {
+			if builtin := pathwaysMountConflict(cleanDest, hasColocatedSidecar); builtin != "" {
+				return fmt.Errorf("mount destination %q conflicts with built-in Pathways mount %q; choose a different path", pm.Dest, builtin)
+			}
 		}
 
 		sourceKey := pm.Src
@@ -243,8 +348,23 @@ func (sm *StorageManager) ValidateMounts(mounts []string) error {
 	return nil
 }
 
-// ValidateRamdiskDir checks --gke-mtc-ramdisk-dir for valid path format, root '/' prohibition, reserved system directory prohibition, and conflicts with user mounts.
-func (sm *StorageManager) ValidateRamdiskDir(ramdiskDir string, rawMounts []string) error {
+// pathwaysMountConflict returns the built-in Pathways mount that cleanPath
+// collides with, or "" if there is none. /tmp/sidecar is only mounted when a
+// colocated Python sidecar is configured.
+func pathwaysMountConflict(cleanPath string, hasColocatedSidecar bool) string {
+	if cleanPath == "/tmp" {
+		return "/tmp"
+	}
+	if hasColocatedSidecar && (cleanPath == "/tmp/sidecar" || strings.HasPrefix(cleanPath, "/tmp/sidecar/")) {
+		return "/tmp/sidecar"
+	}
+	return ""
+}
+
+// ValidateRamdiskDir checks that --gke-mtc-ramdisk-dir is an absolute,
+// non-reserved path that collides with no --mount destination and, for
+// Pathways jobs, no built-in Pathways mount.
+func (sm *StorageManager) ValidateRamdiskDir(ramdiskDir string, rawMounts []string, isPathways bool, hasColocatedSidecar bool) error {
 	if ramdiskDir == "" {
 		return nil
 	}
@@ -254,6 +374,11 @@ func (sm *StorageManager) ValidateRamdiskDir(ramdiskDir string, rawMounts []stri
 	cleanRamdisk := normalizeMountPath(ramdiskDir)
 	if err := checkReservedSystemPath(cleanRamdisk, "--gke-mtc-ramdisk-dir"); err != nil {
 		return err
+	}
+	if isPathways {
+		if builtin := pathwaysMountConflict(cleanRamdisk, hasColocatedSidecar); builtin != "" {
+			return fmt.Errorf("--gke-mtc-ramdisk-dir path %q conflicts with built-in Pathways mount %q; choose a different path", ramdiskDir, builtin)
+		}
 	}
 	for _, m := range rawMounts {
 		pm, err := sm.parseSingleVolume(m)
@@ -541,7 +666,8 @@ func validateSrcScheme(src string, vStr string) error {
 		}
 		return nil
 	}
-	return fmt.Errorf("invalid volume format: %s. Unsupported scheme.", vStr)
+	scheme, _, _ := strings.Cut(src, ":")
+	return fmt.Errorf("invalid volume format: %s. unsupported scheme: %s. Only gs:// and filestore:// schemes are supported. To mount an existing PVC (including for other storage types), specify the volume claim name directly without a URI scheme prefix (e.g. '<pvc-name>;<destination>')", vStr, scheme)
 }
 
 // truncatePVCName enforces maxLen without leaving a trailing '-'.
@@ -614,7 +740,7 @@ func (sm *StorageManager) generateFilestoreResources(pm parsedMount, idx int, jo
 		return info, "", nil
 	}
 
-	filestoreTmpl, err := sm.orchestrator.parseGKETextTemplate("filestore.tmpl")
+	filestoreTmpl, err := k8s.ParseTextTemplate(sm.orchestrator.gkeCustomTemplatesPath, "filestore.tmpl")
 	if err != nil {
 		return MountInfo{}, "", fmt.Errorf("failed to parse filestore template: %w", err)
 	}
@@ -732,7 +858,7 @@ func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx in
 		return MountInfo{}, "", err
 	}
 
-	tmpl, err := sm.orchestrator.parseGKETextTemplate("gcs_fuse_pv_pvc.tmpl")
+	tmpl, err := k8s.ParseTextTemplate(sm.orchestrator.gkeCustomTemplatesPath, "gcs_fuse_pv_pvc.tmpl")
 	if err != nil {
 		return MountInfo{}, "", fmt.Errorf("failed to parse GCSFuse PV/PVC template: %w", err)
 	}
@@ -803,7 +929,7 @@ func (sm *StorageManager) checkExistingGatewayPV(pvName, pvcName, ns, renderedYA
 		return nil
 	}
 
-	res := sm.orchestrator.executor.ExecuteCommand("kubectl", "get", "pv", pvName, "--ignore-not-found", "-o", "json")
+	res := sm.orchestrator.kubectl("get", "pv", pvName, "--ignore-not-found", "-o", "json")
 	if res.ExitCode != 0 {
 		return fmt.Errorf("failed to inspect existing gateway PV %q (needs cluster-scoped `get pv`): %s",
 			pvName, strings.TrimSpace(res.Stderr))
@@ -850,7 +976,7 @@ func (sm *StorageManager) recreateStaleGatewayPV(pvName string, existing existin
 	}
 
 	logging.Info("Recreating stale gateway PV %q (%s)", pvName, phase)
-	res := sm.orchestrator.executor.ExecuteCommand("kubectl", "delete", "pv", pvName,
+	res := sm.orchestrator.kubectl("delete", "pv", pvName,
 		"--ignore-not-found", "--wait=true", "--timeout=60s")
 	if res.ExitCode != 0 {
 		return fmt.Errorf("failed to delete stale gateway PV %q: %s", pvName, strings.TrimSpace(res.Stderr))
@@ -869,12 +995,12 @@ func (sm *StorageManager) claimedAt() string {
 // waitForGatewayRelease waits out a gateway deleted by a recent cleanup, so an immediate resubmit recreates it.
 func (sm *StorageManager) waitForGatewayRelease(pvName, pvcName, ns string) error {
 	logging.Info("Waiting up to %s for storage gateway PV %q from a previous job to finish deleting...", gatewayReleaseTimeout, pvName)
-	res := sm.orchestrator.executor.ExecuteCommand("kubectl", "wait", "--for=delete", "pv/"+pvName,
+	res := sm.orchestrator.kubectl("wait", "--for=delete", "pv/"+pvName,
 		"--timeout="+gatewayReleaseTimeout.String())
 	if res.ExitCode == 0 {
 		return nil
 	}
-	if gone := sm.orchestrator.executor.ExecuteCommand("kubectl", "get", "pv", pvName, "--ignore-not-found", "-o", "name"); gone.ExitCode == 0 && strings.TrimSpace(gone.Stdout) == "" {
+	if gone := sm.orchestrator.kubectl("get", "pv", pvName, "--ignore-not-found", "-o", "name"); gone.ExitCode == 0 && strings.TrimSpace(gone.Stdout) == "" {
 		return nil
 	}
 	return fmt.Errorf(
@@ -932,7 +1058,8 @@ func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountIn
 		}
 	}
 
-	if opts.GKEMTCEnabled {
+	// Pathways jobs get the MTC volume from pathways_jobset.tmpl, on worker pods only.
+	if opts.GKEMTCEnabled && !opts.IsPathwaysJob {
 		ramdiskDir := opts.GKEMTCRamdiskDirectory
 		mountSpecs = append(mountSpecs,
 			map[string]interface{}{"name": "cache", "mountPath": ramdiskDir},
@@ -940,11 +1067,6 @@ func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountIn
 		volSpecs = append(volSpecs,
 			map[string]interface{}{"name": "cache", "csi": map[string]interface{}{"driver": multitierCheckpointCSIDriver}},
 		)
-	}
-
-	if opts.IsPathwaysJob && opts.Pathways.ColocatedPythonSidecarImage != "" {
-		mountSpecs = append(mountSpecs, map[string]interface{}{"name": "sidecar-shared-memory", "mountPath": "/tmp/sidecar"})
-		volSpecs = append(volSpecs, map[string]interface{}{"name": "sidecar-shared-memory", "emptyDir": map[string]interface{}{"medium": "Memory"}})
 	}
 
 	if len(volSpecs) == 0 {
@@ -993,7 +1115,7 @@ func buildVolumeSpec(v MountInfo) map[string]interface{} {
 			volumeAttributes[key] = value
 		}
 		spec["csi"] = map[string]interface{}{
-			"driver":           "gcsfuse.csi.storage.gke.io",
+			"driver":           gcsFuseCSIDriver,
 			"readOnly":         v.ReadOnly,
 			"volumeAttributes": volumeAttributes,
 		}
@@ -1317,7 +1439,7 @@ func (sm *StorageManager) validateStorageClassesExist(mounts []profileMount, dry
 }
 
 func (sm *StorageManager) validateStorageClassExists(storageClass string, dryRun bool) error {
-	res := sm.orchestrator.executor.ExecuteCommand("kubectl", "get", "storageclass", storageClass, "--ignore-not-found", "-o", "name")
+	res := sm.orchestrator.kubectl("get", "storageclass", storageClass, "--ignore-not-found", "-o", "name")
 	if res.ExitCode != 0 {
 		logging.Warn("Could not verify that StorageClass %q exists on the cluster: %s. Proceeding with job submission.",
 			storageClass, strings.TrimSpace(res.Stderr))

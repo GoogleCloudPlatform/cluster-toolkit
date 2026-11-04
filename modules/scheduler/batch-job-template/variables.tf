@@ -84,6 +84,40 @@ variable "mpi_mode" {
   default     = false
 }
 
+variable "max_retry_count" {
+  description = "Maximum number of automatic retries for each failed task (between 0 and 10). Defaults to null (Batch default is 0)."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.max_retry_count == null ? true : (var.max_retry_count >= 0 && var.max_retry_count <= 10 && floor(var.max_retry_count) == var.max_retry_count)
+    error_message = "max_retry_count must be an integer between 0 and 10."
+  }
+}
+
+variable "lifecycle_policies" {
+  description = "List of lifecycle policies defining task retry or fail actions for specific exit codes (e.g., 50001 for Spot preemption; note that Spot VMs require a custom instance_template). Note: Cloud Batch currently supports at most 1 lifecycle policy."
+  type = list(object({
+    action     = string
+    exit_codes = list(number)
+  }))
+  default = []
+
+  validation {
+    condition     = length(var.lifecycle_policies) <= 1
+    error_message = "Cloud Batch currently supports at most 1 lifecycle policy."
+  }
+
+  validation {
+    condition = alltrue([
+      for p in var.lifecycle_policies :
+      contains(["RETRY_TASK", "FAIL_TASK"], p.action) && length(p.exit_codes) > 0 &&
+      alltrue([for code in p.exit_codes : code >= 0 && floor(code) == code])
+    ])
+    error_message = "Each lifecycle_policies entry must set action to 'RETRY_TASK' or 'FAIL_TASK' and a non-empty list of non-negative integer exit_codes."
+  }
+}
+
 variable "log_policy" {
   description = <<-EOT
   Create a block to define log policy.
@@ -133,10 +167,17 @@ variable "enable_public_ips" {
 }
 
 variable "service_account" {
-  description = "Service account to attach to the Google Cloud Batch compute node. Ignored if `instance_template` is provided."
+  description = "Service account to attach to the Google Cloud Batch compute node and Batch job allocationPolicy. If `instance_template` is provided, `scopes` is ignored and `email` must match the service account set in that template."
   type = object({
-    email  = string,
-    scopes = set(string)
+    email = string,
+    scopes = optional(set(string), [
+      "https://www.googleapis.com/auth/devstorage.read_only",
+      "https://www.googleapis.com/auth/logging.write",
+      "https://www.googleapis.com/auth/monitoring.write",
+      "https://www.googleapis.com/auth/servicecontrol",
+      "https://www.googleapis.com/auth/service.management.readonly",
+      "https://www.googleapis.com/auth/trace.append"
+    ])
   })
   default = {
     email = null

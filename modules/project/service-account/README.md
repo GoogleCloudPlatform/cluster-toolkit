@@ -9,16 +9,16 @@ Allows creation of service accounts for a Google Cloud Platform project.
   source: modules/project/service-account
   settings:
     project_id: $(vars.project_id)
-    name: instance_acct
+    name: instance-acct
     project_roles:
     - logging.logWriter
     - monitoring.metricWriter
     - storage.objectViewer
 ```
 
-This creates a service account in GCP project "project_id" with the name
-"instance_acct". It will have the 3 roles listed for all resources within the
-project.
+This creates a service account in GCP project `project_id` with the ID
+`<deployment_name>-instance-acct`. It will have the 3 roles listed for all
+resources within the project.
 
 ### Usage with startup-script module
 
@@ -32,7 +32,7 @@ service account as a bucket viewer in the startup-script module:
   source: modules/project/service-account
   settings:
     project_id: $(vars.project_id)
-    name: instance_acct
+    name: instance-acct
     project_roles:
     - logging.logWriter
     - monitoring.metricWriter
@@ -79,7 +79,7 @@ limitations under the License.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
-| <a name="module_service_account"></a> [service\_account](#module\_service\_account) | terraform-google-modules/service-accounts/google | ~> 4.2 |
+| <a name="module_service_account"></a> [service\_account](#module\_service\_account) | terraform-google-modules/service-accounts/google | ~> 5.1 |
 
 ## Resources
 

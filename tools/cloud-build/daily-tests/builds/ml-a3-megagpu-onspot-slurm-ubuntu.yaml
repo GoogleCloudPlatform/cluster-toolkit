@@ -143,10 +143,12 @@ steps:
               cd /workspace
 
               DEPLOYMENT_NAME="a3m-onspot-slurm-$$BUILD_ID_SHORT"
+              BLUEPRINT="/workspace/examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml"
+              BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$BLUEPRINT" 2>/dev/null | awk '{print \$$2}')
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/\$${BP_NAME:-*}/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
@@ -163,7 +165,6 @@ steps:
               bash tools/get_binary.sh "${_TEST_PREFIX}"
               REGION="\$${ZONE%-*}"
               BUILD_ID_SHORT="\$${BUILD_ID:0:6}"
-              BLUEPRINT="/workspace/examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml"
               sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' \$$BLUEPRINT
               sed -i -e '/reason:/d' \$$BLUEPRINT
 

@@ -16,7 +16,7 @@
 
 output "network_name" {
   description = "Name of the new VPC network"
-  value       = module.vpc.network_name
+  value       = local.network_name
   depends_on  = [module.vpc]
 }
 

@@ -21,6 +21,13 @@ spec:
 ghpc:
   inject_module_id: job_id
   validators:
+  - validator: range
+    inputs:
+      vars: [max_retry_count]
+      min: 0
+      max: 10
+    error_message: "max_retry_count must be an integer between 0 and 10."
+
   - validator: allowed_enum
     inputs:
       vars: [on_host_maintenance]

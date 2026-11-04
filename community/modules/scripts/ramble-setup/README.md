@@ -38,17 +38,15 @@ This example simply installs ramble on a VM.
     install_dir: /ramble
     ramble_url: https://github.com/Ramble-Project/ramble
     ramble_ref: v0.2.1
-    log_file: /var/log/ramble.log
-    chown_owner: “owner”
-    chgrp_group: “user_group”
-    chmod_mode: “a+r”
+    system_user_name: "owner"
+    chmod_mode: "a+r"
 ```
 
-This example simply installs ramble into a VM at the location `/ramble`, checks
-out the v0.2.1 tag, changes the owner and group to “owner” and “user_group”,
-and chmod’s the clone to make it world readable.
+This example installs ramble into a VM at the location `/ramble`, checks
+out the `v0.2.1` tag as user `"owner"`, and chmod's the clone to make it world
+readable.
 
-Also see a more complete [Ramble example blueprint](../../../examples/ramble.yaml).
+Also see a more complete [Ramble example blueprint](../../../examples/hpc-slurm-ramble-gromacs.yaml).
 
 ## License
 

@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 const (
@@ -167,7 +168,8 @@ func cancelTestOrchestrator(kc KubeClient) *GKEOrchestrator {
 		"gcloud":  {{ExitCode: 0}, {ExitCode: 0}, {ExitCode: 0}},
 		"kubectl": {{ExitCode: 0}, {ExitCode: 0}, {ExitCode: 0}},
 	})
-	return &GKEOrchestrator{executor: ex, kubeClient: kc, namespace: "default", dynClient: nopDynamicClient{}}
+	return &GKEOrchestrator{executor: ex, kubeClient: kc, namespace: "default", dynClient: nopDynamicClient{},
+		kubeconfigLoader: staticLoader(clientcmdapi.NewConfig())}
 }
 
 var cancelOpts = orchestrator.CancelOptions{ClusterName: "c", ClusterLocation: "us-central1", ProjectID: "p"}
@@ -177,10 +179,12 @@ var cancelOpts = orchestrator.CancelOptions{ClusterName: "c", ClusterLocation: "
 // referenced by any JobSet, but the namespace sweep must still reclaim it.
 func TestCancelJob_SweepsGatewaysLeftByTTLExpiredJobs(t *testing.T) {
 	mock := gatewayMock(nil)
-	if err := cancelTestOrchestrator(mock).CancelJob("job-b", cancelOpts); err != nil {
+	orc := cancelTestOrchestrator(mock)
+	if err := orc.CancelJob("job-b", cancelOpts); err != nil {
 		t.Fatalf("CancelJob() unexpected error: %v", err)
 	}
 	assertDeleted(t, mock, []string{testClaim}, []string{testPV})
+	orc.executor.(*MockExecutor).assertAllKubectlPinned(t, "gke_p_us-central1_c")
 }
 
 // TestCancelJob_NotFoundStillReclaimsAndReportsError covers cancelling a job

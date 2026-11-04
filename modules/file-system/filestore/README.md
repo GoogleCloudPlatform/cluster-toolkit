@@ -38,11 +38,11 @@ Usage can be enabled in a blueprint with, for example:
 At the time of writing, Filestore supports 5 [tiers of service][tiers] that are
 specified in the Toolkit using the following names:
 
-- Basic HDD: "BASIC\_HDD" ([preferred][tierapi]) or "STANDARD" (deprecated)
-- Basic SSD: "BASIC\_SSD" ([preferred][tierapi]) or "PREMIUM" (deprecated)
-- Zonal: "ZONAL"
-- Enterprise: "ENTERPRISE"
-- Regional: "REGIONAL"
+- Basic HDD: `"BASIC_HDD"` (legacy `"STANDARD"` is rejected by validation)
+- Basic SSD: `"BASIC_SSD"` (legacy `"PREMIUM"` is rejected by validation)
+- Zonal: `"ZONAL"` (or legacy `"HIGH_SCALE_SSD"`)
+- Enterprise: `"ENTERPRISE"`
+- Regional: `"REGIONAL"`
 
 [tierapi]: https://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier
 

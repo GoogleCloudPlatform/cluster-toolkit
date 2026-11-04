@@ -1,0 +1,86 @@
+#!/bin/bash
+# Installs the per-user desktop broker package and its virtualenv.
+set -euo pipefail
+
+install_root=${jsonencode(install_root)}
+broker_dir=${jsonencode(broker_dir)}
+broker_config_path=${jsonencode(broker_config_path)}
+broker_app_dir=${jsonencode(broker_app_dir)}
+broker_state_dir=${jsonencode(broker_state_dir)}
+broker_log_dir=${jsonencode(broker_log_dir)}
+broker_runtime_dir=${jsonencode(broker_runtime_dir)}
+broker_service_path=${jsonencode(broker_service_path)}
+broker_venv_dir=${jsonencode(broker_venv_dir)}
+broker_python_path=${jsonencode(broker_python_path)}
+broker_pip_path=${jsonencode(broker_pip_path)}
+broker_socket_path=${jsonencode(broker_socket_path)}
+requires_units=${jsonencode(requires_units)}
+
+if command -v dnf >/dev/null 2>&1; then
+  dnf install -y curl python3 python3-pip tar
+elif command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y curl python3 python3-pip python3-venv tar
+else
+  echo "Unsupported package manager for the desktop broker" >&2
+  exit 1
+fi
+
+install -d -m 0755 "$install_root" "$broker_dir" "$broker_app_dir" "$broker_log_dir" "$broker_venv_dir"
+# Session records name each user, their uid, their display number and - on the
+# tcp transport - their RFB password.
+install -d -m 0700 "$broker_state_dir"
+# Parent of the broker's socket and the per-user 0700 runtime directories, so it
+# must stay traversable. On tmpfs, so a socket or password file cannot outlive a
+# reboot.
+install -d -m 0755 "$broker_runtime_dir"
+
+# The package is staged as individual files, so tighten permissions across the
+# whole tree rather than per file.
+find "$broker_app_dir" -type d -exec chmod 0755 {} +
+find "$broker_app_dir" -type f -name '*.py' -exec chmod 0644 {} +
+
+python3 -m venv "$broker_venv_dir"
+"$broker_pip_path" install --upgrade pip
+"$broker_pip_path" install 'aiohttp~=3.10'
+
+
+# Only the broker, which runs as root, reads it.
+chmod 0600 "$broker_config_path"
+
+# ---------------------------------------------------------------- service
+cat >"$broker_service_path" <<EOF_BROKER_SERVICE
+[Unit]
+Description=GHPC per-user desktop broker
+After=network-online.target $requires_units
+Wants=network-online.target
+$([ -n "$requires_units" ] && echo "Requires=$requires_units")
+
+[Service]
+Type=simple
+Environment=PYTHONPATH=$broker_app_dir
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=$broker_python_path -m desktop_broker.main --config $broker_config_path
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF_BROKER_SERVICE
+
+systemctl daemon-reload
+systemctl enable --now ghpc-desktop-broker.service
+
+# Fail the runner rather than leave a broker that is not actually serving.
+for _ in $(seq 1 30); do
+  if curl -fsS -o /dev/null --unix-socket "$broker_socket_path" http://localhost/healthz; then
+    echo "Desktop broker is serving on $broker_socket_path"
+    exit 0
+  fi
+  sleep 2
+done
+
+echo "Desktop broker did not become healthy" >&2
+journalctl -u ghpc-desktop-broker.service --no-pager | tail -50 >&2
+exit 1

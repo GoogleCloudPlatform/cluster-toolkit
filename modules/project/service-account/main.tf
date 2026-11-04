@@ -21,7 +21,7 @@ locals {
 
 module "service_account" {
   source  = "terraform-google-modules/service-accounts/google"
-  version = "~> 4.2"
+  version = "~> 5.1"
 
   billing_account_id = var.billing_account_id
   description        = local.description

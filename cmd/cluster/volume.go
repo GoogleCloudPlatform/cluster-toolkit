@@ -34,6 +34,8 @@ var VolumeCmd = &cobra.Command{
 func init() {
 	VolumeCmd.Flags().StringVarP(&clusterName, "cluster", "c", "", "Name of the GKE cluster.")
 	VolumeCmd.Flags().StringVarP(&location, "location", "l", "", "Location (region or zone) of the GKE cluster.")
+	_ = VolumeCmd.MarkFlagRequired("cluster")
+	_ = VolumeCmd.MarkFlagRequired("location")
 }
 
 func runListVolumes(cmd *cobra.Command, args []string) error {

@@ -21,15 +21,15 @@ Toolkit guidance to enable [APIs][apis] and establish minimum resource
 - [compute.googleapis.com](https://cloud.google.com/compute/docs/reference/rest/v1#service:-compute.googleapis.com) (Google Compute Engine)
 - [secretmanager.googleapis.com](https://cloud.google.com/secret-manager/docs/reference/rest#service:-secretmanager.googleapis.com) (Secret manager, for secure mode)
 
-[apis]: ../../../README.md#enable-gcp-apis
-[quotas]: ../../../README.md#gcp-quotas
+[apis]: https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment
+[quotas]: https://cloud.google.com/compute/quotas
 
 ### Deploy the flux-framework Cluster
 
 Use `gcluster` to provision the blueprint
 
 ```bash
-gcluster create community/examples/flux-framework --vars project_id=<<PROJECT_ID>>
+./gcluster create community/examples/flux-framework/flux-cluster.yaml --vars project_id=<<PROJECT_ID>>
 ```
 
 This will create a directory containing Terraform modules.
