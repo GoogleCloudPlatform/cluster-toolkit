@@ -30,3 +30,10 @@ ghpc:
       vars: [network_id]
       pattern: "^projects/[^/]+/global/networks/[^/]+$"
     error_message: "The network id must be provided in the following format: projects/<project_id>/global/networks/<network_name>."
+  - validator: conditional
+    inputs:
+      trigger: data_cache_enabled
+      trigger_value: true
+      dependent: edition
+      dependent_value: ENTERPRISE_PLUS
+    error_message: "data_cache_enabled requires edition to be ENTERPRISE_PLUS; with ENTERPRISE, Cloud SQL has no data cache and the setting would be ignored."

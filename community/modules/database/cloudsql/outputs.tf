@@ -29,9 +29,15 @@ output "self_link" {
   value       = local.instance_self_link
 }
 
+# depends_on is per output. It holds each output back until what a consumer
+# needs to use it exists: the PSC endpoint's forwarding rule for the address,
+# and the password's secret version and accessor grants for the secret.
+
 output "private_ip_address" {
   description = "The private IP address of the Cloud SQL instance, or its PSC endpoint address when use_psc_connection is true."
   value       = local.server_ip
+
+  depends_on = [google_compute_forwarding_rule.psc_consumer]
 }
 
 output "database_name" {
@@ -47,9 +53,19 @@ output "username" {
 output "password_secret_id" {
   description = "The Secret Manager secret ID holding the database password."
   value       = google_secret_manager_secret.password.secret_id
+
+  depends_on = [
+    google_secret_manager_secret_version.password,
+    google_secret_manager_secret_iam_member.password_accessor,
+  ]
 }
 
 output "password_secret_version" {
   description = "The Secret Manager secret version resource name holding the database password."
   value       = google_secret_manager_secret_version.password.name
+
+  depends_on = [
+    google_secret_manager_secret_version.password,
+    google_secret_manager_secret_iam_member.password_accessor,
+  ]
 }

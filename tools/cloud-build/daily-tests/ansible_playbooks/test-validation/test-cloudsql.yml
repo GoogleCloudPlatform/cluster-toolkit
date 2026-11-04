@@ -287,55 +287,59 @@
   changed_when: false
   failed_when: old_login.rc == 0 or 'Access denied' not in old_login.stderr
 
-- name: Turn on deletion protection for the MySQL instance
-  delegate_to: localhost
-  ansible.builtin.command: >-
-    terraform -chdir={{ workspace }}/{{ deployment_name }}/{{ custom_vars.deployment_group }}
-    apply -auto-approve -input=false -no-color
-    -var mysql_password_version=2 -var mysql_deletion_protection=true
-  changed_when: true
+# Deletion protection is turned off in always, so a failure inside the block
+# cannot leave a protected instance that the deployment's destroy then leaks.
+- name: Check that a protected instance refuses destroy
+  block:
+  - name: Turn on deletion protection for the MySQL instance
+    delegate_to: localhost
+    ansible.builtin.command: >-
+      terraform -chdir={{ workspace }}/{{ deployment_name }}/{{ custom_vars.deployment_group }}
+      apply -auto-approve -input=false -no-color
+      -var mysql_password_version=2 -var mysql_deletion_protection=true
+    changed_when: true
 
-# Targeting the database also destroys everything that depends on it,
-# including the module's destroy guard, which runs first.
-- name: Try to destroy the protected database
-  delegate_to: localhost
-  ansible.builtin.command: >-
-    terraform -chdir={{ workspace }}/{{ deployment_name }}/{{ custom_vars.deployment_group }}
-    destroy -auto-approve -input=false -no-color
-    -var mysql_password_version=2 -var mysql_deletion_protection=true
-    -target=module.sql.google_sql_database.database
-  register: protected_destroy
-  changed_when: false
-  failed_when: >-
-    protected_destroy.rc == 0 or
-    'Set both to false and apply before destroying it' not in (protected_destroy.stdout + protected_destroy.stderr)
+  # Targeting the database also destroys everything that depends on it,
+  # including the module's destroy guard, which runs first.
+  - name: Try to destroy the protected database
+    delegate_to: localhost
+    ansible.builtin.command: >-
+      terraform -chdir={{ workspace }}/{{ deployment_name }}/{{ custom_vars.deployment_group }}
+      destroy -auto-approve -input=false -no-color
+      -var mysql_password_version=2 -var mysql_deletion_protection=true
+      -target=module.sql.google_sql_database.database
+    register: protected_destroy
+    changed_when: false
+    failed_when: >-
+      protected_destroy.rc == 0 or
+      'Set both to false and apply before destroying it' not in (protected_destroy.stdout + protected_destroy.stderr)
 
-- name: List the instance's databases
-  delegate_to: localhost
-  ansible.builtin.command: >-
-    gcloud sql databases list --instance={{ sql_instance }}
-    --project {{ project }} --format=value(name)
-  register: databases_after
-  changed_when: false
+  - name: List the instance's databases
+    delegate_to: localhost
+    ansible.builtin.command: >-
+      gcloud sql databases list --instance={{ sql_instance }}
+      --project {{ project }} --format=value(name)
+    register: databases_after
+    changed_when: false
 
-- name: Assert the refused destroy left the database in place
-  ansible.builtin.assert:
-    that:
-    - "'appdb' in databases_after.stdout_lines"
+  - name: Assert the refused destroy left the database in place
+    ansible.builtin.assert:
+      that:
+      - "'appdb' in databases_after.stdout_lines"
 
-- name: Log in after the refused destroy
-  ansible.builtin.command: >-
-    mysql --ssl --connect-timeout=10 -h {{ private_ip }} -u {{ sql_username }} -N -e 'SELECT 1' appdb
-  environment:
-    MYSQL_PWD: "{{ rotated_secret.stdout }}"
-  register: guarded_login
-  no_log: true
-  changed_when: false
-
-- name: Turn deletion protection off again so the deployment can be destroyed
-  delegate_to: localhost
-  ansible.builtin.command: >-
-    terraform -chdir={{ workspace }}/{{ deployment_name }}/{{ custom_vars.deployment_group }}
-    apply -auto-approve -input=false -no-color
-    -var mysql_password_version=2 -var mysql_deletion_protection=false
-  changed_when: true
+  - name: Log in after the refused destroy
+    ansible.builtin.command: >-
+      mysql --ssl --connect-timeout=10 -h {{ private_ip }} -u {{ sql_username }} -N -e 'SELECT 1' appdb
+    environment:
+      MYSQL_PWD: "{{ rotated_secret.stdout }}"
+    register: guarded_login
+    no_log: true
+    changed_when: false
+  always:
+  - name: Turn deletion protection off again so the deployment can be destroyed
+    delegate_to: localhost
+    ansible.builtin.command: >-
+      terraform -chdir={{ workspace }}/{{ deployment_name }}/{{ custom_vars.deployment_group }}
+      apply -auto-approve -input=false -no-color
+      -var mysql_password_version=2 -var mysql_deletion_protection=false
+    changed_when: true

@@ -27,9 +27,12 @@ locals {
 # abandoned so destroy keeps its data. Deletion protection guards only the
 # instance, and Terraform destroys the database and user before it, so they
 # are also abandoned while either protection is on.
+#
+# deployment_name may contain underscores, which Cloud SQL, address and
+# forwarding rule names do not allow, so they become hyphens in the default name.
 locals {
   create_instance        = var.existing_instance_name == null
-  sql_instance_name      = var.sql_instance_name != null ? var.sql_instance_name : (local.create_instance ? "${var.deployment_name}-sql-${random_id.resource_name_suffix[0].hex}" : null)
+  sql_instance_name      = var.sql_instance_name != null ? var.sql_instance_name : (local.create_instance ? "${replace(var.deployment_name, "_", "-")}-sql-${random_id.resource_name_suffix[0].hex}" : null)
   database_engine        = local.create_instance ? var.database_version : data.google_sql_database_instance.existing[0].database_version
   instance_protected     = local.create_instance && (coalesce(var.deletion_protection, true) || coalesce(var.api_deletion_protection, false))
   user_deletion_policy   = var.user_deletion_policy != null ? var.user_deletion_policy : (startswith(local.database_engine, "POSTGRES") || local.instance_protected ? "ABANDON" : null)
