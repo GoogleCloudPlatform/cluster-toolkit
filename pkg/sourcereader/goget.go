@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"hpc-toolkit/pkg/dependencies"
@@ -68,6 +69,9 @@ func getterClient(source string, dst string) getter.Client {
 	}
 }
 
+// gitEnvMu protects against concurrent modification of repository-local Git environment variables.
+var gitEnvMu sync.Mutex
+
 // gitLocalEnvVars lists repository-local Git environment variables that must not leak into child git processes.
 var gitLocalEnvVars = []string{
 	"GIT_ALTERNATE_OBJECT_DIRECTORIES",
@@ -84,8 +88,8 @@ var gitLocalEnvVars = []string{
 	"GIT_WORK_TREE",
 }
 
-// UnsetGitLocalEnvVars removes repository-local Git environment variables from the current process environment and returns their original values.
-func UnsetGitLocalEnvVars() map[string]string {
+// unsetGitLocalEnvVars removes repository-local Git environment variables from the current process environment and returns their original values.
+func unsetGitLocalEnvVars() map[string]string {
 	originalEnv := make(map[string]string)
 	for _, key := range gitLocalEnvVars {
 		if val, ok := os.LookupEnv(key); ok {
@@ -96,8 +100,8 @@ func UnsetGitLocalEnvVars() map[string]string {
 	return originalEnv
 }
 
-// RestoreGitLocalEnvVars restores repository-local Git environment variables.
-func RestoreGitLocalEnvVars(env map[string]string) {
+// restoreGitLocalEnvVars restores repository-local Git environment variables.
+func restoreGitLocalEnvVars(env map[string]string) {
 	for key, val := range env {
 		_ = os.Setenv(key, val)
 	}
@@ -105,8 +109,12 @@ func RestoreGitLocalEnvVars(env map[string]string) {
 
 // GetModule copies the git source to a provided destination (the deployment directory)
 func (r GoGetterSourceReader) GetModule(source string, dst string) error {
-	origEnv := UnsetGitLocalEnvVars()
-	defer RestoreGitLocalEnvVars(origEnv)
+	gitEnvMu.Lock()
+	origEnv := unsetGitLocalEnvVars()
+	defer func() {
+		restoreGitLocalEnvVars(origEnv)
+		gitEnvMu.Unlock()
+	}()
 
 	pwd, err := os.Getwd()
 	if err != nil {

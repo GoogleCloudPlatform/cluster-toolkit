@@ -376,7 +376,7 @@ func resetJobFlags() {
 	gracePeriodStr = "30s"
 	gkeDisableParallelContainers = false
 	placementPolicy = ""
-	nodeConstraint = nil
+	nodeConstraint = make(map[string]string)
 	cpuAffinityStr = ""
 	restartOnExitCodes = nil
 	imagePullSecrets = ""
