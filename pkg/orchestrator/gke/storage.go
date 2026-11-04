@@ -74,7 +74,10 @@ const (
 	// gatewayReleaseTimeout bounds how long submit waits for a gateway that is still being deleted.
 	gatewayReleaseTimeout = 2 * time.Minute
 
+	gcsFuseCSIDriver           = "gcsfuse.csi.storage.gke.io"
 	servingProfileStorageClass = "gcsfusecsi-serving"
+	pvcGCSFuseJSONPath         = `jsonpath={.spec.volumeName}{"\t"}{.spec.storageClassName}{"\t"}{.metadata.annotations.volume\.kubernetes\.io/storage-provisioner}{"\t"}{.metadata.annotations.volume\.beta\.kubernetes\.io/storage-provisioner}`
+	pvCSIDriverTemplate        = `go-template={{if .spec.csi}}{{.spec.csi.driver}}{{end}}`
 
 	// minGCSFuseProfileGKEVersion is the first GKE version with storage profile StorageClasses.
 	minGCSFuseProfileGKEVersion = "1.35.1-gke.1616000"
@@ -143,8 +146,95 @@ func (sm *StorageManager) dispatchMount(pm parsedMount, idx int, job orchestrato
 	case strings.HasPrefix(pm.Src, "gs://") && pm.Profile != "":
 		return sm.generateGCSFuseProfileResources(pm, idx, job, state)
 	default:
-		return buildPodLevelMount(pm, idx), "", nil
+		info := buildPodLevelMount(pm, idx)
+		if info.Type == "pvc" {
+			ns, err := sm.resolveNamespace(job)
+			if err != nil {
+				logging.Warn("Could not resolve namespace to inspect PVC %q for GCSFuse CSI driver (%v); defaulting to \"default\".", info.Source, err)
+				ns = "default"
+			}
+			if sm.isGCSFuseBackedPVC(info.Source, ns) {
+				info.NeedsGCSFuseSidecar = true
+			}
+		}
+		return info, "", nil
 	}
+}
+
+// isGCSFuseBackedPVC reports whether an existing PVC is backed by the GKE GCSFuse CSI driver
+// (via its storage-provisioner annotation, a bound PV with spec.csi.driver=gcsfuse.csi.storage.gke.io,
+// or a GCSFuse StorageClass), which requires the pod to carry the gke-gcsfuse/volumes: "true" webhook annotation.
+func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string) bool {
+	if strings.HasPrefix(pvcName, gcsFuseGatewayPrefix+"-") {
+		return true
+	}
+	if sm.orchestrator == nil || sm.orchestrator.executor == nil {
+		return false
+	}
+
+	res := sm.orchestrator.kubectl("get", "pvc", pvcName, "-n", ns, "--ignore-not-found", kubectlReadTimeout,
+		"-o", pvcGCSFuseJSONPath)
+	if res.ExitCode != 0 {
+		logGCSFuseInspectWarning("pvc", pvcName, pvcName, res.Stderr)
+		return false
+	}
+	volumeName, storageClassName, provisioner := parsePVCGCSFuseFields(res.Stdout)
+	if provisioner != "" {
+		return provisioner == gcsFuseCSIDriver
+	}
+	if volumeName == "" && storageClassName == "" {
+		return false
+	}
+
+	lowerSC := strings.ToLower(storageClassName)
+	if sc := gcsFuseProfileStorageClasses[lowerSC]; sc != "" && sc == lowerSC {
+		return true
+	}
+	return sm.hasGCSFuseCSIField("pv", volumeName, pvcName, pvCSIDriverTemplate) ||
+		sm.hasGCSFuseCSIField("storageclass", storageClassName, pvcName, "jsonpath={.provisioner}")
+}
+
+func parsePVCGCSFuseFields(stdout string) (volumeName, storageClassName, provisioner string) {
+	if strings.TrimSpace(stdout) == "" {
+		return "", "", ""
+	}
+	fields := strings.Split(strings.Trim(stdout, "\r\n"), "\t")
+	volumeName = strings.TrimSpace(fields[0])
+	if len(fields) > 1 {
+		storageClassName = strings.TrimSpace(fields[1])
+	}
+	for _, ann := range fields[min(2, len(fields)):] {
+		if ann = strings.TrimSpace(ann); ann == gcsFuseCSIDriver {
+			return volumeName, storageClassName, ann
+		}
+		if ann != "" && provisioner == "" {
+			provisioner = ann
+		}
+	}
+	return volumeName, storageClassName, provisioner
+}
+
+func (sm *StorageManager) hasGCSFuseCSIField(resourceKind, name, pvcName, outputFormat string) bool {
+	if name == "" {
+		return false
+	}
+	res := sm.orchestrator.kubectl("get", resourceKind, name, "--ignore-not-found", kubectlReadTimeout, "-o", outputFormat)
+	if res.ExitCode != 0 {
+		logGCSFuseInspectWarning(resourceKind, name, pvcName, res.Stderr)
+		return false
+	}
+	return strings.TrimSpace(res.Stdout) == gcsFuseCSIDriver
+}
+
+func logGCSFuseInspectWarning(resourceKind, name, pvcName, stderr string) {
+	errMsg := strings.TrimSpace(stderr)
+	if strings.Contains(errMsg, "Forbidden") {
+		logging.Warn("Permission denied inspecting %s %q for PVC %q (%s). If %q is backed by GCS FUSE, the pod will not receive the required GCSFuse sidecar annotations and may fail to start. Grant 'get' permission on %s or mount the bucket directly with --mount gs://<bucket>;<dest>.",
+			resourceKind, name, pvcName, errMsg, pvcName, resourceKind)
+		return
+	}
+	logging.Warn("Could not inspect %s %q for PVC %q to check for GCSFuse CSI driver: %s.",
+		resourceKind, name, pvcName, errMsg)
 }
 
 func buildPodLevelMount(pm parsedMount, idx int) MountInfo {
@@ -1021,7 +1111,7 @@ func buildVolumeSpec(v MountInfo) map[string]interface{} {
 			volumeAttributes[key] = value
 		}
 		spec["csi"] = map[string]interface{}{
-			"driver":           "gcsfuse.csi.storage.gke.io",
+			"driver":           gcsFuseCSIDriver,
 			"readOnly":         v.ReadOnly,
 			"volumeAttributes": volumeAttributes,
 		}

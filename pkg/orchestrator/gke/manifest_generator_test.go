@@ -2209,6 +2209,138 @@ func TestGeneratePathwaysManifest_MTC(t *testing.T) {
 	}
 }
 
+// TestGeneratePathwaysManifest_ColocatedSidecarUserMounts verifies that user
+// --mount volumes are mounted inside colocated-python-sidecar alongside
+// pathways-worker and workload-container.
+func TestGeneratePathwaysManifest_ColocatedSidecarUserMounts(t *testing.T) {
+	mounts := []string{
+		"gs://my-bucket;/data;ro",
+		"/host/path;/host",
+		"custom-pvc;/mnt/pvc;rw",
+	}
+	tests := []struct {
+		name       string
+		headless   bool
+		ramdiskDir string
+	}{
+		{name: "batch without MTC"},
+		{name: "batch with MTC", ramdiskDir: "/tmp/mtc_checkpoints"},
+		{name: "headless with MTC", headless: true, ramdiskDir: "/tmp/mtc_checkpoints"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := renderPathwaysTestManifest(t, tc.headless, "sidecar:latest", tc.ramdiskDir, mounts)
+			if err := ValidateJobSetManifest(manifest); err != nil {
+				t.Fatalf("ValidateJobSetManifest failed: %v\n%s", err, manifest)
+			}
+
+			specs := pathwaysPodSpecs(t, manifest)
+			worker := specs["worker"]
+			if worker == nil {
+				t.Fatalf("worker replicatedJob not found in manifest")
+			}
+
+			wantWorker := expectedWorkerMounts(tc.ramdiskDir, true)
+			wantWorker["vol-0"] = "/data"
+			wantWorker["vol-1"] = "/host"
+			wantWorker["vol-2"] = "/mnt/pvc"
+
+			for _, cName := range []string{"colocated-python-sidecar", "pathways-worker"} {
+				c := findContainer(worker, cName)
+				if c == nil {
+					t.Fatalf("worker container %q not found", cName)
+				}
+				if diff := cmp.Diff(wantWorker, volumeMountPaths(c)); diff != "" {
+					t.Errorf("%s volume mounts mismatch (-want +got):\n%s", cName, diff)
+				}
+			}
+
+			if !tc.headless {
+				head := specs["pathways-head"]
+				wc := findContainer(head, "workload-container")
+				if wc == nil {
+					t.Fatalf("workload-container not found in pathways-head")
+				}
+				gotHeadMounts := volumeMountPaths(wc)
+				for vol, wantPath := range map[string]string{"vol-0": "/data", "vol-1": "/host", "vol-2": "/mnt/pvc"} {
+					if gotHeadMounts[vol] != wantPath {
+						t.Errorf("workload-container mount %q = %q, want %q", vol, gotHeadMounts[vol], wantPath)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestGenerateManifest_CustomGCSFusePVCAnnotation(t *testing.T) {
+	setupMockMachineConfig(t)
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"guestCpus": 2}`},
+			{ExitCode: 0, Stdout: `{"guestCpus": 2}`},
+		},
+		fmt.Sprintf("kubectl get pvc ub-verify-dataset-pvc -n default --ignore-not-found --request-timeout=10s -o %s", pvcGCSFuseJSONPath): {
+			{ExitCode: 0, Stdout: "ub-verify-dataset-pv\t\t\t"},
+			{ExitCode: 0, Stdout: "ub-verify-dataset-pv\t\t\t"},
+		},
+		fmt.Sprintf("kubectl get pv ub-verify-dataset-pv --ignore-not-found --request-timeout=10s -o %s", pvCSIDriverTemplate): {
+			{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
+			{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
+		},
+	}
+	orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "gcsfuse-pvc-job",
+		CommandToRun:    "python3 train.py",
+		NumSlices:       1,
+		ClusterLocation: "us-central1-a",
+		ComputeType:     "n2-standard-2",
+		RawMounts:       []string{"ub-verify-dataset-pvc;/data;ro"},
+		Pathways: orchestrator.PathwaysJobDefinition{
+			ProxyServerImage:            "proxy:latest",
+			ServerImage:                 "server:latest",
+			WorkerImage:                 "worker:latest",
+			ColocatedPythonSidecarImage: "sidecar:latest",
+			GCSLocation:                 "gs://my-bucket",
+			HeadNodePool:                "pathways-np",
+		},
+	}
+
+	profile, isDyn, isStat, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDyn, isStat)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+	stdManifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+	if !strings.Contains(stdManifest, `gke-gcsfuse/volumes: "true"`) {
+		t.Errorf("standard JobSet manifest missing gke-gcsfuse/volumes annotation:\n%s", stdManifest)
+	}
+
+	pwJob := job
+	pwJob.IsPathwaysJob = true
+	pwManifest, err := orc.GeneratePathwaysManifest(pwJob, "test-image:latest", profile, isDyn, isStat)
+	if err != nil {
+		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+	}
+	if got := strings.Count(pwManifest, `gke-gcsfuse/volumes: "true"`); got != 2 {
+		t.Errorf("Pathways JobSet manifest has %d occurrences of gke-gcsfuse/volumes annotation, want 2 (head + worker):\n%s", got, pwManifest)
+	}
+}
+
 func TestGeneratePathwaysManifest_MTCRejectsStaleCustomTemplate(t *testing.T) {
 	tests := []struct {
 		name        string
