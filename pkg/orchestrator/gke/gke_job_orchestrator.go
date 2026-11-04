@@ -516,6 +516,10 @@ func (g *GKEOrchestrator) validateJobConflicts(job orchestrator.JobDefinition) e
 	return nil
 }
 
+// ApplyManifest validates the workload manifest and either saves it to outputManifestPath or applies it to the
+// cluster in g.namespace. SubmitJob resolves g.namespace (configureClusterEnvironment -> getCurrentNamespace) before
+// reaching this point; when it is empty, kubectl applies into the pinned context's namespace, which is the same value
+// getCurrentNamespace would resolve.
 func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, workloadName string) error {
 	if err := ValidateJobSetManifest(manifestContent); err != nil {
 		return err

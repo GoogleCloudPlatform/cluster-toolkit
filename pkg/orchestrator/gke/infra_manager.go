@@ -662,7 +662,11 @@ func (g *GKEOrchestrator) applyManifestFile(filePath, namespace string) error {
 	}
 	res := g.kubectl(append(args, "-f", filePath)...)
 	if res.ExitCode != 0 {
-		return fmt.Errorf("kubectl apply failed with exit code %d: %s\n%s", res.ExitCode, res.Stderr, res.Stdout)
+		out := strings.TrimSpace(strings.TrimSpace(res.Stderr) + "\n" + strings.TrimSpace(res.Stdout))
+		if namespace != "" {
+			return fmt.Errorf("kubectl apply in namespace %q failed with exit code %d: %s", namespace, res.ExitCode, out)
+		}
+		return fmt.Errorf("kubectl apply failed with exit code %d: %s", res.ExitCode, out)
 	}
 	logging.Info("Manifests applied successfully.")
 	return nil

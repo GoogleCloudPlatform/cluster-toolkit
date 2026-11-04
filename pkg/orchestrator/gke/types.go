@@ -636,7 +636,10 @@ type EnvVar struct {
 }
 
 type jobSetTemplateData struct {
-	WorkloadName                  string
+	WorkloadName string
+	// Namespace is the namespace resolved for the submission; rendered as metadata.namespace so a saved manifest
+	// applies to the same namespace as the PV/PVC documents appended to it. Empty when unresolved (dry-run offline).
+	Namespace                     string
 	ClusterName                   string
 	Containers                    []ContainerData
 	ProjectID                     string
