@@ -44,7 +44,30 @@ refer [shared-vpc][shared-vpc-doc]
 
 [cloudnat]: https://cloud.google.com/nat/docs/overview
 [iap]: https://cloud.google.com/iap/docs/using-tcp-forwarding
-[shared-vpc-doc]: ../../../examples/README.md#hpc-slurm-sharedvpcyaml-community-badge-experimental-badge
+[shared-vpc-doc]: ../../../examples/README.md#hpc-slurm-sharedvpcyaml--
+
+### Use with GKE Cluster
+
+When pairing `pre-existing-vpc` with the [gke-cluster module][gke-cluster], the existing subnetwork must have [Private Google Access](https://cloud.google.com/vpc/docs/private-google-access) enabled and secondary IP ranges configured for pods and services. Pass the secondary range names to `gke-cluster` via `pods_ip_range_name` and `services_ip_range_name` (which default to `pods` and `services`):
+
+```yaml
+- id: existing_network
+  source: modules/network/pre-existing-vpc
+  settings:
+    network_name: my-existing-vpc
+    subnetwork_name: my-existing-subnet
+
+- id: gke_cluster
+  source: modules/scheduler/gke-cluster
+  use:
+  - existing_network
+  settings:
+    enable_private_endpoint: false # Or set enable_external_dns_endpoint: true when deploying from outside the VPC
+    pods_ip_range_name: pods
+    services_ip_range_name: services
+```
+
+[gke-cluster]: ../../scheduler/gke-cluster/README.md
 
 ## License
 

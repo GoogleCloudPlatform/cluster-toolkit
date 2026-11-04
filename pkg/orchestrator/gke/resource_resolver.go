@@ -23,6 +23,7 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -46,7 +47,7 @@ func (g *GKEOrchestrator) FetchMachineCapacity(machineType, zone string) (int, e
 		return cap.Accelerators[0].Count, nil
 	}
 	if cap.GuestCpus > 0 {
-		return cap.GuestCpus, nil
+		return g.getEffectiveCPUs(machineType, cap.GuestCpus), nil
 	}
 	return 0, fmt.Errorf("no accelerators or guestCpus found for machine type %s in zone %s", machineType, zone)
 }
@@ -422,9 +423,14 @@ func (g *GKEOrchestrator) hasSlicingTopologies() bool {
 
 func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile JobProfile) (cpu, mem, gpu, tpu string, err error) {
 	if profile.IsCPUMachine {
-		logging.Info("Using cached capacity for CPU machine %s during limits calculation: %d", opts.ComputeType, profile.CapacityCount)
-		offsetVCPUs := max(1, int(float64(profile.CapacityCount)*0.95))
-		return fmt.Sprintf("%d", offsetVCPUs), "", "", "", nil
+		machineType := opts.MachineType
+		if machineType == "" {
+			machineType = opts.ComputeType
+		}
+		vCPUs := g.getEffectiveCPUs(machineType, profile.CapacityCount)
+		logging.Info("Using cached capacity for CPU machine %s during limits calculation: %d", opts.ComputeType, vCPUs)
+		cpuMilli := calculateFullNodeCPURequestMilli(vCPUs, opts.GCSFuseEnabled)
+		return fmt.Sprintf("%dm", cpuMilli), "", "", "", nil
 	}
 
 	mapped := g.GenerateGKENodeSelectorLabel(opts.ComputeType)
@@ -486,34 +492,26 @@ func (g *GKEOrchestrator) resolveMachineName(acceleratorType string) (string, er
 
 	// Check if the input is a full machine type and present in the cluster (required for CPUs).
 	clusterMachineTypes, err := g.queryAllMachineTypes()
-	if err == nil {
-		for _, cmt := range clusterMachineTypes {
-			if strings.EqualFold(acceleratorType, cmt) {
-				return acceleratorType, nil
-			}
-		}
+	if err == nil && slices.ContainsFunc(clusterMachineTypes, func(cmt string) bool { return strings.EqualFold(acceleratorType, cmt) }) {
+		return acceleratorType, nil
 	}
 
 	// 3. Fail fast
 	return "", fmt.Errorf("machine type %q could not be resolved from static maps or cluster state", acceleratorType)
 }
 
+// resolveJobMachineType maps --compute-type to a machine type, preferring the host shape used by the cluster's node pools for TPU shorthands.
 func (g *GKEOrchestrator) resolveJobMachineType(computeType string) (string, error) {
-	parts := strings.Split(computeType, "-")
+	if mapped, isShorthand := config.AcceleratorShorthandMap[strings.ToLower(computeType)]; isShorthand {
+		if config.IsTPU(mapped) {
+			return g.resolveShorthandFromCluster(computeType, mapped)
+		}
+		return mapped, nil
+	}
+
 	machineName, err := g.resolveMachineName(computeType)
-	if err == nil {
-		return machineName, nil
-	}
-
-	prefix := parts[0]
-	candidates := config.GetCandidatesForShorthand(prefix)
-	if len(candidates) == 0 {
-		return "", fmt.Errorf("compute type %q is not a known shorthand and could not be resolved", prefix)
-	}
-
-	machineName, err = g.resolveAmbiguousComputeShorthand(prefix, candidates)
 	if err != nil {
-		return "", err
+		return g.resolveShorthandFromCluster(computeType, "")
 	}
 	return machineName, nil
 }
@@ -561,7 +559,7 @@ func (g *GKEOrchestrator) resolveTPUPlacementPolicy(job *orchestrator.JobDefinit
 		return g.resolveWorkloadPlacementPolicy(job, isTPU7x, isDynamicSlicing)
 	}
 	if isTPU7x && !isDynamicSlicing && job.NodesPerSlice > 1 {
-		policy, err := g.resolveTPUWorkloadPolicy(job.MachineType, job.Topology, job.ClusterLocation, job.ProjectID, job.DryRunManifest != "")
+		policy, err := g.resolveWorkloadPolicy(job.MachineType, job.Topology, job.ClusterLocation, job.ProjectID, job.DryRunManifest != "")
 		if err != nil {
 			return err
 		}
@@ -605,13 +603,49 @@ func (g *GKEOrchestrator) resolveWorkloadPlacementPolicy(job *orchestrator.JobDe
 		return err
 	}
 
-	// GCE Workload Resource Policies are only queried and validated for static multi-host TPU 7x workloads.
-	// For GPUs/CPUs, GKE NAP dynamically creates compact placement groups on the fly.
-	if isTPU7x && !isDynamicSlicing && job.NodesPerSlice > 1 && job.DryRunManifest == "" {
+	// GCE workload policies are queried and validated only where the hardware requires one:
+	// static multi-host TPU 7x and GPU families listed in gpuWorkloadPolicyTopologies.
+	// Other GPUs/CPUs may use either a compact placement or a workload policy, so only locality is checked.
+	expectedTopology := ""
+	if isTPU7x && !isDynamicSlicing && job.NodesPerSlice > 1 {
+		expectedTopology = job.Topology
+	} else if !isTPU7x {
+		expectedTopology = gpuWorkloadPolicyTopology(job.MachineType)
+	}
+	if expectedTopology != "" && job.DryRunManifest == "" {
 		clusterRegion := shell.ExtractRegion(job.ClusterLocation)
-		return g.validateTPU7xPlacementPolicy(parsed.Name, clusterRegion, job.ProjectID, job.Topology)
+		return g.validateWorkloadPlacementPolicy(parsed.Name, clusterRegion, job.ProjectID, expectedTopology)
 	}
 
+	return nil
+}
+
+// resolveGPUPlacementPolicy validates a user-specified placement policy for GPU/CPU jobs and,
+// for GPU families that cannot schedule without a GCE workload policy (e.g. A4X), discovers one
+// when none was given: from the matching node pool on static clusters, or from GCE (creating the
+// canonical policy if missing) under NAP. A policy is never created for a static cluster because
+// nodes only carry the policy their node pool was built with.
+func (g *GKEOrchestrator) resolveGPUPlacementPolicy(job *orchestrator.JobDefinition) error {
+	if job.PlacementPolicy != "" {
+		return g.resolveWorkloadPlacementPolicy(job, false, false)
+	}
+	topology := gpuWorkloadPolicyTopology(job.MachineType)
+	if topology == "" {
+		return nil
+	}
+	if job.GKENAPProvisioning != "" {
+		policy, err := g.resolveWorkloadPolicy(job.MachineType, topology, job.ClusterLocation, job.ProjectID, job.DryRunManifest != "")
+		if err != nil {
+			return err
+		}
+		job.PlacementPolicy = policy
+		return nil
+	}
+	if policy := g.findPolicyInClusterNodePools(job.MachineType, topology); policy != "" {
+		job.PlacementPolicy = policy
+		return nil
+	}
+	logging.Warn("No node pool for %s carries a placement policy. %s requires a HIGH_THROUGHPUT workload policy with topology %s attached to its node pool; pods may fail to schedule or run with degraded performance. Create a node pool with the workload policy attached (it will then be discovered automatically), or use --gke-nap-provisioning.", job.MachineType, job.MachineType, topology)
 	return nil
 }
 
@@ -626,7 +660,7 @@ func validateResourcePolicyLocality(parsed parsedResourcePolicy, projectID, clus
 	return nil
 }
 
-func (g *GKEOrchestrator) validateTPU7xPlacementPolicy(name, region, projectID, expectedTopology string) error {
+func (g *GKEOrchestrator) validateWorkloadPlacementPolicy(name, region, projectID, expectedTopology string) error {
 	policy, err := g.describeResourcePolicyCached(name, region, projectID)
 	if err != nil {
 		if errors.Is(err, ErrResourcePolicyPermissionDenied) {
@@ -642,7 +676,7 @@ func (g *GKEOrchestrator) validateTPU7xPlacementPolicy(name, region, projectID, 
 		return fmt.Errorf("placement policy %q has type %q; expected %q", name, policy.Type, "HIGH_THROUGHPUT")
 	}
 	if !isStaticWorkloadPolicyMode(policy.AcceleratorTopologyMode) {
-		return fmt.Errorf("placement policy %q has mode %q, which is incompatible with static multi-host TPU workloads (expected AUTO_CONNECT or default static placement)", name, policy.AcceleratorTopologyMode)
+		return fmt.Errorf("placement policy %q has mode %q, which is incompatible with static multi-host workloads (expected AUTO_CONNECT or default static placement)", name, policy.AcceleratorTopologyMode)
 	}
 	if expectedTopology != "" && policy.AcceleratorTopology != "" && !strings.EqualFold(policy.AcceleratorTopology, expectedTopology) {
 		return fmt.Errorf("placement policy %q has topology %q; expected %q", name, policy.AcceleratorTopology, expectedTopology)
@@ -677,8 +711,7 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 			}
 		}
 	} else {
-		// For non-TPU workloads (GPU/CPU), validate placement policy if specified.
-		if err := g.resolveWorkloadPlacementPolicy(job, false, false); err != nil {
+		if err := g.resolveGPUPlacementPolicy(job); err != nil {
 			return JobProfile{}, isDynamicSlicing, isStaticSlicing, err
 		}
 	}
@@ -697,36 +730,59 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 	}, isDynamicSlicing, isStaticSlicing, nil
 }
 
-func (g *GKEOrchestrator) resolveAmbiguousComputeShorthand(prefix string, candidates []string) (string, error) {
-	logging.Info("Detected ambiguous compute shorthand %q, finding candidates...", prefix)
+func isCandidateCompatibleForComputeType(computeType, candidate string) bool {
+	if !config.IsTPU(candidate) {
+		return true
+	}
+	topo, err := config.ResolveTopologyForChips(strings.ToLower(computeType), candidate)
+	if err != nil {
+		return true
+	}
+	nodes, err := config.CalculateAcceleratorNodes(candidate, topo, 0)
+	if err != nil {
+		return false
+	}
+	hostChips := config.AcceleratorsPerVM(candidate)
+	return nodes == 1 || hostChips == 4
+}
+
+func (g *GKEOrchestrator) resolveShorthandFromCluster(computeType, defaultMachineType string) (string, error) {
+	prefix := strings.Split(computeType, "-")[0]
+	candidates := config.GetCandidatesForShorthand(prefix)
+	if len(candidates) == 0 {
+		return "", fmt.Errorf("compute type %q is not a known shorthand and could not be resolved", prefix)
+	}
 
 	clusterMachineTypes, err := g.queryAllMachineTypes()
 	if err != nil {
 		return "", err
 	}
 
-	cmtSet := make(map[string]bool, len(clusterMachineTypes))
-	for _, cmt := range clusterMachineTypes {
-		cmtSet[cmt] = true
-	}
-
-	var matchedCandidates []string
+	var inCluster []string
 	for _, c := range candidates {
-		if cmtSet[c] {
-			matchedCandidates = append(matchedCandidates, c)
+		if !isCandidateCompatibleForComputeType(computeType, c) {
+			continue
+		}
+		if slices.ContainsFunc(clusterMachineTypes, func(cmt string) bool { return strings.EqualFold(cmt, c) }) {
+			inCluster = append(inCluster, c)
 		}
 	}
 
-	if len(matchedCandidates) == 1 {
-		logging.Info("Disambiguated %q to %q based on cluster state.", prefix, matchedCandidates[0])
-		return matchedCandidates[0], nil
+	if defaultMachineType != "" && (len(inCluster) == 0 || slices.Contains(inCluster, defaultMachineType)) {
+		// Present, or absent along with the rest of its family: node auto-provisioning
+		// may still create it, and otherwise the capacity lookup reports the gap.
+		return defaultMachineType, nil
 	}
 
-	if len(matchedCandidates) == 0 {
+	switch len(inCluster) {
+	case 1:
+		logging.Info("Disambiguated %q to %q based on cluster state.", prefix, inCluster[0])
+		return inCluster[0], nil
+	case 0:
 		return "", fmt.Errorf("no matching machine types found in cluster for shorthand %q. Available candidates: %v", prefix, candidates)
+	default:
+		return "", fmt.Errorf("multiple matching machine types found in cluster for shorthand %q: %v. Please pass the required machine type with --compute-type to disambiguate", prefix, inCluster)
 	}
-
-	return "", fmt.Errorf("multiple matching machine types found in cluster for shorthand %q: %v. Please pass the required machine type directly to disambiguate.", prefix, matchedCandidates)
 }
 
 func (g *GKEOrchestrator) dynamicallyCalculateNodesPerSlice(job *orchestrator.JobDefinition) error {
@@ -806,4 +862,41 @@ func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUM
 	}
 
 	return profile, nil
+}
+
+// calculateAllocatableCPUMilli mirrors modules/compute/gke-node-pool/outputs.tf
+func calculateAllocatableCPUMilli(vCPUs int) int64 {
+	if vCPUs <= 0 {
+		return 0
+	}
+	// GKE CPU reservations: 60m (1st core), 10m (2nd), 10m (3rd & 4th), 2.5m/core (>4)
+	var reserveMilli int64 = 60
+	if vCPUs > 1 {
+		reserveMilli += 10
+	}
+	if vCPUs > 2 {
+		thirdFourth := min(vCPUs-2, 2)
+		reserveMilli += int64(thirdFourth) * 5
+	}
+	if vCPUs > 4 {
+		reserveMilli += int64(vCPUs-4) * 5 / 2 // 2.5m per core
+	}
+	return int64(vCPUs)*1000 - reserveMilli
+}
+
+// calculateFullNodeCPURequestMilli mirrors modules/compute/gke-job-template/main.tf
+func calculateFullNodeCPURequestMilli(vCPUs int, hasGCSFuse bool) int64 {
+	allocatable := calculateAllocatableCPUMilli(vCPUs)
+	var request int64
+	if allocatable > 2000 {
+		// Leave headroom for 1 CPU of system DaemonSets
+		request = allocatable - 1000
+	} else {
+		// On small nodes, take just over half to guarantee scheduling
+		request = allocatable/2 + 100
+	}
+	if hasGCSFuse {
+		request -= 250 // gcsfuse sidecar
+	}
+	return max(100, request)
 }

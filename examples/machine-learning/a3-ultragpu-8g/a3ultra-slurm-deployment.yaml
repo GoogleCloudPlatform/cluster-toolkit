@@ -34,3 +34,10 @@ vars:
 # a3u_enable_spot_vm: true
 #
 # To make use of Spot VMs, for more info visit: https://cloud.google.com/compute/docs/instances/spot
+
+## --- Optional overrides (defaults shown) ---
+  # a3u_node_count_dynamic_max: 0
+  # login_machine_type: n2d-standard-16
+  # login_disk_size_gb: 300
+  # controller_machine_type: n2d-standard-16
+  # controller_disk_size_gb: 300

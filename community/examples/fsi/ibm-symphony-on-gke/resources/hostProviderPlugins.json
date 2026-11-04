@@ -1,0 +1,30 @@
+{
+    "version": 2,
+    "providerplugins":[
+        {
+            "name": "gcpgke",
+            "enabled": 1,
+            "scriptPath": "${HF_TOP}/${HF_VERSION}/providerplugins/gcpgke/scripts/"
+        },
+        {
+            "name": "aws",
+            "enabled": 0,
+            "scriptPath": "${HF_TOP}/${HF_VERSION}/providerplugins/aws/scripts/"
+        },
+        {
+            "name": "azure",
+            "enabled": 0,
+            "scriptPath": "${HF_TOP}/${HF_VERSION}/providerplugins/azure/scripts/"
+        },
+        {
+            "name": "ibmcloud",
+            "enabled": 0,
+            "scriptPath": "${HF_TOP}/${HF_VERSION}/providerplugins/ibmcloud/scripts/"
+        },
+        {
+            "name": "openshift",
+            "enabled": 0,
+            "scriptPath": "${HF_TOP}/${HF_VERSION}/providerplugins/openshift/scripts/"
+        }
+    ]
+}

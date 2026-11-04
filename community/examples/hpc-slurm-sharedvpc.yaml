@@ -34,6 +34,15 @@ vars:
   deployment_name: hpc-small-shared-vpc
   region: us-central1
   zone: us-central1-c
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned nodes in the debug partition.
+  debug_node_count_dynamic_max: 4
+  # Machine type for the debug partition.
+  debug_machine_type: n2-standard-2
+  # Maximum number of dynamically provisioned nodes in the compute partition.
+  compute_node_count_dynamic_max: 20
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -59,8 +68,8 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network1]
     settings:
-      node_count_dynamic_max: 4
-      machine_type: n2-standard-2
+      node_count_dynamic_max: $(vars.debug_node_count_dynamic_max)
+      machine_type: $(vars.debug_machine_type)
       allow_automatic_updates: false
 
   - id: debug_partition
@@ -75,7 +84,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network1]
     settings:
-      node_count_dynamic_max: 20
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
 
@@ -89,7 +98,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network1]
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       enable_login_public_ips: true
 
   - id: slurm_controller

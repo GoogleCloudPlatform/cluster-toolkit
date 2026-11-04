@@ -51,7 +51,7 @@ This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, al
     1. `deployment_name`: Name of the deployment.
     1. `region`: Compute region used for the deployment.
     1. `zone`: Compute zone used for the deployment.
-    1. `machine_type`: The VM shape. See allowed values at https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus.
+    1. `compute_machine_type`: The VM shape. See allowed values at https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus.
     1. `num_gpus`: Number of GPUS in the VM. Can be found at https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus.
     1. `authorized_cidr`: update the IP address in `<your-ip-address>/32`.
 
@@ -75,6 +75,15 @@ Option 1 (Specific Reservation) is uncommented by default in `gke-g4-deployment.
    ```
 
    Type `a` and hit enter to create the cluster.
+
+## Inference Benchmarks for GKE G4
+
+The [gke-inference-benchmarks](../../community/examples/gke-inference-benchmarks/README.md)
+directory contains community-maintained blueprints that run LLM inference
+benchmarks on G4. Each benchmark provisions a separate GKE cluster and G4 node
+pool, serves the model with vLLM and runs the benchmark with a single
+`gcluster deploy`. The first entry serves DiffusionGemma 26B-A4B on a Spot G4
+node pool.
 
 ## NCCL Tests for GKE G4
 

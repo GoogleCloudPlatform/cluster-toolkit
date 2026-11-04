@@ -18,15 +18,11 @@
     that:
     - custom_vars.mounts is defined
 
-- name: Get mount info
-  ansible.builtin.stat:
-    path: "{{ item }}"
-  register: stat_mounts
+- name: Verify mount points are actively mounted
+  ansible.builtin.command:
+    argv:
+    - mountpoint
+    - "{{ item }}"
   loop: "{{ custom_vars.mounts }}"
   become: true
-
-- name: Check if mount exists
-  ansible.builtin.fail:
-    msg: "{{ item.item }} not mounted"
-  when: not item.stat.exists
-  loop: "{{ stat_mounts.results }}"
+  changed_when: false

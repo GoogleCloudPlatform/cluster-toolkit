@@ -34,6 +34,11 @@ vars:
   - us-central1-b
   - us-central1-c
   - us-central1-f
+  # Optional overrides (defaults shown)
+  # Size in GB of the shared /home Filestore instance.
+  homefs_size_gb: 1024
+  # Number of statically provisioned nodes in the compute partition.
+  compute_node_count_static: 0
 
 deployment_groups:
 - group: primary
@@ -55,7 +60,7 @@ deployment_groups:
     settings:
       local_mount: /home
       filestore_tier: BASIC_HDD
-      size_gb: 1024
+      size_gb: $(vars.homefs_size_gb)
 
   # 3. Dynamic N2 Compute Nodeset
   # 800 nodes * 128 vCPUs = 102400 Cores maximum capacity
@@ -63,7 +68,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      node_count_static: 0             # 0 active VMs at idle ($0 compute cost)
+      node_count_static: $(vars.compute_node_count_static)             # 0 active VMs at idle ($0 compute cost)
       node_count_dynamic_max: $(vars.node_count_dynamic_max)
       machine_type: $(vars.compute_machine_type)
       enable_spot_vm: $(vars.enable_spot_vm)

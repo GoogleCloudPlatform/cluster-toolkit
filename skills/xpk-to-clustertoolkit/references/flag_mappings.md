@@ -72,7 +72,7 @@ This reference provides a comprehensive mapping of commands, flags, and options 
 | `--scheduler <name>` | `--gke-scheduler <name>` | Custom scheduler (e.g. `gke.io/topology-aware-auto`). |
 | `--use-parallel-containers=false` | `--gke-disable-parallel-containers` | Inverted boolean flag. Disables parallel container startup. |
 | `--ramdisk-directory <dir>` | `--gke-mtc-ramdisk-dir <dir>` | Directory path for Multi-Tier Checkpointing ramdisk. |
-| `--mtc-enabled` | `--gke-mtc-enabled` | Enables Multi-Tier Checkpointing sidecar/annotations. |
+| `--mtc-enabled` | `--gke-mtc-enabled` | Mounts the Multi-Tier Checkpointing RAM disk at `--gke-mtc-ramdisk-dir` and checks the cluster's MTC setup. |
 | `--wait-for-job-completion` | `--await-job-completion` | Blocks CLI until workload completes or fails. |
 | `--enable-debug-logs` | `--verbose` | Emits detailed debug logging during job submission. |
 | `--deploy-stacktrace-sidecar` | `--enable-ml-diagnostics` | Enables ML Diagnostics sidecar. |
@@ -159,7 +159,7 @@ When migrating workload listing commands from `xpk workload list --filter-by-sta
 | XPK `--filter-by-status` Value | Cluster Toolkit `gcluster job list --status` Value |
 | :--- | :--- |
 | `RUNNING` | `Running` |
-| `QUEUED` | `Pending` |
+| `QUEUED` | `Suspended` (JobSet not yet admitted by Kueue) |
 | `SUCCESSFUL` | `Succeeded` |
 | `FAILED` | `Failed` |
 | `FINISHED` | *(Run without `--status`, or filter client-side)* |
@@ -168,7 +168,7 @@ When migrating workload listing commands from `xpk workload list --filter-by-sta
 > [!IMPORTANT]
 > The `gcluster job list --status` argument is case-sensitive and accepts **only** values in the strict allowlist (`cmd/job/list.go:35-48 (validStatuses)`):
 > `Pending`, `Running`, `Succeeded`, `Failed`, `Suspended`.
-> Passing `Success` or lowercase names produces a validation error.
+> `gcluster job list` derives status from the JobSet object, so jobs queued in Kueue report `Suspended` and admitted jobs report `Running` even while their pods are still pending (`--status Pending` currently matches nothing on GKE). Passing `Success` or lowercase names produces a validation error.
 
 ---
 

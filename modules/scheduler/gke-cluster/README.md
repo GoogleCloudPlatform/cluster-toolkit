@@ -28,6 +28,18 @@ requirements.
 
 Also see a full [GKE example blueprint](../../../examples/hpc-gke.yaml).
 
+### Node pool lifecycle
+
+This module manages the system node pool separately from the cluster, following
+the [Terraform provider's recommended approach](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_node_pool.html).
+This separates node pool lifecycle management from the cluster resource in Terraform.
+
+During creation, GKE requires an initial node pool. The module creates that
+pool with one node per zone, removes it, and then creates the configured system
+pool when `system_node_pool_enabled` is true (the default). This adds temporary
+node usage and provisioning time. For a regional cluster using the default three
+node locations, the initial pool contains three nodes.
+
 ### VPC Network
 
 This module is configured to create a
@@ -37,6 +49,28 @@ ranges for pods and services. In the example shown above these secondary ranges
 are created in the VPC module. By default the `gke-cluster` module will look for
 ranges with the names `pods` and `services`. These names can be configured using
 the `pods_ip_range_name` and `services_ip_range_name` settings.
+
+#### Using a Pre-existing VPC
+
+To deploy a GKE cluster into an existing VPC and subnetwork using [pre-existing-vpc](../../network/pre-existing-vpc/README.md), ensure that the target subnetwork has [Private Google Access](https://cloud.google.com/vpc/docs/private-google-access) enabled and includes secondary IP ranges for pods and services:
+
+```yaml
+  - id: existing_network
+    source: modules/network/pre-existing-vpc
+    settings:
+      network_name: my-existing-vpc
+      subnetwork_name: my-existing-subnet
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [existing_network]
+    settings:
+      enable_private_endpoint: false # Or set enable_external_dns_endpoint: true when deploying from outside the VPC
+      pods_ip_range_name: pods
+      services_ip_range_name: services
+```
+
+By default, `master_ipv4_cidr_block` is `null`, which configures GKE to use Private Service Connect (PSC) and reserve the control plane private endpoint IP directly from the cluster's primary subnetwork (`subnetwork_self_link`). This avoids `/28` CIDR collisions when deploying into pre-existing VPCs or running multiple GKE clusters in the same VPC. If you need GKE to provision a dedicated `/28` control plane endpoint subnetwork instead, set `master_ipv4_cidr_block` to an unused `/28` IPv4 CIDR range in your VPC (e.g., `1.2.3.0/28`).
 
 ### Multi-networking
 
@@ -65,21 +99,28 @@ To [enable Multi-networking](https://cloud.google.com/kubernetes-engine/docs/how
   - id: gke-cluster
     source: modules/scheduler/gke-cluster
     use: [network, multinetwork] ## enables multi networking and Dataplane V2 on cluster
-    settings:
-      cluster_name: $(vars.deployment_name)
 ```
 
-Find an example of multi networking in GKE [here](../../../examples/gke-a3-megagpu.yaml).
+Find an example of multi networking in GKE [here](../../../examples/gke-a3-megagpu/gke-a3-megagpu.yaml).
 
 ### Cluster Limitations
 
-The current implementations has the following limitations:
+The current implementation has the following limitations:
 
-- Autopilot is disabled
-- Auto-provisioning of new node pools is disabled
-- Network policies are not supported
-- General addon configuration is not supported
-- Only regional cluster is supported
+- Autopilot is not supported (Standard clusters only; Node Auto-Provisioning is supported via `cluster_autoscaling` and Zonal/Regional availability via `cluster_availability_type`)
+- General addon configuration is limited to the add-ons the module exposes as inputs (for example `enable_gcsfuse_csi`, `enable_filestore_csi`, `enable_parallelstore_csi`, `enable_managed_lustre_csi`, `enable_persistent_disk_csi`, `enable_ray_operator`, `enable_inference_gateway`, `enable_node_local_dns_cache`, and `network_policy`); see the Inputs table below for the full list.
+
+### Gateway API
+
+Set `enable_gateway_api: true` to enable the GKE Standard
+[Gateway API](https://gateway-api.sigs.k8s.io/) channel
+and the `HttpLoadBalancing` addon without installing
+[Inference Extension](https://gateway-api-inference-extension.sigs.k8s.io/) CRDs.
+GKE requires the `HttpLoadBalancing` addon for its managed Gateway controller;
+see [Deploying Gateways](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/deploying-gateways#before_you_begin).
+You can also install other Gateway API controllers, including agentgateway.
+This setting does not install agentgateway. Since GKE owns the Gateway API CRDs,
+do not replace them with separately managed manifests.
 
 ### GKE Inference Gateway
 
@@ -133,7 +174,7 @@ limitations under the License.
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
 | <a name="module_mldiagnostics_version_check"></a> [mldiagnostics\_version\_check](#module\_mldiagnostics\_version\_check) | ../../internal/semver_compare | n/a |
 | <a name="module_slice_controller_version_check"></a> [slice\_controller\_version\_check](#module\_slice\_controller\_version\_check) | ../../internal/semver_compare | n/a |
-| <a name="module_workload_identity"></a> [workload\_identity](#module\_workload\_identity) | terraform-google-modules/kubernetes-engine/google//modules/workload-identity | >= 40.0 |
+| <a name="module_workload_identity"></a> [workload\_identity](#module\_workload\_identity) | terraform-google-modules/kubernetes-engine/google//modules/workload-identity | >= 46.0 |
 
 ## Resources
 
@@ -142,7 +183,6 @@ limitations under the License.
 | [google-beta_google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_cluster) | resource |
 | [google-beta_google_container_node_pool.cpu_np](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
 | [google-beta_google_container_node_pool.system_node_pools](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
-| [google_service_account_iam_member.mtc_node_workload_identity](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account_iam_member) | resource |
 | [kubernetes_labels.workload_namespace_labels](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/labels) | resource |
 | [kubernetes_namespace.user_namespace](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/namespace) | resource |
 | [terraform_data.validate_high_scale_checkpointing_version](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
@@ -164,7 +204,7 @@ limitations under the License.
 | <a name="input_autoscaling_profile"></a> [autoscaling\_profile](#input\_autoscaling\_profile) | (Beta) Optimize for utilization or availability when deciding to remove nodes. Can be BALANCED or OPTIMIZE\_UTILIZATION. | `string` | `"OPTIMIZE_UTILIZATION"` | no |
 | <a name="input_boot_disk_kms_key"></a> [boot\_disk\_kms\_key](#input\_boot\_disk\_kms\_key) | The Customer Managed Encryption Key (CMEK) used to encrypt the boot disks of the GKE nodes. Required if enable\_confidential\_storage is true. | `string` | `null` | no |
 | <a name="input_cloud_dns_config"></a> [cloud\_dns\_config](#input\_cloud\_dns\_config) | Configuration for Using Cloud DNS for GKE.<br/><br/>  additive\_vpc\_scope\_dns\_domain: This will enable Cloud DNS additive VPC scope. Must provide a domain name that is unique within the VPC. For this to work cluster\_dns = "CLOUD\_DNS" and cluster\_dns\_scope = "CLUSTER\_SCOPE" must both be set as well.<br/>  cluster\_dns: Which in-cluster DNS provider should be used. KUBE\_DNS (default) or PROVIDER\_UNSPECIFIED or PLATFORM\_DEFAULT or CLOUD\_DNS.<br/>  cluster\_dns\_scope: The scope of access to cluster DNS records. DNS\_SCOPE\_UNSPECIFIED (default) or CLUSTER\_SCOPE or VPC\_SCOPE.<br/>  cluster\_dns\_domain: The suffix used for all cluster service records. | <pre>object({<br/>    additive_vpc_scope_dns_domain = optional(string)<br/>    cluster_dns                   = optional(string, "KUBE_DNS")<br/>    cluster_dns_scope             = optional(string, "DNS_SCOPE_UNSPECIFIED")<br/>    cluster_dns_domain            = optional(string)<br/>  })</pre> | <pre>{<br/>  "additive_vpc_scope_dns_domain": null,<br/>  "cluster_dns": "KUBE_DNS",<br/>  "cluster_dns_domain": null,<br/>  "cluster_dns_scope": "DNS_SCOPE_UNSPECIFIED"<br/>}</pre> | no |
-| <a name="input_cluster_autoscaling"></a> [cluster\_autoscaling](#input\_cluster\_autoscaling) | GKE Node Auto-Provisioning (NAP) and Cluster Autoscaling configuration.<br/><br/>  enabled:               Enable/disable GKE Cluster autoscaling and auto-provisioning.<br/>  service\_account\_email: The service account tied to node-provisioning. Defaults to the deployment service account.<br/>  oauth\_scopes:          Scopes assigned to nodes provisioned by NAP.<br/>  autoprovisioning\_disk\_size\_gb: The disk size of auto-provisioned nodes (GB). Default 100.<br/>  autoprovisioning\_disk\_type:    The disk type of auto-provisioned nodes. Default pd-balanced.<br/>  autoprovisioning\_cpu\_max:      The maximum number of CPU cores limit. Default 1,000,000.<br/>  autoprovisioning\_memory\_max:   The maximum Memory limit in GB. Default 10,000,000.<br/>  limits:                Explicit upper bounds to apply during scaling.<br/>    autoprovisioning\_machine\_type: GCE machine type tier (used as input).<br/>    autoprovisioning\_resource\_type: The underlying specific GKE accelerator resource name (inferred by expansion).<br/>    autoprovisioning\_max\_count:    The ceiling for specific accelerator types. Default 1000.<br/><br/>  Note: `autoprovisioning_machine_type` is consumed dynamically by the toolkit pipeline to resolve <br/>  the precise `autoprovisioning_resource_type` (e.g. `nvidia-h100-80gb`) expected by Terraform.<br/><br/>  WARNING: Enabling autoscaling defaults to effectively unlimited scaling (1,000,000 CPU cores and 10,000,000 GB of memory) unless specific limits are passed in. This may result in large unexpected billing charges if a workload misconfiguration occurs. | <pre>object({<br/>    limits = list(object({<br/>      autoprovisioning_machine_type  = optional(string)<br/>      autoprovisioning_resource_type = optional(string)<br/>      autoprovisioning_max_count     = optional(number, 1000)<br/>    }))<br/>    service_account_email         = optional(string, "")<br/>    oauth_scopes                  = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])<br/>    autoprovisioning_disk_size_gb = optional(number, 100)<br/>    autoprovisioning_disk_type    = optional(string, "pd-balanced")<br/>    autoprovisioning_auto_upgrade = optional(bool, true)<br/>    autoprovisioning_auto_repair  = optional(bool, true)<br/>    autoprovisioning_cpu_max      = optional(number, 1000000)<br/>    autoprovisioning_memory_max   = optional(number, 10000000)<br/>  })</pre> | `null` | no |
+| <a name="input_cluster_autoscaling"></a> [cluster\_autoscaling](#input\_cluster\_autoscaling) | GKE Node Auto-Provisioning (NAP) and Cluster Autoscaling configuration. Passing a non-null object enables NAP; leave null (default) to disable.<br/><br/>  service\_account\_email: The service account tied to node-provisioning. Defaults to the deployment service account.<br/>  oauth\_scopes:          Scopes assigned to nodes provisioned by NAP.<br/>  autoprovisioning\_disk\_size\_gb: The disk size of auto-provisioned nodes (GB). Default 100.<br/>  autoprovisioning\_disk\_type:    The disk type of auto-provisioned nodes. Default pd-balanced.<br/>  autoprovisioning\_cpu\_max:      The maximum number of CPU cores limit. Default 1,000,000.<br/>  autoprovisioning\_memory\_max:   The maximum Memory limit in GB. Default 10,000,000.<br/>  limits:                Explicit upper bounds to apply during scaling.<br/>    autoprovisioning\_machine\_type: GCE machine type tier (used as input).<br/>    autoprovisioning\_resource\_type: The underlying specific GKE accelerator resource name (inferred by expansion).<br/>    autoprovisioning\_max\_count:    The ceiling for specific accelerator types. Default 1000.<br/><br/>  Note: `autoprovisioning_machine_type` is consumed dynamically by the toolkit pipeline to resolve <br/>  the precise `autoprovisioning_resource_type` (e.g. `nvidia-h100-80gb`) expected by Terraform.<br/><br/>  WARNING: Enabling autoscaling defaults to effectively unlimited scaling (1,000,000 CPU cores and 10,000,000 GB of memory) unless specific limits are passed in. This may result in large unexpected billing charges if a workload misconfiguration occurs. | <pre>object({<br/>    limits = list(object({<br/>      autoprovisioning_machine_type  = optional(string)<br/>      autoprovisioning_resource_type = optional(string)<br/>      autoprovisioning_max_count     = optional(number, 1000)<br/>    }))<br/>    service_account_email         = optional(string, "")<br/>    oauth_scopes                  = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])<br/>    autoprovisioning_disk_size_gb = optional(number, 100)<br/>    autoprovisioning_disk_type    = optional(string, "pd-balanced")<br/>    autoprovisioning_auto_upgrade = optional(bool, true)<br/>    autoprovisioning_auto_repair  = optional(bool, true)<br/>    autoprovisioning_cpu_max      = optional(number, 1000000)<br/>    autoprovisioning_memory_max   = optional(number, 10000000)<br/>  })</pre> | `null` | no |
 | <a name="input_cluster_availability_type"></a> [cluster\_availability\_type](#input\_cluster\_availability\_type) | Type of cluster availability. Possible values are: {REGIONAL, ZONAL} | `string` | `"REGIONAL"` | no |
 | <a name="input_cluster_reference_type"></a> [cluster\_reference\_type](#input\_cluster\_reference\_type) | How system node pools refer to the cluster. Possible values are: {SELF\_LINK, NAME}. Defaults to SELF\_LINK to prevent destructive replacement of existing node pools (since cluster is immutable). For new clusters deployed with Google Provider >= 8.0, set this to 'NAME' to avoid provider URL path concatenation errors (HTTP 404). | `string` | `"SELF_LINK"` | no |
 | <a name="input_confidential_instance_type"></a> [confidential\_instance\_type](#input\_confidential\_instance\_type) | The type of technology used by the confidential nodes (e.g., SEV, SEV\_SNP, TDX). Leave null for default. | `string` | `null` | no |
@@ -179,6 +219,7 @@ limitations under the License.
 | <a name="input_enable_external_dns_endpoint"></a> [enable\_external\_dns\_endpoint](#input\_enable\_external\_dns\_endpoint) | Allow [DNS-based approach](https://cloud.google.com/kubernetes-engine/docs/concepts/network-isolation#dns-based_endpoint) for accessing the GKE control plane.<br/>Refer this [dedicated blog](https://cloud.google.com/blog/products/containers-kubernetes/new-dns-based-endpoint-for-the-gke-control-plane) for more details. | `bool` | `false` | no |
 | <a name="input_enable_filestore_csi"></a> [enable\_filestore\_csi](#input\_enable\_filestore\_csi) | The status of the Filestore Container Storage Interface (CSI) driver addon, which allows the usage of filestore instance as volumes. | `bool` | `false` | no |
 | <a name="input_enable_fqdn_network_policy"></a> [enable\_fqdn\_network\_policy](#input\_enable\_fqdn\_network\_policy) | Enable FQDN Network Policy on the cluster. This feature requires GKE Dataplane V2 to be enabled. | `bool` | `false` | no |
+| <a name="input_enable_gateway_api"></a> [enable\_gateway\_api](#input\_enable\_gateway\_api) | Enable the GKE Standard Gateway API channel and HttpLoadBalancing addon without installing Inference Extension CRDs. Inference Gateway also enables these prerequisites independently of this setting. | `bool` | `false` | no |
 | <a name="input_enable_gcfs"></a> [enable\_gcfs](#input\_enable\_gcfs) | Enable the Google Container Filesystem (GCFS) for Image Streaming at the cluster level. | `bool` | `false` | no |
 | <a name="input_enable_gcsfuse_csi"></a> [enable\_gcsfuse\_csi](#input\_enable\_gcsfuse\_csi) | The status of the GCSFuse Container Storage Interface (CSI) driver addon, which allows the usage of a GCS bucket as volumes. | `bool` | `false` | no |
 | <a name="input_enable_inference_gateway"></a> [enable\_inference\_gateway](#input\_enable\_inference\_gateway) | If true, enables GKE features required for Inference Gateway, including the HttpLoadBalancing addon, and installs required CRDs. | `bool` | `false` | no |
@@ -207,7 +248,7 @@ limitations under the License.
 | <a name="input_maintenance_exclusions"></a> [maintenance\_exclusions](#input\_maintenance\_exclusions) | List of maintenance exclusions. A cluster can have up to three. For each exclusion, exactly one of `end_time` or `exclusion_end_time_behavior` must be specified. If `exclusion_end_time_behavior` is used, its value must be `UNTIL_END_OF_SUPPORT`. | <pre>list(object({<br/>    name                        = string<br/>    start_time                  = optional(string)<br/>    end_time                    = optional(string)<br/>    exclusion_scope             = string<br/>    exclusion_end_time_behavior = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_maintenance_start_time"></a> [maintenance\_start\_time](#input\_maintenance\_start\_time) | Start time for daily maintenance operations in GMT (HH:MM format). If set to null, a daily maintenance window restriction is not configured, meaning GKE can schedule maintenance at any time. | `string` | `"09:00"` | no |
 | <a name="input_master_authorized_networks"></a> [master\_authorized\_networks](#input\_master\_authorized\_networks) | External network that can access Kubernetes master through HTTPS. Must be specified in CIDR notation. | <pre>list(object({<br/>    cidr_block   = string<br/>    display_name = string<br/>  }))</pre> | `[]` | no |
-| <a name="input_master_ipv4_cidr_block"></a> [master\_ipv4\_cidr\_block](#input\_master\_ipv4\_cidr\_block) | (Beta) The IP range in CIDR notation to use for the hosted master network. | `string` | `"172.16.0.32/28"` | no |
+| <a name="input_master_ipv4_cidr_block"></a> [master\_ipv4\_cidr\_block](#input\_master\_ipv4\_cidr\_block) | (Beta) The IP range in CIDR notation (size must be /28) to use for the hosted master network. If null (default), GKE uses Private Service Connect (PSC) and reserves the control plane endpoint IP from the cluster's primary subnetwork (`subnetwork_self_link`). | `string` | `null` | no |
 | <a name="input_min_master_version"></a> [min\_master\_version](#input\_min\_master\_version) | The minimum version of the master. If unset, the cluster's version will be set by GKE to the version of the most recent official release. | `string` | `null` | no |
 | <a name="input_monitoring_components"></a> [monitoring\_components](#input\_monitoring\_components) | List of GKE monitoring components to enable. If empty, GKE monitoring is disabled. | `list(string)` | <pre>[<br/>  "SYSTEM_COMPONENTS",<br/>  "POD",<br/>  "DAEMONSET",<br/>  "DEPLOYMENT",<br/>  "STATEFULSET",<br/>  "STORAGE",<br/>  "HPA",<br/>  "CADVISOR",<br/>  "KUBELET",<br/>  "JOBSET"<br/>]</pre> | no |
 | <a name="input_name_suffix"></a> [name\_suffix](#input\_name\_suffix) | Custom cluster name postpended to the `deployment_name`. See `prefix_with_deployment_name`. | `string` | `""` | no |
@@ -229,7 +270,7 @@ limitations under the License.
 | <a name="input_system_node_pool_disk_type"></a> [system\_node\_pool\_disk\_type](#input\_system\_node\_pool\_disk\_type) | Disk type for each node of the system node pool. | `string` | `null` | no |
 | <a name="input_system_node_pool_enable_secure_boot"></a> [system\_node\_pool\_enable\_secure\_boot](#input\_system\_node\_pool\_enable\_secure\_boot) | Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info. | `bool` | `true` | no |
 | <a name="input_system_node_pool_enabled"></a> [system\_node\_pool\_enabled](#input\_system\_node\_pool\_enabled) | Create a system node pool. | `bool` | `true` | no |
-| <a name="input_system_node_pool_image_type"></a> [system\_node\_pool\_image\_type](#input\_system\_node\_pool\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
+| <a name="input_system_node_pool_image_type"></a> [system\_node\_pool\_image\_type](#input\_system\_node\_pool\_image\_type) | The OS image type used for the system node pool nodes. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_system_node_pool_kubernetes_labels"></a> [system\_node\_pool\_kubernetes\_labels](#input\_system\_node\_pool\_kubernetes\_labels) | Kubernetes labels to be applied to each node in the node group. Key-value pairs.<br/>(The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified) | `map(string)` | `null` | no |
 | <a name="input_system_node_pool_machine_type"></a> [system\_node\_pool\_machine\_type](#input\_system\_node\_pool\_machine\_type) | Machine type for the system node pool. Defaults to 'n2d-standard-4' if confidential nodes are enabled. Otherwise, it defaults to 'n4-standard-4' if available in the target region/zones, falling back to 'n2d-standard-4'. | `string` | `null` | no |
 | <a name="input_system_node_pool_name"></a> [system\_node\_pool\_name](#input\_system\_node\_pool\_name) | Name of the system node pool. | `string` | `"system"` | no |
@@ -254,12 +295,14 @@ limitations under the License.
 | <a name="output_confidential_instance_type"></a> [confidential\_instance\_type](#output\_confidential\_instance\_type) | The type of technology used by the confidential nodes. |
 | <a name="output_enable_confidential_nodes"></a> [enable\_confidential\_nodes](#output\_enable\_confidential\_nodes) | Indicates whether Confidential Nodes are enabled at the cluster level. |
 | <a name="output_enable_confidential_storage"></a> [enable\_confidential\_storage](#output\_enable\_confidential\_storage) | Indicates whether Confidential Storage is enabled at the cluster level. |
+| <a name="output_enable_multi_tier_checkpointing"></a> [enable\_multi\_tier\_checkpointing](#output\_enable\_multi\_tier\_checkpointing) | Indicates whether High Scale Checkpointing (Multi-Tier Checkpointing) is enabled. |
 | <a name="output_enable_pathways_for_tpus"></a> [enable\_pathways\_for\_tpus](#output\_enable\_pathways\_for\_tpus) | Indicates whether Pathways for TPUs is enabled. |
 | <a name="output_enable_slice_controller"></a> [enable\_slice\_controller](#output\_enable\_slice\_controller) | Indicates whether the GKE Slice Controller is enabled. |
 | <a name="output_gke_cluster_exists"></a> [gke\_cluster\_exists](#output\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. |
 | <a name="output_gke_version"></a> [gke\_version](#output\_gke\_version) | GKE cluster's version. |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to connect to the created cluster. |
 | <a name="output_k8s_service_account_name"></a> [k8s\_service\_account\_name](#output\_k8s\_service\_account\_name) | Name of k8s service account. |
+| <a name="output_mtc_service_account_member"></a> [mtc\_service\_account\_member](#output\_mtc\_service\_account\_member) | Workload Identity Federation principal of the Multi-Tier Checkpointing (MTC) driver's Kubernetes service account. Grant it object access on the MTC checkpoint bucket; it is only used when enable\_multi\_tier\_checkpointing is true. |
 | <a name="output_namespace"></a> [namespace](#output\_namespace) | The namespace where Workload Identity is configured (created if not 'default'). |
 | <a name="output_node_service_account"></a> [node\_service\_account](#output\_node\_service\_account) | The GCP Service Account email used by the GKE node pools. |
 | <a name="output_system_node_pool_id"></a> [system\_node\_pool\_id](#output\_system\_node\_pool\_id) | The ID of the system node pool. |

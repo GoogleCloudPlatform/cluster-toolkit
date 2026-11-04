@@ -1,0 +1,125 @@
+# Shared blocks for GKE workload templates, rendered via StructuralData (.RenderBlock "<name>" <indent>).
+# Custom base.tmpl files may override individual blocks; omitted blocks fall back to embedded defaults.
+
+{{- define "workload_labels" -}}
+gcluster.google.com/workload: {{.WorkloadName}}
+{{- if .KueueQueueName }}
+kueue.x-k8s.io/queue-name: {{.KueueQueueName}}
+{{- end }}
+{{- if .MLDiagnosticsEnabled }}
+managed-mldiagnostics-gke: "true"
+{{- end }}
+{{- end -}}
+
+{{- define "jobset_network" -}}
+enableDNSHostnames: true
+publishNotReadyAddresses: true
+{{- end -}}
+
+{{- define "pod_auth_and_priority" -}}
+{{- if .PriorityClassName }}
+priorityClassName: {{.PriorityClassName}}
+{{- end }}
+{{- if .ServiceAccountName }}
+serviceAccountName: {{.ServiceAccountName}}
+{{- end }}
+{{- if .ImagePullSecrets }}
+imagePullSecrets:
+{{reindent 2 (StructuralData .ImagePullSecrets)}}
+{{- end }}
+{{- end -}}
+
+{{- define "pod_placement" -}}
+{{- if .NodeSelector }}
+nodeSelector:
+{{reindent 2 (StructuralData .NodeSelector)}}
+{{- end }}
+{{- if .Affinity }}
+affinity:
+{{reindent 2 (StructuralData .Affinity)}}
+{{- end }}
+{{- if .Tolerations }}
+tolerations:
+{{reindent 2 (StructuralData .Tolerations)}}
+{{- end }}
+{{- end -}}
+
+{{- define "pod_template" -}}
+metadata:
+  labels:
+    gcluster.google.com/workload: {{.WorkloadName}}
+{{- if or .TopologyAnnotation .GCSFuseEnabled }}
+  annotations:
+{{- if .TopologyAnnotation }}
+{{reindent 4 (StructuralData .TopologyAnnotation)}}
+{{- end }}
+{{- if .GCSFuseEnabled }}
+    gke-gcsfuse/volumes: "true"
+{{- end }}
+{{- end }}
+spec:
+{{- if .Subdomain }}
+  subdomain: {{.Subdomain}}
+{{- end }}
+{{- if .HostNetworkEnabled }}
+  hostNetwork: true
+  dnsPolicy: ClusterFirstWithHostNet
+{{- end }}
+  terminationGracePeriodSeconds: {{.TerminationGracePeriodSeconds}}
+{{- if .SchedulerName }}
+  schedulerName: {{.SchedulerName}}
+{{- end }}
+{{- if .SchedulingGates }}
+{{reindent 2 (StructuralData .SchedulingGates)}}
+{{- end }}
+  restartPolicy: Never
+  containers:
+  {{- range .Containers }}
+  - name: {{ .Name }}
+    image: {{ $.FullImageName }}
+    command:
+    {{- range $.Command }}
+    - {{ printf "%q" . }}
+    {{- end }}
+{{- if .ResourcesYAML }}
+{{reindent 4 (StructuralData .ResourcesYAML)}}
+{{- end }}
+    {{- if or $.Env (and $.Verbose (or $.IsTPU $.IsGPU)) }}
+    env:
+    {{- range $.Env }}
+    - name: {{ .Name }}
+      value: {{ printf "%q" .Value }}
+    {{- end }}
+    {{- if $.Verbose }}
+    {{- if $.IsTPU }}
+    - name: TPU_STDERR_LOG_LEVEL
+      value: "0"
+    - name: TPU_MIN_LOG_LEVEL
+      value: "0"
+    - name: TF_CPP_MIN_LOG_LEVEL
+      value: "0"
+    - name: TPU_VMODULE
+      value: "real_program_continuator=1"
+    {{- else if $.IsGPU }}
+    - name: NCCL_DEBUG
+      value: "INFO"
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    volumeMounts:
+    - name: dshm
+      mountPath: /dev/shm
+{{- if $.VolumeMountsYAML }}
+{{reindent 4 (StructuralData $.VolumeMountsYAML)}}
+{{- end }}
+  {{- end }}
+  volumes:
+  - name: dshm
+    emptyDir:
+      medium: Memory
+{{- if .VolumesYAML }}
+{{reindent 2 (StructuralData .VolumesYAML)}}
+{{- end -}}
+{{- with (.RenderBlock "pod_placement" 2) }}{{"\n"}}{{(StructuralData .)}}{{- end -}}
+{{- with (.RenderBlock "pod_auth_and_priority" 2) }}{{"\n"}}{{(StructuralData .)}}{{- end }}
+{{- end -}}

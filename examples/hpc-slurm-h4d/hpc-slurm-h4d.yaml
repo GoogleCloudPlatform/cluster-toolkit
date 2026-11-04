@@ -32,6 +32,14 @@ vars:
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+  # Optional overrides (defaults shown)
+  # Size in GB of the /home Filestore instance.
+  homefs_size_gb: 2560
+  # Maximum number of dynamically provisioned nodes in the h4d partition.
+  h4d_node_count_dynamic_max: 0
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
 deployment_groups:
 - group: primary
   modules:
@@ -66,7 +74,7 @@ deployment_groups:
     use: [h4d-slurm-net-0]
     settings:
       filestore_tier: BASIC_SSD
-      size_gb: 2560
+      size_gb: $(vars.homefs_size_gb)
       filestore_share_name: homeshare
       local_mount: /home
 
@@ -90,7 +98,7 @@ deployment_groups:
       bandwidth_tier: gvnic_enabled
       machine_type: h4d-highmem-192-lssd
       node_count_static: $(vars.h4d_cluster_size)
-      node_count_dynamic_max: 0
+      node_count_dynamic_max: $(vars.h4d_node_count_dynamic_max)
       enable_placement: false
       enable_spot_vm: $(vars.h4d_enable_spot_vm)
 
@@ -119,7 +127,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [h4d-slurm-net-0]
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       enable_login_public_ips: true
 
   - id: controller_startup

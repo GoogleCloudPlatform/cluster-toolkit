@@ -25,8 +25,11 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"k8s.io/client-go/tools/clientcmd"
@@ -297,25 +300,6 @@ func (g *GKEOrchestrator) probeContext(contextName string) (probeOutcome, string
 	return classifyProbeFailure(stderr), stderr
 }
 
-// checkClusterConnectivity verifies the pinned kubectl context can reach the
-// cluster. Unrecognised probe output is not fatal, matching configureKubectl.
-func (g *GKEOrchestrator) checkClusterConnectivity(clusterName string) error {
-	logging.Info("Checking cluster connectivity...")
-	outcome, stderr := g.probeContext(g.kubeContext)
-	switch outcome {
-	case probeOK, probeForbidden:
-		logging.Info("Cluster connectivity verified.")
-		return nil
-	case probeAuth:
-		return authFailureError(clusterName, stderr)
-	case probeConnectivity:
-		return fmt.Errorf("failed to connect to GKE cluster %q. Please verify your IP is allowed in the cluster's authorized networks or that you have correct network access. Error: %s", clusterName, stderr)
-	default:
-		logging.Warn("Could not verify connectivity to GKE cluster '%s' (%s). Proceeding; subsequent kubectl calls will report the underlying error.", clusterName, firstLine(stderr))
-		return nil
-	}
-}
-
 func authFailureError(clusterName, stderr string) error {
 	return fmt.Errorf("authentication to GKE cluster %q failed: %s. Re-fetching cluster credentials will not help; run 'gcloud auth application-default login' (or 'gcloud auth login') and ensure %s is installed",
 		clusterName, firstLine(stderr), gkeAuthPluginBinary)
@@ -349,9 +333,26 @@ func withKubeContext(kubeContext string, args []string) []string {
 	return append([]string{"--context", kubeContext}, args...)
 }
 
+// kubectlCommandLine renders a kubectl command, pinned like the ones gcluster runs, for users to copy.
+// Arguments that contain whitespace, such as Windows paths, are double-quoted.
+func kubectlCommandLine(kubeContext string, args ...string) string {
+	parts := append([]string{"kubectl"}, withKubeContext(kubeContext, args)...)
+	for i, p := range parts {
+		if strings.ContainsAny(p, " \t") {
+			parts[i] = `"` + p + `"`
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
 // kubectl runs kubectl against the context chosen by configureKubectl.
 func (g *GKEOrchestrator) kubectl(args ...string) shell.CommandResult {
 	return g.executor.ExecuteCommand("kubectl", withKubeContext(g.kubeContext, args)...)
+}
+
+// kubectlWithTimeout runs kubectl with a process timeout against the context chosen by configureKubectl.
+func (g *GKEOrchestrator) kubectlWithTimeout(timeout time.Duration, args ...string) shell.CommandResult {
+	return g.executor.ExecuteCommandWithTimeout(timeout, "kubectl", withKubeContext(g.kubeContext, args)...)
 }
 
 // kubectlStream streams kubectl output against the context chosen by configureKubectl.
@@ -511,4 +512,60 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 		return nil
 	}
 	return g.regenerateKubeContext(clusterName, clusterLocation, projectID, avoid)
+}
+
+// usableKubeClient returns the Kubernetes API client for best-effort discovery, or nil when none can be
+// built yet (no pinned context, or an unreadable kubeconfig).
+func (g *GKEOrchestrator) usableKubeClient() KubeClient {
+	if g.needsDynamicClientInit() {
+		if g.dynClient == nil && g.kubeContext == "" {
+			return nil
+		}
+		if _, err := g.getDynamicClient(); err != nil {
+			logging.Warn("Kubernetes API client unavailable for cluster discovery (context %q): %v", g.kubeContext, err)
+			return nil
+		}
+	}
+	return g.kubeClient
+}
+
+// activeWorkloadImages returns the distinct images the rendered pods pull: the workload image plus, for
+// Pathways, the server, proxy, worker, and colocated sidecar images of the selected deployment mode.
+func activeWorkloadImages(job orchestrator.JobDefinition, fullImageName string) []string {
+	raw := []string{fullImageName}
+	if job.IsPathwaysJob {
+		pw := job.Pathways
+		if pw.Headless || pw.DeploySPS {
+			raw = nil
+		}
+		raw = append(raw, pw.ServerImage, pw.WorkerImage, pw.ColocatedPythonSidecarImage)
+		if !pw.DeploySPS {
+			raw = append(raw, pw.ProxyServerImage)
+		}
+	}
+	var images []string
+	for _, img := range raw {
+		if img != "" && !slices.Contains(images, img) {
+			images = append(images, img)
+		}
+	}
+	return images
+}
+
+// resolveImagePullSecrets returns the user's --image-pull-secret value verbatim when it was given (an empty value
+// attaches none), otherwise the dockerconfigjson secrets in the target namespace matching the workload's images.
+// An unavailable API client or an RBAC denial degrades to no secrets; a namespace that cannot be resolved is an error.
+func (g *GKEOrchestrator) resolveImagePullSecrets(job orchestrator.JobDefinition, fullImageName string) (string, error) {
+	if job.ImagePullSecrets != "" || job.ImagePullSecretsSpecified {
+		return job.ImagePullSecrets, nil
+	}
+	kc := g.usableKubeClient()
+	if kc == nil {
+		return "", nil
+	}
+	ns, err := g.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve the target namespace for imagePullSecrets discovery: %w", err)
+	}
+	return k8s.DiscoverImagePullSecrets(kc, ns, job.ServiceAccountName, activeWorkloadImages(job, fullImageName)), nil
 }

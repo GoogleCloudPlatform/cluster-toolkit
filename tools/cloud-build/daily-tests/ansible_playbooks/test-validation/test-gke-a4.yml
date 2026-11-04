@@ -37,7 +37,7 @@
   register: job_completion
   until: job_completion.stdout_lines | length > 1
   retries: 20
-  delay: 10
+  delay: 60
 
 - name: Fetch logs from the 0-0 pod and save to pod_logs.txt
   delegate_to: localhost

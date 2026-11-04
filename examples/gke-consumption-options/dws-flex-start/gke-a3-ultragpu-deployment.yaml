@@ -39,3 +39,6 @@ vars:
   # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
+
+## --- Optional overrides (defaults shown) ---
+  # system_node_pool_machine_type: n2d-standard-16

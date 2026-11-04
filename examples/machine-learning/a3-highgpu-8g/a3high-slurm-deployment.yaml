@@ -42,3 +42,9 @@ vars:
   # To make use of Spot VMs, for more info visit: https://cloud.google.com/compute/docs/instances/spot
   a3_dws_flex_enabled: false # set this if you want to use DWS Flex
   a3_enable_spot_vm: false # set this if you want to use spot VMs
+
+## --- Optional overrides (defaults shown) ---
+  # image_build_machine_type: c2d-standard-32
+  # a3_node_count_dynamic_max: 0
+  # login_machine_type: c2-standard-4
+  # controller_machine_type: c2-standard-8
