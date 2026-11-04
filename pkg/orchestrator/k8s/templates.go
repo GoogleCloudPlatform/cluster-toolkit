@@ -32,6 +32,18 @@ import (
 //go:embed templates/*
 var templatesFS embed.FS
 
+// Workload template file names. The preflight (ValidateCustomWorkloadTemplates), the manifest generators, and
+// the submit dispatch all key on these constants so a template cannot be validated under one name and rendered
+// under another.
+const (
+	// JobSetTemplate renders a standard (non-Pathways) JobSet.
+	JobSetTemplate = "jobset.tmpl"
+	// PathwaysJobSetTemplate renders a Pathways JobSet (pathways-head + worker).
+	PathwaysJobSetTemplate = "pathways_jobset.tmpl"
+	// JobTemplate renders a standalone batch/v1 Indexed Job plus headless Service for single-slice workloads.
+	JobTemplate = "job.tmpl"
+)
+
 func templateFuncs() yamltemplate.FuncMap {
 	return yamltemplate.FuncMap{
 		"reindent": ReindentYAML,

@@ -149,11 +149,13 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	return nil
 }
 
+// workloadTemplateName selects the workload template for a job. It is the single source for both the local
+// preflight (ValidateCustomWorkloadTemplates) and submitWorkloadTemplate, so the two cannot drift.
 func workloadTemplateName(job orchestrator.JobDefinition) string {
 	if job.IsPathwaysJob {
-		return "pathways_jobset.tmpl"
+		return k8s.PathwaysJobSetTemplate
 	}
-	return "jobset.tmpl"
+	return k8s.JobSetTemplate
 }
 
 // validateSubmitLocalPreflight runs the checks that need no cluster access or image build: mount syntax and
@@ -437,19 +439,27 @@ func (g *GKEOrchestrator) resolveLogsSelector(name string, optsMainOnly *bool, p
 }
 
 func (g *GKEOrchestrator) generateAndSubmitManifests(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) error {
-	switch workloadTemplateName(job) {
-	case "pathways_jobset.tmpl":
+	return g.submitWorkloadTemplate(workloadTemplateName(job), job, fullImageName, profile, isDynamicSlicing, isStaticSlicing)
+}
+
+// submitWorkloadTemplate renders and applies the manifest for tmplName. Every workload template has an explicit
+// case; an unknown name is an internal error rather than a silent fallback to the JobSet path.
+func (g *GKEOrchestrator) submitWorkloadTemplate(tmplName string, job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) error {
+	switch tmplName {
+	case k8s.PathwaysJobSetTemplate:
 		manifestContent, err := g.GeneratePathwaysManifest(job, fullImageName, profile, isDynamicSlicing, isStaticSlicing)
 		if err != nil {
 			return err
 		}
 		return g.ApplyManifest(manifestContent, job.DryRunManifest, job.WorkloadName)
-	default:
+	case k8s.JobSetTemplate:
 		manifestOpts, err := g.PrepareManifestOptions(job, fullImageName, profile, isDynamicSlicing, isStaticSlicing)
 		if err != nil {
 			return err
 		}
 		return g.generateAndApplyManifest(manifestOpts, profile, job.DryRunManifest)
+	default:
+		return fmt.Errorf("internal error: no manifest generator is wired for workload template %q", tmplName)
 	}
 }
 

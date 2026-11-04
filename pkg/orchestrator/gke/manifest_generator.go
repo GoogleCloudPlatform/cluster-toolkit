@@ -88,7 +88,7 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 	if opts.WorkloadName != "" {
 		coordHost = fmt.Sprintf("%s-main-job-0-0.%s", opts.WorkloadName, opts.WorkloadName)
 	}
-	return g.generateWorkloadManifest(opts, profile, "jobset.tmpl", coordHost, "")
+	return g.generateWorkloadManifest(opts, profile, k8s.JobSetTemplate, coordHost, "")
 }
 
 // GenerateJobManifest generates a headless Service and batch/v1 Indexed Job manifest for single-slice workloads.
@@ -100,7 +100,7 @@ func (g *GKEOrchestrator) GenerateJobManifest(opts ManifestOptions, profile JobP
 	if opts.WorkloadName != "" {
 		coordHost = fmt.Sprintf("%s-0.%s", opts.WorkloadName, opts.WorkloadName)
 	}
-	return g.generateWorkloadManifest(opts, profile, "job.tmpl", coordHost, opts.WorkloadName)
+	return g.generateWorkloadManifest(opts, profile, k8s.JobTemplate, coordHost, opts.WorkloadName)
 }
 
 func (g *GKEOrchestrator) generateWorkloadManifest(opts ManifestOptions, profile JobProfile, tmplName, coordinatorHost, subdomain string) (string, error) {
@@ -612,7 +612,7 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		job.Pathways.WorkerImage = job.Pathways.ServerImage
 	}
 
-	tmpl, baseBlocks, err := k8s.LoadWorkloadTemplate(g.gkeCustomTemplatesPath, "pathways_jobset.tmpl")
+	tmpl, baseBlocks, err := k8s.LoadWorkloadTemplate(g.gkeCustomTemplatesPath, k8s.PathwaysJobSetTemplate)
 	if err != nil {
 		return "", err
 	}

@@ -4921,6 +4921,130 @@ func TestCustomTemplateLoading_ExtractedDefaultsAreNoOp(t *testing.T) {
 	}
 }
 
+// TestSubmitWorkloadTemplate_DispatchesByJobKind pins that each job kind reaches its own generator (observed via
+// the dry-run manifest) and that an unknown template name is an error rather than a silent JobSet fallback.
+func TestSubmitWorkloadTemplate_DispatchesByJobKind(t *testing.T) {
+	orc := newCustomTemplateTestOrc(t, "")
+	_, profile := newCustomTemplateBaseOpts()
+	baseJob := orchestrator.JobDefinition{
+		WorkloadName:    "dispatch-job",
+		CommandToRun:    "echo hi",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+		ClusterLocation: "us-central1-a",
+		ComputeType:     "n2-standard-4",
+		MachineType:     "n2-standard-4",
+	}
+	pwJob := baseJob
+	pwJob.IsPathwaysJob = true
+	pwJob.Pathways = orchestrator.PathwaysJobDefinition{GCSLocation: "gs://bkt", HeadNodePool: "head-np"}
+
+	for _, tc := range []struct {
+		name         string
+		job          orchestrator.JobDefinition
+		wantTemplate string
+		wantContains []string
+		wantAbsent   []string
+	}{
+		{
+			name: "standard job renders jobset.tmpl", job: baseJob, wantTemplate: k8s.JobSetTemplate,
+			wantContains: []string{"kind: JobSet", "name: main-job"}, wantAbsent: []string{"pathways-head"},
+		},
+		{
+			name: "pathways job renders pathways_jobset.tmpl", job: pwJob, wantTemplate: k8s.PathwaysJobSetTemplate,
+			wantContains: []string{"kind: JobSet", "name: pathways-head"}, wantAbsent: []string{"name: main-job"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := workloadTemplateName(tc.job); got != tc.wantTemplate {
+				t.Fatalf("workloadTemplateName() = %q, want %q", got, tc.wantTemplate)
+			}
+			job := tc.job
+			job.DryRunManifest = filepath.Join(t.TempDir(), "manifest.yaml")
+			if err := orc.generateAndSubmitManifests(job, "img:v1", profile, false, false); err != nil {
+				t.Fatalf("generateAndSubmitManifests failed: %v", err)
+			}
+			content, err := os.ReadFile(job.DryRunManifest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range tc.wantContains {
+				if !strings.Contains(string(content), want) {
+					t.Errorf("dry-run manifest missing %q:\n%s", want, content)
+				}
+			}
+			for _, absent := range tc.wantAbsent {
+				if strings.Contains(string(content), absent) {
+					t.Errorf("dry-run manifest unexpectedly contains %q:\n%s", absent, content)
+				}
+			}
+		})
+	}
+
+	err := orc.submitWorkloadTemplate("pathways-jobset.tmpl", pwJob, "img:v1", profile, false, false)
+	if err == nil || !strings.Contains(err.Error(), `no manifest generator is wired for workload template "pathways-jobset.tmpl"`) {
+		t.Errorf("unknown template name: error = %v, want internal error naming the template", err)
+	}
+}
+
+// TestGeneratePathwaysManifest_PodFailurePolicyScopingByMode pins podFailurePolicyContainers on the Pathways head:
+// scoped to workload-container when the head runs the workload, pod-wide (no containerName) for headless and SPS
+// heads that have no workload container, and valid in every mode.
+func TestGeneratePathwaysManifest_PodFailurePolicyScopingByMode(t *testing.T) {
+	orc := newCustomTemplateTestOrc(t, "")
+	_, profile := newCustomTemplateBaseOpts()
+	for _, tc := range []struct {
+		name          string
+		workload      string
+		headless      bool
+		deploySPS     bool
+		wantContainer []string
+	}{
+		{name: "default head runs workload-container", workload: "pw-pfp-default", wantContainer: []string{"workload-container"}},
+		{name: "headless head has no workload container", workload: "pw-pfp-headless", headless: true},
+		{name: "SPS head has no workload container", workload: "pw-pfp-sps", deploySPS: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			job := orchestrator.JobDefinition{
+				WorkloadName:       tc.workload,
+				CommandToRun:       "python3 train.py",
+				NumSlices:          1,
+				NodesPerSlice:      1,
+				ClusterLocation:    "us-central1-a",
+				ComputeType:        "n2-standard-4",
+				MachineType:        "n2-standard-4",
+				RestartOnExitCodes: []int{143, 42},
+				IsPathwaysJob:      true,
+				Pathways: orchestrator.PathwaysJobDefinition{
+					GCSLocation:  "gs://bkt",
+					HeadNodePool: "head-np",
+					Headless:     tc.headless,
+					DeploySPS:    tc.deploySPS,
+				},
+			}
+			manifest, err := orc.GeneratePathwaysManifest(job, "img:v1", profile, false, false)
+			if err != nil {
+				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+			}
+			if err := ValidateJobSetManifest(manifest); err != nil {
+				t.Fatalf("ValidateJobSetManifest failed: %v\n%s", err, manifest)
+			}
+			_, templates := parseStrictJobSetTemplates(t, manifest)
+			head := templates["pathways-head"]
+			if head.Spec.PodFailurePolicy == nil || len(head.Spec.PodFailurePolicy.Rules) != 1 {
+				t.Fatalf("pathways-head podFailurePolicy = %+v, want exactly one rule", head.Spec.PodFailurePolicy)
+			}
+			assertPodFailurePolicyContainers(t, head.Spec.PodFailurePolicy, tc.wantContainer)
+			if diff := cmp.Diff([]int32{42, 143}, head.Spec.PodFailurePolicy.Rules[0].OnExitCodes.Values); diff != "" {
+				t.Errorf("exit codes mismatch (-want +got):\n%s", diff)
+			}
+			if worker := templates["worker"]; worker.Spec.PodFailurePolicy != nil {
+				t.Errorf("worker replicatedJob must not carry a podFailurePolicy, got %+v", worker.Spec.PodFailurePolicy)
+			}
+		})
+	}
+}
+
 func TestCustomTemplateLoading_MalformedBaseFailsFast(t *testing.T) {
 	baseOpts, profile := newCustomTemplateBaseOpts()
 	customDir := t.TempDir()
