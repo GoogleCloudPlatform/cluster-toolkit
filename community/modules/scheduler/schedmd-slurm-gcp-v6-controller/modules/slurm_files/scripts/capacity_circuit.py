@@ -339,8 +339,11 @@ def trip(
                 else uuid.uuid4().hex
             )
             reason = _reason(nodeset_name, failures, cooldown)
-            probe_after = now + timedelta(seconds=cooldown)
             resume_timeout = _resume_timeout_seconds(lkp, nodeset_name)
+            # `state=down` keeps POWERING_UP|NOT_RESPONDING until boot+ResumeTimeout;
+            # a RESUME before that leaves the probe IDLE+NOT_RESPONDING (not allocatable).
+            probe_delay = max(cooldown, resume_timeout)
+            probe_after = now + timedelta(seconds=probe_delay)
             reset_grace = max(cooldown, resume_timeout)
             reset_after = probe_after + timedelta(seconds=reset_grace)
             # A released half-open probe must remain schedulable while unrelated
@@ -415,7 +418,7 @@ def trip(
                 "down",
                 reason,
                 lkp,
-                resume_after=cooldown,
+                resume_after=probe_delay,
             ):
                 owned.update(probe_failures)
                 pending_down.difference_update(probe_failures)
@@ -667,6 +670,12 @@ def _close_nodeset(
             or record.get("circuit_id") != circuit_id
             or int(record.get("generation", 0)) != generation
         ):
+            if record and record.get("circuit_id") == circuit_id and resumable:
+                # A newer generation of this circuit is still open, but this close
+                # already resumed these nodes; disown them so reconcile re-drains them.
+                record["owned_nodes"] = sorted(
+                    set(record.get("owned_nodes", [])).difference(resumable)
+                )
             return False
         state["nodesets"].pop(nodeset_name, None)
     log.info("Closed GCE capacity circuit for nodeset %s", nodeset_name)
@@ -888,6 +897,86 @@ def _probe_is_in_flight(probes: Sequence[str], lkp: util.Lookup) -> bool:
     return False
 
 
+def _reconcile_nodeset(
+    nodeset_name: str,
+    record: Mapping[str, Any],
+    lkp: util.Lookup,
+) -> None:
+    circuit_id = record.get("circuit_id")
+    generation = int(record.get("generation", 0))
+    try:
+        transitions_complete = _reapply_pending_transitions(
+            nodeset_name,
+            circuit_id,
+            generation,
+            lkp,
+        )
+    except Exception:
+        transitions_complete = False
+        log.exception(
+            "Unable to reapply pending capacity circuit transitions for nodeset %s",
+            nodeset_name,
+        )
+    probes = tuple(record.get("probe_nodes", []))
+    probe_instances = [lkp.instance(node) for node in probes]
+    if any(
+        instance is not None and instance.status == "RUNNING"
+        for instance in probe_instances
+    ):
+        _close_nodeset(nodeset_name, lkp, circuit_id, generation)
+        return
+
+    now = _now()
+    reset_after = record.get("reset_after")
+    reset_due = bool(reset_after and now >= _parse_time(reset_after))
+    probe_in_flight = _probe_is_in_flight(probes, lkp)
+    transient_instance = any(
+        instance is not None and instance.status in TRANSIENT_INSTANCE_STATES
+        for instance in probe_instances
+    )
+    reset_deferred = False
+    if reset_due:
+        hard_reset_after = record.get("hard_reset_after", reset_after)
+        if (
+            (probe_in_flight or transient_instance)
+            and hard_reset_after
+            and now < _parse_time(hard_reset_after)
+        ):
+            log.info(
+                "Deferring capacity circuit reset for in-flight probe in nodeset %s",
+                nodeset_name,
+            )
+            reset_deferred = True
+        else:
+            log.info(
+                "Closing capacity circuit for nodeset %s after probe grace period",
+                nodeset_name,
+            )
+            _close_nodeset(nodeset_name, lkp, circuit_id, generation)
+            return
+    if (
+        transitions_complete
+        and not reset_deferred
+        and not probe_in_flight
+        and not any(instance is not None for instance in probe_instances)
+    ):
+        _release_probe(nodeset_name, circuit_id, generation, lkp)
+
+    nodeset = lkp.cfg.nodeset.get(nodeset_name)
+    if nodeset is None:
+        return
+    newly_powered_down = set(_powered_down_nodes(nodeset, lkp)).difference(
+        record.get("owned_nodes", [])
+    )
+    _drain_new_nodes(
+        nodeset_name,
+        circuit_id,
+        generation,
+        sorted(newly_powered_down),
+        lkp,
+    )
+
+
 def reconcile(lkp: Optional[util.Lookup] = None) -> None:
     """Recover circuit state and release probes whose cooldown has elapsed."""
     lkp = lkp or util.lookup()
@@ -903,76 +992,10 @@ def reconcile(lkp: Optional[util.Lookup] = None) -> None:
         return
 
     for nodeset_name, record in snapshot.items():
-        circuit_id = record.get("circuit_id")
-        generation = int(record.get("generation", 0))
         try:
-            transitions_complete = _reapply_pending_transitions(
-                nodeset_name,
-                circuit_id,
-                generation,
-                lkp,
-            )
+            _reconcile_nodeset(nodeset_name, record, lkp)
         except Exception:
-            transitions_complete = False
             log.exception(
-                "Unable to reapply pending capacity circuit transitions for nodeset %s",
+                "Unable to reconcile capacity circuit for nodeset %s",
                 nodeset_name,
             )
-        probes = tuple(record.get("probe_nodes", []))
-        probe_instances = [lkp.instance(node) for node in probes]
-        if any(
-            instance is not None and instance.status == "RUNNING"
-            for instance in probe_instances
-        ):
-            _close_nodeset(nodeset_name, lkp, circuit_id, generation)
-            continue
-
-        now = _now()
-        reset_after = record.get("reset_after")
-        reset_due = bool(reset_after and now >= _parse_time(reset_after))
-        probe_in_flight = _probe_is_in_flight(probes, lkp)
-        transient_instance = any(
-            instance is not None and instance.status in TRANSIENT_INSTANCE_STATES
-            for instance in probe_instances
-        )
-        reset_deferred = False
-        if reset_due:
-            hard_reset_after = record.get("hard_reset_after", reset_after)
-            if (
-                (probe_in_flight or transient_instance)
-                and hard_reset_after
-                and now < _parse_time(hard_reset_after)
-            ):
-                log.info(
-                    "Deferring capacity circuit reset for in-flight probe in nodeset %s",
-                    nodeset_name,
-                )
-                reset_deferred = True
-            else:
-                log.info(
-                    "Closing capacity circuit for nodeset %s after probe grace period",
-                    nodeset_name,
-                )
-                _close_nodeset(nodeset_name, lkp, circuit_id, generation)
-                continue
-        if (
-            transitions_complete
-            and not reset_deferred
-            and not probe_in_flight
-            and not any(instance is not None for instance in probe_instances)
-        ):
-            _release_probe(nodeset_name, circuit_id, generation, lkp)
-
-        nodeset = lkp.cfg.nodeset.get(nodeset_name)
-        if nodeset is None:
-            continue
-        newly_powered_down = set(_powered_down_nodes(nodeset, lkp)).difference(
-            record.get("owned_nodes", [])
-        )
-        _drain_new_nodes(
-            nodeset_name,
-            circuit_id,
-            generation,
-            sorted(newly_powered_down),
-            lkp,
-        )

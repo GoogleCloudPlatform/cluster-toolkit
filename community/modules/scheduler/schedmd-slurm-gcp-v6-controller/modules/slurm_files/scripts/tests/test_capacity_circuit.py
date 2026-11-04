@@ -656,6 +656,7 @@ def test_trip_waits_for_in_progress_close(state_files, monkeypatch):
     state = json.loads(capacity_circuit.STATE_FILE.read_text())
     assert "n" in state["nodesets"]
     assert state["nodesets"]["n"]["generation"] == 2
+    assert state["nodesets"]["n"]["owned_nodes"] == ["c-n-0", "c-n-3"]
 
 
 def test_stale_close_does_not_close_reopened_circuit(state_files, monkeypatch):
@@ -1091,3 +1092,55 @@ def test_disabling_circuit_resumes_owned_nodes(state_files, monkeypatch):
         lkp,
     )
     assert not capacity_circuit.owns_node("c-n-0", lkp)
+
+
+def test_trip_waits_at_least_resume_timeout_for_probe_delay(
+    state_files, monkeypatch
+):
+    lkp = make_lookup()
+    lkp.cfg.cloud_parameters["resume_timeout"] = 30
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(capacity_circuit, "_now", lambda: now)
+    update = mock.Mock(return_value=True)
+    monkeypatch.setattr(capacity_circuit, "_update_nodes", update)
+
+    trip = capacity_circuit.trip(["c-n-0"], {"ZONE_RESOURCE_POOL_EXHAUSTED"}, lkp)
+
+    assert trip is not None
+    assert trip.cooldown_seconds == 10
+    update.assert_any_call(["c-n-0"], "down", trip.reason, lkp, resume_after=30)
+    record = json.loads(capacity_circuit.STATE_FILE.read_text())["nodesets"]["n"]
+    assert record["probe_after"] == (now + timedelta(seconds=30)).isoformat()
+    assert record["reset_after"] == (now + timedelta(seconds=60)).isoformat()
+
+
+def test_reconcile_isolates_per_nodeset_errors(state_files, monkeypatch, caplog):
+    lkp = make_lookup()
+    lkp.cfg.nodeset["m"] = TstNodeset(
+        nodeset_name="m",
+        node_count_dynamic_max=2,
+    )
+    lkp.slurm_nodes = mock.Mock(  # type: ignore[method-assign]
+        return_value={
+            "c-n-0": util.NodeState("ALLOCATED", frozenset({"CLOUD", "POWERING_UP"})),
+            "c-m-0": util.NodeState("ALLOCATED", frozenset({"CLOUD", "POWERING_UP"})),
+        }
+    )
+    monkeypatch.setattr(capacity_circuit, "_update_nodes", mock.Mock(return_value=True))
+    capacity_circuit.trip(["c-n-0"], {"ZONE_RESOURCE_POOL_EXHAUSTED"}, lkp)
+    capacity_circuit.trip(["c-m-0"], {"ZONE_RESOURCE_POOL_EXHAUSTED"}, lkp)
+
+    def lookup_instance(node):
+        if node.startswith("c-n-"):
+            raise RuntimeError("transient lookup error")
+        return SimpleNamespace(status="RUNNING")
+
+    lkp.instance = mock.Mock(side_effect=lookup_instance)  # type: ignore[method-assign]
+    close = mock.Mock(return_value=True)
+    monkeypatch.setattr(capacity_circuit, "_close_nodeset", close)
+
+    capacity_circuit.reconcile(lkp)
+
+    close.assert_called_once_with("m", lkp, mock.ANY, 1)
+    assert "Unable to reconcile capacity circuit for nodeset n" in caplog.text
+

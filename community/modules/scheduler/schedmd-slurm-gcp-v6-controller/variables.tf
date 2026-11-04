@@ -665,11 +665,14 @@ variable "cloud_parameters" {
 variable "capacity_circuit_breaker" {
   description = <<-EOT
     Controls automatic failover away from a GCE nodeset after a capacity error.
+    Applies only to BULK_INSERT nodesets (not MIG, DWS Flex or TPU nodesets).
     When enabled, powered-down nodes in the affected nodeset are drained while
-    a small probe set is retried after an exponential cooldown. A successful
-    probe makes the nodeset schedulable again. If no workload can use the probe
-    set, the nodeset is automatically reset after a bounded grace period that
-    accounts for Slurm's ResumeTimeout.
+    a small probe set is retried after an exponential cooldown (never earlier
+    than the nodeset's ResumeTimeout). A successful probe makes the nodeset
+    schedulable again. If no workload can use the probe set, the nodeset is
+    automatically reset after a bounded grace period and the backoff restarts
+    from initial_cooldown_seconds. Set probe_count to at least the node count
+    of jobs that run only on this nodeset.
   EOT
   type = object({
     enabled                  = optional(bool, false)

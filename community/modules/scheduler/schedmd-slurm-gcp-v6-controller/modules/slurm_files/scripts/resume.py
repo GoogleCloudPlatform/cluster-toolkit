@@ -638,17 +638,28 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
         log.error("bulkInsert API failures: {}".format("; ".join(failed_reqs)))
         for ident, exc in failed.items():
             failed_nodes = grouped_nodes[ident].nodes
+            reason = exc._get_reason() if hasattr(exc, "_get_reason") else str(exc) # type: ignore
             trip = trip_capacity_circuit(
                 failed_nodes,
                 capacity_circuit.exception_error_codes(exc),
                 lkp,
             )
-            down_nodes_notify_jobs(
-                failed_nodes,
-                f"GCP Error: {exc._get_reason() if hasattr(exc, '_get_reason') else str(exc)}", # type: ignore
-                resume_data,
-                trip,
-            )
+            if trip is not None:
+                down_nodes_notify_jobs(failed_nodes, f"GCP Error: {reason}", resume_data, trip)
+                continue
+            details = reason
+            err_details = getattr(exc, "error_details", None)
+            if err_details:
+                if isinstance(err_details, list):
+                    details = "; ".join(
+                        err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                        for err in err_details
+                    )
+                else:
+                    details = str(err_details)
+
+            action, admin_comment = error_handler.classify_gcp_error(reason, details)
+            handle_resume_failure(failed_nodes, f"GCP Error: {reason}", resume_data, action, admin_comment)
 
     if log.isEnabledFor(logging.DEBUG):
         for group, op in started.items():
@@ -733,13 +744,14 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
     if not failed and created == 0:
         error_codes = capacity_circuit.structured_error_codes(operation_errors)
         if capacity_circuit.is_capacity_error(error_codes):
-            msg = "; ".join(
-                f"{err['code']}: {err.get('message', 'no message')}"
-                for err in operation_errors
-            )
             trip = trip_capacity_circuit(nodes, error_codes, util.lookup())
-            down_nodes_notify_jobs(nodes, f"GCP Error: {msg}", resume_data, trip)
-            return
+            if trip is not None:
+                msg = "; ".join(
+                    f"{err['code']}: {err.get('message', 'no message')}"
+                    for err in operation_errors
+                )
+                down_nodes_notify_jobs(nodes, f"GCP Error: {msg}", resume_data, trip)
+                return
     
     # Multiple errors are possible, group by all of them (joined string codes)
     by_error_inserts = util.groupby_unsorted(
@@ -769,12 +781,11 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
                 capacity_circuit.structured_error_codes(errors),
                 util.lookup(),
             )
-            down_nodes_notify_jobs(
-                failed_nodes,
-                f"GCP Error: {msg}",
-                resume_data,
-                trip,
-            )
+            if trip is not None:
+                down_nodes_notify_jobs(failed_nodes, f"GCP Error: {msg}", resume_data, trip)
+            else:
+                action, admin_comment = error_handler.classify_gcp_error(code, msg)
+                handle_resume_failure(failed_nodes, f"GCP Error: {msg}", resume_data, action, admin_comment)
         log.error(
             f"errors from insert for node '{failed_nodes[0]}' ({failed_ops[0]['name']}): {msg}"
         )
