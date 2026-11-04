@@ -35,7 +35,6 @@ on:
     - "tools/validate_cloud_docs.py"
     - "tools/tests/test_validate_cloud_docs.py"
     - ".github/workflows/cloud-docs-drift.yml"
-    - "Makefile"
   schedule:
   - cron: "0 8 * * 1"  # Weekly on Mondays at 08:00 UTC
   workflow_dispatch:
@@ -70,18 +69,8 @@ jobs:
         python3 -m pip install --upgrade pip
         python3 -m pip install 'pyyaml>=6.0.1'
 
-    - name: Run Cloud Docs Validator Unit Tests (only when the validator changes)
-      env:
-        BASE_REF: "origin/${{ github.base_ref }}"
-      run: |
-        changed="$(git diff --name-only --no-renames "$BASE_REF...HEAD" -- \
-            tools/validate_cloud_docs.py tools/tests/test_validate_cloud_docs.py \
-            .github/workflows/cloud-docs-drift.yml)"
-        if [ -n "$changed" ]; then
-          python3 tools/tests/test_validate_cloud_docs.py
-        else
-          echo "Validator unchanged in this PR; skipping its unit tests."
-        fi
+    - name: Run Cloud Docs Validator Unit Tests
+      run: python3 tools/tests/test_validate_cloud_docs.py
 
     - name: Check PR for Cloud Docs Impact
       env:

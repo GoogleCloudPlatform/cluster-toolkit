@@ -103,17 +103,18 @@ class TestValidateCloudDocs(unittest.TestCase):
         bp = "examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"
         stale_html = (
             "<article>Request 10 TiB of HIGH_SCALE_SSD Filestore instance quota. "
-            "Requires Cluster Toolkit v1.62.0.</article>"
+            "Requires Cluster Toolkit v1.62.0. <pre>./gcluster --version</pre></article>"
         )
         errs = vcd.check_slurm_gpu_page(slug, bp, stale_html)
-        self.assertEqual(len(errs), 3)
+        self.assertEqual(len(errs), 4)
         self.assertTrue(any("Filestore" in e for e in errs))
         self.assertTrue(any("missing Managed Lustre" in e for e in errs))
         self.assertTrue(any("v1.62.0" in e for e in errs))
+        self.assertTrue(any("without running 'make' first" in e for e in errs))
 
         clean_html = (
             "<article>Request 36 TiB Managed Lustre quota (lustre.googleapis.com). "
-            "Requires v1.103.0+.</article>"
+            "Requires v1.103.0+. <pre>make &amp;&amp; ./gcluster --version</pre></article>"
         )
         self.assertEqual(vcd.check_slurm_gpu_page(slug, bp, clean_html), [])
 
@@ -123,7 +124,7 @@ class TestValidateCloudDocs(unittest.TestCase):
         dep = "examples/gke-a3-ultragpu/gke-a3-ultragpu-deployment.yaml"
         stale_html = (
             "<article>For the reservation field, provide the name of your reservation."
-            "<pre>kubectl apply -f examples/deleted-sample-workloads/missing-job.yaml\n"
+            "<pre>kubectl apply -f ./examples/deleted-sample-workloads/missing-job.yaml\n"
             "./gcluster destroy CLUSTER_NAME</pre>"
             "</article>"
         )
@@ -154,9 +155,10 @@ class TestValidateCloudDocs(unittest.TestCase):
             "<article>hpc-centos-7 †This OS image has DAOS drivers pre-installed.</article>"
         )
         errs = vcd.check_blueprint_catalog_page(slug, stale_html)
-        self.assertEqual(len(errs), 2)
+        self.assertEqual(len(errs), 3)
         self.assertTrue(any("hpc-centos-7" in e for e in errs))
         self.assertTrue(any("DAOS drivers" in e for e in errs))
+        self.assertTrue(any("llms.txt" in e for e in errs))
 
     def test_check_configure_environment_page_detects_missing_apis(self):
         slug = "/cluster-toolkit/docs/setup/configure-environment"
@@ -174,15 +176,20 @@ class TestValidateCloudDocs(unittest.TestCase):
         )
         errs = vcd.check_cli_reference_page(slug, "cmd", stale_html)
         self.assertTrue(any("'explain'" in e for e in errs))
+        self.assertTrue(any("'job'" in e for e in errs))
+        self.assertTrue(any("'cluster'" in e for e in errs))
 
-        # When <dt><code> tags are present, prose mentions of a missing subcommand do not mask drift
+        # When <dt><code> tags are present, prose mentions do not mask missing subcommands
+        # and removed/stale <dt><code> entries are also flagged
         dt_html = (
             "<article><p>You can deploy or explain blueprints.</p>"
-            "<dl><dt><a href='#'><code>create</code></a></dt></dl></article>"
+            "<dl><dt><a href='#'><code>create</code></a></dt>"
+            "<dt><a href='#'><code>obsolete-removed-cmd</code></a></dt></dl></article>"
         )
         dt_errs = vcd.check_cli_reference_page(slug, "cmd", dt_html)
         self.assertTrue(any("'explain'" in e for e in dt_errs))
         self.assertTrue(any("'deploy'" in e for e in dt_errs))
+        self.assertTrue(any("documented CLI subcommand 'obsolete-removed-cmd'" in e for e in dt_errs))
 
     def test_check_github_blob_links_detects_deleted_files(self):
         slug = "/cluster-toolkit/docs/setup/cluster-blueprint-catalog"
@@ -212,6 +219,7 @@ class TestValidateCloudDocs(unittest.TestCase):
                             "examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml",
                             "cmd/explain.go",
                             "cmd/explain_test.go",
+                            "cmd/README.md",
                             "cmd/job/list.go",
                             "--pr-body",
                             "",
@@ -249,6 +257,7 @@ class TestValidateCloudDocs(unittest.TestCase):
                             "--fail-on-impact",
                             "--changed-files",
                             "cmd/explain_test.go",
+                            "cmd/README.md",
                             "--pr-body",
                             "",
                             "--summary-file",

@@ -283,10 +283,16 @@ def extract_cli_subcommands(
     excluded = EXCLUDED_CMD_NAMES.get(os.path.normpath(cmd_rel_dir), set())
     if not os.path.isdir(full_dir):
         return commands
+    go_files: list[str] = []
     for entry in sorted(os.listdir(full_dir)):
-        if not entry.endswith(".go") or entry.endswith("_test.go"):
-            continue
-        path = os.path.join(full_dir, entry)
+        entry_path = os.path.join(full_dir, entry)
+        if os.path.isdir(entry_path):
+            sub_go = os.path.join(entry_path, f"{entry}.go")
+            if os.path.isfile(sub_go):
+                go_files.append(sub_go)
+        elif entry.endswith(".go") and not entry.endswith("_test.go"):
+            go_files.append(entry_path)
+    for path in go_files:
         with open(path, encoding="utf-8") as f:
             content = f.read()
         for match in re.finditer(r'\bUse:\s*"([^"]+)"', content):
@@ -330,7 +336,7 @@ def check_code_block_paths(
     ]
     seen_paths: set[str] = set()
     pattern = re.compile(
-        r"(?<![a-zA-Z0-9_./-])((?:community/)?examples/[a-zA-Z0-9_./-]+\.ya?ml)\b"
+        r"(?<![a-zA-Z0-9_./-])(?:\./)?((?:community/)?examples/[a-zA-Z0-9_./-]+\.ya?ml)\b"
     )
     for pre_text in pre_blocks:
         for match in pattern.finditer(pre_text):
@@ -372,6 +378,10 @@ def check_slurm_gpu_page(
         errors.append(
             f"{slug}: states 'v1.62.0' as the Cluster Toolkit version "
             "(literal match; confirm the current minimum)"
+        )
+    if "./gcluster --version" in text and not re.search(r"\bmake\b", text):
+        errors.append(
+            f"{slug}: runs './gcluster --version' after 'git clone' without running 'make' first"
         )
     return errors
 
@@ -463,14 +473,22 @@ def check_cli_reference_page(
     }
     if documented:
         missing = expected_cmds - documented
+        extra = documented - expected_cmds
     else:  # No <dt> command list (layout change or synthetic fixture): word search fallback.
         text = html_to_text(raw_html)
         missing = {
-            s for s in expected_cmds if not re.search(rf"\b{re.escape(s)}\b", text)
+            s
+            for s in expected_cmds
+            if not re.search(rf"(?<![a-zA-Z0-9_-]){re.escape(s)}(?![a-zA-Z0-9_-])", text)
         }
+        extra: set[str] = set()
     for sub in sorted(missing):
         errors.append(
             f"{slug}: CLI subcommand '{sub}' (from {cmd_rel_dir}/) is not documented on page"
+        )
+    for sub in sorted(extra):
+        errors.append(
+            f"{slug}: documented CLI subcommand '{sub}' does not exist in {cmd_rel_dir}/"
         )
     return errors
 
@@ -483,6 +501,8 @@ def check_blueprint_catalog_page(slug: str, raw_html: str) -> list[str]:
         errors.append(f"{slug}: references removed OS image 'hpc-centos-7'")
     if "DAOS drivers pre-installed" in text:
         errors.append(f"{slug}: contains obsolete DAOS drivers footnote")
+    if "llms.txt" not in text and "llms-full.txt" not in text:
+        errors.append(f"{slug}: missing reference to 'llms.txt' or 'llms-full.txt'")
     return errors
 
 
@@ -579,6 +599,15 @@ def validate_live_cloud_docs(
             )
         )
 
+    ai_slug = "/ai-hypercomputer/docs/create/gke-ai-hypercompute"
+    ai_raw = get_page(ai_slug)
+    if ai_raw is not None:
+        ai_text = html_to_text(ai_raw)
+        if "gcluster" not in ai_text and "Cluster Toolkit" not in ai_text:
+            errors.append(
+                f"{ai_slug}: missing Cluster Toolkit (gcluster) callout"
+            )
+
     return errors
 
 
@@ -612,6 +641,8 @@ def match_pr_cloud_docs_impacts(
             continue
         for prefix, slugs, reason in PR_PATH_TO_CLOUD_DOCS:
             if path == prefix or (prefix.endswith("/") and path.startswith(prefix)):
+                if prefix.startswith("cmd/") and not path.endswith(".go"):
+                    continue
                 # For top-level cmd/, only match direct files in cmd/ (not subdirs already matched)
                 if prefix == "cmd/" and "/" in path[len("cmd/") :]:
                     continue
@@ -670,7 +701,7 @@ def format_pr_reminder_markdown(
     else:
         lines.append(
             "**How to pass this check:** Add a `Cloud-Docs:` line to your PR description "
-            "(for example, `Cloud-Docs: b/123456` or `Cloud-Docs: none`) "
+            "(for example, `Cloud-Docs: #1234`, `Cloud-Docs: b/123456`, or `Cloud-Docs: none`) "
             "to acknowledge and turn this check green. Saving the PR description "
             "automatically triggers a new check run (re-running an older failed run "
             "will not pick up the updated description)."
@@ -686,7 +717,8 @@ def _emit_github_annotations(impacts: list[tuple[str, list[str], str]]) -> None:
     for path, urls, reason in impacts:
         msg = (
             f"{reason}. Verify: {' '.join(urls)} "
-            "(Add 'Cloud-Docs: b/123456' or 'Cloud-Docs: none' to PR description to pass check)"
+            "(Add 'Cloud-Docs: #1234', 'Cloud-Docs: b/123456', or 'Cloud-Docs: none' "
+            "to PR description to pass check)"
         )
         msg = msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
         prop = path.replace("%", "%25").replace(":", "%3A").replace(",", "%2C")
@@ -707,9 +739,11 @@ def format_live_drift_markdown(errors: list[str]) -> str:
         "",
     ]
     for err in errors:
-        lines.append(
-            f"- `{CLOUD_DOCS_BASE}{err}`" if err.startswith("/") else f"- {err}"
-        )
+        if err.startswith("/") and ": " in err:
+            slug, detail = err.split(": ", 1)
+            lines.append(f"- [{CLOUD_DOCS_BASE}{slug}]({CLOUD_DOCS_BASE}{slug}): {detail}")
+        else:
+            lines.append(f"- {err}")
     lines.append("")
     return "\n".join(lines)
 
