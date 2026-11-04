@@ -4218,6 +4218,33 @@ func TestPopulateClusterMetadata_PathwaysHeadNodePoolPreflight(t *testing.T) {
 		}
 	})
 
+	t.Run("non-CPU --pathways-head-np fails fast", func(t *testing.T) {
+		mockExec := NewMockExecutor(nil)
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.clusterDesc = gkeCluster{
+			NodePools: []gkeJobNodePool{
+				{
+					Name:             "tpu-np",
+					InitialNodeCount: 1,
+					Config:           gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+				},
+			},
+		}
+		job := &orchestrator.JobDefinition{
+			ClusterName:     "test-cluster",
+			ClusterLocation: "us-central1-a",
+			IsPathwaysJob:   true,
+			Pathways:        orchestrator.PathwaysJobDefinition{HeadNodePool: "tpu-np"},
+		}
+		err := orc.populateClusterMetadata(job)
+		if err == nil {
+			t.Fatal("expected error for non-CPU --pathways-head-np, got nil")
+		}
+		if !strings.Contains(err.Error(), "Pathways head node pool 'tpu-np' in cluster 'test-cluster' is not a CPU node pool") {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	})
+
 	t.Run("0-node cpu-np with autoscaling disabled fails fast", func(t *testing.T) {
 		mockExec := NewMockExecutor(nil)
 		orc := newTestGKEOrchestrator(mockExec)

@@ -662,6 +662,9 @@ func (g *GKEOrchestrator) validatePathwaysHeadNodePool(poolName, clusterName str
 			availablePools = append(availablePools, np.Name)
 		}
 		if np.Name == poolName {
+			if len(np.Config.Accelerators) > 0 || config.IsTPU(np.Config.MachineType) {
+				return fmt.Errorf("Pathways head node pool '%s' in cluster '%s' is not a CPU node pool. The Pathways head pod must run on a CPU-only node pool", poolName, clusterName)
+			}
 			if g.getNodeCount(np) == 0 {
 				return fmt.Errorf("Pathways head node pool '%s' in cluster '%s' has 0 nodes and autoscaling is disabled (or max node count is 0), so the Pathways head pod cannot be scheduled. Enable autoscaling or resize node pool '%s', or specify a different node pool with --pathways-head-np", poolName, clusterName, poolName)
 			}
