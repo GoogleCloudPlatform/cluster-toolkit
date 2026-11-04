@@ -4056,6 +4056,7 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 		namespace     string
 		mockResponses map[string][]shell.CommandResult
 		wantGCSFuse   bool
+		wantCalls     int
 	}{
 		{
 			name:  "static PVC bound to gcsfuse CSI PV enables gke-gcsfuse annotation",
@@ -4069,6 +4070,7 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 				},
 			},
 			wantGCSFuse: true,
+			wantCalls:   2,
 		},
 		{
 			name:      "unbound PVC with built-in gcsfusecsi-training StorageClass in custom namespace",
@@ -4080,6 +4082,7 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 				},
 			},
 			wantGCSFuse: true,
+			wantCalls:   1,
 		},
 		{
 			name:  "dynamically provisioned PVC with storage-provisioner annotation avoids cluster-scoped lookups",
@@ -4090,6 +4093,7 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 				},
 			},
 			wantGCSFuse: true,
+			wantCalls:   1,
 		},
 		{
 			name:  "PVC with custom StorageClass provisioned by gcsfuse.csi.storage.gke.io",
@@ -4103,18 +4107,31 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 				},
 			},
 			wantGCSFuse: true,
+			wantCalls:   2,
 		},
 		{
 			name:        "toolkit gcluster-gcsfuse-* PVC name enables gke-gcsfuse annotation without kubectl lookup",
 			mount:       "gcluster-gcsfuse-mybucket-training-abc123;/data;ro",
 			wantGCSFuse: true,
+			wantCalls:   0,
 		},
 		{
-			name:  "non-GCSFuse PVC (Persistent Disk CSI) leaves GCSFuseEnabled false",
+			name:  "dynamically provisioned non-GCSFuse PVC (Persistent Disk CSI annotation) short-circuits without cluster-scoped lookups",
 			mount: "pd-pvc;/data;ro",
 			mockResponses: map[string][]shell.CommandResult{
 				pvcCmd("pd-pvc", "default"): {
 					{ExitCode: 0, Stdout: "pvc-12345\tstandard-rwo\tpd.csi.storage.gke.io\t"},
+				},
+			},
+			wantGCSFuse: false,
+			wantCalls:   1,
+		},
+		{
+			name:  "static non-GCSFuse PVC (Persistent Disk CSI without annotation) checks PV and StorageClass",
+			mount: "static-pd-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("static-pd-pvc", "default"): {
+					{ExitCode: 0, Stdout: "pvc-12345\tstandard-rwo\t\t"},
 				},
 				pvCmd("pvc-12345"): {
 					{ExitCode: 0, Stdout: "pd.csi.storage.gke.io"},
@@ -4124,6 +4141,7 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 				},
 			},
 			wantGCSFuse: false,
+			wantCalls:   3,
 		},
 		{
 			name:  "StorageClass named training with non-GCSFuse provisioner leaves GCSFuseEnabled false",
@@ -4137,6 +4155,7 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 				},
 			},
 			wantGCSFuse: false,
+			wantCalls:   2,
 		},
 		{
 			name:  "missing PVC leaves GCSFuseEnabled false without failing",
@@ -4147,6 +4166,7 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 				},
 			},
 			wantGCSFuse: false,
+			wantCalls:   1,
 		},
 		{
 			name:  "kubectl get pv failure degrades gracefully and falls back to StorageClass check",
@@ -4163,12 +4183,14 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 				},
 			},
 			wantGCSFuse: true,
+			wantCalls:   3,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			orc := newTestGKEOrchestrator(NewMockExecutor(tc.mockResponses))
+			mockExec := NewMockExecutor(tc.mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
 			if tc.namespace != "" {
 				orc.namespace = tc.namespace
 			}
@@ -4183,6 +4205,9 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 			}
 			if infos[0].NeedsGCSFuseSidecar != tc.wantGCSFuse {
 				t.Errorf("MountInfo.NeedsGCSFuseSidecar = %v, want %v", infos[0].NeedsGCSFuseSidecar, tc.wantGCSFuse)
+			}
+			if len(mockExec.calls) != tc.wantCalls {
+				t.Errorf("kubectl call count = %d (%v), want %d", len(mockExec.calls), mockExec.calls, tc.wantCalls)
 			}
 
 			opts := &ManifestOptions{}

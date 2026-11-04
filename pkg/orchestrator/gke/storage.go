@@ -147,29 +147,18 @@ func (sm *StorageManager) dispatchMount(pm parsedMount, idx int, job orchestrato
 		return sm.generateGCSFuseProfileResources(pm, idx, job, state)
 	default:
 		info := buildPodLevelMount(pm, idx)
-		if info.Type == "pvc" && sm.isGCSFuseBackedPVC(info.Source, sm.pvcNamespaceForLookup(info.Source, job, state)) {
-			info.NeedsGCSFuseSidecar = true
+		if info.Type == "pvc" {
+			ns, err := sm.resolveNamespace(job)
+			if err != nil {
+				logging.Warn("Could not resolve namespace to inspect PVC %q for GCSFuse CSI driver (%v); defaulting to \"default\".", info.Source, err)
+				ns = "default"
+			}
+			if sm.isGCSFuseBackedPVC(info.Source, ns) {
+				info.NeedsGCSFuseSidecar = true
+			}
 		}
 		return info, "", nil
 	}
-}
-
-func (sm *StorageManager) pvcNamespaceForLookup(pvcName string, job orchestrator.JobDefinition, state *mountBuildState) string {
-	if strings.HasPrefix(pvcName, gcsFuseGatewayPrefix+"-") || sm.orchestrator == nil || sm.orchestrator.executor == nil {
-		return ""
-	}
-	if state != nil && state.pvcNamespace != "" {
-		return state.pvcNamespace
-	}
-	ns, err := sm.resolveNamespace(job)
-	if err != nil {
-		logging.Warn("Could not resolve namespace to inspect PVC %q for GCSFuse CSI driver (%v); defaulting to \"default\".", pvcName, err)
-		ns = "default"
-	}
-	if state != nil {
-		state.pvcNamespace = ns
-	}
-	return ns
 }
 
 // isGCSFuseBackedPVC reports whether an existing PVC is backed by the GKE GCSFuse CSI driver
@@ -189,9 +178,9 @@ func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string) bool {
 		logGCSFuseInspectWarning("pvc", pvcName, pvcName, res.Stderr)
 		return false
 	}
-	volumeName, storageClassName, hasGCSFuseAnnotation := parsePVCGCSFuseFields(res.Stdout)
-	if hasGCSFuseAnnotation {
-		return true
+	volumeName, storageClassName, provisioner := parsePVCGCSFuseFields(res.Stdout)
+	if provisioner != "" {
+		return provisioner == gcsFuseCSIDriver
 	}
 	if volumeName == "" && storageClassName == "" {
 		return false
@@ -205,9 +194,9 @@ func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string) bool {
 		sm.hasGCSFuseCSIField("storageclass", storageClassName, pvcName, "jsonpath={.provisioner}")
 }
 
-func parsePVCGCSFuseFields(stdout string) (volumeName, storageClassName string, hasGCSFuseAnnotation bool) {
+func parsePVCGCSFuseFields(stdout string) (volumeName, storageClassName, provisioner string) {
 	if strings.TrimSpace(stdout) == "" {
-		return "", "", false
+		return "", "", ""
 	}
 	fields := strings.Split(strings.Trim(stdout, "\r\n"), "\t")
 	volumeName = strings.TrimSpace(fields[0])
@@ -215,11 +204,14 @@ func parsePVCGCSFuseFields(stdout string) (volumeName, storageClassName string, 
 		storageClassName = strings.TrimSpace(fields[1])
 	}
 	for _, ann := range fields[min(2, len(fields)):] {
-		if strings.TrimSpace(ann) == gcsFuseCSIDriver {
-			return volumeName, storageClassName, true
+		if ann = strings.TrimSpace(ann); ann == gcsFuseCSIDriver {
+			return volumeName, storageClassName, ann
+		}
+		if ann != "" && provisioner == "" {
+			provisioner = ann
 		}
 	}
-	return volumeName, storageClassName, false
+	return volumeName, storageClassName, provisioner
 }
 
 func (sm *StorageManager) hasGCSFuseCSIField(resourceKind, name, pvcName, outputFormat string) bool {
