@@ -59,7 +59,7 @@ allowed_read_only_commands:
    Spot/reservation, or storage size:
    - **Case 1 — All requested knobs already exist in `vars:`:** Create or edit
      **only** a **new, untracked** `deployment.yaml` (or `<name>-deployment.yaml`)
-     passed with `-d`, containing only `vars:` (omit `terraform_backend_defaults: type: gcs`
+     passed with `-d`, containing `ai_assisted: true` and `vars:` (omit `terraform_backend_defaults: type: gcs`
      unless the user provides a GCS state bucket). Do **not** copy or edit the
      blueprint `.yaml` file, and **never modify git-tracked companion `*-deployment.yaml`
      files** under `examples/` or `community/examples/` in place (read them only as a
@@ -109,9 +109,9 @@ allowed_read_only_commands:
    in the catalog that already has it, keep its `use:` list, and check
    `module_wiring.<source>.required_inputs` to confirm every required input is
    satisfied by a module in `use:`.
-4. **Mark agent-authored blueprints.** Add `ai_assisted: true` at the top level
-   of any blueprint you create, copy, or repair/fix (if an existing custom
-   blueprint you are fixing lacks `ai_assisted: true`, add it).
+4. **Mark agent-authored blueprints and deployment files.** Add `ai_assisted: true` at the top level
+   of any new untracked `deployment.yaml` and any blueprint you create, copy, or repair/fix (if an existing custom
+   blueprint you are fixing lacks `ai_assisted: true`, add it). If `./gcluster` reports `field ai_assisted not found in type config.DeploymentSettings`, the binary is older than this field: run `make` and retry instead of removing `ai_assisted`.
 5. **Validate with gcluster, fix the blueprint, never the output.**
    `./gcluster expand` and `./gcluster create` are the validation step. Once
    `./gcluster create` or `./gcluster expand` succeeds, **stop immediately**—do
@@ -192,7 +192,7 @@ Prefer blueprints under `examples/` over `community/examples/` when both match.
 ### 2. Customize via deployment.yaml
 
 Always create a **new, untracked** deployment file (e.g. `my-deployment.yaml` in
-the repo root or `examples/<name>-deployment.yaml`) containing only `vars:`.
+the repo root or `examples/<name>-deployment.yaml`) containing `ai_assisted: true` and `vars:`.
 **Never modify git-tracked companion `*-deployment.yaml` files** under
 `examples/` or `community/examples/` in place (`deployment_path` in the catalog
 entry, such as `examples/gke-a4/gke-a4-deployment.yaml` or
@@ -208,6 +208,7 @@ Terraform's `${var.name}`.
 ```yaml
 # my-deployment.yaml
 ---
+ai_assisted: true
 vars:
   project_id: my-proj
   deployment_name: hpc-slurm-small

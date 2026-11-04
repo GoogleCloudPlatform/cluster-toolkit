@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"hpc-toolkit/pkg/sourcereader"
+	"hpc-toolkit/pkg/telemetry"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -387,4 +388,76 @@ deployment_groups:
 	outNoAPIs, err := runExplainForTest("community/examples/gcloud-example.yaml")
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(outNoAPIs, `"required_apis": []`), Equals, true)
+}
+
+func (s *MySuite) TestExplainTelemetryTargetModes(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+	defer func() {
+		telemetryCollector = nil
+	}()
+
+	cases := []struct {
+		name       string
+		args       []string
+		wantTarget string
+		expectErr  bool
+	}{
+		{
+			name:       "zero args -> catalog",
+			args:       []string{},
+			wantTarget: "catalog",
+		},
+		{
+			name:       "blueprint path -> blueprint",
+			args:       []string{"examples/hpc-slurm.yaml"},
+			wantTarget: "blueprint",
+		},
+		{
+			name:       "deployment path -> deployment",
+			args:       []string{"examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml"},
+			wantTarget: "deployment",
+		},
+		{
+			name:       "module path -> module",
+			args:       []string{"modules/file-system/managed-lustre"},
+			wantTarget: "module",
+		},
+		{
+			name:       "spec keywords -> specs",
+			args:       []string{"slurm", "a3u", "lustre"},
+			wantTarget: "specs",
+		},
+		{
+			name:       "missing blueprint path still records blueprint target",
+			args:       []string{"examples/does-not-exist.yaml"},
+			wantTarget: "blueprint",
+			expectErr:  true,
+		},
+		{
+			name:       "missing deployment path still records deployment target",
+			args:       []string{"examples/does-not-exist-deployment.yaml"},
+			wantTarget: "deployment",
+			expectErr:  true,
+		},
+		{
+			name:       "missing module path still records module target",
+			args:       []string{"modules/network/does-not-exist"},
+			wantTarget: "module",
+			expectErr:  true,
+		},
+	}
+
+	for _, tc := range cases {
+		telemetryCollector = telemetry.NewCollector(explainCmd, tc.args, telemetry.SOURCE)
+		_, err := runExplainForTest(tc.args...)
+		if tc.expectErr {
+			c.Check(err, NotNil)
+		} else {
+			c.Check(err, IsNil)
+		}
+
+		gotTarget, _ := telemetryCollector.GetMetadata(telemetry.EXPLAIN_TARGET)
+		c.Check(gotTarget, Equals, tc.wantTarget)
+	}
 }
