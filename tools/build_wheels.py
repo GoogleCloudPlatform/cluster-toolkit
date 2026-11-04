@@ -12,26 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Package prebuilt gcluster binaries as platform wheels for PyPI.
+"""Packages prebuilt gcluster binaries as platform wheels for PyPI.
 
-Users install the result with `uv tool install <name>`, `pipx install <name>`
-or `pip install <name>`. Each wheel contains:
-
-  - the gcluster binary (gcluster.exe on Windows), installed to the
-    environment's bin/ (Scripts\\ on Windows) so it is on PATH
-  - examples/ and community/examples/, installed to
-    <prefix>/share/cluster-toolkit/
-  - the LICENSE file
-
-No Python code runs at install time or at run time: pip only copies files.
-The script uses the Python standard library only.
+Each wheel installs the gcluster binary onto PATH and the example blueprints
+to <prefix>/share/cluster-toolkit/.
 
 Usage:
-  tools/build_wheels.py --name google-cloud-cluster-toolkit \\
-      --version 1.107.0 --out dist \\
-      --binary linux_amd64=build/gcluster_linux_amd64 \\
-      --binary darwin_arm64=build/gcluster_darwin_arm64 \\
-      --binary windows_amd64=build/gcluster_windows_amd64.exe
+  tools/build_wheels.py --name <package-name> --version 1.108.0 \\
+      --binary linux_amd64=gcluster_linux_amd64 --binary darwin_arm64=gcluster_darwin_arm64
 """
 
 import argparse
@@ -42,9 +30,7 @@ import re
 import sys
 import zipfile
 
-# Wheel platform tags per gcluster build target (GOOS_GOARCH). The binary is a
-# static Go build (CGO_ENABLED=0), so one Linux wheel covers glibc and musl
-# distributions. macOS tags are filled in from the minimum macOS version.
+# The binary is static (CGO_ENABLED=0), so one Linux wheel covers glibc and musl.
 LINUX_TAGS = {
     "linux_amd64": ["manylinux2014_x86_64", "musllinux_1_2_x86_64"],
     "linux_arm64": ["manylinux2014_aarch64", "musllinux_1_2_aarch64"],
@@ -53,9 +39,7 @@ MACOS_ARCH = {"darwin_amd64": "x86_64", "darwin_arm64": "arm64"}
 WINDOWS_TAGS = {"windows_amd64": ["win_amd64"]}
 PLATFORMS = sorted([*LINUX_TAGS, *MACOS_ARCH, *WINDOWS_TAGS])
 
-# Minimum macOS version required by each Go release, from
-# https://go.dev/wiki/MinimumRequirements. The macOS wheel tag must not be
-# lower than this, or pip would install a binary that cannot run.
+# Minimum macOS per Go release: https://go.dev/wiki/MinimumRequirements
 GO_MIN_MACOS = {
     "1.23": "11.0",
     "1.24": "11.0",
@@ -64,11 +48,7 @@ GO_MIN_MACOS = {
     "1.27": "13.0",
 }
 
-# Oldest Go patch release with required security fixes, per Go release line.
-# Go 1.26.10 and 1.27.3 block the compromised eMudhra intermediate CA keys in
-# crypto/x509 (https://go.dev/blog/emudhra-incident). Binaries built with
-# older Go stay vulnerable until rebuilt. Release lines older than the oldest
-# entry are rejected; newer lines are accepted.
+# Minimum Go patch per release line (eMudhra fix): https://go.dev/blog/emudhra-incident
 GO_MIN_PATCH = {
     "1.26": (1, 26, 10),
     "1.27": (1, 27, 3),
@@ -77,7 +57,7 @@ GO_MIN_PATCH = {
 EXAMPLE_DIRS = ["examples", "community/examples"]
 SKIP_NAMES = {".DS_Store", "__pycache__"}
 SHARE_DIR = "share/cluster-toolkit"
-# Fixed timestamp so the same inputs always produce the same wheel bytes.
+# Fixed timestamp for reproducible wheels.
 ZIP_DATE_TIME = (2026, 1, 1, 0, 0, 0)
 
 SUMMARY = "Google Cloud Cluster Toolkit command line tool (gcluster)"
@@ -118,11 +98,7 @@ def normalize_version(version):
 
 
 def wheel_name_part(name):
-    """Returns the distribution name as written in wheel file names.
-
-    The wheel spec requires runs of '-', '_' and '.' to become a single '_'
-    (google-cloud-cluster-toolkit -> google_cloud_cluster_toolkit).
-    """
+    """Returns the name as used in wheel file names (google_cloud_cluster_toolkit)."""
     if not _NAME_RE.match(name):
         raise ValueError(f"invalid package name {name!r}")
     return re.sub(r"[-_.]+", "_", name).lower()
@@ -139,11 +115,7 @@ def go_version(repo_root):
 
 
 def toolkit_version(repo_root):
-    """Returns the version gcluster reports (latestToolkitVersion), or None.
-
-    `gcluster --version` prints this constant from pkg/config/config.go, so the
-    wheel version must match it.
-    """
+    """Returns latestToolkitVersion from pkg/config/config.go, or None."""
     path = os.path.join(repo_root, "pkg", "config", "config.go")
     if not os.path.isfile(path):
         return None
@@ -166,11 +138,7 @@ _BUILDINFO_MAGIC = b"\xff Go buildinf:"
 
 
 def go_build_version(binary):
-    """Returns the Go version a binary was built with ('go1.26.8'), or None.
-
-    Reads the build info block Go embeds in every binary (the same data
-    `go version <binary>` prints). Supports the Go 1.18+ format.
-    """
+    """Returns the Go version embedded in a binary ('go1.26.8'), or None."""
     with open(binary, "rb") as f:
         data = f.read()
     i = data.find(_BUILDINFO_MAGIC)
