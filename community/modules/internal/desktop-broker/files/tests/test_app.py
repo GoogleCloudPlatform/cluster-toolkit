@@ -28,9 +28,12 @@ from desktop_broker.novnc import NoVncFrontend  # noqa: E402
 
 
 class _Request:
-    def __init__(self, path, upgrade=None):
+    def __init__(self, path, upgrade=None, origin=None, host="login.example.com"):
         self.path = path
+        self.host = host
         self.headers = {"Upgrade": upgrade} if upgrade else {}
+        if origin is not None:
+            self.headers["Origin"] = origin
 
 
 class _Frontend(NoVncFrontend):
@@ -184,3 +187,34 @@ def test_tcp_is_refused_without_an_iap_verifier():
     with pytest.raises(BrokerError) as excinfo:
         asyncio.run(broker.authenticate(_tcp_request()))
     assert excinfo.value.status == 403
+
+
+@pytest.mark.parametrize(
+    "origin, host",
+    [
+        ("https://login.example.com", "login.example.com"),
+        ("http://localhost:6080", "localhost:6080"),
+        (None, "login.example.com"),
+    ],
+    ids=["load-balancer", "ssh-tunnel", "no-origin"],
+)
+def test_same_site_websockets_are_relayed(broker, origin, host):
+    async def relay(request, session):
+        return "ws"
+
+    broker.frontend.handle = relay
+    request = _Request("/websockify", upgrade="websocket", origin=origin, host=host)
+    assert handle(broker, request) == "ws"
+
+
+@pytest.mark.parametrize(
+    "origin",
+    ["https://evil.example.net", "https://login.example.com.evil.net", "null",
+     "http://localhost:6080"],
+)
+def test_cross_site_websockets_are_refused_before_a_session(broker, origin):
+    request = _Request("/websockify", upgrade="websocket", origin=origin)
+    response = handle(broker, request)
+    assert response.status == 403
+    assert broker.sessions.ensured == 0
+    assert broker.frontend.served == []

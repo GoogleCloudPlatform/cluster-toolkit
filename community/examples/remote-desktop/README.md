@@ -128,8 +128,10 @@ hostname, so no SSH tunnel is needed. The SSH route above keeps working
 alongside it.
 
 A load balancer cannot reach a unix socket, so these brokers also listen on TCP
-port 6080, and a firewall rule admits only Google's front ends to it. On that
-port the user is whoever Identity-Aware Proxy says they are. The broker
+port 6080. A firewall rule admits Google's front ends to it, and the network's
+rule for internal traffic admits its other VMs. On that port the user is
+whoever Identity-Aware Proxy says they are, and a request without IAP's
+assertion is refused. The broker
 verifies the assertion IAP signs onto every request, checks it was minted for
 this host's backend service, and maps the Google account to its OS Login
 account. OS Login then decides whether that account may have a desktop, as it
@@ -142,9 +144,10 @@ The blueprint has three parts:
   creates one backend service per desktop target.
 - [modules/network/firewall-rules](../../../modules/network/firewall-rules/README.md)
   admits the load balancer to the brokers.
-- terraform-google-lb-http's
-  [frontend](https://github.com/terraform-google-modules/terraform-google-lb-http/tree/main/modules/frontend)
-  module provides the address, certificate and URL map.
+- [ext-app-lb](../../modules/network/ext-app-lb/README.md) provides the
+  address, certificate and URL map. For one wildcard certificate rather than
+  one per hostname, pass it the `certificate_map` of
+  [managed-certificate](../../modules/network/managed-certificate/README.md).
 
 The front end only needs each backend service's self link, so it can live in
 another deployment and serve several clusters.
@@ -168,13 +171,21 @@ another deployment and serve several clusters.
 4. Grant each desktop user both `roles/compute.osLogin` and, through
    `desktop_iap_members`, IAP access. IAP admits them to the load balancer; OS
    Login decides whether they get a desktop.
+5. Grant the desktop hosts' service account `roles/compute.viewer`, so each
+   broker can look up its backend service. This blueprint runs them as the
+   default compute service account, which otherwise has that only through the
+   Editor role, and organization policy may keep it from being granted:
+
+   ```bash
+   gcloud projects add-iam-policy-binding PROJECT_ID \
+     --member=serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com \
+     --role=roles/compute.viewer
+   ```
 
 Set `desktop_domain`, `desktop_address` (the IP itself) and
 `desktop_iap_members` in the blueprint, then create and deploy it as above.
 
-The desktop hosts' service account needs `compute.backendServices.get`, so each
-broker can find its backend service. The default compute service account has
-it. IAP's Google-managed OAuth client only admits users in your organization;
+IAP's Google-managed OAuth client only admits users in your organization;
 for anyone else, set `oauth2_client_id` and `oauth2_client_secret` on
 `iap-backend-service`.
 

@@ -46,9 +46,10 @@ locals {
   iap_enabled     = var.iap_backend_service != null
   iap_listen_port = local.iap_enabled ? var.iap_listen_port : null
   # Verifying IAP assertions needs these; a socket-only broker does not.
+  # cryptography from google-auth's floor for ES256 to the newest major tested.
   broker_pip_packages = concat(
     ["aiohttp~=3.10"],
-    local.iap_enabled ? ["google-auth~=2.35", "cryptography"] : [],
+    local.iap_enabled ? ["google-auth~=2.35", "cryptography>=38.0.3,<51"] : [],
   )
 }
 

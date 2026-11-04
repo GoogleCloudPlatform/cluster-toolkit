@@ -20,6 +20,7 @@ this backend service must be refused.
 """
 
 import base64
+import json
 import time
 import types
 
@@ -140,8 +141,48 @@ def test_keys_are_cached_and_refetched_once_on_rotation(verifier, key, published
 
     rotated = Key("rotated")
     published.keys.append(rotated.jwk())
+    verifier._certs_fetched_at -= iap.CERTS_MIN_REFRESH_SECONDS
     assert verifier.subject(headers(rotated.sign())) == SUBJECT
     assert len(published.fetches) == 2
+
+
+def test_unknown_key_ids_refetch_the_keys_at_most_once_a_minute(
+    verifier, key, published
+):
+    verifier.subject(headers(key.sign()))
+    for _ in range(5):
+        with pytest.raises(BrokerError) as excinfo:
+            verifier.subject(headers(Key("unknown").sign()))
+        assert excinfo.value.status == 401
+    assert len(published.fetches) == 1
+
+
+def _with_header(assertion, **header):
+    """The assertion with its header replaced, signature unchanged."""
+    encoded = base64.urlsafe_b64encode(json.dumps(header).encode()).rstrip(b"=")
+    return ".".join([encoded.decode(), *assertion.split(".")[1:]])
+
+
+@pytest.mark.parametrize("alg", ["RS256", "HS256", "none", "ES384", None])
+def test_only_es256_assertions_are_accepted(verifier, key, alg):
+    assertion = _with_header(key.sign(), alg=alg, kid=key.kid)
+    with pytest.raises(BrokerError) as excinfo:
+        verifier.subject(headers(assertion))
+    assert excinfo.value.status == 401
+
+
+def test_a_clock_slightly_behind_iap_is_tolerated(verifier, key):
+    now = int(time.time())
+    assertion = key.sign(iat=now + 5, exp=now + 600)
+    assert verifier.subject(headers(assertion)) == SUBJECT
+
+
+def test_an_assertion_issued_well_in_the_future_is_refused(verifier, key):
+    now = int(time.time())
+    assertion = key.sign(iat=now + 600, exp=now + 1200)
+    with pytest.raises(BrokerError) as excinfo:
+        verifier.subject(headers(assertion))
+    assert excinfo.value.status == 401
 
 
 def test_the_audience_is_looked_up_from_the_backend_service(monkeypatch):

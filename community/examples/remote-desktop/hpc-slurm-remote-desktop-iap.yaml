@@ -85,7 +85,8 @@ deployment_groups:
       subnetwork_name: $(vars.deployment_name)-subnet
 
   # The load balancer and its health checks reach the brokers from Google's
-  # front ends. Nothing else needs the port: IAP authenticates every request.
+  # front ends. Other VMs in the network can reach the port too, but the
+  # broker refuses any request without a verified IAP assertion.
   - id: desktop-firewall
     source: modules/network/firewall-rules
     use: [network]
@@ -97,7 +98,7 @@ deployment_groups:
         target_tags: [$(vars.desktop_network_tag)]
         allow:
         - protocol: tcp
-          ports: ["6080"]
+          ports: [$(login-desktop-runtime.iap_listen_port)]
 
   - id: homefs
     source: community/modules/file-system/nfs-server

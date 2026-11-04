@@ -15,7 +15,9 @@
 locals {
   # This label allows for billing report tracking based on module.
   labels = merge(var.labels, { ghpc_module = "managed-certificate", ghpc_role = "network" })
+}
 
+locals {
   # A wildcard is authorised by its parent domain's record, so *.example.com
   # and example.com share one authorisation.
   authorized_domains = toset([for domain in var.domains : trimprefix(domain, "*.")])

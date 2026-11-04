@@ -17,6 +17,13 @@ service's name to verify IAP assertions.
 Pass the same `name` to the desktop module's `iap_backend_service`, and admit
 Google's front ends (`130.211.0.0/22`, `35.191.0.0/16`) to the broker port with
 [modules/network/firewall-rules](../../../../modules/network/firewall-rules).
+Other VMs in the network may reach the port as well, under its internal traffic
+rule; the broker refuses any request without a verified IAP assertion.
+
+Each broker looks its backend service up by name, so the hosts' service account
+needs `compute.backendServices.get`, such as through `roles/compute.viewer`.
+The default compute service account has it only through the Editor role, which
+organization policy may keep it from being granted.
 
 IAP decides who reaches the hosts. OS Login, which the broker asks on every
 hand-off, still decides who gets a desktop. Grant `iap_members` both

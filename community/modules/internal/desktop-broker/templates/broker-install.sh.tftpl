@@ -14,7 +14,9 @@ broker_venv_dir=${jsonencode(broker_venv_dir)}
 broker_python_path=${jsonencode(broker_python_path)}
 broker_pip_path=${jsonencode(broker_pip_path)}
 broker_socket_path=${jsonencode(broker_socket_path)}
-broker_pip_packages=(%{ for package in broker_pip_packages }${jsonencode(package)} %{ endfor })
+# Single-quoted, not jsonencoded: jsonencode writes < and > as < and >,
+# which bash passes to pip literally. The specifiers are fixed in main.tf.
+broker_pip_packages=(%{ for package in broker_pip_packages }'${package}' %{ endfor })
 requires_units=${jsonencode(requires_units)}
 
 if command -v dnf >/dev/null 2>&1; then

@@ -29,6 +29,10 @@ HTTPS is enabled when one of these is set, and HTTP then redirects to it
 Without any of them the load balancer serves HTTP only, which Identity-Aware
 Proxy does not support.
 
+The HTTPS proxy accepts TLS 1.2 and later, through an SSL policy created here
+with the `MODERN` profile. Set `min_tls_version` to change that, or
+`ssl_policy` to use an existing policy instead.
+
 Choose between `certificate_map` and the other two when the load balancer is
 created. Moving an existing load balancer from `ssl_certificates` or
 `managed_ssl_certificate_domains` to `certificate_map` fails, because the
@@ -80,10 +84,13 @@ A wildcard certificate and one hostname per desktop:
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.9.0 |
 
 ## Providers
 
-No providers.
+| Name | Version |
+| ---- | ------- |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 6.9.0 |
 
 ## Modules
 
@@ -93,7 +100,9 @@ No providers.
 
 ## Resources
 
-No resources.
+| Name | Type |
+| ---- | ---- |
+| [google_compute_ssl_policy.policy](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_ssl_policy) | resource |
 
 ## Inputs
 
@@ -104,11 +113,12 @@ No resources.
 | <a name="input_https_redirect"></a> [https\_redirect](#input\_https\_redirect) | Whether to redirect HTTP requests to HTTPS. Ignored without a certificate, as the load balancer then serves HTTP only. | `bool` | `true` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the resources. | `map(string)` | `{}` | no |
 | <a name="input_managed_ssl_certificate_domains"></a> [managed\_ssl\_certificate\_domains](#input\_managed\_ssl\_certificate\_domains) | Domains for a Google-managed Compute Engine certificate, created here. It is<br/>issued once each domain resolves to the load balancer. It cannot cover a<br/>wildcard; use certificate\_map for one. | `list(string)` | `[]` | no |
+| <a name="input_min_tls_version"></a> [min\_tls\_version](#input\_min\_tls\_version) | Lowest TLS version the HTTPS proxy accepts, in the SSL policy created when ssl\_policy is null. | `string` | `"TLS_1_2"` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name of the load balancer's forwarding rules, and prefix of its other resources. | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the load balancer is created. Must be its backend services' project. | `string` | n/a | yes |
 | <a name="input_routes"></a> [routes](#input\_routes) | Hostnames and the backend services that serve them, by self link, such as<br/>iap-backend-service's backend\_service\_self\_link. paths defaults to every<br/>path. Requests for any other hostname go to the route whose host is "*",<br/>or without one, to the alphabetically first host's backend service. | <pre>list(object({<br/>    host            = string<br/>    backend_service = string<br/>    paths           = optional(list(string), ["/*"])<br/>  }))</pre> | n/a | yes |
 | <a name="input_ssl_certificates"></a> [ssl\_certificates](#input\_ssl\_certificates) | Self links of existing Compute Engine SSL certificates. | `list(string)` | `[]` | no |
-| <a name="input_ssl_policy"></a> [ssl\_policy](#input\_ssl\_policy) | Self link of an SSL policy for the HTTPS proxy. Null uses Google's default policy. | `string` | `null` | no |
+| <a name="input_ssl_policy"></a> [ssl\_policy](#input\_ssl\_policy) | Self link of an existing SSL policy for the HTTPS proxy. Null creates one from min\_tls\_version. | `string` | `null` | no |
 
 ## Outputs
 

@@ -20,7 +20,9 @@
 locals {
   # This label allows for billing report tracking based on module.
   labels = merge(var.labels, { ghpc_module = "ext-app-lb", ghpc_role = "network" })
+}
 
+locals {
   ssl = (
     var.certificate_map != null
     || length(var.ssl_certificates) > 0
@@ -38,6 +40,16 @@ locals {
       }
     ]
   ])
+}
+
+# Google's default policy, which applies when a proxy names none, still allows
+# TLS 1.0.
+resource "google_compute_ssl_policy" "policy" {
+  count           = local.ssl && var.ssl_policy == null ? 1 : 0
+  project         = var.project_id
+  name            = "${var.name}-tls"
+  profile         = "MODERN"
+  min_tls_version = var.min_tls_version
 }
 
 module "frontend" {
@@ -61,7 +73,7 @@ module "frontend" {
   # Lets the managed certificate's domains change: a certificate cannot be
   # replaced in place while a proxy uses it.
   random_certificate_suffix = length(var.managed_ssl_certificate_domains) > 0
-  ssl_policy                = var.ssl_policy
+  ssl_policy                = var.ssl_policy != null ? var.ssl_policy : one(google_compute_ssl_policy.policy[*].self_link)
 
   # Without a certificate there is nothing to redirect to.
   https_redirect = local.ssl && var.https_redirect

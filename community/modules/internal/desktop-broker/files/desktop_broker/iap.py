@@ -53,6 +53,12 @@ ISSUER = "https://cloud.google.com/iap"
 # Google's OIDC certificates.
 CERTS_URL = "https://www.gstatic.com/iap/verify/public_key-jwk"
 CERTS_CACHE_SECONDS = 3600
+ALGORITHM = "ES256"
+# An unknown key ID refetches the keys at most this often: anyone who can reach
+# the port can send one.
+CERTS_MIN_REFRESH_SECONDS = 60
+# Leeway on "iat" and "exp" for clocks that differ from IAP's.
+CLOCK_SKEW_SECONDS = 60
 
 METADATA_ROOT = "http://metadata.google.internal/computeMetadata/v1"
 BACKEND_SERVICE_URL = (
@@ -106,8 +112,8 @@ class Verifier:
     """Verifies IAP assertions for one backend service.
 
     The audience and IAP's signing keys are both cached: the backend service's
-    ID never changes, and the keys rotate slowly enough that refetching once
-    for an unknown key ID is enough.
+    ID never changes, and the keys rotate slowly enough that refetching for an
+    unknown key ID, at most once a minute, is enough.
     """
 
     def __init__(self, backend_service, certs_url=CERTS_URL):
@@ -116,6 +122,7 @@ class Verifier:
         self._audience = None
         self._certs = {}
         self._certs_expire_at = 0
+        self._certs_fetched_at = 0
 
     def audience(self):
         # Not cached on failure, so a broker that starts before its backend
@@ -150,7 +157,10 @@ class Verifier:
         )
 
     def _keys(self, refresh=False):
-        if refresh or not self._certs or time.time() >= self._certs_expire_at:
+        now = time.time()
+        if refresh and now - self._certs_fetched_at < CERTS_MIN_REFRESH_SECONDS:
+            refresh = False
+        if refresh or not self._certs or now >= self._certs_expire_at:
             payload = _read_json(
                 urllib.request.Request(self.certs_url), "Fetching IAP signing keys"
             )
@@ -160,7 +170,8 @@ class Verifier:
                 }
             except (KeyError, TypeError, ValueError) as err:
                 raise BrokerError(502, "Could not read IAP signing keys.") from err
-            self._certs_expire_at = time.time() + CERTS_CACHE_SECONDS
+            self._certs_fetched_at = now
+            self._certs_expire_at = now + CERTS_CACHE_SECONDS
         return self._certs
 
     def subject(self, headers):
@@ -176,9 +187,17 @@ class Verifier:
                 "Identity-Aware Proxy.",
             )
         try:
-            key_id = google_jwt.decode_header(assertion).get("kid")
+            header = google_jwt.decode_header(assertion)
         except ValueError as err:
             raise BrokerError(401, "Malformed IAP assertion.") from err
+        if not isinstance(header, dict):
+            raise BrokerError(401, "Malformed IAP assertion.")
+        # google-auth picks the verifier from the token's own header, and an
+        # RS256 one fails on IAP's EC keys with a TypeError rather than a
+        # refusal. IAP only signs with ES256.
+        if header.get("alg") != ALGORITHM:
+            raise BrokerError(401, "IAP assertion has an unexpected algorithm.")
+        key_id = header.get("kid")
 
         certs = self._keys()
         if key_id not in certs:
@@ -186,7 +205,10 @@ class Verifier:
         try:
             # Checks the signature, "aud", "exp" and "iat", but not "iss".
             claims = google_jwt.decode(
-                assertion, certs=certs, audience=self.audience()
+                assertion,
+                certs=certs,
+                audience=self.audience(),
+                clock_skew_in_seconds=CLOCK_SKEW_SECONDS,
             )
         except ValueError as err:
             LOG.warning("Rejected IAP assertion: %s", err)

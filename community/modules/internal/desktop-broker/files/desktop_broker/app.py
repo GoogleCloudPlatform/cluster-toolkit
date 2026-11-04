@@ -151,6 +151,7 @@ class Broker:
     async def handle(self, request):
         try:
             username = await self.authenticate(request)
+            self.frontend.check_origin(request)
             if not self.frontend.needs_session(request):
                 # Authenticated, but a static asset: no lock, no record write
                 # and no probe of the display.

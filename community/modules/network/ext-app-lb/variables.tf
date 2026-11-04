@@ -102,9 +102,21 @@ variable "managed_ssl_certificate_domains" {
 }
 
 variable "ssl_policy" {
-  description = "Self link of an SSL policy for the HTTPS proxy. Null uses Google's default policy."
+  description = "Self link of an existing SSL policy for the HTTPS proxy. Null creates one from min_tls_version."
   type        = string
   default     = null
+}
+
+variable "min_tls_version" {
+  description = "Lowest TLS version the HTTPS proxy accepts, in the SSL policy created when ssl_policy is null."
+  type        = string
+  default     = "TLS_1_2"
+  nullable    = false
+
+  validation {
+    condition     = contains(["TLS_1_0", "TLS_1_1", "TLS_1_2"], var.min_tls_version)
+    error_message = "min_tls_version must be TLS_1_0, TLS_1_1 or TLS_1_2."
+  }
 }
 
 variable "https_redirect" {

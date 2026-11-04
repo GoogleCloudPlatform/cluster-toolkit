@@ -100,4 +100,9 @@ variable "oauth2_client_secret" {
   type        = string
   default     = null
   sensitive   = true
+
+  validation {
+    condition     = (var.oauth2_client_id == null) == (var.oauth2_client_secret == null)
+    error_message = "Set oauth2_client_id and oauth2_client_secret together, or neither for a Google-managed client."
+  }
 }

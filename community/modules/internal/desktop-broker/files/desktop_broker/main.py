@@ -53,8 +53,9 @@ def bind_tcp(port):
     """The listener for an HTTPS load balancer behind Identity-Aware Proxy.
 
     On every interface, because the load balancer connects to the instance's
-    own address. The firewall admits only Google's front ends, and a request
-    is still refused unless it carries a verified IAP assertion (see iap.py).
+    own address. A firewall rule admits Google's front ends, but other VMs in
+    the network may reach the port too, under its internal traffic rule. So a
+    request is refused unless it carries a verified IAP assertion (see iap.py).
     """
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
