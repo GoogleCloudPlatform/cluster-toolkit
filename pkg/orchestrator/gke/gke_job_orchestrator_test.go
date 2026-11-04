@@ -4198,6 +4198,7 @@ func TestPopulateClusterMetadata_PathwaysHeadNodePoolPreflight(t *testing.T) {
 
 func TestCheckJobSetWarningEvents_IncludesPodSchedulingEvents(t *testing.T) {
 	const jobSetEventsCmd = "kubectl get events -n default --field-selector=involvedObject.name=pw-job,involvedObject.kind=JobSet,type=Warning --request-timeout=10s --no-headers"
+	const jobPodsCmd = "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=pw-job -o name"
 	const podEventsCmd = "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
 
 	podEventsOutput := strings.Join([]string{
@@ -4205,10 +4206,12 @@ func TestCheckJobSetWarningEvents_IncludesPodSchedulingEvents(t *testing.T) {
 		"90s         Warning   FailedScheduling    pod/pw-job-pathways-head-0-0-xyz   0/5 nodes are available: 5 Insufficient cpu.",
 		"85s         Normal    NotTriggerScaleUp   pod/pw-job-pathways-head-0-0-xyz   pod didn't trigger scale-up: 1 max node group size reached",
 		"80s         Warning   FailedScheduling    pod/other-pw-job-0-0-def   0/5 nodes are available",
+		"75s         Warning   FailedScheduling    pod/pw-job-2-worker-0-0-abc   0/5 nodes are available",
 	}, "\n")
 
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
 		jobSetEventsCmd: {{ExitCode: 0, Stdout: ""}},
+		jobPodsCmd:      {{ExitCode: 0, Stdout: "pod/pw-job-worker-0-0-abc\npod/pw-job-pathways-head-0-0-xyz\n"}},
 		podEventsCmd:    {{ExitCode: 0, Stdout: podEventsOutput}},
 	})
 	orc := newTestGKEOrchestrator(mockExec)
@@ -4226,6 +4229,9 @@ func TestCheckJobSetWarningEvents_IncludesPodSchedulingEvents(t *testing.T) {
 	if strings.Contains(got, "other-pw-job") {
 		t.Errorf("did not expect events from unrelated job with matching suffix, got:\n%s", got)
 	}
+	if strings.Contains(got, "pw-job-2") {
+		t.Errorf("did not expect events from unrelated job with matching prefix, got:\n%s", got)
+	}
 }
 
 func TestFetchLogsWithRetry_SurfacesUnscheduledPodsAndEvents(t *testing.T) {
@@ -4238,14 +4244,15 @@ func TestFetchLogsWithRetry_SurfacesUnscheduledPodsAndEvents(t *testing.T) {
 	const unschedCmd = "kubectl get pods -n default -l " + selector + " -o jsonpath=" + unscheduledPodsJSONPath
 	const podEventsCmd = "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
 
-	waiting := shell.CommandResult{ExitCode: 1, Stderr: `container "pathways-head" in pod "pw-job-pathways-head-0-0-xyz" is waiting to start: PodInitializing`}
+	waiting := shell.CommandResult{ExitCode: 1, Stderr: `container "worker" in pod "pw-job-worker-0-0-abc" is waiting to start: PodInitializing`}
 	timedOut := make([]shell.CommandResult, 12)
 	for i := range timedOut {
 		timedOut[i] = waiting
 	}
 	unschedResult := shell.CommandResult{
 		ExitCode: 0,
-		Stdout:   "pw-job-pathways-head-0-0-xyz\tPending\tFalse\tUnschedulable\t0/4 nodes are available: 4 node(s) didn't match Pod's node affinity/selector.\n",
+		Stdout: "pw-job-worker-0-0-abc\tPending\tTrue\t\t\n" +
+			"pw-job-pathways-head-0-0-xyz\tPending\tFalse\tUnschedulable\t0/4 nodes are available: 4 node(s) didn't match Pod's node affinity/selector.\n",
 	}
 	podEventResult := shell.CommandResult{
 		ExitCode: 0,
@@ -4255,7 +4262,7 @@ func TestFetchLogsWithRetry_SurfacesUnscheduledPodsAndEvents(t *testing.T) {
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
 		logsCmd:      timedOut,
 		unschedCmd:   {unschedResult, unschedResult},
-		podEventsCmd: {podEventResult, podEventResult},
+		podEventsCmd: {podEventResult, podEventResult, podEventResult},
 	})
 	orc := newTestGKEOrchestrator(mockExec)
 
@@ -4271,6 +4278,9 @@ func TestFetchLogsWithRetry_SurfacesUnscheduledPodsAndEvents(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("expected error to contain %q, got:\n%v", want, err)
 		}
+	}
+	if n := strings.Count(err.Error(), "NotTriggerScaleUp"); n != 1 {
+		t.Errorf("want NotTriggerScaleUp once in the timeout error, got %d:\n%v", n, err)
 	}
 }
 
