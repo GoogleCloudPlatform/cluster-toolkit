@@ -218,10 +218,22 @@ def test_an_unknown_subject_refetches_then_is_refused():
     # Refetched so a just-granted account need not wait out the cache.
     directory = ListingDirectory({"": profile()})
     directory.username_for_subject(SUBJECT)
+    directory._subjects_fetched_at -= oslogin.SUBJECTS_MIN_REFRESH_SECONDS
     with pytest.raises(oslogin.ProfileNotFound) as excinfo:
         directory.username_for_subject("999")
     assert excinfo.value.status == 403
     assert len(directory.asked) == 2
+
+
+def test_unknown_subjects_refetch_the_listing_at_most_once_a_minute():
+    # Each request from a signed-in user without OS Login access, page assets
+    # included, would otherwise list every profile again.
+    directory = ListingDirectory({"": profile()})
+    directory.username_for_subject(SUBJECT)
+    for _ in range(5):
+        with pytest.raises(oslogin.ProfileNotFound):
+            directory.username_for_subject("999")
+    assert len(directory.asked) == 1
 
 
 def test_the_listing_stops_at_the_metadata_servers_end_marker():

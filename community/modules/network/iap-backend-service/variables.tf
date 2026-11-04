@@ -58,6 +58,11 @@ variable "endpoints" {
     ip_address = string
   }))
   default = []
+
+  validation {
+    condition     = length(distinct([for endpoint in var.endpoints : endpoint.instance])) == length(var.endpoints)
+    error_message = "Each instance may appear in endpoints only once."
+  }
 }
 
 variable "port" {

@@ -223,3 +223,23 @@ def test_a_failed_audience_lookup_is_retried(monkeypatch):
     monkeypatch.setattr(iap, "_metadata", lambda path: {
         "project/numeric-project-id": "123"}.get(path, '{"access_token": "t"}'))
     assert verifier.audience() == AUDIENCE
+
+
+@pytest.mark.parametrize(
+    "token", ["not json", '{"no_access_token": 1}', "[]"],
+    ids=["unparsable", "no-access-token", "not-an-object"],
+)
+def test_an_unreadable_metadata_token_is_a_clean_502(monkeypatch, token):
+    monkeypatch.setattr(iap, "_metadata", lambda path: token)
+    with pytest.raises(BrokerError) as excinfo:
+        iap.Verifier("c1-login").audience()
+    assert excinfo.value.status == 502
+
+
+def test_a_failed_audience_lookup_is_not_reported_as_a_bad_assertion(
+    monkeypatch, published, key
+):
+    monkeypatch.setattr(iap, "_metadata", lambda path: "not json")
+    with pytest.raises(BrokerError) as excinfo:
+        iap.Verifier("c1-login").subject(headers(key.sign()))
+    assert excinfo.value.status == 502

@@ -133,13 +133,19 @@ class Verifier:
         return self._audience
 
     def _lookup_audience(self):
-        token = json.loads(_metadata("instance/service-accounts/default/token"))
+        try:
+            token = json.loads(_metadata("instance/service-accounts/default/token"))
+            access_token = token["access_token"]
+        except (ValueError, KeyError, TypeError) as err:
+            raise BrokerError(
+                502, "The metadata server returned an unreadable access token."
+            ) from err
         request = urllib.request.Request(
             BACKEND_SERVICE_URL.format(
                 project=urllib.parse.quote(_metadata("project/project-id")),
                 name=urllib.parse.quote(self.backend_service),
             ),
-            headers={"Authorization": f"Bearer {token['access_token']}"},
+            headers={"Authorization": f"Bearer {access_token}"},
         )
         backend = _read_json(
             request,
@@ -202,12 +208,15 @@ class Verifier:
         certs = self._keys()
         if key_id not in certs:
             certs = self._keys(refresh=True)
+        # Outside the try below: a failed lookup is the broker's fault, not a
+        # bad assertion.
+        audience = self.audience()
         try:
             # Checks the signature, "aud", "exp" and "iat", but not "iss".
             claims = google_jwt.decode(
                 assertion,
                 certs=certs,
-                audience=self.audience(),
+                audience=audience,
                 clock_skew_in_seconds=CLOCK_SKEW_SECONDS,
             )
         except ValueError as err:

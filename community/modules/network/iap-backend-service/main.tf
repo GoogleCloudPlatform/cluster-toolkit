@@ -31,13 +31,14 @@ resource "google_compute_network_endpoint_group" "desktops" {
   default_port          = var.port
 }
 
+# Keyed by instance, so adding or removing a host leaves the others in place.
 resource "google_compute_network_endpoint" "desktops" {
-  count                  = length(var.endpoints)
+  for_each               = { for endpoint in var.endpoints : endpoint.instance => endpoint }
   project                = var.project_id
   zone                   = var.zone
   network_endpoint_group = google_compute_network_endpoint_group.desktops.name
-  instance               = var.endpoints[count.index].instance
-  ip_address             = var.endpoints[count.index].ip_address
+  instance               = each.value.instance
+  ip_address             = each.value.ip_address
   port                   = var.port
 }
 
