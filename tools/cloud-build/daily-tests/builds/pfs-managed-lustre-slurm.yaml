@@ -149,10 +149,11 @@ steps:
 
               source /workspace/tools/cloud-build/find_available_zone.sh
               if [ -z "\$${ZONE:-}" ]; then
-                echo "ERROR: ZONE not found" >&2
+                echo "ERROR: No available zone found." >&2
                 exit 1
               fi
               REGION="\$${ZONE%-*}"
+              echo "Selected zone: \$$ZONE (region: \$$REGION)"
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
                 --extra-vars="test_prefix=${_TEST_PREFIX}" \

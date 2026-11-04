@@ -147,11 +147,12 @@ steps:
               python3 tools/fix_vpc_name.py "\$$BLUEPRINT" "${_TEST_PREFIX}"
 
               source /workspace/tools/cloud-build/find_available_zone.sh
-              if [ -z "\$${ZONE}" ]; then
-                echo "ERROR: No available zone found."
+              if [ -z "\$${ZONE:-}" ]; then
+                echo "ERROR: No available zone found." >&2
                 exit 1
               fi
-              REGION=\$(echo "\$${ZONE}" | sed 's/-[a-z0-9]*$$//')
+              REGION="\$${ZONE%-*}"
+              echo "Selected zone: \$$ZONE (region: \$$REGION)"
 
               # 2. Add separated extra-vars to safely isolate an empty test_prefix from use_fixed_vpc
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \

@@ -27,7 +27,8 @@ post_deploy_tests:
 - test-validation/test-gke-managed-lustre.yml
 custom_vars:
   project: "{{ project }}"
-cli_deployment_vars: "{{ {
+cli_deployment_vars: >-
+  {{ {
     'test_name': test_name,
     'region': region,
     'zone': zone,
@@ -36,4 +37,4 @@ cli_deployment_vars: "{{ {
     'size_gib': size_gib,
     'per_unit_storage_throughput': per_unit_storage_throughput,
     'gcp_public_cidrs_access_enabled': true
-  } | combine({'kms_key': 'projects/' ~ project ~ '/locations/us-central1/keyRings/lustre-keyring/cryptoKeys/lustre-key'} if region == 'us-central1' else {}) }}"
+  } | combine({'kms_key': 'projects/' ~ project ~ '/locations/us-central1/keyRings/lustre-keyring/cryptoKeys/lustre-key'} if region == 'us-central1' else {}) }}
