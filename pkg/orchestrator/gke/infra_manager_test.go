@@ -2754,8 +2754,9 @@ spec:
       storage: 5Gi
 `
 
-// The workload manifest carries no metadata.namespace, so the apply must target the namespace
-// SubmitJob resolved (--gke-namespace or the pinned context's namespace); every read path already does.
+// kubectl apply must target the namespace SubmitJob resolved (--gke-namespace or the pinned context's
+// namespace) even when the manifest declares none, which is the case for custom templates extracted before
+// metadata.namespace was rendered; every read path already uses that namespace.
 func TestApplyManifest_AppliesInTargetNamespace(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
