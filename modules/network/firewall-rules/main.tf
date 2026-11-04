@@ -17,7 +17,7 @@
 # the google_compute_network data source does not allow identification by
 # self_link, which uniquely identifies subnet, project, and network
 data "google_compute_subnetwork" "subnetwork" {
-  # Only instantiate this data source if needed
+  # Look up the subnetwork when enabled by use_subnetwork_data
   count     = var.use_subnetwork_data ? 1 : 0
   self_link = var.subnetwork_self_link
 }

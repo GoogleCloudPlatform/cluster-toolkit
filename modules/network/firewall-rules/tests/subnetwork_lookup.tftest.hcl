@@ -143,8 +143,12 @@ run "empty_network_still_requires_private_google_access" {
 }
 
 run "new_network_values_unknown_until_apply" {
-  command = plan
+  command = apply
   module {
     source = "./tests/fixtures/new-network"
+  }
+  assert {
+    condition     = terraform_data.network.output.project == "test-project" && terraform_data.network.output.name == "test-network"
+    error_message = "New network outputs must resolve and apply cleanly."
   }
 }

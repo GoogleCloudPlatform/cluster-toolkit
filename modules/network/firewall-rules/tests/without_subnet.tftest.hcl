@@ -40,6 +40,22 @@ run "missing_project_without_lookup" {
   expect_failures = [var.use_subnetwork_data]
 }
 
+run "empty_project_without_lookup" {
+  command = plan
+  variables {
+    project_id = ""
+  }
+  expect_failures = [var.use_subnetwork_data]
+}
+
+run "missing_network_without_lookup" {
+  command = plan
+  variables {
+    network_name = null
+  }
+  expect_failures = [var.use_subnetwork_data]
+}
+
 run "empty_network_without_lookup" {
   command = plan
   variables {

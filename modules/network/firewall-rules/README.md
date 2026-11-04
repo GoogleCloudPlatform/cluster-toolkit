@@ -3,10 +3,10 @@
 This module facilitates the creation of custom firewall rules for existing
 networks.
 
-By default, this module looks up `subnetwork_self_link` to derive missing project
-and network values. When either value is omitted, it also verifies that Private
-Google Access is enabled. The subnet can be created in the same deployment group;
-its lookup waits until it exists.
+By default (`use_subnetwork_data: true`), this module looks up `subnetwork_self_link`
+and uses it to fill in any missing `project_id` or `network_name` value. When either
+value is omitted, it also verifies that Private Google Access is enabled. The subnet
+can be created in the same deployment group; its lookup waits until it exists.
 
 To skip the lookup and Private Google Access check, set `use_subnetwork_data: false`
 and supply nonempty `project_id` and `network_name`. In this mode,
