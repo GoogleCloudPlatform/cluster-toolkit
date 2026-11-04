@@ -1143,4 +1143,3 @@ def test_reconcile_isolates_per_nodeset_errors(state_files, monkeypatch, caplog)
 
     close.assert_called_once_with("m", lkp, mock.ANY, 1)
     assert "Unable to reconcile capacity circuit for nodeset n" in caplog.text
-
