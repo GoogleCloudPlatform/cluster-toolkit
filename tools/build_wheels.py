@@ -64,6 +64,16 @@ GO_MIN_MACOS = {
     "1.27": "13.0",
 }
 
+# Oldest Go patch release with required security fixes, per Go release line.
+# Go 1.26.10 and 1.27.3 block the compromised eMudhra intermediate CA keys in
+# crypto/x509 (https://go.dev/blog/emudhra-incident). Binaries built with
+# older Go stay vulnerable until rebuilt. Release lines older than the oldest
+# entry are rejected; newer lines are accepted.
+GO_MIN_PATCH = {
+    "1.26": (1, 26, 10),
+    "1.27": (1, 27, 3),
+}
+
 EXAMPLE_DIRS = ["examples", "community/examples"]
 SKIP_NAMES = {".DS_Store", "__pycache__"}
 SHARE_DIR = "share/cluster-toolkit"
@@ -150,6 +160,56 @@ def min_macos_for_go(go_ver):
             "GO_MIN_MACOS (see https://go.dev/wiki/MinimumRequirements) or "
             "pass --macos-min")
     return GO_MIN_MACOS[go_ver]
+
+
+_BUILDINFO_MAGIC = b"\xff Go buildinf:"
+
+
+def go_build_version(binary):
+    """Returns the Go version a binary was built with ('go1.26.8'), or None.
+
+    Reads the build info block Go embeds in every binary (the same data
+    `go version <binary>` prints). Supports the Go 1.18+ format.
+    """
+    with open(binary, "rb") as f:
+        data = f.read()
+    i = data.find(_BUILDINFO_MAGIC)
+    if i < 0 or len(data) < i + 33:
+        return None
+    flags = data[i + 15]
+    if not flags & 0x2:  # pre-1.18 format with pointers instead of strings
+        return None
+    pos, length, shift = i + 32, 0, 0
+    while pos < len(data):  # uvarint length prefix
+        b = data[pos]
+        pos += 1
+        length |= (b & 0x7F) << shift
+        if not b & 0x80:
+            break
+        shift += 7
+    version = data[pos:pos + length].decode("ascii", "replace")
+    return version if version.startswith("go") else None
+
+
+def check_go_version(version):
+    """Raises ValueError if a Go version lacks required security fixes."""
+    m = re.match(r"^go(\d+)\.(\d+)(?:\.(\d+))?", version or "")
+    if not m:
+        raise ValueError(f"cannot read the Go version from the binary ({version!r})")
+    got = (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0))
+    line = f"{got[0]}.{got[1]}"
+    oldest_line = min(tuple(map(int, k.split("."))) for k in GO_MIN_PATCH)
+    if line in GO_MIN_PATCH:
+        need = GO_MIN_PATCH[line]
+    elif got[:2] < oldest_line:
+        need = GO_MIN_PATCH[".".join(map(str, oldest_line))]
+    else:
+        return  # newer release line than any listed minimum
+    if got < need:
+        need_str = ".".join(map(str, need))
+        raise ValueError(
+            f"binary was built with {version}; rebuild with go{need_str} or later "
+            "(security fixes, see https://go.dev/blog/emudhra-incident)")
 
 
 def platform_tags(platform, macos_min):
@@ -276,6 +336,9 @@ def main(argv=None):
     ap.add_argument("--skip-version-check", action="store_true",
                     help="allow --version to differ from latestToolkitVersion in "
                     "pkg/config/config.go (for test builds only)")
+    ap.add_argument("--skip-go-check", action="store_true",
+                    help="allow binaries built with a Go version below GO_MIN_PATCH "
+                    "(for test builds only)")
     ap.add_argument("--macos-min",
                     help="minimum macOS version for macOS wheels, e.g. 12.0 "
                     "(default: derived from the Go version in go.mod)")
@@ -296,6 +359,13 @@ def main(argv=None):
             if not sep or not binary:
                 raise ValueError(f"--binary must be PLATFORM=PATH, got {spec!r}")
             platform_tags(platform, macos_min)  # validate before building
+            if not os.path.isfile(binary):
+                raise ValueError(f"binary for {platform} not found: {binary}")
+            if not args.skip_go_check:
+                try:
+                    check_go_version(go_build_version(binary))
+                except ValueError as e:
+                    raise ValueError(f"{platform}: {e}") from None
             specs.append((platform, binary))
         if len({p for p, _ in specs}) != len(specs):
             raise ValueError("each platform may be given only once")

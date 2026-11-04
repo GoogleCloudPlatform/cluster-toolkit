@@ -32,6 +32,13 @@ NAME = "google-cloud-cluster-toolkit"
 WHEEL_NAME = "google_cloud_cluster_toolkit"
 
 
+def _go_binary(go_version):
+    """Bytes of a fake binary with a Go 1.18+ build info block."""
+    v = go_version.encode()
+    header = b"\xff Go buildinf:" + bytes([8, 2]) + b"\x00" * 16
+    return b"\x7fELF padding" + header + bytes([len(v)]) + v + b"\x00modinfo"
+
+
 def _write(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     mode = "wb" if isinstance(data, bytes) else "w"
@@ -54,7 +61,7 @@ class _FakeRepo(unittest.TestCase):
         _write(os.path.join(self.root, "examples", ".DS_Store"), "junk")
         _write(os.path.join(self.root, "community", "examples", "c.yaml"), "blueprint_name: c\n")
         self.binary = os.path.join(self._tmp.name, "gcluster")
-        _write(self.binary, b"\x7fELF fake gcluster binary")
+        _write(self.binary, _go_binary("go1.26.10"))
 
     def build(self, plat="linux_amd64", version="1.107.0", macos_min="12.0"):
         return bw.build_wheel(NAME, version, plat, self.binary, self.out, self.root, macos_min)
@@ -91,6 +98,24 @@ class TestHelpers(unittest.TestCase):
                          ["manylinux2014_aarch64", "musllinux_1_2_aarch64"])
         with self.assertRaises(ValueError):
             bw.platform_tags("solaris_sparc", "12.0")
+
+
+class TestGoBuildVersion(_FakeRepo):
+
+    def test_reads_version_from_binary(self):
+        self.assertEqual(bw.go_build_version(self.binary), "go1.26.10")
+
+    def test_not_a_go_binary(self):
+        _write(self.binary, b"not a go binary")
+        self.assertIsNone(bw.go_build_version(self.binary))
+
+    def test_check_go_version(self):
+        for ok in ["go1.26.10", "go1.26.11", "go1.27.3", "go1.28.0", "go1.28"]:
+            with self.subTest(ok=ok):
+                bw.check_go_version(ok)
+        for bad in ["go1.26.8", "go1.27.2", "go1.25.9", "go1.24", None, "devel"]:
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                bw.check_go_version(bad)
 
 
 class TestGoVersion(_FakeRepo):
@@ -193,6 +218,14 @@ class TestMain(_FakeRepo):
         args = ["--name", NAME, "--version", "1.107.0", "--out", self.out,
                 "--repo-root", self.root, "--binary", f"linux_amd64={self.binary}",
                 "--skip-version-check"]
+        self.assertEqual(bw.main(args), 0)
+
+    def test_rejects_binary_built_with_old_go(self):
+        _write(self.binary, _go_binary("go1.26.8"))
+        self.assertEqual(self.run_main(f"linux_amd64={self.binary}"), 1)
+        args = ["--name", NAME, "--version", "1.107.0", "--out", self.out,
+                "--repo-root", self.root, "--binary", f"linux_amd64={self.binary}",
+                "--skip-go-check"]
         self.assertEqual(bw.main(args), 0)
 
     def test_rejects_bad_input(self):
