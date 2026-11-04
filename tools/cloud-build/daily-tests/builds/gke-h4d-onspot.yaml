@@ -181,6 +181,7 @@ steps:
               # Uses the newest REGULAR-channel version matching the blueprint's version_prefix,
               # skipping versions listed in _GKE_VERSION_DENYLIST. _GKE_VERSION_PIN forces an exact version.
               GKE_DENYLIST="${_GKE_VERSION_DENYLIST}"
+              read -r -a GKE_DENYLIST_ARR <<< "\$$GKE_DENYLIST"
               GKE_PIN="${_GKE_VERSION_PIN}"
               GKE_PREFIX=\$(grep -m1 'version_prefix:' \$$EXAMPLE_BP | awk '{print \$$2}' | tr -d '"' || true)
               GKE_ALL_VERSIONS=\$(gcloud container get-server-config --region="\$$REGION" --project="$PROJECT_ID" \
@@ -190,8 +191,10 @@ steps:
               GKE_LATEST=\$(echo "\$$GKE_PREFIX_VERSIONS" | head -n1)
               if [[ -n "\$$GKE_PIN" ]]; then
                 GKE_SELECTED="\$$GKE_PIN"
+              elif (( \$${#GKE_DENYLIST_ARR[@]} > 0 )); then
+                GKE_SELECTED=\$(echo "\$$GKE_PREFIX_VERSIONS" | grep -vxF -f <(printf '%s\n' "\$${GKE_DENYLIST_ARR[@]}") | head -n1 || true)
               else
-                GKE_SELECTED=\$(echo "\$$GKE_PREFIX_VERSIONS" | grep -vxF -f <(printf '%s\n' \$$GKE_DENYLIST) | head -n1 || true)
+                GKE_SELECTED=\$(echo "\$$GKE_PREFIX_VERSIONS" | head -n1)
               fi
               if [[ -z "\$$GKE_SELECTED" ]]; then
                 echo "ERROR: no usable REGULAR GKE version for prefix '\$$GKE_PREFIX' in \$$REGION (denylist: \$$GKE_DENYLIST). Bump version_prefix in \$$EXAMPLE_BP or update _GKE_VERSION_DENYLIST." >&2
