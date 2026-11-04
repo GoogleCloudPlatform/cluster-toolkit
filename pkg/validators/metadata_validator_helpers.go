@@ -279,6 +279,9 @@ func isSingleValSet(val cty.Value) bool {
 	case cty.Bool:
 		return val.True()
 	default:
+		if val.Type().IsObjectType() {
+			return len(val.Type().AttributeTypes()) > 0
+		}
 		// For lists, maps, and sets, consider them "not set" if they are empty.
 		return val.LengthInt() > 0
 	}

@@ -2111,3 +2111,141 @@ func TestModuleMetadataRules_StorageAndNodePool(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateBlueprintWithMetadata_BatchesAllErrors(t *testing.T) {
+	const (
+		lustreMod   = "../../modules/file-system/managed-lustre"
+		nodePoolMod = "../../modules/compute/gke-node-pool"
+		vpcMod      = "../../modules/network/vpc"
+	)
+	bp := config.Blueprint{
+		BlueprintName: "batch-test",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "pkr-mod",
+						Source: vpcMod,
+						Kind:   config.PackerKind,
+					},
+					{
+						ID:     "lustre",
+						Source: lustreMod,
+						Kind:   config.TerraformKind,
+						Settings: config.NewDict(map[string]cty.Value{
+							"per_unit_storage_throughput": cty.NumberIntVal(300),
+							"import_gcs_bucket_uri":       cty.StringVal("https://bad-uri"),
+							"network_id":                  cty.StringVal("bad-net-id"),
+						}),
+					},
+					{
+						ID:     "pool",
+						Source: nodePoolMod,
+						Kind:   config.TerraformKind,
+						Settings: config.NewDict(map[string]cty.Value{
+							"threads_per_core":          cty.NumberIntVal(4),
+							"host_maintenance_interval": cty.StringVal("DAILY"),
+						}),
+					},
+				},
+			},
+		},
+	}
+
+	err := validateBlueprintWithMetadata(bp)
+	if err == nil {
+		t.Fatal("expected batched metadata validation errors, got nil")
+	}
+	multi, ok := err.(config.Errors)
+	if !ok {
+		t.Fatalf("expected config.Errors value, got %T: %v", err, err)
+	}
+	if len(multi.Errors) != 5 {
+		t.Fatalf("expected 5 batched errors across lustre and pool, got %d: %v", len(multi.Errors), multi.Errors)
+	}
+
+	execErr := Execute(bp)
+	if execErr == nil {
+		t.Fatal("expected Execute to return batched errors, got nil")
+	}
+	execMulti, ok := execErr.(config.Errors)
+	if !ok {
+		t.Fatalf("expected Execute to return flattened config.Errors, got %T: %v", execErr, execErr)
+	}
+	for _, sub := range execMulti.Errors {
+		if _, isNested := sub.(config.Errors); isNested {
+			t.Fatalf("expected Execute to flatten config.Errors, found nested config.Errors: %v", sub)
+		}
+	}
+	for _, sub := range []string{
+		"per_unit_storage_throughput must be one of 125, 250, 500, 1000, or null.",
+		"import_gcs_bucket_uri must be a valid GCS URI starting with gs://.",
+		"network_id must be in the format projects/{project}/global/networks/{network}.",
+		"threads_per_core must be between 0 and 2.",
+		"host_maintenance_interval must be 'PERIODIC', 'AS_NEEDED', empty, or null.",
+	} {
+		if !strings.Contains(execErr.Error(), sub) {
+			t.Errorf("expected batched error output to contain %q, got:\n%s", sub, execErr.Error())
+		}
+	}
+}
+
+func TestModuleMetadataRules_SlurmTopology(t *testing.T) {
+	const (
+		partMod = "../../community/modules/compute/schedmd-slurm-gcp-v6-partition"
+		ctrlMod = "../../community/modules/scheduler/schedmd-slurm-gcp-v6-controller"
+	)
+	useNodeset := config.AsProductOfModuleUse(config.ModuleRef("ns", "nodeset").AsValue(), "ns")
+	useTwoStaticNodesets := config.AsProductOfModuleUse(
+		config.FunctionCallExpression("flatten", cty.TupleVal([]cty.Value{
+			config.ModuleRef("ns2", "nodeset").AsValue(),
+			config.ModuleRef("ns1", "nodeset").AsValue(),
+		})).AsValue(),
+		"ns1", "ns2",
+	)
+	useNodesetDyn := config.AsProductOfModuleUse(config.ModuleRef("ns_dyn", "nodeset_dyn").AsValue(), "ns_dyn")
+	usePartitions := config.AsProductOfModuleUse(config.ModuleRef("part", "partitions").AsValue(), "part")
+	literalObjList := cty.TupleVal([]cty.Value{
+		cty.ObjectVal(map[string]cty.Value{"name": cty.StringVal("item-1")}),
+	})
+
+	cases := []struct {
+		name     string
+		modPath  string
+		settings map[string]cty.Value
+		wantErr  bool
+		errSub   string
+	}{
+		{"partition fails when no nodeset provided", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute")}, true, "at least one nodeset must be provided"},
+		{"partition fails when nodeset list is empty", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": cty.EmptyTupleVal}, true, "at least one nodeset must be provided"},
+		{"partition passes with nodeset via use", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": useNodeset}, false, ""},
+		{"partition passes with two nodesets of same type via use", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": useTwoStaticNodesets}, false, ""},
+		{"partition passes with literal nodeset object list", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": literalObjList}, false, ""},
+		{"partition fails with two nodeset types", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": useNodeset, "nodeset_dyn": useNodesetDyn}, true, "at most one type of nodeset"},
+		{"controller fails when partitions omitted", ctrlMod, map[string]cty.Value{}, true, "At least one partition must be provided to the Slurm controller"},
+		{"controller fails when partitions list is empty", ctrlMod, map[string]cty.Value{"partitions": cty.EmptyTupleVal}, true, "At least one partition must be provided to the Slurm controller"},
+		{"controller passes with partitions via use", ctrlMod, map[string]cty.Value{"partitions": usePartitions}, false, ""},
+		{"controller passes with literal partitions object list", ctrlMod, map[string]cty.Value{"partitions": literalObjList}, false, ""},
+		{"controller warning rule does not fail validateBlueprintWithMetadata", ctrlMod, map[string]cty.Value{"partitions": usePartitions, "enable_slurm_auth": cty.False}, false, ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := modulereader.GetModuleInfo(tc.modPath, "terraform"); err != nil {
+				t.Fatalf("failed to read module info for %s: %v", tc.modPath, err)
+			}
+			bp := createBaseTestBlueprint()
+			bp.Groups[0].Modules[0].Source = tc.modPath
+			bp.Groups[0].Modules[0].Kind = config.TerraformKind
+			bp.Groups[0].Modules[0].Settings = config.NewDict(tc.settings)
+			err := validateBlueprintWithMetadata(bp)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("validateBlueprintWithMetadata() error = %v, wantErr = %v", err, tc.wantErr)
+			}
+			if tc.errSub != "" && !strings.Contains(err.Error(), tc.errSub) {
+				t.Fatalf("expected error containing %q, got: %v", tc.errSub, err)
+			}
+		})
+	}
+}
