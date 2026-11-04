@@ -28,6 +28,12 @@ tags:
 substitutions:
   _PROVISIONING_MODEL: ""
   _TEST_PREFIX: "" # Default to no prefix
+  # Space-separated list of GKE versions known to break this test. The newest REGULAR-channel
+  # version matching the blueprint's version_prefix that is NOT listed here is used.
+  # 1.35.8-gke.1975000: H4D + IRDMA multi-network nodes fail to register (STALLED_IP_ACQUISITION).
+  _GKE_VERSION_DENYLIST: "1.35.8-gke.1975000"
+  # Optional: force an exact GKE version (debugging only). Empty = automatic selection.
+  _GKE_VERSION_PIN: ""
 
 timeout: 86400s
 queueTtl: 86400s  # 24hr
@@ -171,6 +177,38 @@ steps:
               echo '      spot: \$(null)'                          >> \$$EXAMPLE_BP
               echo '      placement_policy: \$(null)'              >> \$$EXAMPLE_BP
 
+              # --- GKE version selection (test-only; the public example blueprint is not modified) ---
+              # Uses the newest REGULAR-channel version matching the blueprint's version_prefix,
+              # skipping versions listed in _GKE_VERSION_DENYLIST. _GKE_VERSION_PIN forces an exact version.
+              GKE_DENYLIST="${_GKE_VERSION_DENYLIST}"
+              GKE_PIN="${_GKE_VERSION_PIN}"
+              GKE_PREFIX=\$(grep -m1 'version_prefix:' \$$EXAMPLE_BP | awk '{print \$$2}' | tr -d '"' || true)
+              GKE_ALL_VERSIONS=\$(gcloud container get-server-config --region="\$$REGION" --project="$PROJECT_ID" \
+                  --flatten=channels --filter="channels.channel=REGULAR" \
+                  --format="value(channels.validVersions)" | tr ';' '\n' | sed '/^\s*\$$/d' || true)
+              GKE_PREFIX_VERSIONS=\$(echo "\$$GKE_ALL_VERSIONS" | awk -v p="\$$GKE_PREFIX" 'index(\$$0,p)==1' | sort -rV || true)
+              GKE_LATEST=\$(echo "\$$GKE_PREFIX_VERSIONS" | head -n1)
+              if [[ -n "\$$GKE_PIN" ]]; then
+                GKE_SELECTED="\$$GKE_PIN"
+              else
+                GKE_SELECTED=\$(echo "\$$GKE_PREFIX_VERSIONS" | grep -vxF -f <(printf '%s\n' \$$GKE_DENYLIST) | head -n1 || true)
+              fi
+              if [[ -z "\$$GKE_SELECTED" ]]; then
+                echo "ERROR: no usable REGULAR GKE version for prefix '\$$GKE_PREFIX' in \$$REGION (denylist: \$$GKE_DENYLIST). Bump version_prefix in \$$EXAMPLE_BP or update _GKE_VERSION_DENYLIST." >&2
+                exit 1
+              fi
+              if ! echo "\$$GKE_ALL_VERSIONS" | grep -qxF "\$$GKE_SELECTED"; then
+                echo "ERROR: GKE version \$$GKE_SELECTED is not offered in the REGULAR channel in \$$REGION. Update _GKE_VERSION_PIN / _GKE_VERSION_DENYLIST." >&2
+                exit 1
+              fi
+              if [[ "\$$GKE_SELECTED" != "\$$GKE_LATEST" ]]; then
+                echo "WARNING: newest REGULAR version \$$GKE_LATEST is skipped (denylisted or pinned); using \$$GKE_SELECTED." >&2
+              fi
+              echo "INFO: Using GKE version \$$GKE_SELECTED (prefix '\$$GKE_PREFIX', region \$$REGION)"
+              sed -i "s/^\( *\)version_prefix:.*/&\n\1min_master_version: \$$GKE_SELECTED/" \$$EXAMPLE_BP
+              grep -q "min_master_version: \$$GKE_SELECTED" \$$EXAMPLE_BP || { echo "ERROR: failed to set GKE version in \$$EXAMPLE_BP" >&2; exit 1; }
+              # --- end GKE version selection ---
+
               ENABLE_SPOT="true"
               GKE_VARS_FILE="tools/cloud-build/daily-tests/tests/gke-h4d-onspot.yml"
               if [[ "\$${PROVISIONING_MODEL:-}" == "STANDARD" ]]; then
@@ -197,7 +235,14 @@ steps:
                   --extra-vars="triage_cloud_run_url_override=$$TRIAGE_CLOUD_RUN_URL" &
               ANSIBLE_PID=\$$!
 
-              wait \$$ANSIBLE_PID
+              if ! wait \$$ANSIBLE_PID; then
+                # Surface the real GKE reason (e.g. STALLED_IP_ACQUISITION) instead of only "NodePool ... ERROR".
+                echo "=== Test failed: GKE node pool operations for \$$DEPLOYMENT_NAME (GKE \$$GKE_SELECTED, \$$ZONE) ===" >&2
+                gcloud container operations list --project="$PROJECT_ID" --region="\$$REGION" \
+                    --filter="targetLink~\$$DEPLOYMENT_NAME AND operationType=CREATE_NODE_POOL" \
+                    --format="table(name.basename(),status,statusMessage)" >&2 || true
+                exit 1
+              fi
               RUN_CLEANUP=false
             resources:
               requests:
