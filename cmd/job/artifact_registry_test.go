@@ -77,7 +77,7 @@ func TestLookupArtifactRegistryRepos(t *testing.T) {
 	defer func() { newArtifactRegistryService = origNewService }()
 
 	newArtifactRegistryService = func(ctx context.Context) (*artifactregistry.Service, error) {
-		return artifactregistry.NewService(ctx, option.WithEndpoint(ts.URL), option.WithoutAuthentication())
+		return artifactregistry.NewService(ctx, option.WithEndpoint(ts.URL), option.WithHTTPClient(ts.Client()))
 	}
 
 	// 3. Call the logic
@@ -106,7 +106,7 @@ func TestLookupArtifactRegistryRepos_NilResponse(t *testing.T) {
 	defer func() { newArtifactRegistryService = origNewService }()
 
 	newArtifactRegistryService = func(ctx context.Context) (*artifactregistry.Service, error) {
-		return artifactregistry.NewService(ctx, option.WithEndpoint(ts.URL), option.WithoutAuthentication())
+		return artifactregistry.NewService(ctx, option.WithEndpoint(ts.URL), option.WithHTTPClient(ts.Client()))
 	}
 
 	suggestions, hasMore := lookupArtifactRegistryRepos(context.Background(), "my-project", "us-central1-c")

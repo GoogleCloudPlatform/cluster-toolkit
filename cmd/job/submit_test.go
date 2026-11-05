@@ -407,6 +407,12 @@ func setupSubmitTestEnv(t *testing.T) {
 	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
 		return &mockOrchestrator{}
 	}
+
+	// The real lookup builds an authenticated Artifact Registry client (ADC, enterprise certificate helper,
+	// network). Submit tests get an offline stub by default; tests about suggestions override it.
+	oldLookup := lookupArtifactRegistryRepos
+	t.Cleanup(func() { lookupArtifactRegistryRepos = oldLookup })
+	lookupArtifactRegistryRepos = func(context.Context, string, string) ([]string, bool) { return nil, false }
 }
 
 type mockOrchestrator struct {
