@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, Callable, Any
+from typing import Dict, Callable, Any, Optional
 import argparse
 import os
 import shelve
@@ -178,16 +178,9 @@ job_schema = {field.name: field for field in schema_fields}
 Job = namedtuple("Job", job_schema.keys()) # type: ignore 
 # ... see https://github.com/python/mypy/issues/848
 
-client = bq.Client(
-    project=lookup().cfg.project,
-    credentials=util.default_credentials(),
-    client_options=util.create_client_options(util.ApiEndpoint.BQ),
-)
-dataset_id = f"{lookup().cfg.slurm_cluster_name}_job_data"
-dataset = bq.DatasetReference(project=lookup().project, dataset_id=dataset_id)
-table = bq.Table(
-    bq.TableReference(dataset, f"jobs_{lookup().cfg.slurm_cluster_name}"), schema_fields
-)
+client: Optional[bq.Client] = None
+dataset: Any = None
+table: Optional[bq.Table] = None
 
 
 class JobInsertionFailed(Exception):
@@ -245,10 +238,42 @@ def load_slurm_jobs(start, end):
     return job_rows
 
 
+def get_controller_region() -> Optional[str]:
+    try:
+        raw_zone = lookup().zone
+        if not raw_zone:
+            return None
+        zone_name = util.trim_self_link(raw_zone) if "/" in raw_zone else raw_zone
+        return zone_name.rsplit("-", 1)[0] if "-" in zone_name else None
+    except Exception:
+        return None
+
+
 def init_table():
-    global dataset
-    global table
-    dataset = client.create_dataset(dataset, exists_ok=True) # type: ignore
+    global client, dataset, table
+    if client is None:
+        client = bq.Client(
+            project=lookup().project,
+            credentials=util.default_credentials(),
+            client_options=util.create_client_options(util.ApiEndpoint.BQ),
+        )
+    if dataset is None:
+        dataset_id = f"{lookup().cfg.slurm_cluster_name}_job_data"
+        dataset = bq.DatasetReference(project=lookup().project, dataset_id=dataset_id)
+    dataset_ref = dataset.reference if isinstance(dataset, bq.Dataset) else dataset
+    if table is None:
+        table = bq.Table(
+            bq.TableReference(dataset_ref, f"jobs_{lookup().cfg.slurm_cluster_name}"),
+            schema_fields,
+        )
+    try:
+        dataset = client.get_dataset(dataset_ref)
+    except exceptions.NotFound:
+        ds = bq.Dataset(dataset_ref)
+        region = get_controller_region()
+        if region:
+            ds.location = region
+        dataset = client.create_dataset(ds, exists_ok=True)  # type: ignore
     table = client.create_table(table, exists_ok=True)
     until_found = retry.Retry(predicate=retry.if_exception_type(exceptions.NotFound))
     table = client.get_table(table, retry=until_found)
@@ -270,7 +295,7 @@ def purge_job_idx_cache():
 
 def bq_submit(jobs):
     try:
-        result = client.insert_rows(table, jobs)
+        result = client.insert_rows(table, jobs)  # type: ignore
     except exceptions.NotFound as e:
         print(f"failed to upload job data, table not yet found: {e}")
         raise e
@@ -316,6 +341,7 @@ def main():
     if not lookup().cfg.enable_bigquery_load:
         print("bigquery load is not currently enabled")
         exit(0)
+    purge_job_idx_cache()
     init_table()
 
     start, end = get_time_window()
@@ -344,7 +370,6 @@ parser.add_argument(
     help="specify timestamp file for reading and writing the time window start. Precedence over TIMESTAMP_FILE env var.",
 )
 
-purge_job_idx_cache()
 if __name__ == "__main__":
     args = parser.parse_args()
     if args.timestamp_file:
