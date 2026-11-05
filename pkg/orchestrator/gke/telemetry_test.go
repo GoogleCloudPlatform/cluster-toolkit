@@ -385,6 +385,40 @@ func TestResolveTelemetryCollector_PrecedenceAndNodeCache(t *testing.T) {
 	})
 }
 
+// TestValidateTelemetryFlags pins the orchestrator-side guards for programmatic callers that bypass the CLI checks.
+func TestValidateTelemetryFlags(t *testing.T) {
+	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{}))
+	orc.projectID = "gke-proj"
+	for _, tc := range []struct {
+		name    string
+		job     orchestrator.JobDefinition
+		wantErr string
+	}{
+		{name: "disabled without options", job: orchestrator.JobDefinition{}},
+		{name: "disabled with image", job: orchestrator.JobDefinition{MLDiagnosticsImage: "registry.local/col:v1"}, wantErr: "require --enable-ml-diagnostics"},
+		{name: "disabled with port", job: orchestrator.JobDefinition{MLDiagnosticsTelemetryPort: 9095}, wantErr: "require --enable-ml-diagnostics"},
+		{name: "enabled with default port", job: orchestrator.JobDefinition{MLDiagnosticsEnabled: true}},
+		{name: "enabled with port out of range", job: orchestrator.JobDefinition{MLDiagnosticsEnabled: true, MLDiagnosticsImage: "registry.local/col:v1", MLDiagnosticsTelemetryPort: 70000}, wantErr: "between 1 and 65535"},
+		{name: "enabled with negative port", job: orchestrator.JobDefinition{MLDiagnosticsEnabled: true, MLDiagnosticsImage: "registry.local/col:v1", MLDiagnosticsTelemetryPort: -1}, wantErr: "between 1 and 65535"},
+		{name: "enabled with port but webhook mode on GKE", job: orchestrator.JobDefinition{MLDiagnosticsEnabled: true, ProjectID: "gke-proj", MLDiagnosticsTelemetryPort: 9095}, wantErr: "only supported when injecting"},
+		{name: "enabled with port and image", job: orchestrator.JobDefinition{MLDiagnosticsEnabled: true, MLDiagnosticsImage: "registry.local/col:v1", MLDiagnosticsTelemetryPort: 9095}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := orc.validateTelemetryFlags(tc.job)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateTelemetryFlags() = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("validateTelemetryFlags() = %v, want substring %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestResolveTelemetryCollector_ErrorPaths(t *testing.T) {
 	setupMockMachineConfig(t)
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")

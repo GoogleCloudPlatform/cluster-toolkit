@@ -155,18 +155,18 @@ func workloadTemplateName(job orchestrator.JobDefinition) string {
 	return k8s.JobSetTemplate
 }
 
-// pinTelemetryAndValidate resolves the ML Diagnostics collector before the image build, so a missing TPU node
-// image cache or an RBAC denial fails fast and PrepareManifestOptions sees the resolved image as explicit, then
-// validates the resolved job's flag conflicts and MTC configuration.
+// pinTelemetryAndValidate runs the cheap name-conflict check, then resolves the ML Diagnostics collector before
+// the image build, so a missing TPU node image cache or an RBAC denial fails fast and PrepareManifestOptions sees
+// the resolved image as explicit, and finally validates the MTC configuration.
 func (g *GKEOrchestrator) pinTelemetryAndValidate(job *orchestrator.JobDefinition) error {
+	if err := g.validateJobConflicts(*job); err != nil {
+		return err
+	}
 	telemetryImg, _, err := g.resolveTelemetryCollector(*job)
 	if err != nil {
 		return err
 	}
 	job.MLDiagnosticsImage = telemetryImg
-	if err := g.validateJobConflicts(*job); err != nil {
-		return err
-	}
 	return g.validateMTCConfig(job)
 }
 
