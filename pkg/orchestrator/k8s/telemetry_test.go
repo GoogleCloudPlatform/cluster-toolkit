@@ -101,6 +101,9 @@ func TestDiscoverTelemetryImage_PicksHighestSemver(t *testing.T) {
 	if got, err := DiscoverTelemetryImage(nodesLister, mt); err != nil || got != "reg.local/ai-telemetry-collector:v1.10.0" {
 		t.Errorf("DiscoverTelemetryImage() = (%q, %v), want reg.local/ai-telemetry-collector:v1.10.0", got, err)
 	}
+	if nodesLister.gotGVR != NodeGVR || nodesLister.gotNS != "" {
+		t.Errorf("listed (%v, ns=%q), want cluster-scoped %v", nodesLister.gotGVR, nodesLister.gotNS, NodeGVR)
+	}
 	if got, err := DiscoverTelemetryImage(nodesLister, "unknown-mt"); err != nil || got != "reg.local/ai-telemetry-collector:v99.0.0" {
 		t.Errorf("without a matching instance type, want the newest image across all TPU nodes, got (%q, %v)", got, err)
 	}

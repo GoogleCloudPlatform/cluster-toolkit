@@ -233,12 +233,7 @@ func WithTelemetryEnv(userEnv map[string]string) map[string]string {
 
 // HasContainerNamed reports whether containers includes a container with the given name.
 func HasContainerNamed(containers []corev1.Container, name string) bool {
-	for i := range containers {
-		if containers[i].Name == name {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(containers, func(c corev1.Container) bool { return c.Name == name })
 }
 
 // ValidatePodTelemetry verifies that a rendered pod template includes the native telemetry sidecar and tpu-workload-name label.

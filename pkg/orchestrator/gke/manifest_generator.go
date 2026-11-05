@@ -128,9 +128,6 @@ func (g *GKEOrchestrator) generateWorkloadManifest(opts ManifestOptions, profile
 	isTPU := tpuLimit != ""
 	isGPU := gpuLimit != ""
 	opts.Env = withCoordinatorEnv(coordinatorHost, opts.Env)
-	if opts.TelemetryCollectorImage != "" {
-		opts.Env = k8s.WithTelemetryEnv(opts.Env)
-	}
 	data := g.prepareJobSetTemplateData(opts, cmdSlice, resourcesString, isTPU, isGPU)
 	data.Subdomain = subdomain
 	data.baseBlocks = baseBlocks
@@ -257,6 +254,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		GKEMTCEnabled:                 job.GKEMTCEnabled,
 		GKEMTCRamdiskDirectory:        job.GKEMTCRamdiskDirectory,
 	}
+	// Single injection point for the telemetry env defaults; the renderers read opts.Env / opts.Pathways.WorkerEnv as is.
 	if opts.TelemetryCollectorImage != "" {
 		if opts.IsPathwaysJob {
 			opts.Pathways.WorkerEnv = k8s.WithTelemetryEnv(opts.Pathways.WorkerEnv)
@@ -817,11 +815,6 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 			ResourcesYAML: resourcesYAML,
 		}
 	}
-	workerEnv := opts.Pathways.WorkerEnv
-	if opts.TelemetryCollectorImage != "" {
-		workerEnv = k8s.WithTelemetryEnv(workerEnv)
-	}
-
 	return jobSetTemplateData{
 		WorkloadName:                  opts.WorkloadName,
 		Namespace:                     g.namespace,
@@ -868,7 +861,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		Env:                           sortedEnvVars(opts.Env),
 		PathwaysProxyEnv:              sortedEnvVars(opts.Pathways.ProxyEnv),
 		PathwaysServerEnv:             sortedEnvVars(opts.Pathways.ServerEnv),
-		PathwaysWorkerEnv:             sortedEnvVars(workerEnv),
+		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
 		IsTPU:                         isTPU,
 		IsGPU:                         isGPU,
 		MLDiagnosticsEnabled:          opts.MLDiagnosticsEnabled,

@@ -38,6 +38,19 @@ func (g *GKEOrchestrator) telemetrySidecarRequested(job orchestrator.JobDefiniti
 	return !g.isGKE(job) || strings.TrimSpace(job.MLDiagnosticsImage) != "" || k8s.TelemetryImageFromEnv() != ""
 }
 
+// telemetrySidecarTrigger names what selected sidecar mode, so a shell-wide GCLUSTER_TELEMETRY_IMAGE that trips the
+// TPU-only check on a CPU/GPU job is visible in the error.
+func (g *GKEOrchestrator) telemetrySidecarTrigger(job orchestrator.JobDefinition) string {
+	switch {
+	case strings.TrimSpace(job.MLDiagnosticsImage) != "":
+		return "--ml-diagnostics-image"
+	case k8s.TelemetryImageFromEnv() != "":
+		return k8s.TelemetryImageEnvVar
+	default:
+		return "the non-GKE target"
+	}
+}
+
 // validateTelemetryFlags is the pure (no cluster access) preflight for the ML Diagnostics options.
 func (g *GKEOrchestrator) validateTelemetryFlags(job orchestrator.JobDefinition) error {
 	if !job.MLDiagnosticsEnabled {
@@ -68,7 +81,7 @@ func (g *GKEOrchestrator) resolveTelemetryCollector(job orchestrator.JobDefiniti
 		return "", 0, nil
 	}
 	if !config.IsTPU(job.MachineType) && !config.IsTPU(job.ComputeType) {
-		return "", 0, fmt.Errorf("ML Diagnostics collector sidecar injection is only supported for TPU workloads (got compute-type=%q, machine-type=%q)", job.ComputeType, job.MachineType)
+		return "", 0, fmt.Errorf("ML Diagnostics collector sidecar injection (selected by %s) is only supported for TPU workloads (got compute-type=%q, machine-type=%q)", g.telemetrySidecarTrigger(job), job.ComputeType, job.MachineType)
 	}
 	img := strings.TrimSpace(job.MLDiagnosticsImage)
 	if img == "" {

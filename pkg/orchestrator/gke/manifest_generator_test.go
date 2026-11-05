@@ -4895,6 +4895,10 @@ spec:
 // manifests to the embedded defaults, covering the read-custom -> overlay -> compile-per-block -> reindent path.
 func TestCustomTemplateLoading_ExtractedDefaultsAreNoOp(t *testing.T) {
 	baseOpts, profile := newCustomTemplateBaseOpts()
+	// Exercise the telemetry_sidecar base block too, so extracted and embedded base.tmpl are compared on it.
+	baseOpts.MLDiagnosticsEnabled = true
+	baseOpts.TelemetryCollectorImage = "registry.local/ai-telemetry-collector:v1"
+	baseOpts.TelemetryCollectorPort = 9100
 	pwJob := newCPUPathwaysJob("pw-noop")
 	render := func(t *testing.T, customDir string) map[string]string {
 		t.Helper()
