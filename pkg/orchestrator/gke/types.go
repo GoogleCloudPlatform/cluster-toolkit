@@ -885,6 +885,20 @@ type spsInstanceSummary struct {
 	SidecarJAX    string // from running sidecar container or image tag
 }
 
+// spsInstance is what an SPS client needs to know about the instance it runs on.
+type spsInstance struct {
+	Name           string
+	Endpoint       string
+	KueueQueueName string
+	HeadNodePool   string
+	ServerImage    string
+	ProxyImage     string
+	GCSLocation    string
+	InstanceType   string
+	InstanceCount  int
+	HasSidecar     bool
+}
+
 type spsContainerView struct {
 	Name  string   `json:"name"`
 	Image string   `json:"image"`
@@ -892,11 +906,15 @@ type spsContainerView struct {
 }
 
 type spsPodSpecView struct {
+	NodeSelector   map[string]string  `json:"nodeSelector"`
 	InitContainers []spsContainerView `json:"initContainers"`
 	Containers     []spsContainerView `json:"containers"`
 }
 
 type spsJobSetView struct {
+	Metadata struct {
+		Labels map[string]string `json:"labels"`
+	} `json:"metadata"`
 	Spec struct {
 		Suspend        bool `json:"suspend"`
 		ReplicatedJobs []struct {

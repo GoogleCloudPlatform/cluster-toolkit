@@ -34,8 +34,6 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/k8s"
-
-	corev1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -43,39 +41,6 @@ const (
 	spsProxyPort         = 29000
 	spsProxyReadyLog     = "IFRT proxy server started"
 )
-
-// spsInstance is what an SPS client needs to know about the instance it runs on.
-type spsInstance struct {
-	Name           string
-	Endpoint       string
-	KueueQueueName string
-	HeadNodePool   string
-	ServerImage    string
-	ProxyImage     string
-	GCSLocation    string
-	InstanceType   string
-	InstanceCount  int
-	HasSidecar     bool
-}
-
-type spsJobSet struct {
-	Metadata struct {
-		Labels map[string]string `json:"labels"`
-	} `json:"metadata"`
-	Spec struct {
-		ReplicatedJobs []struct {
-			Name     string `json:"name"`
-			Replicas int    `json:"replicas"`
-			Template struct {
-				Spec struct {
-					Template struct {
-						Spec corev1.PodSpec `json:"spec"`
-					} `json:"template"`
-				} `json:"spec"`
-			} `json:"template"`
-		} `json:"replicatedJobs"`
-	} `json:"spec"`
-}
 
 // spsInstanceRef turns a JobSet name or endpoint into the instance name and the endpoint the proxy connects to.
 func spsInstanceRef(ref string) (name, endpoint string) {
@@ -101,7 +66,7 @@ func proxyImageFor(serverImage string) string {
 }
 
 func parseSPSClientTarget(name string, data []byte) (spsInstance, error) {
-	var js spsJobSet
+	var js spsJobSetView
 	if err := json.Unmarshal(data, &js); err != nil {
 		return spsInstance{}, fmt.Errorf("failed to parse SPS instance %q: %w", name, err)
 	}
@@ -129,7 +94,7 @@ func parseSPSClientTarget(name string, data []byte) (spsInstance, error) {
 	return inst, nil
 }
 
-func parseSPSClientTargetHead(name string, pod *corev1.PodSpec, inst *spsInstance) error {
+func parseSPSClientTargetHead(name string, pod *spsPodSpecView, inst *spsInstance) error {
 	inst.HeadNodePool = pod.NodeSelector["cloud.google.com/gke-nodepool"]
 	for _, c := range slices.Concat(pod.InitContainers, pod.Containers) {
 		switch {
@@ -165,7 +130,7 @@ func parseSPSClientTargetRMArgs(args []string, inst *spsInstance) {
 	}
 }
 
-func parseSPSClientTargetWorker(pod *corev1.PodSpec, replicas int, inst *spsInstance) bool {
+func parseSPSClientTargetWorker(pod *spsPodSpecView, replicas int, inst *spsInstance) bool {
 	if inst.InstanceCount == 0 && replicas > 0 {
 		inst.InstanceCount = replicas
 	}
@@ -174,7 +139,7 @@ func parseSPSClientTargetWorker(pod *corev1.PodSpec, replicas int, inst *spsInst
 		switch c.Name {
 		case "pathways-worker":
 			hasWorker = true
-			if c.Image != "" {
+			if inst.ServerImage == "" && c.Image != "" {
 				inst.ServerImage = c.Image
 			}
 		case "colocated-python-sidecar", "external-sidecar":
@@ -194,7 +159,7 @@ func spsVirtualSlices(instanceType string, n int) string {
 
 func (g *GKEOrchestrator) readSPSInstance(ref, ns string) (spsInstance, error) {
 	name, endpoint := spsInstanceRef(ref)
-	res := g.kubectl("get", "jobset", name, "-n", ns, "-o", "json")
+	res := g.kubectl("get", "jobset", name, "-n", ns, "-o", "json", kubectlReadTimeout)
 	if res.ExitCode != 0 {
 		return spsInstance{}, fmt.Errorf("failed to read SPS instance %q in namespace %q: %s", name, ns, strings.TrimSpace(res.Stderr))
 	}
@@ -205,7 +170,7 @@ func (g *GKEOrchestrator) readSPSInstance(ref, ns string) (spsInstance, error) {
 	inst.Endpoint = endpoint
 	inst.ProxyImage = proxyImageFor(inst.ServerImage)
 
-	phases := g.kubectl("get", "pods", "-n", ns, "-l", "jobset.sigs.k8s.io/jobset-name="+name+",jobset.sigs.k8s.io/replicatedjob-name=pathways-head", "-o", "jsonpath={.items[*].status.phase}")
+	phases := g.kubectl("get", "pods", "-n", ns, "-l", "jobset.sigs.k8s.io/jobset-name="+name+",jobset.sigs.k8s.io/replicatedjob-name=pathways-head", "-o", "jsonpath={.items[*].status.phase}", kubectlReadTimeout)
 	if phases.ExitCode != 0 {
 		return spsInstance{}, fmt.Errorf("failed to check SPS instance pods: %s", strings.TrimSpace(phases.Stderr))
 	}
@@ -228,6 +193,9 @@ func (g *GKEOrchestrator) runSPSWorkload(job orchestrator.JobDefinition) error {
 	inst, err := g.readSPSInstance(job.Pathways.RunSPSWorkload, ns)
 	if err != nil {
 		return err
+	}
+	if job.WorkloadName == inst.Name {
+		return fmt.Errorf("--name %q must differ from the target SPS instance %q", job.WorkloadName, inst.Name)
 	}
 	if inst.InstanceCount > 0 && job.NumSlices > inst.InstanceCount {
 		return fmt.Errorf("--num-slices %d is more than the %d slices of SPS instance %q", job.NumSlices, inst.InstanceCount, inst.Name)
@@ -290,15 +258,25 @@ func resolveSPSClientPathways(p orchestrator.PathwaysJobDefinition, inst spsInst
 	return p, nil
 }
 
-// generateSPSClientManifest renders the client JobSet from pathways_jobset.tmpl: a proxy pointed at the
-// instance, plus the workload container when fullImageName is set. No resource manager, no TPU workers.
-func (g *GKEOrchestrator) generateSPSClientManifest(job orchestrator.JobDefinition, inst spsInstance, fullImageName string) (string, error) {
-	p, err := resolveSPSClientPathways(job.Pathways, inst)
+func (g *GKEOrchestrator) buildSPSClientManifestOptions(job orchestrator.JobDefinition, p orchestrator.PathwaysJobDefinition, fullImageName string) (ManifestOptions, error) {
+	job.IsPathwaysJob = true
+	job.Pathways = p
+	pullSecrets, err := g.resolveImagePullSecrets(job, fullImageName)
 	if err != nil {
-		return "", err
+		return ManifestOptions{}, err
+	}
+	var pfpContainers []string
+	if fullImageName != "" {
+		pfpContainers = []string{"workload-container"}
+	}
+	pfpStr, err := g.generatePodFailurePolicy(job.RestartOnExitCodes, pfpContainers...)
+	if err != nil {
+		return ManifestOptions{}, err
 	}
 	opts := ManifestOptions{
 		WorkloadName:                  job.WorkloadName,
+		ProjectID:                     job.ProjectID,
+		ClusterName:                   job.ClusterName,
 		KueueQueueName:                job.KueueQueueName,
 		TtlSecondsAfterFinished:       job.TtlSecondsAfterFinished,
 		TerminationGracePeriodSeconds: job.TerminationGracePeriodSeconds,
@@ -310,6 +288,10 @@ func (g *GKEOrchestrator) generateSPSClientManifest(job orchestrator.JobDefiniti
 		Env:                           job.Env,
 		PriorityClassName:             job.PriorityClassName,
 		ServiceAccountName:            job.ServiceAccountName,
+		ImagePullSecrets:              indentYaml(g.generateImagePullSecrets(pullSecrets), 16),
+		PodFailurePolicy:              indentYaml(pfpStr, 12),
+		Verbose:                       job.Verbose,
+		MLDiagnosticsEnabled:          job.MLDiagnosticsEnabled,
 		IsPathwaysJob:                 true,
 		Pathways:                      p,
 	}
@@ -317,10 +299,24 @@ func (g *GKEOrchestrator) generateSPSClientManifest(job orchestrator.JobDefiniti
 		sm := &StorageManager{orchestrator: g}
 		mountInfos, manifests, err := sm.ProcessMounts(job.RawMounts, job)
 		if err != nil {
-			return "", err
+			return ManifestOptions{}, err
 		}
 		opts.AdditionalManifests = manifests
 		sm.AddVolumeOptions(&opts, mountInfos)
+	}
+	return opts, nil
+}
+
+// generateSPSClientManifest renders the client JobSet from pathways_jobset.tmpl: a proxy pointed at the
+// instance, plus the workload container when fullImageName is set. No resource manager, no TPU workers.
+func (g *GKEOrchestrator) generateSPSClientManifest(job orchestrator.JobDefinition, inst spsInstance, fullImageName string) (string, error) {
+	p, err := resolveSPSClientPathways(job.Pathways, inst)
+	if err != nil {
+		return "", err
+	}
+	opts, err := g.buildSPSClientManifestOptions(job, p, fullImageName)
+	if err != nil {
+		return "", err
 	}
 	data := g.prepareJobSetTemplateData(opts, workloadContainerCommand(job.CommandToRun), "", false, false)
 	data.PathwaysRMEnabled = false
@@ -342,7 +338,36 @@ func (g *GKEOrchestrator) generateSPSClientManifest(job orchestrator.JobDefiniti
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
 	}
-	return assembleManifest(buf.String(), opts.AdditionalManifests), nil
+	if err := validateSPSClientManifest(buf.String(), inst.Endpoint); err != nil {
+		return "", err
+	}
+	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
+	if err := ValidateJobSetManifest(manifest); err != nil {
+		return "", err
+	}
+	return manifest, nil
+}
+
+func validateSPSClientManifest(jobSet, endpoint string) error {
+	workerTmpl, headTmpl, err := extractPathwaysPodTemplates(jobSet)
+	if err != nil {
+		return err
+	}
+	if workerTmpl != nil {
+		return fmt.Errorf("--pathways-run-sps-workload is set but the Pathways manifest has a worker replicatedJob; an SPS client runs only pathways-head. %s", pathwaysTemplateExtractHint)
+	}
+	if headTmpl == nil {
+		return fmt.Errorf("--pathways-run-sps-workload is set but the Pathways manifest has no pathways-head replicatedJob. %s", pathwaysTemplateExtractHint)
+	}
+	for _, c := range slices.Concat(headTmpl.Spec.InitContainers, headTmpl.Spec.Containers) {
+		if c.Name == "pathways-rm" {
+			return fmt.Errorf("--pathways-run-sps-workload is set but pathways-head runs container %q; an SPS client connects to an existing resource manager. %s", c.Name, pathwaysTemplateExtractHint)
+		}
+	}
+	if !strings.Contains(jobSet, "--resource_manager_address="+endpoint) {
+		return fmt.Errorf("--pathways-run-sps-workload is set but pathways-proxy does not target %q. %s", endpoint, pathwaysTemplateExtractHint)
+	}
+	return nil
 }
 
 // runSPSWorkloadLocally works like pathwaysutils run_workload: it starts a proxy in the cluster, port-forwards
@@ -387,7 +412,11 @@ func (g *GKEOrchestrator) waitForSPSProxy(name, ns string, sigCh <-chan os.Signa
 	selector := "jobset.sigs.k8s.io/jobset-name=" + name
 	deadline := time.Now().Add(spsProxyStartTimeout)
 	for time.Now().Before(deadline) {
-		if pod := g.readySPSProxyPod(ns, selector); pod != "" {
+		pod, err := g.readySPSProxyPod(ns, selector)
+		if err != nil {
+			return "", err
+		}
+		if pod != "" {
 			return pod, nil
 		}
 		select {
@@ -403,20 +432,27 @@ func (g *GKEOrchestrator) waitForSPSProxy(name, ns string, sigCh <-chan os.Signa
 	return "", fmt.Errorf("timed out after %s waiting for the SPS proxy of %q%s", spsProxyStartTimeout, name, warnSuffix)
 }
 
-func (g *GKEOrchestrator) readySPSProxyPod(ns, selector string) string {
-	res := g.kubectl("get", "pods", "-n", ns, "-l", selector, "-o", `jsonpath={range .items[*]}{.metadata.name}{" "}{.status.phase}{"\n"}{end}`)
+func (g *GKEOrchestrator) readySPSProxyPod(ns, selector string) (string, error) {
+	res := g.kubectl("get", "pods", "-n", ns, "-l", selector, "-o", `jsonpath={range .items[*]}{.metadata.name}{" "}{.status.phase}{"\n"}{end}`, kubectlReadTimeout)
 	for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) == 2 && fields[1] == "Running" {
-			if logs := g.kubectl("logs", "-n", ns, fields[0], "-c", "pathways-proxy"); strings.Contains(logs.Stdout+logs.Stderr, spsProxyReadyLog) {
-				return fields[0]
+		if len(fields) != 2 {
+			continue
+		}
+		switch fields[1] {
+		case "Running":
+			if logs := g.kubectl("logs", "-n", ns, fields[0], "-c", "pathways-proxy", kubectlReadTimeout); strings.Contains(logs.Stdout+logs.Stderr, spsProxyReadyLog) {
+				return fields[0], nil
 			}
+		case "Failed", "Succeeded":
+			logs := g.kubectl("logs", "-n", ns, fields[0], "-c", "pathways-proxy", "--tail=50", kubectlReadTimeout)
+			return "", fmt.Errorf("SPS proxy pod %s exited (%s):\n%s", fields[0], fields[1], strings.TrimSpace(logs.Stdout+logs.Stderr))
 		}
 	}
-	return ""
+	return "", nil
 }
 
-var portForwardRe = regexp.MustCompile(`127\.0\.0\.1:(\d+)`)
+var portForwardRe = regexp.MustCompile(`(?:127\.0\.0\.1|\[::1\]):(\d+)`)
 
 func (g *GKEOrchestrator) startPortForward(pod, ns string) (int, func(), error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -435,49 +471,56 @@ func (g *GKEOrchestrator) startPortForward(pod, ns string) (int, func(), error) 
 
 	var errOut strings.Builder
 	portCh := make(chan int, 1)
-	go readForwardedPort(stdout, &errOut, portCh)
+	pipeDone := make(chan struct{})
+	go readForwardedPort(stdout, &errOut, portCh, pipeDone)
 
 	select {
 	case port, ok := <-portCh:
 		if !ok {
 			cancel()
+			<-pipeDone
 			_ = cmd.Wait()
 			return 0, nil, fmt.Errorf("port-forward to %s did not become ready: %s", pod, strings.TrimSpace(errOut.String()))
 		}
 		done := make(chan struct{})
 		restartArgs := withKubeContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf("%d:%d", port, spsProxyPort)})
-		go keepPortForwardAlive(ctx, cmd, restartArgs, done)
+		go keepPortForwardAlive(ctx, cmd, pipeDone, restartArgs, done)
 		return port, func() { cancel(); <-done }, nil
 	case <-time.After(30 * time.Second):
 		cancel()
-		<-portCh
+		<-pipeDone
 		_ = cmd.Wait()
 		return 0, nil, fmt.Errorf("timed out waiting for port-forward to %s", pod)
 	}
 }
 
-func readForwardedPort(r io.Reader, errOut *strings.Builder, portCh chan<- int) {
-	defer close(portCh)
+func readForwardedPort(r io.Reader, errOut *strings.Builder, portCh chan<- int, pipeDone chan<- struct{}) {
+	defer close(pipeDone)
 	for scanner := bufio.NewScanner(r); scanner.Scan(); {
 		line := scanner.Text()
 		if m := portForwardRe.FindStringSubmatch(line); len(m) == 2 {
 			if port, err := strconv.Atoi(m[1]); err == nil {
 				portCh <- port
+				close(portCh)
 				_, _ = io.Copy(io.Discard, r)
 				return
 			}
 		}
 		errOut.WriteString(line + "\n")
 	}
+	close(portCh)
 }
 
 // keepPortForwardAlive restarts kubectl port-forward if it exits before ctx is cancelled (e.g. on Ctrl-C in pdb).
-func keepPortForwardAlive(ctx context.Context, cmd *exec.Cmd, args []string, done chan<- struct{}) {
+func keepPortForwardAlive(ctx context.Context, cmd *exec.Cmd, pipeDone <-chan struct{}, args []string, done chan<- struct{}) {
 	defer close(done)
+	<-pipeDone
 	for {
 		_ = cmd.Wait()
-		if ctx.Err() != nil {
+		select {
+		case <-ctx.Done():
 			return
+		case <-time.After(500 * time.Millisecond):
 		}
 		cmd = exec.CommandContext(ctx, "kubectl", args...)
 		if err := cmd.Start(); err != nil {
@@ -489,10 +532,11 @@ func keepPortForwardAlive(ctx context.Context, cmd *exec.Cmd, args []string, don
 func runLocalCommand(command string, port int, env map[string]string, sigCh <-chan os.Signal) error {
 	cmd := exec.Command("bash", "-c", command)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	cmd.Env = append(os.Environ(), "JAX_PLATFORMS=proxy", fmt.Sprintf("JAX_BACKEND_TARGET=grpc://127.0.0.1:%d", port))
+	cmd.Env = os.Environ()
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
+	cmd.Env = append(cmd.Env, "JAX_PLATFORMS=proxy", fmt.Sprintf("JAX_BACKEND_TARGET=grpc://127.0.0.1:%d", port))
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start %q: %w", command, err)
 	}

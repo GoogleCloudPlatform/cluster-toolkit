@@ -19,7 +19,42 @@ import (
 	"testing"
 
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
 )
+
+const testSPSJobSetJSON = `{
+	"metadata": {
+		"labels": {"kueue.x-k8s.io/queue-name": "cluster-queue"}
+	},
+	"spec": {
+		"replicatedJobs": [
+			{
+				"name": "pathways-head",
+				"replicas": 1,
+				"template": {"spec": {"template": {"spec": {
+					"nodeSelector": {"cloud.google.com/gke-nodepool": "cpu-np"},
+					"containers": [{
+						"name": "pathways-rm",
+						"image": "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:20261004",
+						"args": [
+							"--gcs_scratch_location", "gs://my-bucket/sps",
+							"--instance_type=tpu7x:2x2x1",
+							"--instance_count=2"
+						]
+					}]
+				}}}}
+			},
+			{
+				"name": "worker",
+				"replicas": 2,
+				"template": {"spec": {"template": {"spec": {
+					"initContainers": [{"name": "colocated-python-sidecar", "image": "sidecar:tag"}],
+					"containers": [{"name": "pathways-worker", "image": "custom-registry.io/custom-worker:v1"}]
+				}}}}
+			}
+		]
+	}
+}`
 
 func TestSPSInstanceRef(t *testing.T) {
 	tests := []struct {
@@ -84,41 +119,7 @@ func TestProxyImageFor(t *testing.T) {
 }
 
 func TestParseSPSClientTarget(t *testing.T) {
-	raw := `{
-		"metadata": {
-			"labels": {"kueue.x-k8s.io/queue-name": "cluster-queue"}
-		},
-		"spec": {
-			"replicatedJobs": [
-				{
-					"name": "pathways-head",
-					"replicas": 1,
-					"template": {"spec": {"template": {"spec": {
-						"nodeSelector": {"cloud.google.com/gke-nodepool": "cpu-np"},
-						"containers": [{
-							"name": "pathways-rm",
-							"image": "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:20261004",
-							"args": [
-								"--gcs_scratch_location", "gs://my-bucket/sps",
-								"--instance_type=tpu7x:2x2x1",
-								"--instance_count=2"
-							]
-						}]
-					}}}}
-				},
-				{
-					"name": "worker",
-					"replicas": 2,
-					"template": {"spec": {"template": {"spec": {
-						"initContainers": [{"name": "colocated-python-sidecar", "image": "sidecar:tag"}],
-						"containers": [{"name": "pathways-worker", "image": "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:20261004"}]
-					}}}}
-				}
-			]
-		}
-	}`
-
-	inst, err := parseSPSClientTarget("sps-j6080103", []byte(raw))
+	inst, err := parseSPSClientTarget("sps-j6080103", []byte(testSPSJobSetJSON))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -316,24 +317,120 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 }
 
 func TestReadForwardedPort(t *testing.T) {
-	t.Run("extracts local port from kubectl port-forward output", func(t *testing.T) {
-		var errOut strings.Builder
-		portCh := make(chan int, 1)
-		readForwardedPort(strings.NewReader("Forwarding from 127.0.0.1:41955 -> 29000\nForwarding from [::1]:41955 -> 29000\n"), &errOut, portCh)
-		if got, ok := <-portCh; !ok || got != 41955 {
-			t.Errorf("got (%d, %v), want (41955, true)", got, ok)
+	t.Run("extracts local port from IPv4 and IPv6 kubectl port-forward output", func(t *testing.T) {
+		for _, line := range []string{
+			"Forwarding from 127.0.0.1:41955 -> 29000\n",
+			"Forwarding from [::1]:41955 -> 29000\n",
+		} {
+			var errOut strings.Builder
+			portCh := make(chan int, 1)
+			pipeDone := make(chan struct{})
+			readForwardedPort(strings.NewReader(line), &errOut, portCh, pipeDone)
+			if got, ok := <-portCh; !ok || got != 41955 {
+				t.Errorf("for %q: got (%d, %v), want (41955, true)", line, got, ok)
+			}
+			<-pipeDone
 		}
 	})
 
 	t.Run("captures error output when port-forward fails", func(t *testing.T) {
 		var errOut strings.Builder
 		portCh := make(chan int, 1)
-		readForwardedPort(strings.NewReader("error: unable to forward port\n"), &errOut, portCh)
+		pipeDone := make(chan struct{})
+		readForwardedPort(strings.NewReader("error: unable to forward port\n"), &errOut, portCh, pipeDone)
 		if _, ok := <-portCh; ok {
 			t.Errorf("expected closed channel on failure")
 		}
+		<-pipeDone
 		if !strings.Contains(errOut.String(), "unable to forward port") {
 			t.Errorf("errOut = %q, want failure message", errOut.String())
+		}
+	})
+}
+
+func TestReadSPSInstance_RejectsNonRunningHeadPod(t *testing.T) {
+	orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get jobset": {{ExitCode: 0, Stdout: testSPSJobSetJSON}},
+		"kubectl get pods":   {{ExitCode: 0, Stdout: "Pending"}},
+	}))
+	_, err := orc.readSPSInstance("sps-j6080103", "default")
+	if err == nil || !strings.Contains(err.Error(), `SPS instance "sps-j6080103" has no running pathways-head pod`) {
+		t.Errorf("got err = %v, want no running pathways-head pod error", err)
+	}
+}
+
+func TestRunSPSWorkload_Validation(t *testing.T) {
+	baseResponses := func() map[string][]shell.CommandResult {
+		return map[string][]shell.CommandResult{
+			"gcloud container clusters get-credentials": {{ExitCode: 0}},
+			"kubectl get jobset":                        {{ExitCode: 0, Stdout: testSPSJobSetJSON}},
+			"kubectl get pods":                          {{ExitCode: 0, Stdout: "Running"}},
+		}
+	}
+
+	t.Run("rejects workload name equal to SPS instance name", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(baseResponses()))
+		job := orchestrator.JobDefinition{
+			WorkloadName:    "sps-j6080103",
+			ClusterName:     "test-cluster",
+			ClusterLocation: "us-central1-a",
+			ProjectID:       "test-project",
+			NumSlices:       1,
+			Pathways:        orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-j6080103"},
+		}
+		err := orc.runSPSWorkload(job)
+		if err == nil || !strings.Contains(err.Error(), `must differ from the target SPS instance "sps-j6080103"`) {
+			t.Errorf("got err = %v, want self-collision error", err)
+		}
+	})
+
+	t.Run("rejects num-slices exceeding SPS instance slice count", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(baseResponses()))
+		job := orchestrator.JobDefinition{
+			WorkloadName:    "sps-client",
+			ClusterName:     "test-cluster",
+			ClusterLocation: "us-central1-a",
+			ProjectID:       "test-project",
+			NumSlices:       3,
+			Pathways:        orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-j6080103"},
+		}
+		err := orc.runSPSWorkload(job)
+		if err == nil || !strings.Contains(err.Error(), `--num-slices 3 is more than the 2 slices of SPS instance "sps-j6080103"`) {
+			t.Errorf("got err = %v, want slice count error", err)
+		}
+	})
+}
+
+func TestReadySPSProxyPod(t *testing.T) {
+	t.Run("returns empty until Running pod logs IFRT proxy server started", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get pods": {
+				{ExitCode: 0, Stdout: "proxy-pod-0 Running\n"},
+				{ExitCode: 0, Stdout: "proxy-pod-0 Running\n"},
+			},
+			"kubectl logs": {
+				{ExitCode: 0, Stdout: "starting up...\n"},
+				{ExitCode: 0, Stdout: "I1105 IFRT proxy server started on 29000\n"},
+			},
+		}))
+		pod, err := orc.readySPSProxyPod("default", "jobset.sigs.k8s.io/jobset-name=sps-client")
+		if err != nil || pod != "" {
+			t.Fatalf("first poll = (%q, %v), want (\"\", nil)", pod, err)
+		}
+		pod, err = orc.readySPSProxyPod("default", "jobset.sigs.k8s.io/jobset-name=sps-client")
+		if err != nil || pod != "proxy-pod-0" {
+			t.Fatalf("second poll = (%q, %v), want (\"proxy-pod-0\", nil)", pod, err)
+		}
+	})
+
+	t.Run("fails fast when proxy pod enters Failed", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get pods": {{ExitCode: 0, Stdout: "proxy-pod-0 Failed\n"}},
+			"kubectl logs":     {{ExitCode: 0, Stderr: "F1105 invalid flag --bad_arg\n"}},
+		}))
+		_, err := orc.readySPSProxyPod("default", "jobset.sigs.k8s.io/jobset-name=sps-client")
+		if err == nil || !strings.Contains(err.Error(), "SPS proxy pod proxy-pod-0 exited (Failed)") || !strings.Contains(err.Error(), "invalid flag --bad_arg") {
+			t.Errorf("got err = %v, want Failed proxy pod error with logs", err)
 		}
 	})
 }

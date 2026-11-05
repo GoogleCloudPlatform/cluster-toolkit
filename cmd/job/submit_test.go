@@ -1986,6 +1986,9 @@ func TestSubmitCmd_RunSPSWorkload(t *testing.T) {
 		if got := mockOrc.SubmittedJob.ImageName; got != "" {
 			t.Errorf("ImageName = %q, want empty", got)
 		}
+		if got := mockOrc.SubmittedJob.MaxRestarts; got != 0 {
+			t.Errorf("MaxRestarts = %d, want 0", got)
+		}
 	})
 
 	t.Run("in-cluster mode succeeds with image and without compute-type or gcs-location", func(t *testing.T) {
