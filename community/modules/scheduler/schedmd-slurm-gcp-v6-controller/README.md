@@ -103,6 +103,7 @@ To enable High Availability:
   use:
   - network
   - homefs
+  - compute_partition
   settings:
     enable_backup_controller: true
     controller_ha_type: regional
