@@ -29,13 +29,22 @@ func (g *GKEOrchestrator) isGKE(job orchestrator.JobDefinition) bool {
 	return strings.TrimSpace(g.projectID) != "" || strings.TrimSpace(job.ProjectID) != ""
 }
 
+// ambientTelemetryImage returns GCLUSTER_TELEMETRY_IMAGE unless --ml-diagnostics-image was given explicitly
+// (an explicit empty value opts out of the environment default, mirroring --image-pull-secret="").
+func ambientTelemetryImage(job orchestrator.JobDefinition) string {
+	if job.MLDiagnosticsImageSpecified {
+		return ""
+	}
+	return k8s.TelemetryImageFromEnv()
+}
+
 // telemetrySidecarRequested reports whether ML Diagnostics runs as the native collector sidecar: always off GKE,
 // and on GKE only when the user names a collector image (otherwise GKE's managed webhook handles it).
 func (g *GKEOrchestrator) telemetrySidecarRequested(job orchestrator.JobDefinition) bool {
 	if !job.MLDiagnosticsEnabled {
 		return false
 	}
-	return !g.isGKE(job) || strings.TrimSpace(job.MLDiagnosticsImage) != "" || k8s.TelemetryImageFromEnv() != ""
+	return !g.isGKE(job) || strings.TrimSpace(job.MLDiagnosticsImage) != "" || ambientTelemetryImage(job) != ""
 }
 
 // telemetrySidecarTrigger names what selected sidecar mode, so a shell-wide GCLUSTER_TELEMETRY_IMAGE that trips the
@@ -44,7 +53,7 @@ func (g *GKEOrchestrator) telemetrySidecarTrigger(job orchestrator.JobDefinition
 	switch {
 	case strings.TrimSpace(job.MLDiagnosticsImage) != "":
 		return "--ml-diagnostics-image"
-	case k8s.TelemetryImageFromEnv() != "":
+	case ambientTelemetryImage(job) != "":
 		return k8s.TelemetryImageEnvVar
 	default:
 		return "the non-GKE target"
@@ -85,7 +94,7 @@ func (g *GKEOrchestrator) resolveTelemetryCollector(job orchestrator.JobDefiniti
 	}
 	img := strings.TrimSpace(job.MLDiagnosticsImage)
 	if img == "" {
-		if img = k8s.TelemetryImageFromEnv(); img != "" {
+		if img = ambientTelemetryImage(job); img != "" {
 			logging.Info("Using ML Diagnostics collector image from %s: %s", k8s.TelemetryImageEnvVar, img)
 		}
 	}

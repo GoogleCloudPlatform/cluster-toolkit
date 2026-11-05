@@ -337,6 +337,14 @@ func TestResolveTelemetryCollector_PrecedenceAndNodeCache(t *testing.T) {
 		if err != nil || opts.TelemetryCollectorImage != "registry.local/flag-collector:v3" {
 			t.Fatalf("expected flag collector image, got %q (err=%v)", opts.TelemetryCollectorImage, err)
 		}
+
+		// --ml-diagnostics-image="" ignores the env var: off GKE the node cache is used instead.
+		optOutJob := baseTPUJob
+		optOutJob.MLDiagnosticsImageSpecified = true
+		opts, err = orc.PrepareManifestOptions(optOutJob, "registry.local/jax:v1", profile, false, false)
+		if err != nil || opts.TelemetryCollectorImage != "registry.local/ai-telemetry-collector:v0" {
+			t.Fatalf("explicit empty image off GKE should discover from the node cache, got %q (err=%v)", opts.TelemetryCollectorImage, err)
+		}
 	})
 
 	t.Run("node cache ignores CPU nodes, prefers matching machineType, ranks buckets, and picks the highest semver tag", func(t *testing.T) {
@@ -416,6 +424,37 @@ func TestValidateTelemetryFlags(t *testing.T) {
 				t.Fatalf("validateTelemetryFlags() = %v, want substring %q", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+// TestResolveTelemetryCollector_ExplicitEmptyImageOnGKE pins --ml-diagnostics-image="" ignoring GCLUSTER_TELEMETRY_IMAGE
+// on GKE: the managed webhook stays in charge and a custom port is still rejected.
+func TestResolveTelemetryCollector_ExplicitEmptyImageOnGKE(t *testing.T) {
+	setupMockMachineConfig(t)
+	baseTPUJob := newTelemetryResolutionJob()
+	profile := JobProfile{CapacityCount: 4}
+	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "registry.local/env-collector:v2")
+	orc := newCachedTestOrchestrator()
+	orc.projectID = "gke-proj"
+	orc.kubeClient = &MockKubeClient{Objects: map[string][]unstructured.Unstructured{
+		"nodes": {makeNodeWithImages("tpu-0", "4", []string{"registry.local/ai-telemetry-collector:v0"})},
+	}}
+	gkeJob := baseTPUJob
+	gkeJob.ProjectID = "gke-proj"
+	gkeJob.MLDiagnosticsImageSpecified = true
+	opts, err := orc.PrepareManifestOptions(gkeJob, "registry.local/jax:v1", profile, false, false)
+	if err != nil || opts.TelemetryCollectorImage != "" || !opts.MLDiagnosticsEnabled {
+		t.Fatalf("want webhook mode (empty collector image, MLDiagnosticsEnabled), got image=%q enabled=%v err=%v", opts.TelemetryCollectorImage, opts.MLDiagnosticsEnabled, err)
+	}
+	_, k8sJob, _ := parseServiceAndJobDocs(t, mustGenerateJobManifest(t, orc, opts, profile))
+	if k8sJob.Labels["managed-mldiagnostics-gke"] != "true" || len(k8sJob.Spec.Template.Spec.InitContainers) != 0 {
+		t.Errorf("want managed-mldiagnostics-gke=true and no initContainers, got labels=%v init=%+v", k8sJob.Labels, k8sJob.Spec.Template.Spec.InitContainers)
+	}
+	// A custom port still needs sidecar mode; the opt-out must not silently satisfy it via the env var.
+	portJob := gkeJob
+	portJob.MLDiagnosticsTelemetryPort = 9095
+	if _, err := orc.PrepareManifestOptions(portJob, "registry.local/jax:v1", profile, false, false); err == nil || !strings.Contains(err.Error(), "only supported when injecting") {
+		t.Fatalf("want port-without-sidecar error, got %v", err)
 	}
 }
 

@@ -16,7 +16,7 @@ If you use `--build-context` to build images on-the-fly, you must set:
 ### Optional Environment Variables
 
 * `GCLUSTER_REFRESH_CREDENTIALS`: Set to `1` to make every `gcluster job` command re-run `gcloud container clusters get-credentials` instead of reusing an existing, verified `kubeconfig` context for the cluster. See [Cluster connectivity and kubeconfig reuse](#101-cluster-connectivity-and-kubeconfig-reuse) for when this is useful.
-* `GCLUSTER_TELEMETRY_IMAGE`: Container image URI for the ML Diagnostics collector native sidecar on Kubernetes 1.29+ TPU workloads when `--enable-ml-diagnostics` is passed without `--ml-diagnostics-image` (switches GKE jobs from the managed webhook to native sidecar injection).
+* `GCLUSTER_TELEMETRY_IMAGE`: Container image URI for the ML Diagnostics collector native sidecar on Kubernetes 1.29+ TPU workloads when `--enable-ml-diagnostics` is passed without `--ml-diagnostics-image` (switches GKE jobs from the managed webhook to native sidecar injection). Pass `--ml-diagnostics-image=""` to ignore it for one submission.
 
 > [!NOTE]
 > ### Automated Prerequisite Checks Overview
@@ -1360,7 +1360,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--gke-scheduler` | `string` | Specific GKE scheduler selection (e.g., `gke.io/topology-aware-auto`). |
 | `--image-pull-secret` | `string` | Comma-separated secret names for pulling images from private registries. When omitted, matching `kubernetes.io/dockerconfigjson` secrets in the target namespace are attached; `--image-pull-secret=""` attaches none. See [Example 6](#61-run-with-advanced-scheduling-flags). |
 | `--enable-ml-diagnostics` | `flag` | Enables ML Diagnostics for the workload. Uses the GKE managed webhook (`managed-mldiagnostics-gke: "true"`) by default, or injects the native `ai-telemetry-collector` sidecar on Kubernetes 1.29+ TPU pods when `--ml-diagnostics-image` or `GCLUSTER_TELEMETRY_IMAGE` is set (presetting `TPU_RUNTIME_METRICS_PORTS="8431,8432,8433,8434,8435,8436,8437,8438"` unless overridden via `--env` / `--pathways-worker-env`). |
-| `--ml-diagnostics-image` | `string` | Container image for the ML Diagnostics collector native sidecar on Kubernetes 1.29+ TPU workloads (requires `--enable-ml-diagnostics`; overrides `GCLUSTER_TELEMETRY_IMAGE`). |
+| `--ml-diagnostics-image` | `string` | Container image for the ML Diagnostics collector native sidecar on Kubernetes 1.29+ TPU workloads (requires `--enable-ml-diagnostics`; overrides `GCLUSTER_TELEMETRY_IMAGE`). `--ml-diagnostics-image=""` ignores `GCLUSTER_TELEMETRY_IMAGE`, so GKE jobs use the managed webhook. |
 | `--ml-diagnostics-telemetry-port` | `int` | Prometheus metrics port exposed by the ML Diagnostics collector sidecar when sidecar injection is active (Default: `8889`; requires `--enable-ml-diagnostics`). |
 | `--service-account` | `string` | Kubernetes service account name used to provide fine-grained IAM roles to the job pods. |
 | `--cpu-affinity` | `string` | CPU affinity rules (e.g., `'numa'`). |

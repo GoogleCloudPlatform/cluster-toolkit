@@ -1815,11 +1815,6 @@ func TestSubmitCmd_MLDiagnosticsValidation(t *testing.T) {
 			extraArgs: []string{"--enable-ml-diagnostics", "--ml-diagnostics-telemetry-port", "70000"},
 			wantErr:   "must be between 1 and 65535",
 		},
-		{
-			name:      "explicit empty ml-diagnostics-image",
-			extraArgs: []string{"--enable-ml-diagnostics", "--ml-diagnostics-image", "   "},
-			wantErr:   "--ml-diagnostics-image cannot be empty",
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setupSubmitTestEnv(t)
@@ -1892,6 +1887,29 @@ func TestSubmitCmd_MLDiagnosticsWiring(t *testing.T) {
 	defaultPort := runSubmitForTest(t, "--enable-ml-diagnostics", "--ml-diagnostics-image", "registry.local/flag-col:v2")
 	if defaultPort.MLDiagnosticsTelemetryPort != 0 {
 		t.Errorf("port must stay 0 (orchestrator default) when --ml-diagnostics-telemetry-port is omitted, got %d", defaultPort.MLDiagnosticsTelemetryPort)
+	}
+}
+
+// TestSubmitCmd_MLDiagnosticsImageSpecified pins the explicit-empty opt-out of GCLUSTER_TELEMETRY_IMAGE
+// (--ml-diagnostics-image="", which the shell passes as --ml-diagnostics-image=) and the Specified wiring.
+func TestSubmitCmd_MLDiagnosticsImageSpecified(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		args          []string
+		wantImage     string
+		wantSpecified bool
+	}{
+		{name: "omitted", wantSpecified: false},
+		{name: "named", args: []string{"--ml-diagnostics-image", "registry.local/flag-col:v2"}, wantImage: "registry.local/flag-col:v2", wantSpecified: true},
+		{name: "explicit empty", args: []string{"--ml-diagnostics-image="}, wantSpecified: true},
+		{name: "explicit blank", args: []string{"--ml-diagnostics-image", "   "}, wantSpecified: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := runSubmitWithTelemetryEnvForTest(t, "registry.local/env-col:v1", append([]string{"--enable-ml-diagnostics"}, tc.args...)...)
+			if got.MLDiagnosticsImage != tc.wantImage || got.MLDiagnosticsImageSpecified != tc.wantSpecified {
+				t.Errorf("got (%q, specified=%v), want (%q, specified=%v)", got.MLDiagnosticsImage, got.MLDiagnosticsImageSpecified, tc.wantImage, tc.wantSpecified)
+			}
+		})
 	}
 }
 
