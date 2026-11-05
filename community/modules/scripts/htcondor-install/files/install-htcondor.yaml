@@ -28,7 +28,6 @@
   module_defaults:
     ansible.builtin.yum:
       lock_timeout: 300
-      disablerepo: "ciq-*"
   tasks:
   - name: Enable EPEL repository
     ansible.builtin.yum:

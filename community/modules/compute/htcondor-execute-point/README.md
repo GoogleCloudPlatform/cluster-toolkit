@@ -178,7 +178,7 @@ User-supplied [`var.metadata`](#input_metadata) overrides these defaults. Settin
 (on Windows) replaces the module's built-in shutdown script.
 
 In addition, the [htcondor-access-point] module configures a job transform rule
-(`RETRY_WINDOWS_SHUTDOWN`) that automatically re-queues jobs up to 5 times
+(`RETRY_WINDOWS_SHUTDOWN`) that automatically re-queues jobs up to 4 times
 (`NumJobCompletions < 5`) if they exit with Windows shutdown/DLL initialization
 error codes (`0xC0000142` or `0xC000026B`). Note that this retry rule is applied
 at the Access Point scheduler level and therefore applies to all jobs in the
