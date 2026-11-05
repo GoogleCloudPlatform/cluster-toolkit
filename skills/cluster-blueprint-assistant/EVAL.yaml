@@ -319,8 +319,8 @@ cases:
     project my-proj.
   expect_keywords_any:
   - "mutually exclusive"
-  - "Flex Start"
-  - "Spot"
+  - "cannot be combined"
+  - "conflict"
   forbidden_commands:
   - "> examples/gke-consumption-options/dws-flex-start/gke-a3-ultragpu.yaml"
   - "tee examples/gke-consumption-options/dws-flex-start/gke-a3-ultragpu.yaml"
@@ -369,5 +369,7 @@ cases:
   - "--skip-validators=test_machine_type_in_zone"
   - "-l IGNORE"
   - "--validation-level IGNORE"
+  - "GHPC_MOCK_MACHINE_CONFIG='{}' ./gcluster"
+  - "GHPC_MOCK_MACHINE_CONFIG='{}' gcluster"
   - "terraform apply"
   - "gcluster destroy"

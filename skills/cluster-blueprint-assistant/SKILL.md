@@ -114,8 +114,9 @@ allowed_read_only_commands:
    blueprint you are fixing lacks `ai_assisted: true`, add it). If `./gcluster` reports `field ai_assisted not found in type config.DeploymentSettings`, the binary is older than this field: run `make` and retry instead of removing `ai_assisted`.
 5. **Validate with gcluster, fix the blueprint, never the output.**
    `./gcluster expand` and `./gcluster create` are the validation step. Once
-   `./gcluster create` or `./gcluster expand` succeeds, **stop immediately**—do
-   not run `terraform init` or `terraform validate` afterwards. If they or
+   `./gcluster create` or `./gcluster expand` succeeds, validation is complete—**do
+   not run `terraform` afterwards**; if the user also asked to deploy, proceed
+   directly to the confirmation gate in rule 6. If they or
    `./gcluster deploy` fail, fix the blueprint YAML or `deployment.yaml` and re-run
    `./gcluster`. Never bypass validators via CLI flags (`-l IGNORE`,
    `--validation-level IGNORE`, `--skip-validators`), environment variables
