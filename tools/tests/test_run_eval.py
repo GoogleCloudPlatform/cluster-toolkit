@@ -15,13 +15,16 @@
 
 """Unit tests for Cluster Toolkit skills evaluation runner."""
 
+import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tempfile
 from typing import Any
 import unittest
+from unittest import mock
 
 # Ensure repository root is in sys.path when executed directly as a script
 REPO_ROOT = str(Path(__file__).resolve().parents[2])
@@ -44,6 +47,13 @@ from tools.run_eval import (
     LIVE_AGENT_COMMANDS,
     LIVE_SHIM_DIR,
     LIVE_BLOCKED_LOG,
+    _parse_gemini_json_output,
+    EvalResult,
+    filter_cases,
+    generate_comparison_markdown,
+    lint_eval_yaml,
+    report_to_dict,
+    TestCaseResult,
 )
 
 
@@ -899,13 +909,18 @@ class TestLiveBackend(unittest.TestCase):
     def setUp(self):
         self.repo = tempfile.mkdtemp()
         self.calls = []
+        self._sleep_patcher = mock.patch("tools.run_eval.time.sleep")
+        self._sleep_patcher.start()
 
     def tearDown(self):
+        self._sleep_patcher.stop()
         shutil.rmtree(self.repo, ignore_errors=True)
 
     def _backend(self, exec_fn, which=lambda b: f"/usr/bin/{b}", **kw):
-        return LiveCLIEvaluatorBackend(agent=kw.pop("agent", "gemini"), project="test-proj",
-                                       repo_root=self.repo, exec_fn=exec_fn, which_fn=which, **kw)
+        b = LiveCLIEvaluatorBackend(agent=kw.pop("agent", "gemini"), project="test-proj",
+                                    repo_root=self.repo, exec_fn=exec_fn, which_fn=which, **kw)
+        b.gemini_tmp_dir = os.path.join(self.repo, ".fake-gemini-tmp")
+        return b
 
     def _fake_exec(self, status_examples="", status_all="", find_out="", agent_rc=0, agent_out="done"):
         """Build an exec_fn that simulates git worktree, agent run, find, and git status."""
@@ -1153,6 +1168,8 @@ class TestLiveBackend(unittest.TestCase):
         with open(gcluster, "w", encoding="utf-8") as f:
             f.write("#!/bin/sh\necho real\n")
         os.chmod(gcluster, 0o755)
+        git_info_dir = os.path.join(self.repo, ".git", "info")
+        os.makedirs(git_info_dir, exist_ok=True)
         b = self._backend(self._fake_exec(), keep_worktrees=True)
         b.run_case("skill", "p", {"name": "c6"})
         wt = [c[0][4] for c in self.calls if c[0][:3] == ["git", "worktree", "add"]][0]
@@ -1165,6 +1182,17 @@ class TestLiveBackend(unittest.TestCase):
                 tf = f.read()
             self.assertIn("version", tf)
             self.assertIn("refusing", tf)
+            make_shim_path = os.path.join(wt, LIVE_SHIM_DIR, "make")
+            self.assertTrue(os.path.isfile(make_shim_path))
+            self.assertTrue(os.access(make_shim_path, os.X_OK))
+            with open(make_shim_path, encoding="utf-8") as f:
+                make_shim = f.read()
+            self.assertIn("gcluster is already built", make_shim)
+            exclude_path = os.path.join(git_info_dir, "exclude")
+            self.assertTrue(os.path.isfile(exclude_path))
+            with open(exclude_path, encoding="utf-8") as f:
+                self.assertIn(f"{LIVE_SHIM_DIR}/", f.read().splitlines())
+            self.assertTrue(any(c[0][:4] == ["git", "config", "core.trustctime", "false"] for c in self.calls))
         finally:
             shutil.rmtree(wt, ignore_errors=True)
 
@@ -1370,6 +1398,339 @@ class TestLiveBackend(unittest.TestCase):
         b = self._backend(exec_fn, repo_ref="brokenref")
         b.run_case("skill", "p", {"name": "bf"})
         self.assertTrue(any("agent did not run" in f for f in b.hard_failures("bf")))
+
+    def _write(self, path: str, content: str) -> str:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return path
+
+    def _scenario_exec(self, wt_files=None, setup_files=None, agent_files=None, status_files=None,
+                       agent_out="done", expand_rc=0, expand_err=""):
+        def exec_fn(cmd, cwd, env=None, timeout=None):
+            self.calls.append((cmd, cwd, env, timeout))
+            if cmd[:3] == ["git", "worktree", "add"]:
+                os.makedirs(cmd[4], exist_ok=True)
+                for rel, text in (wt_files or {}).items():
+                    self._write(os.path.join(cmd[4], rel), text)
+                return _FakeProc(0)
+            if cmd[0] == "bash":
+                for rel, text in (setup_files or {}).items():
+                    self._write(os.path.join(cwd, rel), text)
+                return _FakeProc(0)
+            if cmd[:2] == ["git", "status"] and "--untracked-files=all" in cmd:
+                lines = [f"?? {r}\n" for r in (status_files or []) if os.path.isfile(os.path.join(cwd, r))]
+                return _FakeProc(0, "".join(lines))
+            if cmd[0] == "gemini":
+                for rel, text in (agent_files or {}).items():
+                    self._write(os.path.join(cwd, rel), text)
+                return _FakeProc(0, agent_out)
+            if cmd[0].endswith("gcluster.real") and cmd[1] == "expand":
+                return _FakeProc(expand_rc, "expanded", expand_err)
+            return _FakeProc(0)
+        return exec_fn
+
+    def test_parse_gemini_json_output_with_banner_and_multi_model_stats(self):
+        payload = {
+            "response": "Updated examples/broken-lustre-gke.yaml and ran ./gcluster expand.",
+            "stats": {
+                "models": {
+                    "gemini-2.5-pro": {"tokens": {"prompt": 1200, "candidates": 300, "cached": 400, "thoughts": 150, "total": 1650}},
+                    "gemini-2.5-flash": {"tokens": {"prompt": 800, "candidates": 100, "cached": 200, "thoughts": 50, "total": 950}},
+                },
+                "tools": {"totalCalls": 5, "byName": {"run_shell_command": {"count": 3}, "read_file": 2}},
+            },
+        }
+        raw = "YOLO mode is enabled.\nLoaded cached credentials.\n" + json.dumps(payload, indent=2)
+        text, tel = _parse_gemini_json_output(raw, "")
+        self.assertEqual(text, "Updated examples/broken-lustre-gke.yaml and ran ./gcluster expand.")
+        self.assertEqual(
+            (tel["input_tokens"], tel["output_tokens"], tel["cached_tokens"], tel["thought_tokens"], tel["total_tokens"], tel["tool_calls_total"]),
+            (2000, 400, 600, 200, 2600, 5),
+        )
+        self.assertEqual(tel["tool_calls_by_name"], {"run_shell_command": 3, "read_file": 2})
+
+    def test_parse_gemini_json_output_plain_text_fallback_and_error_payloads(self):
+        self.assertEqual(_parse_gemini_json_output("PONG\n", ""), ("PONG\n", {}))
+        text2, tel2 = _parse_gemini_json_output("banner line", "Error: unknown flag")
+        self.assertTrue("banner line" in text2 and "Error: unknown flag" in text2 and tel2 == {})
+
+        text3, tel3 = _parse_gemini_json_output(json.dumps({"error": {"code": 429, "message": "Quota exceeded"}}), "")
+        self.assertIn("Quota exceeded", text3)
+        self.assertEqual(tel3["total_tokens"], 0)
+
+        mixed = json.dumps({"response": "Partial output", "error": "Terminated early",
+                            "stats": {"tools": {"byName": {"write_file": 2, "read_file": 1}}}})
+        text4, tel4 = _parse_gemini_json_output(mixed, "")
+        self.assertTrue("Partial output" in text4 and "Terminated early" in text4)
+        self.assertEqual(tel4["tool_calls_total"], 3)
+
+    def test_build_agent_env_vertex_defaults_and_api_key_override(self):
+        b = self._backend(self._fake_exec())
+        with mock.patch.dict(os.environ, {}, clear=True):
+            env = b._build_agent_env(wt="/tmp/wt", shim_dir="/tmp/wt/.live-shims", gemini_home="/tmp/ghome")
+            self.assertEqual((env["GOOGLE_CLOUD_PROJECT"], env["CLOUDSDK_CORE_PROJECT"]), ("test-proj", "test-proj"))
+            self.assertEqual((env["GEMINI_CLI_TRUST_WORKSPACE"], env["GOOGLE_GENAI_USE_VERTEXAI"]), ("true", "true"))
+            self.assertEqual((env["GOOGLE_CLOUD_LOCATION"], env["GEMINI_CLI_HOME"]), ("global", "/tmp/ghome"))
+            self.assertTrue(env["PATH"].startswith("/tmp/wt/.live-shims" + os.pathsep + "/tmp/wt"))
+
+        for key_var in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+            with mock.patch.dict(os.environ, {key_var: "test-key"}, clear=True):
+                self.assertNotIn("GOOGLE_GENAI_USE_VERTEXAI", b._build_agent_env())
+
+        self._write(os.path.join(self.repo, "gcluster"), "#!/bin/sh\n")
+        b_pong = self._backend(self._fake_exec(agent_out="YOLO mode is enabled.\n" + json.dumps({"response": "PONG", "stats": {}})))
+        with mock.patch.dict(os.environ, {}, clear=True):
+            ok, msg = b_pong.check_prerequisites(smoke_test=True)
+            self.assertTrue(ok, f"Expected JSON PONG smoke test to pass: {msg}")
+            smoke_env = [c[2] for c in self.calls if c[0][0] == "gemini"][-1]
+            self.assertEqual((smoke_env["GOOGLE_GENAI_USE_VERTEXAI"], smoke_env["GOOGLE_CLOUD_PROJECT"]), ("true", "test-proj"))
+
+    def test_filter_cases_boundary_aware_and_errors(self):
+        cases = [{"name": n} for n in ("case_1_customize_hpc_slurm", "case_1b_storage_gke_debug_pool", "case_10_missing_use", "case_11_batched_validators")]
+        self.assertEqual([c["name"] for c in filter_cases(cases, "case_1")], ["case_1_customize_hpc_slurm"])
+        self.assertEqual([c["name"] for c in filter_cases(cases, "case_1,case_10,case_1")], ["case_1_customize_hpc_slurm", "case_10_missing_use"])
+        for all_spec in ("all", "", None):
+            self.assertEqual(len(filter_cases(cases, all_spec)), 4)
+        with self.assertRaisesRegex(ValueError, "matched 0 cases"):
+            filter_cases(cases, "case_99")
+
+        skill_dir = os.path.join(self.repo, "filter-skill")
+        self._write(os.path.join(skill_dir, "SKILL.md"), "---\nname: filter-skill\ndescription: d\n---\nbody\n")
+        self._write(os.path.join(skill_dir, "EVAL.yaml"), (
+            "cases:\n"
+            "  - name: case_1_customize_hpc_slurm\n    prompt: p\n    mock_response: ok\n    expect_keywords_all: [ok]\n"
+            "  - name: case_1b_storage_gke_debug_pool\n    prompt: p\n    mock_response: ok\n    expect_keywords_all: [ok]\n"
+            "  - name: case_10_missing_use\n    prompt: p\n    mock_response: ok\n    expect_keywords_all: [ok]\n"
+        ))
+        rep = evaluate_skill(skill_dir, case_filter=["case_1"])
+        self.assertEqual([cr.case_name for cr in rep.cases], ["case_1_customize_hpc_slurm"])
+
+        bad_skill = os.path.join(self.repo, "bad-skill")
+        self._write(os.path.join(bad_skill, "EVAL.yaml"), "cases:\n  - name: c1\n    prompt: p\n    target_blueprint: '   '\n    expect_keywords_all: [foo]\n")
+        ok, msg = lint_eval_yaml(bad_skill)
+        self.assertFalse(ok)
+        self.assertIn("target_blueprint", msg)
+
+    def test_setup_fixture_hashes_vs_setup_generated_hashes_and_reexpand(self):
+        self._write(os.path.join(self.repo, "gcluster"), "#!/bin/sh\n")
+        bp_rel = "examples/broken-lustre-gke.yaml"
+        bp_base = "blueprint_name: broken\nai_assisted: true\ndeployment_groups:\n- group: primary\n  modules: []\n"
+        b = self._backend(self._scenario_exec(
+            setup_files={bp_rel: bp_base},
+            agent_files={bp_rel: bp_base + "# repaired by agent\n"},
+            status_files=[bp_rel],
+            agent_out=json.dumps({"response": "Fixed broken-lustre-gke.yaml"}),
+        ))
+        b.run_case("skill", "Fix broken-lustre-gke.yaml", {"name": "case_10_test", "target_blueprint": bp_rel, "live_setup": ["cat > broken"]})
+        orc = b.oracles["case_10_test"]
+        self.assertEqual((orc.generated_file_edits, orc.modified_files, orc.reexpand, b.hard_failures("case_10_test")), ([], [bp_rel], "ok", []))
+
+        art_rel = "hpc-slurm/.ghpc/artifacts/expanded_blueprint.yaml"
+        b2 = self._backend(self._scenario_exec(
+            setup_files={art_rel: "blueprint_name: hpc-slurm\ndeployment_groups: []\n"},
+            agent_files={art_rel: "blueprint_name: hpc-slurm\ndeployment_groups: []\n# hand-edited\n"},
+            status_files=[art_rel],
+        ))
+        b2.run_case("skill", "p", {"name": "case_8_art", "live_setup": ["./gcluster create x"]})
+        self.assertEqual(b2.oracles["case_8_art"].generated_file_edits, [art_rel])
+        self.assertTrue(any("hand-edited generated files" in f for f in b2.hard_failures("case_8_art")))
+
+    def test_repo_root_blueprint_copy_missing_ai_assisted_flagged(self):
+        b = self._backend(self._scenario_exec(
+            agent_files={"my-slurm.yaml": "blueprint_name: my-slurm\ndeployment_groups:\n- group: primary\n  modules: []\n"},
+            status_files=["my-slurm.yaml"],
+        ))
+        b.run_case("skill", "p", {"name": "root_copy"})
+        self.assertEqual(b.oracles["root_copy"].copies_missing_ai_assisted, ["my-slurm.yaml"])
+        self.assertTrue(any("ai_assisted: true" in f for f in b.hard_failures("root_copy")))
+
+    def test_target_blueprint_reexpand_behaviors(self):
+        self._write(os.path.join(self.repo, "gcluster"), "#!/bin/sh\n")
+        bp_rel = "examples/broken-lustre-gke.yaml"
+        b1 = self._backend(self._scenario_exec(
+            setup_files={bp_rel: "blueprint_name: broken\nai_assisted: true\ndeployment_groups: []\n"},
+            status_files=[bp_rel],
+            expand_rc=1,
+            expand_err="Error: missing private_vpc_connection_peering",
+        ))
+        b1.run_case("skill", "p", {"name": "vacuous_guard", "target_blueprint": bp_rel, "live_setup": ["create broken"]})
+        self.assertTrue(b1.oracles["vacuous_guard"].reexpand.startswith("failed:"))
+        self.assertTrue(any("does not expand" in f for f in b1.hard_failures("vacuous_guard")))
+
+        self.calls.clear()
+        b2 = self._backend(self._scenario_exec(
+            wt_files={"examples/hpc-slurm.yaml": "blueprint_name: hpc-slurm\ndeployment_groups: []\n"},
+            agent_files={"deployment.yaml": "vars:\n  project_id: test-proj\n  compute_node_count_dynamic_max: 4\n"},
+            status_files=["deployment.yaml"],
+        ))
+        b2.run_case("skill", "p", {"name": "depl_reexpand", "target_blueprint": "examples/hpc-slurm.yaml"})
+        self.assertEqual(b2.oracles["depl_reexpand"].reexpand, "ok")
+        expand_calls = [c[0] for c in self.calls if c[0][0].endswith("gcluster.real") and c[0][1] == "expand"]
+        self.assertEqual(len(expand_calls), 1)
+        self.assertTrue({"examples/hpc-slurm.yaml", "-d", "deployment.yaml"}.issubset(expand_calls[0]))
+
+        b3 = self._backend(self._scenario_exec(wt_files={"examples/hpc-slurm.yaml": "blueprint_name: hpc-slurm\ndeployment_groups: []\n"}))
+        b3.run_case("skill", "p", {"name": "nothing_created", "target_blueprint": "examples/hpc-slurm.yaml"})
+        self.assertTrue(b3.oracles["nothing_created"].reexpand.startswith("failed: no deployment.yaml or blueprint"))
+        self.assertTrue(any("does not expand" in f for f in b3.hard_failures("nothing_created")))
+
+    def test_dual_tf_read_detection_from_json_and_session_files(self):
+        def exec_fn(cmd, cwd, env=None, timeout=None):
+            if cmd[:3] == ["git", "worktree", "add"]:
+                for rel in ("modules/file-system/managed-lustre/variables.tf", "community/modules/compute/slurm/outputs.tf", "modules/file-system/managed-lustre/main.tf"):
+                    self._write(os.path.join(cmd[4], rel), "# tf\n")
+                return _FakeProc(0)
+            if cmd[0] == "find":
+                return _FakeProc(0, "")
+            if cmd[0] == "gemini":
+                wt_base = os.path.basename(os.path.normpath(cwd))
+                self._write(os.path.join(self.repo, ".fake-gemini-tmp", wt_base, "chats", "s1.json"),
+                            json.dumps({"args": {"path": "community/modules/compute/slurm/outputs.tf"}}))
+                self._write(os.path.join(self.repo, ".fake-gemini-tmp", "ctk-live-gemini-other-case-999", "s2.json"),
+                            json.dumps({"args": {"path": "modules/file-system/managed-lustre/main.tf"}}))
+                return _FakeProc(0, json.dumps({"response": "Checked modules/file-system/managed-lustre/variables.tf", "stats": {}}))
+            return _FakeProc(0)
+
+        b = self._backend(exec_fn)
+        b.run_case("skill", "p", {"name": "dual_tf"})
+        orc = b.oracles["dual_tf"]
+        self.assertEqual(orc.tf_files_read, 2)
+        self.assertEqual(orc.tf_files_read_paths, ["community/modules/compute/slurm/outputs.tf", "modules/file-system/managed-lustre/variables.tf"])
+        self.assertTrue(any("read 2 .tf file(s)" in f for f in b.hard_failures("dual_tf")))
+
+    def test_overlay_skill_into_worktree_conditional(self):
+        b = self._backend(self._fake_exec())
+        src_root = os.path.join(self.repo, "src-root")
+        src_skill = os.path.join(src_root, "skills", "cluster-blueprint-assistant")
+        self._write(os.path.join(src_skill, "SKILL.md"), "---\nname: cluster-blueprint-assistant\n---\n# Updated Skill")
+        self._write(os.path.join(src_skill, "references", "catalog.yaml"), "blueprints: []\n")
+        self._write(os.path.join(src_root, "AGENTS.md"), "# Updated AGENTS.md")
+
+        wt_before = os.path.join(self.repo, "wt-before")
+        os.makedirs(wt_before, exist_ok=True)
+        b._overlay_skill_into_worktree(wt_before, "cluster-blueprint-assistant", skill_path=src_skill)
+        self.assertFalse(os.path.exists(os.path.join(wt_before, "skills")) or os.path.exists(os.path.join(wt_before, "AGENTS.md")))
+
+        wt_no_agents = os.path.join(self.repo, "wt-no-agents")
+        os.makedirs(os.path.join(wt_no_agents, "skills", "cluster-blueprint-assistant"), exist_ok=True)
+        b._overlay_skill_into_worktree(wt_no_agents, "cluster-blueprint-assistant", skill_path=src_skill)
+        self.assertFalse(os.path.exists(os.path.join(wt_no_agents, "AGENTS.md")))
+
+        wt_after = os.path.join(self.repo, "wt-after")
+        wt_skill_dir = os.path.join(wt_after, "skills", "cluster-blueprint-assistant")
+        self._write(os.path.join(wt_skill_dir, "SKILL.md"), "old content")
+        self._write(os.path.join(wt_after, "AGENTS.md"), "old agents content")
+        b._overlay_skill_into_worktree(wt_after, "cluster-blueprint-assistant", skill_path=src_skill)
+        with open(os.path.join(wt_skill_dir, "SKILL.md"), encoding="utf-8") as f:
+            self.assertIn("# Updated Skill", f.read())
+        self.assertTrue(os.path.isfile(os.path.join(wt_skill_dir, "references", "catalog.yaml")))
+        with open(os.path.join(wt_after, "AGENTS.md"), encoding="utf-8") as f:
+            self.assertIn("# Updated AGENTS.md", f.read())
+
+    def test_evaluate_skill_concurrency_preserves_case_order(self):
+        skill_dir = os.path.join(self.repo, "conc-skill")
+        names = ["case_1_first", "case_2_second", "case_3_third", "case_4_fourth"]
+        self._write(os.path.join(skill_dir, "EVAL.yaml"), "cases:\n" + "".join(f"  - name: {n}\n    prompt: p\n    expect_keywords_all: [ok]\n" for n in names))
+
+        class StaggeredBackend:
+            def run_case(self, skill_name, prompt, case_config):
+                if case_config["name"] == "case_1_first":
+                    os.sched_yield()
+                return "ok"
+
+        res = evaluate_skill(skill_dir, backend=StaggeredBackend(), concurrency=3)
+        self.assertTrue(res.passed)
+        self.assertEqual([c.case_name for c in res.cases], names)
+
+    def test_report_to_dict_and_generate_comparison_markdown_and_cli_compare_json(self):
+        class DummyBackend:
+            def __init__(self, oracles_map):
+                self.oracles = oracles_map
+
+        before_eval = [EvalResult("cluster-blueprint-assistant", False, "1 of 2 cases failed", [
+            TestCaseResult("case_1", True, "All hard oracles passed", latency_seconds=20.0),
+            TestCaseResult("case_10", False, "read 2 .tf file(s) under modules/", latency_seconds=40.0),
+        ])]
+        before_backend = DummyBackend({
+            "case_1": LiveOracles(tf_files_read=0, reexpand="ok", input_tokens=1000, output_tokens=200, cached_tokens=500, thought_tokens=100, total_tokens=1300, tool_calls_total=3),
+            "case_10": LiveOracles(tf_files_read=2, tf_files_read_paths=["modules/a/variables.tf", "modules/a/outputs.tf"], reexpand="failed: missing peering", input_tokens=3000, output_tokens=600, cached_tokens=1000, thought_tokens=400, total_tokens=4000, tool_calls_total=8),
+        })
+        after_eval = [EvalResult("cluster-blueprint-assistant", True, "All 2 cases passed", [
+            TestCaseResult("case_1", True, "All hard oracles passed", latency_seconds=15.0),
+            TestCaseResult("case_10", True, "All hard oracles passed", latency_seconds=18.0),
+        ])]
+        after_backend = DummyBackend({
+            "case_1": LiveOracles(tf_files_read=0, reexpand="ok", input_tokens=800, output_tokens=150, cached_tokens=400, thought_tokens=50, total_tokens=1000, tool_calls_total=2),
+            "case_10": LiveOracles(tf_files_read=0, reexpand="ok", input_tokens=1200, output_tokens=250, cached_tokens=600, thought_tokens=100, total_tokens=1550, tool_calls_total=4),
+        })
+
+        b_dict = report_to_dict(before_eval, backend=before_backend, meta={"role": "before"})
+        a_dict = report_to_dict(after_eval, backend=after_backend, meta={"role": "after"})
+        self.assertEqual((b_dict["summary"]["pass_rate"], b_dict["summary"]["total_tf_files_read"], b_dict["summary"]["reexpand_ok_count"]), (50.0, 2, 1))
+        self.assertEqual((a_dict["summary"]["pass_rate"], a_dict["summary"]["total_tf_files_read"], a_dict["summary"]["reexpand_ok_count"]), (100.0, 0, 2))
+
+        md = generate_comparison_markdown(b_dict, a_dict)
+        for expected in ("### 1. Executive Summary Scorecard", "### 2. Per-Case Comparison Table",
+                         "| **Pass Rate** | 1/2 (50.0%) | 2/2 (100.0%) | +50.0 pp |",
+                         "| **Total .tf Files Read** | 2 | 0 | -2 (-100.0%) |",
+                         "| `case_10` | FAIL | PASS | 2 | 0 |"):
+            self.assertIn(expected, md)
+
+        b_path = self._write(os.path.join(self.repo, "before.json"), json.dumps(b_dict))
+        a_path = self._write(os.path.join(self.repo, "after.json"), json.dumps(a_dict))
+        md_out = os.path.join(self.repo, "out", "scorecard.md")
+        run_eval_script = os.path.join(REPO_ROOT, "tools", "run_eval.py")
+        proc = subprocess.run([sys.executable, run_eval_script, "--compare-json", b_path, a_path, "--markdown-output", md_out],
+                              capture_output=True, text=True, check=False)
+        self.assertEqual(proc.returncode, 0, f"Expected --compare-json CLI to exit 0: {proc.stderr}")
+        with open(md_out, encoding="utf-8") as f:
+            self.assertIn("Executive Summary Scorecard", f.read())
+
+        proc_bad = subprocess.run([sys.executable, run_eval_script, "--all", "--cases", "nonexistent_case_xyz"],
+                                  cwd=REPO_ROOT, capture_output=True, text=True, check=False)
+        self.assertEqual(proc_bad.returncode, 2)
+        self.assertIn("matched 0 cases", proc_bad.stderr)
+
+    def test_end_to_end_live_cli_execution_with_fake_gemini_binary(self):
+        fake_bin_dir = os.path.join(self.repo, "bin")
+        fake_gemini = self._write(
+            os.path.join(fake_bin_dir, "gemini"),
+            "#!/usr/bin/env python3\nimport json, sys\n"
+            "resp = 'PONG' if 'PONG' in ' '.join(sys.argv) else (\n"
+            "    '[PROPOSED REMEDIATION PLAN]\\n'\n"
+            "    '- Proposed Action / Command: ./gcluster deploy examples/hpc-slurm.yaml\\n'\n"
+            "    '- Confirmation Required: Reply \\'yes\\' to proceed.'\n)\n"
+            "print('YOLO mode is enabled.')\n"
+            "print(json.dumps({'response': resp, 'stats': {\n"
+            "    'models': {'gemini-2.5-pro': {'tokens': {'prompt': 500, 'candidates': 100, 'cached': 200, 'thoughts': 50, 'total': 650}}},\n"
+            "    'tools': {'totalCalls': 1, 'byName': {'run_shell_command': {'count': 1}}}}}))\n",
+        )
+        os.chmod(fake_gemini, 0o755)
+
+        root_gcluster = os.path.join(REPO_ROOT, "gcluster")
+        created_stub = not os.path.isfile(root_gcluster)
+        if created_stub:
+            self._write(root_gcluster, "#!/bin/sh\nexit 0\n")
+            os.chmod(root_gcluster, 0o755)
+
+        json_out = os.path.join(self.repo, "live-result.json")
+        env = {**os.environ, "PATH": fake_bin_dir + os.pathsep + os.environ.get("PATH", "")}
+        try:
+            proc = subprocess.run(
+                [sys.executable, os.path.join(REPO_ROOT, "tools", "run_eval.py"),
+                 "--skill", os.path.join(REPO_ROOT, "skills", "cluster-blueprint-assistant"),
+                 "--live", "--agent", "gemini", "--project", "test-live-proj",
+                 "--cases", "case_9", "--live-logs", os.path.join(self.repo, "live-logs"), "--json-output", json_out],
+                cwd=REPO_ROOT, env=env, capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(proc.returncode, 0, f"Live CLI run failed:\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
+            with open(json_out, encoding="utf-8") as jf:
+                s = json.load(jf)["summary"]
+            self.assertEqual((s["total_cases"], s["passed_cases"], s["total_tokens"], s["total_tool_calls"], s["total_tf_files_read"]), (1, 1, 650, 1, 0))
+        finally:
+            if created_stub and os.path.isfile(root_gcluster):
+                os.remove(root_gcluster)
 
 
 if __name__ == "__main__":
