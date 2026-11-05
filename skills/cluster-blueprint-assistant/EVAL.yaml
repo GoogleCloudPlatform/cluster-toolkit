@@ -20,6 +20,7 @@ cases:
 # CUJ 1: Customize an existing blueprint without touching module blocks.
 - name: case_1_customize_hpc_slurm_node_count_via_deployment_yaml
   description: "Agent finds hpc-slurm.yaml in the catalog and caps the compute partition at 4 nodes via the existing compute_node_count_dynamic_max var in deployment.yaml, validating with gcluster expand. Must not edit examples/hpc-slurm.yaml in place, module blocks, or generated Terraform."
+  target_blueprint: examples/hpc-slurm.yaml
   prompt: >
     Set up examples/hpc-slurm.yaml for project my-proj with at most 4 compute
     nodes and validate the configuration.
@@ -45,6 +46,7 @@ cases:
 # tracked template must not be edited.
 - name: case_1b_storage_gke_debug_pool_via_deployment_yaml
   description: "Agent sets the storage-gke debug pool to 4 nodes using the pool-prefixed var in deployment.yaml only; it must not edit examples/storage-gke.yaml in place or use the bare gke-node-pool input name, which would be injected into every pool."
+  target_blueprint: examples/storage-gke.yaml
   prompt: >
     Set the debug node pool in examples/storage-gke.yaml to 4 nodes for
     project my-proj and validate it.
@@ -68,7 +70,7 @@ cases:
 - name: case_1c_hardware_named_partition_machine_type_requires_copy
   description: "Agent recognises that the ml-slurm g2 partition has no machine_type var (hardware-named partition) and copies the blueprint to a new file with ai_assisted: true rather than editing examples/ml-slurm.yaml in place."
   prompt: >
-    Run the g2 partition of examples/ml-slurm.yaml on g4-standard-4 instead.
+    Run the g2 partition of examples/ml-slurm.yaml on g4-standard-48 instead.
   expect_keywords_all:
   - "ai_assisted"
   expect_keywords_any:
@@ -86,6 +88,7 @@ cases:
 # matches a module input is silently injected into every module lacking it.
 - name: case_1d_only_catalog_vars_in_deployment_yaml
   description: "Agent uses the prefixed vars compute_machine_type / compute_node_count_dynamic_max from the catalog entry; it must not write the bare module inputs machine_type or node_count_dynamic_max into deployment.yaml (machine_type would silently apply to slurm_controller), and must not edit examples/hpc-slurm.yaml in place."
+  target_blueprint: examples/hpc-slurm.yaml
   prompt: >
     Make the compute partition of examples/hpc-slurm.yaml use machine type
     c2-standard-30 with up to 8 nodes, project my-proj.
@@ -110,6 +113,7 @@ cases:
 # tracked template, and must leave the other partitions on-demand.
 - name: case_1e_spot_via_partition_prefixed_var
   description: "Agent sets compute_enable_spot_vm: true in deployment.yaml only; it never writes the bare module input enable_spot_vm, never copies or edits examples/hpc-slurm.yaml, and does not touch debug_/h3_enable_spot_vm."
+  target_blueprint: examples/hpc-slurm.yaml
   prompt: >
     Make the compute partition of examples/hpc-slurm.yaml use Spot VMs,
     project my-proj.
@@ -289,3 +293,223 @@ cases:
   - "--auto-approve"
   - "terraform apply"
   - "gcluster destroy"
+
+# CUJ 4 (graph wiring): missing use: link & private_service_access hint recovery.
+- name: case_10_missing_use_and_private_service_access_hint
+  description: "Agent runs gcluster expand on examples/broken-lustre-gke.yaml, reads the missing private_vpc_connection_peering hint, adds private_service_access to lustre's use: list, and re-validates without reading any .tf files."
+  target_blueprint: examples/broken-lustre-gke.yaml
+  prompt: >
+    Fix the validation error in examples/broken-lustre-gke.yaml for project
+    my-proj so that ./gcluster expand succeeds. Do not read any .tf files
+    under modules/.
+  live_setup:
+  - |
+    cat <<'EOF' > examples/broken-lustre-gke.yaml
+    ---
+    blueprint_name: broken-lustre-gke
+    ai_assisted: true
+    vars:
+      project_id: {project}
+      deployment_name: lustre-gke-test
+      region: us-central1
+      zone: us-central1-a
+    deployment_groups:
+    - group: primary
+      modules:
+      - id: network
+        source: modules/network/vpc
+      - id: private_service_access
+        source: modules/network/private-service-access
+        use: [network]
+      - id: lustre
+        source: modules/file-system/managed-lustre
+        use: [network]
+        settings:
+          name: scratch-lustre
+          local_mount: /mnt/lustre
+          remote_mount: scratch
+          size_gib: 18000
+          per_unit_storage_throughput: 1000
+    EOF
+  expect_keywords_all:
+  - "private_service_access"
+  - "use"
+  expect_keywords_any:
+  - "gcluster expand"
+  - "broken-lustre-gke.yaml"
+  forbidden_commands:
+  - "variables.tf"
+  - "outputs.tf"
+  - "main.tf"
+  - "terraform apply"
+  - "gcluster destroy"
+  - "rm -rf"
+
+# CUJ 4 (batched metadata validators): fix GKE node pool & Managed Lustre validator errors in one pass.
+- name: case_11_batched_metadata_validators_gke_and_lustre
+  description: "Agent repairs multiple batched metadata.yaml validator errors across gke-node-pool and managed-lustre in examples/broken-g4-pool.yaml and validates with gcluster expand without reading any .tf files."
+  target_blueprint: examples/broken-g4-pool.yaml
+  prompt: >
+    examples/broken-g4-pool.yaml fails validation in project my-proj with
+    multiple GKE node pool and Managed Lustre errors. Fix all of the
+    validator errors in examples/broken-g4-pool.yaml (use Spot VMs as the
+    consumption model, 2 threads per core, COMPACT placement, AS_NEEDED
+    maintenance, 250 MB/s/TiB Lustre throughput, and gs://my-bucket/path)
+    and verify with ./gcluster expand without reading any .tf files.
+  live_setup:
+  - |
+    cat <<'EOF' > examples/broken-g4-pool.yaml
+    ---
+    blueprint_name: broken-g4-pool
+    ai_assisted: true
+    vars:
+      project_id: {project}
+      deployment_name: g4-pool-test
+      region: us-central1
+      zone: us-central1-a
+    deployment_groups:
+    - group: primary
+      modules:
+      - id: network
+        source: modules/network/vpc
+      - id: private_service_access
+        source: modules/network/private-service-access
+        use: [network]
+      - id: gke_cluster
+        source: modules/scheduler/gke-cluster
+        use: [network]
+      - id: gpu_pool
+        source: modules/compute/gke-node-pool
+        use: [gke_cluster]
+        settings:
+          machine_type: g2-standard-4
+          zones: [us-central1-a]
+          placement_policy:
+            type: COLLOCATED
+          threads_per_core: 4
+          host_maintenance_interval: WEEKLY
+          spot: true
+          enable_flex_start: true
+          reservation_affinity:
+            consume_reservation_type: SPECIFIC_RESERVATION
+            specific_reservations:
+            - name: res-1
+      - id: lustre
+        source: modules/file-system/managed-lustre
+        use: [network, private_service_access]
+        settings:
+          name: scratch-lustre
+          local_mount: /mnt/lustre
+          remote_mount: scratch
+          size_gib: 18000
+          per_unit_storage_throughput: 300
+          import_gcs_bucket_uri: /my-bucket/path
+    EOF
+  expect_keywords_all:
+  - "COMPACT"
+  - "AS_NEEDED"
+  - "gs://my-bucket/path"
+  expect_keywords_any:
+  - "250"
+  - "threads_per_core"
+  - "gcluster expand"
+  forbidden_commands:
+  - "variables.tf"
+  - "outputs.tf"
+  - "main.tf"
+  - "-l IGNORE"
+  - "--validation-level IGNORE"
+  - "terraform apply"
+  - "gcluster destroy"
+  - "rm -rf"
+
+# CUJ 4 (Slurm topology & reservation migration): fix nodeset/partition wiring and DWS Flex conflict.
+- name: case_12_slurm_topology_and_reservation_validation
+  description: "Agent repairs Slurm v6 nodeset/partition wiring and migrates compute_nodeset off a conflicting reservation_name onto DWS Flex Start with ANY_SINGLE_ZONE and lowercase partition_name in examples/broken-slurm-topology.yaml without reading any .tf files."
+  target_blueprint: examples/broken-slurm-topology.yaml
+  prompt: >
+    examples/broken-slurm-topology.yaml fails validation in project my-proj.
+    Migrate compute_nodeset off the stale reservation onto DWS Flex Start
+    with ANY_SINGLE_ZONE, rename the partition to lowercase 'compute', wire
+    compute_nodeset into compute_partition, and validate with ./gcluster
+    expand without reading any .tf files.
+  live_setup:
+  - |
+    cat <<'EOF' > examples/broken-slurm-topology.yaml
+    ---
+    blueprint_name: broken-slurm-topology
+    ai_assisted: true
+    vars:
+      project_id: {project}
+      deployment_name: slurm-topo-test
+      region: us-central1
+      zone: us-central1-a
+    deployment_groups:
+    - group: primary
+      modules:
+      - id: network
+        source: modules/network/vpc
+      - id: compute_nodeset
+        source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+        use: [network]
+        settings:
+          machine_type: c2-standard-60
+          node_count_dynamic_max: 4
+          enable_placement: false
+          dws_flex:
+            enabled: true
+          reservation_name: stale-res-1
+          zone_target_shape: BALANCED
+      - id: compute_partition
+        source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+        settings:
+          partition_name: Compute_1
+      - id: slurm_controller
+        source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+        use: [network, compute_partition]
+    EOF
+  expect_keywords_all:
+  - "compute_nodeset"
+  - "ANY_SINGLE_ZONE"
+  - "compute"
+  expect_keywords_any:
+  - "dws_flex"
+  - "reservation_name"
+  - "gcluster expand"
+  forbidden_commands:
+  - "variables.tf"
+  - "outputs.tf"
+  - "main.tf"
+  - "-l IGNORE"
+  - "--validation-level IGNORE"
+  - "terraform apply"
+  - "gcluster destroy"
+  - "rm -rf"
+
+# CUJ 1 (hardware-locked GKE A3 HighGPU): customize via deployment.yaml only without copying or editing template.
+- name: case_13_hardware_locked_a3_highgpu_customization
+  description: "Agent customizes hardware-locked examples/gke-a3-highgpu/gke-a3-highgpu.yaml via an untracked deployment.yaml (static_node_count: 4, spot: true, authorized_cidr: 10.0.0.0/8, zone: us-central1-a) and validates with gcluster expand without modifying or copying the template."
+  target_blueprint: examples/gke-a3-highgpu/gke-a3-highgpu.yaml
+  prompt: >
+    Customize examples/gke-a3-highgpu/gke-a3-highgpu.yaml for project
+    my-proj in zone us-central1-a with 4 static nodes, Spot VMs enabled,
+    and authorized_cidr 10.0.0.0/8 using a new deployment.yaml file, and
+    validate it with ./gcluster expand. Do not modify or copy the
+    hardware-locked blueprint template.
+  expect_keywords_all:
+  - "deployment.yaml"
+  - "static_node_count"
+  - "spot"
+  - "10.0.0.0/8"
+  expect_keywords_any:
+  - "gcluster expand"
+  - "authorized_cidr"
+  forbidden_commands:
+  - "> examples/gke-a3-highgpu/gke-a3-highgpu.yaml"
+  - ">> examples/gke-a3-highgpu/gke-a3-highgpu.yaml"
+  - "tee examples/gke-a3-highgpu/gke-a3-highgpu.yaml"
+  - "variables.tf"
+  - "outputs.tf"
+  - "terraform apply"
+  - "gcluster destroy"
+  - "rm -rf"

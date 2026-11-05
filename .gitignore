@@ -81,3 +81,4 @@ GEMINI.md
 .agents/
 live-logs/
 live-eval-report.md
+.live-shims/
