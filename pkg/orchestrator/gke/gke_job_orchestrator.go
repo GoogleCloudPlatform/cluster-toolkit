@@ -343,9 +343,9 @@ func (g *GKEOrchestrator) checkUnscheduledPods(ns, jobsetName, selector string) 
 			continue
 		}
 		podName := parts[0]
-		jobPods["pod/"+podName] = true
 		scheduledStatus := parts[2]
 		if scheduledStatus == "False" {
+			jobPods["pod/"+podName] = true
 			var reason, msg string
 			if len(parts) > 3 {
 				reason = parts[3]
@@ -637,7 +637,7 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 func (g *GKEOrchestrator) autoDetectCPUNodePool() string {
 	var fallback string
 	for _, np := range g.clusterDesc.NodePools {
-		if (np.Name == "cpu-np" || np.Name == "pathways-np") && len(np.Config.Accelerators) == 0 && !g.isSystemPool(np) {
+		if (np.Name == "cpu-np" || np.Name == "pathways-np") && len(np.Config.Accelerators) == 0 && !config.IsTPU(np.Config.MachineType) && !g.isSystemPool(np) {
 			if g.getNodeCount(np) > 0 {
 				return np.Name
 			}
