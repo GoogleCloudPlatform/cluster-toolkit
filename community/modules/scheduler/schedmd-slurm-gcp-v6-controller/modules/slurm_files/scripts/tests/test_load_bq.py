@@ -39,8 +39,14 @@ def reset_load_bq_globals():
         ("projects/123456789/zones/europe-west9-a", "europe-west9"),
         ("https://www.googleapis.com/compute/v1/projects/my-proj/zones/asia-northeast1-b", "asia-northeast1"),
         ("us-central1-c", "us-central1"),
+        ("  us-central1-c  ", "us-central1"),
+        ("us-east1-b/", "us-east1"),
         ("", None),
+        (None, None),
         ("global", None),
+        ("-a", None),
+        ("us-central1-", None),
+        ("projects/my-proj", None),
     ],
 )
 def test_get_controller_region(raw_zone, expected_region):
@@ -60,14 +66,18 @@ def test_get_controller_region(raw_zone, expected_region):
 def test_get_controller_region_exception(exc):
     lkp = Mock()
     type(lkp).zone = PropertyMock(side_effect=exc)
-    with patch.object(load_bq, "lookup", return_value=lkp):
+    with patch.object(load_bq, "lookup", return_value=lkp), \
+         patch.object(util.log, "warning") as mock_warn:
         assert load_bq.get_controller_region() is None
+    mock_warn.assert_called_once()
 
 
 def test_init_table_existing_dataset():
     cfg = TstCfg(slurm_cluster_name="m22", project="my-proj")
     lkp = util.Lookup(cfg)
     mock_client = Mock()
+    mock_creds = Mock()
+    mock_opts = Mock()
     dataset_ref = bq.DatasetReference(project="my-proj", dataset_id="m22_job_data")
     existing_ds = bq.Dataset(dataset_ref)
     mock_client.get_dataset.return_value = existing_ds
@@ -77,14 +87,23 @@ def test_init_table_existing_dataset():
     mock_client.update_table.return_value = mock_table
 
     with patch.object(load_bq, "lookup", return_value=lkp), \
-         patch.object(load_bq.bq, "Client", return_value=mock_client), \
-         patch.object(util, "default_credentials", return_value=Mock()), \
-         patch.object(util, "create_client_options", return_value=Mock()):
+         patch.object(load_bq.bq, "Client", return_value=mock_client) as client_cls, \
+         patch.object(util, "default_credentials", return_value=mock_creds), \
+         patch.object(util, "create_client_options", return_value=mock_opts):
         load_bq.init_table()
 
+    client_cls.assert_called_once_with(
+        project="my-proj",
+        credentials=mock_creds,
+        client_options=mock_opts,
+    )
     mock_client.get_dataset.assert_called_once_with(dataset_ref)
     mock_client.create_dataset.assert_not_called()
     mock_client.create_table.assert_called_once()
+    table_arg = mock_client.create_table.call_args.args[0]
+    assert isinstance(table_arg, bq.Table)
+    assert table_arg.reference == bq.TableReference(dataset_ref, "jobs_m22")
+    assert mock_client.create_table.call_args.kwargs == {"exists_ok": True}
     mock_client.get_table.assert_called_once()
     mock_client.update_table.assert_called_once_with(mock_table, ["schema"])
     assert load_bq.dataset is existing_ds
@@ -105,12 +124,13 @@ def test_init_table_missing_dataset_sets_controller_region():
     mock_client.update_table.return_value = mock_table
 
     with patch.object(load_bq, "lookup", return_value=lkp), \
-         patch.object(load_bq, "get_controller_region", return_value="europe-west9"), \
+         patch.object(util, "instance_metadata", return_value="projects/my-proj/zones/europe-west9-a") as mock_meta, \
          patch.object(load_bq.bq, "Client", return_value=mock_client), \
          patch.object(util, "default_credentials", return_value=Mock()), \
          patch.object(util, "create_client_options", return_value=Mock()):
         load_bq.init_table()
 
+    mock_meta.assert_called_once_with("zone")
     mock_client.get_dataset.assert_called_once_with(dataset_ref)
     mock_client.create_dataset.assert_called_once()
     ds_arg = mock_client.create_dataset.call_args.args[0]
@@ -136,7 +156,7 @@ def test_init_table_missing_dataset_when_region_is_none():
     mock_client.update_table.return_value = mock_table
 
     with patch.object(load_bq, "lookup", return_value=lkp), \
-         patch.object(load_bq, "get_controller_region", return_value=None), \
+         patch.object(util, "instance_metadata", side_effect=util.MetadataNotFoundError("no metadata")), \
          patch.object(load_bq.bq, "Client", return_value=mock_client), \
          patch.object(util, "default_credentials", return_value=Mock()), \
          patch.object(util, "create_client_options", return_value=Mock()):
@@ -148,6 +168,22 @@ def test_init_table_missing_dataset_when_region_is_none():
     assert ds_arg.reference == dataset_ref
     assert ds_arg.location is None
     assert mock_client.create_dataset.call_args.kwargs == {"exists_ok": True}
+
+
+def test_init_table_get_dataset_forbidden_propagates():
+    cfg = TstCfg(slurm_cluster_name="m22", project="my-proj")
+    lkp = util.Lookup(cfg)
+    mock_client = Mock()
+    mock_client.get_dataset.side_effect = exceptions.Forbidden("org policy")
+
+    with patch.object(load_bq, "lookup", return_value=lkp), \
+         patch.object(load_bq.bq, "Client", return_value=mock_client), \
+         patch.object(util, "default_credentials", return_value=Mock()), \
+         patch.object(util, "create_client_options", return_value=Mock()):
+        with pytest.raises(exceptions.Forbidden):
+            load_bq.init_table()
+
+    mock_client.create_dataset.assert_not_called()
 
 
 def test_init_table_idempotent():
@@ -174,6 +210,11 @@ def test_init_table_idempotent():
     assert mock_client.get_dataset.call_count == 2
     for call_args in mock_client.get_dataset.call_args_list:
         assert call_args.args[0] == dataset_ref
+
+
+def test_bq_submit_uninitialized_raises():
+    with pytest.raises(RuntimeError, match="init_table"):
+        load_bq.bq_submit([{"job_id": "1"}])
 
 
 def test_main_disabled_exits_early():

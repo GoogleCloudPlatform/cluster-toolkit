@@ -179,7 +179,7 @@ Job = namedtuple("Job", job_schema.keys()) # type: ignore
 # ... see https://github.com/python/mypy/issues/848
 
 client: Optional[bq.Client] = None
-dataset: Any = None
+dataset: Optional[bq.Dataset] = None
 table: Optional[bq.Table] = None
 
 
@@ -240,12 +240,13 @@ def load_slurm_jobs(start, end):
 
 def get_controller_region() -> Optional[str]:
     try:
-        raw_zone = lookup().zone
-        if not raw_zone:
-            return None
-        zone_name = util.trim_self_link(raw_zone) if "/" in raw_zone else raw_zone
-        return zone_name.rsplit("-", 1)[0] if "-" in zone_name else None
-    except Exception:
+        zone_name = util.trim_self_link(lookup().zone or "")
+        region, _, subzone = zone_name.rpartition("-")
+        if region and subzone and "-" in region:
+            return region
+        return None
+    except Exception as e:
+        util.log.warning(f"Failed to determine controller region: {e}")
         return None
 
 
@@ -257,15 +258,8 @@ def init_table():
             credentials=util.default_credentials(),
             client_options=util.create_client_options(util.ApiEndpoint.BQ),
         )
-    if dataset is None:
-        dataset_id = f"{lookup().cfg.slurm_cluster_name}_job_data"
-        dataset = bq.DatasetReference(project=lookup().project, dataset_id=dataset_id)
-    dataset_ref = dataset.reference if isinstance(dataset, bq.Dataset) else dataset
-    if table is None:
-        table = bq.Table(
-            bq.TableReference(dataset_ref, f"jobs_{lookup().cfg.slurm_cluster_name}"),
-            schema_fields,
-        )
+    dataset_id = f"{lookup().cfg.slurm_cluster_name}_job_data"
+    dataset_ref = bq.DatasetReference(project=lookup().project, dataset_id=dataset_id)
     try:
         dataset = client.get_dataset(dataset_ref)
     except exceptions.NotFound:
@@ -273,8 +267,11 @@ def init_table():
         region = get_controller_region()
         if region:
             ds.location = region
-        dataset = client.create_dataset(ds, exists_ok=True)  # type: ignore
-    table = client.create_table(table, exists_ok=True)
+        dataset = client.create_dataset(ds, exists_ok=True)
+    table_ref = bq.TableReference(
+        dataset_ref, f"jobs_{lookup().cfg.slurm_cluster_name}"
+    )
+    table = client.create_table(bq.Table(table_ref, schema_fields), exists_ok=True)
     until_found = retry.Retry(predicate=retry.if_exception_type(exceptions.NotFound))
     table = client.get_table(table, retry=until_found)
     # cannot add required fields to an existing schema
@@ -294,8 +291,12 @@ def purge_job_idx_cache():
 
 
 def bq_submit(jobs):
+    if client is None or table is None:
+        raise RuntimeError(
+            "BigQuery client/table not initialized; call init_table() first"
+        )
     try:
-        result = client.insert_rows(table, jobs)  # type: ignore
+        result = client.insert_rows(table, jobs)
     except exceptions.NotFound as e:
         print(f"failed to upload job data, table not yet found: {e}")
         raise e
