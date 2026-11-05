@@ -145,7 +145,7 @@ steps:
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
-              source /workspace/tools/cloud-build/find_available_zone.sh
+              source /workspace/tools/cloud-build/wait_for_available_zone.sh
               if [ -z "\$${ZONE:-}" ]; then
                 echo "ERROR: No available zone found." >&2
                 exit 1
