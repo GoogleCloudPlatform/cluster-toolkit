@@ -732,7 +732,7 @@ func (s *MySuite) TestReservationExistsValidatorWithReservationBlocksAndSubBlock
 	newComputeService = func(ctx context.Context) (*compute.Service, error) {
 		return mockComputeService(func(w http.ResponseWriter, r *http.Request) {
 			parts := strings.Split(r.URL.Path, "/")
-			if len(parts) >= 7 && parts[1] == "projects" && parts[3] == "zones" && parts[5] == "reservations" {
+			if len(parts) == 7 && parts[1] == "projects" && parts[3] == "zones" && parts[5] == "reservations" {
 				capturedProject = parts[2]
 				capturedZone = parts[4]
 				capturedName = parts[6]
