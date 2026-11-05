@@ -242,8 +242,14 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 	allContainers := !mainOnly
 	if opts.Follow {
 		logging.Info("Streaming logs for job '%s'...", name)
-		if _, err := g.fetchLogsWithRetry(foundNamespace, name, selector, allContainers, streamCount, 1); err != nil {
+		res, err := g.fetchLogsWithRetry(foundNamespace, name, selector, allContainers, streamCount, 1)
+		if err != nil {
 			return "", err
+		}
+		if strings.TrimSpace(res.Stdout) == "" {
+			if schedMsg := g.checkUnscheduledPods(foundNamespace, name); schedMsg != "" {
+				logging.Warn("Job pods are waiting to be scheduled (no container logs available yet):\n%s", schedMsg)
+			}
 		}
 		if _, fresh, err := g.getJobPodStreams(foundNamespace, selector); err == nil {
 			streamCount = max(streamCount, fresh) // pods created while the probe waited
@@ -256,7 +262,7 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 		return "", err
 	}
 	if strings.TrimSpace(res.Stdout) == "" {
-		if schedMsg := g.checkUnscheduledPods(foundNamespace, name, selector); schedMsg != "" {
+		if schedMsg := g.checkUnscheduledPods(foundNamespace, name); schedMsg != "" {
 			return fmt.Sprintf("Job pods are waiting to be scheduled (no container logs available yet):\n%s", schedMsg), nil
 		}
 		return "Job exists but has no live logs available (it may have finished or failed to start pods)", nil
@@ -296,7 +302,7 @@ func (g *GKEOrchestrator) fetchLogsWithRetry(ns, jobsetName, selector string, al
 
 		if strings.Contains(res.Stderr, "is waiting to start") {
 			if i == 0 {
-				if schedMsg := g.checkUnscheduledPods(ns, jobsetName, selector); schedMsg != "" {
+				if schedMsg := g.checkUnscheduledPods(ns, jobsetName); schedMsg != "" {
 					logging.Warn("Job pods are waiting to be scheduled:\n%s", schedMsg)
 				} else {
 					logging.Info("Job containers are waiting to start (likely pulling images). Waiting...")
@@ -309,7 +315,7 @@ func (g *GKEOrchestrator) fetchLogsWithRetry(ns, jobsetName, selector string, al
 	}
 
 	var details []string
-	schedMsg := g.checkUnscheduledPods(ns, jobsetName, selector)
+	schedMsg := g.checkUnscheduledPods(ns, jobsetName)
 	if schedMsg != "" {
 		details = append(details, fmt.Sprintf("unscheduled pods:\n%s", schedMsg))
 	}
@@ -326,8 +332,8 @@ func (g *GKEOrchestrator) fetchLogsWithRetry(ns, jobsetName, selector string, al
 	return res, fmt.Errorf("timed out waiting for job to start; latest error: %s\n%s", res.Stderr, res.Stdout)
 }
 
-func (g *GKEOrchestrator) checkUnscheduledPods(ns, jobsetName, selector string) string {
-	res := g.kubectl("get", "pods", "-n", ns, "-l", selector, "-o", "jsonpath="+unscheduledPodsJSONPath)
+func (g *GKEOrchestrator) checkUnscheduledPods(ns, jobsetName string) string {
+	res := g.kubectl("get", "pods", "-n", ns, "-l", "jobset.sigs.k8s.io/jobset-name="+jobsetName, "-o", "jsonpath="+unscheduledPodsJSONPath)
 	if res.ExitCode != 0 {
 		return ""
 	}
@@ -656,6 +662,9 @@ func (g *GKEOrchestrator) validatePathwaysHeadNodePool(poolName, clusterName str
 	var availablePools []string
 	for _, np := range g.clusterDesc.NodePools {
 		if g.isSystemPool(np) {
+			if np.Name == poolName {
+				return fmt.Errorf("Pathways head node pool '%s' in cluster '%s' is a GKE system node pool. Specify a non-system CPU node pool using --pathways-head-np", poolName, clusterName)
+			}
 			continue
 		}
 		if len(np.Config.Accelerators) == 0 && !config.IsTPU(np.Config.MachineType) && g.getNodeCount(np) > 0 {
@@ -671,7 +680,10 @@ func (g *GKEOrchestrator) validatePathwaysHeadNodePool(poolName, clusterName str
 			return nil
 		}
 	}
-	return fmt.Errorf("Pathways head node pool '%s' not found in cluster '%s' (available node pools: %s). Specify an existing CPU node pool using --pathways-head-np", poolName, clusterName, strings.Join(availablePools, ", "))
+	if len(availablePools) > 0 {
+		return fmt.Errorf("Pathways head node pool '%s' not found in cluster '%s' (available node pools: %s). Specify an existing CPU node pool using --pathways-head-np", poolName, clusterName, strings.Join(availablePools, ", "))
+	}
+	return fmt.Errorf("Pathways head node pool '%s' not found in cluster '%s'. Specify an existing CPU node pool using --pathways-head-np", poolName, clusterName)
 }
 
 func (g *GKEOrchestrator) isSystemPool(np gkeJobNodePool) bool {
@@ -1835,7 +1847,7 @@ func (g *GKEOrchestrator) checkPodWarningEvents(ns string, jobPods map[string]bo
 		if len(fields) < 4 || !jobPods[fields[3]] {
 			continue
 		}
-		if strings.Contains(line, "Warning") || strings.Contains(line, "NotTriggerScaleUp") || strings.Contains(line, "FailedScheduling") {
+		if fields[1] == "Warning" || fields[2] == "NotTriggerScaleUp" || fields[2] == "FailedScheduling" {
 			matched = append(matched, line)
 		}
 	}
