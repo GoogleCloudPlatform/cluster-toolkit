@@ -120,10 +120,15 @@ func extractVariableValidationCondition(t *testing.T, varsFile, varName string) 
 		}
 		for _, sub := range blk.Body.Blocks {
 			if sub.Type == "validation" {
-				return sub.Body.Attributes["condition"].Expr
+				attr, ok := sub.Body.Attributes["condition"]
+				if !ok {
+					t.Fatalf("validation block in variable %s does not have a 'condition' attribute", varName)
+				}
+				return attr.Expr
 			}
 		}
 	}
+
 	t.Fatalf("could not find validation.condition for variable %s in %s", varName, varsFile)
 	return nil
 }
