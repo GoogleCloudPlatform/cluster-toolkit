@@ -140,7 +140,7 @@ func TestTelemetryDefaultsAndPodValidation(t *testing.T) {
 		t.Errorf("EffectiveTelemetryPort without sidecar = %d, want 0", got)
 	}
 	env := WithTelemetryEnv(map[string]string{"CUSTOM": "1"})
-	if env["TPU_RUNTIME_METRICS_PORTS"] != DefaultTPURuntimeMetricsPorts || env["CUSTOM"] != "1" {
+	if env["TPU_RUNTIME_METRICS_PORTS"] != defaultTPURuntimeMetricsPorts || env["CUSTOM"] != "1" {
 		t.Errorf("unexpected WithTelemetryEnv: %+v", env)
 	}
 	override := WithTelemetryEnv(map[string]string{"TPU_RUNTIME_METRICS_PORTS": "9999"})

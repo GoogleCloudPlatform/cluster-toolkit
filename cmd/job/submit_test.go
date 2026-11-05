@@ -1289,6 +1289,16 @@ func TestSubmitCmd_SkipPrereqsFalse_RunsChecks(t *testing.T) {
 		return &mockOrchestrator{}
 	}
 
+	// Never spawn the host's gcloud: the stub reports every local CLI as missing, so the checks fail
+	// deterministically and the recorded call proves they ran.
+	origExecute := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecute }()
+	var localCLICalls []string
+	shell.ExecuteCommandWithTimeout = func(_ time.Duration, name string, args ...string) shell.CommandResult {
+		localCLICalls = append(localCLICalls, name+" "+strings.Join(args, " "))
+		return shell.CommandResult{ExitCode: 1, Stderr: "not installed in test"}
+	}
+
 	_, err := executeCommand(JobCmd,
 		"submit",
 		"--name", "test-skip-false",
@@ -1301,11 +1311,12 @@ func TestSubmitCmd_SkipPrereqsFalse_RunsChecks(t *testing.T) {
 		// --skip-prereqs is false by default
 	)
 
-	// Since --skip-prereqs is false, the prerequisite checks will run.
-	// Since our MockStore state is empty, the CLI will try to run real gcloud checks
-	// which will fail either due to absence of gcloud or missing authentication in test env.
+	// --skip-prereqs is false and the store state is empty, so the prerequisite checks must run and fail.
 	if err == nil {
 		t.Fatalf("expected an error (prerequisite check failure) since --skip-prereqs is false/omitted, but got nil")
+	}
+	if !slices.Contains(localCLICalls, "gcloud version") {
+		t.Fatalf("prerequisite checks did not run the gcloud SDK check; local CLI calls: %v", localCLICalls)
 	}
 }
 

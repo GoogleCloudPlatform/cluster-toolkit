@@ -34,8 +34,8 @@ import (
 const (
 	// DefaultTelemetryCollectorPort is the default container port exposed by ai-telemetry-collector.
 	DefaultTelemetryCollectorPort = 8889
-	// DefaultTPURuntimeMetricsPorts lists the libtpu runtime metric ports exposed on TPU hosts.
-	DefaultTPURuntimeMetricsPorts = "8431,8432,8433,8434,8435,8436,8437,8438"
+	// defaultTPURuntimeMetricsPorts lists the libtpu runtime metric ports exposed on TPU hosts.
+	defaultTPURuntimeMetricsPorts = "8431,8432,8433,8434,8435,8436,8437,8438"
 	// TelemetryCollectorContainerName is the container name of the native ML Diagnostics collector sidecar.
 	TelemetryCollectorContainerName = "ai-telemetry-collector"
 	// TPUWorkloadNameLabel is the pod label used by cluster PodMonitors to group TPU metrics per workload.
@@ -226,7 +226,7 @@ func EffectiveTelemetryPort(collectorImage string, port int) int {
 // WithTelemetryEnv sets default TPU_RUNTIME_METRICS_PORTS unless already provided in userEnv.
 func WithTelemetryEnv(userEnv map[string]string) map[string]string {
 	merged := make(map[string]string, len(userEnv)+1)
-	merged["TPU_RUNTIME_METRICS_PORTS"] = DefaultTPURuntimeMetricsPorts
+	merged["TPU_RUNTIME_METRICS_PORTS"] = defaultTPURuntimeMetricsPorts
 	maps.Copy(merged, userEnv)
 	return merged
 }
