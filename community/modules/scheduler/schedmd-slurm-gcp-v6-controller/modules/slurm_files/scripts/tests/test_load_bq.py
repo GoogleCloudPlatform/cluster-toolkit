@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import pytest
-from mock import Mock, PropertyMock, patch
+from unittest.mock import Mock, PropertyMock, patch
 from google.api_core import exceptions
 from google.cloud import bigquery as bq
 
