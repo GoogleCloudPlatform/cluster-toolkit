@@ -241,21 +241,7 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 
 	allContainers := !mainOnly
 	if opts.Follow {
-		logging.Info("Streaming logs for job '%s'...", name)
-		res, err := g.fetchLogsWithRetry(foundNamespace, name, selector, allContainers, streamCount, 1)
-		if err != nil {
-			return "", err
-		}
-		if strings.TrimSpace(res.Stdout) == "" {
-			if schedMsg := g.checkUnscheduledPods(foundNamespace, name); schedMsg != "" {
-				logging.Warn("Job pods are waiting to be scheduled (no container logs available yet):\n%s", schedMsg)
-			}
-		}
-		if _, fresh, err := g.getJobPodStreams(foundNamespace, selector); err == nil {
-			streamCount = max(streamCount, fresh) // pods created while the probe waited
-		}
-		args := g.buildKubectlLogsArgs(foundNamespace, selector, allContainers, true, streamCount, -1)
-		return "", g.kubectlStream(args...)
+		return "", g.followJobLogs(foundNamespace, name, selector, allContainers, streamCount)
 	}
 	res, err := g.fetchLogsWithRetry(foundNamespace, name, selector, allContainers, streamCount, -1)
 	if err != nil {
@@ -268,6 +254,24 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 		return "Job exists but has no live logs available (it may have finished or failed to start pods)", nil
 	}
 	return res.Stdout, nil
+}
+
+func (g *GKEOrchestrator) followJobLogs(ns, name, selector string, allContainers bool, streamCount int) error {
+	logging.Info("Streaming logs for job '%s'...", name)
+	res, err := g.fetchLogsWithRetry(ns, name, selector, allContainers, streamCount, 1)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(res.Stdout) == "" {
+		if schedMsg := g.checkUnscheduledPods(ns, name); schedMsg != "" {
+			logging.Warn("Job pods are waiting to be scheduled (no container logs available yet):\n%s", schedMsg)
+		}
+	}
+	if _, fresh, err := g.getJobPodStreams(ns, selector); err == nil {
+		streamCount = max(streamCount, fresh) // pods created while the probe waited
+	}
+	args := g.buildKubectlLogsArgs(ns, selector, allContainers, true, streamCount, -1)
+	return g.kubectlStream(args...)
 }
 
 // buildKubectlLogsArgs leaves the container to kubectl unless allContainers is set. kubectl (1.24+) then reads the

@@ -4191,160 +4191,106 @@ func TestSubmitJob_MTCFastFailBeforeClusterCalls(t *testing.T) {
 func TestPopulateClusterMetadata_PathwaysHeadNodePoolPreflight(t *testing.T) {
 	setupMockMachineConfig(t)
 
-	t.Run("non-existent --pathways-head-np fails fast", func(t *testing.T) {
-		mockExec := NewMockExecutor(nil)
-		orc := newTestGKEOrchestrator(mockExec)
-		orc.clusterDesc = gkeCluster{
-			NodePools: []gkeJobNodePool{
-				{
-					Name:             "cpu-np",
-					InitialNodeCount: 1,
-					Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+	tests := []struct {
+		name         string
+		pools        []gkeJobNodePool
+		headNodePool string
+		wantErr      string
+		forbidErr    string
+	}{
+		{
+			name: "non-existent --pathways-head-np fails fast",
+			pools: []gkeJobNodePool{{
+				Name:             "cpu-np",
+				InitialNodeCount: 1,
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+			}},
+			headNodePool: "missing-pool",
+			wantErr:      "Pathways head node pool 'missing-pool' not found in cluster 'test-cluster' (available node pools: cpu-np)",
+		},
+		{
+			name: "non-existent --pathways-head-np omits available node pools when none qualify",
+			pools: []gkeJobNodePool{{
+				Name:             "tpu-np",
+				InitialNodeCount: 1,
+				Config:           gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+			}},
+			headNodePool: "missing-pool",
+			wantErr:      "Pathways head node pool 'missing-pool' not found in cluster 'test-cluster'.",
+			forbidErr:    "available node pools",
+		},
+		{
+			name: "system pool --pathways-head-np fails fast with system pool error",
+			pools: []gkeJobNodePool{{
+				Name:             "default-pool",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2-standard-8",
+					Taints:      []gkeTaint{{Key: "components.gke.io/gke-managed-components", Value: "true", Effect: "NoSchedule"}},
 				},
-			},
-		}
-		job := &orchestrator.JobDefinition{
-			ClusterName:     "test-cluster",
-			ClusterLocation: "us-central1-a",
-			IsPathwaysJob:   true,
-			Pathways:        orchestrator.PathwaysJobDefinition{HeadNodePool: "missing-pool"},
-		}
-		err := orc.populateClusterMetadata(job)
-		if err == nil {
-			t.Fatal("expected error for non-existent --pathways-head-np, got nil")
-		}
-		if !strings.Contains(err.Error(), "Pathways head node pool 'missing-pool' not found in cluster 'test-cluster' (available node pools: cpu-np)") {
-			t.Errorf("unexpected error message: %v", err)
-		}
-	})
+			}},
+			headNodePool: "default-pool",
+			wantErr:      "Pathways head node pool 'default-pool' in cluster 'test-cluster' is a GKE system node pool",
+		},
+		{
+			name: "non-CPU --pathways-head-np fails fast",
+			pools: []gkeJobNodePool{{
+				Name:             "tpu-np",
+				InitialNodeCount: 1,
+				Config:           gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+			}},
+			headNodePool: "tpu-np",
+			wantErr:      "Pathways head node pool 'tpu-np' in cluster 'test-cluster' is not a CPU node pool",
+		},
+		{
+			name: "0-node cpu-np with autoscaling disabled fails fast",
+			pools: []gkeJobNodePool{{
+				Name:             "cpu-np",
+				InitialNodeCount: 0,
+				Autoscaling:      gkeAutoscaling{Enabled: false},
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+			}},
+			wantErr: "Pathways head node pool 'cpu-np' in cluster 'test-cluster' has 0 nodes and autoscaling is disabled",
+		},
+	}
 
-	t.Run("non-existent --pathways-head-np omits available node pools when none qualify", func(t *testing.T) {
-		mockExec := NewMockExecutor(nil)
-		orc := newTestGKEOrchestrator(mockExec)
-		orc.clusterDesc = gkeCluster{
-			NodePools: []gkeJobNodePool{
-				{
-					Name:             "tpu-np",
-					InitialNodeCount: 1,
-					Config:           gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
-				},
-			},
-		}
-		job := &orchestrator.JobDefinition{
-			ClusterName:     "test-cluster",
-			ClusterLocation: "us-central1-a",
-			IsPathwaysJob:   true,
-			Pathways:        orchestrator.PathwaysJobDefinition{HeadNodePool: "missing-pool"},
-		}
-		err := orc.populateClusterMetadata(job)
-		if err == nil {
-			t.Fatal("expected error for non-existent --pathways-head-np, got nil")
-		}
-		if !strings.Contains(err.Error(), "Pathways head node pool 'missing-pool' not found in cluster 'test-cluster'.") {
-			t.Errorf("unexpected error message: %v", err)
-		}
-		if strings.Contains(err.Error(), "available node pools") {
-			t.Errorf("expected empty available node pools clause to be omitted, got: %v", err)
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+			orc.clusterDesc = gkeCluster{NodePools: tt.pools}
+			job := &orchestrator.JobDefinition{
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				IsPathwaysJob:   true,
+				Pathways:        orchestrator.PathwaysJobDefinition{HeadNodePool: tt.headNodePool},
+			}
+			err := orc.populateClusterMetadata(job)
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("unexpected error message: %v", err)
+			}
+			if tt.forbidErr != "" && strings.Contains(err.Error(), tt.forbidErr) {
+				t.Errorf("did not expect %q in error, got: %v", tt.forbidErr, err)
+			}
+		})
+	}
+}
 
-	t.Run("system pool --pathways-head-np fails fast with system pool error", func(t *testing.T) {
-		mockExec := NewMockExecutor(nil)
-		orc := newTestGKEOrchestrator(mockExec)
-		orc.clusterDesc = gkeCluster{
-			NodePools: []gkeJobNodePool{
-				{
-					Name:             "default-pool",
-					InitialNodeCount: 1,
-					Config: gkeNodePoolConfig{
-						MachineType: "n2-standard-8",
-						Taints:      []gkeTaint{{Key: "components.gke.io/gke-managed-components", Value: "true", Effect: "NoSchedule"}},
-					},
-				},
-			},
-		}
-		job := &orchestrator.JobDefinition{
-			ClusterName:     "test-cluster",
-			ClusterLocation: "us-central1-a",
-			IsPathwaysJob:   true,
-			Pathways:        orchestrator.PathwaysJobDefinition{HeadNodePool: "default-pool"},
-		}
-		err := orc.populateClusterMetadata(job)
-		if err == nil {
-			t.Fatal("expected error for system --pathways-head-np, got nil")
-		}
-		if !strings.Contains(err.Error(), "Pathways head node pool 'default-pool' in cluster 'test-cluster' is a GKE system node pool") {
-			t.Errorf("unexpected error message: %v", err)
-		}
-	})
-
-	t.Run("non-CPU --pathways-head-np fails fast", func(t *testing.T) {
-		mockExec := NewMockExecutor(nil)
-		orc := newTestGKEOrchestrator(mockExec)
-		orc.clusterDesc = gkeCluster{
-			NodePools: []gkeJobNodePool{
-				{
-					Name:             "tpu-np",
-					InitialNodeCount: 1,
-					Config:           gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
-				},
-			},
-		}
-		job := &orchestrator.JobDefinition{
-			ClusterName:     "test-cluster",
-			ClusterLocation: "us-central1-a",
-			IsPathwaysJob:   true,
-			Pathways:        orchestrator.PathwaysJobDefinition{HeadNodePool: "tpu-np"},
-		}
-		err := orc.populateClusterMetadata(job)
-		if err == nil {
-			t.Fatal("expected error for non-CPU --pathways-head-np, got nil")
-		}
-		if !strings.Contains(err.Error(), "Pathways head node pool 'tpu-np' in cluster 'test-cluster' is not a CPU node pool") {
-			t.Errorf("unexpected error message: %v", err)
-		}
-	})
-
-	t.Run("0-node cpu-np with autoscaling disabled fails fast", func(t *testing.T) {
-		mockExec := NewMockExecutor(nil)
-		orc := newTestGKEOrchestrator(mockExec)
-		orc.clusterDesc = gkeCluster{
-			NodePools: []gkeJobNodePool{
-				{
-					Name:             "cpu-np",
-					InitialNodeCount: 0,
-					Autoscaling:      gkeAutoscaling{Enabled: false},
-					Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
-				},
-			},
-		}
-		job := &orchestrator.JobDefinition{
-			ClusterName:     "test-cluster",
-			ClusterLocation: "us-central1-a",
-			IsPathwaysJob:   true,
-		}
-		err := orc.populateClusterMetadata(job)
-		if err == nil {
-			t.Fatal("expected error for 0-node head pool with autoscaling disabled, got nil")
-		}
-		if !strings.Contains(err.Error(), "Pathways head node pool 'cpu-np' in cluster 'test-cluster' has 0 nodes and autoscaling is disabled") {
-			t.Errorf("unexpected error message: %v", err)
-		}
-	})
+func TestPopulateClusterMetadata_PathwaysHeadNodePoolCapacity(t *testing.T) {
+	setupMockMachineConfig(t)
 
 	t.Run("scale-to-zero cpu-np with autoscaling enabled (min=0, max>0) succeeds and creates pathways-flavor", func(t *testing.T) {
-		mockExec := NewMockExecutor(nil)
-		orc := newTestGKEOrchestrator(mockExec)
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
 		orc.machineCapCache["n2-standard-16:us-central1-a"] = MachineTypeCap{GuestCpus: 16, MemoryMb: 65536}
 		orc.clusterDesc = gkeCluster{
-			NodePools: []gkeJobNodePool{
-				{
-					Name:             "cpu-np",
-					InitialNodeCount: 0,
-					Autoscaling:      gkeAutoscaling{Enabled: true, MinNodeCount: 0, MaxNodeCount: 16},
-					Config:           gkeNodePoolConfig{MachineType: "n2-standard-16"},
-				},
-			},
+			NodePools: []gkeJobNodePool{{
+				Name:             "cpu-np",
+				InitialNodeCount: 0,
+				Autoscaling:      gkeAutoscaling{Enabled: true, MinNodeCount: 0, MaxNodeCount: 16},
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-16"},
+			}},
 		}
 		job := &orchestrator.JobDefinition{
 			ClusterName:     "test-cluster",
@@ -4364,8 +4310,7 @@ func TestPopulateClusterMetadata_PathwaysHeadNodePoolPreflight(t *testing.T) {
 	})
 
 	t.Run("autoDetectCPUNodePool prefers pool with capacity over 0-node disabled pool", func(t *testing.T) {
-		mockExec := NewMockExecutor(nil)
-		orc := newTestGKEOrchestrator(mockExec)
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
 		orc.clusterDesc = gkeCluster{
 			NodePools: []gkeJobNodePool{
 				{
