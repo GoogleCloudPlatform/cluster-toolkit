@@ -189,7 +189,7 @@ To use this configuration file for automated deployment, follow these steps:
 1. Create a file called `config.yaml` (do not place inline `#` comments on value lines — `deploy.sh` parses values directly):
 
   ```yaml
-  deployment_name: MyDeployment
+  deployment_name: my-deployment
   project_id: my-project-id
   zone: us-west1-a
   # Optional fields: subnet_name, dns_hostname, ip_address, deployment_mode, repo_fork, repo_branch

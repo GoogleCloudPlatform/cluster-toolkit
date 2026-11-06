@@ -21,11 +21,11 @@ This creates a cluster of 8 compute VMs that are:
 * on the network defined by the `network1` module
 * of type c2-standard-60
 
-> **_NOTE:_** Simultaneous Multithreading (SMT) is deactivated by default
-> (threads_per_core=1), which means only the physical cores are visible on the
+> **_NOTE:_** Simultaneous Multithreading (SMT) is deactivated by default on compatible machine types
+> (`threads_per_core=0` by default, which resolves to `1` thread per physical core on SMT-capable machines and falls back to GCE defaults on unsupported types), meaning only the physical cores are visible on the
 > VM. With SMT disabled, a machine of type c2-standard-60 will only have the 30
-> physical cores visible. To change this, set `threads_per_core=2` under
-> settings.
+> physical cores visible. To enable SMT, set `threads_per_core: 2` under
+> `settings` (or `threads_per_core: null` to always use GCE defaults).
 
 ### VPC Networks
 
@@ -75,7 +75,7 @@ placement [guide][guide-link] and [api][api-link] documentation.
 Use the following settings for compact placement:
 
 ```yaml
-  ...
+  # ...
   settings:
     instance_count: 4
     machine_type: c2-standard-60
@@ -89,7 +89,7 @@ compactness is not obtainable, you can enforce this with the [`max_distance`
 setting](https://cloud.google.com/compute/docs/instances/use-compact-placement-policies):
 
 ```yaml
-  ...
+  # ...
   settings:
     instance_count: 4
     machine_type: c2-standard-60
@@ -101,7 +101,7 @@ setting](https://cloud.google.com/compute/docs/instances/use-compact-placement-p
 Use the following settings for spread placement:
 
 ```yaml
-  ...
+  # ...
   settings:
     instance_count: 4
     machine_type: n2-standard-4

@@ -5,7 +5,7 @@ scripts and tools that automate the installation, deployment, and certain
 operational aspects of [Slurm](https://slurm.schedmd.com/overview.html) on
 Google Cloud Platform. The Cluster Toolkit team has finished transitioning to
 Slurm-GCP v6 and has removed all v5 modules and blueprints. Slurm-GCP v6 is the
-only supported option for provisioning Slurm on Google Cloud.
+only supported option for GCE-based Slurm clusters on Google Cloud (for Kubernetes-backed Slurm clusters on GKE, see [`community/examples/hpc-slinky/hpc-slinky.yaml`](../community/examples/hpc-slinky/hpc-slinky.yaml) and [`community/examples/slurm-gke/slurm-gke.yaml`](../community/examples/slurm-gke/slurm-gke.yaml)).
 
 ### Major Changes in from Slurm GCP v5 to v6
 
@@ -23,13 +23,11 @@ only supported option for provisioning Slurm on Google Cloud.
 
 * Fewer dependencies in the deployment environment
 
-  Reconfiguration and compute node cleanup no longer require users to install local python dependencies in the deploy
-ent environment (where gcluster is called). This has allowed for these features to be enabled by default.
+  Reconfiguration and compute node cleanup no longer require users to install local python dependencies in the deployment environment (where gcluster is called). This has allowed for these features to be enabled by default.
 
 * Flexible node to partition relation
 
-  The v5 concept of "node-group" was replaced by "nodeset" to align with Slurm naming convention. Nodeset can be attr
-buted to multiple partitions, as well as partitions can include multiple nodesets.
+  The v5 concept of "node-group" was replaced by "nodeset" to align with Slurm naming convention. Nodeset can be attributed to multiple partitions, as well as partitions can include multiple nodesets.
 
 * Upgrade Slurm to 23.11
 * TPU v3, v4 support
