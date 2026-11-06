@@ -34,6 +34,7 @@ import (
 const (
 	blueprintLabel        = "ghpc_blueprint"
 	deploymentLabel       = "ghpc_deployment"
+	aiAssistedLabel       = "ghpc_ai_assisted"
 	GoogleProviderVersion = ">= 6.9.0, <= 8.8.0"
 )
 
@@ -761,6 +762,9 @@ func (bp *Blueprint) expandGlobalLabels() {
 			creator = creator[:63]
 		}
 		defaultsMap["ghpc_creator"] = cty.StringVal(creator)
+	}
+	if bp.AIAssisted {
+		defaultsMap[aiAssistedLabel] = cty.StringVal("true")
 	}
 	defaults := cty.ObjectVal(defaultsMap)
 

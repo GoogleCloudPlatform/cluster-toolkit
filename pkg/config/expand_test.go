@@ -577,6 +577,84 @@ func (s *zeroSuite) TestExpandGlobalLabels(c *C) {
 		})
 		c.Check(labelsVal, DeepEquals, expectedLabels)
 	}
+
+	{ // AIAssisted true injects ghpc_ai_assisted label
+		bp := Blueprint{
+			BlueprintName: "tree",
+			Vars:          NewDict(map[string]cty.Value{}),
+			AIAssisted:    true,
+		}
+		bp.expandGlobalLabels()
+		labelsVal := bp.Vars.Get("labels")
+
+		expectedLabels := cty.ObjectVal(map[string]cty.Value{
+			"ghpc_blueprint":   cty.StringVal("tree"),
+			"ghpc_deployment":  GlobalRef("deployment_name").AsValue(),
+			"ghpc_ai_assisted": cty.StringVal("true"),
+		})
+		c.Check(labelsVal, DeepEquals, expectedLabels)
+	}
+
+	{ // AIAssisted true with AddCreatorLabel true
+		bp := Blueprint{
+			BlueprintName:   "tree",
+			Vars:            NewDict(map[string]cty.Value{}),
+			AddCreatorLabel: true,
+			CreatorUsername: "testuser",
+			AIAssisted:      true,
+		}
+		bp.expandGlobalLabels()
+		labelsVal := bp.Vars.Get("labels")
+
+		expectedLabels := cty.ObjectVal(map[string]cty.Value{
+			"ghpc_blueprint":   cty.StringVal("tree"),
+			"ghpc_deployment":  GlobalRef("deployment_name").AsValue(),
+			"ghpc_creator":     cty.StringVal("testuser"),
+			"ghpc_ai_assisted": cty.StringVal("true"),
+		})
+		c.Check(labelsVal, DeepEquals, expectedLabels)
+	}
+
+	{ // AIAssisted true merges with existing user labels and respects user override
+		userLabels := cty.ObjectVal(map[string]cty.Value{
+			"env": cty.StringVal("prod"),
+		})
+		bp := Blueprint{
+			BlueprintName: "tree",
+			Vars: NewDict(map[string]cty.Value{
+				"deployment_name": cty.StringVal("my-cluster"),
+				"labels":          userLabels,
+			}),
+			AIAssisted: true,
+		}
+		bp.expandGlobalLabels()
+		evalVal, err := bp.Eval(bp.Vars.Get("labels"))
+		c.Assert(err, IsNil)
+
+		expectedEval := cty.ObjectVal(map[string]cty.Value{
+			"ghpc_blueprint":   cty.StringVal("tree"),
+			"ghpc_deployment":  cty.StringVal("my-cluster"),
+			"ghpc_ai_assisted": cty.StringVal("true"),
+			"env":              cty.StringVal("prod"),
+		})
+		c.Check(evalVal, DeepEquals, expectedEval)
+
+		overrideLabels := cty.ObjectVal(map[string]cty.Value{
+			"ghpc_ai_assisted": cty.StringVal("false"),
+		})
+		bpOverride := Blueprint{
+			BlueprintName: "tree",
+			Vars: NewDict(map[string]cty.Value{
+				"deployment_name": cty.StringVal("my-cluster"),
+				"labels":          overrideLabels,
+			}),
+			AIAssisted: true,
+		}
+		bpOverride.expandGlobalLabels()
+		evalOverride, err := bpOverride.Eval(bpOverride.Vars.Get("labels"))
+		c.Assert(err, IsNil)
+		c.Check(evalOverride.GetAttr("ghpc_ai_assisted"), DeepEquals, cty.StringVal("false"))
+	}
 }
 
 func (s *zeroSuite) TestCheckInputValueMatchesType_Panic(c *C) {

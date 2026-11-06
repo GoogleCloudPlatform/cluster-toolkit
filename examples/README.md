@@ -2373,6 +2373,7 @@ The Cluster Toolkit automatically sets reserved labels for monitoring and resour
 
 * `ghpc_blueprint`: The name of the blueprint the deployment was created from (can be overridden in `vars.labels` or module `settings.labels`)
 * `ghpc_deployment`: The name of the specific deployment (can be overridden in `vars.labels` or module `settings.labels`)
+* `ghpc_ai_assisted`: Set to `"true"` when `ai_assisted: true` is configured in the blueprint or deployment variables file (can be overridden in `vars.labels` or module `settings.labels`)
 * `ghpc_creator`: Set automatically to the sanitized account identity (e.g., `jdoe_google_com`) when deploying with a `@google.com` account (or when `--add-creator-label=true` is passed; disable with `--add-creator-label=false`)
 * `ghpc_module` and `ghpc_role`: Set inside each Terraform/Packer module's `locals` via `merge(var.labels, { ghpc_module = "...", ghpc_role = "..." })` (see below; because they are merged after `var.labels`, they cannot be overridden via `vars.labels`)
 
