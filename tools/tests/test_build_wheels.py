@@ -89,8 +89,12 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(bw.platform_tags("windows_amd64", "12.0"), ["win_amd64"])
         self.assertEqual(bw.platform_tags("linux_arm64", "12.0"),
                          ["manylinux2014_aarch64", "musllinux_1_2_aarch64"])
+        self.assertEqual(bw.platform_tags("darwin_arm64", "13"), ["macosx_13_0_arm64"])
         with self.assertRaises(ValueError):
             bw.platform_tags("solaris_sparc", "12.0")
+        for bad in ["12.0.1", "abc", "12.", ""]:
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                bw.platform_tags("darwin_arm64", bad)
 
 
 class TestGoVersion(_FakeRepo):
@@ -125,6 +129,10 @@ class TestBuildWheel(_FakeRepo):
         self.assertNotIn(f"{share}/examples/.DS_Store", names)
         for f in ["LICENSE", "METADATA", "WHEEL", "RECORD"]:
             self.assertIn(f"{WHEEL_NAME}-1.107.0.dist-info/{f}", names)
+
+    def test_entries_are_marked_unix(self):
+        with zipfile.ZipFile(self.build()) as z:
+            self.assertEqual({i.create_system for i in z.infolist()}, {3})
 
     def test_windows_binary_is_exe(self):
         with zipfile.ZipFile(self.build("windows_amd64")) as z:

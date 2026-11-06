@@ -135,8 +135,10 @@ def platform_tags(platform, macos_min):
     if platform in WINDOWS_TAGS:
         return WINDOWS_TAGS[platform]
     if platform in MACOS_ARCH:
-        major, _, minor = macos_min.partition(".")
-        return [f"macosx_{major}_{minor or 0}_{MACOS_ARCH[platform]}"]
+        m = re.match(r"^(\d+)(?:\.(\d+))?$", macos_min)
+        if not m:
+            raise ValueError(f"--macos-min must look like 12 or 12.0, got {macos_min!r}")
+        return [f"macosx_{m.group(1)}_{m.group(2) or 0}_{MACOS_ARCH[platform]}"]
     raise ValueError(
         f"unknown platform {platform!r}; expected one of {', '.join(PLATFORMS)}")
 
@@ -230,6 +232,7 @@ def build_wheel(name, version, platform, binary, out_dir, repo_root, macos_min):
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for p, d, mode in entries:
             info = zipfile.ZipInfo(p, date_time=ZIP_DATE_TIME)
+            info.create_system = 3  # UNIX, so the output is the same on any build OS
             info.external_attr = (0o100000 | mode) << 16
             info.compress_type = zipfile.ZIP_DEFLATED
             z.writestr(info, d)
