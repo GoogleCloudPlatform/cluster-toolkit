@@ -103,6 +103,9 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err := g.validateSubmitLocalPreflight(sm, job); err != nil {
 		return err
 	}
+	if job.Pathways.RunSPSWorkload != "" {
+		return g.runSPSWorkload(job)
+	}
 
 	if err := g.initializeJobSubmission(&job); err != nil {
 		return err
@@ -133,13 +136,8 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 
-	if job.DryRunManifest == "" {
-		g.printConsoleLinks(job)
-		if job.AwaitJobCompletion {
-			if err := g.awaitJobCompletion(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, job.Timeout); err != nil {
-				return err
-			}
-		}
+	if err := g.finishJobSubmission(job); err != nil {
+		return err
 	}
 	logging.Info("gcluster job submit workflow completed.")
 
@@ -180,6 +178,17 @@ func (g *GKEOrchestrator) validateSubmitLocalPreflight(sm *StorageManager, job o
 		return err
 	}
 	return k8s.ValidateCustomWorkloadTemplates(g.gkeCustomTemplatesPath, workloadTemplateName(job))
+}
+
+func (g *GKEOrchestrator) finishJobSubmission(job orchestrator.JobDefinition) error {
+	if job.DryRunManifest != "" {
+		return nil
+	}
+	g.printConsoleLinks(job)
+	if job.AwaitJobCompletion {
+		return g.awaitJobCompletion(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, job.Timeout)
+	}
+	return nil
 }
 
 // ListJobs retrieves a list of jobs in the GKE cluster.

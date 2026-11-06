@@ -396,6 +396,7 @@ func setupSubmitTestEnv(t *testing.T) {
 	gkeNapProvisioning = ""
 	gkeNapReservation = ""
 	envVars = nil
+	volumeStr = nil
 	pathwaysProxyEnv = nil
 	pathwaysServerEnv = nil
 	pathwaysWorkerEnv = nil
@@ -1957,4 +1958,157 @@ func assertCleanSecondSubmitRun(t *testing.T, second orchestrator.JobDefinition)
 	if second.TerminationGracePeriodSeconds != 30 {
 		t.Fatalf("--grace-period default did not reset on second run: %+v", second)
 	}
+}
+
+func TestSubmitCmd_RunSPSWorkload(t *testing.T) {
+	t.Run("terminal mode succeeds without compute-type, gcs-location, or image", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+			return mockOrc
+		}
+
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-run-sps-workload", "sps-v5p",
+			"--name", "sps-client-local",
+			"--command", "python3 train.py",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+		)
+		if err != nil {
+			t.Fatalf("command failed with error: %v", err)
+		}
+		if got := mockOrc.SubmittedJob.Pathways.RunSPSWorkload; got != "sps-v5p" {
+			t.Errorf("RunSPSWorkload = %q, want %q", got, "sps-v5p")
+		}
+		if got := mockOrc.SubmittedJob.ImageName; got != "" {
+			t.Errorf("ImageName = %q, want empty", got)
+		}
+		if got := mockOrc.SubmittedJob.MaxRestarts; got != 0 {
+			t.Errorf("MaxRestarts = %d, want 0", got)
+		}
+	})
+
+	t.Run("in-cluster mode succeeds with image and without compute-type or gcs-location", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+			return mockOrc
+		}
+
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-run-sps-workload", "sps-v5p-pathways-head-0-0.sps-v5p:29001",
+			"--name", "sps-client-cluster",
+			"--image", "us-docker.pkg.dev/my-project/my-repo/my-image:tag",
+			"--command", "python3 train.py",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+		)
+		if err != nil {
+			t.Fatalf("command failed with error: %v", err)
+		}
+		if got := mockOrc.SubmittedJob.Pathways.RunSPSWorkload; got != "sps-v5p-pathways-head-0-0.sps-v5p:29001" {
+			t.Errorf("RunSPSWorkload = %q, want endpoint", got)
+		}
+		if got := mockOrc.SubmittedJob.ImageName; got != "us-docker.pkg.dev/my-project/my-repo/my-image:tag" {
+			t.Errorf("ImageName = %q, want image", got)
+		}
+	})
+}
+
+func TestSubmitCmd_RunSPSWorkload_Validation(t *testing.T) {
+	t.Run("rejects pathways-run-sps-workload without pathways flag", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways-run-sps-workload", "sps-v5p",
+			"--name", "sps-client",
+			"--command", "python3 train.py",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+		)
+		if err == nil || !strings.Contains(err.Error(), "pathways flags specified but --pathways flag is missing") {
+			t.Errorf("got err = %v, want missing --pathways error", err)
+		}
+	})
+
+	t.Run("rejects pathways-run-sps-workload with pathways-deploy-sps or pathways-headless", func(t *testing.T) {
+		for _, conflictFlag := range []string{"--pathways-deploy-sps", "--pathways-headless"} {
+			setupSubmitTestEnv(t)
+			_, err := executeCommand(JobCmd,
+				"submit",
+				"--pathways",
+				"--pathways-run-sps-workload", "sps-v5p",
+				conflictFlag,
+				"--name", "sps-client",
+				"--command", "python3 train.py",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+			)
+			if err == nil || !strings.Contains(err.Error(), "--pathways-run-sps-workload cannot be used with --pathways-deploy-sps or --pathways-headless") {
+				t.Errorf("for %s, got err = %v, want mutual exclusion error", conflictFlag, err)
+			}
+		}
+	})
+
+	t.Run("rejects pathways-run-sps-workload without command", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-run-sps-workload", "sps-v5p",
+			"--name", "sps-client",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+		)
+		if err == nil || !strings.Contains(err.Error(), `required flag "command" not set`) {
+			t.Errorf("got err = %v, want required flag \"command\" not set error", err)
+		}
+	})
+
+	t.Run("rejects mount in terminal mode without image", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		t.Cleanup(func() { volumeStr = nil })
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-run-sps-workload", "sps-v5p",
+			"--name", "sps-client",
+			"--command", "python3 train.py",
+			"--mount", "gs://my-bucket;/mnt/data",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+		)
+		if err == nil || !strings.Contains(err.Error(), "--mount requires --image or --base-image when used with --pathways-run-sps-workload") {
+			t.Errorf("got err = %v, want --mount requires --image error", err)
+		}
+	})
+
+	t.Run("rejects compute-type and server flags with pathways-run-sps-workload", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-run-sps-workload", "sps-v5p",
+			"--compute-type", "ct6e-standard-4t",
+			"--name", "sps-client",
+			"--command", "python3 train.py",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+		)
+		if err == nil || !strings.Contains(err.Error(), "--pathways-run-sps-workload connects to an existing SPS instance and cannot be used with --compute-type") {
+			t.Errorf("got err = %v, want unsupported --compute-type error", err)
+		}
+	})
 }
