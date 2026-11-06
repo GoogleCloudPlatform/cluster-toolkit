@@ -19,10 +19,14 @@ package telemetry
 import (
 	"encoding/json"
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/orchestrator"
 	"time"
 )
 
 func (c *Collector) Execute(exitCode int, err error) {
+	if orchestrator.IsKnownAirGapped() {
+		return
+	}
 	c.CollectMetrics(exitCode, err)
 	concordEvent := c.BuildConcordEvent()
 	payload := BuildPayload(concordEvent)

@@ -17,8 +17,11 @@ package telemetry
 import (
 	"encoding/json"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"hpc-toolkit/pkg/orchestrator"
 
 	"github.com/spf13/cobra"
 )
@@ -86,6 +89,9 @@ func TestBuildPayload(t *testing.T) {
 }
 
 func TestExecute(t *testing.T) {
+	t.Setenv(orchestrator.AirGappedEnvVar, "")
+	orchestrator.SetDefaultAirGappedState(false)
+
 	// Save the original transport and restore it after tests run
 	// to prevent Flush() from triggering real external network requests
 	origTransport := http.DefaultTransport
@@ -107,4 +113,42 @@ func TestExecute(t *testing.T) {
 	// Trigger Execute. Since Execute doesn't return anything, we verify
 	// it functions without panicking or failing.
 	c.Execute(0, nil)
+}
+
+func TestExecute_AirGappedSkipsClearcut(t *testing.T) {
+	origTransport := http.DefaultTransport
+	t.Cleanup(func() {
+		http.DefaultTransport = origTransport
+		orchestrator.SetDefaultAirGappedState(false)
+	})
+
+	var calls atomic.Int32
+	http.DefaultTransport = &telemetryMockTransport{
+		roundTripFunc: func(req *http.Request) (*http.Response, error) {
+			calls.Add(1)
+			return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+		},
+	}
+
+	cmd := &cobra.Command{Use: "test-airgapped"}
+
+	t.Setenv(orchestrator.AirGappedEnvVar, "true")
+	orchestrator.SetDefaultAirGappedState(false)
+	NewCollector(cmd, nil, SOURCE).Execute(0, nil)
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("expected 0 Clearcut HTTP calls when GCLUSTER_AIR_GAPPED=true, got %d", got)
+	}
+
+	t.Setenv(orchestrator.AirGappedEnvVar, "")
+	orchestrator.SetDefaultAirGappedState(true)
+	NewCollector(cmd, nil, SOURCE).Execute(0, nil)
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("expected 0 Clearcut HTTP calls when SetDefaultAirGapped is active, got %d", got)
+	}
+
+	t.Setenv(orchestrator.AirGappedEnvVar, "false")
+	NewCollector(cmd, nil, SOURCE).Execute(0, nil)
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("expected 1 Clearcut HTTP call when GCLUSTER_AIR_GAPPED=false overrides default, got %d", got)
+	}
 }

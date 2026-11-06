@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"io"
 	"os"
 	"path/filepath"
@@ -40,7 +41,7 @@ type inspectWriter struct {
 // runAndLog pins kubectl to the chosen context before logging so the report shows the command that ran.
 func (w *inspectWriter) runAndLog(description string, command string, args ...string) {
 	if command == "kubectl" {
-		args = withKubeContext(w.orc.kubeContext, args)
+		args = k8s.WithContext(w.orc.kubeContext, args)
 	}
 	outputStr := fmt.Sprintf("Description: %s\nCommand: %s %v\n", description, command, args)
 	_, _ = fmt.Fprint(w.writer, outputStr)
