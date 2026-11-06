@@ -114,6 +114,8 @@ No resources.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_enable_gpu_acceleration"></a> [enable\_gpu\_acceleration](#input\_enable\_gpu\_acceleration) | Use hardware OpenGL for desktop sessions. Requires a GPU on the host and an<br/>image whose NVIDIA driver has graphics (not merely compute) support; falls<br/>back to software rendering otherwise. Requires vnc\_backend = "turbovnc".<br/>See community/examples/remote-desktop/README.md for which image to use. | `bool` | `false` | no |
+| <a name="input_iap_backend_service"></a> [iap\_backend\_service](#input\_iap\_backend\_service) | Name of the backend service through which an HTTPS load balancer with<br/>Identity-Aware Proxy reaches this host, such as one created by the<br/>iap-backend-service module. When set, the broker also serves the load<br/>balancer on TCP iap\_listen\_port, as whichever user IAP names. The instance<br/>service account needs compute.backendServices.get. Leave null to serve<br/>desktops only over an SSH tunnel. | `string` | `null` | no |
+| <a name="input_iap_listen_port"></a> [iap\_listen\_port](#input\_iap\_listen\_port) | TCP port the broker serves the load balancer on. Only used when iap\_backend\_service is set. | `number` | `6080` | no |
 | <a name="input_install_root"></a> [install\_root](#input\_install\_root) | Directory under which noVNC assets are installed. | `string` | `"/opt/ghpc-remote-desktop"` | no |
 | <a name="input_max_user_sessions"></a> [max\_user\_sessions](#input\_max\_user\_sessions) | Maximum number of concurrent per-user desktop sessions the host VM will support. | `number` | `32` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. | <pre>list(object({<br/>    server_ip             = string<br/>    remote_mount          = string<br/>    local_mount           = string<br/>    fs_type               = string<br/>    mount_options         = string<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  }))</pre> | `[]` | no |
@@ -130,6 +132,7 @@ No resources.
 | Name | Description |
 | ---- | ----------- |
 | <a name="output_broker_socket_path"></a> [broker\_socket\_path](#output\_broker\_socket\_path) | Unix socket the desktop broker serves on. Forward a local port to it over SSH to reach a desktop. |
+| <a name="output_iap_listen_port"></a> [iap\_listen\_port](#output\_iap\_listen\_port) | TCP port the broker serves the load balancer on, or null when it serves only its unix socket. |
 | <a name="output_startup_runners"></a> [startup\_runners](#output\_startup\_runners) | Startup-script runners required to install and launch the noVNC desktop runtime. |
 | <a name="output_vnc_backend"></a> [vnc\_backend](#output\_vnc\_backend) | VNC backend used by the noVNC desktop runtime. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -21,6 +21,7 @@ display, so authentication happens once, before the relay starts.
 
 import asyncio
 import logging
+import urllib.parse
 
 from aiohttp import WSMsgType, web
 
@@ -44,6 +45,21 @@ class NoVncFrontend:
     @staticmethod
     def is_websocket(request):
         return request.headers.get("Upgrade", "").lower() == "websocket"
+
+    def check_origin(self, request):
+        """Refuse a websocket opened by a page from another site.
+
+        Browsers send cookies, IAP's among them, with a cross-site websocket
+        handshake, and nothing like CORS stops a page reading the reply. So a
+        page on any site could otherwise drive the desktop of a user signed in
+        to IAP. A browser always sends Origin on a websocket handshake; a
+        client that sends none is not a page, and is left alone.
+        """
+        origin = request.headers.get("Origin")
+        if not self.is_websocket(request) or origin is None:
+            return
+        if urllib.parse.urlsplit(origin).netloc.lower() != (request.host or "").lower():
+            raise BrokerError(403, "Cross-site desktop connections are refused.")
 
     def needs_session(self, request):
         """Whether serving this request means starting or touching a desktop.

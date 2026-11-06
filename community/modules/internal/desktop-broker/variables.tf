@@ -95,3 +95,26 @@ variable "novnc_version" {
   type        = string
   default     = "1.7.0"
 }
+
+variable "iap_backend_service" {
+  description = <<-EOT
+    Name of the backend service, in the same project, through which an HTTPS
+    load balancer with Identity-Aware Proxy reaches this host. When set, the
+    broker also listens on TCP iap_listen_port and serves only requests that
+    carry an IAP assertion for that backend service. The instance service
+    account needs compute.backendServices.get to resolve its ID. Leave null to
+    serve only the unix socket.
+  EOT
+  type        = string
+  default     = null
+}
+
+variable "iap_listen_port" {
+  description = "TCP port the broker listens on for the load balancer. Only used when iap_backend_service is set."
+  type        = number
+  default     = 6080
+  validation {
+    condition     = var.iap_listen_port >= 1 && var.iap_listen_port <= 65535
+    error_message = "iap_listen_port must be a valid TCP port."
+  }
+}

@@ -22,6 +22,16 @@ output "instance_name" {
   value       = var.instance_count > 0 ? module.instances.name[0] : null
 }
 
+output "network_endpoints" {
+  description = "Name and internal IP of each desktop instance, for attaching them to a load balancer backend such as iap-backend-service."
+  value = [
+    for index, name in module.instances.name : {
+      instance   = name
+      ip_address = module.instances.internal_ip[index]
+    }
+  ]
+}
+
 output "internal_ip" {
   description = "Internal IP addresses of created desktop instances."
   value       = module.instances.internal_ip
@@ -35,6 +45,11 @@ output "external_ip" {
 output "broker_socket_path" {
   description = "Unix socket the desktop broker serves on. Forward a local port to it over SSH to reach a desktop."
   value       = module.novnc_runtime.broker_socket_path
+}
+
+output "iap_listen_port" {
+  description = "TCP port the broker serves the load balancer on, or null when it serves only its unix socket."
+  value       = module.novnc_runtime.iap_listen_port
 }
 
 output "vnc_backend" {
