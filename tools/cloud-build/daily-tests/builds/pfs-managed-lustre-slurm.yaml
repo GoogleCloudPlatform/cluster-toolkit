@@ -107,6 +107,22 @@ steps:
               value: "$$TRIAGE_INVOKER_SA"
             - name: TRIAGE_CLOUD_RUN_URL
               value: "$$TRIAGE_CLOUD_RUN_URL"
+            - name: NUM_NODES
+              value: "2"
+            - name: MIN_NODES
+              value: "1"
+            - name: MACHINE_TYPE
+              value: "c2-standard-4"
+            - name: INSTANCE_PREFIX
+              value: "mgdltr"
+            - name: ENABLE_SPOT_FALLBACK
+              value: "true"
+            - name: CHECK_LUSTRE
+              value: "true"
+            - name: REQUIRED_LUSTRE_GB
+              value: "36000"
+            - name: OPTIONS_GCS_PATH
+              value: "gs://hpc-ctk1357/lustreoptions.txt"
             command: ["/bin/bash", "-c"]
             args:
             - |
@@ -128,6 +144,14 @@ steps:
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
+              source /workspace/tools/cloud-build/wait_for_available_zone.sh
+              if [ -z "\$${ZONE:-}" ]; then
+                echo "ERROR: No available zone found." >&2
+                exit 1
+              fi
+              REGION="\$${ZONE%-*}"
+              echo "Selected zone: \$$ZONE (region: \$$REGION)"
+
               bash tools/add_ttl_label.sh "\$$BLUEPRINT"
               python3 tools/fix_vpc_name.py "\$$BLUEPRINT" "${_TEST_PREFIX}"
 
@@ -136,6 +160,7 @@ steps:
                 --extra-vars="use_fixed_vpc=true" \
                 --user="$$OSLOGIN_USER"  --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
                 --extra-vars="@tools/cloud-build/daily-tests/tests/pfs-managed-lustre-slurm.yml" \
+                --extra-vars="region=\$${REGION} zone=\$${ZONE}" \
                 --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
                 --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
                 --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \

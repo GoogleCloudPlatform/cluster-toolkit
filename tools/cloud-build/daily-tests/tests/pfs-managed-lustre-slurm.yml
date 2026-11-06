@@ -15,20 +15,19 @@
 
 test_name: managed-lustre-slurm
 deployment_name: "managed-lustre-slurm-{{ build }}"
-region: us-central1
-zone: us-central1-a
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/pfs-managed-lustre-slurm.yaml"
 network: "{{ deployment_name }}-net"
 slurm_cluster_name: "mgdltr{{ build[0:3] }}"
-cli_deployment_vars:
-  test_name: "{{ test_name }}"
-  region: "{{ region }}"
-  zone: "{{ zone }}"
-  compute_machine_type: c2-standard-4
-  slurm_cluster_name: "{{ slurm_cluster_name }}"
-  lustre_instance_id: "lustre-instance-{{build}}"
-  kms_key: "projects/{{ project }}/locations/us-central1/keyRings/lustre-keyring/cryptoKeys/lustre-key"
+cli_deployment_vars: >-
+  {{ {
+    'test_name': test_name,
+    'region': region,
+    'zone': zone,
+    'compute_machine_type': 'c2-standard-4',
+    'slurm_cluster_name': slurm_cluster_name,
+    'lustre_instance_id': 'lustre-instance-' ~ build
+  } | combine({'kms_key': 'projects/' ~ project ~ '/locations/us-central1/keyRings/lustre-keyring/cryptoKeys/lustre-key'} if region == 'us-central1' else {}) }}
 # Note: Pattern matching in gcloud only supports 1 wildcard.
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
