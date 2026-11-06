@@ -115,9 +115,9 @@ steps:
             - name: MACHINE_TYPE
               value: "n2d-standard-4"
             - name: NUM_NODES
-              value: "1"
+              value: "2"
             - name: MIN_NODES
-              value: "1"
+              value: "2"
             - name: INSTANCE_PREFIX
               value: "gkeml"
             - name: OPTIONS_GCS_PATH

@@ -144,9 +144,6 @@ steps:
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
-              bash tools/add_ttl_label.sh "\$$BLUEPRINT"
-              python3 tools/fix_vpc_name.py "\$$BLUEPRINT" "${_TEST_PREFIX}"
-
               source /workspace/tools/cloud-build/wait_for_available_zone.sh
               if [ -z "\$${ZONE:-}" ]; then
                 echo "ERROR: No available zone found." >&2
@@ -154,6 +151,9 @@ steps:
               fi
               REGION="\$${ZONE%-*}"
               echo "Selected zone: \$$ZONE (region: \$$REGION)"
+
+              bash tools/add_ttl_label.sh "\$$BLUEPRINT"
+              python3 tools/fix_vpc_name.py "\$$BLUEPRINT" "${_TEST_PREFIX}"
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
                 --extra-vars="test_prefix=${_TEST_PREFIX}" \

@@ -15,8 +15,6 @@
 
 test_name: managed-lustre-slurm
 deployment_name: "managed-lustre-slurm-{{ build }}"
-region: us-central1
-zone: us-central1-a
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/pfs-managed-lustre-slurm.yaml"
 network: "{{ deployment_name }}-net"
