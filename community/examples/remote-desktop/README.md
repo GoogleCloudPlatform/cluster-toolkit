@@ -37,12 +37,12 @@ near-identical second blueprint, apply these four changes to
 
 ```yaml
 vars:
-  # Debian is the only slurm-gcp family shipping an NVIDIA driver with graphics
+  # Ubuntu is the slurm-gcp family shipping an NVIDIA driver with graphics
   # (not merely compute) support. A compute driver ships no libEGL_nvidia and
   # cannot render.
   slurm_image:
-    family: slurm-gcp-6-12-debian-12
-    project: schedmd-slurm-public
+    family: aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-amd64
+    project: advanced-compute-images
   viz_machine_type: g2-standard-8
 
 # on the viz-desktop module:

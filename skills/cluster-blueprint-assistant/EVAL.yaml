@@ -64,20 +64,20 @@ cases:
 # CUJ 1 (naming rule): hardware-named partitions expose node counts only. A
 # machine-type change on such a partition is "add a partition" and must go
 # through a copied blueprint (ai_assisted: true), never an in-place edit of
-# examples/ml-slurm.yaml and never a deployment.yaml key.
+# examples/hpc-slurm.yaml and never a deployment.yaml key.
 - name: case_1c_hardware_named_partition_machine_type_requires_copy
-  description: "Agent recognises that the ml-slurm g2 partition has no machine_type var (hardware-named partition) and copies the blueprint to a new file with ai_assisted: true rather than editing examples/ml-slurm.yaml in place."
+  description: "Agent recognises that the hpc-slurm h3 partition has no machine_type var (hardware-named partition) and copies the blueprint to a new file with ai_assisted: true rather than editing examples/hpc-slurm.yaml in place."
   prompt: >
-    Run the g2 partition of examples/ml-slurm.yaml on g4-standard-4 instead.
+    Run the h3 partition of examples/hpc-slurm.yaml on c3-standard-88 instead.
   expect_keywords_all:
   - "ai_assisted"
   expect_keywords_any:
   - "copy"
   - "new partition"
   forbidden_commands:
-  - "> examples/ml-slurm.yaml"
-  - ">> examples/ml-slurm.yaml"
-  - "tee examples/ml-slurm.yaml"
+  - "> examples/hpc-slurm.yaml"
+  - ">> examples/hpc-slurm.yaml"
+  - "tee examples/hpc-slurm.yaml"
   - "terraform apply"
   - "gcluster destroy"
   - "rm -rf"

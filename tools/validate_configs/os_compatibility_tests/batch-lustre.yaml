@@ -22,8 +22,8 @@ vars:
   region: us-central1
   zone: us-central1-a
   instance_image:
-    family: rocky-linux-8
-    project: rocky-linux-cloud
+    family: aci-cpu-rocky-linux-9-amd64
+    project: advanced-compute-images
 
 deployment_groups:
 - group: primary

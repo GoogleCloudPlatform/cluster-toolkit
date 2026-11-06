@@ -14,11 +14,11 @@
 
 ---
 
-test_name: hpc-slurm6-rocky8
-deployment_name: "rock-8-{{ build }}"
+test_name: hpc-slurm6-rocky9
+deployment_name: "rock-9-{{ build }}"
 # Manually adding the slurm_cluster_name for use in node names, which filters
 # non-alphanumeric chars and is capped at 10 chars.
-slurm_cluster_name: "rock8{{ build[0:5] }}"
+slurm_cluster_name: "rock9{{ build[0:5] }}"
 
 cli_deployment_vars:
   test_name: "{{ test_name }}"

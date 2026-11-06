@@ -25,6 +25,7 @@ vars:
   packer_metadata:
     user-data: |
       #cloud-config
+      create_hostname_file: true
       write_files:
       - path: /etc/apt/apt.conf.d/20auto-upgrades
         permissions: '0644'

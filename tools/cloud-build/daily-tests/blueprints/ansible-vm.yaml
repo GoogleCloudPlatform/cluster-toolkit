@@ -44,18 +44,6 @@ deployment_groups:
           set -ex
           echo \$(ansible --version)
 
-  - id: workstation-ubuntu-2204
-    source: modules/compute/vm-instance
-    use:
-    - network1
-    - startup-script
-    settings:
-      name_prefix: ubuntu2204
-      add_deployment_name_before_prefix: true
-      instance_image:
-        family: ubuntu-2204-lts
-        project: ubuntu-os-cloud
-
   - id: workstation-ubuntu-2404
     source: modules/compute/vm-instance
     use:
@@ -106,18 +94,6 @@ deployment_groups:
         family: debian-13
         project: debian-cloud
 
-  - id: workstation-rocky-8
-    source: modules/compute/vm-instance
-    use:
-    - network1
-    - startup-script
-    settings:
-      name_prefix: rocky8
-      add_deployment_name_before_prefix: true
-      instance_image:
-        family: rocky-linux-8-optimized-gcp
-        project: rocky-linux-cloud
-
   - id: workstation-rocky-9
     source: modules/compute/vm-instance
     use:
@@ -129,18 +105,6 @@ deployment_groups:
       instance_image:
         family: rocky-linux-9-optimized-gcp
         project: rocky-linux-cloud
-
-  - id: workstation-rhel-8
-    source: modules/compute/vm-instance
-    use:
-    - network1
-    - startup-script
-    settings:
-      name_prefix: rhel8
-      add_deployment_name_before_prefix: true
-      instance_image:
-        family: rhel-8
-        project: rhel-cloud
 
   - id: workstation-rhel-9
     source: modules/compute/vm-instance
@@ -158,13 +122,10 @@ deployment_groups:
     source: community/modules/scripts/wait-for-startup
     settings:
       instance_names:
-      - $(workstation-ubuntu-2204.name[0])
       - $(workstation-ubuntu-2404.name[0])
       - $(workstation-ubuntu-2404-arm.name[0])
       - $(workstation-debian-12.name[0])
       - $(workstation-debian-13.name[0])
-      - $(workstation-rocky-8.name[0])
       - $(workstation-rocky-9.name[0])
-      - $(workstation-rhel-8.name[0])
       - $(workstation-rhel-9.name[0])
       timeout: 7200

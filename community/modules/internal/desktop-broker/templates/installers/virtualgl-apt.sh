@@ -18,7 +18,7 @@
 # GPU is needed.
 #
 # No NVIDIA driver is installed here: use an image that already carries one, such
-# as slurm-gcp-6-12-ubuntu-2204-lts-nvidia-570. Without a driver there is no
+# as aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-amd64. Without a driver there is no
 # render node and the desktop falls back to software rendering.
 #
 # NOTE: this file is read with file(), not templatefile(), so shell variables use

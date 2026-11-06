@@ -24,12 +24,12 @@ vars:
   a4x_max_cluster_size: # supply cluster size
 
   # Image settings
-  build_from_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-580
-  build_from_image_project: ubuntu-os-accelerator-images
+  source_image_family: aci-gpu-u2404-cuda-132-nvidia-595-arm64
+  source_image_project: advanced-compute-images
   image_build_machine_type: c4a-highcpu-16
   image_build_disk_type: hyperdisk-balanced
   image_disk_size_gb: 100
-  built_image_family: slurm-ubuntu2404-a4x-max-metal # Needs to be built with MOFED
+  built_image_family: slurm-ubuntu2404-a4x-max-metal # Custom Slurm image with MFT
   build_slurm_from_git_ref: 6.13.2
 
   # Cluster env settings
@@ -138,9 +138,13 @@ deployment_groups:
               - libnvidia-compute-*-server
               - libnvidia-nscq-*
               - nvidia-compute-utils-*-server
-              - nvidia-fabricmanager-*
+              - nvidia-fabricmanager*
               - nvidia-utils-*-server
               - nvidia-imex-*
+              - nvidia-container-toolkit
+              - nvidia-container-toolkit-base
+              - libnvidia-container-tools
+              - libnvidia-container1
             tasks:
             - name: Hold nvidia packages
               ansible.builtin.command:
@@ -149,6 +153,10 @@ deployment_groups:
                 - hold
                 - "{{ item }}"
               loop: "{{ nvidia_packages_to_hold }}"
+            - name: Remove HDF5 apt block before Slurm installation
+              ansible.builtin.file:
+                path: /etc/apt/preferences.d/block-hdf5
+                state: absent
       - type: data
         destination: /etc/enroot/enroot.conf
         content: |
@@ -188,7 +196,7 @@ deployment_groups:
             "install_cuda": false,
             "allow_kernel_upgrades": false,
             "monitoring_agent": "cloud-ops",
-            "install_managed_lustre": true
+            "install_managed_lustre": false
           }
       - type: shell
         destination: setup_asapd_lite_service.sh
@@ -266,39 +274,16 @@ deployment_groups:
           - name: Install A4X Drivers and Utils
             hosts: all
             become: true
-            vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
-              cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/sbsa/cuda-keyring_1.1-1_all.deb
-              cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
-              nvidia_packages:
-              - cuda-toolkit-13-0
-              - datacenter-gpu-manager-4-cuda13=1:4.6.0-1
-              - datacenter-gpu-manager-4-dev=1:4.6.0-1
-              - datacenter-gpu-manager-4-core=1:4.6.0-1
             tasks:
-            - name: Download NVIDIA repository package
-              ansible.builtin.get_url:
-                url: "{{ cuda_repo_url }}"
-                dest: "{{ cuda_repo_filename }}"
-            - name: Install NVIDIA repository package
+            - name: Install NVIDIA DCGM
               ansible.builtin.apt:
-                deb: "{{ cuda_repo_filename }}"
+                name: datacenter-gpu-manager-4-cuda13
                 state: present
-            - name: Install NVIDIA fabric and CUDA
-              ansible.builtin.apt:
-                name: "{{ item }}"
                 update_cache: true
-                allow_downgrade: yes
-              loop: "{{ nvidia_packages }}"
-              ignore_errors: yes # Ignore errors during packer build
-            - name: Freeze NVIDIA fabric and CUDA
-              ansible.builtin.command:
-                argv:
-                - apt-mark
-                - hold
-                - "{{ item.split('=')[0] }}"
-              loop: "{{ nvidia_packages }}"
-              ignore_errors: yes # Ignore errors during packer build
+            - name: Freeze NVIDIA DCGM
+              ansible.builtin.dpkg_selections:
+                name: datacenter-gpu-manager-4-cuda13
+                selection: hold
             - name: Create nvidia-persistenced override directory
               ansible.builtin.file:
                 path: /etc/systemd/system/nvidia-persistenced.service.d
@@ -333,9 +318,9 @@ deployment_groups:
                 name: nvidia-persistenced.service
                 state: stopped
                 enabled: false
-      # Install DOCA-OFED
+      # Install MFT
       - type: shell
-        destination: install_mofed.sh
+        destination: install_mft.sh
         content: |
           #!/bin/bash
           set -e -o pipefail
@@ -353,16 +338,6 @@ deployment_groups:
           cd ..
           # remove
           rm -rf mft-4.34.0-145-aarch64-deb
-
-          BASE_URL=https://linux.mellanox.com/public/repo/doca
-          DOCA_SUFFIX=latest/ubuntu24.04/arm64-sbsa/
-          DOCA_URL="$BASE_URL/$DOCA_SUFFIX"
-          # Download both old Mellanox key and new NVIDIA DOCA key (required for 'latest' repository signature verification)
-          curl -fsSL $BASE_URL/GPG-KEY-Mellanox.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.gpg
-          curl -fsSL -o /etc/apt/trusted.gpg.d/nvidia-doca-debian-gpg-public-key.gpg $BASE_URL/public_keys/nvidia-doca-debian-gpg-public-key.gpg
-          echo "deb [signed-by=/etc/apt/trusted.gpg.d/nvidia-doca-debian-gpg-public-key.gpg] $DOCA_URL ./" > /etc/apt/sources.list.d/doca.list
-          sudo apt-get update
-          sudo apt-get -y install doca-ofed
       - type: data
         destination: /etc/systemd/network/20-mrdma.network
         content: |
@@ -377,13 +352,6 @@ deployment_groups:
           SLAAC=true
           DHCP=no
           LinkLocalAddressing=ipv6
-      - type: shell
-        destination: enable_openibd.sh
-        content: |
-          #!/bin/bash
-          set -e -x
-          echo "Enabling openibd service..."
-          sudo systemctl enable openibd
       - type: shell
         destination: configure_lnet_image.sh
         content: |
@@ -401,12 +369,11 @@ deployment_groups:
       disk_size: $(vars.image_disk_size_gb)
       disk_type: $(vars.image_build_disk_type)
       machine_type: $(vars.image_build_machine_type)
-      source_image_family: $(vars.build_from_image_family)
-      source_image_project_id: [$(vars.build_from_image_project)]
+      source_image_family: $(vars.source_image_family)
+      source_image_project_id: [$(vars.source_image_project)]
       image_family: $(vars.built_image_family)
       omit_external_ip: false
       metadata:
-        # Needed in Ubuntu 24.04 for enroot, not required on VMs using this image
         # Unattended upgrades are disabled in this blueprint so that software does not
         # get updated daily and lead to potential instability in the cluster environment.
         #

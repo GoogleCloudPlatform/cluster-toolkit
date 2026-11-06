@@ -93,6 +93,12 @@ locals {
 
   override_gcloud_path = var.gcloud_path_override == null ? "" : var.gcloud_path_override
   compute_version      = var.compute_endpoint_version == null ? "" : var.compute_endpoint_version
+
+  source_image_project_id = (
+    var.source_image_project_id == null && var.source_image == null && var.source_image_family == "aci-cpu-rocky-linux-9-amd64"
+    ? ["advanced-compute-images"]
+    : var.source_image_project_id
+  )
 }
 
 source "googlecompute" "toolkit_image" {
@@ -127,7 +133,7 @@ source "googlecompute" "toolkit_image" {
   scopes                      = var.service_account_scopes
   source_image                = var.source_image
   source_image_family         = var.source_image_family
-  source_image_project_id     = var.source_image_project_id
+  source_image_project_id     = local.source_image_project_id
   ssh_username                = var.ssh_username
   tags                        = var.tags
   use_iap                     = local.use_iap

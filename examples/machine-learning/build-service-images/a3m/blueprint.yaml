@@ -57,9 +57,13 @@ deployment_groups:
               - libnvidia-compute-*-server
               - libnvidia-nscq-*
               - nvidia-compute-utils-*-server
-              - nvidia-fabricmanager-*
+              - nvidia-fabricmanager*
               - nvidia-utils-*-server
               - nvidia-imex-*
+              - nvidia-container-toolkit
+              - nvidia-container-toolkit-base
+              - libnvidia-container-tools
+              - libnvidia-container1
             tasks:
             - name: Hold nvidia packages
               ansible.builtin.command:
@@ -68,6 +72,10 @@ deployment_groups:
                 - hold
                 - "{{ item }}"
               loop: "{{ nvidia_packages_to_hold }}"
+            - name: Remove HDF5 apt block before Slurm installation
+              ansible.builtin.file:
+                path: /etc/apt/preferences.d/block-hdf5
+                state: absent
 
       - type: shell
         destination: hold_google_services.sh
@@ -86,10 +94,9 @@ deployment_groups:
             "install_cuda": false,
             "install_ompi": true,
             "install_lustre": false,
-            "install_managed_lustre": true,
+            "install_managed_lustre": false,
             "install_gcsfuse": true,
             "monitoring_agent": "cloud-ops",
-            "slurm_patch_files": ["task_prolog_epilog.patch"],
             "use_open_drivers": true
           }
       - type: shell
@@ -100,42 +107,6 @@ deployment_groups:
           apt-get update
           apt-get install -y git
       - $(vars.runner_install_slurm)
-      - type: ansible-local
-        destination: update-gvnic.yml
-        content: |
-          ---
-          - name: Install updated gVNIC driver from GitHub
-            hosts: all
-            become: true
-            vars:
-              package_url: https://github.com/GoogleCloudPlatform/compute-virtual-ethernet-linux/releases/download/v1.4.3/gve-dkms_1.4.3_all.deb
-              package_filename: /tmp/{{ package_url | basename }}
-            tasks:
-            - name: Install driver dependencies
-              ansible.builtin.apt:
-                name:
-                - dkms
-            - name: Download gVNIC package
-              ansible.builtin.get_url:
-                url: "{{ package_url }}"
-                dest: "{{ package_filename }}"
-            - name: Install updated gVNIC
-              ansible.builtin.apt:
-                deb: "{{ package_filename }}"
-                state: present
-      - type: shell
-        destination: install-nvidia.sh
-        content: |
-          #!/bin/bash
-          set -ex -o pipefail
-          # Install nvidia container toolkit
-          curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
-            gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg  && \
-            curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-            sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-            tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-          apt-get update -y
-          apt-get install -y nvidia-container-toolkit
       # this duplicates the ulimits configuration of the HPC VM Image
       - $(vars.runner_setup_hpc_vm_image_ulimits)
       - type: data
@@ -146,54 +117,36 @@ deployment_groups:
           ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
           ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
           ENROOT_TEMP_PATH       /mnt/localssd/${UID}/enroot
+      - type: shell
+        destination: fix_enroot_env.sh
+        content: |
+          #!/bin/bash
+          # 1. Disable Ubuntu 24.04 restriction on unprivileged user namespaces
+          # Required for enroot/pyxis to work
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            echo "kernel.apparmor_restrict_unprivileged_userns = 0" > /etc/sysctl.d/90-enroot-namespaces.conf
+          fi
       - type: ansible-local
         destination: configure_gpu_monitoring.yml
         content: |
           ---
-          - name: Install CUDA & DCGM & Configure Ops Agent
+          - name: Configure DCGM, nvidia-persistenced & Ops Agent
             hosts: all
             become: true
             vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
-              package_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
-              package_filename: /tmp/{{ package_url | basename }}
               enable_ops_agent: true
               enable_nvidia_dcgm: true
-              nvidia_packages:
-              - cuda-toolkit-12-8
-              - datacenter-gpu-manager-4-cuda12
             tasks:
-            - name: Download NVIDIA repository package
-              ansible.builtin.get_url:
-                url: "{{ package_url }}"
-                dest: "{{ package_filename }}"
-            - name: Install NVIDIA repository package
+            - name: Install NVIDIA DCGM
               ansible.builtin.apt:
-                deb: "{{ package_filename }}"
+                name: datacenter-gpu-manager-4-cuda13
                 state: present
-            - name: Reduce NVIDIA repository priority
-              ansible.builtin.copy:
-                dest: /etc/apt/preferences.d/cuda-repository-pin-600
-                mode: 0o0644
-                owner: root
-                group: root
-                content: |
-                  Package: nsight-compute
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
-                  Package: nsight-systems
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
-                  Package: *
-                  Pin: release l=NVIDIA CUDA
-                  Pin-Priority: 400
-            - name: Install CUDA & DCGM
-              ansible.builtin.apt:
-                name: "{{ item }}"
                 update_cache: true
-              loop: "{{ nvidia_packages }}"
+            - name: Freeze NVIDIA DCGM
+              ansible.builtin.dpkg_selections:
+                name: datacenter-gpu-manager-4-cuda13
+                selection: hold
             - name: Create nvidia-persistenced override directory
               ansible.builtin.file:
                 path: /etc/systemd/system/nvidia-persistenced.service.d
@@ -237,27 +190,96 @@ deployment_groups:
         destination: install_dmabuf.yml
         content: |
           ---
-          - name: Install DMBABUF import helper
+          - name: Install patched DMABUF import helper
             hosts: all
             become: true
+            vars:
+              dmabuf_version: "1.1"
             tasks:
             - name: Setup apt-transport-artifact-registry repository
               ansible.builtin.apt_repository:
                 repo: deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main
                 state: present
+                filename: artifact-registry
+
             - name: Install driver dependencies
               ansible.builtin.apt:
                 name:
-                - dkms
                 - apt-transport-artifact-registry
+                - dkms
+                state: present
+                update_cache: true
+
             - name: Setup gpudirect-tcpxo apt repository
               ansible.builtin.apt_repository:
-                repo: deb [arch=all trusted=yes ] ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-tcpxo-apt main
+                repo: deb [arch=all trusted=yes] ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-tcpxo-apt main
                 state: present
-            - name: Install DMABUF import helper DKMS package
-              ansible.builtin.apt:
-                name: dmabuf-import-helper
-                state: present
+                filename: gpudirect-tcpxo
+
+            - name: Check if dmabuf-import-helper DKMS module is already installed
+              ansible.builtin.command:
+                cmd: dkms status -m dmabuf-import-helper -v {{ dmabuf_version }}
+              register: dkms_status
+              failed_when: false
+              changed_when: false
+
+            - name: Install and patch dmabuf-import-helper
+              block:
+                - name: Create temp directory for dmabuf package
+                  ansible.builtin.tempfile:
+                    state: directory
+                    suffix: dmabuf
+                  register: tempdir
+
+                - name: Download dmabuf-import-helper package
+                  ansible.builtin.command:
+                    cmd: apt-get download dmabuf-import-helper
+                    chdir: "{{ tempdir.path }}"
+                  register: download_res
+                  changed_when: download_res.rc == 0
+
+                - name: Extract dmabuf-import-helper deb package
+                  ansible.builtin.shell:
+                    cmd: dpkg-deb -x *.deb .
+                    chdir: "{{ tempdir.path }}"
+                  register: extract_res
+                  changed_when: extract_res.rc == 0
+
+                - name: Clean existing dmabuf source in /usr/src
+                  ansible.builtin.file:
+                    path: /usr/src/dmabuf-import-helper-{{ dmabuf_version }}
+                    state: absent
+
+                - name: Move dmabuf-import-helper source to /usr/src
+                  ansible.builtin.command:
+                    cmd: mv "{{ tempdir.path }}/usr/src/dmabuf-import-helper-{{ dmabuf_version }}" /usr/src/
+                  register: move_res
+                  changed_when: move_res.rc == 0
+
+                - name: Patch import-helper.c for kernel 6.17 compatibility
+                  ansible.builtin.replace:
+                    path: /usr/src/dmabuf-import-helper-{{ dmabuf_version }}/import-helper.c
+                    regexp: 'MODULE_IMPORT_NS\(DMA_BUF\)'
+                    replace: 'MODULE_IMPORT_NS("DMA_BUF")'
+
+                - name: Add dmabuf-import-helper to DKMS
+                  ansible.builtin.command:
+                    cmd: dkms add -m dmabuf-import-helper -v {{ dmabuf_version }}
+                  when: "'added' not in dkms_status.stdout"
+
+                - name: Build dmabuf-import-helper via DKMS
+                  ansible.builtin.command:
+                    cmd: dkms build -m dmabuf-import-helper -v {{ dmabuf_version }}
+
+                - name: Install dmabuf-import-helper via DKMS
+                  ansible.builtin.command:
+                    cmd: dkms install -m dmabuf-import-helper -v {{ dmabuf_version }}
+
+                - name: Clean up temp directory
+                  ansible.builtin.file:
+                    path: "{{ tempdir.path }}"
+                    state: absent
+              when: "'installed' not in dkms_status.stdout"
       - type: ansible-local
         destination: aperture_devices.yml  # This still needs to be run during startup http://google3/cloud/hosted/hypercomputecluster/terraform/slurm/nodeset_a3m.tf;l=16;rcl=767407261
         content: |
@@ -297,7 +319,7 @@ deployment_groups:
           # the LXD container manager, both of which might have been installed via Snap.
           # This step is crucial to prevent conflicts with the upcoming APT installation
           # and address potential issues with Snapd and NFS mounts in specific environments
-          snap remove google-cloud-cli lxd
+          snap remove google-cloud-cli lxd || true
           # Install key and google-cloud-cli from apt repo
           GCLOUD_APT_SOURCE="/etc/apt/sources.list.d/google-cloud-sdk.list"
           if [ ! -f "${GCLOUD_APT_SOURCE}" ]; then
@@ -325,8 +347,8 @@ deployment_groups:
       disk_size: 100
       machine_type: c2-standard-8
 
-      source_image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
-      source_image_project_id: [ubuntu-os-accelerator-images]
+      source_image_family: aci-gpu-u2404-cuda-132-nvidia-595-amd64
+      source_image_project_id: [advanced-compute-images]
 
       image_family: $(vars.family)
       omit_external_ip: false
