@@ -20,6 +20,7 @@ import re
 import sys
 import tempfile
 import unittest
+import unittest.mock
 import yaml
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -149,7 +150,7 @@ class TestValidateReadmeSnippets(unittest.TestCase):
         raw = (
             "    vars:\n"
             "      project_id: test\n"
-            "      ... # more settings\n"
+            "      # ...\n"
             "    ---\n"
             "    deployment_groups: []\n"
         )
@@ -157,6 +158,32 @@ class TestValidateReadmeSnippets(unittest.TestCase):
         docs = list(yaml.safe_load_all(cleaned))
         self.assertEqual(len(docs), 2)
         self.assertEqual(docs[0]["vars"]["project_id"], "test")
+
+    def test_uncommented_yaml_ellipsis_is_rejected(self):
+        for raw in (
+            "  ...\n  - id: script\n    source: modules/scripts/startup-script\n",
+            "  - id: script\n    source: modules/scripts/startup-script\n  ...\n",
+            "  - id: script\n    source: modules/scripts/startup-script\n  ... # more modules\n",
+        ):
+            errs = vrs.validate_yaml_block(raw, "test.md", {})
+            self.assertEqual(len(errs), 1)
+            self.assertIn("invalid YAML syntax in snippet", errs[0])
+            self.assertIn("use '# ...' for elided lines", errs[0])
+
+    def test_backticked_and_leading_slash_links_rejected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            md_path = os.path.join(tmpdir, "README.md")
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write(
+                    "See [`missing`](missing.md) and [abs](/modules/foo.md).\n"
+                )
+            with unittest.mock.patch.object(vrs, "REPO_ROOT", tmpdir), unittest.mock.patch.object(
+                vrs, "_find_markdown_files_under", return_value=[]
+            ):
+                errs = vrs.validate_markdown_links_and_cli({os.path.normpath(md_path)})
+            self.assertEqual(len(errs), 2)
+            self.assertTrue(any("missing.md" in e for e in errs))
+            self.assertTrue(any("/modules/foo.md" in e for e in errs))
 
     def test_validate_yaml_block_required_kms_key_settings(self):
         snippet = """

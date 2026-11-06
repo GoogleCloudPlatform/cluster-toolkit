@@ -189,14 +189,14 @@ disk_size = 100
 In a blueprint, the equivalent syntax is:
 
 ```yaml
-...
+    # ...
     settings:
       startup_script: |
         #!/bin/bash
         yum install -y epel-release
         yum install -y jq
       disk_size: 100
-...
+    # ...
 ```
 
 ## Monitoring startup script execution

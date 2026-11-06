@@ -28,13 +28,14 @@ import (
 )
 
 type stubResourceLister struct {
-	items []unstructured.Unstructured
-	err   error
-	gotNS string
-	gotFS string
-	sa    *unstructured.Unstructured
-	saErr error
-	gotSA string
+	items  []unstructured.Unstructured
+	err    error
+	gotGVR schema.GroupVersionResource
+	gotNS  string
+	gotFS  string
+	sa     *unstructured.Unstructured
+	saErr  error
+	gotSA  string
 }
 
 func (s *stubResourceLister) GetResource(gvr schema.GroupVersionResource, _, name string) (*unstructured.Unstructured, error) {
@@ -45,7 +46,8 @@ func (s *stubResourceLister) GetResource(gvr schema.GroupVersionResource, _, nam
 	return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
 }
 
-func (s *stubResourceLister) ListResources(_ schema.GroupVersionResource, ns, _, fs string) ([]unstructured.Unstructured, error) {
+func (s *stubResourceLister) ListResources(gvr schema.GroupVersionResource, ns, _, fs string) ([]unstructured.Unstructured, error) {
+	s.gotGVR = gvr
 	s.gotNS = ns
 	s.gotFS = fs
 	return s.items, s.err
@@ -217,6 +219,9 @@ func TestDiscoverImagePullSecrets_ListErrorsAndNamespaceDefault(t *testing.T) {
 	okLister := &stubResourceLister{items: []unstructured.Unstructured{makeTestDockerSecret("sec-1", "registry.local")}}
 	if got := DiscoverImagePullSecrets(okLister, "team-ns", "", []string{"registry.local/app:v1"}); got != "sec-1" || okLister.gotNS != "team-ns" || okLister.gotFS != "type=kubernetes.io/dockerconfigjson" {
 		t.Errorf("got (%q, ns=%q, fs=%q), want (\"sec-1\", \"team-ns\", \"type=kubernetes.io/dockerconfigjson\")", got, okLister.gotNS, okLister.gotFS)
+	}
+	if okLister.gotGVR != SecretGVR {
+		t.Errorf("listed %v, want %v", okLister.gotGVR, SecretGVR)
 	}
 }
 

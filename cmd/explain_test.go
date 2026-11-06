@@ -461,3 +461,53 @@ func (s *MySuite) TestExplainTelemetryTargetModes(c *C) {
 		c.Check(gotTarget, Equals, tc.wantTarget)
 	}
 }
+
+func (s *MySuite) TestFindExplainRepoRootReleaseBundle(c *C) {
+	origWD, err := os.Getwd()
+	c.Assert(err, IsNil)
+	defer func() { _ = os.Chdir(origWD) }()
+
+	// Case 1: release bundle root with examples/ + community/examples/
+	bundleRoot1 := c.MkDir()
+	subDir1 := filepath.Join(bundleRoot1, "examples", "gke-a4")
+	c.Assert(os.MkdirAll(subDir1, 0o755), IsNil)
+	c.Assert(os.MkdirAll(filepath.Join(bundleRoot1, "community", "examples"), 0o755), IsNil)
+	c.Assert(os.Chdir(subDir1), IsNil)
+	evalGot1, err := filepath.EvalSymlinks(findExplainRepoRoot())
+	c.Assert(err, IsNil)
+	evalWant1, err := filepath.EvalSymlinks(bundleRoot1)
+	c.Assert(err, IsNil)
+	c.Check(evalGot1, Equals, evalWant1)
+
+	// Case 2: release bundle root with examples/ + gcluster binary
+	bundleRoot2 := c.MkDir()
+	subDir2 := filepath.Join(bundleRoot2, "examples", "hpc")
+	c.Assert(os.MkdirAll(subDir2, 0o755), IsNil)
+	c.Assert(os.WriteFile(filepath.Join(bundleRoot2, "gcluster"), []byte("#!/bin/sh\n"), 0o755), IsNil)
+	c.Assert(os.Chdir(subDir2), IsNil)
+	evalGot2, err := filepath.EvalSymlinks(findExplainRepoRoot())
+	c.Assert(err, IsNil)
+	evalWant2, err := filepath.EvalSymlinks(bundleRoot2)
+	c.Assert(err, IsNil)
+	c.Check(evalGot2, Equals, evalWant2)
+}
+
+func (s *MySuite) TestExplainIndexCoreBeforeCommunity(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	indexOut, err := runExplainForTest()
+	c.Assert(err, IsNil)
+	coreIdx := strings.Index(indexOut, "examples/hpc-slurm.yaml")
+	commIdx := strings.Index(indexOut, "community/examples/")
+	c.Check(coreIdx > 0 && commIdx > coreIdx, Equals, true)
+}
+
+func (s *MySuite) TestExplainUnderscoreCompanion(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	symOut, err := runExplainForTest("community/examples/fsi/ibm-symphony-on-gke/symphony.yaml")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(symOut, "Companion Deployment File: community/examples/fsi/ibm-symphony-on-gke/symphony_deployment.yaml"), Equals, true)
+}

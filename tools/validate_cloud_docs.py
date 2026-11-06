@@ -53,6 +53,19 @@ USER_AGENT = "cluster-toolkit-cloud-docs-validator/1.0"
 # Mapping from repository path prefixes/patterns to public Cloud Docs slugs.
 PR_PATH_TO_CLOUD_DOCS: list[tuple[str, list[str], str]] = [
     (
+        "examples/machine-learning/a3-highgpu-8g/",
+        ["/ai-hypercomputer/docs/create/create-self-managed-slurm-cluster"],
+        "A3 High Slurm blueprint or deployment variables changed",
+    ),
+    (
+        "examples/machine-learning/a3-megagpu-8g/",
+        [
+            "/cluster-toolkit/docs/deploy/deploy-a3-mega-cluster",
+            "/ai-hypercomputer/docs/create/create-self-managed-slurm-cluster",
+        ],
+        "A3 Mega Slurm blueprint or deployment variables changed",
+    ),
+    (
         "examples/machine-learning/a3-ultragpu-8g/",
         ["/cluster-toolkit/docs/deploy/slurm/create-a3-ultra-cluster"],
         "A3 Ultra Slurm blueprint or deployment variables changed",
@@ -71,6 +84,34 @@ PR_PATH_TO_CLOUD_DOCS: list[tuple[str, list[str], str]] = [
         "examples/machine-learning/a4x-maxgpu-4g-metal/",
         ["/cluster-toolkit/docs/deploy/slurm/create-a4x-max-cluster"],
         "A4X Max Slurm blueprint or deployment variables changed",
+    ),
+    (
+        "examples/machine-learning/tpu-v5e-v5p-v6e/",
+        ["/ai-hypercomputer/docs/create/create-self-managed-slurm-cluster"],
+        "Slurm TPU v5e/v5p/v6e blueprint or deployment variables changed",
+    ),
+    (
+        "examples/machine-learning/tpu7x-standard-4t/",
+        ["/ai-hypercomputer/docs/create/create-self-managed-slurm-cluster"],
+        "Slurm TPU 7x blueprint or deployment variables changed",
+    ),
+    (
+        "examples/hpc-slurm-h4d/",
+        ["/compute/docs/hpc/create-a-slurm-cluster-h4d"],
+        "H4D Slurm blueprint or deployment template changed",
+    ),
+    (
+        "examples/gke-a3-highgpu/",
+        ["/ai-hypercomputer/docs/create/gke-ai-hypercompute"],
+        "GKE A3 High blueprint or deployment template changed",
+    ),
+    (
+        "examples/gke-a3-megagpu/",
+        [
+            "/cluster-toolkit/docs/deploy/deploy-a3-mega-gke-cluster",
+            "/ai-hypercomputer/docs/create/gke-ai-hypercompute",
+        ],
+        "GKE A3 Mega blueprint or deployment template changed",
     ),
     (
         "examples/gke-a3-ultragpu/",
@@ -95,6 +136,36 @@ PR_PATH_TO_CLOUD_DOCS: list[tuple[str, list[str], str]] = [
             "/ai-hypercomputer/docs/create/gke-ai-hypercompute",
         ],
         "GKE A4X blueprint or deployment template changed",
+    ),
+    (
+        "examples/gke-a4x-max-bm/",
+        ["/ai-hypercomputer/docs/create/gke-ai-hypercompute"],
+        "GKE A4X Max Bare Metal blueprint or deployment template changed",
+    ),
+    (
+        "examples/gke-h4d/",
+        ["/ai-hypercomputer/docs/create/gke-ai-hypercompute"],
+        "GKE H4D blueprint or deployment template changed",
+    ),
+    (
+        "examples/gke-tpu-v5e/",
+        ["/ai-hypercomputer/docs/create/gke-ai-hypercompute"],
+        "GKE TPU v5e blueprint or deployment template changed",
+    ),
+    (
+        "examples/gke-tpu-v5p/",
+        ["/ai-hypercomputer/docs/create/gke-ai-hypercompute"],
+        "GKE TPU v5p blueprint or deployment template changed",
+    ),
+    (
+        "examples/gke-tpu-v6e/",
+        ["/ai-hypercomputer/docs/create/gke-ai-hypercompute"],
+        "GKE TPU v6e blueprint or deployment template changed",
+    ),
+    (
+        "examples/gke-tpu-7x/",
+        ["/ai-hypercomputer/docs/create/gke-ai-hypercompute"],
+        "GKE TPU 7x blueprint or deployment template changed",
     ),
     (
         "examples/hpc-slurm.yaml",
