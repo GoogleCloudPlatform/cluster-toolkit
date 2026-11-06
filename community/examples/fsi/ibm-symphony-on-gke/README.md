@@ -87,7 +87,7 @@ The GCS bucket layout:
 * **Google Cloud Secret Manager & IAM Setup:**
   To avoid storing or passing the Symphony `Admin` password in plaintext, the password must be stored in a Google Cloud Secret Manager secret (by default `<DEPLOYMENT_NAME>-admin-password`, configured via `admin_password_secret`). The blueprint verifies that this secret exists during the `primary` deployment stage (`verify_admin_password_secret`) and exits immediately if it has not been created. During Master VM startup, `scripts/sym_master.sh` retrieves the password at runtime using `gcloud secrets`.
 
-  1. Ensure the Secret Manager API is enabled and your deployer identity has permissions to create and read secrets (`roles/secretmanager.admin` and `roles/secretmanager.secretAccessor`, as basic roles like `roles/writer` or `roles/editor` do not include `secretmanager.versions.access`):
+  1. Ensure the Secret Manager API is enabled and your deployer identity has permissions to create and read secrets (`roles/secretmanager.admin` and `roles/secretmanager.secretAccessor`, as basic roles like `roles/writer` or `roles/editor` do not include `secretmanager.versions.access`), as well as `roles/iam.serviceAccountAdmin` and `roles/resourcemanager.projectIamAdmin` to create and bind the cluster service accounts:
 
      ```bash
      gcloud services enable secretmanager.googleapis.com --project="<YOUR_PROJECT_ID>"
@@ -99,6 +99,14 @@ The GCS bucket layout:
      gcloud projects add-iam-policy-binding "<YOUR_PROJECT_ID>" \
          --member="user:<DEPLOYER_USER_EMAIL>" \
          --role="roles/secretmanager.secretAccessor"
+
+     gcloud projects add-iam-policy-binding "<YOUR_PROJECT_ID>" \
+         --member="user:<DEPLOYER_USER_EMAIL>" \
+         --role="roles/iam.serviceAccountAdmin"
+
+     gcloud projects add-iam-policy-binding "<YOUR_PROJECT_ID>" \
+         --member="user:<DEPLOYER_USER_EMAIL>" \
+         --role="roles/resourcemanager.projectIamAdmin"
      ```
 
      *(Note: If deploying with a service account, replace `user:<DEPLOYER_USER_EMAIL>` with `serviceAccount:<DEPLOYER_SERVICE_ACCOUNT_EMAIL>`.)*
@@ -250,7 +258,7 @@ While `egosh` manages EGO services and cluster resources once worker pods join, 
          }
        ]
      }' \
-     http://localhost:8080/platform/rest/hostfactory/requestor/admin/request
+     http://localhost:9080/platform/rest/hostfactory/requestor/admin/request
    ```
 
 3. **Alternative: Request Compute Pods Directly via the `hf-gke` Provider CLI:**

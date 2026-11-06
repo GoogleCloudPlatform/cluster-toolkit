@@ -333,6 +333,8 @@ type ManifestOptions struct {
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
 	MLDiagnosticsEnabled          bool
+	TelemetryCollectorImage       string
+	TelemetryCollectorPort        int
 	Verbose                       bool
 	Env                           map[string]string
 	AdditionalManifests           []string
@@ -636,7 +638,10 @@ type EnvVar struct {
 }
 
 type jobSetTemplateData struct {
-	WorkloadName                  string
+	WorkloadName string
+	// Namespace is the namespace resolved for the submission; rendered as metadata.namespace so a saved manifest
+	// applies to the same namespace as the PV/PVC documents appended to it. Empty when unresolved (dry-run offline).
+	Namespace                     string
 	ClusterName                   string
 	Containers                    []ContainerData
 	ProjectID                     string
@@ -673,8 +678,11 @@ type jobSetTemplateData struct {
 	GCSFuseEnabled                bool
 	HostNetworkEnabled            bool
 	Pathways                      orchestrator.PathwaysJobDefinition
-	PathwaysProxyEnabled          bool // pathways-head runs pathways-proxy (false for an SPS server)
-	PathwaysWorkloadEnabled       bool // pathways-head runs the user's workload (false for headless and SPS)
+	PathwaysProxyEnabled          bool   // pathways-head runs pathways-proxy (false for an SPS server)
+	PathwaysWorkloadEnabled       bool   // pathways-head runs the user's workload (false for headless and SPS)
+	PathwaysRMEnabled             bool   // pathways-head runs pathways-rm (false for an SPS client)
+	PathwaysWorkersEnabled        bool   // the JobSet has TPU workers (false for an SPS client)
+	PathwaysRMAddress             string // remote resource manager for the proxy (SPS client); empty means the local head
 	ExclusiveTopologyAnnotation   string
 	Verbose                       bool
 	Env                           []EnvVar
@@ -686,13 +694,16 @@ type jobSetTemplateData struct {
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
 	MLDiagnosticsEnabled          bool
+	TelemetryCollectorImage       string
+	TelemetryCollectorPort        int
 	Subdomain                     string
 	baseBlocks                    map[string]*yamltemplate.Template
 }
 
 type jobSetValidationSpec struct {
-	metav1.TypeMeta `json:",inline"`
-	Spec            struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata"`
+	Spec              struct {
 		ReplicatedJobs []struct {
 			Name     string                  `json:"name"`
 			Template batchv1.JobTemplateSpec `json:"template"`
@@ -874,6 +885,20 @@ type spsInstanceSummary struct {
 	SidecarJAX    string // from running sidecar container or image tag
 }
 
+// spsInstance is what an SPS client needs to know about the instance it runs on.
+type spsInstance struct {
+	Name           string
+	Endpoint       string
+	KueueQueueName string
+	HeadNodePool   string
+	ServerImage    string
+	ProxyImage     string
+	GCSLocation    string
+	InstanceType   string
+	InstanceCount  int
+	HasSidecar     bool
+}
+
 type spsContainerView struct {
 	Name  string   `json:"name"`
 	Image string   `json:"image"`
@@ -881,11 +906,15 @@ type spsContainerView struct {
 }
 
 type spsPodSpecView struct {
+	NodeSelector   map[string]string  `json:"nodeSelector"`
 	InitContainers []spsContainerView `json:"initContainers"`
 	Containers     []spsContainerView `json:"containers"`
 }
 
 type spsJobSetView struct {
+	Metadata struct {
+		Labels map[string]string `json:"labels"`
+	} `json:"metadata"`
 	Spec struct {
 		Suspend        bool `json:"suspend"`
 		ReplicatedJobs []struct {

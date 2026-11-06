@@ -213,7 +213,7 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName, ns string) error {
 		if err != nil {
 			return fmt.Errorf("failed to render clusterqueue: %w", err)
 		}
-		if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile); err != nil {
+		if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile, ""); err != nil {
 			return fmt.Errorf("failed to apply clusterqueue: %w", err)
 		}
 	} else {
@@ -226,7 +226,7 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName, ns string) error {
 		return err
 	}
 
-	if err := g.applyManifests(localQueueBytes, localQueueManifestFile); err != nil {
+	if err := g.applyManifests(localQueueBytes, localQueueManifestFile, ""); err != nil {
 		return fmt.Errorf("failed to apply localqueue: %w", err)
 	}
 
@@ -257,7 +257,7 @@ func (g *GKEOrchestrator) ensureClusterQueueCoverage(localQueueName, ns string) 
 		if err != nil {
 			return fmt.Errorf("failed to render clusterqueue with new capacity: %w", err)
 		}
-		if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile); err != nil {
+		if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile, ""); err != nil {
 			return fmt.Errorf("failed to apply clusterqueue with new capacity: %w", err)
 		}
 		return nil
@@ -452,7 +452,7 @@ func (g *GKEOrchestrator) installKueue(version string) error {
 		return err
 	}
 
-	if err := g.applyManifests(cleanedManifests, "kueue.yaml"); err != nil {
+	if err := g.applyManifests(cleanedManifests, "kueue.yaml", ""); err != nil {
 		return err
 	}
 
@@ -796,7 +796,7 @@ func (g *GKEOrchestrator) installPriorityClasses() error {
 	}
 
 	logging.Info("Applying Kueue priority classes...")
-	if err := g.applyManifests(buf.Bytes(), "kueue_priority_classes.yaml"); err != nil {
+	if err := g.applyManifests(buf.Bytes(), "kueue_priority_classes.yaml", ""); err != nil {
 		return fmt.Errorf("failed to apply Kueue priority classes: %w", err)
 	}
 
@@ -884,7 +884,7 @@ func (g *GKEOrchestrator) EnsureResourceFlavors() error {
 		if err != nil {
 			return fmt.Errorf("failed to render ResourceFlavor %s: %w", name, err)
 		}
-		if err := g.applyManifests(rfBytes, fmt.Sprintf("resource-flavor-%s.yaml", name)); err != nil {
+		if err := g.applyManifests(rfBytes, fmt.Sprintf("resource-flavor-%s.yaml", name), ""); err != nil {
 			return fmt.Errorf("failed to apply ResourceFlavor %s: %w", name, err)
 		}
 	}
@@ -934,7 +934,7 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 	if err != nil {
 		return err
 	}
-	if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile); err != nil {
+	if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile, ""); err != nil {
 		return err
 	}
 
@@ -943,7 +943,7 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 	if err != nil {
 		return err
 	}
-	if err := g.applyManifests(localQueueBytes, localQueueManifestFile); err != nil {
+	if err := g.applyManifests(localQueueBytes, localQueueManifestFile, ""); err != nil {
 		return err
 	}
 

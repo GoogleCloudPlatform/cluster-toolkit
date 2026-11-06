@@ -5,8 +5,8 @@ This module creates a login node for a Slurm cluster based on the internal
 terraform modules. The login node is used in conjunction with the
 [Slurm controller](../schedmd-slurm-gcp-v6-controller/README.md).
 
-[slurm\_instance]: /community/modules/internal/slurm-gcp/instance/README.md
-[slurm\_instance\_template]: /community/modules/internal/slurm-gcp/instance_template/README.md
+[slurm\_instance]: ../../internal/slurm-gcp/instance/README.md
+[slurm\_instance\_template]: ../../internal/slurm-gcp/instance_template/README.md
 
 ### Example
 

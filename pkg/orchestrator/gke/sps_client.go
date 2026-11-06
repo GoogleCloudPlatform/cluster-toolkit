@@ -1,0 +1,552 @@
+// Copyright 2026 "Google LLC"
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package gke
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"os/signal"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
+)
+
+const (
+	spsProxyStartTimeout = 10 * time.Minute
+	spsProxyPort         = 29000
+	spsProxyReadyLog     = "IFRT proxy server started"
+)
+
+// spsInstanceRef turns a JobSet name or endpoint into the instance name and the endpoint the proxy connects to.
+func spsInstanceRef(ref string) (name, endpoint string) {
+	ref = strings.TrimPrefix(strings.TrimSpace(ref), "grpc://")
+	if i := strings.Index(ref, "-pathways-head-0-0"); i > 0 {
+		endpoint = ref
+		if !strings.Contains(ref, ":") {
+			endpoint += ":29001"
+		}
+		return ref[:i], endpoint
+	}
+	return ref, fmt.Sprintf(spsEndpointFormat, ref)
+}
+
+// proxyImageFor derives the proxy image that matches an SPS server image, as pathwaysutils does.
+func proxyImageFor(serverImage string) string {
+	for _, sep := range []string{":", "@"} {
+		if strings.Contains(serverImage, "/server"+sep) {
+			return strings.Replace(serverImage, "/server"+sep, "/proxy_server"+sep, 1)
+		}
+	}
+	return ""
+}
+
+func parseSPSClientTarget(name string, data []byte) (spsInstance, error) {
+	var js spsJobSetView
+	if err := json.Unmarshal(data, &js); err != nil {
+		return spsInstance{}, fmt.Errorf("failed to parse SPS instance %q: %w", name, err)
+	}
+	inst := spsInstance{
+		Name:           name,
+		KueueQueueName: js.Metadata.Labels["kueue.x-k8s.io/queue-name"],
+	}
+	var hasHead, hasWorker bool
+	for i := range js.Spec.ReplicatedJobs {
+		rj := &js.Spec.ReplicatedJobs[i]
+		pod := &rj.Template.Spec.Template.Spec
+		switch rj.Name {
+		case "pathways-head":
+			hasHead = true
+			if err := parseSPSClientTargetHead(name, pod, &inst); err != nil {
+				return spsInstance{}, err
+			}
+		case "worker", "pathways-worker":
+			hasWorker = parseSPSClientTargetWorker(pod, rj.Replicas, &inst)
+		}
+	}
+	if !hasHead || !hasWorker || inst.InstanceType == "" || inst.ServerImage == "" {
+		return spsInstance{}, fmt.Errorf("JobSet %q is not an SPS instance: it needs a pathways-head job running pathways-rm and a worker job running pathways-worker", name)
+	}
+	return inst, nil
+}
+
+func parseSPSClientTargetHead(name string, pod *spsPodSpecView, inst *spsInstance) error {
+	inst.HeadNodePool = pod.NodeSelector["cloud.google.com/gke-nodepool"]
+	for _, c := range slices.Concat(pod.InitContainers, pod.Containers) {
+		switch {
+		case c.Name == "pathways-rm":
+			if inst.ServerImage == "" {
+				inst.ServerImage = c.Image
+			}
+			inst.InstanceType, inst.InstanceCount, inst.GCSLocation = parsePathwaysRMArgs(c.Args)
+		case c.Name == "pathways-proxy" || strings.HasPrefix(c.Name, "workload-container") || c.Name == "user-workload":
+			return fmt.Errorf("JobSet %q is not an SPS instance: its pathways-head runs %s, so it is a regular or headless Pathways job", name, c.Name)
+		}
+	}
+	return nil
+}
+
+func parseSPSClientTargetWorker(pod *spsPodSpecView, replicas int, inst *spsInstance) bool {
+	if inst.InstanceCount == 0 && replicas > 0 {
+		inst.InstanceCount = replicas
+	}
+	hasWorker := false
+	for _, c := range slices.Concat(pod.InitContainers, pod.Containers) {
+		switch c.Name {
+		case "pathways-worker":
+			hasWorker = true
+			if inst.ServerImage == "" && c.Image != "" {
+				inst.ServerImage = c.Image
+			}
+		case "colocated-python-sidecar", "external-sidecar":
+			inst.HasSidecar = true
+		}
+	}
+	return hasWorker
+}
+
+func spsVirtualSlices(instanceType string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return strings.Join(slices.Repeat([]string{instanceType}, n), ",")
+}
+
+func (g *GKEOrchestrator) readSPSInstance(ref, ns string) (spsInstance, error) {
+	name, endpoint := spsInstanceRef(ref)
+	res := g.kubectl("get", "jobset", name, "-n", ns, "-o", "json", kubectlReadTimeout)
+	if res.ExitCode != 0 {
+		return spsInstance{}, fmt.Errorf("failed to read SPS instance %q in namespace %q: %s", name, ns, strings.TrimSpace(res.Stderr))
+	}
+	inst, err := parseSPSClientTarget(name, []byte(res.Stdout))
+	if err != nil {
+		return spsInstance{}, err
+	}
+	inst.Endpoint = endpoint
+	inst.ProxyImage = proxyImageFor(inst.ServerImage)
+
+	phases := g.kubectl("get", "pods", "-n", ns, "-l", "jobset.sigs.k8s.io/jobset-name="+name+",jobset.sigs.k8s.io/replicatedjob-name=pathways-head", "-o", "jsonpath={.items[*].status.phase}", kubectlReadTimeout)
+	if phases.ExitCode != 0 {
+		return spsInstance{}, fmt.Errorf("failed to check SPS instance pods: %s", strings.TrimSpace(phases.Stderr))
+	}
+	if !strings.Contains(phases.Stdout, "Running") {
+		return spsInstance{}, fmt.Errorf("SPS instance %q has no running pathways-head pod", name)
+	}
+	return inst, nil
+}
+
+// runSPSWorkload runs job.CommandToRun on an existing SPS instance: on this machine when no image is given, in the cluster otherwise.
+func (g *GKEOrchestrator) runSPSWorkload(job orchestrator.JobDefinition) error {
+	logging.Info("Configuring kubectl for GKE cluster '%s'...", job.ClusterName)
+	if err := g.configureKubectl(job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
+		return err
+	}
+	ns, err := g.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	if err != nil {
+		return err
+	}
+	inst, err := g.readSPSInstance(job.Pathways.RunSPSWorkload, ns)
+	if err != nil {
+		return err
+	}
+	if job.WorkloadName == inst.Name {
+		return fmt.Errorf("--name %q must differ from the target SPS instance %q", job.WorkloadName, inst.Name)
+	}
+	if inst.InstanceCount > 0 && job.NumSlices > inst.InstanceCount {
+		return fmt.Errorf("--num-slices %d is more than the %d slices of SPS instance %q", job.NumSlices, inst.InstanceCount, inst.Name)
+	}
+	if err := g.validateJobConflicts(job); err != nil {
+		return err
+	}
+	if job.KueueQueueName == "" {
+		job.KueueQueueName = inst.KueueQueueName
+	}
+	if inst.HeadNodePool == "" {
+		inst.HeadNodePool = g.autoDetectCPUNodePool()
+	}
+	logging.Info("Using SPS instance %s (%s): %d x %s", inst.Name, inst.Endpoint, inst.InstanceCount, inst.InstanceType)
+
+	if job.ImageName == "" && job.BaseImage == "" {
+		return g.runSPSWorkloadLocally(job, inst, ns)
+	}
+	return g.submitSPSClusterWorkload(job, inst)
+}
+
+func (g *GKEOrchestrator) submitSPSClusterWorkload(job orchestrator.JobDefinition, inst spsInstance) error {
+	sm := &StorageManager{orchestrator: g}
+	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
+		return err
+	}
+	fullImageName, err := g.BuildContainerImage(job)
+	if err != nil {
+		return err
+	}
+	manifest, err := g.generateSPSClientManifest(job, inst, fullImageName)
+	if err != nil {
+		return err
+	}
+	if err := g.ApplyManifest(manifest, job.DryRunManifest, job.WorkloadName); err != nil {
+		return err
+	}
+	return g.finishJobSubmission(job)
+}
+
+func resolveSPSClientPathways(p orchestrator.PathwaysJobDefinition, inst spsInstance) (orchestrator.PathwaysJobDefinition, error) {
+	if p.HeadNodePool == "" {
+		p.HeadNodePool = inst.HeadNodePool
+	}
+	if p.HeadNodePool == "" {
+		return p, fmt.Errorf("failed to auto-detect a suitable CPU node pool for the Pathways head job; pass --pathways-head-np")
+	}
+	if p.ProxyServerImage == "" {
+		p.ProxyServerImage = inst.ProxyImage
+	}
+	if p.ProxyServerImage == "" {
+		return p, fmt.Errorf("could not derive the proxy image from SPS server image %q; pass --pathways-proxy-server-image", inst.ServerImage)
+	}
+	if p.GCSLocation == "" {
+		p.GCSLocation = inst.GCSLocation
+	}
+	if p.GCSLocation == "" {
+		return p, fmt.Errorf("could not determine GCS scratch location from SPS instance %q; pass --pathways-gcs-location", inst.Name)
+	}
+	return p, nil
+}
+
+func (g *GKEOrchestrator) buildSPSClientManifestOptions(job orchestrator.JobDefinition, p orchestrator.PathwaysJobDefinition, fullImageName string) (ManifestOptions, error) {
+	job.IsPathwaysJob = true
+	job.Pathways = p
+	pullSecrets, err := g.resolveImagePullSecrets(job, fullImageName, "")
+	if err != nil {
+		return ManifestOptions{}, err
+	}
+	var pfpContainers []string
+	if fullImageName != "" {
+		pfpContainers = []string{"workload-container"}
+	}
+	pfpStr, err := g.generatePodFailurePolicy(job.RestartOnExitCodes, pfpContainers...)
+	if err != nil {
+		return ManifestOptions{}, err
+	}
+	opts := ManifestOptions{
+		WorkloadName:                  job.WorkloadName,
+		ProjectID:                     job.ProjectID,
+		ClusterName:                   job.ClusterName,
+		KueueQueueName:                job.KueueQueueName,
+		TtlSecondsAfterFinished:       job.TtlSecondsAfterFinished,
+		TerminationGracePeriodSeconds: job.TerminationGracePeriodSeconds,
+		MaxRestarts:                   job.MaxRestarts,
+		NumSlices:                     job.NumSlices,
+		NodesPerSlice:                 1,
+		FullImageName:                 fullImageName,
+		CommandToRun:                  job.CommandToRun,
+		Env:                           job.Env,
+		PriorityClassName:             job.PriorityClassName,
+		ServiceAccountName:            job.ServiceAccountName,
+		ImagePullSecrets:              indentYaml(g.generateImagePullSecrets(pullSecrets), 16),
+		PodFailurePolicy:              indentYaml(pfpStr, 12),
+		MLDiagnosticsEnabled:          job.MLDiagnosticsEnabled,
+		IsPathwaysJob:                 true,
+		Pathways:                      p,
+	}
+	if fullImageName != "" && len(job.RawMounts) > 0 {
+		sm := &StorageManager{orchestrator: g}
+		mountInfos, manifests, err := sm.ProcessMounts(job.RawMounts, job)
+		if err != nil {
+			return ManifestOptions{}, err
+		}
+		opts.AdditionalManifests = manifests
+		sm.AddVolumeOptions(&opts, mountInfos)
+	}
+	return opts, nil
+}
+
+// generateSPSClientManifest renders the client JobSet from pathways_jobset.tmpl: a proxy pointed at the
+// instance, plus the workload container when fullImageName is set. No resource manager, no TPU workers.
+func (g *GKEOrchestrator) generateSPSClientManifest(job orchestrator.JobDefinition, inst spsInstance, fullImageName string) (string, error) {
+	p, err := resolveSPSClientPathways(job.Pathways, inst)
+	if err != nil {
+		return "", err
+	}
+	opts, err := g.buildSPSClientManifestOptions(job, p, fullImageName)
+	if err != nil {
+		return "", err
+	}
+	data := g.prepareJobSetTemplateData(opts, workloadContainerCommand(job.CommandToRun), "", false, false)
+	data.PathwaysRMEnabled = false
+	data.PathwaysWorkersEnabled = false
+	data.PathwaysProxyEnabled = true
+	data.PathwaysWorkloadEnabled = fullImageName != ""
+	data.PathwaysRMAddress = inst.Endpoint
+	data.ProxyArgsList = append(data.ProxyArgsList, "--virtual_slices="+spsVirtualSlices(inst.InstanceType, job.NumSlices))
+	if inst.HasSidecar {
+		data.ProxyArgsList = withSidecarNameArg(data.ProxyArgsList)
+	}
+
+	tmpl, baseBlocks, err := k8s.LoadWorkloadTemplate(g.gkeCustomTemplatesPath, k8s.PathwaysJobSetTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse pathways jobset template: %w", err)
+	}
+	data.baseBlocks = baseBlocks
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
+	}
+	if err := validateSPSClientManifest(buf.String(), inst.Endpoint); err != nil {
+		return "", err
+	}
+	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
+	if err := ValidateJobSetManifest(manifest); err != nil {
+		return "", err
+	}
+	return manifest, nil
+}
+
+func validateSPSClientManifest(jobSet, endpoint string) error {
+	workerTmpl, headTmpl, err := extractPathwaysPodTemplates(jobSet)
+	if err != nil {
+		return err
+	}
+	if workerTmpl != nil {
+		return fmt.Errorf("--pathways-run-sps-workload is set but the Pathways manifest has a worker replicatedJob; an SPS client runs only pathways-head. %s", pathwaysTemplateExtractHint)
+	}
+	if headTmpl == nil {
+		return fmt.Errorf("--pathways-run-sps-workload is set but the Pathways manifest has no pathways-head replicatedJob. %s", pathwaysTemplateExtractHint)
+	}
+	for _, c := range slices.Concat(headTmpl.Spec.InitContainers, headTmpl.Spec.Containers) {
+		if c.Name == "pathways-rm" {
+			return fmt.Errorf("--pathways-run-sps-workload is set but pathways-head runs container %q; an SPS client connects to an existing resource manager. %s", c.Name, pathwaysTemplateExtractHint)
+		}
+	}
+	if !strings.Contains(jobSet, "--resource_manager_address="+endpoint) {
+		return fmt.Errorf("--pathways-run-sps-workload is set but pathways-proxy does not target %q. %s", endpoint, pathwaysTemplateExtractHint)
+	}
+	return nil
+}
+
+// runSPSWorkloadLocally works like pathwaysutils run_workload: it starts a proxy in the cluster, port-forwards
+// to it and runs the command on this machine with the terminal attached, so pdb works. The proxy is deleted on exit.
+func (g *GKEOrchestrator) runSPSWorkloadLocally(job orchestrator.JobDefinition, inst spsInstance, ns string) error {
+	if len(job.RawMounts) > 0 {
+		return fmt.Errorf("--mount requires --image or --base-image when used with --pathways-run-sps-workload")
+	}
+	manifest, err := g.generateSPSClientManifest(job, inst, "")
+	if err != nil {
+		return err
+	}
+	if job.DryRunManifest != "" {
+		return g.ApplyManifest(manifest, job.DryRunManifest, job.WorkloadName)
+	}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	if err := g.ApplyManifest(manifest, "", job.WorkloadName); err != nil {
+		return err
+	}
+	defer g.deleteSPSClient(job.WorkloadName, ns)
+
+	pod, err := g.waitForSPSProxy(job.WorkloadName, ns, sigCh)
+	if err != nil {
+		return err
+	}
+	port, stop, err := g.startPortForward(pod, ns, sigCh)
+	if err != nil {
+		return err
+	}
+	defer stop()
+
+	logging.Info("Proxy %s is ready. Running the command on this machine with JAX_BACKEND_TARGET=grpc://127.0.0.1:%d", pod, port)
+	return runLocalCommand(job.CommandToRun, port, job.Env, sigCh)
+}
+
+func (g *GKEOrchestrator) waitForSPSProxy(name, ns string, sigCh <-chan os.Signal) (string, error) {
+	logging.Info("Waiting for the SPS proxy to start (Kueue admission and CPU node scale-up can take a few minutes)...")
+	selector := "jobset.sigs.k8s.io/jobset-name=" + name
+	deadline := time.Now().Add(spsProxyStartTimeout)
+	for time.Now().Before(deadline) {
+		pod, err := g.readySPSProxyPod(ns, selector)
+		if err != nil {
+			return "", err
+		}
+		if pod != "" {
+			return pod, nil
+		}
+		select {
+		case <-sigCh:
+			return "", fmt.Errorf("interrupted while waiting for the SPS proxy")
+		case <-time.After(5 * time.Second):
+		}
+	}
+	var warnSuffix string
+	if warnEvents := g.checkJobSetWarningEvents(ns, name); warnEvents != "" {
+		warnSuffix = fmt.Sprintf("\nJobSet warning events:\n%s", warnEvents)
+	}
+	return "", fmt.Errorf("timed out after %s waiting for the SPS proxy of %q%s", spsProxyStartTimeout, name, warnSuffix)
+}
+
+func (g *GKEOrchestrator) readySPSProxyPod(ns, selector string) (string, error) {
+	res := g.kubectl("get", "pods", "-n", ns, "-l", selector, "-o", `jsonpath={range .items[*]}{.metadata.name}{" "}{.status.phase}{"\n"}{end}`, kubectlReadTimeout)
+	for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		switch fields[1] {
+		case "Running":
+			if logs := g.kubectl("logs", "-n", ns, fields[0], "-c", "pathways-proxy", kubectlReadTimeout); strings.Contains(logs.Stdout+logs.Stderr, spsProxyReadyLog) {
+				return fields[0], nil
+			}
+		case "Failed", "Succeeded":
+			logs := g.kubectl("logs", "-n", ns, fields[0], "-c", "pathways-proxy", "--tail=50", kubectlReadTimeout)
+			return "", fmt.Errorf("SPS proxy pod %s exited (%s):\n%s", fields[0], fields[1], strings.TrimSpace(logs.Stdout+logs.Stderr))
+		}
+	}
+	return "", nil
+}
+
+var portForwardRe = regexp.MustCompile(`(?:127\.0\.0\.1|\[::1\]):(\d+)`)
+
+func (g *GKEOrchestrator) startPortForward(pod, ns string, sigCh <-chan os.Signal) (int, func(), error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	args := withKubeContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf(":%d", spsProxyPort)})
+	cmd := exec.CommandContext(ctx, "kubectl", args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		cancel()
+		return 0, nil, fmt.Errorf("failed to create stdout pipe for port-forward: %w", err)
+	}
+	cmd.Stderr = cmd.Stdout
+	if err := cmd.Start(); err != nil {
+		cancel()
+		return 0, nil, fmt.Errorf("failed to start kubectl port-forward: %w", err)
+	}
+
+	var errOut strings.Builder
+	portCh := make(chan int, 1)
+	pipeDone := make(chan struct{})
+	go readForwardedPort(stdout, &errOut, portCh, pipeDone)
+
+	select {
+	case port, ok := <-portCh:
+		if !ok {
+			cancel()
+			<-pipeDone
+			_ = cmd.Wait()
+			return 0, nil, fmt.Errorf("port-forward to %s did not become ready: %s", pod, strings.TrimSpace(errOut.String()))
+		}
+		done := make(chan struct{})
+		restartArgs := withKubeContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf("%d:%d", port, spsProxyPort)})
+		go keepPortForwardAlive(ctx, cmd, pipeDone, restartArgs, done)
+		return port, func() { cancel(); <-done }, nil
+	case <-sigCh:
+		cancel()
+		<-pipeDone
+		_ = cmd.Wait()
+		return 0, nil, fmt.Errorf("interrupted while starting port-forward to %s", pod)
+	case <-time.After(30 * time.Second):
+		cancel()
+		<-pipeDone
+		_ = cmd.Wait()
+		return 0, nil, fmt.Errorf("timed out waiting for port-forward to %s", pod)
+	}
+}
+
+func readForwardedPort(r io.Reader, errOut *strings.Builder, portCh chan<- int, pipeDone chan<- struct{}) {
+	defer close(pipeDone)
+	for scanner := bufio.NewScanner(r); scanner.Scan(); {
+		line := scanner.Text()
+		if m := portForwardRe.FindStringSubmatch(line); len(m) == 2 {
+			if port, err := strconv.Atoi(m[1]); err == nil {
+				portCh <- port
+				close(portCh)
+				_, _ = io.Copy(io.Discard, r)
+				return
+			}
+		}
+		errOut.WriteString(line + "\n")
+	}
+	close(portCh)
+}
+
+// keepPortForwardAlive restarts kubectl port-forward if it exits before ctx is cancelled (e.g. on Ctrl-C in pdb).
+func keepPortForwardAlive(ctx context.Context, cmd *exec.Cmd, pipeDone <-chan struct{}, args []string, done chan<- struct{}) {
+	defer close(done)
+	<-pipeDone
+	for {
+		_ = cmd.Wait()
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(500 * time.Millisecond):
+		}
+		cmd = exec.CommandContext(ctx, "kubectl", args...)
+		if err := cmd.Start(); err != nil {
+			if ctx.Err() == nil {
+				logging.Warn("failed to restart kubectl port-forward: %v", err)
+			}
+			return
+		}
+	}
+}
+
+func runLocalCommand(command string, port int, env map[string]string, sigCh <-chan os.Signal) error {
+	cmd := exec.Command("bash", "-c", command)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	cmd.Env = os.Environ()
+	for k, v := range env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	cmd.Env = append(cmd.Env, "JAX_PLATFORMS=proxy", fmt.Sprintf("JAX_BACKEND_TARGET=grpc://127.0.0.1:%d", port))
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start %q: %w", command, err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	for {
+		select {
+		case err := <-done:
+			if err != nil {
+				return fmt.Errorf("command %q failed: %w", command, err)
+			}
+			return nil
+		case s := <-sigCh:
+			// Ctrl-C reaches the command directly (same process group), e.g. inside pdb; forward only SIGTERM.
+			if s == syscall.SIGTERM {
+				_ = cmd.Process.Signal(s)
+			}
+		}
+	}
+}
+
+func (g *GKEOrchestrator) deleteSPSClient(name, ns string) {
+	logging.Info("Deleting SPS client %s...", name)
+	if res := g.kubectl("delete", "jobset", name, "-n", ns, "--ignore-not-found", "--wait=false", kubectlReadTimeout); res.ExitCode != 0 {
+		logging.Warn("failed to delete SPS client %s: %s", name, strings.TrimSpace(res.Stderr))
+	}
+}

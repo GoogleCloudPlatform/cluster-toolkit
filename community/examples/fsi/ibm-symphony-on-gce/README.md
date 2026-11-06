@@ -86,6 +86,10 @@ The GCS bucket layout should look like:
      gcloud projects add-iam-policy-binding "<YOUR_PROJECT_ID>" \
          --member="user:<DEPLOYER_USER_EMAIL>" \
          --role="roles/secretmanager.secretAccessor"
+
+     gcloud projects add-iam-policy-binding "<YOUR_PROJECT_ID>" \
+         --member="user:<DEPLOYER_USER_EMAIL>" \
+         --role="roles/resourcemanager.projectIamAdmin"
      ```
 
      *(Note: If deploying with a service account, replace `user:<DEPLOYER_USER_EMAIL>` with `serviceAccount:<DEPLOYER_SERVICE_ACCOUNT_EMAIL>`.)*

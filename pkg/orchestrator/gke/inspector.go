@@ -631,6 +631,10 @@ func parseSPSHead(name string, head *spsPodSpecView, summary *spsInstanceSummary
 }
 
 func parseRMArgs(args []string, summary *spsInstanceSummary) {
+	summary.InstanceType, summary.InstanceCount, _ = parsePathwaysRMArgs(args)
+}
+
+func parsePathwaysRMArgs(args []string) (instanceType string, instanceCount int, gcsLocation string) {
 	for i := 0; i < len(args); i++ {
 		key, value, ok := strings.Cut(args[i], "=")
 		if !ok && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
@@ -640,12 +644,15 @@ func parseRMArgs(args []string, summary *spsInstanceSummary) {
 			continue
 		}
 		switch strings.TrimLeft(key, "-") {
+		case "gcs_scratch_location":
+			gcsLocation = value
 		case "instance_type":
-			summary.InstanceType = value
+			instanceType = value
 		case "instance_count":
-			summary.InstanceCount, _ = strconv.Atoi(value)
+			instanceCount, _ = strconv.Atoi(value)
 		}
 	}
+	return instanceType, instanceCount, gcsLocation
 }
 
 func spsInstanceStatus(js *spsJobSetView) string {

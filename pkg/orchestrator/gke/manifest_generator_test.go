@@ -4418,8 +4418,10 @@ func TestGenerateJobSetAndPathways_SharedBaseBlocksStrict(t *testing.T) {
 func TestGenerateManifest_YAMLInjectionRejectedInBaseBlocks(t *testing.T) {
 	setupMockMachineConfig(t)
 	cpuResp := shell.CommandResult{ExitCode: 0, Stdout: `{"guestCpus": 4}`}
+	tpuResp := shell.CommandResult{ExitCode: 0, Stdout: `{"guestCpus": 112, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v6e-slice"}]}`}
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
 		"gcloud compute machine-types describe n2-standard-4 --zone=us-central1-a --format=json": {cpuResp, cpuResp, cpuResp, cpuResp, cpuResp, cpuResp, cpuResp, cpuResp, cpuResp, cpuResp, cpuResp, cpuResp},
+		"gcloud compute machine-types describe tpu-v6e-slice --zone=us-central1-a --format=json": {tpuResp, tpuResp, tpuResp, tpuResp},
 	})
 	orc := newTestGKEOrchestrator(mockExec)
 	orc.projectID = "mock-project"
@@ -4429,6 +4431,7 @@ func TestGenerateManifest_YAMLInjectionRejectedInBaseBlocks(t *testing.T) {
 
 	cases := []struct {
 		name   string
+		useTPU bool
 		mutate func(*ManifestOptions, *orchestrator.JobDefinition)
 	}{
 		{
@@ -4459,6 +4462,17 @@ func TestGenerateManifest_YAMLInjectionRejectedInBaseBlocks(t *testing.T) {
 				j.PriorityClassName = o.PriorityClassName
 			},
 		},
+		{
+			name:   "TelemetryCollectorImage injection in telemetry_sidecar",
+			useTPU: true,
+			mutate: func(o *ManifestOptions, j *orchestrator.JobDefinition) {
+				o.MLDiagnosticsEnabled = true
+				o.TelemetryCollectorImage = "registry.local/col:v1\n    securityContext:\n      privileged: true"
+				o.TelemetryCollectorPort = 8889
+				j.MLDiagnosticsEnabled = true
+				j.MLDiagnosticsImage = o.TelemetryCollectorImage
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -4467,6 +4481,12 @@ func TestGenerateManifest_YAMLInjectionRejectedInBaseBlocks(t *testing.T) {
 			mt := "n2-standard-4"
 			ct := "n2-standard-4"
 			topo := ""
+			if tc.useTPU {
+				p = JobProfile{CapacityCount: 4}
+				mt = "tpu-v6e-slice"
+				ct = "v6e-4"
+				topo = "2x2"
+			}
 			opts := ManifestOptions{
 				WorkloadName:    "safe-job",
 				FullImageName:   "alpine:3.20",
@@ -4638,25 +4658,29 @@ func TestImagePullSecrets_MultiImageMatching(t *testing.T) {
 	}
 
 	tpuJob := orchestrator.JobDefinition{
-		WorkloadName:    "multi-img-tpu",
-		CommandToRun:    "python3 train.py",
-		ComputeType:     "v6e-4",
-		MachineType:     "tpu-v6e-slice",
-		Topology:        "2x2",
-		ClusterLocation: "us-central1-a",
-		NumSlices:       1,
-		NodesPerSlice:   1,
+		WorkloadName:         "multi-img-tpu",
+		CommandToRun:         "python3 train.py",
+		ComputeType:          "v6e-4",
+		MachineType:          "tpu-v6e-slice",
+		Topology:             "2x2",
+		ClusterLocation:      "us-central1-a",
+		NumSlices:            1,
+		NodesPerSlice:        1,
+		MLDiagnosticsEnabled: true,
+		MLDiagnosticsImage:   "[fd00::1]:5000/obs/ai-telemetry-collector:v1.2.3",
 	}
 	opts, err := orc.PrepareManifestOptions(tpuJob, "alpine:3.20", JobProfile{CapacityCount: 4}, false, false)
 	if err != nil {
 		t.Fatalf("PrepareManifestOptions failed: %v", err)
 	}
-	if !strings.Contains(opts.ImagePullSecrets, "dockerhub-sec") {
-		t.Fatalf("expected dockerhub-sec, got %q", opts.ImagePullSecrets)
+	if !strings.Contains(opts.ImagePullSecrets, "dockerhub-sec") || !strings.Contains(opts.ImagePullSecrets, "ipv6-sidecar-sec") {
+		t.Fatalf("expected dockerhub-sec and ipv6-sidecar-sec, got %q", opts.ImagePullSecrets)
 	}
 
 	pwJob := tpuJob
 	pwJob.WorkloadName = "pw-secrets"
+	pwJob.MLDiagnosticsImage = ""
+	pwJob.MLDiagnosticsEnabled = false
 	pwJob.IsPathwaysJob = true
 	pwJob.Pathways = orchestrator.PathwaysJobDefinition{
 		GCSLocation:                 "gs://bkt",
@@ -4759,17 +4783,17 @@ func TestImagePullSecrets_ExplicitBypassAndActiveImages(t *testing.T) {
 		ProxyServerImage: "reg.local/proxy:v1",
 		WorkerImage:      "reg.local/server:v1",
 	}
-	spsImages := activeWorkloadImages(orchestrator.JobDefinition{IsPathwaysJob: true, Pathways: pw}, "reg.local/workload:v1")
-	if diff := cmp.Diff([]string{"reg.local/server:v1"}, spsImages); diff != "" {
+	spsImages := activeWorkloadImages(orchestrator.JobDefinition{IsPathwaysJob: true, Pathways: pw}, "reg.local/workload:v1", "reg.local/telem:v1")
+	if diff := cmp.Diff([]string{"reg.local/server:v1", "reg.local/telem:v1"}, spsImages); diff != "" {
 		t.Errorf("DeploySPS activeWorkloadImages mismatch (-want +got):\n%s", diff)
 	}
 	pw.DeploySPS, pw.Headless = false, true
-	headlessImages := activeWorkloadImages(orchestrator.JobDefinition{IsPathwaysJob: true, Pathways: pw}, "reg.local/workload:v1")
+	headlessImages := activeWorkloadImages(orchestrator.JobDefinition{IsPathwaysJob: true, Pathways: pw}, "reg.local/workload:v1", "")
 	if diff := cmp.Diff([]string{"reg.local/server:v1", "reg.local/proxy:v1"}, headlessImages); diff != "" {
 		t.Errorf("Headless activeWorkloadImages mismatch (-want +got):\n%s", diff)
 	}
 	pw.Headless = false
-	fullImages := activeWorkloadImages(orchestrator.JobDefinition{IsPathwaysJob: true, Pathways: pw}, "reg.local/workload:v1")
+	fullImages := activeWorkloadImages(orchestrator.JobDefinition{IsPathwaysJob: true, Pathways: pw}, "reg.local/workload:v1", "")
 	if diff := cmp.Diff([]string{"reg.local/workload:v1", "reg.local/server:v1", "reg.local/proxy:v1"}, fullImages); diff != "" {
 		t.Errorf("Pathways activeWorkloadImages mismatch (-want +got):\n%s", diff)
 	}
@@ -4871,7 +4895,17 @@ spec:
 // manifests to the embedded defaults, covering the read-custom -> overlay -> compile-per-block -> reindent path.
 func TestCustomTemplateLoading_ExtractedDefaultsAreNoOp(t *testing.T) {
 	baseOpts, profile := newCustomTemplateBaseOpts()
+	// Exercise the telemetry_sidecar base block too, so extracted and embedded base.tmpl are compared on it.
+	baseOpts.MLDiagnosticsEnabled = true
+	baseOpts.TelemetryCollectorImage = "registry.local/ai-telemetry-collector:v1"
+	baseOpts.TelemetryCollectorPort = 9100
 	pwJob := newCPUPathwaysJob("pw-noop")
+	pwJob.ComputeType = "v6e-4"
+	pwJob.MachineType = "tpu-v6e-slice"
+	pwJob.Topology = "2x2"
+	pwJob.MLDiagnosticsEnabled = true
+	pwJob.MLDiagnosticsImage = "registry.local/ai-telemetry-collector:v1"
+	pwJob.MLDiagnosticsTelemetryPort = 9100
 	render := func(t *testing.T, customDir string) map[string]string {
 		t.Helper()
 		orc := newCustomTemplateTestOrc(t, customDir)
@@ -4883,7 +4917,7 @@ func TestCustomTemplateLoading_ExtractedDefaultsAreNoOp(t *testing.T) {
 		if out["job"], err = orc.GenerateJobManifest(baseOpts, profile); err != nil {
 			t.Fatalf("GenerateJobManifest(customDir=%q) failed: %v", customDir, err)
 		}
-		if out["pathways"], err = orc.GeneratePathwaysManifest(pwJob, "img:latest", profile, false, false); err != nil {
+		if out["pathways"], err = orc.GeneratePathwaysManifest(pwJob, "img:latest", JobProfile{CapacityCount: 4}, false, false); err != nil {
 			t.Fatalf("GeneratePathwaysManifest(customDir=%q) failed: %v", customDir, err)
 		}
 		return out
@@ -5157,6 +5191,255 @@ func assertLegacyJobSetRendersAllInputs(t *testing.T, manifest, workloadName str
 	assertContainerHasMount(t, podSpec.Containers[0], "/tmp/mtc", false)
 }
 
+func TestCustomTemplateValidation_WorkloadTelemetry(t *testing.T) {
+	setupMockMachineConfig(t)
+	tpuResp := shell.CommandResult{ExitCode: 0, Stdout: `{"guestCpus": 112, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v6e-slice"}]}`}
+	cases := []struct {
+		name    string
+		baseOvr string
+		wantSub string
+	}{
+		{
+			name: "missing ai-telemetry-collector sidecar",
+			baseOvr: `{{- define "pod_template" -}}
+metadata:
+  labels:
+    gcluster.google.com/workload: {{.WorkloadName}}
+    tpu-workload-name: {{.WorkloadName}}
+spec:
+  restartPolicy: Never
+  containers:
+  - name: workload-container
+    image: {{.FullImageName}}
+{{- end -}}
+`,
+			wantSub: "ai-telemetry-collector",
+		},
+		{
+			name: "missing tpu-workload-name pod label",
+			baseOvr: `{{- define "pod_template" -}}
+metadata:
+  labels:
+    gcluster.google.com/workload: {{.WorkloadName}}
+spec:
+  restartPolicy: Never
+  initContainers:
+{{(StructuralData (.RenderBlock "telemetry_sidecar" 2))}}
+  containers:
+  - name: workload-container
+    image: {{.FullImageName}}
+{{- end -}}
+`,
+			wantSub: "tpu-workload-name",
+		},
+		{
+			name: "collector as a plain init container without restartPolicy",
+			baseOvr: `{{- define "telemetry_sidecar" -}}
+- name: ai-telemetry-collector
+  image: {{.TelemetryCollectorImage}}
+{{- end -}}
+`,
+			wantSub: "restartPolicy: Always",
+		},
+		{
+			name: "stale workload_labels keeps the managed webhook label",
+			baseOvr: `{{- define "workload_labels" -}}
+gcluster.google.com/workload: {{.WorkloadName}}
+managed-mldiagnostics-gke: "true"
+{{- end -}}
+`,
+			wantSub: "managed-mldiagnostics-gke",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			customDir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(customDir, "base.tmpl"), []byte(tc.baseOvr), 0644); err != nil {
+				t.Fatal(err)
+			}
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe tpu-v6e-slice --zone=us-central1-a --format=json": {tpuResp, tpuResp},
+			})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.clusterZones = []string{"us-central1-a"}
+			orc.gkeCustomTemplatesPath = customDir
+
+			opts := ManifestOptions{
+				WorkloadName:            "telemetry-job",
+				FullImageName:           "registry.local/jax:v1",
+				CommandToRun:            "python3 train.py",
+				ComputeType:             "tpu-v6e-slice",
+				MachineType:             "tpu-v6e-slice",
+				ClusterLocation:         "us-central1-a",
+				NumSlices:               1,
+				NodesPerSlice:           1,
+				MLDiagnosticsEnabled:    true,
+				TelemetryCollectorImage: "registry.local/ai-telemetry-collector:v1",
+				TelemetryCollectorPort:  8889,
+			}
+			profile := JobProfile{CapacityCount: 4}
+
+			for kind, fn := range map[string]func() (string, error){
+				"JobSet": func() (string, error) { return orc.GenerateGKEManifest(opts, profile) },
+				"Job":    func() (string, error) { return orc.GenerateJobManifest(opts, profile) },
+			} {
+				_, err := fn()
+				if err == nil || !strings.Contains(err.Error(), tc.wantSub) || !strings.Contains(err.Error(), "gcluster job gke-template-extract") {
+					t.Errorf("%s expected error mentioning %q and gke-template-extract, got: %v", kind, tc.wantSub, err)
+				}
+			}
+		})
+	}
+}
+
+func TestCustomTemplateValidation_PathwaysTelemetry(t *testing.T) {
+	setupMockMachineConfig(t)
+	tpuResp := shell.CommandResult{ExitCode: 0, Stdout: `{"guestCpus": 112, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v6e-slice"}]}`}
+	cases := []struct {
+		name   string
+		mutate func(string) string
+		want   string
+	}{
+		{
+			name: "missing ai-telemetry-collector on worker",
+			mutate: func(src string) string {
+				return strings.ReplaceAll(src, `{{(StructuralData (.RenderBlock "telemetry_sidecar" 12))}}`, "")
+			},
+			want: "ai-telemetry-collector",
+		},
+		{
+			name: "missing tpu-workload-name on worker",
+			mutate: func(src string) string {
+				return strings.ReplaceAll(src, "tpu-workload-name: {{.WorkloadName}}", "other-label: {{.WorkloadName}}")
+			},
+			want: "tpu-workload-name",
+		},
+		{
+			name: "leaked tpu-workload-name onto pathways-head",
+			mutate: func(src string) string {
+				return strings.Replace(src, "gcluster.google.com/workload: {{.WorkloadName}}", "gcluster.google.com/workload: {{.WorkloadName}}\n              tpu-workload-name: {{.WorkloadName}}", 1)
+			},
+			want: "pathways-head",
+		},
+		{
+			name: "leaked ai-telemetry-collector onto pathways-head",
+			mutate: func(src string) string {
+				return strings.Replace(src, "- name: pathways-rm", "- name: ai-telemetry-collector\n              image: {{.TelemetryCollectorImage}}\n            - name: pathways-rm", 1)
+			},
+			want: "pathways-head",
+		},
+		{
+			name: "leaked ai-telemetry-collector into pathways-head regular containers",
+			mutate: func(src string) string {
+				return strings.Replace(src, "- name: workload-container", "- name: ai-telemetry-collector\n              image: {{.TelemetryCollectorImage}}\n            - name: workload-container", 1)
+			},
+			want: "pathways-head",
+		},
+		{
+			name: "missing worker replicatedJob",
+			mutate: func(src string) string {
+				return strings.Replace(src, "  - name: worker", "  - name: renamed-worker", 1)
+			},
+			want: "no worker replicatedJob",
+		},
+		{
+			name: "stale workload_labels keeps the managed webhook label on the JobSet",
+			mutate: func(src string) string {
+				return strings.Replace(src, `{{(StructuralData (.RenderBlock "workload_labels" 4))}}`, "    gcluster.google.com/workload: {{.WorkloadName}}\n    managed-mldiagnostics-gke: \"true\"", 1)
+			},
+			want: "managed-mldiagnostics-gke",
+		},
+		{
+			name: "telemetry port already declared by pathways-worker",
+			mutate: func(src string) string {
+				return strings.Replace(src, "- containerPort: 8471", "- containerPort: 8471\n              - containerPort: 8889", 1)
+			},
+			want: `declared by container "pathways-worker"`,
+		},
+		{
+			name: "ai-telemetry-collector placed in regular containers instead of initContainers",
+			mutate: func(src string) string {
+				withoutInit := strings.ReplaceAll(src, `{{(StructuralData (.RenderBlock "telemetry_sidecar" 12))}}`, "")
+				return strings.Replace(withoutInit, "- name: pathways-worker", "- name: ai-telemetry-collector\n              image: {{.TelemetryCollectorImage}}\n            - name: pathways-worker", 1)
+			},
+			want: "initContainers",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			customDir := t.TempDir()
+			if err := k8s.ExtractDefaultTemplates(customDir, false); err != nil {
+				t.Fatalf("ExtractDefaultTemplates failed: %v", err)
+			}
+			pwPath := filepath.Join(customDir, "pathways_jobset.tmpl")
+			raw, err := os.ReadFile(pwPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(pwPath, []byte(tc.mutate(string(raw))), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe tpu-v6e-slice --zone=us-central1-a --format=json": {tpuResp},
+			})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.clusterZones = []string{"us-central1-a"}
+			orc.gkeCustomTemplatesPath = customDir
+
+			pwJob := orchestrator.JobDefinition{
+				WorkloadName:         "pw-telemetry",
+				CommandToRun:         "python3 train.py",
+				ComputeType:          "v6e-4",
+				MachineType:          "tpu-v6e-slice",
+				Topology:             "2x2",
+				NumSlices:            1,
+				NodesPerSlice:        1,
+				ClusterLocation:      "us-central1-a",
+				MLDiagnosticsEnabled: true,
+				MLDiagnosticsImage:   "registry.local/ai-telemetry-collector:v1",
+				IsPathwaysJob:        true,
+				Pathways: orchestrator.PathwaysJobDefinition{
+					GCSLocation:  "gs://bkt",
+					HeadNodePool: "cpu-np",
+				},
+			}
+			_, err = orc.GeneratePathwaysManifest(pwJob, "registry.local/jax:v1", JobProfile{CapacityCount: 4}, false, false)
+			if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "gcluster job gke-template-extract") {
+				t.Errorf("expected error mentioning %q and gke-template-extract, got: %v", tc.want, err)
+			}
+		})
+	}
+
+	t.Run("built-in template port collision omits custom-template re-extract hint", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud compute machine-types describe tpu-v6e-slice --zone=us-central1-a --format=json": {tpuResp},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.clusterZones = []string{"us-central1-a"}
+		_, err := orc.GeneratePathwaysManifest(orchestrator.JobDefinition{
+			WorkloadName:               "pw-port-clash",
+			CommandToRun:               "python3 train.py",
+			ComputeType:                "v6e-4",
+			MachineType:                "tpu-v6e-slice",
+			Topology:                   "2x2",
+			NumSlices:                  1,
+			NodesPerSlice:              1,
+			ClusterLocation:            "us-central1-a",
+			MLDiagnosticsEnabled:       true,
+			MLDiagnosticsImage:         "registry.local/ai-telemetry-collector:v1",
+			MLDiagnosticsTelemetryPort: 8080,
+			IsPathwaysJob:              true,
+			Pathways:                   orchestrator.PathwaysJobDefinition{GCSLocation: "gs://bkt", HeadNodePool: "cpu-np"},
+		}, "registry.local/jax:v1", JobProfile{CapacityCount: 4}, false, false)
+		if err == nil || !strings.Contains(err.Error(), `declared by container "pathways-worker"`) || strings.Contains(err.Error(), "gke-template-extract") {
+			t.Fatalf("got err = %v, want pathways-worker port collision without custom-template hint", err)
+		}
+	})
+}
+
 func TestCustomTemplateValidation_PodFailurePolicyAndTemplatePathErrors(t *testing.T) {
 	customDir := t.TempDir()
 	renamedContainerBase := `{{- define "pod_template" -}}
@@ -5261,5 +5544,77 @@ func TestRenderBlock_RecursiveOverrideFailsFast(t *testing.T) {
 		if _, err := orc.GenerateGKEManifest(baseOpts, profile); err != nil {
 			t.Fatalf("render %d with embedded defaults failed: %v", i+1, err)
 		}
+	}
+}
+
+func assertRenderedNamespace(t *testing.T, kind, manifest, wantNS string) {
+	t.Helper()
+	var meta struct {
+		Metadata struct {
+			Namespace string `json:"namespace"`
+		} `json:"metadata"`
+	}
+	if err := k8syaml.Unmarshal([]byte(manifest), &meta); err != nil {
+		t.Fatalf("%s: failed to parse metadata: %v\n%s", kind, err, manifest)
+	}
+	if meta.Metadata.Namespace != wantNS {
+		t.Errorf("%s: metadata.namespace = %q, want %q", kind, meta.Metadata.Namespace, wantNS)
+	}
+	if wantNS == "" && strings.Contains(manifest, "namespace:") {
+		t.Errorf("%s: no namespace resolved but manifest renders one:\n%s", kind, manifest)
+	}
+}
+
+// TestGenerateManifests_RenderResolvedNamespace pins that all workload templates declare metadata.namespace from
+// the namespace resolved for the submission, so a saved manifest applied outside gcluster lands in the same
+// namespace as the PV/PVC documents appended to it, and that nothing is rendered when no namespace was resolved.
+func TestGenerateManifests_RenderResolvedNamespace(t *testing.T) {
+	setupMockMachineConfig(t)
+	newOrc := func(ns string) *GKEOrchestrator {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.projectID = "mock-project"
+		orc.clusterZones = []string{"us-central1-a"}
+		orc.namespace = ns
+		orc.clusterDesc.NodePools = []gkeJobNodePool{{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}}}
+		return orc
+	}
+	profile := JobProfile{IsCPUMachine: true, CapacityCount: 2}
+	jobSetOpts := ManifestOptions{WorkloadName: "ns-render", FullImageName: "img:v1", CommandToRun: "echo hi", ComputeType: "n2-standard-2", MachineType: "n2-standard-2", ClusterLocation: "us-central1-a", NumSlices: 1, NodesPerSlice: 1}
+	pwJob := orchestrator.JobDefinition{
+		WorkloadName: "ns-render-pw", CommandToRun: "echo hi", NumSlices: 1, NodesPerSlice: 1, ClusterLocation: "us-central1-a", ComputeType: "n2-standard-2", MachineType: "n2-standard-2", IsPathwaysJob: true,
+		Pathways: orchestrator.PathwaysJobDefinition{ProxyServerImage: "proxy:latest", ServerImage: "server:latest", WorkerImage: "worker:latest", GCSLocation: "gs://bkt", HeadNodePool: "pathways-np"},
+	}
+
+	// The rendered namespace must always equal the one the orchestrator resolved: explicitly (--gke-namespace)
+	// or implicitly during generation (pull-secret discovery resolves it through the pinned context), and
+	// nothing is rendered while it is still unresolved.
+	for _, ns := range []string{"team-a", ""} {
+		t.Run("namespace="+ns, func(t *testing.T) {
+			orc := newOrc(ns)
+			jobSet, err := orc.GenerateGKEManifest(jobSetOpts, profile)
+			if err != nil {
+				t.Fatalf("GenerateGKEManifest failed: %v", err)
+			}
+			assertRenderedNamespace(t, "jobset", jobSet, ns)
+
+			jobManifest := mustGenerateJobManifest(t, orc, jobSetOpts, profile)
+			svcDoc, jobDoc, _ := parseServiceAndJobDocs(t, jobManifest)
+			if svcDoc.Namespace != ns || jobDoc.Namespace != ns {
+				t.Errorf("job: Service/Job metadata.namespace = (%q, %q), want %q", svcDoc.Namespace, jobDoc.Namespace, ns)
+			}
+			assertRenderedNamespace(t, "job-service", jobManifest, ns)
+
+			pathways, err := orc.GeneratePathwaysManifest(pwJob, "img:v1", profile, false, false)
+			if err != nil {
+				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+			}
+			assertRenderedNamespace(t, "pathways", pathways, orc.namespace)
+			if ns != "" && orc.namespace != ns {
+				t.Errorf("explicit namespace %q was overwritten during generation with %q", ns, orc.namespace)
+			}
+		})
 	}
 }
