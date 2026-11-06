@@ -18,7 +18,6 @@
 package modulewriter
 
 import (
-	"bytes"
 	"crypto/md5"
 	"embed"
 	"encoding/hex"
@@ -37,7 +36,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"text/template"
 
 	"github.com/hashicorp/go-getter"
 	"github.com/hashicorp/hcl/v2/hclparse"
@@ -338,15 +336,12 @@ func AgentNoticePath(deploymentDir string) string {
 // folder's GEMINI.md when it opens a file there, so the "do not edit" rule reaches
 // the agent together with the file. Rewritten on every create so it never goes stale.
 func writeAgentNotice(deploymentDir string) error {
-	tmpl, err := template.ParseFS(templatesFS, agentNoticeTemplate)
+	raw, err := templatesFS.ReadFile(agentNoticeTemplate)
 	if err != nil {
 		return err
 	}
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, map[string]string{"Folder": filepath.Base(filepath.Clean(deploymentDir))}); err != nil {
-		return err
-	}
-	return os.WriteFile(AgentNoticePath(deploymentDir), buf.Bytes(), 0644)
+	content := strings.ReplaceAll(string(raw), "{{.Folder}}", filepath.Base(filepath.Clean(deploymentDir)))
+	return os.WriteFile(AgentNoticePath(deploymentDir), []byte(content), 0644)
 }
 
 func createGroupDir(deplPath string, g config.Group) (string, error) {
