@@ -340,7 +340,11 @@ func writeAgentNotice(deploymentDir string) error {
 	if err != nil {
 		return err
 	}
-	content := strings.ReplaceAll(string(raw), "{{.Folder}}", filepath.Base(filepath.Clean(deploymentDir)))
+	absDir, err := filepath.Abs(deploymentDir)
+	if err != nil {
+		return err
+	}
+	content := strings.ReplaceAll(string(raw), "{{.Folder}}", filepath.Base(absDir))
 	return os.WriteFile(AgentNoticePath(deploymentDir), []byte(content), 0644)
 }
 
