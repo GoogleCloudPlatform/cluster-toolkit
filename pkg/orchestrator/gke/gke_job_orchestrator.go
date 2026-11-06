@@ -1116,6 +1116,19 @@ func (g *GKEOrchestrator) queryDiscoveredTopologies(accelLabel string, machineTy
 	return strings.TrimSpace(output), nil
 }
 
+func (g *GKEOrchestrator) resolveBuildNamespace(job orchestrator.JobDefinition) string {
+	if ns := strings.TrimSpace(job.GKENamespace); ns != "" {
+		return ns
+	}
+	if ns := strings.TrimSpace(g.namespace); ns != "" {
+		return ns
+	}
+	if resolvedNS, err := g.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID); err == nil && resolvedNS != "" {
+		return resolvedNS
+	}
+	return "default"
+}
+
 func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (string, error) {
 	if job.Pathways.Headless || job.Pathways.DeploySPS {
 		return "", nil
@@ -1123,7 +1136,7 @@ func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (s
 	if job.DryRunManifest != "" {
 		if job.BaseImage != "" {
 			logging.Info("[Dry Run] Skipping Crane build, generating predicted URI...")
-			return imagebuilder.GenerateImageName(job.ProjectID, job.ClusterLocation)
+			return imagebuilder.GenerateImageName(job.ProjectID, job.ClusterLocation, g.resolveBuildNamespace(job), job.WorkloadName, job.BaseImage, "")
 		}
 		if job.ImageName != "" {
 			logging.Info("[Dry Run] Using pre-existing container image: %s", job.ImageName)
@@ -1146,6 +1159,8 @@ func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (s
 		fullImageName, err := imagebuilder.BuildContainerImageFromBaseImage(
 			job.ProjectID,
 			job.ClusterLocation,
+			g.resolveBuildNamespace(job),
+			job.WorkloadName,
 			job.BaseImage,
 			job.BuildContext,
 			job.Platform,

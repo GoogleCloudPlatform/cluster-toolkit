@@ -16,8 +16,10 @@ package job
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/imagebuilder"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -509,40 +511,51 @@ func validateBuildContext(ctx context.Context, projectID, location string) error
 	if buildContext == "" {
 		return nil
 	}
-	if os.Getenv("GCLUSTER_IMAGE_REPO") == "" {
-		suggestions, hasMore := lookupArtifactRegistryRepos(ctx, projectID, location)
-
-		region := shell.ExtractRegion(location)
-
-		projPrint := projectID
-		if projPrint == "" {
-			projPrint = "<PROJECT_ID>"
+	dest, err := imagebuilder.ResolveDestinationRepo(projectID, location, baseImage, os.Getenv("GCLUSTER_IMAGE_REPO"))
+	if err != nil {
+		if !errors.Is(err, imagebuilder.ErrMissingImageRepo) {
+			return err
 		}
-		regPrint := region
-		if regPrint == "" {
-			regPrint = "<REGION>"
+		if projectID == "" && location == "" {
+			return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context with base image %q. "+
+				"Set GCLUSTER_IMAGE_REPO=<registry-host>/<repository> (or pass a --base-image hosted in your local/private OCI registry)", baseImage)
 		}
-
-		if len(suggestions) > 0 {
-			reposStr := "'" + strings.Join(suggestions, "', '") + "'"
-			if hasMore {
-				reposStr += " (and more)"
-			}
-			return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context.\n\n"+
-				"Available Docker repositories in project '%s' and region '%s' are: %s.\n\n"+
-				"To view all repositories, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --filter=\"format=DOCKER\" --format=\"value(name.basename())\"\n\n"+
-				"Please set your environment variable to one of these (e.g., export GCLUSTER_IMAGE_REPO=%s)",
-				projPrint, regPrint, reposStr, projPrint, regPrint, suggestions[0])
-		}
-		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. "+
-			"Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo).\n\n"+
-			"To see available repositories manually, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --filter=\"format=DOCKER\" --format=\"value(name.basename())\"",
-			projPrint, regPrint)
+		return missingGARRepoError(ctx, projectID, location)
 	}
-	if os.Getenv("USER") == "" && os.Getenv("USERNAME") == "" {
+	if dest.IsGAR && os.Getenv("USER") == "" && os.Getenv("USERNAME") == "" {
 		return fmt.Errorf("failed to determine user identity from environment (tried USER and USERNAME). This is required to ensure unique image tagging when using --build-context")
 	}
 	return nil
+}
+
+func missingGARRepoError(ctx context.Context, projectID, location string) error {
+	suggestions, hasMore := lookupArtifactRegistryRepos(ctx, projectID, location)
+	region := shell.ExtractRegion(location)
+
+	projPrint := projectID
+	if projPrint == "" {
+		projPrint = "<PROJECT_ID>"
+	}
+	regPrint := region
+	if regPrint == "" {
+		regPrint = "<REGION>"
+	}
+
+	if len(suggestions) > 0 {
+		reposStr := "'" + strings.Join(suggestions, "', '") + "'"
+		if hasMore {
+			reposStr += " (and more)"
+		}
+		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context.\n\n"+
+			"Available Docker repositories in project '%s' and region '%s' are: %s.\n\n"+
+			"To view all repositories, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --filter=\"format=DOCKER\" --format=\"value(name.basename())\"\n\n"+
+			"Please set your environment variable to one of these (e.g., export GCLUSTER_IMAGE_REPO=%s)",
+			projPrint, regPrint, reposStr, projPrint, regPrint, suggestions[0])
+	}
+	return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. "+
+		"Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo).\n\n"+
+		"To see available repositories manually, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --filter=\"format=DOCKER\" --format=\"value(name.basename())\"",
+		projPrint, regPrint)
 }
 
 func validateGKENAPFlags() error {
