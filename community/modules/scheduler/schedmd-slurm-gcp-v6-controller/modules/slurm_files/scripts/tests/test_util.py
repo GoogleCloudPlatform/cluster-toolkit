@@ -1441,12 +1441,21 @@ def test_slurmsync_deferred_reconfigure_restart(
         "repair.poll_operations",
     ):
         mocker.patch(f"slurmsync.{name}")
-    mock_reconfigure = mocker.patch("util.scontrol_reconfigure")
+    call_order = []
+    mock_reconfigure = mocker.patch(
+        "util.scontrol_reconfigure",
+        side_effect=lambda *a, **kw: call_order.append("reconfigure"),
+    )
+    mocker.patch(
+        "slurmsync.sync_instances",
+        side_effect=lambda *a, **kw: call_order.append("sync_instances"),
+    )
 
     slurmsync.main()
 
     mock_reconfigure.assert_called_once()
     assert mock_reconfigure.call_args.kwargs["restart"] is expect_restart
+    assert call_order == ["reconfigure", "sync_instances"]
 def test_nodeset_slice_size():
     cfg = TstCfg(
         slurm_cluster_name="testcl",
@@ -2262,3 +2271,30 @@ def test_fetch_config_download_error_propagates():
 def test_yaml_load_reads_dumped_config():
     cfg = util.NSDict({"nodeset": {"a": {"node_conf": {"Weight": 1}, "zones": ["us-east1-b"]}}, "x": None})
     assert util._yaml_load(util.yaml.dump(cfg, Dumper=util.Dumper)) == cfg
+
+
+def test_slurm_nodes_parses_state_and_reason(mocker):
+    cfg = TstCfg(slurm_cluster_name="scalem1")
+    lkp = util.Lookup(cfg)
+    sample = (
+        "NodeName=scalem1-ns-0 Arch=x86_64 State=IDLE+CLOUD+POWERED_DOWN CfgTRES=cpu=2\n"
+        "NodeName=scalem1-ns-1 Arch=x86_64 State=DOWN+CLOUD Reason=MIG Auto-Healing instance repair in progress [slurm@2026-11-05T18:00:00] Comment=test Extra=meta\n"
+        "NodeName=scalem1-ns-2 Arch=x86_64 State=DOWN+CLOUD Reason=Quota exceeded [CPUS] [slurm@2026-11-05T18:00:00]\n"
+        "NodeName=onprem-0 Arch=x86_64 State=IDLE CfgTRES=cpu=8\n"
+    )
+    mocker.patch("util.run", return_value=Mock(stdout=sample))
+    parsed = lkp.slurm_nodes()
+    assert set(parsed.keys()) == {"scalem1-ns-0", "scalem1-ns-1", "scalem1-ns-2"}
+    assert parsed["scalem1-ns-0"] == NodeState(
+        base="IDLE", flags=frozenset({"CLOUD", "POWERED_DOWN"}), reason=""
+    )
+    assert parsed["scalem1-ns-1"] == NodeState(
+        base="DOWN",
+        flags=frozenset({"CLOUD"}),
+        reason="MIG Auto-Healing instance repair in progress",
+    )
+    assert parsed["scalem1-ns-2"] == NodeState(
+        base="DOWN",
+        flags=frozenset({"CLOUD"}),
+        reason="Quota exceeded [CPUS]",
+    )
