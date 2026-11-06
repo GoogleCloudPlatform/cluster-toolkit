@@ -86,6 +86,22 @@ setting [var.spool_parent_dir](#input_spool_parent_dir) to its mount point:
 
 [replacement]: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#type
 
+## Automatic Job Retry on Shutdown Exit Codes
+
+The Access Point configures a `Schedd` job transform (`RETRY_WINDOWS_SHUTDOWN`)
+that automatically re-queues jobs failing with Windows DLL initialization exit
+codes that commonly occur when a job is dispatched to an Execute Point while the
+VM is shutting down:
+
+- `-1073741502` / `3221225794` (`0xC0000142`, `STATUS_DLL_INIT_FAILED`)
+- `-1073741205` / `3221226091` (`0xC000026B`, `STATUS_DLL_INIT_FAILED_LOGOFF`)
+
+The transform preserves any user-specified `OnExitRemove` expression and keeps
+the job in the queue (`OnExitRemove = False`) when it exits normally with one of
+these codes, up to 5 attempts (`NumJobCompletions < 5`). Because this transform
+is applied by the Access Point `Schedd` to all submitted jobs without an OS
+filter, it applies to all jobs in the pool, including Linux jobs.
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2026 Google LLC
 
