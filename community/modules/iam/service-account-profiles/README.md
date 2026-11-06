@@ -139,6 +139,8 @@ If the controller sets its own `slurm_cluster_name`, pass the same value to this
 `slurm_cluster_name` (as `community/examples/hpc-slurm-ha.yaml` does) rather than writing
 `instance_name_prefixes` by hand. The controller's `bulkInsert` needs this permission even
 though it sets no metadata itself, whether or not its instance template carries metadata.
+`slurm_cluster_name` can also be set once in the blueprint's `vars`: every other profile
+ignores it.
 
 Verified live (2026-10-05), as a `slurm-controller` account:
 
@@ -378,7 +380,7 @@ default Compute Engine service account:
   kind: packer
   use: [network, image_builder_profile]
   settings:
-    ...
+    # ...
 ```
 
 The account id is `<deployment_name>-<name>` and is limited to 30 characters (enforced by
@@ -535,7 +537,7 @@ No modules.
 | <a name="input_custom_permissions"></a> [custom\_permissions](#input\_custom\_permissions) | For the custom profile: IAM permissions (e.g. "compute.instances.get") for this account's<br/>generated custom role. | `list(string)` | `[]` | no |
 | <a name="input_custom_profile_name"></a> [custom\_profile\_name](#input\_custom\_profile\_name) | For the custom profile: a short name for what this identity is for, used as the custom role's title. | `string` | `null` | no |
 | <a name="input_custom_role_deletion_policy"></a> [custom\_role\_deletion\_policy](#input\_custom\_role\_deletion\_policy) | Deletion policy for the generated custom role. Unset means the provider default,<br/>"DELETE": destroy soft-deletes the role, a later apply within 7 days undeletes it, and its<br/>id cannot be reused until Google's 44-day deletion process ends. "ABANDON" leaves the role<br/>active, so a later apply fails until the role is imported or removed. "PREVENT" blocks<br/>deletion. | `string` | `null` | no |
-| <a name="input_custom_role_stage"></a> [custom\_role\_stage](#input\_custom\_role\_stage) | Launch stage of the generated custom role: "ALPHA", "BETA", "GA", "DEPRECATED",<br/>"DISABLED" or "EAP". Unset means the provider default, "GA". A "DISABLED" role stays<br/>bound but grants nothing. Only valid when the account gets a generated custom role. | `string` | `null` | no |
+| <a name="input_custom_role_stage"></a> [custom\_role\_stage](#input\_custom\_role\_stage) | Launch stage of the generated custom role: "ALPHA", "BETA", "GA", "DEPRECATED",<br/>"DISABLED" or "EAP". Unset means the provider default, "GA". A "DISABLED" role stays<br/>bound but grants nothing. Ignored by profiles that never get a generated custom role<br/>(slurm-login, slurm-compute), so it can be set in the blueprint's top-level vars; with<br/>profile "custom" it requires capability flags or custom\_permissions. | `string` | `null` | no |
 | <a name="input_custom_roles"></a> [custom\_roles](#input\_custom\_roles) | For the custom profile: ids of existing custom roles to bind to this account, e.g.<br/>"projects/<project\_id>/roles/<role\_id>" or "organizations/<org\_id>/roles/<role\_id>". Can be combined<br/>with custom\_permissions. Predefined roles are not accepted. | `list(string)` | `[]` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment. With name, it builds the generated custom role ids. Use the deployment\_name given to whatever created the account. | `string` | n/a | yes |
 | <a name="input_enable_bigquery_load"></a> [enable\_bigquery\_load](#input\_enable\_bigquery\_load) | Capability: add the BigQuery permissions for the Slurm controller's enable\_bigquery\_load job accounting. | `bool` | `false` | no |
@@ -556,7 +558,7 @@ No modules.
 | <a name="input_role_id_suffix"></a> [role\_id\_suffix](#input\_role\_id\_suffix) | Optional suffix for the generated custom role ids: "<deployment\_name>.<name>.<role\_id\_suffix>"<br/>(and ".scoped" after it for the name-scoped role). Set or change it to redeploy a destroyed<br/>deployment under the same deployment\_name while Google still holds the old role id (from 7<br/>to 44 days after destroy). See "Custom role lifecycle" in the README. | `string` | `null` | no |
 | <a name="input_secret_bindings"></a> [secret\_bindings](#input\_secret\_bindings) | Roles to grant on individual Secret Manager secrets: a map of { project (default project\_id), secret\_id, role }. | <pre>map(object({<br/>    project   = optional(string)<br/>    secret_id = string<br/>    role      = string<br/>  }))</pre> | `{}` | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | E-mail address of the existing service account to grant this profile's permissions to.<br/>Usually set by use: [<account module id>] on a modules/project/service-account block, which<br/>supplies its service\_account\_email output; can also be set directly to any existing account's<br/>e-mail. This module does not create service accounts. | `string` | n/a | yes |
-| <a name="input_slurm_cluster_name"></a> [slurm\_cluster\_name](#input\_slurm\_cluster\_name) | For the Slurm controller profile: the same value given to<br/>schedmd-slurm-gcp-v6-controller's slurm\_cluster\_name input, if set. Slurm names every<br/>VM "<slurm\_cluster\_name>-...", and the controller does not re-normalise an explicit<br/>value, so passing the identical value here keeps the name-scoped role's instance-name<br/>condition correct without hand-deriving instance\_name\_prefixes. Unset mirrors the<br/>controller's own derived default (the first 10 characters of deployment\_name,<br/>lowercase, letters and digits only). Ignored if instance\_name\_prefixes is also set. | `string` | `null` | no |
+| <a name="input_slurm_cluster_name"></a> [slurm\_cluster\_name](#input\_slurm\_cluster\_name) | For the Slurm controller profile: the same value given to<br/>schedmd-slurm-gcp-v6-controller's slurm\_cluster\_name input, if set. Slurm names every<br/>VM "<slurm\_cluster\_name>-...", and the controller does not re-normalise an explicit<br/>value, so passing the identical value here keeps the name-scoped role's instance-name<br/>condition correct without hand-deriving instance\_name\_prefixes. Unset mirrors the<br/>controller's own derived default (the first 10 characters of deployment\_name,<br/>lowercase, letters and digits only). Ignored if instance\_name\_prefixes is also set, and<br/>by every other profile, so it can be set once in the blueprint's top-level vars. | `string` | `null` | no |
 | <a name="input_subnetwork_bindings"></a> [subnetwork\_bindings](#input\_subnetwork\_bindings) | Roles to grant on individual Compute Engine subnetworks: a map of { project (default project\_id; the host project for Shared VPC), region, subnetwork, role }. | <pre>map(object({<br/>    project    = optional(string)<br/>    region     = string<br/>    subnetwork = string<br/>    role       = string<br/>  }))</pre> | `{}` | no |
 
 ## Outputs

@@ -374,7 +374,7 @@ ILLUSTRATIVE_SOURCES = (
 
 
 def _strip_yaml_elision_lines(block: str) -> str:
-    """Strips blockquote prefixes, common indentation, and standalone '...' placeholder lines from a YAML snippet."""
+    """Strips blockquote prefixes and common indentation from a YAML snippet."""
     lines = block.splitlines()
     if lines and all(
         not line.strip() or line.lstrip().startswith(">") for line in lines
@@ -382,10 +382,7 @@ def _strip_yaml_elision_lines(block: str) -> str:
         lines = [re.sub(r"^\s*>\s?", "", line) for line in lines]
     # Dedent instead of rewriting indented '---' lines: a list-item fence's separator lands at
     # column 0, while '---' nested inside a block scalar keeps its indentation and stays content.
-    lines = textwrap.dedent("\n".join(lines)).splitlines()
-    return "\n".join(
-        line for line in lines if not re.match(r"^\s*\.\.\.(?:\s+#.*|\s*)$", line)
-    )
+    return textwrap.dedent("\n".join(lines))
 
 
 def validate_yaml_block(
@@ -399,10 +396,17 @@ def validate_yaml_block(
     errors: list[str] = []
     cleaned_block = _strip_yaml_elision_lines(block)
     try:
+        if re.search(r"(?m)^\s*\.\.\.(?:\s+#.*|\s*)$", cleaned_block):
+            raise ValueError("bare '...' ellipsis line")
         docs = list(yaml.safe_load_all(cleaned_block))
     except (yaml.YAMLError, ValueError) as exc:
         first_line = str(exc).splitlines()[0]
-        errors.append(f"{rel_path}: invalid YAML syntax in snippet: {first_line}")
+        hint = (
+            " (use '# ...' for elided lines)"
+            if re.search(r"(?m)^\s*\.\.\.(?:\s+#.*|\s*)$", cleaned_block)
+            else ""
+        )
+        errors.append(f"{rel_path}: invalid YAML syntax in snippet: {first_line}{hint}")
         return errors
 
     mods: list[dict] = []
@@ -625,10 +629,17 @@ def validate_module_readme_snippets(non_ignored: set[str] | None = None) -> list
             elif lang in ("yaml", "yml"):
                 cleaned_block = _strip_yaml_elision_lines(block)
                 try:
+                    if re.search(r"(?m)^\s*\.\.\.(?:\s+#.*|\s*)$", cleaned_block):
+                        raise ValueError("bare '...' ellipsis line")
                     list(yaml.safe_load_all(cleaned_block))
                 except (yaml.YAMLError, ValueError) as exc:
                     first_line = str(exc).splitlines()[0]
-                    errors.append(f"{snippet_loc}: invalid YAML syntax in snippet: {first_line}")
+                    hint = (
+                        " (use '# ...' for elided lines)"
+                        if re.search(r"(?m)^\s*\.\.\.(?:\s+#.*|\s*)$", cleaned_block)
+                        else ""
+                    )
+                    errors.append(f"{snippet_loc}: invalid YAML syntax in snippet: {first_line}{hint}")
 
     os_compat_blueprints = [
         p
@@ -736,6 +747,7 @@ def validate_markdown_links_and_cli(non_ignored: set[str] | None = None) -> list
             errors.append(f"{rel_path}: contains legacy './ghpc' CLI reference (use './gcluster')")
 
         no_fences = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+        no_fences = re.sub(r"\[`([^`\n\]]+)`\]", r"[\1]", no_fences)
         no_code = re.sub(r"`[^`\n]+`", "", no_fences)
 
         ref_defs: set[str] = set()
@@ -787,7 +799,8 @@ def validate_markdown_links_and_cli(non_ignored: set[str] | None = None) -> list
             if not file_part:
                 abs_target = abs_path
             elif file_part.startswith("/"):
-                abs_target = os.path.join(REPO_ROOT, file_part.lstrip("/"))
+                errors.append(f"{rel_path}: root-relative link '{target}' is not portable; use a path relative to this file")
+                continue
             else:
                 abs_target = os.path.normpath(os.path.join(os.path.dirname(abs_path), file_part))
 

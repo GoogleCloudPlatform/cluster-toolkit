@@ -66,14 +66,15 @@ variable "slurm_cluster_name" {
     value, so passing the identical value here keeps the name-scoped role's instance-name
     condition correct without hand-deriving instance_name_prefixes. Unset mirrors the
     controller's own derived default (the first 10 characters of deployment_name,
-    lowercase, letters and digits only). Ignored if instance_name_prefixes is also set.
+    lowercase, letters and digits only). Ignored if instance_name_prefixes is also set, and
+    by every other profile, so it can be set once in the blueprint's top-level vars.
   EOT
   type        = string
   default     = null
 
   validation {
-    condition     = var.slurm_cluster_name == null || can(regex("^[a-z]([-a-z0-9]{0,19})$", var.slurm_cluster_name))
-    error_message = "slurm_cluster_name must match ^[a-z]([-a-z0-9]{0,19})$, the same pattern schedmd-slurm-gcp-v6-controller's own slurm_cluster_name variable requires."
+    condition     = var.slurm_cluster_name == null || can(regex("^[a-z]([-a-z0-9]{2,19})$", var.slurm_cluster_name))
+    error_message = "slurm_cluster_name must be 3 to 20 characters matching ^[a-z]([-a-z0-9]{2,19})$ (schedmd-slurm-gcp-v6-controller's own pattern, with a 3-character minimum so the derived instance name prefix \"<slurm_cluster_name>-\" is at least 4 characters)."
   }
 }
 
@@ -123,11 +124,6 @@ variable "profile" {
   }
 
   validation {
-    condition     = var.slurm_cluster_name == null || var.profile == "slurm-controller"
-    error_message = "slurm_cluster_name is accepted only with profile \"slurm-controller\", not \"${var.profile}\"."
-  }
-
-  validation {
     condition     = !try(local.profiles[var.profile].custom, false) || var.custom_profile_name != null
     error_message = "profile = \"${var.profile}\" requires custom_profile_name, which names the custom role."
   }
@@ -147,13 +143,15 @@ variable "profile" {
     error_message = "custom_permissions repeats permissions that an enabled capability flag already grants: ${join(", ", setintersection(var.custom_permissions, local.capability_grants))}. Remove them from custom_permissions."
   }
 
+  # Only the custom profile can end up with no generated role by configuration;
+  # slurm-login and slurm-compute never get one and ignore custom_role_stage,
+  # so it can be set in the blueprint's top-level vars.
   validation {
-    condition = var.custom_role_stage == null || length(concat(
-      try(local.profiles[var.profile].permissions, ["?"]),
+    condition = var.custom_role_stage == null || !try(local.profiles[var.profile].custom, false) || length(concat(
       [for capability in local.enabled_capabilities : capability if contains(try(local.profiles[var.profile].accepted_capabilities, []), capability)],
       var.custom_permissions,
     )) > 0
-    error_message = "custom_role_stage is set, but this account gets no generated custom role (its profile, capability flags and custom_permissions grant no permissions), so the stage would have nothing to apply to. Leave custom_role_stage unset."
+    error_message = "custom_role_stage is set, but this custom profile gets no generated custom role (its capability flags and custom_permissions grant no permissions), so the stage would have nothing to apply to. Leave custom_role_stage unset."
   }
 }
 
@@ -368,7 +366,9 @@ variable "custom_role_stage" {
   description = <<-EOT
     Launch stage of the generated custom role: "ALPHA", "BETA", "GA", "DEPRECATED",
     "DISABLED" or "EAP". Unset means the provider default, "GA". A "DISABLED" role stays
-    bound but grants nothing. Only valid when the account gets a generated custom role.
+    bound but grants nothing. Ignored by profiles that never get a generated custom role
+    (slurm-login, slurm-compute), so it can be set in the blueprint's top-level vars; with
+    profile "custom" it requires capability flags or custom_permissions.
   EOT
   type        = string
   default     = null
