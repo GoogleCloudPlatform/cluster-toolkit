@@ -95,7 +95,10 @@ class ClusterInfo:
         self._prepare_bootstrap_gcs()
 
     def start_cluster(self, credentials):
-        self.cluster.cloud_state = "nm"
+        # A Retry of a cluster whose earlier apply succeeded must not forget
+        # that its resources exist.
+        if self.cluster.cloud_state != "m":
+            self.cluster.cloud_state = "nm"
         self.cluster.status = "c"
         self.cluster.save()
 
@@ -112,10 +115,11 @@ class ClusterInfo:
             self.cluster.save()
 
         # Not a lot we can do if terraform fails, it's on the admin user to
-        # investigate and fix the errors shown in the log
+        # investigate and fix the errors shown in the log.
+        # cloud_state is left alone: it becomes "m" as soon as the apply
+        # succeeds, so a later failure keeps the cluster managed.
         except Exception:  # pylint: disable=broad-except
             self.cluster.status = "e"
-            self.cluster.cloud_state = "nm"
             self.cluster.save()
             raise
 
@@ -130,10 +134,11 @@ class ClusterInfo:
             self.cluster.save()
 
         # Not a lot we can do if terraform fails, it's on the admin user to
-        # investigate and fix the errors shown in the log
+        # investigate and fix the errors shown in the log.
+        # The cluster was running before this reconfigure and still exists,
+        # so it stays managed.
         except Exception:  # pylint: disable=broad-except
             self.cluster.status = "e"
-            self.cluster.cloud_state = "nm"
             self.cluster.save()
             raise
 
@@ -663,6 +668,13 @@ class ClusterInfo:
             logger.info("Invoking Terraform Apply")
             utils.run_terraform(terraform_dir, "apply", extra_env=extra_env)
 
+            # The apply succeeded, so the cluster's resources exist. Record
+            # that before anything below can fail (reading the state back,
+            # registry or node bookkeeping), so the cluster stays managed.
+            self.cluster.internal_name = self.cluster.name
+            self.cluster.cloud_state = "m"
+            self.cluster.save()
+
             # Look for Management and Login Nodes in the Terraform state
             state = utils.get_terraform_state(terraform_dir, extra_env)
 
@@ -677,10 +689,6 @@ class ClusterInfo:
                 # Be nicer to the user and continue creating cluster
                 logger.warning(f"An error occurred while applying permissions to service accounts: {e}")
 
-
-            # Cluster is now being initialized
-            self.cluster.internal_name = self.cluster.name
-            self.cluster.cloud_state = "m"
 
             # Cluster initialization is now running. Stamp the start time
             # so a bootstrap that stalls (controller never reports ready)

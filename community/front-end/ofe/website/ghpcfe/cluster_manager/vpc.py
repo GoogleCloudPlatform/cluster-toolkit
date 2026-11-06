@@ -85,17 +85,35 @@ project = "{project_id}"
 def start_vpc(vpc: VirtualNetwork) -> None:
     """Effectively, just 'terraform apply'"""
     target_dir = _tf_dir_for_vpc(vpc.id)
+    extra_env = {
+        "GOOGLE_APPLICATION_CREDENTIALS": Path(
+            target_dir / "cloud_credentials"
+        ).as_posix()
+    }
     try:
-        extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": Path(
-                target_dir / "cloud_credentials"
-            ).as_posix()
-        }
         utils.run_terraform(target_dir, "apply", extra_env=extra_env)
+    except subprocess.CalledProcessError as err:
+        logger.error("Terraform apply failed", exc_info=err)
+        if err.stdout:
+            logger.info("TF stdout:\n%s\n", err.stdout.decode("utf-8"))
+        if err.stderr:
+            logger.info("TF stderr:\n%s\n", err.stderr.decode("utf-8"))
+        # A failed apply can leave some resources behind. "Unknown" keeps
+        # Edit, Apply Cloud Changes and Destroy available instead of leaving
+        # the network stuck in "Creating".
+        vpc.cloud_state = "um"
+        vpc.save()
+        raise
+
+    # The apply succeeded, so the network exists. Mark it managed before
+    # reading the state back, so a failure there does not leave it stuck in
+    # "Creating".
+    vpc.cloud_state = "m"
+    vpc.save()
+    try:
         state = utils.get_terraform_state(target_dir, extra_env)
-        if vpc.is_managed:
-            vpc.cloud_id = state["outputs"]["vpc_id"]["value"]
-            vpc.save()
+        vpc.cloud_id = state["outputs"]["vpc_id"]["value"]
+        vpc.save()
         for subnet in vpc.subnets.all():
             if subnet.is_managed:
                 subnet.cloud_id = state["outputs"][f"subnet-{subnet.id}"][
@@ -103,14 +121,11 @@ def start_vpc(vpc: VirtualNetwork) -> None:
                 ]
                 subnet.cloud_state = "m"
                 subnet.save()
-    except subprocess.CalledProcessError as err:
-        logger.error("Terraform apply failed", exc_info=err)
-        if err.stdout:
-            logger.info("TF stdout:\n%s\n", err.stdout.decode("utf-8"))
-        if err.stderr:
-            logger.info("TF stderr:\n%s\n", err.stderr.decode("utf-8"))
-        vpc.status = "e"
-        vpc.save()
+    except (subprocess.CalledProcessError, RuntimeError, KeyError) as err:
+        logger.error(
+            "Terraform apply succeeded but reading its state failed",
+            exc_info=err,
+        )
         raise
 
 
