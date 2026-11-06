@@ -706,6 +706,9 @@ func inferWorkloads(machineTypes, accelerators []string, relPath string) []strin
 }
 
 func addMLWorkloads(accelerators []string, lowerPath string, add func(string)) {
+	if strings.Contains(lowerPath, "hcls-") || strings.Contains(lowerPath, "alphaevolve/") {
+		return
+	}
 	isInferOnlyPath := strings.Contains(lowerPath, "inference-gateway") || strings.Contains(lowerPath, "inference-benchmarks") || strings.Contains(lowerPath, "agentgateway")
 	for _, acc := range accelerators {
 		if frontierAccelerators[acc] {
@@ -728,19 +731,25 @@ func addMLWorkloads(accelerators []string, lowerPath string, add func(string)) {
 	}
 }
 
+func isExcludedFromHPC(lowerPath string) bool {
+	return strings.Contains(lowerPath, "storage-") ||
+		strings.Contains(lowerPath, "hyperdisk") ||
+		strings.Contains(lowerPath, "gke-large-scale/") ||
+		strings.Contains(lowerPath, "tpu")
+}
+
 func isHPCBlueprint(machineTypes []string, lowerPath string) bool {
+	if isExcludedFromHPC(lowerPath) {
+		return false
+	}
 	for _, tok := range hpcPathTokens {
 		if strings.Contains(lowerPath, tok) {
 			return true
 		}
 	}
-	if strings.Contains(lowerPath, "storage-") || strings.Contains(lowerPath, "hyperdisk") || strings.Contains(lowerPath, "gke-large-scale/") {
-		return false
-	}
 	for _, mt := range machineTypes {
-		lowerMT := strings.ToLower(mt)
 		for _, pref := range hpcMachinePrefixes {
-			if strings.HasPrefix(lowerMT, pref) {
+			if strings.HasPrefix(mt, pref) {
 				return true
 			}
 		}

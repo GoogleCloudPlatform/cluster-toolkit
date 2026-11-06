@@ -739,6 +739,16 @@ func TestInferAcceleratorsAndWorkloads(t *testing.T) {
 			wantAccel: nil,
 			wantWork:  []string{"hpc"},
 		},
+		{
+			path:      "examples/hcls-blueprint.yaml",
+			wantAccel: []string{"nvidia-l4"},
+			wantWork:  []string{"hpc"},
+		},
+		{
+			path:      "community/examples/hpc-slurm6-tpu-maxtext.yaml",
+			wantAccel: []string{"tpu"},
+			wantWork:  []string{"ml-training", "ml-inference"},
+		},
 	}
 	for _, tc := range cases {
 		bp, ok := byPath[tc.path]

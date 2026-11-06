@@ -2077,7 +2077,7 @@ blueprints:
   description: "This blueprint demonstrates an advanced architecture that can be used to run GROMACS with GPUs and CPUs on Google Cloud. For full documentation, refer document."
   machine_types: [c2-standard-16, c2-standard-60, g2-standard-4]
   accelerators: [nvidia-l4]
-  workloads: [ml-inference, hpc]
+  workloads: [hpc]
   required_services: [compute.googleapis.com, file.googleapis.com, iam.googleapis.com, servicenetworking.googleapis.com, serviceusage.googleapis.com, stackdriver.googleapis.com, storage.googleapis.com]
   vars:
     bucket_force_destroy: false
@@ -4455,7 +4455,6 @@ blueprints:
   description: "Deploys the Google Cloud infrastructure and per-experiment software environments required to run scalable AlphaEvolve evolutionary code optimization experiments on Cloud Batch and Vertex AI Colab Enterprise."
   machine_types: [n2-standard-4]
   accelerators: [nvidia-tesla-t4]
-  workloads: [ml-inference]
   required_services: [cloudbuild.googleapis.com, cloudresourcemanager.googleapis.com, compute.googleapis.com, iam.googleapis.com, storage.googleapis.com]
   vars:
     accelerator_count: 1
@@ -6087,7 +6086,7 @@ blueprints:
   scheduler: slurm
   description: "Creates an auto-scaling Slurm cluster with TPU nodes."
   accelerators: [tpu]
-  workloads: [ml-training, ml-inference, hpc]
+  workloads: [ml-training, ml-inference]
   required_services: [compute.googleapis.com, iam.googleapis.com, storage.googleapis.com]
   vars:
     compute_node_count_dynamic_max: 20
@@ -6133,7 +6132,7 @@ blueprints:
   scheduler: slurm
   description: "Creates an auto-scaling Slurm cluster with TPU nodes."
   accelerators: [tpu]
-  workloads: [ml-training, ml-inference, hpc]
+  workloads: [ml-training, ml-inference]
   required_services: [cloudresourcemanager.googleapis.com, compute.googleapis.com, iam.googleapis.com, storage.googleapis.com]
   vars:
     deployment_name: slurm6-tpu
