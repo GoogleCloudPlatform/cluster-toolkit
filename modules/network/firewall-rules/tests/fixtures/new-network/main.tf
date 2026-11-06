@@ -14,6 +14,8 @@
 
 terraform {
   required_providers {
+    # Required to bind the test's mock provider to child modules.
+    # tflint-ignore: terraform_unused_required_providers
     google = {
       source  = "hashicorp/google"
       version = ">= 4.64"
