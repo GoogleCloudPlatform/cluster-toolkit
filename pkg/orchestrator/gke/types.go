@@ -678,8 +678,11 @@ type jobSetTemplateData struct {
 	GCSFuseEnabled                bool
 	HostNetworkEnabled            bool
 	Pathways                      orchestrator.PathwaysJobDefinition
-	PathwaysProxyEnabled          bool // pathways-head runs pathways-proxy (false for an SPS server)
-	PathwaysWorkloadEnabled       bool // pathways-head runs the user's workload (false for headless and SPS)
+	PathwaysProxyEnabled          bool   // pathways-head runs pathways-proxy (false for an SPS server)
+	PathwaysWorkloadEnabled       bool   // pathways-head runs the user's workload (false for headless and SPS)
+	PathwaysRMEnabled             bool   // pathways-head runs pathways-rm (false for an SPS client)
+	PathwaysWorkersEnabled        bool   // the JobSet has TPU workers (false for an SPS client)
+	PathwaysRMAddress             string // remote resource manager for the proxy (SPS client); empty means the local head
 	ExclusiveTopologyAnnotation   string
 	Verbose                       bool
 	Env                           []EnvVar

@@ -1112,7 +1112,7 @@ Pathways integration provides the following orchestration capabilities:
 * **Multi-role JobSet orchestration:** When you specify the `--pathways` flag, Cluster Toolkit generates and coordinates a multi-role JobSet comprising the Resource Manager (`pathways-rm`), Proxy server (`pathways-proxy`), and JAX worker pods.
 * **Kueue resource management:** Cluster Toolkit automatically maps multi-slice resource limits and unifies Kueue ClusterQueue resource groups so that coordinator and worker pods schedule without resource deadlocks.
 * **Headless execution mode:** With the `--pathways-headless` flag, Cluster Toolkit provisions the Pathways server infrastructure without requiring a client workload container, letting external clients (such as local notebooks) connect to the cluster.
-* **Shared Pathways Service (SPS) mode:** With the `--pathways-deploy-sps` flag, Cluster Toolkit deploys a long-running Shared Pathways Service instance: `pathways-head` runs only `pathways-rm` (no proxy or workload container, because each SPS client brings its own proxy), the TPU worker pods keep running with optional colocated Python sidecar support, and `--restarts` and `--pathways-max-slice-restarts` default to `30` and `1000000`. The command prints the in-cluster service endpoint (`<name>-pathways-head-0-0.<name>:29001`).
+* **Shared Pathways Service (SPS) mode:** With the `--pathways-deploy-sps` flag, Cluster Toolkit deploys a long-running Shared Pathways Service instance: `pathways-head` runs only `pathways-rm` (no proxy or workload container, because each SPS client brings its own proxy), the TPU worker pods keep running with optional colocated Python sidecar support, and `--restarts` and `--pathways-max-slice-restarts` default to `30` and `1000000`. The command prints the in-cluster service endpoint (`<name>-pathways-head-0-0.<name>:29001`). With `--pathways-run-sps-workload <instance-or-endpoint>`, Cluster Toolkit runs a workload against an existing SPS instance (auto-discovering its `instance_type`, `gcs_scratch_location`, proxy image, Kueue queue, and colocated Python sidecar): locally in your terminal via a port-forwarded `pathways-proxy` pod when no container image is passed, or inside the cluster when `--image` (or `--base-image` + `--build-context`) is passed.
 * **Completion and restart semantics:** In non-headless mode, the JobSet's `successPolicy` tracks `pathways-head`: when `workload-container` exits `0`, the entire JobSet is marked `Completed` and the worker pods are torn down; when it exits non-zero (including `143` on `SIGTERM`), the JobSet `failurePolicy` restarts the job up to `--restarts` times. Ensure your training command exits non-zero on fatal errors (for example, if a framework catches checkpoint or data-loader exceptions and exits `0` early, the JobSet will complete as `Succeeded` instead of restarting).
 
 #### Example CLI commands
@@ -1149,6 +1149,28 @@ To deploy a Shared Pathways Service (SPS) instance, enter the following command:
   --pathways \
   --pathways-gcs-location gs://BUCKET_NAME/pathways-artifacts \
   --pathways-deploy-sps
+```
+
+To run a workload against an existing SPS instance in your local terminal (deploying an ephemeral `pathways-proxy` pod in the cluster, port-forwarding to it, and cleaning it up on exit), enter the following command:
+
+```shell
+./gcluster job submit \
+  --name my-sps-client-local \
+  --pathways \
+  --pathways-run-sps-workload my-pathways-sps \
+  --command "python train_pathways.py"
+```
+
+To run a containerized workload inside the cluster against an existing SPS instance, pass `--image` (or `--base-image` and `--build-context`):
+
+```shell
+./gcluster job submit \
+  --name my-sps-client-job \
+  --image <CONTAINER_IMAGE> \
+  --pathways \
+  --pathways-run-sps-workload my-pathways-sps \
+  --num-slices 1 \
+  --command "python train_pathways.py"
 ```
 
 ---
@@ -1295,8 +1317,8 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | :--- | :--- | :--- |
 | `-n, --name` | `string` | Name of the job (JobSet) to create. Used for Kubernetes resources. Maximum of 28 characters for standard workloads, or 22 characters when `--pathways` is enabled. *(Required)* |
 | `-e, --command` | `string` | Command to execute inside the container (e.g., `'python /app.py'`). *(Required except when `--pathways-headless` or `--pathways-deploy-sps` is set)* |
-| `--compute-type` | `string` | The hardware target for the job. GPU/TPU shorthands (e.g., `h100-80gb-8`, `l4-1`, `v6e-8`) and machine types from `gcluster`'s built-in shorthand map (e.g., `a3-highgpu-8g`) resolve without a matching node pool, so they also work on NAP clusters. Any other GCE machine type (e.g., `n2-standard-32`) or a GKE accelerator label (e.g., `nvidia-l4`) is resolved against the cluster's existing node pools. *(Required)* The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed. |
-| `-i, --image` | `string` | Full registry path of a pre-built container image to run. Either `--image`, **or** both `--base-image` and `--build-context`, is required and the two forms are mutually exclusive (except when `--pathways-headless` or `--pathways-deploy-sps` is set, where no image is needed). |
+| `--compute-type` | `string` | The hardware target for the job. GPU/TPU shorthands (e.g., `h100-80gb-8`, `l4-1`, `v6e-8`) and machine types from `gcluster`'s built-in shorthand map (e.g., `a3-highgpu-8g`) resolve without a matching node pool, so they also work on NAP clusters. Any other GCE machine type (e.g., `n2-standard-32`) or a GKE accelerator label (e.g., `nvidia-l4`) is resolved against the cluster's existing node pools. *(Required except when `--pathways-run-sps-workload` is set)* The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed. |
+| `-i, --image` | `string` | Full registry path of a pre-built container image to run. Either `--image`, **or** both `--base-image` and `--build-context`, is required and the two forms are mutually exclusive (except when `--pathways-headless` or `--pathways-deploy-sps` is set, where no image is needed, or when `--pathways-run-sps-workload` is used in terminal mode). |
 | `-B, --base-image` | `string` | Name of the base container image to build upon (e.g., `python:3.9-slim`). Requires `--build-context`; mutually exclusive with `--image`. |
 | `-b, --build-context` | `string` | Path to the local build context directory for on-the-fly image builds. Requires `--base-image`; mutually exclusive with `--image`. |
 | `-f, --platform` | `string` | Target platform architecture for the image build (Default: `linux/amd64`). |
@@ -1320,12 +1342,13 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | :--- | :--- | :--- |
 | `--topology` | `string` | TPU slice topology (e.g., `2x2x1`, `2x4`, `2x4x4`). Applies to TPU workloads only (rejected for GPU/CPU jobs). **Required for TPU 7x.** For other TPU types, when omitted, `gcluster` resolves it from a slice shorthand (e.g., `v6e-16` -> `4x4`) or auto-discovers it from matching TPU node pools on the cluster. |
 | `--pathways` | `flag` | If present, generates a manifest tailored for a Pathways distributed job paradigm. |
-| `--pathways-gcs-location` | `string` | GCS bucket location to store Pathways artifacts. *(Required when --pathways is set)* |
+| `--pathways-gcs-location` | `string` | GCS bucket location to store Pathways artifacts. *(Required when `--pathways` is set, except with `--pathways-run-sps-workload` which inherits it from the SPS instance)* |
 | `--pathways-proxy-server-image` | `string` | Container image for the Pathways proxy server. |
 | `--pathways-server-image` | `string` | Container image for the Pathways resource manager / server. |
 | `--pathways-worker-image` | `string` | Container image for the Pathways workers. |
 | `--pathways-headless` | `flag` | If present, the user workload container will not be deployed in the `pathways-head` job. |
 | `--pathways-deploy-sps` | `flag` | If present, deploys a Shared Pathways Service (SPS) instance (`pathways-rm` on `pathways-head` without a proxy or workload container, plus the TPU worker pods). Mutually exclusive with `--pathways-headless`. |
+| `--pathways-run-sps-workload` | `string` | Name or endpoint (`<name>-pathways-head-0-0.<name>:29001`) of an existing SPS instance to run `--command` against. Runs locally in the terminal via a port-forwarded `pathways-proxy` pod when no image is specified, or inside the cluster when `--image` (or `--base-image` + `--build-context`) is passed. |
 | `--pathways-elastic-slices` | `int` | Configures the number of elastic slices for resilient training scaling. |
 | `--pathways-max-slice-restarts` | `int` | Maximum number of times the workers within a single slice can be restarted (Default: `0`, `4000` when `--pathways-elastic-slices > 0` or `--pathways-headless` is set, or `1000000` when `--pathways-deploy-sps` is set). Maps to `backoffLimitPerIndex: N` and `backoffLimit: N * nodesPerSlice` on the Pathways worker Job. |
 | `--pathways-proxy-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-proxy`. |

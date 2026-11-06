@@ -104,6 +104,9 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 		if err := validateWorkloadNameLength(workloadName, isPathwaysJob); err != nil {
 			return err
 		}
+		if computeType == "" && pathways.RunSPSWorkload == "" {
+			return fmt.Errorf("required flag(s) \"compute-type\" not set")
+		}
 
 		if !pathways.Headless && !pathways.DeploySPS && commandToRun == "" {
 			return fmt.Errorf("required flag \"command\" not set")
@@ -190,6 +193,7 @@ func init() {
 	SubmitCmd.Flags().StringVar(&pathways.WorkerImage, "pathways-worker-image", "", "The image for the Pathways worker.")
 	SubmitCmd.Flags().BoolVar(&pathways.Headless, "pathways-headless", false, "If present, the user's workload container will not be deployed within the `pathways-head` job.")
 	SubmitCmd.Flags().BoolVar(&pathways.DeploySPS, "pathways-deploy-sps", false, "Deploy a Shared Pathways Service (SPS) instance with a resource-manager-only head pod and persistent TPU workers.")
+	SubmitCmd.Flags().StringVar(&pathways.RunSPSWorkload, "pathways-run-sps-workload", "", "Run --command on an existing SPS instance, given its JobSet name or endpoint. Without an image the command runs on this machine against the instance (like pathwaysutils run_workload); with --image or --base-image it runs in the cluster.")
 	SubmitCmd.Flags().StringVar(&pathways.GCSLocation, "pathways-gcs-location", "", "Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.")
 	SubmitCmd.Flags().IntVar(&pathways.ElasticSlices, "pathways-elastic-slices", 0, "Configures the number of elastic slices, potentially allowing for more flexible resource allocation.")
 	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 0, "Maximum times the workers in a slice can be restarted (defaults to 0, 4000 when --pathways-elastic-slices>0 or --pathways-headless is set, or 1000000 when --pathways-deploy-sps is set). Maps to backoffLimitPerIndex=N and backoffLimit=N*nodesPerSlice on the worker Job.")
@@ -210,7 +214,6 @@ func init() {
 	SubmitCmd.Flags().StringVar(&gkeCustomTemplatesPath, "gke-custom-templates-path", "", "Path to a local directory containing custom GKE templates overrides.")
 
 	_ = SubmitCmd.MarkFlagRequired("name")
-	_ = SubmitCmd.MarkFlagRequired("compute-type")
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
@@ -367,9 +370,17 @@ func applyPathwaysSubmitDefaults(cmd *cobra.Command) {
 	} else if (pathways.ElasticSlices > 0 || pathways.Headless) && !cmd.Flags().Changed("pathways-max-slice-restarts") {
 		pathways.MaxSliceRestarts = defaultElasticMaxSliceRestarts
 	}
+	if pathways.RunSPSWorkload != "" && !cmd.Flags().Changed("restarts") {
+		restarts = 0
+	}
 	pathways.ProxyEnv = parseEnvFlags(pathwaysProxyEnv)
 	pathways.ServerEnv = parseEnvFlags(pathwaysServerEnv)
 	pathways.WorkerEnv = parseEnvFlags(pathwaysWorkerEnv)
+}
+
+// isSPSTerminalRun reports whether --pathways-run-sps-workload runs the command on this machine (no image given).
+func isSPSTerminalRun() bool {
+	return pathways.RunSPSWorkload != "" && imageName == "" && baseImage == "" && buildContext == ""
 }
 
 func validateWorkloadNameLength(name string, isPathways bool) error {
@@ -388,10 +399,10 @@ func validateWorkloadNameLength(name string, isPathways bool) error {
 
 func validatePathwaysFlags(cmd *cobra.Command) error {
 	if isPathwaysJob {
-		if err := validateDeploySPSFlags(); err != nil {
+		if err := validateSPSModeFlags(); err != nil {
 			return err
 		}
-		if pathways.GCSLocation == "" {
+		if pathways.GCSLocation == "" && pathways.RunSPSWorkload == "" {
 			return fmt.Errorf("pathways-gcs-location is required when using --pathways")
 		}
 		if pathways.ElasticSlices < 0 {
@@ -406,6 +417,13 @@ func validatePathwaysFlags(cmd *cobra.Command) error {
 		return fmt.Errorf("pathways flags specified but --pathways flag is missing")
 	}
 	return nil
+}
+
+func validateSPSModeFlags() error {
+	if pathways.RunSPSWorkload != "" && (pathways.DeploySPS || pathways.Headless) {
+		return fmt.Errorf("--pathways-run-sps-workload cannot be used with --pathways-deploy-sps or --pathways-headless")
+	}
+	return validateDeploySPSFlags()
 }
 
 // validateDeploySPSFlags rejects flags that have no effect on an SPS instance, which runs no workload.
@@ -436,7 +454,7 @@ func hasChangedPathwaysFlags(cmd *cobra.Command) bool {
 }
 
 func validateImageFlags(ctx context.Context, projectID, location string) error {
-	if pathways.Headless || pathways.DeploySPS {
+	if pathways.Headless || pathways.DeploySPS || isSPSTerminalRun() {
 		return nil
 	}
 	if err := validateImageSources(); err != nil {

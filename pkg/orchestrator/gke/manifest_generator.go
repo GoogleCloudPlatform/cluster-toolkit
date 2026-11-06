@@ -872,6 +872,8 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		Pathways:                      opts.Pathways,
 		PathwaysProxyEnabled:          !opts.Pathways.DeploySPS,
 		PathwaysWorkloadEnabled:       !opts.Pathways.Headless && !opts.Pathways.DeploySPS,
+		PathwaysRMEnabled:             true,
+		PathwaysWorkersEnabled:        true,
 		ExclusiveTopologyAnnotation:   exclusiveTopology,
 		Verbose:                       opts.Verbose,
 		Env:                           sortedEnvVars(opts.Env),
