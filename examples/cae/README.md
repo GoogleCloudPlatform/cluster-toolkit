@@ -1,33 +1,39 @@
 # Computer Aided Engineering (CAE) Reference Architecture
 
-The Computer Aided Engineering (CAE) [blueprint](./cae-slurm.yaml) in
-this folder captures a reference architecture where the right cloud components
+The Computer Aided Engineering (CAE) [blueprint](./cae-slurm.yaml) and accompanying
+[deployment configuration](./cae-slurm-deployment.yaml) in
+this folder capture a reference architecture where the right cloud components
 are assembled to optimally cater to the requirements of computationally-intensive
 CAE workloads. Specifically, it is architected around Google Cloud’s VM families
 that provide a high memory bandwidth and a balanced memory/flop ratio, which is
 particularly useful for per-core licensed CAE software. The solution caters also
-to large CAE use cases, requiring multiple nodes that are tightly-coupled via MPI.
-Special high-memory shapes support even very memory-demanding workloads with up
-to 16GB/core. For file IO, different Google managed high performance NFS storage
-services are available. For very IO demanding workloads, third party parallel file
-systems can be integrated. The scheduling of the workloads is done by a workload
-manager.
+to large CAE use cases, requiring multiple nodes that are tightly-coupled via MPI
+over Cloud RDMA. Special high-memory shapes support even very memory-demanding
+workloads with up to 16GB/core, while GPU partitions support GPU-accelerated CAE
+solvers and visualization workloads. For file IO, Google managed high-performance
+NFS storage services (Filestore) are used for `/home` and `/apps`, and Google Cloud
+Managed Lustre provides a high-throughput parallel file system for `/scratch`.
+The scheduling of the workloads is done by the Slurm workload manager.
 
 ## Architecture
+
 The CAE blueprint is intended to be a starting point for more tailored explorations
 or installations of specific CAE codes, as provided by ISVs separately.
 
 This blueprint features a general setup suited for CAE applications on GCP
 including:
 
-- Google's H3 VMs, ideally suited for CAE workloads
-- Google's C3-highmem VM, suited for workloads with 8GB/core requirement
-- Google's Filestore NFS-based shared storage
-- Google's Chrome Remote Desktop
-- SLURM workload scheduler
+- Google's H4D VMs (`h4d-highmem-192-lssd`) with Cloud RDMA and Local SSD (`/mnt/lssd`), ideally suited for tightly-coupled CAE workloads (`h4d` default partition)
+- Google's C4D-highmem VMs (`c4d-highmem-192`) with Tier 1 networking, suited for workloads with 16GB/core requirement (`highmem` partition)
+- Google's G4 GPU VMs (`g4-standard-48` by default, or `g4-standard-384` with Dual NIC) with NVIDIA DCGM monitoring enabled, suited for GPU-accelerated CAE and visualization workloads (`g4` partition)
+- Google's Filestore NFS-based shared storage for `/home` and `/apps`
+- Google's Managed Lustre parallel file system for `/scratch`
+- Google's Chrome Remote Desktop with NVIDIA T4 GPU and shared `/home` and `/apps` mounts
+- SLURM workload scheduler with OS Admin Login password-free `sudo` and pre-job iRDMA health checks on H4D nodes
 
 ## Getting Started
-To explore the reference architecture, you should follow the these steps:
+
+To explore the reference architecture, you should follow these steps:
 
 Before you start, make sure your prerequisites and dependencies are set up:
 [Set up Cluster Toolkit](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment).
@@ -42,15 +48,30 @@ For pointers on how to proceed with the installation of ISV software, please see
 
 This blueprint has the following deployment groups:
 
-- `setup`: Setup backbone infrastructure such as networking, file systems, &
-  monitoring.
-- `software_installation`(_optional_): This deployment group is a stub for
-  custom software installation on the network storage before the cluster is brought up
-- `cluster`: Deploys an auto-scaling cluster and remote desktop.
+- `enable_apis`: Enables required Google Cloud APIs (Compute Engine, Filestore,
+  Managed Lustre, Service Networking, etc.).
+- `setup`: Sets up backbone infrastructure such as the primary VPC network,
+  Private Service Access (required for Managed Lustre), the secondary Cloud RDMA
+  (IRDMA) network for H4D nodes, persistent NFS Filestore shares (`/home` and `/apps`),
+  and monitoring dashboard.
+- `software_installation` (_optional_): This deployment group is a stub for
+  custom software installation on the network storage before the cluster is brought up.
+- `cluster`: Deploys the Managed Lustre `/scratch` file system, Chrome Remote Desktop,
+  and the auto-scaling Slurm cluster (`h4d`, `highmem`, and `g4` partitions).
 
 Having multiple deployment groups decouples the life cycle of some
-infrastructure. For example a) you can tear down the cluster while leaving the
-storage intact and b) you can build software before you deploy your cluster.
+infrastructure. For example a) you can tear down the cluster and Managed Lustre
+scratch storage while leaving the persistent `/home` and `/apps` NFS storage intact
+and b) you can build software before you deploy your cluster.
+
+## Configuration
+
+You can customize your deployment settings in [`cae-slurm-deployment.yaml`](./cae-slurm-deployment.yaml):
+
+- **Project & Location**: Set `project_id`, `deployment_name` (defaults to `cae-slurm-solutions`), `region`, and `zone` (ensure the selected zone supports H4D, C4D, G4, and Managed Lustre).
+- **H4D & Cloud RDMA Settings**: Configure `rdma_net_range`, `h4d_cluster_size` (static node count), and the provisioning model (`h4d_reservation_name`, `h4d_dws_flex_enabled`, or `h4d_enable_spot_vm`).
+- **G4 GPU Settings**: Configure `g4_cluster_size`, `g4_machine_type` (`g4-standard-48` or `g4-standard-384`), `g4_disk_size_gb`, and the provisioning model (`g4_reservation_name`, `g4_enable_spot_vm`, or `g4_dws_flex_enabled`). To use Dual NIC with `g4-standard-384`, uncomment `net1_range` in the deployment file as well as the `net1` module and `additional_networks` setting in [`cae-slurm.yaml`](./cae-slurm.yaml).
+- **Managed Lustre Settings**: Configure `lustre_instance_id`, `lustre_size_gib` (default `9000`), and `per_unit_storage_throughput` (default `1000`). Refer to [Managed Lustre performance tiers](https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers) for valid size and throughput combinations.
 
 ## Deployment Instructions
 
@@ -60,33 +81,47 @@ storage intact and b) you can build software before you deploy your cluster.
 >
 > - Compute Engine
 > - Filestore
+> - Managed Lustre
 >
 > To avoid continued billing after use closely follow the
 > [teardown instructions](#teardown-instructions). To generate a cost estimate based on
 > your projected usage, use the [pricing calculator](https://cloud.google.com/products/calculator).
->
+
+### Quotas and Permissions
+
 > [!WARNING]
 > Before attempting to execute the following instructions, it is important to
-> consider your project's quota. The `cae-slurm.yaml` blueprint creates an
-> autoscaling cluster that, when fully scaled up, can deploy up to 10
-> `h3-standard-88` and up to 10 `c3-highmem-176` VMs.
+> consider your project's IAM permissions and quota.
+>
+> **IAM Permissions**: Private Service Access (required for Managed Lustre)
+> requires the `compute.networkAdmin` (or `servicenetworking.networksAdmin`) role,
+> which is included in the `Owner` role but not the `Editor` role.
+>
+> **Quotas**: The `cae-slurm.yaml` blueprint creates an autoscaling cluster that,
+> when fully scaled up with default settings, can deploy up to 10
+> `h4d-highmem-192-lssd`, up to 10 `c4d-highmem-192`, and up to 2 `g4-standard-48` VMs.
 >
 > To fully scale up this cluster, the project would require quota for:
 >
-> - Compute Node Group
->   - 88 CPUs * 10 VMs = **880 `H3 CPUs`**
->   - 176 CPUs * 10 VMs = **1760 `C3 CPUs`**
-> - Remote Desktop Group
->   - **40 `N1 CPUs`**
->   - **5 `T4 GPUs`**
-> - Slurm Login & Controller VM
->   - **24 `N2 CPUs`**
+> - Compute Node Groups
+>   - 192 CPUs * 10 VMs = **1920 `H4D CPUs`** (plus Local SSD and Hyperdisk Balanced)
+>   - 192 CPUs * 10 VMs = **1920 `C4D CPUs`**
+>   - 48 CPUs * 2 VMs = **96 `G4 CPUs`** and **2 `NVIDIA RTX PRO 6000 GPUs`**
+> - Remote Desktop Instance
+>   - **8 `N1 CPUs`** (`1x n1-standard-8` by default)
+>   - **1 `T4 GPU`** (`nvidia-tesla-t4-vws`)
+> - Slurm Login & Controller VMs
+>   - **24 `N2 CPUs`** (`n2-standard-8` login and `n2-standard-16` controller)
 > - Filestore
->   - **2x `Basic SSD`**
->   - **1x `High Scale SSD`**
+>   - **2x `Basic SSD`** (`2560 GB` each, for `/home` and `/apps`)
+> - Managed Lustre
+>   - **1x `Managed Lustre`** (`9000 GiB` at `1000 MB/s/TiB` for `/scratch`)
 >
 > However, this is merely an example sizing for an instance of this reference architecture.
-> Node counts and remote desktop seats can easily be adjusted in the blueprint.
+> Node counts, provisioning models (Reservations, DWS Flex-Start, Spot VMs), and remote desktop
+> settings can easily be adjusted in the blueprint and deployment files.
+
+### Step-by-Step Deployment
 
 1. From the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository, build `./gcluster` (if not already built):
 
@@ -94,33 +129,41 @@ storage intact and b) you can build software before you deploy your cluster.
    test -x ./gcluster || make
    ```
 
-1. Generate the deployment folder after replacing `<project>` with the project
-   id.
+1. Update `project_id` (and any other desired variables) in
+   `examples/cae/cae-slurm-deployment.yaml`, then generate the deployment folder:
 
    ```bash
-   ./gcluster create examples/cae/cae-slurm.yaml -w --vars project_id=<project>
+   ./gcluster create examples/cae/cae-slurm.yaml -d examples/cae/cae-slurm-deployment.yaml -w
    ```
 
-1. Deploy the `setup` group
+   *(Alternatively, you can generate the deployment folder directly without the
+   deployment file by running `./gcluster create examples/cae/cae-slurm.yaml -w --vars project_id=<project>`,
+   which uses the default deployment name `cae-slurm-v6`.)*
 
-   Call the following gcluster command to deploy the cae-slurm blueprint.
+1. Deploy the `enable_apis` and `setup` groups
+
+   Call the following `gcluster` command to deploy the blueprint (using `cae-slurm-solutions`
+   from `cae-slurm-deployment.yaml`, or `cae-slurm-v6` if you did not use the deployment file):
 
    ```bash
-   ./gcluster deploy cae-slurm-v6
+   ./gcluster deploy cae-slurm-solutions
    ```
 
-   The next `gcluster` prompt will ask you to **display**, **apply**, **stop**, or
-   **continue** without applying the `setup` group. Select 'apply'.
+   For each deployment group (`enable_apis`, followed by `setup`), `gcluster`
+   will prompt you to **display**, **apply**, **stop**, or **continue** without
+   applying. Select **apply** for each.
 
-   This group will create a network and file systems to be used by the cluster.
+   The `enable_apis` group enables the required GCP service APIs, and the `setup`
+   group creates the primary VPC network, Private Service Access, secondary Cloud
+   RDMA network, `/home` and `/apps` Filestore instances, and monitoring dashboard.
 
    > [!WARNING]
-   > This gcluster command will run through 2 deployment groups (3 if you populate
+   > This `gcluster` command will run through 3 deployment groups (4 if you populate
    > & activate the `software_installation` stage) and prompt you to apply each one.
    > If the command is cancelled or exited by accident before finishing, it can
    > be rerun to continue deploying the blueprint.
 
-1. Deploy the `software_installation` group (_optional_).
+1. Deploy the `software_installation` group (_optional_)
 
    > [!NOTE]
    > Installation processes differ between applications. Some come as a
@@ -136,27 +179,28 @@ storage intact and b) you can build software before you deploy your cluster.
    > By default, this deployment group is disabled in the reference design. See
    > [Software Installation Patterns](#software-installation-patterns) for more information.
 
-   If this deployment group is used (needs to be uncomment in the blueprint first),
-   you can return to the gcluster command which will ask you to **display**, **apply**,
+   If this deployment group is used (needs to be uncommented in the blueprint first),
+   you can return to the `gcluster` command which will ask you to **display**, **apply**,
    **stop**, or **continue** without applying the `software_installation` group.
-   Select 'apply'.
+   Select **apply**.
 
 1. Deploy the `cluster` group
 
    The next `gcluster` prompt will ask you to **display**, **apply**, **stop**, or
-   **continue** without applying the `cluster` group. Select 'apply'.
+   **continue** without applying the `cluster` group. Select **apply**.
 
-   This deployment group contains the Slurm cluster and with compute partitions
-   and a partition for Chrome remote desktop visualization nodes.
+   This deployment group provisions the Managed Lustre `/scratch` file system,
+   the Chrome Remote Desktop visualization node, and the Slurm cluster with
+   `h4d`, `highmem` (C4D), and `g4` (GPU) compute partitions.
 
 1. Set up Chrome Remote Desktop
 
-   One or multiple Chrome Remote Desktop (CRD) sessions can be started dynamically
-   through Slurm.
+   A Chrome Remote Desktop (CRD) visualization instance with `/home` and `/apps`
+   mounted is provisioned as part of the `cluster` group.
 
-   - Follow
-     [the instructions](../../community/modules/remote-desktop/chrome-remote-desktop/README.md)
-     for setting up the Remote Desktop.
+   - Follow the
+     [chrome-remote-desktop module instructions](../../community/modules/remote-desktop/chrome-remote-desktop/README.md)
+     for configuring and connecting to the Remote Desktop.
 
 ## Teardown Instructions
 
@@ -165,17 +209,17 @@ storage intact and b) you can build software before you deploy your cluster.
 > eliminate billing is to delete the project.
 
 When you would like to tear down the deployment, each stage must be destroyed.
-Since the `software_installation` and `cluster` depend on the network deployed
+Since the `software_installation` and `cluster` groups depend on the network deployed
 in the `setup` stage, they must be destroyed first. You can use the following
-commands to destroy the deployment in this reverse order. You will be prompted
+command to destroy the deployment in this reverse order. You will be prompted
 to confirm the deletion of each stage.
 
 ```bash
-./gcluster destroy cae-slurm-v6
+./gcluster destroy cae-slurm-solutions
 ```
 
 > [!WARNING]
-> If you do not destroy all three deployment groups then there may be continued
+> If you do not destroy all deployment groups then there may be continued
 > associated costs.
 
 ## Software Installation Patterns
@@ -206,7 +250,7 @@ Depending on the software you want to use, different installation paths may be r
   ``` {.yaml}
   - id: sw-installer-vm
     source: modules/compute/vm-instance
-    use: [network1, appsfs]
+    use: [network, appsfs]
     settings:
       name_prefix: sw-installer
       add_deployment_name_before_prefix: true
