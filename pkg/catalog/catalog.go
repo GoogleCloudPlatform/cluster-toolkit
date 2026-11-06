@@ -62,6 +62,8 @@ type BlueprintEntry struct {
 	Scheduler        string                 `yaml:"scheduler"`
 	Description      string                 `yaml:"description,omitempty"`
 	MachineTypes     []string               `yaml:"machine_types,omitempty,flow"`
+	Accelerators     []string               `yaml:"accelerators,omitempty,flow"`
+	Workloads        []string               `yaml:"workloads,omitempty,flow"`
 	RequiredServices []string               `yaml:"required_services,omitempty,flow"`
 	Vars             map[string]interface{} `yaml:"vars,omitempty"`
 	Modules          []ModuleSummary        `yaml:"modules"`
@@ -234,8 +236,10 @@ func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string
 	modules := extractModuleSummaries(bp)
 	scheduler := inferScheduler(modules)
 	machineTypes := extractMachineTypes(bp, machineVarsMap)
+	accelerators := inferAccelerators(machineTypes, machineVarsMap, relPath)
 	reqServices := ExtractBlueprintServices(repoRoot, filepath.Dir(absPath), bp)
 	desc := lookupDescription(repoRoot, absPath, relPath, readmeDescs)
+	workloads := inferWorkloads(machineTypes, accelerators, relPath)
 	if len(varsMap) == 0 {
 		varsMap = nil
 	}
@@ -247,6 +251,8 @@ func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string
 		Scheduler:        scheduler,
 		Description:      desc,
 		MachineTypes:     machineTypes,
+		Accelerators:     accelerators,
+		Workloads:        workloads,
 		RequiredServices: reqServices,
 		Vars:             varsMap,
 		Modules:          modules,
@@ -575,6 +581,141 @@ func resolveMachineTypeString(raw string, varsMap map[string]interface{}) string
 		return ""
 	}
 	return raw
+}
+
+var machineTypePrefixAccelerators = []struct {
+	prefix string
+	accel  string
+}{
+	{"a3-highgpu-", "nvidia-h100"},
+	{"a3-megagpu-", "nvidia-h100"},
+	{"a3-ultragpu-", "nvidia-h200"},
+	{"a4-highgpu-", "nvidia-b200"},
+	{"a4x-highgpu-", "nvidia-gb200"},
+	{"a4x-maxgpu-", "nvidia-gb300"},
+	{"a2-", "nvidia-a100"},
+	{"g2-", "nvidia-l4"},
+	{"g4-", "nvidia-rtx-pro-6000"},
+	{"tpu7x-", "tpu-7x"},
+	{"ct6e-", "tpu-v6e"},
+	{"ct5p-", "tpu-v5p"},
+	{"ct5lp-", "tpu-v5e"},
+	{"ct4p-", "tpu-v4"},
+}
+
+func inferAccelerators(machineTypes []string, varsMap map[string]interface{}, relPath string) []string {
+	var out []string
+	add := func(acc string) {
+		if acc != "" && !slices.Contains(out, acc) {
+			out = append(out, acc)
+		}
+	}
+	for _, mt := range machineTypes {
+		lower := strings.ToLower(mt)
+		for _, rule := range machineTypePrefixAccelerators {
+			if strings.HasPrefix(lower, rule.prefix) {
+				add(rule.accel)
+			}
+		}
+	}
+	if len(out) == 0 {
+		if acc, ok := varsMap["accelerator_type"].(string); ok {
+			add(resolveMachineTypeString(acc, varsMap))
+		}
+	}
+	lowerPath := strings.ToLower(relPath)
+	if strings.Contains(lowerPath, "tpu-v5e-v5p-v6e") {
+		add("tpu-v5e")
+		add("tpu-v5p")
+		add("tpu-v6e")
+	} else if len(out) == 0 && strings.Contains(lowerPath, "tpu") {
+		add("tpu")
+	}
+	return out
+}
+
+var frontierAccelerators = map[string]bool{
+	"nvidia-h100":  true,
+	"nvidia-h200":  true,
+	"nvidia-b200":  true,
+	"nvidia-gb200": true,
+	"nvidia-gb300": true,
+	"nvidia-a100":  true,
+	"tpu-7x":       true,
+	"tpu-v6e":      true,
+	"tpu-v5p":      true,
+	"tpu-v5e":      true,
+	"tpu-v4":       true,
+	"tpu":          true,
+}
+
+var hpcMachinePrefixes = []string{"h4d-", "h3-", "c2-", "c2d-", "c3-", "c3d-", "c4a-"}
+
+var hpcPathTokens = []string{
+	"hpc-", "/cae/", "/eda/", "eda-", "htc-", "batch-mpi", "symphony",
+	"flux", "starccm", "fluent", "gromacs", "openfoam", "af3", "slinky",
+	"slurm-gke", "slurm-high-throughput",
+}
+
+func inferWorkloads(machineTypes, accelerators []string, relPath string) []string {
+	lowerPath := strings.ToLower(relPath)
+	if strings.Contains(lowerPath, "build-service-images/") {
+		return nil
+	}
+	var out []string
+	add := func(w string) {
+		if !slices.Contains(out, w) {
+			out = append(out, w)
+		}
+	}
+	addMLWorkloads(accelerators, lowerPath, add)
+	if isHPCBlueprint(machineTypes, lowerPath) {
+		add("hpc")
+	}
+	return out
+}
+
+func addMLWorkloads(accelerators []string, lowerPath string, add func(string)) {
+	isInferOnlyPath := strings.Contains(lowerPath, "inference-gateway") || strings.Contains(lowerPath, "inference-benchmarks") || strings.Contains(lowerPath, "agentgateway")
+	for _, acc := range accelerators {
+		if frontierAccelerators[acc] {
+			if !isInferOnlyPath {
+				add("ml-training")
+			}
+			add("ml-inference")
+		} else {
+			if strings.Contains(lowerPath, "ml-slurm") || strings.Contains(lowerPath, "ml-gke") {
+				add("ml-training")
+			}
+			add("ml-inference")
+		}
+	}
+	if isInferOnlyPath {
+		add("ml-inference")
+	}
+	if strings.Contains(lowerPath, "xpk-") {
+		add("ml-training")
+	}
+}
+
+func isHPCBlueprint(machineTypes []string, lowerPath string) bool {
+	for _, tok := range hpcPathTokens {
+		if strings.Contains(lowerPath, tok) {
+			return true
+		}
+	}
+	if strings.Contains(lowerPath, "storage-") || strings.Contains(lowerPath, "hyperdisk") || strings.Contains(lowerPath, "gke-large-scale/") {
+		return false
+	}
+	for _, mt := range machineTypes {
+		lowerMT := strings.ToLower(mt)
+		for _, pref := range hpcMachinePrefixes {
+			if strings.HasPrefix(lowerMT, pref) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func dictToPlainMap(d config.Dict) map[string]interface{} {

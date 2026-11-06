@@ -147,12 +147,13 @@ type ExplainModuleInput struct {
 
 // ExplainSpecMatchResult is the structured output for Mode 3 (spec matching).
 type ExplainSpecMatchResult struct {
-	ExactMatch     bool                   `json:"exact_match" yaml:"exact_match"`
-	OtherExact     int                    `json:"other_exact_matches,omitempty" yaml:"other_exact_matches,omitempty"`
-	RequestedSpecs []string               `json:"requested_specs" yaml:"requested_specs"`
-	MatchedSpecs   []string               `json:"matched_specs" yaml:"matched_specs"`
-	MissingSpecs   []ExplainMissingSpec   `json:"missing_specs,omitempty" yaml:"missing_specs,omitempty"`
-	Blueprint      ExplainBlueprintResult `json:"blueprint" yaml:"blueprint"`
+	ExactMatch        bool                   `json:"exact_match" yaml:"exact_match"`
+	OtherExact        int                    `json:"other_exact_matches,omitempty" yaml:"other_exact_matches,omitempty"`
+	OtherExactMatches []string               `json:"other_exact_match_paths,omitempty" yaml:"other_exact_match_paths,omitempty"`
+	RequestedSpecs    []string               `json:"requested_specs" yaml:"requested_specs"`
+	MatchedSpecs      []string               `json:"matched_specs" yaml:"matched_specs"`
+	MissingSpecs      []ExplainMissingSpec   `json:"missing_specs,omitempty" yaml:"missing_specs,omitempty"`
+	Blueprint         ExplainBlueprintResult `json:"blueprint" yaml:"blueprint"`
 }
 
 // ExplainMissingSpec describes a requested spec that was not in the closest blueprint.
@@ -1580,7 +1581,7 @@ func printOptionalModuleInputs(w io.Writer, optInputs []ExplainModuleInput) {
 type normalizedSpec struct {
 	Raw          string
 	Canonical    string
-	Category     string // "scheduler", "hardware", "module", "keyword"
+	Category     string // "scheduler", "hardware", "workload", "module", "keyword"
 	ModuleSource string
 	Aliases      []string
 }
@@ -1601,18 +1602,18 @@ var knownSpecAliasTable = []specAliasDef{
 	{Canonical: "htcondor", Category: "scheduler", Aliases: []string{"htcondor"}, Tokens: []string{"htcondor", "condor"}},
 	{Canonical: "flux", Category: "scheduler", Aliases: []string{"flux"}, Tokens: []string{"flux"}},
 
-	{Canonical: "a3-ultragpu-8g", Category: "hardware", Aliases: []string{"a3-ultragpu-8g", "a3-ultragpu", "a3ultra"}, Tokens: []string{"a3u", "a3-ultra", "a3ultra", "h200", "a3-ultragpu", "a3-ultragpu-8g"}},
+	{Canonical: "a3-ultragpu-8g", Category: "hardware", Aliases: []string{"a3-ultragpu-8g", "a3-ultragpu", "a3ultra", "nvidia-h200"}, Tokens: []string{"a3u", "a3-ultra", "a3ultra", "h200", "nvidia-h200", "a3-ultragpu", "a3-ultragpu-8g"}},
 	{Canonical: "a3-megagpu-8g", Category: "hardware", Aliases: []string{"a3-megagpu-8g", "a3-megagpu", "a3mega"}, Tokens: []string{"a3m", "a3-mega", "a3mega", "a3-megagpu", "a3-megagpu-8g"}},
-	{Canonical: "a3-highgpu-8g", Category: "hardware", Aliases: []string{"a3-highgpu-8g", "a3-highgpu", "a3high"}, Tokens: []string{"a3h", "a3-high", "a3high", "h100", "a3-highgpu", "a3-highgpu-8g"}},
-	{Canonical: "a4-highgpu-8g", Category: "hardware", Aliases: []string{"a4-highgpu-8g", "a4-highgpu", "a4high", "gke-a4"}, Tokens: []string{"a4", "a4h", "a4-high", "a4high", "b200", "a4-highgpu", "a4-highgpu-8g"}},
-	{Canonical: "a4x-highgpu-4g", Category: "hardware", Aliases: []string{"a4x-highgpu-4g", "a4xhigh", "gke-a4x"}, Tokens: []string{"a4x", "a4xh", "a4x-high", "a4xhigh", "gb200", "a4x-highgpu", "a4x-highgpu-4g"}},
-	{Canonical: "a4x-maxgpu-4g-metal", Category: "hardware", Aliases: []string{"a4x-maxgpu-4g-metal", "a4xmax-bm", "gke-a4x-max-bm"}, Tokens: []string{"a4xmax", "a4x-max", "a4x-max-bm", "a4xmax-bm", "gb300", "a4x-maxgpu", "a4x-maxgpu-4g-metal"}},
+	{Canonical: "a3-highgpu-8g", Category: "hardware", Aliases: []string{"a3-highgpu-8g", "a3-highgpu", "a3high", "nvidia-h100"}, Tokens: []string{"a3h", "a3-high", "a3high", "h100", "nvidia-h100", "a3-highgpu", "a3-highgpu-8g"}},
+	{Canonical: "a4-highgpu-8g", Category: "hardware", Aliases: []string{"a4-highgpu-8g", "a4-highgpu", "a4high", "gke-a4", "nvidia-b200"}, Tokens: []string{"a4", "a4h", "a4-high", "a4high", "b200", "nvidia-b200", "a4-highgpu", "a4-highgpu-8g"}},
+	{Canonical: "a4x-highgpu-4g", Category: "hardware", Aliases: []string{"a4x-highgpu-4g", "a4xhigh", "gke-a4x", "nvidia-gb200"}, Tokens: []string{"a4x", "a4xh", "a4x-high", "a4xhigh", "gb200", "nvidia-gb200", "a4x-highgpu", "a4x-highgpu-4g"}},
+	{Canonical: "a4x-maxgpu-4g-metal", Category: "hardware", Aliases: []string{"a4x-maxgpu-4g-metal", "a4xmax-bm", "gke-a4x-max-bm", "nvidia-gb300"}, Tokens: []string{"a4xmax", "a4x-max", "a4x-max-bm", "a4xmax-bm", "gb300", "nvidia-gb300", "a4x-maxgpu", "a4x-maxgpu-4g-metal"}},
 	{Canonical: "tpu7x-standard-4t", Category: "hardware", Aliases: []string{"tpu7x-standard-4t", "tpu-7x", "tpu7x"}, Tokens: []string{"tpu7x", "tpu-7x", "7x", "ironwood", "tpu7x-standard-4t"}},
 	{Canonical: "tpu-v6e", Category: "hardware", Aliases: []string{"tpu-v6e", "v6e", "ct6e"}, Tokens: []string{"tpuv6e", "tpu-v6e", "v6e", "trillium"}},
 	{Canonical: "tpu-v5p", Category: "hardware", Aliases: []string{"tpu-v5p", "v5p", "ct5p"}, Tokens: []string{"tpuv5p", "tpu-v5p", "v5p"}},
 	{Canonical: "tpu-v5e", Category: "hardware", Aliases: []string{"tpu-v5e", "v5e", "ct5lp"}, Tokens: []string{"tpuv5e", "tpu-v5e", "v5e"}},
 	{Canonical: "tpu-v4", Category: "hardware", Aliases: []string{"tpu-v4", "v4", "ct4p"}, Tokens: []string{"tpuv4", "tpu-v4", "v4"}},
-	{Canonical: "tpu", Category: "hardware", Aliases: []string{"tpu", "tpu7x", "ct6e", "ct5p", "ct5lp", "ct4p"}, Tokens: []string{"tpu"}},
+	{Canonical: "tpu", Category: "hardware", Aliases: []string{"tpu", "tpu-7x", "tpu7x", "tpu-v6e", "tpu-v5p", "tpu-v5e", "tpu-v4", "ct6e", "ct5p", "ct5lp", "ct4p"}, Tokens: []string{"tpu", "maxtext", "jax", "pathways"}},
 	{Canonical: "h4d", Category: "hardware", Aliases: []string{"h4d"}, Tokens: []string{"h4d"}},
 	{Canonical: "h3", Category: "hardware", Aliases: []string{"h3"}, Tokens: []string{"h3"}},
 	{Canonical: "c4a", Category: "hardware", Aliases: []string{"c4a"}, Tokens: []string{"c4a"}},
@@ -1620,13 +1621,17 @@ var knownSpecAliasTable = []specAliasDef{
 	{Canonical: "c3", Category: "hardware", Aliases: []string{"c3"}, Tokens: []string{"c3"}},
 	{Canonical: "c2d", Category: "hardware", Aliases: []string{"c2d"}, Tokens: []string{"c2d"}},
 	{Canonical: "c2", Category: "hardware", Aliases: []string{"c2"}, Tokens: []string{"c2"}},
-	{Canonical: "g2", Category: "hardware", Aliases: []string{"g2"}, Tokens: []string{"g2"}},
-	{Canonical: "g4", Category: "hardware", Aliases: []string{"g4"}, Tokens: []string{"g4"}},
-	{Canonical: "a2", Category: "hardware", Aliases: []string{"a2"}, Tokens: []string{"a2"}},
+	{Canonical: "g2", Category: "hardware", Aliases: []string{"g2", "nvidia-l4"}, Tokens: []string{"g2", "l4", "nvidia-l4"}},
+	{Canonical: "g4", Category: "hardware", Aliases: []string{"g4", "nvidia-rtx-pro-6000"}, Tokens: []string{"g4", "rtx-pro-6000", "rtx6000", "nvidia-rtx-pro-6000"}},
+	{Canonical: "a2", Category: "hardware", Aliases: []string{"a2", "nvidia-a100"}, Tokens: []string{"a2", "a100", "nvidia-a100"}},
 	{Canonical: "n2d", Category: "hardware", Aliases: []string{"n2d"}, Tokens: []string{"n2d"}},
 	{Canonical: "n2", Category: "hardware", Aliases: []string{"n2"}, Tokens: []string{"n2"}},
 	{Canonical: "e2", Category: "hardware", Aliases: []string{"e2"}, Tokens: []string{"e2"}},
 	{Canonical: "t2a", Category: "hardware", Aliases: []string{"t2a"}, Tokens: []string{"t2a"}},
+
+	{Canonical: "ml-training", Category: "workload", Aliases: []string{"ml-training"}, Tokens: []string{"training", "ml-training", "pretraining", "finetuning", "sft", "rlhf", "pytorch", "torch", "nemo", "fsdp", "megatron", "ml"}},
+	{Canonical: "ml-inference", Category: "workload", Aliases: []string{"ml-inference"}, Tokens: []string{"inference", "ml-inference", "serving", "vllm", "sglang", "tgi", "llama", "deepseek", "qwen", "gemma", "mistral"}},
+	{Canonical: "hpc", Category: "workload", Aliases: []string{"hpc"}, Tokens: []string{"hpc", "mpi", "openmpi", "spack", "gromacs", "eda", "cae", "openfoam", "fluent", "starccm"}},
 
 	{Canonical: "managed-lustre", Category: "module", ModuleSource: "modules/file-system/managed-lustre", Aliases: []string{"managed-lustre"}, Tokens: []string{"lustre", "managed-lustre"}},
 	{Canonical: "filestore", Category: "module", ModuleSource: "modules/file-system/filestore", Aliases: []string{"filestore"}, Tokens: []string{"filestore", "nfs"}},
@@ -1692,9 +1697,15 @@ func blueprintMatchesSpec(bp catalog.BlueprintEntry, spec normalizedSpec) bool {
 		return matchModuleSpec(bp, spec)
 	case "hardware":
 		return hardwareMatchStrength(bp, spec) > 0
+	case "workload":
+		return matchWorkloadSpec(bp, spec)
 	default:
 		return matchKeywordSpec(bp, spec)
 	}
+}
+
+func matchWorkloadSpec(bp catalog.BlueprintEntry, spec normalizedSpec) bool {
+	return slices.Contains(bp.Workloads, spec.Canonical) || matchKeywordSpec(bp, spec)
 }
 
 func matchSchedulerSpec(bp catalog.BlueprintEntry, spec normalizedSpec) bool {
@@ -1723,6 +1734,11 @@ func hardwareMatchStrength(bp catalog.BlueprintEntry, spec normalizedSpec) int {
 	lowerName := strings.ToLower(bp.BlueprintName)
 	for _, al := range spec.Aliases {
 		if containsSegment(lowerPath, al) || containsSegment(lowerName, al) {
+			return 1
+		}
+	}
+	for _, acc := range bp.Accelerators {
+		if matchesHardwareMachineType(strings.ToLower(acc), spec.Aliases) {
 			return 1
 		}
 	}
@@ -1788,15 +1804,11 @@ func buildExplainSpecMatch(repoRoot string, args []string) (ExplainSpecMatchResu
 		return ExplainSpecMatchResult{}, err
 	}
 
-	best, exactTotal := selectBestBlueprintCandidate(blueprints, specs)
+	best, otherExactPaths := selectBestBlueprintCandidate(blueprints, specs)
 	if best == nil {
 		return ExplainSpecMatchResult{}, formatUnmatchedSpecsError(specs)
 	}
-	otherExact := 0
-	if len(best.missingSpecs) == 0 && exactTotal > 1 {
-		otherExact = exactTotal - 1
-	}
-	return assembleSpecMatchResult(repoRoot, specs, best, otherExact, blueprints)
+	return assembleSpecMatchResult(repoRoot, specs, best, otherExactPaths, blueprints)
 }
 
 func scanBlueprintsForSpecMatch(repoRoot string) ([]catalog.BlueprintEntry, error) {
@@ -1810,22 +1822,34 @@ func scanBlueprintsForSpecMatch(repoRoot string) ([]catalog.BlueprintEntry, erro
 	return blueprints, nil
 }
 
-func selectBestBlueprintCandidate(blueprints []catalog.BlueprintEntry, specs []normalizedSpec) (*scoredBlueprintCandidate, int) {
+func selectBestBlueprintCandidate(blueprints []catalog.BlueprintEntry, specs []normalizedSpec) (*scoredBlueprintCandidate, []string) {
 	var best *scoredBlueprintCandidate
-	exactCount := 0
+	var exactCandidates []*scoredBlueprintCandidate
 	for _, bp := range blueprints {
 		cand := scoreBlueprintAgainstSpecs(bp, specs)
 		if cand.matchedCount == 0 {
 			continue
 		}
 		if len(cand.missingSpecs) == 0 {
-			exactCount++
+			exactCandidates = append(exactCandidates, cand)
 		}
 		if isBetterBlueprintCandidate(cand, best) {
 			best = cand
 		}
 	}
-	return best, exactCount
+	if best == nil || len(best.missingSpecs) > 0 || len(exactCandidates) <= 1 {
+		return best, nil
+	}
+	sort.Slice(exactCandidates, func(i, j int) bool {
+		return isBetterBlueprintCandidate(exactCandidates[i], exactCandidates[j])
+	})
+	otherPaths := make([]string, 0, len(exactCandidates)-1)
+	for _, c := range exactCandidates {
+		if c.entry.Path != best.entry.Path {
+			otherPaths = append(otherPaths, c.entry.Path)
+		}
+	}
+	return best, otherPaths
 }
 
 func scoreBlueprintAgainstSpecs(bp catalog.BlueprintEntry, specs []normalizedSpec) *scoredBlueprintCandidate {
@@ -1857,7 +1881,22 @@ func specMatchWeight(bp catalog.BlueprintEntry, sp normalizedSpec) int {
 	if sp.Category == "hardware" && hardwareMatchStrength(bp, sp) == 2 {
 		return base + 5
 	}
+	if (sp.Category == "workload" || sp.Category == "hardware") && strings.Contains(strings.ToLower(bp.Path), sp.Raw) {
+		if isGenericWorkloadToken(sp.Raw) {
+			return base + 3
+		}
+		return base + 8
+	}
 	return base
+}
+
+func isGenericWorkloadToken(raw string) bool {
+	switch raw {
+	case "hpc", "ml", "training", "ml-training", "inference", "ml-inference", "serving":
+		return true
+	default:
+		return false
+	}
 }
 
 func specCategoryWeight(category string) int {
@@ -1866,6 +1905,8 @@ func specCategoryWeight(category string) int {
 		return 100
 	case "hardware":
 		return 90
+	case "workload":
+		return 50
 	case "module":
 		return 40
 	default:
@@ -1884,7 +1925,7 @@ func blueprintTieBreakBonus(bp catalog.BlueprintEntry) int {
 	if !strings.HasSuffix(bp.Path, "-vm.yaml") && !strings.HasSuffix(bp.Path, "-image.yaml") && bp.Scheduler != "none" {
 		bonus += 3
 	}
-	if !strings.HasSuffix(bp.Path, "-advanced.yaml") {
+	if !strings.HasSuffix(bp.Path, "-advanced.yaml") && !strings.Contains(bp.Path, "-confidential") && !strings.Contains(bp.Path, "-inference-gateway") {
 		bonus += 1
 	}
 	return bonus
@@ -1910,7 +1951,7 @@ func formatUnmatchedSpecsError(specs []normalizedSpec) error {
 		strings.Join(rawList, ", "))
 }
 
-func assembleSpecMatchResult(repoRoot string, specs []normalizedSpec, best *scoredBlueprintCandidate, otherExact int, allBlueprints []catalog.BlueprintEntry) (ExplainSpecMatchResult, error) {
+func assembleSpecMatchResult(repoRoot string, specs []normalizedSpec, best *scoredBlueprintCandidate, otherExactPaths []string, allBlueprints []catalog.BlueprintEntry) (ExplainSpecMatchResult, error) {
 	bpAbs := filepath.Join(repoRoot, filepath.FromSlash(best.entry.Path))
 	deplAbs := ""
 	if best.entry.DeploymentPath != "" {
@@ -1945,12 +1986,13 @@ func assembleSpecMatchResult(repoRoot string, specs []normalizedSpec, best *scor
 	}
 
 	return ExplainSpecMatchResult{
-		ExactMatch:     len(best.missingSpecs) == 0,
-		OtherExact:     otherExact,
-		RequestedSpecs: reqNames,
-		MatchedSpecs:   matchedNames,
-		MissingSpecs:   missingOut,
-		Blueprint:      bpExplain,
+		ExactMatch:        len(best.missingSpecs) == 0,
+		OtherExact:        len(otherExactPaths),
+		OtherExactMatches: otherExactPaths,
+		RequestedSpecs:    reqNames,
+		MatchedSpecs:      matchedNames,
+		MissingSpecs:      missingOut,
+		Blueprint:         bpExplain,
 	}, nil
 }
 
@@ -2114,7 +2156,18 @@ func printExplainSpecMatchText(w io.Writer, res ExplainSpecMatchResult) {
 		writef(w, "Exact Blueprint Match (%d/%d specs matched: %s):\n",
 			len(res.MatchedSpecs), len(res.RequestedSpecs), strings.Join(res.MatchedSpecs, ", "))
 		if res.OtherExact > 0 {
-			writef(w, "  Note: %d other blueprint(s) also matched all requested specs; add hardware or storage specs to narrow down.\n", res.OtherExact)
+			if len(res.OtherExactMatches) > 0 {
+				shown := res.OtherExactMatches
+				suffix := ""
+				if len(shown) > 8 {
+					suffix = fmt.Sprintf(", ... (+%d more)", len(shown)-8)
+					shown = shown[:8]
+				}
+				writef(w, "  Note: %d other blueprint(s) also matched all requested specs: %s%s\n",
+					res.OtherExact, strings.Join(shown, ", "), suffix)
+			} else {
+				writef(w, "  Note: %d other blueprint(s) also matched all requested specs; add hardware or storage specs to narrow down.\n", res.OtherExact)
+			}
 		}
 		writeln(w, "")
 		printExplainBlueprintText(w, res.Blueprint)

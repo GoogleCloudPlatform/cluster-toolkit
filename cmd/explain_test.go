@@ -461,3 +461,64 @@ func (s *MySuite) TestExplainTelemetryTargetModes(c *C) {
 		c.Check(gotTarget, Equals, tc.wantTarget)
 	}
 }
+
+func (s *MySuite) TestExplainWorkloadAcceleratorsAndOtherExactMatches(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	// 1. Workload + accelerator spec matching: gke + vllm (ml-inference) + h200
+	outVLLM, err := runExplainForTest("gke", "vllm", "h200")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outVLLM, "Exact Blueprint Match (3/3 specs matched: gke, ml-inference, a3-ultragpu-8g):"), Equals, true)
+	c.Check(strings.Contains(outVLLM, "Blueprint: examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml"), Equals, true)
+
+	// 2. TPU framework spec matching: gke + maxtext (tpu) + tpu-v6e
+	outMaxText, err := runExplainForTest("gke", "maxtext", "tpu-v6e")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outMaxText, "Exact Blueprint Match (3/3 specs matched: gke, tpu, tpu-v6e):"), Equals, true)
+	c.Check(strings.Contains(outMaxText, "Blueprint: examples/gke-tpu-v6e/gke-tpu-v6e.yaml"), Equals, true)
+
+	// 3. Training framework spec matching: slurm + pytorch (ml-training) + h100
+	outPyTorch, err := runExplainForTest("slurm", "pytorch", "h100")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outPyTorch, "Exact Blueprint Match (3/3 specs matched: slurm, ml-training, a3-highgpu-8g):"), Equals, true)
+	c.Check(strings.Contains(outPyTorch, "Blueprint: examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"), Equals, true)
+
+	// 4. L4, RTX PRO 6000, and A100 hardware aliases
+	outL4, err := runExplainForTest("gke", "l4")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outL4, "Blueprint: examples/ml-gke.yaml"), Equals, true)
+
+	outRTX, err := runExplainForTest("gke", "rtx-pro-6000", "inference")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outRTX, "Blueprint: examples/gke-g4/gke-g4.yaml"), Equals, true)
+
+	outH100GKE, err := runExplainForTest("gke", "h100")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outH100GKE, "Blueprint: examples/gke-a3-highgpu/gke-a3-highgpu.yaml"), Equals, true)
+	c.Check(strings.Contains(outH100GKE, "examples/gke-a3-megagpu/gke-a3-megagpu.yaml"), Equals, true)
+
+	outA100, err := runExplainForTest("slurm", "a100")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outA100, "Exact Blueprint Match (2/2 specs matched: slurm, a2):"), Equals, true)
+
+	// 4b. Raw-token path specificity bonus (slurm + gromacs -> community/examples/hpc-slurm-gromacs.yaml)
+	outGromacs, err := runExplainForTest("slurm", "gromacs")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGromacs, "Blueprint: community/examples/hpc-slurm-gromacs.yaml"), Equals, true)
+
+	// 5. Tied exact-match blueprints (OtherExactMatches) surfaced in text and JSON
+	outTied, err := runExplainForTest("a3-ultragpu")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outTied, "other blueprint(s) also matched all requested specs:"), Equals, true)
+	c.Check(strings.Contains(outTied, "examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"), Equals, true)
+
+	explainFlags.format = "json"
+	outTiedJSON, err := runExplainForTest("a3-ultragpu")
+	c.Assert(err, IsNil)
+	var specRes ExplainSpecMatchResult
+	c.Assert(json.Unmarshal([]byte(outTiedJSON), &specRes), IsNil)
+	c.Check(specRes.ExactMatch, Equals, true)
+	c.Check(specRes.OtherExact > 0, Equals, true)
+	c.Check(len(specRes.OtherExactMatches), Equals, specRes.OtherExact)
+}

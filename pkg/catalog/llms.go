@@ -260,11 +260,17 @@ func renderBlueprintFullSection(sb *strings.Builder, bp BlueprintEntry) {
 	if len(bp.MachineTypes) > 0 {
 		mt = strings.Join(bp.MachineTypes, ", ")
 	}
-	deployMeta := ""
-	if bp.DeploymentPath != "" {
-		deployMeta = fmt.Sprintf(" | deployment: `%s`", bp.DeploymentPath)
+	extraMeta := ""
+	if len(bp.Accelerators) > 0 {
+		extraMeta += fmt.Sprintf(" | accelerators: `%s`", strings.Join(bp.Accelerators, ", "))
 	}
-	fmt.Fprintf(sb, "\n### %s (`%s` | scheduler: `%s` | machines: `%s`%s)\n", bp.Path, bp.BlueprintName, bp.Scheduler, mt, deployMeta)
+	if len(bp.Workloads) > 0 {
+		extraMeta += fmt.Sprintf(" | workloads: `%s`", strings.Join(bp.Workloads, ", "))
+	}
+	if bp.DeploymentPath != "" {
+		extraMeta += fmt.Sprintf(" | deployment: `%s`", bp.DeploymentPath)
+	}
+	fmt.Fprintf(sb, "\n### %s (`%s` | scheduler: `%s` | machines: `%s`%s)\n", bp.Path, bp.BlueprintName, bp.Scheduler, mt, extraMeta)
 	if bp.Description != "" {
 		fmt.Fprintf(sb, "- **Description:** %s\n", bp.Description)
 	}

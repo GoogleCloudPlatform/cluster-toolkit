@@ -639,3 +639,66 @@ func TestModuleServicesForSourceRelativeLocalDir(t *testing.T) {
 		t.Errorf("expected cwd.googleapis.com from cwd-relative module, got %v", svcs)
 	}
 }
+
+func TestInferAcceleratorsAndWorkloads(t *testing.T) {
+	_, blueprints := cachedScan(t)
+	byPath := indexBlueprintsByPath(t, blueprints)
+
+	cases := []struct {
+		path      string
+		wantAccel []string
+		wantWork  []string
+	}{
+		{
+			path:      "examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml",
+			wantAccel: []string{"nvidia-h200"},
+			wantWork:  []string{"ml-training", "ml-inference"},
+		},
+		{
+			path:      "examples/gke-a4/gke-a4.yaml",
+			wantAccel: []string{"nvidia-b200"},
+			wantWork:  []string{"ml-training", "ml-inference"},
+		},
+		{
+			path:      "examples/gke-tpu-v6e/gke-tpu-v6e.yaml",
+			wantAccel: []string{"tpu-v6e"},
+			wantWork:  []string{"ml-training", "ml-inference"},
+		},
+		{
+			path:      "examples/gke-a3-highgpu-inference-gateway.yaml",
+			wantAccel: []string{"nvidia-h100"},
+			wantWork:  []string{"ml-inference"},
+		},
+		{
+			path:      "examples/gke-g4/gke-g4.yaml",
+			wantAccel: []string{"nvidia-rtx-pro-6000"},
+			wantWork:  []string{"ml-inference"},
+		},
+		{
+			path:      "examples/hpc-slurm.yaml",
+			wantAccel: nil,
+			wantWork:  []string{"hpc"},
+		},
+	}
+	for _, tc := range cases {
+		bp, ok := byPath[tc.path]
+		if !ok {
+			t.Fatalf("missing blueprint %s", tc.path)
+		}
+		if !slices.Equal(bp.Accelerators, tc.wantAccel) {
+			t.Errorf("%s: Accelerators = %v, want %v", tc.path, bp.Accelerators, tc.wantAccel)
+		}
+		if !slices.Equal(bp.Workloads, tc.wantWork) {
+			t.Errorf("%s: Workloads = %v, want %v", tc.path, bp.Workloads, tc.wantWork)
+		}
+	}
+
+	allowedWorkloads := map[string]bool{"ml-training": true, "ml-inference": true, "hpc": true}
+	for _, bp := range blueprints {
+		for _, w := range bp.Workloads {
+			if !allowedWorkloads[w] {
+				t.Errorf("%s has non-canonical workload %q", bp.Path, w)
+			}
+		}
+	}
+}
