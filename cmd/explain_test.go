@@ -478,13 +478,18 @@ func (s *MySuite) TestExplainWorkloadAcceleratorsAndOtherExactMatches(c *C) {
 	c.Check(strings.Contains(outMaxText, "Exact Blueprint Match (3/3 specs matched: gke, tpu, tpu-v6e):"), Equals, true)
 	c.Check(strings.Contains(outMaxText, "Blueprint: examples/gke-tpu-v6e/gke-tpu-v6e.yaml"), Equals, true)
 
-	// 3. Training framework spec matching: slurm + pytorch (ml-training) + h100
+	// 3. Training framework spec matching: slurm + pytorch/jax (ml-training) + h100
 	outPyTorch, err := runExplainForTest("slurm", "pytorch", "h100")
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(outPyTorch, "Exact Blueprint Match (3/3 specs matched: slurm, ml-training, a3-highgpu-8g):"), Equals, true)
 	c.Check(strings.Contains(outPyTorch, "Blueprint: examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"), Equals, true)
 
-	// 4. L4, RTX PRO 6000, and A100 hardware aliases
+	outJAX, err := runExplainForTest("slurm", "jax", "h100")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outJAX, "Exact Blueprint Match (3/3 specs matched: slurm, ml-training, a3-highgpu-8g):"), Equals, true)
+	c.Check(strings.Contains(outJAX, "Blueprint: examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"), Equals, true)
+
+	// 4. L4, RTX PRO 6000, A100, and generic GPU/NVIDIA hardware aliases
 	outL4, err := runExplainForTest("gke", "l4")
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(outL4, "Blueprint: examples/ml-gke.yaml"), Equals, true)
@@ -498,14 +503,35 @@ func (s *MySuite) TestExplainWorkloadAcceleratorsAndOtherExactMatches(c *C) {
 	c.Check(strings.Contains(outH100GKE, "Blueprint: examples/gke-a3-highgpu/gke-a3-highgpu.yaml"), Equals, true)
 	c.Check(strings.Contains(outH100GKE, "examples/gke-a3-megagpu/gke-a3-megagpu.yaml"), Equals, true)
 
+	outGkeGPU, err := runExplainForTest("gke", "gpu")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeGPU, "Blueprint: examples/gke-a3-highgpu/gke-a3-highgpu.yaml"), Equals, true)
+	c.Check(strings.Contains(outGkeGPU, "examples/gke-g4/gke-g4.yaml"), Equals, true)
+
+	outGkeNvidia, err := runExplainForTest("gke", "nvidia")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeNvidia, "Blueprint: examples/gke-a3-highgpu/gke-a3-highgpu.yaml"), Equals, true)
+
+	outGkeInfer, err := runExplainForTest("gke", "inference")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeInfer, "Blueprint: examples/gke-a3-highgpu/gke-a3-highgpu.yaml"), Equals, true)
+
 	outA100, err := runExplainForTest("slurm", "a100")
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(outA100, "Exact Blueprint Match (2/2 specs matched: slurm, a2):"), Equals, true)
 
-	// 4b. Raw-token path specificity bonus (slurm + gromacs -> community/examples/hpc-slurm-gromacs.yaml)
+	// 4b. Raw-token path specificity bonus preserved even when generic token precedes specific token
 	outGromacs, err := runExplainForTest("slurm", "gromacs")
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(outGromacs, "Blueprint: community/examples/hpc-slurm-gromacs.yaml"), Equals, true)
+
+	outHpcGromacs, err := runExplainForTest("slurm", "hpc", "gromacs")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outHpcGromacs, "Blueprint: community/examples/hpc-slurm-gromacs.yaml"), Equals, true)
+
+	outTpuMaxText, err := runExplainForTest("slurm", "tpu", "maxtext")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outTpuMaxText, "Blueprint: community/examples/hpc-slurm6-tpu-maxtext.yaml"), Equals, true)
 
 	// 5. Tied exact-match blueprints (OtherExactMatches) surfaced in text and JSON
 	outTied, err := runExplainForTest("a3-ultragpu")
@@ -513,7 +539,9 @@ func (s *MySuite) TestExplainWorkloadAcceleratorsAndOtherExactMatches(c *C) {
 	c.Check(strings.Contains(outTied, "other blueprint(s) also matched all requested specs:"), Equals, true)
 	c.Check(strings.Contains(outTied, "examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"), Equals, true)
 
+	oldFormat := explainFlags.format
 	explainFlags.format = "json"
+	defer func() { explainFlags.format = oldFormat }()
 	outTiedJSON, err := runExplainForTest("a3-ultragpu")
 	c.Assert(err, IsNil)
 	var specRes ExplainSpecMatchResult

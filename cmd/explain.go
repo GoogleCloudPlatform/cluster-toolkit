@@ -1613,7 +1613,8 @@ var knownSpecAliasTable = []specAliasDef{
 	{Canonical: "tpu-v5p", Category: "hardware", Aliases: []string{"tpu-v5p", "v5p", "ct5p"}, Tokens: []string{"tpuv5p", "tpu-v5p", "v5p"}},
 	{Canonical: "tpu-v5e", Category: "hardware", Aliases: []string{"tpu-v5e", "v5e", "ct5lp"}, Tokens: []string{"tpuv5e", "tpu-v5e", "v5e"}},
 	{Canonical: "tpu-v4", Category: "hardware", Aliases: []string{"tpu-v4", "v4", "ct4p"}, Tokens: []string{"tpuv4", "tpu-v4", "v4"}},
-	{Canonical: "tpu", Category: "hardware", Aliases: []string{"tpu", "tpu-7x", "tpu7x", "tpu-v6e", "tpu-v5p", "tpu-v5e", "tpu-v4", "ct6e", "ct5p", "ct5lp", "ct4p"}, Tokens: []string{"tpu", "maxtext", "jax", "pathways"}},
+	{Canonical: "tpu", Category: "hardware", Aliases: []string{"tpu", "tpu-7x", "tpu7x", "tpu-v6e", "tpu-v5p", "tpu-v5e", "tpu-v4", "ct6e", "ct5p", "ct5lp", "ct4p"}, Tokens: []string{"tpu", "tpus", "maxtext", "pathways"}},
+	{Canonical: "gpu", Category: "hardware", Aliases: []string{"nvidia", "a3-highgpu", "a3-megagpu", "a3-ultragpu", "a4-highgpu", "a4x-highgpu", "a4x-maxgpu", "a2", "g2", "g4"}, Tokens: []string{"gpu", "gpus", "nvidia", "cuda"}},
 	{Canonical: "h4d", Category: "hardware", Aliases: []string{"h4d"}, Tokens: []string{"h4d"}},
 	{Canonical: "h3", Category: "hardware", Aliases: []string{"h3"}, Tokens: []string{"h3"}},
 	{Canonical: "c4a", Category: "hardware", Aliases: []string{"c4a"}, Tokens: []string{"c4a"}},
@@ -1629,8 +1630,8 @@ var knownSpecAliasTable = []specAliasDef{
 	{Canonical: "e2", Category: "hardware", Aliases: []string{"e2"}, Tokens: []string{"e2"}},
 	{Canonical: "t2a", Category: "hardware", Aliases: []string{"t2a"}, Tokens: []string{"t2a"}},
 
-	{Canonical: "ml-training", Category: "workload", Aliases: []string{"ml-training"}, Tokens: []string{"training", "ml-training", "pretraining", "finetuning", "sft", "rlhf", "pytorch", "torch", "nemo", "fsdp", "megatron", "ml"}},
-	{Canonical: "ml-inference", Category: "workload", Aliases: []string{"ml-inference"}, Tokens: []string{"inference", "ml-inference", "serving", "vllm", "sglang", "tgi", "llama", "deepseek", "qwen", "gemma", "mistral"}},
+	{Canonical: "ml-training", Category: "workload", Aliases: []string{"ml-training"}, Tokens: []string{"training", "train", "ml-training", "pretraining", "pretrain", "finetuning", "finetune", "sft", "rlhf", "pytorch", "torch", "jax", "nemo", "fsdp", "megatron", "ml"}},
+	{Canonical: "ml-inference", Category: "workload", Aliases: []string{"ml-inference"}, Tokens: []string{"inference", "ml-inference", "serving", "vllm", "sglang", "tgi", "triton", "nim", "llama", "deepseek", "qwen", "gemma", "mistral"}},
 	{Canonical: "hpc", Category: "workload", Aliases: []string{"hpc"}, Tokens: []string{"hpc", "mpi", "openmpi", "spack", "gromacs", "eda", "cae", "openfoam", "fluent", "starccm"}},
 
 	{Canonical: "managed-lustre", Category: "module", ModuleSource: "modules/file-system/managed-lustre", Aliases: []string{"managed-lustre"}, Tokens: []string{"lustre", "managed-lustre"}},
@@ -1652,15 +1653,21 @@ func parseSpecTokens(args []string) []normalizedSpec {
 	}
 
 	out := make([]normalizedSpec, 0, len(rawTokens))
-	seenCanonical := make(map[string]bool, len(rawTokens))
+	seenIdx := make(map[string]int, len(rawTokens))
 	for _, tok := range rawTokens {
 		sp := classifySpecToken(tok)
-		if !seenCanonical[sp.Canonical] {
-			seenCanonical[sp.Canonical] = true
+		if idx, exists := seenIdx[sp.Canonical]; !exists {
+			seenIdx[sp.Canonical] = len(out)
 			out = append(out, sp)
+		} else if isGenericSpecToken(out[idx]) && !isGenericSpecToken(sp) {
+			out[idx].Raw = sp.Raw
 		}
 	}
 	return out
+}
+
+func isGenericSpecToken(sp normalizedSpec) bool {
+	return isGenericWorkloadToken(strings.ToLower(sp.Raw)) || strings.EqualFold(sp.Raw, sp.Canonical)
 }
 
 func isSpecSeparator(r rune) bool {
@@ -1761,6 +1768,11 @@ func matchKeywordSpec(bp catalog.BlueprintEntry, spec normalizedSpec) bool {
 	}
 	for _, mt := range bp.MachineTypes {
 		if strings.Contains(strings.ToLower(mt), spec.Canonical) {
+			return true
+		}
+	}
+	for _, acc := range bp.Accelerators {
+		if strings.Contains(strings.ToLower(acc), spec.Canonical) {
 			return true
 		}
 	}
@@ -1877,22 +1889,32 @@ func scoreBlueprintAgainstSpecs(bp catalog.BlueprintEntry, specs []normalizedSpe
 }
 
 func specMatchWeight(bp catalog.BlueprintEntry, sp normalizedSpec) int {
-	base := specCategoryWeight(sp.Category)
+	weight := specCategoryWeight(sp.Category)
 	if sp.Category == "hardware" && hardwareMatchStrength(bp, sp) == 2 {
-		return base + 5
+		weight += 5
 	}
-	if (sp.Category == "workload" || sp.Category == "hardware") && strings.Contains(strings.ToLower(bp.Path), sp.Raw) {
-		if isGenericWorkloadToken(sp.Raw) {
-			return base + 3
-		}
-		return base + 8
+	if sp.Category == "workload" || sp.Category == "hardware" {
+		weight += workloadOrHardwarePathBonus(strings.ToLower(bp.Path), strings.ToLower(sp.Raw))
 	}
-	return base
+	return weight
+}
+
+func workloadOrHardwarePathBonus(lowerPath, lowerRaw string) int {
+	if lowerRaw == "" || !containsSegment(lowerPath, lowerRaw) {
+		return 0
+	}
+	if lowerRaw == "hpc" {
+		return 3
+	}
+	if isGenericWorkloadToken(lowerRaw) {
+		return 0
+	}
+	return 12
 }
 
 func isGenericWorkloadToken(raw string) bool {
 	switch raw {
-	case "hpc", "ml", "training", "ml-training", "inference", "ml-inference", "serving":
+	case "hpc", "ml", "training", "train", "ml-training", "pretraining", "pretrain", "finetuning", "finetune", "inference", "ml-inference", "serving", "gpu", "gpus", "nvidia", "tpu", "tpus":
 		return true
 	default:
 		return false
