@@ -1,0 +1,35 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+test_name: cloudsql-database
+deployment_name: "csdb-{{ build }}"
+zone: us-central1-a
+workspace: /workspace
+blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/cloudsql-database.yaml"
+# The vpc module's default name, so the playbook's Private Service Access
+# cleanup targets this deployment's own network.
+network: "{{ deployment_name }}-net"
+remote_node: "{{ deployment_name }}-client-0"
+post_deploy_tests:
+- test-validation/test-cloudsql.yml
+custom_vars:
+  deployment_group: primary
+cli_deployment_vars:
+  region: us-central1
+  zone: "{{ zone }}"
+  # Unique per attempt: a requeued attempt reuses the deployment name, and
+  # Cloud SQL keeps a deleted instance's name reserved for up to a week.
+  mysql_name_suffix: "{{ now(utc=True).strftime('%y%m%d%H%M%S') }}"

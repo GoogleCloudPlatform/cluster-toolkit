@@ -1,0 +1,66 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: cloudsql-postgres
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: cloudsql-pg
+  region: us-central1
+  zone: us-central1-a
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/vpc
+
+  - id: ps_connect
+    source: modules/network/private-service-access
+    use: [network1]
+    settings:
+      # Lets terraform destroy succeed while Cloud SQL is still releasing
+      # the connection; the peering is removed with the network.
+      deletion_policy: ABANDON
+
+  - id: sql
+    source: community/modules/database/cloudsql
+    use: [network1, ps_connect]
+    outputs:
+    - connection_name
+    - private_ip_address
+    settings:
+      database_name: pgappdb
+      sql_instance_name: $(vars.deployment_name)-db
+      tier: "db-f1-micro"
+      database_version: POSTGRES_15
+      database_flags:
+        log_min_duration_statement: "1000"
+      query_insights:
+        enabled: true
+
+  # Exercises the existing-instance-adoption code path. This is a
+  # terraform-validate-only blueprint (no real apply happens here), so
+  # existing_instance_name does not need to reference a real Cloud SQL
+  # instance -- terraform validate never evaluates data sources, only
+  # their static configuration.
+  - id: sql_adopt
+    source: community/modules/database/cloudsql
+    use: [network1]
+    settings:
+      existing_instance_name: some-pre-existing-instance
+      database_name: adopteddb
+      sql_username: adoptuser

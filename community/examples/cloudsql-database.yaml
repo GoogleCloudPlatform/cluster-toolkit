@@ -1,0 +1,66 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This blueprint demonstrates standalone use of the cloudsql module: a
+# private Cloud SQL instance reachable over Private Service Access, with a
+# generated password delivered as a Secret Manager reference rather than a
+# plaintext setting.
+#
+# The instance has deletion protection on by default. Before destroying the
+# deployment, set deletion_protection: false and api_deletion_protection:
+# false on the sql module and deploy again. Its automated backups are kept
+# after deletion until they expire (retain_backups_on_delete); set that to
+# false to delete them too.
+
+---
+blueprint_name: cloudsql-database
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: cloudsql-db
+  region: us-central1
+  zone: us-central1-a
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [network]
+    settings:
+      # Lets terraform destroy succeed while Cloud SQL is still releasing
+      # the connection; the peering is removed with the network.
+      deletion_policy: ABANDON
+
+  # The service account a workload runs as. Using it from the sql module
+  # grants it read access to the password secret.
+  - id: app_sa
+    source: modules/project/service-account
+    settings:
+      name: app
+      project_roles:
+      - logging.logWriter
+
+  - id: sql
+    source: community/modules/database/cloudsql
+    use: [network, private_service_access, app_sa]
+    settings:
+      database_name: appdb
+      tier: db-f1-micro
+    outputs:
+    - connection_name
+    - password_secret_id

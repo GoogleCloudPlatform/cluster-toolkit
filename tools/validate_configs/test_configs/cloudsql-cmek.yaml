@@ -1,0 +1,81 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: cloudsql-cmek
+
+# Exercises the cloudsql module's encryption_key_name input wired through
+# kms-key-iam's use-matched output of the same name, exactly as a real
+# blueprint would. Using kms_key_iam (not kms_key) is what orders the
+# instance behind the IAM grant to the cloudsql service agent; consuming
+# kms_key directly would order the instance behind the key but not the grant.
+#
+# Also exercises CMEK on the password secret's user-managed replica. The
+# Secret Manager service agent is granted on the key through kms-key-iam's
+# service_agents, and the replica's key is taken from kms_key_iam so the
+# secret is ordered behind that grant too.
+#
+# Both service agents must exist before kms-key-iam can grant them. In a
+# project that has never used them, create them first:
+#   gcloud beta services identity create --service=sqladmin.googleapis.com
+#   gcloud beta services identity create --service=secretmanager.googleapis.com
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: cloudsql-cmek
+  region: us-central1
+  zone: us-central1-a
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/vpc
+
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [network1]
+    settings:
+      # Lets terraform destroy succeed while Cloud SQL is still releasing
+      # the connection; the peering is removed with the network.
+      deletion_policy: ABANDON
+
+  - id: kms_key
+    source: community/modules/security/kms-key
+    settings:
+      location: $(vars.region)
+      key_ring_name: $(vars.deployment_name)-ring
+      key_name: $(vars.deployment_name)-key
+      deletion_policy: ABANDON
+
+  - id: kms_key_iam
+    source: community/modules/security/kms-key-iam
+    use: [kms_key]
+    settings:
+      service_agents: [cloudsql, secretmanager]
+
+  - id: sql
+    source: community/modules/database/cloudsql
+    use: [network1, private_service_access, kms_key_iam]
+    outputs:
+    - connection_name
+    - private_ip_address
+    settings:
+      database_name: appdb
+      sql_instance_name: $(vars.deployment_name)-db
+      tier: "db-f1-micro"
+      user_managed_replication:
+      - location: $(vars.region)
+        kms_key_name: $(kms_key_iam.crypto_key_id)

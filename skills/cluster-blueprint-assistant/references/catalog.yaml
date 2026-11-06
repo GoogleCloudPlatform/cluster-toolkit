@@ -4488,6 +4488,30 @@ blueprints:
   - id: build-af3
     source: community/modules/container/cloud-build
     settings: [cloud_build_template_path, repo_ref, repo_url, skip_if_exists, template_vars]
+- path: community/examples/cloudsql-database.yaml
+  blueprint_name: cloudsql-database
+  scheduler: none
+  description: "A private Cloud SQL instance whose generated password is delivered through Secret Manager; see the cloudsql module README."
+  required_services: [compute.googleapis.com, iam.googleapis.com, secretmanager.googleapis.com, servicenetworking.googleapis.com, sqladmin.googleapis.com]
+  vars:
+    deployment_name: cloudsql-db
+    project_id: null
+    region: us-central1
+    zone: us-central1-a
+  modules:
+  - id: network
+    source: modules/network/vpc
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [network]
+    settings: [deletion_policy]
+  - id: app_sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: sql
+    source: community/modules/database/cloudsql
+    use: [network, private_service_access, app_sa]
+    settings: [database_name, tier]
 - path: community/examples/eda/eda-all-on-cloud.yaml
   blueprint_name: eda-all-on-cloud
   scheduler: slurm
@@ -6721,6 +6745,9 @@ module_wiring:
     consumed_by:
     - community/modules/files/fsi-montecarlo-on-batch
     - community/modules/pubsub/bigquery-sub
+  community/modules/database/cloudsql:
+    required_services: [compute.googleapis.com, secretmanager.googleapis.com, servicenetworking.googleapis.com, sqladmin.googleapis.com]
+    required_inputs: [database_name]
   community/modules/database/slurm-cloudsql-federation:
     required_services: [bigqueryconnection.googleapis.com, servicenetworking.googleapis.com, sqladmin.googleapis.com]
     required_inputs: [network_id, sql_instance_name, tier]
@@ -7307,6 +7334,7 @@ module_wiring:
     - modules/network/pre-existing-vpc
     - modules/network/vpc
     consumed_by:
+    - community/modules/database/cloudsql
     - modules/file-system/filestore
     - modules/file-system/managed-lustre
     - modules/file-system/netapp-storage-pool
@@ -7319,6 +7347,7 @@ module_wiring:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
+    - community/modules/database/cloudsql
     - community/modules/database/slurm-cloudsql-federation
     - community/modules/file-system/nfs-server
     - community/modules/network/int-app-lb
@@ -7351,6 +7380,7 @@ module_wiring:
     required_inputs: [name, project_roles]
     consumed_by:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    - community/modules/database/cloudsql
     - community/modules/project/aiplatform-predict-iam
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login

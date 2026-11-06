@@ -13,6 +13,20 @@ but otherwise the same variables. This test exists to ensure there will be no
 naming collisions when more than one NFS server is created in a projects with
 the same deployment name.
 
+**cloudsql-cmek.yaml**: The `cloudsql` module with CMEK on the instance
+(`encryption_key_name`) and on the password secret's replica, both wired from
+`kms-key-iam` through `use`.
+
+**cloudsql-postgres.yaml**: The `cloudsql` module running PostgreSQL with
+`database_flags` and `query_insights`, plus a second module adopting an
+existing instance through `existing_instance_name`.
+
+**cloudsql-psc.yaml**: The `cloudsql` module over Private Service Connect,
+with the production settings: backups (start time, retention, final backup),
+deletion protection (Terraform and API),
+`availability_type: REGIONAL`, `ssl_mode`, `psc_allowed_consumer_projects` and
+`maintenance_window`.
+
 **gpu.yaml**: Deploys a set of VM instances (`vm-instance`) with different GPU
 configurations attached. Both automatic (via `gpu_definition.yaml`) and manually
 supplied guest accelerators are adding to the VM instances.
