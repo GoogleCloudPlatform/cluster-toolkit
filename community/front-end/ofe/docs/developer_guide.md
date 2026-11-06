@@ -1,11 +1,11 @@
-## Cluster Toolkit FrontEnd - Developer Guide
+# Open Front End (OFE) - Developer Guide
 <!--
 0        1         2         3         4         5         6         7        8
 1234567890123456789012345678901234567890123456789012345678901234567890234567890
 -->
-### Architecture design
+## Architecture design
 
-The Cluster Toolkit FrontEnd is a web application integrating several front-end and
+The Open Front End (OFE) is a web application integrating several front-end and
 back-end technologies. *Django*, a high-level Python-based web framework, forms
 the foundation of the web application. The back-end business logics can mostly
 be delegated to *Terraform* to create GCP cloud infrastructure required by the
@@ -17,8 +17,14 @@ The overall system design is described in the following figure:
 
 ![System Design](images/system-design.png) <!--TODO: refine this sketch-->
 
+> **Note:** `images/system-design.png` and `images/db-UML.png` (below) predate
+> newer models and are not regenerated with each change. For example, the UML
+> diagram shows `Workbench.trusted_users` (now `trusted_user`) and has no
+> `attached_cluster` field, `WorkbenchPreset` or container registry models.
+> Treat `website/ghpcfe/models.py` as the source of truth.
+
 In most cases, end-users are expected to use and communicate with the cloud
-systems via the FrontEnd. Of course, users from a traditional supercomputing
+systems via the OFE. Of course, users from a traditional supercomputing
 background may wish to work with HPC clusters from the command line. This is
 entirely possible through the Slurm login nodes.
 
@@ -36,7 +42,7 @@ from now on, should be created to host the application server, webserver and
 database server. In large productions, these servers can of course be hosted on
 different machines if desired.
 
-The web application is built upon Django, a Python framework to develop
+The web application is built upon Django (6.1, see `requirements.in`), a Python framework to develop
 data-driven dynamic websites. An *nginx* server is configured to serve the
 static files of the website, as well as proxying Django URLs to the application
 server. ([Uvicorn](https://www.uvicorn.org) is the chosen application server).
@@ -82,10 +88,14 @@ development.
 
 Here are some notes from a developer's perspective:
 
-- The deployment is done using Terraform.
-- When `deploy.sh` is invoked, it validates the client machine's development
-  environment, collects configuration information from user, save input
-  variables in `tf/terraform.tfvars`, and invoke Terraform.
+- The deployment is done using Terraform (`>= 1.12.2`, see `tf/versions.tf`).
+  The `tf/` and `tf/network/` directories and `script/` are internal to
+  `deploy.sh` and `teardown.sh`.
+- When `deploy.sh` is invoked interactively, it validates the client machine's
+  development environment, collects configuration information from user, save
+  input variables in `tf/terraform.tfvars`, and invoke Terraform. With
+  `--config`, many of these checks are skipped; see the
+  [Administrator's Guide](admin_guide.md#automated-deployment-process).
   - The deploy script will check the GCP project being used has the correct
     APIs enabled.  The list of required APIs is embedded in `deploy.sh`
     script - **this will need to be maintained**.
@@ -101,7 +111,8 @@ Here are some notes from a developer's perspective:
 - Terraform sets up a Pub/Sub topic for communication between the service
   machine and clusters.
 - Terraform provisions a compute engine virtual machine to be the service
-  machine. A startup script is then executed on the service machine to set up
+  machine, using the Rocky Linux 8 image pinned in `tf/main.tf`
+  (`rocky-linux-8-v20220126`). A startup script is then executed on the service machine to set up
   the software environment for Cluster Toolkit and Django, and start the web and
   application servers.
 
@@ -119,18 +130,19 @@ system after a new deployment:
 
 Immediately after login, run `sudo su -l gcluster` to become the *gcluster*
 user. This user account was created during the deployment to be the owner of
-the FrontEnd files.
+the OFE files.
 
 ### Directory structures on service machine
 
 The home directory of the *gcluster* account is at `/opt/gcluster`. For a new deployment, the following four sub-directories are created:
 
 - `go` - the development environment of the Go programming language, required to build Google Cluster Toolkit
-- `cluster-toolkit` - a clone of the Google Cluster Toolkit project. The `ghpc` binary
-   should have already been built during the deployment. The `frontend`
-   sub-directory contains the Django-based web application for the FrontEnd and
-   other supporting files.
-- `django-env` - a Python 3 virtual environment containing everything required
+- `cluster-toolkit` - a clone of the Google Cluster Toolkit project. The
+   `gcluster` binary (and its compatibility symlink `ghpc`, which is what the
+   backend still invokes) should have already been built during the
+   deployment. The `community/front-end/ofe` sub-directory contains the
+   Django-based web application for the OFE and other supporting files.
+- `django-env` - a Python 3.12 virtual environment containing everything required
    to support Django development. To activate this environment:
    `source ~/django-env/bin/activate`. Doing so may be required during the
    development, e.g., when running the Django `manage.py` script for
@@ -148,16 +160,16 @@ The home directory of the *gcluster* account is at `/opt/gcluster`. For a new de
 #### For cloud resources
 
 Run-time data to support creating and managing cloud resources are generated
-and stored in the following sub-directories within `cluster-toolkit/frontend` on
-the service machine:
+and stored in the following sub-directories within
+`/opt/gcluster/cluster-toolkit/community/front-end/ofe` on the service machine:
 
 - `clusters/cluster_\<id>` - holding run-time data for a cluster. `\<id>` here
 has a one-to-one mapping to the IDs shown in the frontend's cluster list page.
 The directory contains the following:
-  - `cluster.yaml` - input file for `ghpc`, generated based on information
-    collected from the web interface.
+  - `cluster.yaml` - input file for `gcluster` (invoked as `ghpc`), generated
+    based on information collected from the web interface.
   - `\<cluster_name>_\<random_id>/primary` - Terraform files generated by
-   `ghpc` to create the cluster, and log files from running
+   `ghpc create` to create the cluster, and log files from running
    `terraform init/validate/plan/apply`. Should there be a need to manually
     clean up the associated cloud resources, run `terraform destroy` here.
 - `vpcs/vpc_\<id>` - similar to above but holding run-time data for a virtual
@@ -165,6 +177,7 @@ The directory contains the following:
   Toolkit. A custom set of Terraform configurations are used.
 - `fs/fs_\<id>` - similar to above but holding run-time data for a filesystem.
   Currently only GCP Filestore is supported.
+- `workbenches/workbench_<id>` - run-time data for a Workbench.
 
 Note that life cycles of VPCs and Filestores are managed independently to those
 of clusters.
@@ -173,24 +186,32 @@ of clusters.
 
 Application data is stored in the shared filesystem `/opt/cluster`. It contains the following sub-directories:
 
-- `/opt/cluster/spack` contains a Spack v0.17.1 installation.
+- `/opt/cluster/spack` contains a Spack v0.21.0 installation (cloned by the
+  `spack_install` Ansible role).
 - When applications are installed via the web interface, supporting files are
-  saved in `/opt/cluster/install/<application_id>` where `<application_id>` can
+  saved in `/opt/cluster/installs/<application_id>` where `<application_id>` can
   be located from the web interface.
   - For a Spack installation, a job script `install.sh` is generated to
     submit a Slurm job to the selected partition to run `spack install` of
-    the desired package.
+    the desired package. Output goes to `<spack_name>.out` and `<spack_name>.err`
+    in the same directory.
   - For a custom installation, a job script `install_submit.sh` is generated
     to submit a Slurm job to the selected partition to execute `job.sh` which
-    contains the custom installation steps.
+    contains the custom installation steps. Output goes to `<name>.out` and
+    `<name>.err` in the same directory.
 - After each successful installation, Spack application binaries are stored at
-  `/opt/cluster/spack/opt/spack/linux-centos7-<arch>` where `<arch>` is the
+  `/opt/cluster/spack/opt/spack/linux-rocky9-<arch>` where `<arch>` is the
   architecture of the processors on which the binaries get built, such as
-  `cascadelake` or `zen2`.
+  `cascadelake` or `zen2`. (The OS part follows the Slurm image family, Rocky
+  Linux 9; older CentOS 7 based clusters used `linux-centos7-<arch>`. This
+  directory name is derived from Spack's platform detection and has not been
+  confirmed against a running cluster.)
 - Standard output and error files for Slurm jobs are stored in the working
   directories and also uploaded to the GCS bucket associated with the
-  deployment at `gs://<deployment_name>-<deployment_zone>-storage/clusters/<cluster_id>/installs/<application_id>/stdout|err`
-  so that they remain available even if the clusters are destroyed.
+  deployment at `gs://<deployment_name>-storage-<suffix>/clusters/<cluster_id>/installs/<application_id>/stdout|stderr`
+  so that they remain available even if the clusters are destroyed. The bucket
+  is created by `tf/main.tf` as `<deployment_name>-storage-<suffix>`, where
+  `<suffix>` is a random string.
 
 #### For jobs
 
@@ -208,7 +229,7 @@ contain the following:
   user-supplied custom commands to run the job.
 - Standard output and error files for Slurm jobs are uploaded to the GCS bucket
   associated with the deployment at the following URLs:
-  `gs://<deployment_name>-<deployment_zone>-storage/clusters/<cluster_id>/jobs/<job_id>/stdout|err`.
+  `gs://<deployment_name>-storage-<suffix>/clusters/<cluster_id>/jobs/<job_id>/stdout|stderr`.
 
 Note that a special home directory is created at `/home/root_jobs` to host jobs
 submitted by the Django superusers. For convenience they do not need Google
@@ -222,11 +243,13 @@ Django is great at building data-driven applications. The major system
 components, such as clusters, applications, and jobs, can easily map to Django
 data models. The database design of this system is best shown with a UML
 diagram. This was generated using a function available in the Python
-*django-extensions* package (depending on the Python *pydotplus* package and
-*graphviz* package to create the image output). To generate the UML diagram,
-run from the command line:
+*django-extensions* package (which needs the Python *pydotplus* package and
+the *graphviz* package to create the image output - neither is listed in
+`requirements.in`, so install them first, e.g. `pip install pydotplus` and your
+OS `graphviz` package). To generate the UML diagram, run from the command line
+in the `website` directory:
 
-```python
+```bash
 python manage.py graph_models -a -X <classes_to_exclude> -o UML_output.png
 ```
 
@@ -241,23 +264,23 @@ including network components, storage components, compute instance
 
 #### Code Layout
 
-The top few layers of the directory hierarchy of the Cluster Toolkit FrontEnd
+The top few layers of the directory hierarchy of the Open Front End (OFE)
 define the major components:
 
 | dir                         | description |
 |-----------------------------|-------------|
-| `cluster-toolkit/frontend/` | Top level   |
+| `cluster-toolkit/community/front-end/ofe/` | Top level   |
 | `.../cli/`                  | client commandline interface |
 | `.../docs/`                 | documentation |
 | `.../infrastructure_files/` | Support files for deploying cloud infrastructure |
-| `.../tf/`                   | Terraform files for deploying the HPC FrontEnd |
-| `.../website/`              | Source code for the HPC Frontend website |
+| `.../tf/`                   | Terraform files for deploying the OFE |
+| `.../website/`              | Source code for the OFE website |
 
 ##### Infrastructure Files
 
 | dir                         | description |
 |-----------------------------|-------------|
-| `.../frontend/infrastructure_files/` | Top level   |
+| `.../ofe/infrastructure_files/` | Top level   |
 | `.../cluster_startup/`               | Bootstrap startup scripts |
 | `.../gcs_bucket/`                    | Common configuration files (scripts, Ansible) to store in GCS |
 | `.../vpc_tf/`                        | Terraform templates for creating VPCs |
@@ -265,12 +288,12 @@ define the major components:
 
 These directories hold all the support infrastructure files which are used to
 create, provision, and initialize the cloud resources which may be created via
-the Cluster Toolkit FrontEnd.  The VPC Terraform and Workbench Terraform files may
+the Open Front End (OFE).  The VPC Terraform and Workbench Terraform files may
 eventually migrate into Cluster Toolkit YAML files.
 
 The files under `gcs_bucket` contain the more in-depth startup scripts and
-configuration information for the FrontEnd webserver as well as for new
-clusters.  During the initial deployment of the Cluster Toolkit FrontEnd, this
+configuration information for the OFE webserver as well as for new
+clusters.  During the initial deployment of the Open Front End (OFE), this
 directory is copied to a new Google Cloud Storage bucket which is then used for
 storing these startup codes as well as additional cluster information, such as
 log files.  When clusters are created in Google Cloud, the initial bootstrap
@@ -288,8 +311,8 @@ here as well, under
 
 | dir                     | description |
 |-------------------------|-------------|
-| `.../frontend/website/` | Top level   |
-| `.../ghpcfe/`           | Frontend Application dir |
+| `.../ofe/website/` | Top level   |
+| `.../ghpcfe/`           | OFE Application dir |
 | `....../cluster_manager/` | Utilities for cloud & backend operations |
 | `....../management/`     | Extra Django setup commands |
 | `....../migrations/`     | Database migration scripts |
@@ -300,16 +323,16 @@ here as well, under
 | `.../website/`          | Django core website configuration (including `settings.py`) |
 | `.../manage.py`         | Core Django application management script |
 
-As with many Django-based web applications, the Cluster Toolkit FrontEnd Django
+As with many Django-based web applications, the Open Front End (OFE) Django
 application is broken across multiple directories, each responsible for some
 critical subcomponent of the overall application, implementing the MVT (model,
 view, template) architecture.  The `ghpcfe/` directory hosts the pieces
-specific to the Cluster Toolkit FrontEnd, whereas the other directories are more
+specific to the Open Front End (OFE), whereas the other directories are more
 Django-focused.
 
 Under `ghpcfe/`, there are a variety of directories as show in the above
 table.  Directly inside this directory is the majority of the Python files
-which make up the Frontend web application. Of particular interest would be
+which make up the OFE web application. Of particular interest would be
 `models.py`, which stores the DB models and `forms.py`, for custom web forms.
 There are a sufficiently large number of Django views in the application, so
 the prototypical `views.py` is broken into its own Python package.
@@ -319,11 +342,11 @@ the "backend" code responsible for gathering cloud information as well as
 creating, controlling, and configuring cloud resources.  Of particular interest
 here are the files:
 
-- `c2.py`: Responsible for bidirectional communication between the FrontEnd and
+- `c2.py`: Responsible for bidirectional communication between the OFE and
   any created clusters.
 - `cloud_info.py`: Provides many utilities for querying information from Google
   Cloud about instance types, pricing, VPCs and so forth
-- `cluster_info.py`: Responsible for creating clusters and keeping track of
+- `clusterinfo.py`: Responsible for creating clusters and keeping track of
   local-to-frontend cluster metadata
 
 Note that these "backend" functions are often invoked asynchronously if the
@@ -337,14 +360,14 @@ contents to them.
 ## Workbenches Architecture
 
 The workbench process is fairly straight-forward. Gather configuration values
-from the FrontEnd and pass them to Terraform to control the creation of the
+from the OFE and pass them to Terraform to control the creation of the
 workbench instance. This is done directly via Terraform as the Cluster Toolkit does
 not currently support Vertex AI Workbenches.
 
 ### Infrastructure files
 
 Workbenches are created using a template configuration in
-`cluster-toolkit/frontend/infrastructure_files/workbench_tf`. The Terraform
+`cluster-toolkit/community/front-end/ofe/infrastructure_files/workbench_tf`. The Terraform
 template was originally based on the Terraform template provided by the
 [Google Cloud Platform Rad-Lab git repo](https://github.com/GoogleCloudPlatform/rad-lab)
 however the configuration diverged during early development. The main reason
@@ -353,23 +376,24 @@ specific OSLogin user rather than the generic Jupyter user which would make it
 impossible to interact properly with any mounted shared storage.
 
 The process of creating the workbench files is mostly contained within the file
-`cluster-toolkit/frontend/website/ghpcfe/cluster_manager/workbenchinfo.py`. The
+`cluster-toolkit/community/front-end/ofe/website/ghpcfe/cluster_manager/workbenchinfo.py`. The
 `copy_terraform()` routine copies files from the `infrastructure_files`
 directory while the `prepare_terraform_vars()` routine creates a
 `terraform.tfvars` file within the
-`cluster-toolkit/frontend/workbenches/workbench_##` directory to provide the
-following info gathered by the FrontEnd during the workbench creation process:
+`cluster-toolkit/community/front-end/ofe/workbenches/workbench_##` directory to provide the
+following info gathered by the OFE during the workbench creation process:
 
 - region
 - zone
 - project_name
 - subnet_name
 - machine_type
-- boot_disk_type
+- boot_disk_type (`PD_STANDARD`, `PD_BALANCED` or `PD_SSD`)
 - boot_disk_size_gb
-- trusted_users
-- image_family
-- owner_id
+- trusted_user (the email address of the trusted user)
+- instance_image (an object with `project = "deeplearning-platform-release"`
+  and `family` set to the selected image family)
+- owner_id (a list holding the same email address)
 - wb_startup_script_name
 - wb_startup_script_bucket
 
@@ -391,8 +415,9 @@ script can be generated.
 
 The startup script is generated by the `copy_startup_script()` process in
 `cluster_manager/workbenchinfo.py`. This process has two parts. The first part
-is generated using information gathered by the frontend and passes the user's
-social ID number set by the owner_id field. It also passes any configured mount
+is generated using information gathered by the frontend and passes the trusted
+user's Google social account ID (taken from their `socialaccount` record, not
+from `owner_id`, which holds an email address). It also passes any configured mount
 points into the startup script before the second part of the startup script is
 copied from `infrastructure_files/gcs_bucket/workbench/startup_script_template.sh`.
 
@@ -407,7 +432,7 @@ boots:
 - Copy Jupyter configuration files from `/home/jupyter/.jupyter` to
   `/tmp/jupyterhome/.jupyter`.
 - Create `DATA_LOSS_WARNING.txt` file with warning message.
-- Configure specified mount points in order specified on FrontEnd.
+- Configure specified mount points in the order specified on OFE.
 - Add symlink to `/tmp/jupyterhome/` which will serve as working directory on
   the web interface.
   - This process of mounting and symlinking means the mountpoint will appear

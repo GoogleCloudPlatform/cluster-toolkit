@@ -78,3 +78,5 @@ limitations under the License.
 | ---- | ----------- |
 | <a name="output_server_ip"></a> [server\_ip](#output\_server\_ip) | Webserver IP Address |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+
+> **Note:** this directory is internal to `deploy.sh` and `teardown.sh`, which write `terraform.tfvars` here and run Terraform. Use those scripts rather than running Terraform by hand; see the [Administrator's Guide](../docs/admin_guide.md). `terraform.tfvars` holds the admin password in plain text.

@@ -1,4 +1,4 @@
-# Google Cluster Toolkit Open Front End
+# Open Front End (OFE)
 
 This is a web front-end for HPC applications on GCP. It delegates to the Cloud
 Cluster Toolkit to create cloud resources for HPC clusters. Through the convenience

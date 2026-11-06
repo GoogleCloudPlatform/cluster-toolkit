@@ -1,14 +1,14 @@
-# Cluster Toolkit FrontEnd - Administrator’s Guide
+# Open Front End (OFE) - Administrator’s Guide
 
 <!--
 0        1         2         3         4         5         6         7        8
 1234567890123456789012345678901234567890123456789012345678901234567890234567890
 -->
 
-This document is for administrators of the Cluster Toolkit FrontEnd (TKFE). An
-administrator can deploy the TKFE portal, manage the lifecycle of HPC clusters,
+This document is for administrators of the Open Front End (OFE). An
+administrator can deploy the OFE portal, manage the lifecycle of HPC clusters,
 set up networking and storage resources that support clusters, install
-applications. and manage user access. Normal HPC users should refer to the
+applications, and manage user access. Normal HPC users should refer to the
 [User Guide](user_guide.md) for guidance on how to prepare and run jobs on
 clusters that have been set up by administrators.
 
@@ -16,32 +16,35 @@ Basic administrator knowledge of the Google Cloud Platform is needed in order to
 create projects and user accounts, but all other low-level administration tasks
 are handled by the portal.
 
-TKFE is a web application built upon the Django framework.  By default, a
+OFE is a web application built upon the Django framework.  By default, a
 single Django superuser is created at deployment time - this superuser then has
-administrator privileges in TKFE.  For large organisations that need additional
+administrator privileges in OFE.  For large organisations that need additional
 administrators, additional Django superusers can be created from the Admin site
-within TKFE, once it is deployed and running.
+within OFE, once it is deployed and running.
 
-The TFKE web application server uses the
+The OFE web application server uses the
 [Cluster Toolkit](https://github.com/GoogleCloudPlatform/cluster-toolkit) to
 provision resources for networks, filesystems and clusters, using a service
-account that has its credentials registered to TKFE. The service account is
+account that has its credentials registered to OFE. The service account is
 used for access management and billing.
 
-This guide covers the deployment of TKFE, registering the service account, and
+This guide covers the deployment of OFE, registering the service account, and
 the steps required to then create and manage clusters.  Further guides cover
 installation of [Applications](Applications.md) and the
 [Workbench](WorkbenchAdmin.md) Jupyter Notebook feature.
 An [Advanced Administrators Guide](AdvancedAdmin.md) also covers features for
-customising the TKFE deployment.
+customising the OFE deployment.
 
-## TKFE Deployment
+## OFE Deployment
 
-TKFE is deployed from a client machine using a script. The script will guide
+OFE is deployed from a client machine using a script. The script will guide
 the admin through the setup process, prompting for input of required
-parameters, then deploy TKFE into the Google Cloud Platform.
+parameters, then deploy OFE into the Google Cloud Platform.
 
-TKFE can also be deployed using a configuration file specified with the --config option. In this case, the script will read the required parameters from the YAML file instead of prompting the user for input. This allows for more streamlined and automated deployment processes. However, it is important to ensure that all required parameters are properly specified in the configuration file before deploying.
+OFE can also be deployed non-interactively from a YAML configuration file with
+`--config`. This is convenient for scripting, but it skips several checks that
+the interactive mode performs - see
+[Automated deployment process](#automated-deployment-process) before using it.
 
 ### Prerequisites
 
@@ -53,17 +56,39 @@ small number of prerequisites that must be installed ahead of time:
 
 - bash shell
 - [Git](https://github.com/git-guides/install-git)
-- [Terraform CLI](https://www.terraform.io/downloads) installation
+- [Terraform CLI](https://www.terraform.io/downloads) installation, version
+  1.12.2 or later (`required_version` in `tf/versions.tf`)
 - [Google Cloud CLI](https://cloud.google.com/cli) installation (`gcloud`,
   including the `gcloud storage` command)
-  
-#### Download TKFE
 
-If not already downloaded, the TKFE repository needs to be cloned to the client
+> **Note:** `deploy.sh` and `teardown.sh` only check that `terraform` is on
+> your `PATH`, and print "version 0.13 or higher" in their error message. That
+> text is stale; Terraform itself will refuse to run with a version older than
+> 1.12.2.
+
+#### Versions used by the OFE server
+
+These are fixed by the repository, not by the client machine. Check the files
+named below if you need to confirm them for a given branch:
+
+| Component | Version | Where it is set |
+| --------- | ------- | --------------- |
+| Terraform | `>= 1.12.2` | `tf/versions.tf` |
+| Terraform `google` / `google-beta` providers | `~> 4.0` | `tf/versions.tf` |
+| Terraform `null` provider | `~> 3.0` | `tf/versions.tf` |
+| Server VM image | `projects/rocky-linux-cloud/global/images/rocky-linux-8-v20220126` (Rocky Linux 8, pinned) | `tf/main.tf` |
+| Python on the server | 3.12 (virtual environment at `/opt/gcluster/django-env`) | `infrastructure_files/gcs_bucket/webserver/startup.sh` |
+| Django | 6.1 | `requirements.in` / `requirements.txt` |
+| Spack on clusters | v0.21.0 | `infrastructure_files/gcs_bucket/clusters/ansible_setup/roles/spack_install/tasks/main.yaml` |
+| Slurm image on clusters | `slurm-gcp-6-12-hpc-rocky-linux-9` family (project `schedmd-slurm-public`) | `website/ghpcfe/templates/blueprint/` |
+
+#### Download OFE
+
+If not already downloaded, the OFE repository needs to be cloned to the client
 machine.
 
 Clone the repository, checkout the corresponding branch, and switch to
-the `front-end/ofe` directory as follows:
+the `community/front-end/ofe` directory as follows:
 
 ```bash
 git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
@@ -83,28 +108,48 @@ resources.
 
 ##### GCP project
 
-A GCP project is required with the following APIs enabled:
+A GCP project is required with the following APIs enabled. This list is the
+`PRJ_API` array in `deploy.sh`:
 
-```Text
- Compute Engine API
- Cloud Monitoring API
- Cloud Logging API
- Cloud Pub/Sub API
- Cloud Resource Manager
- Identity and Access Management (IAM) API
- Cloud OS Login API
- Cloud Filestore API
- Cloud Billing API
- Vertex AI API
+| API | Service name |
+| --- | ------------ |
+| Cloud Monitoring API | `monitoring.googleapis.com` |
+| Cloud Logging API | `logging.googleapis.com` |
+| Compute Engine API | `compute.googleapis.com` |
+| Cloud Pub/Sub API | `pubsub.googleapis.com` |
+| Cloud Filestore API | `file.googleapis.com` |
+| Cloud Resource Manager API | `cloudresourcemanager.googleapis.com` |
+| Identity and Access Management (IAM) API | `iam.googleapis.com` |
+| Cloud OS Login API | `oslogin.googleapis.com` |
+| Cloud Billing API | `cloudbilling.googleapis.com` |
+| Vertex AI API | `aiplatform.googleapis.com` |
+| BigQuery Connection API | `bigqueryconnection.googleapis.com` |
+| Cloud SQL Admin API | `sqladmin.googleapis.com` |
+| Service Networking API | `servicenetworking.googleapis.com` |
+| Secret Manager API | `secretmanager.googleapis.com` |
+| Service Usage API | `serviceusage.googleapis.com` |
+| Cloud Storage API | `storage.googleapis.com` |
+
+In interactive mode, if any of these are not enabled, the deployment script
+asks to enable each one for you. It's not possible to complete a deployment
+without these APIs, so the script aborts if you decline. In `--config` mode
+this check is skipped (see [Automated deployment process](#automated-deployment-process)),
+so enable them beforehand:
+
+```bash
+gcloud services enable --project=<PROJECT_ID> \
+  monitoring.googleapis.com logging.googleapis.com compute.googleapis.com \
+  pubsub.googleapis.com file.googleapis.com cloudresourcemanager.googleapis.com \
+  iam.googleapis.com oslogin.googleapis.com cloudbilling.googleapis.com \
+  aiplatform.googleapis.com bigqueryconnection.googleapis.com \
+  sqladmin.googleapis.com servicenetworking.googleapis.com \
+  secretmanager.googleapis.com serviceusage.googleapis.com \
+  storage.googleapis.com
 ```
-
-If these are not enabled, the deployment script will ask to enable them for
-you. It's not possible to complete a deployment without these APIs, so the
-script will abort if not selected.
 
 ##### GCP user
 
-A GCP user that is a member of the project will be able to deploy TKFE, but
+A GCP user that is a member of the project will be able to deploy OFE, but
 must have appropriate privileges.  A user that is an *Owner* of the project
 will automatically have all required roles and permissions.  Alternatively,
 another account with access to the project, but a limited set of roles can be
@@ -142,87 +187,201 @@ If further help is needed, please refer to GCP documentation for:
 - [Granting and roles/permissions](https://cloud.google.com/iam/docs/creating-custom-roles)
 
 ### Deployment Process
+
 #### Manual deployment process
 
-TKFE uses a deployment script run on the client machine, prompting for required
-parameters, to configure TKFE.
+OFE uses a deployment script run on the client machine, prompting for required
+parameters, to configure OFE. Run it from the `community/front-end/ofe`
+directory:
 
-1. Run `./deploy.sh`
-1. Follow prompts to name the FrontEnd VM instance, specify the GCP project,
-   zone and subnet (subnet is optional, and one will be created if required).
-   The hosting VM will be referred to as the *service machine* from now on.
-1. Follow prompts to enter domain name (DNS hostname) and IP address for the
-   service machine.
+```bash
+./deploy.sh
+```
+
+The script asks for the following, in this order:
+
+1. Before asking anything, the script aborts if `tf/.tkfe.lock` exists (an OFE
+   was already deployed from this directory) and checks that `terraform` and
+   `gcloud` (with `gcloud storage`) are on your `PATH`.
+1. **Deployment name.** Lower-case letters, digits, `-` and `.`; at least 3
+   characters, starting with a letter and ending with a letter or digit. The
+   server VM is named `<deployment name>-server`.
+1. **GCP project ID** (defaults to your `gcloud` project). The ID is checked
+   with `gcloud projects describe`.
+1. **API check.** For each required API that is not enabled, you are asked
+   whether to enable it. Declining exits the script. The check lists the APIs
+   of your default `gcloud` project, so run
+   `gcloud config set project <PROJECT_ID>` before `./deploy.sh`.
+1. **Account check.** The script exits if `gcloud` has no authorised account. If
+   the account is not an *Owner* or *Editor* of the project, it prints a
+   warning and asks `Proceed [y/N]`. Answering `N` exits.
+1. **GCP zone** (default `europe-west4-a`). The region is derived from the zone
+   by dropping the last `-<letter>`.
+1. **Subnet** (optional). Leave blank and a VPC and subnet are created.
+1. **DNS hostname** (optional) and **static IP address** (optional).
    - For a production deployment, provide a domain name and static IP
      address.  If a static IP is needed, follow the on-screen instructions. An
      SSL certificate will automatically be obtained via
      [LetsEncrypt](https://letsencrypt.org/) to secure the web application.
-   - For dev and testing purposes, the domain name and static IP address and
-     domain name can be left blank. The system can still be successfully
-     deployed and run with an ephemeral IP address, however OAuth2-based login
-     (see later) will not be available as this requires a publicly resolvable
-     domain name.
-1. Follow instructions to provide details for an Admin (the Django superuser)
-   account - username, password, email address.
-1. Confirm whether to create a service account for managing clusters.  This
-   will create a service account, and generate a credential, associated with
-   the GCP project specified earlier being used to deploy TKFE.  This service
-   account may not be needed if using an existing one, or using multiple
+   - For dev and testing purposes, both can be left blank. The system can still
+     be successfully deployed and run with an ephemeral IP address, however
+     OAuth2-based login (see later) will not be available as this requires a
+     publicly resolvable domain name. Without a hostname the server uses
+     plain HTTP.
+1. **Admin (Django superuser)** username, password (entered twice) and email
+   address.
+1. **Service account and credential.** `Create a service account and
+   credential? [y/N]` - the default is **No**. If you answer yes, the script
+   creates the account `<deployment name>-tkfe-sa` in the project, grants it
+   the roles listed in `script/service_account.sh`, and writes a key to
+   `credential.json` next to `deploy.sh`. That file must be registered in OFE
+   (see below). If the account already exists you are asked whether to delete
+   and recreate it, or reuse it (optionally regenerating the credential). You
+   can skip this step if you use an existing service account, or multiple
    projects (see [advanced admin guide](AdvancedAdmin.md) for details).
-   - If selected, a credential file, `credential.json`. will be created in the
-     directory that needs to be registered in the FrontEnd (see below).
-1. Confirm the parameters are correct when prompted and the deployment can
-   proceed.
-   - If confirmed, the VM instance will be created.  This can take a few
-     minutes.
+1. **Deployment method of the server software.**
+   - `1` (default): clone the git repository when the server starts. You are
+     then asked for the fork owner (default `GoogleCloudPlatform`) and branch
+     (default `main`). The repository must be named `cluster-toolkit`.
+   - `2`: use a copy of the code from this computer (a tarball of the git
+     checkout containing `deploy.sh`).
+1. **Summary and confirmation.** The script prints a summary, writes
+   `tf/terraform.tfvars`, and asks `Proceed to deploy? [y/N]`. If confirmed,
+   Terraform creates the VM instance and its supporting resources. This can take
+   a few minutes.
    - **Note: after the deploy script has completed, it will still take up to
-     another 15 minutes to fully install the TKFE server with its full
+     another 15 minutes to fully install the OFE server with its full
      software stack.**
 
+> **Warning:** `tf/terraform.tfvars` contains the admin password in plain text
+> (`django_su_password`). The password is also stored in the Terraform state
+> in `tf/` and in the `webserver/config` object in the deployment's GCS bucket.
+> Restrict access to the `tf/` directory, and never commit it.
+
 #### Automated deployment process
-TKFE can also be deployed automatically using a YAML configuration file with all the required parameters. To deploy using this option, run ./deploy.sh --config <path-to-config-file>. All required parameters for deployment must be specified in the YAML file. If any required parameter is missing or invalid, the script will exit with an error. If all parameters are provided correctly, the deployment process will proceed automatically without any prompts for user input. Note that in case of any errors during deployment, the script will exit with an error and no resources will be created or modified.
 
-If the DJANGO_SUPERUSER_PASSWORD environment variable is set, the script will use it to set the Django superuser password instead of the value in the YAML file. This is a more secure way of handling passwords.
+OFE can also be deployed from a YAML configuration file:
 
-To use this configuration file for automated deployment, follow these steps:
+```bash
+./deploy.sh --config <path-to-config-file>
+```
 
-1. Create a file called `config.yaml` (do not place inline `#` comments on value lines — `deploy.sh` parses values directly):
+In this mode the script does not prompt for anything, including the final
+`Proceed to deploy?` confirmation. It reads a small set of keys, fails if a
+required one is missing, writes `tf/terraform.tfvars` and runs
+`terraform apply -auto-approve`.
 
-  ```yaml
-  deployment_name: MyDeployment
-  project_id: my-project-id
-  zone: us-west1-a
-  # Optional fields: subnet_name, dns_hostname, ip_address, deployment_mode, repo_fork, repo_branch
-  subnet_name: my-subnet
-  dns_hostname: myhostname.com
-  ip_address: 1.2.3.4
-  django_superuser_username: sysadm
-  # Optional if DJANGO_SUPERUSER_PASSWORD is set in the environment
-  django_superuser_password: Passw0rd!
-  django_superuser_email: sysadmin@example.com
-  deployment_mode: git
-  repo_fork: GoogleCloudPlatform
-  repo_branch: develop
-  ```
+**Config mode is not equivalent to interactive mode.** It does only the
+following checks: required keys are present, and a password is available. It
+does *not*:
 
- 1. Save the file in the same directory as the deploy.sh script.
- 1. Open a terminal and navigate to the directory where the files are located.
- 1. Run the following command: ./deploy.sh --config config.yaml
- 1. The script will read the parameters from the config file and proceed with the deployment process. If DJANGO_SUPERUSER_PASSWORD environment variable is set, the script will use it to set the Django superuser password instead of the value in the YAML file.
+- check for `tf/.tkfe.lock` (running it twice from the same directory
+  overwrites `tf/terraform.tfvars`, so do not do this while an OFE is deployed);
+- check that `terraform` and `gcloud` are installed, that the project exists,
+  that the required APIs are enabled, or that your account has suitable roles;
+- validate the deployment name (use lower-case letters, digits and `-`, as in
+  interactive mode);
+- create a service account or write `credential.json`.
+
+The script does not "validate everything and then deploy": if Terraform fails
+part-way, some resources may already exist. See
+[Deployment problems](#deployment-problems) for how to recover.
+
+##### Config file format
+
+The file is read as flat `key: value` lines, not full YAML. What this means in
+practice:
+
+- Blank lines and comment lines are skipped, as are lines that are not
+  `key: value` with a key of letters, digits and `_` (not starting with a
+  digit). Indentation before a key is ignored.
+- A value wrapped in matching single or double quotes is unquoted. Otherwise a
+  `#` that starts the value or follows whitespace starts a comment, so
+  `key: value # note` yields `value`. Quote a value to keep a `#` that follows a space.
+- Backslash escapes inside double quotes are copied to `terraform.tfvars` as
+  written, and Terraform decodes them, so `"a\"b"` gives `a"b`. Use escapes
+  Terraform understands, such as `\"` and `\\`. A single-quoted value with
+  `''`, or a value with text after the closing quote, is kept as written,
+  quotes included. `"` or `\` in an unquoted value, and `${` in any value,
+  can break the generated `terraform.tfvars`.
+- Leading and trailing spaces around an unquoted value are dropped; spaces
+  inside quotes are kept.
+- Lists, nesting and multi-line values are not supported. An indented key is
+  read as a top-level key, and a later duplicate key wins.
+
+```yaml
+# Required
+deployment_name: mydeployment
+project_id: my-project-id
+zone: us-west1-a
+django_superuser_username: sysadm
+django_superuser_email: sysadmin@example.com
+# Not needed if the DJANGO_SUPERUSER_PASSWORD environment variable is set
+django_superuser_password: CHANGE_ME
+# Optional. Default is the zone without its last -<letter>
+region: us-west1
+# Optional
+subnet_name: my-subnet
+dns_hostname: myhostname.com
+ip_address: 1.2.3.4
+# Optional: git or tarball. Default in config mode is tarball
+deployment_mode: git
+# Optional, used only with git. Defaults are GoogleCloudPlatform and main
+repo_fork: GoogleCloudPlatform
+repo_branch: develop
+```
+
+If the `DJANGO_SUPERUSER_PASSWORD` environment variable is set (even to an
+empty string), its value is used instead of the YAML file. This keeps the
+password out of the file.
+
+Note that in config mode `deployment_mode` defaults to `tarball`, whereas the
+interactive default is `git`. With `tarball`, run `deploy.sh` from inside a
+git checkout of the repository.
+
+##### Setting the region
+
+The region is derived from the zone (the zone without its last `-<letter>`),
+as in interactive mode. To use a different region, add `region: <REGION>` to
+the config file. The region is used for the Google provider, the storage
+bucket location and the VPC created when no subnet is given.
+
+##### Creating the service account manually
+
+Config mode does not create a service account or `credential.json`. Create them
+with the helper script, using the same naming as interactive mode, then
+register `credential.json` in OFE (see [Credential Management](#credential-management)):
+
+```bash
+script/service_account.sh create <PROJECT_ID> <DEPLOYMENT_NAME>-tkfe-sa
+script/service_account.sh credential <PROJECT_ID> <DEPLOYMENT_NAME>-tkfe-sa credential.json
+```
+
+See the [Advanced Admin Guide](AdvancedAdmin.md#service-account-management)
+for other options.
+
+To deploy with a config file:
+
+1. Create the file, for example `config.yaml`, as above.
+1. Make sure the project's APIs are enabled and you are authenticated with
+   `gcloud auth application-default login --project=<PROJECT_ID>`.
+1. From the `community/front-end/ofe` directory run
+   `./deploy.sh --config config.yaml`.
 
 <!--
 TODO:  Give instruction for a custom deployment.
 
-If a custom TKFE deployment is needed, the final step can be cancelled  Then
-hack any files in ./tf and manually run `terraform apply` in the `frontend/tf` directory after properly setting the `terraform.tfvars`.
+If a custom OFE deployment is needed, the final step can be cancelled  Then
+hack any files in ./tf and manually run `terraform apply` in the `front-end/ofe/tf` directory after properly setting the `terraform.tfvars`.
 -->
 
-**Important: To ensure that the TKFE resources can be fully cleaned up at a
+**Important: To ensure that the OFE resources can be fully cleaned up at a
 later date, ensure that the directory containing the terraform configuration
-(`./tf`) is retained.**
+and state (`./tf`) is retained.** After a successful deployment `tf/.tkfe.lock`
+is created, which stops a second deployment from the same directory.
 
 The deployment is now complete and after ~15 minutes, it will be possible to
-log into the TKFE using the Admin account details given, at the specified
+log into the OFE using the Admin account details given, at the specified
 domain name or IP address via a web browser.  The IP address will be output as
 `server_ip`.
 
@@ -232,14 +391,17 @@ domain name or IP address via a web browser.  The IP address will be output as
 
 ### Credential Management
 
-To allow TKFE to manage cloud resources on behalf of users, a
+To allow OFE to manage cloud resources on behalf of users, a
 [service account](https://cloud.google.com/iam/docs/service-accounts)
 must be registered by the Admin.  This is done by entering a credential
 corresponding to the service account - the credential will be a json format
-key file that needs to be copied into the *Credentials* form in TKFE.
+key file that needs to be copied into the *Credentials* form in OFE.
 
 The deploy script will usually create a service account and credential (unless
-told not to), but other service accounts can be used -see advanced admin guide(AdvancedAdmin.md#service-account-management) for details.
+told not to), but other service accounts can be used - see the
+[advanced admin guide](AdvancedAdmin.md#service-account-management) for
+details. If you deployed with `--config`, no service account was created - see
+[Creating the service account manually](#creating-the-service-account-manually).
 
 <!--
 The supplied credential will be validated and stored in the database for
@@ -276,7 +438,7 @@ button to trigger creation of the VPC and subnet(s).
 
 If your organisation already has predefined VPCs within the hosting GCP
 project, they can be imported.  Simply select an existing VPC and associated
-subnets from the web interface to register them with TKFE.  Imported VPCs
+subnets from the web interface to register them with OFE.  Imported VPCs
 can be used in exactly the same way as newly created ones.
 
 ## Filesystem Management
@@ -304,13 +466,13 @@ be reachable by the VPC subnets intended to be used for clusters.
 
 An internal address can be used if the cluster shares the same VPC with the
 imported filesystem. Alternatively, system administrators can set up hybrid
-connectivity (such as extablishing network peering) before mounting the
+connectivity (such as establishing network peering) before mounting the
 external filesystem located elsewhere on GCP.
 
 ## Cluster Management
 
 HPC clusters can be created after setting up the hosting VPC and any
-additional filesystems. The Cluster Toolkit FrontEnd can manage the whole life
+additional filesystems. The Open Front End (OFE) can manage the whole life
 cycles of clusters. Click the *Clusters* item in the main menu to list all
 existing clusters.
 
@@ -366,7 +528,7 @@ A typical workflow for creating a new cluster is as follows:
    cluster.
 1. Click the *Save* button to store the cluster settings in the database.
    Continue from the *Cluster Detail* page.
-1. Click the *Edit* button to make additional changes. such as creating more
+1. Click the *Edit* button to make additional changes, such as creating more
    Slurm partitions for different compute node instance types, or mounting
    additional filesystems.
    - For filesystems, note the two existing shared filesystems defined by
@@ -379,8 +541,9 @@ A typical workflow for creating a new cluster is as follows:
      as appropriate. Also, placement group can be enabled (for C2 and C2D
      partitions only). In the *image* field one can optionally supply a custom
      image to be used by the compute nodes. Administrators should ensure such
-     an image is compatible to the CentOS 7 based machine image used by Slurm
-     GCP. Otherwise additional customisation done by this system might fail.
+     an image is compatible with the Rocky Linux 9 based image family
+     (`slurm-gcp-6-12-hpc-rocky-linux-9`, project `schedmd-slurm-public`) that
+     the cluster templates use by default. Otherwise additional customisation done by this system might fail.
 1. Finally, save the configurations and click the *Create* button to trigger
    the cluster creation.
 
@@ -405,7 +568,7 @@ Administrators can choose from one of the following options:
 
 ### Set up Google OAuth2 login
 
-While it is possible to use a Django user account to access the FrontEnd
+While it is possible to use a Django user account to access the OFE
 website, and indeed doing so is required for some administration tasks, standard
 users must authenticate using their Google identities via Google OAuth2.  This,
 combined with the use of Google OSLogin for access to clusters, ensures
@@ -450,7 +613,7 @@ the cluster you will need to additionally assign these users the
 way to assign at the project level).
 
 User accounts will be automatically created for users when they log into the
-FrontEnd for the first time, by default new accounts are created with quota
+OFE for the first time, by default new accounts are created with quota
 disabled.  To enable job submission for an account, administrators must enable
 compute quota from the *Users* page.
 
@@ -474,18 +637,30 @@ Please see the [Workbench Admin Guide](WorkbenchAdmin.md).
 
 ## Teardown Process
 
-The TKFE package contains a `teardown.sh` script that will destroy the running
-FrontEnd instance. This script only removes the FrontEnd, not resources started from it.
+The OFE package contains a `teardown.sh` script that will destroy the running
+OFE instance. This script only removes the OFE, not resources started from it.
 
 **Before running the teardown script, ensure that all clusters, VPCs,
-workbenches and filestores are removed using the TKFE web interface before
+workbenches and filestores are removed using the OFE web interface before
 destroying it. These resources will otherwise persist and accrue costs.**
 
 To tear down the web interface and its hosting infrastructure, run
-directory `./teardown.sh` on the original client machine
-in the same directory that was used to deploy TKFE.
+`./teardown.sh` on the original client machine, in the same directory that was
+used to deploy OFE (it reads `tf/terraform.tfvars` and the Terraform state in
+`tf/`). On success it deletes `tf/.tkfe.lock`.
 
-Note: If the -y flag is passed to the script, all user questions will be answered with "yes". This is intended for automated deployments where user input is not possible.
+If `tf/terraform.tfvars` does not exist, the script exits with status 1 before
+asking anything.
+
+Note: if the `-y` flag is passed, the script answers "yes" to its own
+"No lock file found - proceed anyway?" and "Proceed?" questions. With `-y`, the
+script also deletes the `<deployment name>-tkfe-sa` service account without
+asking, so `./teardown.sh -y` runs without prompts. `-y` must be the first
+argument. The service account is handled before the `Proceed?` question, so it
+is deleted even if the teardown then stops. Without `-y` it asks
+`Delete [y/N]`; answer `n` to keep that service account and its credential.
+A leftover `<deployment name>-fe-sa` account (created by Terraform) is removed
+without a prompt.
 
 ## Troubleshooting
 
@@ -495,9 +670,9 @@ The service machine produces log files in `/opt/gcluster/run/`. These log
 files will show errors from the Django web application.
 
 Cloud resource deployment log files (from Terraform) are typically shown via
-the FrontEnd web site.  If those logs are not being shown, they can be found on
+the OFE web site.  If those logs are not being shown, they can be found on
 the service machine under
-`/opt/gcluster/cluster-toolkit/frontend/(clusters|fs|vpc)/...`.
+`/opt/gcluster/cluster-toolkit/community/front-end/ofe/(clusters|fs|vpcs|workbenches)/...`.
 Cluster Toolkit log files will also be found in those directories.  The Terraform
 log files and status files will be down a few directories, based off of the
 Cluster Number, Deployment ID, and Terraform directory.
@@ -509,7 +684,7 @@ the service machine logs to syslog, and can be viewed on the cluster controller
 node via `journalctl`, looking at the `ghpcfe_c2` service.
 
 Job logs and Spack application logs are uploaded upon job completion to Google
-Cloud Storage and viewable via the HPC Frontend.
+Cloud Storage and viewable via the OFE.
 
 ### Deployment problems
 
@@ -518,18 +693,39 @@ this is the case, error message will normally show what permissions are
 missing. Use the [IAM permissions reference](https://cloud.google.com/iam/docs/permissions-reference)
 to research this and identify additional roles to add to your user account.
 
-Before any attempt to redeploy the TKFE, make sure to run
-`terraform destroy` in `cluster-toolkit/frontend/tf` to remove cloud resources that
-have been already created.
+Before any attempt to redeploy OFE, remove the cloud resources that have
+already been created. On the client machine, in the directory you deployed
+from:
+
+```bash
+cd community/front-end/ofe/tf
+terraform destroy
+```
+
+or run `./teardown.sh` from `community/front-end/ofe` (see
+[Teardown Process](#teardown-process)).
+
+If `terraform apply` failed part-way, `deploy.sh` exits with "Terraform failed"
+and does **not** create `tf/.tkfe.lock`. The Terraform state and
+`tf/terraform.tfvars` are kept in `tf/`, so either:
+
+- fix the cause (for example a missing role or API, or a quota) and run
+  `terraform apply` again in `tf/`; or
+- run `terraform destroy` in `tf/` (or `./teardown.sh`) to start again.
+
+`deploy.sh` also writes the Terraform output to `tf/tfapply.log`. If
+`tf/.tkfe.lock` exists and you are sure nothing is deployed, delete it to allow
+a new deployment from that directory. Remember that `tf/terraform.tfvars` holds
+the admin password in plain text.
 
 ### Cluster problems
 
-The FrontEnd should be quite reliable provisioning clusters. However, in cloud
+The OFE should be quite reliable provisioning clusters. However, in cloud
 computing, errors will and do happen from time to time; usually due to changes
-in back-end services or other factors beyond scope of the TKFE. For example, a
+in back-end services or other factors beyond scope of the OFE. For example, a
 resource creation could fail because the hosting GCP project has ran out of
 certain resource quotas; or an upgrade of an underlying machine image might
-have introduced changes that are incompatible to the TKFE, which then needs
+have introduced changes that are incompatible to the OFE, which then needs
 updating.
 It is not possible to capture all such situations.  Here, a list of tips is
 given to help debug cluster creation problems. The
@@ -539,7 +735,8 @@ back-end logic is handled, which can also help with certain issues.
 - If a cluster is stuck at status 'c', something is wrong with the provisioning
   of cluster hardware.
   - SSH into the service machine and identify the directory containing the
-    run-time data for that cluster at `frontend/clusters/cluster_<cluster_id>`
+    run-time data for that cluster at
+    `/opt/gcluster/cluster-toolkit/community/front-end/ofe/clusters/cluster_<cluster_id>`
     where `<cluster_id>` can be found on the web interface. Check the
     Terraform log files there for debugging information.
 - If a cluster is stuck at status 'i', hardware resources should have been

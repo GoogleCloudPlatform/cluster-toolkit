@@ -1,11 +1,11 @@
-# Cluster Toolkit FrontEnd - Workbench User Guide
+# Open Front End (OFE) - Workbench User Guide
 <!--
 0        1         2         3         4         5         6         7        8
 1234567890123456789012345678901234567890123456789012345678901234567890234567890
 -->
 
 Vertex AI Workbenches give the user a dedicated interactive environment to
-perform pre- or post- processing of data from the cluster. Using the FrontEnd
+perform pre- or post- processing of data from the cluster. Using the OFE
 one can create Vertex AI workbenches dedicated to the selected user. Filestore
 filesystems and storage from the cluster headnode can be mounted within the
 Workbench and accessed as the selected user.
@@ -22,10 +22,10 @@ workbench is created by their administrator.
 On the above page you will be asked to select name, subnet, cloud zone, Trusted
 User, Machine Type, Boot disk type, Boot Disk Capacity and image family.
 
-- Name - The given name acts as a human readable id on the FrontEnd
+- Name - The given name acts as a human readable id on the OFE
 - Subnet - The Subnet field determines which network the Workbench will be
   located in, the available subnets will be populated by the networks added to
-  the FrontEnd under the networks menu
+  the OFE under the networks menu
 - Cloud zone - The cloud zone field will be populated once the subnet is
   selected and will govern which zone within the region the workbench will
   located in.
@@ -38,9 +38,12 @@ User, Machine Type, Boot disk type, Boot Disk Capacity and image family.
   presets or the admin user will have access to create workbenches outside of
   these pre-approved machine types
 - Boot disk type - The type of disk storage used for the workbench boot disk
+  (Standard, Balanced or SSD persistent disk)
 - Boot disk capacity - The amount of disk storage used for the workbench boot
-  disk
-- Image family - Currently the Cluster Toolkit FrontEnd supports Base Python3,
+  disk, in GB (minimum 120)
+- Attached cluster - Optional. A running cluster in the same VPC whose
+  filesystems are mounted in the workbench
+- Image family - Currently the Open Front End (OFE) supports Base Python3,
   Tensorflow, PyTorch and R images
 
 ## Add storage
@@ -48,7 +51,7 @@ User, Machine Type, Boot disk type, Boot Disk Capacity and image family.
 The second part of the configuration is to add any desired shared file storage.
 Once the initial configuration is saved an additional configuration section
 will be displayed showing the options to mount any shared file storage known
-about by the Cluster Toolkit FrontEnd.
+about by the Open Front End (OFE).
 
 ![workbench step 2](images/Workbench_userguide/create2.png)
 
