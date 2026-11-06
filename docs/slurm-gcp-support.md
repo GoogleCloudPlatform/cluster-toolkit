@@ -5,7 +5,7 @@ scripts and tools that automate the installation, deployment, and certain
 operational aspects of [Slurm](https://slurm.schedmd.com/overview.html) on
 Google Cloud Platform. The Cluster Toolkit team has finished transitioning to
 Slurm-GCP v6 and has removed all v5 modules and blueprints. Slurm-GCP v6 is the
-only supported option for GCE-based Slurm clusters on Google Cloud (for Kubernetes-backed Slurm clusters on GKE, see [`examples/slinky/`](../examples/slinky/README.md) and [`community/examples/slurm-gke/`](../community/examples/slurm-gke/README.md)).
+only supported option for GCE-based Slurm clusters on Google Cloud (for Kubernetes-backed Slurm clusters on GKE, see [`community/examples/hpc-slinky/hpc-slinky.yaml`](../community/examples/hpc-slinky/hpc-slinky.yaml) and [`community/examples/slurm-gke/slurm-gke.yaml`](../community/examples/slurm-gke/slurm-gke.yaml)).
 
 ### Major Changes in from Slurm GCP v5 to v6
 

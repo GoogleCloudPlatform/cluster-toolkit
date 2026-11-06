@@ -373,3 +373,57 @@ cases:
   - "GHPC_MOCK_MACHINE_CONFIG='{}' gcluster"
   - "terraform apply"
   - "gcluster destroy"
+
+# Discoverability M5: neutral 1,000-node A3 Ultra GKE sizing & blueprint discovery.
+- name: discover_a3u_1000_nodes
+  description: "Agent discovers the official GKE A3 Ultra blueprint (examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml) and large-scale GKE sizing reference (examples/gke-large-scale/) without reading raw .tf files."
+  prompt: >
+    Which blueprint should I use to deploy a 1,000-node A3 Ultra GKE cluster,
+    and what large-scale GKE settings apply?
+  expect_keywords_all:
+  - "examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml"
+  expect_keywords_any:
+  - "gke-large-scale"
+  - "static_node_count"
+  - "reservation_affinity"
+  forbidden_commands:
+  - "variables.tf"
+  - "outputs.tf"
+  - "main.tf"
+  - "terraform apply"
+
+# Discoverability M5: neutral 1,000-node A4X Slurm sizing & blueprint discovery.
+- name: discover_a4x_1000_nodes
+  description: "Agent discovers the official Slurm A4X High blueprint (examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml) and its companion deployment file without reading raw .tf files."
+  prompt: >
+    How do I configure a 1,000-node A4X High Slurm cluster with Managed Lustre
+    in Cluster Toolkit?
+  expect_keywords_all:
+  - "examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml"
+  expect_keywords_any:
+  - "a4xhigh-slurm-deployment.yaml"
+  - "a4x_cluster_size"
+  - "lustre"
+  forbidden_commands:
+  - "variables.tf"
+  - "outputs.tf"
+  - "main.tf"
+  - "terraform apply"
+
+# Discoverability M5: inspect module inputs and required APIs via gcluster explain / llms-full.txt with zero .tf reads.
+- name: discover_no_raw_tf
+  description: "Agent inspects module inputs, outputs, and required GCP APIs using ./gcluster explain or llms-full.txt without reading any .tf files."
+  prompt: >
+    Without reading any Terraform .tf files, tell me the required GCP APIs and
+    key inputs for modules/file-system/managed-lustre.
+  expect_keywords_all:
+  - "lustre.googleapis.com"
+  expect_keywords_any:
+  - "size_gib"
+  - "gcluster explain"
+  - "llms-full.txt"
+  forbidden_commands:
+  - "variables.tf"
+  - "outputs.tf"
+  - "main.tf"
+  - "cat modules/"

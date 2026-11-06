@@ -82,10 +82,10 @@ deployment_groups:
   - id: batch-startup-script
     source: modules/scripts/startup-script
     settings:
-      runners: ...
+      runners: []
 
   - id: batch-compute-template
-    source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v7.8.0
+    source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v15.4.1
     use: [batch-startup-script]
     settings:
       # Boiler plate to work with Cloud Foundation Toolkit
