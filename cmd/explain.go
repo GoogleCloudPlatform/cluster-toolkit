@@ -79,6 +79,8 @@ type ExplainBlueprintSummary struct {
 	DeploymentPath string   `json:"deployment_path,omitempty" yaml:"deployment_path,omitempty"`
 	Scheduler      string   `json:"scheduler" yaml:"scheduler"`
 	MachineTypes   []string `json:"machine_types,omitempty" yaml:"machine_types,omitempty"`
+	Accelerators   []string `json:"accelerators,omitempty" yaml:"accelerators,omitempty"`
+	Workloads      []string `json:"workloads,omitempty" yaml:"workloads,omitempty"`
 	Storage        []string `json:"storage,omitempty" yaml:"storage,omitempty"`
 }
 
@@ -536,6 +538,8 @@ func buildExplainIndex(repoRoot string) (ExplainIndexResult, error) {
 			DeploymentPath: bp.DeploymentPath,
 			Scheduler:      bp.Scheduler,
 			MachineTypes:   bp.MachineTypes,
+			Accelerators:   bp.Accelerators,
+			Workloads:      bp.Workloads,
 			Storage:        extractBlueprintStorageTags(bp),
 		})
 	}
@@ -1618,6 +1622,7 @@ func printOptionalModuleInputs(w io.Writer, optInputs []ExplainModuleInput) {
 
 type normalizedSpec struct {
 	Raw          string
+	RawTokens    []string
 	Canonical    string
 	Category     string // "scheduler", "hardware", "workload", "module", "keyword"
 	ModuleSource string
@@ -1697,15 +1702,11 @@ func parseSpecTokens(args []string) []normalizedSpec {
 		if idx, exists := seenIdx[sp.Canonical]; !exists {
 			seenIdx[sp.Canonical] = len(out)
 			out = append(out, sp)
-		} else if isGenericSpecToken(out[idx]) && !isGenericSpecToken(sp) {
-			out[idx].Raw = sp.Raw
+		} else {
+			out[idx].RawTokens = append(out[idx].RawTokens, sp.Raw)
 		}
 	}
 	return out
-}
-
-func isGenericSpecToken(sp normalizedSpec) bool {
-	return isGenericWorkloadToken(strings.ToLower(sp.Raw)) || strings.EqualFold(sp.Raw, sp.Canonical)
 }
 
 func isSpecSeparator(r rune) bool {
@@ -1717,6 +1718,7 @@ func classifySpecToken(tok string) normalizedSpec {
 		if slices.Contains(def.Tokens, tok) {
 			return normalizedSpec{
 				Raw:          tok,
+				RawTokens:    []string{tok},
 				Canonical:    def.Canonical,
 				Category:     def.Category,
 				ModuleSource: def.ModuleSource,
@@ -1727,11 +1729,11 @@ func classifySpecToken(tok string) normalizedSpec {
 
 	for _, m := range listTopLevelEmbeddedModules(sourcereader.ModuleFS) {
 		if m.Name == tok {
-			return normalizedSpec{Raw: tok, Canonical: m.Name, Category: "module", ModuleSource: m.Path, Aliases: []string{m.Name}}
+			return normalizedSpec{Raw: tok, RawTokens: []string{tok}, Canonical: m.Name, Category: "module", ModuleSource: m.Path, Aliases: []string{m.Name}}
 		}
 	}
 
-	return normalizedSpec{Raw: tok, Canonical: tok, Category: "keyword", Aliases: []string{tok}}
+	return normalizedSpec{Raw: tok, RawTokens: []string{tok}, Canonical: tok, Category: "keyword", Aliases: []string{tok}}
 }
 
 func blueprintMatchesSpec(bp catalog.BlueprintEntry, spec normalizedSpec) bool {
@@ -1932,9 +1934,23 @@ func specMatchWeight(bp catalog.BlueprintEntry, sp normalizedSpec) int {
 		weight += 5
 	}
 	if sp.Category == "workload" || sp.Category == "hardware" {
-		weight += workloadOrHardwarePathBonus(strings.ToLower(bp.Path), strings.ToLower(sp.Raw))
+		weight += maxWorkloadOrHardwarePathBonus(strings.ToLower(bp.Path), sp)
 	}
 	return weight
+}
+
+func maxWorkloadOrHardwarePathBonus(lowerPath string, sp normalizedSpec) int {
+	tokens := sp.RawTokens
+	if len(tokens) == 0 && sp.Raw != "" {
+		tokens = []string{sp.Raw}
+	}
+	best := 0
+	for _, raw := range tokens {
+		if b := workloadOrHardwarePathBonus(lowerPath, strings.ToLower(raw)); b > best {
+			best = b
+		}
+	}
+	return best
 }
 
 func workloadOrHardwarePathBonus(lowerPath, lowerRaw string) int {

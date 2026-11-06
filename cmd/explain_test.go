@@ -498,6 +498,11 @@ func (s *MySuite) TestExplainWorkloadAcceleratorsAndOtherExactMatches(c *C) {
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(outRTX, "Blueprint: examples/gke-g4/gke-g4.yaml"), Equals, true)
 
+	outG4Train, err := runExplainForTest("gke", "g4", "training")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outG4Train, "Exact Blueprint Match (3/3 specs matched: gke, g4, ml-training):"), Equals, true)
+	c.Check(strings.Contains(outG4Train, "Blueprint: examples/gke-g4/gke-g4.yaml"), Equals, true)
+
 	outH100GKE, err := runExplainForTest("gke", "h100")
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(outH100GKE, "Blueprint: examples/gke-a3-highgpu/gke-a3-highgpu.yaml"), Equals, true)
@@ -528,6 +533,10 @@ func (s *MySuite) TestExplainWorkloadAcceleratorsAndOtherExactMatches(c *C) {
 	outHpcGromacs, err := runExplainForTest("slurm", "hpc", "gromacs")
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(outHpcGromacs, "Blueprint: community/examples/hpc-slurm-gromacs.yaml"), Equals, true)
+
+	outMpiGromacs, err := runExplainForTest("slurm", "mpi", "gromacs")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outMpiGromacs, "Blueprint: community/examples/hpc-slurm-gromacs.yaml"), Equals, true)
 
 	outTpuMaxText, err := runExplainForTest("slurm", "tpu", "maxtext")
 	c.Assert(err, IsNil)

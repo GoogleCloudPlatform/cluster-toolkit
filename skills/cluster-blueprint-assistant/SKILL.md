@@ -190,8 +190,9 @@ grep -n "managed-lustre" skills/cluster-blueprint-assistant/references/catalog.y
 ```
 
 Each `blueprints[]` entry gives you: `path`, optional `deployment_path`,
-`scheduler`, `description`, `machine_types`, the default `vars`, and the
-`modules` list with `id`, `source`, `use`, and configured `settings` keys.
+`scheduler`, `description`, `machine_types`, optional `accelerators` and
+`workloads`, the default `vars`, and the `modules` list with `id`, `source`,
+`use`, and configured `settings` keys.
 Prefer blueprints under `examples/` over `community/examples/` when both match.
 
 ### 2. Customize via deployment.yaml

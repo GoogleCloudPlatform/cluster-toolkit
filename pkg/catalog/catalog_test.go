@@ -673,7 +673,17 @@ func TestInferAcceleratorsAndWorkloads(t *testing.T) {
 		{
 			path:      "examples/gke-g4/gke-g4.yaml",
 			wantAccel: []string{"nvidia-rtx-pro-6000"},
+			wantWork:  []string{"ml-training", "ml-inference"},
+		},
+		{
+			path:      "community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml",
+			wantAccel: []string{"nvidia-rtx-pro-6000"},
 			wantWork:  []string{"ml-inference"},
+		},
+		{
+			path:      "community/examples/alphaevolve/alpha-evolve-experiment.yaml",
+			wantAccel: nil,
+			wantWork:  nil,
 		},
 		{
 			path:      "examples/hpc-slurm.yaml",
