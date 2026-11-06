@@ -33,6 +33,8 @@ from django.dispatch import receiver
 from rest_framework.authtoken.models import Token
 from django import template
 
+from .cluster_manager.utils import new_state_namespace
+
 register = template.Library()
 
 logger = logging.getLogger(__name__)
@@ -1950,6 +1952,8 @@ class Workbench(CloudResource):
         ("r-latest-cpu-experimental-ubuntu-2004", "R (Experimental)"),
     )
     # pylint: enable=line-too-long
+    # Unused: Workbench Instances use the default image, so this is neither
+    # shown in the UI nor passed to Terraform. Kept to avoid a schema migration.
     image_family = models.CharField(
         max_length=64,
         choices=WORKBENCH_IMAGEFAMILIES,
@@ -2004,3 +2008,21 @@ class WorkbenchMountPoint(models.Model):
 
     def __str__(self):
         return f"{self.mount_path} on {self.workbench}"
+
+
+class StateNamespace(models.Model):
+    """This database's namespace in the Terraform state bucket (one row).
+
+    Created once per database so a fresh database cannot reuse an earlier
+    database's state prefixes.
+    """
+
+    namespace = models.CharField(max_length=32, unique=True, editable=False)
+    created = models.DateTimeField(auto_now_add=True)
+
+    @classmethod
+    def current(cls):
+        obj, _ = cls.objects.get_or_create(
+            pk=1, defaults={"namespace": new_state_namespace()}
+        )
+        return obj.namespace
