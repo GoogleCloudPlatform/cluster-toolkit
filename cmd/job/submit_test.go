@@ -1818,6 +1818,11 @@ func TestSubmitCmd_MLDiagnosticsValidation(t *testing.T) {
 			wantErr:   "--enable-ml-diagnostics",
 		},
 		{
+			name:      "explicit empty image without enable-ml-diagnostics",
+			extraArgs: []string{"--ml-diagnostics-image="},
+			wantErr:   "--enable-ml-diagnostics",
+		},
+		{
 			name:      "port without enable-ml-diagnostics",
 			extraArgs: []string{"--ml-diagnostics-telemetry-port", "8889"},
 			wantErr:   "--enable-ml-diagnostics",

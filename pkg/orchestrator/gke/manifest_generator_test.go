@@ -4900,6 +4900,12 @@ func TestCustomTemplateLoading_ExtractedDefaultsAreNoOp(t *testing.T) {
 	baseOpts.TelemetryCollectorImage = "registry.local/ai-telemetry-collector:v1"
 	baseOpts.TelemetryCollectorPort = 9100
 	pwJob := newCPUPathwaysJob("pw-noop")
+	pwJob.ComputeType = "v6e-4"
+	pwJob.MachineType = "tpu-v6e-slice"
+	pwJob.Topology = "2x2"
+	pwJob.MLDiagnosticsEnabled = true
+	pwJob.MLDiagnosticsImage = "registry.local/ai-telemetry-collector:v1"
+	pwJob.MLDiagnosticsTelemetryPort = 9100
 	render := func(t *testing.T, customDir string) map[string]string {
 		t.Helper()
 		orc := newCustomTemplateTestOrc(t, customDir)
@@ -4911,7 +4917,7 @@ func TestCustomTemplateLoading_ExtractedDefaultsAreNoOp(t *testing.T) {
 		if out["job"], err = orc.GenerateJobManifest(baseOpts, profile); err != nil {
 			t.Fatalf("GenerateJobManifest(customDir=%q) failed: %v", customDir, err)
 		}
-		if out["pathways"], err = orc.GeneratePathwaysManifest(pwJob, "img:latest", profile, false, false); err != nil {
+		if out["pathways"], err = orc.GeneratePathwaysManifest(pwJob, "img:latest", JobProfile{CapacityCount: 4}, false, false); err != nil {
 			t.Fatalf("GeneratePathwaysManifest(customDir=%q) failed: %v", customDir, err)
 		}
 		return out
@@ -5324,6 +5330,13 @@ func TestCustomTemplateValidation_PathwaysTelemetry(t *testing.T) {
 			want: "pathways-head",
 		},
 		{
+			name: "leaked ai-telemetry-collector into pathways-head regular containers",
+			mutate: func(src string) string {
+				return strings.Replace(src, "- name: workload-container", "- name: ai-telemetry-collector\n              image: {{.TelemetryCollectorImage}}\n            - name: workload-container", 1)
+			},
+			want: "pathways-head",
+		},
+		{
 			name: "missing worker replicatedJob",
 			mutate: func(src string) string {
 				return strings.Replace(src, "  - name: worker", "  - name: renamed-worker", 1)
@@ -5399,6 +5412,32 @@ func TestCustomTemplateValidation_PathwaysTelemetry(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("built-in template port collision omits custom-template re-extract hint", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud compute machine-types describe tpu-v6e-slice --zone=us-central1-a --format=json": {tpuResp},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.clusterZones = []string{"us-central1-a"}
+		_, err := orc.GeneratePathwaysManifest(orchestrator.JobDefinition{
+			WorkloadName:               "pw-port-clash",
+			CommandToRun:               "python3 train.py",
+			ComputeType:                "v6e-4",
+			MachineType:                "tpu-v6e-slice",
+			Topology:                   "2x2",
+			NumSlices:                  1,
+			NodesPerSlice:              1,
+			ClusterLocation:            "us-central1-a",
+			MLDiagnosticsEnabled:       true,
+			MLDiagnosticsImage:         "registry.local/ai-telemetry-collector:v1",
+			MLDiagnosticsTelemetryPort: 8080,
+			IsPathwaysJob:              true,
+			Pathways:                   orchestrator.PathwaysJobDefinition{GCSLocation: "gs://bkt", HeadNodePool: "cpu-np"},
+		}, "registry.local/jax:v1", JobProfile{CapacityCount: 4}, false, false)
+		if err == nil || !strings.Contains(err.Error(), `declared by container "pathways-worker"`) || strings.Contains(err.Error(), "gke-template-extract") {
+			t.Fatalf("got err = %v, want pathways-worker port collision without custom-template hint", err)
+		}
+	})
 }
 
 func TestCustomTemplateValidation_PodFailurePolicyAndTemplatePathErrors(t *testing.T) {

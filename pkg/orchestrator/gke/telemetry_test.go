@@ -112,10 +112,12 @@ func TestMLDiagnostics_WebhookModeAndNonTPUGuard(t *testing.T) {
 			img         string
 			envImg      string
 			wantTrigger string
+			wantHint    string
 		}{
 			{
 				name:        "explicit --ml-diagnostics-image on CPU",
 				wantTrigger: "--ml-diagnostics-image",
+				wantHint:    "omit --ml-diagnostics-image",
 				projectID:   "gke-proj",
 				computeType: "n2-standard-4",
 				machineType: "n2-standard-4",
@@ -125,6 +127,7 @@ func TestMLDiagnostics_WebhookModeAndNonTPUGuard(t *testing.T) {
 			{
 				name:        "GCLUSTER_TELEMETRY_IMAGE on GPU",
 				wantTrigger: "GCLUSTER_TELEMETRY_IMAGE",
+				wantHint:    "--ml-diagnostics-image=\"\"",
 				projectID:   "gke-proj",
 				computeType: "g2-standard-48",
 				machineType: "g2-standard-48",
@@ -134,6 +137,7 @@ func TestMLDiagnostics_WebhookModeAndNonTPUGuard(t *testing.T) {
 			{
 				name:        "non-GKE --enable-ml-diagnostics on GPU",
 				wantTrigger: "non-GKE",
+				wantHint:    "omit --enable-ml-diagnostics",
 				projectID:   "",
 				computeType: "g2-standard-48",
 				machineType: "g2-standard-48",
@@ -162,8 +166,8 @@ func TestMLDiagnostics_WebhookModeAndNonTPUGuard(t *testing.T) {
 					MLDiagnosticsImage:   tc.img,
 				}
 				_, err := orc.PrepareManifestOptions(job, "alpine:3.20", tc.profile, false, false)
-				if err == nil || !strings.Contains(err.Error(), "only supported for TPU workloads") || !strings.Contains(err.Error(), tc.wantTrigger) {
-					t.Fatalf("expected TPU-only error naming %q, got: %v", tc.wantTrigger, err)
+				if err == nil || !strings.Contains(err.Error(), "only supported for TPU workloads") || !strings.Contains(err.Error(), tc.wantTrigger) || !strings.Contains(err.Error(), tc.wantHint) {
+					t.Fatalf("expected TPU-only error naming %q and hint %q, got: %v", tc.wantTrigger, tc.wantHint, err)
 				}
 			})
 		}
@@ -623,4 +627,18 @@ func assertContainerEnvContains(t *testing.T, c corev1.Container, key, wantVal s
 		}
 	}
 	t.Errorf("container %s missing env %s (got %+v)", c.Name, key, c.Env)
+}
+
+func TestResolveTelemetryCollector_PartialTPUInputs(t *testing.T) {
+	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.projectID = "gke-proj"
+	for _, partial := range []orchestrator.JobDefinition{
+		{WorkloadName: "ct-only", ComputeType: "v6e-4", MLDiagnosticsEnabled: true, MLDiagnosticsImage: "registry.local/col:v1"},
+		{WorkloadName: "mt-only", MachineType: "tpu-v6e-slice", MLDiagnosticsEnabled: true, MLDiagnosticsImage: "registry.local/col:v1"},
+	} {
+		if img, _, err := orc.resolveTelemetryCollector(partial); err != nil || img != "registry.local/col:v1" {
+			t.Fatalf("resolveTelemetryCollector(%s) = (%q, %v), want registry.local/col:v1", partial.WorkloadName, img, err)
+		}
+	}
 }

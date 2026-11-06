@@ -63,6 +63,11 @@ func TestValidateTelemetryPort(t *testing.T) {
 		{port: 8435, wantErr: "libtpu runtime metrics"},
 		{port: 8438, wantErr: "libtpu runtime metrics"},
 		{port: tpuSliceBuilderPort, wantErr: "SliceBuilder"},
+		{port: 8475},
+		{port: minTPUProcessPort, wantErr: "multi-process"},
+		{port: 8477, wantErr: "multi-process"},
+		{port: maxTPUProcessPort, wantErr: "multi-process"},
+		{port: 8480},
 		{port: telemetryCollectorHealthPort, wantErr: "health-check"},
 	} {
 		err := ValidateTelemetryPort(tc.port)
@@ -136,7 +141,9 @@ func TestCompareImageRefs(t *testing.T) {
 		want int
 	}{
 		{"r/c:v1.10.0", "r/c:v1.9.0", 1},
+		{"r/c:v2", "r/c:v1.10.0", 1},
 		{"r/c:1.2.3", "r/c:v1.2.3-rc1", 1},
+		{"a/c:v1.2.3", "b/c:v1.2.3", -1},
 		{"r/c:20250115", "r/c:v0.1.0", -1},
 		{"r/c:20250115", "r/c:20260301", -1},
 		{"r/c:latest", "r/c:v0.1.0", -1},
@@ -202,6 +209,9 @@ func TestValidatePodTelemetry(t *testing.T) {
 				t.Fatalf("ValidatePodTelemetry() = %v, want substring %q plus the hint", err, tc.wantErr)
 			}
 		})
+	}
+	if err := ValidatePodTelemetry("pod", "", "job-1", corev1.PodSpec{}, okLabels); err == nil || strings.HasSuffix(err.Error(), ". ") {
+		t.Errorf("ValidatePodTelemetry(empty hint) = %v, want clean error without trailing separator", err)
 	}
 	if err := ValidateNoManagedWebhookLabel("JobSet", "hint", map[string]string{ManagedMLDiagnosticsLabel: "true"}); err == nil || !strings.Contains(err.Error(), ManagedMLDiagnosticsLabel) {
 		t.Errorf("ValidateNoManagedWebhookLabel(true) = %v, want label error", err)

@@ -140,7 +140,11 @@ func (g *GKEOrchestrator) generateWorkloadManifest(opts ManifestOptions, profile
 	if err := ValidateJobSetManifest(manifest); err != nil {
 		return "", err
 	}
-	if err := validateWorkloadTelemetryManifest(manifest, opts.TelemetryCollectorImage, opts.WorkloadName, tmplName); err != nil {
+	customHint := ""
+	if g.gkeCustomTemplatesPath != "" {
+		customHint = fmt.Sprintf(workloadTemplateExtractHintFmt, tmplName)
+	}
+	if err := validateWorkloadTelemetryManifest(manifest, opts.TelemetryCollectorImage, opts.WorkloadName, customHint); err != nil {
 		return "", err
 	}
 	return manifest, nil
@@ -678,7 +682,11 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
 	}
-	if err := validateRenderedPathwaysManifest(buf.String(), opts); err != nil {
+	customHint := ""
+	if g.gkeCustomTemplatesPath != "" {
+		customHint = pathwaysTemplateExtractHint
+	}
+	if err := validateRenderedPathwaysManifest(buf.String(), opts, customHint); err != nil {
 		return "", err
 	}
 
@@ -689,14 +697,14 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 	return manifest, nil
 }
 
-func validateRenderedPathwaysManifest(jobSet string, opts ManifestOptions) error {
+func validateRenderedPathwaysManifest(jobSet string, opts ManifestOptions, customHint string) error {
 	if err := validatePathwaysMTCManifest(jobSet, opts); err != nil {
 		return err
 	}
 	if err := validatePathwaysSPSManifest(jobSet, opts); err != nil {
 		return err
 	}
-	return validatePathwaysTelemetryManifest(jobSet, opts.TelemetryCollectorImage, opts.WorkloadName)
+	return validatePathwaysTelemetryManifest(jobSet, opts.TelemetryCollectorImage, opts.WorkloadName, customHint)
 }
 
 func findCSIVolumeName(podSpec *corev1.PodSpec, driver string) string {
@@ -880,11 +888,10 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 	}
 }
 
-func validateWorkloadTelemetryManifest(manifestContent, collectorImage, workloadName, tmplName string) error {
+func validateWorkloadTelemetryManifest(manifestContent, collectorImage, workloadName, hint string) error {
 	if collectorImage == "" {
 		return nil
 	}
-	hint := fmt.Sprintf(workloadTemplateExtractHintFmt, tmplName)
 	return forEachWorkloadObject(manifestContent, func(kind, jobName string, objectLabels map[string]string, _ *batchv1.PodFailurePolicy, tmpl *corev1.PodTemplateSpec) error {
 		prefix := "Job pod template"
 		if kind == "JobSet" {
@@ -897,7 +904,7 @@ func validateWorkloadTelemetryManifest(manifestContent, collectorImage, workload
 	})
 }
 
-func validatePathwaysTelemetryManifest(jobSet, collectorImage, workloadName string) error {
+func validatePathwaysTelemetryManifest(jobSet, collectorImage, workloadName, hint string) error {
 	if collectorImage == "" {
 		return nil
 	}
@@ -906,22 +913,25 @@ func validatePathwaysTelemetryManifest(jobSet, collectorImage, workloadName stri
 		return err
 	}
 	if err := forEachWorkloadObject(jobSet, func(kind, _ string, objectLabels map[string]string, _ *batchv1.PodFailurePolicy, _ *corev1.PodTemplateSpec) error {
-		return k8s.ValidateNoManagedWebhookLabel(kind, pathwaysTemplateExtractHint, objectLabels)
+		return k8s.ValidateNoManagedWebhookLabel(kind, hint, objectLabels)
 	}); err != nil {
 		return err
 	}
 	if headTmpl != nil {
-		if k8s.HasContainerNamed(slices.Concat(headTmpl.Spec.InitContainers, headTmpl.Spec.Containers), k8s.TelemetryCollectorContainerName) {
-			return fmt.Errorf("pathways-head must not run %q; telemetry sidecar belongs only on TPU worker pods. %s", k8s.TelemetryCollectorContainerName, pathwaysTemplateExtractHint)
+		hasCollector := func(cs []corev1.Container) bool {
+			return slices.ContainsFunc(cs, func(c corev1.Container) bool { return c.Name == k8s.TelemetryCollectorContainerName })
+		}
+		if hasCollector(headTmpl.Spec.InitContainers) || hasCollector(headTmpl.Spec.Containers) {
+			return fmt.Errorf("%s", k8s.AppendHint(fmt.Sprintf("pathways-head must not run %q; telemetry sidecar belongs only on TPU worker pods", k8s.TelemetryCollectorContainerName), hint))
 		}
 		if _, hasLbl := headTmpl.Labels[k8s.TPUWorkloadNameLabel]; hasLbl {
-			return fmt.Errorf("pathways-head must not carry label %q; telemetry pod labels belong only on TPU worker pods. %s", k8s.TPUWorkloadNameLabel, pathwaysTemplateExtractHint)
+			return fmt.Errorf("%s", k8s.AppendHint(fmt.Sprintf("pathways-head must not carry label %q; telemetry pod labels belong only on TPU worker pods", k8s.TPUWorkloadNameLabel), hint))
 		}
 	}
 	if workerTmpl == nil {
-		return fmt.Errorf("ML Diagnostics sidecar is enabled but the Pathways manifest has no worker replicatedJob. %s", pathwaysTemplateExtractHint)
+		return fmt.Errorf("%s", k8s.AppendHint("ML Diagnostics sidecar is enabled but the Pathways manifest has no worker replicatedJob", hint))
 	}
-	return k8s.ValidatePodTelemetry("Pathways worker pod template", pathwaysTemplateExtractHint, workloadName, workerTmpl.Spec, workerTmpl.Labels)
+	return k8s.ValidatePodTelemetry("Pathways worker pod template", hint, workloadName, workerTmpl.Spec, workerTmpl.Labels)
 }
 
 // withCoordinatorEnv sets default MASTER_ADDR and WORKERS_0_HOSTNAME pointing to the rank-0 pod.

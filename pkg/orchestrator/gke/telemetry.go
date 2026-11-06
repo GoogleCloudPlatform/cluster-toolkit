@@ -82,6 +82,17 @@ func (g *GKEOrchestrator) validateTelemetryFlags(job orchestrator.JobDefinition)
 	return nil
 }
 
+// nonTPUTelemetryHint returns the remediation hint when native sidecar mode is triggered on a non-TPU workload.
+func (g *GKEOrchestrator) nonTPUTelemetryHint(job orchestrator.JobDefinition) string {
+	if !g.isGKE(job) {
+		return "omit --enable-ml-diagnostics for non-TPU workloads"
+	}
+	if strings.TrimSpace(job.MLDiagnosticsImage) != "" {
+		return "omit --ml-diagnostics-image to use the GKE managed webhook (or omit --enable-ml-diagnostics)"
+	}
+	return fmt.Sprintf("pass --ml-diagnostics-image=\"\" or unset %s to use the GKE managed webhook (or omit --enable-ml-diagnostics)", k8s.TelemetryImageEnvVar)
+}
+
 // resolveTelemetryCollector returns the native sidecar image and metrics port for job, or an empty image when
 // GKE's managed webhook provides ML Diagnostics. Off GKE, an unnamed image is discovered from the TPU node image cache.
 func (g *GKEOrchestrator) resolveTelemetryCollector(job orchestrator.JobDefinition) (string, int, error) {
@@ -92,7 +103,7 @@ func (g *GKEOrchestrator) resolveTelemetryCollector(job orchestrator.JobDefiniti
 		return "", 0, nil
 	}
 	if !config.IsTPU(job.MachineType) && !config.IsTPU(job.ComputeType) {
-		return "", 0, fmt.Errorf("ML Diagnostics collector sidecar injection (selected by %s) is only supported for TPU workloads (got compute-type=%q, machine-type=%q)", g.telemetrySidecarTrigger(job), job.ComputeType, job.MachineType)
+		return "", 0, fmt.Errorf("ML Diagnostics collector sidecar injection (selected by %s) is only supported for TPU workloads (got compute-type=%q, machine-type=%q); %s", g.telemetrySidecarTrigger(job), job.ComputeType, job.MachineType, g.nonTPUTelemetryHint(job))
 	}
 	img := strings.TrimSpace(job.MLDiagnosticsImage)
 	if img == "" {

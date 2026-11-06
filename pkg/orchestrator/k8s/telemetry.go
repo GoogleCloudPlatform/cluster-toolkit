@@ -47,6 +47,10 @@ const (
 	telemetryCollectorHealthPort = 13133
 	// tpuSliceBuilderPort is libtpu's default SliceBuilder/ICI worker gRPC port on hostNetwork.
 	tpuSliceBuilderPort = 8471
+	// minTPUProcessPort and maxTPUProcessPort bound libtpu's per-process SliceBuilder / barrier ports
+	// (TPU_PROCESS_PORT=8476..8479) bound on hostNetwork by multi-container TPU 7x and multi-process TPU pods.
+	minTPUProcessPort = 8476
+	maxTPUProcessPort = 8479
 	// TelemetryImageEnvVar supplies the collector image when --ml-diagnostics-image is omitted.
 	TelemetryImageEnvVar = "GCLUSTER_TELEMETRY_IMAGE"
 
@@ -55,7 +59,7 @@ const (
 
 // ValidateTelemetryPort checks that port is a usable TCP port for the collector's Prometheus endpoint and does
 // not collide with listeners the collector itself depends on (libtpu runtime metric ports and its own health
-// check) or with libtpu's SliceBuilder worker port (which standard TPU manifests do not declare in ports:).
+// check) or with libtpu's SliceBuilder / TPU_PROCESS_PORT worker ports (which standard TPU manifests do not declare in ports:).
 // Ports declared by other containers in the pod are checked against the rendered manifest by ValidatePodTelemetry.
 func ValidateTelemetryPort(port int) error {
 	if port < 1 || port > 65535 {
@@ -64,8 +68,8 @@ func ValidateTelemetryPort(port int) error {
 	if strings.Contains(","+defaultTPURuntimeMetricsPorts+",", fmt.Sprintf(",%d,", port)) {
 		return fmt.Errorf("invalid --ml-diagnostics-telemetry-port %d: ports %s are the libtpu runtime metrics endpoints the collector scrapes", port, defaultTPURuntimeMetricsPorts)
 	}
-	if port == tpuSliceBuilderPort {
-		return fmt.Errorf("invalid --ml-diagnostics-telemetry-port %d: it is the libtpu SliceBuilder worker port", port)
+	if port == tpuSliceBuilderPort || (port >= minTPUProcessPort && port <= maxTPUProcessPort) {
+		return fmt.Errorf("invalid --ml-diagnostics-telemetry-port %d: ports %d and %d-%d are libtpu SliceBuilder / multi-process coordination ports", port, tpuSliceBuilderPort, minTPUProcessPort, maxTPUProcessPort)
 	}
 	if port == telemetryCollectorHealthPort {
 		return fmt.Errorf("invalid --ml-diagnostics-telemetry-port %d: it is the collector's own health-check port", port)
@@ -253,9 +257,12 @@ func WithTelemetryEnv(userEnv map[string]string) map[string]string {
 	return merged
 }
 
-// HasContainerNamed reports whether containers includes a container with the given name.
-func HasContainerNamed(containers []corev1.Container, name string) bool {
-	return slices.ContainsFunc(containers, func(c corev1.Container) bool { return c.Name == name })
+// AppendHint appends hint as a trailing sentence when hint is non-empty.
+func AppendHint(msg, hint string) string {
+	if hint == "" {
+		return msg
+	}
+	return msg + ". " + hint
 }
 
 // isNativeSidecar reports whether c is a Kubernetes 1.29+ native sidecar: an init container with
@@ -271,17 +278,17 @@ func isNativeSidecar(c corev1.Container) bool {
 func ValidatePodTelemetry(contextPrefix, hint, workloadName string, pod corev1.PodSpec, labels map[string]string) error {
 	idx := slices.IndexFunc(pod.InitContainers, func(c corev1.Container) bool { return c.Name == TelemetryCollectorContainerName })
 	if idx < 0 {
-		return fmt.Errorf("%s is missing native sidecar %q in initContainers. %s", contextPrefix, TelemetryCollectorContainerName, hint)
+		return fmt.Errorf("%s", AppendHint(fmt.Sprintf("%s is missing native sidecar %q in initContainers", contextPrefix, TelemetryCollectorContainerName), hint))
 	}
 	if !isNativeSidecar(pod.InitContainers[idx]) {
-		return fmt.Errorf("%s runs %q as a plain init container; it must set restartPolicy: Always to run as a native sidecar. %s", contextPrefix, TelemetryCollectorContainerName, hint)
+		return fmt.Errorf("%s", AppendHint(fmt.Sprintf("%s runs %q as a plain init container; it must set restartPolicy: Always to run as a native sidecar", contextPrefix, TelemetryCollectorContainerName), hint))
 	}
 	if workloadName != "" && labels[TPUWorkloadNameLabel] != workloadName {
-		return fmt.Errorf("%s is missing pod label %s=%q. %s", contextPrefix, TPUWorkloadNameLabel, workloadName, hint)
+		return fmt.Errorf("%s", AppendHint(fmt.Sprintf("%s is missing pod label %s=%q", contextPrefix, TPUWorkloadNameLabel, workloadName), hint))
 	}
 	for _, p := range pod.InitContainers[idx].Ports {
 		if other := containerListeningOn(pod, p.ContainerPort, idx); other != "" {
-			return fmt.Errorf("%s: --ml-diagnostics-telemetry-port %d is already declared by container %q, and TPU pods share the host network; choose another port. %s", contextPrefix, p.ContainerPort, other, hint)
+			return fmt.Errorf("%s", AppendHint(fmt.Sprintf("%s: --ml-diagnostics-telemetry-port %d is already declared by container %q, and TPU pods share the host network; choose another port", contextPrefix, p.ContainerPort, other), hint))
 		}
 	}
 	return nil
@@ -307,7 +314,7 @@ func containerListeningOn(pod corev1.PodSpec, port int32, skipInit int) string {
 // sidecar is injected, so a stale custom workload_labels block cannot produce two collectors.
 func ValidateNoManagedWebhookLabel(contextPrefix, hint string, objectLabels map[string]string) error {
 	if objectLabels[ManagedMLDiagnosticsLabel] == "true" {
-		return fmt.Errorf("%s sets label %s=\"true\" while the native %q sidecar is injected; remove the label (GKE's managed webhook would add a second collector). %s", contextPrefix, ManagedMLDiagnosticsLabel, TelemetryCollectorContainerName, hint)
+		return fmt.Errorf("%s", AppendHint(fmt.Sprintf("%s sets label %s=\"true\" while the native %q sidecar is injected; remove the label (GKE's managed webhook would add a second collector)", contextPrefix, ManagedMLDiagnosticsLabel, TelemetryCollectorContainerName), hint))
 	}
 	return nil
 }
