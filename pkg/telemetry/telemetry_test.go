@@ -92,10 +92,15 @@ func TestExecute(t *testing.T) {
 	t.Setenv(shell.AirGappedEnvVar, "")
 	shell.SetDefaultAirGappedState(false)
 
-	// Save the original transport and restore it after tests run
-	// to prevent Flush() from triggering real external network requests
+	// Save original globals and restore them after tests run
+	// to prevent Flush() or CollectMetrics() from triggering real network/subprocess calls
 	origTransport := http.DefaultTransport
-	defer func() { http.DefaultTransport = origTransport }()
+	origTfVersion := tfVersionFunc
+	t.Cleanup(func() {
+		http.DefaultTransport = origTransport
+		tfVersionFunc = origTfVersion
+	})
+	tfVersionFunc = func() (string, error) { return "1.5.0", nil }
 
 	var calls atomic.Int32
 	http.DefaultTransport = &telemetryMockTransport{
@@ -118,10 +123,13 @@ func TestExecute(t *testing.T) {
 
 func TestExecute_AirGappedSkipsClearcut(t *testing.T) {
 	origTransport := http.DefaultTransport
+	origTfVersion := tfVersionFunc
 	t.Cleanup(func() {
 		http.DefaultTransport = origTransport
+		tfVersionFunc = origTfVersion
 		shell.SetDefaultAirGappedState(false)
 	})
+	tfVersionFunc = func() (string, error) { return "1.5.0", nil }
 
 	var calls atomic.Int32
 	http.DefaultTransport = &telemetryMockTransport{
