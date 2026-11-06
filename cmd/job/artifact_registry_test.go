@@ -27,6 +27,7 @@ import (
 )
 
 func TestLookupArtifactRegistryRepos(t *testing.T) {
+	t.Setenv("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
 	// 1. Setup the httptest server with a handler to mock GCP API
 	mockHandler := func(w http.ResponseWriter, r *http.Request) {
 		// Verify URL matches the expected parent URL requested
@@ -95,6 +96,7 @@ func TestLookupArtifactRegistryRepos(t *testing.T) {
 }
 
 func TestLookupArtifactRegistryRepos_NilResponse(t *testing.T) {
+	t.Setenv("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)

@@ -46,25 +46,35 @@ func makeTestTPUNode(name, instanceType, tpuAlloc string, names ...string) unstr
 	}
 }
 
-func TestValidateTelemetryPortAndEnvImage(t *testing.T) {
-	for _, port := range []int{0, -1, 65536} {
-		if err := ValidateTelemetryPort(port); err == nil || !strings.Contains(err.Error(), "between 1 and 65535") {
-			t.Errorf("ValidateTelemetryPort(%d) = %v, want range error", port, err)
+func TestValidateTelemetryPort(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		port    int
+		wantErr string
+	}{
+		{port: DefaultTelemetryCollectorPort},
+		{port: 9095},
+		{port: 8430},
+		{port: 8439},
+		{port: 0, wantErr: "between 1 and 65535"},
+		{port: -1, wantErr: "between 1 and 65535"},
+		{port: 65536, wantErr: "between 1 and 65535"},
+		{port: 8431, wantErr: "libtpu runtime metrics"},
+		{port: 8435, wantErr: "libtpu runtime metrics"},
+		{port: 8438, wantErr: "libtpu runtime metrics"},
+		{port: tpuSliceBuilderPort, wantErr: "SliceBuilder"},
+		{port: telemetryCollectorHealthPort, wantErr: "health-check"},
+	} {
+		err := ValidateTelemetryPort(tc.port)
+		if tc.wantErr == "" && err != nil {
+			t.Errorf("ValidateTelemetryPort(%d) = %v, want nil", tc.port, err)
+		} else if tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+			t.Errorf("ValidateTelemetryPort(%d) = %v, want substring %q", tc.port, err, tc.wantErr)
 		}
 	}
-	for _, port := range []int{DefaultTelemetryCollectorPort, 9095, 8430, 8439} {
-		if err := ValidateTelemetryPort(port); err != nil {
-			t.Errorf("ValidateTelemetryPort(%d) = %v, want nil", port, err)
-		}
-	}
-	for _, port := range []int{8431, 8435, 8438} {
-		if err := ValidateTelemetryPort(port); err == nil || !strings.Contains(err.Error(), "libtpu runtime metrics") {
-			t.Errorf("ValidateTelemetryPort(%d) = %v, want libtpu port error", port, err)
-		}
-	}
-	if err := ValidateTelemetryPort(telemetryCollectorHealthPort); err == nil || !strings.Contains(err.Error(), "health-check") {
-		t.Errorf("ValidateTelemetryPort(%d) = %v, want health port error", telemetryCollectorHealthPort, err)
-	}
+}
+
+func TestTelemetryImageFromEnv(t *testing.T) {
 	t.Setenv(TelemetryImageEnvVar, "  reg.local/env-collector:v1  ")
 	if got := TelemetryImageFromEnv(); got != "reg.local/env-collector:v1" {
 		t.Errorf("TelemetryImageFromEnv() = %q, want trimmed env value", got)
@@ -127,6 +137,7 @@ func TestCompareImageRefs(t *testing.T) {
 	}{
 		{"r/c:v1.10.0", "r/c:v1.9.0", 1},
 		{"r/c:1.2.3", "r/c:v1.2.3-rc1", 1},
+		{"r/c:20250115", "r/c:v0.1.0", -1},
 		{"r/c:20250115", "r/c:20260301", -1},
 		{"r/c:latest", "r/c:v0.1.0", -1},
 		{"r/c@sha256:aaa", "r/c@sha256:bbb", -1},

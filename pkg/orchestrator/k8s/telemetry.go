@@ -45,6 +45,8 @@ const (
 	ManagedMLDiagnosticsLabel = "managed-mldiagnostics-gke"
 	// telemetryCollectorHealthPort is the collector's own health-check listener.
 	telemetryCollectorHealthPort = 13133
+	// tpuSliceBuilderPort is libtpu's default SliceBuilder/ICI worker gRPC port on hostNetwork.
+	tpuSliceBuilderPort = 8471
 	// TelemetryImageEnvVar supplies the collector image when --ml-diagnostics-image is omitted.
 	TelemetryImageEnvVar = "GCLUSTER_TELEMETRY_IMAGE"
 
@@ -52,15 +54,18 @@ const (
 )
 
 // ValidateTelemetryPort checks that port is a usable TCP port for the collector's Prometheus endpoint and does
-// not collide with listeners the collector itself depends on: the libtpu runtime metric ports it scrapes and
-// its own health check. Ports used by other containers in the pod are checked against the rendered manifest
-// by ValidatePodTelemetry, since TPU pods share the host network.
+// not collide with listeners the collector itself depends on (libtpu runtime metric ports and its own health
+// check) or with libtpu's SliceBuilder worker port (which standard TPU manifests do not declare in ports:).
+// Ports declared by other containers in the pod are checked against the rendered manifest by ValidatePodTelemetry.
 func ValidateTelemetryPort(port int) error {
 	if port < 1 || port > 65535 {
 		return fmt.Errorf("invalid --ml-diagnostics-telemetry-port %d: must be between 1 and 65535", port)
 	}
 	if strings.Contains(","+defaultTPURuntimeMetricsPorts+",", fmt.Sprintf(",%d,", port)) {
 		return fmt.Errorf("invalid --ml-diagnostics-telemetry-port %d: ports %s are the libtpu runtime metrics endpoints the collector scrapes", port, defaultTPURuntimeMetricsPorts)
+	}
+	if port == tpuSliceBuilderPort {
+		return fmt.Errorf("invalid --ml-diagnostics-telemetry-port %d: it is the libtpu SliceBuilder worker port", port)
 	}
 	if port == telemetryCollectorHealthPort {
 		return fmt.Errorf("invalid --ml-diagnostics-telemetry-port %d: it is the collector's own health-check port", port)
@@ -158,6 +163,9 @@ func semverTag(ref string) string {
 		return ""
 	}
 	if !strings.HasPrefix(tag, "v") {
+		if !strings.Contains(tag, ".") {
+			return ""
+		}
 		tag = "v" + tag
 	}
 	if !semver.IsValid(tag) {
