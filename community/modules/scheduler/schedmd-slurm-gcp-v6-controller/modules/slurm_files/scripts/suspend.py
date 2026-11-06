@@ -59,6 +59,14 @@ def delete_instance_request(name: str) -> Any:
     return request
 
 
+def _is_not_found_error(err: Any) -> bool:
+    status = getattr(getattr(err, "resp", None), "status", None)
+    if status == 404:
+        return True
+    err_str = str(err)
+    return "HttpError 404" in err_str or "was not found" in err_str
+
+
 def delete_instances(instances):
     """delete instances individually"""
     invalid, valid = separate(lambda inst: bool(lookup().instance(inst)), instances)
@@ -70,10 +78,22 @@ def delete_instances(instances):
 
     requests = {inst: delete_instance_request(inst) for inst in valid}
 
+    def _log_delete_err(msg: str) -> None:
+        if _is_not_found_error(msg):
+            log.debug(msg)
+        else:
+            log.error(msg)
+
     log.info(f"to delete {len(valid)} instances ({to_hostlist(valid)})")
-    ops, failed = batch_execute(requests)
+    ops, failed = batch_execute(requests, log_err=_log_delete_err)
+    already_gone = []
     for node, (_, err) in failed.items():
-        log.error(f"instance {node} failed to delete: {err}")
+        if _is_not_found_error(err):
+            already_gone.append(node)
+        else:
+            log.error(f"instance {node} failed to delete: {err}")
+    if already_gone:
+        log.info(f"{len(already_gone)} instances already deleted (404): {to_hostlist(already_gone)}")
     
     log.info(f"deleting {len(ops)} instances {to_hostlist(ops.keys())}")
 
