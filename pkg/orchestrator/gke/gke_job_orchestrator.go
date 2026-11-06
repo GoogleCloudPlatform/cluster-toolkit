@@ -22,6 +22,7 @@ import (
 	"hpc-toolkit/pkg/imagebuilder"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 	"net/url"
 	"os"
@@ -99,13 +100,14 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	g.gkeCustomTemplatesPath = job.GkeCustomTemplatesPath
 
 	sm := &StorageManager{orchestrator: g}
-	if err := sm.validateJobMounts(job.RawMounts, job.IsPathwaysJob, job.Pathways.ColocatedPythonSidecarImage != ""); err != nil {
+	if err := g.validateSubmitLocalPreflight(sm, job); err != nil {
 		return err
 	}
+	if job.Pathways.RunSPSWorkload != "" {
+		return g.runSPSWorkload(job)
+	}
 
-	var err error
-	err = g.initializeJobSubmission(&job)
-	if err != nil {
+	if err := g.initializeJobSubmission(&job); err != nil {
 		return err
 	}
 
@@ -121,10 +123,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err != nil {
 		return err
 	}
-	if err := g.validateJobConflicts(job); err != nil {
-		return err
-	}
-	if err := g.validateMTCConfig(&job); err != nil {
+	if err := g.pinTelemetryAndValidate(&job); err != nil {
 		return err
 	}
 
@@ -137,16 +136,58 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 
-	if job.DryRunManifest == "" {
-		g.printConsoleLinks(job)
-		if job.AwaitJobCompletion {
-			if err := g.awaitJobCompletion(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, job.Timeout); err != nil {
-				return err
-			}
-		}
+	if err := g.finishJobSubmission(job); err != nil {
+		return err
 	}
 	logging.Info("gcluster job submit workflow completed.")
 
+	return nil
+}
+
+// workloadTemplateName selects the workload template for a job. It is the single source for both the local
+// preflight (ValidateCustomWorkloadTemplates) and submitWorkloadTemplate, so the two cannot drift.
+func workloadTemplateName(job orchestrator.JobDefinition) string {
+	if job.IsPathwaysJob {
+		return k8s.PathwaysJobSetTemplate
+	}
+	return k8s.JobSetTemplate
+}
+
+// pinTelemetryAndValidate runs the cheap name-conflict check, then resolves the ML Diagnostics collector before
+// the image build, so a missing TPU node image cache or an RBAC denial fails fast and PrepareManifestOptions sees
+// the resolved image as explicit, and finally validates the MTC configuration.
+func (g *GKEOrchestrator) pinTelemetryAndValidate(job *orchestrator.JobDefinition) error {
+	if err := g.validateJobConflicts(*job); err != nil {
+		return err
+	}
+	telemetryImg, _, err := g.resolveTelemetryCollector(*job)
+	if err != nil {
+		return err
+	}
+	job.MLDiagnosticsImage = telemetryImg
+	return g.validateMTCConfig(job)
+}
+
+// validateSubmitLocalPreflight runs the checks that need no cluster access or image build: mount syntax,
+// ML Diagnostics flags, and custom template parsing.
+func (g *GKEOrchestrator) validateSubmitLocalPreflight(sm *StorageManager, job orchestrator.JobDefinition) error {
+	if err := sm.validateJobMounts(job.RawMounts, job.IsPathwaysJob, job.Pathways.ColocatedPythonSidecarImage != ""); err != nil {
+		return err
+	}
+	if err := g.validateTelemetryFlags(job); err != nil {
+		return err
+	}
+	return k8s.ValidateCustomWorkloadTemplates(g.gkeCustomTemplatesPath, workloadTemplateName(job))
+}
+
+func (g *GKEOrchestrator) finishJobSubmission(job orchestrator.JobDefinition) error {
+	if job.DryRunManifest != "" {
+		return nil
+	}
+	g.printConsoleLinks(job)
+	if job.AwaitJobCompletion {
+		return g.awaitJobCompletion(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, job.Timeout)
+	}
 	return nil
 }
 
@@ -422,19 +463,28 @@ func (g *GKEOrchestrator) resolveLogsSelector(name string, optsMainOnly *bool, p
 }
 
 func (g *GKEOrchestrator) generateAndSubmitManifests(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) error {
-	if job.IsPathwaysJob {
+	return g.submitWorkloadTemplate(workloadTemplateName(job), job, fullImageName, profile, isDynamicSlicing, isStaticSlicing)
+}
+
+// submitWorkloadTemplate renders and applies the manifest for tmplName. Every workload template has an explicit
+// case; an unknown name is an internal error rather than a silent fallback to the JobSet path.
+func (g *GKEOrchestrator) submitWorkloadTemplate(tmplName string, job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) error {
+	switch tmplName {
+	case k8s.PathwaysJobSetTemplate:
 		manifestContent, err := g.GeneratePathwaysManifest(job, fullImageName, profile, isDynamicSlicing, isStaticSlicing)
 		if err != nil {
 			return err
 		}
 		return g.ApplyManifest(manifestContent, job.DryRunManifest, job.WorkloadName)
+	case k8s.JobSetTemplate:
+		manifestOpts, err := g.PrepareManifestOptions(job, fullImageName, profile, isDynamicSlicing, isStaticSlicing)
+		if err != nil {
+			return err
+		}
+		return g.generateAndApplyManifest(manifestOpts, profile, job.DryRunManifest)
+	default:
+		return fmt.Errorf("internal error: no manifest generator is wired for workload template %q", tmplName)
 	}
-
-	manifestOpts, err := g.PrepareManifestOptions(job, fullImageName, profile, isDynamicSlicing, isStaticSlicing)
-	if err != nil {
-		return err
-	}
-	return g.generateAndApplyManifest(manifestOpts, profile, job.DryRunManifest)
 }
 
 func getCloudConsoleLogsURL(projectID, location, clusterName, namespace, podNamePrefix string) string {
@@ -490,6 +540,10 @@ func (g *GKEOrchestrator) validateJobConflicts(job orchestrator.JobDefinition) e
 	return nil
 }
 
+// ApplyManifest validates the workload manifest and either saves it to outputManifestPath or applies it to the
+// cluster in g.namespace. SubmitJob resolves g.namespace (configureClusterEnvironment -> getCurrentNamespace) before
+// reaching this point; when it is empty, kubectl applies into the pinned context's namespace, which is the same value
+// getCurrentNamespace would resolve.
 func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, workloadName string) error {
 	if err := ValidateJobSetManifest(manifestContent); err != nil {
 		return err
@@ -501,9 +555,13 @@ func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, wor
 		}
 		logging.Info("GKE manifest saved successfully.")
 	} else {
-		// Submit will fail if a job with the same name already exists.
+		// Submit will fail if a job with the same name already exists. The embedded workload templates render
+		// metadata.namespace from the same resolved namespace, but a custom template extracted before that
+		// existed does not, so pass -n as well: kubectl then places unnamespaced objects in the resolved
+		// namespace and rejects any object that declares a different one, instead of silently using the
+		// kubeconfig default.
 		logging.Info("Applying GKE manifest to cluster...")
-		err := g.applyManifests([]byte(manifestContent), workloadName+".yaml")
+		err := g.applyManifests([]byte(manifestContent), workloadName+".yaml", g.namespace)
 		if err != nil {
 			return fmt.Errorf("failed to apply GKE manifest: %w", err)
 		}
@@ -637,8 +695,47 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 	return capacity, nodePoolSAs, nil
 }
 
+// isSharedCoreMachineType mirrors local.machine_shared_core in
+// modules/compute/gke-node-pool/threads_per_core_calc.tf: shared-core machine
+// types (e.g. e2-micro, e2-small, e2-medium, f1-micro, g1-small) have two
+// dash-separated parts (<family>-<tier>) and only expose 1 allocatable vCPU in
+// GKE even when guestCpus is 2.
+func isSharedCoreMachineType(machineType string) bool {
+	trimmed := strings.TrimSpace(machineType)
+	if trimmed == "" {
+		return false
+	}
+	return len(strings.Split(trimmed, "-")) <= 2
+}
+
+func (g *GKEOrchestrator) getThreadsPerCore(machineType string) string {
+	if tpc, ok := g.machineTypeToThreadsPerCore[machineType]; ok {
+		return tpc
+	}
+	for _, np := range g.clusterDesc.NodePools {
+		if g.isSystemPool(np) {
+			continue
+		}
+		if strings.EqualFold(np.Config.MachineType, machineType) && np.Config.AdvancedMachineFeatures != nil {
+			return np.Config.AdvancedMachineFeatures.ThreadsPerCore
+		}
+	}
+	return ""
+}
+
 func (g *GKEOrchestrator) getEffectiveCPUs(machineType string, guestCpus int) int {
-	if tpc, ok := g.machineTypeToThreadsPerCore[machineType]; ok && tpc == "1" && !strings.HasPrefix(machineType, "t2a") {
+	if guestCpus <= 0 {
+		return 0
+	}
+	if isSharedCoreMachineType(machineType) {
+		return 1
+	}
+	if g.getThreadsPerCore(machineType) == "1" && !strings.HasPrefix(machineType, "t2a") && !strings.HasPrefix(machineType, "t2d") {
+		for k, cap := range g.machineCapCache {
+			if strings.HasPrefix(k, machineType+":") && cap.GuestCpus > 0 && guestCpus == cap.GuestCpus/2 && cap.GuestCpus != guestCpus {
+				return guestCpus
+			}
+		}
 		return guestCpus / 2
 	}
 	return guestCpus
@@ -1331,43 +1428,57 @@ func (g *GKEOrchestrator) parseKueueWorkloadStatus(obj map[string]interface{}) s
 	return "Unknown"
 }
 
-func (g *GKEOrchestrator) generatePodFailurePolicy(exitCodes []int) (string, error) {
+func (g *GKEOrchestrator) generatePodFailurePolicy(exitCodes []int, containerNames ...string) (string, error) {
 	if len(exitCodes) == 0 {
 		return "", nil
 	}
 
-	var validCodes []int
-	seen := make(map[int]bool)
-	for _, code := range exitCodes {
-		if code < 1 || code > 255 {
-			return "", fmt.Errorf("invalid exit code %d in restart-on-exit-codes: exit codes must be between 1 and 255", code)
-		}
-		if !seen[code] {
-			seen[code] = true
-			validCodes = append(validCodes, code)
-		}
-	}
-
-	if len(validCodes) == 0 {
-		return "", nil
+	validCodes, err := dedupeValidExitCodes(exitCodes)
+	if err != nil || len(validCodes) == 0 {
+		return "", err
 	}
 
 	policy := map[string]interface{}{
-		"rules": []map[string]interface{}{
-			{
-				"action": "FailJob",
-				"onExitCodes": map[string]interface{}{
-					"operator": "NotIn",
-					"values":   validCodes,
-				},
-			},
-		},
+		"rules": buildPodFailureRules(validCodes, containerNames),
 	}
 	b, err := yaml.Marshal(policy)
 	if err != nil {
 		return "", err
 	}
 	return string(b), nil
+}
+
+func dedupeValidExitCodes(exitCodes []int) ([]int, error) {
+	var validCodes []int
+	seen := make(map[int]bool, len(exitCodes))
+	for _, code := range exitCodes {
+		if code < 1 || code > 255 {
+			return nil, fmt.Errorf("invalid exit code %d in restart-on-exit-codes: exit codes must be between 1 and 255", code)
+		}
+		if !seen[code] {
+			seen[code] = true
+			validCodes = append(validCodes, code)
+		}
+	}
+	// batch/v1 declares onExitCodes.values as +listType=set: the API server rejects unordered or duplicate
+	// lists ("must be ordered"), so sorting here is required, not cosmetic.
+	slices.Sort(validCodes)
+	return validCodes, nil
+}
+
+func buildPodFailureRules(validCodes []int, containerNames []string) []map[string]interface{} {
+	if len(containerNames) == 0 {
+		containerNames = []string{""} // one pod-wide rule
+	}
+	rules := make([]map[string]interface{}, 0, len(containerNames))
+	for _, cname := range containerNames {
+		onExitCodes := map[string]interface{}{"operator": "NotIn", "values": validCodes}
+		if cname != "" {
+			onExitCodes["containerName"] = cname
+		}
+		rules = append(rules, map[string]interface{}{"action": "FailJob", "onExitCodes": onExitCodes})
+	}
+	return rules
 }
 
 func (g *GKEOrchestrator) generateImagePullSecrets(secrets string) string {

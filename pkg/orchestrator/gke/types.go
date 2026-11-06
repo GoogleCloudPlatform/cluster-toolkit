@@ -27,10 +27,12 @@ import (
 	"time"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
+	"github.com/google/safetext/yamltemplate"
 	crm "google.golang.org/api/cloudresourcemanager/v1"
 	compute "google.golang.org/api/compute/v1"
 	iamapi "google.golang.org/api/iam/v1"
 	gcs "google.golang.org/api/storage/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -331,6 +333,8 @@ type ManifestOptions struct {
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
 	MLDiagnosticsEnabled          bool
+	TelemetryCollectorImage       string
+	TelemetryCollectorPort        int
 	Verbose                       bool
 	Env                           map[string]string
 	AdditionalManifests           []string
@@ -634,7 +638,10 @@ type EnvVar struct {
 }
 
 type jobSetTemplateData struct {
-	WorkloadName                  string
+	WorkloadName string
+	// Namespace is the namespace resolved for the submission; rendered as metadata.namespace so a saved manifest
+	// applies to the same namespace as the PV/PVC documents appended to it. Empty when unresolved (dry-run offline).
+	Namespace                     string
 	ClusterName                   string
 	Containers                    []ContainerData
 	ProjectID                     string
@@ -671,8 +678,11 @@ type jobSetTemplateData struct {
 	GCSFuseEnabled                bool
 	HostNetworkEnabled            bool
 	Pathways                      orchestrator.PathwaysJobDefinition
-	PathwaysProxyEnabled          bool // pathways-head runs pathways-proxy (false for an SPS server)
-	PathwaysWorkloadEnabled       bool // pathways-head runs the user's workload (false for headless and SPS)
+	PathwaysProxyEnabled          bool   // pathways-head runs pathways-proxy (false for an SPS server)
+	PathwaysWorkloadEnabled       bool   // pathways-head runs the user's workload (false for headless and SPS)
+	PathwaysRMEnabled             bool   // pathways-head runs pathways-rm (false for an SPS client)
+	PathwaysWorkersEnabled        bool   // the JobSet has TPU workers (false for an SPS client)
+	PathwaysRMAddress             string // remote resource manager for the proxy (SPS client); empty means the local head
 	ExclusiveTopologyAnnotation   string
 	Verbose                       bool
 	Env                           []EnvVar
@@ -684,6 +694,21 @@ type jobSetTemplateData struct {
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
 	MLDiagnosticsEnabled          bool
+	TelemetryCollectorImage       string
+	TelemetryCollectorPort        int
+	Subdomain                     string
+	baseBlocks                    map[string]*yamltemplate.Template
+}
+
+type jobSetValidationSpec struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata"`
+	Spec              struct {
+		ReplicatedJobs []struct {
+			Name     string                  `json:"name"`
+			Template batchv1.JobTemplateSpec `json:"template"`
+		} `json:"replicatedJobs"`
+	} `json:"spec"`
 }
 
 // Types for parsing kubectl get nodes -o json
@@ -843,4 +868,76 @@ func isPermissionDenied(errStr string) bool {
 		strings.Contains(lower, "permission_denied") ||
 		strings.Contains(lower, "required 'compute.") ||
 		(strings.Contains(lower, "403") && strings.Contains(lower, "forbidden"))
+}
+
+// spsInstanceSummary is what `gcluster job inspect --name <instance> --filter=pathways-sps` writes.
+type spsInstanceSummary struct {
+	Name          string
+	Namespace     string
+	Status        string
+	InstanceType  string // pathways-rm --instance_type, e.g. tpuv6e:2x4
+	InstanceCount int    // pathways-rm --instance_count
+	ReadySlices   string // e.g. "1/1"; empty until pathways-rm logs or JobSet status reports ready slices
+	ServerImage   string
+	SidecarImage  string // empty when the workers run no colocated Python sidecar
+	SidecarName   string // sidecar container name on worker pods
+	SidecarPython string // from running sidecar container or image tag
+	SidecarJAX    string // from running sidecar container or image tag
+}
+
+// spsInstance is what an SPS client needs to know about the instance it runs on.
+type spsInstance struct {
+	Name           string
+	Endpoint       string
+	KueueQueueName string
+	HeadNodePool   string
+	ServerImage    string
+	ProxyImage     string
+	GCSLocation    string
+	InstanceType   string
+	InstanceCount  int
+	HasSidecar     bool
+}
+
+type spsContainerView struct {
+	Name  string   `json:"name"`
+	Image string   `json:"image"`
+	Args  []string `json:"args"`
+}
+
+type spsPodSpecView struct {
+	NodeSelector   map[string]string  `json:"nodeSelector"`
+	InitContainers []spsContainerView `json:"initContainers"`
+	Containers     []spsContainerView `json:"containers"`
+}
+
+type spsJobSetView struct {
+	Metadata struct {
+		Labels map[string]string `json:"labels"`
+	} `json:"metadata"`
+	Spec struct {
+		Suspend        bool `json:"suspend"`
+		ReplicatedJobs []struct {
+			Name     string `json:"name"`
+			Replicas int    `json:"replicas"`
+			Template struct {
+				Spec struct {
+					Template struct {
+						Spec spsPodSpecView `json:"spec"`
+					} `json:"template"`
+				} `json:"spec"`
+			} `json:"template"`
+		} `json:"replicatedJobs"`
+	} `json:"spec"`
+	Status struct {
+		TerminalState string `json:"terminalState"`
+		Conditions    []struct {
+			Type   string `json:"type"`
+			Status string `json:"status"`
+		} `json:"conditions"`
+		ReplicatedJobsStatus []struct {
+			Name  string `json:"name"`
+			Ready int    `json:"ready"`
+		} `json:"replicatedJobsStatus"`
+	} `json:"status"`
 }

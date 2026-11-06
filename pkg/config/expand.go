@@ -34,6 +34,7 @@ import (
 const (
 	blueprintLabel        = "ghpc_blueprint"
 	deploymentLabel       = "ghpc_deployment"
+	aiAssistedLabel       = "ghpc_ai_assisted"
 	GoogleProviderVersion = ">= 6.9.0, <= 8.8.0"
 )
 
@@ -171,7 +172,7 @@ func findBlueprintProviders(inputName string, m Module, bp Blueprint) []string {
 	seen := make(map[ModuleID]bool)
 	for _, g := range eligibleCandidateGroups(bp, m) {
 		for _, cand := range g.Modules {
-			if seen[cand.ID] || !isBlueprintCandidateProvider(cand, m, inputName) {
+			if seen[cand.ID] || !isBlueprintCandidateProvider(cand, m, inputName, bp) {
 				continue
 			}
 			seen[cand.ID] = true
@@ -192,7 +193,7 @@ func eligibleCandidateGroups(bp Blueprint, m Module) []Group {
 	return bp.Groups[:idx+1]
 }
 
-func isBlueprintCandidateProvider(cand Module, consumer Module, inputName string) bool {
+func isBlueprintCandidateProvider(cand Module, consumer Module, inputName string, bp Blueprint) bool {
 	if cand.ID == "" || cand.ID == consumer.ID || cand.Kind == PackerKind {
 		return false
 	}
@@ -203,7 +204,144 @@ func isBlueprintCandidateProvider(cand Module, consumer Module, inputName string
 	if err != nil {
 		return false
 	}
-	return IsTrueProviderOutput(candInfo, inputName)
+	return IsTrueProviderOutput(candInfo, inputName) && !violatesConsumerExclusiveRules(candInfo, consumer, bp)
+}
+
+func violatesConsumerExclusiveRules(candInfo modulereader.ModuleInfo, consumer Module, bp Blueprint) bool {
+	consumerInfo, err := consumer.Info()
+	if err != nil || len(consumerInfo.Metadata.Ghpc.Validators) == 0 {
+		return false
+	}
+	consumerInputs := make(map[string]bool, len(consumerInfo.Inputs))
+	for _, in := range consumerInfo.Inputs {
+		if in.Name != "labels" {
+			consumerInputs[in.Name] = true
+		}
+	}
+	candOutputs := make(map[string]bool, len(candInfo.Outputs))
+	for _, out := range candInfo.Outputs {
+		candOutputs[out.Name] = true
+	}
+	for _, rule := range consumerInfo.Metadata.Ghpc.Validators {
+		if rule.Validator == "exclusive" && ruleViolatesExclusive(rule, consumer, bp, consumerInputs, candOutputs) {
+			return true
+		}
+	}
+	return false
+}
+
+func ruleViolatesExclusive(rule modulereader.ValidationRule, consumer Module, bp Blueprint, consumerInputs, candOutputs map[string]bool) bool {
+	alreadySetCount := 0
+	newlyInjectedCount := 0
+	for _, varName := range extractRuleVars(rule.Inputs["vars"]) {
+		if isConsumerSettingSet(consumer, bp, varName) {
+			alreadySetCount++
+		} else if consumerInputs[varName] && candOutputs[varName] {
+			newlyInjectedCount++
+		}
+	}
+	return newlyInjectedCount > 0 && (alreadySetCount+newlyInjectedCount) > 1
+}
+
+func extractRuleVars(v interface{}) []string {
+	switch vv := v.(type) {
+	case []string:
+		return vv
+	case []interface{}:
+		out := make([]string, 0, len(vv))
+		for _, e := range vv {
+			if s, ok := e.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	case string:
+		return []string{vv}
+	default:
+		return nil
+	}
+}
+
+func isConsumerSettingSet(consumer Module, bp Blueprint, varName string) bool {
+	val, found := getNestedSetting(consumer.Settings, bp, varName)
+	if !found {
+		val, found = getNestedSetting(bp.Vars, bp, varName)
+	}
+	if !found || val == cty.NilVal {
+		return false
+	}
+	if evaled, err := bp.Eval(val); err == nil {
+		val = evaled
+	}
+	return IsValueSet(val)
+}
+
+func getNestedSetting(d Dict, bp Blueprint, path string) (cty.Value, bool) {
+	if path == "" {
+		return cty.NilVal, false
+	}
+	parts := strings.Split(path, ".")
+	if !d.Has(parts[0]) {
+		return cty.NilVal, false
+	}
+	curr := d.Get(parts[0])
+	for _, part := range parts[1:] {
+		next, ok := stepNestedSetting(curr, bp, part)
+		if !ok {
+			return cty.NilVal, false
+		}
+		curr = next
+	}
+	return curr, true
+}
+
+func stepNestedSetting(curr cty.Value, bp Blueprint, key string) (cty.Value, bool) {
+	if evaled, err := bp.Eval(curr); err == nil {
+		curr = evaled
+	}
+	if curr == cty.NilVal || !curr.IsKnown() || curr.IsNull() {
+		return cty.NilVal, false
+	}
+	curr, _ = curr.Unmark()
+	if curr.Type().IsObjectType() && curr.Type().HasAttribute(key) {
+		return curr.GetAttr(key), true
+	}
+	if curr.Type().IsMapType() && curr.HasIndex(cty.StringVal(key)).True() {
+		return curr.Index(cty.StringVal(key)), true
+	}
+	return cty.NilVal, false
+}
+
+// IsValueSet reports whether a cty.Value is considered set (non-null, known or an
+// expression/use reference, and non-empty). For object types, at least one attribute
+// must recursively be set.
+func IsValueSet(val cty.Value) bool {
+	if val == cty.NilVal || val.IsNull() {
+		return false
+	}
+	if !val.IsKnown() {
+		_, isExpr := IsExpressionValue(val)
+		return isExpr || len(IsProductOfModuleUse(val)) > 0
+	}
+	val, _ = val.Unmark()
+	switch val.Type() {
+	case cty.String:
+		return val.AsString() != ""
+	case cty.Number:
+		return val.AsBigFloat().Sign() > 0
+	case cty.Bool:
+		return val.True()
+	default:
+		if val.Type().IsObjectType() {
+			for attr := range val.Type().AttributeTypes() {
+				if IsValueSet(val.GetAttr(attr)) {
+					return true
+				}
+			}
+			return false
+		}
+		return val.LengthInt() > 0
+	}
 }
 
 func formatBlueprintProvidersHint(candIDs []string, m Module) string {
@@ -213,8 +351,8 @@ func formatBlueprintProvidersHint(candIDs []string, m Module) string {
 			candIDs[0], m.ID, formatUseListExample(m.Use, candIDs[0]))
 	}
 	return fmt.Sprintf(
-		"Consider adding one of modules %s to the \"use\" list of module %q.",
-		formatQuotedList(candIDs), m.ID)
+		"Consider adding one of modules %s to the \"use\" list of module %q (e.g. use: %s).",
+		formatQuotedList(candIDs), m.ID, formatUseListExample(m.Use, candIDs[0]))
 }
 
 func formatUseListExample(existing ModuleIDs, addID string) string {
@@ -267,22 +405,22 @@ func scanEmbeddedCategoryProviders(catPath string, inputName string, consumer Mo
 			continue
 		}
 		modPath := path.Join(catPath, modDir.Name())
-		if isEmbeddedProviderCandidate(modPath, inputName, consumer.Source, bp) {
+		if isEmbeddedProviderCandidate(modPath, inputName, consumer, bp) {
 			matches = append(matches, modPath)
 		}
 	}
 	return matches
 }
 
-func isEmbeddedProviderCandidate(modPath string, inputName string, consumerSource string, bp Blueprint) bool {
-	if isSameModuleSource(consumerSource, modPath, bp) || !isEmbeddedTerraformModule(modPath) {
+func isEmbeddedProviderCandidate(modPath string, inputName string, consumer Module, bp Blueprint) bool {
+	if isSameModuleSource(consumer.Source, modPath, bp) || !isEmbeddedTerraformModule(modPath) {
 		return false
 	}
 	info, err := modulereader.GetModuleInfo(modPath, TerraformKind.String())
 	if err != nil || info.Metadata.Ghpc.DeprecationDate != "" {
 		return false
 	}
-	return IsTrueProviderOutput(info, inputName)
+	return IsTrueProviderOutput(info, inputName) && !violatesConsumerExclusiveRules(info, consumer, bp)
 }
 
 func isEmbeddedTerraformModule(modPath string) bool {
@@ -315,14 +453,18 @@ func formatEmbeddedProvidersHint(sources []string, m Module) string {
 	if m.Kind == PackerKind {
 		groupPlacement = "an earlier deployment group"
 	}
+	useSuffix := ""
+	if len(m.Use) > 0 {
+		useSuffix = fmt.Sprintf(" (e.g. use: %s)", formatUseListExample(m.Use, "<new_module_id>"))
+	}
 	if len(sources) == 1 {
 		return fmt.Sprintf(
-			"Module source %q provides this output; add it to %s and reference its id in the \"use\" list of module %q.",
-			sources[0], groupPlacement, m.ID)
+			"Module source %q provides this output; add it to %s and reference its id in the \"use\" list of module %q%s.",
+			sources[0], groupPlacement, m.ID, useSuffix)
 	}
 	return fmt.Sprintf(
-		"Module sources %s provide this output; add one to %s and reference its id in the \"use\" list of module %q.",
-		formatQuotedList(sources), groupPlacement, m.ID)
+		"Module sources %s provide this output; add one to %s and reference its id in the \"use\" list of module %q%s.",
+		formatQuotedList(sources), groupPlacement, m.ID, useSuffix)
 }
 
 func attemptEvalModuleInput(val cty.Value, bp Blueprint) (cty.Value, bool) {
@@ -620,6 +762,9 @@ func (bp *Blueprint) expandGlobalLabels() {
 			creator = creator[:63]
 		}
 		defaultsMap["ghpc_creator"] = cty.StringVal(creator)
+	}
+	if bp.AIAssisted {
+		defaultsMap[aiAssistedLabel] = cty.StringVal("true")
 	}
 	defaults := cty.ObjectVal(defaultsMap)
 

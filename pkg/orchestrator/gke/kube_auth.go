@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
@@ -349,6 +350,11 @@ func (g *GKEOrchestrator) kubectl(args ...string) shell.CommandResult {
 	return g.executor.ExecuteCommand("kubectl", withKubeContext(g.kubeContext, args)...)
 }
 
+// kubectlWithTimeout runs kubectl with a process timeout against the context chosen by configureKubectl.
+func (g *GKEOrchestrator) kubectlWithTimeout(timeout time.Duration, args ...string) shell.CommandResult {
+	return g.executor.ExecuteCommandWithTimeout(timeout, "kubectl", withKubeContext(g.kubeContext, args)...)
+}
+
 // kubectlStream streams kubectl output against the context chosen by configureKubectl.
 func (g *GKEOrchestrator) kubectlStream(args ...string) error {
 	return g.executor.ExecuteCommandStream("kubectl", withKubeContext(g.kubeContext, args)...)
@@ -523,20 +529,24 @@ func (g *GKEOrchestrator) usableKubeClient() KubeClient {
 	return g.kubeClient
 }
 
-// activeWorkloadImages returns the distinct images the rendered pods pull: the workload image plus, for
-// Pathways, the server, proxy, worker, and colocated sidecar images of the selected deployment mode.
-func activeWorkloadImages(job orchestrator.JobDefinition, fullImageName string) []string {
+// activeWorkloadImages returns the distinct images the rendered pods pull: the workload image, the ML
+// Diagnostics telemetry sidecar image when enabled, and, for Pathways, the server, proxy, worker, and
+// colocated sidecar images of the selected deployment mode.
+func activeWorkloadImages(job orchestrator.JobDefinition, fullImageName, telemetryImage string) []string {
 	raw := []string{fullImageName}
 	if job.IsPathwaysJob {
 		pw := job.Pathways
 		if pw.Headless || pw.DeploySPS {
 			raw = nil
 		}
-		raw = append(raw, pw.ServerImage, pw.WorkerImage, pw.ColocatedPythonSidecarImage)
+		if pw.RunSPSWorkload == "" {
+			raw = append(raw, pw.ServerImage, pw.WorkerImage, pw.ColocatedPythonSidecarImage)
+		}
 		if !pw.DeploySPS {
 			raw = append(raw, pw.ProxyServerImage)
 		}
 	}
+	raw = append(raw, telemetryImage)
 	var images []string
 	for _, img := range raw {
 		if img != "" && !slices.Contains(images, img) {
@@ -547,9 +557,10 @@ func activeWorkloadImages(job orchestrator.JobDefinition, fullImageName string) 
 }
 
 // resolveImagePullSecrets returns the user's --image-pull-secret value verbatim when it was given (an empty value
-// attaches none), otherwise the dockerconfigjson secrets in the target namespace matching the workload's images.
+// attaches none), otherwise the dockerconfigjson secrets in the target namespace matching the workload's images
+// (including the ML Diagnostics telemetry sidecar image when sidecar injection is active).
 // An unavailable API client or an RBAC denial degrades to no secrets; a namespace that cannot be resolved is an error.
-func (g *GKEOrchestrator) resolveImagePullSecrets(job orchestrator.JobDefinition, fullImageName string) (string, error) {
+func (g *GKEOrchestrator) resolveImagePullSecrets(job orchestrator.JobDefinition, fullImageName, telemetryImage string) (string, error) {
 	if job.ImagePullSecrets != "" || job.ImagePullSecretsSpecified {
 		return job.ImagePullSecrets, nil
 	}
@@ -561,5 +572,5 @@ func (g *GKEOrchestrator) resolveImagePullSecrets(job orchestrator.JobDefinition
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve the target namespace for imagePullSecrets discovery: %w", err)
 	}
-	return k8s.DiscoverImagePullSecrets(kc, ns, job.ServiceAccountName, activeWorkloadImages(job, fullImageName)), nil
+	return k8s.DiscoverImagePullSecrets(kc, ns, job.ServiceAccountName, activeWorkloadImages(job, fullImageName, telemetryImage)), nil
 }
