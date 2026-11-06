@@ -648,7 +648,7 @@ func inferAccelerators(machineTypes []string, varsMap map[string]interface{}, re
 			}
 		}
 	}
-	if len(out) == 0 {
+	if len(out) == 0 && (len(machineTypes) == 0 || hasN1MachineType(machineTypes)) {
 		if acc, ok := varsMap["accelerator_type"].(string); ok {
 			add(resolveMachineTypeString(acc, varsMap))
 		}
@@ -664,19 +664,13 @@ func inferAccelerators(machineTypes []string, varsMap map[string]interface{}, re
 	return out
 }
 
-var frontierAccelerators = map[string]bool{
-	"nvidia-h100":  true,
-	"nvidia-h200":  true,
-	"nvidia-b200":  true,
-	"nvidia-gb200": true,
-	"nvidia-gb300": true,
-	"nvidia-a100":  true,
-	"tpu-7x":       true,
-	"tpu-v6e":      true,
-	"tpu-v5p":      true,
-	"tpu-v5e":      true,
-	"tpu-v4":       true,
-	"tpu":          true,
+func hasN1MachineType(machineTypes []string) bool {
+	for _, mt := range machineTypes {
+		if strings.HasPrefix(strings.ToLower(mt), "n1-") {
+			return true
+		}
+	}
+	return false
 }
 
 var hpcMachinePrefixes = []string{"h4d-", "h3-", "c2-", "c2d-", "c3-", "c3d-", "c4a-"}
@@ -706,24 +700,16 @@ func inferWorkloads(machineTypes, accelerators []string, relPath string) []strin
 }
 
 func addMLWorkloads(accelerators []string, lowerPath string, add func(string)) {
-	if strings.Contains(lowerPath, "hcls-") || strings.Contains(lowerPath, "alphaevolve/") {
+	if strings.Contains(lowerPath, "hcls-") {
 		return
 	}
 	isInferOnlyPath := strings.Contains(lowerPath, "inference-gateway") || strings.Contains(lowerPath, "inference-benchmarks") || strings.Contains(lowerPath, "agentgateway")
-	for _, acc := range accelerators {
-		if frontierAccelerators[acc] {
-			if !isInferOnlyPath {
-				add("ml-training")
-			}
-			add("ml-inference")
-		} else {
-			if strings.Contains(lowerPath, "ml-slurm") || strings.Contains(lowerPath, "ml-gke") {
-				add("ml-training")
-			}
-			add("ml-inference")
+	if len(accelerators) > 0 {
+		if !isInferOnlyPath {
+			add("ml-training")
 		}
-	}
-	if isInferOnlyPath {
+		add("ml-inference")
+	} else if isInferOnlyPath {
 		add("ml-inference")
 	}
 	if strings.Contains(lowerPath, "xpk-") {

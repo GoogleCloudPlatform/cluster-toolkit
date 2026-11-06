@@ -1149,7 +1149,7 @@ blueprints:
   description: "This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV-SNP) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure..."
   machine_types: [g4-standard-48]
   accelerators: [nvidia-rtx-pro-6000]
-  workloads: [ml-inference]
+  workloads: [ml-training, ml-inference]
   required_services: [compute.googleapis.com, container.googleapis.com, iam.googleapis.com]
   vars:
     authorized_cidr: null
@@ -1210,7 +1210,7 @@ blueprints:
   description: "This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found here. The deployment instructions can be found in the README."
   machine_types: [g4-standard-48]
   accelerators: [nvidia-rtx-pro-6000]
-  workloads: [ml-inference]
+  workloads: [ml-training, ml-inference]
   required_services: [compute.googleapis.com, container.googleapis.com, iam.googleapis.com]
   vars:
     authorized_cidr: null
@@ -4454,7 +4454,6 @@ blueprints:
   scheduler: none
   description: "Deploys the Google Cloud infrastructure and per-experiment software environments required to run scalable AlphaEvolve evolutionary code optimization experiments on Cloud Batch and Vertex AI Colab Enterprise."
   machine_types: [n2-standard-4]
-  accelerators: [nvidia-tesla-t4]
   required_services: [cloudbuild.googleapis.com, cloudresourcemanager.googleapis.com, compute.googleapis.com, iam.googleapis.com, storage.googleapis.com]
   vars:
     accelerator_count: 1
