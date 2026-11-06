@@ -27,6 +27,7 @@ import base64
 import hashlib
 import os
 import re
+import subprocess
 import sys
 import zipfile
 
@@ -63,7 +64,9 @@ DESCRIPTION = f"""\
 Cluster Toolkit is open-source software offered by Google Cloud which makes it
 easy for customers to deploy AI/ML and HPC environments on Google Cloud.
 
-This package installs the `gcluster` command and the example blueprints.
+This package installs the `gcluster` command and the example blueprints. The
+examples are installed to `<install prefix>/share/cluster-toolkit/` (with uv:
+`$(uv tool dir)/{{name}}/share/cluster-toolkit/`).
 
 ```shell
 uv tool install {{name}}           # or: pipx install {{name}}
@@ -180,8 +183,22 @@ def _metadata(name, version):
     return (header + "\n" + body).encode("utf-8")
 
 
+def _git_tracked(repo_root):
+    """Returns the set of git-tracked example paths, or None if not a git checkout."""
+    try:
+        out = subprocess.run(["git", "-C", repo_root, "ls-files", "-z", "--", *EXAMPLE_DIRS],
+                             capture_output=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return {p for p in out.decode().split("\0") if p}
+
+
 def _example_files(repo_root):
-    """Yields (absolute path, path relative to repo root) in sorted order."""
+    """Yields (absolute path, path relative to repo root) in sorted order.
+
+    In a git checkout, only tracked files are included.
+    """
+    tracked = _git_tracked(repo_root)
     for top in EXAMPLE_DIRS:
         base = os.path.join(repo_root, top)
         if not os.path.isdir(base):
@@ -193,7 +210,8 @@ def _example_files(repo_root):
                     continue
                 full = os.path.join(root, f)
                 rel = os.path.relpath(full, repo_root).replace(os.sep, "/")
-                yield full, rel
+                if tracked is None or rel in tracked:
+                    yield full, rel
 
 
 def _read(path):
@@ -215,7 +233,8 @@ def build_wheel(name, version, platform, binary, out_dir, repo_root, macos_min):
 
     entries = [(f"{data_dir}/scripts/{exe}", _read(binary), 0o755)]
     for full, rel in _example_files(repo_root):
-        entries.append((f"{data_dir}/data/{SHARE_DIR}/{rel}", _read(full), 0o644))
+        mode = 0o755 if os.stat(full).st_mode & 0o111 else 0o644
+        entries.append((f"{data_dir}/data/{SHARE_DIR}/{rel}", _read(full), mode))
     entries.append((f"{dist_info}/LICENSE", _read(os.path.join(repo_root, "LICENSE")), 0o644))
     entries.append((f"{dist_info}/METADATA", _metadata(name, version), 0o644))
     wheel_txt = ("Wheel-Version: 1.0\n"
@@ -264,6 +283,9 @@ def main(argv=None):
         version = normalize_version(args.version)
         wheel_name_part(args.name)
         reported = toolkit_version(args.repo_root)
+        if not reported and not args.skip_version_check:
+            raise ValueError("cannot read latestToolkitVersion from pkg/config/config.go "
+                             "(check --repo-root, or pass --skip-version-check)")
         if reported and reported != version and not args.skip_version_check:
             raise ValueError(
                 f"--version {version} does not match the version gcluster reports "
