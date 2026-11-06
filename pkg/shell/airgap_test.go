@@ -35,6 +35,11 @@ func TestAirGappedPrecedenceAndConcurrency(t *testing.T) {
 		}
 	}
 
+	t.Setenv(AirGappedEnvVar, "true")
+	if !IsAirGappedEnv(nil) {
+		t.Fatalf("expected IsAirGappedEnv(nil) to default to os.Getenv and return true")
+	}
+
 	t.Setenv(AirGappedEnvVar, "")
 	if IsKnownAirGapped() {
 		t.Fatalf("expected unset %s with defaultAirGap=false to return false", AirGappedEnvVar)

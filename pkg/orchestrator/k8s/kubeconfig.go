@@ -29,8 +29,7 @@ func DefaultKubeconfigLoader() (*clientcmdapi.Config, error) {
 	return clientcmd.NewDefaultClientConfigLoadingRules().Load()
 }
 
-// FindContextByCluster resolves a kubeconfig context matching name, preferring an exact context name match,
-// then cfg.CurrentContext when its cluster matches name, before scanning context cluster references in sorted order.
+// FindContextByCluster resolves a kubeconfig context matching the given cluster name.
 func FindContextByCluster(cfg *clientcmdapi.Config, name string) (string, *clientcmdapi.Context, bool) {
 	if cfg == nil || name == "" {
 		return "", nil, false
@@ -50,7 +49,7 @@ func FindContextByCluster(cfg *clientcmdapi.Config, name string) (string, *clien
 	return "", nil, false
 }
 
-// ResolveCurrentContext resolves cfg.CurrentContext and returns its context name, context entry, and cluster name.
+// ResolveCurrentContext returns the active context, its entry, and its target cluster name.
 func ResolveCurrentContext(cfg *clientcmdapi.Config) (string, *clientcmdapi.Context, string, bool) {
 	if cfg == nil || cfg.CurrentContext == "" {
 		return "", nil, "", false
@@ -64,18 +63,6 @@ func ResolveCurrentContext(cfg *clientcmdapi.Config) (string, *clientcmdapi.Cont
 		clusterName = cfg.CurrentContext
 	}
 	return cfg.CurrentContext, kubeCtx, clusterName, true
-}
-
-// ResolveContext resolves clusterName via FindContextByCluster when non-empty, or falls back to ResolveCurrentContext.
-func ResolveContext(cfg *clientcmdapi.Config, clusterName string) (string, *clientcmdapi.Context, string, bool) {
-	if trimmed := strings.TrimSpace(clusterName); trimmed != "" {
-		name, kubeCtx, ok := FindContextByCluster(cfg, trimmed)
-		if !ok {
-			return "", nil, "", false
-		}
-		return name, kubeCtx, trimmed, true
-	}
-	return ResolveCurrentContext(cfg)
 }
 
 // ExecPluginBaseName returns the normalized lowercase executable basename (without .exe) of auth's exec credential plugin.

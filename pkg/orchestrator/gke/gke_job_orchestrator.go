@@ -2011,7 +2011,10 @@ func (d *DefaultKubeClient) GetCurrentNamespace(clusterName, location, projectID
 	// Standard GKE context naming convention first, then bare cluster name or current-context fallback.
 	_, kubeCtx, _, ok := resolveGKEContext(config, clusterName, location, projectID)
 	if !ok {
-		return "", fmt.Errorf("no matching context found for cluster %s in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag", clusterName)
+		if strings.TrimSpace(clusterName) == "" {
+			return "", fmt.Errorf("no current-context set in kubeconfig and no cluster specified. You can explicitly specify the namespace using the --gke-namespace flag")
+		}
+		return "", fmt.Errorf("no matching context found for cluster %q in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag", clusterName)
 	}
 	if kubeCtx.Namespace != "" {
 		return kubeCtx.Namespace, nil

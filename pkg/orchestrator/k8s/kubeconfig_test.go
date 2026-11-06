@@ -83,23 +83,6 @@ func TestResolveCurrentContext(t *testing.T) {
 	}
 }
 
-func TestResolveContext(t *testing.T) {
-	t.Parallel()
-	cfg := clientcmdapi.NewConfig()
-	cfg.Contexts["prod-ctx"] = &clientcmdapi.Context{Cluster: "prod-cluster"}
-	cfg.CurrentContext = "prod-ctx"
-
-	if name, _, clusterName, ok := ResolveContext(cfg, ""); !ok || name != "prod-ctx" || clusterName != "prod-cluster" {
-		t.Fatalf("ResolveContext('') = (%q, %q, %v)", name, clusterName, ok)
-	}
-	if name, _, clusterName, ok := ResolveContext(cfg, "prod-cluster"); !ok || name != "prod-ctx" || clusterName != "prod-cluster" {
-		t.Fatalf("ResolveContext(prod-cluster) = (%q, %q, %v)", name, clusterName, ok)
-	}
-	if _, _, _, ok := ResolveContext(cfg, "nonexistent"); ok {
-		t.Errorf("expected explicit nonexistent cluster to return false")
-	}
-}
-
 func TestExecPluginBaseName(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

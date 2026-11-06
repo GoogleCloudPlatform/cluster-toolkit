@@ -30,7 +30,7 @@ func IsKnownAirGapped() bool {
 	return IsAirGappedEnv(os.Getenv)
 }
 
-// IsAirGappedEnv evaluates air-gapped state using getenv (defaulting to os.Getenv when nil) before falling back to defaultAirGap.
+// IsAirGappedEnv reports whether the environment is air-gapped.
 func IsAirGappedEnv(getenv func(string) string) bool {
 	if getenv == nil {
 		getenv = os.Getenv
