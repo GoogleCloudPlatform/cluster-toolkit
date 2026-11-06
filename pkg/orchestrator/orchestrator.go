@@ -105,6 +105,11 @@ type JobDefinition struct {
 	GKEMTCRamdiskDirectory string
 
 	MLDiagnosticsEnabled bool
+	MLDiagnosticsImage   string
+	// MLDiagnosticsImageSpecified reports that MLDiagnosticsImage was given explicitly, possibly empty; an explicit
+	// empty value ignores GCLUSTER_TELEMETRY_IMAGE (GKE then uses the managed webhook).
+	MLDiagnosticsImageSpecified bool
+	MLDiagnosticsTelemetryPort  int
 
 	GkeCustomTemplatesPath string
 

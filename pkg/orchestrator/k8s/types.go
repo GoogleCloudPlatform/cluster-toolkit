@@ -20,6 +20,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// NodeGVR identifies core/v1 Node resources for dynamic Kubernetes queries.
+var NodeGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "nodes",
+}
+
 // SecretGVR identifies core/v1 Secret resources for dynamic Kubernetes queries.
 var SecretGVR = schema.GroupVersionResource{
 	Group:    "",

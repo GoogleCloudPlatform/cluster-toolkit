@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"strings"
@@ -64,12 +65,14 @@ var (
 	gkeScheduler           string
 	platform               string
 
-	awaitJobCompletion  bool
-	timeout             string
-	priority            string
-	verbose             bool
-	enableMLDiagnostics bool
-	volumeStr           []string
+	awaitJobCompletion         bool
+	timeout                    string
+	priority                   string
+	verbose                    bool
+	enableMLDiagnostics        bool
+	mlDiagnosticsImage         string
+	mlDiagnosticsTelemetryPort int
+	volumeStr                  []string
 
 	gkeMtcEnabled          bool
 	gkeMtcRamdiskDirectory string
@@ -113,11 +116,6 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 		if err := validatePathwaysFlags(cmd); err != nil {
 			return err
 		}
-		if !skipPrereqs && buildContext != "" && !pathways.Headless && !pathways.DeploySPS {
-			if err := ensureBuildPrerequisites(cmd, projectID, location); err != nil {
-				return err
-			}
-		}
 
 		if err := validateGKENAPFlags(); err != nil {
 			return err
@@ -131,6 +129,16 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 
 		if err := validateRestartOnExitCodes(restartOnExitCodes); err != nil {
 			return err
+		}
+
+		if err := validateMLDiagnosticsFlags(cmd); err != nil {
+			return err
+		}
+
+		if !skipPrereqs && buildContext != "" && !pathways.Headless && !pathways.DeploySPS {
+			if err := ensureBuildPrerequisites(cmd, projectID, location); err != nil {
+				return err
+			}
 		}
 
 		priority = strings.ToLower(priority)
@@ -196,7 +204,9 @@ func init() {
 
 	SubmitCmd.Flags().BoolVar(&gkeMtcEnabled, "gke-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC).")
 	SubmitCmd.Flags().StringVar(&gkeMtcRamdiskDirectory, "gke-mtc-ramdisk-dir", "", "Ramdisk directory path for Multi-Tier Checkpointing (MTC). Required when --gke-mtc-enabled is set.")
-	SubmitCmd.Flags().BoolVar(&enableMLDiagnostics, "enable-ml-diagnostics", false, "Enables ML Diagnostics for the workload. Requires the target cluster to have ML Diagnostics explicitly enabled.")
+	SubmitCmd.Flags().BoolVar(&enableMLDiagnostics, "enable-ml-diagnostics", false, "Enables ML Diagnostics for the workload (uses the GKE managed webhook by default, or injects the collector native sidecar on Kubernetes 1.29+ TPU pods when --ml-diagnostics-image or GCLUSTER_TELEMETRY_IMAGE is set).")
+	SubmitCmd.Flags().StringVar(&mlDiagnosticsImage, "ml-diagnostics-image", "", "Container image for the ML Diagnostics telemetry collector native sidecar on Kubernetes 1.29+ TPU workloads (requires --enable-ml-diagnostics; overrides GCLUSTER_TELEMETRY_IMAGE, and --ml-diagnostics-image=\"\" ignores it so GKE uses the managed webhook).")
+	SubmitCmd.Flags().IntVar(&mlDiagnosticsTelemetryPort, "ml-diagnostics-telemetry-port", k8s.DefaultTelemetryCollectorPort, "Prometheus metrics port exposed by the ML Diagnostics collector sidecar (requires --enable-ml-diagnostics with --ml-diagnostics-image or GCLUSTER_TELEMETRY_IMAGE on GKE; ports 8431-8438, 8471, 8476-8479, and 13133 are reserved).")
 	SubmitCmd.Flags().StringVar(&gkeCustomTemplatesPath, "gke-custom-templates-path", "", "Path to a local directory containing custom GKE templates overrides.")
 
 	_ = SubmitCmd.MarkFlagRequired("name")
@@ -235,6 +245,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 
 	jobTopology := strings.ToLower(strings.TrimSpace(topology))
 	applyPathwaysSubmitDefaults(cmd)
+	resolvedMLDiagImg, resolvedMLDiagPort := resolveSubmitMLDiagnostics(cmd)
 
 	jobDef := orchestrator.JobDefinition{
 		ImageName:                     imageName,
@@ -269,6 +280,9 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		PriorityClassName:             priority,
 		Verbose:                       verbose,
 		MLDiagnosticsEnabled:          enableMLDiagnostics,
+		MLDiagnosticsImage:            resolvedMLDiagImg,
+		MLDiagnosticsImageSpecified:   cmd.Flags().Changed("ml-diagnostics-image"),
+		MLDiagnosticsTelemetryPort:    resolvedMLDiagPort,
 		GKEMTCEnabled:                 gkeMtcEnabled,
 		GKEMTCRamdiskDirectory:        gkeMtcRamdiskDirectory,
 		GkeCustomTemplatesPath:        gkeCustomTemplatesPath,
@@ -536,4 +550,29 @@ func validateRestartOnExitCodes(codes []int) error {
 		}
 	}
 	return nil
+}
+
+func validateMLDiagnosticsFlags(cmd *cobra.Command) error {
+	imgChanged := cmd.Flags().Changed("ml-diagnostics-image")
+	portChanged := cmd.Flags().Changed("ml-diagnostics-telemetry-port")
+	if !enableMLDiagnostics && (imgChanged || portChanged) {
+		return fmt.Errorf("--ml-diagnostics-image and --ml-diagnostics-telemetry-port require --enable-ml-diagnostics")
+	}
+	if portChanged {
+		return k8s.ValidateTelemetryPort(mlDiagnosticsTelemetryPort)
+	}
+	return nil
+}
+
+// resolveSubmitMLDiagnostics returns the collector image and metrics port for the job; the port is 0 unless
+// --ml-diagnostics-telemetry-port was passed so the orchestrator can tell "default" from "explicit".
+func resolveSubmitMLDiagnostics(cmd *cobra.Command) (string, int) {
+	if !enableMLDiagnostics {
+		return "", 0
+	}
+	port := 0
+	if cmd.Flags().Changed("ml-diagnostics-telemetry-port") {
+		port = mlDiagnosticsTelemetryPort
+	}
+	return strings.TrimSpace(mlDiagnosticsImage), port
 }

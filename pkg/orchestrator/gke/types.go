@@ -333,6 +333,8 @@ type ManifestOptions struct {
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
 	MLDiagnosticsEnabled          bool
+	TelemetryCollectorImage       string
+	TelemetryCollectorPort        int
 	Verbose                       bool
 	Env                           map[string]string
 	AdditionalManifests           []string
@@ -689,13 +691,16 @@ type jobSetTemplateData struct {
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
 	MLDiagnosticsEnabled          bool
+	TelemetryCollectorImage       string
+	TelemetryCollectorPort        int
 	Subdomain                     string
 	baseBlocks                    map[string]*yamltemplate.Template
 }
 
 type jobSetValidationSpec struct {
-	metav1.TypeMeta `json:",inline"`
-	Spec            struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata"`
+	Spec              struct {
 		ReplicatedJobs []struct {
 			Name     string                  `json:"name"`
 			Template batchv1.JobTemplateSpec `json:"template"`
